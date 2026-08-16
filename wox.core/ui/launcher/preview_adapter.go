@@ -21,6 +21,11 @@ import (
 
 // buildPreview resolves controller-owned preview state into a pure preview view.
 func (a *App) buildPreview(result queryResult, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	return a.buildPreviewWithChatHeader(result, palette, width, height, imageScale, true)
+}
+
+// buildPreviewWithChatHeader lets preview-only windows host chat navigation in their platform title bar.
+func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, width, height, imageScale float32, showChatHeader bool) woxwidget.Widget {
 	preview := a.resolvePreview(result.Preview)
 	if preview.PreviewType == "remote" {
 		return woxwidget.Container{Width: width, Height: height}
@@ -42,7 +47,7 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height,
 		return a.buildMediaPreview(result, data, palette, width, height)
 	}
 	if preview.PreviewType == "chat" {
-		return a.buildChatPreview(result, preview, palette, width, height, imageScale)
+		return a.buildChatPreview(result, preview, palette, width, height, imageScale, showChatHeader)
 	}
 	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
 	if preview.PreviewType == "update" {

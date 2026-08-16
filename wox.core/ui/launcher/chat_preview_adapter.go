@@ -16,16 +16,27 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const chatHistorySidebarWidth = float32(240)
+
 // buildChatPreview prepares chat view props while retaining lifecycle and actions in the controller.
-func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette uiPalette, width, height, imageScale float32, showHeader bool) woxwidget.Widget {
 	snapshot, err := a.chatPreviewSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.PreviewError(fmt.Sprintf("Invalid chat preview: %v", err), width, height, palette.componentTheme())
 	}
 
-	const headerHeight = float32(52)
+	headerHeight := float32(0)
+	if showHeader {
+		headerHeight = 52
+	}
 	const inputHeight = float32(98)
-	innerWidth := max(float32(0), width-20)
+	contentWidth := width
+	catalogWidth := float32(0)
+	if snapshot.panel == "history" {
+		catalogWidth = min(chatHistorySidebarWidth, width/2)
+		contentWidth = max(float32(0), width-catalogWidth)
+	}
+	innerWidth := max(float32(0), contentWidth-20)
 	innerHeight := max(float32(0), height-14)
 	questionHeight := chatQuestionPanelHeight(snapshot, innerHeight)
 	debugHeight := float32(0)
@@ -46,7 +57,6 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	}
 	var catalog *previewview.ChatCatalogProps
 	if snapshot.panel == "history" {
-		catalogWidth := min(float32(260), width)
 		props := a.chatCatalogProps(snapshot, palette, catalogWidth, height)
 		catalog = &props
 	} else if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
@@ -55,9 +65,14 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 		catalog = &props
 	}
 	panel := snapshot.panel
+	var header *previewview.ChatHeaderProps
+	if showHeader {
+		props := a.chatHeaderProps(snapshot, palette, innerWidth, headerHeight, true)
+		header = &props
+	}
 	return previewview.ChatPreview(previewview.ChatPreviewProps{
 		Width: width, Height: height, Key: snapshot.key, Panel: panel,
-		Header:   a.chatHeaderProps(snapshot, palette, innerWidth, headerHeight),
+		Header:   header,
 		Messages: a.chatMessagesProps(snapshot, palette, innerWidth, messagesHeight, imageScale),
 		Debug:    debug, Question: question,
 		Input:   a.chatInputProps(snapshot, palette, innerWidth, inputHeight),
@@ -66,7 +81,7 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 }
 
 // chatHeaderProps resolves the current title and available controller actions.
-func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatHeaderProps {
+func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, showExit bool) previewview.ChatHeaderProps {
 	title := strings.TrimSpace(snapshot.chat.Title)
 	if title == "" {
 		title = a.translate("i18n:ui_ai_chat_new_chat")
@@ -84,8 +99,8 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 	// The sidebar toggle advertises the same Ctrl/Cmd+B shortcut Flutter binds to preview fullscreen.
 	historyTooltip := historyLabel + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")"
 	return previewview.ChatHeaderProps{
-		Width: width, Height: height, Key: snapshot.key, Title: title, HistoryOpen: snapshot.panel == "history",
-		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", ShowExit: launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
+		Width: width, Height: height, Key: snapshot.key, Title: title,
+		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", ShowExit: showExit && launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
 		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, Theme: palette.componentTheme(),
 		OnHistory: func() { a.toggleChatPanel("history") }, OnHistoryHover: a.setPreviewTooltip, OnDebug: func() { a.toggleChatPanel("debug") },
 		OnExit: a.closePreviewWindow, OnDrag: func() {
@@ -252,7 +267,7 @@ func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 			}
 			items = append(items, previewview.ChatCatalogItemProps{
 				SelectID: fmt.Sprintf("chat-history-row-%s-%d", snapshot.key, entry.index), DeleteID: fmt.Sprintf("chat-history-delete-%s-%d", snapshot.key, entry.index),
-				Kind: "history", Title: title, GroupLabel: groupLabel, DeleteLabel: a.translate("i18n:ui_ai_chat_delete_chat"), Selected: chatID == snapshot.chat.ID,
+				Kind: "history", Title: title, GroupLabel: groupLabel, DeleteLabel: a.translate("i18n:ui_ai_chat_delete_chat"), ConfirmDeleteLabel: a.translate("i18n:ui_delete_row_confirm"), Selected: chatID == snapshot.chat.ID,
 				OnSelect: func() { a.selectChatHistory(chatID) }, OnDelete: func() { a.deleteChatHistory(chatID) },
 			})
 		}

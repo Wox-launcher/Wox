@@ -128,6 +128,39 @@ func TestChatMessagesUsesSharedScrollView(t *testing.T) {
 	}
 }
 
+func TestChatPreviewCanHostHeaderOutsideContent(t *testing.T) {
+	view := ChatPreview(ChatPreviewProps{
+		Width: 500, Height: 400, Key: "external-header",
+		Messages: ChatMessagesProps{Width: 480, Height: 288},
+		Input:    ChatInputProps{Width: 480, Height: 98},
+	}).(woxwidget.Stack)
+
+	body := view.Children[0].Child.(woxwidget.Flex)
+	if len(body.Children) != 2 {
+		t.Fatalf("chat body children = %d, want messages and input without an internal header", len(body.Children))
+	}
+}
+
+func TestChatPreviewHistorySidebarPushesContent(t *testing.T) {
+	view := ChatPreview(ChatPreviewProps{
+		Width: 800, Height: 600, Key: "history", Panel: "history",
+		Messages: ChatMessagesProps{Width: 520, Height: 488},
+		Input:    ChatInputProps{Width: 520, Height: 98},
+		Catalog:  &ChatCatalogProps{Width: 260, Height: 600, Key: "history", ShowNew: true},
+	}).(woxwidget.Flex)
+
+	if view.Axis != woxwidget.Horizontal || len(view.Children) != 2 {
+		t.Fatalf("history split = %+v, want two horizontal columns", view)
+	}
+	if _, ok := view.Children[0].(woxwidget.Stack); !ok {
+		t.Fatalf("history sidebar = %T, want an in-flow catalog without a dismiss overlay", view.Children[0])
+	}
+	content := view.Children[1].(woxwidget.Container)
+	if content.Width != 540 || content.Padding.Left != 10 {
+		t.Fatalf("history content = width %.0f padding %+v, want 540-wide pushed content", content.Width, content.Padding)
+	}
+}
+
 func TestChatMessagesCentersEmptyStateWithAlign(t *testing.T) {
 	view := ChatMessages(ChatMessagesProps{
 		Width: 500, Height: 300, EmptyMessage: "Ask anything", EmptyTextWidth: 180, EmptyTextHeight: 36,
@@ -153,7 +186,7 @@ func TestChatDebugUsesMeasuredControlledScrollGeometry(t *testing.T) {
 }
 
 func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
-	theme := woxcomponent.Theme{ActionBackground: woxui.Color{R: 20, G: 21, B: 22, A: 255}, PreviewText: woxui.Color{A: 255}}
+	theme := woxcomponent.Theme{Background: woxui.Color{R: 20, G: 21, B: 22, A: 255}, ActionBackground: woxui.Color{R: 30, G: 31, B: 32, A: 255}, PreviewText: woxui.Color{A: 255}, PreviewSplit: woxui.Color{R: 90, G: 91, B: 92, A: 80}}
 	drawer := ChatCatalog(ChatCatalogProps{
 		Width: 260, Height: 600, Key: "history", ShowNew: true, NewLabel: "New Chat", ContentHeight: 576, Theme: theme,
 		Items: []ChatCatalogItemProps{{SelectID: "chat", DeleteID: "delete", Kind: "history", Title: "Suzhou", GroupLabel: "Today", Selected: true, OnSelect: func() {}, OnDelete: func() {}}},
@@ -162,8 +195,11 @@ func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
 		t.Fatalf("history drawer = width %.0f, height %.0f, children %+v", drawer.Width, drawer.Height, drawer.Children)
 	}
 	panel := drawer.Children[0].Child.(woxwidget.Container)
-	if panel.Radius != 0 || panel.Padding.Left != 10 || panel.Padding.Top != 12 || panel.Color != theme.ActionBackground {
+	if panel.Radius != 0 || panel.Padding.Left != 10 || panel.Padding.Top != 12 || panel.Color.A != 0 {
 		t.Fatalf("history panel = radius %.0f, padding %+v, color %#v", panel.Radius, panel.Padding, panel.Color)
+	}
+	if divider := drawer.Children[1].Child.(woxwidget.Container); divider.Width != 1 || divider.Color != theme.PreviewSplit {
+		t.Fatalf("history divider = width %.0f color %#v, want semantic preview divider", divider.Width, divider.Color)
 	}
 }
 
@@ -177,6 +213,86 @@ func TestChatHistoryItemOmitsBubbleIcon(t *testing.T) {
 	}
 	if row.Children[0].Left != 12 {
 		t.Fatalf("history title left = %.0f, want indented 12", row.Children[0].Left)
+	}
+}
+
+func TestChatHistoryItemUsesSelectedForegroundOnHover(t *testing.T) {
+	theme := woxcomponent.Theme{
+		PreviewText: woxui.Color{R: 40, G: 40, B: 40, A: 255}, ResultSubtitle: woxui.Color{R: 80, G: 80, B: 80, A: 255},
+		SelectedBackground: woxui.Color{R: 30, G: 110, B: 220, A: 255}, SelectedTitle: woxui.Color{R: 255, G: 255, B: 255, A: 255}, SelectedSubtitle: woxui.Color{R: 230, G: 235, B: 245, A: 255},
+	}
+	item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Suzhou", OnSelect: func() {}, OnDelete: func() {}}
+	view := chatHistoryItem(item, 260, 46, theme, true, func(bool) {}).(woxwidget.Container)
+	stack := view.Child.(woxwidget.Stack)
+	row := stack.Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	title := row.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container).Child.(woxwidget.Text)
+	if row.Color != theme.SelectedBackground || title.Color != theme.SelectedTitle {
+		t.Fatalf("hovered history row = background %#v title %#v, want selected palette", row.Color, title.Color)
+	}
+	delete := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	deleteGlyph := delete.Icon.(woxwidget.Image)
+	expectedGlyph := woxcomponent.DeleteGlyph(15, theme.SelectedSubtitle).(woxwidget.Image)
+	if deleteGlyph.Source != expectedGlyph.Source {
+		t.Fatal("hovered history delete icon should use the selected subtitle color")
+	}
+
+	newChat := chatHistoryItem(ChatCatalogItemProps{SelectID: "new", Kind: "history-new", Title: "New Chat"}, 260, 38, theme, true, func(bool) {}).(woxwidget.Gesture)
+	newChatRow := newChat.Child.(woxwidget.Container)
+	newChatContent := newChatRow.Child.(woxwidget.Flex)
+	if newChatRow.Color != theme.SelectedBackground || newChatContent.Children[1].(woxwidget.Text).Color != theme.SelectedTitle {
+		t.Fatal("hovered new-chat row should use the selected background and title colors")
+	}
+}
+
+func TestChatHistoryDeleteUsesDangerHoverAndConfirmation(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ResultSubtitle: woxui.Color{R: 80, G: 80, B: 80, A: 255}, ErrorText: woxui.Color{R: 210, G: 45, B: 55, A: 255},
+		SelectedTitle: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Cursor: woxui.Color{R: 30, G: 110, B: 220, A: 255},
+	}
+	item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Suzhou", DeleteLabel: "Delete", ConfirmDeleteLabel: "Confirm delete", OnSelect: func() {}, OnDelete: func() {}}
+	deleteControl := func(deleteHovered, deleteConfirm bool) woxwidget.Align {
+		view := chatHistoryItemWithDeleteState(item, 240, 46, theme, false, deleteHovered, deleteConfirm, func(bool) {}, func(bool) {}, func() {}).(woxwidget.Container)
+		stack := view.Child.(woxwidget.Stack)
+		return stack.Children[1].Child.(woxwidget.Align)
+	}
+
+	hovered := deleteControl(true, false).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	hoveredGlyph := hovered.Icon.(woxwidget.Image)
+	expectedDangerGlyph := woxcomponent.DeleteGlyph(15, theme.ErrorText).(woxwidget.Image)
+	if hoveredGlyph.Source != expectedDangerGlyph.Source || hovered.HoverBackground.R != theme.ErrorText.R || hovered.HoverBackground.A == 0 {
+		t.Fatalf("delete hover = icon %#v background %#v, want danger treatment", hoveredGlyph.Source, hovered.HoverBackground)
+	}
+
+	confirm := deleteControl(true, true)
+	confirmButton := confirm.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	confirmGlyph := confirmButton.Icon.(woxwidget.Image)
+	expectedConfirmGlyph := woxcomponent.CheckGlyph(14, theme.SelectedTitle).(woxwidget.Image)
+	if confirm.Width != 26 || confirmButton.Label != item.ConfirmDeleteLabel || confirmButton.Background != theme.ErrorText || confirmGlyph.Source != expectedConfirmGlyph.Source {
+		t.Fatalf("delete confirmation = width %.0f label %q background %#v, want danger confirmation icon", confirm.Width, confirmButton.Label, confirmButton.Background)
+	}
+}
+
+func TestChatHistoryDeleteRequiresTwoActivations(t *testing.T) {
+	state := &chatCatalogItemState{}
+	if state.advanceDeleteConfirmation() {
+		t.Fatal("first delete activation must only enter confirmation")
+	}
+	if !state.deleteConfirm {
+		t.Fatal("first delete activation did not retain confirmation state")
+	}
+	if !state.advanceDeleteConfirmation() {
+		t.Fatal("second delete activation must confirm deletion")
+	}
+	if state.deleteConfirm {
+		t.Fatal("confirmed deletion must clear confirmation state")
+	}
+}
+
+func TestChatHistoryDeleteConfirmationClearsOnMouseLeave(t *testing.T) {
+	state := &chatCatalogItemState{deleteHovered: true, deleteConfirm: true}
+	state.setDeleteHovered(false)
+	if state.deleteHovered || state.deleteConfirm {
+		t.Fatalf("delete state after mouse leave = hovered %v confirm %v, want both cleared", state.deleteHovered, state.deleteConfirm)
 	}
 }
 

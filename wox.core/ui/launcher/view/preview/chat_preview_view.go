@@ -14,7 +14,7 @@ type ChatPreviewProps struct {
 	Height    float32
 	Key       string
 	Panel     string
-	Header    ChatHeaderProps
+	Header    *ChatHeaderProps
 	Messages  ChatMessagesProps
 	Debug     *ChatDebugProps
 	Question  *ChatQuestionProps
@@ -25,11 +25,17 @@ type ChatPreviewProps struct {
 
 // ChatPreview builds the chat reading flow and floating catalog layers.
 func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
-	const headerHeight = float32(52)
+	headerHeight := float32(52)
 	const inputHeight = float32(98)
 	innerWidth := max(float32(0), props.Width-20)
 	innerHeight := max(float32(0), props.Height-14)
-	children := []woxwidget.Widget{ChatHeader(props.Header), ChatMessages(props.Messages)}
+	children := make([]woxwidget.Widget, 0, 5)
+	if props.Header != nil {
+		children = append(children, ChatHeader(*props.Header))
+	} else {
+		headerHeight = 0
+	}
+	children = append(children, ChatMessages(props.Messages))
 	if props.Debug != nil {
 		children = append(children, ChatDebug(*props.Debug))
 	}
@@ -37,17 +43,16 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 		children = append(children, ChatQuestion(*props.Question))
 	}
 	children = append(children, ChatInput(props.Input))
+	if props.Panel == "history" && props.Catalog != nil {
+		contentWidth := max(float32(0), props.Width-props.Catalog.Width)
+		content := woxwidget.Container{Width: contentWidth, Height: props.Height, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{ChatCatalog(*props.Catalog), content}}
+	}
 	layers := []woxwidget.StackChild{{Left: 10, Top: 6, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}}
 	if props.Catalog != nil {
 		layers = append(layers, woxwidget.StackChild{Child: woxwidget.Gesture{ID: "chat-panel-dismiss-" + props.Key, OnTap: props.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}})
-		left := float32(0)
-		top := float32(0)
-		if props.Panel != "history" {
-			left = 10
-			top = 6
-			left += (innerWidth - props.Catalog.Width) / 2
-			top += max(headerHeight, innerHeight-inputHeight-props.Catalog.Height-6)
-		}
+		left := 10 + (innerWidth-props.Catalog.Width)/2
+		top := 6 + max(headerHeight, innerHeight-inputHeight-props.Catalog.Height-6)
 		layers = append(layers, woxwidget.StackChild{Left: left, Top: top, Child: ChatCatalog(*props.Catalog)})
 	}
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: layers}
@@ -59,7 +64,6 @@ type ChatHeaderProps struct {
 	Height         float32
 	Key            string
 	Title          string
-	HistoryOpen    bool
 	ShowDebug      bool
 	DebugOpen      bool
 	ShowExit       bool
@@ -77,17 +81,8 @@ type ChatHeaderProps struct {
 
 // ChatHeader builds the compact chat title bar.
 func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
-	menuBackground := woxui.Color{}
-	menuIcon := woxcomponent.MenuGlyph(22, props.Theme.ResultSubtitle)
-	if props.HistoryOpen {
-		menuBackground = props.Theme.ActionBackground
-		menuIcon = woxcomponent.CloseGlyph(20, props.Theme.ResultSubtitle)
-	}
 	menuHoverBackground := props.Theme.ResultSubtitle
 	menuHoverBackground.A = uint8(float32(menuHoverBackground.A) * 0.1)
-	if menuBackground.A != 0 {
-		menuHoverBackground = menuBackground
-	}
 	debugWidth := float32(0)
 	if props.ShowDebug {
 		debugWidth = 48
@@ -102,8 +97,8 @@ func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
 	}}
 	children := []woxwidget.StackChild{
 		{Left: 2, Child: woxwidget.Align{Width: 36, Height: props.Height, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: "chat-history-" + props.Key, Label: props.HistoryLabel, Icon: menuIcon, Width: 36, Height: 36, Radius: 7,
-			Background: menuBackground, HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnHistory,
+			ID: "chat-history-" + props.Key, Label: props.HistoryLabel, Icon: woxcomponent.SidebarGlyph(20, props.Theme.ResultSubtitle), Width: 36, Height: 36, Radius: 7,
+			HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnHistory,
 			OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				if props.OnHistoryHover != nil {
 					props.OnHistoryHover(inside, props.HistoryTooltip, bounds)
@@ -155,11 +150,13 @@ type ChatCatalogItemProps struct {
 	Title       string
 	Subtitle    string
 	DeleteLabel string
-	GroupLabel  string
-	Selected    bool
-	Current     bool
-	OnSelect    func()
-	OnDelete    func()
+	// ConfirmDeleteLabel describes the destructive second activation for assistive technology.
+	ConfirmDeleteLabel string
+	GroupLabel         string
+	Selected           bool
+	Current            bool
+	OnSelect           func()
+	OnDelete           func()
 }
 
 // ChatCatalogProps contains a typed history, model, or skill catalog.
@@ -246,16 +243,16 @@ func chatHistoryCatalog(props ChatCatalogProps) woxwidget.Widget {
 		Key: woxwidget.Key("chat-catalog-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
 		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
 	})
-	divider := props.Theme.ResultSubtitle
-	divider.A = 20
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 10, Top: 12, Right: 10, Bottom: 12}, Child: scroll}},
-		{AnchorRight: true, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: divider}},
+		{Child: woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 10, Top: 12, Right: 10, Bottom: 12}, Child: scroll}},
+		{AnchorRight: true, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: props.Theme.PreviewSplit}},
 	}}
 }
 
 type chatCatalogItemState struct {
-	hovered bool
+	hovered       bool
+	deleteHovered bool
+	deleteConfirm bool
 }
 
 type chatCatalogItemWidget struct {
@@ -279,19 +276,50 @@ func (s *chatCatalogItemState) DidUpdateWidget(_ woxwidget.StateContext, _, _ an
 
 func (s *chatCatalogItemState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(chatCatalogItemWidget)
-	return chatCatalogItem(props.item, props.width, props.height, props.theme, s.hovered, func(inside bool) {
+	return chatCatalogItemWithDeleteState(props.item, props.width, props.height, props.theme, s.hovered, s.deleteHovered, s.deleteConfirm, func(inside bool) {
 		if inside != s.hovered {
 			context.SetState(func() { s.hovered = inside })
 		}
+	}, func(inside bool) {
+		if inside != s.deleteHovered || !inside && s.deleteConfirm {
+			context.SetState(func() { s.setDeleteHovered(inside) })
+		}
+	}, func() {
+		deleteConfirmed := false
+		context.SetState(func() { deleteConfirmed = s.advanceDeleteConfirmation() })
+		if deleteConfirmed && props.item.OnDelete != nil {
+			props.item.OnDelete()
+		}
 	})
+}
+
+func (s *chatCatalogItemState) setDeleteHovered(inside bool) {
+	s.deleteHovered = inside
+	if !inside {
+		s.deleteConfirm = false
+	}
+}
+
+// advanceDeleteConfirmation requires two consecutive activations before deletion.
+func (s *chatCatalogItemState) advanceDeleteConfirmation() bool {
+	if !s.deleteConfirm {
+		s.deleteConfirm = true
+		return false
+	}
+	s.deleteConfirm = false
+	return true
 }
 
 func (s *chatCatalogItemState) Dispose() {}
 
 // chatCatalogItem renders the shared two-line catalog row and optional delete target.
 func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme, hovered bool, onHover func(bool)) woxwidget.Widget {
+	return chatCatalogItemWithDeleteState(item, width, height, theme, hovered, false, false, onHover, nil, item.OnDelete)
+}
+
+func chatCatalogItemWithDeleteState(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme, hovered, deleteHovered, deleteConfirm bool, onHover, onDeleteHover func(bool), onDelete func()) woxwidget.Widget {
 	if item.Kind == "history" || item.Kind == "history-new" {
-		return chatHistoryItem(item, width, height, theme, hovered, onHover)
+		return chatHistoryItemWithDeleteState(item, width, height, theme, hovered, deleteHovered, deleteConfirm, onHover, onDeleteHover, onDelete)
 	}
 	background := woxui.Color{}
 	if item.Selected {
@@ -350,35 +378,68 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 }
 
 func chatHistoryItem(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme, hovered bool, onHover func(bool)) woxwidget.Widget {
+	return chatHistoryItemWithDeleteState(item, width, height, theme, hovered, false, false, onHover, nil, item.OnDelete)
+}
+
+func chatHistoryItemWithDeleteState(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme, hovered, deleteHovered, deleteConfirm bool, onHover, onDeleteHover func(bool), onDelete func()) woxwidget.Widget {
 	background := woxui.Color{}
-	if hovered || item.Selected {
+	selected := hovered || item.Selected
+	if selected {
 		background = theme.SelectedBackground
 	}
 	if item.Kind == "history-new" {
 		iconColor := theme.ActionHeader
 		iconColor.A = 200
+		titleColor := theme.PreviewText
+		if selected {
+			iconColor = theme.SelectedSubtitle
+			titleColor = theme.SelectedTitle
+		}
 		return woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, OnHover: onHover, Child: woxwidget.Container{Width: width, Height: height, Radius: 6, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12, Bottom: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxcomponent.AddGlyph(18, iconColor),
-			woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.PreviewText},
+			woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor},
 		}}}}
 	}
 	titleColor := theme.PreviewText
-	if item.Selected {
+	deleteColor := theme.ResultSubtitle
+	if selected {
 		titleColor = theme.SelectedTitle
+		deleteColor = theme.SelectedSubtitle
 	}
 	rowHeight := height - 4
-	deleteHover := theme.ResultSubtitle
-	deleteHover.A = uint8(float32(deleteHover.A) * 0.1)
-	row := woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, OnHover: onHover, Child: woxwidget.Container{Width: width, Height: rowHeight, Radius: 6, Color: background, Child: woxwidget.Stack{Width: width, Height: rowHeight, Children: []woxwidget.StackChild{
-		{Left: 12, Top: 13, Right: 38, StretchWidth: true, Child: woxwidget.Container{Height: 18, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor}}},
-	}}}}
+	dangerColor := theme.ErrorText
+	dangerHover := dangerColor
+	dangerHover.A = uint8(float32(dangerHover.A) * 0.16)
+	deleteWidth := float32(26)
+	deleteLabel := item.DeleteLabel
+	deleteBackground := woxui.Color{}
+	deleteHoverBackground := dangerHover
+	deleteIcon := woxcomponent.DeleteGlyph(15, deleteColor)
+	if deleteHovered {
+		deleteIcon = woxcomponent.DeleteGlyph(15, dangerColor)
+	}
+	if deleteConfirm {
+		if item.ConfirmDeleteLabel != "" {
+			deleteLabel = item.ConfirmDeleteLabel
+		}
+		deleteBackground = dangerColor
+		deleteHoverBackground = dangerColor
+		deleteIcon = woxcomponent.CheckGlyph(14, theme.SelectedTitle)
+	}
 	deleteButton := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-		ID: item.DeleteID, Label: item.DeleteLabel, Icon: woxcomponent.DeleteGlyph(15, theme.ResultSubtitle), Width: 26, Height: 26, Radius: 13,
-		HoverBackground: deleteHover, FocusRingColor: theme.Cursor, OnTap: item.OnDelete,
+		ID: item.DeleteID, Label: deleteLabel, Icon: deleteIcon, Width: deleteWidth, Height: 26, Radius: 13,
+		Background: deleteBackground, HoverBackground: deleteHoverBackground, FocusRingColor: theme.Cursor, OnTap: onDelete, OnHoverAt: func(inside bool, _ woxui.Rect) {
+			if onDeleteHover != nil {
+				onDeleteHover(inside)
+			}
+		},
 	})
+	row := woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, OnHover: onHover, Child: woxwidget.Container{Width: width, Height: rowHeight, Radius: 6, Color: background, Child: woxwidget.Stack{Width: width, Height: rowHeight, Children: []woxwidget.StackChild{
+		{Left: 12, Top: 13, Right: deleteWidth + 16, StretchWidth: true, Child: woxwidget.Container{Height: 18, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor}}},
+	}}}}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Bottom: 4}, Child: woxwidget.Stack{Width: width, Height: rowHeight, Children: []woxwidget.StackChild{
 		{Child: row},
-		{Top: 8, Right: 8, AnchorRight: true, Child: deleteButton},
+		{Right: 8, AnchorRight: true, Child: woxwidget.Align{Width: deleteWidth, Height: rowHeight, Vertical: 0.5, Child: deleteButton}},
 	}}}
 }
 

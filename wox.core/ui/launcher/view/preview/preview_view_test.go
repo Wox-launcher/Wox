@@ -136,11 +136,11 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 		t.Fatal("chat title drag did not start window dragging")
 	}
 	menu := stack.Children[0].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-	if menu.Width != 36 || menu.Height != 36 || menu.HoverBackground.A == 0 {
-		t.Fatalf("chat menu props = %+v, want hoverable 36x36 icon button", menu)
+	if menu.Width != 36 || menu.Height != 36 || menu.Background.A != 0 || menu.HoverBackground.A == 0 {
+		t.Fatalf("chat sidebar props = %+v, want transparent hoverable 36x36 icon button", menu)
 	}
-	if glyph := menu.Icon.(woxwidget.Image); glyph.Source == nil || glyph.Width != 22 || glyph.Height != 22 {
-		t.Fatalf("chat menu glyph = %vx%v, want centered 22x22", glyph.Width, glyph.Height)
+	if glyph := menu.Icon.(woxwidget.Image); glyph.Source == nil || glyph.Width != 20 || glyph.Height != 20 {
+		t.Fatalf("chat sidebar glyph = %vx%v, want centered 20x20", glyph.Width, glyph.Height)
 	}
 	exitChild := stack.Children[len(stack.Children)-1]
 	exitAlign := exitChild.Child.(woxwidget.Align)

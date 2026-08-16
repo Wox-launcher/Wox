@@ -34,6 +34,7 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		DeleteGlyph(15, color),
 		ChatBubbleGlyph(22, color),
 		MenuGlyph(18, color),
+		SidebarGlyph(18, color),
 		ChevronGlyph(16, color, false),
 		ChevronGlyph(16, color, true),
 		CopyGlyph(14, color),

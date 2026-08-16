@@ -127,6 +127,7 @@ var uiIcons = map[string]WoxImage{
 	"control.search":             newMonochromeUIIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`),
 	"control.fullscreen":         newMonochromeUIIcon(`<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
 	"control.fullscreen-exit":    newMonochromeUIIcon(`<path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/>`),
+	"control.sidebar":            newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>`),
 	"control.tune":               tuneUIIcon,
 	"control.settings-suggest":   newMonochromeUIIcon(`<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15"/><path d="m18 3 .55 1.45L20 5l-1.45.55L18 7l-.55-1.45L16 5l1.45-.55z"/>`),
 	"control.locate":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`),

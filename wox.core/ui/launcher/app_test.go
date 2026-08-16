@@ -174,8 +174,8 @@ func TestLauncherPreviewTitleBarRequiresOptInFullPreview(t *testing.T) {
 	}
 	snapshot.show.ShowPreviewTitleBar = true
 	snapshot.results[0].Preview.PreviewType = "chat"
-	if launcherPreviewTitleBarVisible(snapshot) {
-		t.Fatal("chat preview should keep its existing header")
+	if !launcherPreviewTitleBarVisible(snapshot) {
+		t.Fatal("chat preview should reuse the preview title bar")
 	}
 	snapshot.results[0].Preview.PreviewType = "file"
 	ratio = 0.4

@@ -126,6 +126,23 @@ func TestSettingsTitleBarCloseOnlyOmitsWindowsMinimize(t *testing.T) {
 	}
 }
 
+func TestSettingsTitleBarCustomContentKeepsPlatformControlsClear(t *testing.T) {
+	content := woxwidget.Container{Width: 454, Height: SettingsTitleBarHeight}
+	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{
+		Width: 500, Platform: "windows", CloseOnly: true, Content: content,
+	}, "", "", nil, nil).(woxwidget.Stack)
+
+	clip, ok := titleBar.Children[1].Child.(woxwidget.Clip)
+	if !ok || titleBar.Children[1].Left != 0 || clip.Width != 454 || clip.Child != content {
+		t.Fatalf("windows custom title content = %#v, want 454-wide content before close control", titleBar.Children[1])
+	}
+
+	left, width := TitleBarContentFrame("darwin", true, 500)
+	if left != 44 || width != 456 {
+		t.Fatalf("macOS custom title content frame = %.0f/%.0f, want 44/456", left, width)
+	}
+}
+
 func TestSettingsTitleBarWindowsUsesInsetStretchAndRightAnchors(t *testing.T) {
 	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "windows"}, "", "", nil, nil).(woxwidget.Stack)
 	title := titleBar.Children[1]

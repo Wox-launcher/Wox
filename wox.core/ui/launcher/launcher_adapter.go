@@ -11,6 +11,7 @@ import (
 
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -320,6 +321,22 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 			},
 		})
 	}
+	preview := a.resolvePreview(snapshot.results[snapshot.selected].Preview)
+	if preview.PreviewType == "chat" {
+		if chatSnapshot, err := a.chatPreviewSnapshotFor(snapshot.results[snapshot.selected], preview); err == nil {
+			_, contentWidth := launcherview.TitleBarContentFrame(runtime.GOOS, true, width)
+			header := previewview.ChatHeader(a.chatHeaderProps(chatSnapshot, snapshot.palette, contentWidth, launcherview.SettingsTitleBarHeight, false))
+			return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
+				Width: width, CloseOnly: true, Content: header, Platform: runtime.GOOS, Theme: snapshot.palette.componentTheme(), Active: windowFocused,
+				OnDrag: func() {
+					if a.window != nil {
+						_ = a.window.StartDragging()
+					}
+				},
+				OnClose: a.closePreviewWindow,
+			})
+		}
+	}
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
 	if a.window != nil {
@@ -367,12 +384,12 @@ func launcherPreviewOnly(snapshot viewSnapshot) bool {
 		launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen) == 0
 }
 
-// launcherPreviewTitleBarVisible limits the opt-in title bar to chrome-free non-chat previews.
+// launcherPreviewTitleBarVisible limits the opt-in title bar to chrome-free previews.
 func launcherPreviewTitleBarVisible(snapshot viewSnapshot) bool {
 	if !snapshot.show.ShowPreviewTitleBar || !launcherPreviewOnly(snapshot) {
 		return false
 	}
-	return snapshot.results[snapshot.selected].Preview.PreviewType != "chat"
+	return true
 }
 
 // queryLineHeight includes the configured font's native line box so glyphs are not clipped.
@@ -836,8 +853,9 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 }
 
 func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
-	child := a.buildPreview(result, snapshot.palette, width, height, imageScale)
 	resolved := a.resolvePreview(result.Preview)
+	showChatHeader := resolved.PreviewType != "chat" || !launcherPreviewTitleBarVisible(snapshot)
+	child := a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader)
 	// Media owns smaller animation and live-data boundaries; an enclosing section boundary would promote every update to the full preview.
 	if resolved.PreviewType == "media" {
 		return child

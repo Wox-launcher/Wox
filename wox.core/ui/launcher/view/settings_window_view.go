@@ -63,6 +63,8 @@ type SettingsTitleBarProps struct {
 	CloseOnly  bool
 	Title      string
 	TitleWidth float32
+	// Content replaces the ordinary title while preserving platform window controls.
+	Content    woxwidget.Widget
 	Platform   string
 	AppIcon    *woxui.Image
 	Theme      woxcomponent.Theme
@@ -72,6 +74,20 @@ type SettingsTitleBarProps struct {
 	// Active is true while this window is the key window. macOS traffic lights
 	// stay gray until it is, matching AppKit.
 	Active bool
+}
+
+// TitleBarContentFrame returns the area available beside platform window controls.
+func TitleBarContentFrame(platform string, closeOnly bool, width float32) (left, contentWidth float32) {
+	if !closeOnly {
+		return 0, width
+	}
+	left = 0
+	right := float32(46)
+	if platform == "darwin" {
+		left = 44
+		right = 0
+	}
+	return left, max(float32(0), width-left-right)
 }
 
 // SettingsTitleBar builds the draggable settings title bar.
@@ -134,6 +150,10 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 9)}})
 	}
 	children = append(children, woxwidget.StackChild{Child: dragArea})
+	if props.Content != nil {
+		left, contentWidth := TitleBarContentFrame(props.Platform, props.CloseOnly, props.Width)
+		children = append(children, woxwidget.StackChild{Left: left, Child: woxwidget.Clip{Width: contentWidth, Height: height, Child: props.Content}})
+	}
 	switch props.Platform {
 	case "darwin":
 		macLight := func(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed bool, onTap func()) woxwidget.Widget {
@@ -154,11 +174,13 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 		)
 	case "windows":
 		if props.CloseOnly {
-			if props.AppIcon != nil {
+			if props.Content == nil && props.AppIcon != nil {
 				children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: height, Vertical: 0.5, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}}})
 			}
+			if props.Content == nil {
+				children = append(children, woxwidget.StackChild{Left: 40, Right: 46, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}})
+			}
 			children = append(children,
-				woxwidget.StackChild{Left: 40, Right: 46, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
 				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)}},
 				woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
 			)
@@ -178,10 +200,10 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 		if props.Platform == "linux" {
 			closeButton = woxcomponent.LinuxTitleBarCloseButton("settings-window-close", hovered == "close", props.Theme, props.OnClose, onHover)
 		}
-		children = append(children,
-			woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Child: woxwidget.Align{Width: props.TitleWidth, Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-			woxwidget.StackChild{AnchorRight: true, Child: closeButton},
-		)
+		if props.Content == nil {
+			children = append(children, woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Child: woxwidget.Align{Width: props.TitleWidth, Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}})
+		}
+		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: closeButton})
 	}
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
 }

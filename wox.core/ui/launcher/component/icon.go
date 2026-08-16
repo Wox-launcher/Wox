@@ -152,6 +152,14 @@ func MenuGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.menu", size, color)
 }
 
+// SidebarGlyph returns the shared sidebar visibility icon.
+func SidebarGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 18
+	}
+	return svgIcon("control.sidebar", size, color)
+}
+
 // ChevronGlyph returns the shared SVG disclosure icon.
 func ChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widget {
 	if size <= 0 {
