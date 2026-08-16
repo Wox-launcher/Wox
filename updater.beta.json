@@ -1,10 +1,12 @@
 {
   "Version": "2.4.0-beta.3",
   "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.4.0-beta.3/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "",
+  "MacArm64Checksum": "b6718e952e8dfeb9a5d02ec12c110ea6",
   "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.4.0-beta.3/wox-windows-amd64.exe",
-  "WindowsChecksum": "",
+  "WindowsChecksum": "4bb633fb06161284d8ab3c21d033aef1",
   "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.4.0-beta.3/wox-linux-amd64",
-  "LinuxChecksum": "",
-  "ReleaseNotes": ""
+  "LinuxChecksum": "0d3f3d7a5e54b3ef0c84d13d67b9f325",
+  "ReleaseNotes": "\nThis beta stabilizes the native UI introduced in beta.2, fixing settings rendering, control interaction, overlays, previews, and display recovery issues that surfaced after the Flutter UI replacement.\n\n- Improve\n  - [`Settings`] Improve settings control sizing, hover feedback, disabled table states, dialog actions, and form layout consistency across settings pages. #4503\n  - [`Preview`] Improve AI Chat preview with draggable title-bar controls and clearer window chrome.\n  - [`Launcher`] Improve query editing so plugin result layout stays stable while the query text changes.\n  - [`Overlay`] Improve movable overlays with draggable title bars and sticky host-window tracking so overlays stay aligned during window moves.\n  - [`Screenshot`] Improve screenshot editor UI scaling, scrolling-capture borders, and screen-recording controls.\n  - [`Hotkey`] Improve main hotkey registration with clearer fallback messaging when a shortcut cannot be registered.\n  - [`Onboarding`] Expand first-run onboarding with main hotkey, selection hotkey, and platform-specific tray setup steps.\n  - [`Query`] Improve launcher query routing with scoped queries that pin results to specific plugins and show scope icons in the query UI.\n  - [`Shell`] Support running shell commands as administrator with UAC elevation on Windows.\n  - [`Linux`] Add `.deb` and `.rpm` package builds with updated installation documentation.\n\n- Fix\n  - [`Settings`] Fix settings page rendering on Hyprland.\n  - [`Windows`] Fix GPU renderer recovery after display device removal #4502\n  - [`Linux`] Fix Hyprland hotkey registration and clipboard handling.\n  - [`Explorer`] Fix type-to-search function-key handling and file-dialog window detection on Windows #4504\n  - [`Bookmark`] Fix Chromium bookmark loading #4501\n  - [`Plugin`] Fix plugin-host recovery and trash deletion reliability.",
+  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.4.0-beta.3/wox-mac-amd64.dmg",
+  "MacAmd64Checksum": "024d4f0a68f04848444be3201d4d83af"
 }
