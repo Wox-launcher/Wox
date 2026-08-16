@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.4.0-beta.3 - 2026-08-16
+
+This beta stabilizes the native UI introduced in beta.2, fixing settings rendering, control interaction, overlays, previews, and display recovery issues that surfaced after the Flutter UI replacement.
+
+- Improve
+  - [`Settings`] Improve settings control sizing, hover feedback, disabled table states, dialog actions, and form layout consistency across settings pages. #4503
+  - [`Preview`] Improve AI Chat preview with draggable title-bar controls and clearer window chrome.
+  - [`Launcher`] Improve query editing so plugin result layout stays stable while the query text changes.
+  - [`Overlay`] Improve movable overlays with draggable title bars and sticky host-window tracking so overlays stay aligned during window moves.
+  - [`Screenshot`] Improve screenshot editor UI scaling, scrolling-capture borders, and screen-recording controls.
+  - [`Hotkey`] Improve main hotkey registration with clearer fallback messaging when a shortcut cannot be registered.
+  - [`Onboarding`] Expand first-run onboarding with main hotkey, selection hotkey, and platform-specific tray setup steps.
+  - [`Query`] Improve launcher query routing with scoped queries that pin results to specific plugins and show scope icons in the query UI.
+  - [`Shell`] Support running shell commands as administrator with UAC elevation on Windows.
+  - [`Linux`] Add `.deb` and `.rpm` package builds with updated installation documentation.
+
+- Fix
+  - [`Settings`] Fix settings page rendering on Hyprland.
+  - [`Windows`] Fix GPU renderer recovery after display device removal #4502
+  - [`Linux`] Fix Hyprland hotkey registration and clipboard handling.
+  - [`Explorer`] Fix type-to-search function-key handling and file-dialog window detection on Windows #4504
+  - [`Bookmark`] Fix Chromium bookmark loading #4501
+  - [`Plugin`] Fix plugin-host recovery and trash deletion reliability.
+
 ## v2.4.0-beta.2 - 2026-08-11
 
 This beta replaces the Flutter UI with an embedded native UI for a single-process launcher and settings experience, cutting typical memory use roughly in half to about 150 MB in daily use, and adds countdown timers plus Private Mode for temporary sessions.  
