@@ -91,6 +91,25 @@ func TestLauncherToolbarExposesStatusAndActionSemantics(t *testing.T) {
 	}
 }
 
+func TestLauncherToolbarKeepsSixteenPixelActionContentSpacing(t *testing.T) {
+	built := LauncherToolbarView(LauncherToolbarProps{
+		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1,
+		Actions: []LauncherToolbarAction{
+			{ID: "execute", Label: "Execute", HotkeyLabels: []string{"Enter"}},
+			{ID: "background", Label: "Execute in Background", HotkeyLabels: []string{"Ctrl", "Enter"}},
+		},
+	}).(woxwidget.Stack)
+	body := built.Children[0].Child.(woxwidget.Container)
+	row := body.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	right := row.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(right.Children) != 2 {
+		t.Fatalf("toolbar action count = %d, want both actions visible", len(right.Children))
+	}
+	if right.Gap != 0 {
+		t.Fatalf("toolbar action gap = %v, want 0 so 8px hover padding keeps 16px between contents", right.Gap)
+	}
+}
+
 func TestLauncherToolbarActionHoversLabelAndKeycapsTogether(t *testing.T) {
 	theme := woxcomponent.Theme{
 		ToolbarBackground: woxui.Color{R: 20, G: 24, B: 28, A: 255},

@@ -76,7 +76,11 @@ type measuredLauncherToolbarAction struct {
 func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	contentHeight := launcherToolbarContentHeight(props.DensityScale)
 	fontSize := scaledLauncherSize(woxcomponent.ToolbarFontSize, props.DensityScale)
-	actionGap := scaledLauncherSize(16, props.DensityScale)
+	// Hover padding is 8px on each side, so a 0 Flex gap keeps 16px between
+	// action contents. Stacking the previous 16px gap on that padding doubled
+	// the visible spacing.
+	actionGap := float32(0)
+	statusActionGap := scaledLauncherSize(16, props.DensityScale)
 	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
 	progressVisible := props.HasProgress || props.Indeterminate
 	leftMaxWidth := max(float32(0), contentWidth-scaledLauncherSize(200, props.DensityScale))
@@ -96,7 +100,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	}
 	rightAvailable := max(float32(0), contentWidth-leftWidth)
 	if leftWidth > 0 && len(props.Actions) > 0 {
-		rightAvailable -= actionGap
+		rightAvailable -= statusActionGap
 	}
 	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
 	for _, action := range props.Actions {
