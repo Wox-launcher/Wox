@@ -22,3 +22,15 @@ func TestTimerSizeLeavesTextMeasurementSlack(t *testing.T) {
 		t.Fatalf("timer text width = %v, want at least %v", textWidth, countdown.Width+timerTextSlack)
 	}
 }
+
+func TestTimerHoverChangesOnlyOnBoundaryTransitions(t *testing.T) {
+	if !nextTimerHovered(false, woxui.PointerEnter) {
+		t.Fatal("pointer enter should expand the timer")
+	}
+	if nextTimerHovered(true, woxui.PointerLeave) {
+		t.Fatal("pointer leave should collapse the timer")
+	}
+	if nextTimerHovered(false, woxui.PointerMove) {
+		t.Fatal("queued pointer move after leave should not expand the timer")
+	}
+}

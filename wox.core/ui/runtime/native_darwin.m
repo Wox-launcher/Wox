@@ -2009,12 +2009,6 @@ static uint8_t portable_pointer_button(NSEvent *event) {
     } else {
       woxGoDarwinFrame(owner->context, (float)size.width, (float)size.height, pixel_width, pixel_height, (float)scale);
     }
-    if (owner->nonactivating && owner->window.hasShadow) {
-      // Transparent overlay content renders after AppKit computes the first
-      // shadow, so recompute it now or the stale rectangular shadow outline
-      // shows as dark streaks beside the tooltip.
-      [owner->window invalidateShadow];
-    }
   }
 }
 
@@ -2100,12 +2094,16 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     bool is_screenshot_window = window_role == 2;
     bool is_nonactivating = nonactivating != 0;
     bool is_overlay_style = is_screenshot_window || is_nonactivating;
-    NSWindowStyleMask style_mask = NSWindowStyleMaskBorderless;
-    if (!is_overlay_style) {
-      style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView;
-      if (is_application_window) {
-        style_mask |= NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
-      }
+    // Transparent borderless windows make AppKit derive shadows from the
+    // asynchronously presented IOSurface, which produces rectangular flashes
+    // and streaks. A hidden full-size title bar keeps nonactivating overlays
+    // visually frameless while letting AppKit own the stable shadow outline.
+    NSWindowStyleMask style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView;
+    if (is_screenshot_window) {
+      style_mask = NSWindowStyleMaskBorderless;
+    }
+    if (is_application_window) {
+      style_mask |= NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
     }
     if (resizable != 0) {
       style_mask |= NSWindowStyleMaskResizable;
@@ -2126,7 +2124,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       native_window.contentAspectRatio = NSMakeSize(aspect_ratio, 1.0);
     }
     native_window.acceptsMouseMovedEvents = YES;
-    if (!is_overlay_style) {
+    if (!is_screenshot_window) {
       native_window.titlebarAppearsTransparent = YES;
       native_window.titleVisibility = NSWindowTitleHidden;
       [[native_window standardWindowButton:NSWindowCloseButton] setHidden:YES];

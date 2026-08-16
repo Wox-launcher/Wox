@@ -95,8 +95,8 @@ func Show(opts Options) {
 			return woxwidget.Container{Width: frame.Size.Width, Height: frame.Size.Height, Radius: 12, Child: woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: stack}}
 		},
 		OnPointer: func(event woxui.PointerEvent) {
-			hovered := event.Kind != woxui.PointerLeave
 			state.Lock()
+			hovered := nextTimerHovered(state.hovered, event.Kind)
 			changed := state.hovered != hovered
 			state.hovered = hovered
 			state.Unlock()
@@ -106,6 +106,18 @@ func Show(opts Options) {
 		},
 		OnDispose: func() { releaseState(opts.Window.ID) },
 	})
+}
+
+// nextTimerHovered ignores queued motion events that can arrive after a macOS tracking-area exit.
+func nextTimerHovered(current bool, kind woxui.PointerEventKind) bool {
+	switch kind {
+	case woxui.PointerEnter:
+		return true
+	case woxui.PointerLeave:
+		return false
+	default:
+		return current
+	}
 }
 
 // timerSize keeps the compact countdown fixed until hover reveals details and close chrome.
