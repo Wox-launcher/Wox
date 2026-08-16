@@ -1276,17 +1276,37 @@ static void place_window(WoxLinuxWindow *window) {
 }
 
 #ifdef GDK_WINDOWING_X11
-static Display *x11_display(WoxLinuxWindow *window) {
+static GdkDisplay *x11_gdk_display(WoxLinuxWindow *window) {
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
   if (gdk_window == NULL || !GDK_IS_X11_WINDOW(gdk_window)) {
     return NULL;
   }
-  return GDK_DISPLAY_XDISPLAY(gdk_window_get_display(gdk_window));
+  return gdk_window_get_display(gdk_window);
+}
+
+static Display *x11_display(WoxLinuxWindow *window) {
+  GdkDisplay *gdk_display = x11_gdk_display(window);
+  return gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
 }
 
 static Window x11_window_id(WoxLinuxWindow *window) {
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
   return gdk_window != NULL && GDK_IS_X11_WINDOW(gdk_window) ? GDK_WINDOW_XID(gdk_window) : None;
+}
+
+// Foreign XIDs can disappear before we query them. GDK's default X handler
+// treats BadWindow as fatal, so this check must run inside an error trap.
+static bool x11_window_is_viewable(GdkDisplay *gdk_display, Display *display, Window xid) {
+  if (gdk_display == NULL || display == NULL || xid == None) {
+    return false;
+  }
+  XWindowAttributes attributes;
+  gdk_x11_display_error_trap_push(gdk_display);
+  int ok = XGetWindowAttributes(display, xid, &attributes);
+  if (gdk_x11_display_error_trap_pop(gdk_display) != 0 || ok == 0) {
+    return false;
+  }
+  return attributes.map_state == IsViewable;
 }
 
 static Window active_x11_window(WoxLinuxWindow *window) {
@@ -1314,9 +1334,11 @@ static Window active_x11_window(WoxLinuxWindow *window) {
 }
 
 static void save_previous_x11_window(WoxLinuxWindow *window) {
+  GdkDisplay *gdk_display = x11_gdk_display(window);
+  Display *display = gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
   Window current = x11_window_id(window);
   Window active = active_x11_window(window);
-  if (active != None && active != current) {
+  if (active != None && active != current && x11_window_is_viewable(gdk_display, display, active)) {
     window->previous_active_window = active;
     window->restore_previous_on_hide = true;
   }
@@ -1345,14 +1367,11 @@ static void request_x11_activation(WoxLinuxWindow *window) {
 }
 
 static void restore_previous_x11_window(WoxLinuxWindow *window) {
-  Display *display = x11_display(window);
+  GdkDisplay *gdk_display = x11_gdk_display(window);
+  Display *display = gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
   Window previous = (Window)window->previous_active_window;
   window->previous_active_window = 0;
-  if (display == NULL || previous == None) {
-    return;
-  }
-  XWindowAttributes attributes;
-  if (XGetWindowAttributes(display, previous, &attributes) == 0 || attributes.map_state != IsViewable) {
+  if (display == NULL || !x11_window_is_viewable(gdk_display, display, previous)) {
     return;
   }
   Atom property = XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
@@ -1367,8 +1386,12 @@ static void restore_previous_x11_window(WoxLinuxWindow *window) {
   event.xclient.format = 32;
   event.xclient.data.l[0] = 2;
   event.xclient.data.l[1] = CurrentTime;
+  // The ClientMessage still names a foreign XID that may vanish after the
+  // viewable check; keep the send inside a trap so GDK cannot abort on it.
+  gdk_x11_display_error_trap_push(gdk_display);
   XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
   XFlush(display);
+  gdk_x11_display_error_trap_pop_ignored(gdk_display);
 }
 #else
 static void save_previous_x11_window(WoxLinuxWindow *window) {
