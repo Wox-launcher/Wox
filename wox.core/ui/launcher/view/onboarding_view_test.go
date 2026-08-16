@@ -178,6 +178,48 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 	}
 }
 
+func TestOnboardingHeaderAreasStartWindowDragging(t *testing.T) {
+	dragged := false
+	props := OnboardingProps{
+		Width: 1040, Height: 800, ActiveStep: 0, OnDrag: func() { dragged = true },
+		Steps:  []OnboardingStep{{ID: "welcome", Title: "Welcome"}},
+		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup"},
+		Theme:  woxcomponent.Theme{},
+	}
+	rail, ok := onboardingRail(props, 0, 728).(woxwidget.Stack)
+	if !ok || len(rail.Children) != 3 {
+		t.Fatalf("rail = %#v, want drag strip, content, and divider", rail)
+	}
+	railDrag := rail.Children[0].Child.(woxwidget.Gesture)
+	railDrag.OnDragStart()
+	if !dragged {
+		t.Fatal("rail header did not start window dragging")
+	}
+	if railDrag.ID != "onboarding-rail-drag" {
+		t.Fatalf("rail drag id = %q, want onboarding-rail-drag", railDrag.ID)
+	}
+	if drag := railDrag.Child.(woxwidget.Container); drag.Width != OnboardingSidebarWidth || drag.Height != OnboardingRailDragHeight {
+		t.Fatalf("rail drag size = %vx%v, want %vx%v", drag.Width, drag.Height, OnboardingSidebarWidth, OnboardingRailDragHeight)
+	}
+
+	dragged = false
+	page, ok := onboardingPage(props, props.Steps[0], 728).(woxwidget.Stack)
+	if !ok || len(page.Children) != 2 {
+		t.Fatalf("page = %#v, want drag strip and content", page)
+	}
+	pageDrag := page.Children[0].Child.(woxwidget.Gesture)
+	pageDrag.OnDragStart()
+	if !dragged {
+		t.Fatal("page header did not start window dragging")
+	}
+	if pageDrag.ID != "onboarding-page-drag" {
+		t.Fatalf("page drag id = %q, want onboarding-page-drag", pageDrag.ID)
+	}
+	if drag := pageDrag.Child.(woxwidget.Container); drag.Width != 784 || drag.Height != OnboardingPageDragHeight {
+		t.Fatalf("page drag size = %vx%v, want 784x%v", drag.Width, drag.Height, OnboardingPageDragHeight)
+	}
+}
+
 func TestOnboardingDemoTimelinesMatchFlutterPhases(t *testing.T) {
 	if got := onboardingDemoDuration("queryHotkeys"); got != 9200*time.Millisecond {
 		t.Fatalf("query hotkey duration = %v, want 9.2s Flutter showcase", got)
@@ -527,7 +569,8 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 	demo := onboardingGlanceDemo(OnboardingProps{
 		GlanceEnabled: true,
 		GlanceLabel:   "CPU",
-		Labels:        map[string]string{"demo.glance.value": "当前时间", "glance.body": "Status", "demo.glance.provider": "Provider", "glance.enable.body": "Body", "glance.primary": "Primary"},
+		GlanceValue:   "62%",
+		Labels:        map[string]string{"demo.glance.value": "当前时间", "glance.body": "Status", "demo.glance.provider": "Provider", "glance.enable.body": "Body", "glance.primary": "Glance item"},
 		Theme:         woxcomponent.Theme{},
 	}, OnboardingStep{}, 640, 360).(woxwidget.Clip)
 	_, frame, windowClip := onboardingPlacedLauncherSlot(demo)
@@ -543,6 +586,11 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 	accessory := query.Children[1].(woxwidget.Align)
 	if accessory.Horizontal != .5 || accessory.Vertical != .5 {
 		t.Fatalf("glance accessory alignment = (%v, %v), want centered", accessory.Horizontal, accessory.Vertical)
+	}
+	accessoryFlex := accessory.Child.(woxwidget.Flex)
+	accessoryText := accessoryFlex.Children[1].(woxwidget.TextBlock)
+	if accessoryText.Value != "62%" {
+		t.Fatalf("glance accessory text = %q, want live glance value", accessoryText.Value)
 	}
 }
 

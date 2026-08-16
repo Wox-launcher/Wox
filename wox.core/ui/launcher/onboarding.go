@@ -139,7 +139,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	labels["permission.checking"] = a.translate("i18n:onboarding_permission_checking")
 	labels["glance.enable"] = a.translate("i18n:ui_glance_enable")
 	labels["glance.enable.body"] = a.translate("i18n:ui_glance_enable_tips")
-	labels["glance.primary"] = a.translate("i18n:onboarding_glance_picker_label")
+	labels["glance.primary"] = a.translate("i18n:ui_glance_primary")
 	if a.onboardingError != "" {
 		labels[step.ID+".body"] = a.onboardingError
 	}
@@ -218,6 +218,11 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		Permissions: permissions, PermissionLoading: a.onboardingLoading,
 		ChoiceKind: a.onboardingChoice, ChoiceValue: choiceValue, ChoiceAnchor: a.onboardingChoiceAnchor, Choices: choices,
 		Window: a.onboardingNativeWindow(), Theme: snapshot.palette.componentTheme(),
+		OnDrag: func() {
+			if window := a.onboardingNativeWindow(); window != nil {
+				_ = window.StartDragging()
+			}
+		},
 		OnStep: a.selectOnboardingStep, OnBack: func() { a.selectOnboardingStep(active - 1) }, OnNext: func() { a.selectOnboardingStep(active + 1) },
 		OnSkip: a.finishOnboarding, OnFinish: a.finishOnboarding, OnToggleGlance: a.setOnboardingGlanceEnabled,
 		OnOpenChoice: a.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,

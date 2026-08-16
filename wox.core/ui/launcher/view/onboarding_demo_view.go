@@ -668,7 +668,10 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 	accessoryWidth := float32(0)
 	if props.GlanceEnabled {
 		title = props.GlanceLabel
-		tail = props.Labels["demo.glance.value"]
+		tail = props.GlanceValue
+		if tail == "" {
+			tail = props.Labels["demo.glance.value"]
+		}
 		accessoryText := tail
 		if accessoryText == "" {
 			accessoryText = props.GlanceLabel
@@ -676,10 +679,14 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 		accessoryWidth = min(float32(200), max(float32(100), float32(len([]rune(accessoryText)))*12+42))
 		accessoryColor := settingsColorAlpha(props.Theme.QueryText, 204)
 		textWidth := min(accessoryWidth-37, float32(len([]rune(accessoryText)))*12)
+		iconWidget := woxwidget.Widget(onboardingDemoClockIcon(accessoryColor))
+		if props.GlanceIcon != nil {
+			iconWidget = woxwidget.Image{Source: props.GlanceIcon, Width: 14, Height: 14, Fit: woxwidget.ImageFitContain}
+		}
 		accessory = woxwidget.Align{
 			Width: accessoryWidth, Height: 30, Horizontal: .5, Vertical: .5,
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				onboardingDemoClockIcon(accessoryColor),
+				iconWidget,
 				woxwidget.TextBlock{Value: accessoryText, Width: textWidth, Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 11}, Color: accessoryColor},
 			}},
 		}
@@ -693,7 +700,7 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 			Results: []onboardingDemoResult{
 				{Title: title, Subtitle: props.Labels["glance.body"], Tail: tail, Glyph: "◉", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
 				{Title: props.Labels["demo.glance.provider"], Subtitle: props.Labels["glance.enable.body"], Tail: "Glance", Glyph: "ϟ", GlyphColor: step.Accent},
-				{Title: props.Labels["glance.primary"], Subtitle: props.Labels["glance.primary"], Tail: props.GlanceLabel, Glyph: "⌖", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
+				{Title: props.GlanceLabel, Subtitle: props.Labels["glance.primary"], Tail: tail, Glyph: "⌖", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
 			},
 		}),
 	})

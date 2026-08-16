@@ -11,6 +11,9 @@ import (
 const (
 	OnboardingSidebarWidth = float32(256)
 	OnboardingFooterHeight = float32(72)
+	// Header drag strips cover the top inset plus the primary title row in each column.
+	OnboardingRailDragHeight = float32(58)
+	OnboardingPageDragHeight = float32(74)
 )
 
 // OnboardingStep describes one item in the first-run progress rail.
@@ -62,6 +65,7 @@ type OnboardingProps struct {
 	Choices            []OnboardingChoice
 	Window             *woxui.Window
 	Theme              woxcomponent.Theme
+	OnDrag             func()
 	OnStep             func(int)
 	OnBack             func()
 	OnNext             func()
@@ -160,10 +164,14 @@ func onboardingRail(props OnboardingProps, active int, height float32) woxwidget
 			}),
 		}},
 	}
-	return woxwidget.Stack{Width: OnboardingSidebarWidth, Height: height, Children: []woxwidget.StackChild{
+	children := []woxwidget.StackChild{
 		{Child: content},
 		{AnchorRight: true, StretchHeight: true, Child: woxwidget.Container{Width: 1, Color: settingsColorAlpha(props.Theme.PreviewSplit, 128)}},
-	}}
+	}
+	if drag := onboardingDragArea(OnboardingSidebarWidth, OnboardingRailDragHeight, "onboarding-rail-drag", props.OnDrag); drag != nil {
+		children = append([]woxwidget.StackChild{{Child: drag}}, children...)
+	}
+	return woxwidget.Stack{Width: OnboardingSidebarWidth, Height: height, Children: children}
 }
 
 func onboardingRailStep(step OnboardingStep, index, active int, width float32, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
@@ -223,7 +231,7 @@ func onboardingPage(props OnboardingProps, step OnboardingStep, height float32) 
 	contentHeight := onboardingPageContentHeight(props, step, innerWidth)
 	content := onboardingStepContent(props, step, innerWidth, contentHeight)
 	previewHeight := max(float32(120), height-30-44-16-contentHeight-18-20)
-	return woxwidget.Container{
+	page := woxwidget.Container{
 		Width: width, Height: height, Padding: woxwidget.Insets{Left: 38, Top: 30, Right: 38, Bottom: 20},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			woxwidget.TextBlock{Value: step.Title, Width: innerWidth, Height: 44, LineHeight: 44, MaxLines: 1, Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
@@ -237,6 +245,18 @@ func onboardingPage(props OnboardingProps, step OnboardingStep, height float32) 
 			},
 		}},
 	}
+	if drag := onboardingDragArea(width, OnboardingPageDragHeight, "onboarding-page-drag", props.OnDrag); drag != nil {
+		return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: drag}, {Child: page}}}
+	}
+	return page
+}
+
+// onboardingDragArea exposes the header chrome as a native window drag target.
+func onboardingDragArea(width, height float32, id string, onDrag func()) woxwidget.Widget {
+	if onDrag == nil || width <= 0 || height <= 0 {
+		return nil
+	}
+	return woxwidget.Gesture{ID: id, OnDragStart: onDrag, Child: woxwidget.Container{Width: width, Height: height}}
 }
 
 // onboardingPageContentHeight keeps control-heavy steps stable while matching Flutter's intrinsic info-panel height for text-only steps.
