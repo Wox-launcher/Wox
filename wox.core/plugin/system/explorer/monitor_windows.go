@@ -450,8 +450,20 @@ func copyExplorerRawKeyListeners(listeners map[int]ExplorerRawKeyListener) []Exp
 func shouldDispatchTypeToSearch(event keyboard.RawKeyEvent) bool {
 	return event.Type == keyboard.EventTypeKeyDown &&
 		!event.Key.IsModifier() &&
+		!isExplorerShortcutKey(event.Key) &&
 		event.Character != "" &&
 		event.Modifiers&(keyboard.ModifierCtrl|keyboard.ModifierAlt|keyboard.ModifierSuper) == 0
+}
+
+// isExplorerShortcutKey preserves function keys handled by File Explorer itself.
+func isExplorerShortcutKey(key keyboard.Key) bool {
+	switch key {
+	case keyboard.KeyF2, keyboard.KeyF3, keyboard.KeyF4, keyboard.KeyF5,
+		keyboard.KeyF6, keyboard.KeyF10, keyboard.KeyF11:
+		return true
+	default:
+		return false
+	}
 }
 
 // isTypeToSearchConsumedKeyDown suppresses repeated keydown events for the key

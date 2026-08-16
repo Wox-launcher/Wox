@@ -117,7 +117,9 @@ static BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
         return TRUE;
     }
 
-    if (_wcsicmp(className, L"DUIViewWndClassName") == 0 || _wcsicmp(className, L"DirectUIHWND") == 0)
+    // Generic TaskDialogs can contain DirectUIHWND too. SHELLDLL_DefView is
+    // the actual file view that distinguishes open/save dialogs.
+    if (_wcsicmp(className, L"SHELLDLL_DefView") == 0)
     {
         data->found = TRUE;
         return FALSE;
@@ -477,7 +479,7 @@ static int isForegroundExplorerOrDialogWindow(HWND hwnd)
 
     int isExplorer = isExplorerProcess(pid);
     int isDialog = isOpenSaveDialog(hwnd);
-    if (isExplorer && (classResult != -1 || isDesktop))
+    if (isExplorer && (classResult == 1 || isDesktop))
     {
         return 1;
     }
@@ -522,7 +524,7 @@ int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
 
     int isExplorer = isExplorerProcess(pid);
     isDialog = isOpenSaveDialog(hwnd);
-    if (!((isExplorer && (classResult != -1 || isDesktop)) || isDialog))
+    if (!((isExplorer && (classResult == 1 || isDesktop)) || isDialog))
     {
         return 0;
     }
@@ -628,20 +630,7 @@ static void CALLBACK foregroundChangedProc(
     {
         int isExplorer = isExplorerProcess(pid);
         int isDialog = isOpenSaveDialog(hwnd);
-        if (isExplorer)
-        {
-            if (classResult != -1)
-            {
-                isValid = 1;
-            }
-        }
-        else if (isDialog)
-        {
-            isValid = 1;
-        }
-
-        // If not valid yet, check if it's a dialog inside explorer process
-        if (!isValid && pid != 0 && isExplorer && isDialog)
+        if ((isExplorer && classResult == 1) || isDialog)
         {
             isValid = 1;
         }
@@ -729,20 +718,7 @@ static void CALLBACK objectShowProc(
     {
         int isExplorer = isExplorerProcess(pid);
         int isDialog = isOpenSaveDialog(hwnd);
-        if (isExplorer)
-        {
-            if (classResult != -1)
-            {
-                isValid = 1;
-            }
-        }
-        else if (isDialog)
-        {
-            isValid = 1;
-        }
-
-        // If not valid yet, check if it's a dialog inside explorer process
-        if (!isValid && pid != 0 && isExplorer && isDialog)
+        if ((isExplorer && classResult == 1) || isDialog)
         {
             isValid = 1;
         }
@@ -826,20 +802,7 @@ static DWORD WINAPI monitorThreadProc(LPVOID param)
         {
             int isExplorer = isExplorerProcess(pid);
             int isDialog = isOpenSaveDialog(hwnd);
-            if (isExplorer)
-            {
-                if (classifyExplorerWindow(hwnd) != -1)
-                { // Re-check class result for initial window
-                    isValid = 1;
-                }
-            }
-            else if (isDialog)
-            {
-                isValid = 1;
-            }
-
-            // If not valid yet, check if it's a dialog inside explorer process
-            if (!isValid && pid != 0 && isExplorer && isDialog)
+            if ((isExplorer && classifyExplorerWindow(hwnd) == 1) || isDialog)
             {
                 isValid = 1;
             }

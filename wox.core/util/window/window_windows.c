@@ -780,7 +780,9 @@ BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
         return TRUE;
     }
 
-    if (wcscmp(className, L"DUIViewWndClassName") == 0 || wcscmp(className, L"DirectUIHWND") == 0)
+    // Generic TaskDialogs can contain DirectUIHWND too. SHELLDLL_DefView is
+    // the actual file view that distinguishes open/save dialogs.
+    if (wcscmp(className, L"SHELLDLL_DefView") == 0)
     {
         data->found = TRUE;
         return FALSE;
