@@ -17,6 +17,26 @@ func TestOpenAsAdministratorRejectsInvalidPath(t *testing.T) {
 	}
 }
 
+func TestRunElevatedRejectsInvalidPath(t *testing.T) {
+	_, err := RunElevated("invalid\x00path.exe", "-Command echo", "")
+	if err == nil {
+		t.Fatal("expected invalid path to fail")
+	}
+	if !strings.Contains(err.Error(), "encode ShellExecute path") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunElevatedRejectsInvalidParameters(t *testing.T) {
+	_, err := RunElevated("powershell.exe", "invalid\x00args", "")
+	if err == nil {
+		t.Fatal("expected invalid parameters to fail")
+	}
+	if !strings.Contains(err.Error(), "encode ShellExecute parameters") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestShellExecuteMaskUsesContextMenuForNamespaceObjects(t *testing.T) {
 	mask := shellExecuteMask(`shell:AppsFolder\Example.App_123!App`)
 	if mask&seeMaskInvokeIDList == 0 {

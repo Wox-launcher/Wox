@@ -20,6 +20,7 @@ const (
 	coInitializeChangedMode        = syscall.Errno(0x80010106)
 	seeMaskAsyncOK                 = 0x00100000
 	seeMaskInvokeIDList            = 0x0000000C
+	seeMaskNoCloseProcess          = 0x00000040
 	shellExecuteShowNormal         = 1
 	shellExecuteSuccessThreshold   = 32
 )
@@ -50,6 +51,15 @@ type shellExecuteInfo struct {
 	hProcess     uintptr
 }
 
+type shellExecuteRequest struct {
+	File           string
+	Verb           string
+	Parameters     string
+	Directory      string
+	Show           int32
+	NoCloseProcess bool
+}
+
 func Open(path string) error {
 	return executeShellVerb(path, "open")
 }
@@ -59,39 +69,113 @@ func OpenAsAdministrator(path string) error {
 	return executeShellVerb(path, "runas")
 }
 
+// RunElevated launches a file through the Windows runas verb so UAC can elevate it.
+// parameters is the argument string passed to the executable. directory is optional.
+func RunElevated(file string, parameters string, directory string) (WaitFunc, error) {
+	return shellExecute(shellExecuteRequest{
+		File:           file,
+		Verb:           "runas",
+		Parameters:     parameters,
+		Directory:      directory,
+		Show:           shellExecuteShowNormal,
+		NoCloseProcess: true,
+	})
+}
+
 // executeShellVerb keeps normal and elevated launches on the same ShellExecute path.
 func executeShellVerb(path string, verb string) error {
-	operationPtr, err := windows.UTF16PtrFromString(verb)
+	_, err := shellExecute(shellExecuteRequest{
+		File: path,
+		Verb: verb,
+		Show: shellExecuteShowNormal,
+	})
+	return err
+}
+
+// shellExecute invokes ShellExecuteExW and optionally returns a wait callback.
+func shellExecute(req shellExecuteRequest) (WaitFunc, error) {
+	operationPtr, err := windows.UTF16PtrFromString(req.Verb)
 	if err != nil {
-		return fmt.Errorf("encode ShellExecute verb: %w", err)
+		return nil, fmt.Errorf("encode ShellExecute verb: %w", err)
 	}
 
-	pathPtr, err := windows.UTF16PtrFromString(path)
+	pathPtr, err := windows.UTF16PtrFromString(req.File)
 	if err != nil {
-		return fmt.Errorf("encode ShellExecute path: %w", err)
+		return nil, fmt.Errorf("encode ShellExecute path: %w", err)
+	}
+
+	parameterPtr, err := utf16PtrOrNil(req.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("encode ShellExecute parameters: %w", err)
+	}
+
+	directoryPtr, err := utf16PtrOrNil(req.Directory)
+	if err != nil {
+		return nil, fmt.Errorf("encode ShellExecute directory: %w", err)
+	}
+
+	mask := shellExecuteMask(req.File)
+	if req.NoCloseProcess {
+		mask |= seeMaskNoCloseProcess
+		// Wait for UAC and process creation so hProcess is populated.
+		mask &^= seeMaskAsyncOK
 	}
 
 	info := shellExecuteInfo{
 		cbSize: uint32(unsafe.Sizeof(shellExecuteInfo{})),
 		// Keep the direct Shell path handling but let Windows finish DDE/delegate launch work asynchronously.
-		fMask:  shellExecuteMask(path),
-		lpVerb: operationPtr,
-		lpFile: pathPtr,
-		nShow:  shellExecuteShowNormal,
+		fMask:        mask,
+		lpVerb:       operationPtr,
+		lpFile:       pathPtr,
+		lpParameters: parameterPtr,
+		lpDirectory:  directoryPtr,
+		nShow:        req.Show,
 	}
 
 	ret, _, callErr := procShellExecuteExW.Call(uintptr(unsafe.Pointer(&info)))
 	if ret == 0 {
 		if callErr != syscall.Errno(0) {
-			return fmt.Errorf("ShellExecute %s failed for %s: %w", verb, path, callErr)
+			if req.Verb == "runas" && errors.Is(callErr, windows.ERROR_CANCELLED) {
+				return nil, ErrElevationCancelled
+			}
+			return nil, fmt.Errorf("ShellExecute %s failed for %s: %w", req.Verb, req.File, callErr)
 		}
-		return fmt.Errorf("ShellExecute %s failed for %s", verb, path)
+		return nil, fmt.Errorf("ShellExecute %s failed for %s", req.Verb, req.File)
 	}
 	if info.hInstApp <= shellExecuteSuccessThreshold {
-		return fmt.Errorf("ShellExecute %s failed for %s with code %d", verb, path, info.hInstApp)
+		return nil, fmt.Errorf("ShellExecute %s failed for %s with code %d", req.Verb, req.File, info.hInstApp)
 	}
 
-	return nil
+	if !req.NoCloseProcess || info.hProcess == 0 {
+		return nil, nil
+	}
+
+	handle := windows.Handle(info.hProcess)
+	return func() (int, error) {
+		defer windows.CloseHandle(handle)
+
+		event, err := windows.WaitForSingleObject(handle, windows.INFINITE)
+		if err != nil {
+			return 1, err
+		}
+		if event != windows.WAIT_OBJECT_0 {
+			return 1, fmt.Errorf("wait for elevated process returned %d", event)
+		}
+
+		var exitCode uint32
+		if err := windows.GetExitCodeProcess(handle, &exitCode); err != nil {
+			return 1, err
+		}
+		return int(exitCode), nil
+	}, nil
+}
+
+// utf16PtrOrNil encodes a ShellExecute string argument, leaving empty values unset.
+func utf16PtrOrNil(value string) (*uint16, error) {
+	if value == "" {
+		return nil, nil
+	}
+	return windows.UTF16PtrFromString(value)
 }
 
 // shellExecuteMask routes namespace objects through their context-menu handlers so registered verbs are available.

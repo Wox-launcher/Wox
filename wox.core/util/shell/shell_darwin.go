@@ -52,6 +52,11 @@ func OpenFileInFolder(path string) error {
 	return exec.Command("open", "-R", path).Start()
 }
 
+// RunElevated is only implemented on Windows, where UAC can elevate a process.
+func RunElevated(file string, parameters string, directory string) (WaitFunc, error) {
+	return nil, fmt.Errorf("elevated execution is only supported on Windows")
+}
+
 // HideWindowCmd is a no-op on macOS as there's no console window to hide
 func HideWindowCmd(cmd *exec.Cmd) {
 	// No-op on macOS

@@ -1019,6 +1019,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, show
 				})
 			},
 		})
+		actions = s.appendExecuteAsAdministratorAction(actions, historyContextData)
 		actions = append(actions, s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData))
 
 		// Only add stop action if command is still running
@@ -1145,17 +1146,18 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				})
 			},
 		},
-		{
-			Id:                     "stop",
-			Name:                   "i18n:plugin_shell_stop",
-			Icon:                   common.TerminateAppIcon,
-			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				s.stopSessionByResultID(ctx, actionContext.ResultId)
-			},
-		},
 	}
+	actions = s.appendExecuteAsAdministratorAction(actions, contextData)
+	actions = append(actions, plugin.QueryResultAction{
+		Id:                     "stop",
+		Name:                   "i18n:plugin_shell_stop",
+		Icon:                   common.TerminateAppIcon,
+		PreventHideAfterAction: true,
+		ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			s.stopSessionByResultID(ctx, actionContext.ResultId)
+		},
+	})
 	actions = append(actions, s.buildEditCommandAction(contextData), s.buildAddCommandAction(contextData), s.buildRunWithInterpreterAction(contextData))
 	actions = append(actions,
 		plugin.QueryResultAction{
@@ -1337,6 +1339,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 				},
 			}
 		}
+		actions = s.appendExecuteAsAdministratorAction(actions, contextData)
 		actions = append(actions, s.buildEditCommandAction(savedCommandData), s.buildDeleteConfiguredCommandAction(savedCommandData), s.buildRunWithInterpreterAction(contextData))
 
 		result := plugin.QueryResult{

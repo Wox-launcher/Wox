@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,6 +48,11 @@ func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 func RunOutput(name string, arg ...string) ([]byte, error) {
 	cmd := BuildCommand(name, nil, arg...)
 	return cmd.Output()
+}
+
+// RunElevated is only implemented on Windows, where UAC can elevate a process.
+func RunElevated(file string, parameters string, directory string) (WaitFunc, error) {
+	return nil, fmt.Errorf("elevated execution is only supported on Windows")
 }
 
 func OpenFileInFolder(path string) error {

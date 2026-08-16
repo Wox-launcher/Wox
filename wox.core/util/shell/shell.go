@@ -2,10 +2,22 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
+
+// ErrElevationCancelled is returned when the user dismisses the Windows UAC prompt.
+var ErrElevationCancelled = errors.New("administrator elevation cancelled")
+
+// WaitFunc waits for a process started by RunElevated and returns its exit code.
+type WaitFunc func() (exitCode int, err error)
+
+// IsElevationCancelled reports whether elevated launch was cancelled at the UAC prompt.
+func IsElevationCancelled(err error) bool {
+	return errors.Is(err, ErrElevationCancelled)
+}
 
 // BuildCommand builds an exec.Cmd with standard env and platform settings, without starting it.
 func BuildCommand(name string, envs []string, arg ...string) *exec.Cmd {
