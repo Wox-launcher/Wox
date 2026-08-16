@@ -430,6 +430,17 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 func (r *SysPlugin) buildDevCommands() []SysCommand {
 	return []SysCommand{
 		{
+			ID:                     "open_onboarding",
+			Title:                  "Open onboarding",
+			SubTitle:               "Open the first-run onboarding window",
+			Icon:                   common.UIIcon("control.onboarding"),
+			Aliases:                []string{"onboarding", "open onboarding", "first run", "setup guide", "引导", "打开引导"},
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				plugin.GetPluginManager().GetUI().OpenOnboardingWindow(ctx)
+			},
+		},
+		{
 			ID:                     "toggle_recording_mode",
 			Title:                  "Toggle recording mode",
 			SubTitle:               "Use a normal launcher window level so screen recording tools can capture Wox",

@@ -64,30 +64,17 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	wallpaperImage := a.themeSettings.ThemeWallpaperImage()
 	wallpaperBlurred := a.themeSettings.ThemeWallpaperBlurred()
 	draftPalette := themeEditorDraftPalette(state.raw, state.values)
-	previewItemPadding := draftPalette.resultItemPadding
-	previewItemPadding.Left += 5
-	previewItemPadding.Right += 5
-	measureTail := func(value string) float32 {
-		metrics, _ := a.window.MeasureText(value, woxui.TextStyle{Size: 11})
-		return metrics.Size.Width + 16
-	}
 
 	dirty := themeEditorSnapshotDirty(state)
 	return launcherview.ThemeEditorSettingsView(launcherview.ThemeEditorSettingsProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: draftPalette.componentTheme(),
-		ResultTail: draftPalette.resultTail, SelectedTail: draftPalette.selectedTail,
 		Groups: groups, ActiveGroup: state.activeGroup, Dirty: dirty, Saving: state.saving, CanOverwrite: !state.isSystem && !state.isAuto && state.sourceID != "", Error: state.error,
 		Wallpaper: wallpaperImage, WallpaperBlurred: wallpaperBlurred,
-		PreviewGeometry: launcherview.ThemeEditorPreviewGeometry{
-			AppPadding: draftPalette.appPadding, QueryRadius: draftPalette.queryRadius, ResultContainerPadding: draftPalette.resultContainerPadding,
-			ResultItemPadding: previewItemPadding, ResultItemRadius: draftPalette.resultItemRadius, ToolbarPadding: draftPalette.toolbarPadding,
-		},
 		FlashToken: state.flashToken,
 		LocateIcon: locateIcon, DiscardIcon: discardIcon, OverwriteIcon: overwriteIcon, SaveAsIcon: saveAsIcon,
 		LocateLabel:  a.translate("i18n:ui_theme_editor_locate_token"),
 		DiscardLabel: a.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.translate("i18n:ui_theme_editor_overwrite"), SaveAsLabel: a.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.translate("i18n:ui_theme_editor_saving"),
 		PreviewResultTitle: a.translate("i18n:ui_theme_editor_preview_result_theme"), PreviewResultState: a.translate("i18n:ui_theme_editor_preview_result_current"),
-		PreviewTailP1Width: measureTail("P1"), PreviewTail4msWidth: measureTail("4ms"), PreviewTail13msWidth: measureTail("13ms"),
 		Window:        a.window,
 		QueryBoxLabel: a.translate("i18n:ui_theme_editor_preview_result_query"), ResultsLabel: a.translate("i18n:ui_theme_editor_group_results"),
 		ToolbarCopyLabel: a.translate("i18n:ui_theme_editor_toolbar_copy"), ToolbarMoreLabel: a.translate("i18n:ui_theme_editor_toolbar_more"),

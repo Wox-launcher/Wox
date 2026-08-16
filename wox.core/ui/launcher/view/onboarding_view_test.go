@@ -220,13 +220,6 @@ func TestOnboardingWindowsTaskbarUsesCenteredAppsAndSystemTray(t *testing.T) {
 
 func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
 	transparent := woxui.Color{R: 255, G: 255, B: 255, A: 0}
-	if got := demoColorOpacity(transparent, 1); got.A != 0 {
-		t.Fatalf("transparent query alpha = %d, want 0", got.A)
-	}
-	mica := onboardingDemoMicaColor(woxui.Color{R: 22, G: 22, B: 26, A: 133})
-	if mica.A < 163 || mica.A > 219 {
-		t.Fatalf("mica alpha = %d, want Flutter's 0.64-0.86 range", mica.A)
-	}
 	backdrop := &woxui.Image{Width: 702, Height: 344}
 	window := onboardingDemoWindow(onboardingDemoWindowProps{
 		Width: 400, Height: 260, Backdrop: backdrop, Opacity: 1, ShowQuery: true,
@@ -242,21 +235,6 @@ func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
 	}
 	if result := stack.Children[3].Child.(woxwidget.Container); result.Color.A != 36 {
 		t.Fatalf("rendered selected result alpha = %d, want theme alpha 36", result.Color.A)
-	}
-}
-
-func TestOnboardingDemoResultTextIsVerticallyCentered(t *testing.T) {
-	row := onboardingDemoResultRow(onboardingDemoWindowProps{
-		Width: 400,
-		Theme: woxcomponent.Theme{},
-	}, onboardingDemoResult{Title: "Everything", Subtitle: "Search Everything files", Tail: "Current time"}, 51, 255).(woxwidget.Container)
-	content := row.Child.(woxwidget.Flex)
-	text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Align)
-	column := text.Child.(woxwidget.Flex)
-	title := column.Children[0].(woxwidget.TextBlock)
-
-	if text.Vertical != .5 || title.Height < title.LineHeight {
-		t.Fatalf("result text = %#v, title = %#v, want expanded vertically centered text", text, title)
 	}
 }
 
@@ -283,11 +261,11 @@ func TestOnboardingDemoHintCardTextIsVerticallyCentered(t *testing.T) {
 func TestOnboardingPluginStoreUsesSharedWindowMetrics(t *testing.T) {
 	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1).(woxwidget.Clip)
 	children := window.Child.(woxwidget.Stack).Children
-	query := children[1].Child.(woxwidget.Container)
-	result := children[2].Child.(woxwidget.Container)
-	toolbar := children[len(children)-1].Child.(woxwidget.Container)
+	query := children[2].Child.(woxwidget.Container)
+	result := children[3].Child.(woxwidget.Container)
+	toolbar := children[len(children)-2].Child.(woxwidget.Container)
 
-	if query.Height != 50 || result.Height != 51 || toolbar.Height != 36 {
+	if query.Height != 55 || result.Height != 56 || toolbar.Height != 40 {
 		t.Fatalf("plugin store metrics = query %v, result %v, toolbar %v", query.Height, result.Height, toolbar.Height)
 	}
 }
@@ -316,7 +294,7 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 	}, OnboardingStep{}, 640, 360).(woxwidget.Clip)
 	desktop := demo.Child.(woxwidget.Stack)
 	window := desktop.Children[len(desktop.Children)-1].Child.(woxwidget.Clip).Child.(woxwidget.Stack)
-	query := window.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	query := window.Children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex)
 
 	if len(query.Children) != 2 {
 		t.Fatalf("glance query children = %d, want query text plus accessory", len(query.Children))

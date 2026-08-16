@@ -91,103 +91,44 @@ func TestThemeEditorControlPaneReservesActionButtonWidth(t *testing.T) {
 	}
 }
 
-func TestThemeEditorTailFlashDoesNotWrapResultRows(t *testing.T) {
-	props := ThemeEditorSettingsProps{
-		FlashToken:          "ResultItemTailTextColor",
-		PreviewTailP1Width:  28,
-		PreviewTail4msWidth: 34,
-		DraftTheme: woxcomponent.Theme{
-			ResultTitle:    woxui.Color{A: 255},
-			ResultSubtitle: woxui.Color{A: 255},
-		},
+func TestThemeEditorUsesCompleteLauncherDemo(t *testing.T) {
+	preview := themeEditorPreviewWindow(ThemeEditorSettingsProps{
+		DraftTheme:         woxcomponent.Theme{QueryText: woxui.Color{A: 255}},
+		PreviewResultTitle: "Theme editor", QueryBoxLabel: "Query box", ResultsLabel: "Results",
+		ToolbarCopyLabel: "Copy", ToolbarMoreLabel: "More Actions",
+	}, 600, 320).(woxwidget.Clip)
+	children := preview.Child.(woxwidget.Stack).Children
+	query := children[2].Child.(woxwidget.Container)
+	result := children[3].Child.(woxwidget.Container)
+	toolbar := children[len(children)-2].Child.(woxwidget.Container)
+
+	if query.Height != 55 || result.Height != 56 || toolbar.Height != 40 {
+		t.Fatalf("shared launcher demo metrics = query %v, result %v, toolbar %v", query.Height, result.Height, toolbar.Height)
 	}
-	rows := themeEditorPreviewResultRows(props, 600, 240).(woxwidget.Flex)
-	for index, row := range rows.Children {
-		if _, wrapsRow := row.(woxwidget.Stack); wrapsRow {
-			t.Fatalf("tail flash wrapped result row %d", index)
+	accessory := query.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	timeText := accessory.Children[1].(woxwidget.Text).Value
+	if len(timeText) != 5 || timeText[2] != ':' {
+		t.Fatalf("theme demo Glance = %q, want current HH:MM time", timeText)
+	}
+	firstRow := children[3].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	secondRow := children[4].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	thirdRow := children[5].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(firstRow.Children) != 3 || len(secondRow.Children) != 2 || len(thirdRow.Children) != 3 {
+		t.Fatalf("theme demo result tag slots = %d/%d/%d, want meaningful/none/meaningful diversity", len(firstRow.Children), len(secondRow.Children), len(thirdRow.Children))
+	}
+}
+
+func TestThemeEditorMapsTokensToSemanticDemoHighlights(t *testing.T) {
+	tests := map[string]woxcomponent.LauncherDemoHighlightTarget{
+		"QueryBoxFontColor":               woxcomponent.LauncherDemoHighlightQueryText,
+		"ResultItemSubTitleColor":         woxcomponent.LauncherDemoHighlightResultSubtitle,
+		"ResultItemActiveBackgroundColor": woxcomponent.LauncherDemoHighlightSelectedBackground,
+		"ActionItemActiveFontColor":       woxcomponent.LauncherDemoHighlightActionSelectedText,
+		"ToolbarFontColor":                woxcomponent.LauncherDemoHighlightToolbarText,
+	}
+	for token, want := range tests {
+		if got := themeEditorDemoHighlightTarget(token); got != want {
+			t.Fatalf("highlight target for %s = %v, want %v", token, got, want)
 		}
-	}
-
-	inactiveRow := rows.Children[1].(woxwidget.Container)
-	content := inactiveRow.Child.(woxwidget.Flex)
-	tail := content.Children[2].(woxwidget.Align)
-	if tail.Vertical != 0.5 {
-		t.Fatalf("inactive tail vertical alignment = %v, want centered like launcher result rows", tail.Vertical)
-	}
-	if _, highlightsTail := tail.Child.(woxwidget.Stack); !highlightsTail {
-		t.Fatalf("inactive tail content = %T, want localized flash Stack", tail.Child)
-	}
-	row := inactiveRow.Child.(woxwidget.Flex)
-	innerWidth := float32(600) - props.PreviewGeometry.ResultItemPadding.Left - props.PreviewGeometry.ResultItemPadding.Right
-	usedWidth := row.Children[0].(woxwidget.Align).Width + row.Children[1].(woxwidget.Align).Width + tail.Width + row.Gap*2
-	if usedWidth > innerWidth {
-		t.Fatalf("result row children width = %v, exceeds inner width %v", usedWidth, innerWidth)
-	}
-}
-
-func TestThemeEditorPreviewChromeMatchesLauncherLayout(t *testing.T) {
-	props := ThemeEditorSettingsProps{
-		DraftTheme: woxcomponent.Theme{PreviewSplit: woxui.Color{R: 1, A: 255}},
-	}
-	query := themeEditorPreviewQuery(props, 600, 55).(woxwidget.Container)
-	queryRow := query.Child.(woxwidget.Flex)
-	queryText := queryRow.Children[0].(woxwidget.Container)
-	glance := queryRow.Children[1].(woxwidget.Align)
-	if queryText.Width+glance.Width != 586 || glance.Horizontal != 1 {
-		t.Fatalf("query content width/alignment = %v + %v, %v; want 586 and right aligned", queryText.Width, glance.Width, glance.Horizontal)
-	}
-
-	actionPanel := themeEditorPreviewWithActionPanel(props, 600, 240).(woxwidget.Stack)
-	panel := actionPanel.Children[1].Child.(woxwidget.Container)
-	panelColumn := panel.Child.(woxwidget.Flex)
-	divider := panelColumn.Children[1].(woxwidget.Container)
-	line := divider.Child.(woxwidget.Container)
-	if divider.Height != ActionDividerHeight || line.Height != 1 || line.Color != props.DraftTheme.PreviewSplit {
-		t.Fatalf("action divider = %#v, want launcher divider", divider)
-	}
-
-	preview := themeEditorPreviewWithTextPanel(props, 600, 240).(woxwidget.Flex)
-	previewPanel := preview.Children[1].(woxwidget.Stack)
-	previewShell := previewPanel.Children[0].Child.(woxwidget.Container)
-	previewStack := previewShell.Child.(woxwidget.Stack)
-	surface := previewStack.Children[0].Child.(woxwidget.Container)
-	tagLayer := previewStack.Children[1]
-	if tagLayer.Top <= surface.Height {
-		t.Fatalf("preview tags top = %v, want below content surface height %v", tagLayer.Top, surface.Height)
-	}
-	tagScroll := tagLayer.Child.(woxwidget.ScrollView)
-	tags := tagScroll.Child.(woxwidget.Flex)
-	if len(tags.Children) != 4 {
-		t.Fatalf("preview tag count = %d, want Flutter metadata sample count 4", len(tags.Children))
-	}
-	if !tagScroll.Horizontal || tagScroll.ContentWidth < tagScroll.Width {
-		t.Fatalf("preview tag strip = %#v, want Flutter horizontal overflow", tagScroll)
-	}
-	firstTag := tags.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
-	if firstTag.Value != "2026-05-26 10:47:08" {
-		t.Fatalf("first preview tag = %q, want Flutter metadata sample", firstTag.Value)
-	}
-	previewDivider := previewPanel.Children[1].Child.(woxwidget.Container)
-	if previewDivider.Width != 1 || previewDivider.Height != 240 {
-		t.Fatalf("preview divider = %#v, want Flutter left-only divider", previewDivider)
-	}
-}
-
-func TestThemeEditorToolbarKeepsFlutterActionAndKeySpacing(t *testing.T) {
-	toolbar := themeEditorPreviewToolbar(ThemeEditorSettingsProps{
-		DraftTheme: woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}},
-	}, 600, 40).(woxwidget.Stack)
-	body := toolbar.Children[0].Child.(woxwidget.Container)
-	if body.BorderWidth != 0 || toolbar.Children[1].Child.(woxwidget.Container).Height != 1 {
-		t.Fatalf("toolbar border = %v, want only Flutter top divider", body.BorderWidth)
-	}
-	right := body.Child.(woxwidget.Flex)
-	if right.Gap != 16 {
-		t.Fatalf("toolbar action gap = %v, want Flutter spacing 16", right.Gap)
-	}
-	moreAction := right.Children[1].(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	keycaps := moreAction.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
-	if len(keycaps.Children) != 2 || keycaps.Gap != 4 {
-		t.Fatalf("more-action keycaps = %d gap %v, want separate Cmd/J keys with Flutter spacing 4", len(keycaps.Children), keycaps.Gap)
 	}
 }

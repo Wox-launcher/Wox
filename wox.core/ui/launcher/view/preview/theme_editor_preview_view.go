@@ -54,36 +54,12 @@ func ThemeEditorPreviewView(props ThemeEditorPreviewProps) woxwidget.Widget {
 
 // ThemeDraftSample builds the reusable live theme preview.
 func ThemeDraftSample(theme woxcomponent.Theme, width, height float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-20)
-	queryHeight := float32(32)
-	toolbarHeight := float32(24)
-	rowHeight := max(float32(24), (height-queryHeight-toolbarHeight-20)/2)
-	query := woxwidget.Container{Width: innerWidth, Height: queryHeight, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10, Top: 8}, Child: woxwidget.Text{
-		Value: "WOX", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.QueryText,
-	}}
-	row := func(selected bool, title, subtitle string) woxwidget.Widget {
-		background := woxui.Color{}
-		titleColor := theme.ResultTitle
-		subtitleColor := theme.ResultSubtitle
-		if selected {
-			background = theme.SelectedBackground
-			titleColor = theme.SelectedTitle
-			subtitleColor = theme.SelectedSubtitle
-		}
-		return woxwidget.Container{Width: innerWidth, Height: rowHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: titleColor},
-			woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 9}, Color: subtitleColor},
-		}}}
-	}
-	toolbar := woxwidget.Container{Width: innerWidth, Height: toolbarHeight, Color: theme.ToolbarBackground, Padding: woxwidget.Insets{Left: 10, Top: 6}, Child: woxwidget.Text{
-		Value: "Open   ·   Actions", Style: woxui.TextStyle{Size: 9}, Color: theme.ToolbarText,
-	}}
-	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.Background, Padding: woxwidget.UniformInsets(10), Child: woxwidget.Flex{
-		Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			query,
-			row(false, "Wox Go UI", "Portable GPU-rendered theme preview"),
-			row(true, "Selected result", "Colors update as you type"),
-			toolbar,
+	return woxcomponent.WoxLauncherDemo(woxcomponent.LauncherDemoProps{
+		Width: width, Height: height, Background: theme.Background, Theme: theme, Opacity: 1, Query: "WOX", ShowQuery: true, ShowToolbar: true,
+		Results: []woxcomponent.LauncherDemoResult{
+			{Title: "Wox Go UI", Subtitle: "Portable GPU-rendered theme preview", Glyph: "W", GlyphColor: theme.ResultTitle},
+			{Title: "Selected result", Subtitle: "Colors update as you type", Glyph: "✓", GlyphColor: theme.SelectedTitle, Selected: true},
 		},
-	}}
+		PrimaryAction: "Open", ActionMore: "Actions",
+	})
 }
