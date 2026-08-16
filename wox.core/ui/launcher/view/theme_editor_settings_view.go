@@ -303,8 +303,8 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 	}
 	return woxcomponent.WoxLauncherDemo(woxcomponent.LauncherDemoProps{
 		Width: width, Height: height, Backdrop: props.WallpaperBlurred, Background: props.DraftTheme.Background, Theme: props.DraftTheme, Opacity: 1,
-		Query: "theme edit", QueryParts: []woxcomponent.LauncherDemoQueryPart{
-			{Text: "theme ", Color: props.DraftTheme.QueryText}, {Text: "edit", Color: selectionText, Background: selection}, {Color: props.DraftTheme.Cursor, Caret: true},
+		Query: "wox search", QueryParts: []woxcomponent.LauncherDemoQueryPart{
+			{Text: "wox ", Color: props.DraftTheme.QueryText}, {Text: "search", Color: selectionText, Background: selection}, {Color: props.DraftTheme.Cursor, Caret: true},
 		},
 		QueryAccessory: woxwidget.Container{Width: 78, Height: 30, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxcomponent.ClockGlyph(16, themeAlpha(props.DraftTheme.QueryText, 178)),

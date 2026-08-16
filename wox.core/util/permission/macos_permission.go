@@ -68,3 +68,15 @@ func IsValidMacOSPermissionType(permissionType MacOSPermissionType) bool {
 		return false
 	}
 }
+
+// MacOSPermissionSettingsAnchor returns the System Settings privacy-pane anchor for one permission.
+func MacOSPermissionSettingsAnchor(permissionType MacOSPermissionType) string {
+	switch permissionType {
+	case MacOSPermissionAccessibility:
+		return "Privacy_Accessibility"
+	case MacOSPermissionFullDiskAccess:
+		return "Privacy_AllFiles"
+	default:
+		return ""
+	}
+}

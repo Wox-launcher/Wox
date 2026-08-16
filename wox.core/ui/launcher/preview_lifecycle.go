@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"log"
-	"strings"
 )
 
 // reconcileSelectedPreview keeps stateful preview resources aligned with the selected render target.
@@ -61,10 +60,6 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 		if a.activateTriggerConflictPreview(result, preview) != nil {
 			a.deactivateTriggerConflictPreview()
 		}
-	case "theme_edit":
-		if a.activateThemeEditorPreview(result, preview) != nil {
-			a.deactivateThemeEditorPreview()
-		}
 	case "chat":
 		if a.activateChatPreview(result, preview) != nil {
 			a.deactivateChatPreview()
@@ -122,9 +117,6 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 	if keep != "trigger_keyword_conflict" {
 		a.deactivateTriggerConflictPreview()
 	}
-	if keep != "theme_edit" {
-		a.deactivateLauncherThemeEditorPreview()
-	}
 	if keep != "chat" {
 		a.deactivateChatPreview()
 	}
@@ -145,20 +137,4 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 		a.deactivateNativeFilePreview()
 	}
 	return false
-}
-
-// deactivateLauncherThemeEditorPreview leaves the independent Settings editor untouched.
-func (a *App) deactivateLauncherThemeEditorPreview() {
-	editor := a.themeSettings.ThemeEditor()
-	if editor == nil || !strings.HasPrefix(editor.key, "settings-theme|") {
-		a.deactivateThemeEditorPreview()
-	}
-}
-
-// clearLauncherThemeEditorPreview preserves the independent Settings draft during launcher resets.
-func (a *App) clearLauncherThemeEditorPreview() {
-	editor := a.themeSettings.ThemeEditor()
-	if editor == nil || !strings.HasPrefix(editor.key, "settings-theme|") {
-		a.themeSettings.SetThemeEditor(nil)
-	}
 }

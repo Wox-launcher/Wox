@@ -42,23 +42,3 @@ func TestOpenSettingChoicePickerEndsEditBeforeOpeningPicker(t *testing.T) {
 		t.Fatalf("choice picker item = %q, want LangCode", picker.item.key)
 	}
 }
-
-func TestThemeEditorPreviewSnapshotReadsUIOwnedState(t *testing.T) {
-	result := queryResult{QueryID: "query", ID: "result"}
-	preview := queryPreview{PreviewData: `{"ThemeName":"Test","AppBackgroundColor":"#000000"}`}
-	raw, key, err := themeEditorPreviewDataAndKey(result, preview)
-	if err != nil {
-		t.Fatalf("prepare theme editor preview: %v", err)
-	}
-	controller := newThemeSettingsController(CommonDeps{})
-	controller.SetThemeEditor(newThemeEditorState(key, raw))
-	app := &App{themeSettings: controller}
-
-	snapshot, snapshotErr := app.themeEditorPreviewSnapshotFor(result, preview)
-	if snapshotErr != nil {
-		t.Fatalf("snapshot theme editor preview: %v", snapshotErr)
-	}
-	if snapshot == nil || snapshot.values["ThemeName"] != "Test" {
-		t.Fatalf("unexpected theme editor snapshot: %#v", snapshot)
-	}
-}

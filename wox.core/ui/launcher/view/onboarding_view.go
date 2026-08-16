@@ -343,21 +343,23 @@ func onboardingPermissions(props OnboardingProps, width, height float32) woxwidg
 				},
 			})
 		}
+		iconColor := props.Theme.ResultTitle
+		if iconColor.A == 0 {
+			iconColor = woxui.Color{R: 255, G: 255, B: 255, A: 220}
+		}
 		rows = append(rows, woxwidget.Container{
-			Width: width, Height: rowHeight, Padding: woxwidget.Insets{Left: 18, Top: 14, Right: 18, Bottom: 12},
+			Width: width, Height: rowHeight, Padding: woxwidget.Insets{Left: 18, Top: 12, Right: 18, Bottom: 12},
 			BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 30), BorderWidth: 1,
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 14, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				woxwidget.Container{
-					Width: 38, Height: 38, Radius: 8, Color: settingsColorAlpha(permissionColor(permission.Ready), 30),
-					Child: woxwidget.Align{Width: 38, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-						Value: permissionGlyph(permission.ID), Style: woxui.TextStyle{Size: 19}, Color: permissionColor(permission.Ready),
-					}},
+					Width: 38, Height: 38, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 18),
+					Child: woxwidget.Align{Width: 38, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: permissionIcon(permission.ID, 20, iconColor)},
 				},
-				woxwidget.Expanded{Child: woxwidget.Container{Height: rowHeight - 26, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
+				woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 					woxwidget.Text{Value: permission.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-					woxwidget.TextBlock{Value: permission.Description, Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
-				}}}},
-				woxwidget.Align{Width: 110, Height: rowHeight - 26, Horizontal: 1, Vertical: 0.5, Child: action},
+					woxwidget.TextBlock{Value: permission.Description, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
+				}}},
+				woxwidget.Align{Width: 110, Horizontal: 1, Vertical: 0.5, Child: action},
 			}},
 		})
 	}
@@ -416,7 +418,7 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 		nextID = "onboarding-finish"
 	}
 	content := woxwidget.Container{
-		Width: props.Width, Height: OnboardingFooterHeight, Color: settingsColorAlpha(props.Theme.Background, 245),
+		Width: props.Width, Height: OnboardingFooterHeight,
 		Padding: woxwidget.Insets{Left: 28, Top: 17, Right: 28, Bottom: 17},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisSpaceBetween, Children: []woxwidget.Widget{
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
@@ -440,16 +442,17 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 	}}
 }
 
-func permissionColor(ready bool) woxui.Color {
-	if ready {
-		return woxui.Color{R: 34, G: 197, B: 94, A: 255}
+// permissionIcon returns the monochrome SVG for one onboarding permission row.
+func permissionIcon(id string, size float32, color woxui.Color) woxwidget.Widget {
+	if id == "accessibility" {
+		return woxcomponent.AccessibilityGlyph(size, color)
 	}
-	return woxui.Color{R: 245, G: 158, B: 11, A: 255}
+	return woxcomponent.DiskAccessGlyph(size, color)
 }
 
 func permissionGlyph(id string) string {
 	if id == "accessibility" {
-		return "♿"
+		return "A"
 	}
-	return "▣"
+	return "F"
 }

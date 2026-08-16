@@ -870,10 +870,6 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 		if a.triggerConflict != nil {
 			state = append(state, snapshotTriggerConflictPreviewLocked(a.triggerConflict))
 		}
-	case "theme_edit":
-		if editor := a.themeSettings.ThemeEditor(); editor != nil {
-			state = append(state, snapshotThemeEditorPreviewLocked(editor))
-		}
 	case "chat":
 		if a.chatPreview != nil {
 			state = append(state, snapshotChatPreviewLocked(a.chatPreview))
@@ -909,7 +905,7 @@ func launcherPreviewVisible(layout queryLayout, preview queryPreview) bool {
 		return true
 	}
 	switch preview.PreviewType {
-	case "query_requirement_settings", "trigger_keyword_conflict", "theme_edit", "hotkey_overview":
+	case "query_requirement_settings", "trigger_keyword_conflict", "hotkey_overview":
 		return true
 	default:
 		return false

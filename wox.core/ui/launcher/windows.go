@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"log"
-	"strings"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -231,16 +230,8 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 	_ = window.SetTextInputState(state)
 }
 
-func (a *App) themeEditorUsesSettingsWindow() bool {
-	editor := a.themeSettings.ThemeEditor()
-	return editor != nil && strings.HasPrefix(editor.key, "settings-theme|")
-}
-
 func (a *App) themeEditorNativeWindow() *woxui.Window {
-	if a.themeEditorUsesSettingsWindow() {
-		return a.settingsNativeWindow()
-	}
-	return a.window
+	return a.settingsNativeWindow()
 }
 
 func (a *App) invalidateThemeEditorWindow() {
@@ -250,19 +241,11 @@ func (a *App) invalidateThemeEditorWindow() {
 }
 
 func (a *App) updateThemeEditorTextInput(enabled bool) {
-	if a.themeEditorUsesSettingsWindow() {
-		a.updateSettingsTextInput(enabled)
-		return
-	}
-	a.updateFormTextInput(enabled)
+	a.updateSettingsTextInput(enabled)
 }
 
 func (a *App) restoreThemeEditorTextInput() {
-	if a.themeEditorUsesSettingsWindow() {
-		a.updateSettingsTextInput(false)
-		return
-	}
-	a.restoreQueryTextInput()
+	a.updateSettingsTextInput(false)
 }
 
 func (a *App) formTableUsesSettingsWindow() bool {

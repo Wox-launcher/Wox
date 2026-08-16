@@ -1889,7 +1889,6 @@ func shouldHidePreviewForGlobalQuery(query Query, preview WoxPreview) bool {
 	}
 
 	return preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		preview.PreviewType != WoxPreviewTypeThemeEdit &&
 		preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict
 }
 
@@ -2446,7 +2445,7 @@ func shouldWrapRemotePreview(preview WoxPreview) bool {
 		return false
 	}
 	switch preview.PreviewType {
-	case WoxPreviewTypeRemote, WoxPreviewTypeQueryRequirementSettings, WoxPreviewTypeThemeEdit, WoxPreviewTypeTriggerKeywordConflict, WoxPreviewTypeMedia:
+	case WoxPreviewTypeRemote, WoxPreviewTypeQueryRequirementSettings, WoxPreviewTypeTriggerKeywordConflict, WoxPreviewTypeMedia:
 		return false
 	default:
 		return true

@@ -11,6 +11,7 @@ package woxui
 import "C"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -22,6 +23,7 @@ import (
 	"unsafe"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
+	"wox/util"
 )
 
 type darwinRunState struct {
@@ -38,31 +40,35 @@ var darwinRuntime struct {
 }
 
 type platformWindow struct {
-	mu            sync.Mutex
-	renderMu      sync.Mutex
-	native        *C.WoxDarwinWindow
-	options       WindowOptions
-	handle        cgo.Handle
-	closing       bool
-	closed        bool
-	renderErr     error
-	fontFamily    string
-	renderWake    chan struct{}
-	renderStop    chan struct{}
-	renderDone    chan struct{}
-	renderStopped bool
-	pendingFrame  *darwinRenderFrame
-	pendingDamage Rect
-	damagePending bool
-	fullDamage    bool
-	webView       *webviewruntime.Controller
+	mu              sync.Mutex
+	renderMu        sync.Mutex
+	native          *C.WoxDarwinWindow
+	options         WindowOptions
+	handle          cgo.Handle
+	closing         bool
+	closed          bool
+	renderErr       error
+	fontFamily      string
+	renderWake      chan struct{}
+	renderStop      chan struct{}
+	renderDone      chan struct{}
+	renderStopped   bool
+	renderErrLogged bool
+	pendingFrame    *darwinRenderFrame
+	pendingDamage   Rect
+	damagePending   bool
+	fullDamage      bool
+	webView         *webviewruntime.Controller
 }
 
 type darwinRenderFrame struct {
-	frame       FrameInfo
-	displayList *DisplayList
-	fontFamily  string
-	buildCost   time.Duration
+	frame                 FrameInfo
+	displayList           *DisplayList
+	fontFamily            string
+	buildCost             time.Duration
+	coalescedFrameCount   uint64
+	firstCoalescedFrameID uint64
+	lastCoalescedFrameID  uint64
 }
 
 // AppKit requires the package's main goroutine to remain on the process main thread.
@@ -214,8 +220,11 @@ func (w *platformWindow) hide() error {
 		dropped := w.pendingFrame
 		w.pendingFrame = nil
 		w.mu.Unlock()
-		if dropped != nil && w.options.frameMetrics != nil {
-			w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+		if dropped != nil {
+			w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=window_hidden frameId=%d", dropped.displayList.frameID))
+			if w.options.frameMetrics != nil {
+				w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+			}
 		}
 		return nil
 	})
@@ -469,7 +478,12 @@ func (w *platformWindow) invalidate() error {
 	w.mu.Lock()
 	if w.renderErr != nil {
 		err := w.renderErr
+		shouldLog := !w.renderErrLogged
+		w.renderErrLogged = true
 		w.mu.Unlock()
+		if shouldLog {
+			w.logRenderDiagnostic(fmt.Sprintf("event=invalidation_rejected reason=sticky_render_error error=%q", err.Error()))
+		}
 		return err
 	}
 	w.fullDamage = true
@@ -491,7 +505,12 @@ func (w *platformWindow) invalidateRect(rect Rect) error {
 	w.mu.Lock()
 	if w.renderErr != nil {
 		err := w.renderErr
+		shouldLog := !w.renderErrLogged
+		w.renderErrLogged = true
 		w.mu.Unlock()
+		if shouldLog {
+			w.logRenderDiagnostic(fmt.Sprintf("event=invalidation_rejected reason=sticky_render_error error=%q", err.Error()))
+		}
 		return err
 	}
 	if !w.fullDamage {
@@ -631,11 +650,38 @@ func (w *platformWindow) openNative() (*C.WoxDarwinWindow, error) {
 }
 
 func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
+	// Positive frame statuses are recoverable skips or compositor backpressure. Latching
+	// them would reject every later invalidation even after the IOSurface pool recovers.
+	if result >= 0 {
+		return
+	}
+	var firstError error
 	w.mu.Lock()
 	if w.renderErr == nil {
 		w.renderErr = fmt.Errorf("woxui: %s failed with status %d", operation, int32(result))
+		firstError = w.renderErr
 	}
 	w.mu.Unlock()
+	if firstError != nil {
+		w.logRenderDiagnostic(fmt.Sprintf("event=renderer_error_latched operation=%q status=%d futureInvalidationsRejected=true error=%q", operation, int32(result), firstError.Error()))
+	}
+}
+
+// logRenderDiagnostic routes macOS renderer diagnostics through Wox's configured debug logger.
+func (w *platformWindow) logRenderDiagnostic(message string) {
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("darwin_render window=%p title=%q %s", w, w.options.Title, message))
+}
+
+// darwinFrameStatusName keeps native skip and backpressure statuses readable in diagnostic logs.
+func darwinFrameStatusName(result int32) string {
+	switch result {
+	case int32(C.WOX_DARWIN_FRAME_SKIPPED):
+		return "native_skipped"
+	case int32(C.WOX_DARWIN_FRAME_SURFACE_BUSY):
+		return "surface_busy"
+	default:
+		return "native_error"
+	}
 }
 
 // startRenderWorker owns ordinary frame encoding so AppKit callbacks can return after building the display list.
@@ -656,8 +702,11 @@ func (w *platformWindow) stopRenderWorkerLocked() {
 	w.renderStopped = true
 	dropped := w.pendingFrame
 	w.pendingFrame = nil
-	if dropped != nil && w.options.frameMetrics != nil {
-		w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+	if dropped != nil {
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=renderer_stopped frameId=%d", dropped.displayList.frameID))
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+		}
 	}
 	close(w.renderStop)
 }
@@ -703,6 +752,7 @@ func (w *platformWindow) renderLoop() {
 				if frame == nil {
 					break
 				}
+				w.logCoalescedFrames(frame)
 				w.encodeFrame(frame, false)
 			}
 			// Tracked result refreshes can produce a frame every second, so trim before that cadence.
@@ -724,7 +774,11 @@ func (w *platformWindow) renderLoop() {
 func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 	w.mu.Lock()
 	if w.closed || w.closing || w.renderStopped {
+		closed := w.closed
+		closing := w.closing
+		stopped := w.renderStopped
 		w.mu.Unlock()
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=renderer_unavailable frameId=%d closed=%t closing=%t stopped=%t", frame.displayList.frameID, closed, closing, stopped))
 		if w.options.frameMetrics != nil {
 			w.options.frameMetrics.dropFrame(frame.displayList.frameID)
 		}
@@ -733,6 +787,12 @@ func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 	replaced := w.pendingFrame
 	if replaced != nil {
 		frame.displayList.SetNativeDamage(mergeFrameDamage(frame.displayList.NativeDamage(), replaced.displayList.NativeDamage()))
+		frame.coalescedFrameCount = replaced.coalescedFrameCount + 1
+		frame.firstCoalescedFrameID = replaced.firstCoalescedFrameID
+		if frame.firstCoalescedFrameID == 0 {
+			frame.firstCoalescedFrameID = replaced.displayList.frameID
+		}
+		frame.lastCoalescedFrameID = replaced.displayList.frameID
 	}
 	w.pendingFrame = frame
 	wake := w.renderWake
@@ -741,6 +801,25 @@ func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)
 	}
 	signalRenderWake(wake)
+}
+
+// logCoalescedFrames records one summary for a burst instead of logging every replaced frame.
+func (w *platformWindow) logCoalescedFrames(frame *darwinRenderFrame) {
+	if frame == nil || frame.coalescedFrameCount == 0 {
+		return
+	}
+	damage := frame.displayList.NativeDamage()
+	w.logRenderDiagnostic(fmt.Sprintf(
+		"event=frames_coalesced frameId=%d replacedCount=%d firstReplacedFrameId=%d lastReplacedFrameId=%d damage=%.1f,%.1f %.1fx%.1f",
+		frame.displayList.frameID,
+		frame.coalescedFrameCount,
+		frame.firstCoalescedFrameID,
+		frame.lastCoalescedFrameID,
+		damage.X,
+		damage.Y,
+		damage.Width,
+		damage.Height,
+	))
 }
 
 // signalRenderWake coalesces renderer activity notifications.
@@ -789,6 +868,7 @@ func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
 	w.mu.Unlock()
 	if replaced != nil {
 		displayList.SetNativeDamage(mergeFrameDamage(displayList.NativeDamage(), replaced.displayList.NativeDamage()))
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=synchronous_frame_replaced frameId=%d replacementFrameId=%d", replaced.displayList.frameID, displayList.frameID))
 	}
 	if replaced != nil && w.options.frameMetrics != nil {
 		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)
@@ -844,6 +924,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	nativeStart := time.Now()
 	native, err := w.openNative()
 	if err != nil {
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=native_window_unavailable frameId=%d error=%q", renderFrame.displayList.frameID, err.Error()))
 		if w.options.frameMetrics != nil {
 			w.options.frameMetrics.dropFrame(renderFrame.displayList.frameID)
 		}
@@ -864,6 +945,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	beginStart := time.Now()
 	result := C.wox_darwin_window_begin_frame(
 		native,
+		C.uint64_t(displayList.frameID),
 		C.float(frame.Size.Width),
 		C.float(frame.Size.Height),
 		C.float(frame.Scale),
@@ -880,9 +962,23 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	if result > 0 {
 		// Preserve cleanup damage for the next naturally scheduled frame. Scheduling
 		// an immediate retry here can starve AppKit while every surface is still busy.
+		reason := darwinFrameStatusName(int32(result))
 		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
 			w.restoreFrameDamage(nativeDamage)
 		}
+		w.logRenderDiagnostic(fmt.Sprintf(
+			"event=frame_dropped reason=%s frameId=%d status=%d damage=%.1f,%.1f %.1fx%.1f size=%.1fx%.1f scale=%.2f",
+			reason,
+			displayList.frameID,
+			int32(result),
+			nativeDamage.X,
+			nativeDamage.Y,
+			nativeDamage.Width,
+			nativeDamage.Height,
+			frame.Size.Width,
+			frame.Size.Height,
+			frame.Scale,
+		))
 		if w.options.frameMetrics != nil {
 			w.options.frameMetrics.dropFrame(displayList.frameID)
 		}
@@ -901,7 +997,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	var imageCost time.Duration
 	var textCount int
 	var imageCount int
-	for _, command := range displayList.commands {
+	for commandIndex, command := range displayList.commands {
 		switch command.kind {
 		case displayCommandFillRoundedRect:
 			result = C.wox_darwin_window_fill_rounded_rect(
@@ -987,10 +1083,19 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			result = C.wox_darwin_window_clear_clip(native)
 		}
 		if result != 0 {
+			reason := darwinFrameStatusName(int32(result))
 			_ = C.wox_darwin_window_end_frame(native, transactionalFrame)
 			if w.options.frameMetrics != nil {
 				w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
 			}
+			if result > 0 {
+				if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+					w.restoreFrameDamage(nativeDamage)
+				}
+				w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=%s stage=encode frameId=%d commandIndex=%d commandKind=%d status=%d", reason, displayList.frameID, commandIndex, command.kind, int32(result)))
+				return
+			}
+			w.logRenderDiagnostic(fmt.Sprintf("event=frame_encode_failed reason=%s frameId=%d commandIndex=%d commandKind=%d status=%d", reason, displayList.frameID, commandIndex, command.kind, int32(result)))
 			w.recordRenderError("encode macOS frame", result)
 			return
 		}
@@ -999,7 +1104,13 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 
 	endStart := time.Now()
 	result = C.wox_darwin_window_end_frame(native, transactionalFrame)
-	if result != 0 {
+	if result > 0 {
+		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+			w.restoreFrameDamage(nativeDamage)
+		}
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=%s stage=end frameId=%d status=%d", darwinFrameStatusName(int32(result)), displayList.frameID, int32(result)))
+	} else if result < 0 {
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_end_failed reason=%s frameId=%d status=%d", darwinFrameStatusName(int32(result)), displayList.frameID, int32(result)))
 		w.recordRenderError("present macOS frame", result)
 	}
 	endCost := time.Since(endStart)
@@ -1088,6 +1199,52 @@ func woxGoDarwinFrameSync(context C.uintptr_t, width C.float, height C.float, pi
 		PixelSize: PixelSize{Width: int(pixelWidth), Height: int(pixelHeight)},
 		Scale:     float32(scale),
 	}, transactional != 0)
+}
+
+const (
+	darwinRenderDiagnosticWindowUnavailable  = 1
+	darwinRenderDiagnosticRendererReplaced   = 2
+	darwinRenderDiagnosticGenerationMismatch = 3
+	darwinRenderDiagnosticStaleSequence      = 4
+	darwinRenderDiagnosticRecovered          = 5
+)
+
+// darwinRenderDiagnosticName keeps asynchronous native presentation outcomes searchable.
+func darwinRenderDiagnosticName(event uint8) string {
+	switch event {
+	case darwinRenderDiagnosticWindowUnavailable:
+		return "presentation_window_unavailable"
+	case darwinRenderDiagnosticRendererReplaced:
+		return "presentation_renderer_replaced"
+	case darwinRenderDiagnosticGenerationMismatch:
+		return "presentation_generation_mismatch"
+	case darwinRenderDiagnosticStaleSequence:
+		return "presentation_stale_sequence"
+	case darwinRenderDiagnosticRecovered:
+		return "presentation_recovered"
+	default:
+		return "presentation_unknown"
+	}
+}
+
+// woxGoDarwinPresentationDiagnostic records asynchronous Core Animation presentation rejections and recovery.
+//
+//export woxGoDarwinPresentationDiagnostic
+func woxGoDarwinPresentationDiagnostic(context C.uintptr_t, frameID C.uint64_t, event C.uint8_t, rendererKind C.uint8_t, sequence C.uint64_t, generation C.uint64_t, currentGeneration C.uint64_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	renderer := "background"
+	if rendererKind != 0 {
+		renderer = "overlay"
+	}
+	window.logRenderDiagnostic(fmt.Sprintf(
+		"event=%s frameId=%d renderer=%s sequence=%d generation=%d currentGeneration=%d",
+		darwinRenderDiagnosticName(uint8(event)),
+		uint64(frameID),
+		renderer,
+		uint64(sequence),
+		uint64(generation),
+		uint64(currentGeneration),
+	))
 }
 
 //export woxGoDarwinFocus

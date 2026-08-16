@@ -49,21 +49,3 @@ func TestSettingsThemeEditorAppliesAndCancelsLiveColor(t *testing.T) {
 		t.Fatalf("cancelled background = %#v, want black", app.palette.background)
 	}
 }
-
-func TestLauncherResetPreservesSettingsThemeEditor(t *testing.T) {
-	settingsState := newThemeEditorState("settings-theme|test", map[string]any{"ThemeName": "Test"})
-	controller := newThemeSettingsController(CommonDeps{})
-	controller.SetThemeEditor(settingsState)
-	app := &App{themeSettings: controller}
-
-	app.clearLauncherThemeEditorPreview()
-	if controller.ThemeEditor() != settingsState {
-		t.Fatal("launcher reset cleared the Settings theme editor")
-	}
-
-	controller.SetThemeEditor(newThemeEditorState("query|result|test", map[string]any{"ThemeName": "Test"}))
-	app.clearLauncherThemeEditorPreview()
-	if controller.ThemeEditor() != nil {
-		t.Fatal("launcher reset retained the launcher theme editor")
-	}
-}

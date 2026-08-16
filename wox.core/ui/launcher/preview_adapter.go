@@ -36,9 +36,6 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 	if preview.PreviewType == "trigger_keyword_conflict" {
 		return a.buildTriggerConflictPreview(result, preview, palette, width, height)
 	}
-	if preview.PreviewType == "theme_edit" {
-		return a.buildThemeEditorPreview(result, preview, palette, width, height)
-	}
 	if preview.PreviewType == "media" {
 		data, err := decodeMediaPreview(preview.PreviewData)
 		if err != nil {

@@ -11,6 +11,7 @@ import (
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/keyboard"
 )
 
 const (
@@ -307,6 +308,9 @@ func (a *App) onboardingLabels() map[string]string {
 		"demo.actions":                  a.translate("i18n:onboarding_action_panel_title"),
 		"demo.action.copy":              a.translate("i18n:onboarding_action_panel_copy"),
 		"demo.action.more":              a.translate("i18n:onboarding_action_panel_more"),
+		"demo.selection.preview":        a.translate("i18n:selection_preview"),
+		"demo.selection.copy_path":      a.translate("i18n:selection_copy_path"),
+		"demo.selection.open_folder":    a.translate("i18n:selection_open_containing_folder"),
 		"demo.glance.provider":          a.translate("i18n:onboarding_glance_sample_provider"),
 		"demo.glance.value":             a.translate("i18n:onboarding_glance_sample_time"),
 		"demo.permission.ready":         a.translate("i18n:onboarding_permission_ready"),
@@ -448,13 +452,25 @@ func (a *App) saveOnboardingSetting(key, value string) {
 }
 
 func (a *App) loadOnboardingPermissionStatus() {
-	_ = a.runOnUI("start onboarding permission check", func() {
-		a.onboardingLoading = true
-		a.invalidateOnboardingWindow()
-	})
+	a.loadOnboardingPermissionStatusWithLoading(true)
+}
+
+// loadOnboardingPermissionStatusWithLoading probes TCC without flashing the authorize button on background refreshes.
+func (a *App) loadOnboardingPermissionStatusWithLoading(showLoading bool) {
+	if showLoading {
+		_ = a.runOnUI("start onboarding permission check", func() {
+			a.onboardingLoading = true
+			a.invalidateOnboardingWindow()
+		})
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	status, err := a.services.MacOSPermissionStatus(ctx, a.sessionID)
 	cancel()
+	if err == nil {
+		if reconcileErr := keyboard.ReconcileRawKeyListenerAccessWithPermissionStatus(status.Accessibility == "granted"); reconcileErr != nil {
+			util.GetLogger().Warn(context.Background(), "failed to reconcile macOS raw keyboard access: "+reconcileErr.Error())
+		}
+	}
 	_ = a.runOnUI("apply onboarding permission status", func() {
 		a.onboardingLoading = false
 		if err != nil {
@@ -469,10 +485,7 @@ func (a *App) loadOnboardingPermissionStatus() {
 
 func (a *App) openOnboardingPermission(permissionType string) {
 	util.Go(a.lifecycleCtx, "open onboarding permission", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := a.services.OpenMacOSPermission(ctx, a.sessionID, permissionType)
-		cancel()
-		if err != nil {
+		if err := a.openMacOSPermissionFlow(permissionType); err != nil {
 			_ = a.runOnUI("show onboarding permission error", func() {
 				a.onboardingError = err.Error()
 				a.invalidateOnboardingWindow()

@@ -6,11 +6,15 @@ import (
 	"time"
 
 	woxcomponent "wox/ui/launcher/component"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-const demoQueryTypingInterval = 50 * time.Millisecond
+const (
+	demoQueryTypingInterval     = 50 * time.Millisecond
+	onboardingDemoDesktopRadius = float32(8)
+)
 
 type onboardingDemoResult = woxcomponent.LauncherDemoResult
 type onboardingDemoQueryPart = woxcomponent.LauncherDemoQueryPart
@@ -34,7 +38,7 @@ func onboardingPreview(props OnboardingProps, step OnboardingStep, width, height
 func onboardingDemoDuration(stepID string) time.Duration {
 	switch stepID {
 	case "welcome":
-		return 9500 * time.Millisecond
+		return 7000 * time.Millisecond
 	case "mainHotkey":
 		return 4200 * time.Millisecond
 	case "selectionHotkey":
@@ -98,11 +102,11 @@ func DemoPreview(props OnboardingProps, step OnboardingStep, width, height float
 
 // onboardingDemoDesktop reproduces the simulated desktop chrome shared by Flutter demos.
 func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, height float32, showDefaultIcons bool, foreground []woxwidget.StackChild) woxwidget.Widget {
-	children := []woxwidget.StackChild{{Child: woxwidget.Container{Width: width, Height: height, Radius: 8, Color: onboardingDemoDesktopBaseColor(props.Theme.Background)}}}
+	children := []woxwidget.StackChild{{Child: woxwidget.Container{Width: width, Height: height, Radius: onboardingDemoDesktopRadius, Color: onboardingDemoDesktopBaseColor(props.Theme.Background)}}}
 	if props.Wallpaper != nil {
 		children = append(children,
-			woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: width, Height: height, Radius: 8}},
-			woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Radius: 8, Color: woxui.Color{A: 87}}},
+			woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: width, Height: height, Radius: onboardingDemoDesktopRadius}},
+			woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Radius: onboardingDemoDesktopRadius, Color: woxui.Color{A: 87}}},
 		)
 	}
 	if showDefaultIcons {
@@ -112,21 +116,111 @@ func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, he
 		)
 	}
 	if runtime.GOOS == "darwin" {
-		menuWidth := width - 28
-		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{
-			Width: width, Height: 28, Radius: 8, Color: settingsColorAlpha(props.Theme.Background, 220),
+		children = append(children, woxwidget.StackChild{Child: onboardingDemoMacMenuBar(props, width)})
+	} else {
+		children = append(children, woxwidget.StackChild{AnchorBottom: true, Child: onboardingDemoWindowsTaskbar(props, width)})
+	}
+	children = append(children, foreground...)
+	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: children}}
+}
+
+// onboardingDemoDesktopChromeTop is the simulated menu bar height reserved on macOS.
+func onboardingDemoDesktopChromeTop() float32 {
+	if runtime.GOOS == "darwin" {
+		return 28
+	}
+	return 0
+}
+
+// onboardingDemoDesktopChromeBottom is the simulated taskbar height reserved on Windows.
+func onboardingDemoDesktopChromeBottom() float32 {
+	if runtime.GOOS == "darwin" {
+		return 0
+	}
+	return 42
+}
+
+// onboardingDemoDesktopContentBottom is the lower edge of the usable simulated desktop.
+func onboardingDemoDesktopContentBottom(height float32) float32 {
+	return height - onboardingDemoDesktopChromeBottom()
+}
+
+// onboardingDemoMacMenuBar draws a square menu bar clipped to the rounded desktop outline.
+func onboardingDemoMacMenuBar(props OnboardingProps, width float32) woxwidget.Widget {
+	height := onboardingDemoDesktopChromeTop()
+	menuWidth := width - 28
+	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: onboardingDemoMacMenuBarFill(width, height, settingsColorAlpha(props.Theme.Background, 220))},
+		{Child: woxwidget.Container{
+			Width: width, Height: height,
 			Padding: woxwidget.Insets{Left: 14, Top: 7, Right: 14},
 			Child: woxwidget.Stack{Width: menuWidth, Height: 16, Children: []woxwidget.StackChild{
 				{Child: woxwidget.Text{Value: "   Finder     File", Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
 				{Left: max(float32(0), menuWidth-60), Child: onboardingDemoSearchIcon(settingsColorAlpha(props.Theme.ResultTitle, 184))},
 				{Left: max(float32(0), menuWidth-32), Child: woxwidget.Align{Width: 32, Height: 16, Horizontal: 1, Vertical: .5, Child: woxwidget.Text{Value: "09:41", Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, 199)}}},
 			}},
-		}})
-	} else {
-		children = append(children, woxwidget.StackChild{AnchorBottom: true, Child: onboardingDemoWindowsTaskbar(props, width)})
+		}},
+	}}}
+}
+
+// onboardingDemoMacMenuBarFill paints the top of the rounded desktop so the bar stays inside the screen corners.
+func onboardingDemoMacMenuBarFill(width, height float32, color woxui.Color) woxwidget.Widget {
+	return woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		displayList.FillRoundedRect(woxui.Rect{
+			X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height + onboardingDemoDesktopRadius*2,
+		}, onboardingDemoDesktopRadius, color)
+	}}
+}
+
+// onboardingDemoHintContentTop leaves room for the hint card above a launcher demo.
+func onboardingDemoHintContentTop() float32 {
+	return demoHintTop() + 70
+}
+
+// onboardingPlaceLauncher centers the fully expanded launcher in the desktop
+// content area and top-aligns the live window so results grow downward.
+func onboardingPlaceLauncher(desktopWidth, areaTop, areaBottom float32, window onboardingDemoWindowProps) woxwidget.StackChild {
+	live := onboardingDemoWindow(window)
+	expandedHeight := live.(woxwidget.Clip).Height
+	if window.FadeResults {
+		expanded := window
+		expanded.ResultsOpacity = 1
+		expandedHeight = onboardingDemoWindow(expanded).(woxwidget.Clip).Height
 	}
-	children = append(children, foreground...)
-	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: children}}
+	return onboardingPlaceExpandedWidget(desktopWidth, areaTop, areaBottom, live, window.Width, expandedHeight)
+}
+
+const onboardingTrayWindowGap = float32(6)
+
+// onboardingPlaceTrayLauncher drops the tray-query window from the menu extra,
+// or lifts it off the taskbar tray, instead of centering it on the desktop.
+func onboardingPlaceTrayLauncher(desktopWidth, desktopHeight, trayX float32, window onboardingDemoWindowProps) woxwidget.StackChild {
+	live := onboardingDemoWindow(window)
+	left, top := onboardingTrayWindowOrigin(desktopWidth, desktopHeight, window.Width, live.(woxwidget.Clip).Height, trayX)
+	return woxwidget.StackChild{Left: left, Top: top, Child: live}
+}
+
+// onboardingTrayWindowOrigin right-aligns the panel to the tray icon and keeps it against the chrome that owns the tray.
+func onboardingTrayWindowOrigin(desktopWidth, desktopHeight, windowWidth, windowHeight, trayX float32) (left, top float32) {
+	left = max(float32(16), trayX+10-windowWidth)
+	if left+windowWidth > desktopWidth-16 {
+		left = max(float32(16), desktopWidth-16-windowWidth)
+	}
+	if runtime.GOOS == "darwin" {
+		return left, onboardingDemoDesktopChromeTop() + onboardingTrayWindowGap
+	}
+	return left, desktopHeight - onboardingDemoDesktopChromeBottom() - windowHeight - onboardingTrayWindowGap
+}
+
+// onboardingPlaceExpandedWidget reserves expandedHeight and top-aligns live content inside it.
+func onboardingPlaceExpandedWidget(desktopWidth, areaTop, areaBottom float32, live woxwidget.Widget, liveWidth, expandedHeight float32) woxwidget.StackChild {
+	return woxwidget.StackChild{
+		Top: areaTop,
+		Child: woxwidget.Align{
+			Width: desktopWidth, Height: max(float32(0), areaBottom-areaTop), Horizontal: .5, Vertical: .5,
+			Child: woxwidget.Align{Width: liveWidth, Height: expandedHeight, Vertical: 0, Child: live},
+		},
+	}
 }
 
 // onboardingDemoDesktopBaseColor matches Flutter's darkened fallback surface under the wallpaper.
@@ -300,34 +394,30 @@ func onboardingDemoHotkey(labels []string, accent woxui.Color, theme woxcomponen
 	}
 }
 
-// onboardingWelcomeDemo follows Flutter's concept-card, flying-token, query, results, and action-panel timeline.
+// onboardingWelcomeDemo shows the query concept card, then fades it out as the launcher appears.
 func onboardingWelcomeDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
 	cardOpacity := float32(1)
 	if progress >= .20 {
-		cardOpacity = 1 - demoEaseInCubic(demoInterval(progress, .20, .40))
+		cardOpacity = 1 - demoEaseOutCubic(demoInterval(progress, .20, .28))
 	}
-	windowProgress := demoEaseOutCubic(demoInterval(progress, .28, .45))
-	query := demoTypedQuery("wpm install everything", progress, .42, onboardingDemoDuration(step.ID))
-	resultsOpacity := demoEaseOutCubic(demoInterval(progress, .57, .65))
+	windowProgress := demoEaseOutCubic(demoInterval(progress, .20, .28))
+	query := demoTypedQuery("wpm install everything", progress, .28, onboardingDemoDuration(step.ID))
+	resultsOpacity := demoEaseOutCubic(demoInterval(progress, .44, .50))
 	actionProgress := float32(0)
-	if progress >= .72 && progress < .79 {
-		actionProgress = demoEaseOutCubic(demoInterval(progress, .72, .79))
-	} else if progress >= .79 && progress < .95 {
+	if progress >= .56 && progress < .62 {
+		actionProgress = demoEaseOutCubic(demoInterval(progress, .56, .62))
+	} else if progress >= .62 && progress < .84 {
 		actionProgress = 1
-	} else if progress >= .95 && progress < .99 {
-		actionProgress = 1 - demoEaseInCubic(demoInterval(progress, .95, .99))
+	} else if progress >= .84 && progress < .90 {
+		actionProgress = 1 - demoEaseOutCubic(demoInterval(progress, .84, .90))
 	}
 	children := []woxwidget.StackChild{}
 	if cardOpacity > .01 {
 		cardWidth := min(float32(500), width-80)
 		children = append(children, woxwidget.StackChild{
-			Left: (width - cardWidth) / 2, Top: height*.24 - 30*(1-cardOpacity),
+			Left: (width - cardWidth) / 2, Top: height * .24,
 			Child: onboardingQueryConceptCard(props, step, cardWidth, cardOpacity),
 		})
-	}
-	if progress >= .20 && progress < .42 {
-		fly := demoEaseInCubic(demoInterval(progress, .20, .42))
-		children = append(children, onboardingFlyingConceptTokens(props, step, width, height, fly)...)
 	}
 	if windowProgress > .01 {
 		windowWidth := max(float32(320), width-100)
@@ -341,14 +431,12 @@ func onboardingWelcomeDemo(props OnboardingProps, step OnboardingStep, width, he
 		for index := range results {
 			results[index].GlyphColor = settingsColorAlpha(results[index].GlyphColor, demoAlpha(resultsOpacity))
 		}
-		children = append(children, woxwidget.StackChild{
-			Left: 48, Top: 34 + 22*(1-windowProgress),
-			Child: onboardingDemoWindow(onboardingDemoWindowProps{
-				Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, QueryParts: parts, Results: results, Accent: step.Accent, Theme: props.Theme,
-				Opacity: windowProgress, ShowQuery: true, ShowToolbar: true, ToolbarPressed: progress >= .70 && progress < .83, ActionProgress: actionProgress,
-				ActionCopy: props.Labels["demo.action.copy"], ActionMore: props.Labels["demo.action.more"], FadeResults: true, ResultsOpacity: resultsOpacity,
-			}),
-		})
+		windowProps := onboardingDemoWindowProps{
+			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, QueryParts: parts, Results: results, Accent: step.Accent, Theme: props.Theme,
+			Opacity: windowProgress, ShowQuery: true, ShowToolbar: true, ToolbarPressed: progress >= .54 && progress < .68, ActionProgress: actionProgress,
+			ActionCopy: props.Labels["demo.action.copy"], ActionMore: props.Labels["demo.action.more"], FadeResults: true, ResultsOpacity: resultsOpacity,
+		}
+		children = append(children, onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), windowProps))
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
@@ -372,7 +460,7 @@ func onboardingQueryConceptCard(props OnboardingProps, step OnboardingStep, widt
 				Width: tokenWidth, Height: 29, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: token.value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(token.color, demoAlpha(opacity))},
 			}},
 			woxwidget.Container{Width: 1, Height: 10, Color: settingsColorAlpha(token.color, demoScaledAlpha(opacity, 90))},
-			woxwidget.TextBlock{Value: token.label, Width: tokenWidth, Height: 15, MaxLines: 1, Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(token.color, demoAlpha(opacity))},
+			woxwidget.TextBlock{Value: token.label, Width: tokenWidth, Height: 15, MaxLines: 1, Centered: true, Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(token.color, demoAlpha(opacity))},
 			woxwidget.Text{Value: props.Labels["demo.concept.optional"], Style: woxui.TextStyle{Size: 8}, Color: settingsColorAlpha(token.color, demoScaledAlpha(opacity, 164))},
 		}}})
 	}
@@ -382,30 +470,6 @@ func onboardingQueryConceptCard(props OnboardingProps, step OnboardingStep, widt
 		BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 24)), BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: 20, Top: 16, Right: 20, Bottom: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children},
 	}
-}
-
-func onboardingFlyingConceptTokens(props OnboardingProps, step OnboardingStep, width, height, progress float32) []woxwidget.StackChild {
-	values := []string{"wpm", "install", "everything"}
-	colors := []woxui.Color{step.Accent, {R: 250, G: 204, B: 21, A: 255}, {R: 74, G: 222, B: 128, A: 255}}
-	sourceX := []float32{width*.38 - 90, width*.50 - 25, width*.62 + 30}
-	targetX := []float32{72, 116, 176}
-	alpha := float32(1)
-	if progress < .08 {
-		alpha = progress / .08
-	} else if progress > .70 {
-		alpha = 1 - (progress-.70)/.30
-	}
-	children := make([]woxwidget.StackChild, 0, 3)
-	for index, value := range values {
-		x := demoLerp(sourceX[index], targetX[index], progress)
-		y := demoLerp(height*.40, 72, progress)
-		tileWidth := max(float32(42), float32(len(value))*7+18)
-		children = append(children, woxwidget.StackChild{Left: x, Top: y, Child: woxwidget.Container{
-			Width: tileWidth, Height: 29, Radius: 6, Color: settingsColorAlpha(colors[index], demoScaledAlpha(alpha, 42)),
-			Child: woxwidget.Align{Width: tileWidth, Height: 29, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(colors[index], demoAlpha(alpha))}},
-		}})
-	}
-	return children
 }
 
 func onboardingColoredQueryParts(query string, accent woxui.Color) []onboardingDemoQueryPart {
@@ -426,8 +490,8 @@ func onboardingColoredQueryParts(query string, accent woxui.Color) []onboardingD
 }
 
 func onboardingMainHotkeyDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
-	hotkeyProgress := demoEnterHoldExit(progress, .10, .22, .54, .68)
-	windowProgress := demoEnterHoldExit(progress, .28, .46, .88, 1)
+	hotkeyProgress := onboardingMainHotkeyProgress(progress)
+	windowProgress := onboardingMainWindowProgress(progress)
 	labels := props.MainHotkeyLabels
 	if len(labels) == 0 {
 		labels = demoDefaultHotkey(false)
@@ -440,7 +504,7 @@ func onboardingMainHotkeyDemo(props OnboardingProps, step OnboardingStep, width,
 	if windowProgress > .01 {
 		windowWidth := width - 68
 		windowHeight := height - 84
-		children = append(children, woxwidget.StackChild{Left: 34, Top: 42 + 22*(1-windowProgress), Child: onboardingDemoWindow(onboardingDemoWindowProps{
+		children = append(children, onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
 			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: demoTypedQuery("app", progress, .52, onboardingDemoDuration(step.ID)), Accent: step.Accent, Theme: props.Theme, Opacity: windowProgress, ShowQuery: true, ShowToolbar: true,
 			Results: []onboardingDemoResult{
 				{Title: step.Title, Subtitle: props.Labels[step.ID+".body"], Tail: strings.Join(labels, "+"), Glyph: "⌨", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
@@ -448,15 +512,15 @@ func onboardingMainHotkeyDemo(props OnboardingProps, step OnboardingStep, width,
 				{Title: "Files", Subtitle: "Search files and folders", Tail: "Files", Glyph: "◆", GlyphColor: woxui.Color{R: 250, G: 204, B: 21, A: 255}},
 				{Title: "Plugins", Subtitle: "Wox.Plugin.Template.Nodejs", Tail: "51 day ago", Glyph: "⬡", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
 			},
-		})})
+		}))
 	}
 	return onboardingDemoDesktop(props, step, width, height, true, children)
 }
 
 func onboardingSelectionHotkeyDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
 	cursorProgress := demoEaseInOutCubic(demoInterval(progress, .08, .34))
-	hotkeyProgress := demoEnterHoldExit(progress, .36, .46, .66, .78)
-	windowProgress := demoEnterHoldExit(progress, .56, .74, .92, 1)
+	hotkeyProgress := onboardingSelectionHotkeyProgress(progress)
+	windowProgress := onboardingSelectionWindowProgress(progress)
 	selected := progress >= .30 && progress < .95
 	labels := props.SelectHotkeyLabels
 	if len(labels) == 0 {
@@ -468,7 +532,7 @@ func onboardingSelectionHotkeyDemo(props OnboardingProps, step OnboardingStep, w
 		{Left: 258, Top: 54, Child: onboardingDemoFileIcon("Screenshots", "◆", woxui.Color{R: 250, G: 204, B: 21, A: 255}, false, props.Theme)},
 		{Left: 64, Top: 150, Child: onboardingDemoFileIcon("Release notes.txt", "≡", woxui.Color{R: 52, G: 211, B: 153, A: 255}, false, props.Theme)},
 	}
-	cursorOpacity := 1 - demoEaseInCubic(demoInterval(progress, .70, .86))
+	cursorOpacity := onboardingSelectionCursorOpacity(progress)
 	if cursorOpacity > .01 {
 		children = append(children, woxwidget.StackChild{
 			Left: demoLerp(width-96, 186, cursorProgress), Top: demoLerp(height-86, 112, cursorProgress),
@@ -476,15 +540,16 @@ func onboardingSelectionHotkeyDemo(props OnboardingProps, step OnboardingStep, w
 		})
 	}
 	if hotkeyProgress > .01 {
-		children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(labels)) / 2, Top: (height-62)/2 + 8*(1-hotkeyProgress), Child: onboardingDemoHotkey(labels, step.Accent, props.Theme, progress >= .46 && progress <= .58, hotkeyProgress)})
+		children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(labels)) / 2, Top: (height-62)/2 + 8*(1-hotkeyProgress), Child: onboardingDemoHotkey(labels, step.Accent, props.Theme, progress >= .46 && progress <= .56, hotkeyProgress)})
 	}
 	if windowProgress > .01 {
 		windowWidth := min(float32(660), width-72)
 		windowHeight := min(float32(330), height*.72)
-		children = append(children, woxwidget.StackChild{
-			Left: (width - windowWidth) / 2, Top: (height-windowHeight)/2 + 20*(1-windowProgress),
-			Child: onboardingSelectionWindow(props, step, windowWidth, windowHeight, windowProgress, strings.Join(labels, "+")),
-		})
+		children = append(children, onboardingPlaceExpandedWidget(
+			width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height),
+			onboardingSelectionWindow(props, step, windowWidth, windowHeight, windowProgress),
+			windowWidth, windowHeight,
+		))
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
@@ -505,36 +570,75 @@ func onboardingDemoFileIcon(label, glyph string, accent woxui.Color, selected bo
 		}}}
 }
 
-func onboardingSelectionWindow(props OnboardingProps, step OnboardingStep, width, height, opacity float32, hotkey string) woxwidget.Widget {
-	leftWidth := width * .40
-	footerHeight := float32(38)
-	queryHeight := float32(54)
-	results := []onboardingDemoResult{
-		{Title: "Preview", Subtitle: "Quarterly plan.pdf", Tail: hotkey, Glyph: "◉", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
-		{Title: "Open containing folder", Subtitle: "Open containing folder", Tail: "Enter", Glyph: "◆", GlyphColor: step.Accent},
-		{Title: "Copy path", Subtitle: `C:\Users\qianl\Desktop\Quarterly plan.pdf`, Tail: "Copy", Glyph: "□", GlyphColor: woxui.Color{R: 56, G: 189, B: 248, A: 255}},
-		{Title: "Translate text", Subtitle: "Input tr hello, tr openai hello", Glyph: "文", GlyphColor: woxui.Color{R: 34, G: 211, B: 238, A: 255}},
+// onboardingSelectionWindow mirrors a live selection query: empty query, file actions, and preview.
+func onboardingSelectionWindow(props OnboardingProps, step OnboardingStep, width, height, opacity float32) woxwidget.Widget {
+	listWidth := min(float32(280), width*.40)
+	fileName := "Quarterly plan.pdf"
+	filePath := "/Users/qianl/Desktop/Quarterly plan.pdf"
+	previewLabel := onboardingDemoLabel(props, "demo.selection.preview", "Preview")
+	copyLabel := onboardingDemoLabel(props, "demo.selection.copy_path", "Copy path")
+	folderLabel := onboardingDemoLabel(props, "demo.selection.open_folder", "Open containing folder")
+	caret := props.Theme.Cursor
+	if caret.A == 0 {
+		caret = props.Theme.QueryText
 	}
-	window := onboardingDemoWindow(onboardingDemoWindowProps{
-		Width: leftWidth, Height: height, Backdrop: props.WallpaperBlurred, Query: "", Results: results, Accent: step.Accent, Theme: props.Theme, Opacity: opacity, ShowQuery: true, ShowToolbar: true,
+	previewWidth := max(float32(0), width-listWidth-16)
+	previewHeight := max(float32(40), height-127)
+	return onboardingDemoWindow(onboardingDemoWindowProps{
+		Width: width, Height: height, Backdrop: props.WallpaperBlurred, Accent: step.Accent, Theme: props.Theme, Opacity: opacity,
+		QueryParts: []onboardingDemoQueryPart{{Color: caret, Caret: true}},
+		ShowQuery:  true, ShowToolbar: true, ResultWidth: listWidth, PrimaryAction: previewLabel, ActionMore: props.Labels["demo.action.more"],
+		Preview: onboardingSelectionPreview(props, previewWidth, previewHeight, opacity, fileName, filePath),
+		Results: []onboardingDemoResult{
+			{Title: previewLabel, Subtitle: fileName, Glyph: "◉", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
+			{Title: folderLabel, Subtitle: folderLabel, Glyph: "◆", GlyphColor: step.Accent},
+			{Title: copyLabel, Subtitle: filePath, Glyph: "□", GlyphColor: woxui.Color{R: 56, G: 189, B: 248, A: 255}},
+			{Title: "Translate text", Subtitle: "Input tr hello, tr openai hello", Glyph: "文", GlyphColor: woxui.Color{R: 34, G: 211, B: 238, A: 255}},
+		},
 	})
-	previewWidth := width - leftWidth - 26
-	previewHeight := height - queryHeight - footerHeight - 18
-	preview := woxwidget.Container{
-		Width: previewWidth, Height: previewHeight, Radius: 8, BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 76)), BorderWidth: 1,
-		Padding: woxwidget.UniformInsets(14), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 6, Radius: 3, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 24))}},
-			woxwidget.Container{Width: previewWidth - 96, Height: 6, Radius: 3, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 24))},
-			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: max(float32(40), previewHeight-62), Radius: 6, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 18)), Child: woxwidget.Align{
-				Height: max(float32(40), previewHeight-62), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "▧", Style: woxui.TextStyle{Size: 28}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoScaledAlpha(opacity, 120))},
-			}}},
+}
+
+// onboardingSelectionPreview shows the selected file on the right, matching a live selection query.
+func onboardingSelectionPreview(props OnboardingProps, width, height, opacity float32, fileName, filePath string) woxwidget.Widget {
+	alpha := demoAlpha(opacity)
+	layout := previewview.ResolvePreviewLayout(width, height, true)
+	surfaceHeight := layout.BodyHeight + 2
+	tag := func(label string) woxwidget.Widget {
+		tagWidth := max(float32(36), float32(len([]rune(label)))*7+18)
+		return woxwidget.Container{
+			Width: tagWidth, Height: 26, Radius: 8, BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 76)), BorderWidth: 1,
+			Padding: woxwidget.Insets{Left: 9, Right: 9},
+			Child: woxwidget.Align{Width: max(float32(0), tagWidth-18), Height: 26, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{
+				Value: label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha),
+			}},
+		}
+	}
+	// Tags sit below the bordered surface. The 10px shell padding under them matches live PreviewView.
+	return woxwidget.Container{
+		Width: width, Height: height, Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10},
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{
+			woxwidget.Container{
+				Width: layout.InnerWidth, Height: surfaceHeight, Radius: 8,
+				Color:       settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 18)),
+				BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 76)), BorderWidth: 1,
+				Child: woxwidget.Align{Width: layout.InnerWidth, Height: surfaceHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.Flex{
+					Axis: woxwidget.Vertical, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+						woxwidget.Text{Value: "▧", Style: woxui.TextStyle{Size: 28}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoScaledAlpha(opacity, 120))},
+						woxwidget.Text{Value: fileName, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, alpha)},
+						woxwidget.TextBlock{Value: filePath, Width: max(float32(80), layout.BodyWidth-12), Height: 16, MaxLines: 1, Centered: true, Style: woxui.TextStyle{Size: 9}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha)},
+					},
+				}},
+			},
+			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{tag("PDF"), tag("2.4 MB")}},
 		}},
 	}
-	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: width, Height: height, Radius: 8, Color: settingsColorAlpha(props.Theme.Background, demoScaledAlpha(opacity, 246)), BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 28)), BorderWidth: 1}},
-		{Child: window},
-		{Left: leftWidth + 14, Top: queryHeight + 8, Child: preview},
-	}}
+}
+
+func onboardingDemoLabel(props OnboardingProps, key, fallback string) string {
+	if value := props.Labels[key]; value != "" {
+		return value
+	}
+	return fallback
 }
 
 func onboardingPermissionsDemo(props OnboardingProps, step OnboardingStep, width, height float32) woxwidget.Widget {
@@ -550,8 +654,11 @@ func onboardingPermissionsDemo(props OnboardingProps, step OnboardingStep, width
 	}
 	windowWidth := min(float32(620), width-96)
 	windowHeight := min(float32(220), height-88)
-	window := onboardingDemoWindow(onboardingDemoWindowProps{Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "permissions", Results: results, Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true})
-	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{{Left: (width - windowWidth) / 2, Top: (height - windowHeight) / 2, Child: window}})
+	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{
+		onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
+			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "permissions", Results: results, Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
+		}),
+	})
 }
 
 func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, height float32) woxwidget.Widget {
@@ -579,16 +686,17 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 	}
 	windowWidth := width - 100
 	windowHeight := height - 88
-	window := onboardingDemoWindow(onboardingDemoWindowProps{
-		Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "wox", QueryAccessory: accessory,
-		Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
-		Results: []onboardingDemoResult{
-			{Title: title, Subtitle: props.Labels["glance.body"], Tail: tail, Glyph: "◉", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
-			{Title: props.Labels["demo.glance.provider"], Subtitle: props.Labels["glance.enable.body"], Tail: "Glance", Glyph: "ϟ", GlyphColor: step.Accent},
-			{Title: props.Labels["glance.primary"], Subtitle: props.Labels["glance.primary"], Tail: props.GlanceLabel, Glyph: "⌖", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
-		},
+	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{
+		onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
+			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "wox", QueryAccessory: accessory,
+			Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
+			Results: []onboardingDemoResult{
+				{Title: title, Subtitle: props.Labels["glance.body"], Tail: tail, Glyph: "◉", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
+				{Title: props.Labels["demo.glance.provider"], Subtitle: props.Labels["glance.enable.body"], Tail: "Glance", Glyph: "ϟ", GlyphColor: step.Accent},
+				{Title: props.Labels["glance.primary"], Subtitle: props.Labels["glance.primary"], Tail: props.GlanceLabel, Glyph: "⌖", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
+			},
+		}),
 	})
-	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{{Left: 48, Top: 44, Child: window}})
 }
 
 // onboardingQueryHotkeysDemo crossfades the normal launcher example into the narrow borderless webview example.
@@ -614,34 +722,38 @@ func onboardingQueryHotkeysDemo(props OnboardingProps, step OnboardingStep, widt
 	children := []woxwidget.StackChild{}
 	if example1Opacity > .01 {
 		children = append(children, woxwidget.StackChild{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, strings.Join(hotkey1, "+"), "github repo", contentWidth, demoAlpha(example1Opacity))})
-		shortcutProgress := demoEnterHoldExit(progress, .09, .15, .25, .31)
+		shortcutProgress := onboardingQueryHotkeyExample1Shortcut(progress)
 		if shortcutProgress > .01 {
 			children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(hotkey1)) / 2, Top: contentTop + 86, Child: onboardingDemoHotkey(hotkey1, step.Accent, props.Theme, progress >= .15 && progress <= .21, shortcutProgress*example1Opacity)})
 		}
-		windowProgress := demoEaseOutCubic(demoInterval(progress, .20, .29))
+		windowProgress := onboardingQueryHotkeyExample1Window(progress)
 		if windowProgress > .01 {
 			windowHeight := max(float32(180), contentHeight-76)
-			children = append(children, woxwidget.StackChild{Left: contentLeft, Top: contentTop + 70 + 20*(1-windowProgress), Child: onboardingDemoWindow(onboardingDemoWindowProps{
+			children = append(children, onboardingPlaceLauncher(width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
 				Width: contentWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "github repo", Accent: step.Accent, Theme: props.Theme, Opacity: windowProgress * example1Opacity, ShowQuery: true, ShowToolbar: true,
 				Results: []onboardingDemoResult{
 					{Title: "Wox repository", Subtitle: "Open Wox-launcher/Wox on GitHub", Tail: strings.Join(hotkey1, "+"), Glyph: "</>", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
 					{Title: step.Title, Subtitle: props.Labels[step.ID+".body"], Tail: "Query Hotkeys", Glyph: "ϟ", GlyphColor: step.Accent},
 					{Title: "Issues", Subtitle: "github repo issues", Tail: "GitHub", Glyph: "!", GlyphColor: woxui.Color{R: 250, G: 204, B: 21, A: 255}},
 				},
-			})})
+			}))
 		}
 	}
 	if example2Opacity > .01 {
 		children = append(children, woxwidget.StackChild{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, strings.Join(hotkey2, "+"), "webview instagram", contentWidth, demoAlpha(example2Opacity))})
-		shortcutProgress := demoEnterHoldExit(progress, .55, .63, .72, .79)
+		shortcutProgress := onboardingQueryHotkeyExample2Shortcut(progress)
 		if shortcutProgress > .01 {
-			children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(hotkey2)) / 2, Top: contentTop + 86, Child: onboardingDemoHotkey(hotkey2, step.Accent, props.Theme, progress >= .63 && progress <= .70, shortcutProgress*example2Opacity)})
+			children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(hotkey2)) / 2, Top: contentTop + 86, Child: onboardingDemoHotkey(hotkey2, step.Accent, props.Theme, progress >= .63 && progress <= .66, shortcutProgress*example2Opacity)})
 		}
-		windowProgress := demoEaseOutCubic(demoInterval(progress, .68, .80))
+		windowProgress := onboardingQueryHotkeyExample2Window(progress)
 		if windowProgress > .01 {
 			instagramWidth := min(float32(340), width-160)
 			instagramHeight := max(float32(190), contentHeight-72)
-			children = append(children, woxwidget.StackChild{Left: (width - instagramWidth) / 2, Top: contentTop + 70 + 20*(1-windowProgress), Child: onboardingInstagramWindow(props, instagramWidth, instagramHeight, windowProgress*example2Opacity)})
+			children = append(children, onboardingPlaceExpandedWidget(
+				width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height),
+				onboardingInstagramWindow(props, instagramWidth, instagramHeight, windowProgress*example2Opacity),
+				instagramWidth, instagramHeight,
+			))
 		}
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
@@ -659,11 +771,11 @@ func onboardingQueryHotkeySilentDemo(props OnboardingProps, step OnboardingStep,
 	contentTop := demoHintTop()
 	hotkey := demoQueryHotkey("S")
 	children := []woxwidget.StackChild{{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, strings.Join(hotkey, "+"), "copy github repo", contentWidth, demoAlpha(sceneOpacity))}}
-	shortcutProgress := demoEnterHoldExit(progress, .10, .16, .26, .32)
+	shortcutProgress := onboardingQueryHotkeySilentShortcut(progress)
 	if shortcutProgress > .01 {
-		children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(hotkey)) / 2, Top: contentTop + 86, Child: onboardingDemoHotkey(hotkey, step.Accent, props.Theme, progress >= .16 && progress <= .22, shortcutProgress*sceneOpacity)})
+		children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(hotkey)) / 2, Top: contentTop + 86, Child: onboardingDemoHotkey(hotkey, step.Accent, props.Theme, progress >= .16 && progress <= .20, shortcutProgress*sceneOpacity)})
 	}
-	toastProgress := demoEaseOutCubic(demoInterval(progress, .22, .34)) * sceneOpacity
+	toastProgress := onboardingQueryHotkeySilentToast(progress) * sceneOpacity
 	if toastProgress > .01 {
 		toastWidth := min(float32(312), width-120)
 		toast := woxwidget.Container{Width: toastWidth, Height: 60, Radius: 12, Color: settingsColorAlpha(props.Theme.Background, demoScaledAlpha(toastProgress, 245)), BorderColor: settingsColorAlpha(step.Accent, demoScaledAlpha(toastProgress, 71)), BorderWidth: 1, Padding: woxwidget.Insets{Left: 14, Top: 13, Right: 14, Bottom: 13}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -728,7 +840,7 @@ func onboardingQueryShortcutsDemo(props OnboardingProps, step OnboardingStep, wi
 	}
 	children := []woxwidget.StackChild{
 		{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, "gh repo", "github repo", contentWidth, 255)},
-		{Left: contentLeft, Top: windowTop, Child: onboardingDemoWindow(onboardingDemoWindowProps{
+		onboardingPlaceLauncher(width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
 			Width: contentWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: query,
 			Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
 			Results: []onboardingDemoResult{
@@ -736,7 +848,7 @@ func onboardingQueryShortcutsDemo(props OnboardingProps, step OnboardingStep, wi
 				{Title: "Repository search", Subtitle: "github repo", Tail: "Enter", Glyph: "↗", GlyphColor: step.Accent},
 				{Title: "Search issues", Subtitle: "github issues", Glyph: "⌕", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
 			},
-		})},
+		}),
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
@@ -763,19 +875,14 @@ func onboardingTrayQueriesDemo(props OnboardingProps, step OnboardingStep, width
 	if windowProgress > .01 {
 		windowWidth := min(float32(420), width-96)
 		windowHeight := min(float32(190), height-160)
-		windowLeft := max(float32(48), trayX-windowWidth+10)
-		windowTop := trayY + 14
-		if runtime.GOOS != "darwin" {
-			windowTop = trayY - windowHeight - 14
-		}
-		children = append(children, woxwidget.StackChild{Left: windowLeft, Top: windowTop + 18*(1-windowProgress), Child: onboardingDemoWindow(onboardingDemoWindowProps{
+		children = append(children, onboardingPlaceTrayLauncher(width, height, trayX, onboardingDemoWindowProps{
 			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Accent: step.Accent, Theme: props.Theme, Opacity: windowProgress, ShowQuery: false, ShowToolbar: false,
 			Results: []onboardingDemoResult{
 				{Title: "Weather", Subtitle: "Sunny, 24 C", Tail: "Tray Queries", Glyph: "☀", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
 				{Title: step.Title, Subtitle: props.Labels[step.ID+".body"], Tail: "Tray", Glyph: "◎", GlyphColor: step.Accent},
 				{Title: "Calendar", Subtitle: "Next meeting in 25 minutes", Glyph: "▣", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
 			},
-		})})
+		}))
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
@@ -805,9 +912,13 @@ func onboardingPluginStoreDemo(props OnboardingProps, step OnboardingStep, width
 		} else if progress >= .90 && progress < .97 {
 			tail = props.Labels["demo.installed"]
 		}
-		children = append(children, woxwidget.StackChild{Left: contentLeft, Top: contentTop + 70 + 18*(1-windowProgress), Child: onboardingPluginStoreWindow(
-			props, step, contentWidth, windowHeight, demoTypedQuery("wpm install", progress, .50, onboardingDemoDuration(step.ID)), tail, windowProgress,
-		)})
+		children = append(children, onboardingPlaceExpandedWidget(
+			width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height),
+			onboardingPluginStoreWindow(
+				props, step, contentWidth, windowHeight, demoTypedQuery("wpm install", progress, .50, onboardingDemoDuration(step.ID)), tail, windowProgress,
+			),
+			contentWidth, windowHeight,
+		))
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
@@ -902,7 +1013,7 @@ func onboardingThemeInstallDemo(props OnboardingProps, step OnboardingStep, widt
 	windowHeight := height - contentTop - 82
 	children := []woxwidget.StackChild{
 		{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, "theme", "theme ocean dark", contentWidth, 255)},
-		{Left: contentLeft, Top: contentTop + 70, Child: onboardingDemoWindow(onboardingDemoWindowProps{
+		onboardingPlaceLauncher(width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
 			Width: contentWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: demoTypedQuery("theme ocean dark", progress, .08, onboardingDemoDuration(step.ID)), Accent: boolColor(applied, woxui.Color{R: 56, G: 189, B: 248, A: 255}, step.Accent), Theme: theme, Background: background,
 			Opacity: 1, ShowQuery: true, ShowToolbar: true,
 			Results: []onboardingDemoResult{
@@ -910,7 +1021,7 @@ func onboardingThemeInstallDemo(props OnboardingProps, step OnboardingStep, widt
 				{Title: "Aurora", Subtitle: "Theme Store", Tail: props.Labels["demo.install"], Glyph: "◈", GlyphColor: woxui.Color{R: 232, G: 121, B: 249, A: 255}},
 				{Title: "Default Dark", Subtitle: "Current theme", Tail: "System", Glyph: "◈", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
 			},
-		})},
+		}),
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
@@ -918,16 +1029,17 @@ func onboardingThemeInstallDemo(props OnboardingProps, step OnboardingStep, widt
 func onboardingFinishDemo(props OnboardingProps, step OnboardingStep, width, height float32) woxwidget.Widget {
 	windowWidth := width - 100
 	windowHeight := height - 88
-	window := onboardingDemoWindow(onboardingDemoWindowProps{
-		Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "ready", Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
-		Results: []onboardingDemoResult{
-			{Title: props.Labels["demo.finish.title"], Subtitle: props.Labels["finish.body"], Tail: props.Labels["demo.finish.badge"], Glyph: "✓", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
-			{Title: "Open Wox Settings", Subtitle: `C:\Users\qianl\AppData\Roaming\Wox`, Glyph: "W", GlyphColor: step.Accent},
-			{Title: props.Labels["demo.actions"], Subtitle: props.Labels["welcome.body"], Tail: demoActionHotkey(), Glyph: "▶", GlyphColor: step.Accent},
-			{Title: props.Labels["queryHotkeys.body"], Subtitle: props.Labels["trayQueries.body"], Tail: "Tray Queries", Glyph: "⌕", GlyphColor: woxui.Color{R: 167, G: 139, B: 250, A: 255}},
-		},
+	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{
+		onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
+			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "ready", Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
+			Results: []onboardingDemoResult{
+				{Title: props.Labels["demo.finish.title"], Subtitle: props.Labels["finish.body"], Tail: props.Labels["demo.finish.badge"], Glyph: "✓", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
+				{Title: "Open Wox Settings", Subtitle: `C:\Users\qianl\AppData\Roaming\Wox`, Glyph: "W", GlyphColor: step.Accent},
+				{Title: props.Labels["demo.actions"], Subtitle: props.Labels["welcome.body"], Tail: demoActionHotkey(), Glyph: "▶", GlyphColor: step.Accent},
+				{Title: props.Labels["queryHotkeys.body"], Subtitle: props.Labels["trayQueries.body"], Tail: "Tray Queries", Glyph: "⌕", GlyphColor: woxui.Color{R: 167, G: 139, B: 250, A: 255}},
+			},
+		}),
 	})
-	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{{Left: 48, Top: 44, Child: window}})
 }
 
 // demoTypedQuery reveals every animated query at one shared fast per-character cadence.
@@ -936,6 +1048,58 @@ func demoTypedQuery(target string, progress, start float32, duration time.Durati
 	elapsed := max(float32(0), progress-start) * float32(duration)
 	count := int(elapsed / float32(demoQueryTypingInterval))
 	return string(runes[:min(count, len(runes))])
+}
+
+// onboardingMainHotkeyProgress finishes the hotkey overlay before the launcher window starts.
+func onboardingMainHotkeyProgress(progress float32) float32 {
+	return demoEnterHoldExit(progress, .10, .22, .40, .52)
+}
+
+// onboardingMainWindowProgress starts the launcher only after the hotkey overlay is gone.
+func onboardingMainWindowProgress(progress float32) float32 {
+	return demoEnterHoldExit(progress, .56, .70, .88, 1)
+}
+
+// onboardingSelectionHotkeyProgress finishes the selection-hotkey overlay before the launcher starts.
+func onboardingSelectionHotkeyProgress(progress float32) float32 {
+	return demoEnterHoldExit(progress, .36, .46, .56, .66)
+}
+
+// onboardingSelectionWindowProgress starts the selection query only after the hotkey overlay is gone.
+func onboardingSelectionWindowProgress(progress float32) float32 {
+	return demoEnterHoldExit(progress, .70, .82, .94, 1)
+}
+
+// onboardingSelectionCursorOpacity hides the pointer before the launcher covers the desktop.
+func onboardingSelectionCursorOpacity(progress float32) float32 {
+	return 1 - demoEaseInCubic(demoInterval(progress, .62, .70))
+}
+
+// onboardingQueryHotkeyExample1Shortcut finishes the first query-hotkey overlay before its launcher appears.
+func onboardingQueryHotkeyExample1Shortcut(progress float32) float32 {
+	return demoEnterHoldExit(progress, .09, .15, .24, .30)
+}
+
+func onboardingQueryHotkeyExample1Window(progress float32) float32 {
+	return demoEaseOutCubic(demoInterval(progress, .32, .42))
+}
+
+// onboardingQueryHotkeyExample2Shortcut finishes the Instagram hotkey overlay before that window appears.
+func onboardingQueryHotkeyExample2Shortcut(progress float32) float32 {
+	return demoEnterHoldExit(progress, .55, .63, .66, .72)
+}
+
+func onboardingQueryHotkeyExample2Window(progress float32) float32 {
+	return demoEaseOutCubic(demoInterval(progress, .74, .86))
+}
+
+// onboardingQueryHotkeySilentShortcut finishes the silent hotkey overlay before the toast appears.
+func onboardingQueryHotkeySilentShortcut(progress float32) float32 {
+	return demoEnterHoldExit(progress, .10, .16, .20, .26)
+}
+
+func onboardingQueryHotkeySilentToast(progress float32) float32 {
+	return demoEaseOutCubic(demoInterval(progress, .28, .40))
 }
 
 func demoEnterHoldExit(progress, enterStart, enterEnd, exitStart, exitEnd float32) float32 {

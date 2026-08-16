@@ -140,6 +140,7 @@ type App struct {
 	onboardingPermission        contract.MacOSPermissionStatus
 	onboardingLoading           bool
 	onboardingError             string
+	permissionFlowHost          *macOSPermissionFlowHost
 	settingsCtx                 settingWindowContext
 	settingTab                  string
 	settingRow                  int
@@ -588,7 +589,6 @@ func (a *App) hideWindow(notify bool) error {
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
 		a.triggerConflict = nil
-		a.clearLauncherThemeEditorPreview()
 		a.resetChatPreview()
 	}); err != nil {
 		return err
@@ -765,7 +765,6 @@ func (a *App) setQuery(query plainQuery) {
 	a.reconcileSelectedPreview()
 	a.requirementForm = nil
 	a.triggerConflict = nil
-	a.clearLauncherThemeEditorPreview()
 	a.resetChatPreview()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
@@ -853,7 +852,6 @@ func (a *App) requestMRU() error {
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
 		a.triggerConflict = nil
-		a.clearLauncherThemeEditorPreview()
 		a.resetChatPreview()
 	}); err != nil {
 		return err
@@ -1207,9 +1205,6 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if a.onTriggerConflictPreviewKey(event) {
 		return true
 	}
-	if a.onThemeEditorPreviewKey(event) {
-		return true
-	}
 	if a.onChatPreviewKey(event) {
 		return true
 	}
@@ -1427,9 +1422,6 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 		return
 	}
 	if a.onTriggerConflictPreviewTextInput(event) {
-		return
-	}
-	if a.onThemeEditorPreviewTextInput(event) {
 		return
 	}
 	if a.onChatPreviewTextInput(event) {

@@ -40,8 +40,11 @@ type WindowOptions struct {
 	Anchor           int
 	OffsetX          float64
 	OffsetY          float64
-	Movable          bool
-	Resizable        bool
+	// WorkArea overrides display discovery when a platform tracker already resolved
+	// the target window and visible frame in one coordinate space.
+	WorkArea  *woxui.Rect
+	Movable   bool
+	Resizable bool
 	// LightAppearance requests the light window appearance instead of the
 	// default dark one, letting themed overlays match the active theme.
 	LightAppearance bool
@@ -449,6 +452,9 @@ func (instance *runtimeOverlay) stopStickyTracking() {
 
 // WorkArea resolves the logical display work area used for sizing and clamping.
 func WorkArea(options WindowOptions, current woxui.Rect) woxui.Rect {
+	if options.WorkArea != nil && options.WorkArea.Width > 0 && options.WorkArea.Height > 0 {
+		return *options.WorkArea
+	}
 	displays, err := screen.ListDisplays()
 	if err != nil || len(displays) == 0 {
 		active := screen.GetActiveScreen()

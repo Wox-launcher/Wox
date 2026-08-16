@@ -185,9 +185,12 @@ func (a *App) OpenOnboarding(_ context.Context) error {
 	return a.openOnboarding()
 }
 
-// OpenMacOSPermissionFlow opens the native privacy surface after a user action.
-func (a *App) OpenMacOSPermissionFlow(ctx context.Context, permissionType string) error {
-	return a.services.OpenMacOSPermission(ctx, a.sessionID, permissionType)
+// OpenMacOSPermissionFlow presents the native drag-to-authorize panel after a user action.
+func (a *App) OpenMacOSPermissionFlow(_ context.Context, permissionType string) error {
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.OpenMacOSPermissionFlow(context.Background(), permissionType)
+	}
+	return a.openMacOSPermissionFlow(permissionType)
 }
 
 // ShowToolbarMessage displays a plugin-owned persistent toolbar snapshot.

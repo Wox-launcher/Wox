@@ -1065,14 +1065,17 @@ func (w Image) layout(ctx context, available constraints) *node {
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			imageBounds := fittedImageBounds(w.Source, bounds, w.Fit)
+			if w.Radius > 0 {
+				// Corner radius belongs to the widget box. Cover's overflowing
+				// destination would round the hidden overflow corners and leave
+				// the visible window corners filled with wallpaper.
+				displayList.DrawRotatedRoundedImage(w.Source, bounds, 0, w.Radius)
+				return
+			}
 			if w.Fit == ImageFitCover {
 				displayList.PushClipRect(bounds)
 				defer displayList.PopClipRect()
-			}
-			imageBounds := fittedImageBounds(w.Source, bounds, w.Fit)
-			if w.Radius > 0 {
-				displayList.DrawRotatedRoundedImage(w.Source, imageBounds, 0, w.Radius)
-				return
 			}
 			displayList.DrawImage(w.Source, imageBounds)
 		},

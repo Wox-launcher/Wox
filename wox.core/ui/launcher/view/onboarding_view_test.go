@@ -100,6 +100,50 @@ func TestOnboardingContentCardsUseSurfaceColors(t *testing.T) {
 	}
 }
 
+func TestOnboardingPermissionsCenterCopyAndUseMonochromeIcons(t *testing.T) {
+	card := onboardingPermissions(OnboardingProps{
+		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{R: 240, G: 240, B: 240, A: 255}, ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255}},
+		Permissions: []OnboardingPermission{
+			{ID: "accessibility", Title: "Accessibility", Description: "Read selected text."},
+			{ID: "fullDiskAccess", Title: "Full Disk Access", Description: "Search protected folders."},
+		},
+		Labels: map[string]string{"permission.authorize": "Authorize"},
+	}, 720, 172).(woxwidget.Container)
+	row := card.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	if row.Padding.Top != row.Padding.Bottom {
+		t.Fatalf("permission row padding = %#v, want equal vertical inset so title and subtitle can center", row.Padding)
+	}
+	content := row.Child.(woxwidget.Flex)
+	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatal("permission row does not center title and subtitle")
+	}
+	icon := content.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Image)
+	if icon.Source == nil {
+		t.Fatal("permission icon is empty, want a monochrome SVG")
+	}
+	column := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	if column.Axis != woxwidget.Vertical {
+		t.Fatalf("permission copy = %#v, want a naturally sized vertical stack", column)
+	}
+	if _, ok := column.Children[1].(woxwidget.TextBlock); !ok {
+		t.Fatal("permission subtitle is missing from the centered copy stack")
+	}
+	color := woxui.Color{R: 240, G: 240, B: 240, A: 255}
+	access := permissionIcon("accessibility", 20, color).(woxwidget.Image)
+	disk := permissionIcon("fullDiskAccess", 20, color).(woxwidget.Image)
+	folder := woxcomponent.FolderGlyph(20, color).(woxwidget.Image)
+	if access.Source == nil || disk.Source == nil || access.Source == disk.Source {
+		t.Fatal("permission icons should be distinct monochrome SVGs")
+	}
+	if disk.Source == folder.Source {
+		t.Fatal("disk permission still uses the folder glyph")
+	}
+	status := content.Children[2].(woxwidget.Align)
+	if status.Vertical != .5 {
+		t.Fatalf("permission status align = %#v, want vertically centered in the row", status)
+	}
+}
+
 func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 	props := OnboardingProps{
 		Width: 1040, Height: 800, ActiveStep: 0,
@@ -116,6 +160,9 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 		t.Fatalf("footer = %#v, want content plus top divider", footer)
 	}
 	content := footer.Children[0].Child.(woxwidget.Container)
+	if content.Color.A != 0 {
+		t.Fatalf("footer fill alpha = %d, want the window canvas material", content.Color.A)
+	}
 	actions := content.Child.(woxwidget.Flex)
 	skip := actions.Children[0].(woxwidget.Semantics)
 	gesture := focusedControlGesture(skip)
@@ -140,14 +187,80 @@ func TestOnboardingDemoTimelinesMatchFlutterPhases(t *testing.T) {
 			t.Fatalf("%s duration = %v, want 4.6s Flutter preset demo", mode, got)
 		}
 	}
-	if got := demoEnterHoldExit(.94, .56, .74, .92, 1); got >= 1 || got <= 0 {
+	if got := onboardingSelectionWindowProgress(.96); got >= 1 || got <= 0 {
 		t.Fatalf("selection window exit progress = %v, want in-flight exit", got)
+	}
+}
+
+func TestOnboardingHotkeyDemosDoNotOverlapWindows(t *testing.T) {
+	for progress := float32(0); progress <= 1; progress += .01 {
+		if onboardingMainHotkeyProgress(progress) > .01 && onboardingMainWindowProgress(progress) > .01 {
+			t.Fatalf("main hotkey and launcher both visible at %.2f", progress)
+		}
+		if onboardingSelectionHotkeyProgress(progress) > .01 && onboardingSelectionWindowProgress(progress) > .01 {
+			t.Fatalf("selection hotkey and launcher both visible at %.2f", progress)
+		}
+		if onboardingSelectionCursorOpacity(progress) > .01 && onboardingSelectionWindowProgress(progress) > .01 {
+			t.Fatalf("selection cursor and launcher both visible at %.2f", progress)
+		}
+		if onboardingQueryHotkeyExample1Shortcut(progress) > .01 && onboardingQueryHotkeyExample1Window(progress) > .01 {
+			t.Fatalf("query hotkey example 1 shortcut and launcher both visible at %.2f", progress)
+		}
+		if onboardingQueryHotkeyExample2Shortcut(progress) > .01 && onboardingQueryHotkeyExample2Window(progress) > .01 {
+			t.Fatalf("query hotkey example 2 shortcut and window both visible at %.2f", progress)
+		}
+		if onboardingQueryHotkeySilentShortcut(progress) > .01 && onboardingQueryHotkeySilentToast(progress) > .01 {
+			t.Fatalf("silent query hotkey and toast both visible at %.2f", progress)
+		}
+	}
+}
+
+func TestOnboardingSelectionWindowMirrorsLiveSelectionQuery(t *testing.T) {
+	window := onboardingSelectionWindow(OnboardingProps{
+		Theme:  woxcomponent.Theme{QueryText: woxui.Color{A: 255}},
+		Labels: map[string]string{"demo.selection.preview": "Preview"},
+	}, OnboardingStep{}, 640, 330, 1).(woxwidget.Clip)
+	children := window.Child.(woxwidget.Stack).Children
+	query := children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	querySlot := query.Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(querySlot.Children) != 1 {
+		t.Fatalf("selection query parts = %d, want a caret only", len(querySlot.Children))
+	}
+	row := children[3].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(row.Children) != 2 {
+		t.Fatalf("selected result children = %d, want icon and text without a hotkey tail", len(row.Children))
+	}
+	preview := children[len(children)-3]
+	if preview.Left <= 10 {
+		t.Fatalf("selection preview left = %v, want a right-hand preview pane", preview.Left)
+	}
+}
+
+func TestOnboardingSelectionPreviewKeepsGapBelowTags(t *testing.T) {
+	const width, height float32 = 280, 180
+	preview := onboardingSelectionPreview(OnboardingProps{}, width, height, 1, "Quarterly plan.pdf", "/tmp/file.pdf").(woxwidget.Container)
+	if preview.BorderWidth != 0 {
+		t.Fatal("tags belong below the preview surface, not inside its border")
+	}
+	if preview.Padding.Bottom != 10 {
+		t.Fatalf("padding below tags = %v, want 10", preview.Padding.Bottom)
+	}
+	flex := preview.Child.(woxwidget.Flex)
+	if flex.Gap != 10 || len(flex.Children) != 2 {
+		t.Fatalf("preview body/tags = gap %v children %d, want a 10px gap and two children", flex.Gap, len(flex.Children))
+	}
+	surface := flex.Children[0].(woxwidget.Container)
+	if surface.BorderWidth != 1 {
+		t.Fatalf("file surface border = %v, want a bordered preview body", surface.BorderWidth)
+	}
+	if got, want := surface.Height+flex.Gap+26+preview.Padding.Top+preview.Padding.Bottom, height; got != want {
+		t.Fatalf("preview vertical layout = %v, want %v so tags keep 10px below them", got, want)
 	}
 }
 
 func TestOnboardingDemoQueriesUseSharedFastTypingSpeed(t *testing.T) {
 	const start = float32(.2)
-	for _, duration := range []time.Duration{4400 * time.Millisecond, 5600 * time.Millisecond, 9500 * time.Millisecond} {
+	for _, duration := range []time.Duration{4400 * time.Millisecond, 5600 * time.Millisecond, 7000 * time.Millisecond} {
 		progress := start + float32(175*time.Millisecond)/float32(duration)
 		if got := demoTypedQuery("abcdef", progress, start, duration); got != "abc" {
 			t.Fatalf("typed query after 175ms with %v timeline = %q, want three characters", duration, got)
@@ -188,9 +301,17 @@ func TestOnboardingDemoDesktopUsesBlackBeforeWallpaperLoads(t *testing.T) {
 	if !ok || background.Color != (woxui.Color{A: 255}) || background.Radius != 8 {
 		t.Fatalf("desktop background = %#v, want opaque black", stack.Children[0].Child)
 	}
-	chrome := stack.Children[len(stack.Children)-1].Child.(woxwidget.Container)
-	if chrome.Radius != 8 {
-		t.Fatalf("desktop chrome radius = %v, want 8 to match wallpaper corners", chrome.Radius)
+	chrome := stack.Children[len(stack.Children)-1].Child
+	if runtime.GOOS == "darwin" {
+		menuBar, ok := chrome.(woxwidget.Clip)
+		if !ok || menuBar.Width != 640 || menuBar.Height != 28 {
+			t.Fatalf("macOS menu bar = %#v, want a 28px clip of the rounded desktop", chrome)
+		}
+		return
+	}
+	container, ok := chrome.(woxwidget.Container)
+	if !ok || container.Radius != 8 {
+		t.Fatalf("desktop chrome = %#v, want radius 8 to match wallpaper corners", chrome)
 	}
 }
 
@@ -218,6 +339,88 @@ func TestOnboardingWindowsTaskbarUsesCenteredAppsAndSystemTray(t *testing.T) {
 	}
 }
 
+func TestOnboardingTrayQueriesWindowSitsAgainstTrayChrome(t *testing.T) {
+	demo := onboardingTrayQueriesDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360, .80).(woxwidget.Clip)
+	desktop := demo.Child.(woxwidget.Stack)
+	slot := desktop.Children[len(desktop.Children)-1]
+	window := slot.Child.(woxwidget.Clip)
+	trayX := float32(640 - 88)
+	if runtime.GOOS != "darwin" {
+		trayX = 640 - 120
+	}
+	left, top := onboardingTrayWindowOrigin(640, 360, window.Width, window.Height, trayX)
+	if slot.Left != left || slot.Top != top {
+		t.Fatalf("tray window origin = %v/%v, want %v/%v against the tray chrome", slot.Left, slot.Top, left, top)
+	}
+	if runtime.GOOS == "darwin" && slot.Top != onboardingDemoDesktopChromeTop()+onboardingTrayWindowGap {
+		t.Fatalf("tray window top = %v, want below the menu bar", slot.Top)
+	}
+	if runtime.GOOS != "darwin" && slot.Top+window.Height+onboardingTrayWindowGap != 360-onboardingDemoDesktopChromeBottom() {
+		t.Fatalf("tray window bottom = %v, want above the taskbar", slot.Top+window.Height)
+	}
+}
+
+func TestOnboardingWelcomeDemoGrowsDownIntoCenteredSlot(t *testing.T) {
+	collapsed := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, .40).(woxwidget.Clip)
+	expanded := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, 1).(woxwidget.Clip)
+	collapsedSlot, collapsedFrame, collapsedWindow := onboardingPlacedLauncherSlot(collapsed)
+	expandedSlot, expandedFrame, expandedWindow := onboardingPlacedLauncherSlot(expanded)
+	contentTop := onboardingDemoDesktopChromeTop()
+	contentHeight := float32(360) - contentTop - onboardingDemoDesktopChromeBottom()
+
+	if collapsedSlot.Top != contentTop || expandedSlot.Top != contentTop {
+		t.Fatalf("welcome launcher chrome top = %v/%v, want %v", collapsedSlot.Top, expandedSlot.Top, contentTop)
+	}
+	collapsedAlign := collapsedSlot.Child.(woxwidget.Align)
+	if collapsedAlign.Width != 640 || collapsedAlign.Height != contentHeight || collapsedAlign.Horizontal != .5 || collapsedAlign.Vertical != .5 {
+		t.Fatalf("welcome launcher desktop align = %#v, want centered in the desktop below chrome", collapsedAlign)
+	}
+	if collapsedFrame.Height != expandedFrame.Height || collapsedFrame.Vertical != 0 || expandedFrame.Vertical != 0 {
+		t.Fatalf("welcome launcher frame = %#v / %#v, want a stable top-aligned expanded slot", collapsedFrame, expandedFrame)
+	}
+	if collapsedWindow.Height != 113 {
+		t.Fatalf("welcome demo height before results = %.0f, want query plus toolbar only", collapsedWindow.Height)
+	}
+	if expandedWindow.Height != expandedFrame.Height || expandedWindow.Height <= collapsedWindow.Height {
+		t.Fatalf("welcome demo height after results = %.0f in frame %.0f, want to fill the reserved slot by growing downward", expandedWindow.Height, expandedFrame.Height)
+	}
+}
+
+func TestOnboardingWelcomeDemoFadesConceptCardAsLauncherAppears(t *testing.T) {
+	demo := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, .24).(woxwidget.Clip)
+	desktop := demo.Child.(woxwidget.Stack)
+	card := desktop.Children[len(desktop.Children)-2]
+	_, _, window := onboardingPlacedLauncherSlot(demo)
+	if card.Top != 360*.24 {
+		t.Fatalf("concept card top = %v, want a stationary fade at 24%% of desktop height", card.Top)
+	}
+	if window.Height != 113 {
+		t.Fatalf("launcher during concept fade = %.0f, want query plus toolbar while the card fades out", window.Height)
+	}
+}
+
+func TestOnboardingLauncherDemosShareCenteredDownwardSlot(t *testing.T) {
+	demos := []woxwidget.Clip{
+		onboardingPermissionsDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
+		onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
+		onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
+	}
+	for _, demo := range demos {
+		slot, frame, window := onboardingPlacedLauncherSlot(demo)
+		align := slot.Child.(woxwidget.Align)
+		if align.Horizontal != .5 || align.Vertical != .5 || frame.Vertical != 0 || window.Height != frame.Height {
+			t.Fatalf("launcher placement = slot %#v frame %#v height %.0f, want a centered expanded slot with downward growth", align, frame, window.Height)
+		}
+	}
+}
+
+func onboardingPlacedLauncherSlot(demo woxwidget.Clip) (woxwidget.StackChild, woxwidget.Align, woxwidget.Clip) {
+	desktop := demo.Child.(woxwidget.Stack)
+	slot := desktop.Children[len(desktop.Children)-1]
+	frame := slot.Child.(woxwidget.Align).Child.(woxwidget.Align)
+	return slot, frame, frame.Child.(woxwidget.Clip)
+}
+
 func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
 	transparent := woxui.Color{R: 255, G: 255, B: 255, A: 0}
 	backdrop := &woxui.Image{Width: 702, Height: 344}
@@ -227,8 +430,8 @@ func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
 		Results: []onboardingDemoResult{{Title: "Everything", Selected: true}},
 	})
 	stack := window.(woxwidget.Clip).Child.(woxwidget.Stack)
-	if image := stack.Children[0].Child.(woxwidget.Image); image.Source != backdrop {
-		t.Fatal("demo window did not use the blurred wallpaper")
+	if image := stack.Children[0].Child.(woxwidget.Image); image.Source != backdrop || image.Fit != woxwidget.ImageFitCover {
+		t.Fatal("demo window did not cover the blurred wallpaper")
 	}
 	if query := stack.Children[2].Child.(woxwidget.Container); query.Color.A != 0 {
 		t.Fatalf("rendered query alpha = %d, want theme alpha 0", query.Color.A)
@@ -275,13 +478,48 @@ func TestOnboardingMacDesktopUsesNativeMenuAndCursorGeometry(t *testing.T) {
 		t.Skip("macOS menu bar only")
 	}
 	desktop := onboardingDemoDesktop(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360, false, nil).(woxwidget.Clip)
-	menu := desktop.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	menuBar := desktop.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Clip)
+	menu := menuBar.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
 	search := menu.Children[1].Child.(woxwidget.Image)
 	timeSlot := menu.Children[2]
 	cursor := onboardingDemoCursor(1).(woxwidget.Painter)
 
+	if menuBar.Width != 640 || menuBar.Height != 28 {
+		t.Fatalf("macOS menu bar clip = %vx%v, want a 28px strip clipped to the desktop", menuBar.Width, menuBar.Height)
+	}
 	if search.Source == nil || search.Width != 16 || timeSlot.Left-(menu.Children[1].Left+search.Width) != 12 || cursor.Width != 22 || cursor.Height != 30 {
 		t.Fatalf("mac desktop geometry = search %#v, time left %v, cursor %#v", search, timeSlot.Left, cursor)
+	}
+}
+
+func TestOnboardingMacMenuBarFillStaysInsideDesktopCorners(t *testing.T) {
+	const width, height = 64, 28
+	color := woxui.Color{R: 220, G: 40, B: 40, A: 255}
+	fill := onboardingDemoMacMenuBarFill(width, height, color).(woxwidget.Painter)
+	displayList := &woxui.DisplayList{}
+	displayList.Clear(woxui.Color{})
+	displayList.PushClipRect(woxui.Rect{Width: width, Height: height})
+	fill.Paint(displayList, woxui.Rect{Width: width, Height: height})
+	displayList.PopClipRect()
+
+	renderer, err := woxui.NewSoftwareRenderer(width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := renderer.Render(displayList); err != nil {
+		t.Fatal(err)
+	}
+	img := renderer.RGBA()
+	alphaAt := func(x, y int) uint8 { return img.Pix[y*img.Stride+x*4+3] }
+	redAt := func(x, y int) uint8 { return img.Pix[y*img.Stride+x*4] }
+	if got := alphaAt(0, 0); got != 0 {
+		t.Fatalf("top-left desktop corner alpha = %d, want empty outside the rounded clip", got)
+	}
+	if got := redAt(width/2, height/2); got < 200 {
+		t.Fatalf("menu bar interior red = %d, want the filled bar", got)
+	}
+	if got := redAt(0, height-1); got < 200 {
+		t.Fatalf("menu bar bottom-left red = %d, want a square bottom edge", got)
 	}
 }
 
@@ -292,10 +530,13 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 		Labels:        map[string]string{"demo.glance.value": "当前时间", "glance.body": "Status", "demo.glance.provider": "Provider", "glance.enable.body": "Body", "glance.primary": "Primary"},
 		Theme:         woxcomponent.Theme{},
 	}, OnboardingStep{}, 640, 360).(woxwidget.Clip)
-	desktop := demo.Child.(woxwidget.Stack)
-	window := desktop.Children[len(desktop.Children)-1].Child.(woxwidget.Clip).Child.(woxwidget.Stack)
+	_, frame, windowClip := onboardingPlacedLauncherSlot(demo)
+	window := windowClip.Child.(woxwidget.Stack)
 	query := window.Children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex)
 
+	if frame.Vertical != 0 {
+		t.Fatalf("glance launcher frame vertical = %v, want top-aligned downward growth", frame.Vertical)
+	}
 	if len(query.Children) != 2 {
 		t.Fatalf("glance query children = %d, want query text plus accessory", len(query.Children))
 	}

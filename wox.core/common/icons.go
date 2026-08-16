@@ -156,6 +156,8 @@ var uiIcons = map[string]WoxImage{
 	"control.copy":               newMonochromeUIIcon(`<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>`),
 	"control.delete":             newMonochromeUIIcon(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`),
 	"control.folder-open":        newMonochromeUIIcon(`<path d="M3 7h6l2 2h10l-2 10H5z"/><path d="M3 7v12h2"/>`),
+	"control.accessibility":      newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.2" r="1.25" fill="#fff" stroke="none"/><path d="M6.8 11.6 12 10.3l5.2 1.3"/><path d="M12 8.6v3.8"/><path d="M8.8 18.4 12 12.4l3.2 6"/>`),
+	"control.internal-drive":     newMonochromeUIIcon(`<rect x="3.5" y="5" width="17" height="14" rx="5"/><path d="M7 15.5v2M9.5 15.5v2M12 15.5v2M14.5 15.5v2M17 15.5v2"/>`),
 	"control.emoji":              newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>`),
 	"control.upload":             newMonochromeUIIcon(`<path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5"/>`),
 	"control.download":           newMonochromeUIIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),

@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"wox/common"
-	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
-	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
@@ -99,47 +97,6 @@ type themeEditorPreviewSnapshot struct {
 	error       string
 }
 
-// buildThemeEditorPreview prepares the current editor state for the pure preview view.
-func (a *App) buildThemeEditorPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	state, err := a.themeEditorPreviewSnapshotFor(result, preview)
-	if err != nil {
-		return previewview.ThemeEditorPreviewView(previewview.ThemeEditorPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
-	}
-	return a.buildThemeEditorSurface(state, palette, width, height)
-}
-
-// buildThemeEditorSurface adapts controller-owned form fields to the shared theme editor view.
-func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-32)
-	callbacks := formFieldCallbacks{idPrefix: "theme-editor", focus: a.focusThemeEditorField, setText: a.setThemeEditorText, onKey: a.onThemeEditorPreviewKey}
-	rows := make([]woxwidget.Widget, 0, len(state.definitions))
-	for index, definition := range state.definitions {
-		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("theme-editor", index), Child: a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, innerWidth, 0)})
-	}
-	dirty := false
-	for key, value := range state.values {
-		if value != state.initial[key] {
-			dirty = true
-			break
-		}
-	}
-	saveLabel := a.translate("i18n:ui_save")
-	if state.isSystem || strings.TrimSpace(state.values["ThemeName"]) != state.sourceName {
-		saveLabel = "Save copy"
-	}
-	draftPalette := themeEditorDraftPalette(state.raw, state.values)
-	return previewview.ThemeEditorPreviewView(previewview.ThemeEditorPreviewProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: draftPalette.componentTheme(),
-		Error: state.error, SaveLabel: saveLabel, Dirty: dirty, Saving: state.saving,
-		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("theme-editor", state.formFieldsSnapshot),
-		OnSubmit: a.submitThemeEditorPreview,
-	})
-}
-
-func (a *App) buildThemeDraftSample(values map[string]string, width, height float32) woxwidget.Widget {
-	return previewview.ThemeDraftSample(themeEditorPalette(values).componentTheme(), width, height)
-}
-
 func themeEditorTokens() []themeColorToken {
 	count := 0
 	for _, group := range themeEditorColorGroups {
@@ -189,7 +146,7 @@ func copyThemeMap(source map[string]any) map[string]any {
 	return copy
 }
 
-// newThemeEditorState builds one portable draft from either a query preview or settings.
+// newThemeEditorState builds one portable draft from the current Settings theme.
 func newThemeEditorState(key string, raw map[string]any) *themeEditorPreviewState {
 	definitions, values := themeEditorForm(raw)
 	fields := newFormFieldsState(definitions, values, false)
@@ -207,7 +164,7 @@ func newThemeEditorState(key string, raw map[string]any) *themeEditorPreviewStat
 	}
 }
 
-// loadSettingsThemeEditor opens the applied theme through the same draft engine used by query previews.
+// loadSettingsThemeEditor opens the applied theme as the Settings theme editor draft.
 func (a *App) loadSettingsThemeEditor() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -231,56 +188,11 @@ func (a *App) loadSettingsThemeEditor() error {
 	return a.runOnUI("apply settings theme editor", func() {
 		a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
 		a.preloadDemoWallpaper(true)
-		if a.window != nil {
-			a.invalidateThemeEditorWindow()
-		}
+		a.invalidateThemeEditorWindow()
 	})
 }
 
-// themeEditorPreviewDataAndKey validates the draft and derives its stable controller identity.
-func themeEditorPreviewDataAndKey(result queryResult, preview queryPreview) (map[string]any, string, error) {
-	var raw map[string]any
-	if err := json.Unmarshal([]byte(preview.PreviewData), &raw); err != nil {
-		return nil, "", fmt.Errorf("decode theme editor preview: %w", err)
-	}
-	if strings.TrimSpace(themeMapString(raw, "AppBackgroundColor")) == "" {
-		return nil, "", fmt.Errorf("theme editor preview has no theme data")
-	}
-	hash := sha256.Sum256([]byte(preview.PreviewData))
-	return raw, fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash), nil
-}
-
-// activateThemeEditorPreview prepares the draft state before rendering.
-func (a *App) activateThemeEditorPreview(result queryResult, preview queryPreview) error {
-	raw, key, err := themeEditorPreviewDataAndKey(result, preview)
-	if err != nil {
-		return err
-	}
-	editor := a.themeSettings.ThemeEditor()
-	if editor != nil && editor.key != key {
-		a.deactivateThemeEditorPreview()
-	}
-
-	current := a.themeSettings.ThemeEditor()
-	if current == nil || current.key != key {
-		a.themeSettings.SetThemeEditor(newThemeEditorState(key, raw))
-	}
-	return nil
-}
-
-// themeEditorPreviewSnapshotFor returns the prepared theme draft.
-func (a *App) themeEditorPreviewSnapshotFor(result queryResult, preview queryPreview) (*themeEditorPreviewSnapshot, error) {
-	_, key, err := themeEditorPreviewDataAndKey(result, preview)
-	if err != nil {
-		return nil, err
-	}
-	editor := a.themeSettings.ThemeEditor()
-	if editor == nil || editor.key != key {
-		return nil, fmt.Errorf("theme editor preview is not ready")
-	}
-	return snapshotThemeEditorPreviewLocked(editor), nil
-}
-
+// snapshotThemeEditorPreviewLocked copies the Settings draft for a render pass.
 func snapshotThemeEditorPreviewLocked(state *themeEditorPreviewState) *themeEditorPreviewSnapshot {
 	if state == nil {
 		return nil
@@ -371,10 +283,6 @@ func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
 	}
 	if event.Key == woxui.KeyEscape {
 		a.deactivateThemeEditorPreview()
-		return true
-	}
-	if event.Key == woxui.KeyEnter && event.Modifiers.HasPrimary() {
-		a.submitThemeEditorPreview()
 		return true
 	}
 	switch event.Key {
@@ -481,18 +389,6 @@ func validateThemeEditorValues(values map[string]string) string {
 	return ""
 }
 
-// submitThemeEditorPreview keeps the launcher preview's original save-or-copy behavior.
-func (a *App) submitThemeEditorPreview() {
-	state := a.themeSettings.ThemeEditor()
-	if state == nil || state.saving {
-		return
-	}
-	syncFormFieldsEditorLocked(&state.formFieldsState)
-	name := strings.TrimSpace(state.values["ThemeName"])
-	overwrite := !state.isSystem && !state.isAuto && state.sourceID != "" && name == state.sourceName
-	a.saveThemeEditorDraft(name, overwrite)
-}
-
 // saveThemeEditorDraft preserves non-color theme fields while saving through the shared theme service.
 func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	state := a.themeSettings.ThemeEditor()
@@ -587,7 +483,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 			a.invalidateThemeEditorWindow()
 		})
 		if err != nil {
-			log.Printf("save theme editor preview: %v", err)
+			log.Printf("save theme editor draft: %v", err)
 		}
 	})
 }

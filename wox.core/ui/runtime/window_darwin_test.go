@@ -6,8 +6,10 @@ import "testing"
 
 func TestDarwinQueueFramePreservesReplacedNativeDamage(t *testing.T) {
 	window := &platformWindow{}
+	frameID := uint64(0)
 	frame := func(damage Rect) *darwinRenderFrame {
-		displayList := &DisplayList{}
+		frameID++
+		displayList := &DisplayList{frameID: frameID}
 		displayList.SetNativeDamage(damage)
 		return &darwinRenderFrame{displayList: displayList}
 	}
@@ -18,6 +20,9 @@ func TestDarwinQueueFramePreservesReplacedNativeDamage(t *testing.T) {
 	if got, want := partial.displayList.NativeDamage(), (Rect{X: 10, Y: 10, Width: 40, Height: 20}); got != want {
 		t.Fatalf("coalesced native damage = %+v, want %+v", got, want)
 	}
+	if partial.coalescedFrameCount != 1 || partial.firstCoalescedFrameID != 1 || partial.lastCoalescedFrameID != 1 {
+		t.Fatalf("coalesced frame metadata = %+v, want one replaced frame 1", partial)
+	}
 
 	full := frame(Rect{})
 	window.queueFrame(full)
@@ -25,6 +30,9 @@ func TestDarwinQueueFramePreservesReplacedNativeDamage(t *testing.T) {
 	window.queueFrame(partialAfterFull)
 	if got := partialAfterFull.displayList.NativeDamage(); got != (Rect{}) {
 		t.Fatalf("native damage after replaced full frame = %+v, want full frame", got)
+	}
+	if partialAfterFull.coalescedFrameCount != 3 || partialAfterFull.firstCoalescedFrameID != 1 || partialAfterFull.lastCoalescedFrameID != 3 {
+		t.Fatalf("accumulated coalesced frame metadata = %+v, want three replacements from 1 through 3", partialAfterFull)
 	}
 }
 
@@ -43,5 +51,42 @@ func TestDarwinRestoreFrameDamage(t *testing.T) {
 	}
 	if got := window.consumePendingDamage(); got != (Rect{}) {
 		t.Fatalf("restored full native damage = %+v, want full frame", got)
+	}
+}
+
+func TestDarwinRenderDiagnosticNames(t *testing.T) {
+	tests := map[uint8]string{
+		darwinRenderDiagnosticWindowUnavailable:  "presentation_window_unavailable",
+		darwinRenderDiagnosticRendererReplaced:   "presentation_renderer_replaced",
+		darwinRenderDiagnosticGenerationMismatch: "presentation_generation_mismatch",
+		darwinRenderDiagnosticStaleSequence:      "presentation_stale_sequence",
+		darwinRenderDiagnosticRecovered:          "presentation_recovered",
+		99:                                       "presentation_unknown",
+	}
+	for event, want := range tests {
+		if got := darwinRenderDiagnosticName(event); got != want {
+			t.Fatalf("diagnostic event %d = %q, want %q", event, got, want)
+		}
+	}
+}
+
+func TestDarwinFrameStatusNames(t *testing.T) {
+	if got := darwinFrameStatusName(1); got != "native_skipped" {
+		t.Fatalf("skipped status = %q", got)
+	}
+	if got := darwinFrameStatusName(2); got != "surface_busy" {
+		t.Fatalf("surface busy status = %q", got)
+	}
+	if got := darwinFrameStatusName(-1); got != "native_error" {
+		t.Fatalf("error status = %q", got)
+	}
+}
+
+func TestDarwinRecoverableFrameStatusDoesNotLatchRenderError(t *testing.T) {
+	window := &platformWindow{}
+	window.recordRenderError("skip macOS frame", 1)
+	window.recordRenderError("present macOS frame", 2)
+	if window.renderErr != nil {
+		t.Fatalf("recoverable frame status latched render error: %v", window.renderErr)
 	}
 }

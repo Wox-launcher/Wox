@@ -32,6 +32,13 @@ func TestBoundsPlacesBelowAnchorTopAtWindowBottom(t *testing.T) {
 	}
 }
 
+func TestWorkAreaUsesTrackedPlatformCoordinates(t *testing.T) {
+	explicit := woxui.Rect{X: -1920, Y: -180, Width: 1920, Height: 1080}
+	if got := WorkArea(WindowOptions{WorkArea: &explicit}, woxui.Rect{}); got != explicit {
+		t.Fatalf("explicit work area = %+v, want %+v", got, explicit)
+	}
+}
+
 func TestRequestCloseFiresCallbackOnce(t *testing.T) {
 	called := 0
 	RegisterCloseCallback("test", func() { called++ })

@@ -28,6 +28,7 @@ extern void woxGoDarwinWebViewNavigationChanged(uintptr_t context, const char *u
 extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFrameSync(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale, int32_t transactional);
+extern void woxGoDarwinPresentationDiagnostic(uintptr_t context, uint64_t frame_id, uint8_t event, uint8_t renderer_kind, uint64_t sequence, uint64_t generation, uint64_t current_generation);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
 extern void woxGoDarwinWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
@@ -67,6 +68,13 @@ enum {
   WOX_ACCESSIBILITY_ACTION_DECREMENT = 1 << 5,
   WOX_ACCESSIBILITY_ACTION_SCROLL = 1 << 6,
   WOX_ACCESSIBILITY_ACTION_DISMISS = 1 << 7,
+  WOX_RENDER_DIAGNOSTIC_WINDOW_UNAVAILABLE = 1,
+  WOX_RENDER_DIAGNOSTIC_RENDERER_REPLACED = 2,
+  WOX_RENDER_DIAGNOSTIC_GENERATION_MISMATCH = 3,
+  WOX_RENDER_DIAGNOSTIC_STALE_SEQUENCE = 4,
+  WOX_RENDER_DIAGNOSTIC_RECOVERED = 5,
+  WOX_RENDERER_BACKGROUND = 0,
+  WOX_RENDERER_OVERLAY = 1,
 };
 
 typedef struct WoxDarwinRenderer WoxDarwinRenderer;
@@ -136,6 +144,7 @@ struct WoxDarwinRenderer {
   CGContextRef context;
   CGSize viewport_size;
   float scale;
+  uint64_t frame_id;
   uint64_t frame_generation;
   uint64_t submission_sequence;
   uint64_t presented_sequence;
@@ -147,6 +156,7 @@ struct WoxDarwinRenderer {
   bool clip_active;
   CGRect clip_rect;
   bool damage_clip_active;
+  bool diagnostic_recovery_pending;
 };
 
 static NSInteger wox_open_window_count = 0;
@@ -846,6 +856,7 @@ static WoxDarwinSurface *acquire_render_surface(WoxDarwinRenderer *renderer, NSU
 
   // Triple buffering absorbs compositor stalls while keeping the visible backing store bounded.
   if (matching_count >= 3) {
+    renderer->diagnostic_recovery_pending = true;
     return nil;
   }
   WoxDarwinSurface *surface = [[WoxDarwinSurface alloc] initWithWidth:width height:height];
@@ -855,12 +866,42 @@ static WoxDarwinSurface *acquire_render_surface(WoxDarwinRenderer *renderer, NSU
   return surface;
 }
 
+// renderer_kind identifies which bounded IOSurface pool produced a diagnostic event.
+static uint8_t renderer_kind(WoxDarwinWindow *window, WoxDarwinRenderer *renderer) {
+  return window->overlay_renderer == renderer ? WOX_RENDERER_OVERLAY : WOX_RENDERER_BACKGROUND;
+}
+
+// report_presentation_diagnostic forwards only rejected or recovered asynchronous presentations to Go logging.
+static void report_presentation_diagnostic(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, uint64_t frame_id, uint8_t event, uint64_t sequence, uint64_t generation) {
+  if (window == NULL || renderer == NULL || window->context == 0) {
+    return;
+  }
+  woxGoDarwinPresentationDiagnostic(
+      window->context,
+      frame_id,
+      event,
+      renderer_kind(window, renderer),
+      sequence,
+      generation,
+      atomic_load_explicit(&window->presentation_generation, memory_order_relaxed));
+}
+
 // present_render_surface joins resize frames to the caller's transaction and owns ordinary frame transactions.
-static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, WoxDarwinSurface *surface, uint64_t sequence, uint64_t generation, bool transactional) {
-  if (window->closed || !window->visible || (window->renderer != renderer && window->overlay_renderer != renderer) ||
-      atomic_load_explicit(&window->presentation_generation, memory_order_relaxed) != generation ||
-      sequence <= renderer->presented_sequence) {
+static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, WoxDarwinSurface *surface, uint64_t frame_id, uint64_t sequence, uint64_t generation, bool transactional) {
+  uint8_t rejected_event = 0;
+  if (window->closed || !window->visible) {
+    rejected_event = WOX_RENDER_DIAGNOSTIC_WINDOW_UNAVAILABLE;
+  } else if (window->renderer != renderer && window->overlay_renderer != renderer) {
+    rejected_event = WOX_RENDER_DIAGNOSTIC_RENDERER_REPLACED;
+  } else if (atomic_load_explicit(&window->presentation_generation, memory_order_relaxed) != generation) {
+    rejected_event = WOX_RENDER_DIAGNOSTIC_GENERATION_MISMATCH;
+  } else if (sequence <= renderer->presented_sequence) {
+    rejected_event = WOX_RENDER_DIAGNOSTIC_STALE_SEQUENCE;
+  }
+  if (rejected_event != 0) {
     atomic_fetch_sub_explicit(&surface->presentation_references, 1, memory_order_relaxed);
+    renderer->diagnostic_recovery_pending = true;
+    report_presentation_diagnostic(window, renderer, frame_id, rejected_event, sequence, generation);
     return;
   }
 
@@ -882,6 +923,10 @@ static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *r
   renderer->content_layer.contents = (__bridge id)surface->io_surface;
   if (!transactional) {
     [CATransaction commit];
+  }
+  if (renderer->diagnostic_recovery_pending) {
+    renderer->diagnostic_recovery_pending = false;
+    report_presentation_diagnostic(window, renderer, frame_id, WOX_RENDER_DIAGNOSTIC_RECOVERED, sequence, generation);
   }
 }
 
@@ -3506,7 +3551,7 @@ void wox_darwin_autorelease_pool_pop(void *pool) {
   [(NSAutoreleasePool *)pool drain];
 }
 
-static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->closed || renderer == NULL || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     return -1;
   }
@@ -3590,6 +3635,7 @@ static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRen
   renderer->context = context;
   renderer->viewport_size = CGSizeMake(logical_width, logical_height);
   renderer->scale = scale;
+  renderer->frame_id = frame_id;
   renderer->frame_generation = atomic_load_explicit(&window->presentation_generation, memory_order_relaxed);
   renderer->frame_sequence = frame_sequence;
   renderer->frame_requested_damage = requested_damage;
@@ -3600,13 +3646,13 @@ static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRen
   return 0;
 }
 
-int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->renderer == NULL || window->overlay_renderer == NULL) {
     return -1;
   }
   window->embedded_surface_overlay_active = false;
   window->active_renderer = window->renderer;
-  return begin_darwin_renderer_frame(window, window->renderer, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
+  return begin_darwin_renderer_frame(window, window->renderer, frame_id, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
 }
 
 // wox_darwin_window_trim_render_surfaces keeps the front buffer and one reusable current-size back buffer.
@@ -3868,6 +3914,7 @@ static int32_t finish_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRe
   renderer->frame_open = false;
 
   uint64_t sequence = renderer->frame_sequence;
+  uint64_t frame_id = renderer->frame_id;
   renderer->submission_sequence = sequence;
   renderer->damage_history[sequence % 64].sequence = sequence;
   renderer->damage_history[sequence % 64].damage = renderer->frame_requested_damage;
@@ -3876,11 +3923,11 @@ static int32_t finish_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRe
   uint64_t generation = renderer->frame_generation;
   atomic_fetch_add_explicit(&surface->presentation_references, 1, memory_order_relaxed);
   if ([NSThread isMainThread]) {
-    present_render_surface(window, renderer, surface, sequence, generation, transactional != 0);
+    present_render_surface(window, renderer, surface, frame_id, sequence, generation, transactional != 0);
   } else {
     WoxDarwinSurface *present_surface = [surface retain];
     dispatch_async(dispatch_get_main_queue(), ^{
-      present_render_surface(window, renderer, present_surface, sequence, generation, false);
+      present_render_surface(window, renderer, present_surface, frame_id, sequence, generation, false);
       [present_surface release];
     });
   }
@@ -3901,7 +3948,7 @@ int32_t wox_darwin_window_begin_embedded_surface_overlay(WoxDarwinWindow *window
   if (result != 0) {
     return result;
   }
-  result = begin_darwin_renderer_frame(window, window->overlay_renderer, viewport.width, viewport.height, scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
+  result = begin_darwin_renderer_frame(window, window->overlay_renderer, background->frame_id, viewport.width, viewport.height, scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
   if (result != 0) {
     return result;
   }
@@ -3923,7 +3970,7 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
     return result;
   }
   WoxDarwinRenderer *background = window->renderer;
-  result = begin_darwin_renderer_frame(window, window->overlay_renderer, background->viewport_size.width, background->viewport_size.height, background->scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
+  result = begin_darwin_renderer_frame(window, window->overlay_renderer, background->frame_id, background->viewport_size.width, background->viewport_size.height, background->scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
   if (result == 0) {
     result = finish_darwin_renderer_frame(window, window->overlay_renderer, transactional);
   }

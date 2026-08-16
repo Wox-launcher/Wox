@@ -117,6 +117,22 @@ func FolderGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.folder-open", size, color)
 }
 
+// AccessibilityGlyph returns the monochrome Universal Access figure used by permission rows.
+func AccessibilityGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 20
+	}
+	return svgIcon("control.accessibility", size, color)
+}
+
+// DiskAccessGlyph returns the monochrome internal-drive icon used by permission rows.
+func DiskAccessGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 20
+	}
+	return svgIcon("control.internal-drive", size, color)
+}
+
 // AddGlyph returns the shared add icon.
 func AddGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.add", size, color)
