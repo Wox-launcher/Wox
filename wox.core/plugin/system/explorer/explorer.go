@@ -811,6 +811,7 @@ func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, 
 		return
 	}
 
+	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer navigation and selection failed; opening folder through Shell: pid=%d windowId=%q path=%s", env.ActiveWindowPid, env.ActiveWindowId, folderPath))
 	shell.Open(folderPath)
 	c.api.HideApp(ctx)
 }
@@ -1137,6 +1138,15 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 
 		showOverlay := func(localCtx context.Context) bool {
 			overlay.Close(explorerDialogHintOverlayName)
+			if activePid <= 0 || window.GetActiveWindowPid() != activePid {
+				c.typeToSearchDebugLog(localCtx, "showOverlay skipped (foreground pid no longer matches explorer pid=%d)", activePid)
+				return false
+			}
+			sourceWindow := common.ActiveWindowSnapshot{
+				Name:     window.GetActiveWindowName(),
+				Pid:      activePid,
+				WindowId: window.GetActiveWindowId(),
+			}
 			x, y, w, h, ok := GetActiveExplorerRect()
 			if !ok {
 				x, y, w, h, ok = GetActiveDialogRect()
@@ -1161,7 +1171,9 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				WindowPosition:       &position,
 				WindowPositionHeight: initialWindowHeight,
 				WindowWidth:          woxSetting.AppWidth.Get() / 2,
+				RestoreWindow:        &sourceWindow,
 			}
+			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(sourceWindow)
 			explorerShow = &showContext
 			changeExplorerQuery(localCtx)
 			return true

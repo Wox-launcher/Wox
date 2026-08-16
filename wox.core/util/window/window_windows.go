@@ -88,6 +88,7 @@ char* getFileDialogPathByPid(int pid);
 */
 import "C"
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -98,6 +99,7 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+	"wox/util"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -628,8 +630,13 @@ func selectBestExplorerShellWindowCandidate(candidates []explorerShellWindowCand
 // tab entry instead of the focused tab. We rank ShellWindows candidates with the active
 // window title and z-order before calling Navigate so type-to-search stays on the current tab.
 func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, windowId string) bool {
-	if pid <= 0 || targetPath == "" {
+	logFailure := func(stage string, detail string) bool {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("NavigateInFileExplorer failed: stage=%s pid=%d windowId=%q title=%q target=%q detail=%s", stage, pid, windowId, windowTitle, targetPath, detail))
 		return false
+	}
+
+	if pid <= 0 || targetPath == "" {
+		return logFailure("validate", "pid or target path is empty")
 	}
 
 	runtime.LockOSThread()
@@ -644,10 +651,10 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 			case rpcEChangedMode:
 				// COM already initialized with different concurrency model; proceed.
 			default:
-				return false
+				return logFailure("initialize COM", err.Error())
 			}
 		} else {
-			return false
+			return logFailure("initialize COM", err.Error())
 		}
 	} else {
 		initialized = true
@@ -659,29 +666,29 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 
 	unknown, err := oleutil.CreateObject("Shell.Application")
 	if err != nil {
-		return false
+		return logFailure("create Shell.Application", err.Error())
 	}
 	defer unknown.Release()
 
 	shellDisp, err := unknown.QueryInterface(ole.IID_IDispatch)
 	if err != nil {
-		return false
+		return logFailure("query Shell.Application dispatch", err.Error())
 	}
 	defer shellDisp.Release()
 
 	windowsVar, err := oleutil.CallMethod(shellDisp, "Windows")
 	if err != nil {
-		return false
+		return logFailure("get ShellWindows", err.Error())
 	}
 	defer windowsVar.Clear()
 	windowsDisp := windowsVar.ToIDispatch()
 	if windowsDisp == nil {
-		return false
+		return logFailure("get ShellWindows dispatch", "dispatch is nil")
 	}
 
 	countVar, err := oleutil.GetProperty(windowsDisp, "Count")
 	if err != nil {
-		return false
+		return logFailure("get ShellWindows count", err.Error())
 	}
 	count := int(countVar.Val)
 	countVar.Clear()
@@ -699,20 +706,27 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 	candidates := make([]explorerShellWindowCandidate, 0, 4)
 	uniqueHwnds := map[uintptr]struct{}{}
 	zOrder := getExplorerWindowZOrder()
+	itemErrors := 0
+	nilDispatches := 0
+	hwndErrors := 0
+	pidMismatches := 0
 
 	for i := 0; i < count; i++ {
 		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
 		if err != nil {
+			itemErrors++
 			continue
 		}
 		wDisp := itemVar.ToIDispatch()
 		if wDisp == nil {
+			nilDispatches++
 			itemVar.Clear()
 			continue
 		}
 
 		hwndVar, err := oleutil.GetProperty(wDisp, "HWND")
 		if err != nil {
+			hwndErrors++
 			itemVar.Clear()
 			continue
 		}
@@ -722,6 +736,7 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 		var wndPid uint32
 		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
 		if int(wndPid) != pid {
+			pidMismatches++
 			itemVar.Clear()
 			continue
 		}
@@ -741,7 +756,7 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 	}
 
 	if len(candidates) == 0 {
-		return false
+		return logFailure("find Explorer candidate", fmt.Sprintf("shellWindowCount=%d itemErrors=%d nilDispatches=%d hwndErrors=%d pidMismatches=%d", count, itemErrors, nilDispatches, hwndErrors, pidMismatches))
 	}
 
 	// Prefer the exact window captured before Wox took foreground focus.
@@ -775,18 +790,18 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 
 	bestCandidateIdx := selectBestExplorerShellWindowCandidate(candidates, targetHwnd, windowTitle)
 	if bestCandidateIdx < 0 {
-		return false
+		return logFailure("select Explorer candidate", fmt.Sprintf("candidateCount=%d targetHwnd=0x%X", len(candidates), targetHwnd))
 	}
 	bestIndex := candidates[bestCandidateIdx].index
 
 	itemVar, err := oleutil.CallMethod(windowsDisp, "Item", bestIndex)
 	if err != nil {
-		return false
+		return logFailure("get Explorer candidate", fmt.Sprintf("index=%d error=%s", bestIndex, err.Error()))
 	}
 	wDisp := itemVar.ToIDispatch()
 	if wDisp == nil {
 		itemVar.Clear()
-		return false
+		return logFailure("get Explorer candidate dispatch", fmt.Sprintf("index=%d", bestIndex))
 	}
 
 	_, err = oleutil.CallMethod(wDisp, "Navigate", targetPath)
@@ -795,7 +810,10 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 	}
 	itemVar.Clear()
 
-	return err == nil
+	if err != nil {
+		return logFailure("navigate Explorer candidate", fmt.Sprintf("index=%d hwnd=0x%X candidateCount=%d error=%s", bestIndex, targetHwnd, len(candidates), err.Error()))
+	}
+	return true
 }
 
 // IsFileExplorer checks if the given PID belongs to Explorer by checking the process image name.
