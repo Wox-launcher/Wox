@@ -20,6 +20,7 @@
 - **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes.
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
 - **Boundary Purity**: `widget.Boundary.Build` must derive its widget tree only from `Props` and stable callbacks carried by `Props`. It must not capture mutable application, controller, collection, or view state outside `Props`, because cache hits intentionally skip `Build`.
+- **Linux Desktop Environments**: Linux desktop sessions differ enough that environment-specific behavior must not accumulate as branches inside a shared `*_linux.go` or `native_linux.c` file. Follow the clipboard package: keep a shared Linux interface and a selector that uses session helpers such as `util.IsKDEDesktopSession()`, `util.IsGnomeDesktopSession()`, `util.IsHyprlandSession()`, and `util.IsLinuxWaylandSession()`, then put each environment's implementation in its own file (`clipboard_linux_gnome.go`, `clipboard_linux_kde.go`, `clipboard_linux_hyprland.go`, `clipboard_linux_x11.go`). A GNOME, KDE/Plasma, Hyprland, or X11 change must stay in that environment's file so it cannot affect the others. When a new desktop needs different behavior, add a new file rather than extending a shared switch with more special cases.
 
 ## User Coding Style Preferences
 

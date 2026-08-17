@@ -140,6 +140,7 @@ struct WoxLinuxWindow {
   bool native_dialog_active;
   bool nonactivating;
   bool restore_previous_on_hide;
+  bool application_window;
   bool layer_shell_enabled;
   bool input_enabled;
   bool input_composing;
@@ -157,6 +158,63 @@ static pthread_t wox_linux_main_thread;
 static gint wox_linux_runtime_running = 0;
 static gint wox_linux_loop_active = 0;
 static gint wox_linux_window_count = 0;
+
+// Must match util.LinuxDesktopAppID / util.LinuxDesktopWMClass.
+#define WOX_LINUX_DEFAULT_APP_ID "io.github.WoxLauncher.Wox"
+#define WOX_LINUX_DEFAULT_WM_CLASS "wox"
+
+static char wox_linux_app_id[256];
+static char wox_linux_wm_class[64];
+static char wox_linux_icon_path[512];
+
+// wox_linux_set_app_identity records the desktop id used for Wayland app_id,
+// X11 WM_CLASS, and the installed icon before gtk_init.
+void wox_linux_set_app_identity(const char *app_id, const char *wm_class, const char *icon_path) {
+  if (app_id != NULL && app_id[0] != '\0') {
+    g_strlcpy(wox_linux_app_id, app_id, sizeof(wox_linux_app_id));
+  }
+  if (wm_class != NULL && wm_class[0] != '\0') {
+    g_strlcpy(wox_linux_wm_class, wm_class, sizeof(wox_linux_wm_class));
+  }
+  if (icon_path != NULL && icon_path[0] != '\0') {
+    g_strlcpy(wox_linux_icon_path, icon_path, sizeof(wox_linux_icon_path));
+  }
+}
+
+static const char *linux_app_id(void) {
+  return wox_linux_app_id[0] != '\0' ? wox_linux_app_id : WOX_LINUX_DEFAULT_APP_ID;
+}
+
+static const char *linux_wm_class(void) {
+  return wox_linux_wm_class[0] != '\0' ? wox_linux_wm_class : WOX_LINUX_DEFAULT_WM_CLASS;
+}
+
+static void apply_linux_app_identity(void) {
+  // Plasma matches Wayland app_id to the desktop file name. prgname is the GTK3
+  // default app_id, so a debug/AppImage basename would otherwise become a letter icon.
+  g_set_prgname(linux_app_id());
+  g_set_application_name("Wox");
+  gdk_set_program_class(linux_wm_class());
+}
+
+static void apply_linux_app_icon(void) {
+  gtk_window_set_default_icon_name(linux_app_id());
+  if (wox_linux_icon_path[0] != '\0') {
+    gtk_window_set_default_icon_from_file(wox_linux_icon_path, NULL);
+  }
+}
+
+static void apply_wayland_app_id(WoxLinuxWindow *window) {
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window == NULL || !GDK_IS_WAYLAND_WINDOW(gdk_window)) {
+    return;
+  }
+  gdk_wayland_window_set_application_id(gdk_window, linux_app_id());
+#else
+  (void)window;
+#endif
+}
 
 typedef GtkWidget *(*WoxWebKitViewNew)(void);
 typedef GtkWidget *(*WoxWebKitViewNewWithManager)(gpointer manager);
@@ -1190,7 +1248,7 @@ static WoxLayerSetAnchor layer_set_anchor;
 static WoxLayerSetMonitor layer_set_monitor;
 static WoxLayerSetMargin layer_set_margin;
 
-static bool is_wlroots_compositor(void) {
+static bool compositor_uses_layer_shell(void) {
   const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
   if (desktop == NULL || desktop[0] == '\0') {
     desktop = g_getenv("XDG_SESSION_DESKTOP");
@@ -1202,7 +1260,10 @@ static bool is_wlroots_compositor(void) {
     return false;
   }
   char *lower = g_ascii_strdown(desktop, -1);
-  bool result = strstr(lower, "hyprland") != NULL || strstr(lower, "sway") != NULL || strstr(lower, "wayfire") != NULL || strstr(lower, "river") != NULL || strstr(lower, "wlroots") != NULL;
+  // Layer-shell surfaces stay off the taskbar. Plasma/KWin advertise the
+  // protocol, but skip_taskbar_hint is X11-only, so without this check the
+  // launcher appears as a regular xdg_toplevel in the Plasma panel.
+  bool result = strstr(lower, "hyprland") != NULL || strstr(lower, "sway") != NULL || strstr(lower, "wayfire") != NULL || strstr(lower, "river") != NULL || strstr(lower, "wlroots") != NULL || strstr(lower, "kde") != NULL || strstr(lower, "plasma") != NULL;
   g_free(lower);
   return result;
 }
@@ -1237,7 +1298,7 @@ static bool resolve_layer_shell(void) {
 }
 
 static bool enable_layer_shell(GtkWindow *window) {
-  if (!is_wlroots_compositor() || !resolve_layer_shell() || !layer_is_supported()) {
+  if (!compositor_uses_layer_shell() || !resolve_layer_shell() || !layer_is_supported()) {
     return false;
   }
   layer_init_for_window(window);
@@ -1345,6 +1406,36 @@ static void save_previous_x11_window(WoxLinuxWindow *window) {
   }
 }
 
+static void apply_x11_skip_taskbar_state(WoxLinuxWindow *window) {
+  GdkDisplay *gdk_display = x11_gdk_display(window);
+  Display *display = gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
+  Window xid = x11_window_id(window);
+  if (gdk_display == NULL || display == NULL || xid == None) {
+    return;
+  }
+  Atom state = XInternAtom(display, "_NET_WM_STATE", False);
+  Atom skip_taskbar = XInternAtom(display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+  Atom skip_pager = XInternAtom(display, "_NET_WM_STATE_SKIP_PAGER", False);
+  if (state == None || skip_taskbar == None || skip_pager == None) {
+    return;
+  }
+  // KWin can drop SKIP_TASKBAR on remap/activate; re-add it after every show.
+  XEvent event;
+  memset(&event, 0, sizeof(event));
+  event.xclient.type = ClientMessage;
+  event.xclient.window = xid;
+  event.xclient.message_type = state;
+  event.xclient.format = 32;
+  event.xclient.data.l[0] = 1;
+  event.xclient.data.l[1] = (long)skip_taskbar;
+  event.xclient.data.l[2] = (long)skip_pager;
+  event.xclient.data.l[3] = 1;
+  gdk_x11_display_error_trap_push(gdk_display);
+  XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+  XFlush(display);
+  gdk_x11_display_error_trap_pop_ignored(gdk_display);
+}
+
 static void request_x11_activation(WoxLinuxWindow *window) {
   Display *display = x11_display(window);
   Window xid = x11_window_id(window);
@@ -1398,6 +1489,9 @@ static void restore_previous_x11_window(WoxLinuxWindow *window) {
 static void save_previous_x11_window(WoxLinuxWindow *window) {
   (void)window;
 }
+static void apply_x11_skip_taskbar_state(WoxLinuxWindow *window) {
+  (void)window;
+}
 static void request_x11_activation(WoxLinuxWindow *window) {
   (void)window;
 }
@@ -1405,6 +1499,17 @@ static void restore_previous_x11_window(WoxLinuxWindow *window) {
   (void)window;
 }
 #endif
+
+// apply_utility_taskbar_hints keeps launcher/overlay windows out of the
+// taskbar and pager. GTK skip_* hints are X11-only; Wayland relies on layer-shell.
+static void apply_utility_taskbar_hints(WoxLinuxWindow *window) {
+  if (window->application_window) {
+    return;
+  }
+  gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), TRUE);
+  gtk_window_set_skip_pager_hint(GTK_WINDOW(window->window), TRUE);
+  apply_x11_skip_taskbar_state(window);
+}
 
 // apply_linux_window_size makes GTK's allocation match the target size before the
 // next frame. gtk_window_resize alone is asynchronous, and Openbox often keeps the
@@ -1623,9 +1728,11 @@ int32_t wox_linux_run(uintptr_t context) {
     return -3;
   }
 #endif
+  apply_linux_app_identity();
   if (!gtk_init_check(NULL, NULL)) {
     return -2;
   }
+  apply_linux_app_icon();
   wox_linux_main_thread = pthread_self();
   g_atomic_int_set(&wox_linux_runtime_running, 1);
   int32_t start_result = woxGoLinuxStart(context);
@@ -1650,6 +1757,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->preferred_height = height;
   window->hide_on_blur = hide_on_blur != 0;
   bool application_window = window_role == 1;
+  window->application_window = application_window;
   window->nonactivating = nonactivating != 0;
   window->im_context = gtk_im_multicontext_new();
   window->pressed_keys = g_hash_table_new(g_direct_hash, g_direct_equal);
@@ -1702,13 +1810,16 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
   if (application_window) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), FALSE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(window->window), FALSE);
     gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_NORMAL);
     gtk_window_set_keep_above(GTK_WINDOW(window->window), FALSE);
   } else {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), TRUE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(window->window), TRUE);
     gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_UTILITY);
     gtk_window_set_keep_above(GTK_WINDOW(window->window), TRUE);
   }
+  gtk_window_set_icon_name(GTK_WINDOW(window->window), linux_app_id());
   gtk_window_set_accept_focus(GTK_WINDOW(window->window), !window->nonactivating);
   gtk_window_set_focus_on_map(GTK_WINDOW(window->window), !window->nonactivating);
   gtk_window_set_position(GTK_WINDOW(window->window), GTK_WIN_POS_CENTER);
@@ -1778,6 +1889,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_realize(window->window);
   gtk_widget_realize(window->gl_area);
   gtk_widget_realize(window->overlay_gl_area);
+  apply_wayland_app_id(window);
   gtk_im_context_set_client_window(window->im_context, gtk_widget_get_window(window->window));
   if (!window->renderer.ready || !window->overlay_renderer.ready) {
     gtk_widget_destroy(window->window);
@@ -1812,6 +1924,8 @@ static void show_main(void *data) {
   save_previous_x11_window(window);
   place_window(window);
   gtk_widget_show_all(window->window);
+  apply_utility_taskbar_hints(window);
+  apply_wayland_app_id(window);
   apply_linux_window_size(window, (int)ceilf(window->preferred_width), (int)ceilf(window->preferred_height));
   place_window(window);
   present_linux_window_now(window);
@@ -1827,6 +1941,7 @@ static void show_main(void *data) {
     gtk_window_present(GTK_WINDOW(window->window));
     gtk_widget_grab_focus(window->gl_area);
   }
+  apply_utility_taskbar_hints(window);
 }
 
 uint64_t wox_linux_window_show(WoxLinuxWindow *window) {

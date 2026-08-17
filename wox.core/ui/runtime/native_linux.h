@@ -7,6 +7,8 @@ typedef struct WoxLinuxWindow WoxLinuxWindow;
 
 int32_t wox_linux_run(uintptr_t context);
 int32_t wox_linux_call(uintptr_t context);
+// wox_linux_set_app_identity records the desktop id, X11 class, and icon path before gtk_init.
+void wox_linux_set_app_identity(const char *app_id, const char *wm_class, const char *icon_path);
 WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
 uint64_t wox_linux_window_show(WoxLinuxWindow *window);
 int32_t wox_linux_window_hide(WoxLinuxWindow *window);

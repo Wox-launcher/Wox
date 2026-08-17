@@ -21,7 +21,22 @@ import (
 	"unsafe"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
+	"wox/util"
 )
+
+// applyLinuxAppIdentity publishes Wox's desktop id to GTK before gtk_init.
+func applyLinuxAppIdentity() {
+	appID := C.CString(util.LinuxDesktopAppID)
+	wmClass := C.CString(util.LinuxDesktopWMClass)
+	defer C.free(unsafe.Pointer(appID))
+	defer C.free(unsafe.Pointer(wmClass))
+	var iconPath *C.char
+	if path, err := util.LinuxDesktopIconPath(); err == nil && path != "" {
+		iconPath = C.CString(path)
+		defer C.free(unsafe.Pointer(iconPath))
+	}
+	C.wox_linux_set_app_identity(appID, wmClass, iconPath)
+}
 
 type linuxRunState struct {
 	start     func() error
@@ -71,6 +86,7 @@ func platformRun(start func() error) error {
 		linuxRuntime.Unlock()
 	}()
 
+	applyLinuxAppIdentity()
 	handle := cgo.NewHandle(state)
 	result := C.wox_linux_run(C.uintptr_t(handle))
 	handle.Delete()

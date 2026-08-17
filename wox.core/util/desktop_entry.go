@@ -9,7 +9,9 @@ import (
 
 const (
 	// LinuxDesktopAppID is Wox's stable desktop id for Linux portals and shells.
-	LinuxDesktopAppID    = "io.github.WoxLauncher.Wox"
+	LinuxDesktopAppID = "io.github.WoxLauncher.Wox"
+	// LinuxDesktopWMClass is the X11 WM_CLASS / StartupWMClass paired with the desktop id.
+	LinuxDesktopWMClass  = "wox"
 	linuxDesktopFile     = LinuxDesktopAppID + ".desktop"
 	linuxDesktopIconFile = LinuxDesktopAppID + ".png"
 )
@@ -76,7 +78,7 @@ func BuildLinuxDesktopEntry(includeURLField bool, autostart bool) (string, error
 		"Categories=Utility;",
 		"MimeType=x-scheme-handler/wox;",
 		"Terminal=false",
-		"StartupWMClass=wox",
+		"StartupWMClass=" + LinuxDesktopWMClass,
 		"X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2",
 	}
 

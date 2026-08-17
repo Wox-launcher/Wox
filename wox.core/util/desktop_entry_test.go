@@ -14,4 +14,10 @@ func TestBuildLinuxDesktopEntryDeclaresKWinScreenshotInterface(t *testing.T) {
 	if !strings.Contains(entry, "X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2\n") {
 		t.Fatalf("desktop entry does not declare KWin screenshot interface:\n%s", entry)
 	}
+	if !strings.Contains(entry, "StartupWMClass="+LinuxDesktopWMClass+"\n") {
+		t.Fatalf("desktop entry does not declare WM class %q:\n%s", LinuxDesktopWMClass, entry)
+	}
+	if !strings.Contains(entry, "Icon="+LinuxDesktopAppID+"\n") {
+		t.Fatalf("desktop entry does not declare icon %q:\n%s", LinuxDesktopAppID, entry)
+	}
 }
