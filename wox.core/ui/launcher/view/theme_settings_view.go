@@ -114,15 +114,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			Value: props.Message, Width: width, Height: min(float32(80), viewportHeight), MaxLines: 3, Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: color,
 		}}
 	} else if len(items) == 0 {
-		title := props.EmptyTitle
-		description := props.EmptyDescription
-		if title == "" && description == "" {
-			title = props.EmptyLabel
-		}
-		list = CatalogListEmptyState(CatalogListEmptyProps{
-			Width: width, Height: viewportHeight, Title: title, Description: description,
-			Icon: props.EmptyIcon, Window: props.Window, Theme: props.Theme,
-		})
+		list = themeEmptyState(props, width, viewportHeight)
 	} else {
 		var keepVisible *woxwidget.ScrollRange
 		for index, item := range items {
@@ -152,6 +144,18 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		OnKey: props.OnSearchKey, OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: []woxwidget.Widget{searchField, list}}
+}
+
+// themeEmptyState keeps the catalog list and detail pane visually consistent when no theme is available.
+func themeEmptyState(props ThemeSettingsProps, width, height float32) woxwidget.Widget {
+	title := props.EmptyTitle
+	if title == "" && props.EmptyDescription == "" {
+		title = props.EmptyLabel
+	}
+	return CatalogListEmptyState(CatalogListEmptyProps{
+		Width: width, Height: height, Title: title, Description: props.EmptyDescription,
+		Icon: props.EmptyIcon, Window: props.Window, Theme: props.Theme,
+	})
 }
 
 // themeListRow builds one catalog entry so LazyList can keep offscreen theme rows unbuilt.
@@ -212,9 +216,7 @@ func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, tagColor
 
 func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widget {
 	if props.Detail == nil {
-		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 16, Top: 20}, Child: woxwidget.Text{
-			Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
-		}}
+		return themeEmptyState(props, width, height)
 	}
 	theme := *props.Detail
 	const headerHeight = float32(124)

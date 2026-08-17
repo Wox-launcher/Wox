@@ -33,7 +33,7 @@ func TestUsageSummaryHeaderAnchorsShareActionToRight(t *testing.T) {
 	}
 }
 
-func TestUsagePeriodSelectorAddsHoverToUnselectedOption(t *testing.T) {
+func TestUsagePeriodSelectorKeepsUnselectedOptionInteractive(t *testing.T) {
 	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 220, G: 230, B: 240, A: 255}}
 	selector, _ := usagePeriodSelector(UsageSettingsProps{
 		Theme:   theme,
@@ -42,8 +42,8 @@ func TestUsagePeriodSelectorAddsHoverToUnselectedOption(t *testing.T) {
 	row := selector.(woxwidget.Container).Child.(woxwidget.Flex)
 	button := row.Children[0].(woxwidget.Semantics)
 	gesture := focusedControlGesture(button)
-	if gesture.OnHoverAt == nil {
-		t.Fatal("unselected usage period does not expose hover input")
+	if button.Disabled || gesture.OnHoverAt == nil || gesture.OnTap == nil {
+		t.Fatal("unselected usage period should remain interactive")
 	}
 }
 

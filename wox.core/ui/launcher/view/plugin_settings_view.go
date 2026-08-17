@@ -94,12 +94,11 @@ type PluginListProps struct {
 // PluginList builds the searchable plugin catalog.
 func PluginList(props PluginListProps) woxwidget.Widget {
 	if props.Message != "" {
-		color := props.Theme.ResultSubtitle
-		if props.MessageError {
-			color = props.Theme.ErrorText
+		if !props.MessageError {
+			return woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxLoadingIndicator(24, props.Theme.Cursor)}
 		}
 		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(16), Child: woxwidget.TextBlock{
-			Value: props.Message, Width: max(float32(0), props.Width-32), Height: max(float32(0), props.Height-32), Style: woxui.TextStyle{Size: 12}, Color: color,
+			Value: props.Message, Width: max(float32(0), props.Width-32), Height: max(float32(0), props.Height-32), Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText,
 		}}
 	}
 
@@ -358,12 +357,16 @@ type PluginStoreDetailProps struct {
 
 // PluginDetailProps selects the empty, store, or editable detail view.
 type PluginDetailProps struct {
-	Width      float32
-	Height     float32
-	EmptyLabel string
-	Store      *PluginStoreDetailProps
-	Editor     *PluginEditorProps
-	Theme      woxcomponent.Theme
+	Width            float32
+	Height           float32
+	EmptyLabel       string
+	EmptyTitle       string
+	EmptyDescription string
+	EmptyIcon        *woxui.Image
+	Window           *woxui.Window
+	Store            *PluginStoreDetailProps
+	Editor           *PluginEditorProps
+	Theme            woxcomponent.Theme
 }
 
 // PluginDetail builds the selected plugin detail route.
@@ -374,9 +377,14 @@ func PluginDetail(props PluginDetailProps) woxwidget.Widget {
 	if props.Editor != nil {
 		return pluginEditor(*props.Editor, props.Width, props.Height, props.Theme)
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(24), Child: woxwidget.Text{
-		Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
-	}}
+	title := props.EmptyTitle
+	if title == "" && props.EmptyDescription == "" {
+		title = props.EmptyLabel
+	}
+	return CatalogListEmptyState(CatalogListEmptyProps{
+		Width: props.Width, Height: props.Height, Title: title, Description: props.EmptyDescription,
+		Icon: props.EmptyIcon, Window: props.Window, Theme: props.Theme,
+	})
 }
 
 // PluginDetailTabBodyProps selects the shared description, form, or metadata body for one plugin tab.

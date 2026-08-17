@@ -95,13 +95,20 @@ func TestPluginTabsProvideHoverFeedback(t *testing.T) {
 	}
 }
 
-func TestPluginListMessageKeepsSettingsBackground(t *testing.T) {
-	list := PluginList(PluginListProps{
-		Width: 260, Height: 660, Message: "Loading", Theme: woxcomponent.Theme{QueryBackground: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
-	}).(woxwidget.Container)
+func TestPluginListLoadingUsesCenteredIndicator(t *testing.T) {
+	loading := PluginList(PluginListProps{Width: 260, Height: 660, Message: "Loading"}).(woxwidget.Align)
+	if loading.Width != 260 || loading.Height != 660 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
+		t.Fatalf("plugin list loading alignment = %#v, want centered", loading)
+	}
+	if indicator := loading.Child.(woxwidget.LoopAnimation); indicator.Key != "wox-loading-indicator" {
+		t.Fatalf("plugin list loading child = %#v, want WoxLoadingIndicator", indicator)
+	}
+}
 
-	if list.Color.A != 0 {
-		t.Fatalf("plugin list message background = %#v, want transparent settings background", list.Color)
+func TestPluginDetailUsesCatalogEmptyState(t *testing.T) {
+	empty := PluginDetail(PluginDetailProps{Width: 600, Height: 700, EmptyTitle: "No plugins", EmptyDescription: "Refresh to load plugins", EmptyIcon: &woxui.Image{}}).(woxwidget.Align)
+	if empty.Width != 600 || empty.Height != 700 || empty.Horizontal != 0.5 || empty.Vertical != 0.42 {
+		t.Fatalf("plugin detail empty state = %#v, want the centered catalog empty state", empty)
 	}
 }
 

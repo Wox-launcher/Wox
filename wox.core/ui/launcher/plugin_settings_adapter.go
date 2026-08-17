@@ -113,8 +113,13 @@ func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.
 func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginDetailProps {
 	plugins := snapshot.plugins
+	emptyIconTint := snapshot.palette.resultSubtitle
+	emptyIconTint.A = 160
 	props := launcherview.PluginDetailProps{
-		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"),
+		EmptyTitle: a.translate("i18n:ui_setting_plugin_empty_data"), EmptyDescription: a.translate("i18n:ui_setting_plugin_empty_subtitle"),
+		EmptyIcon: a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale)), Window: a.settingsNativeWindow(),
+		Theme: snapshot.palette.componentTheme(),
 	}
 	if plugins.PluginSelected < 0 || plugins.PluginSelected >= len(plugins.Plugins) {
 		return props

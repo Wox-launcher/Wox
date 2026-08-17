@@ -33,7 +33,7 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	for _, link := range props.Links {
 		links = append(links, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: link.ID, Label: link.Label, Icon: link.Icon, IconSize: 18, IconGap: 8, IntrinsicWidth: true,
-			Variant: woxcomponent.ButtonText, Padding: woxwidget.Insets{Left: 6, Top: 4, Right: 6, Bottom: 4}, OnTap: link.OnTap, Theme: props.Theme,
+			Variant: woxcomponent.ButtonText, Padding: woxwidget.Insets{Left: 6, Right: 6}, OnTap: link.OnTap, Theme: props.Theme,
 		}))
 	}
 

@@ -51,6 +51,13 @@ func TestThemeDetailKeepsVersionBesideTitle(t *testing.T) {
 	}
 }
 
+func TestThemeDetailUsesCatalogEmptyState(t *testing.T) {
+	empty := themeDetail(ThemeSettingsProps{EmptyTitle: "No themes", EmptyDescription: "Refresh to load themes", EmptyIcon: &woxui.Image{}}, 600, 700).(woxwidget.Align)
+	if empty.Width != 600 || empty.Height != 700 || empty.Horizontal != 0.5 || empty.Vertical != 0.42 {
+		t.Fatalf("theme detail empty state = %#v, want the centered catalog empty state", empty)
+	}
+}
+
 func TestThemeDetailWebsiteUsesSharedButtonHover(t *testing.T) {
 	detail := ThemeCatalogItem{Name: "Aquarium", URL: "https://example.com"}
 	view := themeDetail(ThemeSettingsProps{

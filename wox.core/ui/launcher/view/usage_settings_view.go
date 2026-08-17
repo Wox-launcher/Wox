@@ -64,7 +64,6 @@ type UsageSettingsProps struct {
 	EmptyLabel      string
 	Periods         []UsagePeriod
 	Error           string
-	Loading         bool
 	KPIs            []UsageKPI
 	Days            []UsageDay
 	MonthLabels     []string
@@ -118,12 +117,8 @@ func usageSummaryHeader(props UsageSettingsProps, width float32) (woxwidget.Widg
 	if !wide {
 		titleWidth = min(float32(320), max(float32(150), width-shareWidth-18))
 	}
-	title := props.Title
-	if props.Loading {
-		title += " …"
-	}
 	titleBlock := woxwidget.Container{Width: titleWidth, Height: 54, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 21, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 21, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
 		woxwidget.Clip{Width: titleWidth, Height: 20, Child: woxwidget.Text{Value: props.Overview, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
 	}}}
 	children := []woxwidget.StackChild{{Child: titleBlock}, {AnchorRight: true, Child: share}}
@@ -143,12 +138,12 @@ func usagePeriodSelector(props UsageSettingsProps) (woxwidget.Widget, float32) {
 		buttonWidth := usagePeriodButtonWidth(period.Label)
 		selectorWidth += buttonWidth
 		onSelect := period.OnSelect
-		if props.Loading || period.Selected {
+		if period.Selected {
 			onSelect = nil
 		}
 		buttons = append(buttons, woxcomponent.WoxSegmentedButton(woxcomponent.SegmentedButtonProps{
 			ID: "usage-period-" + period.ID, Label: period.Label, Width: buttonWidth,
-			Selected: period.Selected, Disabled: props.Loading, Theme: props.Theme, OnTap: onSelect,
+			Selected: period.Selected, Theme: props.Theme, OnTap: onSelect,
 		}))
 	}
 	return woxwidget.Container{
@@ -180,7 +175,7 @@ func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Radius: 8,
 		FontSize: 13, Variant: woxcomponent.ButtonOutlinedSurface,
-		Disabled: props.Loading, OnTap: props.OnShare, Theme: theme,
+		OnTap: props.OnShare, Theme: theme,
 	}), width
 }
 

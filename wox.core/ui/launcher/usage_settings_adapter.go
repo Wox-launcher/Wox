@@ -45,7 +45,7 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, i
 
 	return launcherview.UsageSettingsView(launcherview.UsageSettingsProps{
 		Width: width, Height: height, Theme: theme, Title: a.translate("i18n:ui_usage"), Overview: overview,
-		ShareLabel: a.translate("i18n:ui_usage_share_x"), Periods: periods, Error: snapshot.usage.Error, Loading: snapshot.usage.Loading,
+		ShareLabel: a.translate("i18n:ui_usage_share_x"), Periods: periods, Error: snapshot.usage.Error,
 		ActivityTitle: a.translate("i18n:ui_usage_opened_by_day"), TopAppsTitle: a.translate("i18n:ui_usage_top_apps"),
 		TopPluginsTitle: a.translate("i18n:ui_usage_top_plugins"), EmptyLabel: a.translate("i18n:ui_usage_no_data"),
 		MonthLabels: monthLabels, OnShare: a.shareUsageToX,
