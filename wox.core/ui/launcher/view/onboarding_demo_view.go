@@ -344,6 +344,7 @@ func onboardingDemoWindow(window onboardingDemoWindowProps) woxwidget.Widget {
 
 func onboardingDemoHintCard(props OnboardingProps, step OnboardingStep, title, from, to string, width float32, alpha uint8) woxwidget.Widget {
 	badgeWidth := min(width*.48, max(float32(160), float32(len([]rune(from+to)))*7+48))
+	badgeInnerWidth := max(float32(0), badgeWidth-20)
 	return woxwidget.Container{
 		Width: width, Height: 58, Radius: 8, Color: settingsColorAlpha(props.Theme.Background, demoScaledAlpha(float32(alpha)/255, 238)),
 		BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 26)), BorderWidth: 1,
@@ -351,7 +352,10 @@ func onboardingDemoHintCard(props OnboardingProps, step OnboardingStep, title, f
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Expanded{Child: woxwidget.Align{Height: 36, Vertical: .5, Child: woxwidget.TextBlock{Value: "⌘  " + title, MaxLines: 1, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, alpha)}}},
 			woxwidget.Container{Width: badgeWidth, Height: 36, Radius: 8, BorderColor: settingsColorAlpha(step.Accent, demoScaledAlpha(float32(alpha)/255, 82)), BorderWidth: 1,
-				Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: woxwidget.Align{Height: 36, Vertical: .5, Child: woxwidget.TextBlock{Value: from + "   →   " + to, MaxLines: 1, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)}}},
+				Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: woxwidget.Align{Width: badgeInnerWidth, Height: 36, Horizontal: .5, Vertical: .5, Child: woxwidget.TextBlock{
+					Value: from + "   →   " + to, Width: badgeInnerWidth, MaxLines: 1, Centered: true,
+					Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha),
+				}}},
 		}},
 	}
 }
@@ -665,7 +669,6 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 	title := props.Labels["glance.enable"]
 	tail := ""
 	var accessory woxwidget.Widget
-	accessoryWidth := float32(0)
 	if props.GlanceEnabled {
 		title = props.GlanceLabel
 		tail = props.GlanceValue
@@ -676,20 +679,12 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 		if accessoryText == "" {
 			accessoryText = props.GlanceLabel
 		}
-		accessoryWidth = min(float32(200), max(float32(100), float32(len([]rune(accessoryText)))*12+42))
 		accessoryColor := settingsColorAlpha(props.Theme.QueryText, 204)
-		textWidth := min(accessoryWidth-37, float32(len([]rune(accessoryText)))*12)
 		iconWidget := woxwidget.Widget(onboardingDemoClockIcon(accessoryColor))
 		if props.GlanceIcon != nil {
-			iconWidget = woxwidget.Image{Source: props.GlanceIcon, Width: 14, Height: 14, Fit: woxwidget.ImageFitContain}
+			iconWidget = woxwidget.Image{Source: props.GlanceIcon, Width: 16, Height: 16, Fit: woxwidget.ImageFitContain}
 		}
-		accessory = woxwidget.Align{
-			Width: accessoryWidth, Height: 30, Horizontal: .5, Vertical: .5,
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				iconWidget,
-				woxwidget.TextBlock{Value: accessoryText, Width: textWidth, Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 11}, Color: accessoryColor},
-			}},
-		}
+		accessory = onboardingGlanceQueryAccessory(accessoryText, iconWidget, accessoryColor)
 	}
 	windowWidth := width - 100
 	windowHeight := height - 88
@@ -704,6 +699,49 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 			},
 		}),
 	})
+}
+
+// onboardingGlanceQueryAccessory sizes the demo glance like the live query
+// accessory. Align/Constrained without an explicit width expand to the parent
+// max (192px), which left short values such as 21:24 floating left of the
+// query-box edge.
+func onboardingGlanceQueryAccessory(text string, icon woxwidget.Widget, color woxui.Color) woxwidget.Widget {
+	text = compactViewText(strings.TrimSpace(text), 22)
+	const (
+		height            = float32(30)
+		horizontalPadding = float32(8)
+		gap               = float32(5)
+	)
+	width := onboardingGlanceAccessoryWidth(text, icon != nil)
+	children := make([]woxwidget.Widget, 0, 2)
+	if icon != nil {
+		children = append(children, icon)
+	}
+	children = append(children, woxwidget.Text{Value: text, Style: woxui.TextStyle{Size: woxcomponent.GlanceFontSize}, Color: color})
+	return woxwidget.Container{
+		Width: width, Height: height, Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
+		Child: woxwidget.Align{
+			Width: width - horizontalPadding*2, Height: height, Horizontal: 1, Vertical: .5,
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
+		},
+	}
+}
+
+// onboardingGlanceAccessoryWidth matches the live query-box glance slot:
+// measured text + 20px chrome, plus 21px when an icon is shown.
+func onboardingGlanceAccessoryWidth(text string, hasIcon bool) float32 {
+	width := float32(20)
+	if hasIcon {
+		width += 21
+	}
+	for _, r := range text {
+		if r > 0xFF {
+			width += woxcomponent.GlanceFontSize
+			continue
+		}
+		width += 9
+	}
+	return min(float32(192), max(float32(44), width))
 }
 
 // onboardingQueryHotkeysDemo crossfades the normal launcher example into the narrow borderless webview example.

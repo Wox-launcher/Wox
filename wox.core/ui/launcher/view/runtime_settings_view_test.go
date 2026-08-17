@@ -44,3 +44,18 @@ func TestRuntimeStatusCardUsesRemainingHeaderWidth(t *testing.T) {
 		t.Fatalf("runtime name slot = %T, want Expanded", name)
 	}
 }
+
+func TestRuntimeStatusPillCentersLabel(t *testing.T) {
+	card := runtimeStatusCard(RuntimeSettingsProps{}, RuntimeStatus{DisplayName: "Node.js", StatusLabel: "运行中"}, 360, 168).(woxwidget.Container)
+	column := card.Child.(woxwidget.Flex)
+	header := column.Children[0].(woxwidget.Flex)
+	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	pill := title.Children[1].(woxwidget.Container)
+	align := pill.Child.(woxwidget.Align)
+	if pill.Padding.Left != 8 || pill.Padding.Right != 8 {
+		t.Fatalf("status pill padding = %+v, want symmetric 8px insets", pill.Padding)
+	}
+	if align.Horizontal != 0.5 || align.Vertical != 0.5 || align.Width != pill.Width-16 {
+		t.Fatalf("status pill alignment = %#v, want centered in the pill", align)
+	}
+}

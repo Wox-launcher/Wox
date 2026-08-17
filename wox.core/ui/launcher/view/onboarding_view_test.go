@@ -483,7 +483,7 @@ func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
 	}
 }
 
-func TestOnboardingDemoHintCardTextIsVerticallyCentered(t *testing.T) {
+func TestOnboardingDemoHintCardTextIsCentered(t *testing.T) {
 	card := onboardingDemoHintCard(
 		OnboardingProps{Theme: woxcomponent.Theme{}},
 		OnboardingStep{},
@@ -497,9 +497,13 @@ func TestOnboardingDemoHintCardTextIsVerticallyCentered(t *testing.T) {
 	title := content.Children[0].(woxwidget.Expanded).Child.(woxwidget.Align)
 	badge := content.Children[1].(woxwidget.Container)
 	expansion := badge.Child.(woxwidget.Align)
+	label := expansion.Child.(woxwidget.TextBlock)
 
 	if title.Vertical != .5 || expansion.Vertical != .5 || badge.Padding.Top != 0 {
 		t.Fatalf("hint alignment: title=%#v expansion=%#v padding=%#v", title, expansion, badge.Padding)
+	}
+	if expansion.Horizontal != .5 || expansion.Width != badge.Width-20 || !label.Centered || label.Width != expansion.Width {
+		t.Fatalf("hint badge text = align %#v label %#v, want horizontally centered in the badge", expansion, label)
 	}
 }
 
@@ -583,14 +587,35 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 	if len(query.Children) != 2 {
 		t.Fatalf("glance query children = %d, want query text plus accessory", len(query.Children))
 	}
-	accessory := query.Children[1].(woxwidget.Align)
-	if accessory.Horizontal != .5 || accessory.Vertical != .5 {
-		t.Fatalf("glance accessory alignment = (%v, %v), want centered", accessory.Horizontal, accessory.Vertical)
+	accessoryBox := query.Children[1].(woxwidget.Container)
+	wantWidth := onboardingGlanceAccessoryWidth("62%", true)
+	if accessoryBox.Width != wantWidth {
+		t.Fatalf("glance accessory width = %v, want content-sized slot %v", accessoryBox.Width, wantWidth)
 	}
-	accessoryFlex := accessory.Child.(woxwidget.Flex)
-	accessoryText := accessoryFlex.Children[1].(woxwidget.TextBlock)
+	if wantWidth >= 100 {
+		t.Fatalf("glance accessory width = %v, want tighter than the old 100px minimum", wantWidth)
+	}
+	if accessoryBox.Padding != (woxwidget.Insets{Left: 8, Right: 8}) {
+		t.Fatalf("glance accessory padding = %+v, want 8px horizontal insets", accessoryBox.Padding)
+	}
+	accessoryAlign := accessoryBox.Child.(woxwidget.Align)
+	if accessoryAlign.Horizontal != 1 || accessoryAlign.Vertical != .5 {
+		t.Fatalf("glance accessory alignment = (%v, %v), want right-aligned", accessoryAlign.Horizontal, accessoryAlign.Vertical)
+	}
+	accessoryFlex := accessoryAlign.Child.(woxwidget.Flex)
+	accessoryText := accessoryFlex.Children[1].(woxwidget.Text)
 	if accessoryText.Value != "62%" {
 		t.Fatalf("glance accessory text = %q, want live glance value", accessoryText.Value)
+	}
+	if accessoryText.Style.Size != woxcomponent.GlanceFontSize {
+		t.Fatalf("glance accessory font = %v, want GlanceFontSize", accessoryText.Style.Size)
+	}
+}
+
+func TestOnboardingGlanceAccessoryWidthStaysContentSized(t *testing.T) {
+	width := onboardingGlanceAccessoryWidth("21:24", true)
+	if width >= 100 || width > onboardingGlanceAccessoryWidth("62%", true)+30 {
+		t.Fatalf("time glance width = %v, want a short content-sized slot", width)
 	}
 }
 

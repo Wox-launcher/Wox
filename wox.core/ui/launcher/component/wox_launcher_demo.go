@@ -202,8 +202,9 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 	if props.QueryAccessory != nil {
 		children = append(children, props.QueryAccessory)
 	}
-	return woxwidget.Container{Height: height, Radius: 8, Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
+	// Live query chrome uses 8px left / 6px right so glance sits on the same edge.
+	return woxwidget.Container{Height: height, Radius: 8, Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
 	}}
 }
 
