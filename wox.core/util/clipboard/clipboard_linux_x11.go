@@ -16,7 +16,10 @@ import (
 	"wox/util"
 )
 
-const x11ClipboardCommandTimeout = 3 * time.Second
+const (
+	x11ClipboardCommandTimeout = 3 * time.Second
+	x11MimeUTF8String          = "UTF8_STRING"
+)
 
 // x11Clipboard talks to the X11 CLIPBOARD selection through xclip or xsel.
 // Openbox, XFCE, i3, MATE, and Xvfb all share this path. GTK is not used here
@@ -89,7 +92,11 @@ func (c *x11Clipboard) readImage() (image.Image, error) {
 }
 
 func (c *x11Clipboard) writeText(text string) error {
-	return c.writeMIME(portalMimeTextPlain, []byte(text))
+	// X11 STRING and charset-less text/plain are Latin-1. Writing UTF-8
+	// Chinese under those targets makes Wox render correctly while Firefox
+	// and other paste clients decode the same bytes as mojibake. UTF8_STRING
+	// is the atom GTK/Qt request for Unicode text.
+	return c.writeMIME(x11MimeUTF8String, []byte(text))
 }
 
 func (c *x11Clipboard) writeFilePaths(paths []string) error {

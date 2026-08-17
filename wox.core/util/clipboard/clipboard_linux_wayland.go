@@ -60,7 +60,7 @@ func (waylandClipboard) readImage() (image.Image, error) {
 }
 
 func (waylandClipboard) writeText(text string) error {
-	return waylandCopy(portalMimeTextPlain, []byte(text))
+	return waylandCopy(portalMimeTextUTF8, []byte(text))
 }
 
 func (waylandClipboard) writeFilePaths(paths []string) error {

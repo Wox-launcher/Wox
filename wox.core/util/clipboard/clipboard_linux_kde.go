@@ -54,7 +54,7 @@ func (kdeWaylandClipboard) writeText(text string) error {
 	if err := portalReady(); err == nil {
 		return portalWriteText(text)
 	}
-	return waylandCopy(portalMimeTextPlain, []byte(text))
+	return waylandCopy(portalMimeTextUTF8, []byte(text))
 }
 
 func (kdeWaylandClipboard) writeFilePaths(paths []string) error {
