@@ -73,7 +73,7 @@ func (f *repaintDebugFrame) draw(displayList *woxui.DisplayList) {
 		for _, repaint := range f.repaints {
 			if repaint.node != nil {
 				alpha := uint8(min(180, 28+repaint.recentCount*18))
-				displayList.FillRoundedRect(repaint.node.bounds, 3, woxui.Color{R: 255, G: 64, A: alpha})
+				displayList.FillRoundedRect(globalRect(repaint.node), 3, woxui.Color{R: 255, G: 64, A: alpha})
 			}
 		}
 	}

@@ -29,7 +29,7 @@ func TestLauncherGridResultWiresNativeDragStart(t *testing.T) {
 		Width: 320, Height: 100, CellWidth: 80, CellHeight: 80, VisualWidth: 60, VisualHeight: 60, Columns: 4,
 		Theme: woxcomponent.Theme{}, DensityScale: 1,
 	})
-	gesture := cell.(woxwidget.Gesture)
+	gesture := cell.(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	gesture.OnDragStart()
 	if !dragged {
 		t.Fatal("launcher grid cell did not forward drag start")

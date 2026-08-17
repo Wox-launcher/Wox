@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "native_renderer_stats.h"
+
 typedef struct WoxDarwinWindow WoxDarwinWindow;
 
 enum {
@@ -45,6 +47,8 @@ int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *wind
 int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text);
 int32_t wox_darwin_window_write_clipboard_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
 int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window);
+int32_t wox_darwin_window_request_animation_frame(WoxDarwinWindow *window);
+int32_t wox_darwin_window_stop_animation_frames(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_text_input_state(WoxDarwinWindow *window, int32_t enabled, float x, float y, float width, float height);
 int32_t wox_darwin_window_set_pointer_cursor(WoxDarwinWindow *window, uint8_t cursor);
 int32_t wox_darwin_accessibility_begin(WoxDarwinWindow *window, uint64_t generation);
@@ -56,6 +60,7 @@ void *wox_darwin_autorelease_pool_push(void);
 void wox_darwin_autorelease_pool_pop(void *pool);
 
 int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_encode_damage(WoxDarwinWindow *window, float *x, float *y, float *width, float *height);
 int32_t wox_darwin_window_begin_embedded_surface_overlay(WoxDarwinWindow *window);
 int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t max_surfaces);
 int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
@@ -66,5 +71,8 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
 int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height);
 int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window);
 int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional);
+int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out);
+int32_t wox_darwin_test_cached_image_owns_pixels(void);
+int32_t wox_darwin_test_large_image_admission(void);
 
 #endif

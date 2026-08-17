@@ -95,6 +95,56 @@ type AccessibilityTree struct {
 	Nodes      []AccessibilityNode
 }
 
+// AccessibilityUpdate is reserved for a future incremental native accessibility path.
+// Nothing currently publishes or consumes it; UpdateAccessibility still takes a full tree.
+type AccessibilityUpdate struct {
+	Generation uint64
+	Full       *AccessibilityTree
+	Upserts    []AccessibilityNode
+	Removes    []AccessibilityNodeID
+	RootIDs    []AccessibilityNodeID
+}
+
+// DiffAccessibilityTrees builds a full snapshot or a node-level delta against the previous tree.
+// Host does not call this: native UpdateAccessibility still consumes a full tree, so an unused
+// delta would only add CPU. Keep the helper for a future incremental native path.
+func DiffAccessibilityTrees(previous, next AccessibilityTree, forceFull bool) AccessibilityUpdate {
+	update := AccessibilityUpdate{Generation: next.Generation, RootIDs: append([]AccessibilityNodeID(nil), next.RootIDs...)}
+	if forceFull || previous.Generation == 0 || len(previous.Nodes) == 0 {
+		full := cloneAccessibilityTree(next)
+		update.Full = &full
+		return update
+	}
+	previousByID := make(map[AccessibilityNodeID]AccessibilityNode, len(previous.Nodes))
+	for _, node := range previous.Nodes {
+		previousByID[node.ID] = node
+	}
+	nextByID := make(map[AccessibilityNodeID]struct{}, len(next.Nodes))
+	for _, node := range next.Nodes {
+		nextByID[node.ID] = struct{}{}
+		if prior, ok := previousByID[node.ID]; !ok || accessibilityNodeContentHash(prior) != accessibilityNodeContentHash(node) {
+			update.Upserts = append(update.Upserts, cloneAccessibilityNode(node))
+		}
+	}
+	for id := range previousByID {
+		if _, ok := nextByID[id]; !ok {
+			update.Removes = append(update.Removes, id)
+		}
+	}
+	return update
+}
+
+func cloneAccessibilityNode(node AccessibilityNode) AccessibilityNode {
+	clone := node
+	clone.Children = append([]AccessibilityNodeID(nil), node.Children...)
+	clone.Actions = append([]AccessibilityAction(nil), node.Actions...)
+	return clone
+}
+
+func accessibilityNodeContentHash(node AccessibilityNode) uint64 {
+	return accessibilityTreeContentHash(AccessibilityTree{Nodes: []AccessibilityNode{node}})
+}
+
 // AccessibilityActionHandler applies one action on the UI thread.
 type AccessibilityActionHandler func(nodeID AccessibilityNodeID, action AccessibilityAction, value string) error
 

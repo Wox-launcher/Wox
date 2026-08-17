@@ -106,7 +106,15 @@ jobs:
       - name: Run native smoke
         env:
           GO_UI_SMOKE_RUNNER: xvfb-run -a
+          WOX_PERF_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/perf
         run: make smoke
+      - name: Upload Linux perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ui-perf-linux-pr
+          path: artifacts/perf/
+          if-no-files-found: ignore
 
   native-smoke-daily:
     name: Native launcher smoke (${{ matrix.name }})
@@ -158,4 +166,12 @@ jobs:
         shell: bash
         env:
           GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
+          WOX_PERF_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/perf
         run: make smoke
+      - name: Upload perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ui-perf-${{ matrix.name }}
+          path: artifacts/perf/
+          if-no-files-found: ignore

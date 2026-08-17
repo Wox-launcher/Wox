@@ -43,6 +43,8 @@ type LauncherGridProps struct {
 	DensityScale      float32
 	Theme             woxcomponent.Theme
 	ScrollDetached    bool
+	Complete          bool
+	ExtentRevision    uint64
 	Results           []LauncherGridResult
 	OnScroll          func(float32) `boundary:"stable"`
 }
@@ -68,39 +70,82 @@ func (p launcherGridIconProps) Equal(other launcherGridIconProps) bool {
 	return p == other
 }
 
-// LauncherGridView builds wrapped grid rows and group headers.
-func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
-	rows := make([]woxwidget.Widget, 0)
-	for index := 0; index < len(props.Results); {
-		if props.Results[index].Group {
-			result := props.Results[index]
-			titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridHeaderFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}
-			rows = append(rows, woxwidget.Container{
-				Width: props.Width - 28, Height: props.GroupHeaderHeight, Padding: woxwidget.Insets{Left: 8},
-				Child: woxwidget.Align{Height: props.GroupHeaderHeight, Vertical: 0.5, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)},
-			})
+// launcherGridVisualRow is one painted row: a group header or a wrapped cell line.
+type launcherGridVisualRow struct {
+	isHeader bool
+	header   LauncherGridResult
+	cells    []LauncherGridResult
+}
+
+// launcherGridVisualRows folds results into header and cell rows so LazyList can virtualize mixed extents.
+func launcherGridVisualRows(results []LauncherGridResult, columns int) []launcherGridVisualRow {
+	if columns <= 0 {
+		columns = 1
+	}
+	rows := make([]launcherGridVisualRow, 0)
+	for index := 0; index < len(results); {
+		if results[index].Group {
+			rows = append(rows, launcherGridVisualRow{isHeader: true, header: results[index]})
 			index++
 			continue
 		}
-		cells := make([]woxwidget.Widget, 0, props.Columns)
-		for len(cells) < props.Columns && index < len(props.Results) && !props.Results[index].Group {
-			result := props.Results[index]
-			cells = append(cells, launcherGridResultView(result, props))
+		rowStart := index
+		for index < len(results) && !results[index].Group && index-rowStart < columns {
 			index++
 		}
-		for len(cells) < props.Columns {
-			cells = append(cells, woxwidget.Painter{Width: props.CellWidth, Height: props.CellHeight})
-		}
-		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})
+		rows = append(rows, launcherGridVisualRow{cells: results[rowStart:index]})
 	}
+	return rows
+}
+
+// LauncherGridView builds wrapped grid rows and group headers.
+func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
+	rows := launcherGridVisualRows(props.Results, props.Columns)
+	innerWidth := max(float32(0), props.Width-28)
 	content := woxwidget.Container{
 		Width: props.Width, Height: props.ContentHeight, Padding: woxwidget.Insets{Left: 14, Right: 14},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+		Child: woxwidget.LazyList{
+			Key: "launcher-grid-rows", Width: innerWidth, Viewport: props.Height, ItemCount: len(rows),
+			ExtentRevision: props.ExtentRevision,
+			ItemExtentAt: func(index int) float32 {
+				if rows[index].isHeader {
+					return props.GroupHeaderHeight
+				}
+				return props.CellHeight
+			},
+			ItemKey: func(index int) woxwidget.Key {
+				if rows[index].isHeader {
+					return woxwidget.Key("grid-row-header:" + rows[index].header.ID)
+				}
+				return woxwidget.Key("grid-row-cells:" + rows[index].cells[0].ID)
+			},
+			ItemBuilder: func(index int) woxwidget.Widget { return launcherGridVisualRowView(rows[index], props) },
+		},
 	}
-	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
 		ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
-	})
+	}))
+}
+
+// launcherGridVisualRowView builds one header or one wrapped cell row.
+func launcherGridVisualRowView(row launcherGridVisualRow, props LauncherGridProps) woxwidget.Widget {
+	if row.isHeader {
+		result := row.header
+		titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridHeaderFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}
+		return woxwidget.Container{
+			Width: props.Width - 28, Height: props.GroupHeaderHeight, Padding: woxwidget.Insets{Left: 8},
+			Child: woxwidget.Align{Height: props.GroupHeaderHeight, Vertical: 0.5, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)},
+		}
+	}
+	cells := make([]woxwidget.Widget, 0, props.Columns)
+	for _, result := range row.cells {
+		cells = append(cells, launcherGridResultView(result, props))
+	}
+	for len(cells) < props.Columns {
+		cells = append(cells, woxwidget.Painter{Width: props.CellWidth, Height: props.CellHeight})
+	}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}
 }
 
 // launcherGridResultView builds one interactive grid cell.
@@ -143,31 +188,47 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 		titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridItemTitleFontSize, props.DensityScale)}, Color: props.Theme.ResultTitle}
 		children = append(children, woxwidget.Container{Width: props.VisualWidth, Height: props.TitleHeight, Padding: woxwidget.Insets{Top: 4}, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)})
 	}
-	return woxwidget.Gesture{
-		ID: fmt.Sprintf("grid-result-%s", result.ID),
-		OnHover: func(inside bool) {
-			if result.OnHover != nil {
-				result.OnHover(inside)
+	return woxwidget.Semantics{
+		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", result.ID)), AutomationID: "launcher.result." + result.ID, Role: woxui.AccessibilityRoleListItem,
+		Label: result.Title, Selected: result.Selected,
+		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+		OnAction: func(action woxui.AccessibilityAction, _ string) error {
+			if action == woxui.AccessibilityActionActivate {
+				if result.OnSelect != nil {
+					result.OnSelect()
+				}
+				if result.OnActivate != nil {
+					result.OnActivate()
+				}
 			}
+			return nil
 		},
-		OnTap: result.OnSelect,
-		OnSecondaryTapDown: func(woxui.Point) {
-			if result.OnSecondaryTapDown != nil {
-				result.OnSecondaryTapDown()
-			}
-		},
-		OnDragStart: result.OnDragStart,
-		OnDoubleTap: func() {
-			if result.OnSelect != nil {
-				result.OnSelect()
-			}
-			if result.OnActivate != nil {
-				result.OnActivate()
-			}
-		},
-		Child: woxwidget.Container{
-			Width: props.CellWidth, Height: props.CellHeight, Padding: woxwidget.UniformInsets(props.ItemMargin),
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+		Child: woxwidget.Gesture{
+			ID: fmt.Sprintf("grid-result-%s", result.ID),
+			OnHover: func(inside bool) {
+				if result.OnHover != nil {
+					result.OnHover(inside)
+				}
+			},
+			OnTap: result.OnSelect,
+			OnSecondaryTapDown: func(woxui.Point) {
+				if result.OnSecondaryTapDown != nil {
+					result.OnSecondaryTapDown()
+				}
+			},
+			OnDragStart: result.OnDragStart,
+			OnDoubleTap: func() {
+				if result.OnSelect != nil {
+					result.OnSelect()
+				}
+				if result.OnActivate != nil {
+					result.OnActivate()
+				}
+			},
+			Child: woxwidget.Container{
+				Width: props.CellWidth, Height: props.CellHeight, Padding: woxwidget.UniformInsets(props.ItemMargin),
+				Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+			},
 		},
 	}
 }

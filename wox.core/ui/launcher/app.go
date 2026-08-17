@@ -185,14 +185,16 @@ type App struct {
 	// imageMu protects the image cache because image decoding completes on background goroutines.
 	imageMu sync.RWMutex
 	// appIcon is decoded during app construction so native title bars never start without their icon.
-	appIcon                                   *woxui.Image
-	images                                    map[string]*woxui.Image
-	imagesRevision                            atomic.Uint64
-	imageRequested                            map[string]string
-	imageVariants                             map[string]string
-	imageVariantKeys                          map[string]string
-	imageLastUsed                             map[string]uint64
-	imageUseSequence                          uint64
+	appIcon          *woxui.Image
+	images           map[string]*woxui.Image
+	imagesRevision   atomic.Uint64
+	imageRequested   map[string]string
+	imageVariants    map[string]string
+	imageVariantKeys map[string]string
+	imageLastUsed    map[string]uint64
+	imageUseSequence uint64
+	// imageCacheSize is the running decoded-byte total so eviction stays O(k) instead of scanning the map.
+	imageCacheSize                            int
 	imageErrors                               map[string]string
 	remotePreviews                            map[string]queryPreview
 	previewRequests                           map[string]bool

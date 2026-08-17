@@ -27,6 +27,34 @@ type textMeasurer interface {
 	MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error)
 }
 
+type frameWorkCounters struct {
+	layoutVisits       int
+	identityVisits     int
+	paintVisits        int
+	a11yVisits         int
+	boundaryBuilds     int
+	boundaryReuses     int
+	paintSegmentReuses int
+	identityUpserts    int
+	a11yUpserts        int
+}
+
+func (w frameWorkCounters) metrics(textDraws, imageDraws int) woxui.FrameWorkMetrics {
+	return woxui.FrameWorkMetrics{
+		LayoutVisits:       w.layoutVisits,
+		IdentityVisits:     w.identityVisits,
+		PaintVisits:        w.paintVisits,
+		A11yVisits:         w.a11yVisits,
+		BoundaryBuilds:     w.boundaryBuilds,
+		BoundaryReuses:     w.boundaryReuses,
+		PaintSegmentReuses: w.paintSegmentReuses,
+		IdentityUpserts:    w.identityUpserts,
+		A11yUpserts:        w.a11yUpserts,
+		TextDraws:          textDraws,
+		ImageDraws:         imageDraws,
+	}
+}
+
 type context struct {
 	window    textMeasurer
 	animation animationFrame
@@ -35,6 +63,8 @@ type context struct {
 	debug     *repaintDebugFrame
 	elements  *elementTree
 	element   *stateElement
+	work      *frameWorkCounters
+	scroll    *scrollLayoutEnv
 }
 
 func (c context) withElement(element *stateElement) context {
@@ -115,55 +145,21 @@ type node struct {
 func (n *node) place(x, y float32) {
 	n.bounds.X += x
 	n.bounds.Y += y
-	for _, child := range n.children {
-		child.place(x, y)
-	}
-}
-
-func (n *node) draw(displayList *woxui.DisplayList, focused, focusRingTarget woxui.AccessibilityNodeID, caretVisible, focusWithin, focusableWithin bool) {
-	if n.focus != nil {
-		focusWithin = n.id == focused
-		focusableWithin = true
-	} else {
-		focusWithin = focusWithin || n.id == focused
-	}
-	if n.paint != nil {
-		n.paint(displayList, n.bounds)
-	}
-	if n.caretPaint != nil {
-		caretFocused := n.caret
-		if focusableWithin {
-			// Reconciliation runs after retained widgets build, so the Host focus is the
-			// authoritative caret state for this frame rather than the captured FocusNode value.
-			caretFocused = focusWithin
-		}
-		n.caretPaint(displayList, n.bounds, caretFocused, caretVisible)
-	}
-	if n.clip {
-		displayList.PushClipRect(n.bounds)
-	}
-	for _, child := range n.children {
-		child.draw(displayList, focused, focusRingTarget, caretVisible, focusWithin, focusableWithin)
-	}
-	if n.id == focusRingTarget && n.focus != nil && n.focus.focusRingColor.A != 0 {
-		outsets := n.focus.focusRingOutsets
-		bounds := woxui.Rect{
-			X: n.bounds.X - outsets.Left, Y: n.bounds.Y - outsets.Top,
-			Width: n.bounds.Width + outsets.Left + outsets.Right, Height: n.bounds.Height + outsets.Top + outsets.Bottom,
-		}
-		displayList.StrokeRoundedRect(bounds, n.focus.focusRingRadius, 2, n.focus.focusRingColor)
-	}
-	if n.clip {
-		displayList.PopClipRect()
-	}
 }
 
 func (n *node) hitTest(point woxui.Point) *node {
-	if point.X < n.bounds.X || point.Y < n.bounds.Y || point.X >= n.bounds.X+n.bounds.Width || point.Y >= n.bounds.Y+n.bounds.Height {
+	return n.hitTestAt(point, woxui.Point{})
+}
+
+// hitTestAt hit-tests against window-space bounds accumulated from origin.
+func (n *node) hitTestAt(point woxui.Point, origin woxui.Point) *node {
+	bounds := offsetRect(n.bounds, origin)
+	if !containsPoint(bounds, point) {
 		return nil
 	}
+	childOrigin := woxui.Point{X: bounds.X, Y: bounds.Y}
 	for index := len(n.children) - 1; index >= 0; index-- {
-		if hit := n.children[index].hitTest(point); hit != nil {
+		if hit := n.children[index].hitTestAt(point, childOrigin); hit != nil {
 			return hit
 		}
 	}
@@ -179,11 +175,18 @@ func (n *node) hitTest(point woxui.Point) *node {
 }
 
 func (n *node) hitTestScroll(point woxui.Point) *node {
-	if point.X < n.bounds.X || point.Y < n.bounds.Y || point.X >= n.bounds.X+n.bounds.Width || point.Y >= n.bounds.Y+n.bounds.Height {
+	return n.hitTestScrollAt(point, woxui.Point{})
+}
+
+// hitTestScrollAt finds the deepest scrollable gesture using accumulated origin.
+func (n *node) hitTestScrollAt(point woxui.Point, origin woxui.Point) *node {
+	bounds := offsetRect(n.bounds, origin)
+	if !containsPoint(bounds, point) {
 		return nil
 	}
+	childOrigin := woxui.Point{X: bounds.X, Y: bounds.Y}
 	for index := len(n.children) - 1; index >= 0; index-- {
-		if hit := n.children[index].hitTestScroll(point); hit != nil {
+		if hit := n.children[index].hitTestScrollAt(point, childOrigin); hit != nil {
 			return hit
 		}
 	}
@@ -500,12 +503,15 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 	}
 	if w.Horizontal {
 		contentWidth := max(width, w.ContentWidth)
+		scroll := &scrollLayoutEnv{offset: max(float32(0), w.Offset), viewport: width}
 		var child *node
 		if w.Child != nil {
-			child = w.Child.layout(ctx, constraints{width: math.MaxFloat32, height: height})
+			childCtx := ctx
+			childCtx.scroll = scroll
+			child = w.Child.layout(childCtx, constraints{width: math.MaxFloat32, height: height})
 			contentWidth = max(contentWidth, child.bounds.Width)
 		}
-		offset := min(max(float32(0), w.Offset), max(float32(0), contentWidth-width))
+		offset := min(max(float32(0), scroll.offset), max(float32(0), contentWidth-width))
 		if w.onGeometry != nil {
 			w.onGeometry(width, contentWidth, scrollChildRange(child, w.KeepVisibleKey, true))
 		} else if w.OnGeometryChanged != nil {
@@ -522,9 +528,12 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		return result
 	}
 	contentHeight := max(height, w.ContentHeight)
+	scroll := &scrollLayoutEnv{offset: max(float32(0), w.Offset), viewport: height}
 	var child *node
 	if w.Child != nil {
-		child = w.Child.layout(ctx, constraints{width: width, height: math.MaxFloat32})
+		childCtx := ctx
+		childCtx.scroll = scroll
+		child = w.Child.layout(childCtx, constraints{width: width, height: math.MaxFloat32})
 		// Flex children can legitimately exceed a caller's estimated extent. The measured height must remain scrollable.
 		contentHeight = max(contentHeight, child.bounds.Height)
 	}
@@ -532,7 +541,7 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		height = max(float32(1), min(height, child.bounds.Height))
 		contentHeight = max(height, max(w.ContentHeight, child.bounds.Height))
 	}
-	offset := min(max(float32(0), w.Offset), max(float32(0), contentHeight-height))
+	offset := min(max(float32(0), scroll.offset), max(float32(0), contentHeight-height))
 	if w.onGeometry != nil {
 		w.onGeometry(height, contentHeight, scrollChildRange(child, w.KeepVisibleKey, false))
 	} else if w.OnGeometryChanged != nil {
@@ -554,14 +563,36 @@ func scrollChildRange(root *node, key Key, horizontal bool) *ScrollRange {
 	if root == nil || key == "" {
 		return nil
 	}
+	x, y, ok := findNodeOffset(root, key, 0, 0)
+	if !ok {
+		return nil
+	}
 	target := findNodeByKey(root, key)
 	if target == nil {
 		return nil
 	}
 	if horizontal {
-		return &ScrollRange{Start: target.bounds.X, End: target.bounds.X + target.bounds.Width}
+		return &ScrollRange{Start: x, End: x + target.bounds.Width}
 	}
-	return &ScrollRange{Start: target.bounds.Y, End: target.bounds.Y + target.bounds.Height}
+	return &ScrollRange{Start: y, End: y + target.bounds.Height}
+}
+
+// findNodeOffset returns the keyed descendant's offset relative to root's parent origin.
+func findNodeOffset(root *node, key Key, originX, originY float32) (float32, float32, bool) {
+	if root == nil {
+		return 0, 0, false
+	}
+	x := originX + root.bounds.X
+	y := originY + root.bounds.Y
+	if root.key == key {
+		return x, y, true
+	}
+	for _, child := range root.children {
+		if childX, childY, found := findNodeOffset(child, key, x, y); found {
+			return childX, childY, true
+		}
+	}
+	return 0, 0, false
 }
 
 func findNodeByKey(root *node, key Key) *node {

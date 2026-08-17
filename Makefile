@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -111,8 +111,9 @@ help:
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
-	@echo "  smoke      Run all native smoke cases, or one with: make smoke launcher/plugin/calculator/001"
+	@echo "  smoke      Run all native smoke cases, one package with CASE=perf, or one case with: make smoke launcher/plugin/calculator/001"
 	@echo "             Add slow to pause 500ms after visible steps; override with SMOKE_STEP_DELAY=1s"
+	@echo "  smoke-perf-baseline  Run the perf package 10 times and write JSON artifacts"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
@@ -407,6 +408,19 @@ smoke: build-go-ui-smoke
 	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
 		cd wox.core && \
 		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" WOX_GO_UI_SMOKE_STEP_DELAY="$(SMOKE_STEP_DELAY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)"
+
+# Ten serial perf-package runs produce raw per-frame baseline artifacts for analysis.
+# The perf cases carry their own loose phase ceilings; these artifacts are what you recalibrate
+# them from, and nothing consumes them automatically.
+PERF_BASELINE_RUNS ?= 10
+smoke-perf-baseline: build-go-ui-smoke
+	@mkdir -p artifacts/perf
+	@i=1; \
+	while [ $$i -le $(PERF_BASELINE_RUNS) ]; do \
+		echo "perf baseline run $$i/$(PERF_BASELINE_RUNS)"; \
+		WOX_PERF_ARTIFACT_DIR="$(CURDIR)/artifacts/perf/run-$$i" $(MAKE) smoke CASE=perf; \
+		i=$$((i + 1)); \
+	done
 
 # Test without network dependencies
 test-offline:

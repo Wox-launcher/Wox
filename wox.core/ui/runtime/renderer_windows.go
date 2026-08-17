@@ -167,7 +167,10 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 		return hresultError("begin frame", result)
 	}
 
-	for index, command := range displayList.commands {
+	index := -1
+	var encodeErr error
+	displayList.ForEachVisibleCommand(damage, func(command displayCommand) bool {
+		index++
 		traceNativeCall("renderer command enter frameId=%d handle=%p index=%d kind=%d", displayList.FrameMetricsID(), r.handle, index, command.kind)
 		var commandResult C.int32_t
 		switch command.kind {
@@ -249,8 +252,13 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 		}
 		if commandResult < 0 {
 			_ = r.endFrame()
-			return hresultError("draw frame command", commandResult)
+			encodeErr = hresultError("draw frame command", commandResult)
+			return false
 		}
+		return true
+	})
+	if encodeErr != nil {
+		return encodeErr
 	}
 
 	traceNativeCall("renderer end_frame enter frameId=%d handle=%p", displayList.FrameMetricsID(), r.handle)

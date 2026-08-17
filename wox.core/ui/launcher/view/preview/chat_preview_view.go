@@ -1,6 +1,7 @@
 package preview
 
 import (
+	"math"
 	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -546,6 +547,7 @@ type ChatMessagesProps struct {
 	EmptyTextWidth  float32
 	EmptyTextHeight float32
 	ContentHeight   float32
+	ExtentRevision  uint64
 	Scroll          float32
 	Theme           woxcomponent.Theme
 	OnScroll        func(float32, float32)
@@ -553,11 +555,20 @@ type ChatMessagesProps struct {
 
 // ChatMessagesContentHeight returns the shared scroll extent for prepared messages.
 func ChatMessagesContentHeight(messages []ChatMessageProps, viewportHeight float32) float32 {
+	height, _ := ChatMessagesScrollMetrics(messages, viewportHeight)
+	return height
+}
+
+// ChatMessagesScrollMetrics walks messages once for scroll extent and a trusted prefix revision.
+func ChatMessagesScrollMetrics(messages []ChatMessageProps, viewportHeight float32) (float32, uint64) {
 	height := float32(0)
+	revision := uint64(len(messages)) + 1
 	for _, message := range messages {
-		height += chatMessageHeight(message)
+		item := chatMessageHeight(message)
+		height += item
+		revision = revision*16777619 ^ uint64(math.Float32bits(item))
 	}
-	return max(viewportHeight, height)
+	return max(viewportHeight, height), revision
 }
 
 // ChatMessages builds the scrollable conversation viewport.
@@ -573,15 +584,18 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 			Child: woxwidget.Container{Width: textWidth, Height: props.EmptyTextHeight, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}, Color: color}},
 		}}
 	}
-	rows := make([]woxwidget.Widget, 0, len(props.Messages))
-	for _, message := range props.Messages {
-		rows = append(rows, ChatMessage(message, innerWidth))
-	}
+	messages := props.Messages
 	contentHeight := max(innerHeight, props.ContentHeight)
 	maxOffset := max(float32(0), contentHeight-innerHeight)
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-message-scroll-" + props.Key), Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
-		Offset: min(max(float32(0), props.Scroll), maxOffset), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+		Offset: min(max(float32(0), props.Scroll), maxOffset), Content: woxwidget.LazyList{
+			Key: woxwidget.Key("chat-messages-" + props.Key), Width: innerWidth, Viewport: innerHeight, ItemCount: len(messages),
+			ExtentRevision: props.ExtentRevision,
+			ItemExtentAt:   func(index int) float32 { return chatMessageHeight(messages[index]) },
+			ItemKey:        func(index int) woxwidget.Key { return woxwidget.Key(messages[index].Key) },
+			ItemBuilder:    func(index int) woxwidget.Widget { return ChatMessage(messages[index], innerWidth) },
+		},
 		ThumbColor: props.Theme.ResultSubtitle, OnScroll: func(delta float32) {
 			if props.OnScroll != nil {
 				props.OnScroll(delta, maxOffset)

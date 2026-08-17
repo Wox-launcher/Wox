@@ -6,6 +6,7 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
@@ -15,7 +16,7 @@ import (
 )
 
 // Test001LauncherQueryMultiline verifies multiline keyboard input, clipboard paste, and wheel scrolling in the native query box.
-// Flow: show launcher -> insert a line with Shift+Enter -> paste mixed newline text with the platform shortcut -> scroll the overflowing query upward.
+// Flow: show launcher -> insert a line with Shift+Enter -> paste mixed newline text with the platform shortcut -> scroll the overflowing query toward earlier lines.
 // Evidence: the query semantics preserve normalized line breaks and move vertically after the wheel event without changing their value.
 func Test001LauncherQueryMultiline(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
@@ -56,28 +57,33 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 		if err != nil {
 			t.Fatalf("wait for pasted multiline query: %v", err)
 		}
-		before, found := automationdriver.Find(snapshot, "launcher.query.input")
-		if !found {
+		if _, found := automationdriver.Find(snapshot, "launcher.query.input"); !found {
 			t.Fatal("launcher query input disappeared before wheel scroll")
 		}
 		beforeScroll, found := automationdriver.Find(snapshot, "launcher.query.scroll")
 		if !found {
 			t.Fatal("launcher query scroll state is unavailable")
 		}
+		// KeepVisible already pins the caret line, so the viewport starts at max
+		// offset. A negative wheel delta would try to scroll further down and no-op.
 		if err := client.Pointer(ctx, woxui.PointerEvent{
 			Kind:     woxui.PointerScroll,
-			Position: woxui.Point{X: before.Bounds.X + 20, Y: before.Bounds.Y + before.Bounds.Height/2},
-			Scroll:   woxui.Point{Y: -34},
+			Position: woxui.Point{X: beforeScroll.Bounds.X + 20, Y: beforeScroll.Bounds.Y + beforeScroll.Bounds.Height/2},
+			Scroll:   woxui.Point{Y: 34},
 		}); err != nil {
 			t.Fatalf("scroll multiline query with wheel: %v", err)
 		}
-		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		scrollCtx, cancelScroll := context.WithTimeout(ctx, 5*time.Second)
+		defer cancelScroll()
+		snapshot, err = client.WaitFor(scrollCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, found := automationdriver.Find(snapshot, "launcher.query.input")
 			scroll, scrollFound := automationdriver.Find(snapshot, "launcher.query.scroll")
 			return found && input.Value == expected && scrollFound && scroll.Value != beforeScroll.Value
 		})
 		if err != nil {
-			t.Fatalf("wait for multiline query wheel scroll: %v", err)
+			currentSnapshot, snapshotErr := client.Snapshot(ctx)
+			current, currentFound := automationdriver.Find(currentSnapshot, "launcher.query.scroll")
+			t.Fatalf("wait for multiline query wheel scroll: %v; before %q current found %v value %q snapshot error %v", err, beforeScroll.Value, currentFound, current.Value, snapshotErr)
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})

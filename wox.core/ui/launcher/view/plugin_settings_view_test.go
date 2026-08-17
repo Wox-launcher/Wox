@@ -150,14 +150,14 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	rows := props.Content.(woxwidget.Flex)
-	row := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container)
+	rows := props.Content.(woxwidget.LazyList)
+	row := focusedControlGesture(rows.ItemBuilder(0)).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	status := rowContent.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if status.Color != activeColor {
 		t.Fatalf("selected plugin subtitle color = %#v, want %#v", status.Color, activeColor)
 	}
-	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	inactiveRow := focusedControlGesture(rows.ItemBuilder(1)).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	inactiveStatus := inactiveRow.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if inactiveStatus.Color != inactiveColor {
 		t.Fatalf("unselected plugin subtitle color = %#v, want %#v", inactiveStatus.Color, inactiveColor)
@@ -198,9 +198,9 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	rows := props.Content.(woxwidget.Flex)
-	selectedRow := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	rows := props.Content.(woxwidget.LazyList)
+	selectedRow := focusedControlGesture(rows.ItemBuilder(0)).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	inactiveRow := focusedControlGesture(rows.ItemBuilder(1)).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	selected := selectedRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
 	inactive := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
 
@@ -219,7 +219,7 @@ func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := focusedControlGesture(props.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
+	row := focusedControlGesture(props.Content.(woxwidget.LazyList).ItemBuilder(0)).Child.(woxwidget.Container)
 	if row.Color != selected {
 		t.Fatalf("selected plugin fill = %#v, want selected color %#v", row.Color, selected)
 	}

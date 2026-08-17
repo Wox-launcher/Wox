@@ -223,6 +223,22 @@ func (w *Window) RecordFrameCounts(frameID uint64, nodes, commands, accessibilit
 	w.metrics.recordCounts(frameID, nodes, commands, accessibilityNodes, logicalDamage)
 }
 
+// RecordFrameWork stores portable Host visit and reuse counts for one frame.
+func (w *Window) RecordFrameWork(frameID uint64, work FrameWorkMetrics) {
+	if w == nil {
+		return
+	}
+	w.metrics.recordWork(frameID, work)
+}
+
+// RecordFrameRendererResources stores native encode-time resource counters for one frame.
+func (w *Window) RecordFrameRendererResources(frameID uint64, resources FrameRendererResourceMetrics) {
+	if w == nil {
+		return
+	}
+	w.metrics.recordRendererResources(frameID, resources)
+}
+
 // Show begins a new focus lifetime and requests platform activation.
 // A later FocusEvent with Active set confirms that the platform granted the request.
 func (w *Window) Show() (FocusEpoch, error) {
@@ -392,6 +408,22 @@ func (w *Window) InvalidateRect(rect Rect) error {
 // DisplayListDamageCullingEnabled reports whether the native renderer can preserve every pixel outside Damage.
 func (w *Window) DisplayListDamageCullingEnabled() bool {
 	return w != nil && w.native != nil && w.native.displayListDamageCullingEnabled()
+}
+
+// RequestAnimationFrame coalesces one vsync-backed invalidation for the next display refresh.
+func (w *Window) RequestAnimationFrame() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.requestAnimationFrame()
+}
+
+// StopAnimationFrames releases the platform vsync callback while no animation is active.
+func (w *Window) StopAnimationFrames() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.stopAnimationFrames()
 }
 
 // DispatchPointer sends portable input directly to an independently managed raw window.

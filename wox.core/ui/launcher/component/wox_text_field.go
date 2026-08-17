@@ -96,6 +96,9 @@ type TextFieldProps struct {
 	onScroll       func(woxui.Point) bool
 	onTextInput    func(woxui.TextInputEvent) bool
 	verticalOffset float32
+	// caretActive is the declared Focused value. CaretPainter uses it so Boundary
+	// verify shadows (a fresh unfocused FocusNode) match the live tree.
+	caretActive bool
 }
 
 // WoxTextField builds a retained text field with shared IME, selection, and accessibility behavior.
@@ -187,6 +190,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		displayState.Selection = woxui.MapSelectionToProtectedDisplay(realState.Text, realState.Selection)
 	}
 	props.editingState = displayState
+	props.caretActive = props.Focused
 	props.Focused = s.focusNode.HasFocus()
 	style := props.Style
 	if style.Size <= 0 {
@@ -868,7 +872,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		props.onSecondaryTap(windowPos)
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
-		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
+		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.caretActive, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 			if state.Text == "" && state.Composition == "" && props.Hint != "" {
 				displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
 			}

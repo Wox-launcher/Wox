@@ -262,6 +262,7 @@ func (a *App) ResetAutomationState() error {
 		a.toolbarMsg = nil
 		a.toolbarFallbackMsg = nil
 		a.toolbarRevision++
+		a.resetAutomationPerfCatalog()
 		resetErr = a.hideWindow(true)
 	}); err != nil {
 		return err

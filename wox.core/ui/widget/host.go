@@ -37,6 +37,7 @@ type HostServices interface {
 type frameMetricsHostServices interface {
 	RecordFramePhase(frameID uint64, phase woxui.FrameMetricPhase, duration time.Duration)
 	RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int, logicalDamage woxui.Rect)
+	RecordFrameWork(frameID uint64, work woxui.FrameWorkMetrics)
 }
 
 type displayListDamageHostServices interface {
@@ -49,9 +50,11 @@ type Host struct {
 	build  func(frame woxui.FrameInfo) Widget
 	root   *node
 
-	nextNodeID woxui.AccessibilityNodeID
-	identities map[string]woxui.AccessibilityNodeID
-	nodes      map[woxui.AccessibilityNodeID]*node
+	nextNodeID    woxui.AccessibilityNodeID
+	identities    map[string]woxui.AccessibilityNodeID
+	identityMeta  map[string]identityBinding
+	identityFrame uint64
+	nodes         map[woxui.AccessibilityNodeID]*node
 
 	hovered    woxui.AccessibilityNodeID
 	rawHovered woxui.AccessibilityNodeID
@@ -110,6 +113,7 @@ func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 	host := &Host{
 		build:            build,
 		identities:       map[string]woxui.AccessibilityNodeID{},
+		identityMeta:     map[string]identityBinding{},
 		nodes:            map[woxui.AccessibilityNodeID]*node{},
 		scopeRestore:     map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
 		change:           make(chan struct{}),
@@ -223,16 +227,18 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		h.elements.endFrame()
 		h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
 		h.recordFrameCounts(frameID, 0, displayList.CommandCount(), 0, displayList.NativeDamage())
+		h.recordFrameWork(frameID, frameWorkCounters{}.metrics(displayList.TextDrawCount(), displayList.ImageDrawCount()))
 		h.updateCaretBlink(false)
 		h.animations.reset()
 		return
 	}
 
-	oldNodes := h.nodes
-	focusedKey := Key("")
-	if old := oldNodes[h.focused]; old != nil {
+	var focusedKey Key
+	if old := h.nodes[h.focused]; old != nil {
 		focusedKey = old.key
 	}
+	oldHovered := h.nodes[h.hovered]
+	oldHoveredBounds := globalRect(oldHovered)
 	animation := h.animations.beginFrame()
 	var debugFrame *repaintDebugFrame
 	if h.repaintDebugMode != RepaintDebugOff {
@@ -242,7 +248,8 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 	caretVisible := h.caretVisibleForFrame()
 	damageTracker := &frameDamageTracker{}
-	layoutCtx := context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}
+	work := &frameWorkCounters{}
+	layoutCtx := context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root, work: work}
 	layoutConstraints := constraints{width: frame.Size.Width, height: frame.Size.Height}
 	// Layout the base tree once so overlay ownership can be validated against this frame's keys
 	// before composing the already-built base node with a separately laid-out overlay.
@@ -256,6 +263,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		root = composeOverlayRoot(root, overlayNode, frame.Size)
 	}
 	diagnostics, removedDamage := h.elements.endFrame()
+	prepareNodeTree(root)
 	boundaryDamage := damageTracker.resolve(woxui.Rect{})
 	if !fullDamage {
 		damage = unionDamageRects(damage, boundaryDamage)
@@ -280,20 +288,23 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if services, ok := h.window.(displayListDamageHostServices); ok && services.DisplayListDamageCullingEnabled() {
 		displayList.SetDamage(damage)
 	}
+	var vsync animationFrameScheduler
+	if scheduler, ok := h.window.(animationFrameScheduler); ok {
+		vsync = scheduler
+	}
 	h.animations.endFrame(animation, func() {
 		if boundaryDamage.Width > 0 && boundaryDamage.Height > 0 {
 			h.invalidateRect(boundaryDamage)
 			return
 		}
 		h.invalidate()
-	})
-	identities := map[string]woxui.AccessibilityNodeID{}
-	nodes := map[woxui.AccessibilityNodeID]*node{}
-	h.assignIdentities(root, nil, "root", 0, h.identities, identities, nodes, &diagnostics, nil)
+	}, vsync)
+	work.layoutVisits = countLayoutVisits(root)
+	h.identityFrame++
+	h.assignIdentities(root, nil, "root", 0, h.identities, h.identities, h.nodes, &diagnostics, nil, work)
+	h.sweepIdentities()
 	h.root = root
-	h.identities = identities
-	h.nodes = nodes
-	h.reconcileTransientState(oldNodes)
+	h.reconcileTransientState(oldHovered, oldHoveredBounds)
 	h.reconcileOverlayOwner()
 	// Remap focus by stable key before reconcileFocus so autofocus never wins and
 	// pure ID remapping does not fire blur/focus or SetTextInputState.
@@ -318,19 +329,20 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if !h.focusVisible {
 		focusRingTarget = 0
 	}
-	h.root.draw(displayList, h.focused, focusRingTarget, caretVisible, false, false)
+	h.root.draw(displayList, h.focused, focusRingTarget, caretVisible, false, false, work)
 	debugFrame.draw(displayList)
 	h.recordFramePhase(frameID, woxui.FrameMetricDrawRecord, time.Since(drawStart))
 
 	accessibilityStart := time.Now()
 	h.generation++
-	tree, diagnostics := h.buildAccessibilityTree(diagnostics)
+	tree, diagnostics := h.buildAccessibilityTree(diagnostics, work)
 	h.publishSnapshot(tree, diagnostics)
 	if err := h.window.UpdateAccessibility(tree, h.dispatchAccessibilityAction); err != nil {
 		h.reportDiagnostic(fmt.Sprintf("publish accessibility tree: %v", err))
 	}
 	h.recordFramePhase(frameID, woxui.FrameMetricAccessibility, time.Since(accessibilityStart))
-	h.recordFrameCounts(frameID, len(nodes), displayList.CommandCount(), len(tree.Nodes), logicalDamage)
+	h.recordFrameCounts(frameID, len(h.nodes), displayList.CommandCount(), len(tree.Nodes), logicalDamage)
+	h.recordFrameWork(frameID, work.metrics(displayList.TextDrawCount(), displayList.ImageDrawCount()))
 	h.syncTextInput()
 	h.runPostFrameCallbacks()
 }
@@ -361,6 +373,31 @@ func (h *Host) recordFrameCounts(frameID uint64, nodes, commands, accessibilityN
 	}
 }
 
+func (h *Host) recordFrameWork(frameID uint64, work woxui.FrameWorkMetrics) {
+	if frameID == 0 {
+		return
+	}
+	if services, ok := h.window.(frameMetricsHostServices); ok {
+		services.RecordFrameWork(frameID, work)
+	}
+}
+
+// countLayoutVisits counts nodes whose layout actually ran. Cached Boundary
+// subtrees are counted as one visit at the reused root.
+func countLayoutVisits(current *node) int {
+	if current == nil {
+		return 0
+	}
+	if current.boundary != nil && current.boundary.hit {
+		return 1
+	}
+	count := 1
+	for _, child := range current.children {
+		count += countLayoutVisits(child)
+	}
+	return count
+}
+
 // runPostFrameCallbacks executes retained lifecycle work after the current node tree is addressable.
 func (h *Host) runPostFrameCallbacks() {
 	callbacks := h.postFrame
@@ -387,9 +424,10 @@ func (h *Host) Dispose() {
 	h.overlayOwner = ""
 	h.nodes = map[woxui.AccessibilityNodeID]*node{}
 	h.identities = map[string]woxui.AccessibilityNodeID{}
+	h.identityMeta = map[string]identityBinding{}
 }
 
-func (h *Host) assignIdentities(current *node, parent *node, parentPath string, index int, previous, identities map[string]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string, collectors []*boundaryCache) {
+func (h *Host) assignIdentities(current *node, parent *node, parentPath string, index int, previous, identities map[string]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string, collectors []*boundaryCache, work *frameWorkCounters) {
 	if current == nil {
 		return
 	}
@@ -407,25 +445,29 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 	cache := current.boundary
 	if cache != nil && cache.hit && cache.identityValid && cache.identityRootPath == path {
 		cache.identityReuses++
+		markIdentityOwnersSeen(cache, h.identityFrame)
 		*diagnostics = append(*diagnostics, cache.identityDiagnostics...)
-		for entryIndex, entry := range cache.identityEntries {
-			entryParent := entry.parent
-			if entryIndex == 0 {
-				entryParent = parent
-			}
-			entry.node.parent = entryParent
-			entry.node.id = entry.id
-			identities[entry.path] = entry.id
-			nodes[entry.id] = entry.node
-			for _, collector := range collectors {
-				collector.identityEntries = append(collector.identityEntries, boundaryIdentityEntry{path: entry.path, node: entry.node, parent: entryParent, id: entry.id})
-			}
+		if len(cache.identityEntries) > 0 {
+			entry := cache.identityEntries[0]
+			entry.parent = parent
+			entry.node.parent = parent
+			cache.identityEntries[0] = entry
+		}
+		for _, collector := range collectors {
+			collector.identityEntries = append(collector.identityEntries, cache.identityEntries...)
+			appendNestedIdentityOwners(collector, cache)
 		}
 		return
 	}
+	if work != nil {
+		work.identityVisits++
+	}
 	diagnosticStart := len(*diagnostics)
+	var previousEntries []boundaryIdentityEntry
 	if cache != nil {
+		previousEntries = append([]boundaryIdentityEntry(nil), cache.identityEntries...)
 		cache.identityEntries = cache.identityEntries[:0]
+		cache.nestedOwners = cache.nestedOwners[:0]
 		collectors = append(collectors, cache)
 	}
 	if id, ok := previous[path]; ok {
@@ -434,8 +476,13 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 		h.nextNodeID++
 		current.id = h.nextNodeID
 	}
-	identities[path] = current.id
-	nodes[current.id] = current
+	owner := (*identityOwner)(nil)
+	if cache != nil {
+		owner = &cache.identityOwner
+	} else if len(collectors) > 0 {
+		owner = &collectors[len(collectors)-1].identityOwner
+	}
+	h.upsertIdentity(path, current.id, current, owner, work)
 	entry := boundaryIdentityEntry{path: path, node: current, parent: parent, id: current.id}
 	for _, collector := range collectors {
 		collector.identityEntries = append(collector.identityEntries, entry)
@@ -456,12 +503,87 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 				siblingKeys[identity] = childIndex
 			}
 		}
-		h.assignIdentities(child, current, childPath, childIndex, previous, identities, nodes, diagnostics, collectors)
+		h.assignIdentities(child, current, childPath, childIndex, previous, identities, nodes, diagnostics, collectors, work)
 	}
 	if cache != nil {
 		cache.identityRootPath = path
 		cache.identityDiagnostics = append(cache.identityDiagnostics[:0], (*diagnostics)[diagnosticStart:]...)
 		cache.identityValid = true
+		cache.identityOwner.seen = h.identityFrame
+		h.removeStaleIdentityEntries(previousEntries, cache.identityEntries)
+		for _, collector := range collectors[:len(collectors)-1] {
+			collector.nestedOwners = append(collector.nestedOwners, &cache.identityOwner)
+		}
+	}
+}
+
+// markIdentityOwnersSeen keeps a reused Boundary and its nested owners out of the identity sweep.
+func markIdentityOwnersSeen(cache *boundaryCache, frame uint64) {
+	if cache == nil {
+		return
+	}
+	cache.identityOwner.seen = frame
+	for _, owner := range cache.nestedOwners {
+		if owner != nil {
+			owner.seen = frame
+		}
+	}
+}
+
+// appendNestedIdentityOwners records a reused Boundary's owner tree on a parent that is rebuilding.
+func appendNestedIdentityOwners(collector, cache *boundaryCache) {
+	if collector == nil || cache == nil {
+		return
+	}
+	collector.nestedOwners = append(collector.nestedOwners, &cache.identityOwner)
+	collector.nestedOwners = append(collector.nestedOwners, cache.nestedOwners...)
+}
+
+func (h *Host) upsertIdentity(path string, id woxui.AccessibilityNodeID, current *node, owner *identityOwner, work *frameWorkCounters) {
+	if h.identities[path] != id {
+		if work != nil {
+			work.identityUpserts++
+		}
+	}
+	h.identities[path] = id
+	h.nodes[id] = current
+	h.identityMeta[path] = identityBinding{id: id, owner: owner, gen: h.identityFrame}
+}
+
+func (h *Host) removeStaleIdentityEntries(previous, current []boundaryIdentityEntry) {
+	live := make(map[string]struct{}, len(current))
+	for _, entry := range current {
+		live[entry.path] = struct{}{}
+	}
+	for _, entry := range previous {
+		if _, ok := live[entry.path]; ok {
+			continue
+		}
+		if h.identities[entry.path] == entry.id {
+			delete(h.identities, entry.path)
+		}
+		if h.nodes[entry.id] == entry.node {
+			delete(h.nodes, entry.id)
+		}
+		delete(h.identityMeta, entry.path)
+	}
+}
+
+func (h *Host) sweepIdentities() {
+	for path, binding := range h.identityMeta {
+		if binding.owner != nil && binding.owner.seen == h.identityFrame {
+			continue
+		}
+		if binding.gen == h.identityFrame {
+			continue
+		}
+		if h.identities[path] == binding.id {
+			delete(h.identities, path)
+		}
+		if node := h.nodes[binding.id]; node != nil && node.id == binding.id {
+			delete(h.nodes, binding.id)
+		}
+		delete(h.identityMeta, path)
 	}
 }
 
@@ -480,14 +602,14 @@ func nodeKind(current *node) string {
 	}
 }
 
-func (h *Host) reconcileTransientState(oldNodes map[woxui.AccessibilityNodeID]*node) {
+func (h *Host) reconcileTransientState(oldHovered *node, oldHoveredBounds woxui.Rect) {
 	if h.hovered != 0 && h.nodes[h.hovered] == nil {
-		if old := oldNodes[h.hovered]; old != nil && old.gesture != nil {
-			if old.gesture.onHover != nil {
-				old.gesture.onHover(false)
+		if oldHovered != nil && oldHovered.gesture != nil {
+			if oldHovered.gesture.onHover != nil {
+				oldHovered.gesture.onHover(false)
 			}
-			if old.gesture.onHoverAt != nil {
-				old.gesture.onHoverAt(false, old.bounds)
+			if oldHovered.gesture.onHoverAt != nil {
+				oldHovered.gesture.onHoverAt(false, oldHoveredBounds)
 			}
 		}
 		h.hovered = 0
@@ -718,10 +840,11 @@ func (h *Host) ensureFocusedVisible() {
 		if ancestor.scroll == nil {
 			continue
 		}
-		start := current.bounds.Y - ancestor.bounds.Y + ancestor.scroll.offset
+		offsetX, offsetY := offsetInAncestor(current, ancestor)
+		start := offsetY + ancestor.scroll.offset
 		end := start + current.bounds.Height
 		if ancestor.scroll.horizontal {
-			start = current.bounds.X - ancestor.bounds.X + ancestor.scroll.offset
+			start = offsetX + ancestor.scroll.offset
 			end = start + current.bounds.Width
 		}
 		if ancestor.scroll.ensureVisible(start, end) {
@@ -881,7 +1004,7 @@ func (h *Host) FocusedKey() Key {
 func (h *Host) BoundsForKey(key Key) (woxui.Rect, bool) {
 	for _, current := range h.nodes {
 		if current.key == key {
-			return current.bounds, true
+			return globalRect(current), true
 		}
 	}
 	return woxui.Rect{}, false
@@ -979,7 +1102,7 @@ func (h *Host) syncTextInput() {
 		_ = h.window.SetTextInputState(woxui.TextInputState{})
 		return
 	}
-	_ = h.window.SetTextInputState(current.focus.textInput(current.bounds))
+	_ = h.window.SetTextInputState(current.focus.textInput(globalRect(current)))
 }
 
 // Pointer dispatches hover, focus, tap, drag, and scroll by retained node identity.
@@ -1040,11 +1163,11 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		if target != nil && target.gesture != nil && target.gesture.onSelectionStart != nil && !multiTap {
 			h.selecting = h.pressed
 			h.selectingGestureID = target.gesture.id
-			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y}, event.Modifiers)
+			target.gesture.onSelectionStart(target.localPoint(event.Position), event.Modifiers)
 			h.invalidate()
 		} else if target != nil && target.gesture != nil && target.gesture.onPanStart != nil {
 			h.panning = h.pressed
-			target.gesture.onPanStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
+			target.gesture.onPanStart(target.localPoint(event.Position))
 			h.invalidate()
 		}
 	}
@@ -1077,14 +1200,14 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			if !h.dragging && deltaX*deltaX+deltaY*deltaY >= 1 {
 				h.dragging = true
 			}
-			selector.gesture.onSelectionExtend(woxui.Point{X: event.Position.X - selector.bounds.X, Y: event.Position.Y - selector.bounds.Y})
+			selector.gesture.onSelectionExtend(selector.localPoint(event.Position))
 			h.invalidate()
 		}
 	}
 	if event.Kind == woxui.PointerMove && h.panning != 0 {
 		if panner := h.nodes[h.panning]; panner != nil && panner.gesture != nil && panner.gesture.onPanUpdate != nil {
 			h.dragging = true
-			panner.gesture.onPanUpdate(woxui.Point{X: event.Position.X - panner.bounds.X, Y: event.Position.Y - panner.bounds.Y})
+			panner.gesture.onPanUpdate(panner.localPoint(event.Position))
 			h.invalidate()
 		}
 	}
@@ -1113,7 +1236,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			// Native backends may coalesce pointer moves while a complex form is rebuilding. Always
 			// apply the release position so the final drag range is not mistaken for a plain click.
 			if selector != nil && selector.gesture != nil && selector.gesture.onSelectionExtend != nil && deltaX*deltaX+deltaY*deltaY >= 1 {
-				selector.gesture.onSelectionExtend(woxui.Point{X: event.Position.X - selector.bounds.X, Y: event.Position.Y - selector.bounds.Y})
+				selector.gesture.onSelectionExtend(selector.localPoint(event.Position))
 				h.dragging = true
 			}
 			selectingMoved := h.dragging
@@ -1173,7 +1296,7 @@ func (h *Host) dispatchRawPointer(event woxui.PointerEvent) bool {
 			if previous := h.nodes[h.rawHovered]; previous != nil && previous.gesture != nil && previous.gesture.onPointer != nil {
 				leave := event
 				leave.Kind = woxui.PointerLeave
-				leave.Position = woxui.Point{X: event.Position.X - previous.bounds.X, Y: event.Position.Y - previous.bounds.Y}
+				leave.Position = previous.localPoint(event.Position)
 				previous.gesture.onPointer(leave)
 			}
 		}
@@ -1183,7 +1306,7 @@ func (h *Host) dispatchRawPointer(event woxui.PointerEvent) bool {
 		return false
 	}
 	local := event
-	local.Position = woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y}
+	local.Position = target.localPoint(event.Position)
 	if !target.gesture.onPointer(local) {
 		return false
 	}
@@ -1303,12 +1426,12 @@ func (h *Host) setHovered(target *node) {
 	old := h.nodes[h.hovered]
 	damage := woxui.Rect{}
 	if old != nil && old.gesture != nil {
-		damage = unionDamageRects(damage, old.bounds)
+		damage = unionDamageRects(damage, globalRect(old))
 		if old.gesture.onHover != nil {
 			old.gesture.onHover(false)
 		}
 		if old.gesture.onHoverAt != nil {
-			old.gesture.onHoverAt(false, old.bounds)
+			old.gesture.onHoverAt(false, globalRect(old))
 		}
 	}
 	h.hovered = nodeID(target)
@@ -1323,12 +1446,12 @@ func (h *Host) setHovered(target *node) {
 		_ = h.window.SetPointerCursor(cursor)
 	}
 	if target != nil && target.gesture != nil {
-		damage = unionDamageRects(damage, target.bounds)
+		damage = unionDamageRects(damage, globalRect(target))
 		if target.gesture.onHover != nil {
 			target.gesture.onHover(true)
 		}
 		if target.gesture.onHoverAt != nil {
-			target.gesture.onHoverAt(true, target.bounds)
+			target.gesture.onHoverAt(true, globalRect(target))
 		}
 	}
 	// Hover callbacks may change both visuals, so redraw only their combined bounds.
@@ -1342,7 +1465,7 @@ func (h *Host) activatePointerTarget(target *node, position woxui.Point) {
 		return
 	}
 	now := time.Now()
-	localPosition := woxui.Point{X: position.X - target.bounds.X, Y: position.Y - target.bounds.Y}
+	localPosition := target.localPoint(position)
 	hasDoubleTap := target.gesture.onDoubleTap != nil || target.gesture.onDoubleTapAt != nil
 	hasTripleTap := target.gesture.onTripleTapAt != nil
 	if h.continuesMultiTap(target.id, position, now) {
@@ -1381,7 +1504,7 @@ func (h *Host) activatePointerTarget(target *node, position woxui.Point) {
 			target.gesture.onTapAt(localPosition)
 		}
 		if target.gesture.onTapBounds != nil {
-			target.gesture.onTapBounds(target.bounds)
+			target.gesture.onTapBounds(globalRect(target))
 		}
 	}
 	h.invalidate()
@@ -1404,7 +1527,7 @@ func nodeID(current *node) woxui.AccessibilityNodeID {
 	return current.id
 }
 
-func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.AccessibilityTree, []string) {
+func (h *Host) buildAccessibilityTree(diagnostics []string, work *frameWorkCounters) (woxui.AccessibilityTree, []string) {
 	nodes := []woxui.AccessibilityNode{}
 	indexByID := map[woxui.AccessibilityNodeID]int{}
 	automationIDs := map[string]woxui.AccessibilityNodeID{}
@@ -1427,11 +1550,13 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 			}
 		}
 	}
-	var visit func(current *node, semanticParent woxui.AccessibilityNodeID)
-	visit = func(current *node, semanticParent woxui.AccessibilityNodeID) {
+	var visit func(current *node, origin woxui.Point, semanticParent woxui.AccessibilityNodeID)
+	visit = func(current *node, origin woxui.Point, semanticParent woxui.AccessibilityNodeID) {
 		if current == nil {
 			return
 		}
+		bounds := offsetRect(current.bounds, origin)
+		childOrigin := woxui.Point{X: bounds.X, Y: bounds.Y}
 		cache := current.boundary
 		if cache != nil && cache.hit && cache.a11yValid && cache.a11yRootID == current.id {
 			cache.a11yReuses++
@@ -1439,8 +1564,8 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 			for _, id := range cache.a11yRootIDs {
 				rootIDs[id] = struct{}{}
 			}
-			deltaX := current.bounds.X - cache.a11yOrigin.X
-			deltaY := current.bounds.Y - cache.a11yOrigin.Y
+			deltaX := bounds.X - cache.a11yOrigin.X
+			deltaY := bounds.Y - cache.a11yOrigin.Y
 			for _, cachedNode := range cache.a11yNodes {
 				nativeNode := cachedNode
 				nativeNode.Children = nil
@@ -1457,6 +1582,9 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 				appendNode(nativeNode)
 			}
 			return
+		}
+		if work != nil {
+			work.a11yVisits++
 		}
 		cacheStart := len(nodes)
 		nextParent := semanticParent
@@ -1478,7 +1606,7 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 				Label:            semantic.label,
 				Description:      semantic.description,
 				Value:            value,
-				Bounds:           current.bounds,
+				Bounds:           bounds,
 				Actions:          actions,
 				LiveRegion:       semantic.liveRegion,
 				Enabled:          semantic.enabled,
@@ -1498,17 +1626,21 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 			nextParent = nativeNode.ID
 		}
 		for _, child := range current.children {
-			visit(child, nextParent)
+			visit(child, childOrigin, nextParent)
 		}
 		if cache != nil {
-			cache.a11yOrigin = woxui.Point{X: current.bounds.X, Y: current.bounds.Y}
+			cache.a11yOrigin = woxui.Point{X: bounds.X, Y: bounds.Y}
 			cache.a11yRootID = current.id
 			cache.a11yNodes = cloneAccessibilityNodes(nodes[cacheStart:])
 			cache.a11yRootIDs = accessibilitySegmentRootIDs(cache.a11yNodes)
 			cache.a11yValid = true
+			if work != nil {
+				// Replay hits stay at 0. This counts rebuilt cache writes, not unused tree diffs.
+				work.a11yUpserts += len(cache.a11yNodes)
+			}
 		}
 	}
-	visit(h.root, 0)
+	visit(h.root, woxui.Point{}, 0)
 	roots := []woxui.AccessibilityNodeID{}
 	for _, current := range nodes {
 		if current.ParentID == 0 {
@@ -1600,7 +1732,7 @@ func (h *Host) performAccessibilityAction(nodeID woxui.AccessibilityNodeID, acti
 			current.gesture.onTap()
 		}
 		if current.gesture.onTapBounds != nil {
-			current.gesture.onTapBounds(current.bounds)
+			current.gesture.onTapBounds(globalRect(current))
 		}
 		h.invalidate()
 		return nil

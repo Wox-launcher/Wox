@@ -1,6 +1,7 @@
 package woxui
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -32,12 +33,74 @@ func TestFrameMetricsRecorderCorrelatesPortableAndNativePhases(t *testing.T) {
 	}
 }
 
+func TestFrameMetricsRecorderStoresNestedWorkAndRendererResources(t *testing.T) {
+	recorder := newFrameMetricsRecorder()
+	frameID := recorder.beginFrame()
+	work := FrameWorkMetrics{LayoutVisits: 12, IdentityVisits: 11, PaintVisits: 10, A11yVisits: 8, BoundaryBuilds: 2, BoundaryReuses: 3, TextDraws: 6, ImageDraws: 4}
+	resources := FrameRendererResourceMetrics{TextRasterizations: 6, ImageCreates: 4, ImageUploads: 4, CacheHits: 1, ResidentBytes: 2048}
+	recorder.recordWork(frameID, work)
+	recorder.recordRendererResources(frameID, resources)
+	recorder.recordCounts(frameID, 12, 9, 8, Rect{Width: 20, Height: 10})
+
+	sample := recorder.current().Recent[0]
+	if sample.NodeCount != 12 || sample.Work != work || sample.RendererResources != resources {
+		t.Fatalf("nested metrics = %+v", sample)
+	}
+}
+
+func TestFrameMetricsSnapshotKeepsLegacyJSONFields(t *testing.T) {
+	payload, err := json.Marshal(FrameMetricsSnapshot{
+		FrameCount: 3, PresentedFrameCount: 2, DroppedFrameCount: 1,
+		Recent: []FrameMetricsSample{{
+			FrameID: 9, NodeCount: 4, DisplayCommandCount: 7, HostCompleted: true,
+			Work: FrameWorkMetrics{LayoutVisits: 4, TextDraws: 2},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"frameCount", "presentedFrameCount", "droppedFrameCount", "recent"} {
+		if _, ok := decoded[key]; !ok {
+			t.Fatalf("legacy field %q missing from %s", key, payload)
+		}
+	}
+	recent := decoded["recent"].([]any)[0].(map[string]any)
+	if recent["nodeCount"] != float64(4) || recent["displayCommandCount"] != float64(7) {
+		t.Fatalf("legacy sample fields = %v", recent)
+	}
+	if _, ok := recent["work"]; !ok {
+		t.Fatalf("nested work field missing from %s", payload)
+	}
+}
+
 func TestFrameMetricsRecorderTracksCoalescedAndResetFrames(t *testing.T) {
 	recorder := newFrameMetricsRecorder()
+	coalescedID := recorder.beginFrame()
+	recorder.coalesceFrame(coalescedID)
+	recorder.coalesceFrame(coalescedID)
+	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 1 || snapshot.CoalescedFrameCount != 1 || len(snapshot.Recent) != 1 || !snapshot.Recent[0].Dropped || !snapshot.Recent[0].Coalesced {
+		t.Fatalf("unexpected coalesced metrics: %+v", snapshot)
+	}
+
+	backpressuredID := recorder.beginFrame()
+	recorder.backpressureFrame(backpressuredID)
+	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 2 || snapshot.BackpressuredFrameCount != 1 || len(snapshot.Recent) != 2 || !snapshot.Recent[1].Dropped || !snapshot.Recent[1].Backpressured {
+		t.Fatalf("unexpected backpressure metrics: %+v", snapshot)
+	}
+	finishedBackpressureID := recorder.beginFrame()
+	recorder.finishBackpressuredFrame(finishedBackpressureID, 2*time.Millisecond, -1)
+	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 3 || snapshot.BackpressuredFrameCount != 2 || snapshot.NativeEncodedFrameCount != 1 || !snapshot.Recent[2].NativeEncodingCompleted || !snapshot.Recent[2].Backpressured {
+		t.Fatalf("unexpected finished backpressure metrics: %+v", snapshot)
+	}
+
 	droppedID := recorder.beginFrame()
 	recorder.dropFrame(droppedID)
 	recorder.dropFrame(droppedID)
-	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 1 || len(snapshot.Recent) != 1 || !snapshot.Recent[0].Dropped {
+	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 4 || snapshot.CoalescedFrameCount != 1 || snapshot.BackpressuredFrameCount != 2 || len(snapshot.Recent) != 4 || !snapshot.Recent[3].Dropped || snapshot.Recent[3].Coalesced || snapshot.Recent[3].Backpressured {
 		t.Fatalf("unexpected dropped metrics: %+v", snapshot)
 	}
 

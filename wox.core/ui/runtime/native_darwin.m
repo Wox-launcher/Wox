@@ -18,6 +18,7 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinCloseRequested(uintptr_t context);
@@ -84,6 +85,13 @@ typedef struct WoxDarwinRenderer WoxDarwinRenderer;
 @class WoxWebViewToolbar;
 @class WoxResultDragSource;
 
+typedef struct {
+  uint64_t image_id;
+  uint64_t byte_size;
+  uint64_t last_used;
+  CGImageRef image;
+} WoxCachedCGImage;
+
 struct WoxDarwinWindow {
   NSWindow *window;
   WoxRenderView *view;
@@ -116,6 +124,9 @@ struct WoxDarwinWindow {
   bool pointer_over_web_view;
   bool closed;
   bool render_scheduled;
+  bool animation_frame_pending;
+  CVDisplayLinkRef display_link;
+  CGDirectDisplayID display_link_display;
   bool suppress_resize_render;
   bool synchronous_frame;
   bool embedded_surface_overlay_active;
@@ -127,6 +138,17 @@ struct WoxDarwinWindow {
   NSMutableArray *accessibility_roots;
   uint64_t accessibility_generation;
   WoxResultDragSource *result_drag_source;
+  WoxCachedCGImage cached_images[32];
+  int32_t cached_image_count;
+  uint64_t cached_image_bytes;
+  uint64_t cached_image_use_serial;
+  CGImageRef cached_large_image;
+  uint64_t cached_large_image_id;
+  uint64_t cached_large_image_bytes;
+  uint64_t large_image_candidate_id;
+  int32_t large_image_candidate_frames;
+  bool cache_large_images;
+  WoxRendererResourceStats frame_resource_stats;
 };
 
 typedef struct {
@@ -150,7 +172,9 @@ struct WoxDarwinRenderer {
   uint64_t presented_sequence;
   uint64_t frame_sequence;
   CGRect frame_requested_damage;
+  CGRect frame_effective_damage;
   bool frame_requested_full;
+  bool frame_effective_full;
   WoxDarwinDamageRecord damage_history[64];
   bool frame_open;
   bool clip_active;
@@ -745,6 +769,9 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
 }
 @end
 
+static void stop_darwin_display_link(WoxDarwinWindow *window);
+static void bind_darwin_display_link(WoxDarwinWindow *window);
+
 // schedule_render coalesces ordinary state changes into one frame on the next main-queue turn.
 static void schedule_render(WoxDarwinWindow *window) {
   if (window == NULL) {
@@ -816,6 +843,186 @@ static void clear_renderer_surfaces(WoxDarwinRenderer *renderer) {
   [renderer->render_surfaces removeAllObjects];
 }
 
+static const size_t wox_cached_image_max_count = 32;
+static const uint64_t wox_cached_image_max_bytes = 8ULL * 1024ULL * 1024ULL;
+static const uint64_t wox_cached_image_max_entry_bytes = 1ULL * 1024ULL * 1024ULL;
+static const uint64_t wox_cached_large_image_max_bytes = 32ULL * 1024ULL * 1024ULL;
+
+static void release_owned_pixels(void *info, const void *data, size_t size) {
+  (void)info;
+  (void)size;
+  free((void *)data);
+}
+
+static void release_cached_cgimage(WoxCachedCGImage *entry) {
+  if (entry == NULL || entry->image == NULL) {
+    return;
+  }
+  CGImageRelease(entry->image);
+  entry->image = NULL;
+  entry->image_id = 0;
+  entry->byte_size = 0;
+  entry->last_used = 0;
+}
+
+static void clear_cached_large_image(WoxDarwinWindow *window) {
+  if (window->cached_large_image != NULL) {
+    CGImageRelease(window->cached_large_image);
+    window->cached_large_image = NULL;
+  }
+  window->cached_large_image_id = 0;
+  window->cached_large_image_bytes = 0;
+}
+
+// clear_cached_images drops every retained CGImage so hidden windows do not keep decoded pixels.
+static void clear_cached_images(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+  for (int32_t index = 0; index < window->cached_image_count; index++) {
+    release_cached_cgimage(&window->cached_images[index]);
+  }
+  window->cached_image_count = 0;
+  window->cached_image_bytes = 0;
+  clear_cached_large_image(window);
+  window->large_image_candidate_id = 0;
+  window->large_image_candidate_frames = 0;
+  window->cache_large_images = false;
+}
+
+static CGImageRef find_cached_cgimage(WoxDarwinWindow *window, uint64_t image_id) {
+  for (int32_t index = 0; index < window->cached_image_count; index++) {
+    if (window->cached_images[index].image_id == image_id) {
+      window->cached_images[index].last_used = ++window->cached_image_use_serial;
+      return window->cached_images[index].image;
+    }
+  }
+  return NULL;
+}
+
+static void evict_oldest_cached_cgimage(WoxDarwinWindow *window) {
+  if (window->cached_image_count <= 0) {
+    return;
+  }
+  int32_t oldest = 0;
+  for (int32_t index = 1; index < window->cached_image_count; index++) {
+    if (window->cached_images[index].last_used < window->cached_images[oldest].last_used) {
+      oldest = index;
+    }
+  }
+  window->cached_image_bytes -= window->cached_images[oldest].byte_size;
+  release_cached_cgimage(&window->cached_images[oldest]);
+  window->cached_images[oldest] = window->cached_images[window->cached_image_count - 1];
+  window->cached_image_count--;
+  window->frame_resource_stats.cache_evictions++;
+}
+
+static bool cache_cgimage(WoxDarwinWindow *window, uint64_t image_id, uint64_t byte_size, CGImageRef image) {
+  if (window == NULL || image_id == 0 || image == NULL || byte_size == 0 || byte_size > wox_cached_image_max_entry_bytes) {
+    return false;
+  }
+  while (window->cached_image_count > 0 &&
+         (window->cached_image_count >= (int32_t)wox_cached_image_max_count ||
+          window->cached_image_bytes + byte_size > wox_cached_image_max_bytes)) {
+    evict_oldest_cached_cgimage(window);
+  }
+  if (window->cached_image_count >= (int32_t)wox_cached_image_max_count ||
+      window->cached_image_bytes + byte_size > wox_cached_image_max_bytes) {
+    return false;
+  }
+  window->cached_images[window->cached_image_count++] = (WoxCachedCGImage){
+      .image_id = image_id,
+      .byte_size = byte_size,
+      .last_used = ++window->cached_image_use_serial,
+      .image = image,
+  };
+  window->cached_image_bytes += byte_size;
+  return true;
+}
+
+// note_large_image_repeat enables one 32MiB preview slot after the same oversized image is
+// redrawn for three consecutive frames.
+//
+// This deliberately has no timing gate, unlike the Linux path where the measured window wraps a
+// real glTexImage2D upload. CGImageCreate only builds a lazy data provider, so a create-time
+// measurement here costs microseconds regardless of image size and can never distinguish an
+// expensive image from a cheap one; the pixel work happens later inside CGContextDrawImage.
+// Gating on it would also be self-locking, because the only path that copies pixels up front is
+// the one taken after caching is already enabled.
+// Admission is bound to the current candidate. A different oversized image must re-earn the slot,
+// otherwise it would inherit the previous winner's verdict and copy and evict on first sight, and
+// two alternating previews would each pay a full pixel copy every frame.
+static void note_large_image_repeat(WoxDarwinWindow *window, uint64_t image_id) {
+  if (window->large_image_candidate_id != image_id) {
+    window->large_image_candidate_id = image_id;
+    window->large_image_candidate_frames = 1;
+    window->cache_large_images = false;
+    return;
+  }
+  window->large_image_candidate_frames++;
+  if (window->large_image_candidate_frames >= 3) {
+    window->cache_large_images = true;
+  }
+}
+
+static CGImageRef create_cgimage_from_pixels(const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, bool copy_pixels) {
+  size_t data_size = (size_t)row_stride * (size_t)image_height;
+  const uint8_t *source = pixels;
+  CGDataProviderReleaseDataCallback release = NULL;
+  if (copy_pixels) {
+    uint8_t *owned = malloc(data_size);
+    if (owned == NULL) {
+      return NULL;
+    }
+    memcpy(owned, pixels, data_size);
+    source = owned;
+    release = release_owned_pixels;
+  }
+  CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, source, data_size, release);
+  if (provider == NULL) {
+    if (copy_pixels) {
+      free((void *)source);
+    }
+    return NULL;
+  }
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (color_space == NULL) {
+    CGDataProviderRelease(provider);
+    return NULL;
+  }
+  CGImageRef image = CGImageCreate(
+      (size_t)image_width,
+      (size_t)image_height,
+      8,
+      32,
+      (size_t)row_stride,
+      color_space,
+      kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big,
+      provider,
+      NULL,
+      false,
+      kCGRenderingIntentDefault);
+  CGColorSpaceRelease(color_space);
+  CGDataProviderRelease(provider);
+  return image;
+}
+
+static void draw_cached_cgimage(WoxDarwinRenderer *renderer, CGImageRef image, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+  CGContextSaveGState(renderer->context);
+  CGContextTranslateCTM(renderer->context, x + width * 0.5f, y + height * 0.5f);
+  CGContextRotateCTM(renderer->context, rotation_radians);
+  if (corner_radius > 0.0f) {
+    float radius = fminf(corner_radius, fminf(width, height) * 0.5f);
+    CGPathRef clip_path = CGPathCreateWithRoundedRect(CGRectMake(-width * 0.5f, -height * 0.5f, width, height), radius, radius, NULL);
+    CGContextAddPath(renderer->context, clip_path);
+    CGContextClip(renderer->context);
+    CGPathRelease(clip_path);
+  }
+  CGContextScaleCTM(renderer->context, 1.0, -1.0);
+  CGContextDrawImage(renderer->context, CGRectMake(-width * 0.5f, -height * 0.5f, width, height), image);
+  CGContextRestoreGState(renderer->context);
+}
+
 // Hidden windows keep their AppKit state but release every IOSurface so the launcher has no
 // display-sized backing allocation while idle. A later frame recreates the pool on demand.
 static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
@@ -831,6 +1038,7 @@ static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
   [CATransaction setDisableActions:YES];
   clear_renderer_surfaces(window->renderer);
   clear_renderer_surfaces(window->overlay_renderer);
+  clear_cached_images(window);
   [CATransaction commit];
   [CATransaction flush];
   [window->window orderOut:nil];
@@ -2085,6 +2293,13 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   }
 }
 
+- (void)windowDidChangeScreen:(NSNotification *)notification {
+  (void)notification;
+  if (_owner != NULL && !_owner->closed) {
+    bind_darwin_display_link(_owner);
+  }
+}
+
 - (void)windowDidResignKey:(NSNotification *)notification {
   (void)notification;
   WoxDarwinWindow *owner = _owner;
@@ -2325,6 +2540,7 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
     BOOL was_wox_frontmost = [NSApp isActive] || [[NSWorkspace sharedWorkspace] frontmostApplication] == [NSRunningApplication currentApplication];
     emit_focus(window, false);
     if (!window->closed) {
+      stop_darwin_display_link(window);
       hide_window_and_release_surfaces(window);
       restore_previous_active_app(window, was_wox_frontmost);
     }
@@ -3240,6 +3456,102 @@ int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window) {
   return result;
 }
 
+static CVReturn darwin_display_link_tick(CVDisplayLinkRef display_link, const CVTimeStamp *now, const CVTimeStamp *output, CVOptionFlags flags, CVOptionFlags *flags_out, void *context) {
+  (void)display_link;
+  (void)now;
+  (void)output;
+  (void)flags;
+  (void)flags_out;
+  WoxDarwinWindow *window = context;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (window == NULL || window->closed || !window->visible || !window->animation_frame_pending) {
+      return;
+    }
+    window->animation_frame_pending = false;
+    schedule_render(window);
+  });
+  return kCVReturnSuccess;
+}
+
+// darwin_window_display_id reads the NSScreenNumber for the window's current display.
+static CGDirectDisplayID darwin_window_display_id(WoxDarwinWindow *window) {
+  if (window == NULL || window->window == nil) {
+    return kCGNullDirectDisplay;
+  }
+  NSScreen *screen = window->window.screen ?: [NSScreen mainScreen];
+  NSNumber *screen_number = [screen.deviceDescription objectForKey:@"NSScreenNumber"];
+  if (screen_number == nil) {
+    return kCGNullDirectDisplay;
+  }
+  return (CGDirectDisplayID)screen_number.unsignedIntValue;
+}
+
+// bind_darwin_display_link pins CVDisplayLink to the window's current display so mixed-refresh layouts stay in sync.
+static void bind_darwin_display_link(WoxDarwinWindow *window) {
+  if (window == NULL || window->display_link == NULL) {
+    return;
+  }
+  CGDirectDisplayID display_id = darwin_window_display_id(window);
+  if (display_id == kCGNullDirectDisplay || display_id == window->display_link_display) {
+    return;
+  }
+  if (CVDisplayLinkSetCurrentCGDisplay(window->display_link, display_id) == kCVReturnSuccess) {
+    window->display_link_display = display_id;
+  }
+}
+
+static void stop_darwin_display_link(WoxDarwinWindow *window) {
+  if (window == NULL || window->display_link == NULL) {
+    return;
+  }
+  CVDisplayLinkStop(window->display_link);
+  CVDisplayLinkRelease(window->display_link);
+  window->display_link = NULL;
+  window->display_link_display = kCGNullDirectDisplay;
+  window->animation_frame_pending = false;
+}
+
+int32_t wox_darwin_window_request_animation_frame(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || !window->visible) {
+      result = -1;
+      return;
+    }
+    window->animation_frame_pending = true;
+    if (window->display_link != NULL) {
+      bind_darwin_display_link(window);
+      return;
+    }
+    if (CVDisplayLinkCreateWithActiveCGDisplays(&window->display_link) != kCVReturnSuccess) {
+      window->display_link = NULL;
+      result = -1;
+      return;
+    }
+    window->display_link_display = kCGNullDirectDisplay;
+    bind_darwin_display_link(window);
+    CVDisplayLinkSetOutputCallback(window->display_link, darwin_display_link_tick, window);
+    if (CVDisplayLinkStart(window->display_link) != kCVReturnSuccess) {
+      stop_darwin_display_link(window);
+      result = -1;
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_stop_animation_frames(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  run_on_main_sync(^{
+    stop_darwin_display_link(window);
+  });
+  return 0;
+}
+
 // wox_darwin_window_set_text_input_state updates AppKit's candidate position on its owning thread.
 int32_t wox_darwin_window_set_text_input_state(WoxDarwinWindow *window, int32_t enabled, float x, float y, float width, float height) {
   if (window == NULL) {
@@ -3479,6 +3791,7 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     window->closed = true;
     window->visible = false;
     window->active = false;
+    stop_darwin_display_link(window);
     window->context = 0;
     clear_previous_active_app(window);
     if (was_active && context != 0) {
@@ -3508,6 +3821,7 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     [window->view setWoxAccessibilityChildren:@[]];
     window->window.delegate = nil;
     [window->window close];
+    clear_cached_images(window);
     destroy_renderer(window->renderer);
     destroy_renderer(window->overlay_renderer);
     window->renderer = NULL;
@@ -3640,6 +3954,8 @@ static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRen
   renderer->frame_sequence = frame_sequence;
   renderer->frame_requested_damage = requested_damage;
   renderer->frame_requested_full = requested_full;
+  renderer->frame_effective_damage = effective_full ? CGRectMake(0.0, 0.0, 0.0, 0.0) : effective_damage;
+  renderer->frame_effective_full = effective_full;
   renderer->frame_open = true;
   renderer->clip_active = false;
   renderer->damage_clip_active = !effective_full;
@@ -3652,7 +3968,27 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, uint64_t frame_id
   }
   window->embedded_surface_overlay_active = false;
   window->active_renderer = window->renderer;
+  memset(&window->frame_resource_stats, 0, sizeof(window->frame_resource_stats));
   return begin_darwin_renderer_frame(window, window->renderer, frame_id, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
+}
+
+int32_t wox_darwin_window_encode_damage(WoxDarwinWindow *window, float *x, float *y, float *width, float *height) {
+  if (window == NULL || window->active_renderer == NULL || x == NULL || y == NULL || width == NULL || height == NULL) {
+    return -1;
+  }
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  if (renderer->frame_effective_full) {
+    *x = 0;
+    *y = 0;
+    *width = 0;
+    *height = 0;
+    return 0;
+  }
+  *x = (float)renderer->frame_effective_damage.origin.x;
+  *y = (float)renderer->frame_effective_damage.origin.y;
+  *width = (float)renderer->frame_effective_damage.size.width;
+  *height = (float)renderer->frame_effective_damage.size.height;
+  return 0;
 }
 
 // wox_darwin_window_trim_render_surfaces keeps the front buffer and one reusable current-size back buffer.
@@ -3803,6 +4139,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   CFRelease(line);
   [attributed release];
   [string release];
+  window->frame_resource_stats.text_rasterizations++;
   return 0;
 }
 
@@ -3811,48 +4148,47 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
     return -1;
   }
   WoxDarwinRenderer *renderer = window->active_renderer;
-  size_t data_size = (size_t)row_stride * (size_t)image_height;
-  CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, pixels, data_size, NULL);
-  if (provider == NULL) {
-    return -1;
+  uint64_t image_bytes = (uint64_t)row_stride * (uint64_t)image_height;
+  bool large_image = image_bytes > wox_cached_image_max_entry_bytes;
+  CGImageRef image = NULL;
+  bool release_image = true;
+  // Lookup is deliberately not gated on cache_large_images: that flag governs admission only, so a
+  // slot already holding this image keeps serving hits while an alternating image churns candidacy.
+  if (large_image && window->cached_large_image_id == image_id && window->cached_large_image != NULL) {
+    image = window->cached_large_image;
+    release_image = false;
+    window->frame_resource_stats.cache_hits++;
+  } else if (!large_image && (image = find_cached_cgimage(window, image_id)) != NULL) {
+    release_image = false;
+    window->frame_resource_stats.cache_hits++;
+  } else {
+    // Settle the admission verdict before creating, because it decides whether the CGImage must
+    // own a copy of the pixels. Deciding afterwards would either copy for an image that is then
+    // rejected, or force a second create for one that is accepted.
+    if (large_image) {
+      note_large_image_repeat(window, image_id);
+    }
+    bool cache_regular = !large_image;
+    bool cache_large = large_image && window->cache_large_images && image_bytes <= wox_cached_large_image_max_bytes;
+    image = create_cgimage_from_pixels(pixels, image_width, image_height, row_stride, cache_regular || cache_large);
+    if (image == NULL) {
+      return -1;
+    }
+    window->frame_resource_stats.image_creates++;
+    if (cache_large) {
+      clear_cached_large_image(window);
+      window->cached_large_image = image;
+      window->cached_large_image_id = image_id;
+      window->cached_large_image_bytes = image_bytes;
+      release_image = false;
+    } else if (cache_regular && cache_cgimage(window, image_id, image_bytes, image)) {
+      release_image = false;
+    }
   }
-  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-  if (color_space == NULL) {
-    CGDataProviderRelease(provider);
-    return -1;
+  draw_cached_cgimage(renderer, image, x, y, width, height, rotation_radians, corner_radius);
+  if (release_image) {
+    CGImageRelease(image);
   }
-  CGImageRef image = CGImageCreate(
-      (size_t)image_width,
-      (size_t)image_height,
-      8,
-      32,
-      (size_t)row_stride,
-      color_space,
-      kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big,
-      provider,
-      NULL,
-      false,
-      kCGRenderingIntentDefault);
-  CGColorSpaceRelease(color_space);
-  CGDataProviderRelease(provider);
-  if (image == NULL) {
-    return -1;
-  }
-
-  CGContextSaveGState(renderer->context);
-  CGContextTranslateCTM(renderer->context, x + width * 0.5f, y + height * 0.5f);
-  CGContextRotateCTM(renderer->context, rotation_radians);
-  if (corner_radius > 0.0f) {
-    float radius = fminf(corner_radius, fminf(width, height) * 0.5f);
-    CGPathRef clip_path = CGPathCreateWithRoundedRect(CGRectMake(-width * 0.5f, -height * 0.5f, width, height), radius, radius, NULL);
-    CGContextAddPath(renderer->context, clip_path);
-    CGContextClip(renderer->context);
-    CGPathRelease(clip_path);
-  }
-  CGContextScaleCTM(renderer->context, 1.0, -1.0);
-  CGContextDrawImage(renderer->context, CGRectMake(-width * 0.5f, -height * 0.5f, width, height), image);
-  CGContextRestoreGState(renderer->context);
-  CGImageRelease(image);
   return 0;
 }
 
@@ -3975,5 +4311,56 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
     result = finish_darwin_renderer_frame(window, window->overlay_renderer, transactional);
   }
   window->active_renderer = NULL;
+  return result;
+}
+
+int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out) {
+  if (window == NULL || out == NULL) {
+    return -1;
+  }
+  *out = window->frame_resource_stats;
+  out->resident_bytes = (int64_t)(window->cached_image_bytes + window->cached_large_image_bytes);
+  return 0;
+}
+
+// wox_darwin_test_large_image_admission proves the single large-image slot is bound to one
+// candidate, so an alternating oversized image cannot inherit an earlier image's admission.
+int32_t wox_darwin_test_large_image_admission(void) {
+  WoxDarwinWindow window;
+  memset(&window, 0, sizeof(window));
+  note_large_image_repeat(&window, 99);
+  note_large_image_repeat(&window, 99);
+  if (window.cache_large_images) {
+    return -1;
+  }
+  note_large_image_repeat(&window, 99);
+  if (!window.cache_large_images) {
+    return -1;
+  }
+  note_large_image_repeat(&window, 100);
+  if (window.cache_large_images || window.large_image_candidate_frames != 1) {
+    return -1;
+  }
+  return 0;
+}
+
+// wox_darwin_test_cached_image_owns_pixels proves a cached CGImage keeps a native pixel copy.
+int32_t wox_darwin_test_cached_image_owns_pixels(void) {
+  uint8_t pixels[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  CGImageRef image = create_cgimage_from_pixels(pixels, 2, 2, 8, true);
+  if (image == NULL) {
+    return -1;
+  }
+  memset(pixels, 0xFF, sizeof(pixels));
+  CGDataProviderRef provider = CGImageGetDataProvider(image);
+  CFDataRef data = CGDataProviderCopyData(provider);
+  if (data == NULL) {
+    CGImageRelease(image);
+    return -1;
+  }
+  const uint8_t *cached = CFDataGetBytePtr(data);
+  int32_t result = cached != NULL && cached[0] == 1 && cached[1] == 2 && cached[2] == 3 && cached[3] == 4 ? 0 : -1;
+  CFRelease(data);
+  CGImageRelease(image);
   return result;
 }

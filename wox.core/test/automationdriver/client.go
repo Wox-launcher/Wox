@@ -148,6 +148,12 @@ func (c *Client) SimulateRendererDeviceRemoved(ctx context.Context) error {
 	return c.pauseAfterStep(ctx, err)
 }
 
+// InstallPerfFixture installs a deterministic wox_automation performance fixture.
+func (c *Client) InstallPerfFixture(ctx context.Context, name string) error {
+	_, err := call[bool](ctx, c, "perf.install_fixture", map[string]any{"name": name})
+	return c.pauseAfterStep(ctx, err)
+}
+
 // WaitForChange waits for a generation newer than afterGeneration.
 func (c *Client) WaitForChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error) {
 	deadline, hasDeadline := ctx.Deadline()

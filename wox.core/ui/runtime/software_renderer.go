@@ -49,7 +49,8 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 	}
 	r.clear(damage, displayList.clearColor)
 	var clip *Rect
-	for _, command := range displayList.commands {
+	var renderErr error
+	displayList.ForEachCommand(func(command displayCommand) bool {
 		switch command.kind {
 		case displayCommandSetClipRect:
 			value := command.rect
@@ -69,10 +70,12 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			// Native composition surfaces are not part of deterministic software output.
 		default:
-			return fmt.Errorf("unsupported display command kind %d", command.kind)
+			renderErr = fmt.Errorf("unsupported display command kind %d", command.kind)
+			return false
 		}
-	}
-	return nil
+		return true
+	})
+	return renderErr
 }
 
 func (r *SoftwareRenderer) fill(rect Rect, color Color, clip *Rect) {

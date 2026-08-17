@@ -14,7 +14,7 @@ func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
 	result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", Selected: true}, LauncherGridProps{
 		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70, ItemPadding: 4, ShowTitle: true, TitleHeight: 22,
 		Theme: woxcomponent.Theme{SelectedBackground: active},
-	}).(woxwidget.Gesture)
+	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	children := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	visual := children[0].(woxwidget.Stack)
 	frameBoundary := visual.Children[0].Child.(woxwidget.Boundary[launcherGridFrameProps])
@@ -34,7 +34,7 @@ func TestLauncherGridResultWiresSecondaryTap(t *testing.T) {
 	tapped := false
 	result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", OnSecondaryTapDown: func() { tapped = true }}, LauncherGridProps{
 		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70,
-	}).(woxwidget.Gesture)
+	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
 
 	result.OnSecondaryTapDown(woxui.Point{})
 	if !tapped {
@@ -59,7 +59,7 @@ func TestLauncherGridImageUsesFlutterFit(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", Icon: icon}, LauncherGridProps{
 				CellWidth: test.visualWidth, CellHeight: test.visualHeight, VisualWidth: test.visualWidth, VisualHeight: test.visualHeight,
-			}).(woxwidget.Gesture)
+			}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
 			visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
 			iconBoundary := visual.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
 			if got := iconBoundary.Build(iconBoundary.Props).(woxwidget.Image).Fit; got != test.want {

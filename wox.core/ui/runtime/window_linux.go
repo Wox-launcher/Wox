@@ -449,6 +449,28 @@ func (w *platformWindow) invalidateRect(rect Rect) error {
 // Linux records the full command stream because a GL context recreation can invalidate the FBO before Go observes it.
 func (*platformWindow) displayListDamageCullingEnabled() bool { return false }
 
+func (w *platformWindow) requestAnimationFrame() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_request_animation_frame(native) != 0 {
+		return errors.New("woxui: failed to request a Linux animation frame")
+	}
+	return nil
+}
+
+func (w *platformWindow) stopAnimationFrames() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_stop_animation_frames(native) != 0 {
+		return errors.New("woxui: failed to stop Linux animation frames")
+	}
+	return nil
+}
+
 // setTextInputState updates GtkIMContext activation and candidate geometry on the GTK thread.
 func (w *platformWindow) setTextInputState(state TextInputState) error {
 	native, err := w.openNative()
@@ -615,13 +637,15 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	}
 	if result < 0 {
 		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
 			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
 		}
 		w.recordRenderError("begin OpenGL frame", result)
 		return
 	}
 
-	for _, command := range displayList.commands {
+	encodeDamage := w.linuxEncodeDamage(native)
+	displayList.ForEachVisibleCommand(encodeDamage, func(command displayCommand) bool {
 		switch command.kind {
 		case displayCommandFillRoundedRect:
 			result = C.wox_linux_window_fill_rounded_rect(
@@ -681,6 +705,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		case displayCommandDrawImage:
 			result = C.wox_linux_window_draw_image(
 				native,
+				C.uint64_t(command.image.id),
 				(*C.uint8_t)(unsafe.Pointer(&command.image.pixels[0])),
 				C.int32_t(command.image.Width),
 				C.int32_t(command.image.Height),
@@ -700,24 +725,72 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 			result = C.wox_linux_window_clear_clip(native)
 		}
 		if result != 0 {
-			_ = C.wox_linux_window_end_frame(native)
-			if w.options.frameMetrics != nil {
-				w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
-			}
-			w.recordRenderError("encode OpenGL frame", result)
-			return
+			return false
 		}
-	}
+		return true
+	})
 
 	presentStart := time.Now()
-	result = C.wox_linux_window_end_frame(native)
+	endResult := C.wox_linux_window_end_frame(native)
 	presentCost := time.Since(presentStart)
+	if result != 0 {
+		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
+		w.recordRenderError("encode OpenGL frame", result)
+		return
+	}
+	result = endResult
 	if w.options.frameMetrics != nil {
+		w.recordNativeResourceMetrics(native, displayList)
 		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-presentCost, presentCost, result == 0)
 	}
 	if result != 0 {
 		w.recordRenderError("finish OpenGL frame", result)
 	}
+}
+
+// linuxEncodeDamage returns the context-aware encode region; zero means a full frame after recreate.
+func (w *platformWindow) linuxEncodeDamage(native *C.WoxLinuxWindow) Rect {
+	if native == nil {
+		return Rect{}
+	}
+	var x, y, width, height C.float
+	if C.wox_linux_window_encode_damage(native, &x, &y, &width, &height) != 0 {
+		return Rect{}
+	}
+	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}
+}
+
+// rendererResourcesFromNative copies one native encode-stat snapshot into portable metrics.
+func rendererResourcesFromNative(stats C.WoxRendererResourceStats) FrameRendererResourceMetrics {
+	return FrameRendererResourceMetrics{
+		TextRasterizations: int(stats.text_rasterizations),
+		ImageCreates:       int(stats.image_creates),
+		ImageUploads:       int(stats.image_uploads),
+		CacheHits:          int(stats.cache_hits),
+		CacheEvictions:     int(stats.cache_evictions),
+		ResidentBytes:      int64(stats.resident_bytes),
+	}
+}
+
+// recordNativeResourceMetrics stores actual native cache hits instead of the uncached baseline.
+func (w *platformWindow) recordNativeResourceMetrics(native *C.WoxLinuxWindow, displayList *DisplayList) {
+	if w.options.frameMetrics == nil || displayList == nil {
+		return
+	}
+	var stats C.WoxRendererResourceStats
+	if native != nil && C.wox_linux_window_take_frame_resource_stats(native, &stats) == 0 {
+		w.options.frameMetrics.recordRendererResources(displayList.frameID, rendererResourcesFromNative(stats))
+		return
+	}
+	w.options.frameMetrics.recordEncodedResources(displayList)
+}
+
+// testLinuxResourceCacheGeneration wraps the native generation/release check for Go tests.
+func testLinuxResourceCacheGeneration() int32 {
+	return int32(C.wox_linux_test_resource_cache_generation())
 }
 
 func (w *platformWindow) consumePendingDamage() Rect {

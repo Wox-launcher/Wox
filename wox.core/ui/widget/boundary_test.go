@@ -302,14 +302,15 @@ func TestBoundaryCaretBlinkReusesCachedLayout(t *testing.T) {
 	if builds != 1 {
 		t.Fatalf("initial caret build count = %d, want 1", builds)
 	}
+	visibleCount := visible.CommandCount()
 	host.caretVisible = !host.caretVisible
 	hidden := &woxui.DisplayList{}
 	host.Frame(hidden, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
 	if builds != 1 {
 		t.Fatalf("blink caret build count = %d, want cached layout", builds)
 	}
-	if visible.CommandCount() != 1 || hidden.CommandCount() != 0 {
-		t.Fatalf("caret draw commands = visible %d hidden %d, want 1/0", visible.CommandCount(), hidden.CommandCount())
+	if visibleCount != 1 || hidden.CommandCount() != 0 {
+		t.Fatalf("caret draw commands = visible %d hidden %d, want 1/0", visibleCount, hidden.CommandCount())
 	}
 }
 
@@ -550,6 +551,24 @@ func TestBoundaryVerifyReportsMutableExternalCapture(t *testing.T) {
 	}
 }
 
+func TestBoundaryVerifyComparesUnexportedGestureCallbacksWithoutPanic(t *testing.T) {
+	taps := 0
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{Key: "verify-gesture", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
+			return Gesture{OnTap: func() { taps++ }, Child: Container{Width: 20, Height: 20}}
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	if err := host.SetRepaintDebugMode(RepaintDebugVerify); err != nil {
+		t.Fatal(err)
+	}
+	renderBoundaryTestFrame(host, 100)
+	renderBoundaryTestFrame(host, 100)
+	if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) != 0 {
+		t.Fatalf("gesture verify diagnostics = %v", diagnostics)
+	}
+}
+
 func TestHostRepaintDebugModeValidatesRuntimeSwitch(t *testing.T) {
 	services := &fakeHostServices{}
 	host := NewHost(func(woxui.FrameInfo) Widget { return Container{Width: 20, Height: 20} })
@@ -630,5 +649,34 @@ func TestBoundaryAccessibilityCacheRejectsChangedIdentityPath(t *testing.T) {
 	}
 	if cache.identityReuses != 0 || cache.a11yReuses != 0 || cache.a11yRootID != host.root.children[0].id {
 		t.Fatalf("identity-changed cache = identity reuses %d a11y reuses %d root %d current %d", cache.identityReuses, cache.a11yReuses, cache.a11yRootID, host.root.children[0].id)
+	}
+}
+
+func TestNestedBoundaryIdentitySurvivesParentCacheHit(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{Key: "outer", Props: boundaryTestProps{Value: 1}, Build: func(boundaryTestProps) Widget {
+			return Container{Width: 40, Height: 40, Child: Boundary[boundaryTestProps]{Key: "inner", Props: boundaryTestProps{Value: 2}, Build: func(boundaryTestProps) Widget {
+				return Semantics{AutomationID: "nested-child", Role: woxui.AccessibilityRoleButton, Label: "Nested", Child: Container{Width: 20, Height: 20}}
+			}}}
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderBoundaryTestFrame(host, 100)
+	firstID := findAutomationNode(t, host.Snapshot().Tree, "nested-child").ID
+	outer := host.root.boundary
+	if outer == nil || len(host.root.children) == 0 {
+		t.Fatalf("outer boundary tree = root %#v", host.root)
+	}
+	inner := host.root.children[0].boundary
+	renderBoundaryTestFrame(host, 100)
+	secondID := findAutomationNode(t, host.Snapshot().Tree, "nested-child").ID
+	if firstID != secondID {
+		t.Fatalf("nested identity changed from %d to %d after parent cache hit", firstID, secondID)
+	}
+	if outer == nil || inner == nil || outer.identityReuses != 1 || inner.identityReuses != 0 {
+		t.Fatalf("cache reuses = outer %+v inner %+v, want parent hit and skipped child walk", outer, inner)
+	}
+	if host.nodes[firstID] == nil {
+		t.Fatalf("nested node %d was swept after parent identity reuse", firstID)
 	}
 }

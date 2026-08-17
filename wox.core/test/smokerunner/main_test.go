@@ -18,8 +18,8 @@ func TestSmokeTestArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := smokeTestCommands("launcher/not-a-number"); err == nil {
-		t.Fatal("invalid selector should fail")
+	if _, err := smokeTestCommands("missing-package"); err == nil {
+		t.Fatal("missing package selector should fail")
 	}
 	all, err := smokeTestCommands("")
 	if err != nil {
@@ -36,5 +36,13 @@ func TestSmokeTestArgs(t *testing.T) {
 	wantOne := [][]string{{"test", "-failfast", "-tags", "wox_ui_smoke", "-count=1", "-v", "-run", "^Test001", "./test/smoke/launcher/plugin/calculator"}}
 	if !reflect.DeepEqual(one, wantOne) {
 		t.Fatalf("single smoke args = %v, want %v", one, wantOne)
+	}
+	pkg, err := smokeTestCommands("launcher/plugin/calculator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPkg := [][]string{{"test", "-failfast", "-tags", "wox_ui_smoke", "-count=1", "-v", "./test/smoke/launcher/plugin/calculator"}}
+	if !reflect.DeepEqual(pkg, wantPkg) {
+		t.Fatalf("package smoke args = %v, want %v", pkg, wantPkg)
 	}
 }

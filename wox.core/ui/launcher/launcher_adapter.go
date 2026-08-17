@@ -839,7 +839,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 				OnClose: a.closePreviewWindow,
 			})
 		}
-		return preview
+		return wrapPreviewOnlyResults(snapshot, preview)
 	}
 	if ratio >= 1 {
 		return a.buildResults(snapshot, width, height, imageScale)
@@ -850,6 +850,19 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 		splitX, a.buildResults(snapshot, splitX, height, imageScale),
 		previewWidth, a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, previewWidth, height, imageScale),
 	)
+}
+
+// wrapPreviewOnlyResults keeps query-complete and selected-result automation IDs when the list pane is hidden.
+func wrapPreviewOnlyResults(snapshot viewSnapshot, preview woxwidget.Widget) woxwidget.Widget {
+	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
+		result := snapshot.results[snapshot.selected]
+		preview = woxwidget.Semantics{
+			Key: woxwidget.Key("launcher-result-key-" + result.ID), AutomationID: "launcher.result." + result.ID,
+			Role: woxui.AccessibilityRoleListItem, Label: result.Title, Value: result.Title, Selected: true,
+			LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: preview,
+		}
+	}
+	return launcherview.WrapLauncherResultsStatus(snapshot.queryComplete, preview)
 }
 
 func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {

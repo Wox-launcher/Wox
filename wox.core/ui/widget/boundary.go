@@ -91,12 +91,29 @@ type boundaryCache struct {
 	identityEntries     []boundaryIdentityEntry
 	identityDiagnostics []string
 	identityReuses      uint64
-	a11yValid           bool
-	a11yOrigin          woxui.Point
-	a11yRootID          woxui.AccessibilityNodeID
-	a11yNodes           []woxui.AccessibilityNode
-	a11yRootIDs         []woxui.AccessibilityNodeID
-	a11yReuses          uint64
+	// nestedOwners keeps descendant Boundary owners alive on a parent cache hit
+	// so sweepIdentities does not walk every cached identity entry.
+	nestedOwners  []*identityOwner
+	a11yValid     bool
+	a11yOrigin    woxui.Point
+	a11yRootID    woxui.AccessibilityNodeID
+	a11yNodes     []woxui.AccessibilityNode
+	a11yRootIDs   []woxui.AccessibilityNodeID
+	a11yReuses    uint64
+	globalBounds  woxui.Rect
+	paint         *woxui.PaintSegment
+	nestedPaint   []*node
+	identityOwner identityOwner
+}
+
+type identityOwner struct {
+	seen uint64
+}
+
+type identityBinding struct {
+	id    woxui.AccessibilityNodeID
+	owner *identityOwner
+	gen   uint64
 }
 
 type boundaryIdentityEntry struct {
@@ -136,8 +153,8 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	if w.element != nil {
 		w.element.boundary = &state.cache
 	}
-	oldBounds := woxui.Rect{}
-	if state.node != nil {
+	oldBounds := state.cache.globalBounds
+	if oldBounds == (woxui.Rect{}) && state.node != nil {
 		oldBounds = state.node.bounds
 	}
 	cacheHit := !incrementalDisabled() && state.hasCache && state.node != nil && !w.dirty && state.constraints == available && w.boundary.Props.Equal(state.props) && state.dynamic.matches(ctx)
@@ -146,7 +163,8 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 		cacheHit = false
 	}
 	if cacheHit {
-		state.node.place(-state.node.bounds.X, -state.node.bounds.Y)
+		state.node.bounds.X = 0
+		state.node.bounds.Y = 0
 		if ctx.debug != nil && ctx.debug.mode == RepaintDebugVerify {
 			if err := w.verifyCachedNode(ctx, available, state.node); err != nil {
 				ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("boundary %q cache verification failed: %v", boundaryLabel(w.boundary), err))
@@ -160,6 +178,9 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 		state.cache.node = state.node
 		state.node.boundary = &state.cache
 		state.reusedAt = ctx.elements.generation
+		if ctx.work != nil {
+			ctx.work.boundaryReuses++
+		}
 		if ctx.dynamic != nil {
 			ctx.dynamic.merge(state.dynamic)
 		}
@@ -194,9 +215,14 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	state.cache.hit = false
 	state.cache.node = result
 	state.cache.a11yValid = false
+	state.cache.paint = nil
+	state.cache.nestedPaint = nil
 	result.boundary = &state.cache
 	state.dynamic = probe
 	state.repaints++
+	if ctx.work != nil {
+		ctx.work.boundaryBuilds++
+	}
 	if ctx.debug != nil && ctx.debug.mode == RepaintDebugCounts {
 		cutoff := ctx.debug.now.Add(-time.Second)
 		kept := state.repaintTimes[:0]
@@ -234,11 +260,17 @@ func (w boundaryLayout[T]) verifyCachedNode(ctx context, available constraints, 
 	if shadow == nil {
 		return fmt.Errorf("shadow layout returned nil")
 	}
+	if shadow.key == "" {
+		shadow.key = w.boundary.Key
+	}
+	if err := verifyNodeTopology(cached, shadow); err != nil {
+		return err
+	}
 	focused := ^woxui.AccessibilityNodeID(0)
 	cachedList := &woxui.DisplayList{}
 	shadowList := &woxui.DisplayList{}
-	cached.draw(cachedList, focused, focused, true, false, false)
-	shadow.draw(shadowList, focused, focused, true, false, false)
+	cached.drawUnretained(cachedList, focused, focused, true, false, false)
+	shadow.drawUnretained(shadowList, focused, focused, true, false, false)
 	return cachedList.Compare(shadowList)
 }
 

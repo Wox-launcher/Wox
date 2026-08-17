@@ -8,6 +8,29 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestLauncherToolbarSplitYieldsStatusToPreparedActions(t *testing.T) {
+	left, right := launcherToolbarSplit(740, 220, 600, 16, 200)
+	if left != 124 || right != 600 {
+		t.Fatalf("toolbar split = left %v right %v, want status to shrink to 124 so 600px of actions fit", left, right)
+	}
+}
+
+func TestFitLauncherToolbarActionsKeepsLeadingResultAndMore(t *testing.T) {
+	shown, used := fitLauncherToolbarActions([]measuredLauncherToolbarAction{
+		{id: "toolbar-action-result-hide-launcher-0", width: 80},
+		{id: "toolbar-action-toolbar-keep-open-0", width: 80},
+		{id: "toolbar-action-toolbar-clear-1", width: 70},
+		{id: launcherToolbarMoreActionID, width: 70},
+	}, 0, 200)
+	if used != 150 || len(shown) != 2 || shown[0].id != "toolbar-action-result-hide-launcher-0" || shown[1].id != launcherToolbarMoreActionID {
+		ids := make([]string, len(shown))
+		for index, action := range shown {
+			ids[index] = action.id
+		}
+		t.Fatalf("fitted toolbar actions = %v width %v, want result action and More in 150", ids, used)
+	}
+}
+
 func TestLauncherToolbarBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, LauncherToolbarAction{})
 	woxwidget.AssertEqualCoversAllFields(t, LauncherToolbarProps{})

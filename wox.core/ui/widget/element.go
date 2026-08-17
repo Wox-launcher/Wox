@@ -36,7 +36,7 @@ func (c StateContext) Invalidate() {
 	for element := c.element; element != nil; element = element.parent {
 		element.dirty.Store(true)
 		if element.boundary != nil && element.boundary.node != nil {
-			damage = element.boundary.node.bounds
+			damage = boundaryWindowBounds(element.boundary)
 			break
 		}
 	}
@@ -311,7 +311,7 @@ func (t *elementTree) boundaryBounds(key Key) (woxui.Rect, bool) {
 			return woxui.Rect{}, false
 		}
 		if parent.key == key && parent.boundary != nil && parent.boundary.node != nil {
-			return parent.boundary.node.bounds, true
+			return boundaryWindowBounds(parent.boundary), true
 		}
 		for _, child := range parent.children {
 			if bounds, found := find(child); found {
@@ -338,7 +338,7 @@ func (t *elementTree) disposeElement(element *stateElement) {
 	}
 	// A removed Boundary must clear its last pixels even though it no longer participates in layout.
 	if element.boundary != nil && element.boundary.node != nil {
-		t.removedDamage = unionDamageRects(t.removedDamage, element.boundary.node.bounds)
+		t.removedDamage = unionDamageRects(t.removedDamage, boundaryWindowBounds(element.boundary))
 	}
 	for identity, child := range element.children {
 		t.disposeElement(child)

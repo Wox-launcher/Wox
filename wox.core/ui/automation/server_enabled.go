@@ -141,6 +141,23 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return resultOrError(true, errors.New("renderer device removal simulation is unavailable"))
 		}
 		return resultOrError(true, simulator.SimulateAutomationRendererDeviceRemoved())
+	case "perf.install_fixture":
+		var params struct {
+			Name string `json:"name"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		if strings.TrimSpace(params.Name) == "" {
+			return nil, invalidParams(errors.New("fixture name is required"))
+		}
+		installer, ok := controller.(interface {
+			InstallAutomationPerfFixture(string) error
+		})
+		if !ok {
+			return resultOrError(true, errors.New("perf fixture installation is unavailable"))
+		}
+		return resultOrError(true, installer.InstallAutomationPerfFixture(params.Name))
 	case "semantics.snapshot":
 		return controller.AutomationSnapshot(), nil
 	case "semantics.wait":

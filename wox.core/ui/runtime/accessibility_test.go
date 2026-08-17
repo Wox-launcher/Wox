@@ -81,3 +81,18 @@ func TestClearAccessibilityDoesNotPublishEmptyNativeTree(t *testing.T) {
 		t.Fatal("closing a window must remove its accessibility action state")
 	}
 }
+
+func TestDiffAccessibilityTreesReportsFocusUpserts(t *testing.T) {
+	previous := AccessibilityTree{Generation: 1, RootIDs: []AccessibilityNodeID{1}, Nodes: []AccessibilityNode{
+		{ID: 1, Label: "one", Focused: true},
+		{ID: 2, Label: "two"},
+	}}
+	next := AccessibilityTree{Generation: 2, RootIDs: []AccessibilityNodeID{1}, Nodes: []AccessibilityNode{
+		{ID: 1, Label: "one"},
+		{ID: 2, Label: "two", Focused: true},
+	}}
+	update := DiffAccessibilityTrees(previous, next, false)
+	if update.Full != nil || len(update.Removes) != 0 || len(update.Upserts) != 2 {
+		t.Fatalf("focus update = %+v, want 2 upserts", update)
+	}
+}

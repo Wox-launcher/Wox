@@ -132,3 +132,100 @@ func TestImageForSizeKeepsPreviousResolutionWhileLoadingNewOne(t *testing.T) {
 		t.Fatalf("imageForSize returned %p, want cached image %p while new resolution loads", got, oldImage)
 	}
 }
+
+func TestImageCacheEvictsByItemAndByteBudget(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	for index := 0; index < 8; index++ {
+		app.imageUseSequence++
+		app.imageLastUsed[fmt.Sprintf("small-%d", index)] = app.imageUseSequence
+		app.insertImageLocked(fmt.Sprintf("small-%d", index), &woxui.Image{Width: 1, Height: 1})
+	}
+	if len(app.images) != 8 {
+		t.Fatalf("small cache size = %d, want 8", len(app.images))
+	}
+
+	app.imageUseSequence++
+	app.imageLastUsed["hot"] = app.imageUseSequence
+	app.insertImageLocked("hot", &woxui.Image{Width: 1, Height: 1})
+	wide := &woxui.Image{Width: 2048, Height: 2048}
+	app.imageUseSequence++
+	app.imageLastUsed["wide"] = app.imageUseSequence
+	app.insertImageLocked("wide", wide)
+	if _, ok := app.images["wide"]; !ok {
+		t.Fatal("expected the large in-use image to stay cached")
+	}
+	if app.imageCacheByteSizeLocked() > launcherImageCacheMaxBytes && len(app.images) != 1 {
+		t.Fatalf("over-budget cache = %d items / %d bytes, want eviction down to the in-use image", len(app.images), app.imageCacheByteSizeLocked())
+	}
+}
+
+func TestImageCacheOversizeImageMonopolizesCache(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{"icon": {Width: 32, Height: 32}}, imageLastUsed: map[string]uint64{"icon": 1}}
+	oversize := &woxui.Image{Width: 4096, Height: 4096}
+	app.imageLastUsed["preview"] = 2
+	app.insertImageLocked("preview", oversize)
+	if len(app.images) != 1 || app.images["preview"] != oversize {
+		t.Fatalf("oversize cache = %d items, want only the in-use preview", len(app.images))
+	}
+}
+
+func TestImageCacheReplaceAppliesByteBudget(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	for index := 0; index < 8; index++ {
+		key := fmt.Sprintf("small-%d", index)
+		app.imageUseSequence++
+		app.imageLastUsed[key] = app.imageUseSequence
+		app.insertImageLocked(key, &woxui.Image{Width: 1, Height: 1})
+	}
+	app.imageUseSequence++
+	app.imageLastUsed["photo"] = app.imageUseSequence
+	app.insertImageLocked("photo", &woxui.Image{Width: 1, Height: 1})
+	oversize := &woxui.Image{Width: 4096, Height: 4096}
+	app.insertImageLocked("photo", oversize)
+	if len(app.images) != 1 || app.images["photo"] != oversize {
+		t.Fatalf("replaced cache = %d items, want only the decoded photo", len(app.images))
+	}
+}
+
+func TestImageCacheHiddenTrimEvictsSingleOversizeImage(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{"preview": 1}}
+	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+	app.trimIdleImageCache()
+	if len(app.images) != 0 || app.imageCacheByteSizeLocked() != 0 {
+		t.Fatalf("hidden oversize cache = %d items / %d bytes, want empty", len(app.images), app.imageCacheByteSizeLocked())
+	}
+}
+
+func TestImageCacheHiddenTrimUsesCountAndByteBudget(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	for index := 0; index < 80; index++ {
+		key := fmt.Sprintf("icon-%d", index)
+		app.imageLastUsed[key] = uint64(index + 1)
+		app.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
+	}
+	app.trimIdleImageCache()
+	if len(app.images) > hiddenImageCacheKeepCount {
+		t.Fatalf("hidden cache count = %d, want at most %d", len(app.images), hiddenImageCacheKeepCount)
+	}
+	if app.imageCacheByteSizeLocked() > hiddenImageCacheMaxBytes {
+		t.Fatalf("hidden cache bytes = %d, want at most %d", app.imageCacheByteSizeLocked(), hiddenImageCacheMaxBytes)
+	}
+	if got := app.imageCacheByteSizeLocked(); got != len(app.images)*imageCacheBytes(&woxui.Image{Width: 64, Height: 64}) {
+		t.Fatalf("hidden cache byte counter = %d, want %d", got, len(app.images)*imageCacheBytes(&woxui.Image{Width: 64, Height: 64}))
+	}
+	if _, ok := app.images["icon-79"]; !ok {
+		t.Fatal("expected the most recently used hidden image to be kept")
+	}
+}
+
+func TestImageCacheReplaceUpdatesByteCounter(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	app.insertImageLocked("photo", &woxui.Image{Width: 10, Height: 10})
+	if got := app.imageCacheByteSizeLocked(); got != 400 {
+		t.Fatalf("initial cache bytes = %d, want 400", got)
+	}
+	app.insertImageLocked("photo", &woxui.Image{Width: 20, Height: 20})
+	if got := app.imageCacheByteSizeLocked(); got != 1600 {
+		t.Fatalf("replaced cache bytes = %d, want 1600", got)
+	}
+}

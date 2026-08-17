@@ -67,7 +67,7 @@ func TestTextBlockPaintsWhenFontLineHeightExceedsBox(t *testing.T) {
 	)
 
 	actual := &woxui.DisplayList{}
-	root.draw(actual, 0, 0, false, false, false)
+	root.draw(actual, 0, 0, false, false, false, nil)
 
 	expected := &woxui.DisplayList{}
 	expected.DrawText(value, woxui.Rect{Width: 120, Height: 18}, style, color)
@@ -85,7 +85,7 @@ func TestTextBlockAlignmentYCentersTallCJKLineInSlot(t *testing.T) {
 	)
 
 	actual := &woxui.DisplayList{}
-	root.draw(actual, 0, 0, false, false, false)
+	root.draw(actual, 0, 0, false, false, false, nil)
 
 	expected := &woxui.DisplayList{}
 	expected.PushClipRect(woxui.Rect{Width: 120, Height: 18})
@@ -108,7 +108,7 @@ func TestTextBlockSkipsLinesThatStartPastTheBox(t *testing.T) {
 	)
 
 	actual := &woxui.DisplayList{}
-	root.draw(actual, 0, 0, false, false, false)
+	root.draw(actual, 0, 0, false, false, false, nil)
 
 	expected := &woxui.DisplayList{}
 	expected.DrawText("alpha", woxui.Rect{Width: 30, Height: 18}, style, color)

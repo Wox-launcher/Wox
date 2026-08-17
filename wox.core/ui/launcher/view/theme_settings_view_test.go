@@ -170,7 +170,8 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 	}
 	list := themeList(props, 260, 400).(woxwidget.Flex)
 	scrollProps := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := focusedControlGesture(scrollProps.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
+	rowSlot := scrollProps.Content.(woxwidget.LazyList).ItemBuilder(0).(woxwidget.Container)
+	row := focusedControlGesture(rowSlot.Child).Child.(woxwidget.Container)
 	alignment := row.Child.(woxwidget.Align)
 	content := alignment.Child.(woxwidget.Flex)
 	_, textExpanded := content.Children[1].(woxwidget.Expanded)

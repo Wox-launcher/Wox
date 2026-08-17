@@ -220,17 +220,21 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		Width: props.Width, Height: props.ContentHeight, Padding: visiblePadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.RowGap, Children: rows},
 	}
+	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
+		ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
+	}))
+}
+
+// WrapLauncherResultsStatus exposes query completion on every result surface, including grid and preview-only chat.
+func WrapLauncherResultsStatus(complete bool, child woxwidget.Widget) woxwidget.Widget {
 	state := "loading"
-	if props.Complete {
+	if complete {
 		state = "complete"
 	}
 	return woxwidget.Semantics{
 		Key: "launcher-results-key", AutomationID: "launcher.results", Role: woxui.AccessibilityRoleList, Label: "Search results",
-		Value: state, ReadOnly: true,
-		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
-			ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
-		}),
+		Value: state, ReadOnly: true, Child: child,
 	}
 }
 

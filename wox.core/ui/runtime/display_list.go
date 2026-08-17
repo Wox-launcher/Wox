@@ -34,6 +34,8 @@ type DisplayList struct {
 	frameID      uint64
 	damage       Rect
 	nativeDamage Rect
+	frozen       bool
+	stats        paintCommandStats
 }
 
 const displayListFloatTolerance = float32(1e-4)
@@ -46,12 +48,55 @@ func (d *DisplayList) FrameMetricsID() uint64 {
 	return d.frameID
 }
 
+// AttachFrameMetricsID binds this display list to an already-started metrics frame.
+func (d *DisplayList) AttachFrameMetricsID(frameID uint64) {
+	if d != nil {
+		d.frameID = frameID
+	}
+}
+
 // CommandCount reports the recorded portable drawing command count.
 func (d *DisplayList) CommandCount() int {
 	if d == nil {
 		return 0
 	}
-	return len(d.commands)
+	return d.stats.commands
+}
+
+// TextDrawCount reports recorded DrawText commands.
+func (d *DisplayList) TextDrawCount() int {
+	if d == nil {
+		return 0
+	}
+	return d.stats.texts
+}
+
+// ImageDrawCount reports recorded DrawImage commands.
+func (d *DisplayList) ImageDrawCount() int {
+	if d == nil {
+		return 0
+	}
+	return d.stats.images
+}
+
+func (d *DisplayList) appendCommand(command displayCommand) {
+	if d == nil {
+		return
+	}
+	d.commands = append(d.commands, command)
+	d.stats.add(command)
+}
+
+// EncodedRendererResources reports the current uncached encode cost of this command stream.
+// Native caches later replace these baseline create/upload counts with hit/miss accounting.
+func (d *DisplayList) EncodedRendererResources() FrameRendererResourceMetrics {
+	text := d.TextDrawCount()
+	images := d.ImageDrawCount()
+	return FrameRendererResourceMetrics{
+		TextRasterizations: text,
+		ImageCreates:       images,
+		ImageUploads:       images,
+	}
 }
 
 // SetDamage limits subsequent drawing commands to one logical redraw region; zero means full frame.
@@ -96,11 +141,13 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 	if d.clearColor != other.clearColor {
 		return fmt.Errorf("clear colors differ: %+v != %+v", d.clearColor, other.clearColor)
 	}
-	if len(d.commands) != len(other.commands) {
-		return fmt.Errorf("command counts differ: %d != %d", len(d.commands), len(other.commands))
+	left := d.flattenedCommands()
+	right := other.flattenedCommands()
+	if len(left) != len(right) {
+		return fmt.Errorf("command counts differ: %d != %d", len(left), len(right))
 	}
-	for index := range d.commands {
-		if !displayCommandsEqual(d.commands[index], other.commands[index]) {
+	for index := range left {
+		if !displayCommandsEqual(left[index], right[index]) {
 			return fmt.Errorf("command %d differs", index)
 		}
 	}
@@ -156,6 +203,7 @@ const (
 	displayCommandBeginEmbeddedSurfaceOverlay
 	displayCommandSetClipRect
 	displayCommandClearClip
+	displayCommandPaintSegment
 )
 
 type displayCommand struct {
@@ -169,6 +217,7 @@ type displayCommand struct {
 	image    *Image
 	rotation float32
 	points   []Point
+	segment  *PaintSegment
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.
@@ -176,7 +225,7 @@ func (d *DisplayList) BeginEmbeddedSurfaceOverlay(rect Rect) {
 	if rect.Width <= 0 || rect.Height <= 0 {
 		return
 	}
-	d.commands = append(d.commands, displayCommand{kind: displayCommandBeginEmbeddedSurfaceOverlay, rect: rect})
+	d.appendCommand(displayCommand{kind: displayCommandBeginEmbeddedSurfaceOverlay, rect: rect})
 }
 
 // FillConvexPolygon fills 3 to MaxConvexPolygonPoints ordered vertices with portable edge antialiasing.
@@ -213,7 +262,7 @@ func (d *DisplayList) FillConvexPolygon(points []Point, color Color) {
 		return
 	}
 	immutablePoints := append([]Point(nil), points...)
-	d.commands = append(d.commands, displayCommand{
+	d.appendCommand(displayCommand{
 		kind: displayCommandFillConvexPolygon, rect: bounds, color: color, points: immutablePoints,
 	})
 }
@@ -223,7 +272,7 @@ func (d *DisplayList) StrokeRoundedRect(rect Rect, radius, width float32, color 
 	if rect.Width <= 0 || rect.Height <= 0 || width <= 0 || !d.shouldRecord(rect) {
 		return
 	}
-	d.commands = append(d.commands, displayCommand{
+	d.appendCommand(displayCommand{
 		kind:   displayCommandStrokeRoundedRect,
 		rect:   rect,
 		radius: max(float32(0), radius),
@@ -238,7 +287,7 @@ func (d *DisplayList) PushClipRect(rect Rect) {
 		rect = intersectRects(d.clipStack[len(d.clipStack)-1], rect)
 	}
 	d.clipStack = append(d.clipStack, rect)
-	d.commands = append(d.commands, displayCommand{kind: displayCommandSetClipRect, rect: rect})
+	d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: rect})
 }
 
 // PopClipRect restores the previous clip rectangle.
@@ -248,10 +297,10 @@ func (d *DisplayList) PopClipRect() {
 	}
 	d.clipStack = d.clipStack[:len(d.clipStack)-1]
 	if len(d.clipStack) == 0 {
-		d.commands = append(d.commands, displayCommand{kind: displayCommandClearClip})
+		d.appendCommand(displayCommand{kind: displayCommandClearClip})
 		return
 	}
-	d.commands = append(d.commands, displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
+	d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
 }
 
 // ClipRect returns the effective clip while widgets record the current subtree.
@@ -288,7 +337,7 @@ func (d *DisplayList) FillRoundedRect(rect Rect, radius float32, color Color) {
 	if radius < 0 {
 		radius = 0
 	}
-	d.commands = append(d.commands, displayCommand{
+	d.appendCommand(displayCommand{
 		kind:   displayCommandFillRoundedRect,
 		rect:   rect,
 		radius: radius,
@@ -304,7 +353,7 @@ func (d *DisplayList) DrawText(text string, rect Rect, style TextStyle, color Co
 	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
 		style.Weight = FontWeightRegular
 	}
-	d.commands = append(d.commands, displayCommand{
+	d.appendCommand(displayCommand{
 		kind:  displayCommandDrawText,
 		rect:  rect,
 		color: color,
@@ -328,7 +377,7 @@ func (d *DisplayList) DrawRotatedRoundedImage(image *Image, rect Rect, radians, 
 	if image == nil || image.Width <= 0 || image.Height <= 0 || len(image.pixels) == 0 || rect.Width <= 0 || rect.Height <= 0 || !d.shouldRecord(rotatedRectBounds(rect, radians)) {
 		return
 	}
-	d.commands = append(d.commands, displayCommand{kind: displayCommandDrawImage, rect: rect, image: image, rotation: radians, radius: min(max(float32(0), radius), min(rect.Width, rect.Height)/2)})
+	d.appendCommand(displayCommand{kind: displayCommandDrawImage, rect: rect, image: image, rotation: radians, radius: min(max(float32(0), radius), min(rect.Width, rect.Height)/2)})
 }
 
 func (d *DisplayList) shouldRecord(rect Rect) bool {

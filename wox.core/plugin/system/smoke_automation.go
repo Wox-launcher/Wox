@@ -44,6 +44,10 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
+			{Command: smokeAutomationListCommand, Description: "500 list results"},
+			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
+			{Command: smokeAutomationChatCommand, Description: "200 chat messages with streaming updates"},
+			{Command: smokeAutomationWarmCacheCommand, Description: "Repeated text and image warm-cache fixture"},
 		},
 		SupportedOS: []string{util.PlatformMacOS, util.PlatformWindows, util.PlatformLinux},
 	}
@@ -62,6 +66,14 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryStreamingPreview()
 	case smokeAutomationToolbarCommand:
 		return p.queryToolbar(ctx)
+	case smokeAutomationListCommand:
+		return queryListFixture()
+	case smokeAutomationGridCommand:
+		return queryGridFixture()
+	case smokeAutomationChatCommand:
+		return p.queryChatFixture()
+	case smokeAutomationWarmCacheCommand:
+		return queryWarmCacheFixture()
 	default:
 		return plugin.QueryResponse{}
 	}

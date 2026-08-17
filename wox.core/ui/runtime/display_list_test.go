@@ -72,6 +72,32 @@ func TestDisplayListCompareToleratesSubpixelFloatDrift(t *testing.T) {
 	}
 }
 
+func TestDisplayListCountsTextAndImageDraws(t *testing.T) {
+	image, err := NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	displayList := &DisplayList{}
+	displayList.FillRect(Rect{Width: 10, Height: 10}, Color{A: 255})
+	displayList.DrawText("one", Rect{Width: 20, Height: 10}, TextStyle{Size: 12}, Color{A: 255})
+	displayList.DrawText("two", Rect{X: 20, Width: 20, Height: 10}, TextStyle{Size: 12}, Color{A: 255})
+	displayList.DrawImage(image, Rect{Width: 8, Height: 8})
+
+	if displayList.TextDrawCount() != 2 || displayList.ImageDrawCount() != 1 {
+		t.Fatalf("draw counts text=%d image=%d, want 2/1", displayList.TextDrawCount(), displayList.ImageDrawCount())
+	}
+	resources := displayList.EncodedRendererResources()
+	if resources.TextRasterizations != 2 || resources.ImageCreates != 1 || resources.ImageUploads != 1 {
+		t.Fatalf("encoded resources = %+v, want 2 text and 1 image", resources)
+	}
+
+	parent := &DisplayList{}
+	parent.AppendPaintSegment(CapturePaintSegment(Rect{Width: 20, Height: 10}, displayList, PaintFingerprint{}), Point{})
+	if parent.CommandCount() != 4 || parent.TextDrawCount() != 2 || parent.ImageDrawCount() != 1 {
+		t.Fatalf("nested cached counts = commands %d text %d image %d, want 4/2/1", parent.CommandCount(), parent.TextDrawCount(), parent.ImageDrawCount())
+	}
+}
+
 func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {
 	displayList := &DisplayList{}
 	displayList.SetDamage(Rect{X: 10, Y: 10, Width: 20, Height: 20})

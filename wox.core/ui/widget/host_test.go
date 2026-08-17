@@ -319,13 +319,13 @@ func TestHostKeepsPressedIdentityAcrossKeyedReorder(t *testing.T) {
 func TestHostAutomationActivatePassesGestureBounds(t *testing.T) {
 	var activatedBounds woxui.Rect
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
-		return Semantics{
+		return Container{Padding: Insets{Left: 16, Top: 12}, Child: Semantics{
 			Key: "anchored-control", AutomationID: "anchored-control", Role: woxui.AccessibilityRoleButton, Label: "Anchored control",
 			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 			Child: Focusable{Key: "anchored-control", Child: Gesture{ID: "anchored-control", OnTapBounds: func(bounds woxui.Rect) {
 				activatedBounds = bounds
 			}, Child: Container{Width: 80, Height: 24}}},
-		}
+		}}
 	})
 	host.AttachServices(&fakeHostServices{})
 	renderTestFrame(host)
@@ -334,15 +334,15 @@ func TestHostAutomationActivatePassesGestureBounds(t *testing.T) {
 	if err := host.performAccessibilityAction(control.ID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("activate anchored control: %v", err)
 	}
-	if activatedBounds.Width != 80 || activatedBounds.Height != 24 {
-		t.Fatalf("activated bounds = %#v, want 80x24 control bounds", activatedBounds)
+	if activatedBounds != (woxui.Rect{X: 16, Y: 12, Width: 80, Height: 24}) {
+		t.Fatalf("activated bounds = %#v, want window-space 16,12 80x24", activatedBounds)
 	}
 	activatedBounds = woxui.Rect{}
 	if !host.FocusAutomationID("anchored-control") || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
 		t.Fatal("keyboard activation was not handled")
 	}
-	if activatedBounds.Width != 80 || activatedBounds.Height != 24 {
-		t.Fatalf("keyboard activated bounds = %#v, want 80x24 control bounds", activatedBounds)
+	if activatedBounds != (woxui.Rect{X: 16, Y: 12, Width: 80, Height: 24}) {
+		t.Fatalf("keyboard activated bounds = %#v, want window-space 16,12 80x24", activatedBounds)
 	}
 }
 
@@ -967,6 +967,63 @@ func TestHostHoverMoveInvalidatesOldAndNewBounds(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 5, Y: 25}})
 	if services.invalidations != 1 || services.invalidatedRect != (woxui.Rect{Width: 100, Height: 40}) {
 		t.Fatalf("hover move damage = %d %#v, want one combined two-row invalidation", services.invalidations, services.invalidatedRect)
+	}
+}
+
+func TestHostHoverAndTapUseWindowBounds(t *testing.T) {
+	var hoverBounds woxui.Rect
+	var tapBounds woxui.Rect
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Container{Padding: Insets{Left: 20, Top: 30}, Child: Gesture{
+			ID: "nested",
+			OnHoverAt: func(_ bool, bounds woxui.Rect) {
+				hoverBounds = bounds
+			},
+			OnTapBounds: func(bounds woxui.Rect) {
+				tapBounds = bounds
+			},
+			Child: Container{Width: 40, Height: 16},
+		}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 25, Y: 35}})
+	want := woxui.Rect{X: 20, Y: 30, Width: 40, Height: 16}
+	if hoverBounds != want {
+		t.Fatalf("hover bounds = %#v, want window-space %#v", hoverBounds, want)
+	}
+	if services.invalidatedRect != want {
+		t.Fatalf("hover damage = %#v, want window-space %#v", services.invalidatedRect, want)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 25, Y: 35}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 25, Y: 35}})
+	if tapBounds != want {
+		t.Fatalf("tap bounds = %#v, want window-space %#v", tapBounds, want)
+	}
+}
+
+func TestHostRemovedHoverableLeavesHover(t *testing.T) {
+	visible := true
+	var hoverStates []bool
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		if !visible {
+			return Container{Width: 10, Height: 10}
+		}
+		return Gesture{
+			ID:      "leaving",
+			OnHover: func(inside bool) { hoverStates = append(hoverStates, inside) },
+			Child:   Container{Width: 100, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 5, Y: 5}})
+	visible = false
+	renderTestFrame(host)
+	if len(hoverStates) != 2 || !hoverStates[0] || hoverStates[1] {
+		t.Fatalf("removed hover states = %v, want [true false]", hoverStates)
 	}
 }
 

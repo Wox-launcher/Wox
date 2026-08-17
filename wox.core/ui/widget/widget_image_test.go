@@ -36,7 +36,7 @@ func TestImageCoverRadiusFollowsWidgetBox(t *testing.T) {
 	)
 
 	actual := &woxui.DisplayList{}
-	root.draw(actual, 0, 0, false, false, false)
+	root.draw(actual, 0, 0, false, false, false, nil)
 	expected := &woxui.DisplayList{}
 	expected.DrawRotatedRoundedImage(source, woxui.Rect{Width: 100, Height: 100}, 0, 20)
 	if err := actual.Compare(expected); err != nil {
@@ -45,7 +45,7 @@ func TestImageCoverRadiusFollowsWidgetBox(t *testing.T) {
 
 	scene := &woxui.DisplayList{}
 	scene.Clear(woxui.Color{G: 255, A: 255})
-	root.draw(scene, 0, 0, false, false, false)
+	root.draw(scene, 0, 0, false, false, false, nil)
 	renderer, err := woxui.NewSoftwareRenderer(100, 100)
 	if err != nil {
 		t.Fatal(err)

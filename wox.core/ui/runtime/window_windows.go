@@ -215,16 +215,21 @@ type platformWindow struct {
 	pointerCursor      PointerCursor
 	pointerPassthrough bool
 	// webViewCursorKnown distinguishes an intentional CSS cursor:none from a cursor not reported yet.
-	webViewCursor      win.HCURSOR
-	webViewCursorKnown bool
-	webViewPointerOver bool
-	inputHighSurrogate uint16
-	inputComposing     bool
-	pointerInside      bool
-	pointerPosition    Point
-	pointerScreen      Point
-	pointerScreenKnown bool
-	damageHistory      bufferDamageHistory
+	webViewCursor         win.HCURSOR
+	webViewCursorKnown    bool
+	webViewPointerOver    bool
+	inputHighSurrogate    uint16
+	inputComposing        bool
+	pointerInside         bool
+	pointerPosition       Point
+	pointerScreen         Point
+	pointerScreenKnown    bool
+	damageHistory         bufferDamageHistory
+	animationFramePending bool
+	animationVsyncRunning bool
+	// animationVsyncEpoch retires a wait loop that is still blocked inside DwmFlush when
+	// stopAnimationFrames runs, so a replacement goroutine cannot coexist with it.
+	animationVsyncEpoch uint64
 }
 
 type candidateForm struct {
@@ -621,6 +626,70 @@ func (w *platformWindow) invalidateRect(rect Rect) error {
 
 func (w *platformWindow) displayListDamageCullingEnabled() bool {
 	return w.webView == nil || !w.webView.Visible()
+}
+
+// requestAnimationFrame waits for DWM vsync instead of immediately invalidating the HWND.
+func (w *platformWindow) requestAnimationFrame() error {
+	w.mu.Lock()
+	if w.hwnd == 0 || !w.focus.visible {
+		w.mu.Unlock()
+		return errors.New("window is closed")
+	}
+	w.animationFramePending = true
+	if w.animationVsyncRunning {
+		w.mu.Unlock()
+		return nil
+	}
+	w.animationVsyncRunning = true
+	hwnd := w.hwnd
+	epoch := w.animationVsyncEpoch
+	w.mu.Unlock()
+	go w.runWindowsAnimationVsync(hwnd, epoch)
+	return nil
+}
+
+// stopAnimationFrames cancels the DWM wait loop started by requestAnimationFrame.
+// Bumping the epoch is what actually retires the loop: clearing the running flag alone
+// would let the next requestAnimationFrame start a second waiter while the first is
+// still parked in DwmFlush, and both would then keep invalidating.
+func (w *platformWindow) stopAnimationFrames() error {
+	w.mu.Lock()
+	w.animationFramePending = false
+	w.animationVsyncRunning = false
+	w.animationVsyncEpoch++
+	w.mu.Unlock()
+	return nil
+}
+
+// runWindowsAnimationVsync waits for DWM composition instead of invalidating immediately.
+// Present1(1, 0) returns at once when DXGI reports OCCLUDED, so a bare invalidate() would spin.
+func (w *platformWindow) runWindowsAnimationVsync(hwnd win.HWND, epoch uint64) {
+	for {
+		if dwmFlush.Find() == nil {
+			_, _, _ = dwmFlush.Call()
+		} else {
+			time.Sleep(16 * time.Millisecond)
+		}
+		w.mu.Lock()
+		// A stale epoch means a replacement waiter now owns the shared flags, so this
+		// retired loop must exit without clearing them.
+		if w.animationVsyncEpoch != epoch {
+			w.mu.Unlock()
+			return
+		}
+		if w.hwnd != hwnd {
+			w.animationFramePending = false
+			w.animationVsyncRunning = false
+			w.mu.Unlock()
+			return
+		}
+		pending := w.animationFramePending
+		w.animationFramePending = false
+		w.mu.Unlock()
+		if pending {
+			_ = w.invalidate()
+		}
+	}
 }
 
 // setTextInputState stores logical editor geometry for the next native IME interaction.
@@ -1990,6 +2059,7 @@ func (w *platformWindow) hideNative() {
 	w.focus.restorePreviousOnHide = false
 	w.focus.previousForeground = 0
 	w.setActive(false)
+	_ = w.stopAnimationFrames()
 	win.ShowWindow(w.hwnd, win.SW_HIDE)
 	_ = w.renderer.clearImageCache()
 	if w.rendererTrimTimer != nil {
@@ -2195,6 +2265,7 @@ func (w *platformWindow) renderWindowsDisplayList(displayList *DisplayList, scal
 	nativeStart := time.Now()
 	err := w.renderer.render(displayList, scale)
 	if w.options.frameMetrics != nil {
+		w.options.frameMetrics.recordEncodedResources(displayList)
 		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, err == nil)
 	}
 	return err

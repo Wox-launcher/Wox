@@ -89,7 +89,20 @@ type svgCenteredText struct {
 	Size  float32
 }
 
-const launcherImageCacheLimit = 512
+const (
+	launcherImageCacheLimit    = 512
+	launcherImageCacheMaxBytes = 32 << 20
+	hiddenImageCacheKeepCount  = 64
+	hiddenImageCacheMaxBytes   = 8 << 20
+)
+
+// imageCacheBytes accounts for one decoded RGBA buffer in the dual-budget LRU.
+func imageCacheBytes(image *woxui.Image) int {
+	if image == nil {
+		return 0
+	}
+	return image.Width * image.Height * 4
+}
 
 func (a *App) imageFor(source woxImage) *woxui.Image {
 	return a.imageForTint(source, nil, 256)
@@ -281,10 +294,7 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 	}
 	if err := a.runOnUI("store launcher image", func() {
 		a.imageMu.Lock()
-		if _, exists := a.images[key]; !exists && len(a.images) >= launcherImageCacheLimit {
-			a.evictOldestImage(key)
-		}
-		a.images[key] = image
+		a.insertImageLocked(key, image)
 		if variantKey := a.imageVariantKeys[key]; variantKey != "" {
 			if a.imageVariants == nil {
 				a.imageVariants = map[string]string{}
@@ -311,64 +321,90 @@ func (a *App) storeImageError(key string, err error) {
 	}
 }
 
-// hiddenImageCacheKeepCount bounds decoded images retained while the launcher stays hidden.
-// The most recently used entries cover redrawing the preserved query instantly on the next
-// show; evicted entries reload asynchronously like any cold icon.
-const hiddenImageCacheKeepCount = 64
+// insertImageLocked stores one decoded image and evicts cold entries to the visible dual budget.
+func (a *App) insertImageLocked(key string, image *woxui.Image) {
+	if a.images == nil {
+		a.images = map[string]*woxui.Image{}
+	}
+	if existing, exists := a.images[key]; exists {
+		a.imageCacheSize -= imageCacheBytes(existing)
+		delete(a.images, key)
+	}
+	incoming := imageCacheBytes(image)
+	if incoming > launcherImageCacheMaxBytes {
+		a.clearImageCacheLocked(key)
+	} else {
+		a.evictImagesToBudget(key, launcherImageCacheLimit-1, launcherImageCacheMaxBytes-incoming)
+	}
+	a.images[key] = image
+	a.imageCacheSize += incoming
+}
 
 // trimIdleImageCache evicts cold decoded images while the launcher stays hidden.
 // Must run on the UI thread like every other access to the image maps.
 func (a *App) trimIdleImageCache() {
-	if len(a.images) <= hiddenImageCacheKeepCount {
-		return
-	}
-	type imageUse struct {
-		key  string
-		used uint64
-	}
-	uses := make([]imageUse, 0, len(a.images))
-	for key := range a.images {
-		uses = append(uses, imageUse{key: key, used: a.imageLastUsed[key]})
-	}
-	sort.Slice(uses, func(i, j int) bool { return uses[i].used > uses[j].used })
-	for _, use := range uses[hiddenImageCacheKeepCount:] {
-		delete(a.images, use.key)
-		if variantKey := a.imageVariantKeys[use.key]; variantKey != "" && a.imageVariants[variantKey] == use.key {
-			delete(a.imageVariants, variantKey)
-		}
-		delete(a.imageVariantKeys, use.key)
-		delete(a.imageRequested, use.key)
-		delete(a.imageLastUsed, use.key)
-		delete(a.imageErrors, use.key)
-	}
+	a.imageMu.Lock()
+	defer a.imageMu.Unlock()
+	a.evictImagesToBudget("", hiddenImageCacheKeepCount, hiddenImageCacheMaxBytes)
 	a.imagesRevision.Add(1)
 }
 
-// evictOldestImage removes one cold image without invalidating the rest of the decoded cache.
-func (a *App) evictOldestImage(keepKey string) {
-	oldestKey := ""
-	oldestUse := ^uint64(0)
+func (a *App) imageCacheByteSizeLocked() int {
+	if a.imageCacheSize < 0 {
+		a.imageCacheSize = 0
+	}
+	return a.imageCacheSize
+}
+
+func (a *App) clearImageCacheLocked(keepKey string) {
 	for key := range a.images {
 		if key == keepKey {
 			continue
 		}
-		used := a.imageLastUsed[key]
-		if oldestKey == "" || used < oldestUse {
-			oldestKey = key
-			oldestUse = used
-		}
+		a.removeImageLocked(key)
 	}
-	if oldestKey == "" {
+}
+
+// evictImagesToBudget drops the coldest images until both budgets fit, ordering candidates
+// once instead of rescanning the map per eviction. Hiding the launcher can trim hundreds of
+// entries in a single call, where the repeated-scan form degraded to O(k*n).
+func (a *App) evictImagesToBudget(keepKey string, maxCount, maxBytes int) {
+	if len(a.images) <= maxCount && a.imageCacheSize <= maxBytes {
 		return
 	}
-	delete(a.images, oldestKey)
-	if variantKey := a.imageVariantKeys[oldestKey]; variantKey != "" && a.imageVariants[variantKey] == oldestKey {
+	candidates := make([]string, 0, len(a.images))
+	for key := range a.images {
+		if key == keepKey {
+			continue
+		}
+		candidates = append(candidates, key)
+	}
+	sort.Slice(candidates, func(first, second int) bool {
+		return a.imageLastUsed[candidates[first]] < a.imageLastUsed[candidates[second]]
+	})
+	for _, key := range candidates {
+		if len(a.images) <= maxCount && a.imageCacheSize <= maxBytes {
+			return
+		}
+		a.removeImageLocked(key)
+	}
+}
+
+func (a *App) removeImageLocked(key string) {
+	if image, ok := a.images[key]; ok {
+		a.imageCacheSize -= imageCacheBytes(image)
+		if a.imageCacheSize < 0 {
+			a.imageCacheSize = 0
+		}
+	}
+	delete(a.images, key)
+	if variantKey := a.imageVariantKeys[key]; variantKey != "" && a.imageVariants[variantKey] == key {
 		delete(a.imageVariants, variantKey)
 	}
-	delete(a.imageVariantKeys, oldestKey)
-	delete(a.imageRequested, oldestKey)
-	delete(a.imageLastUsed, oldestKey)
-	delete(a.imageErrors, oldestKey)
+	delete(a.imageVariantKeys, key)
+	delete(a.imageRequested, key)
+	delete(a.imageLastUsed, key)
+	delete(a.imageErrors, key)
 }
 
 func (a *App) imageErrorFor(source woxImage) string {

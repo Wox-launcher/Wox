@@ -25,13 +25,15 @@ func (t *frameDamageTracker) resolve(base woxui.Rect) woxui.Rect {
 	}
 	result := base
 	for _, repaint := range t.rebuilt {
-		if !repaint.always && repaint.node != nil && repaint.oldBounds == repaint.node.bounds {
+		current := woxui.Rect{}
+		if repaint.node != nil {
+			current = globalRect(repaint.node)
+		}
+		if !repaint.always && repaint.oldBounds == current {
 			continue
 		}
 		result = unionDamageRects(result, repaint.oldBounds)
-		if repaint.node != nil {
-			result = unionDamageRects(result, repaint.node.bounds)
-		}
+		result = unionDamageRects(result, current)
 	}
 	return result
 }
@@ -73,6 +75,10 @@ func clipDamageRect(rect woxui.Rect, size woxui.Size) woxui.Rect {
 
 // activeCaretDamage returns only the focused editor paint bounds, independent of its enclosing Boundary.
 func activeCaretDamage(current *node, focused woxui.AccessibilityNodeID, focusWithin, focusableWithin bool) woxui.Rect {
+	return activeCaretDamageAt(current, woxui.Point{}, focused, focusWithin, focusableWithin)
+}
+
+func activeCaretDamageAt(current *node, origin woxui.Point, focused woxui.AccessibilityNodeID, focusWithin, focusableWithin bool) woxui.Rect {
 	if current == nil {
 		return woxui.Rect{}
 	}
@@ -82,6 +88,7 @@ func activeCaretDamage(current *node, focused woxui.AccessibilityNodeID, focusWi
 	} else {
 		focusWithin = focusWithin || current.id == focused
 	}
+	bounds := offsetRect(current.bounds, origin)
 	result := woxui.Rect{}
 	if current.caretPaint != nil {
 		caretActive := current.caret
@@ -89,11 +96,12 @@ func activeCaretDamage(current *node, focused woxui.AccessibilityNodeID, focusWi
 			caretActive = focusWithin
 		}
 		if caretActive {
-			result = current.bounds
+			result = bounds
 		}
 	}
+	childOrigin := woxui.Point{X: bounds.X, Y: bounds.Y}
 	for _, child := range current.children {
-		result = unionDamageRects(result, activeCaretDamage(child, focused, focusWithin, focusableWithin))
+		result = unionDamageRects(result, activeCaretDamageAt(child, childOrigin, focused, focusWithin, focusableWithin))
 	}
 	return result
 }

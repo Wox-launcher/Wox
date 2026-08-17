@@ -530,6 +530,28 @@ func (w *platformWindow) invalidateRect(rect Rect) error {
 
 func (*platformWindow) displayListDamageCullingEnabled() bool { return false }
 
+func (w *platformWindow) requestAnimationFrame() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_request_animation_frame(native) != 0 {
+		return errors.New("woxui: failed to request a macOS animation frame")
+	}
+	return nil
+}
+
+func (w *platformWindow) stopAnimationFrames() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_stop_animation_frames(native) != 0 {
+		return errors.New("woxui: failed to stop macOS animation frames")
+	}
+	return nil
+}
+
 // setTextInputState updates NSTextInputClient activation and candidate geometry on the AppKit thread.
 func (w *platformWindow) setTextInputState(state TextInputState) error {
 	native, err := w.openNative()
@@ -772,6 +794,9 @@ func (w *platformWindow) renderLoop() {
 
 // queueFrame replaces an obsolete unencoded frame instead of letting rendering fall behind input.
 func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
+	if frame != nil && frame.displayList != nil {
+		frame.displayList.Freeze()
+	}
 	w.mu.Lock()
 	if w.closed || w.closing || w.renderStopped {
 		closed := w.closed
@@ -798,7 +823,7 @@ func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 	wake := w.renderWake
 	w.mu.Unlock()
 	if replaced != nil && w.options.frameMetrics != nil {
-		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)
+		w.options.frameMetrics.coalesceFrame(replaced.displayList.frameID)
 	}
 	signalRenderWake(wake)
 }
@@ -871,7 +896,7 @@ func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
 		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=synchronous_frame_replaced frameId=%d replacementFrameId=%d", replaced.displayList.frameID, displayList.frameID))
 	}
 	if replaced != nil && w.options.frameMetrics != nil {
-		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)
+		w.options.frameMetrics.coalesceFrame(replaced.displayList.frameID)
 	}
 	w.encodeFrameLocked(&darwinRenderFrame{frame: frame, displayList: displayList, fontFamily: fontFamily, buildCost: buildCost}, transactional)
 	signalRenderWake(wake)
@@ -980,12 +1005,17 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			frame.Scale,
 		))
 		if w.options.frameMetrics != nil {
-			w.options.frameMetrics.dropFrame(displayList.frameID)
+			if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+				w.options.frameMetrics.backpressureFrame(displayList.frameID)
+			} else {
+				w.options.frameMetrics.dropFrame(displayList.frameID)
+			}
 		}
 		return
 	}
 	if result < 0 {
 		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
 			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
 		}
 		w.recordRenderError("begin macOS frame", result)
@@ -997,7 +1027,12 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	var imageCost time.Duration
 	var textCount int
 	var imageCount int
-	for commandIndex, command := range displayList.commands {
+	encodeDamage := w.darwinEncodeDamage(native)
+	commandIndex := -1
+	encodeFailed := false
+	var failedCommandKind displayCommandKind
+	displayList.ForEachVisibleCommand(encodeDamage, func(command displayCommand) bool {
+		commandIndex++
 		switch command.kind {
 		case displayCommandFillRoundedRect:
 			result = C.wox_darwin_window_fill_rounded_rect(
@@ -1083,27 +1118,39 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			result = C.wox_darwin_window_clear_clip(native)
 		}
 		if result != 0 {
-			reason := darwinFrameStatusName(int32(result))
-			_ = C.wox_darwin_window_end_frame(native, transactionalFrame)
-			if w.options.frameMetrics != nil {
-				w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
-			}
-			if result > 0 {
-				if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
-					w.restoreFrameDamage(nativeDamage)
-				}
-				w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=%s stage=encode frameId=%d commandIndex=%d commandKind=%d status=%d", reason, displayList.frameID, commandIndex, command.kind, int32(result)))
-				return
-			}
-			w.logRenderDiagnostic(fmt.Sprintf("event=frame_encode_failed reason=%s frameId=%d commandIndex=%d commandKind=%d status=%d", reason, displayList.frameID, commandIndex, command.kind, int32(result)))
-			w.recordRenderError("encode macOS frame", result)
-			return
+			encodeFailed = true
+			failedCommandKind = command.kind
+			return false
 		}
-	}
+		return true
+	})
 	encodeCost := time.Since(encodeStart)
 
 	endStart := time.Now()
-	result = C.wox_darwin_window_end_frame(native, transactionalFrame)
+	endResult := C.wox_darwin_window_end_frame(native, transactionalFrame)
+	endCost := time.Since(endStart)
+	if encodeFailed {
+		reason := darwinFrameStatusName(int32(result))
+		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
+			if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+				w.options.frameMetrics.finishBackpressuredFrame(displayList.frameID, time.Since(nativeStart), -1)
+			} else {
+				w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+			}
+		}
+		if result > 0 {
+			if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+				w.restoreFrameDamage(nativeDamage)
+			}
+			w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=%s stage=encode frameId=%d commandIndex=%d commandKind=%d status=%d", reason, displayList.frameID, commandIndex, failedCommandKind, int32(result)))
+			return
+		}
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_encode_failed reason=%s frameId=%d commandIndex=%d commandKind=%d status=%d", reason, displayList.frameID, commandIndex, failedCommandKind, int32(result)))
+		w.recordRenderError("encode macOS frame", result)
+		return
+	}
+	result = endResult
 	if result > 0 {
 		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
 			w.restoreFrameDamage(nativeDamage)
@@ -1113,15 +1160,66 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		w.logRenderDiagnostic(fmt.Sprintf("event=frame_end_failed reason=%s frameId=%d status=%d", darwinFrameStatusName(int32(result)), displayList.frameID, int32(result)))
 		w.recordRenderError("present macOS frame", result)
 	}
-	endCost := time.Since(endStart)
 	if w.options.frameMetrics != nil {
-		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-endCost, endCost, result == 0)
+		w.recordNativeResourceMetrics(native, displayList)
+		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+			w.options.frameMetrics.finishBackpressuredFrame(displayList.frameID, time.Since(nativeStart)-endCost, endCost)
+		} else {
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-endCost, endCost, result == 0)
+		}
 	}
 	totalCost := renderFrame.buildCost + time.Since(frameStart)
 	if totalCost >= 16*time.Millisecond {
 		log.Printf("darwin frame timing: totalUs=%d buildUs=%d beginUs=%d encodeUs=%d textUs=%d imageUs=%d endUs=%d commands=%d text=%d image=%d size=%.0fx%.0f scale=%.2f transactional=%t",
 			totalCost.Microseconds(), renderFrame.buildCost.Microseconds(), beginCost.Microseconds(), encodeCost.Microseconds(), textCost.Microseconds(), imageCost.Microseconds(), endCost.Microseconds(), len(displayList.commands), textCount, imageCount, frame.Size.Width, frame.Size.Height, frame.Scale, transactional)
 	}
+}
+
+// rendererResourcesFromNative copies one native encode-stat snapshot into portable metrics.
+func rendererResourcesFromNative(stats C.WoxRendererResourceStats) FrameRendererResourceMetrics {
+	return FrameRendererResourceMetrics{
+		TextRasterizations: int(stats.text_rasterizations),
+		ImageCreates:       int(stats.image_creates),
+		ImageUploads:       int(stats.image_uploads),
+		CacheHits:          int(stats.cache_hits),
+		CacheEvictions:     int(stats.cache_evictions),
+		ResidentBytes:      int64(stats.resident_bytes),
+	}
+}
+
+// darwinEncodeDamage returns the IOSurface-effective encode region; zero means a full frame.
+func (w *platformWindow) darwinEncodeDamage(native *C.WoxDarwinWindow) Rect {
+	if native == nil {
+		return Rect{}
+	}
+	var x, y, width, height C.float
+	if C.wox_darwin_window_encode_damage(native, &x, &y, &width, &height) != 0 {
+		return Rect{}
+	}
+	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}
+}
+
+// recordNativeResourceMetrics stores actual native cache hits instead of the uncached baseline.
+func (w *platformWindow) recordNativeResourceMetrics(native *C.WoxDarwinWindow, displayList *DisplayList) {
+	if w.options.frameMetrics == nil || displayList == nil {
+		return
+	}
+	var stats C.WoxRendererResourceStats
+	if native != nil && C.wox_darwin_window_take_frame_resource_stats(native, &stats) == 0 {
+		w.options.frameMetrics.recordRendererResources(displayList.frameID, rendererResourcesFromNative(stats))
+		return
+	}
+	w.options.frameMetrics.recordEncodedResources(displayList)
+}
+
+// testCachedCGImageOwnsNativePixels wraps the native lifetime check for Go tests.
+func testCachedCGImageOwnsNativePixels() int32 {
+	return int32(C.wox_darwin_test_cached_image_owns_pixels())
+}
+
+// testLargeImageAdmission wraps the native large-image admission policy check for Go tests.
+func testLargeImageAdmission() int32 {
+	return int32(C.wox_darwin_test_large_image_admission())
 }
 
 // trimRenderSurfaces releases idle back buffers without changing active triple-buffer behavior.

@@ -21,6 +21,7 @@ import (
 )
 
 var caseSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*/[0-9]{3}$`)
+var packageSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*$`)
 var caseFilePattern = regexp.MustCompile(`^[0-9]{3}_.+_test\.go$`)
 
 func main() {
@@ -130,8 +131,11 @@ func smokeTestCommands(caseSelector string) ([][]string, error) {
 		}
 		return commands, nil
 	}
+	if packageSelectorPattern.MatchString(caseSelector) && !caseSelectorPattern.MatchString(caseSelector) {
+		return smokePackageCommand(baseArgs, caseSelector)
+	}
 	if !caseSelectorPattern.MatchString(caseSelector) {
-		return nil, fmt.Errorf("invalid smoke CASE %q; expected a path like launcher/plugin/calculator/001", caseSelector)
+		return nil, fmt.Errorf("invalid smoke CASE %q; expected a package like perf or a path like launcher/plugin/calculator/001", caseSelector)
 	}
 	matches, err := filepath.Glob(filepath.FromSlash("test/smoke/" + caseSelector + "_*_test.go"))
 	if err != nil {
@@ -144,6 +148,30 @@ func smokeTestCommands(caseSelector string) ([][]string, error) {
 	packagePath := "./test/smoke/" + filepath.ToSlash(strings.TrimSuffix(directory, string(filepath.Separator)))
 	args := append(append([]string(nil), baseArgs...), "-run", "^Test"+number, packagePath)
 	return [][]string{args}, nil
+}
+
+// smokePackageCommand runs every numbered case in one smoke package, such as perf.
+func smokePackageCommand(baseArgs []string, caseSelector string) ([][]string, error) {
+	packageDir := filepath.FromSlash("test/smoke/" + caseSelector)
+	info, err := os.Stat(packageDir)
+	if err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("smoke package %q was not found", caseSelector)
+	}
+	entries, err := os.ReadDir(packageDir)
+	if err != nil {
+		return nil, fmt.Errorf("read smoke package %q: %w", caseSelector, err)
+	}
+	found := false
+	for _, entry := range entries {
+		if !entry.IsDir() && caseFilePattern.MatchString(entry.Name()) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("smoke package %q has no numbered cases", caseSelector)
+	}
+	return [][]string{append(append([]string(nil), baseArgs...), "./test/smoke/"+caseSelector)}, nil
 }
 
 // availablePort reserves and releases a loopback port for the isolated core server.

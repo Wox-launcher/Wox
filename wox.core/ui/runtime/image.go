@@ -62,6 +62,14 @@ func NewImageFromPackedRGBA(source *image.RGBA) (*Image, error) {
 	return &Image{Width: width, Height: height, id: nextImageID.Add(1), pixels: source.Pix[:pixelCount]}, nil
 }
 
+// ID is the stable native cache key for this immutable pixel buffer.
+func (i *Image) ID() uint64 {
+	if i == nil {
+		return 0
+	}
+	return i.id
+}
+
 // RGBAAt returns one pixel from the image's zero-based renderer coordinate space.
 func (i *Image) RGBAAt(x, y int) color.RGBA {
 	if i == nil || x < 0 || y < 0 || x >= i.Width || y >= i.Height {

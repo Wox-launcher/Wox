@@ -60,15 +60,17 @@ func (p LauncherToolbarProps) Equal(other LauncherToolbarProps) bool {
 	return true
 }
 
-// LauncherToolbarBoundary retains the toolbar while its prepared props are unchanged.
+// LauncherToolbarBoundary composes the footer. Hoverable action chrome stays
+// outside a Boundary so WOX_DEBUG_REPAINT=verify does not rebuild a full-width
+// strip on every caret blink.
 func LauncherToolbarBoundary(props LauncherToolbarProps) woxwidget.Widget {
-	return woxwidget.Boundary[LauncherToolbarProps]{
-		Key: "launcher-toolbar-boundary", Label: "toolbar", Props: props,
-		Build: func(props LauncherToolbarProps) woxwidget.Widget { return LauncherToolbarView(props) },
-	}
+	return LauncherToolbarView(props)
 }
 
+const launcherToolbarMoreActionID = "result-toolbar-more"
+
 type measuredLauncherToolbarAction struct {
+	id     string
 	widget woxwidget.Widget
 	width  float32
 }
@@ -84,43 +86,26 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	statusActionGap := scaledLauncherSize(16, props.DensityScale)
 	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
 	progressVisible := props.HasProgress || props.Indeterminate
-	leftMaxWidth := max(float32(0), contentWidth-scaledLauncherSize(200, props.DensityScale))
-	leftWidth := float32(0)
+	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
+	for _, action := range props.Actions {
+		widget, width := launcherToolbarActionView(action, props.Theme, props.Window, props.DensityScale)
+		measured = append(measured, measuredLauncherToolbarAction{id: action.ID, widget: widget, width: width})
+	}
+	naturalLeft := float32(0)
 	labelWidth := float32(0)
 	if props.Label != "" {
 		metrics, _ := props.Window.MeasureText(props.Label, woxui.TextStyle{Size: fontSize})
 		labelWidth = metrics.Size.Width
-		leftWidth = labelWidth
+		naturalLeft = labelWidth
 		if props.Icon != nil {
-			leftWidth += scaledLauncherSize(26, props.DensityScale)
+			naturalLeft += scaledLauncherSize(26, props.DensityScale)
 		}
 		if progressVisible {
-			leftWidth += scaledLauncherSize(22, props.DensityScale)
+			naturalLeft += scaledLauncherSize(22, props.DensityScale)
 		}
-		leftWidth = min(leftWidth, leftMaxWidth)
 	}
-	rightAvailable := max(float32(0), contentWidth-leftWidth)
-	if leftWidth > 0 && len(props.Actions) > 0 {
-		rightAvailable -= statusActionGap
-	}
-	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
-	for _, action := range props.Actions {
-		widget, width := launcherToolbarActionView(action, props.Theme, props.Window, props.DensityScale)
-		measured = append(measured, measuredLauncherToolbarAction{widget: widget, width: width})
-	}
-	shown := make([]measuredLauncherToolbarAction, 0, len(measured))
-	rightWidth := float32(0)
-	for index := len(measured) - 1; index >= 0; index-- {
-		nextWidth := measured[index].width
-		if len(shown) > 0 {
-			nextWidth += actionGap
-		}
-		if rightWidth+nextWidth > rightAvailable {
-			break
-		}
-		rightWidth += nextWidth
-		shown = append([]measuredLauncherToolbarAction{measured[index]}, shown...)
-	}
+	leftWidth, rightAvailable := launcherToolbarSplit(contentWidth, naturalLeft, toolbarActionsWidth(measured, actionGap), statusActionGap, scaledLauncherSize(200, props.DensityScale))
+	shown, rightWidth := fitLauncherToolbarActions(measured, actionGap, rightAvailable)
 	rightChildren := make([]woxwidget.Widget, 0, len(shown))
 	for _, action := range shown {
 		rightChildren = append(rightChildren, action.widget)
@@ -247,4 +232,82 @@ func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcompone
 // launcherToolbarContentHeight includes a 2px optical inset above and below the 28px action content.
 func launcherToolbarContentHeight(densityScale float32) float32 {
 	return scaledLauncherSize(28, densityScale) + scaledLauncherSize(2, densityScale)*2
+}
+
+// launcherToolbarSplit lets prepared actions keep their measured width before the
+// status label consumes the leftover, so a long toolbar message does not hide
+// result and message actions that still fit the window.
+func launcherToolbarSplit(contentWidth, naturalLeft, wantedRight, statusGap, minRight float32) (leftWidth, rightAvailable float32) {
+	rightNeed := wantedRight
+	if rightNeed > 0 {
+		rightNeed = max(rightNeed, minRight)
+	}
+	if naturalLeft > 0 && rightNeed > 0 {
+		leftWidth = min(naturalLeft, max(float32(0), contentWidth-rightNeed-statusGap))
+		return leftWidth, max(float32(0), contentWidth-leftWidth-statusGap)
+	}
+	if rightNeed > 0 {
+		return 0, contentWidth
+	}
+	return min(naturalLeft, contentWidth), max(float32(0), contentWidth-min(naturalLeft, contentWidth))
+}
+
+func toolbarActionsWidth(measured []measuredLauncherToolbarAction, gap float32) float32 {
+	total := float32(0)
+	for index, action := range measured {
+		total += action.width
+		if index > 0 {
+			total += gap
+		}
+	}
+	return total
+}
+
+// fitLauncherToolbarActions keeps More visible and then fills remaining width
+// from the start of the prepared list so result actions are not dropped first.
+func fitLauncherToolbarActions(measured []measuredLauncherToolbarAction, gap, available float32) ([]measuredLauncherToolbarAction, float32) {
+	if len(measured) == 0 || available <= 0 {
+		return nil, 0
+	}
+	moreIndex := -1
+	for index, action := range measured {
+		if action.id == launcherToolbarMoreActionID {
+			moreIndex = index
+			break
+		}
+	}
+	reserved := float32(0)
+	if moreIndex >= 0 {
+		reserved = measured[moreIndex].width
+		if len(measured) > 1 {
+			reserved += gap
+		}
+	}
+	shown := make([]measuredLauncherToolbarAction, 0, len(measured))
+	used := float32(0)
+	for index, action := range measured {
+		if index == moreIndex {
+			continue
+		}
+		nextWidth := action.width
+		if len(shown) > 0 {
+			nextWidth += gap
+		}
+		if used+nextWidth > available-reserved {
+			break
+		}
+		shown = append(shown, action)
+		used += nextWidth
+	}
+	if moreIndex >= 0 {
+		nextWidth := measured[moreIndex].width
+		if len(shown) > 0 {
+			nextWidth += gap
+		}
+		if used+nextWidth <= available {
+			shown = append(shown, measured[moreIndex])
+			used += nextWidth
+		}
+	}
+	return shown, used
 }

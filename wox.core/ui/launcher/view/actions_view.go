@@ -103,16 +103,12 @@ func ActionsView(props ActionsProps) (woxwidget.Widget, float32, float32) {
 	return view, panelWidth, panelHeight
 }
 
-// ActionsBoundary retains the action panel while its prepared props and retained state are unchanged.
+// ActionsBoundary composes the floating action panel. Scroll chrome stays outside
+// any Boundary so WOX_DEBUG_REPAINT=verify does not compare a live scrollbar
+// animation with a shadow rebuild at rest, which would rebuild the whole panel
+// on every caret blink and report panel-sized idle damage.
 func ActionsBoundary(props ActionsProps) (woxwidget.Widget, float32, float32) {
-	panelWidth, _, panelHeight, _ := actionPanelGeometry(props)
-	return woxwidget.Boundary[ActionsProps]{
-		Key: "launcher-actions-boundary", Label: "actions", Props: props,
-		Build: func(props ActionsProps) woxwidget.Widget {
-			view, _, _ := ActionsView(props)
-			return view
-		},
-	}, panelWidth, panelHeight
+	return ActionsView(props)
 }
 
 // InitState creates the action list controller when the panel enters the Host tree.
@@ -244,11 +240,11 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.ActionHeader,
 	})
-	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-		ID: "action-search", Label: "Filter actions", Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
+	search := actionSearchBoundary(actionSearchProps{
+		Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
 		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8, Bottom: 8}, Background: props.ActionQueryBackground,
-		Style: woxui.TextStyle{Size: actionFilterFontSize}, TextColor: props.ActionQueryText, Value: props.Filter, Focused: true, Autofocus: true,
-		DisableHover: true, MaxLines: 1, Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
+		Style: woxui.TextStyle{Size: actionFilterFontSize}, TextColor: props.ActionQueryText, Filter: props.Filter,
+		Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
 	})
 	panel := woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,
@@ -262,4 +258,40 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	}
 	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.
 	return woxwidget.Gesture{ID: "action-panel-surface", OnTap: func() {}, Child: panel}
+}
+
+type actionSearchProps struct {
+	Width      float32
+	Height     float32
+	Radius     float32
+	Padding    woxwidget.Insets
+	Background woxui.Color
+	Style      woxui.TextStyle
+	TextColor  woxui.Color
+	Filter     string
+	Window     *woxui.Window
+	Theme      woxcomponent.Theme
+	OnChanged  func(string)              `boundary:"stable"`
+	OnKey      func(woxui.KeyEvent) bool `boundary:"stable"`
+}
+
+// Equal compares every render dependency for the retained action filter.
+func (p actionSearchProps) Equal(other actionSearchProps) bool {
+	return p.Width == other.Width && p.Height == other.Height && p.Radius == other.Radius && p.Padding == other.Padding && p.Background == other.Background && p.Style == other.Style && p.TextColor == other.TextColor && p.Filter == other.Filter && p.Window == other.Window && p.Theme == other.Theme
+}
+
+// actionSearchBoundary retains the action filter so caret blinks and text-field
+// invalidations stay inside the input instead of walking to a full-width ancestor.
+func actionSearchBoundary(props actionSearchProps) woxwidget.Widget {
+	return woxwidget.Boundary[actionSearchProps]{
+		Key: "launcher-actions-search-boundary", Label: "actions:search", Props: props,
+		Build: func(props actionSearchProps) woxwidget.Widget {
+			return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+				ID: "action-search", Label: "Filter actions", Width: props.Width, Height: props.Height, Radius: props.Radius,
+				Padding: props.Padding, Background: props.Background, Style: props.Style, TextColor: props.TextColor,
+				Value: props.Filter, Focused: true, Autofocus: true, DisableHover: true, MaxLines: 1,
+				Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
+			})
+		},
+	}
 }

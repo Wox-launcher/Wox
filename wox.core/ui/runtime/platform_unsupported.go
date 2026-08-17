@@ -136,6 +136,14 @@ func (w *platformWindow) invalidate() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) requestAnimationFrame() error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) stopAnimationFrames() error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) setTextInputState(state TextInputState) error {
 	return ErrPlatformUnsupported
 }

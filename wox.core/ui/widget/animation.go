@@ -146,13 +146,19 @@ func transformAnimationProgress(progress float32, curve AnimationCurve) float32 
 	return 1 + (overshoot+1)*shifted*shifted*shifted + overshoot*shifted*shifted
 }
 
+type animationFrameScheduler interface {
+	RequestAnimationFrame() error
+	StopAnimationFrames() error
+}
+
 type animationHost struct {
-	mu         sync.Mutex
-	values     map[Key]*floatAnimation
-	loops      map[Key]*loopAnimation
-	generation uint64
-	active     bool
-	timer      *time.Timer
+	mu           sync.Mutex
+	values       map[Key]*floatAnimation
+	loops        map[Key]*loopAnimation
+	generation   uint64
+	active       bool
+	timer        *time.Timer
+	vsyncPending bool
 }
 
 // observe keeps an animation alive when a cached Boundary skips its widget layout.
@@ -195,6 +201,7 @@ func (h *animationHost) beginFrame() animationFrame {
 	defer h.mu.Unlock()
 	h.generation++
 	h.active = false
+	h.vsyncPending = false
 	return animationFrame{host: h, generation: h.generation, now: time.Now()}
 }
 
@@ -259,7 +266,7 @@ func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.D
 }
 
 // endFrame drops absent animations and requests the next frame only while a value is moving.
-func (h *animationHost) endFrame(frame animationFrame, invalidate func()) {
+func (h *animationHost) endFrame(frame animationFrame, invalidate func(), vsync animationFrameScheduler) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for key, animation := range h.values {
@@ -277,10 +284,25 @@ func (h *animationHost) endFrame(frame animationFrame, invalidate func()) {
 			h.timer.Stop()
 			h.timer = nil
 		}
+		h.vsyncPending = false
+		if vsync != nil {
+			_ = vsync.StopAnimationFrames()
+		}
 		return
 	}
-	if h.timer != nil {
+	if h.timer != nil || h.vsyncPending {
 		return
+	}
+	if vsync != nil {
+		h.vsyncPending = true
+		h.mu.Unlock()
+		err := vsync.RequestAnimationFrame()
+		h.mu.Lock()
+		if err != nil {
+			h.vsyncPending = false
+		} else {
+			return
+		}
 	}
 	var timer *time.Timer
 	timer = time.AfterFunc(animationFrameInterval, func() {
@@ -306,6 +328,7 @@ func (h *animationHost) reset() {
 		h.timer.Stop()
 		h.timer = nil
 	}
+	h.vsyncPending = false
 	h.values = nil
 	h.loops = nil
 	h.active = false

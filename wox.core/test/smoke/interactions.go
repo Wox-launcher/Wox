@@ -386,9 +386,13 @@ func SetLauncherQueryAndWaitComplete(t *testing.T, ctx context.Context, client *
 		t.Fatalf("set launcher query %q: %v", query, err)
 	}
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
 		results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
-		return inputFound && input.Value == query && resultsFound && results.Value == "complete"
+		if !resultsFound || results.Value != "complete" {
+			return false
+		}
+		input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+		// Chat/preview-only modes hide the query box after the result lands.
+		return !inputFound || input.Value == query
 	})
 	if err != nil {
 		t.Fatalf("wait for launcher query %q: %v", query, err)

@@ -72,7 +72,11 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, 0)
 	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height)
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
+	var groupSignature uint64
 	for index, result := range snapshot.results {
+		if result.IsGroup {
+			groupSignature = groupSignature*16777619 ^ uint64(index+1)
+		}
 		item := launcherview.LauncherGridResult{
 			ID: result.ID, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 		}
@@ -93,7 +97,8 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
 		CellWidth: cellWidth, CellHeight: cellHeight, VisualWidth: visualWidth, VisualHeight: visualHeight,
-		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale, Theme: snapshot.palette.componentTheme(), ScrollDetached: snapshot.resultScrollDetached, Results: results,
+		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale, Theme: snapshot.palette.componentTheme(), ScrollDetached: snapshot.resultScrollDetached, Complete: snapshot.queryComplete,
+		ExtentRevision: launcherGridExtentRevision(cellHeight, gridGroupHeaderHeight, width, layout.Columns, len(snapshot.results), groupSignature), Results: results,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
@@ -187,4 +192,13 @@ func gridResultVerticalBounds(results []queryResult, target int, width float32, 
 		y += cellHeight
 	}
 	return y, y
+}
+
+func launcherGridExtentRevision(cellHeight, headerHeight, width float32, columns, resultCount int, groupSignature uint64) uint64 {
+	revision := uint64(resultCount) + 1
+	revision = revision*16777619 ^ uint64(math.Float32bits(cellHeight))
+	revision = revision*16777619 ^ uint64(math.Float32bits(headerHeight))
+	revision = revision*16777619 ^ uint64(math.Float32bits(width))
+	revision = revision*16777619 ^ uint64(columns)
+	return revision ^ groupSignature
 }

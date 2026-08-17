@@ -37,6 +37,7 @@ wox.ui.windows/obj/
 .tmp
 .worktrees/
 .tmp-*
+artifacts/
 .wox-automation.json
 superpowers
 .superpowers/*

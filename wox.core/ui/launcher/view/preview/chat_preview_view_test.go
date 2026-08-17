@@ -99,6 +99,19 @@ func TestChatToolActivityUsesNestedDisclosureHeights(t *testing.T) {
 	}
 }
 
+func TestChatMessagesScrollMetricsHashesEveryItemHeight(t *testing.T) {
+	first := []ChatMessageProps{{Kind: "round"}, {Kind: "tool-activity"}, {Kind: "round"}}
+	second := []ChatMessageProps{{Kind: "round"}, {Kind: "round"}, {Kind: "tool-activity"}}
+	heightA, revisionA := ChatMessagesScrollMetrics(first, 0)
+	heightB, revisionB := ChatMessagesScrollMetrics(second, 0)
+	if heightA != heightB {
+		t.Fatalf("reordered heights = %.0f and %.0f, want the same total", heightA, heightB)
+	}
+	if revisionA == revisionB {
+		t.Fatal("reordered item heights kept the same extent revision")
+	}
+}
+
 func TestChatMessagesUsesSharedScrollView(t *testing.T) {
 	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
 	maxOffset := float32(0)

@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 extern int32_t woxGoLinuxStart(uintptr_t context);
 extern void woxGoLinuxCall(uintptr_t context);
@@ -66,6 +67,41 @@ enum {
   WOX_WINDOW_ROLE_SCREENSHOT = 2,
 };
 
+enum {
+  WOX_LINUX_IMAGE_CACHE_MAX = 32,
+  WOX_LINUX_TEXT_CACHE_MAX = 1024,
+  WOX_LINUX_TEXT_CACHE_MAX_CHARS = 256,
+};
+
+static const uint64_t wox_linux_image_cache_max_bytes = 8ULL * 1024ULL * 1024ULL;
+static const uint64_t wox_linux_image_cache_max_entry_bytes = 1ULL * 1024ULL * 1024ULL;
+static const uint64_t wox_linux_large_image_max_bytes = 32ULL * 1024ULL * 1024ULL;
+static const uint64_t wox_linux_text_cache_max_bytes = 16ULL * 1024ULL * 1024ULL;
+static const uint64_t wox_linux_text_cache_max_entry_bytes = 1ULL * 1024ULL * 1024ULL;
+
+typedef struct {
+  uint64_t image_id;
+  uint64_t byte_size;
+  uint64_t last_used;
+  uint64_t generation;
+  GLuint texture;
+} WoxLinuxImageCacheEntry;
+
+typedef struct {
+  uint64_t hash;
+  uint64_t byte_size;
+  uint64_t last_used;
+  uint64_t generation;
+  GLuint texture;
+  float font_size;
+  float scale;
+  int pixel_width;
+  int pixel_height;
+  uint8_t font_weight;
+  char text[WOX_LINUX_TEXT_CACHE_MAX_CHARS + 1];
+  char family[64];
+} WoxLinuxTextCacheEntry;
+
 typedef struct {
   GLuint rect_program;
   GLuint texture_program;
@@ -102,6 +138,25 @@ typedef struct {
   float logical_width;
   float logical_height;
   float scale;
+  uint64_t context_generation;
+  uint64_t last_presented_generation;
+  bool encode_full;
+  float encode_damage_x;
+  float encode_damage_y;
+  float encode_damage_width;
+  float encode_damage_height;
+  WoxLinuxImageCacheEntry images[WOX_LINUX_IMAGE_CACHE_MAX];
+  int32_t image_count;
+  uint64_t image_bytes;
+  uint64_t image_use_serial;
+  GLuint cached_large_image;
+  uint64_t cached_large_image_id;
+  uint64_t cached_large_image_bytes;
+  uint64_t cached_large_image_generation;
+  WoxLinuxTextCacheEntry *texts;
+  int32_t text_count;
+  uint64_t text_bytes;
+  uint64_t text_use_serial;
 } WoxLinuxRenderer;
 
 struct WoxLinuxWindow {
@@ -138,6 +193,8 @@ struct WoxLinuxWindow {
   guint32 pointer_time;
   bool visible;
   bool active;
+  bool animation_frame_pending;
+  guint animation_tick_id;
   bool hide_on_blur;
   bool native_dialog_active;
   bool nonactivating;
@@ -158,6 +215,12 @@ struct WoxLinuxWindow {
   guint invalidate_idle;
   bool closed;
   GdkRectangle input_cursor_rect;
+  WoxRendererResourceStats frame_resource_stats;
+  uint64_t large_image_candidate_id;
+  int32_t large_image_candidate_frames;
+  int64_t large_image_create_ns[16];
+  int32_t large_image_create_count;
+  bool cache_large_images;
 };
 
 static pthread_t wox_linux_main_thread;
@@ -842,6 +905,302 @@ static GLuint create_program(const char *vertex_source, const char *fragment_sou
   return 0;
 }
 
+static uint64_t fnv1a_bytes(uint64_t hash, const void *data, size_t length) {
+  const uint8_t *bytes = data;
+  for (size_t index = 0; index < length; index++) {
+    hash ^= bytes[index];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+static uint64_t linux_text_cache_hash(const char *text, const char *family, float font_size, uint8_t font_weight, float scale, int pixel_width, int pixel_height) {
+  uint64_t hash = 14695981039346656037ULL;
+  hash = fnv1a_bytes(hash, text, strlen(text));
+  hash = fnv1a_bytes(hash, family, strlen(family));
+  hash = fnv1a_bytes(hash, &font_size, sizeof(font_size));
+  hash = fnv1a_bytes(hash, &font_weight, sizeof(font_weight));
+  hash = fnv1a_bytes(hash, &scale, sizeof(scale));
+  hash = fnv1a_bytes(hash, &pixel_width, sizeof(pixel_width));
+  hash = fnv1a_bytes(hash, &pixel_height, sizeof(pixel_height));
+  return hash;
+}
+
+static void delete_gl_texture(GLuint *texture, bool delete_texture) {
+  if (texture == NULL || *texture == 0) {
+    return;
+  }
+  if (delete_texture) {
+    glDeleteTextures(1, texture);
+  }
+  *texture = 0;
+}
+
+// clear_cached_large_image drops the adaptive 32MiB preview slot for one GL context.
+static void clear_cached_large_image(WoxLinuxRenderer *renderer, bool delete_textures) {
+  if (renderer == NULL) {
+    return;
+  }
+  delete_gl_texture(&renderer->cached_large_image, delete_textures);
+  renderer->cached_large_image_id = 0;
+  renderer->cached_large_image_bytes = 0;
+  renderer->cached_large_image_generation = 0;
+}
+
+// reset_large_image_policy forgets the adaptive large-image candidate after hide.
+static void reset_large_image_policy(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+  window->large_image_candidate_id = 0;
+  window->large_image_candidate_frames = 0;
+  window->large_image_create_count = 0;
+  window->cache_large_images = false;
+}
+
+static void clear_linux_resource_caches(WoxLinuxRenderer *renderer, bool delete_textures) {
+  if (renderer == NULL) {
+    return;
+  }
+  for (int32_t index = 0; index < renderer->image_count; index++) {
+    delete_gl_texture(&renderer->images[index].texture, delete_textures);
+  }
+  memset(renderer->images, 0, sizeof(renderer->images));
+  renderer->image_count = 0;
+  renderer->image_bytes = 0;
+  clear_cached_large_image(renderer, delete_textures);
+  if (renderer->texts != NULL) {
+    for (int32_t index = 0; index < renderer->text_count; index++) {
+      delete_gl_texture(&renderer->texts[index].texture, delete_textures);
+    }
+    memset(renderer->texts, 0, sizeof(WoxLinuxTextCacheEntry) * (size_t)WOX_LINUX_TEXT_CACHE_MAX);
+  }
+  renderer->text_count = 0;
+  renderer->text_bytes = 0;
+}
+
+static uint64_t linux_cache_resident_bytes(const WoxLinuxRenderer *renderer) {
+  if (renderer == NULL) {
+    return 0;
+  }
+  return renderer->image_bytes + renderer->text_bytes + renderer->cached_large_image_bytes;
+}
+
+static WoxLinuxImageCacheEntry *find_cached_gl_image(WoxLinuxRenderer *renderer, uint64_t image_id) {
+  if (renderer == NULL || image_id == 0) {
+    return NULL;
+  }
+  for (int32_t index = 0; index < renderer->image_count; index++) {
+    if (renderer->images[index].image_id == image_id && renderer->images[index].generation == renderer->context_generation) {
+      renderer->images[index].last_used = ++renderer->image_use_serial;
+      return &renderer->images[index];
+    }
+  }
+  return NULL;
+}
+
+static void evict_oldest_gl_image(WoxLinuxRenderer *renderer, bool delete_textures, int32_t *evictions) {
+  if (renderer->image_count <= 0) {
+    return;
+  }
+  int32_t oldest = 0;
+  for (int32_t index = 1; index < renderer->image_count; index++) {
+    if (renderer->images[index].last_used < renderer->images[oldest].last_used) {
+      oldest = index;
+    }
+  }
+  renderer->image_bytes -= renderer->images[oldest].byte_size;
+  delete_gl_texture(&renderer->images[oldest].texture, delete_textures);
+  renderer->images[oldest] = renderer->images[renderer->image_count - 1];
+  renderer->image_count--;
+  if (evictions != NULL) {
+    (*evictions)++;
+  }
+}
+
+static bool cache_gl_image(WoxLinuxRenderer *renderer, uint64_t image_id, uint64_t byte_size, GLuint texture, bool delete_textures, int32_t *evictions) {
+  if (renderer == NULL || image_id == 0 || texture == 0 || byte_size == 0 || byte_size > wox_linux_image_cache_max_entry_bytes) {
+    return false;
+  }
+  while (renderer->image_count > 0 &&
+         (renderer->image_count >= WOX_LINUX_IMAGE_CACHE_MAX ||
+          renderer->image_bytes + byte_size > wox_linux_image_cache_max_bytes)) {
+    evict_oldest_gl_image(renderer, delete_textures, evictions);
+  }
+  if (renderer->image_count >= WOX_LINUX_IMAGE_CACHE_MAX || renderer->image_bytes + byte_size > wox_linux_image_cache_max_bytes) {
+    return false;
+  }
+  renderer->images[renderer->image_count++] = (WoxLinuxImageCacheEntry){
+      .image_id = image_id,
+      .byte_size = byte_size,
+      .last_used = ++renderer->image_use_serial,
+      .generation = renderer->context_generation,
+      .texture = texture,
+  };
+  renderer->image_bytes += byte_size;
+  return true;
+}
+
+static int64_t linux_monotonic_nanos(void) {
+  struct timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+    return 0;
+  }
+  return (int64_t)now.tv_sec * 1000000000LL + (int64_t)now.tv_nsec;
+}
+
+static int64_t linux_p95_nanos(const int64_t *samples, int32_t count) {
+  if (samples == NULL || count <= 0) {
+    return 0;
+  }
+  int64_t sorted[16];
+  int32_t limit = count < 16 ? count : 16;
+  memcpy(sorted, samples, sizeof(int64_t) * (size_t)limit);
+  for (int32_t index = 1; index < limit; index++) {
+    int64_t value = sorted[index];
+    int32_t slot = index;
+    while (slot > 0 && sorted[slot - 1] > value) {
+      sorted[slot] = sorted[slot - 1];
+      slot--;
+    }
+    sorted[slot] = value;
+  }
+  int32_t rank = (limit * 95 + 99) / 100 - 1;
+  if (rank < 0) {
+    rank = 0;
+  }
+  if (rank >= limit) {
+    rank = limit - 1;
+  }
+  return sorted[rank];
+}
+
+// note_large_image_create enables one 32MiB preview slot after the same oversized image
+// is recreated for three frames and image-create P95 stays above 2ms.
+static void note_large_image_create(WoxLinuxWindow *window, uint64_t image_id, int64_t create_ns) {
+  if (window == NULL) {
+    return;
+  }
+  if (window->large_image_candidate_id == image_id) {
+    window->large_image_candidate_frames++;
+  } else {
+    window->large_image_candidate_id = image_id;
+    window->large_image_candidate_frames = 1;
+    window->large_image_create_count = 0;
+    // Admission is bound to the current candidate. Without this reset a different oversized image
+    // would inherit the previous winner's verdict and evict the single slot on first sight, so two
+    // alternating previews would keep replacing each other and never accumulate hits.
+    window->cache_large_images = false;
+  }
+  if (window->large_image_create_count < 16) {
+    window->large_image_create_ns[window->large_image_create_count++] = create_ns;
+  }
+  if (!window->cache_large_images && window->large_image_candidate_frames >= 3 &&
+      linux_p95_nanos(window->large_image_create_ns, window->large_image_create_count) > 2000000LL) {
+    window->cache_large_images = true;
+  }
+}
+
+static WoxLinuxTextCacheEntry *find_cached_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char *text, const char *family, float font_size, uint8_t font_weight, float scale, int pixel_width, int pixel_height) {
+  if (renderer == NULL || renderer->texts == NULL) {
+    return NULL;
+  }
+  for (int32_t index = 0; index < renderer->text_count; index++) {
+    WoxLinuxTextCacheEntry *entry = &renderer->texts[index];
+    if (entry->hash == hash && entry->generation == renderer->context_generation &&
+        entry->font_size == font_size && entry->font_weight == font_weight && entry->scale == scale &&
+        entry->pixel_width == pixel_width && entry->pixel_height == pixel_height &&
+        strcmp(entry->text, text) == 0 && strcmp(entry->family, family) == 0) {
+      entry->last_used = ++renderer->text_use_serial;
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static void evict_oldest_gl_text(WoxLinuxRenderer *renderer, bool delete_textures, int32_t *evictions) {
+  if (renderer->texts == NULL || renderer->text_count <= 0) {
+    return;
+  }
+  int32_t oldest = 0;
+  for (int32_t index = 1; index < renderer->text_count; index++) {
+    if (renderer->texts[index].last_used < renderer->texts[oldest].last_used) {
+      oldest = index;
+    }
+  }
+  renderer->text_bytes -= renderer->texts[oldest].byte_size;
+  delete_gl_texture(&renderer->texts[oldest].texture, delete_textures);
+  renderer->texts[oldest] = renderer->texts[renderer->text_count - 1];
+  renderer->text_count--;
+  if (evictions != NULL) {
+    (*evictions)++;
+  }
+}
+
+static bool cache_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char *text, const char *family, float font_size, uint8_t font_weight, float scale, int pixel_width, int pixel_height, uint64_t byte_size, GLuint texture, bool delete_textures, int32_t *evictions) {
+  if (renderer == NULL || renderer->texts == NULL || texture == 0 || byte_size == 0 || byte_size > wox_linux_text_cache_max_entry_bytes) {
+    return false;
+  }
+  if (strlen(text) > WOX_LINUX_TEXT_CACHE_MAX_CHARS || strlen(family) >= sizeof(renderer->texts[0].family)) {
+    return false;
+  }
+  while (renderer->text_count > 0 &&
+         (renderer->text_count >= WOX_LINUX_TEXT_CACHE_MAX ||
+          renderer->text_bytes + byte_size > wox_linux_text_cache_max_bytes)) {
+    evict_oldest_gl_text(renderer, delete_textures, evictions);
+  }
+  if (renderer->text_count >= WOX_LINUX_TEXT_CACHE_MAX || renderer->text_bytes + byte_size > wox_linux_text_cache_max_bytes) {
+    return false;
+  }
+  WoxLinuxTextCacheEntry *entry = &renderer->texts[renderer->text_count++];
+  memset(entry, 0, sizeof(*entry));
+  entry->hash = hash;
+  entry->byte_size = byte_size;
+  entry->last_used = ++renderer->text_use_serial;
+  entry->generation = renderer->context_generation;
+  entry->texture = texture;
+  entry->font_size = font_size;
+  entry->scale = scale;
+  entry->pixel_width = pixel_width;
+  entry->pixel_height = pixel_height;
+  entry->font_weight = font_weight;
+  memcpy(entry->text, text, strlen(text));
+  memcpy(entry->family, family, strlen(family));
+  renderer->text_bytes += byte_size;
+  return true;
+}
+
+static void draw_bound_texture(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float rotation_radians, float corner_radius, const float color[4]) {
+  glUseProgram(renderer->texture_program);
+  glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
+  glUniform4f(renderer->texture_bounds, x, y, width, height);
+  glUniform4fv(renderer->texture_color, 1, color);
+  glUniform1f(renderer->texture_rotation, rotation_radians);
+  glUniform1f(renderer->texture_radius, corner_radius);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static GLuint upload_gl_texture(int width, int height, GLenum format, const void *pixels, int unpack_row_length) {
+  GLuint texture = 0;
+  glGenTextures(1, &texture);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  if (unpack_row_length > 0) {
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
+  }
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, format, GL_UNSIGNED_BYTE, pixels);
+  if (unpack_row_length > 0) {
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+  }
+  return texture;
+}
+
 static bool initialize_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
   GError *error = gtk_gl_area_get_error(GTK_GL_AREA(gl_area));
@@ -878,6 +1237,17 @@ static bool initialize_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) 
   glUseProgram(renderer->texture_program);
   glUniform1i(glGetUniformLocation(renderer->texture_program, "u_texture"), 0);
   glUseProgram(0);
+  if (renderer->texts == NULL) {
+    renderer->texts = calloc((size_t)WOX_LINUX_TEXT_CACHE_MAX, sizeof(WoxLinuxTextCacheEntry));
+    if (renderer->texts == NULL) {
+      glDeleteVertexArrays(1, &renderer->vertex_array);
+      glDeleteProgram(renderer->texture_program);
+      glDeleteProgram(renderer->rect_program);
+      memset(renderer, 0, sizeof(*renderer));
+      return false;
+    }
+  }
+  renderer->context_generation++;
   renderer->ready = true;
   return true;
 }
@@ -917,6 +1287,7 @@ static void destroy_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
   }
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
   if (gtk_gl_area_get_error(GTK_GL_AREA(gl_area)) == NULL) {
+    clear_linux_resource_caches(renderer, true);
     if (renderer->frame_framebuffer != 0) {
       glDeleteFramebuffers(1, &renderer->frame_framebuffer);
     }
@@ -926,7 +1297,10 @@ static void destroy_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
     glDeleteVertexArrays(1, &renderer->vertex_array);
     glDeleteProgram(renderer->texture_program);
     glDeleteProgram(renderer->rect_program);
+  } else {
+    clear_linux_resource_caches(renderer, false);
   }
+  free(renderer->texts);
   memset(renderer, 0, sizeof(*renderer));
 }
 
@@ -1568,6 +1942,8 @@ static void present_linux_window_now(WoxLinuxWindow *window) {
   window->presenting = false;
 }
 
+static void stop_linux_animation_frames(WoxLinuxWindow *window);
+
 static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
   if (window->closed || !window->visible) {
     return;
@@ -1578,6 +1954,24 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
     return;
   }
   window->visible = false;
+  stop_linux_animation_frames(window);
+  if (window->renderer.ready && window->gl_area != NULL) {
+    gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
+    if (gtk_gl_area_get_error(GTK_GL_AREA(window->gl_area)) == NULL) {
+      clear_linux_resource_caches(&window->renderer, true);
+    } else {
+      clear_linux_resource_caches(&window->renderer, false);
+    }
+  }
+  if (window->overlay_renderer.ready && window->overlay_gl_area != NULL) {
+    gtk_gl_area_make_current(GTK_GL_AREA(window->overlay_gl_area));
+    if (gtk_gl_area_get_error(GTK_GL_AREA(window->overlay_gl_area)) == NULL) {
+      clear_linux_resource_caches(&window->overlay_renderer, true);
+    } else {
+      clear_linux_resource_caches(&window->overlay_renderer, false);
+    }
+  }
+  reset_large_image_policy(window);
   gtk_widget_hide(window->window);
   if (should_restore) {
     restore_previous_x11_window(window);
@@ -2854,6 +3248,62 @@ int32_t wox_linux_window_invalidate(WoxLinuxWindow *window) {
   return run_on_main_sync(invalidate_main, &call) ? call.result : -1;
 }
 
+static gboolean linux_animation_tick(GtkWidget *widget, GdkFrameClock *clock, gpointer data) {
+  (void)widget;
+  (void)clock;
+  WoxLinuxWindow *window = data;
+  if (window == NULL || window->closed || !window->visible || !window->animation_frame_pending) {
+    return G_SOURCE_CONTINUE;
+  }
+  window->animation_frame_pending = false;
+  gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+  return G_SOURCE_CONTINUE;
+}
+
+static void stop_linux_animation_frames(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+  window->animation_frame_pending = false;
+  if (window->animation_tick_id != 0 && window->gl_area != NULL) {
+    gtk_widget_remove_tick_callback(window->gl_area, window->animation_tick_id);
+    window->animation_tick_id = 0;
+  }
+}
+
+static void request_animation_frame_main(void *data) {
+  WoxWindowCall *call = data;
+  if (call->window->closed || !call->window->visible || call->window->gl_area == NULL) {
+    call->result = -1;
+    return;
+  }
+  call->window->animation_frame_pending = true;
+  if (call->window->animation_tick_id == 0) {
+    call->window->animation_tick_id = gtk_widget_add_tick_callback(call->window->gl_area, linux_animation_tick, call->window, NULL);
+  }
+}
+
+static void stop_animation_frames_main(void *data) {
+  WoxWindowCall *call = data;
+  stop_linux_animation_frames(call->window);
+}
+
+int32_t wox_linux_window_request_animation_frame(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxWindowCall call = {.window = window};
+  return run_on_main_sync(request_animation_frame_main, &call) ? call.result : -1;
+}
+
+int32_t wox_linux_window_stop_animation_frames(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxWindowCall call = {.window = window};
+  return run_on_main_sync(stop_animation_frames_main, &call) ? call.result : -1;
+}
+
 typedef struct {
   WoxLinuxWindow *window;
   bool enabled;
@@ -3224,6 +3674,10 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
     return -1;
   }
   gtk_gl_area_attach_buffers(GTK_GL_AREA(gl_area));
+  if (renderer->scale > 0.0f && fabsf(renderer->scale - scale) > 0.001f) {
+    clear_linux_resource_caches(renderer, true);
+    renderer->text_use_serial = 0;
+  }
   renderer->logical_width = logical_width;
   renderer->logical_height = logical_height;
   renderer->scale = scale;
@@ -3240,7 +3694,13 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
   premultiplied_color(red, green, blue, force_opaque ? 255 : alpha, clear);
   glViewport(0, 0, pixel_width, pixel_height);
   glDisable(GL_DEPTH_TEST);
-  renderer->damage_active = !recreated && damage_width > 0.0f && damage_height > 0.0f;
+  bool generation_changed = renderer->last_presented_generation == 0 || renderer->last_presented_generation != renderer->context_generation;
+  renderer->encode_full = recreated || generation_changed || damage_width <= 0.0f || damage_height <= 0.0f;
+  renderer->encode_damage_x = damage_x;
+  renderer->encode_damage_y = damage_y;
+  renderer->encode_damage_width = damage_width;
+  renderer->encode_damage_height = damage_height;
+  renderer->damage_active = !renderer->encode_full;
   if (renderer->damage_active) {
     int left = (int)floorf(fmaxf(0.0f, damage_x) * scale);
     int right = (int)ceilf(fminf(logical_width, damage_x + damage_width) * scale);
@@ -3273,9 +3733,29 @@ int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width
   window->embedded_surface_overlay_active = false;
   window->active_renderer = &window->renderer;
   window->active_gl_area = window->gl_area;
+  memset(&window->frame_resource_stats, 0, sizeof(window->frame_resource_stats));
   // Screenshot and recording surfaces must keep the requested clear alpha. Forcing
   // opaque here turns Clear(Color{}) into a black desktop-covering backdrop.
   return begin_linux_renderer_frame(window, window->active_renderer, window->active_gl_area, !window->per_pixel_alpha, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
+}
+
+int32_t wox_linux_window_encode_damage(WoxLinuxWindow *window, float *x, float *y, float *width, float *height) {
+  if (window == NULL || window->active_renderer == NULL || x == NULL || y == NULL || width == NULL || height == NULL) {
+    return -1;
+  }
+  WoxLinuxRenderer *renderer = window->active_renderer;
+  if (renderer->encode_full) {
+    *x = 0;
+    *y = 0;
+    *width = 0;
+    *height = 0;
+    return 0;
+  }
+  *x = renderer->encode_damage_x;
+  *y = renderer->encode_damage_y;
+  *width = renderer->encode_damage_width;
+  *height = renderer->encode_damage_height;
+  return 0;
 }
 
 int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
@@ -3367,6 +3847,24 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   if (pixel_width <= 0 || pixel_height <= 0 || pixel_width > 16384 || pixel_height > 16384) {
     return -1;
   }
+  const char *family = font_family[0] == '\0' ? "Sans" : font_family;
+  size_t text_len = strlen(text);
+  bool cacheable = text_len <= WOX_LINUX_TEXT_CACHE_MAX_CHARS;
+  uint64_t hash = 0;
+  WoxLinuxTextCacheEntry *cached = NULL;
+  if (cacheable) {
+    hash = linux_text_cache_hash(text, family, font_size, font_weight, renderer->scale, pixel_width, pixel_height);
+    cached = find_cached_gl_text(renderer, hash, text, family, font_size, font_weight, renderer->scale, pixel_width, pixel_height);
+  }
+  float color[4];
+  premultiplied_color(red, green, blue, alpha, color);
+  if (cached != NULL) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cached->texture);
+    draw_bound_texture(renderer, x, y, width, height, 0.0f, 0.0f, color);
+    window->frame_resource_stats.cache_hits++;
+    return 0;
+  }
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, pixel_width, pixel_height);
   if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
@@ -3377,7 +3875,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   cairo_set_source_rgba(cairo, 1.0, 1.0, 1.0, 1.0);
   PangoLayout *layout = pango_cairo_create_layout(cairo);
   PangoFontDescription *font = pango_font_description_new();
-	pango_font_description_set_family(font, font_family[0] == '\0' ? "Sans" : font_family);
+  pango_font_description_set_family(font, family);
   pango_font_description_set_absolute_size(font, font_size * renderer->scale * PANGO_SCALE);
   pango_font_description_set_weight(font, font_weight == 1 ? PANGO_WEIGHT_SEMIBOLD : PANGO_WEIGHT_NORMAL);
   pango_layout_set_font_description(layout, font);
@@ -3390,28 +3888,24 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   pango_cairo_show_layout(cairo, layout);
   cairo_surface_flush(surface);
 
-  GLuint texture = 0;
-  glGenTextures(1, &texture);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, pixel_width, pixel_height, 0, GL_BGRA, GL_UNSIGNED_BYTE, cairo_image_surface_get_data(surface));
-
-  float color[4];
-  premultiplied_color(red, green, blue, alpha, color);
-  glUseProgram(renderer->texture_program);
-  glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
-  glUniform4f(renderer->texture_bounds, x, y, width, height);
-  glUniform4fv(renderer->texture_color, 1, color);
-  glUniform1f(renderer->texture_rotation, 0.0f);
-  glUniform1f(renderer->texture_radius, 0.0f);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glDeleteTextures(1, &texture);
+  GLuint texture = upload_gl_texture(pixel_width, pixel_height, GL_BGRA, cairo_image_surface_get_data(surface), 0);
+  if (texture == 0) {
+    pango_font_description_free(font);
+    g_object_unref(layout);
+    cairo_destroy(cairo);
+    cairo_surface_destroy(surface);
+    return -1;
+  }
+  window->frame_resource_stats.text_rasterizations++;
+  bool cached_texture = false;
+  if (cacheable) {
+    uint64_t byte_size = (uint64_t)pixel_width * (uint64_t)pixel_height * 4ULL;
+    cached_texture = cache_gl_text(renderer, hash, text, family, font_size, font_weight, renderer->scale, pixel_width, pixel_height, byte_size, texture, true, &window->frame_resource_stats.cache_evictions);
+  }
+  draw_bound_texture(renderer, x, y, width, height, 0.0f, 0.0f, color);
+  if (!cached_texture) {
+    glDeleteTextures(1, &texture);
+  }
 
   pango_font_description_free(font);
   g_object_unref(layout);
@@ -3420,35 +3914,58 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   return 0;
 }
 
-int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
   WoxLinuxRenderer *renderer = window->active_renderer;
-  GLuint texture = 0;
-  glGenTextures(1, &texture);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, row_stride / 4);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
   float color[4];
   premultiplied_color(255, 255, 255, 255, color);
-  glUseProgram(renderer->texture_program);
-  glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
-  glUniform4f(renderer->texture_bounds, x, y, width, height);
-  glUniform4fv(renderer->texture_color, 1, color);
-  glUniform1f(renderer->texture_rotation, rotation_radians);
-  glUniform1f(renderer->texture_radius, corner_radius);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glDeleteTextures(1, &texture);
+  uint64_t image_bytes = (uint64_t)row_stride * (uint64_t)image_height;
+  bool large_image = image_bytes > wox_linux_image_cache_max_entry_bytes;
+  // Lookup is deliberately not gated on cache_large_images: that flag governs admission only, so a
+  // slot already holding this image keeps serving hits while an alternating image churns candidacy.
+  if (large_image && renderer->cached_large_image_id == image_id &&
+      renderer->cached_large_image != 0 && renderer->cached_large_image_generation == renderer->context_generation) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, renderer->cached_large_image);
+    draw_bound_texture(renderer, x, y, width, height, rotation_radians, corner_radius, color);
+    window->frame_resource_stats.cache_hits++;
+    return 0;
+  }
+  WoxLinuxImageCacheEntry *cached = !large_image && image_id != 0 ? find_cached_gl_image(renderer, image_id) : NULL;
+  if (cached != NULL) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cached->texture);
+    draw_bound_texture(renderer, x, y, width, height, rotation_radians, corner_radius, color);
+    window->frame_resource_stats.cache_hits++;
+    return 0;
+  }
+  int64_t create_start = linux_monotonic_nanos();
+  GLuint texture = upload_gl_texture(image_width, image_height, GL_RGBA, pixels, row_stride / 4);
+  if (texture == 0) {
+    return -1;
+  }
+  window->frame_resource_stats.image_creates++;
+  window->frame_resource_stats.image_uploads++;
+  bool cached_texture = false;
+  if (large_image) {
+    note_large_image_create(window, image_id, linux_monotonic_nanos() - create_start);
+    if (window->cache_large_images && image_id != 0 && image_bytes <= wox_linux_large_image_max_bytes) {
+      clear_cached_large_image(renderer, true);
+      renderer->cached_large_image = texture;
+      renderer->cached_large_image_id = image_id;
+      renderer->cached_large_image_bytes = image_bytes;
+      renderer->cached_large_image_generation = renderer->context_generation;
+      cached_texture = true;
+    }
+  } else {
+    cached_texture = image_id != 0 && cache_gl_image(renderer, image_id, image_bytes, texture, true, &window->frame_resource_stats.cache_evictions);
+  }
+  draw_bound_texture(renderer, x, y, width, height, rotation_radians, corner_radius, color);
+  if (!cached_texture) {
+    glDeleteTextures(1, &texture);
+  }
   return 0;
 }
 
@@ -3514,6 +4031,7 @@ static int32_t finish_linux_renderer_frame(WoxLinuxRenderer *renderer) {
   glBindFramebuffer(GL_FRAMEBUFFER, renderer->default_framebuffer);
   glFlush();
   renderer->frame_open = false;
+  renderer->last_presented_generation = renderer->context_generation;
   return 0;
 }
 
@@ -3564,5 +4082,64 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
   gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
   window->active_renderer = NULL;
   window->active_gl_area = NULL;
+  return result;
+}
+
+int32_t wox_linux_window_take_frame_resource_stats(WoxLinuxWindow *window, WoxRendererResourceStats *out) {
+  if (window == NULL || out == NULL) {
+    return -1;
+  }
+  *out = window->frame_resource_stats;
+  out->resident_bytes = (int64_t)(linux_cache_resident_bytes(&window->renderer) + linux_cache_resident_bytes(&window->overlay_renderer));
+  return 0;
+}
+
+// wox_linux_test_resource_cache_generation exercises LRU bookkeeping and context generations without GL.
+int32_t wox_linux_test_resource_cache_generation(void) {
+  WoxLinuxRenderer renderer;
+  memset(&renderer, 0, sizeof(renderer));
+  renderer.context_generation = 1;
+  renderer.texts = calloc((size_t)WOX_LINUX_TEXT_CACHE_MAX, sizeof(WoxLinuxTextCacheEntry));
+  if (renderer.texts == NULL) {
+    return -1;
+  }
+  if (!cache_gl_image(&renderer, 11, 64, 1, false, NULL) || find_cached_gl_image(&renderer, 11) == NULL) {
+    free(renderer.texts);
+    return -1;
+  }
+  if (!cache_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 2.0f, 40, 16, 128, 2, false, NULL) ||
+      find_cached_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 2.0f, 40, 16) == NULL) {
+    free(renderer.texts);
+    return -1;
+  }
+  renderer.context_generation++;
+  if (find_cached_gl_image(&renderer, 11) != NULL || find_cached_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 2.0f, 40, 16) != NULL) {
+    free(renderer.texts);
+    return -1;
+  }
+  if (cache_gl_image(&renderer, 12, wox_linux_image_cache_max_entry_bytes + 1, 3, false, NULL)) {
+    free(renderer.texts);
+    return -1;
+  }
+  renderer.cached_large_image = 3;
+  renderer.cached_large_image_id = 12;
+  renderer.cached_large_image_bytes = 2ULL * 1024ULL * 1024ULL;
+  renderer.cached_large_image_generation = 1;
+  clear_linux_resource_caches(&renderer, false);
+  WoxLinuxWindow window;
+  memset(&window, 0, sizeof(window));
+  note_large_image_create(&window, 99, 3000000LL);
+  note_large_image_create(&window, 99, 3000000LL);
+  note_large_image_create(&window, 99, 3000000LL);
+  bool large_slot_admitted = window.cache_large_images;
+  // A different oversized image must re-earn the slot instead of inheriting the verdict above.
+  note_large_image_create(&window, 100, 3000000LL);
+  bool large_slot_requires_new_candidate = !window.cache_large_images;
+  int32_t result = renderer.image_count == 0 && renderer.text_count == 0 && renderer.image_bytes == 0 &&
+                           renderer.text_bytes == 0 && renderer.cached_large_image == 0 && renderer.cached_large_image_bytes == 0 &&
+                           renderer.context_generation == 2 && large_slot_admitted && large_slot_requires_new_candidate
+                       ? 0
+                       : -1;
+  free(renderer.texts);
   return result;
 }

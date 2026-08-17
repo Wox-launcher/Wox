@@ -106,66 +106,10 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	const headerHeight = float32(62)
 	const rowHeight = float32(62)
 	viewportHeight := max(float32(0), props.Height-headerHeight)
-	rows := make([]woxwidget.Widget, 0, len(props.Items))
-	for _, item := range props.Items {
-		background := woxui.Color{}
-		titleColor := props.Theme.ResultTitle
-		subtitleColor := props.Theme.ResultSubtitle
-		if item.Selected {
-			background = props.Theme.SelectedBackground
-			titleColor = props.Theme.ActionSelectedText
-			subtitleColor = props.Theme.ActionSelectedText
-		}
-		border := woxui.Color{}
-		if item.Highlighted {
-			border = props.Theme.SelectedBackground
-			border.A = 122
-			if !item.Selected {
-				background = props.Theme.SelectedBackground
-				background.A = 41
-			}
-		}
-		var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: item.FallbackColor}
-		if item.Icon != nil {
-			icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
-		}
-		textWidth := max(float32(0), props.Width-12-32-10)
-		rowChildren := []woxwidget.Widget{icon}
-		if item.Badge != "" {
-			textWidth = max(float32(0), textWidth-10-44)
-		}
-		if item.ShowInstalledIcon {
-			textWidth = max(float32(0), textWidth-10-26)
-		}
-		rowChildren = append(rowChildren, woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
-			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
-		}}})
-		if item.Badge != "" {
-			badgeColor := props.Theme.ResultSubtitle
-			if item.Selected {
-				badgeColor = props.Theme.ActionSelectedText
-			}
-			badge := woxcomponent.WoxTag(item.Badge, badgeColor)
-			rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
-		}
-		if item.ShowInstalledIcon {
-			installedIcon := props.InstalledIcon
-			if item.Selected {
-				installedIcon = props.InstalledSelectedIcon
-			}
-			rowChildren = append(rowChildren, woxwidget.Align{Width: 26, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: installedIcon, Width: 20, Height: 20}})
-		}
-		radius := float32(4)
-		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-			ID: "plugin-list-" + item.ID, Label: item.Name, Width: props.Width, Height: rowHeight, Radius: &radius,
-			Background: &background, BorderColor: border, BorderWidth: 1, Selected: item.Selected, OnTap: item.OnSelect, Theme: props.Theme,
-			Padding: woxwidget.Insets{Left: 6, Right: 6}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
-		}))
-	}
+	items := props.Items
 
 	var list woxwidget.Widget
-	if len(rows) == 0 {
+	if len(items) == 0 {
 		title := props.EmptyTitle
 		description := props.EmptyDescription
 		if title == "" && description == "" {
@@ -177,7 +121,7 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		})
 	} else {
 		var keepVisible *woxwidget.ScrollRange
-		for index, item := range props.Items {
+		for index, item := range items {
 			if item.Selected {
 				start := float32(index) * rowHeight
 				keepVisible = &woxwidget.ScrollRange{Start: start, End: start + rowHeight}
@@ -185,7 +129,11 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			}
 		}
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "plugin-list-scroll", Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: props.Width, Height: viewportHeight,
+			Key: "plugin-list-scroll", Content: woxwidget.LazyList{
+				Width: props.Width, Viewport: viewportHeight, ItemCount: len(items), ItemExtent: rowHeight,
+				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("plugin-list-" + items[index].ID) },
+				ItemBuilder: func(index int) woxwidget.Widget { return pluginListRow(items[index], props, rowHeight) },
+			}, Width: props.Width, Height: viewportHeight,
 			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
 		})
 	}
@@ -200,6 +148,64 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 20, Children: []woxwidget.Widget{searchField, list}}}
+}
+
+// pluginListRow builds one catalog entry so LazyList can materialize only the visible slice.
+func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32) woxwidget.Widget {
+	background := woxui.Color{}
+	titleColor := props.Theme.ResultTitle
+	subtitleColor := props.Theme.ResultSubtitle
+	if item.Selected {
+		background = props.Theme.SelectedBackground
+		titleColor = props.Theme.ActionSelectedText
+		subtitleColor = props.Theme.ActionSelectedText
+	}
+	border := woxui.Color{}
+	if item.Highlighted {
+		border = props.Theme.SelectedBackground
+		border.A = 122
+		if !item.Selected {
+			background = props.Theme.SelectedBackground
+			background.A = 41
+		}
+	}
+	var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: item.FallbackColor}
+	if item.Icon != nil {
+		icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
+	}
+	textWidth := max(float32(0), props.Width-12-32-10)
+	rowChildren := []woxwidget.Widget{icon}
+	if item.Badge != "" {
+		textWidth = max(float32(0), textWidth-10-44)
+	}
+	if item.ShowInstalledIcon {
+		textWidth = max(float32(0), textWidth-10-26)
+	}
+	rowChildren = append(rowChildren, woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+		woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
+		woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
+	}}})
+	if item.Badge != "" {
+		badgeColor := props.Theme.ResultSubtitle
+		if item.Selected {
+			badgeColor = props.Theme.ActionSelectedText
+		}
+		badge := woxcomponent.WoxTag(item.Badge, badgeColor)
+		rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
+	}
+	if item.ShowInstalledIcon {
+		installedIcon := props.InstalledIcon
+		if item.Selected {
+			installedIcon = props.InstalledSelectedIcon
+		}
+		rowChildren = append(rowChildren, woxwidget.Align{Width: 26, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: installedIcon, Width: 20, Height: 20}})
+	}
+	radius := float32(4)
+	return woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+		ID: "plugin-list-" + item.ID, Label: item.Name, Width: props.Width, Height: rowHeight, Radius: &radius,
+		Background: &background, BorderColor: border, BorderWidth: 1, Selected: item.Selected, OnTap: item.OnSelect, Theme: props.Theme,
+		Padding: woxwidget.Insets{Left: 6, Right: 6}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
+	})
 }
 
 // PluginFilterOption describes one advanced catalog filter.

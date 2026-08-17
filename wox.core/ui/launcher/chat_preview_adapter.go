@@ -499,7 +499,7 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 		}
 		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, item.conversation, palette, innerWidth, item.showMeta, item.hideReasoning, imageScale))
 	}
-	props.ContentHeight = previewview.ChatMessagesContentHeight(props.Messages, innerHeight)
+	props.ContentHeight, props.ExtentRevision = previewview.ChatMessagesScrollMetrics(props.Messages, innerHeight)
 	maxOffset := max(float32(0), props.ContentHeight-innerHeight)
 	a.clampChatPreviewScroll(maxOffset)
 	return props

@@ -11,6 +11,41 @@ import (
 func TestActionsBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, ActionItem{})
 	woxwidget.AssertEqualCoversAllFields(t, ActionsProps{})
+	woxwidget.AssertEqualCoversAllFields(t, actionSearchProps{})
+}
+
+type actionSearchHostServices struct{}
+
+func (actionSearchHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * max(style.Size/2, 1), Height: max(style.Size, 1)}}, nil
+}
+func (actionSearchHostServices) Invalidate() error { return nil }
+func (actionSearchHostServices) InvalidateRect(woxui.Rect) error {
+	return nil
+}
+func (actionSearchHostServices) SetTextInputState(woxui.TextInputState) error { return nil }
+func (actionSearchHostServices) SetPointerCursor(woxui.PointerCursor) error   { return nil }
+func (actionSearchHostServices) UpdateAccessibility(woxui.AccessibilityTree, woxui.AccessibilityActionHandler) error {
+	return nil
+}
+
+func TestActionSearchBoundaryVerifyPasses(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return actionSearchBoundary(actionSearchProps{
+			Width: 300, Height: 40, Window: &woxui.Window{},
+			Style: woxui.TextStyle{Size: 14}, Theme: woxcomponent.Theme{},
+		})
+	})
+	host.AttachServices(actionSearchHostServices{})
+	if err := host.SetRepaintDebugMode(woxwidget.RepaintDebugVerify); err != nil {
+		t.Fatal(err)
+	}
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 300, Height: 40}, PixelSize: woxui.PixelSize{Width: 300, Height: 40}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	host.Frame(&woxui.DisplayList{}, frame)
+	if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) != 0 {
+		t.Fatalf("action search verify diagnostics = %v", diagnostics)
+	}
 }
 
 func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {

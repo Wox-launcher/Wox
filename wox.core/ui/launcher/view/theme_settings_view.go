@@ -102,47 +102,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 	const searchHeight = woxcomponent.SettingsSearchHeight
 	const searchGap = float32(20)
 	viewportHeight := max(float32(0), height-searchHeight-searchGap)
-
-	rows := make([]woxwidget.Widget, 0, len(props.Items))
-	for _, item := range props.Items {
-		background := woxui.Color{}
-		titleColor := props.Theme.ResultTitle
-		subtitleColor := props.Theme.ResultSubtitle
-		if item.Selected {
-			background = props.Theme.SelectedBackground
-			titleColor = props.Theme.ActionSelectedText
-			subtitleColor = props.Theme.ActionSelectedText
-		}
-		trailing, _ := themeListTrailing(props, item, subtitleColor)
-		status := strings.TrimSpace(item.Version + "  " + item.Author)
-		var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
-		if item.IsAuto {
-			swatch = themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, 32)
-		}
-		rowChildren := []woxwidget.Widget{
-			swatch,
-			woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-				return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
-					woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
-				}}}
-			}}},
-		}
-		if trailing != nil {
-			rowChildren = append(rowChildren, trailing)
-		}
-		radius := float32(4)
-		rowHeight := ThemeListRowHeight - 8
-		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-			ID: "theme-list-" + item.ID, Label: item.Name, Width: width, Height: rowHeight, Radius: &radius,
-			Background: &background, Selected: item.Selected, Padding: woxwidget.Insets{Left: 6, Right: 6}, Theme: props.Theme,
-			OnTap: func() {
-				if props.OnSelect != nil {
-					props.OnSelect(item.SourceIndex)
-				}
-			}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
-		}))
-	}
+	items := props.Items
 
 	var list woxwidget.Widget
 	if props.Message != "" {
@@ -153,7 +113,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		list = woxwidget.Container{Width: width, Height: viewportHeight, Padding: woxwidget.Insets{Top: 18}, Child: woxwidget.TextBlock{
 			Value: props.Message, Width: width, Height: min(float32(80), viewportHeight), MaxLines: 3, Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: color,
 		}}
-	} else if len(rows) == 0 {
+	} else if len(items) == 0 {
 		title := props.EmptyTitle
 		description := props.EmptyDescription
 		if title == "" && description == "" {
@@ -165,7 +125,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		})
 	} else {
 		var keepVisible *woxwidget.ScrollRange
-		for index, item := range props.Items {
+		for index, item := range items {
 			if item.Selected {
 				start := float32(index) * ThemeListRowHeight
 				keepVisible = &woxwidget.ScrollRange{Start: start, End: start + ThemeListRowHeight}
@@ -173,7 +133,11 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			}
 		}
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "theme-list-scroll", Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: rows}, Width: width, Height: viewportHeight,
+			Key: "theme-list-scroll", Content: woxwidget.LazyList{
+				Width: width, Viewport: viewportHeight, ItemCount: len(items), ItemExtent: ThemeListRowHeight,
+				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("theme-list-" + items[index].ID) },
+				ItemBuilder: func(index int) woxwidget.Widget { return themeListRow(props, items[index], width) },
+			}, Width: width, Height: viewportHeight,
 			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
 		})
 	}
@@ -188,6 +152,47 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		OnKey: props.OnSearchKey, OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: []woxwidget.Widget{searchField, list}}
+}
+
+// themeListRow builds one catalog entry so LazyList can keep offscreen theme rows unbuilt.
+func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32) woxwidget.Widget {
+	background := woxui.Color{}
+	titleColor := props.Theme.ResultTitle
+	subtitleColor := props.Theme.ResultSubtitle
+	if item.Selected {
+		background = props.Theme.SelectedBackground
+		titleColor = props.Theme.ActionSelectedText
+		subtitleColor = props.Theme.ActionSelectedText
+	}
+	trailing, _ := themeListTrailing(props, item, subtitleColor)
+	status := strings.TrimSpace(item.Version + "  " + item.Author)
+	var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
+	if item.IsAuto {
+		swatch = themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, 32)
+	}
+	rowChildren := []woxwidget.Widget{
+		swatch,
+		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
+				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
+			}}}
+		}}},
+	}
+	if trailing != nil {
+		rowChildren = append(rowChildren, trailing)
+	}
+	radius := float32(4)
+	rowHeight := ThemeListRowHeight - 8
+	return woxwidget.Container{Width: width, Height: ThemeListRowHeight, Padding: woxwidget.Insets{Bottom: 8}, Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+		ID: "theme-list-" + item.ID, Label: item.Name, Width: width, Height: rowHeight, Radius: &radius,
+		Background: &background, Selected: item.Selected, Padding: woxwidget.Insets{Left: 6, Right: 6}, Theme: props.Theme,
+		OnTap: func() {
+			if props.OnSelect != nil {
+				props.OnSelect(item.SourceIndex)
+			}
+		}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
+	})}
 }
 
 func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, tagColor woxui.Color) (woxwidget.Widget, float32) {
