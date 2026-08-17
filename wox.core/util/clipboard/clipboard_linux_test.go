@@ -31,6 +31,39 @@ func TestDataControlSelectionContentType(t *testing.T) {
 	}
 }
 
+func TestSelectLinuxClipboard(t *testing.T) {
+	tests := []struct {
+		name     string
+		wayland  bool
+		kde      bool
+		gnome    bool
+		hyprland bool
+		expected string
+	}{
+		{name: "X11 Openbox", wayland: false, expected: "x11"},
+		{name: "GNOME X11", wayland: false, gnome: true, expected: "x11"},
+		{name: "KDE X11", wayland: false, kde: true, expected: "x11"},
+		{name: "GNOME Wayland", wayland: true, gnome: true, expected: "gnome-wayland"},
+		{name: "KDE Wayland", wayland: true, kde: true, expected: "kde-wayland"},
+		{name: "Hyprland", wayland: true, hyprland: true, expected: "hyprland"},
+		{name: "Sway", wayland: true, expected: "wayland"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, selectLinuxClipboardFor(test.wayland, test.kde, test.gnome, test.hyprland).name())
+		})
+	}
+}
+
+func TestX11TargetsContentType(t *testing.T) {
+	assert.Equal(t, ClipboardTypeFile, x11TargetsContentType([]string{"TIMESTAMP", "text/uri-list"}))
+	assert.Equal(t, ClipboardTypeImage, x11TargetsContentType([]string{"image/png", "TARGETS"}))
+	assert.Equal(t, ClipboardTypeText, x11TargetsContentType([]string{"UTF8_STRING", "STRING"}))
+	assert.Equal(t, ClipboardTypeText, x11TargetsContentType([]string{"text/plain;charset=utf-8"}))
+	assert.Equal(t, Type(""), x11TargetsContentType([]string{"TIMESTAMP", "TARGETS"}))
+}
+
 func TestLinuxDataControlLiveRead(t *testing.T) {
 	if os.Getenv("WOX_LIVE_DATA_CONTROL") != "1" {
 		t.Skip("set WOX_LIVE_DATA_CONTROL=1 to read the current Wayland clipboard")
