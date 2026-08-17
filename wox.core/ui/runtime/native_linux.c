@@ -208,6 +208,10 @@ struct WoxLinuxWindow {
   bool active_web_view_transient;
   bool pointer_over_web_view;
   uint8_t pointer_cursor;
+  // updating_accessibility swallows leave/enter from destroying GTK a11y
+  // mirrors. Query keystrokes rebuild those widgets under the pointer and
+  // would otherwise flicker the host cursor between text and default.
+  bool updating_accessibility;
   char *web_view_cursor_name;
   bool has_preferred_position;
   bool presenting;
@@ -372,6 +376,35 @@ static bool ensure_webkit(void) {
   return wox_webkit.available;
 }
 
+// apply_linux_cursor_to_gdk_window walks entry/button inner surfaces that keep their own cursors.
+static void apply_linux_cursor_to_gdk_window(GdkWindow *gdk_window, GdkCursor *cursor) {
+  if (gdk_window == NULL) {
+    return;
+  }
+  gdk_window_set_cursor(gdk_window, cursor);
+  GList *children = gdk_window_get_children(gdk_window);
+  for (GList *item = children; item != NULL; item = item->next) {
+    apply_linux_cursor_to_gdk_window(GDK_WINDOW(item->data), cursor);
+  }
+  g_list_free(children);
+}
+
+// apply_linux_cursor_to_widget covers GTK accessibility mirrors, including GtkEntry's text window.
+static void apply_linux_cursor_to_widget(GtkWidget *widget, GdkCursor *cursor) {
+  if (widget == NULL) {
+    return;
+  }
+  apply_linux_cursor_to_gdk_window(gtk_widget_get_window(widget), cursor);
+  if (!GTK_IS_CONTAINER(widget)) {
+    return;
+  }
+  GList *children = gtk_container_get_children(GTK_CONTAINER(widget));
+  for (GList *item = children; item != NULL; item = item->next) {
+    apply_linux_cursor_to_widget(GTK_WIDGET(item->data), cursor);
+  }
+  g_list_free(children);
+}
+
 // apply_linux_cursor_name mirrors one cursor across every GDK window that may own pointer input.
 static int32_t apply_linux_cursor_name(WoxLinuxWindow *window, const char *cursor_name) {
   if (window == NULL || window->closed) {
@@ -404,6 +437,9 @@ static int32_t apply_linux_cursor_name(WoxLinuxWindow *window, const char *curso
   if (top_level_window != content_window && top_level_window != overlay_window) {
     gdk_window_set_cursor(top_level_window, native_cursor);
   }
+  // GtkEntry accessibility mirrors cover the query box, including the trailing
+  // window-drag strip. Without this they keep the native I-beam and fight the host cursor.
+  apply_linux_cursor_to_widget(window->accessibility_layer, native_cursor);
   g_object_unref(native_cursor);
   return 0;
 }
@@ -1503,8 +1539,13 @@ static gboolean on_pointer_motion(GtkWidget *widget, GdkEventMotion *event, gpoi
 static gboolean on_pointer_crossing(GtkWidget *widget, GdkEventCrossing *event, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
-  if (window->forwarding_embedded_pointer) {
-    return FALSE;
+  if (window->forwarding_embedded_pointer || window->updating_accessibility) {
+    return TRUE;
+  }
+  // Inferior crossings mean the pointer is still inside this window, usually
+  // because an accessibility mirror was created or destroyed under it.
+  if (event->detail == GDK_NOTIFY_INFERIOR) {
+    return TRUE;
   }
   uint8_t kind = event->type == GDK_ENTER_NOTIFY ? WOX_POINTER_ENTER : WOX_POINTER_LEAVE;
   emit_pointer(window, (GdkEvent *)event, kind, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
@@ -3516,6 +3557,7 @@ int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generatio
   if (window == NULL || window->closed || window->accessibility_layer == NULL) {
     return -1;
   }
+  window->updating_accessibility = true;
   GList *children = gtk_container_get_children(GTK_CONTAINER(window->accessibility_layer));
   for (GList *item = children; item != NULL; item = item->next) {
     gtk_widget_destroy(GTK_WIDGET(item->data));
@@ -3565,13 +3607,14 @@ int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, ui
   gtk_widget_set_no_show_all(widget, (state_flags & WOX_ACCESSIBILITY_STATE_HIDDEN) != 0);
   if ((state_flags & WOX_ACCESSIBILITY_STATE_HIDDEN) == 0) {
     gtk_widget_show(widget);
+    apply_linux_pointer_cursor(window);
   }
   // Native accessibility widgets mirror the GPU tree but must not consume visual pointer input.
-  // Forward their events through the same portable Host path before GTK button defaults run.
-  gtk_widget_add_events(widget, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+  // Forward press/motion/scroll before GTK button defaults run. Leave/enter stay on the
+  // top-level window: rebuilding these mirrors on each query keystroke would otherwise
+  // report a window leave and let GtkEntry's I-beam fight the query drag-area cursor.
+  gtk_widget_add_events(widget, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
   g_signal_connect(widget, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
-  g_signal_connect(widget, "enter-notify-event", G_CALLBACK(on_pointer_crossing), window);
-  g_signal_connect(widget, "leave-notify-event", G_CALLBACK(on_pointer_crossing), window);
   g_signal_connect(widget, "button-press-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(widget, "button-release-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(widget, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
@@ -3579,7 +3622,12 @@ int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, ui
 }
 
 int32_t wox_linux_accessibility_end(WoxLinuxWindow *window) {
-  if (window == NULL || window->closed || window->accessibility_layer == NULL) {
+  if (window == NULL) {
+    return -1;
+  }
+  apply_linux_pointer_cursor(window);
+  window->updating_accessibility = false;
+  if (window->closed || window->accessibility_layer == NULL) {
     return -1;
   }
   g_signal_emit_by_name(gtk_widget_get_accessible(window->accessibility_layer), "visible-data-changed");

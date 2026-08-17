@@ -28,6 +28,8 @@ func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) er
 	if C.wox_linux_accessibility_begin(native, C.uint64_t(tree.Generation)) != 0 {
 		return errors.New("woxui: failed to begin Linux accessibility update")
 	}
+	// Always finish the update so native leave/enter suppression cannot stick after a failed node add.
+	defer C.wox_linux_accessibility_end(native)
 	for _, node := range tree.Nodes {
 		children := make([]C.uint64_t, len(node.Children))
 		for index := range node.Children {
@@ -75,9 +77,6 @@ func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) er
 		if result != 0 {
 			return errors.New("woxui: failed to add Linux accessibility node")
 		}
-	}
-	if C.wox_linux_accessibility_end(native) != 0 {
-		return errors.New("woxui: failed to commit Linux accessibility update")
 	}
 	return nil
 }

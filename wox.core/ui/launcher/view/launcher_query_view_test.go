@@ -36,6 +36,54 @@ func TestLauncherQueryRemainsFocusableWithoutOwningFocus(t *testing.T) {
 	}
 }
 
+type queryPointerHostServices struct {
+	pointerCursor woxui.PointerCursor
+}
+
+func (queryPointerHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * max(style.Size/2, 1), Height: max(style.Size, 1)}}, nil
+}
+func (queryPointerHostServices) Invalidate() error                            { return nil }
+func (queryPointerHostServices) InvalidateRect(woxui.Rect) error              { return nil }
+func (queryPointerHostServices) SetTextInputState(woxui.TextInputState) error { return nil }
+func (s *queryPointerHostServices) SetPointerCursor(cursor woxui.PointerCursor) error {
+	s.pointerCursor = cursor
+	return nil
+}
+func (queryPointerHostServices) UpdateAccessibility(woxui.AccessibilityTree, woxui.AccessibilityActionHandler) error {
+	return nil
+}
+
+func TestLauncherQueryDragAreaKeepsDefaultCursorWhileQueryChanges(t *testing.T) {
+	textWidth := float32(40)
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return LauncherQueryBoundary(LauncherQueryProps{
+			Width: 500, Height: 40, TextWidth: textWidth, Enabled: true,
+			State: woxui.TextEditingState{Text: "query"},
+		})
+	})
+	services := &queryPointerHostServices{}
+	host.AttachServices(services)
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 500, Height: 40}, PixelSize: woxui.PixelSize{Width: 500, Height: 40}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 400, Y: 20}})
+	if services.pointerCursor != woxui.PointerCursorDefault {
+		t.Fatalf("drag hover cursor = %v, want default", services.pointerCursor)
+	}
+
+	textWidth = 70
+	host.Frame(&woxui.DisplayList{}, frame)
+	if services.pointerCursor != woxui.PointerCursorDefault {
+		t.Fatalf("cursor after query change = %v, want default", services.pointerCursor)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave, Position: woxui.Point{X: 400, Y: 20}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 400, Y: 20}})
+	if services.pointerCursor != woxui.PointerCursorDefault {
+		t.Fatalf("cursor after leave/enter on drag area = %v, want default", services.pointerCursor)
+	}
+}
+
 func TestLauncherQueryKeepsMinimumEditableAreaBeforeDragOverlay(t *testing.T) {
 	tapped := false
 	query := LauncherQueryView(LauncherQueryProps{
