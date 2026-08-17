@@ -144,7 +144,7 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 	}
 	scale := a.densityMetrics.normalized().scale
 	return previewview.UpdatePreviewView(previewview.UpdatePreviewProps{
-		ID: id, Width: width, Height: height, Scale: scale, Theme: palette.componentTheme(), Title: title, Error: data.Error,
+		ID: id, Width: width, Height: height, Scale: scale, Window: a.window, Theme: palette.componentTheme(), Title: title, Error: data.Error,
 		BetaLabel: betaLabel, StatusLabel: status, StatusColor: statusColor, AutoUpdateEnabled: data.AutoUpdateEnabled,
 		DisabledTitle: a.translate("i18n:plugin_update_auto_update_disabled_title"), DisabledDescription: a.translate("i18n:plugin_update_auto_update_disabled_desc"),
 		DisabledAction: a.translate("i18n:plugin_update_action_enable_auto_update") + " (enter)", OnPrimaryAction: a.activateSelected,

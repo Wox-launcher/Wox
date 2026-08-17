@@ -49,6 +49,30 @@ func TestRetainedPaintReusesBoundaryAndSkipsDescendants(t *testing.T) {
 	}
 }
 
+func TestBoundaryCanDisableRetainedPaintWithoutDisablingLayoutCache(t *testing.T) {
+	builds := 0
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{
+			Key: "unretained-paint", Props: boundaryTestProps{}, DisableRetainedPaint: true,
+			Build: func(boundaryTestProps) Widget {
+				builds++
+				return Container{Width: 20, Height: 20, Color: woxui.Color{A: 255}}
+			},
+		}
+	})
+	services := &recordingHostServices{}
+	host.AttachServices(services)
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 20, Height: 20}}
+	host.Frame(&woxui.DisplayList{}, frame)
+	host.Frame(&woxui.DisplayList{}, frame)
+	if builds != 1 {
+		t.Fatalf("boundary builds = %d, want one cached layout build", builds)
+	}
+	if services.work.PaintSegmentReuses != 0 {
+		t.Fatalf("paint segment reuses = %d, want immediate paint", services.work.PaintSegmentReuses)
+	}
+}
+
 func TestRetainedPaintCaretRerecordsOnlyCaretBoundary(t *testing.T) {
 	innerCache := &boundaryCache{}
 	outerCache := &boundaryCache{}

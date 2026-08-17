@@ -16,6 +16,7 @@ type UpdatePreviewProps struct {
 	Width               float32
 	Height              float32
 	Scale               float32
+	Window              *woxui.Window
 	Theme               woxcomponent.Theme
 	Title               string
 	Error               string
@@ -68,9 +69,6 @@ func UpdatePreviewView(props UpdatePreviewProps) woxwidget.Widget {
 
 	innerWidth := max(float32(0), props.Width-scaled(40))
 	headerHeight := scaled(24)
-	if strings.TrimSpace(props.Error) != "" {
-		headerHeight += scaled(22)
-	}
 	statusWidth := updatePillWidth(props, props.StatusLabel, scaled)
 	betaWidth := float32(0)
 	if strings.TrimSpace(props.BetaLabel) != "" {
@@ -84,30 +82,61 @@ func UpdatePreviewView(props UpdatePreviewProps) woxwidget.Widget {
 	headerChildren := []woxwidget.StackChild{
 		{Child: woxwidget.TextBlock{Value: props.Title, Width: titleWidth, Height: scaled(22), MaxLines: 2, Style: woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}, LineHeight: scaled(20), Color: props.Theme.PreviewText}},
 	}
-	if strings.TrimSpace(props.Error) != "" {
-		headerChildren = append(headerChildren, woxwidget.StackChild{Top: scaled(28), Child: woxwidget.TextBlock{Value: props.Error, Width: titleWidth, Height: scaled(18), MaxLines: 2, Style: woxui.TextStyle{Size: scaled(11)}, LineHeight: scaled(16), Color: props.Theme.ErrorText}})
-	}
 	right := innerWidth - statusWidth
 	headerChildren = append(headerChildren, woxwidget.StackChild{Left: right, Child: updateStatusPill(props.StatusLabel, statusWidth, props.StatusColor, scaled)})
 	if betaWidth > 0 {
 		headerChildren = append(headerChildren, woxwidget.StackChild{Left: right - scaled(8) - betaWidth, Child: updateStatusPill(props.BetaLabel, betaWidth, woxui.Color{R: 33, G: 150, B: 243, A: 255}, scaled)})
 	}
 
+	header := woxwidget.Widget(woxwidget.Stack{Width: innerWidth, Height: headerHeight, Children: headerChildren})
+	if errorMessage := strings.TrimSpace(props.Error); errorMessage != "" {
+		errorStyle := woxui.TextStyle{Size: scaled(11)}
+		errorLineHeight := scaled(16)
+		errorTextWidth := max(float32(0), innerWidth-scaled(20))
+		errorLines := min(4, max(1, strings.Count(errorMessage, "\n")+1))
+		var errorLayout *woxwidget.TextBlockLayout
+		if props.Window != nil {
+			layout := woxwidget.LayoutTextBlock(props.Window, errorMessage, errorStyle, errorTextWidth, 4, errorLineHeight)
+			errorLines = max(1, len(layout.Lines))
+			errorLayout = &layout
+		}
+		errorTextHeight := float32(errorLines) * errorLineHeight
+		errorHeight := errorTextHeight + scaled(20)
+		headerHeight += scaled(8) + errorHeight
+		header = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: scaled(8), Children: []woxwidget.Widget{
+			woxwidget.Stack{Width: innerWidth, Height: scaled(24), Children: headerChildren},
+			woxwidget.Container{
+				Width: innerWidth, Height: errorHeight, Padding: woxwidget.UniformInsets(scaled(10)), Radius: scaled(8),
+				Color: updateColorAlpha(props.Theme.ErrorText, 0.08), BorderColor: updateColorAlpha(props.Theme.ErrorText, 0.3), BorderWidth: 1,
+				Child: woxwidget.TextBlock{Value: errorMessage, Width: errorTextWidth, Height: errorTextHeight, MaxLines: 4, Style: errorStyle, LineHeight: errorLineHeight, Layout: errorLayout, Color: props.Theme.ErrorText},
+			},
+		}}
+	}
+
 	bodyHeight := max(float32(0), props.Height-scaled(40)-headerHeight-scaled(27))
 	releaseNotes := strings.TrimSpace(props.ReleaseNotes)
+	var body woxwidget.Widget
 	if releaseNotes == "" {
-		releaseNotes = props.NoReleaseNotes
+		body = updateEmptyReleaseNotes(props.NoReleaseNotes, innerWidth-scaled(8), bodyHeight, props.Theme, scaled)
+	} else {
+		body = buildUpdateReleaseNotes(props, releaseNotes, innerWidth-scaled(8), scaled)
 	}
-	body := buildUpdateReleaseNotes(props, releaseNotes, innerWidth-scaled(8), scaled)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(scaled(20)),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Stack{Width: innerWidth, Height: headerHeight, Children: headerChildren},
+			header,
 			woxwidget.Container{Width: innerWidth, Height: scaled(15), Padding: woxwidget.Insets{Top: scaled(14)}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
 			woxwidget.ScrollView{Key: woxwidget.Key("update-preview-scroll-" + props.ID), ID: "update-preview-scroll-" + props.ID, Width: innerWidth, Height: bodyHeight, Child: body},
 		}},
 	}
+}
+
+// updateEmptyReleaseNotes matches the centered empty-state treatment used by catalog lists.
+func updateEmptyReleaseNotes(message string, width, height float32, theme woxcomponent.Theme, scaled func(float32) float32) woxwidget.Widget {
+	return woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.42, Child: woxwidget.Text{
+		Value: message, Style: woxui.TextStyle{Size: scaled(15), Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle,
+	}}
 }
 
 func disabledUpdatePreview(props UpdatePreviewProps, scaled func(float32) float32) woxwidget.Widget {

@@ -30,7 +30,7 @@ func (n *node) drawUnretained(displayList *woxui.DisplayList, focused, focusRing
 
 // drawAt paints this node in window space by adding origin to its local bounds.
 func (n *node) drawAt(displayList *woxui.DisplayList, origin woxui.Point, focused, focusRingTarget woxui.AccessibilityNodeID, caretVisible, focusWithin, focusableWithin bool, work *frameWorkCounters, retain bool, nested *[]*node) {
-	if retain && n.boundary != nil && !retainedPaintDisabled() {
+	if retain && n.boundary != nil && !n.boundary.disableRetainedPaint && !retainedPaintDisabled() {
 		n.drawBoundary(displayList, origin, focused, focusRingTarget, caretVisible, focusWithin, focusableWithin, work, nested)
 		return
 	}

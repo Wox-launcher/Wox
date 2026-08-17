@@ -163,7 +163,7 @@ func (d *DisplayList) ForEachCommand(visit func(displayCommand) bool) {
 	if d == nil || visit == nil {
 		return
 	}
-	walkDisplayCommands(d.commands, Point{}, Rect{}, visit)
+	walkDisplayCommands(d.commands, Point{}, Rect{}, Rect{}, false, visit)
 }
 
 // ForEachVisibleCommand skips retained segments that do not intersect encode damage.
@@ -175,13 +175,17 @@ func (d *DisplayList) ForEachVisibleCommand(damage Rect, visit func(displayComma
 		return
 	}
 	if d.stats.overlay {
-		walkDisplayCommands(d.commands, Point{}, Rect{}, visit)
+		walkDisplayCommands(d.commands, Point{}, Rect{}, Rect{}, false, visit)
 		return
 	}
-	walkDisplayCommands(d.commands, Point{}, damage, visit)
+	walkDisplayCommands(d.commands, Point{}, damage, Rect{}, false, visit)
 }
 
-func walkDisplayCommands(commands []displayCommand, origin Point, damage Rect, visit func(displayCommand) bool) bool {
+func walkDisplayCommands(commands []displayCommand, origin Point, damage, inheritedClip Rect, hasInheritedClip bool, visit func(displayCommand) bool) bool {
+	// Paint segments record clip stacks independently, so scope their clip commands
+	// to the clip active at insertion instead of letting a child clear an ancestor viewport.
+	activeClip := inheritedClip
+	hasActiveClip := hasInheritedClip
 	for _, command := range commands {
 		if command.kind == displayCommandPaintSegment && command.segment != nil {
 			childOrigin := Point{X: origin.X + command.rect.X, Y: origin.Y + command.rect.Y}
@@ -189,12 +193,31 @@ func walkDisplayCommands(commands []displayCommand, origin Point, damage Rect, v
 			if damage.Width > 0 && damage.Height > 0 && !rectsOverlap(bounds, damage) {
 				continue
 			}
-			if !walkDisplayCommands(command.segment.Commands, childOrigin, damage, visit) {
+			if !walkDisplayCommands(command.segment.Commands, childOrigin, damage, activeClip, hasActiveClip, visit) {
 				return false
 			}
 			continue
 		}
-		if !visit(translateDisplayCommand(command, origin)) {
+		command = translateDisplayCommand(command, origin)
+		switch command.kind {
+		case displayCommandSetClipRect:
+			if hasInheritedClip {
+				command.rect = intersectRects(inheritedClip, command.rect)
+			}
+			activeClip = command.rect
+			hasActiveClip = true
+		case displayCommandClearClip:
+			if hasInheritedClip {
+				command.kind = displayCommandSetClipRect
+				command.rect = inheritedClip
+				activeClip = inheritedClip
+				hasActiveClip = true
+			} else {
+				activeClip = Rect{}
+				hasActiveClip = false
+			}
+		}
+		if !visit(command) {
 			return false
 		}
 	}

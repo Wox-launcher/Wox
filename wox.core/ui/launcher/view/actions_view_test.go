@@ -48,6 +48,13 @@ func TestActionSearchBoundaryVerifyPasses(t *testing.T) {
 	}
 }
 
+func TestActionSearchBoundaryKeepsCaretPaintUnretained(t *testing.T) {
+	boundary := actionSearchBoundary(actionSearchProps{}).(woxwidget.Boundary[actionSearchProps])
+	if !boundary.DisableRetainedPaint {
+		t.Fatal("action search must paint directly so its caret blink reaches the native surface")
+	}
+}
+
 func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),

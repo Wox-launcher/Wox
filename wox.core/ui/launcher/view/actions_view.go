@@ -284,7 +284,7 @@ func (p actionSearchProps) Equal(other actionSearchProps) bool {
 // invalidations stay inside the input instead of walking to a full-width ancestor.
 func actionSearchBoundary(props actionSearchProps) woxwidget.Widget {
 	return woxwidget.Boundary[actionSearchProps]{
-		Key: "launcher-actions-search-boundary", Label: "actions:search", Props: props,
+		Key: "launcher-actions-search-boundary", Label: "actions:search", Props: props, DisableRetainedPaint: true,
 		Build: func(props actionSearchProps) woxwidget.Widget {
 			return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 				ID: "action-search", Label: "Filter actions", Width: props.Width, Height: props.Height, Radius: props.Radius,

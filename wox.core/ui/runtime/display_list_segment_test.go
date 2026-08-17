@@ -37,6 +37,35 @@ func TestForEachVisibleCommandSkipsNonIntersectingSegments(t *testing.T) {
 	}
 }
 
+func TestPaintSegmentClipRestoresInheritedClip(t *testing.T) {
+	local := &DisplayList{}
+	local.PushClipRect(Rect{Width: 30, Height: 30})
+	local.FillRect(Rect{Width: 30, Height: 30}, Color{A: 255})
+	local.PopClipRect()
+	segment := CapturePaintSegment(Rect{Width: 30, Height: 30}, local, PaintFingerprint{})
+
+	displayList := &DisplayList{}
+	displayList.PushClipRect(Rect{Width: 10, Height: 10})
+	displayList.AppendPaintSegment(segment, Point{X: 5, Y: 5})
+	displayList.FillRect(Rect{Width: 10, Height: 10}, Color{A: 255})
+	displayList.PopClipRect()
+
+	var commands []displayCommand
+	displayList.ForEachCommand(func(command displayCommand) bool {
+		commands = append(commands, command)
+		return true
+	})
+	if len(commands) != 6 {
+		t.Fatalf("flattened command count = %d, want 6", len(commands))
+	}
+	if commands[1].kind != displayCommandSetClipRect || commands[1].rect != (Rect{X: 5, Y: 5, Width: 5, Height: 5}) {
+		t.Fatalf("segment clip = %+v, want intersection with inherited clip", commands[1])
+	}
+	if commands[3].kind != displayCommandSetClipRect || commands[3].rect != (Rect{Width: 10, Height: 10}) {
+		t.Fatalf("segment clip restore = %+v, want inherited clip", commands[3])
+	}
+}
+
 func TestCapturePaintSegmentPublishesANewImmutableVersion(t *testing.T) {
 	red := &DisplayList{}
 	red.FillRect(Rect{Width: 10, Height: 10}, Color{R: 255, A: 255})

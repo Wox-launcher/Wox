@@ -23,6 +23,8 @@ type Boundary[T BoundaryProps[T]] struct {
 	Label string
 	Props T
 	Build func(T) Widget
+	// DisableRetainedPaint keeps layout caching while recording this subtree directly each frame.
+	DisableRetainedPaint bool
 }
 
 type animationDependencyKind uint8
@@ -93,17 +95,18 @@ type boundaryCache struct {
 	identityReuses      uint64
 	// nestedOwners keeps descendant Boundary owners alive on a parent cache hit
 	// so sweepIdentities does not walk every cached identity entry.
-	nestedOwners  []*identityOwner
-	a11yValid     bool
-	a11yOrigin    woxui.Point
-	a11yRootID    woxui.AccessibilityNodeID
-	a11yNodes     []woxui.AccessibilityNode
-	a11yRootIDs   []woxui.AccessibilityNodeID
-	a11yReuses    uint64
-	globalBounds  woxui.Rect
-	paint         *woxui.PaintSegment
-	nestedPaint   []*node
-	identityOwner identityOwner
+	nestedOwners         []*identityOwner
+	a11yValid            bool
+	a11yOrigin           woxui.Point
+	a11yRootID           woxui.AccessibilityNodeID
+	a11yNodes            []woxui.AccessibilityNode
+	a11yRootIDs          []woxui.AccessibilityNodeID
+	a11yReuses           uint64
+	globalBounds         woxui.Rect
+	paint                *woxui.PaintSegment
+	nestedPaint          []*node
+	disableRetainedPaint bool
+	identityOwner        identityOwner
 }
 
 type identityOwner struct {
@@ -153,6 +156,7 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	if w.element != nil {
 		w.element.boundary = &state.cache
 	}
+	state.cache.disableRetainedPaint = w.boundary.DisableRetainedPaint
 	oldBounds := state.cache.globalBounds
 	if oldBounds == (woxui.Rect{}) && state.node != nil {
 		oldBounds = state.node.bounds
