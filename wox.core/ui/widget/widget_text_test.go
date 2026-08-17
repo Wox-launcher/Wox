@@ -76,6 +76,26 @@ func TestTextBlockPaintsWhenFontLineHeightExceedsBox(t *testing.T) {
 	}
 }
 
+func TestTextBlockAlignmentYCentersTallCJKLineInSlot(t *testing.T) {
+	style := woxui.TextStyle{Size: 13}
+	color := woxui.Color{R: 240, G: 240, B: 240, A: 255}
+	value := "快捷键"
+	root := (TextBlock{Value: value, Style: style, Width: 120, Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5, Color: color}).layout(
+		context{window: tallLineMeasurer{height: 22}}, constraints{width: 120, height: 18},
+	)
+
+	actual := &woxui.DisplayList{}
+	root.draw(actual, 0, 0, false, false, false)
+
+	expected := &woxui.DisplayList{}
+	expected.PushClipRect(woxui.Rect{Width: 120, Height: 18})
+	expected.DrawText(value, woxui.Rect{Y: -2, Width: 120, Height: 22}, style, color)
+	expected.PopClipRect()
+	if err := actual.Compare(expected); err != nil {
+		t.Fatalf("aligned CJK line in 18px slot: %v", err)
+	}
+}
+
 func TestTextBlockSkipsLinesThatStartPastTheBox(t *testing.T) {
 	style := woxui.TextStyle{Size: 10}
 	color := woxui.Color{A: 255}

@@ -438,12 +438,16 @@ func formTableColumnWidthsWithOperation(columns []FormTableColumn, tableWidth fl
 func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, width float32, index int) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
 	contentWidth := max(float32(0), width-16)
-	children := []woxwidget.Widget{woxwidget.TextBlock{
-		Value: column.Label, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
-	}}
+	// Keep the same 18px slot as body cells so the table shares one centerline.
+	// AlignmentY centers CJK fonts whose logical box is taller than that slot.
+	label := woxwidget.TextBlock{
+		Value: column.Label, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5,
+		Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
+	}
+	children := []woxwidget.Widget{label}
 	if column.Tooltip != "" {
-		contentWidth = max(float32(0), contentWidth-20)
-		children[0] = woxwidget.TextBlock{Value: column.Label, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText}
+		label.Width = max(float32(0), contentWidth-20)
+		children[0] = label
 		var icon woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
 		if props.InfoIcon != nil {
 			icon = woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}
@@ -455,7 +459,9 @@ func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, widt
 		}, Child: icon})
 	}
 	return woxwidget.Container{Width: width, Height: tableSurfaceHeaderHeight, Color: style.headerBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 8, Top: 9, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: children}}
+		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Width: contentWidth, Height: tableSurfaceHeaderHeight, Vertical: 0.5, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
+		}}}
 }
 
 func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwidget.Widget {
@@ -556,7 +562,7 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		contentWidth = max(float32(0), contentWidth-20)
 	}
 	var content woxwidget.Widget = woxwidget.TextBlock{
-		Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, ShrinkWrap: cell.Tooltip != "",
+		Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, ShrinkWrap: cell.Tooltip != "", AlignmentY: 0.5,
 		Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
 	}
 	if cell.Child != nil {
@@ -570,7 +576,7 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		}
 		children := []woxwidget.Widget{woxwidget.Image{Source: cell.Icon, Width: iconSize, Height: iconSize}}
 		if cell.Text != "" {
-			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-iconSize-8), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
+			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-iconSize-8), Height: 18, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
 		}
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}
 	}
@@ -627,7 +633,7 @@ func FormTableOverlay(props FormTableOverlayProps) woxwidget.Widget {
 		padding = woxwidget.UniformInsets(24)
 		radius = 20
 		borderColor = formTableAlpha(props.Theme.ResultSubtitle, 104)
-		borderWidth = 0.75
+		borderWidth = 1
 	} else {
 		innerWidth := max(float32(0), panelWidth-32)
 		header := woxwidget.Container{Width: innerWidth, Height: 52, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
@@ -668,7 +674,7 @@ func FormTableDeleteDialog(props FormTableDeleteDialogProps) woxwidget.Widget {
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-delete-dialog", Label: props.Message, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-delete-backdrop", BackdropAlpha: 210,
-		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 20, Right: 24, Bottom: 22}, BorderColor: border, BorderWidth: 0.75,
+		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 20, Right: 24, Bottom: 22}, BorderColor: border, BorderWidth: 1,
 		InitialFocus: "form-table-delete-cancel", OnEscape: props.OnCancel, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{
 			woxwidget.TextBlock{Value: props.Message, Width: innerWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText},
@@ -719,8 +725,10 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 					props.OnSelect(index)
 				}
 			},
-			Child: woxwidget.Container{Width: props.Width, Height: formTableListRowHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 15, Right: 10}, Child: woxwidget.Text{
-				Value: value, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: foreground,
+			Child: woxwidget.Container{Width: props.Width, Height: formTableListRowHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{
+				Width: max(float32(0), props.Width-22), Height: formTableListRowHeight, Vertical: 0.5, Child: woxwidget.Text{
+					Value: value, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: foreground,
+				},
 			}},
 		})
 	}
@@ -1085,7 +1093,7 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		},
 	})
 	if props.TrailingLabel != "" {
-		trailing := woxwidget.Gesture{ID: props.ID + "-trailing", OnTapBounds: props.OnTrailingTap, Child: woxwidget.Container{Width: 34, Height: height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{
+		trailing := woxwidget.Gesture{ID: props.ID + "-trailing", OnTapBounds: props.OnTrailingTap, Child: woxwidget.Align{Width: 34, Height: height, Vertical: 0.5, Child: woxwidget.Text{
 			Value: props.TrailingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
 		}}}
 		input = woxwidget.Stack{Width: inputWidth, Height: height, Children: []woxwidget.StackChild{

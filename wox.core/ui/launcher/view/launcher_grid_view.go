@@ -76,8 +76,8 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 			result := props.Results[index]
 			titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridHeaderFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}
 			rows = append(rows, woxwidget.Container{
-				Width: props.Width - 28, Height: props.GroupHeaderHeight, Padding: woxwidget.Insets{Left: 8, Top: 9},
-				Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps),
+				Width: props.Width - 28, Height: props.GroupHeaderHeight, Padding: woxwidget.Insets{Left: 8},
+				Child: woxwidget.Align{Height: props.GroupHeaderHeight, Vertical: 0.5, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)},
 			})
 			index++
 			continue

@@ -38,6 +38,7 @@ Useful focused searches include:
 rg -n 'Wox(Button|TextField|Dropdown|Checkbox|Switch|IconButton)' wox.core/ui/launcher
 rg -n 'woxwidget\.Gesture\{' wox.core/ui/launcher/view
 rg -n 'TextStyle\{Size:|Height:|Radius:|Color: woxui\.Color' wox.core/ui/launcher/view
+rg -n 'BorderWidth: [0-9]+\.|Radius: [0-9]+\.|LineHeight: [0-9]+\.|TextStyle\{Size: [0-9]+\.[0-9]' wox.core/ui/launcher
 ```
 
 Interpret results in context. Primitive gestures are valid for page-specific pointer regions and tooltips; they are a defect when they recreate a reusable control contract.
@@ -46,7 +47,7 @@ Interpret results in context. Primitive gestures are valid for page-specific poi
 
 1. Identify each element's semantic role, size tier, visual state, and alignment group.
 2. Use semantic theme roles and shared typography instead of raw colors or page-local type scales.
-3. Use the ordinary 32-unit control height only inside its defined scope. Preserve special Launcher and Action Panel geometry.
+3. Use the ordinary 32-unit control height only inside its defined scope. Preserve special Launcher and Action Panel geometry. Author only whole logical units for size, padding, gap, radius, border, font size, and line height.
 4. Align controls by interaction frame and centerline. Preserve the internal geometry of checkboxes and switches.
 5. Cover every applicable state from the state matrix, including non-color cues and accessibility semantics.
 6. Prefer an existing categorized SVG from `wox.core/common/icons.go`; add a reusable icon there before introducing a local asset.

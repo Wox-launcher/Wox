@@ -27,7 +27,7 @@ const (
 	SettingsHelpFontSize            = float32(12)
 	SettingsControlFontSize         = float32(13)
 	SettingsSecondaryFontSize       = float32(12)
-	SettingsSearchTitleFontSize     = float32(12.5)
+	SettingsSearchTitleFontSize     = float32(13)
 	SettingsSearchSubtitleFontSize  = float32(11)
 	TableHeaderFontSize             = float32(13)
 	TableBodyFontSize               = float32(13)

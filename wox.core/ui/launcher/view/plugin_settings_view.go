@@ -160,7 +160,7 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 			ID: "plugin-list-" + item.ID, Label: item.Name, Width: props.Width, Height: rowHeight, Radius: &radius,
 			Background: &background, BorderColor: border, BorderWidth: 1, Selected: item.Selected, OnTap: item.OnSelect, Theme: props.Theme,
-			Padding: woxwidget.Insets{Left: 6, Top: 9, Right: 6, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
+			Padding: woxwidget.Insets{Left: 6, Right: 6}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
 		}))
 	}
 
@@ -460,8 +460,8 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 		}},
 	}}
 	author := woxwidget.Expanded{Child: woxwidget.Container{
-		Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 7},
-		Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle},
+		Height: 30, Padding: woxwidget.Insets{Left: 8},
+		Child: woxwidget.Align{Height: 30, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
 	}}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, identity}},
@@ -612,10 +612,10 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollI
 func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	return woxwidget.Container{Width: width, Height: 62, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: width * 0.32, Height: 61, Padding: woxwidget.Insets{Left: 8, Top: 18, Right: 8}, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-			woxwidget.Container{Width: width * 0.68, Height: 61, Padding: woxwidget.Insets{Left: 8, Top: 14, Right: 8}, Child: woxwidget.TextBlock{
+			woxwidget.Container{Width: width * 0.32, Height: 61, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Height: 61, Vertical: 0.5, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}}},
+			woxwidget.Container{Width: width * 0.68, Height: 61, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Height: 61, Vertical: 0.5, Child: woxwidget.TextBlock{
 				Value: item.Description, MaxLines: 2, LineHeight: 16, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
-			}},
+			}}},
 		}},
 		woxwidget.Container{Width: width, Height: 1, Color: theme.PreviewSplit},
 	}}}
@@ -631,12 +631,12 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	}
 	const headerHeight = float32(124)
 	const tabHeight = float32(44)
-	identity := woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+	identity := woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		icon,
-		woxwidget.Expanded{Child: woxwidget.Container{Height: 38, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20}, Color: theme.QueryText},
-			woxwidget.Container{Height: 25, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}},
-		}}}},
+			woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle},
+		}}},
 	}}}
 	websiteWidth := float32(104)
 	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 32}
@@ -650,7 +650,7 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		identity,
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}}},
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 6}, Child: woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}}}},
 			website,
 		}},
 		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: pluginOutlineActions(props.Management, theme)},

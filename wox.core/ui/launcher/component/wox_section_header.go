@@ -18,7 +18,7 @@ type SectionHeaderProps struct {
 
 // WoxSectionHeader builds the shared settings section divider.
 func WoxSectionHeader(props SectionHeaderProps) woxwidget.Widget {
-	title := woxwidget.Container{Height: 42, Padding: woxwidget.Insets{Top: 14}, Child: woxwidget.Text{
+	title := woxwidget.Align{Height: 42, Vertical: 0.5, Child: woxwidget.Text{
 		Value: strings.ToUpper(props.Label), Style: woxui.TextStyle{Size: SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
 	}}
 	children := []woxwidget.Widget{woxwidget.Expanded{Child: title}}
@@ -31,6 +31,6 @@ func WoxSectionHeader(props SectionHeaderProps) woxwidget.Widget {
 	}
 	return woxwidget.Container{Width: props.Width, Height: 43, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: props.Width, Height: 1, Color: withAlpha(props.Theme.ToolbarText, 26)},
-		woxwidget.Container{Width: props.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}},
+		woxwidget.Container{Width: props.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
 	}}}
 }

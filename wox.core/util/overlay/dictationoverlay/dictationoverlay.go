@@ -65,7 +65,7 @@ func Show(opts Options) {
 					Width: 28, Height: 28, Radius: 6, HoverBackground: woxui.Color{R: 255, G: 255, B: 255, A: 28}, OnTap: func() { overlay.RequestClose(window.ID) },
 				})})
 			}
-			return woxwidget.Container{Width: frame.Size.Width, Height: frame.Size.Height, Radius: 12, Child: woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: children}}
+			return overlay.HUDSurface(frame.Size.Width, frame.Size.Height, 12, window.LightAppearance, woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: children})
 		},
 		OnDispose: func() { releaseState(window.ID) },
 	})

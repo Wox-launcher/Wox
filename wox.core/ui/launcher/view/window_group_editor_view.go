@@ -266,7 +266,7 @@ func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDispla
 	background := props.Theme.QueryBackground
 	if tile.Selected {
 		border = windowGroupFadeColor(selectedColor, 0.9)
-		borderWidth = 2.5
+		borderWidth = 2
 		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.08), props.Theme.QueryBackground)
 	}
 	slotChildren := make([]woxwidget.StackChild, 0, len(tile.Slots))
@@ -344,7 +344,7 @@ func windowGroupLayoutCard(props WindowGroupEditorProps, layout WindowGroupLayou
 	if selected {
 		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.14), props.Theme.ActionBackground)
 		border = selectedColor
-		borderWidth = 2.5
+		borderWidth = 2
 	}
 	layoutID := layout.ID
 	miniHeight := windowGroupLayoutCardHeight - 14 - 5 - 12
@@ -385,8 +385,8 @@ func windowGroupMiniLayout(props WindowGroupEditorProps, slots []WindowGroupSlot
 	for _, slot := range slots {
 		x, y, w, h := slotFractionRect(slot, width, height)
 		slotChildren = append(slotChildren, woxwidget.StackChild{
-			Left: x + 1.5, Top: y + 1.5, Child: woxwidget.Container{
-				Width: max(float32(1), w-3), Height: max(float32(1), h-3), Radius: 2, Color: windowGroupFadeColor(props.Theme.ActionSelected, 0.7),
+			Left: x + 2, Top: y + 2, Child: woxwidget.Container{
+				Width: max(float32(1), w-4), Height: max(float32(1), h-4), Radius: 2, Color: windowGroupFadeColor(props.Theme.ActionSelected, 0.7),
 			},
 		})
 	}

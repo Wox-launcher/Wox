@@ -57,3 +57,36 @@ func TestFormTableCellUsesRequestedIconSize(t *testing.T) {
 		t.Fatalf("24px table icon geometry = %vx%v with alignment %#v", icon.Width, icon.Height, alignment)
 	}
 }
+
+func TestFormTableListRowCentersLabel(t *testing.T) {
+	list := FormTableList(FormTableListProps{Width: 240, Height: 180, Rows: []string{"shortcut"}, Theme: woxcomponent.Theme{}}).(woxwidget.Flex)
+	scroll := list.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	if row.Padding.Top != 0 || row.Padding.Bottom != 0 {
+		t.Fatalf("list row padding = %#v, want horizontal insets only", row.Padding)
+	}
+	alignment, ok := row.Child.(woxwidget.Align)
+	if !ok || alignment.Height != formTableListRowHeight || alignment.Vertical != 0.5 {
+		t.Fatalf("list row alignment = %#v, want a full-height centered slot", row.Child)
+	}
+}
+
+func TestFormTableHeaderCellCentersLabel(t *testing.T) {
+	icon := &woxui.Image{}
+	cell := formTableHeaderCell(FormTableFieldProps{ID: "commands", InfoIcon: icon, Theme: woxcomponent.Theme{}}, FormTableColumn{Label: "快捷键", Tooltip: "alias tip"}, 160, 0).(woxwidget.Container)
+	if cell.Padding.Top != 0 || cell.Padding.Bottom != 0 {
+		t.Fatalf("header padding = %#v, want horizontal insets only", cell.Padding)
+	}
+	alignment, ok := cell.Child.(woxwidget.Align)
+	if !ok || alignment.Height != tableSurfaceHeaderHeight || alignment.Vertical != 0.5 {
+		t.Fatalf("header alignment = %#v, want a full-height centered slot", cell.Child)
+	}
+	content := alignment.Child.(woxwidget.Flex)
+	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("header row alignment = %v, want vertical center", content.CrossAxisAlignment)
+	}
+	label := content.Children[0].(woxwidget.TextBlock)
+	if label.Height != 18 || label.LineHeight != 18 || label.AlignmentY != 0.5 {
+		t.Fatalf("header label slot = height %v line height %v alignment %v, want an 18px optically centered slot", label.Height, label.LineHeight, label.AlignmentY)
+	}
+}

@@ -1026,6 +1026,10 @@ type TextBlock struct {
 	LineHeight float32
 	MaxLines   int
 	Centered   bool
+	// AlignmentY optically places each measured line box inside the authored
+	// slot. 0 keeps the native top edge; 0.5 centers CJK metrics that are
+	// taller than the slot by clipping extra ascent and descent equally.
+	AlignmentY float32
 	// ShrinkWrap keeps short text at its measured width while preserving Width as the truncation limit.
 	ShrinkWrap bool
 	Layout     *TextBlockLayout
@@ -1187,10 +1191,33 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 					lineWidth := min(metrics.Size.Width, bounds.Width)
 					lineBounds = woxui.Rect{X: bounds.X + (bounds.Width-lineWidth)/2, Y: y, Width: lineWidth, Height: lineBounds.Height}
 				}
-				displayList.DrawText(line, lineBounds, w.Style, w.Color)
+				drawBounds := lineBounds
+				if w.AlignmentY > 0 && line != "" {
+					if metrics, err := window.MeasureText(line, w.Style); err == nil && metrics.Size.Height > 0 {
+						drawBounds = alignedTextLineBounds(lineBounds, metrics.Size.Height, w.AlignmentY)
+					}
+				}
+				if drawBounds.Y < lineBounds.Y || drawBounds.Y+drawBounds.Height > lineBounds.Y+lineBounds.Height {
+					displayList.PushClipRect(lineBounds)
+					displayList.DrawText(line, drawBounds, w.Style, w.Color)
+					displayList.PopClipRect()
+					continue
+				}
+				displayList.DrawText(line, drawBounds, w.Style, w.Color)
 			}
 		},
 	}
+}
+
+// alignedTextLineBounds places a measured line box inside an authored slot.
+func alignedTextLineBounds(bounds woxui.Rect, measuredHeight, alignment float32) woxui.Rect {
+	alignment = min(max(float32(0), alignment), float32(1))
+	if measuredHeight <= 0 || alignment == 0 {
+		return bounds
+	}
+	bounds.Y += (bounds.Height - measuredHeight) * alignment
+	bounds.Height = measuredHeight
+	return bounds
 }
 
 // LayoutTextBlock wraps text with the same platform font metrics used during rendering.

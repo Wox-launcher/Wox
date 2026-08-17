@@ -132,14 +132,15 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			rowChildren = append(rowChildren, trailing)
 		}
 		radius := float32(4)
+		rowHeight := ThemeListRowHeight - 8
 		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-			ID: "theme-list-" + item.ID, Label: item.Name, Width: width, Height: ThemeListRowHeight - 8, Radius: &radius,
-			Background: &background, Selected: item.Selected, Padding: woxwidget.Insets{Left: 6, Top: 10, Right: 6, Bottom: 10}, Theme: props.Theme,
+			ID: "theme-list-" + item.ID, Label: item.Name, Width: width, Height: rowHeight, Radius: &radius,
+			Background: &background, Selected: item.Selected, Padding: woxwidget.Insets{Left: 6, Right: 6}, Theme: props.Theme,
 			OnTap: func() {
 				if props.OnSelect != nil {
 					props.OnSelect(item.SourceIndex)
 				}
-			}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
+			}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
 		}))
 	}
 
@@ -228,7 +229,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
 		}}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}},
+			woxwidget.Expanded{Child: woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}},
 			website,
 		}},
 		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: themeActions(props, theme)}},
@@ -327,7 +328,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 			titleColor = theme.SelectedTitle
 			subtitleColor = theme.SelectedSubtitle
 		}
-		rowWidgets = append(rowWidgets, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 60, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 10}, Child: woxwidget.Flex{
+		rowWidgets = append(rowWidgets, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 60, Color: background, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: 60, Vertical: 0.5, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
 				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
@@ -337,11 +338,11 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 					}}}
 				}}},
 			},
-		}}})
+		}}}})
 	}
-	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
+	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: theme.QueryText,
-	}}}
+	}}}}
 	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultSubtitle})
 	toolbar := themeCatalogToolbar(props, theme, width, true)
 	window := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
@@ -393,7 +394,7 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 		if index == 1 {
 			titleColor, subtitleColor = light.SelectedTitle, light.SelectedSubtitle
 		}
-		rows = append(rows, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 60, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 10}, Child: woxwidget.Flex{
+		rows = append(rows, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 60, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: 60, Vertical: 0.5, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
 				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
@@ -403,11 +404,11 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 					}}}
 				}}},
 			},
-		}}})
+		}}}})
 	}
-	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
+	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: light.QueryText,
-	}}}
+	}}}}
 	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultSubtitle})
 	toolbar := themeCatalogToolbar(props, dark, width, false)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
@@ -600,10 +601,10 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 
 func themeSwatch(theme woxcomponent.Theme, size float32) woxwidget.Widget {
 	innerWidth := max(float32(0), size-8)
-	return woxwidget.Container{Width: size, Height: size, Radius: 8, Color: theme.Background, Padding: woxwidget.Insets{Left: 4, Top: 5, Right: 4}, Child: woxwidget.Flex{
+	return woxwidget.Container{Width: size, Height: size, Radius: 8, Color: theme.Background, Padding: woxwidget.Insets{Left: 4, Right: 4}, Child: woxwidget.Align{Height: size, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: innerWidth, Height: 10, Radius: 4, Color: theme.QueryBackground},
 			woxwidget.Container{Width: innerWidth, Height: 5, Radius: 2, Color: theme.SelectedBackground},
 		},
-	}}
+	}}}
 }

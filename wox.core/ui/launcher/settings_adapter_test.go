@@ -46,7 +46,7 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 	rows := scroll.Content.(woxwidget.Flex)
 	stateful := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Stateful)
 	row := stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture).Child.(woxwidget.Container)
-	icon := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
+	icon := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 
 	if icon.Source != normalIcon {
 		t.Fatalf("selected navigation icon = %p, want cached SVG %p while the selected tint loads", icon.Source, normalIcon)
@@ -74,7 +74,7 @@ func TestSettingsSearchSelectedBuiltInIconUsesSelectedTextColor(t *testing.T) {
 		Width: panel.Width - panel.Padding.Left - panel.Padding.Right, Height: panel.Height - panel.Padding.Top - panel.Padding.Bottom,
 	}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
-	icon := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
+	icon := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 
 	if icon.Source != selectedIcon {
 		t.Fatalf("selected settings search icon = %p, want selected text tint %p", icon.Source, selectedIcon)

@@ -15,8 +15,8 @@ func TestWindowGroupSelectedLayoutCardUsesStrongActiveTreatment(t *testing.T) {
 	halo := surface.Children[0].Child.(woxwidget.Container)
 	card := surface.Children[1].Child.(woxwidget.Container)
 
-	if card.BorderColor != windowGroupSelectionColor() || card.BorderWidth != 2.5 {
-		t.Fatalf("selected layout border = %+v/%.1f, want green/2.5", card.BorderColor, card.BorderWidth)
+	if card.BorderColor != windowGroupSelectionColor() || card.BorderWidth != 2 {
+		t.Fatalf("selected layout border = %+v/%.0f, want green/2", card.BorderColor, card.BorderWidth)
 	}
 	if card.Color == theme.ActionBackground {
 		t.Fatal("selected layout background should have a visible green tint")

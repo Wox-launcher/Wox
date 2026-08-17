@@ -17,6 +17,11 @@ func EnsureDeepLinkProtocolHandler(ctx context.Context) bool {
 		return false
 	}
 
+	if execPath, execErr := linuxDesktopExecPath(); execErr == nil && isEphemeralDebugExecutable(execPath) {
+		GetLogger().Info(ctx, fmt.Sprintf("skipping Linux desktop entry update for debug executable: %s", execPath))
+		return IsFileExists(desktopFilePath)
+	}
+
 	if err := WriteLinuxDesktopEntry(desktopFilePath, true, false); err != nil {
 		GetLogger().Error(ctx, fmt.Sprintf("failed to write Linux desktop entry: %s", err.Error()))
 		return false

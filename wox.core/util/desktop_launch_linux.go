@@ -28,6 +28,13 @@ func ShouldRelaunchLinuxFromDesktopEntry(args []string) bool {
 	if os.Getenv(linuxDesktopRelaunchAttemptedEnv) == "1" {
 		return false
 	}
+	// Dev/debug launches must stay in-process. VS Code + Delve run an
+	// ephemeral __debug_bin_* binary; handing off to systemd-run exits the
+	// debugger session, and the replacement exec usually fails after Delve
+	// deletes that file.
+	if IsDev() {
+		return false
+	}
 
 	return IsLinuxWaylandSession() && !IsLinuxLaunchedFromStableDesktopEntry()
 }

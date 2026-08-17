@@ -36,3 +36,25 @@ func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 		t.Fatalf("empty state message = %#v, want No matches", row.Children[1])
 	}
 }
+
+func TestActionRowCentersIconAndLabel(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, Items: []ActionItem{{ID: "open", Label: "打开 系统命令 设置", Icon: &woxui.Image{}}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	panel := view.Child.(woxwidget.Container)
+	actionList := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := actionList.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	content := row.Child.(woxwidget.Flex)
+	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("action row alignment = %v, want vertical center", content.CrossAxisAlignment)
+	}
+	icon := content.Children[0].(woxwidget.Align)
+	if icon.Height != ActionRowHeight || icon.Vertical != 0.5 || icon.Child.(woxwidget.Container).Padding.Top != 0 {
+		t.Fatalf("action icon slot = %#v, want a full-height centered slot", icon)
+	}
+	label := content.Children[1].(woxwidget.Align).Child.(woxwidget.TextBlock)
+	if label.Height != 18 || label.LineHeight != 18 || label.AlignmentY != 0.5 || label.Value != "打开 系统命令 设置" {
+		t.Fatalf("action label slot = %#v, want an 18px optically centered line", label)
+	}
+}

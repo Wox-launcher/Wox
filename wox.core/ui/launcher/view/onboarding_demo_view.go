@@ -789,7 +789,7 @@ func onboardingQueryHotkeySilentDemo(props OnboardingProps, step OnboardingStep,
 			woxwidget.Text{Value: "✓", Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, demoAlpha(toastProgress))},
 			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: step.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, demoAlpha(toastProgress))},
-				woxwidget.Text{Value: "copy github repo", Style: woxui.TextStyle{Size: 10.5}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoAlpha(toastProgress))},
+				woxwidget.Text{Value: "copy github repo", Style: woxui.TextStyle{Size: 11}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoAlpha(toastProgress))},
 			}},
 		}}}
 		children = append(children, woxwidget.StackChild{Left: (width - toastWidth) / 2, Top: height - 96 + 18*(1-toastProgress), Child: toast})

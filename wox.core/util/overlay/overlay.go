@@ -347,8 +347,9 @@ func (instance *runtimeOverlay) dispose() {
 
 // overlayNativeWindowOptions maps overlay chrome onto a utility window. Topmost
 // preview surfaces take focus but still float above the launcher. Tooltips stay
-// nonactivating so they do not steal focus; native acrylic or vibrancy still
-// comes from the platform window, not from a painted panel fill.
+// nonactivating so they do not steal focus. Windows and macOS still take their
+// material from the native window; Linux paints PanelFill because it has no
+// acrylic or vibrancy.
 func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.WindowOptions {
 	return woxui.WindowOptions{
 		Title:            "Wox Overlay",
@@ -359,6 +360,29 @@ func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.Wi
 		Nonactivating:    !(options.TakeFocus || options.CloseOnEscape),
 		TransientOverlay: true,
 		Topmost:          options.Topmost,
+	}
+}
+
+// PanelFill is the painted overlay surface. Windows and macOS leave this empty
+// so native acrylic or vibrancy shows through. Linux has neither material, so
+// the panel is an opaque fill matching the requested window appearance.
+func PanelFill(goos string, lightAppearance bool) woxui.Color {
+	if goos != "linux" {
+		return woxui.Color{}
+	}
+	if lightAppearance {
+		return woxui.Color{R: 245, G: 245, B: 247, A: 255}
+	}
+	return woxui.Color{R: 24, G: 24, B: 26, A: 255}
+}
+
+// HUDSurface is the rounded overlay panel used by compact HUD windows. Linux
+// paints PanelFill; other platforms keep the native window material.
+func HUDSurface(width, height, radius float32, lightAppearance bool, child woxwidget.Widget) woxwidget.Container {
+	return woxwidget.Container{
+		Width: width, Height: height, Radius: radius,
+		Color: PanelFill(runtime.GOOS, lightAppearance),
+		Child: child,
 	}
 }
 

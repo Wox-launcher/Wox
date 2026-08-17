@@ -123,7 +123,11 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 	}
 	props := settingsSearchScroll(panel)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
-	content := row.Child.(woxwidget.Flex)
+	alignment := row.Child.(woxwidget.Align)
+	content := alignment.Child.(woxwidget.Flex)
+	if row.Padding.Top != 0 || alignment.Height != 54 || alignment.Vertical != 0.5 {
+		t.Fatalf("search result alignment = padding %#v slot %#v, want a full-height centered slot", row.Padding, alignment)
+	}
 
 	if content.Axis != woxwidget.Horizontal || content.Gap != 8 || content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("search result content = %#v, want centered horizontal row with 8px gap", content)
@@ -149,7 +153,7 @@ func TestSettingsSearchResultsUseSelectedTextColors(t *testing.T) {
 	}).(woxwidget.Container)
 	props := settingsSearchScroll(panel)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
-	text := row.Child.(woxwidget.Flex)
+	text := row.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 
 	if title := text.Children[0].(woxwidget.Text); title.Color != titleColor {
 		t.Fatalf("selected search title color = %#v, want %#v", title.Color, titleColor)
@@ -167,7 +171,7 @@ func TestSettingsSearchResultsHideIconInNarrowPanel(t *testing.T) {
 	props := settingsSearchScroll(panel)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 
-	if content, ok := row.Child.(woxwidget.Flex); !ok || content.Axis != woxwidget.Vertical {
+	if content, ok := row.Child.(woxwidget.Align).Child.(woxwidget.Flex); !ok || content.Axis != woxwidget.Vertical {
 		t.Fatalf("narrow search result content = %T %#v, want icon-free text column", row.Child, row.Child)
 	}
 }

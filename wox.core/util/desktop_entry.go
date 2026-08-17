@@ -127,6 +127,12 @@ func linuxDesktopExecPath() (string, error) {
 	return exePath, nil
 }
 
+// isEphemeralDebugExecutable reports Delve/VS Code debug binaries that must
+// not be written into the user desktop entry or used as a relaunch target.
+func isEphemeralDebugExecutable(path string) bool {
+	return strings.HasPrefix(filepath.Base(path), "__debug_bin")
+}
+
 func quoteDesktopExecArg(value string) string {
 	replacer := strings.NewReplacer(
 		"\\", "\\\\",

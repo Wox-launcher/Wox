@@ -101,7 +101,7 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-skill-add-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-skill-add-backdrop", BackdropAlpha: 210,
-		Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: border, BorderWidth: 0.75,
+		Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: border, BorderWidth: 1,
 		InitialFocus: woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", props.Tab)), OnEscape: props.OnCancel, Theme: props.Theme,
 		Child: body,
 	})

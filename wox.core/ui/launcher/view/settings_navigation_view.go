@@ -72,10 +72,10 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 				items = append(items, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 					ID: "settings-nav-" + item.ID, Label: item.Label, Width: size.Width, Height: 46, Radius: &radius,
 					Background: &color, HoverBackground: &hoverBackground, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: onTap, Theme: props.Theme,
-					Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+					Padding: woxwidget.Insets{Left: leftPadding, Right: 10}, Child: woxwidget.Align{Height: 46, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 						woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 						woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}}},
-					}},
+					}}},
 				}))
 			}
 			const searchAreaHeight = float32(58)
@@ -192,7 +192,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 				if inside && result.OnHover != nil {
 					result.OnHover()
 				}
-			}, OnTap: result.OnTap, Child: woxwidget.Container{Width: size.Width, Height: rowHeight, Radius: 5, Color: rowBackground, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10}, Child: content}})
+			}, OnTap: result.OnTap, Child: woxwidget.Container{Width: size.Width, Height: rowHeight, Radius: 5, Color: rowBackground, Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: content}}})
 		}
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "settings-search-results", Width: size.Width, Height: size.Height,

@@ -156,7 +156,7 @@ func (s *formTableEmojiPickerState) buildDialog(context woxwidget.StateContext, 
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-emoji-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.OverlayWidth, OverlayHeight: props.OverlayHeight, BackdropID: "form-table-emoji-backdrop", BackdropAlpha: 210,
-		Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: border, BorderWidth: 0.75,
+		Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: border, BorderWidth: 1,
 		InitialFocus: "form-table-emoji-search", OnEscape: props.OnCancel, Theme: props.Theme, Child: content,
 	})
 }

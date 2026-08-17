@@ -197,8 +197,10 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 				woxwidget.Expanded{Child: woxwidget.Container{Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}}},
 				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: theme.ResultSubtitle}},
 			}},
-			woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Top: 4}, Child: woxwidget.Text{
-				Value: status.StatusLabel, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize, Weight: woxui.FontWeightSemibold}, Color: statusColor,
+			woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8}, Child: woxwidget.Align{
+				Height: 22, Vertical: 0.5, Child: woxwidget.Text{
+					Value: status.StatusLabel, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize, Weight: woxui.FontWeightSemibold}, Color: statusColor,
+				},
 			}},
 		}}}},
 	}}

@@ -203,7 +203,7 @@ func mediaRecordPainter(size float32, props MediaPreviewProps, progress float32)
 			if index%2 == 0 {
 				alpha = 14
 			}
-			displayList.StrokeRoundedRect(woxui.Rect{X: disc.X + radius - grooveRadius, Y: disc.Y + radius - grooveRadius, Width: grooveRadius * 2, Height: grooveRadius * 2}, grooveRadius, 0.8, woxui.Color{R: 255, G: 255, B: 255, A: alpha})
+			displayList.StrokeRoundedRect(woxui.Rect{X: disc.X + radius - grooveRadius, Y: disc.Y + radius - grooveRadius, Width: grooveRadius * 2, Height: grooveRadius * 2}, grooveRadius, 1, woxui.Color{R: 255, G: 255, B: 255, A: alpha})
 		}
 
 		labelSize := disc.Width * 0.43
@@ -392,11 +392,11 @@ func mediaPlaybackStatus(props MediaPreviewProps, availableWidth float32) woxwid
 		if props.Playing {
 			for index, height := range []float32{7, 13, 9} {
 				x := bounds.X + float32(index)*5 + 1
-				displayList.FillRoundedRect(woxui.Rect{X: x, Y: bounds.Y + (bounds.Height-height)/2, Width: 2.5, Height: height}, 1.25, mediaAccent)
+				displayList.FillRoundedRect(woxui.Rect{X: x, Y: bounds.Y + (bounds.Height-height)/2, Width: 3, Height: height}, 1, mediaAccent)
 			}
 		} else {
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 3, Width: 2.5, Height: 9}, 1, mediaAccent)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 9, Y: bounds.Y + 3, Width: 2.5, Height: 9}, 1, mediaAccent)
+			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 3, Width: 3, Height: 9}, 1, mediaAccent)
+			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 9, Y: bounds.Y + 3, Width: 3, Height: 9}, 1, mediaAccent)
 		}
 	}}
 	children := []woxwidget.Widget{icon}

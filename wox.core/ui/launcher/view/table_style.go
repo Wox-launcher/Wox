@@ -9,7 +9,7 @@ const (
 	tableSurfaceHeaderHeight = float32(36)
 	tableSurfaceRowHeight    = float32(36)
 	tableSurfaceEmptyHeight  = float32(82)
-	tableSurfaceBorderWidth  = float32(0.5)
+	tableSurfaceBorderWidth  = float32(1)
 )
 
 // tableSurfaceStyle keeps every column-based table on the same theme-derived visual tokens.

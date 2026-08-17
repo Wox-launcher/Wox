@@ -704,7 +704,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 	} else {
 		if reasoning := strings.TrimSpace(conversation.Reasoning); reasoning != "" && !hideReasoning {
 			props.Reasoning = reasoning
-			props.ReasoningLayout = a.previewTextLayout(fmt.Sprintf("chat-reasoning\x00%s\x00%d", key, index), props.Reasoning, woxui.TextStyle{Size: 11}, innerWidth, 15.4)
+			props.ReasoningLayout = a.previewTextLayout(fmt.Sprintf("chat-reasoning\x00%s\x00%d", key, index), props.Reasoning, woxui.TextStyle{Size: 11}, innerWidth, 16)
 		}
 		props.Text = strings.TrimSpace(conversation.Text)
 		if props.Text != "" {

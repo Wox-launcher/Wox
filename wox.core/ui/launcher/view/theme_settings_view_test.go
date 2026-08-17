@@ -161,9 +161,9 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 		t.Fatalf("system tag slot alignment = (%v, %v), want trailing and vertically centered", slot.Horizontal, slot.Vertical)
 	}
 	tag := slot.Child.(woxwidget.Container)
-	wantPadding := woxwidget.Insets{Left: 4, Top: 1, Right: 4, Bottom: 1}
-	if tag.Padding != wantPadding || tag.BorderWidth != 0.5 {
-		t.Fatalf("system tag geometry = padding %+v border %v, want shared Flutter tag", tag.Padding, tag.BorderWidth)
+	wantPadding := woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}
+	if tag.Padding != wantPadding || tag.BorderWidth != 1 {
+		t.Fatalf("system tag geometry = padding %+v border %v, want shared 1px outlined tag", tag.Padding, tag.BorderWidth)
 	}
 	if label := tag.Child.(woxwidget.Text); tag.BorderColor != tagColor || label.Color != tagColor {
 		t.Fatalf("system tag colors = border %#v text %#v, want %#v", tag.BorderColor, label.Color, tagColor)
@@ -171,9 +171,13 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 	list := themeList(props, 260, 400).(woxwidget.Flex)
 	scrollProps := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := focusedControlGesture(scrollProps.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
-	content := row.Child.(woxwidget.Flex)
+	alignment := row.Child.(woxwidget.Align)
+	content := alignment.Child.(woxwidget.Flex)
 	_, textExpanded := content.Children[1].(woxwidget.Expanded)
 	tagSlot := content.Children[2].(woxwidget.Align)
+	if row.Padding.Top != 0 || alignment.Vertical != 0.5 || content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("theme row alignment = padding %#v slot %#v flex %v, want a full-height centered icon row", row.Padding, alignment, content.CrossAxisAlignment)
+	}
 	if !textExpanded || tagSlot.Width != 44 {
 		t.Fatalf("theme row slots = text expanded %v tag %.0f, want true/44", textExpanded, tagSlot.Width)
 	}

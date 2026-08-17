@@ -577,8 +577,10 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 				background = withAlpha(props.Theme.PreviewText, 12)
 			}
 			cells = append(cells, woxwidget.Container{
-				Width: cellWidth, Height: 38, Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8}, Color: background, BorderColor: withAlpha(props.Theme.PreviewSplit, 100), BorderWidth: 1,
-				Child: woxwidget.TextBlock{Value: value, Width: max(float32(0), cellWidth-16), Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}, Color: props.Theme.PreviewText},
+				Width: cellWidth, Height: 38, Padding: woxwidget.Insets{Left: 8, Right: 8}, Color: background, BorderColor: withAlpha(props.Theme.PreviewSplit, 100), BorderWidth: 1,
+				Child: woxwidget.Align{Width: max(float32(0), cellWidth-16), Height: 38, Vertical: 0.5, Child: woxwidget.TextBlock{
+					Value: value, Width: max(float32(0), cellWidth-16), Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}, Color: props.Theme.PreviewText,
+				}},
 			})
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})

@@ -685,7 +685,7 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 		if props.Reasoning != "" {
 			reasoningColor := textColor
 			reasoningColor.A = 120
-			reasoning := woxwidget.TextBlock{Value: props.Reasoning, Width: innerWidth, Height: props.ReasoningLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 15.4, Color: reasoningColor, Layout: &props.ReasoningLayout}
+			reasoning := woxwidget.TextBlock{Value: props.Reasoning, Width: innerWidth, Height: props.ReasoningLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: reasoningColor, Layout: &props.ReasoningLayout}
 			if props.Text != "" {
 				children = append(children, woxwidget.Container{Width: innerWidth, Height: props.ReasoningLayout.Size.Height + 3, Padding: woxwidget.Insets{Bottom: 3}, Child: reasoning})
 			} else {
@@ -1149,7 +1149,7 @@ func ChatQuestion(props ChatQuestionProps) woxwidget.Widget {
 			background = props.Theme.SelectedBackground
 		}
 		children = append(children, woxwidget.Gesture{ID: option.ID, OnTap: option.OnSelect, Child: woxwidget.Container{
-			Width: innerWidth, Height: 40, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 11, Right: 10}, Child: woxwidget.Text{Value: option.Label, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.PreviewText},
+			Width: innerWidth, Height: 40, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{Value: option.Label, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.PreviewText}},
 		}})
 	}
 	if props.Input != nil {

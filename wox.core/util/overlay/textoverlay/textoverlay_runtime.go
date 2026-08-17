@@ -383,9 +383,9 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	rootChildren := []woxwidget.StackChild{{Child: woxwidget.Container{
 		Width: frame.Size.Width, Height: frame.Size.Height,
-		// No panel fill: every platform window supplies its own material
-		// (macOS NSVisualEffectView, Windows Desktop Acrylic). Windows applies
-		// that HWND backdrop even when the overlay is WS_EX_NOACTIVATE.
+		// Windows and macOS keep Color empty so native acrylic or vibrancy
+		// shows through. Linux has neither, so PanelFill is an opaque surface.
+		Color:  overlay.PanelFill(runtime.GOOS, instance.options.Window.LightAppearance),
 		Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
 	}}}
 	if layout.titleBarHeight > 0 {
@@ -433,7 +433,9 @@ func runtimeTextWindowChrome(goos string) (radius, borderWidth float32, borderCo
 func runtimeTextCopyTooltip(width float32, label string, style woxui.TextStyle, foreground woxui.Color) woxwidget.Container {
 	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	return woxwidget.Container{
-		Width: width, Height: runtimeTextTooltipHeight, Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
+		Width: width, Height: runtimeTextTooltipHeight,
+		Color:  overlay.PanelFill(runtime.GOOS, false),
+		Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
 		Child: woxwidget.Align{Width: width, Height: runtimeTextTooltipHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.TextBlock{
 			Value: label, Width: width - 16, Height: 18, MaxLines: 1, Centered: true, Style: style, Color: foreground,
 		}},

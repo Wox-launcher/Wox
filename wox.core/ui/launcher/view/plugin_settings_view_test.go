@@ -152,12 +152,12 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := props.Content.(woxwidget.Flex)
 	row := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container)
-	rowContent := row.Child.(woxwidget.Flex)
+	rowContent := row.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	status := rowContent.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if status.Color != activeColor {
 		t.Fatalf("selected plugin subtitle color = %#v, want %#v", status.Color, activeColor)
 	}
-	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	inactiveStatus := inactiveRow.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if inactiveStatus.Color != inactiveColor {
 		t.Fatalf("unselected plugin subtitle color = %#v, want %#v", inactiveStatus.Color, inactiveColor)
@@ -171,12 +171,12 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 		t.Fatalf("plugin row content width = %v, want inner width %v so the tag keeps the 6px trailing padding", contentWidth, row.Width-row.Padding.Left-row.Padding.Right)
 	}
 	badge := badgeSlot.Child.(woxwidget.Container)
-	wantPadding := woxwidget.Insets{Left: 4, Top: 1, Right: 4, Bottom: 1}
+	wantPadding := woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}
 	if badge.Padding != wantPadding {
 		t.Fatalf("badge padding = %+v, want %+v", badge.Padding, wantPadding)
 	}
-	if badge.BorderWidth != 0.5 {
-		t.Fatalf("badge border width = %v, want 0.5", badge.BorderWidth)
+	if badge.BorderWidth != 1 {
+		t.Fatalf("badge border width = %v, want 1", badge.BorderWidth)
 	}
 	label := badge.Child.(woxwidget.Text)
 	if label.Style.Size != 11 {
@@ -199,8 +199,8 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := props.Content.(woxwidget.Flex)
-	selectedRow := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	selectedRow := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	selected := selectedRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
 	inactive := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
 
@@ -474,10 +474,15 @@ func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
 		Title:       "Active window process ID",
 		Description: "For example, when browsing a webpage this plugin reads the active window process ID.",
 	}, 600, woxcomponent.Theme{}).(woxwidget.Container)
-	description := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.TextBlock)
+	descriptionSlot := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[1].(woxwidget.Container)
+	descriptionAlign := descriptionSlot.Child.(woxwidget.Align)
+	description := descriptionAlign.Child.(woxwidget.TextBlock)
 
 	if description.MaxLines != 2 || description.LineHeight != 16 {
 		t.Fatalf("metadata description wrapping = %d lines at %vpx, want two 16px lines", description.MaxLines, description.LineHeight)
+	}
+	if descriptionSlot.Padding.Top != 0 || descriptionAlign.Height != 61 || descriptionAlign.Vertical != 0.5 {
+		t.Fatalf("metadata description alignment = padding %#v slot %#v, want a full-height centered slot", descriptionSlot.Padding, descriptionAlign)
 	}
 }
 
@@ -764,15 +769,20 @@ func TestFormTableDataCellDoesNotOpenEditor(t *testing.T) {
 
 func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
 	props := FormTableFieldProps{ID: "commands", EmptyLabel: "No rows", Theme: woxcomponent.Theme{}}
-	header := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
+	headerCell := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container)
+	headerAlign := headerCell.Child.(woxwidget.Align)
+	header := headerAlign.Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
 	body := formTableDataCell(props, FormTableCell{Text: "Translate"}, 120).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
 	empty := formTableEmptyState(props, 240, tableSurfaceEmptyHeight).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
 
 	if header.Style.Size != woxcomponent.TableHeaderFontSize || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
 		t.Fatalf("table typography = %v/%v/%v, want %v/%v/%v", header.Style.Size, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
 	}
-	if header.Height != 18 || header.LineHeight != 18 {
-		t.Fatalf("table header slot = height %v line height %v, want 18/18", header.Height, header.LineHeight)
+	if header.Height != 18 || header.LineHeight != 18 || header.AlignmentY != 0.5 {
+		t.Fatalf("table header slot = height %v line height %v alignment %v, want an 18px optically centered slot", header.Height, header.LineHeight, header.AlignmentY)
+	}
+	if headerCell.Padding.Top != 0 || headerAlign.Height != tableSurfaceHeaderHeight || headerAlign.Vertical != 0.5 {
+		t.Fatalf("table header alignment = padding %#v slot %#v, want a full-height centered slot", headerCell.Padding, headerAlign)
 	}
 }
 

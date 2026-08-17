@@ -10,6 +10,7 @@ This guide is the sole visual policy for portable Go UI under `wox.core/ui`. It 
 - [Color and surfaces](#color-and-surfaces)
 - [Typography](#typography)
 - [Spacing, alignment, and shape](#spacing-alignment-and-shape)
+- [Integer logical units](#integer-logical-units)
 - [Interaction state matrix](#interaction-state-matrix)
 - [Components, icons, and content](#components-icons-and-content)
 - [Layout and platform behavior](#layout-and-platform-behavior)
@@ -169,9 +170,25 @@ Use the 4-unit rhythm: 4, 8, 12, 16, 20, and 24. Allow 6, 10, and 14 only for es
 - Use built-in horizontal and vertical alignment primitives (`Align`, Flex alignment, `Expanded`, and `Constrained`) instead of manual offsets or calculated centering padding. Do not write formulas such as `(rowHeight-controlHeight)/2` to position a child; make the layout component express the relationship.
 - Keep related label, value, and action content together; separate unrelated tasks into sections.
 - Preserve room for validation and progress where it prevents avoidable layout jumps.
-- Use a 1-unit border or divider for structure.
+- Use a 1-unit border or divider for structure. Do not author hairlines such as `0.5` or `0.75`; they clip under coverage AA and CJK metrics, especially on the top edge.
 - Use 4 radius for ordinary controls, 6-8 for rows and bounded panels, and the owning shared component's radius for dialogs or special surfaces.
 - Do not introduce a new spacing, radius, or height value when an existing tier expresses the role.
+
+## Integer logical units
+
+Authored layout values must be whole logical units. Do not write fractional widths, heights, padding, gaps, radii, border or stroke widths, icon sizes, font sizes, or line heights such as `0.5`, `0.75`, `1.5`, `2.5`, `10.5`, or `12.5`.
+
+This applies to Settings, Launcher, the Action Panel, and preview chrome. Convert to physical pixels only at the renderer or platform boundary.
+
+Allowed to stay non-integer:
+
+- alignment factors (`Horizontal: 0.5`, `Vertical: 0.5`)
+- opacity and color-channel math
+- animation progress and in-flight interpolated frames
+- ratios that split available space
+- measured text, image, parsed SVG content, and DPI conversions
+
+When a formula would produce a half unit, express the relationship with `Align` or Flex alignment instead of fractional padding.
 
 ## Interaction state matrix
 
@@ -235,6 +252,7 @@ Before completing a visual change, confirm:
 - the surface is classified as ordinary UI, Launcher, Action Panel, or platform-owned;
 - each ordinary control uses Standard, approved Compact, or Search geometry;
 - controls in one group share height, centerline, spacing rhythm, and hierarchy;
+- authored geometry uses whole logical units (no fractional pixels);
 - reusable visuals and states live in `launcher/component`, not a view;
 - colors and typography come from semantic shared contracts;
 - default, hover, pressed, selected, focused, disabled, loading, empty, and error states are covered where applicable;

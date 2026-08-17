@@ -12,6 +12,18 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
+func TestLinuxKWinCaptureKeepsCallerWindows(t *testing.T) {
+	options := linuxKWinCaptureOptions()
+	value, ok := options["hide-caller-windows"]
+	if !ok {
+		t.Fatal("KWin capture options must set hide-caller-windows")
+	}
+	hidden, ok := value.Value().(bool)
+	if !ok || hidden {
+		t.Fatalf("hide-caller-windows = %#v, want false so the settings window stays visible", value.Value())
+	}
+}
+
 func TestParseLinuxKWinDisplayGeometries(t *testing.T) {
 	support := `Screens
 -------

@@ -41,7 +41,7 @@ func PreviewList(props PreviewListProps) woxwidget.Widget {
 		var tail woxwidget.Widget
 		if item.Tail != "" {
 			tailWidth = 78
-			tail = woxwidget.Container{Width: tailWidth, Height: 30, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: item.Tail, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle}}
+			tail = woxwidget.Align{Width: tailWidth, Height: 30, Vertical: 0.5, Child: woxwidget.Text{Value: item.Tail, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle}}
 		}
 		rows = append(rows, woxwidget.Container{Width: max(float32(0), props.Width-20), Height: rowHeight, Padding: woxwidget.Insets{Left: 10, Top: 10, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 			icon,

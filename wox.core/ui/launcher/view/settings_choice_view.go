@@ -218,8 +218,10 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 				if props.OnTooltip != nil {
 					props.OnTooltip(inside, choice.Tooltip, bounds)
 				}
-			}, Child: woxwidget.Container{Width: 28, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 6, Top: 14}, Child: woxwidget.Text{
-				Value: "ⓘ", Style: woxui.TextStyle{Size: 14}, Color: foreground,
+			}, Child: woxwidget.Container{Width: 28, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 6}, Child: woxwidget.Align{
+				Width: 22, Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.Text{
+					Value: "ⓘ", Style: woxui.TextStyle{Size: 14}, Color: foreground,
+				},
 			}}}
 		}
 		activate := func() {

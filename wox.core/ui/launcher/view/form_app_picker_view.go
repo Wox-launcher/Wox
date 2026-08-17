@@ -219,7 +219,7 @@ func formAppPickerRow(context woxwidget.StateContext, props FormAppPickerProps, 
 	if selected {
 		weight = woxui.FontWeightSemibold
 	}
-	children = append(children, woxwidget.Container{Width: contentWidth, Height: formAppPickerRowHeight, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{
+	children = append(children, woxwidget.Align{Width: contentWidth, Height: formAppPickerRowHeight, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
 			woxwidget.TextBlock{Value: item.candidate.Name, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: props.Theme.ActionText},
 			woxwidget.TextBlock{Value: item.candidate.Detail, Width: contentWidth, Height: 15, LineHeight: 15, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},

@@ -1,7 +1,6 @@
 package component
 
 import (
-	"math"
 	"testing"
 	"time"
 
@@ -9,7 +8,7 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func TestWoxSwitchMatchesFlutterFittedGeometry(t *testing.T) {
+func TestWoxSwitchUsesIntegerGeometry(t *testing.T) {
 	animation := WoxSwitch(SwitchProps{}).(woxwidget.AnimatedFloat)
 	off := animation.Builder(0).(woxwidget.Stack)
 	on := animation.Builder(1).(woxwidget.Stack)
@@ -19,11 +18,11 @@ func TestWoxSwitchMatchesFlutterFittedGeometry(t *testing.T) {
 	if off.Width != 36 || off.Height != 24 {
 		t.Fatalf("switch size = %vx%v, want 36x24", off.Width, off.Height)
 	}
-	if track := off.Children[0].Child.(woxwidget.Container); track.Width != 31.2 || track.Height != 19.2 {
-		t.Fatalf("switch track = %vx%v, want 31.2x19.2", track.Width, track.Height)
+	if track := off.Children[0].Child.(woxwidget.Container); track.Width != 32 || track.Height != 20 || track.Radius != 10 {
+		t.Fatalf("switch track = %vx%v r%v, want 32x20 r10", track.Width, track.Height, track.Radius)
 	}
-	if math.Abs(float64(offThumb.Width-9.6)) > 0.001 || math.Abs(float64(onThumb.Width-14.4)) > 0.001 {
-		t.Fatalf("switch thumb sizes = %v/%v, want 9.6/14.4", offThumb.Width, onThumb.Width)
+	if offThumb.Width != 10 || onThumb.Width != 14 {
+		t.Fatalf("switch thumb sizes = %v/%v, want 10/14", offThumb.Width, onThumb.Width)
 	}
 }
 
@@ -48,7 +47,7 @@ func TestWoxSwitchAnimatesThumbSizeOnHover(t *testing.T) {
 	}
 	normalThumb := normal.Children[1].Child.(woxwidget.Container)
 	hoveredThumb := hovered.Children[1].Child.(woxwidget.Container)
-	if math.Abs(float64(hoveredThumb.Width-normalThumb.Width-1.6)) > 0.001 {
-		t.Fatalf("switch hover thumb growth = %v, want subtle 1.6px", hoveredThumb.Width-normalThumb.Width)
+	if hoveredThumb.Width-normalThumb.Width != 2 {
+		t.Fatalf("switch hover thumb growth = %v, want 2", hoveredThumb.Width-normalThumb.Width)
 	}
 }

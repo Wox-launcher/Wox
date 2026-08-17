@@ -47,6 +47,16 @@ func TestUsagePeriodSelectorAddsHoverToUnselectedOption(t *testing.T) {
 	}
 }
 
+func TestUsageRankingRowCentersNameAndIcon(t *testing.T) {
+	row := usageRankingRow(0, UsageRankingItem{Name: "Wox", Count: 12}, 12, 400, woxui.Color{A: 255}, true, &woxui.Image{}, []*woxui.Image{&woxui.Image{}}, woxcomponent.Theme{}).(woxwidget.Container)
+	content := row.Child.(woxwidget.Flex)
+	icon := content.Children[1].(woxwidget.Align)
+	name := content.Children[2].(woxwidget.Clip).Child.(woxwidget.Align)
+	if icon.Height != 24 || icon.Vertical != 0.5 || name.Height != 24 || name.Vertical != 0.5 {
+		t.Fatalf("ranking alignment = icon %#v name %#v, want 24px centered slots", icon, name)
+	}
+}
+
 func TestUsageSettingsViewUsesSymmetricHorizontalInsets(t *testing.T) {
 	page := UsageSettingsView(UsageSettingsProps{Width: 800, Height: 600})
 	container := page.(woxwidget.Container)

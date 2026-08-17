@@ -50,7 +50,11 @@ func TestFormAppPickerMatchesFlutterDialogAndDefersCommit(t *testing.T) {
 		t.Fatal("empty initial selection should render unchecked radio rows")
 	}
 	row := first.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	labels := row.Children[len(row.Children)-1].(woxwidget.Container).Child.(woxwidget.Flex).Children
+	labelSlot := row.Children[len(row.Children)-1].(woxwidget.Align)
+	if labelSlot.Height != formAppPickerRowHeight || labelSlot.Vertical != 0.5 {
+		t.Fatalf("app label alignment = %#v, want a full-height centered slot", labelSlot)
+	}
+	labels := labelSlot.Child.(woxwidget.Flex).Children
 	name := labels[0].(woxwidget.TextBlock)
 	detail := labels[1].(woxwidget.TextBlock)
 	if name.Value != "Finder" || detail.Value != "/System/Finder.app" || name.Height < name.LineHeight || detail.Height < detail.LineHeight {

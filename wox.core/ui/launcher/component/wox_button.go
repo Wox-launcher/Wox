@@ -60,8 +60,10 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	if props.FontSize > 0 {
 		fontSize = props.FontSize
 	}
-	// Intrinsic buttons need the tallest child when calculating symmetric vertical padding.
-	contentHeight := fontSize * 1.35
+	// Keep a whole-unit label slot. fontSize*1.35 produced fractional padding and
+	// left CJK ink off the button centerline.
+	const labelLineHeight = float32(18)
+	contentHeight := labelLineHeight
 
 	background := props.Theme.QueryBackground
 	foreground := props.Theme.ActionText
@@ -103,7 +105,11 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		actions = nil
 	}
 	key := woxwidget.Key(props.ID)
-	var child woxwidget.Widget = woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground}
+	label := woxwidget.TextBlock{
+		Value: props.Label, Height: labelLineHeight, LineHeight: labelLineHeight, MaxLines: 1, AlignmentY: 0.5, ShrinkWrap: true,
+		Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground,
+	}
+	var child woxwidget.Widget = label
 	if props.Icon != nil {
 		iconSize := props.IconSize
 		if iconSize <= 0 {
@@ -114,10 +120,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		if iconGap <= 0 {
 			iconGap = 8
 		}
-		child = woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}
 		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			child,
-			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground},
+			woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
+			label,
 		}}
 	}
 	if props.TrailingIcon != nil {
@@ -150,7 +155,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		alignedChild = child
 		buttonWidth = 0
 	}
-	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.
+	// Intrinsic buttons cannot wrap content in Align: a zero-width Align expands to
+	// the parent Flex width. Integer vertical padding around the 18px label slot
+	// keeps the label on the centerline without fractional insets.
 	content := hoverable(key, props.Disabled, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 		buttonBackground := background
 		if hovered {

@@ -175,9 +175,12 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				FontSize: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Window: props.Window,
 			})
 			hotkeyWidth = chipWidth + 15
-			hotkey = woxwidget.Container{Width: hotkeyWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 5, Bottom: 6}, Child: chip}
+			hotkey = woxwidget.Align{Width: hotkeyWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
+				Width: hotkeyWidth, Padding: woxwidget.Insets{Left: 10, Right: 5}, Child: chip,
+			}}
 		}
 		labelWidth := max(float32(40), innerWidth-37-hotkeyWidth)
+		labelLineHeight := scaledLauncherSize(18, props.DensityScale)
 		activate := func() {
 			if props.OnSelect != nil {
 				props.OnSelect(item.Index)
@@ -195,11 +198,18 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				}
 			},
 			OnTap: activate,
-			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: 37, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 5, Top: 9, Right: 10, Bottom: 9}, Child: icon},
-				woxwidget.Container{Width: labelWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: actionTitleFontSize}, Color: foreground}},
-				hotkey,
-			}}},
+			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{
+				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+					woxwidget.Align{Width: 37, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
+						Width: 37, Padding: woxwidget.Insets{Left: 5, Right: 10}, Child: icon,
+					}},
+					woxwidget.Align{Width: labelWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.TextBlock{
+						Value: item.Label, Width: labelWidth, Height: labelLineHeight, LineHeight: labelLineHeight, MaxLines: 1, AlignmentY: 0.5,
+						Style: woxui.TextStyle{Size: actionTitleFontSize}, Color: foreground,
+					}},
+					hotkey,
+				},
+			}},
 		}
 		rows = append(rows, woxwidget.Semantics{
 			Key: woxwidget.Key(automationID), AutomationID: automationID, Role: woxui.AccessibilityRoleMenuItem, Label: item.Label, Selected: selected,

@@ -183,6 +183,10 @@ func TestRuntimeTextCopyTooltipUsesWindowChrome(t *testing.T) {
 	if tooltip.Radius != radius || tooltip.BorderWidth != borderWidth || tooltip.BorderColor != borderColor {
 		t.Fatalf("copy tooltip chrome = radius %v border %v/%#v, want %+v/%v/%#v", tooltip.Radius, tooltip.BorderWidth, tooltip.BorderColor, radius, borderWidth, borderColor)
 	}
+	fill := overlay.PanelFill(runtime.GOOS, false)
+	if tooltip.Color != fill {
+		t.Fatalf("copy tooltip fill = %#v, want %#v", tooltip.Color, fill)
+	}
 	if tooltip.Height != runtimeTextTooltipHeight {
 		t.Fatalf("copy tooltip height = %v, want %v", tooltip.Height, runtimeTextTooltipHeight)
 	}
@@ -205,6 +209,27 @@ func TestRuntimeTextOverlayBuildUsesWindowChrome(t *testing.T) {
 	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	if panel.Radius != radius || panel.BorderWidth != borderWidth || panel.BorderColor != borderColor {
 		t.Fatalf("overlay panel chrome = radius %v border %v/%#v, want %v/%v/%#v", panel.Radius, panel.BorderWidth, panel.BorderColor, radius, borderWidth, borderColor)
+	}
+	fill := overlay.PanelFill(runtime.GOOS, false)
+	if panel.Color != fill {
+		t.Fatalf("overlay panel fill = %#v, want %#v", panel.Color, fill)
+	}
+}
+
+func TestRuntimeTextOverlayBuildUsesAppearancePanelFill(t *testing.T) {
+	instance := &runtimeTextOverlay{
+		layout: runtimeTextLayout{
+			windowSize:  woxui.Size{Width: 160, Height: 48},
+			contentSize: woxui.Size{Width: 140, Height: 28},
+			textWidth:   140,
+		},
+		options: Options{Message: "hello", Window: overlay.WindowOptions{LightAppearance: true}},
+	}
+	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}}).(woxwidget.Stack)
+	panel := root.Children[0].Child.(woxwidget.Container)
+	fill := overlay.PanelFill(runtime.GOOS, true)
+	if panel.Color != fill {
+		t.Fatalf("light overlay panel fill = %#v, want %#v", panel.Color, fill)
 	}
 }
 

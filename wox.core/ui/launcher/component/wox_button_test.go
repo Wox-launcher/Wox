@@ -27,9 +27,9 @@ func TestWoxButtonCentersContentInsideSymmetricPadding(t *testing.T) {
 	if content.Horizontal != 0.5 || content.Vertical != 0.5 {
 		t.Fatalf("button content alignment = (%v, %v), want (0.5, 0.5)", content.Horizontal, content.Vertical)
 	}
-	label := content.Child.(woxwidget.Text)
-	if label.Style.Size != CompactButtonFontSize || label.Style.Weight != woxui.FontWeightSemibold {
-		t.Fatalf("button label style = %+v, want semibold %.0fpx", label.Style, CompactButtonFontSize)
+	label := content.Child.(woxwidget.TextBlock)
+	if label.Style.Size != CompactButtonFontSize || label.Style.Weight != woxui.FontWeightSemibold || label.Height != 18 || label.AlignmentY != 0.5 {
+		t.Fatalf("button label slot = %+v, want semibold %.0fpx in an 18px centered line", label, CompactButtonFontSize)
 	}
 }
 
@@ -37,9 +37,12 @@ func TestWoxButtonCentersIntrinsicContentVertically(t *testing.T) {
 	button := WoxButton(ButtonProps{ID: "apply", Label: "应用", FontSize: 13, IntrinsicWidth: true})
 	container := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
 
-	wantPadding := (float32(32) - float32(13)*1.35) / 2
-	if container.Width != 0 || container.Padding.Top != wantPadding || container.Padding.Bottom != wantPadding {
-		t.Fatalf("intrinsic button = width %v padding %+v, want natural width and 13px-centered content", container.Width, container.Padding)
+	if container.Width != 0 || container.Padding.Top != 7 || container.Padding.Bottom != 7 {
+		t.Fatalf("intrinsic button = width %v padding %+v, want natural width and 7px integer insets around an 18px label", container.Width, container.Padding)
+	}
+	label := container.Child.(woxwidget.TextBlock)
+	if label.Height != 18 || label.LineHeight != 18 || label.AlignmentY != 0.5 {
+		t.Fatalf("intrinsic label slot = %#v, want an 18px optically centered line", label)
 	}
 }
 
@@ -76,7 +79,7 @@ func TestWoxButtonUsesContentWidthWhenWidthOmitted(t *testing.T) {
 	if _, isAlign := container.Child.(woxwidget.Align); isAlign {
 		t.Fatal("content-sized buttons must not wrap labels in an expanding Align")
 	}
-	if label, ok := container.Child.(woxwidget.Text); !ok || label.Value != "Cancel" {
+	if label, ok := container.Child.(woxwidget.TextBlock); !ok || label.Value != "Cancel" || !label.ShrinkWrap {
 		t.Fatalf("content-sized label = %#v", container.Child)
 	}
 }

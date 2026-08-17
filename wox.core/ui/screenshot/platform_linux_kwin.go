@@ -163,6 +163,15 @@ func parseLinuxKWinDisplayGeometries(support string) []linuxKWinDisplayGeometry 
 	return displays
 }
 
+// linuxKWinCaptureOptions keeps launcher hiding in Go. KWin's hide-caller-windows
+// flag is process-wide and would also remove the independent settings window.
+func linuxKWinCaptureOptions() map[string]dbus.Variant {
+	return map[string]dbus.Variant{
+		"native-resolution":   dbus.MakeVariant(true),
+		"hide-caller-windows": dbus.MakeVariant(false),
+	}
+}
+
 // capture requests native-resolution pixels for the fixed output and decodes KWin's raw QImage buffer.
 func (capture *linuxKWinDesktopCapture) capture() (image.Image, error) {
 	capture.mu.Lock()
@@ -177,10 +186,7 @@ func (capture *linuxKWinDesktopCapture) capture() (image.Image, error) {
 	}
 	defer reader.Close()
 
-	options := map[string]dbus.Variant{
-		"native-resolution":   dbus.MakeVariant(true),
-		"hide-caller-windows": dbus.MakeVariant(true),
-	}
+	options := linuxKWinCaptureOptions()
 	callContext, cancel := context.WithTimeout(context.Background(), linuxKWinScreenshotCallTimeout)
 	call := capture.conn.Object(linuxKWinScreenshotBusName, linuxKWinScreenshotObjectPath).CallWithContext(
 		callContext,

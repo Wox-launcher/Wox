@@ -1,9 +1,11 @@
 package overlay
 
 import (
+	"runtime"
 	"testing"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 func TestBoundsMovesUpWhenGrowthReachesWorkAreaBottom(t *testing.T) {
@@ -50,6 +52,40 @@ func TestRequestCloseFiresCallbackOnce(t *testing.T) {
 	}
 	if called != 1 {
 		t.Fatalf("close callback count = %d, want 1", called)
+	}
+}
+
+func TestPanelFillIsOpaqueOnLinuxOnly(t *testing.T) {
+	if color := PanelFill("windows", false); color.A != 0 {
+		t.Fatalf("windows panel fill = %#v, want empty so acrylic shows through", color)
+	}
+	if color := PanelFill("darwin", false); color.A != 0 {
+		t.Fatalf("darwin panel fill = %#v, want empty so vibrancy shows through", color)
+	}
+	dark := PanelFill("linux", false)
+	if dark.A != 255 {
+		t.Fatalf("linux dark panel fill = %#v, want opaque", dark)
+	}
+	light := PanelFill("linux", true)
+	if light.A != 255 {
+		t.Fatalf("linux light panel fill = %#v, want opaque", light)
+	}
+	if light == dark {
+		t.Fatal("linux light and dark overlay fills must differ")
+	}
+}
+
+func TestHUDSurfaceUsesPlatformPanelFill(t *testing.T) {
+	child := woxwidget.Container{Width: 10, Height: 10}
+	panel := HUDSurface(120, 48, 12, false, child)
+	if panel.Width != 120 || panel.Height != 48 || panel.Radius != 12 {
+		t.Fatalf("hud surface geometry = %+v, want 120x48 r12", panel)
+	}
+	if panel.Color != PanelFill(runtime.GOOS, false) {
+		t.Fatalf("hud surface fill = %#v, want %#v", panel.Color, PanelFill(runtime.GOOS, false))
+	}
+	if panel.Child != child {
+		t.Fatal("hud surface dropped its child")
 	}
 }
 

@@ -162,11 +162,11 @@ func usagePeriodButtonWidth(label string) float32 {
 	for _, character := range label {
 		switch {
 		case character == ' ':
-			width += 3.5
+			width += 4
 		case character > 127:
 			width += 12
 		default:
-			width += 6.5
+			width += 7
 		}
 	}
 	return min(float32(120), max(float32(58), width))
@@ -174,7 +174,7 @@ func usagePeriodButtonWidth(label string) float32 {
 
 // usageShareButton builds the outlined share action without giving it more visual weight than the page filter.
 func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
-	width := min(float32(168), max(float32(104), float32(utf8.RuneCountInString(props.ShareLabel))*7.5+48))
+	width := min(float32(168), max(float32(104), float32(utf8.RuneCountInString(props.ShareLabel))*8+48))
 	theme := props.Theme
 	theme.ResultSubtitle = usageOutlineColor(props.Theme)
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
@@ -273,7 +273,7 @@ func drawUsageHeatmap(displayList *woxui.DisplayList, bounds woxui.Rect, source 
 	sort.Slice(days, func(i, j int) bool { return days[i].date.Before(days[j].date) })
 	firstOffset := int(days[0].date.Weekday())
 	weekCount := max(1, (firstOffset+len(days)+6)/7)
-	const cellGap = float32(2.5)
+	const cellGap = float32(2)
 	const monthHeight = float32(18)
 	availableGridWidth := max(float32(0), bounds.Width-8)
 	cellSize := min(float32(13), max(float32(5), (availableGridWidth-cellGap*float32(weekCount-1))/float32(weekCount)))
@@ -418,16 +418,16 @@ func usageRankingRow(index int, item UsageRankingItem, maxCount int64, width flo
 		if itemIcon != nil {
 			icon = woxwidget.Image{Source: itemIcon, Width: 18, Height: 18}
 		}
-		children = append(children, woxwidget.Container{Width: 26, Height: 24, Padding: woxwidget.Insets{Top: 3, Right: 8}, Child: icon})
+		children = append(children, woxwidget.Align{Width: 26, Height: 24, Vertical: 0.5, Child: icon})
 	}
 	children = append(children,
-		woxwidget.Clip{Width: nameWidth, Height: 24, Child: woxwidget.Container{Width: nameWidth, Height: 24, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle}}},
+		woxwidget.Clip{Width: nameWidth, Height: 24, Child: woxwidget.Align{Width: nameWidth, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle}}},
 		woxwidget.Container{Width: 12, Height: 24},
 		usageRankingProgress(progressWidth, item.Count, maxCount, accent, theme),
 		woxwidget.Container{Width: 10, Height: 24},
 		woxwidget.Align{Width: 32, Height: 24, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%d", item.Count), Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}},
 	)
-	return woxwidget.Container{Width: width, Height: 34, Padding: woxwidget.Insets{Top: 5, Bottom: 5}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+	return woxwidget.Container{Width: width, Height: 34, Padding: woxwidget.Insets{Top: 5, Bottom: 5}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}}
 }
 
 func usageRankVisual(index int, rankIcons []*woxui.Image, theme woxcomponent.Theme) woxwidget.Widget {
@@ -443,7 +443,7 @@ func usageRankingProgress(width float32, count, maxCount int64, accent woxui.Col
 		progress = min(float32(1), max(float32(0), float32(count)/float32(maxCount)))
 	}
 	track := usageWithAlpha(theme.ResultTitle, 18)
-	return woxwidget.Container{Width: width, Height: 24, Padding: woxwidget.Insets{Top: 10.5, Bottom: 10.5}, Child: woxwidget.Stack{Width: width, Height: 3, Children: []woxwidget.StackChild{
+	return woxwidget.Align{Width: width, Height: 24, Vertical: 0.5, Child: woxwidget.Stack{Width: width, Height: 3, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Container{Width: width, Height: 3, Radius: 2, Color: track}},
 		{Child: woxwidget.Container{Width: width * progress, Height: 3, Radius: 2, Color: usageWithAlpha(accent, 184)}},
 	}}}

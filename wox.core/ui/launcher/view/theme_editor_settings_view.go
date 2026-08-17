@@ -60,7 +60,7 @@ func themeEditorColorWheel(props ThemeEditorColorPickerProps) woxwidget.Widget {
 	thumbX := radius + float32(math.Cos(angle)*props.Saturation)*radius
 	thumbY := radius + float32(math.Sin(angle)*props.Saturation)*radius
 	thumb := woxwidget.Stack{Width: 20, Height: 20, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: 20, Height: 20, Radius: 10, BorderColor: woxui.Color{A: 128}, BorderWidth: 1.5}},
+		{Child: woxwidget.Container{Width: 20, Height: 20, Radius: 10, BorderColor: woxui.Color{A: 128}, BorderWidth: 2}},
 		{Left: 2, Top: 2, Child: woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: props.Color, BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, BorderWidth: 2}},
 	}}
 	setPosition := func(position woxui.Point) {
@@ -135,9 +135,9 @@ func themeEditorColorSlider(id, label string, value float64, theme woxcomponent.
 		Child: track,
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: 70, Height: 24, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
+		woxwidget.Align{Width: 70, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
 		woxwidget.Align{Width: trackWidth, Height: 24, Vertical: 0.5, Child: semanticTrack},
-		woxwidget.Container{Width: 46, Height: 24, Padding: woxwidget.Insets{Left: 10, Top: 5}, Child: woxwidget.Text{Value: fmt.Sprintf("%.0f%%", normalized*100), Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle}},
+		woxwidget.Container{Width: 46, Height: 24, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Width: 36, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%.0f%%", normalized*100), Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle}}},
 	}}
 }
 
@@ -502,7 +502,7 @@ func (s *themeEditorGroupChipState) Build(context woxwidget.StateContext, widget
 		}
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: props.Height, Radius: 6, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth,
-		Padding: woxwidget.Insets{Left: 12, Top: 8}, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Foreground},
+		Padding: woxwidget.Insets{Left: 12}, Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Foreground}},
 	}}
 }
 
