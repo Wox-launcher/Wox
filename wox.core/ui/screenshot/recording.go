@@ -216,6 +216,24 @@ func applyRecordingOverlays(frame *image.RGBA, pixelBounds image.Rectangle, poin
 	return nil
 }
 
+// swapRecordingFrameRedBlue converts a packed RGBA capture into the BGR0 layout
+// the H.264 encoder and recording overlays already assume.
+func swapRecordingFrameRedBlue(frame *image.RGBA) {
+	if frame == nil {
+		return
+	}
+	pix := frame.Pix
+	stride := frame.Stride
+	width, height := frame.Rect.Dx(), frame.Rect.Dy()
+	for row := 0; row < height; row++ {
+		rowOffset := row * stride
+		for col := 0; col < width; col++ {
+			index := rowOffset + col*4
+			pix[index], pix[index+2] = pix[index+2], pix[index]
+		}
+	}
+}
+
 // overlayRecordingCursor draws a DPI-scaled pointer onto a BGR0 capture buffer.
 func overlayRecordingCursor(target *image.RGBA, cursorPixel Point, scale float32) error {
 	width := max(1, int(math.Round(float64(screenshotEditorCursorWidth*scale))))

@@ -83,6 +83,8 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Width: selection.Width + margin*2, Height: selection.Height + margin*2,
 			})
 		},
+		retainRecordingBorder: true,
+		recordingFrameIsRGBA:  true,
 	}
 	if hasCapturedCursor {
 		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(Point{X: float32(cursorX), Y: float32(cursorY)}, bounds, source)

@@ -233,6 +233,12 @@ type screenshotEditorPlatform struct {
 	setPointerPosition   func(Point) error
 	cursorPosition       func() *Point
 	setRecordingBounds   func(*Window, Rect, Size, float32) error
+	// retainRecordingBorder keeps the Go-drawn selection stroke visible while
+	// recording. Linux has no native hollow strip windows like Windows.
+	retainRecordingBorder bool
+	// recordingFrameIsRGBA is true when desktop capture stores packed RGBA.
+	// Windows BitBlt frames stay BGR0; the H.264 encoder always consumes BGR0.
+	recordingFrameIsRGBA bool
 	preparedWindow       *ManagedWindow
 	windowHost           *screenshotEditorWindowHost
 }

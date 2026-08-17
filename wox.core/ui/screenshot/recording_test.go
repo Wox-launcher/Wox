@@ -436,11 +436,53 @@ func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
 	}
 }
 
+func TestRecordingPreviewKeepsSelectionStrokeWithoutDuplicateTooltip(t *testing.T) {
+	session := &recordingSession{state: recordingStateSave, config: recordingSessionConfig{PixelBounds: image.Rect(0, 0, 200, 100)}}
+	state := &recordingToolbarState{
+		session:          session,
+		selection:        Rect{X: 80, Y: 80, Width: 200, Height: 100},
+		frameSize:        Size{Width: 400, Height: 300},
+		hoverTooltip:     "Show pointer",
+		hoverTooltipRect: Rect{X: 10, Y: 10, Width: 40, Height: 40},
+		editor:           &screenshotEditorOverlayState{image: testScreenshotImage(t, 400, 300)},
+		platform:         screenshotEditorPlatform{retainRecordingBorder: true},
+	}
+
+	overlay := &DisplayList{}
+	state.drawOverlay(overlay, FrameInfo{Size: Size{Width: 200, Height: 100}})
+	overlayCheck := &DisplayList{}
+	overlayCheck.Clear(Color{})
+	state.drawPreview(overlayCheck, Rect{Width: 200, Height: 100}, 1)
+	overlayCheck.StrokeRoundedRect(Rect{Width: 200, Height: 100}, 0, 2, Color{R: 47, G: 128, B: 237, A: 255})
+	if err := overlay.Compare(overlayCheck); err != nil {
+		t.Fatalf("preview overlay should keep the selection stroke: %v", err)
+	}
+
+	border := &DisplayList{}
+	state.drawBorder(border, FrameInfo{Size: Size{Width: 400, Height: 300}})
+	local := recordingBorderLocalSelection(state.selection, state.borderOrigin)
+	wantBorder := &DisplayList{}
+	wantBorder.Clear(Color{})
+	drawScreenshotEditorSizeLabel(wantBorder, "200 x 100", local, Size{Width: 400, Height: 300}, 1)
+	if err := border.Compare(wantBorder); err != nil {
+		t.Fatalf("save-state border should not restack the toolbar tooltip or covered stroke: %v", err)
+	}
+}
+
 func TestRecordingDurationTickerStopsSafely(t *testing.T) {
 	state := &recordingToolbarState{durationTickerStop: make(chan struct{})}
 	state.startDurationTicker()
 	state.stopDurationTicker()
 	state.stopDurationTicker()
+}
+
+func TestRecordingSaveDialogCanHidePreviewSurfacesWithoutWindows(t *testing.T) {
+	state := &recordingToolbarState{
+		platform: screenshotEditorPlatform{retainRecordingBorder: true},
+		session:  &recordingSession{state: recordingStateSave},
+	}
+	state.hidePreviewSurfacesForDialog()
+	state.restorePreviewSurfacesAfterDialog()
 }
 
 func TestRecordingRecordIconUsesRingAndDot(t *testing.T) {
@@ -853,6 +895,19 @@ func TestFFmpegRecordingEncoderHoldsFramesAcrossCaptureGaps(t *testing.T) {
 	}
 	if !bytes.Equal(writer.Bytes()[frameBytes*3:], secondYUV) {
 		t.Fatal("latest capture should be written at its timeline position")
+	}
+}
+
+func TestSwapRecordingFrameRedBlueExchangesPackedChannels(t *testing.T) {
+	frame := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	frame.SetRGBA(0, 0, color.RGBA{R: 10, G: 20, B: 30, A: 255})
+	frame.SetRGBA(1, 0, color.RGBA{R: 200, G: 150, B: 40, A: 128})
+	swapRecordingFrameRedBlue(frame)
+	if got := frame.RGBAAt(0, 0); got != (color.RGBA{R: 30, G: 20, B: 10, A: 255}) {
+		t.Fatalf("swapped pixel = %+v, want R/B exchanged", got)
+	}
+	if got := frame.RGBAAt(1, 0); got != (color.RGBA{R: 40, G: 150, B: 200, A: 128}) {
+		t.Fatalf("second swapped pixel = %+v, want R/B exchanged", got)
 	}
 }
 

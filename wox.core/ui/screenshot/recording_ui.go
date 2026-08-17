@@ -246,24 +246,35 @@ func (state *recordingToolbarState) stopBorderMonitor() {
 	}
 }
 
-// startDurationTicker redraws the toolbar once a second so the timer advances without pointer motion.
+// startDurationTicker redraws countdown chrome and advances the recording timer.
 func (state *recordingToolbarState) startDurationTicker() {
 	go func() {
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
+		var lastToolbarSecond int64 = -1
 		for {
 			select {
 			case <-ticker.C:
-				if state.recordingStatus() != recordingStateRecording {
-					continue
-				}
+				status := state.recordingStatus()
 				state.mu.Lock()
+				overlay := state.overlay
 				collapsed := state.collapsed
 				window := state.window
+				session := state.session
 				state.mu.Unlock()
-				if !collapsed && window != nil {
-					_ = window.Invalidate()
+				if status == recordingStateCountdown && overlay != nil {
+					_ = overlay.Invalidate()
+					continue
 				}
+				if status != recordingStateRecording || collapsed || window == nil || session == nil {
+					continue
+				}
+				second := int64(session.EffectiveDuration() / time.Second)
+				if second == lastToolbarSecond {
+					continue
+				}
+				lastToolbarSecond = second
+				_ = window.Invalidate()
 			case <-state.durationTickerStop:
 				return
 			}
@@ -299,6 +310,13 @@ func (state *recordingToolbarState) updateBorderPassthrough() {
 	}
 	ready := status == recordingStateReady
 	if !ready {
+		if interactive {
+			if err := border.SetPointerPassthrough(true); err == nil {
+				state.mu.Lock()
+				state.borderInteractive = false
+				state.mu.Unlock()
+			}
+		}
 		return
 	}
 	shouldIntercept := false
@@ -475,8 +493,15 @@ func (state *recordingToolbarState) syncRecordingSurfaces() {
 		_ = state.setManagedVisible(state.overlayManaged, false)
 		return
 	}
-	_ = state.setManagedVisible(state.borderManaged, false)
-	state.ensureScrollBorder()
+	// Linux keeps the existing selection stroke. Windows swaps in native
+	// hollow strips so the capture surface does not include a covering window.
+	if state.platform.retainRecordingBorder {
+		_ = state.positionBorder()
+		_ = state.setManagedVisible(state.borderManaged, true)
+	} else {
+		_ = state.setManagedVisible(state.borderManaged, false)
+		state.ensureScrollBorder()
+	}
 	if !coverSelection {
 		_ = state.setManagedVisible(state.overlayManaged, false)
 		return
@@ -702,6 +727,9 @@ func (state *recordingToolbarState) drawOverlay(displayList *DisplayList, frame 
 	if session != nil && session.currentState() == recordingStateSave {
 		state.drawPreview(displayList, local, uiScale)
 	}
+	if state.platform.retainRecordingBorder {
+		displayList.StrokeRoundedRect(local, 0, 2*uiScale, Color{R: 47, G: 128, B: 237, A: 255})
+	}
 	if session != nil && session.currentState() == recordingStateCountdown {
 		remaining := session.CountdownRemaining()
 		seconds := max(1, int((remaining+time.Second-1)/time.Second))
@@ -768,13 +796,22 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	displayList.Clear(Color{})
 	localSelection := recordingBorderLocalSelection(selection, origin)
 	blue := Color{R: 47, G: 128, B: 237, A: 255}
-	displayList.StrokeRoundedRect(localSelection, 0, 2*uiScale, blue)
-	if session == nil || session.currentState() == recordingStateReady {
+	status := recordingStateReady
+	if session != nil {
+		status = session.currentState()
+	}
+	coverSelection := status == recordingStateCountdown || status == recordingStateSave
+	if !coverSelection {
+		displayList.StrokeRoundedRect(localSelection, 0, 2*uiScale, blue)
+	}
+	if status == recordingStateReady {
 		drawScreenshotEditorHandles(displayList, localSelection, blue, uiScale)
 	}
 	label := fmt.Sprintf("%d x %d", sessionPixelWidth(session, source, selection, frameSize), sessionPixelHeight(session, source, selection, frameSize))
 	drawScreenshotEditorSizeLabel(displayList, label, localSelection, frame.Size, uiScale)
-	if !collapsed {
+	// After recording starts the toolbar draws this hint. Drawing it again here
+	// stacked a second tooltip when Linux kept the border window visible.
+	if !collapsed && status == recordingStateReady {
 		drawScreenshotEditorToolTooltipAt(displayList, recordingToolbarTooltipLocalRect(frameSize, toolbarBounds, hoverTooltipRect, origin, hoverTooltip, uiScale), hoverTooltip, uiScale)
 	}
 }
@@ -1195,6 +1232,9 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 			if composeErr != nil {
 				return nil, composeErr
 			}
+			if state.platform.recordingFrameIsRGBA {
+				swapRecordingFrameRedBlue(frame)
+			}
 			state.editor.mu.Lock()
 			uiScale := max(float32(1), state.editor.uiScale)
 			chromeScale := state.editor.chromeScale
@@ -1373,6 +1413,29 @@ func (state *recordingToolbarState) stopRecording() {
 	}()
 }
 
+// hidePreviewSurfacesForDialog uncovers the desktop so a keep-above preview cannot
+// stack above the native Save As dialog, then restorePreviewSurfacesAfterDialog
+// puts countdown/preview chrome back if the user cancels.
+func (state *recordingToolbarState) hidePreviewSurfacesForDialog() {
+	_ = state.setManagedVisible(state.overlayManaged, false)
+	if state.platform.retainRecordingBorder {
+		_ = state.setManagedVisible(state.borderManaged, false)
+	}
+}
+
+func (state *recordingToolbarState) restorePreviewSurfacesAfterDialog() {
+	state.syncRecordingSurfaces()
+	if state.window != nil {
+		_ = state.window.Invalidate()
+	}
+	if state.overlay != nil {
+		_ = state.overlay.Invalidate()
+	}
+	if state.border != nil {
+		_ = state.border.Invalidate()
+	}
+}
+
 // saveRecording asks for a destination only when the download control is used.
 func (state *recordingToolbarState) saveRecording() {
 	state.mu.Lock()
@@ -1388,8 +1451,12 @@ func (state *recordingToolbarState) saveRecording() {
 		var target string
 		var saveErr error
 		callErr := Call(func() {
+			state.hidePreviewSurfacesForDialog()
 			defaultName := time.Now().Format("20060102_150405") + "_wox_recording.mp4"
 			target, saveErr = state.window.SaveFile(SaveFileOptions{Title: "Save recording", DefaultFileName: defaultName, Extension: "mp4"})
+			if target == "" || saveErr != nil {
+				state.restorePreviewSurfacesAfterDialog()
+			}
 		})
 		if callErr != nil {
 			state.setFinishError(callErr)

@@ -62,6 +62,8 @@ enum {
   WOX_ACCESSIBILITY_ACTION_ACTIVATE = 1 << 1,
   WOX_ACCESSIBILITY_ACTION_SET_VALUE = 1 << 2,
   WOX_ACCESSIBILITY_ACTION_TOGGLE = 1 << 3,
+  WOX_WINDOW_ROLE_APPLICATION = 1,
+  WOX_WINDOW_ROLE_SCREENSHOT = 2,
 };
 
 typedef struct {
@@ -139,6 +141,8 @@ struct WoxLinuxWindow {
   bool hide_on_blur;
   bool native_dialog_active;
   bool nonactivating;
+  bool per_pixel_alpha;
+  bool pointer_passthrough;
   bool restore_previous_on_hide;
   bool application_window;
   bool layer_shell_enabled;
@@ -150,6 +154,8 @@ struct WoxLinuxWindow {
   char *web_view_cursor_name;
   bool has_preferred_position;
   bool presenting;
+  bool rendering;
+  guint invalidate_idle;
   bool closed;
   GdkRectangle input_cursor_rect;
 };
@@ -1628,7 +1634,9 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
     scale = 1;
   }
   if (width > 0 && height > 0) {
+    window->rendering = true;
     woxGoLinuxFrame(window->context, (float)width, (float)height, width * scale, height * scale, (float)scale);
+    window->rendering = false;
   }
   return TRUE;
 }
@@ -1694,6 +1702,10 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
   window->visible = false;
   window->active = false;
   window->context = 0;
+  if (window->invalidate_idle != 0) {
+    g_source_remove(window->invalidate_idle);
+    window->invalidate_idle = 0;
+  }
   clear_active_web_view(window, false);
   g_hash_table_destroy(window->web_view_cache);
   g_hash_table_destroy(window->web_view_signatures);
@@ -1745,6 +1757,85 @@ int32_t wox_linux_run(uintptr_t context) {
   return start_result == 0 ? 0 : -1;
 }
 
+static void apply_linux_rgba_visual(GtkWidget *widget) {
+  GdkScreen *screen = gtk_widget_get_screen(widget);
+  if (screen == NULL) {
+    return;
+  }
+  GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
+  if (visual != NULL) {
+    gtk_widget_set_visual(widget, visual);
+  }
+}
+
+static gboolean on_linux_transparent_draw(GtkWidget *widget, cairo_t *cr, gpointer data) {
+  (void)widget;
+  (void)data;
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+  cairo_paint(cr);
+  return FALSE;
+}
+
+static void on_linux_transparent_screen_changed(GtkWidget *widget, GdkScreen *previous, gpointer data) {
+  (void)previous;
+  (void)data;
+  apply_linux_rgba_visual(widget);
+}
+
+// Recording chrome and screenshot toolbars call Clear(Color{}) so the live
+// desktop shows through. Launcher windows stay opaque because their widget
+// host also clears with A=0 and relies on force_opaque for a solid backdrop.
+static void enable_linux_per_pixel_alpha(WoxLinuxWindow *window) {
+  GtkCssProvider *provider = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(provider, "window, overlay { background-color: rgba(0,0,0,0); background-image: none; }", -1, NULL);
+
+  GtkWidget *widgets[] = {window->window, window->overlay};
+  for (size_t index = 0; index < G_N_ELEMENTS(widgets); index++) {
+    GtkWidget *widget = widgets[index];
+    apply_linux_rgba_visual(widget);
+    gtk_widget_set_app_paintable(widget, TRUE);
+    gtk_style_context_add_provider(gtk_widget_get_style_context(widget), GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_signal_connect(widget, "screen-changed", G_CALLBACK(on_linux_transparent_screen_changed), window);
+    g_signal_connect(widget, "draw", G_CALLBACK(on_linux_transparent_draw), window);
+  }
+  apply_linux_rgba_visual(window->gl_area);
+  apply_linux_rgba_visual(window->overlay_gl_area);
+  g_object_unref(provider);
+}
+
+static void apply_pointer_passthrough_to_gdk_window(GdkWindow *native, bool enabled) {
+  if (native == NULL) {
+    return;
+  }
+  gdk_window_set_pass_through(native, enabled);
+  // gdk_window_set_pass_through only affects in-process picking. Wayland and
+  // X11 child GL surfaces still receive compositor input unless the input
+  // region is empty, which is why the recording border ate toolbar clicks.
+  if (enabled) {
+    cairo_region_t *region = cairo_region_create();
+    gdk_window_input_shape_combine_region(native, region, 0, 0);
+    cairo_region_destroy(region);
+    return;
+  }
+  gdk_window_input_shape_combine_region(native, NULL, 0, 0);
+}
+
+static void apply_linux_pointer_passthrough(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed) {
+    return;
+  }
+  apply_pointer_passthrough_to_gdk_window(gtk_widget_get_window(window->window), window->pointer_passthrough);
+  apply_pointer_passthrough_to_gdk_window(gtk_widget_get_window(window->overlay), window->pointer_passthrough);
+  apply_pointer_passthrough_to_gdk_window(gtk_widget_get_window(window->gl_area), window->pointer_passthrough);
+  apply_pointer_passthrough_to_gdk_window(gtk_widget_get_window(window->overlay_gl_area), window->pointer_passthrough);
+}
+
+static void on_linux_pointer_passthrough_realize(GtkWidget *widget, gpointer data) {
+  (void)widget;
+  apply_linux_pointer_passthrough(data);
+}
+
 WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
@@ -1756,9 +1847,10 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->preferred_width = width;
   window->preferred_height = height;
   window->hide_on_blur = hide_on_blur != 0;
-  bool application_window = window_role == 1;
+  bool application_window = window_role == WOX_WINDOW_ROLE_APPLICATION;
   window->application_window = application_window;
   window->nonactivating = nonactivating != 0;
+  window->per_pixel_alpha = window->nonactivating || window_role == WOX_WINDOW_ROLE_SCREENSHOT;
   window->im_context = gtk_im_multicontext_new();
   window->pressed_keys = g_hash_table_new(g_direct_hash, g_direct_equal);
   window->web_view_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
@@ -1824,18 +1916,26 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_window_set_focus_on_map(GTK_WINDOW(window->window), !window->nonactivating);
   gtk_window_set_position(GTK_WINDOW(window->window), GTK_WIN_POS_CENTER);
   gtk_widget_set_app_paintable(window->window, TRUE);
+  if (window->per_pixel_alpha) {
+    enable_linux_per_pixel_alpha(window);
+  }
   GtkTargetEntry file_drop_target = {(gchar *)"text/uri-list", 0, 0};
   gtk_drag_dest_set(window->window, GTK_DEST_DEFAULT_ALL, &file_drop_target, 1, GDK_ACTION_COPY);
 
   window->layer_shell_enabled = !application_window && enable_layer_shell(GTK_WINDOW(window->window));
+  if (window->layer_shell_enabled && window->nonactivating) {
+    // Exclusive keyboard on the fullscreen recording border steals Escape from
+    // the screenshot toolbar. Nonactivating chrome must not own the seat.
+    layer_set_keyboard_mode(GTK_WINDOW(window->window), WOX_KEYBOARD_NONE);
+  }
 
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
   gtk_gl_area_set_use_es(GTK_GL_AREA(window->gl_area), FALSE);
-  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), window->nonactivating);
+  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), window->per_pixel_alpha);
   gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_auto_render(GTK_GL_AREA(window->gl_area), FALSE);
-  gtk_widget_set_can_focus(window->gl_area, TRUE);
+  gtk_widget_set_can_focus(window->gl_area, !window->nonactivating);
   gtk_widget_set_hexpand(window->gl_area, TRUE);
   gtk_widget_set_vexpand(window->gl_area, TRUE);
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->overlay_gl_area), 3, 3);
@@ -1865,10 +1965,12 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_show(window->accessibility_layer);
 
   g_signal_connect(window->gl_area, "realize", G_CALLBACK(on_gl_realize), window);
+  g_signal_connect(window->gl_area, "realize", G_CALLBACK(on_linux_pointer_passthrough_realize), window);
   g_signal_connect(window->gl_area, "unrealize", G_CALLBACK(on_gl_unrealize), window);
   g_signal_connect(window->gl_area, "render", G_CALLBACK(on_gl_render), window);
   g_signal_connect(window->gl_area, "notify::scale-factor", G_CALLBACK(on_scale_changed), window);
   g_signal_connect(window->overlay_gl_area, "realize", G_CALLBACK(on_gl_realize), window);
+  g_signal_connect(window->overlay_gl_area, "realize", G_CALLBACK(on_linux_pointer_passthrough_realize), window);
   g_signal_connect(window->overlay_gl_area, "unrealize", G_CALLBACK(on_gl_unrealize), window);
   g_signal_connect(window->overlay_gl_area, "render", G_CALLBACK(on_gl_render), window);
   g_signal_connect(window->window, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
@@ -1882,6 +1984,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->window, "focus-out-event", G_CALLBACK(on_focus_out), window);
   g_signal_connect(window->window, "key-press-event", G_CALLBACK(on_key_press), window);
   g_signal_connect(window->window, "key-release-event", G_CALLBACK(on_key_release), window);
+  g_signal_connect(window->window, "realize", G_CALLBACK(on_linux_pointer_passthrough_realize), window);
   g_signal_connect(window->window, "destroy", G_CALLBACK(on_window_destroy), window);
   g_signal_connect(window->im_context, "commit", G_CALLBACK(on_ime_commit), window);
   g_signal_connect(window->im_context, "preedit-changed", G_CALLBACK(on_ime_preedit_changed), window);
@@ -1924,6 +2027,7 @@ static void show_main(void *data) {
   save_previous_x11_window(window);
   place_window(window);
   gtk_widget_show_all(window->window);
+  apply_linux_pointer_passthrough(window);
   apply_utility_taskbar_hints(window);
   apply_wayland_app_id(window);
   apply_linux_window_size(window, (int)ceilf(window->preferred_width), (int)ceilf(window->preferred_height));
@@ -1997,6 +2101,7 @@ static void set_bounds_main(void *data) {
   int height = (int)ceilf(call->height);
   apply_linux_window_size(window, width, height);
   place_window(window);
+  apply_linux_pointer_passthrough(window);
   if (window->visible) {
     present_linux_window_now(window);
   }
@@ -2707,13 +2812,38 @@ int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uin
   return run_on_main_sync(write_clipboard_image_main, &call) ? call.result : -1;
 }
 
+static gboolean linux_invalidate_idle(gpointer data) {
+  WoxLinuxWindow *window = data;
+  window->invalidate_idle = 0;
+  if (!window->closed && window->visible && window->gl_area != NULL) {
+    gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+  }
+  return G_SOURCE_REMOVE;
+}
+
+// queue_linux_window_render defers gtk_gl_area_queue_render when called from the
+// current render. GtkGLArea with auto-render off clears needs_render after the
+// signal, so an in-frame Invalidate would otherwise blit the same "3" forever.
+static void queue_linux_window_render(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || window->gl_area == NULL) {
+    return;
+  }
+  if (window->presenting || window->rendering) {
+    if (window->invalidate_idle == 0) {
+      window->invalidate_idle = g_idle_add(linux_invalidate_idle, window);
+    }
+    return;
+  }
+  gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+}
+
 static void invalidate_main(void *data) {
   WoxWindowCall *call = data;
   if (call->window->closed) {
     call->result = -1;
     return;
   }
-  gtk_gl_area_queue_render(GTK_GL_AREA(call->window->gl_area));
+  queue_linux_window_render(call->window);
 }
 
 int32_t wox_linux_window_invalidate(WoxLinuxWindow *window) {
@@ -2843,12 +2973,12 @@ int32_t wox_linux_window_save_file(WoxLinuxWindow *window, const char *title, co
 
 static void set_pointer_passthrough_main(void *data) {
   WoxBoolCall *call = data;
-  GdkWindow *native = gtk_widget_get_window(call->window->window);
-  if (native == NULL) {
+  if (call->window->closed) {
     call->result = -1;
     return;
   }
-  gdk_window_set_pass_through(native, call->enabled);
+  call->window->pointer_passthrough = call->enabled;
+  apply_linux_pointer_passthrough(call->window);
 }
 
 int32_t wox_linux_window_set_pointer_passthrough(WoxLinuxWindow *window, int32_t enabled) {
@@ -3143,7 +3273,9 @@ int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width
   window->embedded_surface_overlay_active = false;
   window->active_renderer = &window->renderer;
   window->active_gl_area = window->gl_area;
-  return begin_linux_renderer_frame(window, window->active_renderer, window->active_gl_area, true, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
+  // Screenshot and recording surfaces must keep the requested clear alpha. Forcing
+  // opaque here turns Clear(Color{}) into a black desktop-covering backdrop.
+  return begin_linux_renderer_frame(window, window->active_renderer, window->active_gl_area, !window->per_pixel_alpha, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
 }
 
 int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
