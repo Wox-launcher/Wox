@@ -148,6 +148,7 @@ struct WoxLinuxWindow {
   uint8_t pointer_cursor;
   char *web_view_cursor_name;
   bool has_preferred_position;
+  bool presenting;
   bool closed;
   GdkRectangle input_cursor_rect;
 };
@@ -1405,6 +1406,57 @@ static void restore_previous_x11_window(WoxLinuxWindow *window) {
 }
 #endif
 
+// apply_linux_window_size makes GTK's allocation match the target size before the
+// next frame. gtk_window_resize alone is asynchronous, and Openbox often keeps the
+// previous taller X window, so GtkGLArea is left with a black framebuffer.
+static void apply_linux_window_size(WoxLinuxWindow *window, int width, int height) {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+  gtk_window_set_default_size(GTK_WINDOW(window->window), width, height);
+  // Layer-shell and non-resizable X11 windows both need the size request; a resize
+  // request alone can leave the widget allocation on its pre-map or previous-result size.
+  if (window->layer_shell_enabled || !gtk_window_get_resizable(GTK_WINDOW(window->window))) {
+    gtk_widget_set_size_request(window->window, width, height);
+  }
+  gtk_window_resize(GTK_WINDOW(window->window), width, height);
+  gtk_widget_queue_resize(window->window);
+  gtk_container_check_resize(GTK_CONTAINER(window->window));
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window != NULL) {
+    gdk_window_resize(gdk_window, width, height);
+  }
+#ifdef GDK_WINDOWING_X11
+  GdkDisplay *gdk_display = x11_gdk_display(window);
+  Display *display = x11_display(window);
+  Window xid = x11_window_id(window);
+  if (gdk_display != NULL && display != NULL && xid != None) {
+    gdk_x11_display_error_trap_push(gdk_display);
+    XResizeWindow(display, xid, (unsigned int)width, (unsigned int)height);
+    XFlush(display);
+    gdk_x11_display_error_trap_pop_ignored(gdk_display);
+  }
+#endif
+}
+
+// present_linux_window_now presents a full frame at the current allocation before
+// SetBounds returns, matching Windows redrawWindowAfterResize.
+static void present_linux_window_now(WoxLinuxWindow *window) {
+  if (window->closed || !window->visible || window->context == 0 || window->presenting) {
+    return;
+  }
+  window->presenting = true;
+  gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window != NULL) {
+    gdk_window_invalidate_rect(gdk_window, NULL, TRUE);
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    gdk_window_process_updates(gdk_window, TRUE);
+    G_GNUC_END_IGNORE_DEPRECATIONS
+  }
+  window->presenting = false;
+}
+
 static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
   if (window->closed || !window->visible) {
     return;
@@ -1760,7 +1812,9 @@ static void show_main(void *data) {
   save_previous_x11_window(window);
   place_window(window);
   gtk_widget_show_all(window->window);
-  gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+  apply_linux_window_size(window, (int)ceilf(window->preferred_width), (int)ceilf(window->preferred_height));
+  place_window(window);
+  present_linux_window_now(window);
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
   if (gdk_window != NULL) {
     gdk_window_raise(gdk_window);
@@ -1826,16 +1880,10 @@ static void set_bounds_main(void *data) {
   window->has_preferred_position = true;
   int width = (int)ceilf(call->width);
   int height = (int)ceilf(call->height);
-  if (window->layer_shell_enabled) {
-    // Layer-shell size negotiation needs all GTK size hints to agree; a resize request
-    // alone can leave the widget allocation on its pre-map size and suppress rendering.
-    gtk_window_set_default_size(GTK_WINDOW(window->window), width, height);
-    gtk_widget_set_size_request(window->window, width, height);
-  }
-  gtk_window_resize(GTK_WINDOW(window->window), width, height);
+  apply_linux_window_size(window, width, height);
   place_window(window);
   if (window->visible) {
-    gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+    present_linux_window_now(window);
   }
 }
 
@@ -2046,10 +2094,10 @@ static void center_main(void *data) {
   window->preferred_x = workarea.x + (workarea.width - width) * 0.5f;
   window->preferred_y = workarea.y + (workarea.height - height) * 0.5f;
   window->has_preferred_position = true;
-  gtk_window_resize(GTK_WINDOW(window->window), (int)ceilf(width), (int)ceilf(height));
+  apply_linux_window_size(window, (int)ceilf(width), (int)ceilf(height));
   place_window(window);
   if (window->visible) {
-    gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
+    present_linux_window_now(window);
   }
 }
 
