@@ -66,6 +66,7 @@ Preserve the current special contracts unless a task explicitly targets them:
 | Surface | Contract |
 | --- | --- |
 | Launcher query | 50 compact, 55 normal, 61 comfortable; add measured line height for each extra line |
+| Action Panel header | 18 optically centered line; do not use a 16 Text slot |
 | Action Panel filter | 40 input inside a 46-high slot |
 | Action Panel row | 40 |
 

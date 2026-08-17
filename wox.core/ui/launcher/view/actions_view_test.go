@@ -79,6 +79,22 @@ func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 	}
 }
 
+func TestActionHeaderCentersLabel(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, ActionHeader: woxui.Color{A: 255}, HeaderLabel: "操作",
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	panel := view.Child.(woxwidget.Container)
+	header := panel.Child.(woxwidget.Flex).Children[0].(woxwidget.Align)
+	if header.Width != ActionPanelContentWidth || header.Height != ActionHeaderHeight || header.Vertical != 0.5 {
+		t.Fatalf("action header slot = %#v, want a full-width centered %v-high slot", header, ActionHeaderHeight)
+	}
+	label := header.Child.(woxwidget.TextBlock)
+	if label.Height != ActionHeaderHeight || label.LineHeight != ActionHeaderHeight || label.AlignmentY != 0.5 || label.Value != "操作" {
+		t.Fatalf("action header label = %#v, want an 18px optically centered line", label)
+	}
+}
+
 func TestActionRowCentersIconAndLabel(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),

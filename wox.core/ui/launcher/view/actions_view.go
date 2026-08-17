@@ -9,10 +9,12 @@ import (
 const (
 	ActionPanelContentWidth = 320
 	ActionRowHeight         = 40
-	ActionHeaderHeight      = 16
-	ActionDividerHeight     = 16
-	ActionSearchHeight      = 46
-	MaxVisibleActions       = 8
+	// ActionHeaderHeight is the 18px CJK line already used by action labels.
+	// A 16px Text slot clips the native ascent of 13px Chinese titles such as 操作.
+	ActionHeaderHeight  = 18
+	ActionDividerHeight = 16
+	ActionSearchHeight  = 46
+	MaxVisibleActions   = 8
 )
 
 // ActionItem contains resolved presentation data for one result action.
@@ -144,6 +146,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	actionHeaderFontSize := scaledLauncherSize(woxcomponent.ActionHeaderFontSize, props.DensityScale)
 	actionFilterFontSize := scaledLauncherSize(woxcomponent.ActionFilterFontSize, props.DensityScale)
 	emptyFontSize := scaledLauncherSize(woxcomponent.ListEmptyFontSize, props.DensityScale)
+	headerLineHeight := scaledLauncherSize(ActionHeaderHeight, props.DensityScale)
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
 		selected := item.Index == props.Selected
@@ -250,7 +253,10 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,
 		Padding: props.ActionPadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: innerWidth, Height: ActionHeaderHeight, Child: woxwidget.Text{Value: props.HeaderLabel, Style: woxui.TextStyle{Size: actionHeaderFontSize}, Color: props.ActionHeader}},
+			woxwidget.Align{Width: innerWidth, Height: ActionHeaderHeight, Vertical: 0.5, Child: woxwidget.TextBlock{
+				Value: props.HeaderLabel, Width: innerWidth, Height: headerLineHeight, LineHeight: headerLineHeight, MaxLines: 1, AlignmentY: 0.5,
+				Style: woxui.TextStyle{Size: actionHeaderFontSize}, Color: props.ActionHeader,
+			}},
 			woxwidget.Container{Width: innerWidth, Height: ActionDividerHeight, Padding: woxwidget.Insets{Top: 7, Bottom: 8}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
 			actionList,
 			woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},
