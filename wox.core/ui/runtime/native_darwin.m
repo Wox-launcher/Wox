@@ -2459,17 +2459,24 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
-    NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
-    effect_view.material = NSVisualEffectMaterialPopover;
-    effect_view.state = NSVisualEffectStateActive;
-    effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-    effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    effect_view.wantsLayer = YES;
-    effect_view.layer.cornerRadius = is_screenshot_window ? 0.0 : wox_window_corner_radius;
-    effect_view.layer.masksToBounds = YES;
-    [effect_view addSubview:view];
-    native_window.contentView = effect_view;
-    [effect_view release];
+    if (is_screenshot_window) {
+      // Recording border and countdown windows intentionally clear their
+      // IOSurfaces to reveal the live desktop. A visual-effect container would
+      // turn those transparent pixels into a fullscreen blur.
+      native_window.contentView = view;
+    } else {
+      NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
+      effect_view.material = NSVisualEffectMaterialPopover;
+      effect_view.state = NSVisualEffectStateActive;
+      effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+      effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      effect_view.wantsLayer = YES;
+      effect_view.layer.cornerRadius = wox_window_corner_radius;
+      effect_view.layer.masksToBounds = YES;
+      [effect_view addSubview:view];
+      native_window.contentView = effect_view;
+      [effect_view release];
+    }
     native_window.delegate = delegate;
     [view registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
     [native_window center];
@@ -2734,6 +2741,67 @@ void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle) {
     [session dismiss];
   });
   [session release];
+}
+
+uintptr_t wox_darwin_show_screenshot_border(float x, float y, float width, float height, float thickness) {
+  if (width <= 0.0f || height <= 0.0f || thickness <= 0.0f) {
+    return 0;
+  }
+  __block NSMutableArray *windows = nil;
+  run_on_main_sync(^{
+    NSRect edges[] = {
+        NSMakeRect(x - thickness, y - thickness, width + thickness * 2.0f, thickness),
+        NSMakeRect(x + width, y, thickness, height),
+        NSMakeRect(x - thickness, y + height, width + thickness * 2.0f, thickness),
+        NSMakeRect(x - thickness, y, thickness, height),
+    };
+    windows = [[NSMutableArray alloc] initWithCapacity:4];
+    NSColor *green = [NSColor colorWithCalibratedRed:41.0 / 255.0 green:1.0 blue:114.0 / 255.0 alpha:1.0];
+    for (NSUInteger index = 0; index < 4; index++) {
+      NSRect edge = edges[index];
+      NSRect frame = NSMakeRect(NSMinX(edge), desktop_top() - NSMaxY(edge), NSWidth(edge), NSHeight(edge));
+      WoxNativeWindow *window = [[WoxNativeWindow alloc]
+          initWithContentRect:frame
+                    styleMask:NSWindowStyleMaskBorderless
+                      backing:NSBackingStoreBuffered
+                        defer:NO];
+      window.releasedWhenClosed = NO;
+      window.woxNonactivating = YES;
+      window.opaque = YES;
+      window.backgroundColor = green;
+      window.hasShadow = NO;
+      window.ignoresMouseEvents = YES;
+      window.animationBehavior = NSWindowAnimationBehaviorNone;
+      window.level = MAX(NSScreenSaverWindowLevel, CGShieldingWindowLevel());
+      NSWindowCollectionBehavior behavior =
+          NSWindowCollectionBehaviorCanJoinAllSpaces |
+          NSWindowCollectionBehaviorFullScreenAuxiliary |
+          NSWindowCollectionBehaviorStationary |
+          NSWindowCollectionBehaviorIgnoresCycle;
+      if (@available(macOS 13.0, *)) {
+        behavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
+      }
+      window.collectionBehavior = behavior;
+      [window orderFrontRegardless];
+      [windows addObject:window];
+      [window release];
+    }
+  });
+  return (uintptr_t)windows;
+}
+
+void wox_darwin_dismiss_screenshot_border(uintptr_t border_handle) {
+  if (border_handle == 0) {
+    return;
+  }
+  NSMutableArray *windows = (NSMutableArray *)border_handle;
+  run_on_main_sync(^{
+    for (WoxNativeWindow *window in windows) {
+      [window orderOut:nil];
+      [window close];
+    }
+  });
+  [windows release];
 }
 
 int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path) {

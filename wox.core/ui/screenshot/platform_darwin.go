@@ -81,6 +81,24 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Width: selection.Width + margin*2, Height: selection.Height + margin*2,
 			})
 		},
+		showScrollBorder: func(selection Rect, _ Size) (func(), error) {
+			handle := C.wox_darwin_show_screenshot_border(
+				C.float(bounds.X+selection.X),
+				C.float(bounds.Y+selection.Y),
+				C.float(selection.Width),
+				C.float(selection.Height),
+				C.float(2),
+			)
+			if handle == 0 {
+				return nil, errors.New("failed to show macOS screenshot border")
+			}
+			var closeOnce sync.Once
+			return func() {
+				closeOnce.Do(func() {
+					C.wox_darwin_dismiss_screenshot_border(C.uintptr_t(handle))
+				})
+			}, nil
+		},
 		frameSize:        Size{Width: bounds.Width, Height: bounds.Height},
 		initialSelection: &selection,
 		afterShow:        dismissSelection,

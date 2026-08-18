@@ -65,6 +65,15 @@ func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.recentUrls = r.loadRecentUrls(ctx)
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
+
+	urls := lo.FilterMap(r.recentUrls, func(item UrlHistory, _ int) (string, bool) {
+		return item.Url, !item.Icon.IsValid()
+	})
+	if len(urls) > 0 {
+		util.Go(ctx, "prefetch recent URL favicons", func() {
+			PrefetchWebsiteIcons(ctx, urls)
+		})
+	}
 }
 
 func (r *UrlPlugin) getReg() *regexp.Regexp {
@@ -219,37 +228,13 @@ func (r *UrlPlugin) getRecentUrlIcon(ctx context.Context, history UrlHistory) co
 		return history.Icon
 	}
 
-	icon, err := getWebsiteIconWithCache(ctx, history.Url)
-	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("recover url icon error: %s", err.Error()))
-		return urlIcon
+	// Queries must remain local-only. Missing favicons are repaired by the
+	// background prefetch started during initialization.
+	if icon, ok := GetWebsiteIconFromCacheOnly(ctx, history.Url); ok {
+		return icon
 	}
 
-	r.updateRecentUrlIcon(ctx, history.Url, icon)
-	return icon
-}
-
-func (r *UrlPlugin) updateRecentUrlIcon(ctx context.Context, url string, icon common.WoxImage) {
-	updated := false
-	for i := range r.recentUrls {
-		if r.recentUrls[i].Url == url {
-			r.recentUrls[i].Icon = icon
-			updated = true
-			break
-		}
-	}
-
-	if !updated {
-		return
-	}
-
-	urlsJson, err := json.Marshal(r.recentUrls)
-	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save url setting error: %s", err.Error()))
-		return
-	}
-
-	r.api.SaveSetting(ctx, "recentUrls", string(urlsJson), false)
+	return urlIcon
 }
 
 func (r *UrlPlugin) removeRecentUrl(ctx context.Context, url string) {

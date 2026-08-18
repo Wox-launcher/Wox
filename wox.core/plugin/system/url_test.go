@@ -1,7 +1,11 @@
 package system
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
+
+	"wox/common"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -25,4 +29,19 @@ func TestUrlPlugin_Query(t *testing.T) {
 	// some invalid urls
 	assert.Equal(t, 0, len(reg.FindStringIndex("http://google")))
 	assert.Equal(t, 0, len(reg.FindStringIndex("http://.google.com")))
+}
+
+func TestUrlPlugin_GetRecentUrlIconUsesDefaultForMissingCache(t *testing.T) {
+	urlPlugin := &UrlPlugin{}
+	history := UrlHistory{
+		Url: "https://missing-icon-test.invalid",
+		Icon: common.WoxImage{
+			ImageType: common.WoxImageTypeAbsolutePath,
+			ImageData: filepath.Join(t.TempDir(), "missing.png"),
+		},
+	}
+
+	icon := urlPlugin.getRecentUrlIcon(context.Background(), history)
+
+	assert.Equal(t, urlIcon, icon)
 }

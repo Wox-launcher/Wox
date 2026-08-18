@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +20,9 @@ import (
 	"time"
 
 	"wox/test/automationdriver"
+	"wox/test/smokefixture"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var caseSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*/[0-9]{3}$`)
@@ -69,6 +74,12 @@ func run(caseSelector string) (int, error) {
 	defer cancel()
 	woxDataDirectory := filepath.Join(suiteDirectory, "wox-data")
 	userDataDirectory := filepath.Join(suiteDirectory, "user-data")
+	if caseSelector == "" || caseSelector == "launcher/plugin/url" || strings.HasPrefix(caseSelector, "launcher/plugin/url/") {
+		if err := seedMissingFaviconURLHistoryFixture(woxDataDirectory, userDataDirectory); err != nil {
+			retainSuiteDirectory = true
+			return 1, err
+		}
+	}
 	process, err := automationdriver.Launch(ctx, absoluteExecutable, automationdriver.LaunchOptions{
 		Environment: []string{
 			"WOX_TEST_DATA_DIR=" + woxDataDirectory,
@@ -108,6 +119,60 @@ func run(caseSelector string) (int, error) {
 		return 1, fmt.Errorf("close shared Wox smoke process: %w", err)
 	}
 	return 0, nil
+}
+
+// seedMissingFaviconURLHistoryFixture prepares persisted URL history before the shared Wox process starts.
+func seedMissingFaviconURLHistoryFixture(woxDataDirectory, userDataDirectory string) error {
+	iconPath := smokefixture.MissingFaviconURLHistoryIconPath(woxDataDirectory)
+	if err := os.MkdirAll(filepath.Dir(iconPath), 0755); err != nil {
+		return fmt.Errorf("create URL smoke favicon directory: %w", err)
+	}
+	if err := os.WriteFile(iconPath, []byte("wox URL smoke favicon fixture"), 0644); err != nil {
+		return fmt.Errorf("write URL smoke favicon fixture: %w", err)
+	}
+
+	historyJSON, err := json.Marshal([]map[string]any{
+		{
+			"Url": smokefixture.MissingFaviconURLHistoryURL,
+			"Icon": map[string]string{
+				"ImageType": "absolute",
+				"ImageData": iconPath,
+			},
+			"Title": "Missing favicon smoke fixture",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("encode URL smoke history fixture: %w", err)
+	}
+
+	if err := os.MkdirAll(userDataDirectory, 0755); err != nil {
+		return fmt.Errorf("create smoke user data directory: %w", err)
+	}
+	db, err := sql.Open("sqlite3", filepath.Join(userDataDirectory, "wox.db"))
+	if err != nil {
+		return fmt.Errorf("open smoke user database: %w", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS plugin_settings (
+		plugin_id TEXT NOT NULL,
+		key TEXT NOT NULL,
+		value TEXT,
+		is_local numeric NOT NULL DEFAULT false,
+		PRIMARY KEY (plugin_id, key)
+	)`); err != nil {
+		return fmt.Errorf("create smoke plugin settings table: %w", err)
+	}
+	if _, err := db.Exec(
+		"INSERT OR REPLACE INTO plugin_settings(plugin_id, key, value, is_local) VALUES (?, ?, ?, ?)",
+		smokefixture.URLPluginID,
+		"recentUrls",
+		string(historyJSON),
+		false,
+	); err != nil {
+		return fmt.Errorf("seed URL smoke history: %w", err)
+	}
+
+	return nil
 }
 
 // smokeTestCommands maps the selector to serial package commands so the first dirty reset stops the suite.

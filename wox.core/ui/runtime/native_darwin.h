@@ -22,6 +22,8 @@ int32_t wox_darwin_window_get_bounds(WoxDarwinWindow *window, float *x, float *y
 int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path);
 int32_t wox_darwin_select_screenshot_region(const char *path, uintptr_t *session_handle, uint32_t *display_id, float *display_x, float *display_y, float *display_width, float *display_height, float *selection_x, float *selection_y, float *selection_width, float *selection_height);
 void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle);
+uintptr_t wox_darwin_show_screenshot_border(float x, float y, float width, float height, float thickness);
+void wox_darwin_dismiss_screenshot_border(uintptr_t border_handle);
 int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path);
 int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height);
 int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window);
