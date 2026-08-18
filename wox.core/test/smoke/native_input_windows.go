@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	woxwindow "wox/util/window"
 )
 
 const windowsKeyEventFlagKeyUp = 0x0002
@@ -26,14 +27,12 @@ type windowsVisibleWindowSearch struct {
 }
 
 var (
-	windowsKeybdEvent          = windows.NewLazySystemDLL("user32.dll").NewProc("keybd_event")
-	windowsEnumWindows         = windows.NewLazySystemDLL("user32.dll").NewProc("EnumWindows")
-	windowsGetForegroundWindow = windows.NewLazySystemDLL("user32.dll").NewProc("GetForegroundWindow")
-	windowsGetWindowProcessID  = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowThreadProcessId")
-	windowsGetWindowText       = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowTextW")
-	windowsIsWindowVisible     = windows.NewLazySystemDLL("user32.dll").NewProc("IsWindowVisible")
-	windowsSetForegroundWindow = windows.NewLazySystemDLL("user32.dll").NewProc("SetForegroundWindow")
-	windowsEnumWindowCallback  = windows.NewCallback(func(window uintptr, lParam uintptr) uintptr {
+	windowsKeybdEvent         = windows.NewLazySystemDLL("user32.dll").NewProc("keybd_event")
+	windowsEnumWindows        = windows.NewLazySystemDLL("user32.dll").NewProc("EnumWindows")
+	windowsGetWindowProcessID = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowThreadProcessId")
+	windowsGetWindowText      = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowTextW")
+	windowsIsWindowVisible    = windows.NewLazySystemDLL("user32.dll").NewProc("IsWindowVisible")
+	windowsEnumWindowCallback = windows.NewCallback(func(window uintptr, lParam uintptr) uintptr {
 		search := (*windowsVisibleWindowSearch)(unsafe.Pointer(lParam))
 		visible, _, _ := windowsIsWindowVisible.Call(window)
 		if visible == 0 {
@@ -114,8 +113,7 @@ func OpenWindowsNotepad(t *testing.T, ctx context.Context, path string) {
 		window, pid := windowsVisibleWindowForTitle(title)
 		if window != 0 {
 			windowPID = pid
-			windowsSetForegroundWindow.Call(window)
-			if windowsForegroundWindowProcessID() == pid {
+			if woxwindow.ActivateWindow(woxwindow.ManagedWindow{Id: fmt.Sprintf("%d", window), Pid: int(pid)}) {
 				return
 			}
 		}
@@ -133,15 +131,4 @@ func windowsVisibleWindowForTitle(title []uint16) (uintptr, uint32) {
 	copy(search.title[:], title)
 	windowsEnumWindows.Call(windowsEnumWindowCallback, uintptr(unsafe.Pointer(&search)))
 	return search.window, search.pid
-}
-
-// windowsForegroundWindowProcessID returns the process owning the foreground window.
-func windowsForegroundWindowProcessID() uint32 {
-	window, _, _ := windowsGetForegroundWindow.Call()
-	if window == 0 {
-		return 0
-	}
-	var pid uint32
-	windowsGetWindowProcessID.Call(window, uintptr(unsafe.Pointer(&pid)))
-	return pid
 }
