@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"wox/setting/definition"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
@@ -136,6 +137,28 @@ func TestPluginSettingsFormDefinitionsKeepMixedFormsInLabelLayout(t *testing.T) 
 
 	if definitions[1].Value.InlineTable {
 		t.Fatalf("table in a mixed plugin form should keep the label-and-control layout")
+	}
+}
+
+func TestPluginControllerPreservesInlineApplicationTableDefinition(t *testing.T) {
+	items := []contract.PluginCatalogItem{{
+		ID: "clipboard",
+		SettingDefinitions: definition.PluginSettingDefinitions{{
+			Type: definition.PluginSettingDefinitionTypeTable,
+			Value: &definition.PluginSettingValueTable{
+				Key: "ignored_applications", InlineTable: true,
+				Columns: []definition.PluginSettingValueTableColumn{{Key: "App", Type: definition.PluginSettingValueTableColumnTypeApp}},
+			},
+		}},
+	}}
+
+	plugins, err := pluginSettingsPluginsFromContract(items)
+	if err != nil {
+		t.Fatalf("adapt plugin settings: %v", err)
+	}
+	value := plugins[0].SettingDefinitions[0].Value
+	if !value.InlineTable || len(value.Columns) != 1 || value.Columns[0].Type != "app" {
+		t.Fatalf("application table definition = %+v", value)
 	}
 }
 

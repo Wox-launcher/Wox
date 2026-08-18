@@ -29,4 +29,5 @@ Open the Action Panel to favorite an item, edit its alias, delete it, open a cop
 - Keep text history and retention days.
 - Keep image history and retention days.
 - Choose whether the primary action copies or pastes.
+- Add applications whose clipboard changes should never be saved to history.
 - Tune behavior if you want Wox to avoid storing sensitive clipboard content.

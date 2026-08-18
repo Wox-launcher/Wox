@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -358,6 +359,113 @@ func OpenInstalledPluginSettings(t *testing.T, ctx context.Context, client *auto
 	}
 	if err := client.Perform(selectCtx, listID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("select installed plugin %q: %v", pluginID, err)
+	}
+}
+
+// WaitForApplicationCatalog waits until the shared application picker has a complete platform catalog.
+func WaitForApplicationCatalog(t *testing.T, ctx context.Context, path string) {
+	t.Helper()
+	WaitForFile(t, ctx, path, func(data []byte) bool {
+		logs := string(data)
+		return strings.Contains(logs, " indexed ") && strings.Contains(logs, " apps, cost ")
+	})
+}
+
+// ApplicationTableRowCount returns the number of persisted rows in one inline application table.
+func ApplicationTableRowCount(t *testing.T, ctx context.Context, client *automationdriver.Client, fieldID string) int {
+	t.Helper()
+	snapshot, err := client.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("read application table %q rows: %v", fieldID, err)
+	}
+	count := 0
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, fieldID+"-row-") && strings.HasSuffix(node.AutomationID, "-delete") {
+			count++
+		}
+	}
+	return count
+}
+
+// AddApplicationTableRow selects one indexed application through the shared picker and waits for persistence.
+func AddApplicationTableRow(t *testing.T, ctx context.Context, client *automationdriver.Client, fieldID, query string) int {
+	t.Helper()
+	rowIndex := ApplicationTableRowCount(t, ctx, client, fieldID)
+	if err := client.Perform(ctx, fieldID+"-add", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("add application to %q: %v", fieldID, err)
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, fieldFound := automationdriver.Find(snapshot, "form-table-row-field-0")
+		_, saveFound := automationdriver.Find(snapshot, "form-table-row-save")
+		return fieldFound && saveFound
+	}); err != nil {
+		t.Fatalf("wait for application row editor: %v", err)
+	}
+	if err := client.Perform(ctx, "form-table-row-field-0", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("open application picker: %v", err)
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, dialogFound := automationdriver.Find(snapshot, "form-table-app-dialog")
+		_, searchFound := automationdriver.Find(snapshot, "form-table-app-search")
+		return dialogFound && searchFound
+	}); err != nil {
+		t.Fatalf("wait for application picker: %v", err)
+	}
+	if err := client.Perform(ctx, "form-table-app-search", woxui.AccessibilityActionSetValue, query); err != nil {
+		t.Fatalf("search applications for %q: %v", query, err)
+	}
+
+	candidateID := ""
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		candidateID = ""
+		count := 0
+		for _, node := range snapshot.Tree.Nodes {
+			if node.Role == woxui.AccessibilityRoleRadioButton && strings.HasPrefix(node.AutomationID, "form-table-app-") {
+				candidateID = node.AutomationID
+				count++
+			}
+		}
+		return count == 1
+	}); err != nil {
+		t.Fatalf("wait for one application candidate for %q: %v", query, err)
+	}
+	if err := client.Perform(ctx, candidateID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("select application %q: %v", query, err)
+	}
+	if err := client.Perform(ctx, "form-table-app-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("confirm application %q: %v", query, err)
+	}
+	if err := client.Perform(ctx, "form-table-row-save", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("save application %q: %v", query, err)
+	}
+
+	rowDeleteID := fieldID + "-row-" + strconv.Itoa(rowIndex) + "-delete"
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, rowFound := automationdriver.Find(snapshot, rowDeleteID)
+		add, addFound := automationdriver.Find(snapshot, fieldID+"-add")
+		return rowFound && addFound && add.Enabled
+	}); err != nil {
+		t.Fatalf("wait for application %q to persist: %v", query, err)
+	}
+	return rowIndex
+}
+
+// RemoveApplicationTableRow deletes one row and waits until its table is ready again.
+func RemoveApplicationTableRow(t *testing.T, ctx context.Context, client *automationdriver.Client, fieldID string, rowIndex int) {
+	t.Helper()
+	rowDeleteID := fieldID + "-row-" + strconv.Itoa(rowIndex) + "-delete"
+	if err := client.Perform(ctx, rowDeleteID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("delete application row %d from %q: %v", rowIndex, fieldID, err)
+	}
+	if err := client.Perform(ctx, "form-table-delete-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("confirm application row %d deletion: %v", rowIndex, err)
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, rowFound := automationdriver.Find(snapshot, rowDeleteID)
+		add, addFound := automationdriver.Find(snapshot, fieldID+"-add")
+		return !rowFound && addFound && add.Enabled
+	}); err != nil {
+		t.Fatalf("wait for application row %d removal: %v", rowIndex, err)
 	}
 }
 

@@ -23,10 +23,12 @@ import (
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting/definition"
+	"wox/setting/validator"
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/ocr"
 	"wox/util/shell"
+	"wox/util/window"
 
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
@@ -45,6 +47,7 @@ var primaryActionSettingKey = "primary_action"
 var primaryActionValueCopy = "copy"
 var primaryActionValuePaste = "paste"
 var favoritesSettingKey = "favorites"
+var ignoredApplicationsSettingKey = "ignored_applications"
 
 const (
 	clipboardTypeRefinementKey   = "clipboard_type"
@@ -113,6 +116,17 @@ type ClipboardPlugin struct {
 	backgroundTasks sync.WaitGroup
 	// Cache for generated preview and icon images to avoid regeneration
 	imageCache *util.HashMap[string, *ImageCacheEntry]
+}
+
+type ignoredClipboardApplication struct {
+	Name     string          `json:"Name"`
+	Identity string          `json:"Identity"`
+	Path     string          `json:"Path"`
+	Icon     common.WoxImage `json:"Icon"`
+}
+
+type ignoredClipboardApplicationRow struct {
+	App ignoredClipboardApplication `json:"App"`
 }
 
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
@@ -217,6 +231,39 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					},
 				},
 			},
+			{
+				Type: definition.PluginSettingDefinitionTypeHead,
+				Value: &definition.PluginSettingValueHead{
+					Content: "i18n:plugin_clipboard_privacy",
+				},
+				DisabledInPlatforms: []util.Platform{util.PlatformLinux},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:          ignoredApplicationsSettingKey,
+					Title:        "i18n:plugin_clipboard_ignored_applications",
+					Tooltip:      "i18n:plugin_clipboard_ignored_applications_tooltip",
+					DefaultValue: "[]",
+					MaxHeight:    220,
+					InlineTable:  true,
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:     "App",
+							Label:   "i18n:plugin_clipboard_ignored_applications_app",
+							Tooltip: "i18n:plugin_clipboard_ignored_applications_tooltip",
+							Width:   420,
+							Type:    definition.PluginSettingValueTableColumnTypeApp,
+							Validators: []validator.PluginSettingValidator{
+								{Type: validator.PluginSettingValidatorTypeNotEmpty, Value: &validator.PluginSettingValidatorNotEmpty{}},
+								{Type: validator.PluginSettingValidatorTypeUnique, Value: &validator.PluginSettingValidatorUnique{}},
+							},
+						},
+					},
+				},
+				DisabledInPlatforms: []util.Platform{util.PlatformLinux},
+				IsPlatformSpecific:  true,
+			},
 		},
 	}
 }
@@ -260,6 +307,9 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		if runtimeCtx.Err() != nil {
 			return
 		}
+		if c.shouldIgnoreClipboardChange(runtimeCtx) {
+			return
+		}
 		c.api.Log(runtimeCtx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 
 		if data.GetType() == clipboard.ClipboardTypeFile {
@@ -291,6 +341,54 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			c.db = nil
 		}
 	})
+}
+
+// shouldIgnoreClipboardChange blocks capture before any clipboard data is persisted or processed.
+func (c *ClipboardPlugin) shouldIgnoreClipboardChange(ctx context.Context) bool {
+	rows, err := parseIgnoredClipboardApplications(c.api.GetSetting(ctx, ignoredApplicationsSettingKey))
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("clipboard: failed to parse ignored applications: %v", err))
+		// A corrupted privacy rule must not silently allow clipboard capture.
+		return true
+	}
+	if len(rows) == 0 {
+		return false
+	}
+
+	activeWindowPid := window.GetActiveWindowPid()
+	identity := strings.TrimSpace(window.GetProcessIdentity(activeWindowPid))
+	if identity == "" || !isIgnoredClipboardApplication(rows, identity) {
+		return false
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("clipboard: ignored change from app identity=%s name=%s pid=%d", identity, window.GetActiveWindowName(), activeWindowPid))
+	return true
+}
+
+// parseIgnoredClipboardApplications decodes rows produced by the shared application table.
+func parseIgnoredClipboardApplications(value string) ([]ignoredClipboardApplicationRow, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	var rows []ignoredClipboardApplicationRow
+	if err := json.Unmarshal([]byte(value), &rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// isIgnoredClipboardApplication compares stable platform process identities.
+func isIgnoredClipboardApplication(rows []ignoredClipboardApplicationRow, identity string) bool {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return false
+	}
+	for _, row := range rows {
+		if strings.EqualFold(strings.TrimSpace(row.App.Identity), identity) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboard.Data) {

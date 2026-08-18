@@ -4,7 +4,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #include <stdint.h>
 
-int activateApplicationForSmoke(int pid) {
+int woxSmokeActivateApplication(int pid) {
     @autoreleasepool {
         NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
         if (application == nil) {
@@ -14,21 +14,21 @@ int activateApplicationForSmoke(int pid) {
     }
 }
 
-int terminateApplicationForSmoke(int pid) {
+int woxSmokeTerminateApplication(int pid) {
     @autoreleasepool {
         NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
         return application != nil && [application terminate] ? 1 : 0;
     }
 }
 
-int frontmostApplicationPidForSmoke(void) {
+int woxSmokeFrontmostApplicationPid(void) {
     @autoreleasepool {
         NSRunningApplication *application = [[NSWorkspace sharedWorkspace] frontmostApplication];
         return application == nil ? 0 : application.processIdentifier;
     }
 }
 
-int postKeyboardChordForSmoke(uint16_t modifierKeyCode, uint64_t flags, uint16_t keyCode) {
+int woxSmokePostKeyboardChord(uint16_t modifierKeyCode, uint64_t flags, uint16_t keyCode) {
     CGEventRef modifierDown = CGEventCreateKeyboardEvent(NULL, modifierKeyCode, true);
     CGEventRef down = CGEventCreateKeyboardEvent(NULL, keyCode, true);
     CGEventRef up = CGEventCreateKeyboardEvent(NULL, keyCode, false);
