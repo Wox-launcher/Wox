@@ -128,6 +128,9 @@ func TestAttentionActionMarksItemRead(t *testing.T) {
 	if len(response.Results[0].Actions) == 0 {
 		t.Fatalf("expected attention result action")
 	}
+	if response.Results[0].Actions[0].Id != attentionOpenActionID || response.Results[0].Actions[1].Id != attentionMarkReadActionID {
+		t.Fatalf("attention action ids = %q, %q", response.Results[0].Actions[0].Id, response.Results[0].Actions[1].Id)
+	}
 
 	response.Results[0].Actions[0].Action(ctx, plugin.ActionContext{})
 

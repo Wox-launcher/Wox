@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"wox/common"
@@ -20,10 +21,14 @@ const (
 	smokeAutomationSlowCommand      = "slow"
 	smokeAutomationStreamingCommand = "streaming-preview"
 	smokeAutomationToolbarCommand   = "toolbar"
+	smokeAutomationAttentionCommand = "attention"
 	smokeAutomationToolbarMessageID = "wox-smoke-toolbar-message"
 	smokeAutomationKeepOpenAction   = "keep-open"
 	smokeAutomationClearAction      = "clear"
 	smokeAutomationResultAction     = "hide-launcher"
+	smokeAutomationAttentionKey     = "attention-smoke-item"
+	smokeAutomationAttentionTitle   = "Attention smoke item"
+	smokeAutomationAttentionQuery   = "1+1"
 	smokeStepDelayEnvironment       = "WOX_GO_UI_SMOKE_STEP_DELAY"
 )
 
@@ -32,7 +37,9 @@ func init() {
 }
 
 type smokeAutomationPlugin struct {
-	api plugin.API
+	api                  plugin.API
+	attentionMu          sync.Mutex
+	attentionDescription string
 }
 
 // GetMetadata exposes one explicit smoke trigger with command-scoped fixture behaviors.
@@ -44,6 +51,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
+			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
 			{Command: smokeAutomationChatCommand, Description: "200 chat messages with streaming updates"},
@@ -66,6 +74,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryStreamingPreview()
 	case smokeAutomationToolbarCommand:
 		return p.queryToolbar(ctx)
+	case smokeAutomationAttentionCommand:
+		return p.queryAttentionFixture()
 	case smokeAutomationListCommand:
 		return queryListFixture()
 	case smokeAutomationGridCommand:
@@ -77,6 +87,60 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 	default:
 		return plugin.QueryResponse{}
 	}
+}
+
+// queryAttentionFixture exposes fresh and repeated pushes through the real plugin API boundary.
+func (p *smokeAutomationPlugin) queryAttentionFixture() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{{
+		Id:    "attention-smoke-fixture",
+		Title: "Attention smoke fixture",
+		Icon:  common.PluginAppIcon,
+		Actions: []plugin.QueryResultAction{
+			{
+				Id:                     "push-fresh-attention",
+				Name:                   "Push fresh attention",
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					p.pushAttentionFixture(ctx, true)
+					p.completeAttentionFixtureAction(ctx, actionContext.ResultId, "Attention smoke fixture: fresh pushed")
+				},
+			},
+			{
+				Id:                     "repeat-attention",
+				Name:                   "Repeat attention",
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					p.pushAttentionFixture(ctx, false)
+					p.completeAttentionFixtureAction(ctx, actionContext.ResultId, "Attention smoke fixture: repeat pushed")
+				},
+			},
+		},
+	}})
+}
+
+func (p *smokeAutomationPlugin) completeAttentionFixtureAction(ctx context.Context, resultID string, title string) {
+	p.api.UpdateResult(ctx, plugin.UpdatableResult{Id: resultID, Title: &title})
+}
+
+// pushAttentionFixture keeps repeated pushes byte-identical until a fresh generation is requested.
+func (p *smokeAutomationPlugin) pushAttentionFixture(ctx context.Context, fresh bool) {
+	p.attentionMu.Lock()
+	if fresh || p.attentionDescription == "" {
+		p.attentionDescription = fmt.Sprintf("Attention smoke generation %d", time.Now().UnixNano())
+	}
+	description := p.attentionDescription
+	p.attentionMu.Unlock()
+
+	p.api.PushAttention(ctx, plugin.PushAttentionRequest{
+		Key:         smokeAutomationAttentionKey,
+		Title:       smokeAutomationAttentionTitle,
+		Description: description,
+		Action: &plugin.AttentionAction{
+			Type:  plugin.AttentionActionTypeChangeQuery,
+			Query: smokeAutomationAttentionQuery,
+		},
+	})
 }
 
 // querySlow delays a real plugin response long enough for smoke tests to observe query loading.

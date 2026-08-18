@@ -12,6 +12,11 @@ import (
 
 var attentionIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#4f7cff" d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13A2.5 2.5 0 0 1 17.5 21h-11A2.5 2.5 0 0 1 4 18.5z"/><path fill="#fff" d="M6.4 13.2h3.1c.5 0 .9.3 1.1.7l.5 1c.2.4.6.7 1.1.7h1.6c.5 0 .9-.3 1.1-.7l.5-1c.2-.4.6-.7 1.1-.7h3.1v5.3c0 .7-.6 1.3-1.3 1.3H7.7c-.7 0-1.3-.6-1.3-1.3z" opacity=".95"/><path fill="#dbe6ff" d="M7.8 6.2h8.4a.8.8 0 0 1 0 1.6H7.8a.8.8 0 1 1 0-1.6m0 3.2h8.4a.8.8 0 0 1 0 1.6H7.8a.8.8 0 1 1 0-1.6"/></svg>`)
 
+const (
+	attentionOpenActionID     = "attention-open"
+	attentionMarkReadActionID = "attention-mark-read"
+)
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &AttentionPlugin{})
 }
@@ -131,6 +136,7 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 	if storedAction != nil && storedAction.Type == plugin.AttentionActionTypeChangeQuery {
 		query := storedAction.Query
 		actions = append(actions, plugin.QueryResultAction{
+			Id:                     attentionOpenActionID,
 			Name:                   "i18n:plugin_attention_action_open",
 			Icon:                   common.ExecuteRunIcon,
 			IsDefault:              true,
@@ -147,6 +153,7 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 
 	if !item.IsRead {
 		actions = append(actions, plugin.QueryResultAction{
+			Id:                     attentionMarkReadActionID,
 			Name:                   "i18n:plugin_attention_action_mark_read",
 			Icon:                   common.PluginInstalledIcon,
 			IsDefault:              len(actions) == 0,
