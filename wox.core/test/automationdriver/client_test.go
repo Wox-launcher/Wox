@@ -3,6 +3,7 @@ package automationdriver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -86,6 +87,76 @@ func TestClientAuthenticatesAndDecodesSnapshot(t *testing.T) {
 	}
 }
 
+func TestWaitForReturnsLastSnapshotWhenWaitingFails(t *testing.T) {
+	t.Parallel()
+
+	requestCount := 0
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requestCount++
+		if requestCount > 1 {
+			return nil, errors.New("wait transport failed")
+		}
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"result": map[string]any{"Tree": map[string]any{
+				"Generation": 9,
+				"Nodes":      []map[string]any{{"ID": 1, "AutomationID": "launcher.query.input", "Value": "last value"}},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("encode snapshot response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	snapshot, err := client.WaitFor(context.Background(), func(woxwidget.AutomationSnapshot) bool { return false })
+	if err == nil || !strings.Contains(err.Error(), "after generation 9") {
+		t.Fatalf("wait error = %v, want generation context", err)
+	}
+	node, found := Find(snapshot, "launcher.query.input")
+	if !found || node.Value != "last value" {
+		t.Fatalf("last snapshot was not preserved: found=%v node=%+v", found, node)
+	}
+}
+
+func TestPressKeyHandledReturnsServerResult(t *testing.T) {
+	t.Parallel()
+
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if requestPayload.Method != "input.key" {
+			t.Fatalf("unexpected method %q", requestPayload.Method)
+		}
+		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": requestPayload.ID, "result": true})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	handled, err := client.PressKeyHandled(context.Background(), woxui.Key("v"), woxui.KeyModifierMeta)
+	if err != nil || !handled {
+		t.Fatalf("press handled = %v err %v, want true", handled, err)
+	}
+}
+
 func TestClientReadsAndResetsFrameMetrics(t *testing.T) {
 	t.Parallel()
 
@@ -125,13 +196,16 @@ func TestClientReadsAndResetsFrameMetrics(t *testing.T) {
 	if err := client.ResetFrameMetrics(context.Background()); err != nil {
 		t.Fatalf("reset frame metrics: %v", err)
 	}
+	if err := client.RequestFrame(context.Background()); err != nil {
+		t.Fatalf("request frame: %v", err)
+	}
 	if err := client.SetRepaintDebugMode(context.Background(), woxwidget.RepaintDebugVerify); err != nil {
 		t.Fatalf("set repaint debug mode: %v", err)
 	}
 	if err := client.SimulateRendererDeviceRemoved(context.Background()); err != nil {
 		t.Fatalf("simulate renderer device removal: %v", err)
 	}
-	if len(methods) != 4 || methods[0] != "render.metrics" || methods[1] != "render.metrics.reset" || methods[2] != "render.repaint_debug" || methods[3] != "render.simulate_device_removed" {
+	if len(methods) != 5 || methods[0] != "render.metrics" || methods[1] != "render.metrics.reset" || methods[2] != "render.invalidate" || methods[3] != "render.repaint_debug" || methods[4] != "render.simulate_device_removed" {
 		t.Fatalf("unexpected methods: %v", methods)
 	}
 }

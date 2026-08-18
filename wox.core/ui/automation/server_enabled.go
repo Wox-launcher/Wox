@@ -127,6 +127,8 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 		return resultOrError(controller.AutomationFrameMetrics())
 	case "render.metrics.reset":
 		return resultOrError(true, controller.ResetAutomationFrameMetrics())
+	case "render.invalidate":
+		return resultOrError(true, controller.RequestAutomationFrame())
 	case "render.repaint_debug":
 		var params struct {
 			Mode woxwidget.RepaintDebugMode `json:"mode"`
@@ -199,7 +201,7 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 		if params.Key == "" {
 			return nil, invalidParams(errors.New("key is required"))
 		}
-		return resultOrError(true, controller.PressAutomationKey(params.Key, params.Modifiers))
+		return resultOrError(controller.PressAutomationKey(params.Key, params.Modifiers))
 	case "input.pointer":
 		var event woxui.PointerEvent
 		if err := decodeParams(rawParams, &event); err != nil {

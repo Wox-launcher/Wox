@@ -15,16 +15,18 @@ import (
 )
 
 type fakeController struct {
-	actionID      string
-	action        woxui.AccessibilityAction
-	actionValue   string
-	pointer       woxui.PointerEvent
-	settingsPath  string
-	selectionText string
-	reset         bool
-	metricsReset  bool
-	repaintMode   woxwidget.RepaintDebugMode
-	deviceRemoved bool
+	actionID       string
+	action         woxui.AccessibilityAction
+	actionValue    string
+	pointer        woxui.PointerEvent
+	settingsPath   string
+	selectionText  string
+	reset          bool
+	metricsReset   bool
+	frameRequested bool
+	repaintMode    woxwidget.RepaintDebugMode
+	deviceRemoved  bool
+	keyHandled     bool
 }
 
 func (*fakeController) AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, error) {
@@ -33,6 +35,11 @@ func (*fakeController) AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, err
 
 func (f *fakeController) ResetAutomationFrameMetrics() error {
 	f.metricsReset = true
+	return nil
+}
+
+func (f *fakeController) RequestAutomationFrame() error {
+	f.frameRequested = true
 	return nil
 }
 
@@ -72,8 +79,10 @@ func (f *fakeController) DispatchAutomationPointer(event woxui.PointerEvent) err
 	return nil
 }
 
-func (*fakeController) PressAutomationKey(woxui.Key, woxui.KeyModifiers) error { return nil }
-func (*fakeController) EnterAutomationText(string) error                       { return nil }
+func (f *fakeController) PressAutomationKey(woxui.Key, woxui.KeyModifiers) (bool, error) {
+	return f.keyHandled, nil
+}
+func (*fakeController) EnterAutomationText(string) error { return nil }
 func (f *fakeController) ResetAutomationState() error {
 	f.reset = true
 	return nil
@@ -141,6 +150,10 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	if metricsResetResponse.Code != http.StatusOK || !controller.metricsReset {
 		t.Fatalf("frame metrics reset was not dispatched: status=%d reset=%v", metricsResetResponse.Code, controller.metricsReset)
 	}
+	frameResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"frame","method":"render.invalidate"}`)
+	if frameResponse.Code != http.StatusOK || !controller.frameRequested {
+		t.Fatalf("frame invalidation was not dispatched: status=%d requested=%v", frameResponse.Code, controller.frameRequested)
+	}
 	repaintResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"repaint","method":"render.repaint_debug","params":{"mode":"verify"}}`)
 	if repaintResponse.Code != http.StatusOK || controller.repaintMode != woxwidget.RepaintDebugVerify {
 		t.Fatalf("repaint mode was not dispatched: status=%d mode=%q", repaintResponse.Code, controller.repaintMode)
@@ -163,6 +176,17 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	}
 	if controller.pointer.Kind != woxui.PointerMove || controller.pointer.Position != (woxui.Point{X: 120.5, Y: 48.25}) {
 		t.Fatalf("unexpected pointer call: %+v", controller.pointer)
+	}
+	controller.keyHandled = true
+	keyResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"key","method":"input.key","params":{"key":"v","modifiers":8}}`)
+	var keyResult struct {
+		Result bool `json:"result"`
+	}
+	if err := json.Unmarshal(keyResponse.Body.Bytes(), &keyResult); err != nil {
+		t.Fatalf("decode key response: %v", err)
+	}
+	if keyResponse.Code != http.StatusOK || !keyResult.Result {
+		t.Fatalf("key handled result was not returned: status=%d handled=%v", keyResponse.Code, keyResult.Result)
 	}
 
 	settingsResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"settings","method":"window.open_settings","params":{"path":"/appearance"}}`)

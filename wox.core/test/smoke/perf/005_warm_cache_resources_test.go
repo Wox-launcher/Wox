@@ -33,7 +33,7 @@ func Test005WarmCacheResources(t *testing.T) {
 			}
 		}
 		assertWarmCacheSteadyState(t, samples[len(samples)/2:])
-		assertNoDroppedFrames(t, ctx, client)
+		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }
 

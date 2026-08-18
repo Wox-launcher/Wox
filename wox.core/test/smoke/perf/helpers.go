@@ -35,6 +35,7 @@ const (
 func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
 	t.Helper()
 	want := perfSampleCount
+	waitForSnapshotQuiet(t, ctx, client, 150*time.Millisecond)
 	if err := client.ResetFrameMetrics(ctx); err != nil {
 		t.Fatalf("reset frame metrics: %v", err)
 	}
@@ -48,24 +49,30 @@ func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automati
 	waitCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	for waitCtx.Err() == nil && len(observed) < want {
-		next, waitErr := client.WaitForChange(waitCtx, generation)
-		if waitErr != nil {
-			break
+		if requestErr := client.RequestFrame(waitCtx); requestErr != nil {
+			t.Fatalf("request performance sample frame: %v", requestErr)
 		}
-		generation = next.Tree.Generation
-		metrics, metricsErr := client.FrameMetrics(ctx)
-		if metricsErr != nil {
-			t.Fatalf("read frame metrics: %v", metricsErr)
-		}
-		for _, sample := range metrics.Recent {
-			if sample.FrameID <= lastFrameID || !sample.HostCompleted || !sample.Presented {
-				continue
+		observedBeforeRequest := len(observed)
+		for waitCtx.Err() == nil && len(observed) == observedBeforeRequest {
+			next, waitErr := client.WaitForChange(waitCtx, generation)
+			if waitErr != nil {
+				break
 			}
-			lastFrameID = sample.FrameID
-			observed = append(observed, sample)
-			if len(observed) >= want {
-				writePerfArtifact(t, observed)
-				return observed
+			generation = next.Tree.Generation
+			metrics, metricsErr := client.FrameMetrics(ctx)
+			if metricsErr != nil {
+				t.Fatalf("read frame metrics: %v", metricsErr)
+			}
+			for _, sample := range metrics.Recent {
+				if sample.FrameID <= lastFrameID || !sample.HostCompleted || !sample.Presented {
+					continue
+				}
+				lastFrameID = sample.FrameID
+				observed = append(observed, sample)
+				if len(observed) >= want {
+					writePerfArtifact(t, observed)
+					return observed
+				}
 			}
 		}
 	}

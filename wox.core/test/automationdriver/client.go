@@ -136,6 +136,12 @@ func (c *Client) ResetFrameMetrics(ctx context.Context) error {
 	return err
 }
 
+// RequestFrame invalidates the active surface so performance tests can sample a settled UI.
+func (c *Client) RequestFrame(ctx context.Context) error {
+	_, err := call[bool](ctx, c, "render.invalidate", nil)
+	return err
+}
+
 // SetRepaintDebugMode changes incremental-rendering diagnostics in the active surface.
 func (c *Client) SetRepaintDebugMode(ctx context.Context, mode woxwidget.RepaintDebugMode) error {
 	_, err := call[bool](ctx, c, "render.repaint_debug", map[string]any{"mode": mode})
@@ -181,10 +187,11 @@ func (c *Client) WaitFor(ctx context.Context, predicate func(woxwidget.Automatio
 		if predicate(snapshot) {
 			return snapshot, nil
 		}
-		snapshot, err = c.WaitForChange(ctx, snapshot.Tree.Generation)
+		next, err := c.WaitForChange(ctx, snapshot.Tree.Generation)
 		if err != nil {
-			return woxwidget.AutomationSnapshot{}, err
+			return snapshot, fmt.Errorf("wait for semantics after generation %d: %w", snapshot.Tree.Generation, err)
 		}
+		snapshot = next
 	}
 }
 
@@ -250,8 +257,17 @@ func (c *Client) LeavePointer(ctx context.Context) error {
 
 // PressKey sends one complete semantic key press.
 func (c *Client) PressKey(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers) error {
-	_, err := call[bool](ctx, c, "input.key", map[string]any{"key": key, "modifiers": modifiers})
-	return c.pauseAfterStep(ctx, err)
+	_, err := c.PressKeyHandled(ctx, key, modifiers)
+	return err
+}
+
+// PressKeyHandled sends one complete semantic key press and reports whether the product handled it.
+func (c *Client) PressKeyHandled(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers) (bool, error) {
+	handled, err := call[bool](ctx, c, "input.key", map[string]any{"key": key, "modifiers": modifiers})
+	if pauseErr := c.pauseAfterStep(ctx, err); pauseErr != nil {
+		return false, pauseErr
+	}
+	return handled, nil
 }
 
 // EnterText commits UTF-8 text through the focused editor.

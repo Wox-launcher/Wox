@@ -12,7 +12,7 @@ import (
 
 // Test002Grid500Work verifies the 500-item grouped grid fixture records per-frame work.
 // Flow: show launcher -> query wox-smoke grid-500 -> collect settled presented frames.
-// Evidence: the first grid item is visible and settled frames report work counters with no drops.
+// Evidence: the first grid item is visible and settled frames report work counters without unexpected drops.
 func Test002Grid500Work(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		snapshot := runQueryFixture(t, ctx, client, fixtureCommandQuery("grid-500"))
@@ -21,6 +21,6 @@ func Test002Grid500Work(t *testing.T) {
 		}
 		samples := waitForPresentedSamples(t, ctx, client)
 		assertSettledWork(t, samples)
-		assertNoDroppedFrames(t, ctx, client)
+		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

@@ -10,7 +10,7 @@ import (
 	"wox/test/smoke"
 )
 
-// Test001List500Work verifies the 500-item list fixture records per-frame work without dropped frames.
+// Test001List500Work verifies the 500-item list fixture records per-frame work without unexpected dropped frames.
 // Flow: show launcher -> query wox-smoke list-500 -> collect settled presented frames.
 // Evidence: each settled frame reports layout/paint/identity work and zero dropped frames.
 func Test001List500Work(t *testing.T) {
@@ -21,6 +21,6 @@ func Test001List500Work(t *testing.T) {
 		}
 		samples := waitForPresentedSamples(t, ctx, client)
 		assertSettledWork(t, samples)
-		assertNoDroppedFrames(t, ctx, client)
+		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

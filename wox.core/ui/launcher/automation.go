@@ -113,6 +113,15 @@ func (a *App) ResetAutomationFrameMetrics() error {
 	return nil
 }
 
+// RequestAutomationFrame invalidates the active surface for deterministic performance sampling.
+func (a *App) RequestAutomationFrame() error {
+	_, window, _ := a.automationSurface()
+	if window == nil {
+		return errors.New("active automation window is not initialized")
+	}
+	return window.Invalidate()
+}
+
 func nextRepaintDebugMode(current woxwidget.RepaintDebugMode) woxwidget.RepaintDebugMode {
 	if current == woxwidget.RepaintDebugOff {
 		return woxwidget.RepaintDebugRainbow
@@ -187,43 +196,49 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 }
 
 // PressAutomationKey sends a complete key press through the normal widget and launcher handlers.
-func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error {
+func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (bool, error) {
 	if window := a.independentAutomationWindow(); window != nil {
-		if _, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}); err != nil {
-			return err
+		downHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true})
+		if err != nil {
+			return false, err
 		}
-		_, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
-		return err
+		upHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
+		return downHandled || upHandled, err
 	}
 	target := a.resolveAutomationTarget()
 	host, _, kind := a.automationSurface()
 	if host == nil {
-		return errors.New("active widget host is not initialized")
+		return false, errors.New("active widget host is not initialized")
 	}
-	return woxui.Call(func() {
+	handled := false
+	err := woxui.Call(func() {
 		down := woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}
-		if !host.Key(down) {
+		downHandled := host.Key(down)
+		if !downHandled {
 			switch kind {
 			case automationSurfaceOnboarding:
-				a.onOnboardingWindowKey(down)
+				downHandled = a.onOnboardingWindowKey(down)
 			case automationSurfaceSettings:
-				a.onSettingsWindowKey(down)
+				downHandled = a.onSettingsWindowKey(down)
 			default:
-				target.onKey(down)
+				downHandled = target.onKey(down)
 			}
 		}
 		up := woxui.KeyEvent{Key: key, Modifiers: modifiers}
-		if !host.Key(up) {
+		upHandled := host.Key(up)
+		if !upHandled {
 			switch kind {
 			case automationSurfaceOnboarding:
-				a.onOnboardingWindowKey(up)
+				upHandled = a.onOnboardingWindowKey(up)
 			case automationSurfaceSettings:
-				a.onSettingsWindowKey(up)
+				upHandled = a.onSettingsWindowKey(up)
 			default:
-				target.onKey(up)
+				upHandled = target.onKey(up)
 			}
 		}
+		handled = downHandled || upHandled
 	})
+	return handled, err
 }
 
 // EnterAutomationText commits UTF-8 text through the active text-input owner.

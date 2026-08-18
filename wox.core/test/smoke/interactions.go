@@ -337,14 +337,26 @@ func OpenInstalledPluginSettings(t *testing.T, ctx context.Context, client *auto
 	if err := client.OpenSettings(ctx, "/plugins"); err != nil {
 		t.Fatalf("open plugin settings: %v", err)
 	}
+	selectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if _, err := client.WaitFor(selectCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := automationdriver.Find(snapshot, "plugin-search")
+		return found
+	}); err != nil {
+		t.Fatalf("wait for installed plugin search: %v", err)
+	}
+	// The catalog uses a lazy list, so filter by ID before waiting for a row that may be off-screen.
+	if err := client.Perform(selectCtx, "plugin-search", woxui.AccessibilityActionSetValue, pluginID); err != nil {
+		t.Fatalf("filter installed plugin %q: %v", pluginID, err)
+	}
 	listID := "plugin-list-" + pluginID
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+	if _, err := client.WaitFor(selectCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		_, found := automationdriver.Find(snapshot, listID)
 		return found
 	}); err != nil {
 		t.Fatalf("wait for installed plugin %q: %v", pluginID, err)
 	}
-	if err := client.Perform(ctx, listID, woxui.AccessibilityActionActivate, ""); err != nil {
+	if err := client.Perform(selectCtx, listID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("select installed plugin %q: %v", pluginID, err)
 	}
 }

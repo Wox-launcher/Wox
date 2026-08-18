@@ -52,7 +52,14 @@ func run(caseSelector string) (int, error) {
 	if err != nil {
 		return 1, fmt.Errorf("create smoke suite directory: %w", err)
 	}
-	defer os.RemoveAll(suiteDirectory)
+	retainSuiteDirectory := false
+	defer func() {
+		if retainSuiteDirectory {
+			fmt.Fprintf(os.Stderr, "smoke failure artifacts retained at %s\n", suiteDirectory)
+			return
+		}
+		_ = os.RemoveAll(suiteDirectory)
+	}()
 
 	port, err := availablePort()
 	if err != nil {
@@ -74,6 +81,7 @@ func run(caseSelector string) (int, error) {
 		StartupTimeout: 45 * time.Second,
 	})
 	if err != nil {
+		retainSuiteDirectory = true
 		return 1, fmt.Errorf("launch shared Wox smoke process: %w", err)
 	}
 	defer process.Close()
@@ -87,6 +95,7 @@ func run(caseSelector string) (int, error) {
 		command.Stdout = os.Stdout
 		command.Stderr = os.Stderr
 		if err := command.Run(); err != nil {
+			retainSuiteDirectory = true
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
 				return exitErr.ExitCode(), nil
@@ -95,6 +104,7 @@ func run(caseSelector string) (int, error) {
 		}
 	}
 	if err := process.Close(); err != nil {
+		retainSuiteDirectory = true
 		return 1, fmt.Errorf("close shared Wox smoke process: %w", err)
 	}
 	return 0, nil

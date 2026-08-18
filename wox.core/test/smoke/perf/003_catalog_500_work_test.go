@@ -13,7 +13,7 @@ import (
 
 // Test003Catalog500Work verifies injected 500-item plugin and theme catalogs record frame work.
 // Flow: install catalog-500 -> open plugins -> measure -> open themes -> measure.
-// Evidence: both catalogs expose the first fixture row and settled frames report work counters.
+// Evidence: both catalogs expose the first fixture row and settled frames report work counters without unexpected drops.
 func Test003Catalog500Work(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		if err := client.OpenSettings(ctx, "/plugins"); err != nil {
@@ -44,6 +44,6 @@ func Test003Catalog500Work(t *testing.T) {
 			t.Fatalf("wait for theme catalog fixture: %v", err)
 		}
 		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
-		assertNoDroppedFrames(t, ctx, client)
+		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

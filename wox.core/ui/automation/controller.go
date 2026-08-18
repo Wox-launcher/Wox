@@ -26,11 +26,12 @@ type Controller interface {
 	AutomationSnapshot() woxwidget.AutomationSnapshot
 	AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, error)
 	ResetAutomationFrameMetrics() error
+	RequestAutomationFrame() error
 	SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error
 	WaitForAutomationChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error)
 	PerformAutomationAction(automationID string, action woxui.AccessibilityAction, value string) error
 	DispatchAutomationPointer(event woxui.PointerEvent) error
-	PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error
+	PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (bool, error)
 	EnterAutomationText(text string) error
 	ResetAutomationState() error
 	ShowAutomationWindow() error

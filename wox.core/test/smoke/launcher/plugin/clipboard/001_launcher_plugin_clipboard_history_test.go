@@ -32,11 +32,11 @@ func Test001LauncherPluginClipboardHistory(t *testing.T) {
 		}
 
 		snapshot := waitForClipboardResult(t, ctx, client, marker)
-		resultID, found := smoke.FindLauncherResult(snapshot, marker)
+		_, found := smoke.FindLauncherResult(snapshot, marker)
 		if !found {
 			t.Fatalf("Clipboard result %q was not found", marker)
 		}
-		smoke.SelectLauncherResult(t, ctx, client, resultID)
+		smoke.SelectLauncherResultLabelPrefix(t, ctx, client, marker)
 
 		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
 		copyAction, found := automationdriver.FindByAutomationIDPrefix(snapshot, "action-result-")
@@ -68,13 +68,15 @@ func Test001LauncherPluginClipboardHistory(t *testing.T) {
 // waitForClipboardResult retries completed queries until the asynchronous clipboard watcher has persisted the marker.
 func waitForClipboardResult(t *testing.T, ctx context.Context, client *automationdriver.Client, marker string) woxwidget.AutomationSnapshot {
 	t.Helper()
+	waitCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	queries := []string{"cb " + marker, "cb " + marker + " "}
 	for attempt := 0; ; attempt++ {
 		query := queries[attempt%len(queries)]
-		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
+		if err := client.Perform(waitCtx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 			t.Fatalf("enter Clipboard query %q: %v", query, err)
 		}
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		snapshot, err := client.WaitFor(waitCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
 			return inputFound && input.Value == query
 		})
@@ -86,6 +88,13 @@ func waitForClipboardResult(t *testing.T, ctx context.Context, client *automatio
 			if _, found := smoke.FindLauncherResult(snapshot, marker); found {
 				return snapshot
 			}
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-waitCtx.Done():
+			timer.Stop()
+			t.Fatalf("wait for Clipboard history to persist %q: %v", marker, waitCtx.Err())
+		case <-timer.C:
 		}
 	}
 }

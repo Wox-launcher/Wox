@@ -42,20 +42,31 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 		if err := clipboard.WriteText("\r\nthree\r\nfour\rfive\nsix"); err != nil {
 			t.Fatalf("prepare multiline clipboard text: %v", err)
 		}
+		clipboardText, err := clipboard.ReadText()
+		if err != nil || clipboardText != "\r\nthree\r\nfour\rfive\nsix" {
+			t.Fatalf("verify multiline clipboard text: value %q err %v", clipboardText, err)
+		}
 		modifier := woxui.KeyModifierControl
 		if runtime.GOOS == "darwin" {
 			modifier = woxui.KeyModifierMeta
 		}
-		if err := client.PressKey(ctx, woxui.Key("v"), modifier); err != nil {
+		handled, err := client.PressKeyHandled(ctx, woxui.Key("v"), modifier)
+		if err != nil {
 			t.Fatalf("paste multiline query text: %v", err)
 		}
+		if !handled {
+			t.Fatal("paste multiline query text: key was not handled")
+		}
 		expected := "one\ntwo\nthree\nfour\nfive\nsix"
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		pasteCtx, cancelPaste := context.WithTimeout(ctx, 5*time.Second)
+		defer cancelPaste()
+		snapshot, err := client.WaitFor(pasteCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, found := automationdriver.Find(snapshot, "launcher.query.input")
 			return found && input.Value == expected
 		})
 		if err != nil {
-			t.Fatalf("wait for pasted multiline query: %v", err)
+			input, found := automationdriver.Find(snapshot, "launcher.query.input")
+			t.Fatalf("wait for pasted multiline query: %v; generation %d input found %v value %q diagnostics %v", err, snapshot.Tree.Generation, found, input.Value, snapshot.Diagnostics)
 		}
 		if _, found := automationdriver.Find(snapshot, "launcher.query.input"); !found {
 			t.Fatal("launcher query input disappeared before wheel scroll")
