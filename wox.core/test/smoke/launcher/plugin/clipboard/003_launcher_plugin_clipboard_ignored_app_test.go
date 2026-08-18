@@ -20,10 +20,10 @@ import (
 
 const clipboardPluginID = "5f815d98-27f5-488d-a756-c317ea39935b"
 
-// Test001SettingPluginClipboardIgnoredApp verifies ignored applications bypass Clipboard history.
+// Test003LauncherPluginClipboardIgnoredApp verifies ignored applications bypass Clipboard history.
 // Flow: add the platform editor to Clipboard privacy settings -> copy unique text in that editor -> query Clipboard.
 // Evidence: a fresh ignore log identifies the source application and the completed Clipboard query omits the marker.
-func Test001SettingPluginClipboardIgnoredApp(t *testing.T) {
+func Test003LauncherPluginClipboardIgnoredApp(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		requireClipboardIgnoredAppRuntime(t)
 		smoke.PreserveClipboard(t)

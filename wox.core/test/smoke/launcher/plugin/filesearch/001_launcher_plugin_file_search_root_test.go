@@ -13,10 +13,10 @@ import (
 	"wox/test/smoke"
 )
 
-// Test001SettingPluginFileSearchRoot verifies a directory added in File Search settings becomes searchable.
+// Test001LauncherPluginFileSearchRoot verifies a directory added in File Search settings becomes searchable.
 // Flow: create a unique file -> add its directory through plugin settings -> wait for the live index -> query Launcher.
 // Evidence: the completed File Search result identifies the exact configured file path.
-func Test001SettingPluginFileSearchRoot(t *testing.T) {
+func Test001LauncherPluginFileSearchRoot(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		root := newFileSearchRoot(t)
 		filePath := filepath.Join(root, fmt.Sprintf("filesearch-root-%d.txt", time.Now().UnixNano()))

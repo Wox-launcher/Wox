@@ -13,10 +13,10 @@ import (
 	"wox/test/smoke"
 )
 
-// Test002SettingPluginFileSearchIncrementalChanges verifies watched file additions and deletions reach File Search quickly.
+// Test002LauncherPluginFileSearchIncrementalChanges verifies watched file additions and deletions reach File Search quickly.
 // Flow: index a configured directory -> create and query a file -> delete it -> repeat the same Launcher query.
 // Evidence: the live index and Launcher add then remove the exact path within the incremental latency budget.
-func Test002SettingPluginFileSearchIncrementalChanges(t *testing.T) {
+func Test002LauncherPluginFileSearchIncrementalChanges(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		root := newFileSearchRoot(t)
 		baselinePath := filepath.Join(root, fmt.Sprintf("filesearch-baseline-%d.txt", time.Now().UnixNano()))
