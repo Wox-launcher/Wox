@@ -12,6 +12,7 @@ import (
 	woxui "wox/ui/runtime"
 	woxscreenshot "wox/ui/screenshot"
 	woxwidget "wox/ui/widget"
+	"wox/util/overlay"
 )
 
 type automationSessionResetter interface {
@@ -24,9 +25,18 @@ const (
 	automationSurfaceLauncher automationSurfaceKind = iota
 	automationSurfaceSettings
 	automationSurfaceOnboarding
+	automationSurfaceOverlay
 )
 
+const automationOverlayInstancePrefix = "overlay."
+
 func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSurfaceKind) {
+	if overlayID, ok := a.automationOverlayID(); ok {
+		host, window, _, found := overlay.AutomationSurface(overlayID)
+		if found {
+			return host, window, automationSurfaceOverlay
+		}
+	}
 	target := a.resolveAutomationTarget()
 	var host *woxwidget.Host
 	var window *woxui.Window
@@ -50,6 +60,19 @@ func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSur
 		window = target.window
 	})
 	return host, window, kind
+}
+
+// automationOverlayID resolves the focused runtime overlay without changing its native lifecycle.
+func (a *App) automationOverlayID() (string, bool) {
+	var focus string
+	_ = a.runOnUI("read automation overlay focus", func() {
+		focus = strings.TrimSpace(a.automationFocusInstance)
+	})
+	if !strings.HasPrefix(focus, automationOverlayInstancePrefix) {
+		return "", false
+	}
+	id := strings.TrimSpace(strings.TrimPrefix(focus, automationOverlayInstancePrefix))
+	return id, id != ""
 }
 
 // resolveAutomationTarget returns the primary or focused secondary smoke target.
@@ -186,9 +209,12 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 	if window := a.independentAutomationWindow(); window != nil {
 		return window.DispatchPointer(event)
 	}
-	host, _, _ := a.automationSurface()
+	host, window, kind := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
+	}
+	if kind == automationSurfaceOverlay {
+		return window.DispatchPointer(event)
 	}
 	return woxui.Call(func() {
 		host.Pointer(event)
@@ -206,9 +232,17 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (b
 		return downHandled || upHandled, err
 	}
 	target := a.resolveAutomationTarget()
-	host, _, kind := a.automationSurface()
+	host, window, kind := a.automationSurface()
 	if host == nil {
 		return false, errors.New("active widget host is not initialized")
+	}
+	if kind == automationSurfaceOverlay {
+		downHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true})
+		if err != nil {
+			return false, err
+		}
+		upHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
+		return downHandled || upHandled, err
 	}
 	handled := false
 	err := woxui.Call(func() {
@@ -383,6 +417,19 @@ func (a *App) SetAutomationFocusInstance(instanceName string) error {
 // AutomationWindowState returns the real managed lifecycle for the primary or a named secondary launcher.
 func (a *App) AutomationWindowState(instanceName string) (automation.WindowState, error) {
 	instanceName = strings.TrimSpace(instanceName)
+	if strings.HasPrefix(instanceName, automationOverlayInstancePrefix) {
+		overlayID := strings.TrimSpace(strings.TrimPrefix(instanceName, automationOverlayInstancePrefix))
+		_, _, managed, found := overlay.AutomationSurface(overlayID)
+		if !found {
+			return automation.WindowState{}, nil
+		}
+		lifecycle := managed.Lifecycle()
+		return automation.WindowState{
+			Exists:    true,
+			Visible:   lifecycle == woxui.WindowLifecycleVisible,
+			Lifecycle: automationWindowLifecycle(lifecycle),
+		}, nil
+	}
 	var target *App
 	if instanceName == "primary" {
 		target = a

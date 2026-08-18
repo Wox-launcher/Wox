@@ -67,32 +67,7 @@ func Show(opts Options) {
 			state.Lock()
 			hovered := state.hovered
 			state.Unlock()
-			showNote := hovered && opts.Note != ""
-			showClose := hovered && opts.Closable
-			textWidth := frame.Size.Width - timerHorizontalPadding*2
-			if showClose {
-				textWidth -= timerCloseReserve
-			}
-			children := []woxwidget.Widget{woxwidget.TextBlock{
-				Value: opts.Countdown, Width: textWidth, Height: float32(opts.CountdownFontSize) + 8, MaxLines: 1, Centered: true,
-				Style: woxui.TextStyle{Size: float32(opts.CountdownFontSize), Weight: woxui.FontWeightSemibold}, Color: woxui.Color{R: 245, G: 245, B: 245, A: 255},
-			}}
-			if showNote {
-				children = append(children, woxwidget.TextBlock{
-					Value: opts.Note, Width: textWidth, Height: float32(opts.NoteFontSize) + 5, MaxLines: 1, Centered: true,
-					Style: woxui.TextStyle{Size: float32(opts.NoteFontSize)}, Color: woxui.Color{R: 200, G: 200, B: 204, A: 255},
-				})
-			}
-			stack := []woxwidget.StackChild{{Child: woxwidget.Align{Width: frame.Size.Width, Height: frame.Size.Height, Horizontal: .5, Vertical: .5, Child: woxwidget.Flex{
-				Axis: woxwidget.Vertical, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
-			}}}}
-			if showClose {
-				stack = append(stack, woxwidget.StackChild{Right: 8, Top: 8, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-					ID: "timer-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(12, woxui.Color{R: 245, G: 245, B: 245, A: 255}),
-					Width: 24, Height: 24, Radius: 6, HoverBackground: woxui.Color{R: 255, G: 255, B: 255, A: 28}, OnTap: func() { overlay.RequestClose(opts.Window.ID) },
-				})})
-			}
-			return overlay.HUDSurface(frame.Size.Width, frame.Size.Height, 12, opts.Window.LightAppearance, woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: stack})
+			return buildTimerOverlay(opts, frame, hovered)
 		},
 		OnPointer: func(event woxui.PointerEvent) {
 			state.Lock()
@@ -106,6 +81,43 @@ func Show(opts Options) {
 		},
 		OnDispose: func() { releaseState(opts.Window.ID) },
 	})
+}
+
+// buildTimerOverlay keeps the visible timer text and hover-only controls available to native accessibility and smoke automation.
+func buildTimerOverlay(opts Options, frame woxui.FrameInfo, hovered bool) woxwidget.Widget {
+	showNote := hovered && opts.Note != ""
+	showClose := hovered && opts.Closable
+	textWidth := frame.Size.Width - timerHorizontalPadding*2
+	if showClose {
+		textWidth -= timerCloseReserve
+	}
+	children := []woxwidget.Widget{woxwidget.Semantics{
+		AutomationID: "timer-overlay-countdown", Role: woxui.AccessibilityRoleText, Label: "Countdown", Value: opts.Countdown, ReadOnly: true,
+		LiveRegion: woxui.AccessibilityLiveRegionPolite,
+		Child: woxwidget.TextBlock{
+			Value: opts.Countdown, Width: textWidth, Height: float32(opts.CountdownFontSize) + 8, MaxLines: 1, Centered: true,
+			Style: woxui.TextStyle{Size: float32(opts.CountdownFontSize), Weight: woxui.FontWeightSemibold}, Color: woxui.Color{R: 245, G: 245, B: 245, A: 255},
+		},
+	}}
+	if showNote {
+		children = append(children, woxwidget.Semantics{
+			AutomationID: "timer-overlay-note", Role: woxui.AccessibilityRoleText, Label: "Timer note", Value: opts.Note, ReadOnly: true,
+			Child: woxwidget.TextBlock{
+				Value: opts.Note, Width: textWidth, Height: float32(opts.NoteFontSize) + 5, MaxLines: 1, Centered: true,
+				Style: woxui.TextStyle{Size: float32(opts.NoteFontSize)}, Color: woxui.Color{R: 200, G: 200, B: 204, A: 255},
+			},
+		})
+	}
+	stack := []woxwidget.StackChild{{Child: woxwidget.Align{Width: frame.Size.Width, Height: frame.Size.Height, Horizontal: .5, Vertical: .5, Child: woxwidget.Flex{
+		Axis: woxwidget.Vertical, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
+	}}}}
+	if showClose {
+		stack = append(stack, woxwidget.StackChild{Right: 8, Top: 8, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "timer-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(12, woxui.Color{R: 245, G: 245, B: 245, A: 255}),
+			Width: 24, Height: 24, Radius: 6, HoverBackground: woxui.Color{R: 255, G: 255, B: 255, A: 28}, OnTap: func() { overlay.RequestClose(opts.Window.ID) },
+		})})
+	}
+	return overlay.HUDSurface(frame.Size.Width, frame.Size.Height, 12, opts.Window.LightAppearance, woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: stack})
 }
 
 // nextTimerHovered ignores queued motion events that can arrive after a macOS tracking-area exit.

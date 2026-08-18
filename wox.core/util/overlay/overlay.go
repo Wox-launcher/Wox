@@ -331,6 +331,21 @@ func runtimeOverlayByID(id string) *runtimeOverlay {
 	return instance
 }
 
+// AutomationSurface returns the retained host and native window for a live overlay.
+// The automation endpoint uses this to inspect and interact with the same surface a user sees.
+func AutomationSurface(id string) (*woxwidget.Host, *woxui.Window, *woxui.ManagedWindow, bool) {
+	instance := runtimeOverlayByID(id)
+	if instance == nil || instance.host == nil || instance.window == nil || instance.managed == nil {
+		return nil, nil, nil, false
+	}
+	switch instance.managed.Lifecycle() {
+	case woxui.WindowLifecycleClosing, woxui.WindowLifecycleClosed:
+		return nil, nil, nil, false
+	default:
+		return instance.host, instance.window, instance.managed, true
+	}
+}
+
 func (instance *runtimeOverlay) dispose() {
 	instance.stopStickyTracking()
 	if instance.view.OnDispose != nil {
