@@ -88,6 +88,26 @@ func TestActionHeaderCentersLabel(t *testing.T) {
 	}
 }
 
+func TestActionFilterUsesReadableTypeWithoutChangingGeometry(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	panel := view.Child.(woxwidget.Container)
+	searchSlot := panel.Child.(woxwidget.Flex).Children[3].(woxwidget.Container)
+	searchBoundary := searchSlot.Child.(woxwidget.Boundary[actionSearchProps])
+	search := searchBoundary.Props
+	if searchSlot.Height != ActionSearchHeight || search.Height != 40 {
+		t.Fatalf("action filter geometry = slot %v input %v, want %v and 40", searchSlot.Height, search.Height, ActionSearchHeight)
+	}
+	if search.Style.Size != woxcomponent.ActionFilterFontSize {
+		t.Fatalf("action filter font size = %v, want shared size %v", search.Style.Size, woxcomponent.ActionFilterFontSize)
+	}
+	if search.Style.Size != 13 {
+		t.Fatalf("action filter font size = %v, want readable 13px type", search.Style.Size)
+	}
+}
+
 func TestActionRowCentersIconAndLabel(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),

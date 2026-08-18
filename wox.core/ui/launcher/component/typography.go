@@ -10,7 +10,7 @@ const (
 	ListEmptyFontSize      = float32(13)
 	ActionHeaderFontSize   = float32(13)
 	ActionTitleFontSize    = float32(13)
-	ActionFilterFontSize   = float32(12)
+	ActionFilterFontSize   = float32(13)
 	ToolbarFontSize        = float32(12)
 	PreviewBodyFontSize    = float32(15)
 	PreviewQuoteFontSize   = float32(17)
