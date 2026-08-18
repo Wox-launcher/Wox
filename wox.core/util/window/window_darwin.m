@@ -207,18 +207,17 @@ static void copyCString(char *dest, size_t destSize, const char *value) {
     dest[destSize - 1] = '\0';
 }
 
-static CGFloat desktopTopForScreens(NSArray<NSScreen *> *screens) {
-    CGFloat desktopTop = 0;
-    for (NSScreen *screen in screens) {
-        desktopTop = MAX(desktopTop, NSMaxY([screen frame]));
-    }
-    return desktopTop;
+// Accessibility window positions use the primary display's top-left origin,
+// even when another display extends above it in AppKit coordinates.
+static CGFloat accessibilityTopForScreens(NSArray<NSScreen *> *screens) {
+    NSScreen *primary = [screens firstObject];
+    return primary ? NSMaxY([primary frame]) : 0;
 }
 
-static WoxWindowRectC rectFromAppKitRect(NSRect rect, CGFloat desktopTop) {
+static WoxWindowRectC rectFromAppKitRect(NSRect rect, CGFloat accessibilityTop) {
     WoxWindowRectC result;
     result.x = (int)llround(rect.origin.x);
-    result.y = (int)llround(desktopTop - NSMaxY(rect));
+    result.y = (int)llround(accessibilityTop - NSMaxY(rect));
     result.width = (int)llround(rect.size.width);
     result.height = (int)llround(rect.size.height);
     return result;
@@ -237,12 +236,12 @@ static BOOL pointInRect(CGPoint point, WoxWindowRectC rect) {
     return point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height;
 }
 
-static void fillDisplayInfoFromScreen(NSScreen *screen, BOOL isPrimary, CGFloat desktopTop, WoxDisplayInfoC *outDisplay) {
+static void fillDisplayInfoFromScreen(NSScreen *screen, BOOL isPrimary, CGFloat accessibilityTop, WoxDisplayInfoC *outDisplay) {
     NSNumber *screenNumber = [[screen deviceDescription] objectForKey:@"NSScreenNumber"];
     NSString *screenId = [screenNumber stringValue];
     copyCString(outDisplay->id, sizeof(outDisplay->id), [screenId UTF8String]);
-    outDisplay->bounds = rectFromAppKitRect([screen frame], desktopTop);
-    outDisplay->workArea = rectFromAppKitRect([screen visibleFrame], desktopTop);
+    outDisplay->bounds = rectFromAppKitRect([screen frame], accessibilityTop);
+    outDisplay->workArea = rectFromAppKitRect([screen visibleFrame], accessibilityTop);
     outDisplay->isPrimary = isPrimary ? 1 : 0;
 }
 
@@ -252,20 +251,20 @@ static BOOL fillDisplayInfoForRect(WoxWindowRectC windowRect, WoxDisplayInfoC *o
         return NO;
     }
 
-    CGFloat desktopTop = desktopTopForScreens(screens);
+    CGFloat accessibilityTop = accessibilityTopForScreens(screens);
     CGPoint center = CGPointMake(windowRect.x + windowRect.width / 2.0, windowRect.y + windowRect.height / 2.0);
     NSScreen *primary = [screens firstObject];
 
     NSScreen *fallback = [screens objectAtIndex:0];
     for (NSScreen *screen in screens) {
-        WoxWindowRectC bounds = rectFromAppKitRect([screen frame], desktopTop);
+        WoxWindowRectC bounds = rectFromAppKitRect([screen frame], accessibilityTop);
         if (pointInRect(center, bounds)) {
-            fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, outDisplay);
+            fillDisplayInfoFromScreen(screen, screen == primary, accessibilityTop, outDisplay);
             return YES;
         }
     }
 
-    fillDisplayInfoFromScreen(fallback, fallback == primary, desktopTop, outDisplay);
+    fillDisplayInfoFromScreen(fallback, fallback == primary, accessibilityTop, outDisplay);
     return YES;
 }
 
@@ -872,11 +871,11 @@ int listDisplaysForManagement(WoxDisplayInfoC **outDisplays, int *outCount) {
             return -1;
         }
 
-        CGFloat desktopTop = desktopTopForScreens(screens);
+        CGFloat accessibilityTop = accessibilityTopForScreens(screens);
         NSScreen *primary = [screens firstObject];
         for (NSUInteger i = 0; i < count; i++) {
             NSScreen *screen = [screens objectAtIndex:i];
-            fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, &displays[i]);
+            fillDisplayInfoFromScreen(screen, screen == primary, accessibilityTop, &displays[i]);
         }
 
         *outDisplays = displays;
