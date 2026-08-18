@@ -38,6 +38,10 @@ const (
 	SharedUserDataDirectoryEnvironment = "WOX_GO_UI_SMOKE_USER_DATA_DIR"
 	// SmokeStepDelayEnvironment slows visible automation steps for interactive observation.
 	SmokeStepDelayEnvironment = "WOX_GO_UI_SMOKE_STEP_DELAY"
+	// SharedLifecyclePhaseEnvironment selects one runner-owned restart phase.
+	SharedLifecyclePhaseEnvironment = "WOX_GO_UI_SMOKE_LIFECYCLE_PHASE"
+	// SharedLifecycleStateEnvironment points lifecycle phases at state outside private-mode cleanup.
+	SharedLifecycleStateEnvironment = "WOX_GO_UI_SMOKE_LIFECYCLE_STATE"
 )
 
 type request struct {
@@ -109,8 +113,6 @@ func ReadInfo(ctx context.Context, path string) (automation.Info, error) {
 			if decodeErr := json.Unmarshal(data, &info); decodeErr == nil && info.Address != "" && info.Token != "" {
 				return info, nil
 			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return automation.Info{}, err
 		}
 		select {
 		case <-ctx.Done():

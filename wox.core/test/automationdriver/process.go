@@ -28,7 +28,8 @@ type Process struct {
 
 	command  *exec.Cmd
 	infoFile string
-	wait     chan error
+	done     chan struct{}
+	waitErr  error
 	close    sync.Once
 }
 
@@ -73,9 +74,10 @@ func Launch(ctx context.Context, executable string, options LaunchOptions) (*Pro
 		return nil, fmt.Errorf("start Wox automation process: %w", err)
 	}
 
-	process := &Process{command: command, infoFile: infoFile, wait: make(chan error, 1)}
+	process := &Process{command: command, infoFile: infoFile, done: make(chan struct{})}
 	go func() {
-		process.wait <- command.Wait()
+		process.waitErr = command.Wait()
+		close(process.done)
 	}()
 	startupCtx, cancel := context.WithTimeout(ctx, startupTimeout)
 	defer cancel()
@@ -91,9 +93,9 @@ func Launch(ctx context.Context, executable string, options LaunchOptions) (*Pro
 		}{info: info, err: readErr}
 	}()
 	select {
-	case waitErr := <-process.wait:
+	case <-process.done:
 		_ = os.RemoveAll(infoDirectory)
-		return nil, fmt.Errorf("Wox exited before automation was ready: %w", waitErr)
+		return nil, fmt.Errorf("Wox exited before automation was ready: %v", process.waitErr)
 	case result := <-infoResult:
 		if result.err != nil {
 			_ = process.Close()
@@ -109,6 +111,19 @@ func Launch(ctx context.Context, executable string, options LaunchOptions) (*Pro
 	}
 }
 
+// Wait blocks until Wox exits or the caller's context is canceled.
+func (p *Process) Wait(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	select {
+	case <-p.done:
+		return p.waitErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Close terminates the isolated Wox process and removes endpoint metadata.
 func (p *Process) Close() error {
 	if p == nil {
@@ -116,11 +131,15 @@ func (p *Process) Close() error {
 	}
 	var closeErr error
 	p.close.Do(func() {
-		if p.command != nil && p.command.Process != nil {
-			closeErr = terminateProcess(p.command)
+		select {
+		case <-p.done:
+		default:
+			if p.command != nil && p.command.Process != nil {
+				closeErr = terminateProcess(p.command)
+			}
 		}
 		select {
-		case <-p.wait:
+		case <-p.done:
 		case <-time.After(5 * time.Second):
 		}
 		_ = os.RemoveAll(filepath.Dir(p.infoFile))

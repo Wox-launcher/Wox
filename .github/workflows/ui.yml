@@ -1,9 +1,9 @@
-name: Go UI Quality
+name: UI Quality
 
 on:
   pull_request:
     paths:
-      - ".github/workflows/go-ui.yml"
+      - ".github/workflows/ui.yml"
       - "Makefile"
       - "wox.core/appcontrol/**"
       - "wox.core/common/**"
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   unit:
-    name: Retained widget and automation contracts
+    name: Widget and automation contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -40,14 +40,15 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxtst-dev \
-            libkeybinder-3.0-dev
+            libkeybinder-3.0-dev \
+            libpipewire-0.3-dev
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
           cache-dependency-path: wox.core/go.sum
-      - name: Test Go UI contracts
+      - name: Test UI contracts
         run: make test-go-ui-unit
 
   native-compile-pr:
@@ -96,6 +97,8 @@ jobs:
             libxkbcommon-x11-dev \
             libxtst-dev \
             libkeybinder-3.0-dev \
+            libpipewire-0.3-dev \
+            xclip \
             xvfb
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -112,7 +115,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: go-ui-perf-linux-pr
+          name: ui-perf-linux-pr
           path: artifacts/perf/
           if-no-files-found: ignore
 
@@ -151,6 +154,8 @@ jobs:
             libxkbcommon-x11-dev \
             libxtst-dev \
             libkeybinder-3.0-dev \
+            libpipewire-0.3-dev \
+            xclip \
             xvfb
       - name: Install make on Windows
         if: ${{ runner.os == 'Windows' }}
@@ -172,6 +177,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: go-ui-perf-${{ matrix.name }}
+          name: ui-perf-${{ matrix.name }}
           path: artifacts/perf/
           if-no-files-found: ignore

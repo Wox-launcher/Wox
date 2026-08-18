@@ -30,6 +30,12 @@ func Case(t *testing.T, run func(context.Context, *automationdriver.Client)) {
 	run(ctx, client)
 }
 
+// SharedClient connects lifecycle phases that intentionally terminate Wox before the test returns.
+func SharedClient(t *testing.T, ctx context.Context) *automationdriver.Client {
+	t.Helper()
+	return sharedClient(t, ctx)
+}
+
 // sharedClient connects one test package to the suite-owned Wox process.
 func sharedClient(t *testing.T, ctx context.Context) *automationdriver.Client {
 	t.Helper()

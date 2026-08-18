@@ -73,14 +73,14 @@ func run(caseSelector string) (int, error) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	woxDataDirectory := filepath.Join(suiteDirectory, "wox-data")
-	userDataDirectory := filepath.Join(suiteDirectory, "user-data")
+	userDataDirectory := filepath.Join(woxDataDirectory, "user-data")
 	if caseSelector == "" || caseSelector == "launcher/plugin/url" || strings.HasPrefix(caseSelector, "launcher/plugin/url/") {
 		if err := seedMissingFaviconURLHistoryFixture(woxDataDirectory, userDataDirectory); err != nil {
 			retainSuiteDirectory = true
 			return 1, err
 		}
 	}
-	process, err := automationdriver.Launch(ctx, absoluteExecutable, automationdriver.LaunchOptions{
+	launchOptions := automationdriver.LaunchOptions{
 		Environment: []string{
 			"WOX_TEST_DATA_DIR=" + woxDataDirectory,
 			"WOX_TEST_USER_DIR=" + userDataDirectory,
@@ -90,28 +90,84 @@ func run(caseSelector string) (int, error) {
 			"WOX_DEBUG_REPAINT=verify",
 		},
 		StartupTimeout: 45 * time.Second,
-	})
+	}
+	launchProcess := func() (*automationdriver.Process, error) {
+		return automationdriver.Launch(ctx, absoluteExecutable, launchOptions)
+	}
+	process, err := launchProcess()
 	if err != nil {
 		retainSuiteDirectory = true
 		return 1, fmt.Errorf("launch shared Wox smoke process: %w", err)
 	}
-	defer process.Close()
+	defer func() { _ = process.Close() }()
 
 	testEnvironment := replaceEnvironment(os.Environ(), automationdriver.SharedInfoFileEnvironment, process.InfoFile())
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedDataDirectoryEnvironment, woxDataDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedUserDataDirectoryEnvironment, userDataDirectory)
 	for _, testArgs := range testCommands {
-		command := exec.CommandContext(ctx, "go", testArgs...)
-		command.Env = testEnvironment
-		command.Stdout = os.Stdout
-		command.Stderr = os.Stderr
-		if err := command.Run(); err != nil {
-			retainSuiteDirectory = true
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				return exitErr.ExitCode(), nil
+		phaseCount := 1
+		// ponytail: privacy is the only restart case; add lifecycle descriptors when a second case needs phases.
+		if testArgs[len(testArgs)-1] == "./test/smoke/setting/privacy" {
+			phaseCount = 4
+		}
+		if phaseCount > 1 {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close shared Wox before lifecycle test: %w", err)
 			}
-			return 1, fmt.Errorf("run smoke cases: %w", err)
+			process, err = launchProcess()
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("launch Wox for lifecycle test: %w", err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
+		for phase := 1; phase <= phaseCount; phase++ {
+			command := exec.CommandContext(ctx, "go", testArgs...)
+			command.Env = testEnvironment
+			if phaseCount > 1 {
+				command.Env = replaceEnvironment(command.Env, automationdriver.SharedLifecyclePhaseEnvironment, fmt.Sprintf("%d", phase))
+				command.Env = replaceEnvironment(command.Env, automationdriver.SharedLifecycleStateEnvironment, filepath.Join(suiteDirectory, "privacy-lifecycle.json"))
+			}
+			command.Stdout = os.Stdout
+			command.Stderr = os.Stderr
+			if err := command.Run(); err != nil {
+				retainSuiteDirectory = true
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
+					return exitErr.ExitCode(), nil
+				}
+				return 1, fmt.Errorf("run smoke cases: %w", err)
+			}
+			if phase == phaseCount {
+				continue
+			}
+			waitCtx, waitCancel := context.WithTimeout(ctx, 30*time.Second)
+			waitErr := process.Wait(waitCtx)
+			waitCancel()
+			if waitErr != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("wait for lifecycle phase %d to exit Wox: %w", phase, waitErr)
+			}
+			if phase == 1 || phase == 3 {
+				cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 30*time.Second)
+				cleanupErr := waitForPrivacyCleanup(cleanupCtx, woxDataDirectory)
+				cleanupCancel()
+				if cleanupErr != nil {
+					retainSuiteDirectory = true
+					return 1, fmt.Errorf("wait for lifecycle phase %d privacy cleanup: %w", phase, cleanupErr)
+				}
+			}
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close lifecycle phase %d: %w", phase, err)
+			}
+			process, err = launchProcess()
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("restart Wox after lifecycle phase %d: %w", phase, err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
 		}
 	}
 	if err := process.Close(); err != nil {
@@ -119,6 +175,23 @@ func run(caseSelector string) (int, error) {
 		return 1, fmt.Errorf("close shared Wox smoke process: %w", err)
 	}
 	return 0, nil
+}
+
+// waitForPrivacyCleanup waits until the exit helper leaves only the profile needed by the next startup.
+func waitForPrivacyCleanup(ctx context.Context, root string) error {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		entries, err := os.ReadDir(root)
+		if err == nil && len(entries) == 1 && entries[0].Name() == "privacy.json" {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 // seedMissingFaviconURLHistoryFixture prepares persisted URL history before the shared Wox process starts.

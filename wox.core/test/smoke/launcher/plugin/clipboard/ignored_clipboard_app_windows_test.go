@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"wox/test/smoke"
+	woxclipboard "wox/util/clipboard"
 )
 
 func requireClipboardIgnoredAppRuntime(t *testing.T) {
@@ -28,10 +30,22 @@ func copyTextFromIgnoredApplication(t *testing.T, ctx context.Context, text stri
 		t.Fatalf("write temporary Notepad document: %v", err)
 	}
 	smoke.OpenWindowsNotepad(t, ctx, path)
-	if err := smoke.SendNativeKeyChord("ctrl", "a"); err != nil {
-		t.Fatalf("select Notepad document contents: %v", err)
-	}
-	if err := smoke.SendNativeKeyChord("ctrl", "c"); err != nil {
-		t.Fatalf("copy Notepad document contents: %v", err)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := smoke.SendNativeKeyChord("ctrl", "a"); err != nil {
+			t.Fatalf("select Notepad document contents: %v", err)
+		}
+		if err := smoke.SendNativeKeyChord("ctrl", "c"); err != nil {
+			t.Fatalf("copy Notepad document contents: %v", err)
+		}
+		if actual, err := woxclipboard.ReadText(); err == nil && actual == text {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("copy temporary Notepad document contents: %v", ctx.Err())
+		case <-ticker.C:
+		}
 	}
 }
