@@ -172,9 +172,7 @@ struct WoxDarwinRenderer {
   uint64_t presented_sequence;
   uint64_t frame_sequence;
   CGRect frame_requested_damage;
-  CGRect frame_effective_damage;
   bool frame_requested_full;
-  bool frame_effective_full;
   WoxDarwinDamageRecord damage_history[64];
   bool frame_open;
   bool clip_active;
@@ -3954,8 +3952,6 @@ static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRen
   renderer->frame_sequence = frame_sequence;
   renderer->frame_requested_damage = requested_damage;
   renderer->frame_requested_full = requested_full;
-  renderer->frame_effective_damage = effective_full ? CGRectMake(0.0, 0.0, 0.0, 0.0) : effective_damage;
-  renderer->frame_effective_full = effective_full;
   renderer->frame_open = true;
   renderer->clip_active = false;
   renderer->damage_clip_active = !effective_full;
@@ -3970,25 +3966,6 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, uint64_t frame_id
   window->active_renderer = window->renderer;
   memset(&window->frame_resource_stats, 0, sizeof(window->frame_resource_stats));
   return begin_darwin_renderer_frame(window, window->renderer, frame_id, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
-}
-
-int32_t wox_darwin_window_encode_damage(WoxDarwinWindow *window, float *x, float *y, float *width, float *height) {
-  if (window == NULL || window->active_renderer == NULL || x == NULL || y == NULL || width == NULL || height == NULL) {
-    return -1;
-  }
-  WoxDarwinRenderer *renderer = window->active_renderer;
-  if (renderer->frame_effective_full) {
-    *x = 0;
-    *y = 0;
-    *width = 0;
-    *height = 0;
-    return 0;
-  }
-  *x = (float)renderer->frame_effective_damage.origin.x;
-  *y = (float)renderer->frame_effective_damage.origin.y;
-  *width = (float)renderer->frame_effective_damage.size.width;
-  *height = (float)renderer->frame_effective_damage.size.height;
-  return 0;
 }
 
 // wox_darwin_window_trim_render_surfaces keeps the front buffer and one reusable current-size back buffer.

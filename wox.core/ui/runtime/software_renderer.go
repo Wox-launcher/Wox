@@ -50,7 +50,7 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 	r.clear(damage, displayList.clearColor)
 	var clip *Rect
 	var renderErr error
-	displayList.ForEachCommand(func(command displayCommand) bool {
+	displayList.forEachCommand(func(command displayCommand) bool {
 		switch command.kind {
 		case displayCommandSetClipRect:
 			value := command.rect

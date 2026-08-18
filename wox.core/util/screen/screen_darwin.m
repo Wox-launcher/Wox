@@ -149,12 +149,14 @@ int listDisplays(ScreenDisplayInfo *displays, int maxCount) {
         (CGDirectDisplayID)[screenNumber unsignedIntValue];
     CGRect pixelFrame = CGDisplayBounds(displayID);
 
-    int logicalX = (int)llround(frame.origin.x - minX);
+    // Runtime window bounds use AppKit's global X coordinate, including
+    // negative origins for displays positioned left of the primary display.
+    int logicalX = (int)llround(frame.origin.x);
     int logicalY = (int)llround(maxY - NSMaxY(frame));
     int logicalWidth = (int)llround(frame.size.width);
     int logicalHeight = (int)llround(frame.size.height);
 
-    int logicalWorkX = (int)llround(visibleFrame.origin.x - minX);
+    int logicalWorkX = (int)llround(visibleFrame.origin.x);
     int logicalWorkY = (int)llround(maxY - NSMaxY(visibleFrame));
     int logicalWorkWidth = (int)llround(visibleFrame.size.width);
     int logicalWorkHeight = (int)llround(visibleFrame.size.height);

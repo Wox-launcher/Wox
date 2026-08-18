@@ -90,12 +90,6 @@ func TestDisplayListCountsTextAndImageDraws(t *testing.T) {
 	if resources.TextRasterizations != 2 || resources.ImageCreates != 1 || resources.ImageUploads != 1 {
 		t.Fatalf("encoded resources = %+v, want 2 text and 1 image", resources)
 	}
-
-	parent := &DisplayList{}
-	parent.AppendPaintSegment(CapturePaintSegment(Rect{Width: 20, Height: 10}, displayList, PaintFingerprint{}), Point{})
-	if parent.CommandCount() != 4 || parent.TextDrawCount() != 2 || parent.ImageDrawCount() != 1 {
-		t.Fatalf("nested cached counts = commands %d text %d image %d, want 4/2/1", parent.CommandCount(), parent.TextDrawCount(), parent.ImageDrawCount())
-	}
 }
 
 func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {

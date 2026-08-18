@@ -30,17 +30,16 @@ type FramePhaseMetrics struct {
 
 // FrameWorkMetrics counts portable Host work actually performed for one frame.
 type FrameWorkMetrics struct {
-	LayoutVisits       int `json:"layoutVisits"`
-	IdentityVisits     int `json:"identityVisits"`
-	PaintVisits        int `json:"paintVisits"`
-	A11yVisits         int `json:"a11yVisits"`
-	BoundaryBuilds     int `json:"boundaryBuilds"`
-	BoundaryReuses     int `json:"boundaryReuses"`
-	PaintSegmentReuses int `json:"paintSegmentReuses"`
-	IdentityUpserts    int `json:"identityUpserts"`
-	A11yUpserts        int `json:"a11yUpserts"`
-	TextDraws          int `json:"textDraws"`
-	ImageDraws         int `json:"imageDraws"`
+	LayoutVisits    int `json:"layoutVisits"`
+	IdentityVisits  int `json:"identityVisits"`
+	PaintVisits     int `json:"paintVisits"`
+	A11yVisits      int `json:"a11yVisits"`
+	BoundaryBuilds  int `json:"boundaryBuilds"`
+	BoundaryReuses  int `json:"boundaryReuses"`
+	IdentityUpserts int `json:"identityUpserts"`
+	A11yUpserts     int `json:"a11yUpserts"`
+	TextDraws       int `json:"textDraws"`
+	ImageDraws      int `json:"imageDraws"`
 }
 
 // FrameRendererResourceMetrics counts native encode-time resource work for one frame.

@@ -140,11 +140,6 @@ typedef struct {
   float scale;
   uint64_t context_generation;
   uint64_t last_presented_generation;
-  bool encode_full;
-  float encode_damage_x;
-  float encode_damage_y;
-  float encode_damage_width;
-  float encode_damage_height;
   WoxLinuxImageCacheEntry images[WOX_LINUX_IMAGE_CACHE_MAX];
   int32_t image_count;
   uint64_t image_bytes;
@@ -3743,12 +3738,7 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
   glViewport(0, 0, pixel_width, pixel_height);
   glDisable(GL_DEPTH_TEST);
   bool generation_changed = renderer->last_presented_generation == 0 || renderer->last_presented_generation != renderer->context_generation;
-  renderer->encode_full = recreated || generation_changed || damage_width <= 0.0f || damage_height <= 0.0f;
-  renderer->encode_damage_x = damage_x;
-  renderer->encode_damage_y = damage_y;
-  renderer->encode_damage_width = damage_width;
-  renderer->encode_damage_height = damage_height;
-  renderer->damage_active = !renderer->encode_full;
+  renderer->damage_active = !recreated && !generation_changed && damage_width > 0.0f && damage_height > 0.0f;
   if (renderer->damage_active) {
     int left = (int)floorf(fmaxf(0.0f, damage_x) * scale);
     int right = (int)ceilf(fminf(logical_width, damage_x + damage_width) * scale);
@@ -3785,25 +3775,6 @@ int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width
   // Screenshot and recording surfaces must keep the requested clear alpha. Forcing
   // opaque here turns Clear(Color{}) into a black desktop-covering backdrop.
   return begin_linux_renderer_frame(window, window->active_renderer, window->active_gl_area, !window->per_pixel_alpha, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
-}
-
-int32_t wox_linux_window_encode_damage(WoxLinuxWindow *window, float *x, float *y, float *width, float *height) {
-  if (window == NULL || window->active_renderer == NULL || x == NULL || y == NULL || width == NULL || height == NULL) {
-    return -1;
-  }
-  WoxLinuxRenderer *renderer = window->active_renderer;
-  if (renderer->encode_full) {
-    *x = 0;
-    *y = 0;
-    *width = 0;
-    *height = 0;
-    return 0;
-  }
-  *x = renderer->encode_damage_x;
-  *y = renderer->encode_damage_y;
-  *width = renderer->encode_damage_width;
-  *height = renderer->encode_damage_height;
-  return 0;
 }
 
 int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {

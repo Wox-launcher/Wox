@@ -169,7 +169,7 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 
 	index := -1
 	var encodeErr error
-	displayList.ForEachVisibleCommand(damage, func(command displayCommand) bool {
+	displayList.forEachCommand(func(command displayCommand) bool {
 		index++
 		traceNativeCall("renderer command enter frameId=%d handle=%p index=%d kind=%d", displayList.FrameMetricsID(), r.handle, index, command.kind)
 		var commandResult C.int32_t

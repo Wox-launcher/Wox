@@ -23,8 +23,6 @@ type Boundary[T BoundaryProps[T]] struct {
 	Label string
 	Props T
 	Build func(T) Widget
-	// DisableRetainedPaint keeps layout caching while recording this subtree directly each frame.
-	DisableRetainedPaint bool
 }
 
 type animationDependencyKind uint8
@@ -95,18 +93,15 @@ type boundaryCache struct {
 	identityReuses      uint64
 	// nestedOwners keeps descendant Boundary owners alive on a parent cache hit
 	// so sweepIdentities does not walk every cached identity entry.
-	nestedOwners         []*identityOwner
-	a11yValid            bool
-	a11yOrigin           woxui.Point
-	a11yRootID           woxui.AccessibilityNodeID
-	a11yNodes            []woxui.AccessibilityNode
-	a11yRootIDs          []woxui.AccessibilityNodeID
-	a11yReuses           uint64
-	globalBounds         woxui.Rect
-	paint                *woxui.PaintSegment
-	nestedPaint          []*node
-	disableRetainedPaint bool
-	identityOwner        identityOwner
+	nestedOwners  []*identityOwner
+	a11yValid     bool
+	a11yOrigin    woxui.Point
+	a11yRootID    woxui.AccessibilityNodeID
+	a11yNodes     []woxui.AccessibilityNode
+	a11yRootIDs   []woxui.AccessibilityNodeID
+	a11yReuses    uint64
+	globalBounds  woxui.Rect
+	identityOwner identityOwner
 }
 
 type identityOwner struct {
@@ -156,7 +151,6 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	if w.element != nil {
 		w.element.boundary = &state.cache
 	}
-	state.cache.disableRetainedPaint = w.boundary.DisableRetainedPaint
 	oldBounds := state.cache.globalBounds
 	if oldBounds == (woxui.Rect{}) && state.node != nil {
 		oldBounds = state.node.bounds
@@ -219,8 +213,6 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	state.cache.hit = false
 	state.cache.node = result
 	state.cache.a11yValid = false
-	state.cache.paint = nil
-	state.cache.nestedPaint = nil
 	result.boundary = &state.cache
 	state.dynamic = probe
 	state.repaints++
@@ -273,8 +265,8 @@ func (w boundaryLayout[T]) verifyCachedNode(ctx context, available constraints, 
 	focused := ^woxui.AccessibilityNodeID(0)
 	cachedList := &woxui.DisplayList{}
 	shadowList := &woxui.DisplayList{}
-	cached.drawUnretained(cachedList, focused, focused, true, false, false)
-	shadow.drawUnretained(shadowList, focused, focused, true, false, false)
+	cached.draw(cachedList, focused, focused, true, false, false, nil)
+	shadow.draw(shadowList, focused, focused, true, false, false, nil)
 	return cachedList.Compare(shadowList)
 }
 

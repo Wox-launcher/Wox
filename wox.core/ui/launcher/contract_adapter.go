@@ -531,7 +531,7 @@ func cloneAnyMap(values map[string]any) map[string]any {
 	return copy
 }
 
-// updatedResultBoundaryKeys maps independently updatable result fields to their retained paint boundaries.
+// updatedResultBoundaryKeys maps independently updatable result fields to their cached layout boundaries.
 func updatedResultBoundaryKeys(result plugin.UpdatableResult, grid bool) []woxwidget.Key {
 	keys := make([]woxwidget.Key, 0, 4)
 	if result.Icon != nil {

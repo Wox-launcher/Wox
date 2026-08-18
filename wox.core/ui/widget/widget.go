@@ -28,30 +28,28 @@ type textMeasurer interface {
 }
 
 type frameWorkCounters struct {
-	layoutVisits       int
-	identityVisits     int
-	paintVisits        int
-	a11yVisits         int
-	boundaryBuilds     int
-	boundaryReuses     int
-	paintSegmentReuses int
-	identityUpserts    int
-	a11yUpserts        int
+	layoutVisits    int
+	identityVisits  int
+	paintVisits     int
+	a11yVisits      int
+	boundaryBuilds  int
+	boundaryReuses  int
+	identityUpserts int
+	a11yUpserts     int
 }
 
 func (w frameWorkCounters) metrics(textDraws, imageDraws int) woxui.FrameWorkMetrics {
 	return woxui.FrameWorkMetrics{
-		LayoutVisits:       w.layoutVisits,
-		IdentityVisits:     w.identityVisits,
-		PaintVisits:        w.paintVisits,
-		A11yVisits:         w.a11yVisits,
-		BoundaryBuilds:     w.boundaryBuilds,
-		BoundaryReuses:     w.boundaryReuses,
-		PaintSegmentReuses: w.paintSegmentReuses,
-		IdentityUpserts:    w.identityUpserts,
-		A11yUpserts:        w.a11yUpserts,
-		TextDraws:          textDraws,
-		ImageDraws:         imageDraws,
+		LayoutVisits:    w.layoutVisits,
+		IdentityVisits:  w.identityVisits,
+		PaintVisits:     w.paintVisits,
+		A11yVisits:      w.a11yVisits,
+		BoundaryBuilds:  w.boundaryBuilds,
+		BoundaryReuses:  w.boundaryReuses,
+		IdentityUpserts: w.identityUpserts,
+		A11yUpserts:     w.a11yUpserts,
+		TextDraws:       textDraws,
+		ImageDraws:      imageDraws,
 	}
 }
 

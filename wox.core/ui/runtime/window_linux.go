@@ -644,8 +644,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		return
 	}
 
-	encodeDamage := w.linuxEncodeDamage(native)
-	displayList.ForEachVisibleCommand(encodeDamage, func(command displayCommand) bool {
+	displayList.forEachCommand(func(command displayCommand) bool {
 		switch command.kind {
 		case displayCommandFillRoundedRect:
 			result = C.wox_linux_window_fill_rounded_rect(
@@ -749,18 +748,6 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	if result != 0 {
 		w.recordRenderError("finish OpenGL frame", result)
 	}
-}
-
-// linuxEncodeDamage returns the context-aware encode region; zero means a full frame after recreate.
-func (w *platformWindow) linuxEncodeDamage(native *C.WoxLinuxWindow) Rect {
-	if native == nil {
-		return Rect{}
-	}
-	var x, y, width, height C.float
-	if C.wox_linux_window_encode_damage(native, &x, &y, &width, &height) != 0 {
-		return Rect{}
-	}
-	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}
 }
 
 // rendererResourcesFromNative copies one native encode-stat snapshot into portable metrics.

@@ -34,8 +34,8 @@ type DisplayList struct {
 	frameID      uint64
 	damage       Rect
 	nativeDamage Rect
-	frozen       bool
-	stats        paintCommandStats
+	textDraws    int
+	imageDraws   int
 }
 
 const displayListFloatTolerance = float32(1e-4)
@@ -60,7 +60,7 @@ func (d *DisplayList) CommandCount() int {
 	if d == nil {
 		return 0
 	}
-	return d.stats.commands
+	return len(d.commands)
 }
 
 // TextDrawCount reports recorded DrawText commands.
@@ -68,7 +68,7 @@ func (d *DisplayList) TextDrawCount() int {
 	if d == nil {
 		return 0
 	}
-	return d.stats.texts
+	return d.textDraws
 }
 
 // ImageDrawCount reports recorded DrawImage commands.
@@ -76,7 +76,7 @@ func (d *DisplayList) ImageDrawCount() int {
 	if d == nil {
 		return 0
 	}
-	return d.stats.images
+	return d.imageDraws
 }
 
 func (d *DisplayList) appendCommand(command displayCommand) {
@@ -84,7 +84,20 @@ func (d *DisplayList) appendCommand(command displayCommand) {
 		return
 	}
 	d.commands = append(d.commands, command)
-	d.stats.add(command)
+	switch command.kind {
+	case displayCommandDrawText:
+		d.textDraws++
+	case displayCommandDrawImage:
+		d.imageDraws++
+	}
+}
+
+func (d *DisplayList) forEachCommand(visit func(displayCommand) bool) {
+	for _, command := range d.commands {
+		if !visit(command) {
+			return
+		}
+	}
 }
 
 // EncodedRendererResources reports the current uncached encode cost of this command stream.
@@ -141,13 +154,11 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 	if d.clearColor != other.clearColor {
 		return fmt.Errorf("clear colors differ: %+v != %+v", d.clearColor, other.clearColor)
 	}
-	left := d.flattenedCommands()
-	right := other.flattenedCommands()
-	if len(left) != len(right) {
-		return fmt.Errorf("command counts differ: %d != %d", len(left), len(right))
+	if len(d.commands) != len(other.commands) {
+		return fmt.Errorf("command counts differ: %d != %d", len(d.commands), len(other.commands))
 	}
-	for index := range left {
-		if !displayCommandsEqual(left[index], right[index]) {
+	for index := range d.commands {
+		if !displayCommandsEqual(d.commands[index], other.commands[index]) {
 			return fmt.Errorf("command %d differs", index)
 		}
 	}
@@ -203,7 +214,6 @@ const (
 	displayCommandBeginEmbeddedSurfaceOverlay
 	displayCommandSetClipRect
 	displayCommandClearClip
-	displayCommandPaintSegment
 )
 
 type displayCommand struct {
@@ -217,7 +227,6 @@ type displayCommand struct {
 	image    *Image
 	rotation float32
 	points   []Point
-	segment  *PaintSegment
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.

@@ -794,9 +794,6 @@ func (w *platformWindow) renderLoop() {
 
 // queueFrame replaces an obsolete unencoded frame instead of letting rendering fall behind input.
 func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
-	if frame != nil && frame.displayList != nil {
-		frame.displayList.Freeze()
-	}
 	w.mu.Lock()
 	if w.closed || w.closing || w.renderStopped {
 		closed := w.closed
@@ -1027,11 +1024,10 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	var imageCost time.Duration
 	var textCount int
 	var imageCount int
-	encodeDamage := w.darwinEncodeDamage(native)
 	commandIndex := -1
 	encodeFailed := false
 	var failedCommandKind displayCommandKind
-	displayList.ForEachVisibleCommand(encodeDamage, func(command displayCommand) bool {
+	displayList.forEachCommand(func(command displayCommand) bool {
 		commandIndex++
 		switch command.kind {
 		case displayCommandFillRoundedRect:
@@ -1185,18 +1181,6 @@ func rendererResourcesFromNative(stats C.WoxRendererResourceStats) FrameRenderer
 		CacheEvictions:     int(stats.cache_evictions),
 		ResidentBytes:      int64(stats.resident_bytes),
 	}
-}
-
-// darwinEncodeDamage returns the IOSurface-effective encode region; zero means a full frame.
-func (w *platformWindow) darwinEncodeDamage(native *C.WoxDarwinWindow) Rect {
-	if native == nil {
-		return Rect{}
-	}
-	var x, y, width, height C.float
-	if C.wox_darwin_window_encode_damage(native, &x, &y, &width, &height) != 0 {
-		return Rect{}
-	}
-	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}
 }
 
 // recordNativeResourceMetrics stores actual native cache hits instead of the uncached baseline.
