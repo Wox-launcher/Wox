@@ -23,6 +23,10 @@ import (
 const (
 	folderResultScore int64 = 1000
 
+	folderOpenActionID              = "open_folder"
+	folderEnterActionID             = "enter_folder"
+	folderToggleHiddenFilesActionID = "toggle_hidden_files"
+
 	folderFavoritesSettingKey     = "favorites"
 	folderFavoriteFormNameKey     = "name"
 	folderFavoriteFormPathKey     = "path"
@@ -272,6 +276,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 
 	actions := []plugin.QueryResultAction{
 		{
+			Id:        folderOpenActionID,
 			Name:      "i18n:plugin_folder_open",
 			Icon:      openIcon,
 			IsDefault: true,
@@ -283,6 +288,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 
 	if isDir {
 		actions = append(actions, plugin.QueryResultAction{
+			Id:                     folderEnterActionID,
 			Name:                   "i18n:plugin_folder_enter",
 			Icon:                   common.FolderIcon,
 			Hotkey:                 util.PrimaryHotkey("enter"),
@@ -311,6 +317,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIndex int) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{
 		{
+			Id:        folderOpenActionID,
 			Name:      "i18n:plugin_folder_open",
 			Icon:      common.FolderIcon,
 			IsDefault: true,
@@ -319,6 +326,7 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 			},
 		},
 		{
+			Id:                     folderEnterActionID,
 			Name:                   "i18n:plugin_folder_enter",
 			Icon:                   common.FolderIcon,
 			Hotkey:                 util.PrimaryHotkey("enter"),
@@ -349,6 +357,7 @@ func (p *FolderPlugin) buildToggleHiddenFilesAction() plugin.QueryResultAction {
 	}
 
 	return plugin.QueryResultAction{
+		Id:                     folderToggleHiddenFilesActionID,
 		Name:                   actionName,
 		Icon:                   common.FolderIcon,
 		PreventHideAfterAction: true,
