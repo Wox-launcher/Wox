@@ -79,6 +79,9 @@ func (r *nativeRenderer) resize(width, height int) error {
 		r.width = width
 		r.height = height
 	}
+	if r.handle == nil {
+		return nil
+	}
 	traceNativeCall("renderer resize enter handle=%p size=%dx%d", r.handle, width, height)
 	result := C.wox_renderer_resize(r.handle, C.uint32_t(width), C.uint32_t(height))
 	traceNativeCall("renderer resize exit handle=%p result=%d", r.handle, result)
@@ -89,6 +92,10 @@ func (r *nativeRenderer) resize(width, height int) error {
 }
 
 func (r *nativeRenderer) setFontFamily(family string) error {
+	if r.handle == nil {
+		r.fontFamily = family
+		return nil
+	}
 	nativeFamily := C.CString(family)
 	defer C.free(unsafe.Pointer(nativeFamily))
 	traceNativeCall("renderer font enter handle=%p family=%q", r.handle, family)
@@ -119,14 +126,13 @@ func (r *nativeRenderer) recreate() error {
 	return nil
 }
 
-// trim asks DXGI to discard driver-managed allocations that are no longer needed while hidden.
+// trim releases the hidden renderer and its shared Direct3D device reference. When no renderer
+// users remain, the native reference count also destroys the device. Keeping that device warm
+// retained about 55 MiB in measurements; releasing it reduced the hidden process by roughly
+// 60 MiB. Recreation adds about 225 ms to the next show, so callers delay this until the window
+// has remained hidden long enough to favor memory over latency.
 func (r *nativeRenderer) trim() error {
-	traceNativeCall("renderer trim enter handle=%p", r.handle)
-	result := C.wox_renderer_trim(r.handle)
-	traceNativeCall("renderer trim exit handle=%p result=%d", r.handle, result)
-	if result < 0 {
-		return hresultError("trim renderer", result)
-	}
+	r.destroy()
 	return nil
 }
 

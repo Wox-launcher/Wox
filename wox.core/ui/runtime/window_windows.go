@@ -25,12 +25,13 @@ import (
 )
 
 const (
-	windowClassName                = "WoxGoUIWindow"
-	windowCommandMessage           = win.WM_APP + 1
-	windowTextInputMessage         = win.WM_APP + 2
-	runtimeCallMessage             = win.WM_APP + 3
-	windowBlurGuardDuration        = 300 * time.Millisecond
-	windowsRendererTrimDelay       = 10 * time.Second
+	windowClassName         = "WoxGoUIWindow"
+	windowCommandMessage    = win.WM_APP + 1
+	windowTextInputMessage  = win.WM_APP + 2
+	runtimeCallMessage      = win.WM_APP + 3
+	windowBlurGuardDuration = 300 * time.Millisecond
+	// Keep the renderer warm for quick launcher toggles before accepting the measured cold-show penalty.
+	windowsRendererTrimDelay       = 30 * time.Second
 	windowsForegroundRestoreDelay1 = 30 * time.Millisecond
 	windowsForegroundRestoreDelay2 = 200 * time.Millisecond
 	wsExNoRedirectionBitmap        = 0x00200000
@@ -1679,7 +1680,8 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	}
 	switch command.kind {
 	case windowCommandShow:
-		return windowCommandResult{epoch: w.showNative()}
+		epoch, err := w.showNative()
+		return windowCommandResult{epoch: epoch, err: err}
 	case windowCommandHide:
 		w.hideNative()
 		return windowCommandResult{epoch: w.focus.epoch}
@@ -1974,12 +1976,20 @@ func monitorScale(monitor win.HMONITOR) float32 {
 	return 1
 }
 
-// showNative combines show, foreground activation, and keyboard focus into one epoch.
-func (w *platformWindow) showNative() FocusEpoch {
+// showNative combines renderer restoration, show, foreground activation, and keyboard focus into one epoch.
+func (w *platformWindow) showNative() (FocusEpoch, error) {
 	w.stopForegroundRestoreTimers()
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil
+	}
+	if w.renderer == nil {
+		return w.focus.epoch, errors.New("window is closed")
+	}
+	if w.renderer.handle == nil {
+		if err := w.renderer.recreate(); err != nil {
+			return w.focus.epoch, fmt.Errorf("restore renderer: %w", err)
+		}
 	}
 	if w.focus.active {
 		// Starting a new focus epoch is not a real focus loss.
@@ -2027,7 +2037,7 @@ func (w *platformWindow) showNative() FocusEpoch {
 	}
 	w.synchronizeBackdropAfterShow()
 	win.InvalidateRect(w.hwnd, nil, false)
-	return w.focus.epoch
+	return w.focus.epoch, nil
 }
 
 // synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.
@@ -2194,7 +2204,7 @@ func activateWindow(hwnd win.HWND) bool {
 
 // drawFrame rebuilds the minimal display list only when Windows requests a paint.
 func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
-	if w.renderer == nil {
+	if w.renderer == nil || w.renderer.handle == nil {
 		return
 	}
 
