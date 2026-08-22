@@ -3,7 +3,7 @@
 package window
 
 /*
-#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -luiautomationcore -ldwmapi
+#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -luuid -luiautomationcore -ldwmapi
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
@@ -95,7 +95,6 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -110,9 +109,12 @@ const windowManagementWin32ErrorOffset = 1000
 
 var (
 	modkernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	moduser32                      = syscall.NewLazyDLL("user32.dll")
 	procOpenProcess                = modkernel32.NewProc("OpenProcess")
 	procQueryFullProcessImageNameW = modkernel32.NewProc("QueryFullProcessImageNameW")
 	procCloseHandle                = modkernel32.NewProc("CloseHandle")
+	procGetWindowTextW             = moduser32.NewProc("GetWindowTextW")
+	procIsWindow                   = moduser32.NewProc("IsWindow")
 )
 
 const (
@@ -545,23 +547,6 @@ func GetFileDialogPathByWindowId(windowId string, pid int) string {
 	return strings.TrimSpace(C.GoString(result))
 }
 
-type explorerShellWindowCandidate struct {
-	index        int
-	hwnd         uintptr
-	path         string
-	locationName string
-	z            int
-}
-
-// parseWindowID converts the decimal HWND captured in QueryEnv.
-func parseWindowID(windowId string) uintptr {
-	value, err := strconv.ParseUint(strings.TrimSpace(windowId), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return uintptr(value)
-}
-
 func getExplorerWindowZOrder() map[uintptr]int {
 	zOrder := map[uintptr]int{}
 	idx := 0
@@ -570,57 +555,6 @@ func getExplorerWindowZOrder() map[uintptr]int {
 		idx++
 	}
 	return zOrder
-}
-
-func scoreExplorerShellWindowCandidate(candidate explorerShellWindowCandidate, windowTitle string) int {
-	score := 0
-
-	titleLower := strings.ToLower(strings.TrimSpace(windowTitle))
-	loc := strings.TrimSpace(candidate.locationName)
-	if loc == "" {
-		loc = filepath.Base(candidate.path)
-	}
-	locLower := strings.ToLower(loc)
-	if titleLower != "" && locLower != "" {
-		if titleLower == locLower {
-			score += 100
-		} else if strings.Contains(titleLower, locLower) || strings.Contains(locLower, titleLower) {
-			score += 50
-		}
-	}
-
-	if candidate.z < (1 << 30) {
-		score += 10
-	}
-
-	return score
-}
-
-func selectBestExplorerShellWindowCandidate(candidates []explorerShellWindowCandidate, preferredHwnd uintptr, windowTitle string) int {
-	if len(candidates) == 0 {
-		return -1
-	}
-
-	bestIdx := 0
-	bestScore := -1
-	for i, candidate := range candidates {
-		score := scoreExplorerShellWindowCandidate(candidate, windowTitle)
-		if preferredHwnd != 0 && candidate.hwnd == preferredHwnd {
-			score += 1000
-		}
-
-		if score > bestScore {
-			bestScore = score
-			bestIdx = i
-			continue
-		}
-
-		if score == bestScore && candidate.z < candidates[bestIdx].z {
-			bestIdx = i
-		}
-	}
-
-	return bestIdx
 }
 
 // NavigateInFileExplorer navigates the active Explorer tab/window owned by pid to targetPath
@@ -1077,10 +1011,64 @@ func GetActiveFileExplorerPath() string {
 	return candidates[bestIdx].path
 }
 
+// GetFileExplorerPathByWindow returns the current folder of a specific Explorer window.
+// The HWND must still belong to Explorer; the latest title of that HWND is used to pick
+// the active Windows 11 tab among ShellWindows entries that share the handle.
+func GetFileExplorerPathByWindow(pid int, windowID string) string {
+	hwnd := parseWindowID(windowID)
+	if !isExplorerWindowOwnedByPid(pid, hwnd) {
+		return ""
+	}
+	return existingFilesystemDirectory(getFileExplorerPathByPidHwndAndTitle(pid, hwnd, getWindowTitleByHwnd(hwnd)))
+}
+
 // GetFileExplorerPathByPidAndWindowTitle returns the filesystem path of an Explorer tab/window owned by pid.
 // On Windows 11, File Explorer tabs can share the same top-level HWND, so we use the window title to pick
 // the active tab (best-effort) when multiple candidates exist.
 func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string {
+	return getFileExplorerPathByPidHwndAndTitle(pid, uintptr(win.GetForegroundWindow()), windowTitle)
+}
+
+func isWin32Window(hwnd uintptr) bool {
+	if hwnd == 0 {
+		return false
+	}
+	ok, _, _ := procIsWindow.Call(hwnd)
+	return ok != 0
+}
+
+func isExplorerWindowOwnedByPid(pid int, hwnd uintptr) bool {
+	if pid <= 0 || hwnd == 0 {
+		return false
+	}
+	if !isWin32Window(hwnd) {
+		return false
+	}
+
+	var wndPid uint32
+	win.GetWindowThreadProcessId(win.HWND(hwnd), &wndPid)
+	if int(wndPid) != pid {
+		return false
+	}
+
+	ok, err := IsFileExplorer(pid)
+	return err == nil && ok
+}
+
+func getWindowTitleByHwnd(hwnd uintptr) string {
+	if !isWin32Window(hwnd) {
+		return ""
+	}
+
+	buf := make([]uint16, 512)
+	n, _, _ := procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if n == 0 {
+		return ""
+	}
+	return strings.TrimSpace(syscall.UTF16ToString(buf[:n]))
+}
+
+func getFileExplorerPathByPidHwndAndTitle(pid int, preferredHwnd uintptr, windowTitle string) string {
 	if pid <= 0 {
 		return ""
 	}
@@ -1201,7 +1189,6 @@ func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string 
 		return p
 	}
 
-	foreground := uintptr(win.GetForegroundWindow())
 	zOrder := getExplorerWindowZOrder()
 	candidates := make([]explorerShellWindowCandidate, 0, 8)
 	for i := 0; i < count; i++ {
@@ -1255,7 +1242,7 @@ func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string 
 		return ""
 	}
 
-	bestIdx := selectBestExplorerShellWindowCandidate(candidates, foreground, windowTitle)
+	bestIdx := selectBestExplorerShellWindowCandidate(candidates, preferredHwnd, windowTitle)
 	if bestIdx < 0 {
 		return ""
 	}

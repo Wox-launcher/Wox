@@ -2,8 +2,9 @@ package explorer
 
 /*
 #include <stdint.h>
-extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
+extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, uintptr_t windowId, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
+extern void fileExplorerTransitionInvalidatedCallbackCGO();
 extern void fileExplorerLogCallbackCGO(char* msg);
 int refreshFileExplorerMonitorState();
 int refreshFileExplorerMonitorStateForRawKey(int allowDesktop);
@@ -25,7 +26,7 @@ import (
 var (
 	explorerActivatedCallback   func(pid int)
 	explorerDeactivatedCallback func()
-	dialogActivatedCallback     func(pid int)
+	dialogActivatedCallback     func(OpenSaveDialogActivatedEvent)
 	dialogDeactivatedCallback   func()
 	explorerKeyListener         func(key string)
 	dialogKeyListener           func(key string)
@@ -66,6 +67,7 @@ const (
 )
 
 var currentState monitorState = stateNone
+var foregroundTransition explorerTransitionState
 var nextRawKeyListenerID = 1
 var explorerRawKeyListeners = map[int]ExplorerRawKeyListener{}
 var dialogRawKeyListeners = map[int]ExplorerRawKeyListener{}
@@ -80,11 +82,14 @@ func fileExplorerLogCallbackCGO(msg *C.char) {
 }
 
 //export fileExplorerActivatedCallbackCGO
-func fileExplorerActivatedCallbackCGO(pid C.int, isFileDialog C.int, x, y, w, h C.int) {
+func fileExplorerActivatedCallbackCGO(pid C.int, isFileDialog C.int, windowId C.uintptr_t, x, y, w, h C.int) {
 	isDialog := int(isFileDialog) == 1
 	rectX, rectY, rectW, rectH := int(x), int(y), int(w), int(h)
+	windowID := formatExplorerWindowID(uintptr(windowId))
 	var deactivated func()
-	var activated func(pid int)
+	var activatedExplorer func(pid int)
+	var activatedDialog func(OpenSaveDialogActivatedEvent)
+	var dialogEvent OpenSaveDialogActivatedEvent
 
 	stateMu.Lock()
 	if isDialog {
@@ -92,35 +97,40 @@ func fileExplorerActivatedCallbackCGO(pid C.int, isFileDialog C.int, x, y, w, h 
 			explorerActive = false
 			deactivated = explorerDeactivatedCallback
 		}
+		dialogEvent = foregroundTransition.ActivateDialog(int(pid), windowID)
 		currentState = stateDialog
 		dialogActive = true
 		dialogRectX = rectX
 		dialogRectY = rectY
 		dialogRectW = rectW
 		dialogRectH = rectH
-		activated = dialogActivatedCallback
+		activatedDialog = dialogActivatedCallback
 	} else {
 		if currentState == stateDialog {
 			dialogActive = false
 			deactivated = dialogDeactivatedCallback
 		}
+		foregroundTransition.ActivateExplorer(ExplorerWindowRef{Pid: int(pid), WindowID: windowID})
 		currentState = stateExplorer
 		explorerActive = true
 		explorerRectX = rectX
 		explorerRectY = rectY
 		explorerRectW = rectW
 		explorerRectH = rectH
-		activated = explorerActivatedCallback
+		activatedExplorer = explorerActivatedCallback
 	}
 	stateMu.Unlock()
 
-	logFromMonitor(fmt.Sprintf("go activate: pid=%d dialog=%t rect=(%d,%d,%d,%d) state=%d", int(pid), isDialog, rectX, rectY, rectW, rectH, currentState))
+	logFromMonitor(fmt.Sprintf("go activate: pid=%d dialog=%t windowId=%s rect=(%d,%d,%d,%d) state=%d", int(pid), isDialog, windowID, rectX, rectY, rectW, rectH, currentState))
 
 	if deactivated != nil {
 		deactivated()
 	}
-	if activated != nil {
-		activated(int(pid))
+	if activatedExplorer != nil {
+		activatedExplorer(int(pid))
+	}
+	if activatedDialog != nil {
+		activatedDialog(dialogEvent)
 	}
 }
 
@@ -139,6 +149,7 @@ func fileExplorerDeactivatedCallbackCGO() {
 		dialogActive = false
 		deactivated = dialogDeactivatedCallback
 	}
+	foregroundTransition.Deactivate()
 	currentState = stateNone
 	stateMu.Unlock()
 
@@ -147,6 +158,14 @@ func fileExplorerDeactivatedCallbackCGO() {
 	if deactivated != nil {
 		deactivated()
 	}
+}
+
+//export fileExplorerTransitionInvalidatedCallbackCGO
+func fileExplorerTransitionInvalidatedCallbackCGO() {
+	stateMu.Lock()
+	foregroundTransition.Deactivate()
+	stateMu.Unlock()
+	logFromMonitor("go transition: invalidated by Wox foreground")
 }
 
 func checkUpdateMonitorState() error {
@@ -167,6 +186,7 @@ func checkUpdateMonitorState() error {
 		currentState = stateNone
 		explorerActive = false
 		dialogActive = false
+		foregroundTransition.Reset()
 		resetTypeToSearchConsumedKeysLocked()
 		stateMu.Unlock()
 	}
@@ -227,7 +247,7 @@ func GetActiveExplorerRect() (int, int, int, int, bool) {
 	return 0, 0, 0, 0, false
 }
 
-func StartExplorerOpenSaveMonitor(activated func(pid int), deactivated func(), keyListener func(string)) {
+func StartExplorerOpenSaveMonitor(activated func(OpenSaveDialogActivatedEvent), deactivated func(), keyListener func(string)) {
 	stateMu.Lock()
 	dialogActivatedCallback = activated
 	dialogDeactivatedCallback = deactivated

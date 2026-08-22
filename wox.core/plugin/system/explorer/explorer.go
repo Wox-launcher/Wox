@@ -61,8 +61,14 @@ func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ExplorerPlugin{})
 }
 
-type overlayRuntime struct {
-	stopCh chan struct{}
+type integrationRuntime struct {
+	stopCh              chan struct{}
+	typeToSearchEnabled atomic.Bool
+	onExplorerActivated func(pid int)
+	onDialogActivated   func(OpenSaveDialogActivatedEvent)
+	onDeactivated       func()
+	onExplorerKey       func(string)
+	onDialogKey         func(string)
 }
 
 type openSaveDialogPathCache struct {
@@ -75,10 +81,12 @@ type openSaveDialogPathCache struct {
 
 type ExplorerPlugin struct {
 	api                    plugin.API
-	overlayRuntime         atomic.Pointer[overlayRuntime]
+	integrationRuntime     atomic.Pointer[integrationRuntime]
 	dialogPathCacheMu      sync.Mutex
 	dialogPathCache        openSaveDialogPathCache
 	dialogPathResolveGroup singleflight.Group
+	dialogNavigateMu       sync.Mutex
+	quickSwitch            *quickSwitchCoordinator
 }
 
 func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
@@ -155,25 +163,20 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 
 func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.quickSwitch = newQuickSwitchCoordinator(c.newQuickSwitchDeps())
 
-	// Start overlay hint listener if enabled
-	enableTypeToSearch := c.api.GetSetting(ctx, enableTypeToSearchSettingKey)
-	setExplorerDialogHookEnabled(enableTypeToSearch == "true")
-	if enableTypeToSearch == "true" {
-		c.startOverlayListener(ctx)
-	}
+	// Quick Switch always listens for Explorer/Finder → dialog transitions.
+	// Type-to-search only adds raw keys and the dialog hint on top of that.
+	c.startIntegrationRuntime(ctx)
+	c.applyTypeToSearchSetting(ctx, c.api.GetSetting(ctx, enableTypeToSearchSettingKey) == "true")
 
-	// Listen for setting changes
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == enableTypeToSearchSettingKey {
-			setExplorerDialogHookEnabled(value == "true")
-			if value == "true" {
-				c.startOverlayListener(callbackCtx)
-			} else {
-				c.stopOverlayListener()
-				overlay.Close("explorer_hint")
-			}
+			c.applyTypeToSearchSetting(callbackCtx, value == "true")
 		}
+	})
+	c.api.OnUnload(ctx, func(context.Context) {
+		c.stopIntegrationRuntime()
 	})
 }
 
@@ -818,10 +821,8 @@ func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, 
 
 // navigateFileDialog prefers the in-process Shell browser route and keeps the existing automation path as a compatibility fallback.
 func (c *ExplorerPlugin) navigateFileDialog(ctx context.Context, env plugin.QueryEnv, folderPath string) bool {
-	if navigateFileDialogWithHook(ctx, env.ActiveWindowId, env.ActiveWindowPid, folderPath) {
-		return true
-	}
-	return window.NavigateFileDialog(env.ActiveWindowId, env.ActiveWindowPid, folderPath)
+	c.quickSwitch.Invalidate()
+	return c.performFileDialogNavigation(ctx, env.ActiveWindowId, env.ActiveWindowPid, folderPath)
 }
 
 func (c *ExplorerPlugin) addQuickJumpPath(ctx context.Context, path string) bool {
@@ -916,29 +917,72 @@ func (c *ExplorerPlugin) typeToSearchDebugLog(ctx context.Context, format string
 	// c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: "+fmt.Sprintf(format, args...))
 }
 
-func (c *ExplorerPlugin) stopOverlayListener() {
-	c.typeToSearchDebugLog(context.Background(), "stop monitor")
-	StopExplorerMonitor()
-	StopExplorerOpenSaveMonitor()
-	setExplorerMonitorLogger(nil)
-	overlay.Close(explorerDialogHintOverlayName)
-	c.clearOpenSaveDialogPathCache(0)
-
-	if runtime := c.overlayRuntime.Swap(nil); runtime != nil {
-		close(runtime.stopCh)
+// applyTypeToSearchSetting reconfigures keyboard and hint features without stopping Quick Switch.
+func (c *ExplorerPlugin) applyTypeToSearchSetting(ctx context.Context, enabled bool) {
+	runtime := c.integrationRuntime.Load()
+	if runtime != nil {
+		runtime.typeToSearchEnabled.Store(enabled)
+	}
+	// File selection still uses the Shell hook only while type-to-search can drive it.
+	// Dialog folder navigation no longer depends on this flag.
+	setExplorerDialogHookEnabled(enabled)
+	c.registerIntegrationMonitors()
+	if !enabled {
+		overlay.Close(explorerDialogHintOverlayName)
+		overlay.Close("explorer_hint")
 	}
 }
 
-func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
-	c.stopOverlayListener()
+// registerIntegrationMonitors keeps foreground listeners on and attaches raw keys only for type-to-search.
+func (c *ExplorerPlugin) registerIntegrationMonitors() {
+	runtime := c.integrationRuntime.Load()
+	if runtime == nil {
+		return
+	}
+
+	var explorerKey func(string)
+	var dialogKey func(string)
+	if runtime.typeToSearchEnabled.Load() {
+		explorerKey = runtime.onExplorerKey
+		dialogKey = runtime.onDialogKey
+	}
+	StartExplorerMonitor(runtime.onExplorerActivated, runtime.onDeactivated, explorerKey)
+	StartExplorerOpenSaveMonitor(runtime.onDialogActivated, runtime.onDeactivated, dialogKey)
+}
+
+// stopIntegrationRuntime releases listeners and cancels pending work when the plugin is disabled.
+func (c *ExplorerPlugin) stopIntegrationRuntime() {
+	runtime := c.integrationRuntime.Swap(nil)
+	if runtime == nil {
+		return
+	}
+
+	if c.quickSwitch != nil {
+		c.quickSwitch.Invalidate()
+	}
+	StopExplorerMonitor()
+	StopExplorerOpenSaveMonitor()
+	setExplorerDialogHookEnabled(false)
+	setExplorerMonitorLogger(nil)
+	overlay.Close(explorerDialogHintOverlayName)
+	overlay.Close("explorer_hint")
+	c.clearOpenSaveDialogPathCache(0)
+	close(runtime.stopCh)
+}
+
+// startIntegrationRuntime starts Explorer/Finder and dialog foreground listeners once.
+func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
+	if c.integrationRuntime.Load() != nil {
+		return
+	}
 
 	setExplorerMonitorLogger(func(msg string) {
 		c.typeToSearchDebugLog(ctx, "%s", msg)
 	})
-	c.typeToSearchDebugLog(ctx, "start monitor")
+	c.typeToSearchDebugLog(ctx, "start integration runtime")
 
-	runtime := &overlayRuntime{stopCh: make(chan struct{})}
-	c.overlayRuntime.Store(runtime)
+	runtime := &integrationRuntime{stopCh: make(chan struct{})}
+	c.integrationRuntime.Store(runtime)
 
 	type overlayEventType int
 	const (
@@ -949,11 +993,13 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	)
 
 	type overlayEvent struct {
-		eventType overlayEventType
-		key       string
-		ctx       context.Context
-		pid       int
-		isDialog  bool
+		eventType        overlayEventType
+		key              string
+		ctx              context.Context
+		pid              int
+		windowID         string
+		isDialog         bool
+		previousExplorer *ExplorerWindowRef
 	}
 
 	events := make(chan overlayEvent, 64)
@@ -968,8 +1014,14 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		c.typeToSearchDebugLog(ctx, "activated pid=%d", pid)
 		pushEvent(overlayEvent{eventType: overlayEventActivate, pid: pid})
 	}
-	onDialogActivated := func(pid int) {
-		pushEvent(overlayEvent{eventType: overlayEventActivate, pid: pid, isDialog: true})
+	onDialogActivated := func(event OpenSaveDialogActivatedEvent) {
+		pushEvent(overlayEvent{
+			eventType:        overlayEventActivate,
+			pid:              event.Pid,
+			windowID:         event.WindowID,
+			isDialog:         true,
+			previousExplorer: event.PreviousExplorer,
+		})
 	}
 	onDeactivated := func() {
 		c.typeToSearchDebugLog(ctx, "deactivated")
@@ -1000,22 +1052,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			explorerShow *common.ShowContext
 		)
 
-		resetState := func() {
-			handoffUntil = time.Time{}
-			pending = ""
-			pendingCtx = nil
-			explorerShow = nil
-		}
-
 		inHandoff := func() bool {
 			return !handoffUntil.IsZero() && time.Now().Before(handoffUntil)
-		}
-
-		beginHandoff := func() {
-			// Brief raw-key capture window after opening the explorer secondary.
-			// Focus handoff is not atomic, so fast typing can still arrive here
-			// before the launcher text input is ready.
-			handoffUntil = time.Now().Add(350 * time.Millisecond)
 		}
 
 		changeExplorerQuery := func(localCtx context.Context) {
@@ -1099,9 +1137,10 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			})
 		}
 
-		// The dialog hint is passive: it advertises Wox search without turning
-		// ordinary filename typing into an Explorer query.
 		showDialogHint := func(localCtx context.Context, pid int) {
+			if !runtime.typeToSearchEnabled.Load() {
+				return
+			}
 			if pid <= 0 {
 				return
 			}
@@ -1179,21 +1218,60 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			return true
 		}
 
-		ticker := time.NewTicker(50 * time.Millisecond)
-		defer ticker.Stop()
+		var handoffTimer *time.Timer
+		var handoffC <-chan time.Time
+		stopHandoffTimer := func() {
+			if handoffTimer != nil {
+				handoffTimer.Stop()
+				handoffTimer = nil
+			}
+			handoffC = nil
+		}
+
+		resetState := func() {
+			handoffUntil = time.Time{}
+			pending = ""
+			pendingCtx = nil
+			explorerShow = nil
+			stopHandoffTimer()
+		}
+
+		beginHandoff := func() {
+			// Brief raw-key capture window after opening the explorer secondary.
+			// Focus handoff is not atomic, so fast typing can still arrive here
+			// before the launcher text input is ready.
+			handoffUntil = time.Now().Add(350 * time.Millisecond)
+			stopHandoffTimer()
+			handoffTimer = time.NewTimer(350 * time.Millisecond)
+			handoffC = handoffTimer.C
+		}
 
 		for {
 			select {
 			case <-runtime.stopCh:
+				stopHandoffTimer()
 				return
 			case ev := <-events:
+				if c.integrationRuntime.Load() != runtime {
+					stopHandoffTimer()
+					return
+				}
 				switch ev.eventType {
 				case overlayEventActivate:
 					c.typeToSearchDebugLog(ctx, "event activate active=%v handoff=%v pending=%q", active, inHandoff(), pending)
 					active = true
 					activePid = ev.pid
 					if ev.isDialog {
-						showDialogHint(ctx, ev.pid)
+						c.requestQuickSwitch(ctx, OpenSaveDialogActivatedEvent{
+							Pid:              ev.pid,
+							WindowID:         ev.windowID,
+							PreviousExplorer: ev.previousExplorer,
+						})
+						if runtime.typeToSearchEnabled.Load() {
+							showDialogHint(ctx, ev.pid)
+						} else {
+							overlay.Close(explorerDialogHintOverlayName)
+						}
 					} else {
 						overlay.Close(explorerDialogHintOverlayName)
 					}
@@ -1206,6 +1284,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					c.typeToSearchDebugLog(ctx, "event deactivate active=%v handoff=%v pending=%q", active, inHandoff(), pending)
 					active = false
 					activePid = 0
+					c.quickSwitch.Invalidate()
 					overlay.Close(explorerDialogHintOverlayName)
 					if !inHandoff() {
 						resetState()
@@ -1247,19 +1326,18 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					}
 					beginHandoff()
 				}
-			case <-ticker.C:
-				if !handoffUntil.IsZero() && time.Now().After(handoffUntil) {
-					resetState()
-				}
+			case <-handoffC:
+				resetState()
 			}
 		}
 	}()
 
-	// Start monitoring file explorer
-	StartExplorerMonitor(onActivated, onDeactivated, onKey)
-
-	// Start monitoring open/save dialogs
-	StartExplorerOpenSaveMonitor(onDialogActivated, onDeactivated, onDialogKey)
+	runtime.onExplorerActivated = onActivated
+	runtime.onDialogActivated = onDialogActivated
+	runtime.onDeactivated = onDeactivated
+	runtime.onExplorerKey = onKey
+	runtime.onDialogKey = onDialogKey
+	c.registerIntegrationMonitors()
 }
 
 func getExplorerInitialWindowHeight(ctx context.Context) int {

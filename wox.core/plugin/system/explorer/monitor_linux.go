@@ -8,7 +8,7 @@ func StopExplorerMonitor() {
 	// Stub implementation for Linux
 }
 
-func StartExplorerOpenSaveMonitor(activated func(pid int), deactivated func(), _ func(string)) {
+func StartExplorerOpenSaveMonitor(activated func(OpenSaveDialogActivatedEvent), deactivated func(), _ func(string)) {
 	// Stub implementation for Linux
 }
 

@@ -526,6 +526,11 @@ func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string 
 	return GetFileExplorerPathByPid(pid)
 }
 
+// GetFileExplorerPathByWindow returns the still focused/front Finder window path for pid.
+func GetFileExplorerPathByWindow(pid int, windowID string) string {
+	return existingFilesystemDirectory(GetFileExplorerPathByPid(pid))
+}
+
 // SelectInFileExplorer selects a file in a Finder window owned by pid.
 func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId string) bool {
 	if pid <= 0 || fullPath == "" {

@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 static UINT getDpiForWindowMonitor(HWND hwnd)
 {
@@ -34,8 +35,9 @@ static UINT getDpiForWindowMonitor(HWND hwnd)
     return dpi;
 }
 
-extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
+extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, uintptr_t windowId, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
+extern void fileExplorerTransitionInvalidatedCallbackCGO();
 extern void fileExplorerLogCallbackCGO(char *msg);
 
 static HWINEVENTHOOK gForegroundHook = NULL;
@@ -573,13 +575,13 @@ static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
         int w = (int)(physW / scale);
         int h = (int)(physH / scale);
         logMessage("Activated hwnd=0x%p pid=%lu dialog=%d physical=(%d,%d,%d,%d) logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", hwnd, pid, isDialog, physX, physY, physW, physH, x, y, w, h, dpi, scale);
-        fileExplorerActivatedCallbackCGO((int)pid, isDialog, x, y, w, h);
+        fileExplorerActivatedCallbackCGO((int)pid, isDialog, (uintptr_t)hwnd, x, y, w, h);
     }
     else
     {
         logMessage("GetWindowRect failed hwnd=0x%p err=%lu", hwnd, GetLastError());
         // Fallback if GetWindowRect fails
-        fileExplorerActivatedCallbackCGO((int)pid, isDialog, 0, 0, 0, 0);
+        fileExplorerActivatedCallbackCGO((int)pid, isDialog, (uintptr_t)hwnd, 0, 0, 0, 0);
     }
 }
 
@@ -625,6 +627,14 @@ static void CALLBACK foregroundChangedProc(
         logMessage("foregroundChangedProc: GetWindowThreadProcessId returned pid=0 hwnd=0x%p", hwnd);
     }
 
+    // Wox is intentionally transparent to the type-to-search handoff, but it
+    // still breaks a direct Explorer -> dialog transition for Quick Switch.
+    if (pid == GetCurrentProcessId())
+    {
+        fileExplorerTransitionInvalidatedCallbackCGO();
+        return;
+    }
+
     int isValid = 0;
     if (pid != 0)
     {
@@ -658,8 +668,8 @@ static void CALLBACK foregroundChangedProc(
 
     if (hwnd == gLastExplorerHwnd)
     {
-        // WINEVENT_SKIPOWNPROCESS hides the intermediate Wox foreground event,
-        // so the same dialog HWND must publish activation again after Wox closes.
+        // Wox foreground events only invalidate Quick Switch so type-to-search
+        // can keep its handoff state; republish the same HWND after Wox closes.
         logMessage("foregroundChangedProc: same hwnd, reactivate");
         triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
         return;
@@ -761,7 +771,7 @@ static DWORD WINAPI monitorThreadProc(LPVOID param)
         foregroundChangedProc,
         0,
         0,
-        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        WINEVENT_OUTOFCONTEXT);
 
     if (!gForegroundHook)
     {

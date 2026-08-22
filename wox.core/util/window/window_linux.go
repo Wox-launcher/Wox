@@ -166,6 +166,11 @@ func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string 
 	return ""
 }
 
+// GetFileExplorerPathByWindow is unsupported on Linux until Explorer path resolution exists there.
+func GetFileExplorerPathByWindow(pid int, windowID string) string {
+	return ""
+}
+
 // IsFileExplorer returns false on platforms other than Windows and macOS.
 func IsFileExplorer(pid int) (bool, error) {
 	return false, nil

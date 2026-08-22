@@ -17,7 +17,7 @@ func setExplorerDialogHookEnabled(enabled bool) {
 }
 
 func navigateFileDialogWithHook(ctx context.Context, windowID string, pid int, targetPath string) bool {
-	if !explorerDialogHookEnabled.Load() || pid <= 0 || strings.TrimSpace(targetPath) == "" {
+	if pid <= 0 || strings.TrimSpace(targetPath) == "" {
 		return false
 	}
 	return windowhook.NavigateDialog(ctx, windowID, pid, targetPath)

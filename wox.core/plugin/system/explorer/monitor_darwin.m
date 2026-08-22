@@ -1,8 +1,9 @@
 #import <Cocoa/Cocoa.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <ctype.h>
+#include <stdint.h>
 
-extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
+extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, uintptr_t windowId, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO(void);
 
 typedef NS_ENUM(NSInteger, MonitorContextState) {
@@ -710,7 +711,7 @@ static void activateIfNeeded(pid_t pid, MonitorContextState state, int x, int y,
     gCurrentY = y;
     gCurrentW = w;
     gCurrentH = h;
-    fileExplorerActivatedCallbackCGO((int)pid, state == MonitorContextStateDialog ? 1 : 0, x, y, w, h);
+    fileExplorerActivatedCallbackCGO((int)pid, state == MonitorContextStateDialog ? 1 : 0, 0, x, y, w, h);
 }
 
 static void evaluateFrontmostApplicationState() {
