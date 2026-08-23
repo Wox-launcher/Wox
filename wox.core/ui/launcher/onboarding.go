@@ -93,14 +93,16 @@ func (a *App) finishOnboarding() {
 	util.Go(a.lifecycleCtx, "finish onboarding", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "OnboardingFinished", "true")
-		cancel()
 		if err != nil {
+			cancel()
 			_ = a.runOnUI("show onboarding finish error", func() {
 				a.onboardingError = err.Error()
 				a.invalidateOnboardingWindow()
 			})
 			return
 		}
+		show := fromCoreShowOptions(a.services.LauncherShowOptions(ctx, a.sessionID))
+		cancel()
 		var onboardingView *woxui.ManagedWindow
 		_ = a.runOnUI("leave onboarding", func() {
 			a.onboardingOpen = false
@@ -116,7 +118,7 @@ func (a *App) finishOnboarding() {
 		if onboardingView != nil {
 			_ = onboardingView.Hide()
 		}
-		if err := a.showWindow(a.show); err != nil {
+		if err := a.showWindow(show); err != nil {
 			log.Printf("show launcher after onboarding: %v", err)
 		}
 	})

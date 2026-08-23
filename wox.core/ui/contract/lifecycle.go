@@ -11,6 +11,7 @@ type LifecycleServices interface {
 	Ready(ctx context.Context, sessionID string) error
 	RegisterInstance(ctx context.Context, view View) error
 	DestroyInstance(ctx context.Context, sessionID string) error
+	LauncherShowOptions(ctx context.Context, sessionID string) ShowOptions
 	Shown(ctx context.Context, sessionID string) error
 	Hidden(ctx context.Context, sessionID string) error
 	RestoreActiveWindow(ctx context.Context, sessionID string, snapshot common.ActiveWindowSnapshot) error

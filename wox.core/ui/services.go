@@ -115,11 +115,16 @@ func (s *CoreServices) ResetAutomationSession(ctx context.Context, sessionID str
 	return nil
 }
 
-// AutomationShowOptions resolves the normal launcher settings and screen position for smoke tests.
-func (s *CoreServices) AutomationShowOptions(ctx context.Context, sessionID string) contract.ShowOptions {
+// LauncherShowOptions resolves the current launcher settings and screen position.
+func (s *CoreServices) LauncherShowOptions(ctx context.Context, sessionID string) contract.ShowOptions {
 	ctx = uiServiceContext(ctx, sessionID)
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 	return getShowOptions(ctx, common.ShowContext{})
+}
+
+// AutomationShowOptions resolves the normal launcher settings and screen position for smoke tests.
+func (s *CoreServices) AutomationShowOptions(ctx context.Context, sessionID string) contract.ShowOptions {
+	return s.LauncherShowOptions(ctx, sessionID)
 }
 
 // Shown records that the launcher window became visible.
