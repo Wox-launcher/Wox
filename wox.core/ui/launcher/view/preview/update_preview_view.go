@@ -80,7 +80,7 @@ func UpdatePreviewView(props UpdatePreviewProps) woxwidget.Widget {
 	}
 	titleWidth := max(float32(0), innerWidth-pillsWidth-scaled(12))
 	headerChildren := []woxwidget.StackChild{
-		{Child: woxwidget.TextBlock{Value: props.Title, Width: titleWidth, Height: scaled(22), MaxLines: 2, Style: woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}, LineHeight: scaled(20), Color: props.Theme.PreviewText}},
+		{Child: woxwidget.TextBlock{Value: props.Title, Width: titleWidth, Height: headerHeight, MaxLines: 1, Style: woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}, LineHeight: headerHeight, AlignmentY: 0.5, Color: props.Theme.PreviewText}},
 	}
 	right := innerWidth - statusWidth
 	headerChildren = append(headerChildren, woxwidget.StackChild{Left: right, Child: updateStatusPill(props.StatusLabel, statusWidth, props.StatusColor, scaled)})

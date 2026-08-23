@@ -32,14 +32,16 @@ if "%TARGET%"=="" (
 )
 echo [%date% %time%] target: %TARGET% >> "%LOG%"
 echo [%date% %time%] removing backup >> "%LOG%"
-if exist "%TARGET%.old" (
-  attrib -H -S -R "%TARGET%.old" >> "%LOG%" 2>&1
-  del /f /q "%TARGET%.old" >> "%LOG%" 2>&1
-) else (
-  echo [%date% %time%] backup not found: %TARGET%.old >> "%LOG%"
+for /l %%I in (1,1,10) do (
+  if not exist "%TARGET%.old" goto backup_removed
+  del /f /q /a "%TARGET%.old" >> "%LOG%" 2>&1
+  if not exist "%TARGET%.old" goto backup_removed
+  timeout /t 1 /nobreak >nul
 )
+echo [%date% %time%] backup removal deferred: %TARGET%.old >> "%LOG%"
+:backup_removed
 echo [%date% %time%] launching >> "%LOG%"
-start "" "%TARGET%" "--update"
+start "" "%TARGET%" "--updated"
 echo [%date% %time%] launched >> "%LOG%"
 endlocal
 del "%~f0" >nul 2>&1

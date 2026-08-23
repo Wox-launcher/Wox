@@ -50,3 +50,14 @@ func TestUpdatePreviewCentersEmptyReleaseNotes(t *testing.T) {
 		t.Fatalf("empty release notes = %#v / %#v, want centered catalog-style copy", empty, message)
 	}
 }
+
+func TestUpdatePreviewCentersTitleInHeader(t *testing.T) {
+	view := UpdatePreviewView(UpdatePreviewProps{
+		Width: 800, Height: 600, AutoUpdateEnabled: true, Title: "发现新版本", StatusLabel: "Latest",
+	}).(woxwidget.Container)
+	header := view.Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	title := header.Children[0].Child.(woxwidget.TextBlock)
+	if title.Height != header.Height || title.LineHeight != header.Height || title.MaxLines != 1 || title.AlignmentY != 0.5 {
+		t.Fatalf("title = %#v, header height = %.0f; want one optically centered line filling the header", title, header.Height)
+	}
+}

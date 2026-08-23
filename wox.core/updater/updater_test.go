@@ -3,6 +3,8 @@ package updater
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"wox/setting"
 
@@ -76,6 +78,22 @@ func TestResetCurrentUpdateInfoWhenReleaseChannelChanges(t *testing.T) {
 	assert.Equal(t, UpdateStatusNone, currentUpdateInfo.Status)
 	assert.False(t, currentUpdateInfo.HasUpdate)
 	assert.Empty(t, currentUpdateInfo.DownloadedPath)
+}
+
+func TestCleanupBackupExecutable(t *testing.T) {
+	backupPath := filepath.Join(t.TempDir(), "wox.exe.old")
+	if err := os.WriteFile(backupPath, []byte("old version"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupBackupExecutable(backupPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
+		t.Fatalf("backup still exists after cleanup: %v", err)
+	}
+	if err := cleanupBackupExecutable(backupPath); err != nil {
+		t.Fatalf("missing backup cleanup should be idempotent: %v", err)
+	}
 }
 
 func TestGetUpdateChannelVersionsReturnsStableAndBetaVersions(t *testing.T) {

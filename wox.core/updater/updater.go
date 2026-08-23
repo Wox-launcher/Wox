@@ -90,6 +90,28 @@ type applyUpdater interface {
 
 var applyUpdaterInstance applyUpdater
 
+// CleanupStaleBackup removes a backup left by a previous Windows update.
+func CleanupStaleBackup(ctx context.Context) {
+	if !util.IsWindows() {
+		return
+	}
+	executablePath, err := os.Executable()
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to resolve executable while cleaning update backup: %v", err))
+		return
+	}
+	if err := cleanupBackupExecutable(executablePath + ".old"); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to clean update backup: %v", err))
+	}
+}
+
+func cleanupBackupExecutable(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // StartAutoUpdateChecker starts a background task that periodically checks for updates
 func StartAutoUpdateChecker(ctx context.Context) {
 	util.Go(ctx, "auto-update-checker", func() {
