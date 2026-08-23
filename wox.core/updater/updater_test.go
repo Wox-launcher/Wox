@@ -80,18 +80,18 @@ func TestResetCurrentUpdateInfoWhenReleaseChannelChanges(t *testing.T) {
 	assert.Empty(t, currentUpdateInfo.DownloadedPath)
 }
 
-func TestCleanupBackupExecutable(t *testing.T) {
+func TestRemoveBackupFile(t *testing.T) {
 	backupPath := filepath.Join(t.TempDir(), "wox.exe.old")
 	if err := os.WriteFile(backupPath, []byte("old version"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := cleanupBackupExecutable(backupPath); err != nil {
+	if err := removeBackupFile(backupPath); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
 		t.Fatalf("backup still exists after cleanup: %v", err)
 	}
-	if err := cleanupBackupExecutable(backupPath); err != nil {
+	if err := removeBackupFile(backupPath); err != nil {
 		t.Fatalf("missing backup cleanup should be idempotent: %v", err)
 	}
 }
