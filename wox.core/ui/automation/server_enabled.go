@@ -202,6 +202,19 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(errors.New("key is required"))
 		}
 		return resultOrError(controller.PressAutomationKey(params.Key, params.Modifiers))
+	case "input.key_event":
+		var params struct {
+			Key       woxui.Key          `json:"key"`
+			Modifiers woxui.KeyModifiers `json:"modifiers"`
+			Down      bool               `json:"down"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		if params.Key == "" {
+			return nil, invalidParams(errors.New("key is required"))
+		}
+		return resultOrError(controller.DispatchAutomationKey(woxui.KeyEvent{Key: params.Key, Modifiers: params.Modifiers, Down: params.Down}))
 	case "input.pointer":
 		var event woxui.PointerEvent
 		if err := decodeParams(rawParams, &event); err != nil {

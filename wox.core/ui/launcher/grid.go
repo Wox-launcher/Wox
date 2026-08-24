@@ -70,7 +70,14 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 	cellWidth, cellHeight, visualWidth, visualHeight := gridCellMetrics(width, layout)
 	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
 	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, 0)
+	a.rememberQuickSelectViewport(quickSelectViewport{
+		grid: true, offset: scroll.offset, height: height, columns: layout.Columns, cellHeight: cellHeight,
+	})
 	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height)
+	quickSelectVisible := []bool(nil)
+	if snapshot.quickSelectMode {
+		quickSelectVisible = a.quickSelectVisibleLocked()
+	}
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
 	var groupSignature uint64
 	for index, result := range snapshot.results {
@@ -79,6 +86,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 		}
 		item := launcherview.LauncherGridResult{
 			ID: result.ID, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
+			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
 		}
 		if !result.IsGroup {
 			if visible[index] {
@@ -97,7 +105,9 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
 		CellWidth: cellWidth, CellHeight: cellHeight, VisualWidth: visualWidth, VisualHeight: visualHeight,
-		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale, Theme: snapshot.palette.componentTheme(), ScrollDetached: snapshot.resultScrollDetached, Complete: snapshot.queryComplete,
+		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale,
+		Theme: snapshot.palette.componentTheme(), TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail,
+		ScrollDetached: snapshot.resultScrollDetached, Complete: snapshot.queryComplete,
 		ExtentRevision: launcherGridExtentRevision(cellHeight, gridGroupHeaderHeight, width, layout.Columns, len(snapshot.results), groupSignature), Results: results,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})

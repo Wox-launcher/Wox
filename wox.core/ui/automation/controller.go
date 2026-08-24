@@ -32,6 +32,7 @@ type Controller interface {
 	PerformAutomationAction(automationID string, action woxui.AccessibilityAction, value string) error
 	DispatchAutomationPointer(event woxui.PointerEvent) error
 	PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (bool, error)
+	DispatchAutomationKey(event woxui.KeyEvent) (bool, error)
 	EnterAutomationText(text string) error
 	ResetAutomationState() error
 	ShowAutomationWindow() error

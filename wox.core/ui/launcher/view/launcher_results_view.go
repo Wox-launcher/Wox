@@ -60,6 +60,7 @@ type LauncherResultItem struct {
 	Tails              []LauncherResultTail
 	TailWidth          float32
 	TailHeight         float32
+	QuickSelectNumber  string
 	OnHover            func(bool) `boundary:"stable"`
 	OnSelect           func()     `boundary:"stable"`
 	OnSecondaryTapDown func()     `boundary:"stable"`
@@ -282,8 +283,14 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 			},
 		}
 	}
+	quickSelectWidth := launcherQuickSelectSlotWidth(item.QuickSelectNumber, props.DensityScale)
+	trailingWidth := item.TailWidth + quickSelectWidth
+	gapCount := 1
+	if trailingWidth > 0 {
+		gapCount++
+	}
 	labelContentWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-scaledLauncherSize(20, props.DensityScale))
-	labelWidth := max(props.BaseHeight, labelContentWidth-item.TailWidth)
+	labelWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-trailingWidth-props.IconGap*float32(gapCount))
 	titleProps := launcherResultTextProps{Value: item.Title, Style: props.TitleStyle, Color: title}
 	labelChildren := []woxwidget.Widget{launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)}
 	subtitleValue := launcherResultSingleLineText(item.Subtitle)
@@ -305,10 +312,11 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		woxwidget.Align{Width: props.IconSize, Height: props.BaseHeight, Vertical: 0.5, Child: icon},
 		woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: labelContent},
 	}
-	// Align with Width 0 fills the parent, so an empty tail slot would consume the
-	// full row width and overflow a sequential horizontal flex by exactly that amount.
-	if item.TailWidth > 0 {
-		rowChildren = append(rowChildren, woxwidget.Align{Width: item.TailWidth, Height: props.BaseHeight, Vertical: 0.5, Child: tail})
+	// Keep tails and the hold-to-number chip in one trailing cluster so every
+	// row shares the same right edge. An extra flex gap here is what pushed
+	// numbered rows with tags past the result padding.
+	if trailing := launcherResultTrailing(tail, item.TailWidth, item.QuickSelectNumber, props.BaseHeight, quickSelectWidth, props.DensityScale, tailColor, props.Theme.Background); trailing != nil {
+		rowChildren = append(rowChildren, trailing)
 	}
 	contentLayer := woxwidget.Container{
 		Width: props.RowWidth, Height: props.RowHeight, Padding: props.ItemPadding,
@@ -340,7 +348,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID)), AutomationID: "launcher.result." + item.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: item.Title, Description: subtitleValue, Selected: item.Selected,
+		Label: item.Title, Description: subtitleValue, Value: item.QuickSelectNumber, Selected: item.Selected,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {
@@ -399,11 +407,18 @@ func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height fl
 		})
 		contentWidth += itemWidth
 	}
-	content := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}
-	if scrollKey == "" {
-		return woxwidget.Clip{Width: width, Height: height, Child: content}
+	content := woxwidget.Container{Width: contentWidth, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+	if contentWidth <= width {
+		return woxwidget.Align{Width: width, Height: height, Horizontal: 1, Vertical: 0.5, Child: content}
 	}
-	return woxwidget.ScrollView{Key: scrollKey, Width: width, Height: height, ContentWidth: max(width, contentWidth), Horizontal: true, Child: content}
+	if scrollKey == "" {
+		return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Align{Width: width, Height: height, Horizontal: 1, Child: content}}
+	}
+	return woxwidget.ScrollView{
+		Key: scrollKey, Width: width, Height: height, ContentWidth: contentWidth, Horizontal: true,
+		InitialOffset: contentWidth - width, KeepVisible: &woxwidget.ScrollRange{Start: contentWidth - width, End: contentWidth},
+		Child: content,
+	}
 }
 
 // launcherResultTextTailStyle maps semantic tail categories to Flutter's stable status colors.
@@ -428,4 +443,63 @@ func launcherResultTextTailStyle(category string, foreground woxui.Color, select
 		border.A = 87
 	}
 	return foreground, woxui.Color{}, border
+}
+
+const (
+	launcherQuickSelectSize          = float32(20)
+	launcherQuickSelectRadius        = float32(4)
+	launcherQuickSelectPaddingLeft   = float32(10)
+	launcherQuickSelectPaddingRight  = float32(5)
+	launcherQuickSelectBorderOpacity = float32(0.3)
+)
+
+func launcherQuickSelectSlotWidth(number string, densityScale float32) float32 {
+	if number == "" {
+		return 0
+	}
+	return scaledLauncherSize(launcherQuickSelectPaddingLeft+launcherQuickSelectSize+launcherQuickSelectPaddingRight, densityScale)
+}
+
+// launcherResultTrailing pins tags and the hold-to-number chip to the row's right edge.
+func launcherResultTrailing(tail woxwidget.Widget, tailWidth float32, number string, height, badgeWidth, densityScale float32, fill, text woxui.Color) woxwidget.Widget {
+	var children []woxwidget.Widget
+	if tailWidth > 0 && tail != nil {
+		children = append(children, woxwidget.Align{Width: tailWidth, Height: height, Vertical: 0.5, Child: tail})
+	}
+	if badgeWidth > 0 && number != "" {
+		children = append(children, woxwidget.Align{
+			Width: badgeWidth, Height: height, Vertical: 0.5,
+			Child: launcherQuickSelectBadge(number, densityScale, fill, text),
+		})
+	}
+	if len(children) == 0 {
+		return nil
+	}
+	if len(children) == 1 {
+		return children[0]
+	}
+	return woxwidget.Container{
+		Width: tailWidth + badgeWidth, Height: height,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
+	}
+}
+
+// launcherQuickSelectBadge draws the hold-to-number chip with text that uses the
+// window background so a light selected tail color cannot wash out the digit.
+func launcherQuickSelectBadge(number string, densityScale float32, fill, text woxui.Color) woxwidget.Widget {
+	size := scaledLauncherSize(launcherQuickSelectSize, densityScale)
+	radius := scaledLauncherSize(launcherQuickSelectRadius, densityScale)
+	left := scaledLauncherSize(launcherQuickSelectPaddingLeft, densityScale)
+	right := scaledLauncherSize(launcherQuickSelectPaddingRight, densityScale)
+	border := fill
+	border.A = uint8(float32(fill.A)*launcherQuickSelectBorderOpacity + 0.5)
+	return woxwidget.Container{
+		Width: left + size + right, Height: size, Padding: woxwidget.Insets{Left: left, Right: right},
+		Child: woxwidget.Container{
+			Width: size, Height: size, Radius: radius, Color: fill, BorderColor: border, BorderWidth: 1,
+			Child: woxwidget.Align{Width: size, Height: size, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
+				Value: number, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Weight: woxui.FontWeightSemibold}, Color: text,
+			}},
+		},
+	}
 }

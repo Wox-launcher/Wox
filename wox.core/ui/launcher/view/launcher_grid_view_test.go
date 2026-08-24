@@ -69,6 +69,29 @@ func TestLauncherGridImageUsesFlutterFit(t *testing.T) {
 	}
 }
 
+func TestLauncherGridShowsQuickSelectBadge(t *testing.T) {
+	fill := woxui.Color{R: 180, G: 180, B: 190, A: 255}
+	text := woxui.Color{R: 24, G: 29, B: 38, A: 255}
+	semantics := launcherGridResultView(LauncherGridResult{ID: "app", QuickSelectNumber: "2"}, LauncherGridProps{
+		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70, ItemPadding: 4,
+		TailColor: fill, Theme: woxcomponent.Theme{Background: text},
+	}).(woxwidget.Semantics)
+	if semantics.Value != "2" {
+		t.Fatalf("grid quick select value = %q, want the visible number", semantics.Value)
+	}
+	result := semantics.Child.(woxwidget.Gesture)
+	visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	if len(visual.Children) != 3 {
+		t.Fatalf("grid visual children = %d, want frame, icon, and quick select badge", len(visual.Children))
+	}
+	badge := visual.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Container)
+	chip := badge.Child.(woxwidget.Container)
+	label := chip.Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if chip.Width != 20 || label.Value != "2" || chip.Color != fill || label.Color != text {
+		t.Fatalf("grid quick select badge = size %.0f text %q fill %#v color %#v", chip.Width, label.Value, chip.Color, label.Color)
+	}
+}
+
 func TestLauncherGridBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, launcherGridFrameProps{})
 	woxwidget.AssertEqualCoversAllFields(t, launcherGridIconProps{})

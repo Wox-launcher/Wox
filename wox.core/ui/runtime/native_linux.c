@@ -1409,6 +1409,14 @@ static const char *portable_key(guint keyval, char text[8]) {
   case GDK_KEY_Delete:
   case GDK_KEY_KP_Delete:
     return "delete";
+  case GDK_KEY_Alt_L:
+  case GDK_KEY_Alt_R:
+    return "alt";
+  case GDK_KEY_Meta_L:
+  case GDK_KEY_Meta_R:
+  case GDK_KEY_Super_L:
+  case GDK_KEY_Super_R:
+    return "meta";
   default:
     break;
   }

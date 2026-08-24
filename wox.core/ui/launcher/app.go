@@ -89,6 +89,10 @@ type App struct {
 	queryTransitionTimer       *time.Timer
 	queryLoading               bool
 	queryLoadingTimer          *time.Timer
+	quickSelectMode            bool
+	quickSelectKeyPressed      bool
+	quickSelectTimer           *time.Timer
+	quickSelectViewport        quickSelectViewport
 	previewTooltipRevision     atomic.Uint64
 	selected                   int
 	hoveredResult              int
@@ -588,6 +592,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.actionSelectionKey = ""
 		a.actionFilter = nil
 		a.form = nil
+		a.stopQuickSelectLocked()
 		a.visible = false
 		a.bottomAnchorY = 0
 		a.stopGlanceLocked(false)
@@ -1192,14 +1197,21 @@ func absFloat32(value float32) float32 {
 }
 
 func (a *App) onKey(event woxui.KeyEvent) bool {
-	if !event.Down || event.Composing {
+	if event.Composing {
 		return false
+	}
+	if !event.Down {
+		return a.onQuickSelectKey(event)
 	}
 	if !a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
 	if !a.formTableUsesSettingsWindow() && a.launcherTableEditor != nil {
 		return a.onFormTableKey(event)
+	}
+	// Handle the hold state before feature-local handlers can consume the key.
+	if a.onQuickSelectKey(event) {
+		return true
 	}
 	if a.onFormKey(event) {
 		return true

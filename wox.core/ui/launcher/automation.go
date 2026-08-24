@@ -248,13 +248,18 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 
 // PressAutomationKey sends a complete key press through the normal widget and launcher handlers.
 func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (bool, error) {
+	downHandled, err := a.DispatchAutomationKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true})
+	if err != nil {
+		return false, err
+	}
+	upHandled, err := a.DispatchAutomationKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
+	return downHandled || upHandled, err
+}
+
+// DispatchAutomationKey sends one key-down or key-up through the normal widget and launcher handlers.
+func (a *App) DispatchAutomationKey(event woxui.KeyEvent) (bool, error) {
 	if window := a.independentAutomationWindow(); window != nil {
-		downHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true})
-		if err != nil {
-			return false, err
-		}
-		upHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
-		return downHandled || upHandled, err
+		return window.DispatchKey(event)
 	}
 	target := a.resolveAutomationTarget()
 	host, window, kind := a.automationSurface()
@@ -262,40 +267,22 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (b
 		return false, errors.New("active widget host is not initialized")
 	}
 	if kind == automationSurfaceOverlay || kind == automationSurfaceNotes {
-		downHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true})
-		if err != nil {
-			return false, err
-		}
-		upHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
-		return downHandled || upHandled, err
+		return window.DispatchKey(event)
 	}
 	handled := false
 	err := woxui.Call(func() {
-		down := woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}
-		downHandled := host.Key(down)
-		if !downHandled {
-			switch kind {
-			case automationSurfaceOnboarding:
-				downHandled = a.onOnboardingWindowKey(down)
-			case automationSurfaceSettings:
-				downHandled = a.onSettingsWindowKey(down)
-			default:
-				downHandled = target.onKey(down)
-			}
+		handled = host.Key(event)
+		if handled {
+			return
 		}
-		up := woxui.KeyEvent{Key: key, Modifiers: modifiers}
-		upHandled := host.Key(up)
-		if !upHandled {
-			switch kind {
-			case automationSurfaceOnboarding:
-				upHandled = a.onOnboardingWindowKey(up)
-			case automationSurfaceSettings:
-				upHandled = a.onSettingsWindowKey(up)
-			default:
-				upHandled = target.onKey(up)
-			}
+		switch kind {
+		case automationSurfaceOnboarding:
+			handled = a.onOnboardingWindowKey(event)
+		case automationSurfaceSettings:
+			handled = a.onSettingsWindowKey(event)
+		default:
+			handled = target.onKey(event)
 		}
-		handled = downHandled || upHandled
 	})
 	return handled, err
 }

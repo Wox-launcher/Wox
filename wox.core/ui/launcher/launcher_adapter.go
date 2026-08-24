@@ -88,6 +88,7 @@ type viewSnapshot struct {
 	densityMetrics        launcherDensityMetrics
 	selectedPreviewType   string
 	webViewNavigation     woxui.WebViewNavigationState
+	quickSelectMode       bool
 }
 
 type actionSectionRevisionState struct {
@@ -180,6 +181,7 @@ func (a *App) snapshot() viewSnapshot {
 		densityMetrics:        a.densityMetrics.normalized(),
 		selectedPreviewType:   selectedPreviewType,
 		webViewNavigation:     a.webViewNavigation,
+		quickSelectMode:       a.quickSelectMode && a.actionPanel == false && a.form == nil && a.requirementForm == nil,
 	}
 }
 
@@ -968,8 +970,15 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 	contentHeight := containerPadding.Top + containerPadding.Bottom + float32(len(snapshot.results))*rowHeight + float32(max(0, len(snapshot.results)-1)*resultRowGap)
 	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, containerPadding.Top)
 	a.rememberResolvedResultScroll(snapshot, scroll)
+	a.rememberQuickSelectViewport(quickSelectViewport{
+		offset: scroll.offset, height: height, topPadding: containerPadding.Top, rowHeight: rowHeight, gap: resultRowGap,
+	})
 	offset := scroll.offset
 	start, end := visibleResultRange(len(snapshot.results), offset, height, containerPadding.Top, rowHeight, resultRowGap)
+	quickSelectVisible := []bool(nil)
+	if snapshot.quickSelectMode {
+		quickSelectVisible = a.quickSelectVisibleLocked()
+	}
 	items := make([]launcherview.LauncherResultItem, 0, end-start)
 	for index := start; index < end; index++ {
 		result := snapshot.results[index]
@@ -983,7 +992,8 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
-			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
+			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
+			OnHover:           func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
 			OnDragStart: func() { a.startResultDrag(index) },
 		})
 	}

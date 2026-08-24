@@ -272,6 +272,21 @@ func (c *Client) PressKeyHandled(ctx context.Context, key woxui.Key, modifiers w
 	return handled, nil
 }
 
+// SendKey sends one key-down or key-up through the normal product key path.
+func (c *Client) SendKey(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers, down bool) error {
+	_, err := c.SendKeyHandled(ctx, key, modifiers, down)
+	return err
+}
+
+// SendKeyHandled sends one key-down or key-up and reports whether the product handled it.
+func (c *Client) SendKeyHandled(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers, down bool) (bool, error) {
+	handled, err := call[bool](ctx, c, "input.key_event", map[string]any{"key": key, "modifiers": modifiers, "down": down})
+	if pauseErr := c.pauseAfterStep(ctx, err); pauseErr != nil {
+		return false, pauseErr
+	}
+	return handled, nil
+}
+
 // EnterText commits UTF-8 text through the focused editor.
 func (c *Client) EnterText(ctx context.Context, text string) error {
 	_, err := call[bool](ctx, c, "input.text", map[string]string{"text": text})

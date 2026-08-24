@@ -263,6 +263,7 @@ func (a *App) toggleActionPanel() {
 	if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
 		return
 	}
+	a.stopQuickSelectLocked()
 	// Flutter dismisses a form action before transferring keyboard ownership to the action filter.
 	a.form = nil
 	a.actionPanel = true

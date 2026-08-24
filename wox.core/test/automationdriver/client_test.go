@@ -157,6 +157,43 @@ func TestPressKeyHandledReturnsServerResult(t *testing.T) {
 	}
 }
 
+func TestSendKeyHandledDispatchesKeyEvent(t *testing.T) {
+	t.Parallel()
+
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Key       woxui.Key          `json:"key"`
+				Modifiers woxui.KeyModifiers `json:"modifiers"`
+				Down      bool               `json:"down"`
+			} `json:"params"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if requestPayload.Method != "input.key_event" || requestPayload.Params.Key != woxui.KeyAlt || requestPayload.Params.Modifiers != woxui.KeyModifierAlt || !requestPayload.Params.Down {
+			t.Fatalf("unexpected key event %#v", requestPayload)
+		}
+		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": requestPayload.ID, "result": true})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	handled, err := client.SendKeyHandled(context.Background(), woxui.KeyAlt, woxui.KeyModifierAlt, true)
+	if err != nil || !handled {
+		t.Fatalf("send handled = %v err %v, want true", handled, err)
+	}
+}
+
 func TestClientReadsAndResetsFrameMetrics(t *testing.T) {
 	t.Parallel()
 

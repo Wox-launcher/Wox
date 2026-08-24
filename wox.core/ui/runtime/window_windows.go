@@ -1565,6 +1565,10 @@ func windowsKey(virtualKey uintptr) Key {
 		return KeyArrowDown
 	case win.VK_DELETE:
 		return KeyDelete
+	case win.VK_MENU, win.VK_LMENU, win.VK_RMENU:
+		return KeyAlt
+	case win.VK_LWIN, win.VK_RWIN:
+		return KeyMeta
 	default:
 		return KeyUnknown
 	}

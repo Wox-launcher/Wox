@@ -53,6 +53,7 @@ wpm install browser
 | `Up` / `Down` | 在结果中移动 |
 | `Enter` | 执行选中结果的主要动作 |
 | Windows/Linux: `Ctrl + J`；macOS: `Command + J` | 打开操作面板 |
+| Windows/Linux: 按住 `Alt` 再按 `1`-`9`；macOS: 按住 `Command` 再按 `1`-`9` | 按序号执行当前可见结果 |
 | `Tab` | 在可用时补全建议查询 |
 
 ## 热键设置

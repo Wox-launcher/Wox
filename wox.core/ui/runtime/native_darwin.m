@@ -706,6 +706,7 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
   NSRange _marked_selection;
   NSTrackingArea *_tracking_area;
   NSArray *_accessibility_children;
+  NSEventModifierFlags _modifier_flags;
 }
 - (void)updateBackingScale;
 - (void)renderFrame;
@@ -2125,6 +2126,33 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   [super keyUp:event];
 }
 
+// flagsChanged is the AppKit path for Command/Option; those keys do not emit keyDown/keyUp.
+- (void)flagsChanged:(NSEvent *)event {
+  WoxDarwinWindow *owner = _owner;
+  if (owner == NULL || owner->closed || owner->context == 0) {
+    [super flagsChanged:event];
+    return;
+  }
+  NSEventModifierFlags previous = _modifier_flags;
+  NSEventModifierFlags current = event.modifierFlags;
+  _modifier_flags = current;
+  uint8_t modifiers = portable_modifiers(current);
+  int32_t composing = _marked_text.length > 0 ? 1 : 0;
+  if (((current ^ previous) & NSEventModifierFlagCommand) != 0) {
+    int32_t down = (current & NSEventModifierFlagCommand) != 0 ? 1 : 0;
+    if (woxGoDarwinKey(owner->context, "meta", modifiers, down, 0, composing) != 0) {
+      return;
+    }
+  }
+  if (((current ^ previous) & NSEventModifierFlagOption) != 0) {
+    int32_t down = (current & NSEventModifierFlagOption) != 0 ? 1 : 0;
+    if (woxGoDarwinKey(owner->context, "alt", modifiers, down, 0, composing) != 0) {
+      return;
+    }
+  }
+  [super flagsChanged:event];
+}
+
 // NSTextInputClient keeps marked text separate from committed UTF-8 text.
 - (void)insertText:(id)value replacementRange:(NSRange)replacement_range {
   (void)replacement_range;
@@ -2305,6 +2333,8 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   if (owner == NULL || owner->closed) {
     return;
   }
+  // The key window may not receive modifier releases after focus moves elsewhere.
+  owner->view->_modifier_flags = 0;
   if (owner->native_dialog_active) {
     return;
   }

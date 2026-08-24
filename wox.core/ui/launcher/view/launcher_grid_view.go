@@ -17,6 +17,7 @@ type LauncherGridResult struct {
 	Selected           bool
 	Hovered            bool
 	Icon               *woxui.Image
+	QuickSelectNumber  string
 	OnHover            func(bool) `boundary:"stable"`
 	OnSelect           func()     `boundary:"stable"`
 	OnSecondaryTapDown func()     `boundary:"stable"`
@@ -42,6 +43,8 @@ type LauncherGridProps struct {
 	TitleHeight       float32
 	DensityScale      float32
 	Theme             woxcomponent.Theme
+	TailColor         woxui.Color
+	SelectedTailColor woxui.Color
 	ScrollDetached    bool
 	Complete          bool
 	ExtentRevision    uint64
@@ -174,7 +177,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	visualWidth := props.VisualWidth + props.ItemPadding*2
 	visualHeight := props.VisualHeight + props.ItemPadding*2
 	frameProps := launcherGridFrameProps{Width: visualWidth, Height: visualHeight, BorderColor: frameColor}
-	visual := woxwidget.Stack{Width: visualWidth, Height: visualHeight, Children: []woxwidget.StackChild{
+	visualChildren := []woxwidget.StackChild{
 		{Child: woxwidget.Boundary[launcherGridFrameProps]{
 			Key: LauncherResultBackgroundBoundaryKey(result.ID), Label: "grid-frame:" + result.ID, Props: frameProps,
 			Build: func(props launcherGridFrameProps) woxwidget.Widget {
@@ -182,7 +185,20 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 			},
 		}},
 		{Child: woxwidget.Container{Width: visualWidth, Height: visualHeight, Padding: woxwidget.UniformInsets(props.ItemPadding), Child: icon}},
-	}}
+	}
+	if result.QuickSelectNumber != "" {
+		fill := props.TailColor
+		if result.Selected {
+			fill = props.SelectedTailColor
+		}
+		badge := launcherQuickSelectBadge(result.QuickSelectNumber, props.DensityScale, fill, props.Theme.Background)
+		inset := scaledLauncherSize(4, props.DensityScale)
+		visualChildren = append(visualChildren, woxwidget.StackChild{Child: woxwidget.Align{
+			Width: visualWidth, Height: visualHeight, Horizontal: 1, Vertical: 0,
+			Child: woxwidget.Container{Padding: woxwidget.Insets{Top: inset, Right: inset}, Child: badge},
+		}})
+	}
+	visual := woxwidget.Stack{Width: visualWidth, Height: visualHeight, Children: visualChildren}
 	children := []woxwidget.Widget{visual}
 	if props.ShowTitle {
 		titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridItemTitleFontSize, props.DensityScale)}, Color: props.Theme.ResultTitle}
@@ -190,7 +206,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", result.ID)), AutomationID: "launcher.result." + result.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: result.Title, Selected: result.Selected,
+		Label: result.Title, Value: result.QuickSelectNumber, Selected: result.Selected,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {

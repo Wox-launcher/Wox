@@ -19,6 +19,7 @@ type fakeController struct {
 	action         woxui.AccessibilityAction
 	actionValue    string
 	pointer        woxui.PointerEvent
+	keyEvent       woxui.KeyEvent
 	settingsPath   string
 	selectionText  string
 	reset          bool
@@ -80,6 +81,10 @@ func (f *fakeController) DispatchAutomationPointer(event woxui.PointerEvent) err
 }
 
 func (f *fakeController) PressAutomationKey(woxui.Key, woxui.KeyModifiers) (bool, error) {
+	return f.keyHandled, nil
+}
+func (f *fakeController) DispatchAutomationKey(event woxui.KeyEvent) (bool, error) {
+	f.keyEvent = event
 	return f.keyHandled, nil
 }
 func (*fakeController) EnterAutomationText(string) error { return nil }
@@ -187,6 +192,10 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	}
 	if keyResponse.Code != http.StatusOK || !keyResult.Result {
 		t.Fatalf("key handled result was not returned: status=%d handled=%v", keyResponse.Code, keyResult.Result)
+	}
+	keyEventResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"key-event","method":"input.key_event","params":{"key":"alt","modifiers":4,"down":true}}`)
+	if keyEventResponse.Code != http.StatusOK || controller.keyEvent.Key != woxui.KeyAlt || controller.keyEvent.Modifiers != woxui.KeyModifierAlt || !controller.keyEvent.Down {
+		t.Fatalf("key event was not dispatched: status=%d event=%+v", keyEventResponse.Code, controller.keyEvent)
 	}
 
 	settingsResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"settings","method":"window.open_settings","params":{"path":"/appearance"}}`)

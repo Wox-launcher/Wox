@@ -53,6 +53,7 @@ Use a keyword when fallback results are noisy or when you know exactly which plu
 | `Up` / `Down` | Move through results |
 | `Enter` | Run the selected result's primary action |
 | Windows/Linux: `Ctrl + J`; macOS: `Command + J` | Open the Action Panel |
+| Windows/Linux: hold `Alt` then `1`-`9`; macOS: hold `Command` then `1`-`9` | Run a visible result by its number |
 | `Tab` | Complete the suggested query when available |
 
 ## Hotkey Settings

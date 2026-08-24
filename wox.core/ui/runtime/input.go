@@ -22,6 +22,10 @@ const (
 	KeyArrowRight Key = "arrow-right"
 	KeyArrowDown  Key = "arrow-down"
 	KeyDelete     Key = "delete"
+	// KeyAlt is Alt on Windows and Linux, Option on macOS.
+	KeyAlt Key = "alt"
+	// KeyMeta is Windows/Super on Windows and Linux, Command on macOS.
+	KeyMeta Key = "meta"
 )
 
 // HasPrimary reports Command on macOS and Control on other desktop platforms.

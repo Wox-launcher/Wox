@@ -17,19 +17,20 @@ import (
 )
 
 const (
-	smokeAutomationTrigger          = "wox-smoke"
-	smokeAutomationSlowCommand      = "slow"
-	smokeAutomationStreamingCommand = "streaming-preview"
-	smokeAutomationToolbarCommand   = "toolbar"
-	smokeAutomationAttentionCommand = "attention"
-	smokeAutomationToolbarMessageID = "wox-smoke-toolbar-message"
-	smokeAutomationKeepOpenAction   = "keep-open"
-	smokeAutomationClearAction      = "clear"
-	smokeAutomationResultAction     = "hide-launcher"
-	smokeAutomationAttentionKey     = "attention-smoke-item"
-	smokeAutomationAttentionTitle   = "Attention smoke item"
-	smokeAutomationAttentionQuery   = "1+1"
-	smokeStepDelayEnvironment       = "WOX_GO_UI_SMOKE_STEP_DELAY"
+	smokeAutomationTrigger            = "wox-smoke"
+	smokeAutomationSlowCommand        = "slow"
+	smokeAutomationStreamingCommand   = "streaming-preview"
+	smokeAutomationToolbarCommand     = "toolbar"
+	smokeAutomationAttentionCommand   = "attention"
+	smokeAutomationQuickSelectCommand = "quick-select"
+	smokeAutomationToolbarMessageID   = "wox-smoke-toolbar-message"
+	smokeAutomationKeepOpenAction     = "keep-open"
+	smokeAutomationClearAction        = "clear"
+	smokeAutomationResultAction       = "hide-launcher"
+	smokeAutomationAttentionKey       = "attention-smoke-item"
+	smokeAutomationAttentionTitle     = "Attention smoke item"
+	smokeAutomationAttentionQuery     = "1+1"
+	smokeStepDelayEnvironment         = "WOX_GO_UI_SMOKE_STEP_DELAY"
 )
 
 func init() {
@@ -52,6 +53,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
+			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
 			{Command: smokeAutomationChatCommand, Description: "200 chat messages with streaming updates"},
@@ -76,6 +78,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryToolbar(ctx)
 	case smokeAutomationAttentionCommand:
 		return p.queryAttentionFixture()
+	case smokeAutomationQuickSelectCommand:
+		return p.queryQuickSelect()
 	case smokeAutomationListCommand:
 		return queryListFixture()
 	case smokeAutomationGridCommand:
@@ -167,6 +171,40 @@ func (p *smokeAutomationPlugin) queryStreamingPreview() plugin.QueryResponse {
 		})
 	})
 	return plugin.NewQueryResponse([]plugin.QueryResult{{Id: resultID, Title: "Streaming preview pending", Icon: common.PluginAppIcon}})
+}
+
+// queryQuickSelect returns two named results so a hold-to-number activation can target the second row.
+func (p *smokeAutomationPlugin) queryQuickSelect() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{
+		{
+			Id:    "quick-select-first-fixture",
+			Title: "Quick select first fixture",
+			Icon:  common.PluginAppIcon,
+			Actions: []plugin.QueryResultAction{{
+				Id:                     "keep-open",
+				Name:                   "Keep open",
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					p.completeAttentionFixtureAction(ctx, actionContext.ResultId, "Quick select first activated")
+				},
+			}},
+		},
+		{
+			Id:    "quick-select-second-fixture",
+			Title: "Quick select second fixture",
+			Icon:  common.PluginAppIcon,
+			Actions: []plugin.QueryResultAction{{
+				Id:                     smokeAutomationResultAction,
+				Name:                   "Hide launcher",
+				IsDefault:              true,
+				PreventHideAfterAction: false,
+				Action: func(ctx context.Context, _ plugin.ActionContext) {
+					p.api.Log(ctx, plugin.LogLevelInfo, "Quick select second fixture activated")
+				},
+			}},
+		},
+	})
 }
 
 // queryToolbar publishes a persistent toolbar message through the real plugin API boundary.
