@@ -148,6 +148,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		focus:             a.focusPluginFormField,
 		change:            a.changePluginFormChoice,
 		setText:           a.setPluginFormText,
+		pickDir:           a.pickPluginFormDirectory,
 		onKey:             a.onPluginSettingsKey,
 		openTable:         a.openPluginFormTable,
 		openChoice:        a.openPluginFormChoice,

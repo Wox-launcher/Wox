@@ -68,13 +68,13 @@ func configureMaximumResultsShellCommands(t *testing.T, ctx context.Context, cli
 	t.Helper()
 	smoke.OpenInstalledPluginSettings(t, ctx, client, "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d")
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "plugin-settings-field-2-add")
+		_, found := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
 		return found
 	}); err != nil {
 		t.Fatalf("wait for Shell command settings: %v", err)
 	}
 	for index := range count {
-		if err := client.Perform(ctx, "plugin-settings-field-2-add", woxui.AccessibilityActionActivate, ""); err != nil {
+		if err := client.Perform(ctx, "plugin-settings-field-3-add", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("add Shell command %d: %v", index, err)
 		}
 		waitForMaximumResultsShellCommandEditor(t, ctx, client)
@@ -93,7 +93,7 @@ func configureMaximumResultsShellCommands(t *testing.T, ctx context.Context, cli
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
-			_, rowFound := automationdriver.Find(snapshot, fmt.Sprintf("plugin-settings-field-2-row-%d-edit", index))
+			_, rowFound := automationdriver.Find(snapshot, fmt.Sprintf("plugin-settings-field-3-row-%d-edit", index))
 			return !editorFound && rowFound
 		}); err != nil {
 			t.Fatalf("wait for saved Shell command %d: %v", index, err)

@@ -14,6 +14,7 @@ type PluginSettingDefinitionType string
 const (
 	PluginSettingDefinitionTypeHead          PluginSettingDefinitionType = "head"
 	PluginSettingDefinitionTypeTextBox       PluginSettingDefinitionType = "textbox"
+	PluginSettingDefinitionTypeDirPath       PluginSettingDefinitionType = "dirPath"
 	PluginSettingDefinitionTypeCheckBox      PluginSettingDefinitionType = "checkbox"
 	PluginSettingDefinitionTypeSelect        PluginSettingDefinitionType = "select"
 	PluginSettingDefinitionTypeSelectAIModel PluginSettingDefinitionType = "selectAIModel"
@@ -95,6 +96,14 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "textbox":
 		n.Type = PluginSettingDefinitionTypeTextBox
 		var v PluginSettingValueTextBox
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "dirPath":
+		n.Type = PluginSettingDefinitionTypeDirPath
+		var v PluginSettingValueDirPath
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr

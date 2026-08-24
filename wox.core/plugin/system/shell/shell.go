@@ -32,22 +32,33 @@ const (
 	PluginCommandDataWorkingDirectory      = "working_directory"
 	QueryContextWorkingDirectoryKey        = "wox:shell:working_directory"
 
-	shellInterpreterSettingKey = "shell_interpreter"
-	shellCommandsSettingKey    = "shellCommands"
-	shellActionSessionIDKey    = "session_id"
-	shellActionHistoryIDKey    = "history_id"
-	shellActionCommandKey      = "command"
-	shellActionInterpreterKey  = "interpreter"
-	shellActionTitleKey        = "title"
-	shellActionWorkingDirKey   = "working_directory"
-	shellActionCommandIndexKey = "command_index"
-	shellOutputSummaryMaxBytes = 64 * 1024
+	shellInterpreterSettingKey                   = "shell_interpreter"
+	shellDefaultWorkingDirectoryModeSettingKey   = "default_working_directory_mode"
+	shellDefaultWorkingDirectorySettingKey       = "default_working_directory"
+	shellDefaultWorkingDirectoryDetailSettingKey = "default_working_directory_detail"
+	shellLastUsedWorkingDirectorySettingKey      = "last_used_working_directory"
+	shellCommandsSettingKey                      = "shellCommands"
+
+	shellDefaultWorkingDirectoryModeHome     = "home"
+	shellDefaultWorkingDirectoryModeLastUsed = "last_used"
+	shellDefaultWorkingDirectoryModeCustom   = "custom"
+	shellActionSessionIDKey                  = "session_id"
+	shellActionHistoryIDKey                  = "history_id"
+	shellActionCommandKey                    = "command"
+	shellActionInterpreterKey                = "interpreter"
+	shellActionTitleKey                      = "title"
+	shellActionWorkingDirKey                 = "working_directory"
+	shellActionCommandIndexKey               = "command_index"
+	shellActionTriggerKeywordKey             = "trigger_keyword"
+	shellOutputSummaryMaxBytes               = 64 * 1024
 
 	shellFormTitleKey       = "title"
 	shellFormCommandKey     = "command"
 	shellFormInterpreterKey = "interpreter"
 	shellFormWorkingDirKey  = "working_directory"
 	shellFormSilentKey      = "silent"
+
+	emptyCommandResultGroupScore int64 = 200
 )
 
 var shellIcon = common.PluginShellIcon
@@ -60,6 +71,9 @@ type ShellPlugin struct {
 	api             plugin.API
 	historyManager  *ShellHistoryManager
 	terminalManager *terminal.Manager
+	// lastWorkingDirectory is the directory used by the most recent command in this Wox session.
+	lastWorkingDirectory   string
+	lastWorkingDirectoryMu sync.Mutex
 	// map[session_id]*shellExecutionState
 	executionStates sync.Map
 	// map[result_id]session_id
@@ -144,6 +158,27 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 					Tooltip:      "i18n:plugin_shell_interpreter_tooltip",
 					DefaultValue: getDefaultInterpreter(),
 					Options:      getInterpreterOptions(),
+				},
+			},
+			{
+				Type:               definition.PluginSettingDefinitionTypeSelect,
+				IsPlatformSpecific: true,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          shellDefaultWorkingDirectoryModeSettingKey,
+					Label:        "i18n:plugin_shell_default_working_directory",
+					Tooltip:      "i18n:plugin_shell_default_working_directory_tooltip",
+					DefaultValue: shellDefaultWorkingDirectoryModeHome,
+					Options: []definition.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_shell_default_working_directory_home", Value: shellDefaultWorkingDirectoryModeHome},
+						{Label: "i18n:plugin_shell_default_working_directory_last_used", Value: shellDefaultWorkingDirectoryModeLastUsed},
+						{Label: "i18n:plugin_shell_default_working_directory_custom", Value: shellDefaultWorkingDirectoryModeCustom},
+					},
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: shellDefaultWorkingDirectoryDetailSettingKey,
 				},
 			},
 			{
@@ -348,16 +383,159 @@ func displayTitleForCommand(data shellContextData) string {
 	return data.Command
 }
 
+// buildEmptyCommandResult is the selected compose row for an empty ">" query.
+// History and saved commands stay below it so a Folder/Explorer handoff can still show the pending working directory.
+func (s *ShellPlugin) buildEmptyCommandResult(ctx context.Context, interpreter string, workingDirectory string) plugin.QueryResult {
+	return s.buildEmptyCommandResultWithTrigger(ctx, interpreter, workingDirectory, ">")
+}
+
+// buildEmptyCommandResultWithTrigger keeps the empty compose row and exposes a working-directory action.
+func (s *ShellPlugin) buildEmptyCommandResultWithTrigger(ctx context.Context, interpreter string, workingDirectory string, triggerKeyword string) plugin.QueryResult {
+	data := shellContextData{Interpreter: interpreter, WorkingDirectory: workingDirectory}
+	return plugin.QueryResult{
+		Title:      "i18n:plugin_shell_enter_command",
+		Icon:       shellIcon,
+		Score:      2000,
+		ScoreKey:   "shell:empty-command",
+		GroupScore: emptyCommandResultGroupScore,
+		Preview: plugin.WoxPreview{
+			PreviewType:    plugin.WoxPreviewTypeText,
+			PreviewData:    "i18n:plugin_shell_enter_command_preview",
+			PreviewTags:    s.buildShellPreviewTags(ctx, data),
+			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+		},
+		Actions: []plugin.QueryResultAction{
+			{
+				Id:                     "compose",
+				Name:                   "i18n:plugin_shell_enter_command",
+				Icon:                   shellIcon,
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action:                 func(context.Context, plugin.ActionContext) {},
+			},
+			s.buildChangeWorkingDirectoryAction(data, triggerKeyword),
+		},
+	}
+}
+
+// userHomeDirectory is the fallback working directory when no command-specific path is set.
+func userHomeDirectory() string {
+	if homeDirectory, err := os.UserHomeDir(); err == nil {
+		return strings.TrimSpace(homeDirectory)
+	}
+	return ""
+}
+
+// defaultWorkingDirectoryMode returns the selected default-directory mode, migrating path-only settings to custom.
+func (s *ShellPlugin) defaultWorkingDirectoryMode(ctx context.Context) string {
+	if s.api == nil {
+		return shellDefaultWorkingDirectoryModeHome
+	}
+	mode := strings.TrimSpace(s.api.GetSetting(ctx, shellDefaultWorkingDirectoryModeSettingKey))
+	switch mode {
+	case shellDefaultWorkingDirectoryModeHome, shellDefaultWorkingDirectoryModeLastUsed, shellDefaultWorkingDirectoryModeCustom:
+		return mode
+	}
+	path := strings.TrimSpace(s.api.GetSetting(ctx, shellDefaultWorkingDirectorySettingKey))
+	if path != "" && path != userHomeDirectory() {
+		return shellDefaultWorkingDirectoryModeCustom
+	}
+	return shellDefaultWorkingDirectoryModeHome
+}
+
+// lastUsedWorkingDirectory returns the most recent valid execute directory from this session or a persisted local setting.
+func (s *ShellPlugin) lastUsedWorkingDirectory(ctx context.Context) string {
+	s.lastWorkingDirectoryMu.Lock()
+	remembered := s.lastWorkingDirectory
+	s.lastWorkingDirectoryMu.Unlock()
+	if resolved, ok := s.resolveWorkingDirectory(ctx, remembered, false); ok && resolved != "" {
+		return resolved
+	}
+	if s.api == nil {
+		return ""
+	}
+	persisted := strings.TrimSpace(s.api.GetSetting(ctx, shellLastUsedWorkingDirectorySettingKey))
+	if resolved, ok := s.resolveWorkingDirectory(ctx, persisted, false); ok && resolved != "" {
+		return resolved
+	}
+	return ""
+}
+
+// rememberWorkingDirectory stores the directory used by the latest executed command.
+func (s *ShellPlugin) rememberWorkingDirectory(ctx context.Context, workingDirectory string) {
+	workingDirectory = strings.TrimSpace(workingDirectory)
+	if workingDirectory == "" {
+		return
+	}
+	s.lastWorkingDirectoryMu.Lock()
+	unchanged := s.lastWorkingDirectory == workingDirectory
+	s.lastWorkingDirectory = workingDirectory
+	s.lastWorkingDirectoryMu.Unlock()
+	if unchanged || s.api == nil {
+		return
+	}
+	s.api.SetSetting(ctx, plugin.SetSettingOption{
+		Key:     shellLastUsedWorkingDirectorySettingKey,
+		Value:   workingDirectory,
+		IsLocal: true,
+	})
+}
+
+// configuredDefaultWorkingDirectory resolves the default directory from the selected mode.
+func (s *ShellPlugin) configuredDefaultWorkingDirectory(ctx context.Context) string {
+	switch s.defaultWorkingDirectoryMode(ctx) {
+	case shellDefaultWorkingDirectoryModeLastUsed:
+		if lastUsed := s.lastUsedWorkingDirectory(ctx); lastUsed != "" {
+			return lastUsed
+		}
+	case shellDefaultWorkingDirectoryModeCustom:
+		if s.api != nil {
+			configured := strings.TrimSpace(s.api.GetSetting(ctx, shellDefaultWorkingDirectorySettingKey))
+			if resolved, ok := s.resolveWorkingDirectory(ctx, configured, false); ok && resolved != "" {
+				return resolved
+			}
+		}
+	}
+	return userHomeDirectory()
+}
+
+// buildDefaultWorkingDirectoryDetailSetting shows the custom path picker only for the custom mode.
+func (s *ShellPlugin) buildDefaultWorkingDirectoryDetailSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
+	if s.defaultWorkingDirectoryMode(ctx) != shellDefaultWorkingDirectoryModeCustom {
+		return definition.PluginSettingDefinitionItem{}
+	}
+	return definition.PluginSettingDefinitionItem{
+		Type:               definition.PluginSettingDefinitionTypeDirPath,
+		IsPlatformSpecific: true,
+		Value: &definition.PluginSettingValueDirPath{
+			Key:          shellDefaultWorkingDirectorySettingKey,
+			Label:        "i18n:plugin_shell_default_working_directory_custom_path",
+			Tooltip:      "i18n:plugin_shell_default_working_directory_custom_path_tooltip",
+			DefaultValue: userHomeDirectory(),
+		},
+	}
+}
+
+// effectiveWorkingDirectory prefers an explicit command path, then the configured default directory.
+func (s *ShellPlugin) effectiveWorkingDirectory(ctx context.Context, workingDirectory string) string {
+	workingDirectory = strings.TrimSpace(workingDirectory)
+	if workingDirectory != "" {
+		return workingDirectory
+	}
+	return s.configuredDefaultWorkingDirectory(ctx)
+}
+
+// displayWorkingDirectory returns the directory shown on empty-command metadata when none was supplied.
+func (s *ShellPlugin) displayWorkingDirectory(ctx context.Context, workingDirectory string) string {
+	return s.effectiveWorkingDirectory(ctx, workingDirectory)
+}
+
 // buildShellPreviewTags builds the metadata chips shown below shell previews.
 func (s *ShellPlugin) buildShellPreviewTags(ctx context.Context, data shellContextData) []plugin.WoxPreviewTag {
 	interpreter := effectiveInterpreter(data.Interpreter, "")
-	workingDirectory := strings.TrimSpace(data.WorkingDirectory)
+	workingDirectory := s.displayWorkingDirectory(ctx, data.WorkingDirectory)
 	if workingDirectory == "" {
-		if currentDirectory, err := os.Getwd(); err == nil {
-			workingDirectory = currentDirectory
-		} else {
-			workingDirectory = "i18n:plugin_shell_default_working_directory"
-		}
+		workingDirectory = "i18n:plugin_shell_default_working_directory"
 	}
 
 	tags := []plugin.WoxPreviewTag{
@@ -406,6 +584,12 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.historyManager = NewShellHistoryManager()
 	s.terminalManager = terminal.GetSessionManager()
 	s.api.OnHandlePluginCommand(ctx, s.handlePluginCommand)
+	s.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+		if key != shellDefaultWorkingDirectoryDetailSettingKey {
+			return definition.PluginSettingDefinitionItem{}
+		}
+		return s.buildDefaultWorkingDirectoryDetailSetting(ctx)
+	})
 
 	// Initialize history table
 	err := s.historyManager.Init(ctx)
@@ -445,6 +629,17 @@ func (s *ShellPlugin) handlePluginCommand(ctx context.Context, request plugin.Pl
 		},
 	})
 	return plugin.PluginCommandResult{Handled: true}
+}
+
+// resolveExecutionWorkingDirectory applies the default directory when none was provided, then validates it.
+func (s *ShellPlugin) resolveExecutionWorkingDirectory(ctx context.Context, workingDirectory string, notify bool) string {
+	if resolved, ok := s.resolveWorkingDirectory(ctx, s.effectiveWorkingDirectory(ctx, workingDirectory), notify); ok {
+		if resolved != "" {
+			s.rememberWorkingDirectory(ctx, resolved)
+		}
+		return resolved
+	}
+	return ""
 }
 
 // resolveWorkingDirectory validates a user/plugin-provided working directory before execution.
@@ -588,6 +783,79 @@ func (s *ShellPlugin) buildRunWithInterpreterAction(data shellContextData) plugi
 			})
 		},
 	}
+}
+
+// buildChangeWorkingDirectoryAction opens a directory picker and applies the path to the current query.
+func (s *ShellPlugin) buildChangeWorkingDirectoryAction(data shellContextData, triggerKeyword string) plugin.QueryResultAction {
+	contextData := s.buildActionContextDataForCommand(data)
+	if keyword := strings.TrimSpace(triggerKeyword); keyword != "" {
+		contextData[shellActionTriggerKeywordKey] = keyword
+	}
+	return plugin.QueryResultAction{
+		Id:                     "change_working_directory",
+		Name:                   "i18n:plugin_shell_change_working_directory",
+		Icon:                   common.FolderIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		ContextData:            contextData,
+		Form:                   s.buildChangeWorkingDirectoryForm(data.WorkingDirectory),
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
+			path := strings.TrimSpace(actionContext.Values[shellFormWorkingDirKey])
+			resolved, ok := s.resolveWorkingDirectory(ctx, path, true)
+			if !ok || resolved == "" {
+				if path == "" {
+					s.api.Notify(ctx, "i18n:plugin_shell_working_directory_required")
+				}
+				return
+			}
+			keyword := strings.TrimSpace(actionContext.ContextData[shellActionTriggerKeywordKey])
+			if keyword == "" {
+				keyword = triggerKeyword
+			}
+			s.applyWorkingDirectoryToQuery(ctx, keyword, currentData.Command, resolved)
+		},
+	}
+}
+
+// buildChangeWorkingDirectoryForm is the single directory field shown by the change-cwd action.
+func (s *ShellPlugin) buildChangeWorkingDirectoryForm(workingDirectory string) definition.PluginSettingDefinitions {
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeDirPath,
+			Value: &definition.PluginSettingValueDirPath{
+				Key:          shellFormWorkingDirKey,
+				Label:        "i18n:plugin_shell_form_working_directory",
+				DefaultValue: strings.TrimSpace(workingDirectory),
+				Tooltip:      "i18n:plugin_shell_change_working_directory_tooltip",
+				Validators:   requiredTextValidator(),
+			},
+		},
+	}
+}
+
+// applyWorkingDirectoryToQuery keeps the current shell query and binds the selected directory to it.
+func (s *ShellPlugin) applyWorkingDirectoryToQuery(ctx context.Context, triggerKeyword string, command string, workingDirectory string) {
+	s.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType: plugin.QueryTypeInput,
+		QueryText: shellQueryText(triggerKeyword, command),
+		ContextData: common.ContextData{
+			QueryContextWorkingDirectoryKey: workingDirectory,
+		},
+	})
+}
+
+// shellQueryText rebuilds a plugin-scoped shell query so the selected directory stays attached.
+func shellQueryText(triggerKeyword string, command string) string {
+	keyword := strings.TrimSpace(triggerKeyword)
+	if keyword == "" {
+		keyword = ">"
+	}
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return keyword + " "
+	}
+	return keyword + " " + command
 }
 
 // buildDeleteConfiguredCommandAction removes a saved shell command from settings.
@@ -846,6 +1114,8 @@ func (s *ShellPlugin) refreshCommandActionForms(actions []plugin.QueryResultActi
 			actions[i].Form = s.buildAddCommandForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
 		case "run_with_interpreter":
 			actions[i].Form = s.buildRunWithInterpreterForm(data.Interpreter)
+		case "change_working_directory":
+			actions[i].Form = s.buildChangeWorkingDirectoryForm(data.WorkingDirectory)
 		}
 	}
 }
@@ -913,36 +1183,20 @@ func (s *ShellPlugin) buildGlobalCommandTails(ctx context.Context, interpreter s
 	return tails
 }
 
-func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, showPlaceholder bool) []plugin.QueryResult {
+func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, triggerKeyword string) []plugin.QueryResult {
+	if s.historyManager == nil {
+		return nil
+	}
+
 	// Get recent history from database
 	histories, err := s.historyManager.GetRecentHistory(ctx, 10)
 	if err != nil {
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to get history: %s", err.Error()))
-		if !showPlaceholder {
-			return nil
-		}
-		return []plugin.QueryResult{
-			{
-				Title:    "i18n:plugin_shell_enter_command",
-				SubTitle: "i18n:plugin_shell_enter_command_subtitle",
-				Icon:     shellIcon,
-				Score:    100,
-			},
-		}
+		return nil
 	}
 
 	if len(histories) == 0 {
-		if !showPlaceholder {
-			return nil
-		}
-		return []plugin.QueryResult{
-			{
-				Title:    "i18n:plugin_shell_enter_command",
-				SubTitle: "i18n:plugin_shell_enter_command_subtitle",
-				Icon:     shellIcon,
-				Score:    100,
-			},
-		}
+		return nil
 	}
 
 	var results []plugin.QueryResult
@@ -1020,7 +1274,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, show
 			},
 		})
 		actions = s.appendExecuteAsAdministratorAction(actions, historyContextData)
-		actions = append(actions, s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData))
+		actions = append(actions, s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData), s.buildChangeWorkingDirectoryAction(historyContextData, triggerKeyword))
 
 		// Only add stop action if command is still running
 		if history.Status == "running" {
@@ -1095,16 +1349,17 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	// Get the command from the query
 	command := strings.TrimSpace(query.Search)
+	workingDirectory := s.effectiveWorkingDirectory(ctx, query.ContextData[QueryContextWorkingDirectoryKey])
 
-	// If no command entered, show history
+	// Keep a compose row selected on empty ">" so history cannot hide the pending working directory.
 	if command == "" {
-		commandResults := s.queryCommands(ctx, query, interpreter, true)
-		historyResults := s.queryHistory(ctx, interpreter, len(commandResults) == 0)
-		return plugin.NewQueryResponse(append(commandResults, historyResults...))
+		results := []plugin.QueryResult{s.buildEmptyCommandResultWithTrigger(ctx, interpreter, workingDirectory, query.TriggerKeyword)}
+		results = append(results, s.queryCommands(ctx, query, interpreter, true)...)
+		results = append(results, s.queryHistory(ctx, interpreter, query.TriggerKeyword)...)
+		return plugin.NewQueryResponse(results)
 	}
 
 	// Create context data
-	workingDirectory := strings.TrimSpace(query.ContextData[QueryContextWorkingDirectoryKey])
 	contextData := shellContextData{
 		Command:          command,
 		Interpreter:      interpreter,
@@ -1158,7 +1413,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			s.stopSessionByResultID(ctx, actionContext.ResultId)
 		},
 	})
-	actions = append(actions, s.buildEditCommandAction(contextData), s.buildAddCommandAction(contextData), s.buildRunWithInterpreterAction(contextData))
+	actions = append(actions, s.buildEditCommandAction(contextData), s.buildAddCommandAction(contextData), s.buildRunWithInterpreterAction(contextData), s.buildChangeWorkingDirectoryAction(contextData, query.TriggerKeyword))
 	actions = append(actions,
 		plugin.QueryResultAction{
 			Id:                     "reexecute",
@@ -1371,11 +1626,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 // executeCommandWithUpdateResult executes a shell command and updates metadata via UpdateResult.
 func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, resultId string, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
-	if resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, data.WorkingDirectory, true); ok {
-		data.WorkingDirectory = resolvedDirectory
-	} else {
-		data.WorkingDirectory = ""
-	}
+	data.WorkingDirectory = s.resolveExecutionWorkingDirectory(ctx, data.WorkingDirectory, true)
 
 	session, err := s.terminalManager.CreateSession(ctx, terminal.CreateSessionParams{
 		Command:          data.Command,
@@ -1624,11 +1875,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {
 	data.Background = true
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command in background: %s with interpreter: %s", data.Command, data.Interpreter))
-	if resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, data.WorkingDirectory, true); ok {
-		data.WorkingDirectory = resolvedDirectory
-	} else {
-		data.WorkingDirectory = ""
-	}
+	data.WorkingDirectory = s.resolveExecutionWorkingDirectory(ctx, data.WorkingDirectory, true)
 
 	cmd := s.buildCommand(ctx, data.Interpreter, data.Command, data.WorkingDirectory)
 	setCommandProcessGroup(cmd)

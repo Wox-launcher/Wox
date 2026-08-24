@@ -14,6 +14,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	shellplugin "wox/plugin/system/shell"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
@@ -23,9 +24,10 @@ import (
 const (
 	folderResultScore int64 = 1000
 
-	folderOpenActionID              = "open_folder"
-	folderEnterActionID             = "enter_folder"
-	folderToggleHiddenFilesActionID = "toggle_hidden_files"
+	folderOpenActionID               = "open_folder"
+	folderEnterActionID              = "enter_folder"
+	folderExecuteCommandHereActionID = "execute_command_here"
+	folderToggleHiddenFilesActionID  = "toggle_hidden_files"
 
 	folderFavoritesSettingKey     = "favorites"
 	folderFavoriteFormNameKey     = "name"
@@ -302,11 +304,14 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 				}
 			},
 		})
+		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, true))
 		if favoriteMatch != nil {
 			actions = append(actions, p.buildEditFavoriteAction(favoriteMatch.Name, favoriteMatch.Path, favoriteMatch.Index), p.buildDeleteFavoriteAction(favoriteMatch.Name, favoriteMatch.Path, favoriteMatch.Index))
 		} else {
 			actions = append(actions, p.buildAddFavoriteAction(filepath.Base(path), path))
 		}
+	} else {
+		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, false))
 	}
 
 	actions = append(actions, p.buildToggleHiddenFilesAction())
@@ -340,12 +345,57 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 				}
 			},
 		},
+		p.buildExecuteCommandAtLocationAction(path, true),
 		p.buildEditFavoriteAction(name, path, favoriteIndex),
 		p.buildDeleteFavoriteAction(name, path, favoriteIndex),
 	}
 
 	actions = append(actions, p.buildToggleHiddenFilesAction())
 	return actions
+}
+
+// buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
+func (p *FolderPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
+	workingDirectory := path
+	if !isDir {
+		workingDirectory = filepath.Dir(path)
+	}
+
+	return plugin.QueryResultAction{
+		Id:                     folderExecuteCommandHereActionID,
+		Name:                   "i18n:plugin_file_execute_command_here",
+		Icon:                   common.PluginShellIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if p.api == nil {
+				return
+			}
+			result, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+				PluginId: shellplugin.PluginID,
+				Command:  shellplugin.PluginCommandPrepareCommandAtDirectory,
+				Data: common.ContextData{
+					shellplugin.PluginCommandDataWorkingDirectory: workingDirectory,
+				},
+			})
+			if err != nil {
+				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to invoke shell plugin command: %s", err.Error()))
+				p.api.Notify(ctx, err.Error())
+				return
+			}
+			if !result.Handled {
+				message := result.Message
+				if message == "" {
+					message = "shell plugin command was not handled"
+				}
+				p.api.Log(ctx, plugin.LogLevelWarning, message)
+				p.api.Notify(ctx, message)
+				return
+			}
+			if result.Message != "" {
+				p.api.Notify(ctx, result.Message)
+			}
+		},
+	}
 }
 
 // buildToggleHiddenFilesAction flips hidden-child visibility and refreshes the current folder query.

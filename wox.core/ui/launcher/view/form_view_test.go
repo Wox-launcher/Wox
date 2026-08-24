@@ -236,6 +236,34 @@ func TestFormTextFieldKeepsSuffixOutsideInput(t *testing.T) {
 	}
 }
 
+func TestFormTextFieldBrowseButtonSharesOneControlRow(t *testing.T) {
+	field := FormTextField(FormTextFieldProps{
+		ID: "cwd", Label: "Directory", Width: 400, LabelWidth: 100,
+		OnBrowse: func() {}, BrowseLabel: "Browse",
+		Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 190}, ResultTitle: woxui.Color{A: 255}},
+	})
+	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	valueRow := controlColumn.Children[0].(woxwidget.Flex)
+	if valueRow.Axis != woxwidget.Horizontal {
+		t.Fatalf("browse layout axis = %v, want one horizontal control row", valueRow.Axis)
+	}
+	input := valueRow.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	browse := valueRow.Children[1].(woxwidget.Semantics)
+	if browse.Label != "Browse" || browse.AutomationID != "cwd-browse" {
+		t.Fatalf("browse button = %+v, want outline Browse", browse)
+	}
+	stateful := browse.Child.(woxwidget.Focusable).Child.(woxwidget.Stateful)
+	container := stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture).Child.(woxwidget.Container)
+	browseWidth := formBrowseButtonWidth("Browse")
+	if input.Width+8+container.Width != 288 || container.Width != browseWidth {
+		t.Fatalf("dirPath input/browse widths = %.0f/%.0f, want one full control row of 288", input.Width, container.Width)
+	}
+	if container.BorderWidth != 1 {
+		t.Fatalf("browse border width = %v, want outline", container.BorderWidth)
+	}
+}
+
 func TestFormTextFieldUsesMeasuredActionLabelWidth(t *testing.T) {
 	field := FormTextField(FormTextFieldProps{ID: "content", Label: "内容", Width: 360, LabelWidth: 60, MaxLines: 8, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)

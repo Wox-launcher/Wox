@@ -13,7 +13,15 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	assertFolderActionIDs(t, pathActions, []string{
 		folderOpenActionID,
 		folderEnterActionID,
+		folderExecuteCommandHereActionID,
 		"add_folder_favorite",
+		folderToggleHiddenFilesActionID,
+	})
+
+	fileActions := folderPlugin.buildPathActions("file.txt", false, nil)
+	assertFolderActionIDs(t, fileActions, []string{
+		folderOpenActionID,
+		folderExecuteCommandHereActionID,
 		folderToggleHiddenFilesActionID,
 	})
 
@@ -21,6 +29,7 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	assertFolderActionIDs(t, favoriteActions, []string{
 		folderOpenActionID,
 		folderEnterActionID,
+		folderExecuteCommandHereActionID,
 		"edit_folder_favorite",
 		"delete_folder_favorite",
 		folderToggleHiddenFilesActionID,

@@ -59,7 +59,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 }
 
 func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, labelWidth, height float32) woxwidget.Widget {
-	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable}
+	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable, pickDir: a.pickFormActionDirectory}
 	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette, index, definition, width, height)
 }
 
@@ -312,7 +312,7 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Suffix: a.translate(definition.Value.Suffix),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth,
 		State: state, Controller: controller, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
-		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse,
+		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse, BrowseLabel: a.translate("i18n:ui_runtime_browse"),
 		OnFocus: func() { callbacks.focus(index) },
 		OnChanged: func(value string) {
 			if callbacks.setText != nil {

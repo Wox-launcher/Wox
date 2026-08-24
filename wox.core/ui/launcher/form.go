@@ -422,6 +422,29 @@ func (a *App) setFormText(index int, value string) {
 	}
 }
 
+// pickFormActionDirectory fills a launcher action dirPath field from the native folder picker.
+func (a *App) pickFormActionDirectory(index int) {
+	if a.form == nil || index < 0 || index >= len(a.form.definitions) || a.form.definitions[index].Type != "dirPath" {
+		return
+	}
+	form := a.form
+	window := a.formFieldNativeWindow("action-form")
+	if window == nil {
+		return
+	}
+	path, err := window.PickFile(woxui.FileDialogOptions{Directory: true})
+	if a.form != form {
+		return
+	}
+	if err != nil || path == "" {
+		return
+	}
+	if form.focused != index {
+		a.setFormFocusLocked(index)
+	}
+	a.setFormText(index, path)
+}
+
 func (a *App) onFormTextInput(_ woxui.TextInputEvent) bool {
 	return a.form != nil
 }

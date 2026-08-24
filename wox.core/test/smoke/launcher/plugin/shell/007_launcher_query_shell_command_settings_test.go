@@ -29,7 +29,7 @@ func Test007LauncherQueryShellCommandSettings(t *testing.T) {
 		editedCommand := fmt.Sprintf("open(%q, \"w\").write(%q)", artifactPath, "edited")
 
 		openShellCommandSettings(t, ctx, client)
-		if err := client.Perform(ctx, "plugin-settings-field-2-add", woxui.AccessibilityActionActivate, ""); err != nil {
+		if err := client.Perform(ctx, "plugin-settings-field-3-add", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("add Shell command row: %v", err)
 		}
 		waitForFormTableRowEditor(t, ctx, client)
@@ -55,7 +55,7 @@ func Test007LauncherQueryShellCommandSettings(t *testing.T) {
 
 		openShellCommandSettings(t, ctx, client)
 		waitForShellCommandRow(t, ctx, client)
-		if err := client.Perform(ctx, "plugin-settings-field-2-row-0-edit", woxui.AccessibilityActionActivate, ""); err != nil {
+		if err := client.Perform(ctx, "plugin-settings-field-3-row-0-edit", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("edit Shell command row: %v", err)
 		}
 		waitForFormTableRowEditor(t, ctx, client)
@@ -70,7 +70,7 @@ func Test007LauncherQueryShellCommandSettings(t *testing.T) {
 
 		openShellCommandSettings(t, ctx, client)
 		waitForShellCommandRow(t, ctx, client)
-		if err := client.Perform(ctx, "plugin-settings-field-2-row-0-delete", woxui.AccessibilityActionActivate, ""); err != nil {
+		if err := client.Perform(ctx, "plugin-settings-field-3-row-0-delete", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("delete Shell command row: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
@@ -83,7 +83,7 @@ func Test007LauncherQueryShellCommandSettings(t *testing.T) {
 			t.Fatalf("confirm Shell command deletion: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, rowFound := automationdriver.Find(snapshot, "plugin-settings-field-2-row-0-edit")
+			_, rowFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-edit")
 			_, dialogFound := automationdriver.Find(snapshot, "form-table-delete-dialog")
 			return !rowFound && !dialogFound
 		}); err != nil {
@@ -94,7 +94,7 @@ func Test007LauncherQueryShellCommandSettings(t *testing.T) {
 		}
 		openShellCommandSettings(t, ctx, client)
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, rowFound := automationdriver.Find(snapshot, "plugin-settings-field-2-row-0-edit")
+			_, rowFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-edit")
 			return !rowFound
 		}); err != nil {
 			t.Fatalf("confirm Shell command deletion persisted: %v", err)
@@ -116,7 +116,7 @@ func openShellCommandSettings(t *testing.T, ctx context.Context, client *automat
 	t.Helper()
 	openShellPluginSettings(t, ctx, client)
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, addFound := automationdriver.Find(snapshot, "plugin-settings-field-2-add")
+		_, addFound := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
 		return addFound
 	}); err != nil {
 		t.Fatalf("wait for Shell command settings: %v", err)
@@ -153,7 +153,7 @@ func confirmShellCommandRowPersisted(t *testing.T, ctx context.Context, client *
 	}
 	openShellCommandSettings(t, ctx, client)
 	waitForShellCommandRow(t, ctx, client)
-	if err := client.Perform(ctx, "plugin-settings-field-2-row-0-edit", woxui.AccessibilityActionActivate, ""); err != nil {
+	if err := client.Perform(ctx, "plugin-settings-field-3-row-0-edit", woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("inspect Shell command after %s: %v", operation, err)
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
@@ -177,8 +177,8 @@ func confirmShellCommandRowPersisted(t *testing.T, ctx context.Context, client *
 func waitForShellCommandRow(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	t.Helper()
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, editFound := automationdriver.Find(snapshot, "plugin-settings-field-2-row-0-edit")
-		_, deleteFound := automationdriver.Find(snapshot, "plugin-settings-field-2-row-0-delete")
+		_, editFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-edit")
+		_, deleteFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-delete")
 		_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
 		return editFound && deleteFound && !editorFound
 	}); err != nil {

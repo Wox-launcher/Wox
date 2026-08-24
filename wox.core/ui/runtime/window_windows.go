@@ -210,8 +210,12 @@ type platformWindow struct {
 	nativeFilePreview           *windowsFilePreview
 	nativeFilePreviewGeneration uint64
 	focus                       focusRuntime
-	darkAppearance              bool
-	scale                       float32
+	// nativeDialogActive keeps hide-on-blur from treating a Wox-owned file
+	// picker as a real focus loss. IFileDialog is modal but not a child or
+	// owned HWND, so isWithinFocusDomain cannot see it.
+	nativeDialogActive bool
+	darkAppearance     bool
+	scale              float32
 	// suppressDPIBounds keeps explicit programmatic bounds from being replaced by
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
 	suppressDPIBounds bool
@@ -1739,11 +1743,15 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		}
 		return windowCommandResult{err: err}
 	case windowCommandPickFile:
-		path, err := pickFileNative(uintptr(w.hwnd), command.fileDialog)
-		return windowCommandResult{path: path, err: err}
+		return w.withOwnedNativeDialog(func() windowCommandResult {
+			path, err := pickFileNative(uintptr(w.hwnd), command.fileDialog)
+			return windowCommandResult{path: path, err: err}
+		})
 	case windowCommandSaveFile:
-		path, err := saveFileNative(uintptr(w.hwnd), command.saveFile)
-		return windowCommandResult{path: path, err: err}
+		return w.withOwnedNativeDialog(func() windowCommandResult {
+			path, err := saveFileNative(uintptr(w.hwnd), command.saveFile)
+			return windowCommandResult{path: path, err: err}
+		})
 	case windowCommandSetPointerPassthrough:
 		w.pointerPassthrough = command.pointerPassthrough
 		exStyle := win.GetWindowLong(w.hwnd, win.GWL_EXSTYLE)
@@ -2165,10 +2173,11 @@ func (w *platformWindow) confirmActivation() {
 	w.setActive(true)
 }
 
-// handleBlur ignores internal native surfaces, nonactivating overlays such as
-// tooltips, and transient messages from the current show transaction.
+// handleBlur ignores internal native surfaces, Wox-owned file pickers,
+// nonactivating overlays such as tooltips, and transient messages from the
+// current show transaction.
 func (w *platformWindow) handleBlur(nextWindow win.HWND) {
-	if !w.focus.visible || w.isWithinFocusDomain(nextWindow) || isNonactivatingNativeWindow(nextWindow) {
+	if !w.focus.visible || w.nativeDialogActive || w.isWithinFocusDomain(nextWindow) || isNonactivatingNativeWindow(nextWindow) {
 		return
 	}
 	if !w.focus.activationConfirmed || time.Now().Before(w.focus.blurGuardUntil) {
@@ -2181,6 +2190,14 @@ func (w *platformWindow) handleBlur(nextWindow win.HWND) {
 	if w.options.HideOnBlur {
 		w.hideNative()
 	}
+}
+
+// withOwnedNativeDialog marks a Wox-owned modal picker so nested WM_KILLFOCUS
+// and WM_ACTIVATE messages do not hide the launcher.
+func (w *platformWindow) withOwnedNativeDialog(fn func() windowCommandResult) windowCommandResult {
+	w.nativeDialogActive = true
+	defer func() { w.nativeDialogActive = false }()
+	return fn()
 }
 
 func (w *platformWindow) setActive(active bool) {

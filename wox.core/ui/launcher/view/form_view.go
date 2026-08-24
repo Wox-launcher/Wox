@@ -426,19 +426,24 @@ type FormTextFieldProps struct {
 	OnChanged   func(string)
 	OnKey       func(woxui.KeyEvent) bool
 	OnBrowse    func()
+	BrowseLabel string
 }
 
 // FormTextField builds a shared text input row with an optional directory picker.
 func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 	fieldWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	inputWidth := fieldWidth
+	browseLabel := props.BrowseLabel
+	browseWidth := float32(0)
 	if props.OnBrowse != nil {
-		inputWidth = max(float32(80), fieldWidth-92)
+		if browseLabel == "" {
+			browseLabel = "Browse"
+		}
+		browseWidth = formBrowseButtonWidth(browseLabel)
+		inputWidth = max(float32(80), fieldWidth-browseWidth-8)
 	}
-	suffixWidth := float32(0)
 	if props.Suffix != "" {
-		suffixWidth = 28
-		inputWidth = max(float32(60), inputWidth-suffixWidth)
+		inputWidth = max(float32(60), inputWidth-28)
 	}
 	fieldHeight := woxcomponent.SettingsControlHeight
 	if props.MaxLines > 1 {
@@ -465,11 +470,19 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 	}
 	if props.OnBrowse != nil {
 		valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-			input,
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: "Browse", Variant: woxcomponent.ButtonSecondary, OnTap: props.OnBrowse, Theme: props.Theme}),
+			valueField,
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: props.ID + "-browse", Label: browseLabel, Width: browseWidth,
+				Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme,
+			}),
 		}}
 	}
 	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, valueField, fieldHeight, props.Theme)
+}
+
+// formBrowseButtonWidth sizes the directory picker so the path field and button share one full control row.
+func formBrowseButtonWidth(label string) float32 {
+	return max(float32(62), min(float32(96), float32(len([]rune(label)))*8+24))
 }
 
 func formFieldLayout(label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.Theme) woxwidget.Widget {

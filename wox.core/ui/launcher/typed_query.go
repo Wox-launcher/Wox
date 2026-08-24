@@ -294,6 +294,8 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 		converted.Value = formDefinitionValue{Content: value.Content, Tooltip: value.Tooltip}
 	case *definition.PluginSettingValueTextBox:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Suffix: value.Suffix, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip, MaxLines: value.MaxLines, Validators: fromCoreValidators(value.Validators)}
+	case *definition.PluginSettingValueDirPath:
+		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip, Validators: fromCoreValidators(value.Validators)}
 	case *definition.PluginSettingValueCheckBox:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip}
 	case *definition.PluginSettingValueSelect:

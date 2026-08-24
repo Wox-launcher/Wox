@@ -66,13 +66,13 @@ func configurePinRankingResults(t *testing.T, ctx context.Context, client *autom
 	t.Helper()
 	smoke.OpenInstalledPluginSettings(t, ctx, client, pinRankingShellPluginID)
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "plugin-settings-field-2-add")
+		_, found := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
 		return found
 	}); err != nil {
 		t.Fatalf("wait for Shell command settings used by pin ranking: %v", err)
 	}
 	for index, alias := range []string{pinRankingFirstAlias, pinRankingSecondAlias} {
-		if err := client.Perform(ctx, "plugin-settings-field-2-add", woxui.AccessibilityActionActivate, ""); err != nil {
+		if err := client.Perform(ctx, "plugin-settings-field-3-add", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("add pin-ranking result %d: %v", index, err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
@@ -101,7 +101,7 @@ func configurePinRankingResults(t *testing.T, ctx context.Context, client *autom
 		if err := client.Perform(ctx, "form-table-row-save", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("save pin-ranking result %d: %v", index, err)
 		}
-		rowID := fmt.Sprintf("plugin-settings-field-2-row-%d-edit", index)
+		rowID := fmt.Sprintf("plugin-settings-field-3-row-%d-edit", index)
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			_, rowFound := automationdriver.Find(snapshot, rowID)
 			_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
@@ -166,14 +166,14 @@ func deletePinRankingResults(t *testing.T, ctx context.Context, client *automati
 	}
 	smoke.OpenInstalledPluginSettings(t, ctx, client, pinRankingShellPluginID)
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, firstFound := automationdriver.Find(snapshot, "plugin-settings-field-2-row-0-delete")
-		_, secondFound := automationdriver.Find(snapshot, "plugin-settings-field-2-row-1-delete")
+		_, firstFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-delete")
+		_, secondFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-1-delete")
 		return firstFound && secondFound
 	}); err != nil {
 		t.Fatalf("wait for pin-ranking result deletion actions: %v", err)
 	}
 	for _, rowIndex := range []int{1, 0} {
-		rowID := fmt.Sprintf("plugin-settings-field-2-row-%d-delete", rowIndex)
+		rowID := fmt.Sprintf("plugin-settings-field-3-row-%d-delete", rowIndex)
 		if err := client.Perform(ctx, rowID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("delete pin-ranking result row %d: %v", rowIndex, err)
 		}

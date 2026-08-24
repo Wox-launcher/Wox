@@ -140,6 +140,27 @@ func TestPluginSettingsFormDefinitionsKeepMixedFormsInLabelLayout(t *testing.T) 
 	}
 }
 
+func TestPluginControllerPreservesDirPathSettingDefinition(t *testing.T) {
+	items := []contract.PluginCatalogItem{{
+		ID: "shell",
+		SettingDefinitions: definition.PluginSettingDefinitions{{
+			Type: definition.PluginSettingDefinitionTypeDirPath,
+			Value: &definition.PluginSettingValueDirPath{
+				Key: "default_working_directory", Label: "Default working directory", DefaultValue: `C:\Users\test`,
+			},
+		}},
+	}}
+
+	plugins, err := pluginSettingsPluginsFromContract(items)
+	if err != nil {
+		t.Fatalf("adapt plugin settings: %v", err)
+	}
+	definition := plugins[0].SettingDefinitions[0]
+	if definition.Type != "dirPath" || definition.Value.Key != "default_working_directory" || definition.Value.DefaultValue != `C:\Users\test` {
+		t.Fatalf("dirPath setting definition = %+v", definition)
+	}
+}
+
 func TestPluginControllerPreservesInlineApplicationTableDefinition(t *testing.T) {
 	items := []contract.PluginCatalogItem{{
 		ID: "clipboard",

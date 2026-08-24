@@ -1293,11 +1293,39 @@ func (a *App) onPluginSettingsTextInput(_ woxui.TextInputEvent) bool {
 func (a *App) setPluginFormText(index int, value string) {
 	form := a.pluginSettings.Form()
 	changed := form != nil && setFormFieldsTextLocked(&form.formFieldsState, index, value)
-	if changed {
-		form.status = ""
+	if !changed {
+		return
 	}
-	if changed {
+	form.status = ""
+	a.invalidateSettingsWindow()
+	// dirPath is a completed folder, like a select: persist immediately so the next
+	// launcher query does not keep using the previous directory.
+	if form.definitions[index].Type == "dirPath" {
+		a.submitPluginSettings()
+	}
+}
+
+// pickPluginFormDirectory fills a plugin dirPath setting from the native folder picker.
+func (a *App) pickPluginFormDirectory(index int) {
+	form := a.pluginSettings.Form()
+	if form == nil || index < 0 || index >= len(form.definitions) || form.definitions[index].Type != "dirPath" {
+		return
+	}
+	window := a.settingsNativeWindow()
+	if window == nil {
+		return
+	}
+	path, err := window.PickFile(woxui.FileDialogOptions{Directory: true})
+	if a.pluginSettings.Form() != form {
+		return
+	}
+	if err != nil {
+		form.status = err.Error()
 		a.invalidateSettingsWindow()
+		return
+	}
+	if path != "" {
+		a.setPluginFormText(index, path)
 	}
 }
 
@@ -1425,7 +1453,47 @@ func (a *App) submitPluginSettings() {
 		})
 		if saveErr != nil {
 			log.Printf("save plugin settings: %v", saveErr)
+			return
 		}
+		// Dynamic settings are resolved from saved values when the catalog is fetched.
+		// Reload this plugin's definitions after the mode dropdown is persisted so the
+		// detail field under it can change immediately.
+		if _, ok := persistedValues["default_working_directory_mode"]; ok {
+			a.refreshPluginFormDefinitions(pluginID)
+		}
+	})
+}
+
+// refreshPluginFormDefinitions reloads one installed plugin's setting definitions without flashing the catalog.
+func (a *App) refreshPluginFormDefinitions(pluginID string) {
+	plugins, err := loadPluginSettingsPlugins(a.lifecycleCtx, a.services, a.sessionID, false)
+	if err != nil {
+		log.Printf("refresh plugin form definitions: %v", err)
+		return
+	}
+	_ = a.runOnUI("refresh plugin form definitions", func() {
+		current := a.pluginSettings.Plugins()
+		for index := range current {
+			if current[index].ID != pluginID {
+				continue
+			}
+			for _, updated := range plugins {
+				if updated.ID != pluginID {
+					continue
+				}
+				current[index].SettingDefinitions = updated.SettingDefinitions
+				current[index].Setting = updated.Setting
+				break
+			}
+			a.pluginSettings.SetPlugins(current)
+			a.pluginSettings.cachePlugins(false, current)
+			a.settingsSearch.SetPlugins(current)
+			if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
+				a.setPluginSelectionLocked(a.pluginSettings.Selected())
+			}
+			break
+		}
+		a.invalidateSettingsWindow()
 	})
 }
 

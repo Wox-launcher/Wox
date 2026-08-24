@@ -46,3 +46,31 @@ func TestIsNonactivatingNativeWindowIgnoresOwnedTooltips(t *testing.T) {
 		t.Fatal("foreign windows must still count as a real focus loss")
 	}
 }
+
+func TestHandleBlurIgnoresOwnedNativeFileDialog(t *testing.T) {
+	hidden := false
+	window := &platformWindow{
+		options: WindowOptions{
+			HideOnBlur: true,
+			OnFocus: func(event FocusEvent) {
+				if !event.Active {
+					hidden = true
+				}
+			},
+		},
+		nativeDialogActive: true,
+		focus: focusRuntime{
+			visible:             true,
+			activationConfirmed: true,
+			active:              true,
+		},
+	}
+
+	window.handleBlur(win.HWND(0x2001))
+	if hidden {
+		t.Fatal("Wox-owned file pickers must not count as hide-on-blur focus loss")
+	}
+	if !window.focus.visible || !window.focus.active {
+		t.Fatal("launcher must stay visible while a Wox-owned file picker is open")
+	}
+}

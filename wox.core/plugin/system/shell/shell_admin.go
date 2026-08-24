@@ -52,11 +52,7 @@ func (s *ShellPlugin) buildExecuteAsAdministratorAction(data shellContextData) p
 func (s *ShellPlugin) executeCommandAsAdministrator(ctx context.Context, data shellContextData) {
 	// Hide before ShellExecute so the UAC prompt is not covered by the topmost launcher.
 	s.api.HideApp(ctx)
-	if resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, data.WorkingDirectory, true); ok {
-		data.WorkingDirectory = resolvedDirectory
-	} else {
-		data.WorkingDirectory = ""
-	}
+	data.WorkingDirectory = s.resolveExecutionWorkingDirectory(ctx, data.WorkingDirectory, true)
 
 	launch := buildElevatedShellLaunch(data.Interpreter, data.Command, data.WorkingDirectory)
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command as administrator: %s with interpreter: %s", data.Command, data.Interpreter))
