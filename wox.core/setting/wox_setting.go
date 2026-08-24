@@ -312,10 +312,8 @@ type QueryCompletionFeedback struct {
 func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	usePinYin := false
 	defaultLangCode := i18n.LangCodeEnUs
-	switchInputMethodABC := false
 	if locale.IsZhCN() {
 		usePinYin = true
-		switchInputMethodABC = true
 		defaultLangCode = i18n.LangCodeZhCn
 	}
 
@@ -327,7 +325,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
 		}),
 		UsePinYin:            NewWoxSettingValue(store, "UsePinYin", usePinYin),
-		SwitchInputMethodABC: NewWoxSettingValue(store, "SwitchInputMethodABC", switchInputMethodABC),
+		SwitchInputMethodABC: NewWoxSettingValue(store, "SwitchInputMethodABC", false),
 		ShowTray:             NewWoxSettingValue(store, "ShowTray", true),
 		HideOnLostFocus:      NewWoxSettingValue(store, "HideOnLostFocus", false),
 		HideOnStart:          NewWoxSettingValue(store, "HideOnStart", false),
