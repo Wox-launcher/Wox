@@ -516,12 +516,15 @@ func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics,
 	w.mu.Lock()
 	fontFamily := w.fontFamily
 	w.mu.Unlock()
+	if style.Family == FontFamilyMonospace {
+		fontFamily = "monospace"
+	}
 	nativeFontFamily := C.CString(fontFamily)
 	defer C.free(unsafe.Pointer(nativeFontFamily))
 	var width C.float
 	var height C.float
 	var baseline C.float
-	result := C.wox_linux_window_measure_text(native, nativeText, nativeFontFamily, C.float(style.Size), C.uint8_t(style.Weight), &width, &height, &baseline)
+	result := C.wox_linux_window_measure_text(native, nativeText, nativeFontFamily, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
 	if result != 0 {
 		return TextMetrics{}, errors.New("woxui: failed to measure Linux text")
 	}
@@ -614,6 +617,8 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	w.mu.Unlock()
 	nativeFontFamily := C.CString(fontFamily)
 	defer C.free(unsafe.Pointer(nativeFontFamily))
+	nativeMonospaceFontFamily := C.CString("monospace")
+	defer C.free(unsafe.Pointer(nativeMonospaceFontFamily))
 	nativeDamage := displayList.NativeDamage()
 	result := C.wox_linux_window_begin_frame(
 		native,
@@ -685,16 +690,21 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 			)
 		case displayCommandDrawText:
 			text := C.CString(command.text)
+			drawFontFamily := nativeFontFamily
+			if command.style.Family == FontFamilyMonospace {
+				drawFontFamily = nativeMonospaceFontFamily
+			}
 			result = C.wox_linux_window_draw_text(
 				native,
 				text,
-				nativeFontFamily,
+				drawFontFamily,
 				C.float(command.rect.X),
 				C.float(command.rect.Y),
 				C.float(command.rect.Width),
 				C.float(command.rect.Height),
 				C.float(command.style.Size),
 				C.uint8_t(command.style.Weight),
+				C.uint8_t(boolByte(command.style.Italic)),
 				C.uint8_t(command.color.R),
 				C.uint8_t(command.color.G),
 				C.uint8_t(command.color.B),

@@ -127,6 +127,14 @@ func (u *uiImpl) OpenOnboardingWindow(ctx context.Context) {
 	u.applyView(ctx, "open onboarding", func(view contract.View) error { return view.OpenOnboarding(ctx) })
 }
 
+func (u *uiImpl) OpenNotesWindow(ctx context.Context, request common.NotesWindowRequest) {
+	u.applyView(ctx, "open Notes", func(view contract.View) error { return view.OpenNotes(ctx, request) })
+}
+
+func (u *uiImpl) RefreshNotesWindow(ctx context.Context, noteID string) {
+	u.applyView(ctx, "refresh Notes", func(view contract.View) error { return view.RefreshNotes(ctx, noteID) })
+}
+
 // OpenMacOSPermissionFlow asks the UI host to present the native permission guide for one permission.
 func (u *uiImpl) OpenMacOSPermissionFlow(ctx context.Context, permissionType string) {
 	u.applyView(ctx, "open macOS permission flow", func(view contract.View) error { return view.OpenMacOSPermissionFlow(ctx, permissionType) })

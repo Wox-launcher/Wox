@@ -389,7 +389,7 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
 	}}}
 	if layout.titleBarHeight > 0 {
-		rootChildren = append(rootChildren, woxwidget.StackChild{Child: instance.buildTitleBar(frame.Size.Width, textColor)})
+		rootChildren = append(rootChildren, woxwidget.StackChild{Child: instance.buildTitleBar(frame.Size.Width, frame.WindowFocused, textColor)})
 	}
 	padding := textOverlayPadding(instance.options)
 	rootChildren = append(rootChildren, woxwidget.StackChild{Left: padding.Left, Top: layout.titleBarHeight + padding.Top, Child: content})
@@ -442,7 +442,7 @@ func runtimeTextCopyTooltip(width float32, label string, style woxui.TextStyle, 
 	}
 }
 
-func (instance *runtimeTextOverlay) buildTitleBar(width float32, foreground woxui.Color) woxwidget.Widget {
+func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, foreground woxui.Color) woxwidget.Widget {
 	hoverBackground := woxui.Color{R: 255, G: 255, B: 255, A: 20}
 	titleSurface := woxwidget.Widget(woxwidget.Container{Width: width, Height: runtimeTextTitleBarHeight})
 	if instance.options.Window.Movable {
@@ -459,27 +459,27 @@ func (instance *runtimeTextOverlay) buildTitleBar(width float32, foreground woxu
 		{Child: titleSurface},
 		{Top: runtimeTextTitleBarHeight - 1, Child: woxwidget.Container{Width: width, Height: 1, Color: woxui.Color{R: 255, G: 255, B: 255, A: 76}}},
 	}
-	closeWidth := runtimeTextTitleButtonSize
-	closeRightMargin := float32(6)
-	if runtime.GOOS == "windows" && instance.options.Closable {
-		closeWidth = 46
-		closeRightMargin = 0
-	}
+	closeWidth := float32(46)
 	actionWidth := float32(0)
-	if instance.options.Closable {
+	if instance.options.Closable && runtime.GOOS != "darwin" {
 		actionWidth += closeWidth
 	}
 	if instance.options.ShowCopyButton {
 		actionWidth += runtimeTextTitleButtonSize
 	}
-	if instance.options.Closable && instance.options.ShowCopyButton {
+	if instance.options.Closable && runtime.GOOS != "darwin" && instance.options.ShowCopyButton {
 		actionWidth += 2
 	}
-	actionsLeft := width - closeRightMargin - actionWidth
+	actionsLeft := width - actionWidth
 	titleLeft := float32(12)
+	iconLeft := float32(12)
+	if runtime.GOOS == "darwin" && instance.options.Closable {
+		titleLeft = 44
+		iconLeft = 44
+	}
 	if instance.titleIcon != nil {
-		children = append(children, woxwidget.StackChild{Left: 12, Top: 10, Child: woxwidget.Image{Source: instance.titleIcon, Width: runtimeTextTitleIconSize, Height: runtimeTextTitleIconSize, Fit: woxwidget.ImageFitContain}})
-		titleLeft = 40
+		children = append(children, woxwidget.StackChild{Left: iconLeft, Top: 10, Child: woxwidget.Image{Source: instance.titleIcon, Width: runtimeTextTitleIconSize, Height: runtimeTextTitleIconSize, Fit: woxwidget.ImageFitContain}})
+		titleLeft = iconLeft + 28
 	}
 	if instance.options.Title != "" {
 		children = append(children, woxwidget.StackChild{Left: titleLeft, Top: 9, Child: woxwidget.TextBlock{
@@ -489,14 +489,17 @@ func (instance *runtimeTextOverlay) buildTitleBar(width float32, foreground woxu
 	}
 	right := width - 6
 	if instance.options.Closable {
-		closeLeft := width - 6 - closeWidth
-		closeTop := float32(4)
-		if runtime.GOOS == "windows" {
-			closeLeft = width - closeWidth
-			closeTop = 0
+		background := woxui.Color{}
+		if instance.options.Window.LightAppearance {
+			background = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 		}
-		children = append(children, woxwidget.StackChild{Left: closeLeft, Top: closeTop, Child: overlay.TitleBarCloseButton(runtime.GOOS == "windows", "text-overlay-close", foreground, func() { overlay.RequestClose(instance.id) })})
-		right = closeLeft - 2
+		children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
+			ID: "text-overlay-close", Width: width, Platform: runtime.GOOS, Theme: woxcomponent.Theme{Background: background, ToolbarText: foreground}, Active: active,
+			OnClose: func() { overlay.RequestClose(instance.id) },
+		})})
+		if runtime.GOOS != "darwin" {
+			right = width - closeWidth - 2
+		}
 	}
 	if instance.options.ShowCopyButton {
 		label := instance.options.CopyButtonTooltip

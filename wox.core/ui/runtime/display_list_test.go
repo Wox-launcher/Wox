@@ -72,6 +72,18 @@ func TestDisplayListCompareToleratesSubpixelFloatDrift(t *testing.T) {
 	}
 }
 
+func TestDisplayListCompareIncludesPortableFontTraits(t *testing.T) {
+	base := &DisplayList{}
+	base.DrawText("note", Rect{Width: 40, Height: 20}, TextStyle{Size: 13}, Color{A: 255})
+	italic := &DisplayList{}
+	italic.DrawText("note", Rect{Width: 40, Height: 20}, TextStyle{Size: 13, Italic: true}, Color{A: 255})
+	monospace := &DisplayList{}
+	monospace.DrawText("note", Rect{Width: 40, Height: 20}, TextStyle{Size: 13, Family: FontFamilyMonospace}, Color{A: 255})
+	if base.Compare(italic) == nil || base.Compare(monospace) == nil {
+		t.Fatal("font family and italic must invalidate retained text commands")
+	}
+}
+
 func TestDisplayListCountsTextAndImageDraws(t *testing.T) {
 	image, err := NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)))
 	if err != nil {

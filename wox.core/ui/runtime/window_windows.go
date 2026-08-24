@@ -737,6 +737,8 @@ func windowsPointerCursor(cursor PointerCursor) win.HCURSOR {
 		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZENWSE))
 	case PointerCursorResizeNESW:
 		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZENESW))
+	case PointerCursorHand:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_HAND))
 	}
 	return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_ARROW))
 }

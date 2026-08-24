@@ -10,6 +10,65 @@ import (
 // TitleBarHeight is the shared height for custom title bars across windows.
 const TitleBarHeight = float32(40)
 
+// WindowCloseChromeProps describes the shared platform close control used by custom title bars.
+type WindowCloseChromeProps struct {
+	ID       string
+	Width    float32
+	Platform string
+	Theme    Theme
+	Active   bool
+	OnClose  func()
+}
+
+type windowCloseChromeState struct {
+	hovered bool
+	pressed bool
+}
+
+// WindowCloseChrome builds the same close control for every custom title bar.
+func WindowCloseChrome(props WindowCloseChromeProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID), Type: (*windowCloseChromeState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &windowCloseChromeState{} },
+	}
+}
+
+func (s *windowCloseChromeState) InitState(_ woxwidget.StateContext, _ any) {}
+
+func (s *windowCloseChromeState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+// Build retains hover and press state while title-bar content changes.
+func (s *windowCloseChromeState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(WindowCloseChromeProps)
+	onHover := func(control string, inside bool) {
+		if control != "close" && control != "mac-controls" {
+			return
+		}
+		context.SetState(func() { s.hovered = inside })
+	}
+	onPress := func(control string, pressed bool) {
+		if control != props.ID {
+			return
+		}
+		context.SetState(func() { s.pressed = pressed })
+	}
+	children := make([]woxwidget.StackChild, 0, 1)
+	switch props.Platform {
+	case "darwin":
+		children = append(children, woxwidget.StackChild{Left: 13, Child: MacTrafficLight(
+			props.ID, woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255},
+			s.hovered, s.pressed, props.Active, props.Theme, props.OnClose, onHover, onPress,
+		)})
+	case "linux":
+		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: LinuxTitleBarCloseButton(props.ID, s.hovered, props.Theme, props.OnClose, onHover)})
+	default:
+		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: WindowsTitleBarButton(props.ID, "×", true, s.hovered, props.Theme, props.OnClose, onHover)})
+	}
+	return woxwidget.Stack{Width: props.Width, Height: TitleBarHeight, Children: children}
+}
+
+func (s *windowCloseChromeState) Dispose() {}
+
 // TitleBarAlpha applies a new alpha channel to a theme color.
 func TitleBarAlpha(color woxui.Color, alpha uint8) woxui.Color {
 	color.A = alpha

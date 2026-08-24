@@ -123,6 +123,7 @@ const (
 	PointerCursorResizeVertical
 	PointerCursorResizeNWSE
 	PointerCursorResizeNESW
+	PointerCursorHand
 )
 
 // PointerEvent uses logical client coordinates; positive scroll Y means upward motion.

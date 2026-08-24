@@ -62,3 +62,37 @@ func TestPluginSettingStore_DeleteAll(t *testing.T) {
 		t.Fatalf("expected pluginB settings preserved, got %d rows", countB)
 	}
 }
+
+func TestPluginSettingStoreListByPrefixScopesPluginAndPrefix(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "plugin_setting_prefix_test.db")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying sql db: %v", err)
+	}
+	defer sqlDB.Close()
+	if err := db.AutoMigrate(&database.PluginSetting{}, &database.Oplog{}); err != nil {
+		t.Fatalf("failed to migrate schema: %v", err)
+	}
+
+	store := setting.NewPluginSettingStore(db, "notes")
+	for key, value := range map[string]string{"note:one": "1", "note:two": "2", "window": "local"} {
+		if err := store.Set(key, value); err != nil {
+			t.Fatalf("set %s: %v", key, err)
+		}
+	}
+	if err := setting.NewPluginSettingStore(db, "other").Set("note:three", "3"); err != nil {
+		t.Fatalf("set other plugin: %v", err)
+	}
+
+	values, err := store.ListByPrefix("note:")
+	if err != nil {
+		t.Fatalf("list prefix: %v", err)
+	}
+	if len(values) != 2 || values["note:one"] != "1" || values["note:two"] != "2" {
+		t.Fatalf("unexpected prefix values: %#v", values)
+	}
+}

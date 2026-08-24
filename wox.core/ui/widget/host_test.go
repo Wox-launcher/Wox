@@ -1088,6 +1088,29 @@ func TestHostUpdatesPointerCursorForHoveredGesture(t *testing.T) {
 	}
 }
 
+func TestHostUpdatesPointerCursorWithinGesture(t *testing.T) {
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{ID: "input", CursorAt: func(position woxui.Point) woxui.PointerCursor {
+			if position.X < 20 {
+				return woxui.PointerCursorHand
+			}
+			return woxui.PointerCursorText
+		}, Child: Container{Width: 100, Height: 20}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 5, Y: 5}})
+	if services.pointerCursor != woxui.PointerCursorHand {
+		t.Fatalf("interactive cursor = %v, want hand", services.pointerCursor)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 30, Y: 5}})
+	if services.pointerCursor != woxui.PointerCursorText {
+		t.Fatalf("text cursor = %v, want text", services.pointerCursor)
+	}
+}
+
 func TestHostUnfocusesOptedInControlOnOutsidePointerDown(t *testing.T) {
 	var focusChanges []bool
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

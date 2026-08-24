@@ -22,6 +22,9 @@ func TestParseMarkdownBuildsSharedPreviewBlocks(t *testing.T) {
 	if document.blocks[2].items[0].marker != "" {
 		t.Fatalf("task list marker = %q, want empty", document.blocks[2].items[0].marker)
 	}
+	if !document.blocks[2].items[0].task || !document.blocks[2].items[0].checked || document.blocks[2].items[0].label != "done" || document.blocks[2].items[0].blocks[0].runs[0].text != "done" {
+		t.Fatalf("task list item = %#v, want checked task metadata without emoji text", document.blocks[2].items[0])
+	}
 	if document.blocks[4].language != "go" {
 		t.Fatalf("code language = %q, want go", document.blocks[4].language)
 	}
@@ -30,6 +33,50 @@ func TestParseMarkdownBuildsSharedPreviewBlocks(t *testing.T) {
 	}
 	if document.blocks[6].image != "/tmp/example.png" || document.blocks[6].imageLabel != "Example" {
 		t.Fatalf("image = %#v, want normalized wiki image", document.blocks[6])
+	}
+}
+
+func TestMarkdownUsesSharedDocumentDecorations(t *testing.T) {
+	theme := Theme{
+		Cursor:         woxui.Color{R: 30, G: 120, B: 220, A: 255},
+		PreviewText:    woxui.Color{R: 230, G: 230, B: 230, A: 255},
+		PreviewSplit:   woxui.Color{R: 90, G: 90, B: 90, A: 255},
+		ResultSubtitle: woxui.Color{R: 140, G: 140, B: 140, A: 255},
+	}
+	document := ParseMarkdown("- [x] done\n\n> quote\n\n---")
+
+	list := renderMarkdownBlock(document.blocks[0], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Flex)
+	row := list.Children[0].(woxwidget.Flex)
+	marker := row.Children[0].(woxwidget.Container).Child.(woxwidget.Semantics)
+	if marker.Role != woxui.AccessibilityRoleCheckBox || !marker.Checked || !marker.Disabled {
+		t.Fatalf("task marker semantics = %#v, want disabled checked checkbox", marker)
+	}
+	if painter, ok := marker.Child.(woxwidget.Painter); !ok || painter.Width != documentCheckboxWidth(12) || painter.Height != 18 {
+		t.Fatalf("task marker = %#v, want shared document checkbox", marker.Child)
+	}
+	body := row.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Wrap)
+	if body.Children[0].(woxwidget.Text).Color != theme.ResultSubtitle {
+		t.Fatalf("completed task text color = %#v, want muted %#v", body.Children[0].(woxwidget.Text).Color, theme.ResultSubtitle)
+	}
+
+	quote := renderMarkdownBlock(document.blocks[1], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Container).Child.(woxwidget.Container)
+	if quote.LeftBorderColor != theme.Cursor || quote.LeftBorderWidth != documentQuoteBarWidth*documentDecorationScale(12) {
+		t.Fatalf("quote bar = %.1f/%#v, want shared accent bar", quote.LeftBorderWidth, quote.LeftBorderColor)
+	}
+	rule := renderMarkdownBlock(document.blocks[2], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Painter)
+	if rule.Width != 300 || rule.Height != documentRuleHeight {
+		t.Fatalf("rule = %.0fx%.0f, want shared full-width rule", rule.Width, rule.Height)
+	}
+}
+
+func TestNestedMarkdownTaskStateStaysOnTheOwningListItem(t *testing.T) {
+	document := ParseMarkdown("- parent\n  - [x] child")
+	parent := document.blocks[0].items[0]
+	if parent.task {
+		t.Fatal("parent list item inherited its nested task state")
+	}
+	if len(parent.blocks) < 2 || len(parent.blocks[1].items) != 1 || !parent.blocks[1].items[0].task || !parent.blocks[1].items[0].checked {
+		t.Fatalf("nested task = %#v, want checked state on child only", parent.blocks)
 	}
 }
 

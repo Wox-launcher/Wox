@@ -218,6 +218,12 @@ func (a *App) applyTheme(theme themeData) {
 	if onboardingView != nil {
 		_ = onboardingView.Window().SetAppearance(isDark)
 	}
+	for _, controller := range a.noteWindows {
+		if controller.managed != nil {
+			_ = controller.managed.Window().SetAppearance(isDark)
+			_ = controller.managed.Window().Invalidate()
+		}
+	}
 	a.invalidateSettingsWindow()
 	a.invalidateOnboardingWindow()
 	overlay.NotifyThemeChanged(isDark)

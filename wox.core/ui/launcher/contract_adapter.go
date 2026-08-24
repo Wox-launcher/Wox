@@ -177,6 +177,30 @@ func (a *App) FocusSetting(_ context.Context) error {
 	return err
 }
 
+// OpenNotes opens, creates, or toggles the native Notes utility window.
+func (a *App) OpenNotes(_ context.Context, request common.NotesWindowRequest) error {
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.OpenNotes(context.Background(), request)
+	}
+	var openErr error
+	if err := a.runOnUI("open Notes window", func() { openErr = a.openNoteRequest(request) }); err != nil {
+		return err
+	}
+	return openErr
+}
+
+// RefreshNotes reloads externally changed Notes data without replacing dirty local edits.
+func (a *App) RefreshNotes(_ context.Context, noteID string) error {
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.RefreshNotes(context.Background(), noteID)
+	}
+	return a.runOnUI("refresh Notes windows", func() {
+		for _, controller := range a.noteWindows {
+			controller.refresh(noteID)
+		}
+	})
+}
+
 // OpenOnboarding opens the first-run guide in its dedicated window.
 func (a *App) OpenOnboarding(_ context.Context) error {
 	if !a.isPrimary && a.primary != nil {

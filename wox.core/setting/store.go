@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
+
 	"wox/cloudsync"
 	"wox/database"
 	"wox/util"
@@ -119,6 +121,25 @@ func (s *PluginSettingStore) Get(key string, target interface{}) error {
 	}
 
 	return deserializeValue(setting.Value, target)
+}
+
+// ListByPrefix returns raw plugin setting values whose keys share prefix.
+func (s *PluginSettingStore) ListByPrefix(prefix string) (map[string]string, error) {
+	var settings []database.PluginSetting
+	query := s.db.Where("plugin_id = ?", s.pluginId)
+	if prefix != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix)
+		query = query.Where(`key LIKE ? ESCAPE '\'`, escaped+"%")
+	}
+	if err := query.Find(&settings).Error; err != nil {
+		return nil, err
+	}
+
+	values := make(map[string]string, len(settings))
+	for _, item := range settings {
+		values[item.Key] = item.Value
+	}
+	return values, nil
 }
 
 func (s *PluginSettingStore) Set(key string, value interface{}) error {

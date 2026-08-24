@@ -209,14 +209,16 @@ func UniformInsets(value float32) Insets {
 
 // Container paints an optional background and positions one child.
 type Container struct {
-	Width       float32
-	Height      float32
-	Padding     Insets
-	Color       woxui.Color
-	BorderColor woxui.Color
-	BorderWidth float32
-	Radius      float32
-	Child       Widget
+	Width           float32
+	Height          float32
+	Padding         Insets
+	Color           woxui.Color
+	BorderColor     woxui.Color
+	BorderWidth     float32
+	LeftBorderColor woxui.Color
+	LeftBorderWidth float32
+	Radius          float32
+	Child           Widget
 }
 
 // Align positions one child inside a fixed box using normalized axis factors.
@@ -336,13 +338,16 @@ func (w Container) layout(ctx context, available constraints) *node {
 	width = available.constrainWidth(width)
 	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
-	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) {
+	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || (w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0) {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			if w.Color.A != 0 {
 				displayList.FillRoundedRect(bounds, w.Radius, w.Color)
 			}
 			if w.BorderColor.A != 0 && w.BorderWidth > 0 {
 				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
+			}
+			if w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0 {
+				displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: min(w.LeftBorderWidth, bounds.Width), Height: bounds.Height}, w.LeftBorderColor)
 			}
 		}
 	}
@@ -1360,6 +1365,7 @@ func fittingRunePrefix(window textMeasurer, runes []rune, style woxui.TextStyle,
 
 type gesture struct {
 	cursor             woxui.PointerCursor
+	cursorAt           func(woxui.Point) woxui.PointerCursor
 	id                 string
 	onHover            func(bool)
 	onHoverAt          func(bool, woxui.Rect)
@@ -1392,6 +1398,7 @@ type gesture struct {
 type Gesture struct {
 	ID        string
 	Cursor    woxui.PointerCursor
+	CursorAt  func(position woxui.Point) woxui.PointerCursor
 	Child     Widget
 	OnHover   func(bool)
 	OnHoverAt func(inside bool, bounds woxui.Rect)
@@ -1440,7 +1447,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	}
 	target.kind = "gesture"
 	target.gesture = &gesture{
-		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
+		id: w.ID, cursor: w.Cursor, cursorAt: w.CursorAt, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
 		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
 		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer,

@@ -1141,7 +1141,9 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 		targetID := nodeID(target)
 		if targetID != h.hovered {
-			h.setHovered(target)
+			h.setHovered(target, event.Position)
+		} else {
+			h.updatePointerCursor(target, event.Position)
 		}
 	}
 	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonPrimary {
@@ -1422,7 +1424,7 @@ func (h *Host) resetCaretBlink() {
 	}
 }
 
-func (h *Host) setHovered(target *node) {
+func (h *Host) setHovered(target *node, position woxui.Point) {
 	old := h.nodes[h.hovered]
 	damage := woxui.Rect{}
 	if old != nil && old.gesture != nil {
@@ -1435,16 +1437,7 @@ func (h *Host) setHovered(target *node) {
 		}
 	}
 	h.hovered = nodeID(target)
-	cursor := woxui.PointerCursorDefault
-	for current := target; current != nil; current = current.parent {
-		if current.gesture != nil && current.gesture.cursor != woxui.PointerCursorDefault {
-			cursor = current.gesture.cursor
-			break
-		}
-	}
-	if h.window != nil {
-		_ = h.window.SetPointerCursor(cursor)
-	}
+	h.updatePointerCursor(target, position)
 	if target != nil && target.gesture != nil {
 		damage = unionDamageRects(damage, globalRect(target))
 		if target.gesture.onHover != nil {
@@ -1457,6 +1450,24 @@ func (h *Host) setHovered(target *node) {
 	// Hover callbacks may change both visuals, so redraw only their combined bounds.
 	if damage.Width > 0 && damage.Height > 0 {
 		h.invalidateRect(damage)
+	}
+}
+
+// updatePointerCursor resolves position-sensitive cursors before static ancestor fallbacks.
+func (h *Host) updatePointerCursor(target *node, position woxui.Point) {
+	cursor := woxui.PointerCursorDefault
+	for current := target; current != nil; current = current.parent {
+		if current.gesture != nil && current.gesture.cursorAt != nil {
+			cursor = current.gesture.cursorAt(current.localPoint(position))
+			break
+		}
+		if current.gesture != nil && current.gesture.cursor != woxui.PointerCursorDefault {
+			cursor = current.gesture.cursor
+			break
+		}
+	}
+	if h.window != nil {
+		_ = h.window.SetPointerCursor(cursor)
 	}
 }
 

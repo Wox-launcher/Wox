@@ -85,6 +85,8 @@ type UI interface {
 	RecordHotkey(ctx context.Context, hotkey string, kind string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	OpenOnboardingWindow(ctx context.Context)
+	OpenNotesWindow(ctx context.Context, request NotesWindowRequest)
+	RefreshNotesWindow(ctx context.Context, noteID string)
 	OpenMacOSPermissionFlow(ctx context.Context, permissionType string)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	CaptureScreenshot(ctx context.Context, request CaptureScreenshotRequest) (CaptureScreenshotResult, error)

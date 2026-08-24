@@ -63,6 +63,8 @@ type View interface {
 	OpenSetting(ctx context.Context, windowContext common.SettingWindowContext) error
 	FocusSetting(ctx context.Context) error
 	OpenOnboarding(ctx context.Context) error
+	OpenNotes(ctx context.Context, request common.NotesWindowRequest) error
+	RefreshNotes(ctx context.Context, noteID string) error
 	OpenMacOSPermissionFlow(ctx context.Context, permissionType string) error
 	ShowToolbarMessage(ctx context.Context, message plugin.ToolbarMsgUI) error
 	ShowNotificationMessage(ctx context.Context, message common.NotifyMsg) error

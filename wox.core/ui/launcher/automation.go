@@ -26,11 +26,15 @@ const (
 	automationSurfaceSettings
 	automationSurfaceOnboarding
 	automationSurfaceOverlay
+	automationSurfaceNotes
 )
 
 const automationOverlayInstancePrefix = "overlay."
 
 func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSurfaceKind) {
+	if host, window, found := a.notesAutomationSurface(); found {
+		return host, window, automationSurfaceNotes
+	}
 	if overlayID, ok := a.automationOverlayID(); ok {
 		host, window, _, found := overlay.AutomationSurface(overlayID)
 		if found {
@@ -60,6 +64,27 @@ func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSur
 		window = target.window
 	})
 	return host, window, kind
+}
+
+// notesAutomationSurface resolves the Notes utility window selected by a smoke client.
+func (a *App) notesAutomationSurface() (*woxwidget.Host, *woxui.Window, bool) {
+	var host *woxwidget.Host
+	var window *woxui.Window
+	_ = a.runOnUI("read Notes automation focus", func() {
+		if strings.TrimSpace(a.automationFocusInstance) != "notes" {
+			return
+		}
+		controller := a.activeNotesController()
+		if controller == nil || controller.managed == nil {
+			return
+		}
+		switch controller.managed.Lifecycle() {
+		case woxui.WindowLifecycleClosing, woxui.WindowLifecycleClosed:
+			return
+		}
+		host, window = controller.host, controller.managed.Window()
+	})
+	return host, window, host != nil && window != nil
 }
 
 // automationOverlayID resolves the focused runtime overlay without changing its native lifecycle.
@@ -213,7 +238,7 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 	if host == nil {
 		return errors.New("active widget host is not initialized")
 	}
-	if kind == automationSurfaceOverlay {
+	if kind == automationSurfaceOverlay || kind == automationSurfaceNotes {
 		return window.DispatchPointer(event)
 	}
 	return woxui.Call(func() {
@@ -236,7 +261,7 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) (b
 	if host == nil {
 		return false, errors.New("active widget host is not initialized")
 	}
-	if kind == automationSurfaceOverlay {
+	if kind == automationSurfaceOverlay || kind == automationSurfaceNotes {
 		downHandled, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true})
 		if err != nil {
 			return false, err
@@ -417,6 +442,19 @@ func (a *App) SetAutomationFocusInstance(instanceName string) error {
 // AutomationWindowState returns the real managed lifecycle for the primary or a named secondary launcher.
 func (a *App) AutomationWindowState(instanceName string) (automation.WindowState, error) {
 	instanceName = strings.TrimSpace(instanceName)
+	if instanceName == "notes" {
+		controller := a.activeNotesController()
+		if controller == nil || controller.managed == nil {
+			return automation.WindowState{}, nil
+		}
+		lifecycle := controller.managed.Lifecycle()
+		return automation.WindowState{
+			Exists:    lifecycle != woxui.WindowLifecycleClosed,
+			Visible:   lifecycle == woxui.WindowLifecycleVisible,
+			Lifecycle: automationWindowLifecycle(lifecycle),
+			BlurReady: controller.managed.Window().FocusReadyForBlur(),
+		}, nil
+	}
 	if strings.HasPrefix(instanceName, automationOverlayInstancePrefix) {
 		overlayID := strings.TrimSpace(strings.TrimPrefix(instanceName, automationOverlayInstancePrefix))
 		_, _, managed, found := overlay.AutomationSurface(overlayID)
@@ -504,6 +542,10 @@ func (a *App) HideAutomationWindow() error {
 			a.finishOnboarding()
 		case automationSurfaceSettings:
 			actionErr = a.closeSettings()
+		case automationSurfaceNotes:
+			if controller := a.activeNotesController(); controller != nil {
+				controller.hide()
+			}
 		default:
 			actionErr = a.hideWindow(true)
 		}

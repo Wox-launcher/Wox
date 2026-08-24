@@ -1629,6 +1629,7 @@ static NSCursor *darwin_host_pointer_cursor(uint8_t cursor) {
     // AppKit has no public diagonal resize cursor, so use the precise crosshair fallback.
     case 6:
     case 7: return [NSCursor crosshairCursor];
+    case 8: return [NSCursor pointingHandCursor];
     default: return [NSCursor arrowCursor];
   }
 }
@@ -3789,8 +3790,9 @@ int32_t wox_darwin_accessibility_end(WoxDarwinWindow *window) {
   return result;
 }
 
-static NSFont *wox_font(const char *font_family, CGFloat size, uint8_t font_weight) {
+static NSFont *wox_font(const char *font_family, CGFloat size, uint8_t font_weight, uint8_t italic) {
   NSFontWeight weight = font_weight == 1 ? NSFontWeightSemibold : NSFontWeightRegular;
+  NSFont *font = nil;
   if (font_family != NULL && font_family[0] != '\0') {
     NSString *family = [NSString stringWithUTF8String:font_family];
     if (family != nil) {
@@ -3798,18 +3800,24 @@ static NSFont *wox_font(const char *font_family, CGFloat size, uint8_t font_weig
         NSFontFamilyAttribute: family,
         NSFontTraitsAttribute: @{NSFontWeightTrait: @(weight)},
       }];
-      NSFont *font = [NSFont fontWithDescriptor:descriptor size:size];
-      if (font != nil) {
-        return font;
-      }
+      font = [NSFont fontWithDescriptor:descriptor size:size];
     }
   }
-  return [NSFont systemFontOfSize:size weight:weight];
+  if (font == nil) {
+    font = [NSFont systemFontOfSize:size weight:weight];
+  }
+  if (italic == 1) {
+    NSFont *converted = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:NSItalicFontMask];
+    if (converted != nil) {
+      font = converted;
+    }
+  }
+  return font;
 }
 
 // wox_darwin_window_measure_text returns logical CoreText metrics for the configured UI font.
-int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, float *width, float *height, float *baseline) {
-  if (window == NULL || text == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1) {
+int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+  if (window == NULL || text == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1 || italic > 1) {
     return -1;
   }
   __block int32_t result = 0;
@@ -3826,7 +3834,7 @@ int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text
       result = -1;
       return;
     }
-    NSFont *font = wox_font(font_family, font_size, font_weight);
+    NSFont *font = wox_font(font_family, font_size, font_weight, italic);
     NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:@{(id)kCTFontAttributeName : font}];
     CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
     CGFloat ascent = 0.0;
@@ -4151,7 +4159,7 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
   return 0;
 }
 
-int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || text == NULL) {
     return -1;
   }
@@ -4164,7 +4172,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   if (string == nil) {
     return -1;
   }
-  NSFont *font = wox_font(font_family, font_size, font_weight);
+  NSFont *font = wox_font(font_family, font_size, font_weight, italic);
   NSColor *color = [NSColor colorWithSRGBRed:red / 255.0 green:green / 255.0 blue:blue / 255.0 alpha:alpha / 255.0];
   NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
       font, (id)kCTFontAttributeName,

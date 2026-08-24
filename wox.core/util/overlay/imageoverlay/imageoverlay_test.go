@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"wox/common"
-	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util/overlay"
@@ -182,16 +181,5 @@ func TestFitImageOverlaySizeToScreenCapsToPointerDisplay(t *testing.T) {
 	width, height = fitImageOverlaySizeToScreen(400, 300, screen.Size{Width: 1000, Height: 800})
 	if width != 400 || height != 300 {
 		t.Fatalf("small image size = %vx%v, want original 400x300", width, height)
-	}
-}
-
-func TestImageOverlayWindowsCloseUsesWebViewTitleBarStyle(t *testing.T) {
-	button := overlay.TitleBarCloseButton(true, "image-overlay-close", woxui.Color{R: 245, G: 245, B: 245, A: 255}, func() {}).(woxwidget.Stateful)
-	props := button.Widget.(woxcomponent.IconButtonProps)
-	if props.Width != 46 || props.Height != imageOverlayTitleBarHeight || props.Radius != 0 {
-		t.Fatalf("Windows close button geometry = %vx%v radius %v, want 46x40 radius 0", props.Width, props.Height, props.Radius)
-	}
-	if props.HoverBackground != (woxui.Color{R: 232, G: 17, B: 35, A: 255}) {
-		t.Fatalf("Windows close hover background = %#v, want WebView danger red", props.HoverBackground)
 	}
 }

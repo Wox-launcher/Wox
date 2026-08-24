@@ -7,6 +7,18 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWindowCloseChromeUsesSharedWindowsGeometry(t *testing.T) {
+	props := WindowCloseChromeProps{ID: "test-close", Width: 420, Platform: "windows", Theme: Theme{ToolbarText: woxui.Color{A: 255}}}
+	chrome := (&windowCloseChromeState{}).Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
+	if chrome.Width != 420 || chrome.Height != TitleBarHeight || len(chrome.Children) != 1 || !chrome.Children[0].AnchorRight {
+		t.Fatalf("Windows close chrome = %#v, want one right-aligned 420x40 control", chrome)
+	}
+	button := chrome.Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if button.Width != 46 || button.Height != TitleBarHeight {
+		t.Fatalf("Windows close geometry = %vx%v, want 46x40", button.Width, button.Height)
+	}
+}
+
 func TestMacTrafficLightUsesInactiveGrayWhileUnfocused(t *testing.T) {
 	dark := Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	native := woxui.Color{R: 255, G: 92, B: 95, A: 255}

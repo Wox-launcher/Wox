@@ -45,6 +45,8 @@ func TestTextMetricsCacheKeysIncludeStyleAndFamily(t *testing.T) {
 		{text: "Wox", size: 15, weight: FontWeightRegular, family: "Inter"},
 		{text: "Wox", size: 14, weight: FontWeightSemibold, family: "Inter"},
 		{text: "Wox", size: 14, weight: FontWeightRegular, family: "JetBrains Mono"},
+		{text: "Wox", size: 14, weight: FontWeightRegular, family: "Inter", kind: FontFamilyMonospace},
+		{text: "Wox", size: 14, weight: FontWeightRegular, family: "Inter", italic: true},
 		{text: "WOX", size: 14, weight: FontWeightRegular, family: "Inter"},
 	}
 	for _, key := range variants {

@@ -63,8 +63,11 @@ type markdownBlock struct {
 }
 
 type markdownListItem struct {
-	marker string
-	blocks []markdownBlock
+	marker  string
+	label   string
+	task    bool
+	checked bool
+	blocks  []markdownBlock
 }
 
 type markdownTableData struct {
@@ -235,16 +238,28 @@ func parseMarkdownList(list *ast.List, source []byte) markdownBlock {
 			marker = fmt.Sprintf("%d.", index)
 			index++
 		}
-		blocks := parseMarkdownBlocks(item, source)
-		if len(blocks) > 0 && len(blocks[0].runs) > 0 {
-			firstText := blocks[0].runs[0].text
-			if strings.HasPrefix(firstText, "☐ ") || strings.HasPrefix(firstText, "☑ ") {
-				marker = ""
-			}
+		task, checked := markdownTaskState(item)
+		if task {
+			marker = ""
 		}
-		block.items = append(block.items, markdownListItem{marker: marker, blocks: blocks})
+		blocks := parseMarkdownBlocks(item, source)
+		block.items = append(block.items, markdownListItem{marker: marker, label: strings.TrimSpace(markdownPlainText(item, source)), task: task, checked: checked, blocks: blocks})
 	}
 	return block
+}
+
+// markdownTaskState reads the GFM task node without leaking emoji markers into text runs.
+func markdownTaskState(item *ast.ListItem) (bool, bool) {
+	firstBlock := item.FirstChild()
+	if firstBlock == nil {
+		return false, false
+	}
+	for node := firstBlock.FirstChild(); node != nil; node = node.NextSibling() {
+		if checkbox, ok := node.(*extast.TaskCheckBox); ok {
+			return true, checkbox.IsChecked
+		}
+	}
+	return false, false
 }
 
 // parseMarkdownTable flattens cell content into the compact native table model.
@@ -300,11 +315,6 @@ func collectMarkdownRuns(parent ast.Node, source []byte, style markdownInlineSty
 		case *extast.Strikethrough:
 			current.strike = true
 		case *extast.TaskCheckBox:
-			if value.IsChecked {
-				appendMarkdownRun(&runs, "☑ ", current)
-			} else {
-				appendMarkdownRun(&runs, "☐ ", current)
-			}
 			return
 		case *ast.Image:
 			label := strings.TrimSpace(markdownPlainText(value, source))
@@ -362,12 +372,6 @@ func markdownPlainText(parent ast.Node, source []byte) string {
 			value.Write(current.Value)
 		case *ast.AutoLink:
 			value.Write(current.Label(source))
-		case *extast.TaskCheckBox:
-			if current.IsChecked {
-				value.WriteString("☑ ")
-			} else {
-				value.WriteString("☐ ")
-			}
 		}
 		return ast.WalkContinue, nil
 	})
@@ -402,16 +406,12 @@ func renderMarkdownBlock(block markdownBlock, props MarkdownProps, width float32
 	case markdownCode:
 		return markdownCodeWidget(block, props, width)
 	case markdownQuote:
-		innerWidth := max(float32(0), width-22)
-		return woxwidget.Container{
-			Width: width, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 8, Bottom: 10},
-			Color: withAlpha(props.Theme.PreviewText, 10), BorderColor: withAlpha(props.Theme.PreviewSplit, 110), BorderWidth: 1, Radius: 5,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: renderMarkdownBlocks(block.children, props, innerWidth, linkIndex)},
-		}
+		innerWidth := max(float32(0), width-documentQuoteWidth(fontSize))
+		return documentQuote(width, fontSize, props.Theme.Cursor, woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: renderMarkdownBlocks(block.children, props, innerWidth, linkIndex)})
 	case markdownList:
 		return markdownListWidget(block, props, width, linkIndex)
 	case markdownRule:
-		return woxwidget.Container{Width: width, Height: 1, Color: withAlpha(props.Theme.PreviewSplit, 150)}
+		return documentHorizontalRule(width, props.Theme.PreviewSplit)
 	case markdownTable:
 		return markdownTableWidget(block.table, props, width)
 	case markdownImage:
@@ -543,9 +543,19 @@ func markdownListWidget(block markdownBlock, props MarkdownProps, width float32,
 	rows := make([]woxwidget.Widget, 0, len(block.items))
 	for _, item := range block.items {
 		markerWidth := float32(28)
+		marker := woxwidget.Widget(woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText})
+		itemProps := props
+		if item.task {
+			fontSize := markdownFontSize(props)
+			markerWidth = documentCheckboxWidth(fontSize) + 4
+			marker = woxwidget.Semantics{Role: woxui.AccessibilityRoleCheckBox, Label: item.label, Checked: item.checked, Disabled: true, Child: documentCheckbox(fontSize, 18, props.Theme.Cursor, item.checked)}
+			if item.checked {
+				itemProps.Theme.PreviewText = props.Theme.ResultSubtitle
+			}
+		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: markerWidth, Padding: woxwidget.Insets{Top: 1}, Child: woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}},
-			woxwidget.Container{Width: max(float32(0), width-markerWidth), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: renderMarkdownBlocks(item.blocks, props, max(float32(0), width-markerWidth), linkIndex)}},
+			woxwidget.Container{Width: markerWidth, Padding: woxwidget.Insets{Top: 1}, Child: marker},
+			woxwidget.Container{Width: max(float32(0), width-markerWidth), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: renderMarkdownBlocks(item.blocks, itemProps, max(float32(0), width-markerWidth), linkIndex)}},
 		}})
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: rows}

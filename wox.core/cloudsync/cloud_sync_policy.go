@@ -3,6 +3,8 @@ package cloudsync
 import (
 	"strings"
 	"time"
+
+	"wox/common"
 )
 
 // OplogSyncPolicy describes when a newly written local oplog can be uploaded.
@@ -30,6 +32,10 @@ func ResolveOplogSyncPolicy(entityType string, entityID string, key string, op s
 		if strings.HasPrefix(key, "feedItems") {
 			return OplogSyncPolicy{Delay: 30 * time.Minute}
 		}
+	}
+
+	if entityType == EntityPluginSetting && entityID == common.NotesPluginID && strings.HasPrefix(key, "note:") {
+		return OplogSyncPolicy{Delay: 5 * time.Second}
 	}
 
 	return OplogSyncPolicy{}

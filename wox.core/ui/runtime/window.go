@@ -488,7 +488,10 @@ func (w *Window) MeasureText(text string, style TextStyle) (TextMetrics, error) 
 	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
 		style.Weight = FontWeightRegular
 	}
-	key := textMetricsCacheKey{text: text, size: style.Size, weight: style.Weight, family: w.currentFontFamily()}
+	if style.Family != FontFamilyUI && style.Family != FontFamilyMonospace {
+		style.Family = FontFamilyUI
+	}
+	key := textMetricsCacheKey{text: text, size: style.Size, weight: style.Weight, family: w.currentFontFamily(), kind: style.Family, italic: style.Italic}
 	if metrics, ok := globalTextMetricsCache.get(key); ok {
 		return metrics, nil
 	}

@@ -59,7 +59,7 @@ func TestRuntimeTextTitleBarContainsCopyAndCloseControls(t *testing.T) {
 		options:   Options{Title: "Summarize", Closable: true, ShowCopyButton: true, Window: overlay.WindowOptions{Movable: true}},
 		titleIcon: &woxui.Image{},
 	}
-	titleBar := instance.buildTitleBar(420, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
+	titleBar := instance.buildTitleBar(420, true, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
 	controls := map[woxwidget.Key]bool{}
 	hasTitle := false
 	hasIcon := false
@@ -142,7 +142,7 @@ func TestRuntimeTextTitleBarOmitsDragWhenNotMovable(t *testing.T) {
 	instance := &runtimeTextOverlay{
 		options: Options{Title: "Translate", Closable: true, ShowCopyButton: true},
 	}
-	titleBar := instance.buildTitleBar(420, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
+	titleBar := instance.buildTitleBar(420, true, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
 	if _, ok := titleBar.Children[0].Child.(woxwidget.Gesture); ok {
 		t.Fatal("fixed text overlay title bar unexpectedly starts window dragging")
 	}

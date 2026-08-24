@@ -293,6 +293,9 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 			URL: url, CanGoBack: snapshot.webViewNavigation.CanGoBack, CanGoForward: snapshot.webViewNavigation.CanGoForward,
 			GoBackLabel: a.translate("i18n:ui_action_webview_go_back"), RefreshLabel: a.translate("i18n:ui_action_webview_refresh"),
 			GoForwardLabel: a.translate("i18n:ui_action_webview_go_forward"), OpenInBrowserLabel: a.translate("i18n:ui_action_webview_open_in_browser"),
+			OnTooltip: func(inside bool, text string, anchor woxui.Rect) {
+				a.setNativeHoverTooltip(&a.previewTooltipRevision, "go-ui-titlebar-action", "update title bar tooltip", inside, text, anchor, "bottom", func() *woxui.Window { return a.window })
+			},
 			OnDrag: func() {
 				if a.window != nil {
 					_ = a.window.StartDragging()

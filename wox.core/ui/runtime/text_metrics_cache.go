@@ -19,6 +19,8 @@ type textMetricsCacheKey struct {
 	size   float32
 	weight FontWeight
 	family string
+	kind   FontFamily
+	italic bool
 }
 
 type textMetricsCacheEntry struct {

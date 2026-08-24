@@ -98,6 +98,7 @@ typedef struct {
   int pixel_width;
   int pixel_height;
   uint8_t font_weight;
+  uint8_t italic;
   char text[WOX_LINUX_TEXT_CACHE_MAX_CHARS + 1];
   char family[64];
 } WoxLinuxTextCacheEntry;
@@ -450,6 +451,7 @@ static int32_t apply_linux_pointer_cursor(WoxLinuxWindow *window) {
       "ns-resize",
       "nwse-resize",
       "nesw-resize",
+      "pointer",
   };
   uint8_t host_cursor = window->pointer_cursor;
   const char *host_cursor_name = host_cursor < sizeof(host_cursor_names) / sizeof(host_cursor_names[0]) ? host_cursor_names[host_cursor] : "default";
@@ -945,12 +947,13 @@ static uint64_t fnv1a_bytes(uint64_t hash, const void *data, size_t length) {
   return hash;
 }
 
-static uint64_t linux_text_cache_hash(const char *text, const char *family, float font_size, uint8_t font_weight, float scale, int pixel_width, int pixel_height) {
+static uint64_t linux_text_cache_hash(const char *text, const char *family, float font_size, uint8_t font_weight, uint8_t italic, float scale, int pixel_width, int pixel_height) {
   uint64_t hash = 14695981039346656037ULL;
   hash = fnv1a_bytes(hash, text, strlen(text));
   hash = fnv1a_bytes(hash, family, strlen(family));
   hash = fnv1a_bytes(hash, &font_size, sizeof(font_size));
   hash = fnv1a_bytes(hash, &font_weight, sizeof(font_weight));
+  hash = fnv1a_bytes(hash, &italic, sizeof(italic));
   hash = fnv1a_bytes(hash, &scale, sizeof(scale));
   hash = fnv1a_bytes(hash, &pixel_width, sizeof(pixel_width));
   hash = fnv1a_bytes(hash, &pixel_height, sizeof(pixel_height));
@@ -1132,14 +1135,14 @@ static void note_large_image_create(WoxLinuxWindow *window, uint64_t image_id, i
   }
 }
 
-static WoxLinuxTextCacheEntry *find_cached_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char *text, const char *family, float font_size, uint8_t font_weight, float scale, int pixel_width, int pixel_height) {
+static WoxLinuxTextCacheEntry *find_cached_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char *text, const char *family, float font_size, uint8_t font_weight, uint8_t italic, float scale, int pixel_width, int pixel_height) {
   if (renderer == NULL || renderer->texts == NULL) {
     return NULL;
   }
   for (int32_t index = 0; index < renderer->text_count; index++) {
     WoxLinuxTextCacheEntry *entry = &renderer->texts[index];
     if (entry->hash == hash && entry->generation == renderer->context_generation &&
-        entry->font_size == font_size && entry->font_weight == font_weight && entry->scale == scale &&
+        entry->font_size == font_size && entry->font_weight == font_weight && entry->italic == italic && entry->scale == scale &&
         entry->pixel_width == pixel_width && entry->pixel_height == pixel_height &&
         strcmp(entry->text, text) == 0 && strcmp(entry->family, family) == 0) {
       entry->last_used = ++renderer->text_use_serial;
@@ -1168,7 +1171,7 @@ static void evict_oldest_gl_text(WoxLinuxRenderer *renderer, bool delete_texture
   }
 }
 
-static bool cache_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char *text, const char *family, float font_size, uint8_t font_weight, float scale, int pixel_width, int pixel_height, uint64_t byte_size, GLuint texture, bool delete_textures, int32_t *evictions) {
+static bool cache_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char *text, const char *family, float font_size, uint8_t font_weight, uint8_t italic, float scale, int pixel_width, int pixel_height, uint64_t byte_size, GLuint texture, bool delete_textures, int32_t *evictions) {
   if (renderer == NULL || renderer->texts == NULL || texture == 0 || byte_size == 0 || byte_size > wox_linux_text_cache_max_entry_bytes) {
     return false;
   }
@@ -1195,6 +1198,7 @@ static bool cache_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char 
   entry->pixel_width = pixel_width;
   entry->pixel_height = pixel_height;
   entry->font_weight = font_weight;
+  entry->italic = italic;
   memcpy(entry->text, text, strlen(text));
   memcpy(entry->family, family, strlen(family));
   renderer->text_bytes += byte_size;
@@ -3635,6 +3639,7 @@ typedef struct {
 	const char *font_family;
   float font_size;
   uint8_t font_weight;
+  uint8_t italic;
   float *width;
   float *height;
   float *baseline;
@@ -3660,6 +3665,7 @@ static void measure_text_main(void *data) {
 	pango_font_description_set_family(font, call->font_family[0] == '\0' ? "Sans" : call->font_family);
   pango_font_description_set_absolute_size(font, call->font_size * PANGO_SCALE);
   pango_font_description_set_weight(font, call->font_weight == 1 ? PANGO_WEIGHT_SEMIBOLD : PANGO_WEIGHT_NORMAL);
+  pango_font_description_set_style(font, call->italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
   pango_layout_set_font_description(layout, font);
   pango_layout_set_text(layout, call->text, -1);
   pango_layout_set_single_paragraph_mode(layout, TRUE);
@@ -3673,8 +3679,8 @@ static void measure_text_main(void *data) {
   g_object_unref(context);
 }
 
-int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, float *width, float *height, float *baseline) {
-  if (window == NULL || text == NULL || font_family == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1 || !g_utf8_validate(text, -1, NULL) || !g_utf8_validate(font_family, -1, NULL)) {
+int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+  if (window == NULL || text == NULL || font_family == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1 || italic > 1 || !g_utf8_validate(text, -1, NULL) || !g_utf8_validate(font_family, -1, NULL)) {
     return -1;
   }
   WoxTextMeasureCall call = {
@@ -3683,6 +3689,7 @@ int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, 
 			.font_family = font_family,
       .font_size = font_size,
       .font_weight = font_weight,
+      .italic = italic,
       .width = width,
       .height = height,
       .baseline = baseline,
@@ -3853,8 +3860,8 @@ int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, fl
   return 0;
 }
 
-int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || text == NULL || font_family == NULL) {
+int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || text == NULL || font_family == NULL || italic > 1) {
     return -1;
   }
   if (text[0] == '\0' || width <= 0.0f || height <= 0.0f || font_size <= 0.0f) {
@@ -3872,8 +3879,8 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   uint64_t hash = 0;
   WoxLinuxTextCacheEntry *cached = NULL;
   if (cacheable) {
-    hash = linux_text_cache_hash(text, family, font_size, font_weight, renderer->scale, pixel_width, pixel_height);
-    cached = find_cached_gl_text(renderer, hash, text, family, font_size, font_weight, renderer->scale, pixel_width, pixel_height);
+    hash = linux_text_cache_hash(text, family, font_size, font_weight, italic, renderer->scale, pixel_width, pixel_height);
+    cached = find_cached_gl_text(renderer, hash, text, family, font_size, font_weight, italic, renderer->scale, pixel_width, pixel_height);
   }
   float color[4];
   premultiplied_color(red, green, blue, alpha, color);
@@ -3897,6 +3904,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   pango_font_description_set_family(font, family);
   pango_font_description_set_absolute_size(font, font_size * renderer->scale * PANGO_SCALE);
   pango_font_description_set_weight(font, font_weight == 1 ? PANGO_WEIGHT_SEMIBOLD : PANGO_WEIGHT_NORMAL);
+  pango_font_description_set_style(font, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
   pango_layout_set_font_description(layout, font);
   pango_layout_set_text(layout, text, -1);
   pango_layout_set_width(layout, pixel_width * PANGO_SCALE);
@@ -3919,7 +3927,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   bool cached_texture = false;
   if (cacheable) {
     uint64_t byte_size = (uint64_t)pixel_width * (uint64_t)pixel_height * 4ULL;
-    cached_texture = cache_gl_text(renderer, hash, text, family, font_size, font_weight, renderer->scale, pixel_width, pixel_height, byte_size, texture, true, &window->frame_resource_stats.cache_evictions);
+    cached_texture = cache_gl_text(renderer, hash, text, family, font_size, font_weight, italic, renderer->scale, pixel_width, pixel_height, byte_size, texture, true, &window->frame_resource_stats.cache_evictions);
   }
   draw_bound_texture(renderer, x, y, width, height, 0.0f, 0.0f, color);
   if (!cached_texture) {
@@ -4126,13 +4134,13 @@ int32_t wox_linux_test_resource_cache_generation(void) {
     free(renderer.texts);
     return -1;
   }
-  if (!cache_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 2.0f, 40, 16, 128, 2, false, NULL) ||
-      find_cached_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 2.0f, 40, 16) == NULL) {
+  if (!cache_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 0, 2.0f, 40, 16, 128, 2, false, NULL) ||
+      find_cached_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 0, 2.0f, 40, 16) == NULL) {
     free(renderer.texts);
     return -1;
   }
   renderer.context_generation++;
-  if (find_cached_gl_image(&renderer, 11) != NULL || find_cached_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 2.0f, 40, 16) != NULL) {
+  if (find_cached_gl_image(&renderer, 11) != NULL || find_cached_gl_text(&renderer, 7, "Hello", "Sans", 13.0f, 0, 0, 2.0f, 40, 16) != NULL) {
     free(renderer.texts);
     return -1;
   }

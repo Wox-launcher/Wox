@@ -30,6 +30,21 @@ func (a *App) reloadTranslations() error {
 	if err := json.Unmarshal([]byte(encoded), &translations); err != nil {
 		return fmt.Errorf("decode language bundle: %w", err)
 	}
+	if langCode != i18n.LangCodeEnUs {
+		englishJSON, englishErr := a.services.LanguageJSON(ctx, a.sessionID, i18n.LangCodeEnUs)
+		if englishErr != nil {
+			return fmt.Errorf("load fallback language bundle: %w", englishErr)
+		}
+		fallback := map[string]string{}
+		if err := json.Unmarshal([]byte(englishJSON), &fallback); err != nil {
+			return fmt.Errorf("decode fallback language bundle: %w", err)
+		}
+		for key, value := range fallback {
+			if translations[key] == "" {
+				translations[key] = value
+			}
+		}
+	}
 	a.translationsMu.Lock()
 	a.translations = translations
 	a.translationsMu.Unlock()

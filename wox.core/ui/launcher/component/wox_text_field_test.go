@@ -373,3 +373,16 @@ func TestFilterHelperUsedBySingleLineContract(t *testing.T) {
 		t.Fatalf("unexpected newline in %q", got)
 	}
 }
+
+func TestTextFieldCompositionPreservesAndShiftsRichDecorations(t *testing.T) {
+	checkbox := TextFieldRichRun{Start: 0, End: 1, Checkbox: true}
+	following := TextFieldRichRun{Start: 5, End: 6, Checkbox: true}
+	state := woxui.TextEditingState{Text: "☐ abc☐", Selection: woxui.TextSelection{Anchor: 2, Focus: 2}, Composition: "中文"}
+	runs := textFieldCompositionRichRuns(state, []TextFieldRichRun{checkbox, following})
+	if len(runs) != 2 || !runs[0].Checkbox || runs[0].Start != 0 || runs[0].End != 1 {
+		t.Fatalf("checkbox before composition changed: %#v", runs)
+	}
+	if !runs[1].Checkbox || runs[1].Start != 7 || runs[1].End != 8 {
+		t.Fatalf("checkbox after composition was not shifted: %#v", runs)
+	}
+}

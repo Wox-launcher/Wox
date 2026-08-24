@@ -300,7 +300,7 @@ static std::wstring utf8_to_wide(const char *text) {
 }
 
 // create_text_format keeps drawing and measurement on identical DirectWrite settings.
-static HRESULT create_text_format(WoxRenderer *renderer, float font_size, uint8_t font_weight, IDWriteTextFormat **format) {
+static HRESULT create_text_format(WoxRenderer *renderer, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, IDWriteTextFormat **format) {
   if (renderer == nullptr || renderer->dwrite_factory == nullptr || format == nullptr || font_size <= 0.0f) {
     return E_INVALIDARG;
   }
@@ -315,11 +315,15 @@ static HRESULT create_text_format(WoxRenderer *renderer, float font_size, uint8_
   default:
     return E_INVALIDARG;
   }
+  const wchar_t *family = font_family == 1 ? L"Consolas" : renderer->font_family.c_str();
+  if (font_family > 1 || italic > 1) {
+    return E_INVALIDARG;
+  }
   HRESULT result = renderer->dwrite_factory->CreateTextFormat(
-		renderer->font_family.c_str(),
+		family,
       nullptr,
       native_font_weight,
-      DWRITE_FONT_STYLE_NORMAL,
+      italic == 1 ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
       DWRITE_FONT_STRETCH_NORMAL,
       font_size,
       L"en-us",
@@ -370,15 +374,15 @@ static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstr
 }
 
 // create_text_layout keeps drawing and measurement on the same font fallback path.
-static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, float width, float height, IDWriteTextLayout **layout) {
+static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height, IDWriteTextLayout **layout) {
   IDWriteTextFormat *format = nullptr;
-  HRESULT result = create_text_format(renderer, font_size, font_weight, &format);
+  HRESULT result = create_text_format(renderer, font_size, font_weight, font_family, italic, &format);
   if (FAILED(result)) {
     return result;
   }
   result = renderer->dwrite_factory->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format, width, height, layout);
   format->Release();
-  if (SUCCEEDED(result) && renderer->uses_default_font_family) {
+  if (SUCCEEDED(result) && renderer->uses_default_font_family && font_family == 0) {
     result = apply_default_cjk_font(*layout, text);
     if (FAILED(result)) {
       release_com(layout);
@@ -701,7 +705,7 @@ extern "C" int32_t wox_renderer_stroke_rounded_rect(WoxRenderer *renderer, float
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->dwrite_factory == nullptr) {
     return E_UNEXPECTED;
   }
@@ -713,7 +717,7 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
 
   // ponytail: create layouts per invalidated frame; cache by text and style when animated text makes this measurable.
   IDWriteTextLayout *layout = nullptr;
-  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, width, height, &layout);
+  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, font_family, italic, width, height, &layout);
   if (FAILED(result)) {
     return result;
   }
@@ -982,7 +986,7 @@ extern "C" int32_t wox_renderer_clear_clip(WoxRenderer *renderer) {
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, float *width, float *height, float *baseline) {
+extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
   if (renderer == nullptr || text == nullptr || width == nullptr || height == nullptr || baseline == nullptr) {
     return E_INVALIDARG;
   }
@@ -995,7 +999,7 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
   }
 
   IDWriteTextLayout *layout = nullptr;
-  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, 1000000.0f, 1000000.0f, &layout);
+  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, font_family, italic, 1000000.0f, 1000000.0f, &layout);
   if (FAILED(result)) {
     return result;
   }

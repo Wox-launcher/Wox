@@ -61,6 +61,8 @@ type App struct {
 	launcher       *woxui.ManagedWindow
 	settingsView   *woxui.ManagedWindow
 	onboardingView *woxui.ManagedWindow
+	noteWindows    map[string]*notesWindowController
+	activeNote     *notesWindowController
 	window         *woxui.Window
 	host           *woxwidget.Host
 	settingsHost   *woxwidget.Host
@@ -277,6 +279,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		fileRequests:     map[string]bool{},
 		mdDocs:           map[string]woxcomponent.MarkdownDocument{},
 		previewLayouts:   map[string]woxwidget.TextBlockLayout{},
+		noteWindows:      map[string]*notesWindowController{},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,
 			MaxResultCount: defaultMaxResult,
@@ -435,6 +438,9 @@ func (a *App) Close() error {
 	}
 
 	a.destroyed.Store(true)
+	for _, noteWindow := range a.noteWindows {
+		_ = noteWindow.flush()
+	}
 	cancel := a.cancel
 	if cancel != nil {
 		cancel()

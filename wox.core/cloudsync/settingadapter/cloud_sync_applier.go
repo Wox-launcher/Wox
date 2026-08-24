@@ -69,7 +69,13 @@ func (a *LocalSettingApplier) ApplyPluginSetting(ctx context.Context, pluginID s
 
 	switch op {
 	case cloudsync.OpDelete:
-		return store.Delete(key)
+		if err := store.Delete(key); err != nil {
+			return err
+		}
+		if hadPrevious {
+			notifyPluginSettingChanged(ctx, pluginID, normalizePluginSettingKey(key), "")
+		}
+		return nil
 	case cloudsync.OpUpsert:
 		if err := store.Set(key, rawValue); err != nil {
 			return err

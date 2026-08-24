@@ -155,7 +155,7 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 	var height C.float
 	var baseline C.float
 	traceNativeCall("renderer measure enter handle=%p textLen=%d size=%.2f weight=%d", r.handle, len(text), style.Size, style.Weight)
-	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), &width, &height, &baseline)
+	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(style.Family), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
 	traceNativeCall("renderer measure exit handle=%p result=%d", r.handle, result)
 	if result < 0 {
 		return TextMetrics{}, hresultError("measure text", result)
@@ -228,6 +228,8 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.float(command.rect.Height),
 				C.float(command.style.Size),
 				C.uint8_t(command.style.Weight),
+				C.uint8_t(command.style.Family),
+				C.uint8_t(boolByte(command.style.Italic)),
 				C.uint8_t(command.color.R),
 				C.uint8_t(command.color.G),
 				C.uint8_t(command.color.B),

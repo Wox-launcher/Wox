@@ -14,10 +14,27 @@ const (
 	FontWeightSemibold
 )
 
-// TextStyle describes the portable subset needed by the initial text renderer.
+// FontFamily selects the portable text family category used by a draw command.
+type FontFamily uint8
+
+const (
+	FontFamilyUI FontFamily = iota
+	FontFamilyMonospace
+)
+
+func boolByte(value bool) uint8 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+// TextStyle describes portable font traits shared by measurement and drawing.
 type TextStyle struct {
 	Size   float32
 	Weight FontWeight
+	Family FontFamily
+	Italic bool
 }
 
 // TextMetrics describes one shaped line in logical pixels.
@@ -169,6 +186,7 @@ func displayCommandsEqual(left, right displayCommand) bool {
 	if left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
 		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
 		left.color != right.color || left.text != right.text || left.style.Weight != right.style.Weight ||
+		left.style.Family != right.style.Family || left.style.Italic != right.style.Italic ||
 		!displayListFloatsEqual(left.style.Size, right.style.Size) || !displayListFloatsEqual(left.rotation, right.rotation) {
 		return false
 	}
@@ -361,6 +379,9 @@ func (d *DisplayList) DrawText(text string, rect Rect, style TextStyle, color Co
 	}
 	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
 		style.Weight = FontWeightRegular
+	}
+	if style.Family != FontFamilyUI && style.Family != FontFamilyMonospace {
+		style.Family = FontFamilyUI
 	}
 	d.appendCommand(displayCommand{
 		kind:  displayCommandDrawText,
