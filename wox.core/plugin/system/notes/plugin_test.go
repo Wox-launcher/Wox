@@ -172,3 +172,92 @@ func TestNoteDeepLinkUsesStablePluginID(t *testing.T) {
 		t.Fatalf("unexpected deep link: %s", got)
 	}
 }
+
+func TestNotesMetadataEnablesMRU(t *testing.T) {
+	metadata := (&Plugin{}).GetMetadata()
+	if !metadata.IsSupportFeature(plugin.MetadataFeatureMRU) {
+		t.Fatal("notes plugin must declare the MRU feature")
+	}
+	params, err := metadata.GetFeatureParamsForMRU()
+	if err != nil || params.HashBy != "scorekey" {
+		t.Fatalf("MRU hash params = %#v, err=%v", params, err)
+	}
+}
+
+func TestNotesQueryActionsCarryMRUContext(t *testing.T) {
+	repository, _ := newRepositoryForTest(t)
+	p := &Plugin{repository: repository}
+	created, err := repository.Create()
+	if err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	if _, _, err := repository.Save(created.ID, created.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "Roadmap"}}}); err != nil {
+		t.Fatalf("save note: %v", err)
+	}
+	list := p.Query(context.Background(), plugin.Query{})
+	if len(list.Results) != 1 {
+		t.Fatalf("expected one note result, got %#v", list.Results)
+	}
+	for _, action := range list.Results[0].Actions {
+		if action.ContextData[notesMRUContextKey] != created.ID {
+			t.Fatalf("action %s context = %#v", action.Id, action.ContextData)
+		}
+	}
+	newResult := p.Query(context.Background(), plugin.Query{Command: "new"})
+	if len(newResult.Results) != 1 || newResult.Results[0].ScoreKey != "note:new" {
+		t.Fatalf("new result = %#v", newResult.Results)
+	}
+	if newResult.Results[0].Actions[0].ContextData[notesMRUContextKey] != notesMRUNewID {
+		t.Fatalf("new action context = %#v", newResult.Results[0].Actions[0].ContextData)
+	}
+}
+
+func TestNotesMRURestoreRebuildsCurrentNote(t *testing.T) {
+	repository, _ := newRepositoryForTest(t)
+	p := &Plugin{repository: repository}
+	created, err := repository.Create()
+	if err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	saved, _, err := repository.Save(created.ID, created.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "Updated title"}}})
+	if err != nil {
+		t.Fatalf("save note: %v", err)
+	}
+
+	restored, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{notesMRUContextKey: saved.ID},
+	})
+	if err != nil {
+		t.Fatalf("restore note: %v", err)
+	}
+	if restored.Id != saved.ID || restored.Title != "Updated title" || restored.Group != "" {
+		t.Fatalf("restored note = %#v", restored)
+	}
+	if restored.ScoreKey != "note:"+saved.ID || restored.Actions[0].ContextData[notesMRUContextKey] != saved.ID {
+		t.Fatalf("restored note identity = %#v", restored)
+	}
+
+	newResult, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{notesMRUContextKey: notesMRUNewID},
+	})
+	if err != nil || newResult.Id != "notes:new" {
+		t.Fatalf("restore new note = %#v, err=%v", newResult, err)
+	}
+
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
+		t.Fatal("empty context should fail restore")
+	}
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{notesMRUContextKey: "missing"},
+	}); err == nil {
+		t.Fatal("missing note should fail restore")
+	}
+	if _, err := repository.Delete(saved.ID); err != nil {
+		t.Fatalf("delete note: %v", err)
+	}
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{notesMRUContextKey: saved.ID},
+	}); err == nil {
+		t.Fatal("deleted note should fail restore")
+	}
+}

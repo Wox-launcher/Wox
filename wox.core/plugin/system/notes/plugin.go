@@ -14,7 +14,11 @@ import (
 	"wox/util/clipboard"
 )
 
-const trashRetention = 60 * 24 * time.Hour
+const (
+	trashRetention     = 60 * 24 * time.Hour
+	notesMRUContextKey = "noteId"
+	notesMRUNewID      = "new"
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &Plugin{})
@@ -47,6 +51,7 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDeepLink},
 			{Name: plugin.MetadataFeatureIgnoreAutoScore},
+			{Name: plugin.MetadataFeatureMRU, Params: map[string]any{"HashBy": "scoreKey"}},
 		},
 		SupportedOS: []string{"Windows", "Macos", "Linux"},
 	}
@@ -61,6 +66,7 @@ func (p *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		}
 	})
 	p.api.OnDeepLink(ctx, p.handleDeepLink)
+	p.api.OnMRURestore(ctx, p.handleMRURestore)
 	p.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
 		if strings.HasPrefix(key, noteSettingPrefix) {
 			p.repository.ExternalChanged(strings.TrimPrefix(key, noteSettingPrefix))
@@ -98,8 +104,8 @@ func (p *Plugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResp
 
 func (p *Plugin) newResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: common.PluginNotesIcon, Score: 1_000_000,
-		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: common.PluginNotesIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: common.PluginNotesIcon, Score: 1_000_000, ScoreKey: "note:new",
+		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: common.PluginNotesIcon, ContextData: noteActionContext(notesMRUNewID), Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.createAndOpen(ctx)
 		}}},
 	}
@@ -130,13 +136,9 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 		} else {
 			score = record.UpdatedAt
 		}
-		group, groupScore := noteResultGroup(record)
-		results = append(results, plugin.QueryResult{
-			Id: record.ID, Title: title, Icon: common.PluginNotesIcon, Score: score, ScoreKey: "note:" + record.ID,
-			Group: group, GroupScore: groupScore,
-			Tails:   []plugin.QueryResultTail{plugin.NewQueryResultTailText(util.FormatTimestamp(record.UpdatedAt))},
-			Actions: p.noteActions(record),
-		})
+		result := p.noteResult(record)
+		result.Score = score
+		results = append(results, result)
 	}
 	if len(results) == 0 {
 		results = append(results, plugin.QueryResult{Title: "i18n:plugin_notes_no_results", SubTitle: "i18n:plugin_notes_no_results_subtitle", Icon: common.SearchIcon})
@@ -144,9 +146,21 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 	return results
 }
 
+// noteResult builds the shared launcher row used by query results and MRU restore.
+func (p *Plugin) noteResult(record common.NoteRecord) plugin.QueryResult {
+	group, groupScore := noteResultGroup(record)
+	return plugin.QueryResult{
+		Id: record.ID, Title: NoteTitle(record.Document), Icon: common.PluginNotesIcon, ScoreKey: "note:" + record.ID,
+		Group: group, GroupScore: groupScore,
+		Tails:   []plugin.QueryResultTail{plugin.NewQueryResultTailText(util.FormatTimestamp(record.UpdatedAt))},
+		Actions: p.noteActions(record),
+	}
+}
+
 func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultAction {
+	contextData := noteActionContext(record.ID)
 	if record.DeletedAt > 0 {
-		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: common.UpdateIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: common.UpdateIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.Restore(record.ID); err != nil {
 				p.notifyError(ctx, err)
 				return
@@ -161,30 +175,30 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 		pinName, pinIcon = "i18n:plugin_notes_action_unpin", common.UnpinIcon
 	}
 	return []plugin.QueryResultAction{
-		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: common.OpenIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: common.OpenIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 		}},
-		{Id: "pin", Name: pinName, Icon: pinIcon, PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "pin", Name: pinName, Icon: pinIcon, PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.SetPinned(record.ID, record.PinnedAt == 0); err != nil {
 				p.notifyError(ctx, err)
 			}
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		}},
-		{Id: "copy-link", Name: "i18n:plugin_notes_action_copy_link", Icon: common.CopyIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "copy-link", Name: "i18n:plugin_notes_action_copy_link", Icon: common.CopyIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if err := clipboard.WriteText(noteDeepLink(record.ID)); err != nil {
 				p.notifyError(ctx, err)
 			}
 		}},
-		{Id: "export-markdown", Name: "i18n:plugin_notes_action_export_markdown", Icon: common.InstallIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-markdown", Name: "i18n:plugin_notes_action_export_markdown", Icon: common.InstallIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "md"})
 		}},
-		{Id: "export-text", Name: "i18n:plugin_notes_action_export_text", Icon: common.TextIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-text", Name: "i18n:plugin_notes_action_export_text", Icon: common.TextIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "txt"})
 		}},
-		{Id: "export-html", Name: "i18n:plugin_notes_action_export_html", Icon: common.InstallIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-html", Name: "i18n:plugin_notes_action_export_html", Icon: common.InstallIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "html"})
 		}},
-		{Id: "delete", Name: "i18n:plugin_notes_action_delete", Icon: common.TrashIcon, PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "delete", Name: "i18n:plugin_notes_action_delete", Icon: common.TrashIcon, PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.Delete(record.ID); err != nil {
 				p.notifyError(ctx, err)
 			}
@@ -211,6 +225,29 @@ func noteResultGroup(record common.NoteRecord) (string, int64) {
 // createAndOpen opens a new draft window. The draft is not persisted until the user types.
 func (p *Plugin) createAndOpen(ctx context.Context) {
 	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowNew})
+}
+
+// handleMRURestore rebuilds a homepage result from the note id recorded by a previous action.
+func (p *Plugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	noteID := strings.TrimSpace(mruData.ContextData[notesMRUContextKey])
+	if noteID == "" {
+		return nil, fmt.Errorf("empty note id in context data")
+	}
+	if noteID == notesMRUNewID {
+		result := p.newResult()
+		return &result, nil
+	}
+	record, err := p.repository.Get(noteID)
+	if err != nil {
+		return nil, err
+	}
+	if record.DeletedAt > 0 || DocumentIsEmpty(record.Document) {
+		return nil, fmt.Errorf("note is no longer available: %s", noteID)
+	}
+	result := p.noteResult(record)
+	result.Group = ""
+	result.GroupScore = 0
+	return &result, nil
 }
 
 func (p *Plugin) handleDeepLink(ctx context.Context, arguments map[string]string) {
@@ -250,6 +287,10 @@ func (p *Plugin) notifyError(ctx context.Context, err error) {
 
 func noteDeepLink(id string) string {
 	return fmt.Sprintf("wox://plugin/%s?action=open&id=%s", common.NotesPluginID, id)
+}
+
+func noteActionContext(id string) common.ContextData {
+	return common.ContextData{notesMRUContextKey: id}
 }
 
 // NotesList returns lightweight summaries for the native browser overlay.
