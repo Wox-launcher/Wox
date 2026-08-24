@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -77,10 +78,12 @@ func projectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 		offset = textEnd
 		ranges = append(ranges, noteBlockRange{Block: index, Start: start, Marker: marker, TextStart: textStart, TextEnd: textEnd, End: textEnd})
 		if block.Type == common.NoteBlockTask {
-			runs = append(runs, woxcomponent.TextFieldRichRun{Start: marker, End: marker + 1, Style: base, Color: theme.Cursor, Checkbox: true, Checked: block.Checked})
+			runs = append(runs, woxcomponent.TextFieldRichRun{Start: marker, End: marker + 1, Style: base, Color: woxcomponent.DocumentListMarkerColor, Checkbox: true, Checked: block.Checked})
+		} else if block.Type == common.NoteBlockBullet || block.Type == common.NoteBlockOrdered {
+			runs = append(runs, woxcomponent.TextFieldRichRun{Start: marker, End: textStart, Style: base, Color: woxcomponent.DocumentListMarkerColor})
 		}
 		if block.Type == common.NoteBlockQuote {
-			runs = append(runs, woxcomponent.TextFieldRichRun{Start: start, End: textEnd, Style: base, Color: theme.Cursor, LeadingBar: true})
+			runs = append(runs, woxcomponent.TextFieldRichRun{Start: start, End: textEnd, Style: base, Color: woxcomponent.DocumentListMarkerColor, LeadingBar: true})
 		}
 		if block.Type == common.NoteBlockDivider {
 			runs = append(runs, woxcomponent.TextFieldRichRun{Start: textStart, End: textEnd, Style: base, Color: theme.PreviewSplit, HorizontalRule: true})
@@ -122,6 +125,10 @@ func projectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 			}
 			if block.Type == common.NoteBlockTask && block.Checked {
 				color = theme.ResultSubtitle
+			}
+			link := noteOpenableLink(inline.link)
+			if link != "" && color == (woxui.Color{}) {
+				color = theme.Cursor
 			}
 			runs = append(runs, woxcomponent.TextFieldRichRun{
 				Start: textStart + offset, End: textStart + end, Style: style,
@@ -389,6 +396,110 @@ func toggleNoteInline(document common.NoteDocument, ranges []noteBlockRange, sel
 	return document
 }
 
+// noteActiveFormats reports which format-bar controls match the caret or selection.
+func noteActiveFormats(document common.NoteDocument, ranges []noteBlockRange, selection woxui.TextSelection) map[string]bool {
+	active := map[string]bool{}
+	if len(document.Blocks) == 0 || len(ranges) == 0 {
+		return active
+	}
+	index := noteBlockAt(ranges, selection.Focus)
+	if index >= 0 && index < len(document.Blocks) {
+		switch document.Blocks[index].Type {
+		case common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3:
+			active["block"] = true
+		case common.NoteBlockCode:
+			active["code"] = true
+		case common.NoteBlockBullet:
+			active["bullet"] = true
+		case common.NoteBlockOrdered:
+			active["ordered"] = true
+		case common.NoteBlockTask:
+			active["task"] = true
+		case common.NoteBlockQuote:
+			active["quote"] = true
+		case common.NoteBlockDivider:
+			active["divider"] = true
+		}
+	}
+	inline := noteInlineStyleAt(document, ranges, selection)
+	if inline.bold {
+		active["bold"] = true
+	}
+	if inline.italic {
+		active["italic"] = true
+	}
+	if inline.underline {
+		active["underline"] = true
+	}
+	if inline.strike {
+		active["strike"] = true
+	}
+	if inline.code {
+		active["code"] = true
+	}
+	if inline.link != "" {
+		active["link"] = true
+	}
+	return active
+}
+
+// noteInlineStyleAt reads the style under a collapsed caret, or the styles shared by a range.
+func noteInlineStyleAt(document common.NoteDocument, ranges []noteBlockRange, selection woxui.TextSelection) noteInlineStyle {
+	start, end := selection.Start(), selection.End()
+	if start == end {
+		return noteInlineStyleAtOffset(document, ranges, start)
+	}
+	var combined *noteInlineStyle
+	for _, blockRange := range ranges {
+		from, to := max(start, blockRange.TextStart), min(end, blockRange.TextEnd)
+		if from >= to {
+			continue
+		}
+		styles := noteBlockStyles(document.Blocks[blockRange.Block], document.Blocks[blockRange.Block].Text)
+		for index := from - blockRange.TextStart; index < to-blockRange.TextStart; index++ {
+			style := styles[index]
+			if combined == nil {
+				current := style
+				combined = &current
+				continue
+			}
+			combined.bold = combined.bold && style.bold
+			combined.italic = combined.italic && style.italic
+			combined.underline = combined.underline && style.underline
+			combined.strike = combined.strike && style.strike
+			combined.code = combined.code && style.code
+			if combined.link != style.link {
+				combined.link = ""
+			}
+		}
+	}
+	if combined == nil {
+		return noteInlineStyle{}
+	}
+	return *combined
+}
+
+// noteInlineStyleAtOffset uses the rune at the caret, or the previous rune when the caret is at a block end.
+func noteInlineStyleAtOffset(document common.NoteDocument, ranges []noteBlockRange, offset int) noteInlineStyle {
+	index := noteBlockAt(ranges, offset)
+	if index < 0 || index >= len(document.Blocks) {
+		return noteInlineStyle{}
+	}
+	blockRange := ranges[index]
+	styles := noteBlockStyles(document.Blocks[index], document.Blocks[index].Text)
+	if len(styles) == 0 {
+		return noteInlineStyle{}
+	}
+	runeOffset := offset - blockRange.TextStart
+	if runeOffset >= len(styles) {
+		runeOffset = len(styles) - 1
+	}
+	if runeOffset < 0 {
+		return noteInlineStyle{}
+	}
+	return styles[runeOffset]
+}
+
 func noteStyleActive(style noteInlineStyle, kind, link string) bool {
 	switch kind {
 	case "bold":
@@ -455,6 +566,53 @@ func noteBlockAt(ranges []noteBlockRange, offset int) int {
 		}
 	}
 	return max(0, len(ranges)-1)
+}
+
+// noteOpenableLink keeps pointer activation on the same schemes Window.OpenExternalURL accepts.
+func noteOpenableLink(target string) string {
+	target = strings.TrimSpace(target)
+	parsed, err := url.ParseRequestURI(target)
+	if err != nil {
+		return ""
+	}
+	if (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" {
+		return parsed.String()
+	}
+	if parsed.Scheme == "mailto" && parsed.Opaque != "" {
+		return parsed.String()
+	}
+	return ""
+}
+
+// noteLinkAtOffset returns the openable URL under a projected editor offset.
+func noteLinkAtOffset(document common.NoteDocument, ranges []noteBlockRange, offset int) string {
+	if len(document.Blocks) == 0 || len(ranges) == 0 {
+		return ""
+	}
+	index := noteBlockAt(ranges, offset)
+	blockRange := ranges[index]
+	if offset < blockRange.TextStart || offset > blockRange.TextEnd {
+		return ""
+	}
+	block := document.Blocks[index]
+	styles := noteBlockStyles(block, block.Text)
+	if len(styles) == 0 {
+		return ""
+	}
+	runeOffset := offset - blockRange.TextStart
+	if runeOffset < 0 || runeOffset > len(styles) {
+		return ""
+	}
+	if runeOffset < len(styles) {
+		if link := noteOpenableLink(styles[runeOffset].link); link != "" {
+			return link
+		}
+	}
+	// Hit-testing snaps to the caret after a glyph's midpoint, so the exclusive span end still belongs to the link.
+	if runeOffset > 0 {
+		return noteOpenableLink(styles[runeOffset-1].link)
+	}
+	return ""
 }
 
 // noteTaskAtOffset limits task activation to the rendered checkbox prefix.

@@ -1004,6 +1004,37 @@ func TestHostHoverAndTapUseWindowBounds(t *testing.T) {
 	}
 }
 
+func TestHostRebuildRemapsHoverWithoutLeave(t *testing.T) {
+	generation := 0
+	var hoverStates []bool
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		generation++
+		wrap := Key("wrap-a")
+		if generation%2 == 0 {
+			wrap = "wrap-b"
+		}
+		return Semantics{Key: wrap, Child: Gesture{
+			ID:      "stable-hover",
+			OnHover: func(inside bool) { hoverStates = append(hoverStates, inside) },
+			Child:   Container{Width: 100, Height: 20},
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 5, Y: 5}})
+	hoveredBefore := host.hovered
+	renderTestFrame(host)
+	if generation < 2 {
+		t.Fatal("expected a rebuilt hoverable tree")
+	}
+	if len(hoverStates) != 1 || !hoverStates[0] {
+		t.Fatalf("rebuilt hover states = %v, want [true] without a leave", hoverStates)
+	}
+	if host.hovered == 0 || host.hovered == hoveredBefore || host.hoveredGestureID != "stable-hover" {
+		t.Fatalf("hovered = %d (was %d) id %q, want a remapped stable-hover", host.hovered, hoveredBefore, host.hoveredGestureID)
+	}
+}
+
 func TestHostRemovedHoverableLeavesHover(t *testing.T) {
 	visible := true
 	var hoverStates []bool

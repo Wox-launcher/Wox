@@ -74,6 +74,15 @@ func TestHTMLExportRejectsExecutableLinkSchemes(t *testing.T) {
 	}
 }
 
+func TestDocumentIsEmptyIgnoresBlankBlocksAndKeepsStructuralContent(t *testing.T) {
+	if !DocumentIsEmpty(EmptyDocument()) || !DocumentIsEmpty(common.NoteDocument{Blocks: []common.NoteBlock{{Type: common.NoteBlockHeading1, Text: "  "}, {Type: common.NoteBlockTask}}}) {
+		t.Fatal("blank notes should be empty")
+	}
+	if DocumentIsEmpty(common.NoteDocument{Blocks: []common.NoteBlock{{Text: "hello"}}}) || DocumentIsEmpty(common.NoteDocument{Blocks: []common.NoteBlock{{Type: common.NoteBlockDivider}}}) {
+		t.Fatal("typed or divider notes should be kept")
+	}
+}
+
 func TestNoteCodecsPreserveNestedTaskLevels(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{Type: common.NoteBlockTask, Text: "parent"},

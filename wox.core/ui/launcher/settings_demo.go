@@ -14,13 +14,30 @@ type settingsDemoState struct {
 	anchor woxui.Rect
 }
 
-// setSettingsDemoHover shows a shared animated preview and delays dismissal while the pointer crosses into it.
+// setSettingsDemoHover shows a shared animated preview after the hover dwell
+// and delays dismissal while the pointer crosses into it.
 func (a *App) setSettingsDemoHover(kind string, inside bool, anchor woxui.Rect) {
 	if inside {
-		a.settingsDemoRevision.Add(1)
-		a.settingsDemo = &settingsDemoState{kind: kind, anchor: anchor}
-		a.preloadDemoWallpaper(true)
-		a.invalidateSettingsWindow()
+		revision := a.settingsDemoRevision.Add(1)
+		util.Go(a.lifecycleCtx, "show settings demo after dwell", func() {
+			if !a.waitHoverTooltipDelay(&a.settingsDemoRevision, revision) {
+				return
+			}
+			apply := func() {
+				if revision != a.settingsDemoRevision.Load() {
+					return
+				}
+				if current := a.settingsDemo; current != nil && current.kind == kind && current.anchor == anchor {
+					return
+				}
+				a.settingsDemo = &settingsDemoState{kind: kind, anchor: anchor}
+				a.preloadDemoWallpaper(true)
+				a.invalidateSettingsWindow()
+			}
+			if err := a.runOnUI("show settings demo", apply); err != nil {
+				apply()
+			}
+		})
 		return
 	}
 	a.scheduleSettingsDemoHide(kind)

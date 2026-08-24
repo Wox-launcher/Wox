@@ -2834,6 +2834,23 @@ int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enable
   return run_on_main_sync(set_hide_on_blur_main, &call) ? call.result : -1;
 }
 
+static void set_topmost_main(void *data) {
+  WoxBoolCall *call = data;
+  if (call->window->closed || call->window->window == NULL) {
+    call->result = -1;
+    return;
+  }
+  gtk_window_set_keep_above(GTK_WINDOW(call->window->window), call->enabled);
+}
+
+int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxBoolCall call = {.window = window, .enabled = enabled != 0};
+  return run_on_main_sync(set_topmost_main, &call) ? call.result : -1;
+}
+
 typedef struct {
   WoxLinuxWindow *window;
   bool directory;

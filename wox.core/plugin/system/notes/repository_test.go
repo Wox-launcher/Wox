@@ -25,6 +25,51 @@ func newRepositoryForTest(t *testing.T) (*Repository, *gorm.DB) {
 	return NewRepository(setting.NewPluginSettingStore(db, common.NotesPluginID)), db
 }
 
+func TestRepositoryDoesNotPersistEmptyDrafts(t *testing.T) {
+	repository, _ := newRepositoryForTest(t)
+	draft, err := repository.Create()
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repository.Get(draft.ID); err == nil {
+		t.Fatal("empty draft should not be stored on create")
+	}
+	if _, _, err := repository.Save(draft.ID, draft.Revision, EmptyDocument()); err != nil {
+		t.Fatalf("save empty draft: %v", err)
+	}
+	if _, err := repository.Get(draft.ID); err == nil {
+		t.Fatal("empty draft should not be stored on save")
+	}
+	saved, conflict, err := repository.Save(draft.ID, draft.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "hello"}}})
+	if err != nil || conflict || saved.ID != draft.ID {
+		t.Fatalf("first content save: %#v conflict=%t err=%v", saved, conflict, err)
+	}
+	if _, _, err := repository.Save(saved.ID, saved.Revision, EmptyDocument()); err != nil {
+		t.Fatalf("clear saved note: %v", err)
+	}
+	current, err := repository.Get(saved.ID)
+	if err != nil || NoteTitle(current.Document) != "hello" {
+		t.Fatalf("empty save must not replace stored content: %#v err=%v", current, err)
+	}
+	if err := repository.Discard(saved.ID); err != nil {
+		t.Fatalf("discard: %v", err)
+	}
+	if _, err := repository.Get(saved.ID); err == nil {
+		t.Fatal("discarded note is still stored")
+	}
+	empty, err := repository.Create()
+	if err != nil {
+		t.Fatalf("create leftover empty: %v", err)
+	}
+	if err := repository.write(common.NoteRecord{ID: empty.ID, Document: EmptyDocument(), Revision: empty.Revision}); err != nil {
+		t.Fatalf("seed leftover empty: %v", err)
+	}
+	count, err := repository.PurgeEmpty()
+	if err != nil || count != 1 {
+		t.Fatalf("purge empty count=%d err=%v", count, err)
+	}
+}
+
 func TestRepositorySaveConflictPreservesRemoteAndCreatesCopy(t *testing.T) {
 	repository, _ := newRepositoryForTest(t)
 	record, err := repository.Create()
@@ -55,6 +100,10 @@ func TestRepositoryTrashRestoreAndPurge(t *testing.T) {
 	record, err := repository.Create()
 	if err != nil {
 		t.Fatalf("create: %v", err)
+	}
+	record, _, err = repository.Save(record.ID, record.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "keep"}}})
+	if err != nil {
+		t.Fatalf("persist note: %v", err)
 	}
 	deleted, err := repository.Delete(record.ID)
 	if err != nil || deleted.DeletedAt == 0 {
@@ -100,6 +149,10 @@ func TestRepositoryLocalPreferencesDoNotSyncAndTrashHonorsBoundary(t *testing.T)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
+	record, _, err = repository.Save(record.ID, record.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "keep"}}})
+	if err != nil {
+		t.Fatalf("persist note: %v", err)
+	}
 	record, err = repository.Delete(record.ID)
 	if err != nil {
 		t.Fatalf("delete: %v", err)
@@ -136,6 +189,10 @@ func TestRepositoryCoalescesDeferredSyncPerNoteKey(t *testing.T) {
 	second, err := repository.Create()
 	if err != nil {
 		t.Fatalf("create second: %v", err)
+	}
+	second, _, err = repository.Save(second.ID, second.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "other"}}})
+	if err != nil {
+		t.Fatalf("persist second: %v", err)
 	}
 	var oplogs []database.Oplog
 	if err := db.Where("entity_id = ? AND synced_to_cloud = ? AND cloud_sync_discarded = ?", common.NotesPluginID, false, false).Order("key").Find(&oplogs).Error; err != nil {

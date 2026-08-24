@@ -39,7 +39,11 @@ func TestPreviewTagHoverUsesTooltip(t *testing.T) {
 	}).(woxwidget.ScrollView)
 	row := view.Child.(woxwidget.Flex)
 	wrapper := row.Children[0].(woxwidget.Container)
-	gesture := wrapper.Child.(woxwidget.Gesture)
+	semantics := wrapper.Child.(woxwidget.Semantics)
+	if semantics.AutomationID != "preview-tag-0" || semantics.Role != woxui.AccessibilityRoleText || semantics.Label != "51 chars" || semantics.Description != "Character count" {
+		t.Fatalf("preview tag semantics = %+v, want a stable hoverable tooltip target", semantics)
+	}
+	gesture := semantics.Child.(woxwidget.Gesture)
 	wantAnchor := woxui.Rect{X: 2, Y: 3, Width: 40, Height: 26}
 	gesture.OnHoverAt(true, wantAnchor)
 

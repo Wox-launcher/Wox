@@ -2990,7 +2990,7 @@ int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost) 
     if (window->screenshot_window || window->nonactivating) {
       return;
     }
-    window->window.level = topmost != 0 ? NSModalPanelWindowLevel : NSFloatingWindowLevel;
+    window->window.level = topmost != 0 ? NSModalPanelWindowLevel : NSNormalWindowLevel;
   });
   return result;
 }

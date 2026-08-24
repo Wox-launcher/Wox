@@ -25,11 +25,25 @@ func TestWoxIconButtonOwnsHoverAndTapGesture(t *testing.T) {
 	}
 }
 
+func TestWoxIconButtonSelectedKeepsActiveBackground(t *testing.T) {
+	selectedColor := woxui.Color{R: 20, G: 30, B: 40, A: 40}
+	props := IconButtonProps{ID: "underline", Label: "Underline", Icon: woxwidget.Painter{Width: 16, Height: 16}, Width: 28, Height: 28, Radius: 6, Selected: true, SelectedBackground: selectedColor}
+	built := (&iconButtonState{}).Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if !built.Selected {
+		t.Fatal("selected icon button must expose selected semantics")
+	}
+	background := built.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Color
+	if background != selectedColor {
+		t.Fatalf("selected background = %#v, want %#v", background, selectedColor)
+	}
+}
+
 func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 	color := woxui.Color{R: 10, G: 20, B: 30, A: 255}
 	glyphs := []woxwidget.Widget{
 		CloseGlyph(16, color),
 		SearchGlyph(18, color),
+		PinGlyph(15, color),
 		AddGlyph(18, color),
 		DeleteGlyph(15, color),
 		ChatBubbleGlyph(22, color),
@@ -55,6 +69,10 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		KeyboardArrowDownGlyph(14, color),
 		KeyboardArrowRightGlyph(16, color),
 		ExtensionGlyph(18, color),
+		FormatGlyph("block", 16, color),
+		FormatGlyph("bold", 16, color),
+		FormatGlyph("link", 16, color),
+		FormatGlyph("more", 16, color),
 	}
 	for index, glyph := range glyphs {
 		image, ok := glyph.(woxwidget.Image)

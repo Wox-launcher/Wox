@@ -16,8 +16,8 @@ import (
 )
 
 // Test001LauncherNotesFlow verifies the native Notes window preserves a rich note through its core lifecycle.
-// Flow: create from Launcher -> enter Markdown -> pin -> create an independent note window -> search the saved note -> delete and restore it.
-// Evidence: the utility window exposes formatted backing text, pin state, persisted search results, trash state, and restored content.
+// Flow: create from Launcher -> enter Markdown -> pin the window -> create an independent note window -> search the saved note -> delete and restore it.
+// Evidence: the utility window exposes formatted backing text, window-pin state, persisted search results, trash state, and restored content.
 func Test001LauncherNotesFlow(t *testing.T) {
 	const title = "Wox Notes Smoke"
 	const markdown = "# " + title + "\n- [ ] ship"
@@ -57,23 +57,13 @@ func Test001LauncherNotesFlow(t *testing.T) {
 		assertEditorSelection(t, snapshot, selectionStart, selectionEnd)
 
 		if err := client.PressKey(ctx, woxui.Key("p"), primaryModifier()|woxui.KeyModifierShift); err != nil {
-			t.Fatalf("pin note: %v", err)
-		}
-		openMoreMenu(t, ctx, client)
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			pin, found := automationdriver.Find(snapshot, "notes.menu.pin")
-			return found && (strings.Contains(pin.Label, "Unpin") || strings.Contains(pin.Label, "取消置顶"))
-		}); err != nil {
-			t.Fatalf("wait for pinned Notes state: %v", err)
-		}
-		if err := client.PressKey(ctx, woxui.KeyEscape, 0); err != nil {
-			t.Fatalf("close Notes menu: %v", err)
+			t.Fatalf("pin Notes window: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, found := automationdriver.Find(snapshot, "notes.menu.pin")
-			return !found
+			pin, found := automationdriver.Find(snapshot, "notes.toolbar.pin")
+			return found && (strings.Contains(pin.Label, "Unpin") || strings.Contains(pin.Label, "取消窗口置顶"))
 		}); err != nil {
-			t.Fatalf("wait for Notes menu to close: %v", err)
+			t.Fatalf("wait for pinned Notes window: %v", err)
 		}
 
 		if err := client.Perform(ctx, "notes.toolbar.new", woxui.AccessibilityActionActivate, ""); err != nil {

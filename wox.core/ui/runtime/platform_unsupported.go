@@ -56,6 +56,10 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) setTopmost(enabled bool) error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) focusReadyForBlur() bool {
 	return true
 }

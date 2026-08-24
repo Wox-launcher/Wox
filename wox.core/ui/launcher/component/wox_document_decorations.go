@@ -14,6 +14,11 @@ const (
 	documentRuleHeight      = float32(2)
 )
 
+// DocumentListMarkerColor is a fixed #1379D2 accent for task boxes and list prefixes.
+// Theme cursor and body text can wash out on light or dark note surfaces, so this
+// stays readable on both.
+var DocumentListMarkerColor = woxui.Color{R: 0x13, G: 0x79, B: 0xD2, A: 255}
+
 func documentDecorationScale(fontSize float32) float32 {
 	return max(float32(0.75), fontSize/documentBaseFontSize)
 }

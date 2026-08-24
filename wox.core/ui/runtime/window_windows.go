@@ -124,6 +124,7 @@ const (
 	windowCommandStartDragging
 	windowCommandMinimize
 	windowCommandSetHideOnBlur
+	windowCommandSetTopmost
 	windowCommandSetAppearance
 	windowCommandSetFontFamily
 	windowCommandPickFile
@@ -154,6 +155,7 @@ type windowCommand struct {
 	bounds                      Rect
 	size                        Size
 	hideOnBlur                  bool
+	topmost                     bool
 	darkAppearance              bool
 	fontFamily                  string
 	fileDialog                  FileDialogOptions
@@ -544,6 +546,10 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	return w.call(windowCommand{kind: windowCommandSetHideOnBlur, hideOnBlur: enabled}).err
 }
 
+func (w *platformWindow) setTopmost(enabled bool) error {
+	return w.call(windowCommand{kind: windowCommandSetTopmost, topmost: enabled}).err
+}
+
 func (w *platformWindow) focusReadyForBlur() bool {
 	return w.focus.visible && w.focus.activationConfirmed && !time.Now().Before(w.focus.blurGuardUntil)
 }
@@ -788,7 +794,10 @@ func (w *platformWindow) createNativeWindow() error {
 	height := logicalToPhysical(w.options.Size.Height, scale)
 	x := (win.GetSystemMetrics(win.SM_CXSCREEN) - int32(width)) / 2
 	y := (win.GetSystemMetrics(win.SM_CYSCREEN) - int32(height)) / 3
-	exStyle := uint32(win.WS_EX_TOPMOST | win.WS_EX_TOOLWINDOW | wsExNoRedirectionBitmap)
+	exStyle := uint32(win.WS_EX_TOOLWINDOW | wsExNoRedirectionBitmap)
+	if w.options.Topmost || w.options.Role == WindowRoleScreenshot {
+		exStyle |= win.WS_EX_TOPMOST
+	}
 	if w.options.Nonactivating {
 		exStyle |= win.WS_EX_NOACTIVATE
 	}
@@ -1712,6 +1721,8 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	case windowCommandSetHideOnBlur:
 		w.options.HideOnBlur = command.hideOnBlur
 		return windowCommandResult{}
+	case windowCommandSetTopmost:
+		return windowCommandResult{err: w.setTopmostNative(command.topmost)}
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
 		if windowsWindowUsesSystemBackdrop(w.options) {
@@ -2043,8 +2054,8 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 			w.confirmActivation()
 		}
 	}
-	if w.options.Topmost {
-		win.SetWindowPos(w.hwnd, win.HWND_TOP, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE)
+	if w.options.Topmost || w.options.Role == WindowRoleScreenshot {
+		win.SetWindowPos(w.hwnd, windowsHWNDTopmost, 0, 0, 0, 0, windowsTopmostShowFlags(w.options.Nonactivating))
 	}
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		w.confirmActivation()
@@ -2154,9 +2165,10 @@ func (w *platformWindow) confirmActivation() {
 	w.setActive(true)
 }
 
-// handleBlur ignores internal native surfaces and transient messages from the current show transaction.
+// handleBlur ignores internal native surfaces, nonactivating overlays such as
+// tooltips, and transient messages from the current show transaction.
 func (w *platformWindow) handleBlur(nextWindow win.HWND) {
-	if !w.focus.visible || w.isWithinFocusDomain(nextWindow) {
+	if !w.focus.visible || w.isWithinFocusDomain(nextWindow) || isNonactivatingNativeWindow(nextWindow) {
 		return
 	}
 	if !w.focus.activationConfirmed || time.Now().Before(w.focus.blurGuardUntil) {
@@ -2189,6 +2201,58 @@ func (w *platformWindow) isWithinFocusDomain(candidate win.HWND) bool {
 	selfRoot := normalizeRootWindow(w.hwnd)
 	candidateRoot := normalizeRootWindow(candidate)
 	return selfRoot == candidateRoot || win.IsChild(selfRoot, candidate) || win.IsChild(selfRoot, candidateRoot)
+}
+
+const (
+	windowsHWNDTopmost   = win.HWND(^uintptr(0))
+	windowsHWNDNoTopmost = win.HWND(^uintptr(0) - 1)
+)
+
+// setTopmostNative toggles WS_EX_TOPMOST and restacks the HWND without activating it.
+func (w *platformWindow) setTopmostNative(enabled bool) error {
+	if w.hwnd == 0 {
+		return errors.New("window is closed")
+	}
+	w.options.Topmost = enabled
+	exStyle := win.GetWindowLong(w.hwnd, win.GWL_EXSTYLE)
+	if enabled {
+		exStyle |= win.WS_EX_TOPMOST
+	} else {
+		exStyle &^= win.WS_EX_TOPMOST
+	}
+	win.SetWindowLong(w.hwnd, win.GWL_EXSTYLE, exStyle)
+	insertAfter := windowsHWNDNoTopmost
+	if enabled {
+		insertAfter = windowsHWNDTopmost
+	}
+	win.SetWindowPos(w.hwnd, insertAfter, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE|win.SWP_NOACTIVATE|win.SWP_FRAMECHANGED)
+	return nil
+}
+
+// windowsTopmostShowFlags raises a just-shown topmost window. Nonactivating
+// overlays keep SWP_NOACTIVATE so tooltips cannot steal launcher focus and
+// trigger hide-on-lost-focus.
+func windowsTopmostShowFlags(nonactivating bool) uint32 {
+	flags := uint32(win.SWP_NOMOVE | win.SWP_NOSIZE)
+	if nonactivating {
+		flags |= win.SWP_NOACTIVATE
+	}
+	return flags
+}
+
+// isNonactivatingNativeWindow reports Wox tooltip and recording chrome that must
+// not count as a real focus loss. Those HWNDs are not owned by the launcher, so
+// isWithinFocusDomain cannot see them.
+func isNonactivatingNativeWindow(hwnd win.HWND) bool {
+	if hwnd == 0 {
+		return false
+	}
+	value, ok := nativeWindows.Load(uintptr(hwnd))
+	if !ok {
+		return false
+	}
+	window, ok := value.(*platformWindow)
+	return ok && window != nil && window.options.Nonactivating
 }
 
 func normalizeRootWindow(hwnd win.HWND) win.HWND {

@@ -17,6 +17,10 @@ type TooltipOptions struct {
 	AnchorY      float64
 	AnchorWidth  float64
 	AnchorHeight float64
+	OwnerX       float64
+	OwnerY       float64
+	OwnerWidth   float64
+	OwnerHeight  float64
 }
 
 // InteractionServices owns launcher actions that are not part of query execution.

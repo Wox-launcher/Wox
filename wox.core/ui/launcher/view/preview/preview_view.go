@@ -100,8 +100,12 @@ func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Wind
 			tooltip = label
 		}
 		if onHover != nil {
-			pill = woxwidget.Container{Width: chipWidth, Height: 26, Child: woxwidget.Gesture{
-				ID: fmt.Sprintf("preview-tag-%d", index), OnHoverAt: func(inside bool, bounds woxui.Rect) { onHover(inside, tooltip, bounds) }, Child: pill,
+			id := fmt.Sprintf("preview-tag-%d", index)
+			pill = woxwidget.Container{Width: chipWidth, Height: 26, Child: woxwidget.Semantics{
+				Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleText, Label: label, Description: tooltip,
+				Child: woxwidget.Gesture{
+					ID: id, OnHoverAt: func(inside bool, bounds woxui.Rect) { onHover(inside, tooltip, bounds) }, Child: pill,
+				},
 			}}
 		}
 		children = append(children, pill)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,12 +37,13 @@ const (
 // App owns one launcher window and its typed core service boundary.
 type App struct {
 	// These narrow locks protect the few resources intentionally accessed outside the UI thread.
-	translationsMu         sync.RWMutex
-	terminalSubscriptionMu sync.Mutex
-	unsubscribersMu        sync.Mutex
-	tooltipMu              sync.Mutex
-	terminalSubscribed     string
-	terminalDesired        atomic.Value
+	translationsMu          sync.RWMutex
+	terminalSubscriptionMu  sync.Mutex
+	unsubscribersMu         sync.Mutex
+	tooltipMu               sync.Mutex
+	nativeHoverTooltipShown map[string]nativeHoverTooltipIdentity
+	terminalSubscribed      string
+	terminalDesired         atomic.Value
 
 	isDev          bool
 	isPrimary      bool
@@ -137,36 +139,38 @@ type App struct {
 	bottomAnchorY float32
 	// automationFocusInstance routes smoke Snapshot/Bounds/Perform to a named
 	// secondary when set; empty keeps the primary launcher surface.
-	automationFocusInstance     string
-	settingsOpen                bool
-	onboardingOpen              bool
-	onboardingStep              int
-	onboardingChoice            string
-	onboardingChoiceAnchor      woxui.Rect
-	onboardingPermission        contract.MacOSPermissionStatus
-	onboardingLoading           bool
-	onboardingError             string
-	permissionFlowHost          *macOSPermissionFlowHost
-	settingsCtx                 settingWindowContext
-	settingTab                  string
-	settingRow                  int
-	settingSaving               bool
-	settingFlash                string
-	settingFlashTimer           *time.Timer
-	settingsInlineTooltip       *settingsInlineTooltipState
-	cloudPlanTooltip            *cloudPlanTooltipState
-	settingsDemo                *settingsDemoState
-	settingsDemoRevision        atomic.Uint64
-	choiceTooltipRevision       atomic.Uint64
-	settingsTableEditor         *formTableEditorState
-	recentFormTableEmojis       []string
-	formTableEmojiSearchOnce    sync.Once
-	formTableEmojiSearchEntries []emojisearch.Entry
-	glanceItem                  *glanceItem
-	glanceLoading               bool
-	glanceRevision              uint64
-	glanceTooltipRevision       atomic.Uint64
-	glanceTimer                 *time.Timer
+	automationFocusInstance       string
+	settingsOpen                  bool
+	onboardingOpen                bool
+	onboardingStep                int
+	onboardingChoice              string
+	onboardingChoiceAnchor        woxui.Rect
+	onboardingPermission          contract.MacOSPermissionStatus
+	onboardingLoading             bool
+	onboardingError               string
+	permissionFlowHost            *macOSPermissionFlowHost
+	settingsCtx                   settingWindowContext
+	settingTab                    string
+	settingRow                    int
+	settingSaving                 bool
+	settingFlash                  string
+	settingFlashTimer             *time.Timer
+	settingsInlineTooltip         *settingsInlineTooltipState
+	settingsInlineTooltipRevision atomic.Uint64
+	cloudPlanTooltip              *cloudPlanTooltipState
+	cloudPlanTooltipRevision      atomic.Uint64
+	settingsDemo                  *settingsDemoState
+	settingsDemoRevision          atomic.Uint64
+	choiceTooltipRevision         atomic.Uint64
+	settingsTableEditor           *formTableEditorState
+	recentFormTableEmojis         []string
+	formTableEmojiSearchOnce      sync.Once
+	formTableEmojiSearchEntries   []emojisearch.Entry
+	glanceItem                    *glanceItem
+	glanceLoading                 bool
+	glanceRevision                uint64
+	glanceTooltipRevision         atomic.Uint64
+	glanceTimer                   *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
 	generalSettings      *generalSettingsController
 	appearanceSettings   *appearanceSettingsController
@@ -354,8 +358,11 @@ func (a *App) start() error {
 
 	host := woxwidget.NewHost(a.buildLauncher)
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
-		Title:           "Wox",
-		Size:            woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
+		Title: "Wox",
+		Size:  woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
+		// Windows and Linux no longer imply always-on-top for every utility window.
+		// macOS keeps the launcher at NSFloatingWindowLevel so Topmost overlays stay above it.
+		Topmost:         runtime.GOOS != "darwin",
 		OnFrame:         host.Frame,
 		OnPointer:       host.Pointer,
 		OnFileDrop:      a.handleFileDrop,

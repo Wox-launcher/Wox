@@ -4,10 +4,12 @@ import (
 	"context"
 	"math"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	woxwidget "wox/ui/widget"
+	"wox/util/mouse"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
 	"wox/util/screen"
@@ -29,6 +31,10 @@ const (
 	tooltipAsciiWidthFactor = 0.68
 	tooltipWideWidthFactor  = 1.1
 	tooltipSpaceWidthFactor = 0.34
+	// tooltipOwnerLeaveGrace is long enough for the first post-show cursor
+	// samples to miss, but short enough that a delayed tooltip cannot stay
+	// up after the pointer has already moved to another control.
+	tooltipOwnerLeaveGrace = 200 * time.Millisecond
 )
 
 const (
@@ -51,6 +57,10 @@ type Options struct {
 	AnchorY       float64
 	AnchorWidth   float64
 	AnchorHeight  float64
+	OwnerX        float64
+	OwnerY        float64
+	OwnerWidth    float64
+	OwnerHeight   float64
 }
 
 // Show renders a native tooltip window that is independent of the UI
@@ -98,6 +108,56 @@ func Close(name string) {
 	overlay.Close(name)
 }
 
+// tooltipTrackingClose reports whether OS-cursor polling may dismiss the overlay.
+// The first samples after show often miss the cursor: creating the tooltip HWND
+// generates owner WM_MOUSELEAVE, and automation hovers do not move the OS
+// pointer. Closing before the cursor has been seen inside would flash-dismiss
+// the overlay and hide-on-lost-focus would treat that as a real focus loss.
+//
+// After the dwell, the pointer may already be on another control in the same
+// owner window. Waiting forever for a later enter would leave that leftover
+// tooltip stuck. Automation stays safe because it never moves the OS cursor
+// onto the owner, so overOwner stays false.
+func tooltipTrackingClose(seenInside bool, inside bool, overOwner bool, positionOK bool, elapsed time.Duration) (shouldClose bool, nowSeenInside bool) {
+	if !positionOK {
+		return false, seenInside
+	}
+	if inside {
+		return false, true
+	}
+	if seenInside {
+		return true, true
+	}
+	if overOwner && elapsed >= tooltipOwnerLeaveGrace {
+		return true, seenInside
+	}
+	return false, seenInside
+}
+
+// evaluateVisibility samples the OS cursor once and applies tooltipTrackingClose.
+func evaluateVisibility(opts Options, seenInside bool, elapsed time.Duration) (shouldClose bool, nowSeenInside bool) {
+	inside, overOwner, ok := cursorTooltipRelation(opts)
+	return tooltipTrackingClose(seenInside, inside, overOwner, ok, elapsed)
+}
+
+func cursorTooltipRelation(opts Options) (inside bool, overOwner bool, ok bool) {
+	point, ok := mouse.CurrentPosition()
+	if !ok {
+		return false, false, false
+	}
+	inside = rectContains(point.X, point.Y, opts.AnchorX, opts.AnchorY, opts.AnchorWidth, opts.AnchorHeight) ||
+		rectContains(point.X, point.Y, opts.X, opts.Y, opts.TooltipWidth, opts.TooltipHeight)
+	overOwner = rectContains(point.X, point.Y, opts.OwnerX, opts.OwnerY, opts.OwnerWidth, opts.OwnerHeight)
+	return inside, overOwner, true
+}
+
+func rectContains(cursorX float64, cursorY float64, left float64, top float64, width float64, height float64) bool {
+	if width <= 0 || height <= 0 {
+		return false
+	}
+	return cursorX >= left && cursorX < left+width && cursorY >= top && cursorY < top+height
+}
+
 func (opts Options) withBounds(x float64, y float64, width float64, height float64) Options {
 	return Options{
 		Name:          opts.Name,
@@ -111,6 +171,10 @@ func (opts Options) withBounds(x float64, y float64, width float64, height float
 		AnchorY:       opts.AnchorY,
 		AnchorWidth:   opts.AnchorWidth,
 		AnchorHeight:  opts.AnchorHeight,
+		OwnerX:        opts.OwnerX,
+		OwnerY:        opts.OwnerY,
+		OwnerWidth:    opts.OwnerWidth,
+		OwnerHeight:   opts.OwnerHeight,
 	}
 }
 

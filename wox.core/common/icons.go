@@ -188,6 +188,17 @@ var uiIcons = map[string]WoxImage{
 	"control.arrow-down":         NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>`),
 	"control.model-training":     NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M15.5 13.5c0 2-2.5 3.5-2.5 5h-2c0-1.5-2.5-3-2.5-5 0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5M13 19.5h-2v.5c0 .55.45 1 1 1s1-.45 1-1zM19 13c0 1.39-.41 2.69-1.12 3.78-.25.39-.19.91.14 1.24.44.44 1.2.38 1.54-.15A8.95 8.95 0 0 0 21 13c0-2.36-.91-4.51-2.4-6.12-.39-.42-1.05-.43-1.45-.03-.38.38-.38.99-.02 1.39A6.97 6.97 0 0 1 19 13M15.65 4.65l-2.79-2.79c-.32-.32-.86-.1-.86.35V4a9 9 0 0 0-7.56 13.88c.34.53 1.1.59 1.54.15.33-.33.39-.84.14-1.23A6.97 6.97 0 0 1 12 6v1.79c0 .45.54.67.85.35l2.79-2.79c.2-.19.2-.51.01-.7"/></svg>`),
 	"control.more-horizontal":    NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`),
+	"control.pin":                newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
+
+	// Notes and other compact editor format bars.
+	"control.format-heading":       newMonochromeUIIcon(`<path d="M6 5v14M18 5v14M6 12h12"/>`),
+	"control.format-bold":          newMonochromeUIIcon(`<path d="M7 5h7a3.5 3.5 0 0 1 0 7H7zM7 12h8a3.5 3.5 0 0 1 0 7H7z"/>`),
+	"control.format-italic":        newMonochromeUIIcon(`<path d="M15 5H9M13 19H7M13.5 5 10.5 19"/>`),
+	"control.format-underline":     newMonochromeUIIcon(`<path d="M7 5v7a5 5 0 0 0 10 0V5M5 20h14"/>`),
+	"control.format-strikethrough": newMonochromeUIIcon(`<path d="M5 12h14M16 7.2C15.2 5.8 13.8 5 12 5c-2.6 0-4.2 1.5-4.2 3.2 0 3.6 8.4 2 8.4 6.2 0 1.8-1.6 3.6-4.2 3.6-2 0-3.5-.9-4.3-2.2"/>`),
+	"control.format-ordered":       newMonochromeUIIcon(`<path d="M11 6h9M11 12h9M11 18h9M5 8V4.5l-1.4 1M4 13.2h2.6L4 18h3"/>`),
+	"control.format-quote":         NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>`),
+	"control.format-divider":       newMonochromeUIIcon(`<path d="M5 12h14"/>`),
 
 	// Screenshot annotation toolbar.
 	"screenshot.select":            newMonochromeUIIcon(`<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="2 2"/>`),

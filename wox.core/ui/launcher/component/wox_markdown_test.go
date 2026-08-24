@@ -58,10 +58,15 @@ func TestMarkdownUsesSharedDocumentDecorations(t *testing.T) {
 	if body.Children[0].(woxwidget.Text).Color != theme.ResultSubtitle {
 		t.Fatalf("completed task text color = %#v, want muted %#v", body.Children[0].(woxwidget.Text).Color, theme.ResultSubtitle)
 	}
+	bullet := renderMarkdownBlock(ParseMarkdown("- item").blocks[0], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Flex)
+	bulletMarker := bullet.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if bulletMarker.Value != "•" || bulletMarker.Color != DocumentListMarkerColor {
+		t.Fatalf("list marker = %#v, want fixed #1379D2", bulletMarker)
+	}
 
 	quote := renderMarkdownBlock(document.blocks[1], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Container).Child.(woxwidget.Container)
-	if quote.LeftBorderColor != theme.Cursor || quote.LeftBorderWidth != documentQuoteBarWidth*documentDecorationScale(12) {
-		t.Fatalf("quote bar = %.1f/%#v, want shared accent bar", quote.LeftBorderWidth, quote.LeftBorderColor)
+	if quote.LeftBorderColor != DocumentListMarkerColor || quote.LeftBorderWidth != documentQuoteBarWidth*documentDecorationScale(12) {
+		t.Fatalf("quote bar = %.1f/%#v, want shared #1379D2 accent bar", quote.LeftBorderWidth, quote.LeftBorderColor)
 	}
 	rule := renderMarkdownBlock(document.blocks[2], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Painter)
 	if rule.Width != 300 || rule.Height != documentRuleHeight {

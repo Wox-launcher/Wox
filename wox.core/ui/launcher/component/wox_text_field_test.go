@@ -177,6 +177,28 @@ func TestReadOnlyTextFieldAllowsSelectAndCopy(t *testing.T) {
 	}
 }
 
+func TestTextFieldGlyphHitIgnoresEmptySpaceAroundText(t *testing.T) {
+	measurer := &fakeTextMeasurer{charWidth: 10}
+	state := woxui.TextEditingState{Text: "sadf\nmore"}
+	style := woxui.TextStyle{Size: 14}
+	const lineHeight = float32(24)
+	hit := func(x, y float32) (int, bool) {
+		return textFieldGlyphHitAt(state, measurer, style, nil, 100, lineHeight, 0, 400, true, woxui.Point{X: x, Y: y})
+	}
+	if _, ok := hit(15, 10); !ok {
+		t.Fatal("pointer over the first-line glyphs must hit")
+	}
+	if _, ok := hit(200, 10); ok {
+		t.Fatal("pointer past the end of a short line must not count as a glyph hit")
+	}
+	if _, ok := hit(15, 60); ok {
+		t.Fatal("pointer below the last line must not count as a glyph hit")
+	}
+	if _, ok := hit(-4, 10); ok {
+		t.Fatal("pointer in the left gutter must not count as a glyph hit")
+	}
+}
+
 func TestTextFieldLinesSoftWrapPreservesOffsets(t *testing.T) {
 	lines := textFieldLines("hello world", nil, woxui.TextStyle{Size: 12}, 0, true)
 	if len(lines) != 1 || lines[0].text != "hello world" {

@@ -161,6 +161,10 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		window.handle.Delete()
 		return nil, errors.New("woxui: failed to create GTK window or OpenGL renderer")
 	}
+	// GTK utility windows start keep-above; honor an explicit unpinned utility window.
+	if options.Role != WindowRoleApplication {
+		_ = window.setTopmost(options.Topmost)
+	}
 	window.webView = webviewruntime.New(&linuxWebViewDriver{window: window})
 	run.mu.Lock()
 	run.windows = append(run.windows, window)
@@ -261,6 +265,22 @@ func (w *platformWindow) minimize() error {
 	if C.wox_linux_window_minimize(native) != 0 {
 		return errors.New("woxui: failed to minimize Linux window")
 	}
+	return nil
+}
+
+func (w *platformWindow) setTopmost(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_linux_window_set_topmost(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update Linux topmost behavior")
+	}
+	w.options.Topmost = enabled
 	return nil
 }
 

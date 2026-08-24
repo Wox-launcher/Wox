@@ -142,31 +142,56 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 // setSettingsHoverTooltip shows one settings-window tooltip on the requested side.
 func (a *App) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {
 	if util.IsLinux() {
-		if !a.settingsOpen {
-			if a.settingsInlineTooltip != nil {
-				a.settingsInlineTooltip = nil
-				a.invalidateSettingsWindow()
-			}
-			return
-		}
-		message := strings.TrimSpace(text)
-		if !inside || message == "" || anchor.Width <= 0 || anchor.Height <= 0 {
-			if a.settingsInlineTooltip != nil {
-				a.settingsInlineTooltip = nil
-				a.invalidateSettingsWindow()
-			}
-			return
-		}
-		next := settingsInlineTooltipState{Text: message, Side: side, Anchor: anchor}
-		if current := a.settingsInlineTooltip; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
-			return
-		}
-		a.settingsInlineTooltip = &next
-		a.invalidateSettingsWindow()
+		a.scheduleLinuxInlineTooltip(inside, text, anchor, side)
 		return
 	}
 
 	a.setNativeHoverTooltip(&a.choiceTooltipRevision, "go-ui-setting-choice", "update setting choice tooltip", inside, text, anchor, side, a.settingsNativeWindow)
+}
+
+func (a *App) scheduleLinuxInlineTooltip(inside bool, text string, anchor woxui.Rect, side string) {
+	if !a.settingsOpen {
+		a.settingsInlineTooltipRevision.Add(1)
+		a.clearLinuxInlineTooltip()
+		return
+	}
+	message := strings.TrimSpace(text)
+	if !nativeHoverTooltipArmed(inside, message, anchor) {
+		a.settingsInlineTooltipRevision.Add(1)
+		a.clearLinuxInlineTooltip()
+		return
+	}
+	next := settingsInlineTooltipState{Text: message, Side: side, Anchor: anchor}
+	if current := a.settingsInlineTooltip; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
+		return
+	}
+	revisionID := a.settingsInlineTooltipRevision.Add(1)
+	util.Go(a.lifecycleCtx, "show settings inline tooltip after dwell", func() {
+		if !a.waitHoverTooltipDelay(&a.settingsInlineTooltipRevision, revisionID) {
+			return
+		}
+		apply := func() {
+			if revisionID != a.settingsInlineTooltipRevision.Load() {
+				return
+			}
+			if current := a.settingsInlineTooltip; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
+				return
+			}
+			a.settingsInlineTooltip = &next
+			a.invalidateSettingsWindow()
+		}
+		if err := a.runOnUI("show settings inline tooltip", apply); err != nil {
+			apply()
+		}
+	})
+}
+
+func (a *App) clearLinuxInlineTooltip() {
+	if a.settingsInlineTooltip == nil {
+		return
+	}
+	a.settingsInlineTooltip = nil
+	a.invalidateSettingsWindow()
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.

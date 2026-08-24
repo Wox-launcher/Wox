@@ -28,11 +28,20 @@ import (
 )
 
 const (
-	notesDefaultWidth  = float32(420)
-	notesDefaultHeight = float32(320)
-	notesMinimumHeight = float32(240)
-	notesMaximumHeight = float32(640)
-	notesAutosaveDelay = 500 * time.Millisecond
+	notesDefaultWidth            = float32(420)
+	notesDefaultHeight           = float32(320)
+	notesMinimumHeight           = float32(240)
+	notesMaximumHeight           = float32(640)
+	notesAutosaveDelay           = 500 * time.Millisecond
+	notesSearchRowHeight         = float32(36)
+	notesSearchSectionHeight     = float32(28)
+	notesSearchSectionLead       = float32(12)
+	notesSearchSectionTextHeight = float32(16)
+	notesSearchTextHeight        = float32(18)
+	notesSearchListGap           = float32(4)
+	notesSearchFieldHeight       = float32(36)
+	notesSearchOverlayPadding    = float32(12)
+	notesSearchOverlayGap        = float32(8)
 )
 
 var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(common.PluginNotesIcon), nil, 256)
@@ -58,6 +67,7 @@ type notesWindowController struct {
 	blockRanges   []noteBlockRange
 	selection     woxui.TextSelection
 	summaries     []common.NoteSummary
+	searchIndex   int
 	searchOpen    bool
 	moreOpen      bool
 	formatMore    bool
@@ -75,6 +85,7 @@ type notesWindowController struct {
 	redoDocuments []common.NoteDocument
 	lastTextEdit  time.Time
 	tooltipRev    atomic.Uint64
+	windowPinned  bool
 }
 
 func newNotesWindowController(app *App, record common.NoteRecord) *notesWindowController {
@@ -124,8 +135,13 @@ func (a *App) removeNoteWindow(controller *notesWindowController) {
 	}
 }
 
-// openNewNoteWindow creates a durable note before assigning it an independent native window.
+// openNewNoteWindow opens an empty draft and reuses one that the user has not typed into yet.
 func (a *App) openNewNoteWindow() error {
+	for _, controller := range a.noteWindows {
+		if controller != nil && controller.record.DeletedAt == 0 && notesplugin.DocumentIsEmpty(controller.document) {
+			return controller.open(common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: controller.record.ID})
+		}
+	}
 	record, err := a.services.NotesCreate(context.Background())
 	if err != nil {
 		return err
@@ -240,7 +256,7 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 		host := woxwidget.NewHost(c.buildNotes)
 		managed, _, openErr = c.app.windows.Open(c.windowID, woxui.WindowOptions{
 			Title: c.app.translate("i18n:notes_title"), Size: woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight},
-			Role: woxui.WindowRoleUtility, Resizable: true, TransientOverlay: true, Topmost: true, HideOnBlur: false,
+			Role: woxui.WindowRoleUtility, Resizable: true, TransientOverlay: true, Topmost: c.windowPinned, HideOnBlur: false,
 			OnFrame: host.Frame, OnPointer: host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)
@@ -257,7 +273,10 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },
 			OnCloseRequested: c.requestClose,
 			OnClosed: func() {
-				_ = c.flush()
+				c.discardEmptyNote()
+				if !notesplugin.DocumentIsEmpty(c.document) {
+					_ = c.flush()
+				}
 				host.Dispose()
 				c.managed, c.host = nil, nil
 				c.app.removeNoteWindow(c)
@@ -279,6 +298,9 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 		return nil, err
 	}
 	if err := window.SetFontFamily(c.app.generalSettings.Data().AppFontFamily); err != nil {
+		return nil, err
+	}
+	if err := window.SetTopmost(c.windowPinned); err != nil {
 		return nil, err
 	}
 	if !c.restoreBounds(window) {
@@ -322,6 +344,8 @@ func (c *notesWindowController) applyRecord(record common.NoteRecord) {
 	c.selection = c.editor.State().Selection
 	c.dirty, c.errorText = false, ""
 	c.undoDocuments, c.redoDocuments = nil, nil
+	c.windowPinned = c.readWindowPinned()
+	c.applyWindowTopmost()
 	c.resizeForDocument()
 }
 
@@ -367,6 +391,13 @@ func (c *notesWindowController) flush() error {
 	if !c.dirty || c.record.ID == "" {
 		return nil
 	}
+	if notesplugin.DocumentIsEmpty(c.document) {
+		if c.saveTimer != nil {
+			c.saveTimer.Stop()
+			c.saveTimer = nil
+		}
+		return nil
+	}
 	if c.saveTimer != nil {
 		c.saveTimer.Stop()
 		c.saveTimer = nil
@@ -408,6 +439,7 @@ func (c *notesWindowController) reloadSummaries() error {
 		return err
 	}
 	c.summaries = items
+	c.clampSearchIndex()
 	return nil
 }
 
@@ -420,7 +452,7 @@ func (c *notesWindowController) refresh(noteID string) {
 	}
 	if record, err := c.app.services.NotesGet(context.Background(), c.record.ID); err == nil && record.Revision != c.record.Revision {
 		c.applyRecord(record)
-	} else if err != nil {
+	} else if err != nil && !notesplugin.DocumentIsEmpty(c.document) {
 		c.errorText = err.Error()
 	}
 	c.invalidate()
@@ -431,6 +463,13 @@ func (c *notesWindowController) hide() {
 		return
 	}
 	c.updateToolbarTooltip(false, "", woxui.Rect{})
+	if notesplugin.DocumentIsEmpty(c.document) {
+		c.discardEmptyNote()
+		if err := c.managed.Close(); err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("close empty Notes window: %v", err))
+		}
+		return
+	}
 	_ = c.flush()
 	c.persistBounds()
 	if err := c.managed.Hide(); err != nil {
@@ -444,11 +483,28 @@ func (c *notesWindowController) close() error {
 		return nil
 	}
 	c.updateToolbarTooltip(false, "", woxui.Rect{})
-	if err := c.flush(); err != nil {
+	if notesplugin.DocumentIsEmpty(c.document) {
+		c.discardEmptyNote()
+	} else if err := c.flush(); err != nil {
 		return err
 	}
 	c.persistBounds()
 	return c.managed.Close()
+}
+
+// discardEmptyNote drops an untitled draft so opening a note without typing does not persist it.
+func (c *notesWindowController) discardEmptyNote() {
+	if c == nil || c.record.ID == "" || !notesplugin.DocumentIsEmpty(c.document) {
+		return
+	}
+	if c.saveTimer != nil {
+		c.saveTimer.Stop()
+		c.saveTimer = nil
+	}
+	c.dirty = false
+	if err := c.app.services.NotesDiscard(context.Background(), c.record.ID); err != nil {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("discard empty note: %v", err))
+	}
 }
 
 // requestClose avoids re-entering native destruction from a platform close-request callback.
@@ -476,6 +532,7 @@ func (c *notesWindowController) persistBounds() {
 	encoded, _ := json.Marshal(notesWindowBounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height})
 	_ = c.app.services.NotesSetLocal(context.Background(), c.preferenceKey("windowBounds"), string(encoded))
 	_ = c.app.services.NotesSetLocal(context.Background(), c.preferenceKey("zoom"), fmt.Sprintf("%.2f", c.zoom))
+	_ = c.app.services.NotesSetLocal(context.Background(), c.preferenceKey("windowPinned"), map[bool]string{true: "1", false: "0"}[c.windowPinned])
 }
 
 // restoreBounds clamps saved logical geometry into a currently connected work area.
@@ -619,7 +676,13 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 		TextColor: theme.PreviewText, Value: c.editor.Text(), Controller: c.editor, FocusNode: c.editorFocus,
 		Focused: c.editorFocus.HasFocus(), Autofocus: true, ReadOnly: c.record.DeletedAt > 0, MaxLines: 10000,
 		Window: c.managed.Window(), Theme: theme, OnChanged: c.onEditorChanged,
-		OnSelectionChanged: func(selection woxui.TextSelection) { c.selection = selection }, OnTapOffset: c.handleBlockTap, CursorAtOffset: c.editorCursorAt, OnKey: c.onKey,
+		OnSelectionChanged: func(selection woxui.TextSelection) {
+			if selection == c.selection {
+				return
+			}
+			c.selection = selection
+			c.invalidate()
+		}, OnTapOffset: c.handleBlockTap, CursorAtOffset: c.editorCursorAt, OnKey: c.onKey,
 		OnUndo: c.undoDocument, OnRedo: c.redoDocument,
 		TransformPaste: func(value string) string { return notesplugin.ToMarkdown(notesplugin.ParseMarkdown(value)) },
 	})
@@ -659,9 +722,19 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		title = strings.TrimSpace(strings.SplitN(c.document.Blocks[0].Text, "\n", 2)[0])
 	}
 	searchLabel := c.app.translate("i18n:notes_search") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+") + ")"
+	pinHotkey := "(" + strings.Join(formatHotkeyLabels(primaryHotkey("shift+p")), "+") + ")"
+	pinLabel := c.app.translate("i18n:notes_pin_window") + " " + pinHotkey
+	if c.windowPinned {
+		pinLabel = c.app.translate("i18n:notes_unpin_window") + " " + pinHotkey
+	}
+	pinColor := color
+	if c.windowPinned {
+		pinColor = woxcomponent.DocumentListMarkerColor
+	}
 	newLabel := c.app.translate("i18n:notes_new") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("n")), "+") + ")"
 	right := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, Children: []woxwidget.Widget{
 		button("search", searchLabel, woxcomponent.SearchGlyph(15, color), false, c.toggleSearch),
+		button("pin", pinLabel, woxcomponent.PinGlyph(15, pinColor), false, c.toggleWindowPin),
 		button("format", c.app.translate("i18n:notes_format"), woxwidget.Text{Value: "Aa", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: color}, false, func() { c.formatVisible = !c.formatVisible; c.invalidate() }),
 		button("new", newLabel, woxcomponent.AddGlyph(15, color), false, func() { c.runAction(c.app.openNewNoteWindow) }),
 		button("more", c.app.translate("i18n:notes_more"), woxcomponent.MenuGlyph(15, color), false, func() { c.moreOpen = !c.moreOpen; c.formatMore = false; c.searchOpen = false; c.invalidate() }),
@@ -670,9 +743,10 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	if runtime.GOOS == "darwin" {
 		contentRight = 0
 	}
-	titleLeft, titleRight, titleAlignment := float32(188), float32(188), float32(.5)
+	const titleSlot = float32(220)
+	titleLeft, titleRight, titleAlignment := titleSlot, titleSlot, float32(.5)
 	if runtime.GOOS == "windows" {
-		titleLeft, titleRight, titleAlignment = 40, 188, 0
+		titleLeft, titleRight, titleAlignment = 40, titleSlot, 0
 	}
 	drag := woxwidget.Semantics{AutomationID: "notes.toolbar.drag", Role: woxui.AccessibilityRoleGroup, Label: c.app.translate("i18n:notes_title"), Child: woxwidget.Gesture{ID: "notes.toolbar.drag", OnDragStart: func() { _ = c.managed.Window().StartDragging() }, Child: woxwidget.Container{Width: width, Height: launcherview.NotesToolbarHeight}}}
 	children := []woxwidget.StackChild{
@@ -689,9 +763,9 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	return woxwidget.Container{Width: width, Height: launcherview.NotesToolbarHeight, Color: theme.Background, Child: content}
 }
 
-// updateToolbarTooltip keeps Notes title-bar hints in the same native overlay used by the launcher.
+// updateToolbarTooltip keeps Notes chrome hints in the same native overlay used by the launcher.
 func (c *notesWindowController) updateToolbarTooltip(inside bool, text string, anchor woxui.Rect) {
-	c.app.setNativeHoverTooltip(&c.tooltipRev, "go-ui-notes-titlebar", "update Notes title bar tooltip", inside, text, anchor, "top", func() *woxui.Window {
+	c.app.setNativeHoverTooltip(&c.tooltipRev, "go-ui-notes-titlebar", "update Notes chrome tooltip", inside, text, anchor, "top", func() *woxui.Window {
 		if c.managed == nil {
 			return nil
 		}
@@ -700,30 +774,44 @@ func (c *notesWindowController) updateToolbarTooltip(inside bool, text string, a
 }
 
 func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent.Theme) woxwidget.Widget {
-	item := func(id, glyph string, style woxui.TextStyle, action func()) woxwidget.Widget {
+	formats := noteActiveFormats(c.document, c.blockRanges, c.selection)
+	item := func(id string, action func()) woxwidget.Widget {
+		label := c.app.translate("i18n:notes_format_" + id)
+		onTap := func() {
+			c.updateToolbarTooltip(false, "", woxui.Rect{})
+			if action != nil {
+				action()
+			}
+		}
+		iconColor := theme.ToolbarText
+		if formats[id] && theme.Cursor.A != 0 {
+			iconColor = theme.Cursor
+		}
 		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: "notes.format." + id, Label: c.app.translate("i18n:notes_format_" + id),
-			Icon: woxwidget.Text{Value: glyph, Style: style, Color: theme.ToolbarText}, Width: 28, Height: 28, Radius: 6,
-			HoverBackground: theme.SelectedBackground, FocusRingColor: theme.Cursor, Disabled: c.record.DeletedAt > 0, OnTap: action,
+			ID: "notes.format." + id, Label: label, Icon: woxcomponent.FormatGlyph(id, 16, iconColor),
+			Width: 28, Height: 28, Radius: 6, HoverBackground: woxcomponent.TitleBarAlpha(theme.ToolbarText, 20),
+			Selected: formats[id], SelectedBackground: woxcomponent.TitleBarAlpha(theme.ToolbarText, 40),
+			FocusRingColor: theme.Cursor, Disabled: c.record.DeletedAt > 0, OnTap: onTap,
+			OnHoverAt: func(inside bool, bounds woxui.Rect) { c.updateToolbarTooltip(inside, label, bounds) },
 		})
 	}
-	base := woxui.TextStyle{Size: 13}
 	items := []woxwidget.Widget{
-		item("block", "¶", base, func() { c.cycleBlock() }),
-		item("bold", "B", woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, func() { c.toggleInline("bold") }),
-		item("italic", "I", woxui.TextStyle{Size: 13, Italic: true}, func() { c.toggleInline("italic") }),
-		item("underline", "U", base, func() { c.toggleInline("underline") }),
-		item("strike", "S̶", base, func() { c.toggleInline("strike") }),
-		item("code", "<>", woxui.TextStyle{Size: 11, Family: woxui.FontFamilyMonospace}, func() { c.toggleInline("code") }),
-		item("link", "↗", base, c.openLink),
-		item("bullet", "•", base, func() { c.setBlock(common.NoteBlockBullet) }),
-		item("ordered", "1.", woxui.TextStyle{Size: 11}, func() { c.setBlock(common.NoteBlockOrdered) }),
-		item("task", "☐", base, func() { c.setBlock(common.NoteBlockTask) }),
-		item("quote", "❝", base, func() { c.setBlock(common.NoteBlockQuote) }),
-		item("divider", "—", base, func() { c.setBlock(common.NoteBlockDivider) }),
+		// Heading cycles the current block through paragraph, H1-H3, and code.
+		item("block", func() { c.cycleBlock() }),
+		item("bold", func() { c.toggleInline("bold") }),
+		item("italic", func() { c.toggleInline("italic") }),
+		item("underline", func() { c.toggleInline("underline") }),
+		item("strike", func() { c.toggleInline("strike") }),
+		item("code", func() { c.toggleInline("code") }),
+		item("link", c.openLink),
+		item("bullet", func() { c.setBlock(common.NoteBlockBullet) }),
+		item("ordered", func() { c.setBlock(common.NoteBlockOrdered) }),
+		item("task", func() { c.setBlock(common.NoteBlockTask) }),
+		item("quote", func() { c.setBlock(common.NoteBlockQuote) }),
+		item("divider", func() { c.setBlock(common.NoteBlockDivider) }),
 	}
 	if width < 390 {
-		items = append(items[:7], item("more", "…", base, func() { c.moreOpen, c.formatMore = true, true; c.invalidate() }))
+		items = append(items[:7], item("more", func() { c.moreOpen, c.formatMore = true, true; c.invalidate() }))
 	}
 	return woxwidget.Container{Width: width, Height: launcherview.NotesFormatBarHeight, Color: theme.ToolbarBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1,
 		Child: woxwidget.Align{Width: width, Height: launcherview.NotesFormatBarHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, Children: items}}}
@@ -743,75 +831,227 @@ func (c *notesWindowController) buildStatus(width float32, theme woxcomponent.Th
 
 func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
 	width := max(float32(260), size.Width-24)
-	height := min(float32(280), size.Height-50)
-	rows := make([]woxwidget.Widget, 0, len(c.summaries)+6)
-	appendSection := func(label string, predicate func(common.NoteSummary) bool) {
-		added := false
-		for _, summary := range c.summaries {
-			if !predicate(summary) {
-				continue
+	height := min(float32(300), size.Height-40)
+	items := c.searchItems()
+	c.clampSearchIndex()
+	rows := make([]woxwidget.Widget, 0, len(items)+6)
+	contentHeight := float32(0)
+	keepVisibleKey := woxwidget.Key("")
+	section := ""
+	for index, summary := range items {
+		label := c.searchSectionLabel(summary)
+		if label != section {
+			first := section == ""
+			section = label
+			header := notesSearchSection(label, width-notesSearchOverlayPadding*2, theme, first)
+			rows = append(rows, header)
+			contentHeight += notesSearchSectionHeight
+			if !first {
+				contentHeight += notesSearchSectionLead
 			}
-			if !added {
-				rows = append(rows, woxwidget.Container{Width: width - 16, Height: 22, Padding: woxwidget.Insets{Left: 8}, Child: woxwidget.Align{Height: 22, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}}})
-				added = true
-			}
-			summary := summary
-			rows = append(rows, c.notesListRow(summary, width-16, theme))
+		}
+		selected := index == c.searchIndex
+		rows = append(rows, c.notesListRow(summary, width-notesSearchOverlayPadding*2, theme, selected))
+		contentHeight += notesSearchRowHeight
+		if selected {
+			keepVisibleKey = woxwidget.Key("notes.search." + summary.ID)
 		}
 	}
-	appendSection(c.app.translate("i18n:notes_pinned"), func(item common.NoteSummary) bool { return item.PinnedAt > 0 && item.DeletedAt == 0 })
-	appendSection(c.app.translate("i18n:notes_recent"), func(item common.NoteSummary) bool { return item.PinnedAt == 0 && item.DeletedAt == 0 })
-	appendSection(c.app.translate("i18n:notes_deleted"), func(item common.NoteSummary) bool { return item.DeletedAt > 0 })
-	if len(rows) == 0 {
-		rows = append(rows, woxwidget.Container{Width: width - 16, Height: 42, Child: woxwidget.Align{Width: width - 16, Height: 42, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: c.app.translate("i18n:notes_no_results"), Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}}})
+	if n := len(rows); n > 1 {
+		contentHeight += notesSearchListGap * float32(n-1)
 	}
+	if len(rows) == 0 {
+		rows = append(rows, woxwidget.Container{Width: width - notesSearchOverlayPadding*2, Height: 48, Child: woxwidget.Align{Width: width - notesSearchOverlayPadding*2, Height: 48, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: c.app.translate("i18n:notes_no_results"), Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}}})
+		contentHeight = 48
+	}
+	var window *woxui.Window
+	if c.managed != nil {
+		window = c.managed.Window()
+	}
+	innerWidth := width - notesSearchOverlayPadding*2
+	scrollHeight := height - notesSearchOverlayPadding*2 - notesSearchFieldHeight - notesSearchOverlayGap
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "notes.search", Label: c.app.translate("i18n:notes_search"), Hint: c.app.translate("i18n:notes_search_placeholder"),
-		Width: width - 16, Height: 34, Style: woxui.TextStyle{Size: 13}, Value: c.searchEditor.Text(), Controller: c.searchEditor,
-		FocusNode: c.searchFocus, Focused: true, Autofocus: true, MaxLines: 1, Window: c.managed.Window(), Theme: theme,
-		OnChanged: func(string) { _ = c.reloadSummaries(); c.invalidate() }, OnKey: c.onSearchKey,
+		Width: innerWidth, Height: notesSearchFieldHeight, Style: woxui.TextStyle{Size: 13}, Value: c.searchEditor.Text(), Controller: c.searchEditor,
+		FocusNode: c.searchFocus, Focused: true, Autofocus: true, MaxLines: 1, Window: window, Theme: theme,
+		OnChanged: func(string) { _ = c.reloadSummaries(); c.searchIndex = 0; c.invalidate() }, OnKey: c.onSearchKey,
 	})
-	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(8), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-		search, woxwidget.ScrollView{Key: "notes.search.results", ID: "notes.search.results", Width: width - 16, Height: height - 56, ContentWidth: width - 16, ContentHeight: float32(len(rows)) * 34, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}},
+	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(notesSearchOverlayPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchOverlayGap, Children: []woxwidget.Widget{
+		search, woxwidget.ScrollView{Key: "notes.search.results", ID: "notes.search.results", Width: innerWidth, Height: scrollHeight, ContentWidth: innerWidth, ContentHeight: contentHeight, KeepVisibleKey: keepVisibleKey, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchListGap, Children: rows}},
 	}}}
 	return c.overlayScrim(size, panel, 12, 44, func() { c.searchOpen = false; c.invalidate() })
 }
 
-func (c *notesWindowController) notesListRow(summary common.NoteSummary, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func (c *notesWindowController) notesListRow(summary common.NoteSummary, width float32, theme woxcomponent.Theme, selected bool) woxwidget.Widget {
 	label := summary.Title
 	if summary.DeletedAt > 0 {
 		label += " · " + c.app.translate("i18n:notes_restore")
 	}
 	radius := float32(6)
 	background := theme.ActionBackground
-	hoverBackground := woxcomponent.ControlHoverColor(background, theme.ActionText)
+	titleColor := theme.ActionText
+	metaColor := theme.ResultSubtitle
+	if selected {
+		background = theme.SelectedBackground
+		titleColor = theme.SelectedTitle
+		metaColor = theme.SelectedSubtitle
+	}
+	hoverBackground := woxcomponent.ControlHoverColor(theme.ActionBackground, theme.ActionText)
 	return woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-		ID: "notes.search." + summary.ID, Label: label, Width: width, Height: 34, Radius: &radius,
-		Background: &background, HoverBackground: &hoverBackground, SkipFocus: true,
+		ID: "notes.search." + summary.ID, Label: label, Width: width, Height: notesSearchRowHeight, Radius: &radius,
+		Background: &background, HoverBackground: &hoverBackground, Selected: selected, SkipFocus: true,
 		Padding: woxwidget.Insets{Left: 8, Right: 8}, Theme: theme,
-		OnTap: func() {
-			var err error
-			if summary.DeletedAt > 0 {
-				var record common.NoteRecord
-				record, err = c.app.services.NotesRestore(context.Background(), summary.ID)
-				if err == nil {
-					err = c.app.openNoteRecord(record, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
-				}
-			} else {
-				err = c.app.openNoteRequest(common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: summary.ID})
-			}
-			if err != nil {
-				c.fail(err)
-				return
-			}
-			c.searchOpen = false
-			c.invalidate()
-		},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}},
-			woxwidget.TextBlock{Value: summary.Preview, Width: min(float32(120), width*.32), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
-		}},
+		OnTap: func() { c.openSearchItem(summary) },
+		Child: notesSearchRowChild(label, util.FormatTimestamp(summary.UpdatedAt), titleColor, metaColor),
 	})
+}
+
+// notesSearchRowChild centers the title and updated time in one search result row.
+func notesSearchRowChild(label, updated string, titleColor, metaColor woxui.Color) woxwidget.Widget {
+	return woxwidget.Align{Height: notesSearchRowHeight, Vertical: .5, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter,
+		Children: []woxwidget.Widget{
+			woxwidget.Expanded{Child: woxwidget.TextBlock{
+				Value: label, Height: notesSearchTextHeight, LineHeight: notesSearchTextHeight, MaxLines: 1, AlignmentY: 0.5,
+				Style: woxui.TextStyle{Size: 13}, Color: titleColor,
+			}},
+			woxwidget.TextBlock{
+				Value: updated, Height: notesSearchTextHeight, LineHeight: notesSearchTextHeight, MaxLines: 1, AlignmentY: 0.5, ShrinkWrap: true,
+				Style: woxui.TextStyle{Size: woxcomponent.TailFontSize}, Color: metaColor,
+			},
+		},
+	}}
+}
+
+// searchItems returns notes in overlay order: pinned, recent, then recently deleted.
+func (c *notesWindowController) searchItems() []common.NoteSummary {
+	items := make([]common.NoteSummary, 0, len(c.summaries))
+	appendMatching := func(match func(common.NoteSummary) bool) {
+		for _, item := range c.summaries {
+			if match(item) {
+				items = append(items, item)
+			}
+		}
+	}
+	appendMatching(func(item common.NoteSummary) bool { return item.PinnedAt > 0 && item.DeletedAt == 0 })
+	appendMatching(func(item common.NoteSummary) bool { return item.PinnedAt == 0 && item.DeletedAt == 0 })
+	appendMatching(func(item common.NoteSummary) bool { return item.DeletedAt > 0 })
+	return items
+}
+
+// notesSearchSection renders a muted section label, with extra lead-in space after the first group.
+func notesSearchSection(label string, width float32, theme woxcomponent.Theme, first bool) woxwidget.Widget {
+	top := float32(0)
+	if !first {
+		top = notesSearchSectionLead
+	}
+	return woxwidget.Container{Width: width, Height: notesSearchSectionHeight + top, Padding: woxwidget.Insets{Left: 8, Top: top}, Child: woxwidget.Align{Height: notesSearchSectionHeight, Vertical: .5, Child: woxwidget.TextBlock{
+		Value: label, Height: notesSearchSectionTextHeight, LineHeight: notesSearchSectionTextHeight, MaxLines: 1, AlignmentY: 0.5,
+		Style: woxui.TextStyle{Size: woxcomponent.SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: theme.ActionHeader,
+	}}}
+}
+
+func (c *notesWindowController) searchSectionLabel(item common.NoteSummary) string {
+	switch {
+	case item.DeletedAt > 0:
+		return c.app.translate("i18n:notes_deleted")
+	case item.PinnedAt > 0:
+		return c.app.translate("i18n:notes_pinned")
+	default:
+		return c.app.translate("i18n:notes_recent")
+	}
+}
+
+// clampSearchIndex keeps keyboard selection on a visible row after the filtered list changes.
+func (c *notesWindowController) clampSearchIndex() {
+	count := len(c.searchItems())
+	if count == 0 {
+		c.searchIndex = 0
+		return
+	}
+	c.searchIndex = min(max(0, c.searchIndex), count-1)
+}
+
+func (c *notesWindowController) moveSearchSelection(delta int) {
+	c.searchIndex += delta
+	c.clampSearchIndex()
+	c.invalidate()
+}
+
+// openSearchItem shows the chosen note in this window instead of opening another utility window.
+func (c *notesWindowController) openSearchItem(summary common.NoteSummary) {
+	if summary.ID == c.record.ID && summary.DeletedAt == 0 {
+		c.searchOpen = false
+		c.editorFocus.RequestFocus()
+		c.invalidate()
+		return
+	}
+	if err := c.persistCurrentNote(); err != nil {
+		c.fail(err)
+		return
+	}
+	var record common.NoteRecord
+	var err error
+	if summary.DeletedAt > 0 {
+		record, err = c.app.services.NotesRestore(context.Background(), summary.ID)
+	} else {
+		record, err = c.app.services.NotesGet(context.Background(), summary.ID)
+	}
+	if err != nil {
+		c.fail(err)
+		return
+	}
+	if err := c.showNoteInCurrentWindow(record); err != nil {
+		c.fail(err)
+		return
+	}
+	c.searchOpen = false
+	c.editorFocus.RequestFocus()
+	c.invalidate()
+}
+
+// persistCurrentNote saves edits, or drops an unused empty draft, before this window changes notes.
+func (c *notesWindowController) persistCurrentNote() error {
+	if notesplugin.DocumentIsEmpty(c.document) {
+		c.discardEmptyNote()
+		return nil
+	}
+	return c.flush()
+}
+
+// showNoteInCurrentWindow rebinds this native window to another note.
+func (c *notesWindowController) showNoteInCurrentWindow(record common.NoteRecord) error {
+	if record.ID == "" {
+		return fmt.Errorf("note ID is required")
+	}
+	if record.ID == c.record.ID {
+		return nil
+	}
+	if existing := c.app.noteWindows[record.ID]; existing != nil && existing != c && existing.managed != nil && existing.managed.Lifecycle() != woxui.WindowLifecycleClosed {
+		return existing.open(common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
+	}
+	previousID := c.record.ID
+	c.persistBounds()
+	if c.app.noteWindows[previousID] == c {
+		delete(c.app.noteWindows, previousID)
+	}
+	if c.app.noteWindows == nil {
+		c.app.noteWindows = map[string]*notesWindowController{}
+	}
+	c.applyRecord(record)
+	c.app.noteWindows[record.ID] = c
+	c.app.activateNoteWindow(c)
+	c.searchEditor.SetText("", false)
+	c.searchIndex = 0
+	return c.reloadSummaries()
+}
+
+func (c *notesWindowController) activateSearchSelection() {
+	items := c.searchItems()
+	if len(items) == 0 {
+		return
+	}
+	c.openSearchItem(items[c.searchIndex])
 }
 
 func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
@@ -827,7 +1067,6 @@ func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcompo
 		return c.moreOverlay(size, width, rows, theme)
 	}
 	rows := []woxwidget.Widget{
-		c.menuRow("pin", map[bool]string{true: c.app.translate("i18n:notes_unpin"), false: c.app.translate("i18n:notes_pin")}[c.record.PinnedAt > 0], width, theme, c.togglePin),
 		c.menuRow("copy-link", c.app.translate("i18n:notes_copy_link"), width, theme, c.copyLink),
 		c.menuRow("export-md", c.app.translate("i18n:notes_export_markdown"), width, theme, func() { c.export("md") }),
 		c.menuRow("export-txt", c.app.translate("i18n:notes_export_text"), width, theme, func() { c.export("txt") }),
@@ -897,6 +1136,7 @@ func (c *notesWindowController) fail(err error) {
 func (c *notesWindowController) toggleSearch() {
 	c.searchOpen, c.moreOpen, c.linkOpen = !c.searchOpen, false, false
 	if c.searchOpen {
+		c.searchIndex = 0
 		_ = c.reloadSummaries()
 		c.searchFocus.RequestFocus()
 	} else {
@@ -909,24 +1149,24 @@ func (c *notesWindowController) onSearchKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	if event.Key == woxui.KeyEscape {
+	switch event.Key {
+	case woxui.KeyEscape:
 		c.searchOpen = false
 		c.editorFocus.RequestFocus()
 		c.invalidate()
 		return true
+	case woxui.KeyArrowDown:
+		c.moveSearchSelection(1)
+		return true
+	case woxui.KeyArrowUp:
+		c.moveSearchSelection(-1)
+		return true
+	case woxui.KeyEnter:
+		c.activateSearchSelection()
+		return true
+	default:
+		return false
 	}
-	if event.Key == woxui.KeyEnter {
-		for _, item := range c.summaries {
-			if item.DeletedAt == 0 {
-				c.runAction(func() error {
-					return c.app.openNoteRequest(common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: item.ID})
-				})
-				c.searchOpen = false
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func (c *notesWindowController) onLinkKey(event woxui.KeyEvent) bool {
@@ -977,7 +1217,7 @@ func (c *notesWindowController) onKey(event woxui.KeyEvent) bool {
 	switch event.Key {
 	case woxui.Key("p"):
 		if event.Modifiers&woxui.KeyModifierShift != 0 {
-			c.togglePin()
+			c.toggleWindowPin()
 		} else {
 			c.toggleSearch()
 		}
@@ -1137,18 +1377,38 @@ func (c *notesWindowController) handleBlockTap(offset int) bool {
 	if index, ok := noteTaskAtOffset(c.document, c.blockRanges, offset); ok {
 		return c.toggleTaskBlock(index)
 	}
-	return noteDividerAtOffset(c.document, c.blockRanges, offset)
+	if noteDividerAtOffset(c.document, c.blockRanges, offset) {
+		return true
+	}
+	if target := noteLinkAtOffset(c.document, c.blockRanges, offset); target != "" {
+		c.openNoteLink(target)
+		return true
+	}
+	return false
 }
 
-// editorCursorAt distinguishes interactive task markers from non-text divider blocks.
+// editorCursorAt distinguishes links and task markers from ordinary editable text.
 func (c *notesWindowController) editorCursorAt(offset int) woxui.PointerCursor {
 	if _, ok := noteTaskAtOffset(c.document, c.blockRanges, offset); ok {
+		return woxui.PointerCursorHand
+	}
+	if noteLinkAtOffset(c.document, c.blockRanges, offset) != "" {
 		return woxui.PointerCursorHand
 	}
 	if noteDividerAtOffset(c.document, c.blockRanges, offset) {
 		return woxui.PointerCursorDefault
 	}
 	return woxui.PointerCursorText
+}
+
+// openNoteLink opens a persisted note URL in the desktop browser.
+func (c *notesWindowController) openNoteLink(target string) {
+	if c.managed == nil {
+		return
+	}
+	if err := c.managed.Window().OpenExternalURL(target); err != nil {
+		c.fail(err)
+	}
 }
 
 // toggleTaskBlock updates one task through the same undo and autosave path as keyboard formatting.
@@ -1243,22 +1503,30 @@ func (c *notesWindowController) setZoom(value float32) {
 	c.invalidate()
 }
 
-// togglePin flushes first so metadata updates cannot mask a stale document revision.
-func (c *notesWindowController) togglePin() {
-	if c.record.ID == "" {
+// readWindowPinned loads the per-note always-on-top preference. Missing values stay unpinned.
+func (c *notesWindowController) readWindowPinned() bool {
+	if c == nil || c.app == nil || c.app.services == nil || c.record.ID == "" {
+		return false
+	}
+	return c.localPreference("windowPinned") == "1"
+}
+
+// applyWindowTopmost mirrors the persisted pin onto the live native window.
+func (c *notesWindowController) applyWindowTopmost() {
+	if c.managed == nil {
 		return
 	}
-	c.runAction(func() error {
-		if err := c.flush(); err != nil {
-			return err
-		}
-		record, err := c.app.services.NotesSetPinned(context.Background(), c.record.ID, c.record.PinnedAt == 0)
-		if err == nil {
-			c.record = record
-			err = c.reloadSummaries()
-		}
-		return err
-	})
+	_ = c.managed.Window().SetTopmost(c.windowPinned)
+}
+
+// toggleWindowPin keeps this note's utility window above other applications.
+func (c *notesWindowController) toggleWindowPin() {
+	c.windowPinned = !c.windowPinned
+	if c.app != nil && c.app.services != nil && c.record.ID != "" {
+		_ = c.app.services.NotesSetLocal(context.Background(), c.preferenceKey("windowPinned"), map[bool]string{true: "1", false: "0"}[c.windowPinned])
+	}
+	c.applyWindowTopmost()
+	c.invalidate()
 }
 
 func (c *notesWindowController) copyLink() {
@@ -1277,6 +1545,10 @@ func (c *notesWindowController) delete() {
 		return
 	}
 	c.runAction(func() error {
+		if notesplugin.DocumentIsEmpty(c.document) {
+			c.discardEmptyNote()
+			return c.close()
+		}
 		if err := c.flush(); err != nil {
 			return err
 		}

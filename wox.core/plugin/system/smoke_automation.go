@@ -23,6 +23,7 @@ const (
 	smokeAutomationToolbarCommand     = "toolbar"
 	smokeAutomationAttentionCommand   = "attention"
 	smokeAutomationQuickSelectCommand = "quick-select"
+	smokeAutomationTooltipCommand     = "tooltip"
 	smokeAutomationToolbarMessageID   = "wox-smoke-toolbar-message"
 	smokeAutomationKeepOpenAction     = "keep-open"
 	smokeAutomationClearAction        = "clear"
@@ -54,6 +55,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
+			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
 			{Command: smokeAutomationChatCommand, Description: "200 chat messages with streaming updates"},
@@ -80,6 +82,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryAttentionFixture()
 	case smokeAutomationQuickSelectCommand:
 		return p.queryQuickSelect()
+	case smokeAutomationTooltipCommand:
+		return queryTooltipPreview()
 	case smokeAutomationListCommand:
 		return queryListFixture()
 	case smokeAutomationGridCommand:
@@ -171,6 +175,29 @@ func (p *smokeAutomationPlugin) queryStreamingPreview() plugin.QueryResponse {
 		})
 	})
 	return plugin.NewQueryResponse([]plugin.QueryResult{{Id: resultID, Title: "Streaming preview pending", Icon: common.PluginAppIcon}})
+}
+
+// queryTooltipPreview exposes one selected result whose preview tag opens a native tooltip.
+func queryTooltipPreview() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{{
+		Id:    "tooltip-smoke-fixture",
+		Title: "Tooltip smoke fixture",
+		Icon:  common.PluginAppIcon,
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: "Hover the preview tag to show a native tooltip.",
+			PreviewTags: []plugin.WoxPreviewTag{{
+				Label:   "Tooltip",
+				Tooltip: "Native tooltip must not hide the launcher",
+			}},
+		},
+		Actions: []plugin.QueryResultAction{{
+			Id:                     smokeAutomationKeepOpenAction,
+			Name:                   "Keep open",
+			IsDefault:              true,
+			PreventHideAfterAction: true,
+		}},
+	}})
 }
 
 // queryQuickSelect returns two named results so a hold-to-number activation can target the second row.

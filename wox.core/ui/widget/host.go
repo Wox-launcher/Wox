@@ -56,12 +56,13 @@ type Host struct {
 	identityFrame uint64
 	nodes         map[woxui.AccessibilityNodeID]*node
 
-	hovered    woxui.AccessibilityNodeID
-	rawHovered woxui.AccessibilityNodeID
-	rawPressed woxui.AccessibilityNodeID
-	pressed    woxui.AccessibilityNodeID
-	pressedAt  woxui.Point
-	dragging   bool
+	hovered          woxui.AccessibilityNodeID
+	hoveredGestureID string
+	rawHovered       woxui.AccessibilityNodeID
+	rawPressed       woxui.AccessibilityNodeID
+	pressed          woxui.AccessibilityNodeID
+	pressedAt        woxui.Point
+	dragging         bool
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
 	selecting          woxui.AccessibilityNodeID
@@ -604,17 +605,24 @@ func nodeKind(current *node) string {
 
 func (h *Host) reconcileTransientState(oldHovered *node, oldHoveredBounds woxui.Rect) {
 	if h.hovered != 0 && h.nodes[h.hovered] == nil {
-		if oldHovered != nil && oldHovered.gesture != nil {
-			if oldHovered.gesture.onHover != nil {
-				oldHovered.gesture.onHover(false)
+		// Rebuilds replace node IDs. Keep the same gesture hovered without
+		// leave/enter so a pending tooltip dwell is not cancelled.
+		if replacement := h.gestureNodeByID(h.hoveredGestureID); replacement != nil {
+			h.hovered = replacement.id
+		} else {
+			if oldHovered != nil && oldHovered.gesture != nil {
+				if oldHovered.gesture.onHover != nil {
+					oldHovered.gesture.onHover(false)
+				}
+				if oldHovered.gesture.onHoverAt != nil {
+					oldHovered.gesture.onHoverAt(false, oldHoveredBounds)
+				}
 			}
-			if oldHovered.gesture.onHoverAt != nil {
-				oldHovered.gesture.onHoverAt(false, oldHoveredBounds)
+			h.hovered = 0
+			h.hoveredGestureID = ""
+			if h.window != nil {
+				_ = h.window.SetPointerCursor(woxui.PointerCursorDefault)
 			}
-		}
-		h.hovered = 0
-		if h.window != nil {
-			_ = h.window.SetPointerCursor(woxui.PointerCursorDefault)
 		}
 	}
 	// Form rebuilds may move a focused editor under a different retained path. Preserve pointer
@@ -1437,6 +1445,11 @@ func (h *Host) setHovered(target *node, position woxui.Point) {
 		}
 	}
 	h.hovered = nodeID(target)
+	if target != nil && target.gesture != nil {
+		h.hoveredGestureID = target.gesture.id
+	} else {
+		h.hoveredGestureID = ""
+	}
 	h.updatePointerCursor(target, position)
 	if target != nil && target.gesture != nil {
 		damage = unionDamageRects(damage, globalRect(target))

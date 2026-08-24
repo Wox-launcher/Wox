@@ -140,6 +140,7 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth, ima
 // setCloudPlanTooltip keeps the rich comparison inside the settings window instead of falling back to the native plain-text tooltip service.
 func (a *App) setCloudPlanTooltip(inside bool, anchor woxui.Rect) {
 	if !inside {
+		a.cloudPlanTooltipRevision.Add(1)
 		if a.cloudPlanTooltip == nil {
 			return
 		}
@@ -150,8 +151,25 @@ func (a *App) setCloudPlanTooltip(inside bool, anchor woxui.Rect) {
 	if a.cloudPlanTooltip != nil && a.cloudPlanTooltip.anchor == anchor {
 		return
 	}
-	a.cloudPlanTooltip = &cloudPlanTooltipState{anchor: anchor}
-	a.invalidateSettingsWindow()
+	revision := a.cloudPlanTooltipRevision.Add(1)
+	util.Go(a.lifecycleCtx, "show cloud plan tooltip after dwell", func() {
+		if !a.waitHoverTooltipDelay(&a.cloudPlanTooltipRevision, revision) {
+			return
+		}
+		apply := func() {
+			if revision != a.cloudPlanTooltipRevision.Load() {
+				return
+			}
+			if a.cloudPlanTooltip != nil && a.cloudPlanTooltip.anchor == anchor {
+				return
+			}
+			a.cloudPlanTooltip = &cloudPlanTooltipState{anchor: anchor}
+			a.invalidateSettingsWindow()
+		}
+		if err := a.runOnUI("show cloud plan tooltip", apply); err != nil {
+			apply()
+		}
+	})
 }
 
 // cloudSettingsLabelWidth keeps login-state fields on Flutter's wide-form grid while preserving room for their controls in narrow settings windows.

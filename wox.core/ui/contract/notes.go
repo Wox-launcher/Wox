@@ -14,6 +14,7 @@ type NotesServices interface {
 	NotesSave(ctx context.Context, id, expectedRevision string, document common.NoteDocument) (common.NoteSaveResult, error)
 	NotesSetPinned(ctx context.Context, id string, pinned bool) (common.NoteRecord, error)
 	NotesDelete(ctx context.Context, id string) (common.NoteRecord, error)
+	NotesDiscard(ctx context.Context, id string) error
 	NotesRestore(ctx context.Context, id string) (common.NoteRecord, error)
 	NotesExport(ctx context.Context, id, format string) (common.NoteExport, error)
 	NotesGetLocal(ctx context.Context, key string) (string, error)

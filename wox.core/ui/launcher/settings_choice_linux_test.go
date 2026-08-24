@@ -3,6 +3,7 @@ package launcher
 import (
 	"runtime"
 	"testing"
+	"time"
 
 	woxui "wox/ui/runtime"
 )
@@ -17,8 +18,15 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 14, Height: 14}
 	app.setSettingChoiceTooltip(true, "  tooltip content  ", anchor)
+	if app.settingsInlineTooltip != nil {
+		t.Fatal("inline tooltip must wait for the shared hover dwell")
+	}
+	deadline := time.Now().Add(nativeHoverTooltipDelay + 300*time.Millisecond)
+	for app.settingsInlineTooltip == nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if app.settingsInlineTooltip == nil {
-		t.Fatal("expected inline tooltip state on linux")
+		t.Fatal("expected inline tooltip state on linux after the hover dwell")
 	}
 	if app.settingsInlineTooltip.Text != "tooltip content" {
 		t.Fatalf("tooltip text = %q, want trimmed content", app.settingsInlineTooltip.Text)

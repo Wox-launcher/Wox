@@ -7,18 +7,20 @@ import (
 
 // IconButtonProps describes a compact icon-only button with retained hover state.
 type IconButtonProps struct {
-	ID              string
-	Label           string
-	Icon            woxwidget.Widget
-	Width           float32
-	Height          float32
-	Radius          float32
-	Background      woxui.Color
-	HoverBackground woxui.Color
-	FocusRingColor  woxui.Color
-	Disabled        bool
-	OnTap           func()
-	OnHoverAt       func(bool, woxui.Rect)
+	ID                 string
+	Label              string
+	Icon               woxwidget.Widget
+	Width              float32
+	Height             float32
+	Radius             float32
+	Background         woxui.Color
+	HoverBackground    woxui.Color
+	Selected           bool
+	SelectedBackground woxui.Color
+	FocusRingColor     woxui.Color
+	Disabled           bool
+	OnTap              func()
+	OnHoverAt          func(bool, woxui.Rect)
 }
 
 type iconButtonState struct {
@@ -40,7 +42,12 @@ func (s *iconButtonState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
 func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(IconButtonProps)
 	background := props.Background
-	if s.hovered {
+	if props.Selected {
+		background = props.SelectedBackground
+		if background.A == 0 {
+			background = props.HoverBackground
+		}
+	} else if s.hovered {
 		background = props.HoverBackground
 	}
 	onTap := props.OnTap
@@ -62,7 +69,7 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 		Child: woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: props.Icon},
 	}}
 	return woxwidget.Semantics{
-		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Actions: actions, Disabled: props.Disabled,
+		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
 		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnKey: func(event woxui.KeyEvent) bool {
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false

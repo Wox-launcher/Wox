@@ -110,6 +110,16 @@ func normalizeSpans(value string, spans []common.NoteSpan) []common.NoteSpan {
 	return normalized
 }
 
+// DocumentIsEmpty reports whether the user has not entered any note content.
+func DocumentIsEmpty(document common.NoteDocument) bool {
+	for _, block := range NormalizeDocument(document).Blocks {
+		if block.Type == common.NoteBlockDivider || strings.TrimSpace(block.Text) != "" {
+			return false
+		}
+	}
+	return true
+}
+
 // NoteTitle returns the plain first line used throughout the Notes UI.
 func NoteTitle(document common.NoteDocument) string {
 	if len(document.Blocks) == 0 {

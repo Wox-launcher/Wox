@@ -66,6 +66,15 @@ func (s *CoreServices) NotesDelete(ctx context.Context, id string) (common.NoteR
 	return services.NotesDelete(ctx, id)
 }
 
+// NotesDiscard permanently removes a note, including empty drafts that were never saved.
+func (s *CoreServices) NotesDiscard(ctx context.Context, id string) error {
+	services, err := notesServices()
+	if err != nil {
+		return err
+	}
+	return services.NotesDiscard(ctx, id)
+}
+
 func (s *CoreServices) NotesRestore(ctx context.Context, id string) (common.NoteRecord, error) {
 	services, err := notesServices()
 	if err != nil {

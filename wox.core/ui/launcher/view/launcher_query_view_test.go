@@ -117,6 +117,42 @@ func TestLauncherQueryForwardsMultiClickSelection(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryHidesCaretWhenTextIsSelected(t *testing.T) {
+	theme := woxcomponent.Theme{
+		QueryText:           woxui.Color{A: 255},
+		SelectionBackground: woxui.Color{B: 255, A: 255},
+		SelectionText:       woxui.Color{R: 255, G: 255, B: 255, A: 255},
+		Cursor:              woxui.Color{A: 255},
+	}
+	style := woxui.TextStyle{Size: 20}
+	bounds := woxui.Rect{Width: 200, Height: 40}
+	selected := launcherQueryCaretPainter(LauncherQueryProps{
+		Width: 200, Height: 40, LineHeight: 34, CaretHeight: 34, Focused: true, Style: style, Theme: theme,
+		State: woxui.TextEditingState{Text: "note", Selection: woxui.TextSelection{Anchor: 0, Focus: 3}},
+		Lines: []LauncherQueryLine{{Text: "note", Selected: "not", SelectedWidth: 30, TextWidth: 40}},
+	})
+	selectedVisible := &woxui.DisplayList{}
+	selectedHidden := &woxui.DisplayList{}
+	selected.Paint(selectedVisible, bounds, true, true)
+	selected.Paint(selectedHidden, bounds, true, false)
+	if selectedVisible.CommandCount() != selectedHidden.CommandCount() {
+		t.Fatalf("selected query still paints a blinking caret: visible=%d hidden=%d", selectedVisible.CommandCount(), selectedHidden.CommandCount())
+	}
+
+	collapsed := launcherQueryCaretPainter(LauncherQueryProps{
+		Width: 200, Height: 40, LineHeight: 34, CaretHeight: 34, Focused: true, Style: style, Theme: theme,
+		State: woxui.TextEditingState{Text: "note", Selection: woxui.TextSelection{Anchor: 3, Focus: 3}},
+		Lines: []LauncherQueryLine{{Text: "note", TextWidth: 40}},
+	})
+	collapsedVisible := &woxui.DisplayList{}
+	collapsedHidden := &woxui.DisplayList{}
+	collapsed.Paint(collapsedVisible, bounds, true, true)
+	collapsed.Paint(collapsedHidden, bounds, true, false)
+	if collapsedVisible.CommandCount() <= collapsedHidden.CommandCount() {
+		t.Fatal("collapsed query should still paint a caret while focused")
+	}
+}
+
 func TestLauncherQueryUsesSharedScrollViewForHiddenLines(t *testing.T) {
 	query := LauncherQueryView(LauncherQueryProps{
 		Width: 100, Height: 136, LineHeight: 34, CaretHeight: 34, CaretLine: 4, Lines: make([]LauncherQueryLine, 5),
@@ -258,6 +294,10 @@ func TestLauncherQueryBoundaryEqualCoversAllFields(t *testing.T) {
 
 func TestGlanceBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, GlanceProps{})
+}
+
+func launcherQueryCaretPainter(props LauncherQueryProps) woxwidget.CaretPainter {
+	return launcherQueryEditable(LauncherQueryView(props)).Child.(woxwidget.Gesture).Child.(woxwidget.CaretPainter)
 }
 
 func launcherQueryEditable(widget woxwidget.Widget) woxwidget.EditableText {

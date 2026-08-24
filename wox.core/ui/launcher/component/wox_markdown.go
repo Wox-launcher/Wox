@@ -407,7 +407,7 @@ func renderMarkdownBlock(block markdownBlock, props MarkdownProps, width float32
 		return markdownCodeWidget(block, props, width)
 	case markdownQuote:
 		innerWidth := max(float32(0), width-documentQuoteWidth(fontSize))
-		return documentQuote(width, fontSize, props.Theme.Cursor, woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: renderMarkdownBlocks(block.children, props, innerWidth, linkIndex)})
+		return documentQuote(width, fontSize, DocumentListMarkerColor, woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: renderMarkdownBlocks(block.children, props, innerWidth, linkIndex)})
 	case markdownList:
 		return markdownListWidget(block, props, width, linkIndex)
 	case markdownRule:
@@ -543,12 +543,12 @@ func markdownListWidget(block markdownBlock, props MarkdownProps, width float32,
 	rows := make([]woxwidget.Widget, 0, len(block.items))
 	for _, item := range block.items {
 		markerWidth := float32(28)
-		marker := woxwidget.Widget(woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText})
+		marker := woxwidget.Widget(woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: woxui.FontWeightSemibold}, Color: DocumentListMarkerColor})
 		itemProps := props
 		if item.task {
 			fontSize := markdownFontSize(props)
 			markerWidth = documentCheckboxWidth(fontSize) + 4
-			marker = woxwidget.Semantics{Role: woxui.AccessibilityRoleCheckBox, Label: item.label, Checked: item.checked, Disabled: true, Child: documentCheckbox(fontSize, 18, props.Theme.Cursor, item.checked)}
+			marker = woxwidget.Semantics{Role: woxui.AccessibilityRoleCheckBox, Label: item.label, Checked: item.checked, Disabled: true, Child: documentCheckbox(fontSize, 18, DocumentListMarkerColor, item.checked)}
 			if item.checked {
 				itemProps.Theme.PreviewText = props.Theme.ResultSubtitle
 			}

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"wox/util/mouse"
 	"wox/util/overlay"
 )
 
@@ -55,44 +54,41 @@ func stopVisibilityTracking(name string) {
 func (current *tracker) run() {
 	// Owner-window pointer-leave cannot dismiss the tooltip: showing this HWND
 	// generates WM_MOUSELEAVE on the launcher/settings window. Poll until the
-	// cursor leaves both the trigger and the overlay.
+	// cursor leaves both the trigger and the overlay, or has already moved on
+	// inside the owner window after the delayed show.
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
+	started := time.Now()
+	seenInside := false
+	if current.closeIfNeeded(&seenInside, started) {
+		return
+	}
 
 	for {
 		select {
 		case <-current.stopCh:
 			return
 		case <-ticker.C:
-			current.mu.RLock()
-			opts := current.opts
-			current.mu.RUnlock()
-
-			inside, ok := isCursorInsideTooltipOrAnchor(opts)
-			if !ok || inside {
-				continue
+			if current.closeIfNeeded(&seenInside, started) {
+				return
 			}
-
-			stopVisibilityTracking(opts.Name)
-			overlay.Close(opts.Name)
-			return
 		}
 	}
 }
 
-func isCursorInsideTooltipOrAnchor(opts Options) (bool, bool) {
-	point, ok := mouse.CurrentPosition()
-	if !ok {
-		return false, false
-	}
+// closeIfNeeded dismisses the overlay once tracking decides the cursor has left.
+func (current *tracker) closeIfNeeded(seenInside *bool, started time.Time) bool {
+	current.mu.RLock()
+	opts := current.opts
+	current.mu.RUnlock()
 
-	return rectContains(point.X, point.Y, opts.AnchorX, opts.AnchorY, opts.AnchorWidth, opts.AnchorHeight) ||
-		rectContains(point.X, point.Y, opts.X, opts.Y, opts.TooltipWidth, opts.TooltipHeight), true
-}
-
-func rectContains(cursorX float64, cursorY float64, left float64, top float64, width float64, height float64) bool {
-	if width <= 0 || height <= 0 {
+	shouldClose, nextSeenInside := evaluateVisibility(opts, *seenInside, time.Since(started))
+	*seenInside = nextSeenInside
+	if !shouldClose {
 		return false
 	}
-	return cursorX >= left && cursorX < left+width && cursorY >= top && cursorY < top+height
+
+	stopVisibilityTracking(opts.Name)
+	overlay.Close(opts.Name)
+	return true
 }

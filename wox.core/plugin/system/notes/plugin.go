@@ -29,15 +29,15 @@ type Plugin struct {
 func (p *Plugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            common.NotesPluginID,
-		Name:          "i18n:plugin_notes_name",
+		Name:          "i18n:plugin_notes_plugin_name",
 		Author:        "Wox Launcher",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "i18n:plugin_notes_description",
+		Description:   "i18n:plugin_notes_plugin_description",
 		Icon:          common.PluginNotesIcon.String(),
 		TriggerKeywords: []string{
-			"notes", "note", "笔记", "便签",
+			"note",
 		},
 		Commands: []plugin.MetadataCommand{
 			{Command: "new", Description: "i18n:plugin_notes_command_new"},
@@ -49,10 +49,6 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 			{Name: plugin.MetadataFeatureIgnoreAutoScore},
 		},
 		SupportedOS: []string{"Windows", "Macos", "Linux"},
-		I18n: map[string]map[string]string{
-			"en_US": notesEnglishTranslations,
-			"zh_CN": notesChineseTranslations,
-		},
 	}
 }
 
@@ -70,6 +66,7 @@ func (p *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			p.repository.ExternalChanged(strings.TrimPrefix(key, noteSettingPrefix))
 		}
 	})
+	p.purgeEmpty(ctx)
 	p.purgeExpired(ctx)
 	util.Go(ctx, "purge expired Notes trash", func() {
 		ticker := time.NewTicker(24 * time.Hour)
@@ -101,8 +98,8 @@ func (p *Plugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResp
 
 func (p *Plugin) newResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: common.UIIcon("control.add"), Score: 1_000_000,
-		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: common.UIIcon("control.add"), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: common.PluginNotesIcon, Score: 1_000_000,
+		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: common.PluginNotesIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.createAndOpen(ctx)
 		}}},
 	}
@@ -116,10 +113,10 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 	}
 	results := make([]plugin.QueryResult, 0, len(records))
 	for _, record := range records {
-		if (record.DeletedAt > 0) != deleted {
+		if (record.DeletedAt > 0) != deleted || DocumentIsEmpty(record.Document) {
 			continue
 		}
-		title, preview := NoteTitle(record.Document), NotePreview(record.Document)
+		title := NoteTitle(record.Document)
 		score := int64(1)
 		if search != "" {
 			titleMatch, titleScore := plugin.IsStringMatchScore(ctx, title, search)
@@ -128,23 +125,28 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 				continue
 			}
 			score = max(titleScore*2, bodyScore)
+		} else if record.PinnedAt > 0 {
+			score = record.PinnedAt
 		} else {
 			score = record.UpdatedAt
 		}
+		group, groupScore := noteResultGroup(record)
 		results = append(results, plugin.QueryResult{
-			Id: record.ID, Title: title, SubTitle: preview, Icon: common.PluginNotesIcon, Score: score, ScoreKey: "note:" + record.ID,
+			Id: record.ID, Title: title, Icon: common.PluginNotesIcon, Score: score, ScoreKey: "note:" + record.ID,
+			Group: group, GroupScore: groupScore,
+			Tails:   []plugin.QueryResultTail{plugin.NewQueryResultTailText(util.FormatTimestamp(record.UpdatedAt))},
 			Actions: p.noteActions(record),
 		})
 	}
 	if len(results) == 0 {
-		results = append(results, plugin.QueryResult{Title: "i18n:plugin_notes_no_results", SubTitle: "i18n:plugin_notes_no_results_subtitle", Icon: common.UIIcon("control.search")})
+		results = append(results, plugin.QueryResult{Title: "i18n:plugin_notes_no_results", SubTitle: "i18n:plugin_notes_no_results_subtitle", Icon: common.SearchIcon})
 	}
 	return results
 }
 
 func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultAction {
 	if record.DeletedAt > 0 {
-		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: common.UIIcon("control.undo"), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: common.UpdateIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.Restore(record.ID); err != nil {
 				p.notifyError(ctx, err)
 				return
@@ -152,12 +154,14 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 		}}}
 	}
+	// Plugin actions are not tinted by the action panel, so use colored icons
+	// instead of monochrome UIIcon glyphs that disappear on the panel.
 	pinName, pinIcon := "i18n:plugin_notes_action_pin", common.PinIcon
 	if record.PinnedAt > 0 {
 		pinName, pinIcon = "i18n:plugin_notes_action_unpin", common.UnpinIcon
 	}
 	return []plugin.QueryResultAction{
-		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: common.PluginNotesIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: common.OpenIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 		}},
 		{Id: "pin", Name: pinName, Icon: pinIcon, PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
@@ -166,21 +170,21 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 			}
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		}},
-		{Id: "copy-link", Name: "i18n:plugin_notes_action_copy_link", Icon: common.UIIcon("control.copy"), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "copy-link", Name: "i18n:plugin_notes_action_copy_link", Icon: common.CopyIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if err := clipboard.WriteText(noteDeepLink(record.ID)); err != nil {
 				p.notifyError(ctx, err)
 			}
 		}},
-		{Id: "export-markdown", Name: "i18n:plugin_notes_action_export_markdown", Icon: common.UIIcon("control.download"), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-markdown", Name: "i18n:plugin_notes_action_export_markdown", Icon: common.InstallIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "md"})
 		}},
-		{Id: "export-text", Name: "i18n:plugin_notes_action_export_text", Icon: common.UIIcon("control.download"), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-text", Name: "i18n:plugin_notes_action_export_text", Icon: common.TextIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "txt"})
 		}},
-		{Id: "export-html", Name: "i18n:plugin_notes_action_export_html", Icon: common.UIIcon("control.download"), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-html", Name: "i18n:plugin_notes_action_export_html", Icon: common.InstallIcon, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "html"})
 		}},
-		{Id: "delete", Name: "i18n:plugin_notes_action_delete", Icon: common.UIIcon("control.delete"), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "delete", Name: "i18n:plugin_notes_action_delete", Icon: common.TrashIcon, PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.Delete(record.ID); err != nil {
 				p.notifyError(ctx, err)
 			}
@@ -189,13 +193,24 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 	}
 }
 
-func (p *Plugin) createAndOpen(ctx context.Context) {
-	record, err := p.repository.Create()
-	if err != nil {
-		p.notifyError(ctx, err)
-		return
+// noteResultGroup mirrors clipboard: pinned notes first, then today / yesterday / history.
+func noteResultGroup(record common.NoteRecord) (string, int64) {
+	if record.DeletedAt == 0 && record.PinnedAt > 0 {
+		return "i18n:plugin_notes_group_pinned", 100
 	}
-	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
+	elapsed := util.GetSystemTimestamp() - record.UpdatedAt
+	if elapsed < 1000*60*60*24 {
+		return "i18n:plugin_notes_group_today", 90
+	}
+	if elapsed < 1000*60*60*24*2 {
+		return "i18n:plugin_notes_group_yesterday", 80
+	}
+	return "i18n:plugin_notes_group_history", 10
+}
+
+// createAndOpen opens a new draft window. The draft is not persisted until the user types.
+func (p *Plugin) createAndOpen(ctx context.Context) {
+	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowNew})
 }
 
 func (p *Plugin) handleDeepLink(ctx context.Context, arguments map[string]string) {
@@ -221,6 +236,13 @@ func (p *Plugin) purgeExpired(ctx context.Context) {
 	}
 }
 
+// purgeEmpty removes leftover untitled notes that were persisted without content.
+func (p *Plugin) purgeEmpty(ctx context.Context) {
+	if _, err := p.repository.PurgeEmpty(); err != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to purge empty notes: %v", err))
+	}
+}
+
 func (p *Plugin) notifyError(ctx context.Context, err error) {
 	p.api.Log(ctx, plugin.LogLevelError, err.Error())
 	p.api.Notify(ctx, err.Error())
@@ -238,7 +260,7 @@ func (p *Plugin) NotesList(ctx context.Context, search string, includeDeleted bo
 	}
 	summaries := make([]common.NoteSummary, 0, len(records))
 	for _, record := range records {
-		if !includeDeleted && record.DeletedAt > 0 {
+		if (!includeDeleted && record.DeletedAt > 0) || DocumentIsEmpty(record.Document) {
 			continue
 		}
 		title, preview := NoteTitle(record.Document), NotePreview(record.Document)
@@ -278,6 +300,11 @@ func (p *Plugin) NotesDelete(_ context.Context, id string) (common.NoteRecord, e
 	return p.repository.Delete(id)
 }
 
+// NotesDiscard permanently removes a note so empty drafts never enter trash.
+func (p *Plugin) NotesDiscard(_ context.Context, id string) error {
+	return p.repository.Discard(id)
+}
+
 func (p *Plugin) NotesRestore(_ context.Context, id string) (common.NoteRecord, error) {
 	return p.repository.Restore(id)
 }
@@ -305,22 +332,4 @@ func (p *Plugin) NotesGetLocal(_ context.Context, key string) (string, error) {
 
 func (p *Plugin) NotesSetLocal(_ context.Context, key, value string) error {
 	return p.repository.SetLocal(key, value)
-}
-
-var notesEnglishTranslations = map[string]string{
-	"plugin_notes_name": "Notes", "plugin_notes_description": "Fast floating notes with rich text and Cloud Sync",
-	"plugin_notes_command_new": "Create a new note", "plugin_notes_command_search": "Search notes", "plugin_notes_command_deleted": "Recently deleted notes",
-	"plugin_notes_new": "New Note", "plugin_notes_new_subtitle": "Create and open an empty note",
-	"plugin_notes_no_results": "No notes found", "plugin_notes_no_results_subtitle": "Try another search or create a new note",
-	"plugin_notes_action_new": "New Note", "plugin_notes_action_open": "Open Note", "plugin_notes_action_pin": "Pin Note", "plugin_notes_action_unpin": "Unpin Note",
-	"plugin_notes_action_copy_link": "Copy Note Link", "plugin_notes_action_export_markdown": "Export as Markdown", "plugin_notes_action_export_text": "Export as Plain Text", "plugin_notes_action_export_html": "Export as HTML", "plugin_notes_action_delete": "Delete Note", "plugin_notes_action_restore": "Restore Note",
-}
-
-var notesChineseTranslations = map[string]string{
-	"plugin_notes_name": "笔记", "plugin_notes_description": "支持富文本和云同步的轻量浮动笔记",
-	"plugin_notes_command_new": "新建笔记", "plugin_notes_command_search": "搜索笔记", "plugin_notes_command_deleted": "最近删除的笔记",
-	"plugin_notes_new": "新建笔记", "plugin_notes_new_subtitle": "创建并打开一篇空白笔记",
-	"plugin_notes_no_results": "没有找到笔记", "plugin_notes_no_results_subtitle": "尝试其他关键词或新建一篇笔记",
-	"plugin_notes_action_new": "新建笔记", "plugin_notes_action_open": "打开笔记", "plugin_notes_action_pin": "置顶笔记", "plugin_notes_action_unpin": "取消置顶",
-	"plugin_notes_action_copy_link": "复制笔记链接", "plugin_notes_action_export_markdown": "导出为 Markdown", "plugin_notes_action_export_text": "导出为纯文本", "plugin_notes_action_export_html": "导出为 HTML", "plugin_notes_action_delete": "删除笔记", "plugin_notes_action_restore": "恢复笔记",
 }

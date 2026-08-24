@@ -901,51 +901,55 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	if props.Disabled {
 		pointerCursor = woxui.PointerCursorDefault
 	}
+	contentPoint := func(position woxui.Point) woxui.Point {
+		return woxui.Point{X: position.X - padding.Left, Y: position.Y - padding.Top}
+	}
 	offsetAt := func(position woxui.Point) int {
-		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
+		point := contentPoint(position)
+		point.X = max(float32(0), point.X)
+		point.Y = max(float32(0), point.Y)
 		return textFieldOffsetAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, point)
 	}
+	glyphHitAt := func(position woxui.Point) (int, bool) {
+		return textFieldGlyphHitAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, contentPoint(position))
+	}
 	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, CursorAt: func(position woxui.Point) woxui.PointerCursor {
-		if props.CursorAtOffset != nil {
-			return props.CursorAtOffset(offsetAt(position))
+		if offset, hit := glyphHitAt(position); hit && props.CursorAtOffset != nil {
+			return props.CursorAtOffset(offset)
 		}
 		return pointerCursor
 	}, OnHoverAt: props.onHoverAt, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
 		}
-		offset := offsetAt(position)
-		if props.OnTapOffset != nil && props.OnTapOffset(offset) {
+		if offset, hit := glyphHitAt(position); hit && props.OnTapOffset != nil && props.OnTapOffset(offset) {
 			return
 		}
-		props.onCaret(offset)
+		props.onCaret(offsetAt(position))
 	}, OnDoubleTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onWordSelection == nil {
 			return
 		}
-		offset := offsetAt(position)
-		if props.OnTapOffset != nil && props.OnTapOffset(offset) {
+		if offset, hit := glyphHitAt(position); hit && props.OnTapOffset != nil && props.OnTapOffset(offset) {
 			return
 		}
-		props.onWordSelection(offset)
+		props.onWordSelection(offsetAt(position))
 	}, OnTripleTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onLineSelection == nil {
 			return
 		}
-		offset := offsetAt(position)
-		if props.OnTapOffset != nil && props.OnTapOffset(offset) {
+		if offset, hit := glyphHitAt(position); hit && props.OnTapOffset != nil && props.OnTapOffset(offset) {
 			return
 		}
-		props.onLineSelection(offset)
+		props.onLineSelection(offsetAt(position))
 	}, OnSelectionStart: func(position woxui.Point, modifiers woxui.KeyModifiers) {
 		if props.Disabled || props.Window == nil || props.onSelectionStart == nil {
 			return
 		}
-		offset := offsetAt(position)
-		if props.CursorAtOffset != nil && props.CursorAtOffset(offset) != woxui.PointerCursorText {
+		if offset, hit := glyphHitAt(position); hit && props.CursorAtOffset != nil && props.CursorAtOffset(offset) != woxui.PointerCursorText {
 			return
 		}
-		props.onSelectionStart(offset, modifiers)
+		props.onSelectionStart(offsetAt(position), modifiers)
 	}, OnSelectionExtend: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onSelectionExtendAt == nil {
 			return
@@ -1260,7 +1264,41 @@ func textFieldLineIndex(lines []textFieldLine, offset int) int {
 }
 
 func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, point woxui.Point) int {
+	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, point)
+}
+
+// textFieldGlyphHitAt reports whether a content-local point sits on a rendered glyph, not just a snapped caret.
+func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, point woxui.Point) (int, bool) {
+	if window == nil || lineHeight <= 0 {
+		return 0, false
+	}
 	lines := textFieldRichLines(state.Text, window, style, width, softWrap, richRuns)
+	if len(lines) == 0 {
+		return 0, false
+	}
+	y := point.Y + verticalOffset
+	if y < 0 || y >= float32(len(lines))*lineHeight {
+		return 0, false
+	}
+	if maxLines == 1 {
+		point.X += textFieldHorizontalOffset([]rune(state.Text), state.Selection.Focus, style, width, window)
+	}
+	if point.X < 0 {
+		return 0, false
+	}
+	line := lines[min(len(lines)-1, int(y/lineHeight))]
+	lineWidth := textFieldMeasureRange(window, []rune(state.Text), line.start, line.end, style, richRuns)
+	if point.X > lineWidth {
+		return line.end, false
+	}
+	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, point), true
+}
+
+func textFieldOffsetOnLines(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, point woxui.Point) int {
+	lines := textFieldRichLines(state.Text, window, style, width, softWrap, richRuns)
+	if len(lines) == 0 {
+		return 0
+	}
 	lineIndex := min(len(lines)-1, max(0, int((point.Y+verticalOffset)/lineHeight)))
 	line := lines[lineIndex]
 	if maxLines == 1 {
@@ -1274,18 +1312,21 @@ func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style
 	previousWidth := float32(0)
 	for candidate := 1; candidate <= len(spans); candidate++ {
 		candidateEnd := line.start + spans[candidate-1].End
-		width := textFieldMeasureRange(window, []rune(state.Text), line.start, candidateEnd, style, richRuns)
-		if point.X < (previousWidth+width)*0.5 {
+		measured := textFieldMeasureRange(window, []rune(state.Text), line.start, candidateEnd, style, richRuns)
+		if point.X < (previousWidth+measured)*0.5 {
 			offset = spans[candidate-1].Start
 			break
 		}
-		previousWidth = width
+		previousWidth = measured
 		offset = spans[candidate-1].End
 	}
 	return line.start + offset
 }
 
-func textFieldHorizontalOffset(runes []rune, focus int, style woxui.TextStyle, width float32, window *woxui.Window) float32 {
+func textFieldHorizontalOffset(runes []rune, focus int, style woxui.TextStyle, width float32, window textFieldMeasurer) float32 {
+	if window == nil {
+		return 0
+	}
 	focus = max(0, min(len(runes), focus))
 	metrics, _ := window.MeasureText(string(runes[:focus]), style)
 	return max(float32(0), metrics.Size.Width-max(float32(0), width-4))

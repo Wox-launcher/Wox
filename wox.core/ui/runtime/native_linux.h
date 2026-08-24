@@ -22,6 +22,7 @@ int32_t wox_linux_window_center(WoxLinuxWindow *window, float width, float heigh
 int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window);
 int32_t wox_linux_window_minimize(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enabled);
+int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, char **path);
 int32_t wox_linux_window_save_file(WoxLinuxWindow *window, const char *title, const char *default_name, const char *extension, char **path);
 int32_t wox_linux_window_set_pointer_passthrough(WoxLinuxWindow *window, int32_t enabled);

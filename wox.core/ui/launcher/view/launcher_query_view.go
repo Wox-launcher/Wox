@@ -315,7 +315,8 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 
 			cursorX := bounds.X + props.CaretWidth
 			caretY := textTop + float32(props.CaretLine)*lineHeight
-			if caretVisible {
+			// Native text fields hide the blinking caret once a range is selected.
+			if caretVisible && props.State.Selection.Collapsed() {
 				displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}, props.Theme.Cursor)
 			}
 			if props.OnTextInputState != nil {

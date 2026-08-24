@@ -325,6 +325,22 @@ func (w *platformWindow) minimize() error {
 	return nil
 }
 
+func (w *platformWindow) setTopmost(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_darwin_window_set_topmost(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update macOS topmost behavior")
+	}
+	w.options.Topmost = enabled
+	return nil
+}
+
 func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	native, err := w.openNative()
 	if err != nil {

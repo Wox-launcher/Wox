@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"wox/common"
 	"wox/setting"
@@ -98,22 +99,51 @@ func (r *Repository) Get(id string) (common.NoteRecord, error) {
 	return record, nil
 }
 
-// Create persists a new empty note.
+// Create returns an in-memory empty draft. Empty notes are not persisted until the user types.
 func (r *Repository) Create() (common.NoteRecord, error) {
 	now := util.GetSystemTimestamp()
-	record := common.NoteRecord{
+	return common.NoteRecord{
 		SchemaVersion: noteSchemaVersion,
 		ID:            uuid.NewString(),
 		Document:      EmptyDocument(),
 		CreatedAt:     now,
 		UpdatedAt:     now,
 		Revision:      uuid.NewString(),
+	}, nil
+}
+
+// Discard permanently removes a note, including unsaved empty drafts that were never stored.
+func (r *Repository) Discard(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("note id is empty")
 	}
-	if err := r.write(record); err != nil {
-		return common.NoteRecord{}, err
+	if err := r.store.DeleteWithSync(noteSettingPrefix+id, true); err != nil {
+		return err
 	}
-	r.notify(record.ID)
-	return record, nil
+	go r.notify(id)
+	return nil
+}
+
+// PurgeEmpty permanently removes notes that have no user-entered content.
+func (r *Repository) PurgeEmpty() (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	records, err := r.List(true)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, record := range records {
+		if !DocumentIsEmpty(record.Document) {
+			continue
+		}
+		if err := r.store.DeleteWithSync(noteSettingPrefix+record.ID, true); err != nil {
+			return count, err
+		}
+		count++
+		go r.notify(record.ID)
+	}
+	return count, nil
 }
 
 // Save applies one optimistic rich-document update and preserves both versions on conflict.
@@ -121,9 +151,33 @@ func (r *Repository) Save(id, expectedRevision string, document common.NoteDocum
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	document = NormalizeDocument(document)
 	current, err := r.Get(id)
 	if err != nil {
-		return common.NoteRecord{}, false, err
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return common.NoteRecord{}, false, err
+		}
+		if DocumentIsEmpty(document) {
+			return emptyDraftRecord(id, expectedRevision, document), false, nil
+		}
+		now := util.GetSystemTimestamp()
+		record := common.NoteRecord{
+			SchemaVersion: noteSchemaVersion,
+			ID:            id,
+			Document:      document,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+			Revision:      uuid.NewString(),
+		}
+		if err := r.write(record); err != nil {
+			return common.NoteRecord{}, false, err
+		}
+		go r.notify(record.ID)
+		return record, false, nil
+	}
+	if DocumentIsEmpty(document) {
+		current.Document = document
+		return current, false, nil
 	}
 	now := util.GetSystemTimestamp()
 	if current.Revision != expectedRevision {
@@ -255,4 +309,20 @@ func (r *Repository) write(record common.NoteRecord) error {
 		return err
 	}
 	return r.store.SetWithSync(noteSettingPrefix+record.ID, string(raw), true)
+}
+
+// emptyDraftRecord keeps an unsaved empty note addressable without writing it to the store.
+func emptyDraftRecord(id, revision string, document common.NoteDocument) common.NoteRecord {
+	now := util.GetSystemTimestamp()
+	if revision == "" {
+		revision = uuid.NewString()
+	}
+	return common.NoteRecord{
+		SchemaVersion: noteSchemaVersion,
+		ID:            id,
+		Document:      document,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Revision:      revision,
+	}
 }

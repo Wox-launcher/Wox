@@ -347,6 +347,14 @@ func (w *Window) Minimize() error {
 	return w.native.minimize()
 }
 
+// SetTopmost keeps the window above other applications, or returns it to normal stacking.
+func (w *Window) SetTopmost(enabled bool) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.setTopmost(enabled)
+}
+
 // SetHideOnBlur changes whether the current window hides after leaving its focus domain.
 func (w *Window) SetHideOnBlur(enabled bool) error {
 	if w == nil || w.native == nil {

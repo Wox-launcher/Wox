@@ -355,3 +355,39 @@ func PlayCircleGlyph(size float32, color woxui.Color) woxwidget.Widget {
 func PauseGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.pause", size, color)
 }
+
+// PinGlyph returns the shared thumbtack used to keep a window above others.
+func PinGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 15
+	}
+	return svgIcon("control.pin", size, color)
+}
+
+var formatGlyphNames = map[string]string{
+	"block":     "control.format-heading",
+	"bold":      "control.format-bold",
+	"italic":    "control.format-italic",
+	"underline": "control.format-underline",
+	"strike":    "control.format-strikethrough",
+	"code":      "control.code",
+	"link":      "control.link",
+	"bullet":    "control.list",
+	"ordered":   "control.format-ordered",
+	"task":      "control.checkbox.unchecked",
+	"quote":     "control.format-quote",
+	"divider":   "control.format-divider",
+	"more":      "control.more-horizontal",
+}
+
+// FormatGlyph returns the shared SVG used by compact editor format bars.
+func FormatGlyph(kind string, size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	name := formatGlyphNames[kind]
+	if name == "" {
+		return woxwidget.Painter{Width: size, Height: size}
+	}
+	return svgIcon(name, size, color)
+}
