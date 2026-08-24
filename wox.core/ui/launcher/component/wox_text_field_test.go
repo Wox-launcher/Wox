@@ -8,6 +8,18 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestUnfocusedSingleLineFieldKeepsOverflowLeftAligned(t *testing.T) {
+	measurer := &fakeTextMeasurer{charWidth: 10}
+	runes := []rune("abcdefghijklmnopqrstuvwxyz")
+	style := woxui.TextStyle{Size: 14}
+	if got := textFieldHorizontalOffset(false, runes, len(runes), style, 40, measurer); got != 0 {
+		t.Fatalf("unfocused overflow offset = %v, want 0 so the start stays visible", got)
+	}
+	if got := textFieldHorizontalOffset(true, runes, len(runes), style, 40, measurer); got <= 0 {
+		t.Fatalf("focused overflow offset = %v, want the caret to stay in view", got)
+	}
+}
+
 func TestSingleLineTextFieldDefaultsToVerticalCenter(t *testing.T) {
 	singleLine := WoxTextField(TextFieldProps{ID: "single"}).(woxwidget.Stateful).Widget.(TextFieldProps)
 	if singleLine.TextAlignmentY != 0.5 {
@@ -183,7 +195,7 @@ func TestTextFieldGlyphHitIgnoresEmptySpaceAroundText(t *testing.T) {
 	style := woxui.TextStyle{Size: 14}
 	const lineHeight = float32(24)
 	hit := func(x, y float32) (int, bool) {
-		return textFieldGlyphHitAt(state, measurer, style, nil, 100, lineHeight, 0, 400, true, woxui.Point{X: x, Y: y})
+		return textFieldGlyphHitAt(state, measurer, style, nil, 100, lineHeight, 0, 400, true, true, woxui.Point{X: x, Y: y})
 	}
 	if _, ok := hit(15, 10); !ok {
 		t.Fatal("pointer over the first-line glyphs must hit")
@@ -397,14 +409,14 @@ func TestFilterHelperUsedBySingleLineContract(t *testing.T) {
 }
 
 func TestTextFieldCompositionPreservesAndShiftsRichDecorations(t *testing.T) {
-	checkbox := TextFieldRichRun{Start: 0, End: 1, Checkbox: true}
-	following := TextFieldRichRun{Start: 5, End: 6, Checkbox: true}
+	marker := TextFieldRichRun{Start: 0, End: 1, Advance: 16, HideText: true}
+	following := TextFieldRichRun{Start: 5, End: 6, Advance: 16, HideText: true}
 	state := woxui.TextEditingState{Text: "☐ abc☐", Selection: woxui.TextSelection{Anchor: 2, Focus: 2}, Composition: "中文"}
-	runs := textFieldCompositionRichRuns(state, []TextFieldRichRun{checkbox, following})
-	if len(runs) != 2 || !runs[0].Checkbox || runs[0].Start != 0 || runs[0].End != 1 {
-		t.Fatalf("checkbox before composition changed: %#v", runs)
+	runs := textFieldCompositionRichRuns(state, []TextFieldRichRun{marker, following})
+	if len(runs) != 2 || runs[0].Advance != 16 || runs[0].Start != 0 || runs[0].End != 1 {
+		t.Fatalf("decoration before composition changed: %#v", runs)
 	}
-	if !runs[1].Checkbox || runs[1].Start != 7 || runs[1].End != 8 {
-		t.Fatalf("checkbox after composition was not shifted: %#v", runs)
+	if runs[1].Advance != 16 || runs[1].Start != 7 || runs[1].End != 8 {
+		t.Fatalf("decoration after composition was not shifted: %#v", runs)
 	}
 }

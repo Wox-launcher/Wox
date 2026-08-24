@@ -12,6 +12,7 @@ package woxui
 import "C"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
@@ -161,10 +162,14 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		window.handle.Delete()
 		return nil, errors.New("woxui: failed to create GTK window or OpenGL renderer")
 	}
+	if options.MinSize.Width > 0 || options.MinSize.Height > 0 {
+		_ = C.wox_linux_window_set_min_size(window.native, C.float(options.MinSize.Width), C.float(options.MinSize.Height))
+	}
 	// GTK utility windows start keep-above; honor an explicit unpinned utility window.
 	if options.Role != WindowRoleApplication {
 		_ = window.setTopmost(options.Topmost)
 	}
+	window.applyWindowIcon()
 	window.webView = webviewruntime.New(&linuxWebViewDriver{window: window})
 	run.mu.Lock()
 	run.windows = append(run.windows, window)
@@ -400,6 +405,23 @@ func (w *platformWindow) writeClipboardText(text string) error {
 		return errors.New("woxui: failed to write Linux clipboard text")
 	}
 	return nil
+}
+
+// applyWindowIcon replaces the desktop-shell icon so minimized notes are not the Wox app glyph.
+func (w *platformWindow) applyWindowIcon() {
+	if w == nil || w.native == nil || w.options.Icon == nil || len(w.options.Icon.pixels) == 0 {
+		return
+	}
+	icon := w.options.Icon
+	if C.wox_linux_window_set_icon(
+		w.native,
+		(*C.uint8_t)(unsafe.Pointer(&icon.pixels[0])),
+		C.int32_t(icon.Width),
+		C.int32_t(icon.Height),
+		C.int32_t(icon.Width*4),
+	) != 0 {
+		util.GetLogger().Warn(context.Background(), "failed to set Linux window icon")
+	}
 }
 
 func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {

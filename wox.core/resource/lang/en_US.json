@@ -595,6 +595,9 @@
   "ui_clone_row": "Clone row",
   "ui_cancel": "Cancel",
   "ui_close": "Close",
+  "ui_minimize": "Minimize",
+  "ui_maximize": "Maximize",
+  "ui_restore": "Restore",
   "ui_all": "All",
   "ui_saving": "Saving...",
   "ui_ok": "OK",
@@ -2739,5 +2742,11 @@
   "notes_format_task": "Task list",
   "notes_format_quote": "Quote",
   "notes_format_divider": "Divider",
+  "notes_format_table": "Table",
+  "notes_table_insert_row": "Insert row",
+  "notes_table_insert_column": "Insert column",
+  "notes_table_delete_row": "Delete row",
+  "notes_table_delete_column": "Delete column",
+  "notes_table_delete": "Delete table",
   "notes_format_more": "More formatting"
 }

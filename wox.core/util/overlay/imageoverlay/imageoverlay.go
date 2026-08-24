@@ -391,7 +391,7 @@ func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered, pressed s
 		case "darwin":
 			children = append(children, woxwidget.StackChild{Left: 13, Child: woxcomponent.MacTrafficLight("image-overlay-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "image-overlay-close", props.Active, theme, props.OnClose, onHover, onPress)})
 		case "windows":
-			children = append(children, woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("image-overlay-close", "×", true, hovered == "close", theme, props.OnClose, onHover)})
+			children = append(children, woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("image-overlay-close", "close", hovered == "close", theme, props.OnClose, onHover)})
 		default:
 			children = append(children, woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.LinuxTitleBarCloseButton("image-overlay-close", hovered == "close", theme, props.OnClose, onHover)})
 		}

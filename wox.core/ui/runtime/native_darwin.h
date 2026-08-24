@@ -32,6 +32,7 @@ int32_t wox_darwin_window_minimize(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enabled);
 int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark);
 int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost);
+int32_t wox_darwin_window_set_min_size(WoxDarwinWindow *window, float width, float height);
 int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, char **path);
 int32_t wox_darwin_window_save_file(WoxDarwinWindow *window, const char *title, const char *default_name, const char *extension, char **path);
 int32_t wox_darwin_window_set_pointer_passthrough(WoxDarwinWindow *window, int32_t enabled);

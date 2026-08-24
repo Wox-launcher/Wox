@@ -577,6 +577,9 @@
   "ui_clone_row": "Clonar linha",
   "ui_cancel": "Cancelar",
   "ui_close": "Fechar",
+  "ui_minimize": "Minimizar",
+  "ui_maximize": "Maximizar",
+  "ui_restore": "Restaurar",
   "ui_all": "Todos",
   "ui_saving": "Salvando...",
   "ui_ok": "OK",
@@ -2431,5 +2434,11 @@
   "plugin_dictation_action_ai_empty": "A ação de ditado produziu um resultado vazio.",
   "plugin_dictation_action_chat_unavailable": "AI Chat indisponível.",
   "plugin_dictation_action_copy": "Copiar",
-  "plugin_dictation_action_copied": "Copiado"
+  "plugin_dictation_action_copied": "Copiado",
+  "notes_format_table": "Tabela",
+  "notes_table_insert_row": "Inserir linha",
+  "notes_table_insert_column": "Inserir coluna",
+  "notes_table_delete_row": "Excluir linha",
+  "notes_table_delete_column": "Excluir coluna",
+  "notes_table_delete": "Excluir tabela"
 }

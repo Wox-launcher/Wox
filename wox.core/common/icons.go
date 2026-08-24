@@ -177,6 +177,9 @@ var uiIcons = map[string]WoxImage{
 	"control.checkbox.checked":   newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 5-6"/>`),
 	"control.checkbox.unchecked": newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/>`),
 	"control.close":              NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>`),
+	"control.window-minimize":    NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="square"><path d="M6 12h12"/></svg>`),
+	"control.window-maximize":    NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="miter"><rect x="6.5" y="6.5" width="11" height="11"/></svg>`),
+	"control.window-restore":     NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="miter" stroke-linecap="square"><path d="M9 5.5h9.5V15"/><rect x="5.5" y="8.5" width="10" height="10"/></svg>`),
 	"control.menu":               NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>`),
 	"control.chevron-up":         NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>`),
 	"control.chevron-down":       NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`),
@@ -199,6 +202,11 @@ var uiIcons = map[string]WoxImage{
 	"control.format-ordered":       newMonochromeUIIcon(`<path d="M11 6h9M11 12h9M11 18h9M5 8V4.5l-1.4 1M4 13.2h2.6L4 18h3"/>`),
 	"control.format-quote":         NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>`),
 	"control.format-divider":       newMonochromeUIIcon(`<path d="M5 12h14"/>`),
+	"control.format-table":         newMonochromeUIIcon(`<path d="M4 6h16v12H4zM4 10h16M4 14h16M10 6v12M16 6v12"/>`),
+	"control.table-insert-row":     newMonochromeUIIcon(`<path d="M4 3h16v11H4zM4 7.5h16M10 3v11M8 18h8M12 14v8"/>`),
+	"control.table-insert-column":  newMonochromeUIIcon(`<path d="M3 4h12v16H3zM3 9.5h12M3 15h12M8 4v16M17 12h5M19.5 9.5v5"/>`),
+	"control.table-delete-row":     newMonochromeUIIcon(`<path d="M4 3h16v11H4zM4 7.5h16M10 3v11M8 19h8"/>`),
+	"control.table-delete-column":  newMonochromeUIIcon(`<path d="M3 4h12v16H3zM3 9.5h12M3 15h12M8 4v16M17 12h5"/>`),
 
 	// Screenshot annotation toolbar.
 	"screenshot.select":            newMonochromeUIIcon(`<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="2 2"/>`),

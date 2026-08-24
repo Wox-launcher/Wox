@@ -28,6 +28,35 @@ func TestConstrainWindowsAspectRatio(t *testing.T) {
 	}
 }
 
+func TestWindowsPhysicalMinSizeUsesWindowScale(t *testing.T) {
+	width, height := windowsPhysicalMinSize(Size{Width: 460, Height: 240}, 1.5)
+	if width != 690 || height != 360 {
+		t.Fatalf("physical min size = %dx%d, want 690x360", width, height)
+	}
+}
+
+func TestApplyWindowsMinTrackSizeRaisesSystemFloor(t *testing.T) {
+	info := win.MINMAXINFO{PtMinTrackSize: win.POINT{X: 112, Y: 27}}
+	applyWindowsMinTrackSize(&info, 690, 360)
+	if info.PtMinTrackSize.X != 690 || info.PtMinTrackSize.Y != 360 {
+		t.Fatalf("min track size = %+v, want 690x360", info.PtMinTrackSize)
+	}
+}
+
+func TestConstrainWindowsMinSizeKeepsDraggedEdge(t *testing.T) {
+	bounds := win.RECT{Left: 100, Top: 40, Right: 220, Bottom: 200}
+	constrainWindowsMinSize(1, &bounds, 460, 240)
+	if bounds.Left != bounds.Right-460 || bounds.Right != 220 {
+		t.Fatalf("left-edge min width = %+v, want width 460 with right edge 220", bounds)
+	}
+
+	bounds = win.RECT{Left: 10, Top: 80, Right: 200, Bottom: 200}
+	constrainWindowsMinSize(3, &bounds, 460, 240)
+	if bounds.Top != bounds.Bottom-240 || bounds.Bottom != 200 {
+		t.Fatalf("top-edge min height = %+v, want height 240 with bottom edge 200", bounds)
+	}
+}
+
 func TestWindowsResizeHitTest(t *testing.T) {
 	bounds := win.RECT{Right: 300, Bottom: 200}
 	tests := []struct {

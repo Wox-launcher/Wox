@@ -83,6 +83,59 @@ func TestDocumentIsEmptyIgnoresBlankBlocksAndKeepsStructuralContent(t *testing.T
 	}
 }
 
+func TestParseMarkdownKeepsGFMTables(t *testing.T) {
+	document := ParseMarkdown("| A | **B** |\n| --- | --- |\n| 1 | 2 |")
+	if len(document.Blocks) != 1 || document.Blocks[0].Type != common.NoteBlockTable || document.Blocks[0].Table == nil {
+		t.Fatalf("table was not parsed: %#v", document.Blocks)
+	}
+	table := document.Blocks[0].Table
+	if table.HeaderRows != 1 || len(table.Rows) != 2 || table.Rows[0][0].Text != "A" || table.Rows[1][1].Text != "2" {
+		t.Fatalf("table cells = %#v", table)
+	}
+	if len(table.Rows[0][1].Spans) == 0 || !table.Rows[0][1].Spans[0].Bold {
+		t.Fatalf("header inline style lost: %#v", table.Rows[0][1])
+	}
+	markdown := ToMarkdown(document)
+	if !strings.Contains(markdown, "| A |") || !strings.Contains(markdown, "| --- |") || !strings.Contains(markdown, "| 1 |") {
+		t.Fatalf("table markdown = %q", markdown)
+	}
+	if !strings.Contains(ToHTML(document), "<table>") || !strings.Contains(ToHTML(document), "<th>") {
+		t.Fatalf("table html = %s", ToHTML(document))
+	}
+	if ToPlainText(document) != "A\tB\n1\t2" && !strings.Contains(ToPlainText(document), "A") {
+		t.Fatalf("table plain text = %q", ToPlainText(document))
+	}
+}
+
+func TestParseHTMLAndTSVBuildTables(t *testing.T) {
+	htmlDocument := ParseHTML(`<article><table><tr><th>Name</th><th>Age</th></tr><tr><td>Ada</td><td>36</td></tr></table></article>`)
+	if len(htmlDocument.Blocks) != 1 || htmlDocument.Blocks[0].Type != common.NoteBlockTable || htmlDocument.Blocks[0].Table.Rows[0][0].Text != "Name" {
+		t.Fatalf("html table = %#v", htmlDocument.Blocks)
+	}
+	tsv := ParseClipboard("Name\tAge\nAda\t36")
+	if len(tsv.Blocks) != 1 || tsv.Blocks[0].Type != common.NoteBlockTable || tsv.Blocks[0].Table.Rows[1][0].Text != "Ada" {
+		t.Fatalf("tsv table = %#v", tsv.Blocks)
+	}
+}
+
+func TestNormalizeDocumentUpgradesPipeTableParagraphs(t *testing.T) {
+	document := NormalizeDocument(common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockParagraph, Text: "| A | B |\n| --- | --- |\n| 1 | 2 |",
+	}}})
+	if len(document.Blocks) != 1 || document.Blocks[0].Type != common.NoteBlockTable || document.Blocks[0].Table == nil {
+		t.Fatalf("legacy pipe table was not upgraded: %#v", document.Blocks)
+	}
+	if !strings.Contains(document.Blocks[0].Text, "| A |") {
+		t.Fatalf("table fallback text missing: %q", document.Blocks[0].Text)
+	}
+}
+
+func TestDocumentIsEmptyKeepsTables(t *testing.T) {
+	if DocumentIsEmpty(common.NoteDocument{Blocks: []common.NoteBlock{{Type: common.NoteBlockTable, Table: &common.NoteTable{Rows: [][]common.NoteTableCell{{{Text: "A"}}}}}}}) {
+		t.Fatal("tables should keep a note from being empty")
+	}
+}
+
 func TestNoteCodecsPreserveNestedTaskLevels(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{Type: common.NoteBlockTask, Text: "parent"},

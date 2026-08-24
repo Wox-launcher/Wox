@@ -577,6 +577,9 @@
   "ui_clone_row": "Клонировать строку",
   "ui_cancel": "Отмена",
   "ui_close": "Закрыть",
+  "ui_minimize": "Свернуть",
+  "ui_maximize": "Развернуть",
+  "ui_restore": "Восстановить",
   "ui_all": "Все",
   "ui_saving": "Сохранение...",
   "ui_ok": "ОК",
@@ -2432,5 +2435,11 @@
   "plugin_dictation_action_ai_empty": "Действие диктовки вернуло пустой результат.",
   "plugin_dictation_action_chat_unavailable": "AI Chat недоступен.",
   "plugin_dictation_action_copy": "Копировать",
-  "plugin_dictation_action_copied": "Скопировано"
+  "plugin_dictation_action_copied": "Скопировано",
+  "notes_format_table": "Таблица",
+  "notes_table_insert_row": "Вставить строку",
+  "notes_table_insert_column": "Вставить столбец",
+  "notes_table_delete_row": "Удалить строку",
+  "notes_table_delete_column": "Удалить столбец",
+  "notes_table_delete": "Удалить таблицу"
 }

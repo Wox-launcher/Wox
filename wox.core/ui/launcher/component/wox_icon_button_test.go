@@ -72,6 +72,8 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		FormatGlyph("block", 16, color),
 		FormatGlyph("bold", 16, color),
 		FormatGlyph("link", 16, color),
+		FormatGlyph("table-insert-row", 16, color),
+		FormatGlyph("table-delete", 16, color),
 		FormatGlyph("more", 16, color),
 	}
 	for index, glyph := range glyphs {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/google/uuid"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -47,6 +48,11 @@ func NormalizeDocument(document common.NoteDocument) common.NoteDocument {
 		if !validBlockType(block.Type) {
 			block.Type = common.NoteBlockParagraph
 		}
+		if block.Type == common.NoteBlockParagraph && block.Table == nil && looksLikeGFMTable(block.Text) {
+			if upgraded := tableFromMarkdown(block.Text); upgraded != nil {
+				block.Type, block.Table, block.Spans = common.NoteBlockTable, upgraded, nil
+			}
+		}
 		if block.Type != common.NoteBlockTask {
 			block.Checked = false
 		}
@@ -55,6 +61,14 @@ func NormalizeDocument(document common.NoteDocument) common.NoteDocument {
 		} else {
 			block.Indent = 0
 		}
+		if block.Type == common.NoteBlockTable {
+			block.Table = normalizeTable(block.Table, block.Text)
+			block.Text = tableToMarkdown(*block.Table)
+			block.Spans = nil
+			blocks = append(blocks, block)
+			continue
+		}
+		block.Table = nil
 		block.Spans = normalizeSpans(block.Text, block.Spans)
 		if block.Type == common.NoteBlockCode && strings.Contains(block.Text, "\n") {
 			for index, line := range strings.Split(strings.ReplaceAll(block.Text, "\r\n", "\n"), "\n") {
@@ -81,7 +95,7 @@ func validBlockType(blockType common.NoteBlockType) bool {
 	switch blockType {
 	case common.NoteBlockParagraph, common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3,
 		common.NoteBlockQuote, common.NoteBlockCode, common.NoteBlockBullet, common.NoteBlockOrdered,
-		common.NoteBlockTask, common.NoteBlockDivider:
+		common.NoteBlockTask, common.NoteBlockDivider, common.NoteBlockTable:
 		return true
 	default:
 		return false
@@ -113,7 +127,7 @@ func normalizeSpans(value string, spans []common.NoteSpan) []common.NoteSpan {
 // DocumentIsEmpty reports whether the user has not entered any note content.
 func DocumentIsEmpty(document common.NoteDocument) bool {
 	for _, block := range NormalizeDocument(document).Blocks {
-		if block.Type == common.NoteBlockDivider || strings.TrimSpace(block.Text) != "" {
+		if block.Type == common.NoteBlockDivider || block.Type == common.NoteBlockTable || strings.TrimSpace(block.Text) != "" {
 			return false
 		}
 	}
@@ -126,6 +140,15 @@ func NoteTitle(document common.NoteDocument) string {
 		return untitledNote
 	}
 	title := strings.TrimSpace(strings.SplitN(document.Blocks[0].Text, "\n", 2)[0])
+	if title == "" && document.Blocks[0].Type == common.NoteBlockTable && document.Blocks[0].Table != nil {
+		for _, row := range document.Blocks[0].Table.Rows {
+			for _, cell := range row {
+				if title = strings.TrimSpace(cell.Text); title != "" {
+					return title
+				}
+			}
+		}
+	}
 	if title == "" {
 		return untitledNote
 	}
@@ -176,6 +199,11 @@ func ToPlainText(document common.NoteDocument) string {
 			prefix = "> "
 		case common.NoteBlockDivider:
 			lines = append(lines, "────────")
+			continue
+		case common.NoteBlockTable:
+			if block.Table != nil {
+				lines = append(lines, tableToPlainText(*block.Table))
+			}
 			continue
 		default:
 			ordered = 1
@@ -229,6 +257,10 @@ func ToMarkdown(document common.NoteDocument) string {
 			value = "- " + marker + " " + value
 		case common.NoteBlockDivider:
 			value = "---"
+		case common.NoteBlockTable:
+			if block.Table != nil {
+				value = tableToMarkdown(*block.Table)
+			}
 		default:
 			ordered = [common.NoteMaximumIndent + 1]int{1, 1, 1}
 		}
@@ -323,6 +355,10 @@ func ToHTML(document common.NoteDocument) string {
 				output.WriteString("<pre><code>" + html.EscapeString(block.Text) + "</code></pre>\n")
 			case common.NoteBlockDivider:
 				output.WriteString("<hr>\n")
+			case common.NoteBlockTable:
+				if block.Table != nil {
+					output.WriteString(tableToHTML(*block.Table))
+				}
 			default:
 				output.WriteString("<p>" + value + "</p>\n")
 			}
@@ -451,6 +487,10 @@ func markdownBlocks(node ast.Node, source []byte) []common.NoteBlock {
 		return markdownListBlocks(value, source)
 	case *ast.ThematicBreak:
 		block.Type = common.NoteBlockDivider
+	case *extast.Table:
+		block.Type = common.NoteBlockTable
+		block.Table = markdownTable(value, source)
+		block.Text = tableToMarkdown(*block.Table)
 	default:
 		if node.Type() == ast.TypeBlock {
 			return markdownChildBlocks(node, source)
@@ -569,4 +609,358 @@ func appendParsedText(output *strings.Builder, spans *[]common.NoteSpan, value s
 		Start: start, End: end, Bold: style.bold, Italic: style.italic, Underline: style.underline,
 		Strike: style.strike, Code: style.code, Link: style.link,
 	})
+}
+
+// EmptyNoteTable creates the default 3x2 editable table (one header row and one body row).
+func EmptyNoteTable() common.NoteTable {
+	row := func() []common.NoteTableCell {
+		return []common.NoteTableCell{{}, {}, {}}
+	}
+	return common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{row(), row()}}
+}
+
+// ParseClipboard turns pasted Markdown, HTML, or TSV into a Notes document.
+func ParseClipboard(value string) common.NoteDocument {
+	if looksLikeHTML(value) {
+		return ParseHTML(value)
+	}
+	if looksLikeTSV(value) {
+		return NormalizeDocument(common.NoteDocument{Version: documentVersion, Blocks: []common.NoteBlock{{
+			ID: uuid.NewString(), Type: common.NoteBlockTable, Table: tableFromTSV(value),
+		}}})
+	}
+	return ParseMarkdown(value)
+}
+
+// ParseHTML converts Notes export HTML and pasted table markup into the block model.
+func ParseHTML(value string) common.NoteDocument {
+	document, err := goquery.NewDocumentFromReader(strings.NewReader(value))
+	if err != nil {
+		return ParseMarkdown(value)
+	}
+	root := document.Find("article")
+	if root.Length() == 0 {
+		root = document.Selection
+	}
+	parsed := common.NoteDocument{Version: documentVersion}
+	root.Children().Each(func(_ int, node *goquery.Selection) {
+		parsed.Blocks = append(parsed.Blocks, htmlBlocks(node)...)
+	})
+	if len(parsed.Blocks) == 0 {
+		if table := htmlTable(document.Find("table").First()); table != nil {
+			parsed.Blocks = append(parsed.Blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockTable, Table: table})
+		}
+	}
+	return NormalizeDocument(parsed)
+}
+
+func htmlBlocks(node *goquery.Selection) []common.NoteBlock {
+	block := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph}
+	switch strings.ToLower(goquery.NodeName(node)) {
+	case "h1":
+		block.Type = common.NoteBlockHeading1
+		block.Text, block.Spans = htmlSelectionText(node)
+	case "h2":
+		block.Type = common.NoteBlockHeading2
+		block.Text, block.Spans = htmlSelectionText(node)
+	case "h3", "h4", "h5", "h6":
+		block.Type = common.NoteBlockHeading3
+		block.Text, block.Spans = htmlSelectionText(node)
+	case "p":
+		block.Text, block.Spans = htmlSelectionText(node)
+	case "blockquote":
+		block.Type = common.NoteBlockQuote
+		block.Text, block.Spans = htmlSelectionText(node)
+	case "pre":
+		block.Type, block.Text = common.NoteBlockCode, node.Text()
+	case "hr":
+		block.Type = common.NoteBlockDivider
+	case "ul", "ol":
+		return htmlListBlocks(node, strings.ToLower(goquery.NodeName(node)) == "ol", 0)
+	case "table":
+		if table := htmlTable(node); table != nil {
+			block.Type, block.Table = common.NoteBlockTable, table
+			break
+		}
+		return nil
+	default:
+		var blocks []common.NoteBlock
+		node.Children().Each(func(_ int, child *goquery.Selection) {
+			blocks = append(blocks, htmlBlocks(child)...)
+		})
+		return blocks
+	}
+	return []common.NoteBlock{block}
+}
+
+func htmlListBlocks(list *goquery.Selection, ordered bool, indent int) []common.NoteBlock {
+	var blocks []common.NoteBlock
+	list.ChildrenFiltered("li").Each(func(_ int, item *goquery.Selection) {
+		text, spans := htmlSelectionText(item)
+		block := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockBullet, Text: text, Spans: spans, Indent: indent}
+		if ordered {
+			block.Type = common.NoteBlockOrdered
+		}
+		if task, _ := item.Attr("data-task"); task == "true" {
+			block.Type = common.NoteBlockTask
+			block.Checked = item.AttrOr("data-checked", "") == "true"
+		}
+		blocks = append(blocks, block)
+		item.ChildrenFiltered("ul,ol").Each(func(_ int, nested *goquery.Selection) {
+			blocks = append(blocks, htmlListBlocks(nested, goquery.NodeName(nested) == "ol", min(common.NoteMaximumIndent, indent+1))...)
+		})
+	})
+	return blocks
+}
+
+func htmlSelectionText(node *goquery.Selection) (string, []common.NoteSpan) {
+	clone := node.Clone()
+	clone.Find("ul,ol,table").Remove()
+	return markdownInlineContentFromPlain(strings.TrimSpace(clone.Text()))
+}
+
+func markdownInlineContentFromPlain(value string) (string, []common.NoteSpan) {
+	return value, nil
+}
+
+func htmlTable(node *goquery.Selection) *common.NoteTable {
+	if node == nil || node.Length() == 0 {
+		return nil
+	}
+	table := common.NoteTable{}
+	node.Find("tr").Each(func(_ int, row *goquery.Selection) {
+		cells := make([]common.NoteTableCell, 0)
+		row.ChildrenFiltered("th,td").Each(func(_ int, cell *goquery.Selection) {
+			text, spans := markdownInlineContentFromPlain(strings.TrimSpace(cell.Text()))
+			if cell.Is("th") && table.HeaderRows == 0 {
+				table.HeaderRows = 1
+			}
+			cells = append(cells, common.NoteTableCell{Text: text, Spans: spans})
+		})
+		if len(cells) > 0 {
+			table.Rows = append(table.Rows, cells)
+		}
+	})
+	if len(table.Rows) == 0 {
+		return nil
+	}
+	return &table
+}
+
+func markdownTable(table *extast.Table, source []byte) *common.NoteTable {
+	data := common.NoteTable{}
+	for row := table.FirstChild(); row != nil; row = row.NextSibling() {
+		_, header := row.(*extast.TableHeader)
+		if header {
+			data.HeaderRows++
+		}
+		cells := make([]common.NoteTableCell, 0)
+		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+			text, spans := markdownInlineContent(cell, source)
+			cells = append(cells, common.NoteTableCell{Text: strings.TrimSpace(text), Spans: normalizeSpans(strings.TrimSpace(text), spans)})
+		}
+		if len(cells) > 0 {
+			data.Rows = append(data.Rows, cells)
+		}
+	}
+	return &data
+}
+
+func normalizeTable(table *common.NoteTable, fallback string) *common.NoteTable {
+	if table == nil || len(table.Rows) == 0 {
+		if parsed := tableFromMarkdown(fallback); parsed != nil {
+			table = parsed
+		} else {
+			empty := EmptyNoteTable()
+			return &empty
+		}
+	}
+	columns := 1
+	for _, row := range table.Rows {
+		columns = max(columns, len(row))
+	}
+	normalized := common.NoteTable{HeaderRows: max(0, min(len(table.Rows), table.HeaderRows)), Rows: make([][]common.NoteTableCell, 0, len(table.Rows))}
+	for _, row := range table.Rows {
+		cells := make([]common.NoteTableCell, columns)
+		for index := 0; index < columns; index++ {
+			if index < len(row) {
+				cells[index] = row[index]
+				cells[index].Spans = normalizeSpans(cells[index].Text, cells[index].Spans)
+			}
+		}
+		normalized.Rows = append(normalized.Rows, cells)
+	}
+	return &normalized
+}
+
+func tableFromMarkdown(value string) *common.NoteTable {
+	document := common.NoteDocument{Version: documentVersion}
+	source := []byte(value)
+	root := noteMarkdownParser.Parse(text.NewReader(source))
+	for node := root.FirstChild(); node != nil; node = node.NextSibling() {
+		document.Blocks = append(document.Blocks, markdownBlocks(node, source)...)
+	}
+	if len(document.Blocks) == 1 && document.Blocks[0].Type == common.NoteBlockTable && document.Blocks[0].Table != nil {
+		return document.Blocks[0].Table
+	}
+	return nil
+}
+
+func tableToMarkdown(table common.NoteTable) string {
+	if len(table.Rows) == 0 {
+		return ""
+	}
+	columns := 1
+	for _, row := range table.Rows {
+		columns = max(columns, len(row))
+	}
+	lines := make([]string, 0, len(table.Rows)+1)
+	for index, row := range table.Rows {
+		lines = append(lines, markdownTableRow(row, columns))
+		if index+1 == max(1, table.HeaderRows) || (table.HeaderRows == 0 && index == 0) {
+			lines = append(lines, markdownTableSeparator(columns))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func markdownTableRow(row []common.NoteTableCell, columns int) string {
+	cells := make([]string, columns)
+	for index := 0; index < columns; index++ {
+		value := ""
+		if index < len(row) {
+			value = markdownInline(row[index].Text, row[index].Spans)
+		}
+		cells[index] = " " + strings.ReplaceAll(value, "|", "\\|") + " "
+	}
+	return "|" + strings.Join(cells, "|") + "|"
+}
+
+func markdownTableSeparator(columns int) string {
+	cells := make([]string, columns)
+	for index := range cells {
+		cells[index] = " --- "
+	}
+	return "|" + strings.Join(cells, "|") + "|"
+}
+
+func tableToHTML(table common.NoteTable) string {
+	var output strings.Builder
+	output.WriteString("<table>\n")
+	for index, row := range table.Rows {
+		tag := "td"
+		if index < table.HeaderRows {
+			if index == 0 {
+				output.WriteString("<thead>\n")
+			}
+			tag = "th"
+		} else if index == table.HeaderRows {
+			if table.HeaderRows > 0 {
+				output.WriteString("</thead>\n")
+			}
+			output.WriteString("<tbody>\n")
+		}
+		output.WriteString("<tr>")
+		for _, cell := range row {
+			output.WriteString("<" + tag + ">" + htmlInline(cell.Text, cell.Spans) + "</" + tag + ">")
+		}
+		output.WriteString("</tr>\n")
+	}
+	if table.HeaderRows > 0 && table.HeaderRows < len(table.Rows) {
+		output.WriteString("</tbody>\n")
+	} else if table.HeaderRows > 0 {
+		output.WriteString("</thead>\n")
+	}
+	output.WriteString("</table>\n")
+	return output.String()
+}
+
+func tableToPlainText(table common.NoteTable) string {
+	lines := make([]string, 0, len(table.Rows))
+	for _, row := range table.Rows {
+		cells := make([]string, 0, len(row))
+		for _, cell := range row {
+			cells = append(cells, cell.Text)
+		}
+		lines = append(lines, strings.Join(cells, "\t"))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func tableFromTSV(value string) *common.NoteTable {
+	lines := strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")
+	table := common.NoteTable{HeaderRows: 1}
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" && len(table.Rows) == 0 {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		row := make([]common.NoteTableCell, 0, len(parts))
+		for _, part := range parts {
+			row = append(row, common.NoteTableCell{Text: part})
+		}
+		table.Rows = append(table.Rows, row)
+	}
+	return &table
+}
+
+func looksLikeGFMTable(value string) bool {
+	lines := nonEmptyLines(value)
+	return len(lines) >= 2 && strings.Contains(lines[0], "|") && isTableSeparator(lines[1])
+}
+
+func looksLikeHTML(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.Contains(strings.ToLower(trimmed), "<table") || strings.Contains(strings.ToLower(trimmed), "<article")
+}
+
+func looksLikeTSV(value string) bool {
+	lines := nonEmptyLines(value)
+	if len(lines) < 2 {
+		return false
+	}
+	columns := 0
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			return false
+		}
+		if columns == 0 {
+			columns = len(parts)
+			continue
+		}
+		if len(parts) != columns {
+			return false
+		}
+	}
+	return columns >= 2
+}
+
+func isTableSeparator(line string) bool {
+	line = strings.TrimSpace(line)
+	if !strings.Contains(line, "|") && !strings.Contains(line, "-") {
+		return false
+	}
+	line = strings.Trim(line, "|")
+	for _, cell := range strings.Split(line, "|") {
+		cell = strings.TrimSpace(cell)
+		if cell == "" {
+			continue
+		}
+		cell = strings.Trim(cell, ":")
+		if strings.Trim(cell, "-") != "" {
+			return false
+		}
+	}
+	return strings.Contains(line, "-")
+}
+
+func nonEmptyLines(value string) []string {
+	var lines []string
+	for _, line := range strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }

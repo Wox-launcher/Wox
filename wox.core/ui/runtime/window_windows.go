@@ -239,6 +239,9 @@ type platformWindow struct {
 	// animationVsyncEpoch retires a wait loop that is still blocked inside DwmFlush when
 	// stopAnimationFrames runs, so a replacement goroutine cannot coexist with it.
 	animationVsyncEpoch uint64
+
+	smallIcon win.HICON
+	bigIcon   win.HICON
 }
 
 type candidateForm struct {
@@ -861,6 +864,7 @@ func (w *platformWindow) createNativeWindow() error {
 	platformRuntime.Lock()
 	platformRuntime.windowCount++
 	platformRuntime.Unlock()
+	w.applyWindowIcon()
 	win.InvalidateRect(hwnd, nil, false)
 	return nil
 }
@@ -876,6 +880,58 @@ func windowsRendererNeedsEmbeddedSurfaceOverlay(role WindowRole) bool {
 // Desktop Acrylic the same way macOS keeps NSVisualEffectView on non-key windows.
 func windowsWindowUsesSystemBackdrop(options WindowOptions) bool {
 	return options.Role != WindowRoleScreenshot
+}
+
+// windowsPhysicalMinSize converts a logical MinSize to the physical tracking size Windows expects.
+func windowsPhysicalMinSize(min Size, scale float32) (width, height int32) {
+	if scale <= 0 {
+		scale = 1
+	}
+	if min.Width > 0 {
+		width = int32(logicalToPhysical(min.Width, scale))
+	}
+	if min.Height > 0 {
+		height = int32(logicalToPhysical(min.Height, scale))
+	}
+	return width, height
+}
+
+// applyWindowsMinTrackSize raises the system tracking floor so live resize cannot go below MinSize.
+func applyWindowsMinTrackSize(info *win.MINMAXINFO, minWidth, minHeight int32) {
+	if info == nil {
+		return
+	}
+	if minWidth > info.PtMinTrackSize.X {
+		info.PtMinTrackSize.X = minWidth
+	}
+	if minHeight > info.PtMinTrackSize.Y {
+		info.PtMinTrackSize.Y = minHeight
+	}
+}
+
+// constrainWindowsMinSize keeps the dragged edge from shrinking past the physical minimum.
+func constrainWindowsMinSize(edge uintptr, bounds *win.RECT, minWidth, minHeight int32) {
+	if bounds == nil {
+		return
+	}
+	width := bounds.Right - bounds.Left
+	height := bounds.Bottom - bounds.Top
+	if minWidth > 0 && width < minWidth {
+		// WMSZ_LEFT / WMSZ_TOPLEFT / WMSZ_BOTTOMLEFT keep the right edge fixed.
+		if edge == 1 || edge == 4 || edge == 7 {
+			bounds.Left = bounds.Right - minWidth
+		} else {
+			bounds.Right = bounds.Left + minWidth
+		}
+	}
+	if minHeight > 0 && height < minHeight {
+		// WMSZ_TOP / WMSZ_TOPLEFT / WMSZ_TOPRIGHT keep the bottom edge fixed.
+		if edge == 3 || edge == 4 || edge == 5 {
+			bounds.Top = bounds.Bottom - minHeight
+		} else {
+			bounds.Bottom = bounds.Top + minHeight
+		}
+	}
 }
 
 // constrainWindowsAspectRatio adjusts the dragged edge while preserving the requested window ratio.
@@ -1212,10 +1268,25 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 				}
 			}
 		}
+	case win.WM_GETMINMAXINFO:
+		if lParam != 0 {
+			minWidth, minHeight := windowsPhysicalMinSize(window.options.MinSize, window.scale)
+			applyWindowsMinTrackSize((*win.MINMAXINFO)(unsafe.Pointer(lParam)), minWidth, minHeight)
+			return 0
+		}
 	case windowsWMSizing:
-		if window.options.AspectRatio > 0 && lParam != 0 {
-			constrainWindowsAspectRatio(wParam, (*win.RECT)(unsafe.Pointer(lParam)), window.options.AspectRatio)
-			return 1
+		if lParam != 0 {
+			rect := (*win.RECT)(unsafe.Pointer(lParam))
+			if window.options.AspectRatio > 0 {
+				constrainWindowsAspectRatio(wParam, rect, window.options.AspectRatio)
+			}
+			minWidth, minHeight := windowsPhysicalMinSize(window.options.MinSize, window.scale)
+			if minWidth > 0 || minHeight > 0 {
+				constrainWindowsMinSize(wParam, rect, minWidth, minHeight)
+			}
+			if window.options.AspectRatio > 0 || minWidth > 0 || minHeight > 0 {
+				return 1
+			}
 		}
 	case win.WM_MOUSEACTIVATE:
 		if window.options.Nonactivating {
@@ -2438,6 +2509,7 @@ func (w *platformWindow) destroyNativeResources() {
 		w.renderer.destroy()
 		w.renderer = nil
 	}
+	w.destroyWindowIcons()
 
 	w.mu.Lock()
 	w.hwnd = 0

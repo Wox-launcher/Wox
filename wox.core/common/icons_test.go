@@ -33,6 +33,22 @@ func TestUIIconsAreCategorizedSVGs(t *testing.T) {
 	}
 }
 
+func TestWindowChromeIconsMatchWindowsCaptionGeometry(t *testing.T) {
+	maximize := UIIcon("control.window-maximize").ImageData
+	restore := UIIcon("control.window-restore").ImageData
+	if strings.Contains(maximize, "rx=") || strings.Contains(restore, "rx=") {
+		t.Fatal("Windows caption icons should stay sharp-cornered")
+	}
+	if !strings.Contains(restore, "<path") || !strings.Contains(restore, "<rect") {
+		t.Fatal("restore icon should be a front square plus the back top and right edges")
+	}
+	for name, source := range map[string]string{"maximize": maximize, "restore": restore} {
+		if _, err := woxsvg.Render(source, 24, 24); err != nil {
+			t.Fatalf("render %s caption icon: %v", name, err)
+		}
+	}
+}
+
 func TestThemeEditorReusesTuneIcon(t *testing.T) {
 	if UIIcon("settings.themes.edit") != UIIcon("control.tune") {
 		t.Fatal("theme editor icon does not reuse the tune icon")

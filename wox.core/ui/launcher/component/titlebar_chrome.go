@@ -2,6 +2,7 @@ package component
 
 import (
 	"math"
+	"strings"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -10,19 +11,29 @@ import (
 // TitleBarHeight is the shared height for custom title bars across windows.
 const TitleBarHeight = float32(40)
 
-// WindowCloseChromeProps describes the shared platform close control used by custom title bars.
+// TitleBarControlWidth is the pointer target used by Windows and Linux caption buttons.
+const TitleBarControlWidth = float32(46)
+
+// TitleBarWindowsIconSize matches the 12-in-40 ratio of native Windows caption glyphs.
+const TitleBarWindowsIconSize = float32(12)
+
+// WindowCloseChromeProps describes the shared platform caption controls used by custom title bars.
 type WindowCloseChromeProps struct {
 	ID       string
 	Width    float32
 	Platform string
 	Theme    Theme
 	Active   bool
-	OnClose  func()
+	// Maximized switches the zoom/maximize control to its restore glyph.
+	Maximized  bool
+	OnMinimize func()
+	OnMaximize func()
+	OnClose    func()
 }
 
 type windowCloseChromeState struct {
-	hovered bool
-	pressed bool
+	hovered string
+	pressed string
 }
 
 // WindowCloseChrome builds the same close control for every custom title bar.
@@ -41,30 +52,119 @@ func (s *windowCloseChromeState) DidUpdateWidget(_ woxwidget.StateContext, _, _ 
 func (s *windowCloseChromeState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(WindowCloseChromeProps)
 	onHover := func(control string, inside bool) {
-		if control != "close" && control != "mac-controls" {
-			return
-		}
-		context.SetState(func() { s.hovered = inside })
+		context.SetState(func() {
+			if inside {
+				s.hovered = control
+				return
+			}
+			if s.hovered == control {
+				s.hovered = ""
+			}
+		})
 	}
 	onPress := func(control string, pressed bool) {
-		if control != props.ID {
-			return
-		}
-		context.SetState(func() { s.pressed = pressed })
+		context.SetState(func() {
+			if pressed {
+				s.pressed = control
+				return
+			}
+			if s.pressed == control {
+				s.pressed = ""
+			}
+		})
 	}
-	children := make([]woxwidget.StackChild, 0, 1)
+	closeID := windowChromeControlID(props.ID, "close")
+	minimizeID := windowChromeControlID(props.ID, "minimize")
+	maximizeID := windowChromeControlID(props.ID, "maximize")
+	macHovered := s.hovered == "mac-controls"
+	children := make([]woxwidget.StackChild, 0, 3)
 	switch props.Platform {
 	case "darwin":
 		children = append(children, woxwidget.StackChild{Left: 13, Child: MacTrafficLight(
-			props.ID, woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255},
-			s.hovered, s.pressed, props.Active, props.Theme, props.OnClose, onHover, onPress,
+			closeID, woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255},
+			macHovered, s.pressed == closeID, props.Active, props.Theme, props.OnClose, onHover, onPress,
 		)})
+		if props.OnMinimize != nil {
+			children = append(children, woxwidget.StackChild{Left: 36, Child: MacTrafficLight(
+				minimizeID, woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255},
+				macHovered, s.pressed == minimizeID, props.Active, props.Theme, props.OnMinimize, onHover, onPress,
+			)})
+		}
+		if props.OnMaximize != nil {
+			zoomLeft := float32(36)
+			if props.OnMinimize != nil {
+				zoomLeft = 59
+			}
+			children = append(children, woxwidget.StackChild{Left: zoomLeft, Child: MacTrafficLight(
+				maximizeID, woxui.Color{R: 40, G: 200, B: 64, A: 255}, "+", woxui.Color{R: 17, G: 96, B: 27, A: 255},
+				macHovered, s.pressed == maximizeID, props.Active, props.Theme, props.OnMaximize, onHover, onPress,
+			)})
+		}
 	case "linux":
-		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: LinuxTitleBarCloseButton(props.ID, s.hovered, props.Theme, props.OnClose, onHover)})
+		right := float32(0)
+		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: LinuxTitleBarCloseButton(closeID, s.hovered == "close", props.Theme, props.OnClose, onHover)})
+		if props.OnMaximize != nil {
+			right += TitleBarControlWidth
+			icon := MaximizeGlyph(14, TitleBarAlpha(props.Theme.ToolbarText, 230))
+			if props.Maximized {
+				icon = RestoreGlyph(14, TitleBarAlpha(props.Theme.ToolbarText, 230))
+			}
+			children = append(children, woxwidget.StackChild{Right: right, AnchorRight: true, Child: LinuxTitleBarIconButton(
+				maximizeID, "maximize", icon, s.hovered == "maximize", false, props.Theme, props.OnMaximize, onHover,
+			)})
+		}
+		if props.OnMinimize != nil {
+			right += TitleBarControlWidth
+			children = append(children, woxwidget.StackChild{Right: right, AnchorRight: true, Child: LinuxTitleBarIconButton(
+				minimizeID, "minimize", MinimizeGlyph(14, TitleBarAlpha(props.Theme.ToolbarText, 230)), s.hovered == "minimize", false, props.Theme, props.OnMinimize, onHover,
+			)})
+		}
 	default:
-		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: WindowsTitleBarButton(props.ID, "×", true, s.hovered, props.Theme, props.OnClose, onHover)})
+		right := float32(0)
+		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: WindowsTitleBarButton(closeID, "close", s.hovered == "close", props.Theme, props.OnClose, onHover)})
+		if props.OnMaximize != nil {
+			right += TitleBarControlWidth
+			control := "maximize"
+			if props.Maximized {
+				control = "restore"
+			}
+			children = append(children, woxwidget.StackChild{Right: right, AnchorRight: true, Child: WindowsTitleBarButton(maximizeID, control, s.hovered == "maximize", props.Theme, props.OnMaximize, onHover)})
+		}
+		if props.OnMinimize != nil {
+			right += TitleBarControlWidth
+			children = append(children, woxwidget.StackChild{Right: right, AnchorRight: true, Child: WindowsTitleBarButton(minimizeID, "minimize", s.hovered == "minimize", props.Theme, props.OnMinimize, onHover)})
+		}
 	}
 	return woxwidget.Stack{Width: props.Width, Height: TitleBarHeight, Children: children}
+}
+
+// TitleBarChromeWidth returns the trailing space reserved by platform caption buttons.
+func TitleBarChromeWidth(platform string, minimize, maximize bool) float32 {
+	if platform == "darwin" {
+		return 0
+	}
+	width := TitleBarControlWidth
+	if minimize {
+		width += TitleBarControlWidth
+	}
+	if maximize {
+		width += TitleBarControlWidth
+	}
+	return width
+}
+
+// windowChromeControlID keeps close IDs stable while adding sibling caption controls.
+func windowChromeControlID(id, control string) string {
+	if control == "close" {
+		return id
+	}
+	if trimmed, ok := strings.CutSuffix(id, ".close"); ok && trimmed != "" {
+		return trimmed + "." + control
+	}
+	if trimmed, ok := strings.CutSuffix(id, "-close"); ok && trimmed != "" {
+		return trimmed + "-" + control
+	}
+	return id + "." + control
 }
 
 func (s *windowCloseChromeState) Dispose() {}
@@ -79,22 +179,34 @@ func TitleBarAlpha(color woxui.Color, alpha uint8) woxui.Color {
 // hover fill, matching the compact native treatment.
 func LinuxTitleBarCloseButton(id string, hovered bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
 	foreground := TitleBarAlpha(theme.ToolbarText, 230)
+	if hovered {
+		foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	}
+	return LinuxTitleBarIconButton(id, "close", CloseGlyph(16, foreground), hovered, true, theme, onTap, onHover)
+}
+
+// LinuxTitleBarIconButton draws one circular Linux caption control.
+func LinuxTitleBarIconButton(id, control string, icon woxwidget.Widget, hovered, danger bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
 	circleColor := woxui.Color{}
 	if hovered {
-		circleColor = woxui.Color{R: 232, G: 17, B: 35, A: 255}
-		foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+		if danger {
+			circleColor = woxui.Color{R: 232, G: 17, B: 35, A: 255}
+		} else {
+			circleColor = TitleBarAlpha(theme.ToolbarText, 26)
+		}
 	}
 	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
 		if onHover != nil {
-			onHover("close", inside)
+			onHover(control, inside)
 		}
-	}, Child: woxwidget.Container{Width: 46, Height: TitleBarHeight, Child: woxwidget.Align{Width: 46, Height: TitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 24, Height: 24, Radius: 12, Color: circleColor, Child: woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: CloseGlyph(16, foreground)}}}}}
+	}, Child: woxwidget.Container{Width: TitleBarControlWidth, Height: TitleBarHeight, Child: woxwidget.Align{Width: TitleBarControlWidth, Height: TitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 24, Height: 24, Radius: 12, Color: circleColor, Child: woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon}}}}}
 }
 
 // WindowsTitleBarButton matches the compact native hover treatment while keeping the frameless window fully custom-drawn.
-func WindowsTitleBarButton(id, glyph string, closeButton, hovered bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
+func WindowsTitleBarButton(id, control string, hovered bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
 	background := woxui.Color{}
 	foreground := TitleBarAlpha(theme.ToolbarText, 230)
+	closeButton := control == "close"
 	if hovered {
 		background = TitleBarAlpha(theme.ToolbarText, 26)
 		if closeButton {
@@ -102,15 +214,37 @@ func WindowsTitleBarButton(id, glyph string, closeButton, hovered bool, theme Th
 			foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 		}
 	}
-	control := "minimize"
-	if closeButton {
-		control = "close"
-	}
+	hoverName := windowsTitleBarControlName(id, closeButton)
 	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
 		if onHover != nil {
-			onHover(control, inside)
+			onHover(hoverName, inside)
 		}
-	}, Child: woxwidget.Container{Width: 46, Height: TitleBarHeight, Color: background, Child: woxwidget.Align{Width: 46, Height: TitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: glyph, Style: woxui.TextStyle{Size: 18}, Color: foreground}}}}
+	}, Child: woxwidget.Container{Width: TitleBarControlWidth, Height: TitleBarHeight, Color: background, Child: woxwidget.Align{Width: TitleBarControlWidth, Height: TitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: windowsTitleBarGlyph(control, foreground)}}}
+}
+
+// windowsTitleBarGlyph draws the Segoe-style caption mark for one Windows chrome button.
+func windowsTitleBarGlyph(control string, color woxui.Color) woxwidget.Widget {
+	switch control {
+	case "close":
+		return CloseGlyph(TitleBarWindowsIconSize, color)
+	case "minimize":
+		return MinimizeGlyph(TitleBarWindowsIconSize, color)
+	case "restore":
+		return RestoreGlyph(TitleBarWindowsIconSize, color)
+	default:
+		return MaximizeGlyph(TitleBarWindowsIconSize, color)
+	}
+}
+
+// windowsTitleBarControlName maps a caption button to its hover-group name.
+func windowsTitleBarControlName(id string, closeButton bool) string {
+	if closeButton {
+		return "close"
+	}
+	if strings.Contains(id, "maximize") {
+		return "maximize"
+	}
+	return "minimize"
 }
 
 // MacTrafficLight matches the compact macOS controls and reveals their glyphs while the group is hovered.

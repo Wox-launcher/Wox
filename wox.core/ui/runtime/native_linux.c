@@ -184,6 +184,9 @@ struct WoxLinuxWindow {
   float preferred_height;
   float preferred_x;
   float preferred_y;
+  float aspect_ratio;
+  float min_width;
+  float min_height;
   double pointer_root_x;
   double pointer_root_y;
   guint32 pointer_time;
@@ -2278,6 +2281,28 @@ static void on_linux_pointer_passthrough_realize(GtkWidget *widget, gpointer dat
   apply_linux_pointer_passthrough(data);
 }
 
+// apply_window_geometry_hints keeps aspect and min-size constraints on the same GdkGeometry.
+static void apply_window_geometry_hints(WoxLinuxWindow *window) {
+  if (window == NULL || window->window == NULL) {
+    return;
+  }
+  GdkGeometry geometry = {0};
+  GdkWindowHints hints = 0;
+  if (window->aspect_ratio > 0.0f) {
+    geometry.min_aspect = window->aspect_ratio;
+    geometry.max_aspect = window->aspect_ratio;
+    hints |= GDK_HINT_ASPECT;
+  }
+  if (window->min_width > 0.0f || window->min_height > 0.0f) {
+    geometry.min_width = (int)ceilf(window->min_width);
+    geometry.min_height = (int)ceilf(window->min_height);
+    hints |= GDK_HINT_MIN_SIZE;
+  }
+  if (hints != 0) {
+    gtk_window_set_geometry_hints(GTK_WINDOW(window->window), NULL, &geometry, hints);
+  }
+}
+
 WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
@@ -2335,12 +2360,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
 #endif
   gtk_window_set_decorated(GTK_WINDOW(window->window), FALSE);
   gtk_window_set_resizable(GTK_WINDOW(window->window), resizable != 0);
-  if (aspect_ratio > 0.0f) {
-    GdkGeometry geometry = {0};
-    geometry.min_aspect = aspect_ratio;
-    geometry.max_aspect = aspect_ratio;
-    gtk_window_set_geometry_hints(GTK_WINDOW(window->window), NULL, &geometry, GDK_HINT_ASPECT);
-  }
+  window->aspect_ratio = aspect_ratio;
+  apply_window_geometry_hints(window);
   // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
   if (application_window) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), FALSE);
@@ -2849,6 +2870,83 @@ int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled) {
   }
   WoxBoolCall call = {.window = window, .enabled = enabled != 0};
   return run_on_main_sync(set_topmost_main, &call) ? call.result : -1;
+}
+
+typedef struct {
+  WoxLinuxWindow *window;
+  float width;
+  float height;
+  int32_t result;
+} WoxMinSizeCall;
+
+static void set_min_size_main(void *data) {
+  WoxMinSizeCall *call = data;
+  if (call->window->closed || call->window->window == NULL) {
+    call->result = -1;
+    return;
+  }
+  call->window->min_width = call->width;
+  call->window->min_height = call->height;
+  apply_window_geometry_hints(call->window);
+}
+
+int32_t wox_linux_window_set_min_size(WoxLinuxWindow *window, float width, float height) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxMinSizeCall call = {.window = window, .width = width, .height = height};
+  return run_on_main_sync(set_min_size_main, &call) ? call.result : -1;
+}
+
+static void free_pixbuf_pixels(guchar *pixels, gpointer data);
+
+typedef struct {
+  WoxLinuxWindow *window;
+  const uint8_t *pixels;
+  int width;
+  int height;
+  int row_stride;
+  int32_t result;
+} WoxWindowIconCall;
+
+static void set_icon_main(void *data) {
+  WoxWindowIconCall *call = data;
+  if (call->window->closed || call->window->window == NULL || call->pixels == NULL || call->width <= 0 || call->height <= 0 || call->row_stride < call->width * 4) {
+    call->result = -1;
+    return;
+  }
+  size_t byte_count = (size_t)call->row_stride * (size_t)call->height;
+  guchar *copy = g_malloc(byte_count);
+  if (copy == NULL) {
+    call->result = -1;
+    return;
+  }
+  memcpy(copy, call->pixels, byte_count);
+  GdkPixbuf *pixbuf = gdk_pixbuf_new_from_data(
+      copy,
+      GDK_COLORSPACE_RGB,
+      TRUE,
+      8,
+      call->width,
+      call->height,
+      call->row_stride,
+      free_pixbuf_pixels,
+      NULL);
+  if (pixbuf == NULL) {
+    g_free(copy);
+    call->result = -1;
+    return;
+  }
+  gtk_window_set_icon(GTK_WINDOW(call->window->window), pixbuf);
+  g_object_unref(pixbuf);
+}
+
+int32_t wox_linux_window_set_icon(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxWindowIconCall call = {.window = window, .pixels = pixels, .width = width, .height = height, .row_stride = row_stride};
+  return run_on_main_sync(set_icon_main, &call) ? call.result : -1;
 }
 
 typedef struct {

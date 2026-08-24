@@ -32,17 +32,23 @@ const (
 
 // TextFieldRichRun applies inline presentation without changing the editor's plain-text value.
 type TextFieldRichRun struct {
-	Start          int
-	End            int
-	Style          woxui.TextStyle
-	Color          woxui.Color
-	Checkbox       bool
-	Checked        bool
-	LeadingBar     bool
-	HorizontalRule bool
-	Underline      bool
-	Strike         bool
-	Background     woxui.Color
+	Start      int
+	End        int
+	Style      woxui.TextStyle
+	Color      woxui.Color
+	Underline  bool
+	Strike     bool
+	Background woxui.Color
+	// Advance, when greater than zero, replaces the measured width of this range.
+	Advance float32
+	// HideText skips drawing the backing characters so a custom Paint can replace them.
+	HideText bool
+	// Paint draws this range. Bounds width is the remaining line when Advance is 0.
+	Paint func(displayList *woxui.DisplayList, bounds woxui.Rect)
+	// LineGutter paints a leading decoration on every soft-wrapped line that intersects this run.
+	LineGutter      bool
+	LineGutterWidth float32
+	PaintLineGutter func(displayList *woxui.DisplayList, bounds woxui.Rect)
 }
 
 // textFieldMenuEnablement is the Cut/Copy/Paste/Select All snapshot shown in the context menu.
@@ -80,22 +86,26 @@ type TextFieldProps struct {
 	LineHeight       float32
 	TextColor        woxui.Color
 	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
-	TextAlignmentY     float32
-	Value              string
-	Focused            bool
-	Autofocus          bool
-	Controller         *woxwidget.TextEditingController
-	FocusNode          *woxwidget.FocusNode
-	Disabled           bool
-	DisableHover       bool
-	ReadOnly           bool
-	Protected          bool
-	MaxLines           int
-	Window             *woxui.Window
-	Theme              Theme
-	OnKey              func(woxui.KeyEvent) bool
-	OnUndo             func() bool
-	OnRedo             func() bool
+	TextAlignmentY float32
+	Value          string
+	Focused        bool
+	Autofocus      bool
+	Controller     *woxwidget.TextEditingController
+	FocusNode      *woxwidget.FocusNode
+	Disabled       bool
+	DisableHover   bool
+	// OnHoverAt reports pointer enter/leave even when DisableHover skips the hover fill.
+	OnHoverAt func(bool, woxui.Rect)
+	ReadOnly  bool
+	Protected bool
+	MaxLines  int
+	Window    *woxui.Window
+	Theme     Theme
+	OnKey     func(woxui.KeyEvent) bool
+	OnUndo    func() bool
+	OnRedo    func() bool
+	// OnPaste receives raw clipboard text and, when it returns true, replaces the default insert.
+	OnPaste            func(string) bool
 	TransformPaste     func(string) string
 	OnFocusChange      func(bool)
 	OnChanged          func(string)
@@ -333,6 +343,11 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		}
 		text, err := provider.ReadText()
 		if err != nil || text == "" {
+			return true
+		}
+		if original.OnPaste != nil && original.OnPaste(text) {
+			notifySelection()
+			invalidate()
 			return true
 		}
 		if original.TransformPaste != nil {
@@ -629,10 +644,14 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	}
 	hoverEnabled := !props.Disabled && !props.DisableHover
 	props.hovered = s.hovered && hoverEnabled && !props.Focused
-	if hoverEnabled {
-		props.onHoverAt = func(inside bool, _ woxui.Rect) {
-			if inside != s.hovered {
+	reportHover := widget.(TextFieldProps).OnHoverAt
+	if hoverEnabled || reportHover != nil {
+		props.onHoverAt = func(inside bool, bounds woxui.Rect) {
+			if hoverEnabled && inside != s.hovered {
 				context.SetState(func() { s.hovered = inside })
+			}
+			if reportHover != nil {
+				reportHover(inside, bounds)
 			}
 		}
 	}
@@ -697,7 +716,7 @@ func (s *textFieldState) applyDragSelectionAt(local woxui.Point) {
 		display.Composition = woxui.MaskProtectedText(real.Composition)
 		display.Selection = woxui.MapSelectionToProtectedDisplay(real.Text, real.Selection)
 	}
-	offset := textFieldOffsetAt(display, s.dragScrollWindow, s.style, s.richRuns, s.maxLines, s.lineHeight, s.verticalOffset, s.innerWidth, s.maxLines > 1, local)
+	offset := textFieldOffsetAt(display, s.dragScrollWindow, s.style, s.richRuns, s.maxLines, s.lineHeight, s.verticalOffset, s.innerWidth, s.maxLines > 1, true, local)
 	if s.dragProtected {
 		offset = woxui.MapProtectedDisplayOffsetToRune(s.controller.Text(), offset)
 	}
@@ -908,10 +927,10 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		point := contentPoint(position)
 		point.X = max(float32(0), point.X)
 		point.Y = max(float32(0), point.Y)
-		return textFieldOffsetAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, point)
+		return textFieldOffsetAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, point)
 	}
 	glyphHitAt := func(position woxui.Point) (int, bool) {
-		return textFieldGlyphHitAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, contentPoint(position))
+		return textFieldGlyphHitAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, contentPoint(position))
 	}
 	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, CursorAt: func(position woxui.Point) woxui.PointerCursor {
 		if offset, hit := glyphHitAt(position); hit && props.CursorAtOffset != nil {
@@ -1263,12 +1282,12 @@ func textFieldLineIndex(lines []textFieldLine, offset int) int {
 	return 0
 }
 
-func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, point woxui.Point) int {
-	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, point)
+func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, focused bool, point woxui.Point) int {
+	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, focused, point)
 }
 
 // textFieldGlyphHitAt reports whether a content-local point sits on a rendered glyph, not just a snapped caret.
-func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, point woxui.Point) (int, bool) {
+func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, focused bool, point woxui.Point) (int, bool) {
 	if window == nil || lineHeight <= 0 {
 		return 0, false
 	}
@@ -1281,7 +1300,7 @@ func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer,
 		return 0, false
 	}
 	if maxLines == 1 {
-		point.X += textFieldHorizontalOffset([]rune(state.Text), state.Selection.Focus, style, width, window)
+		point.X += textFieldHorizontalOffset(focused, []rune(state.Text), state.Selection.Focus, style, width, window)
 	}
 	if point.X < 0 {
 		return 0, false
@@ -1291,10 +1310,10 @@ func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer,
 	if point.X > lineWidth {
 		return line.end, false
 	}
-	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, point), true
+	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, focused, point), true
 }
 
-func textFieldOffsetOnLines(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, point woxui.Point) int {
+func textFieldOffsetOnLines(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, focused bool, point woxui.Point) int {
 	lines := textFieldRichLines(state.Text, window, style, width, softWrap, richRuns)
 	if len(lines) == 0 {
 		return 0
@@ -1302,7 +1321,7 @@ func textFieldOffsetOnLines(state woxui.TextEditingState, window textFieldMeasur
 	lineIndex := min(len(lines)-1, max(0, int((point.Y+verticalOffset)/lineHeight)))
 	line := lines[lineIndex]
 	if maxLines == 1 {
-		point.X += textFieldHorizontalOffset([]rune(state.Text), state.Selection.Focus, style, width, window)
+		point.X += textFieldHorizontalOffset(focused, []rune(state.Text), state.Selection.Focus, style, width, window)
 	}
 	spans := woxui.GraphemeSpans(line.text)
 	if len(spans) == 0 {
@@ -1323,8 +1342,9 @@ func textFieldOffsetOnLines(state woxui.TextEditingState, window textFieldMeasur
 	return line.start + offset
 }
 
-func textFieldHorizontalOffset(runes []rune, focus int, style woxui.TextStyle, width float32, window textFieldMeasurer) float32 {
-	if window == nil {
+// textFieldHorizontalOffset follows the caret only while focused so idle overflow stays left-aligned.
+func textFieldHorizontalOffset(focused bool, runes []rune, focus int, style woxui.TextStyle, width float32, window textFieldMeasurer) float32 {
+	if !focused || window == nil {
 		return 0
 	}
 	focus = max(0, min(len(runes), focus))
@@ -1358,7 +1378,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	lastLine := min(len(lines), firstLine+visibleLines+1)
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
-		horizontalOffset = textFieldHorizontalOffset(displayRunes, focus, style, bounds.Width, window)
+		horizontalOffset = textFieldHorizontalOffset(focused, displayRunes, focus, style, bounds.Width, window)
 	}
 	for lineIndex := firstLine; lineIndex < lastLine; lineIndex++ {
 		line := lines[lineIndex]
@@ -1370,8 +1390,12 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 			selectedWidth := textFieldMeasureRange(window, displayRunes, selectionStart, selectionEnd, style, richRuns)
 			displayList.FillRoundedRect(woxui.Rect{X: bounds.X - horizontalOffset + prefixWidth, Y: y, Width: selectedWidth, Height: lineHeight}, 3, theme.SelectionBackground)
 		}
-		if bar, ok := textFieldLeadingBar(line, richRuns); ok {
-			paintDocumentQuoteBar(displayList, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: documentQuoteWidth(bar.Style.Size), Height: lineHeight}, bar.Style.Size, bar.Color)
+		if gutter, ok := textFieldLineGutter(line, richRuns); ok && gutter.PaintLineGutter != nil {
+			width := gutter.LineGutterWidth
+			if width <= 0 {
+				width = documentQuoteWidth(gutter.Style.Size)
+			}
+			gutter.PaintLineGutter(displayList, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: width, Height: lineHeight})
 		}
 		drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, bounds.X-horizontalOffset, bounds.X+bounds.Width, y, lineHeight, style, richRuns, textColor, true, textAlignmentY)
 		if focused && selectionStart < selectionEnd {
@@ -1405,7 +1429,7 @@ func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, ri
 	lineOffset := verticalOffset - float32(firstLine)*lineHeight
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
-		horizontalOffset = textFieldHorizontalOffset(displayRunes, focus, style, bounds.Width, window)
+		horizontalOffset = textFieldHorizontalOffset(true, displayRunes, focus, style, bounds.Width, window)
 	}
 	line := lines[caretLine]
 	return woxui.Rect{
@@ -1418,12 +1442,12 @@ func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, ri
 func textFieldMeasureRange(window textFieldMeasurer, runes []rune, start, end int, base woxui.TextStyle, richRuns []TextFieldRichRun) float32 {
 	width := float32(0)
 	for _, segment := range textFieldRichSegments(start, end, base, richRuns) {
-		if segment.Checkbox {
-			width += documentCheckboxWidth(segment.Style.Size)
+		if segment.Advance > 0 {
+			width += segment.Advance
 			continue
 		}
-		if segment.LeadingBar {
-			width += documentQuoteWidth(segment.Style.Size)
+		if segment.LineGutter && segment.Paint == nil && !segment.HideText {
+			width += lineGutterWidth(segment)
 			continue
 		}
 		metrics, _ := window.MeasureText(string(runes[segment.Start:segment.End]), segment.Style)
@@ -1464,24 +1488,23 @@ func textFieldRichSegments(start, end int, base woxui.TextStyle, richRuns []Text
 
 func drawTextFieldRichRange(displayList *woxui.DisplayList, window *woxui.Window, runes []rune, start, end int, x, right, y, lineHeight float32, base woxui.TextStyle, richRuns []TextFieldRichRun, color woxui.Color, useRunColor bool, alignment float32) {
 	for _, segment := range textFieldRichSegments(start, end, base, richRuns) {
-		if segment.Checkbox {
-			advance := documentCheckboxWidth(segment.Style.Size)
-			paintDocumentCheckbox(displayList, woxui.Rect{X: x, Y: y, Width: advance, Height: lineHeight}, segment.Style.Size, segment.Color, segment.Checked)
-			x += advance
+		if segment.Advance > 0 && segment.Paint != nil {
+			segment.Paint(displayList, woxui.Rect{X: x, Y: y, Width: segment.Advance, Height: lineHeight})
+			x += segment.Advance
 			continue
 		}
-		if segment.LeadingBar {
-			x += documentQuoteWidth(segment.Style.Size)
+		if segment.LineGutter && segment.Paint == nil && !segment.HideText {
+			x += lineGutterWidth(segment)
 			continue
 		}
 		text := string(runes[segment.Start:segment.End])
 		metrics, _ := window.MeasureText(text, segment.Style)
-		if segment.HorizontalRule {
-			ruleColor := segment.Color
-			if ruleColor.A == 0 {
-				ruleColor = color
+		if segment.Paint != nil && segment.HideText {
+			paintWidth := metrics.Size.Width
+			if segment.Advance <= 0 {
+				paintWidth = max(float32(0), right-x)
 			}
-			paintDocumentHorizontalRule(displayList, woxui.Rect{X: x, Y: y + (lineHeight-documentRuleHeight)/2, Width: max(float32(0), right-x), Height: documentRuleHeight}, ruleColor)
+			segment.Paint(displayList, woxui.Rect{X: x, Y: y, Width: paintWidth, Height: lineHeight})
 			x += metrics.Size.Width
 			continue
 		}
@@ -1504,14 +1527,21 @@ func drawTextFieldRichRange(displayList *woxui.DisplayList, window *woxui.Window
 	}
 }
 
-// textFieldLeadingBar keeps the decoration active across every soft-wrapped line in its block range.
-func textFieldLeadingBar(line textFieldLine, richRuns []TextFieldRichRun) (TextFieldRichRun, bool) {
+// textFieldLineGutter keeps the decoration active across every soft-wrapped line in its block range.
+func textFieldLineGutter(line textFieldLine, richRuns []TextFieldRichRun) (TextFieldRichRun, bool) {
 	for _, run := range richRuns {
-		if run.LeadingBar && line.start >= run.Start && line.start <= run.End {
+		if run.LineGutter && line.start >= run.Start && line.start <= run.End {
 			return run, true
 		}
 	}
 	return TextFieldRichRun{}, false
+}
+
+func lineGutterWidth(run TextFieldRichRun) float32 {
+	if run.LineGutterWidth > 0 {
+		return run.LineGutterWidth
+	}
+	return documentQuoteWidth(run.Style.Size)
 }
 
 func textFieldScrolledOffset(offset, maximumOffset, deltaY float32) (float32, bool) {

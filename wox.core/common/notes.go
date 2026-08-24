@@ -17,6 +17,7 @@ const (
 	NoteBlockOrdered   NoteBlockType = "ordered"
 	NoteBlockTask      NoteBlockType = "task"
 	NoteBlockDivider   NoteBlockType = "divider"
+	NoteBlockTable     NoteBlockType = "table"
 	NoteMaximumIndent                = 2
 )
 
@@ -32,6 +33,18 @@ type NoteSpan struct {
 	Link      string `json:"link,omitempty"`
 }
 
+// NoteTableCell is one editable table cell with the same inline styles as a text block.
+type NoteTableCell struct {
+	Text  string     `json:"text,omitempty"`
+	Spans []NoteSpan `json:"spans,omitempty"`
+}
+
+// NoteTable is the structured payload for a GFM table block.
+type NoteTable struct {
+	HeaderRows int               `json:"headerRows,omitempty"`
+	Rows       [][]NoteTableCell `json:"rows"`
+}
+
 // NoteBlock is one editable block in a note document.
 type NoteBlock struct {
 	ID      string        `json:"id"`
@@ -40,6 +53,7 @@ type NoteBlock struct {
 	Checked bool          `json:"checked,omitempty"`
 	Indent  int           `json:"indent,omitempty"`
 	Spans   []NoteSpan    `json:"spans,omitempty"`
+	Table   *NoteTable    `json:"table,omitempty"`
 }
 
 // NoteDocument is the versioned rich-text payload stored with a note.

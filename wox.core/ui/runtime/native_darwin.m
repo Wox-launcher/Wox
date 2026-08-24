@@ -2995,6 +2995,23 @@ int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost) 
   return result;
 }
 
+int32_t wox_darwin_window_set_min_size(WoxDarwinWindow *window, float width, float height) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->window == nil) {
+      result = -1;
+      return;
+    }
+    CGFloat min_width = width > 0.0f ? (CGFloat)width : 0.0;
+    CGFloat min_height = height > 0.0f ? (CGFloat)height : 0.0;
+    window->window.contentMinSize = NSMakeSize(min_width, min_height);
+  });
+  return result;
+}
+
 // wox_darwin_window_set_appearance keeps AppKit materials aligned with the active Wox theme.
 int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark) {
   if (window == NULL) {

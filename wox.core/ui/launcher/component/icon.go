@@ -69,6 +69,30 @@ func CloseGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.close", size, color)
 }
 
+// MinimizeGlyph returns the shared window-minimize bar.
+func MinimizeGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.window-minimize", size, color)
+}
+
+// MaximizeGlyph returns the shared window-maximize square.
+func MaximizeGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.window-maximize", size, color)
+}
+
+// RestoreGlyph returns the overlapping squares used to restore a maximized window.
+func RestoreGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.window-restore", size, color)
+}
+
 // SearchGlyph returns the shared SVG search icon.
 func SearchGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {
@@ -365,19 +389,25 @@ func PinGlyph(size float32, color woxui.Color) woxwidget.Widget {
 }
 
 var formatGlyphNames = map[string]string{
-	"block":     "control.format-heading",
-	"bold":      "control.format-bold",
-	"italic":    "control.format-italic",
-	"underline": "control.format-underline",
-	"strike":    "control.format-strikethrough",
-	"code":      "control.code",
-	"link":      "control.link",
-	"bullet":    "control.list",
-	"ordered":   "control.format-ordered",
-	"task":      "control.checkbox.unchecked",
-	"quote":     "control.format-quote",
-	"divider":   "control.format-divider",
-	"more":      "control.more-horizontal",
+	"block":               "control.format-heading",
+	"bold":                "control.format-bold",
+	"italic":              "control.format-italic",
+	"underline":           "control.format-underline",
+	"strike":              "control.format-strikethrough",
+	"code":                "control.code",
+	"link":                "control.link",
+	"bullet":              "control.list",
+	"ordered":             "control.format-ordered",
+	"task":                "control.checkbox.unchecked",
+	"quote":               "control.format-quote",
+	"divider":             "control.format-divider",
+	"table":               "control.format-table",
+	"table-insert-row":    "control.table-insert-row",
+	"table-insert-column": "control.table-insert-column",
+	"table-delete-row":    "control.table-delete-row",
+	"table-delete-column": "control.table-delete-column",
+	"table-delete":        "control.delete",
+	"more":                "control.more-horizontal",
 }
 
 // FormatGlyph returns the shared SVG used by compact editor format bars.

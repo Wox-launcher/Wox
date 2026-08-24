@@ -183,6 +183,71 @@ func TestNotesListMarkersUseFixedAccent(t *testing.T) {
 	}
 }
 
+func TestDocumentFromEditorPromotesTypedPipeTables(t *testing.T) {
+	document := documentFromEditor("| A | B |\n| --- | --- |\n| 1 | 2 |", common.NoteDocument{})
+	if len(document.Blocks) != 1 || document.Blocks[0].Type != common.NoteBlockTable || document.Blocks[0].Table == nil {
+		t.Fatalf("typed pipe table was not promoted: %#v", document.Blocks)
+	}
+	if document.Blocks[0].Table.Rows[0][0].Text != "A" || document.Blocks[0].Table.Rows[1][1].Text != "2" {
+		t.Fatalf("typed table cells = %#v", document.Blocks[0].Table)
+	}
+}
+
+func TestReplaceNoteSegmentKeepsNeighboringTables(t *testing.T) {
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+		{ID: "p", Type: common.NoteBlockParagraph, Text: "hello"},
+		{ID: "t", Type: common.NoteBlockTable, Table: &table},
+		{ID: "q", Type: common.NoteBlockParagraph, Text: "tail"},
+	}}
+	parsed := documentFromEditor("hello world", woxcomponent.NoteSegmentDocument(document, woxcomponent.NoteDocumentSegment{Start: 0, End: 1}))
+	updated := woxcomponent.ReplaceNoteSegment(document, woxcomponent.NoteDocumentSegment{Start: 0, End: 1}, parsed.Blocks)
+	if len(updated.Blocks) != 3 || updated.Blocks[1].Type != common.NoteBlockTable || updated.Blocks[2].Text != "tail" {
+		t.Fatalf("neighboring table was disturbed: %#v", updated.Blocks)
+	}
+}
+
+func TestRemoveEmptyNoteSegmentClosesTheGapBetweenTables(t *testing.T) {
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+		{ID: "t1", Type: common.NoteBlockTable, Table: &table},
+		{ID: "gap", Type: common.NoteBlockParagraph},
+		{ID: "t2", Type: common.NoteBlockTable, Table: &table},
+		{ID: "tail", Type: common.NoteBlockParagraph},
+	}}
+	updated, ok := woxcomponent.RemoveEmptyNoteSegment(document, woxcomponent.NoteDocumentSegment{Start: 1, End: 2})
+	if !ok || len(updated.Blocks) != 3 || updated.Blocks[0].ID != "t1" || updated.Blocks[1].ID != "t2" || updated.Blocks[2].ID != "tail" {
+		t.Fatalf("removed inter-table gap = ok %t blocks %#v", ok, updated.Blocks)
+	}
+}
+
+func TestInsertNoteTableAddsEditableGrid(t *testing.T) {
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}}}
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	updated, index := woxcomponent.InsertNoteTable(document, ranges, woxui.TextSelection{})
+	if index != 0 || updated.Blocks[0].Type != common.NoteBlockTable || updated.Blocks[0].Table == nil || len(updated.Blocks[0].Table.Rows) != 2 {
+		t.Fatalf("insert table = %#v", updated.Blocks)
+	}
+	if len(updated.Blocks) < 2 || updated.Blocks[1].Type != common.NoteBlockParagraph {
+		t.Fatal("insert table should leave a paragraph after the grid")
+	}
+}
+
+func TestInsertNoteTableDoesNotForceSpacerBetweenTables(t *testing.T) {
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}}, {{Text: "1"}}}}
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+		{ID: "first", Type: common.NoteBlockTable, Table: &table},
+		{ID: "second", Type: common.NoteBlockTable, Table: &table},
+	}}
+	updated, index := woxcomponent.InsertNoteTable(document, nil, woxui.TextSelection{})
+	if index != 1 || updated.Blocks[0].Type != common.NoteBlockTable || updated.Blocks[1].Type != common.NoteBlockTable {
+		t.Fatalf("insert beside a table = index %d blocks %#v, want the new grid next to the existing one", index, updated.Blocks)
+	}
+	if len(updated.Blocks) < 3 || updated.Blocks[1].Type == common.NoteBlockParagraph {
+		t.Fatalf("insert beside a table = %#v, want no forced blank paragraph between grids", updated.Blocks)
+	}
+}
+
 func TestNotesListIndentSupportsThreeLevels(t *testing.T) {
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 		{ID: "parent", Type: common.NoteBlockTask, Text: "parent"},

@@ -595,6 +595,9 @@
   "ui_clone_row": "克隆此行",
   "ui_cancel": "取消",
   "ui_close": "关闭",
+  "ui_minimize": "最小化",
+  "ui_maximize": "最大化",
+  "ui_restore": "还原",
   "ui_all": "全部",
   "ui_saving": "保存中...",
   "ui_ok": "确定",
@@ -2738,5 +2741,11 @@
   "notes_format_task": "任务列表",
   "notes_format_quote": "引用",
   "notes_format_divider": "分隔线",
+  "notes_format_table": "表格",
+  "notes_table_insert_row": "插入行",
+  "notes_table_insert_column": "插入列",
+  "notes_table_delete_row": "删除行",
+  "notes_table_delete_column": "删除列",
+  "notes_table_delete": "删除表格",
   "notes_format_more": "更多格式"
 }

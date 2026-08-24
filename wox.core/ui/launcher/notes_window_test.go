@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -37,13 +38,32 @@ func TestClampNotesBoundsUsesLogicalMixedDPIDisplayWorkAreas(t *testing.T) {
 		{ID: "left", WorkArea: screen.Rect{X: -1280, Y: 0, Width: 1280, Height: 720}, Scale: 1.25},
 		{ID: "main", WorkArea: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}, Scale: 2, Primary: true},
 	}
-	got := clampNotesBoundsToDisplays(woxui.Rect{X: -1400, Y: 650, Width: 420, Height: 700}, displays)
-	if got.X != -1280 || got.Y != 80 || got.Width != 420 || got.Height != 640 {
+	got := clampNotesBoundsToDisplays(woxui.Rect{X: -1400, Y: 650, Width: notesDefaultWidth, Height: 700}, displays)
+	if got.X != -1280 || got.Y != 80 || got.Width != notesDefaultWidth || got.Height != 640 {
 		t.Fatalf("logical bounds were not clamped on negative-origin display: %#v", got)
 	}
-	got = clampNotesBoundsToDisplays(woxui.Rect{X: 2500, Y: -100, Width: 420, Height: 320}, displays)
-	if got.X != 1500 || got.Y != 0 {
+	got = clampNotesBoundsToDisplays(woxui.Rect{X: 2500, Y: -100, Width: notesDefaultWidth, Height: 320}, displays)
+	if got.X != 1920-notesDefaultWidth || got.Y != 0 {
 		t.Fatalf("disconnected display bounds were not recovered: %#v", got)
+	}
+}
+
+func TestClampNotesBoundsEnforcesMinimumWidth(t *testing.T) {
+	if notesMinimumWidth != 460 || notesDefaultWidth < notesMinimumWidth {
+		t.Fatalf("notes width = default %.0f min %.0f, want a 460-unit minimum", notesDefaultWidth, notesMinimumWidth)
+	}
+	got := clampNotesBoundsToDisplays(woxui.Rect{X: 40, Y: 60, Width: 320, Height: 320}, []screen.Display{
+		{ID: "main", WorkArea: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}, Scale: 1, Primary: true},
+	})
+	if got.Width != notesMinimumWidth {
+		t.Fatalf("clamped width = %.0f, want minimum %.0f", got.Width, notesMinimumWidth)
+	}
+}
+
+func TestNotesNativeMinSizeMatchesWindowFloor(t *testing.T) {
+	got := notesNativeMinSize()
+	if got.Width != notesMinimumWidth || got.Height != notesMinimumHeight {
+		t.Fatalf("native min size = %+v, want width %.0f height %.0f", got, notesMinimumWidth, notesMinimumHeight)
 	}
 }
 
@@ -172,6 +192,51 @@ func TestNotesSearchSectionIsDistinctFromRows(t *testing.T) {
 	}
 }
 
+func TestNotesDeleteColumnUndoRestoresTheColumn(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "t", Type: common.NoteBlockTable, Table: &table},
+		}},
+	})
+	controller.focusedTableBlock, controller.focusedTableRow, controller.focusedTableCol = 0, 0, 1
+	controller.tableDeleteColumn(0)
+	if got := noteTableColumnCount(*controller.document.Blocks[0].Table); got != 1 {
+		t.Fatalf("delete column = %d columns, want 1", got)
+	}
+	if !controller.onKey(woxui.KeyEvent{Key: woxui.Key("z"), Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true}) {
+		t.Fatal("Ctrl+Z should undo a table column delete after the toolbar keeps window focus")
+	}
+	restored := controller.document.Blocks[0].Table
+	if restored == nil || noteTableColumnCount(*restored) != 2 || restored.Rows[0][1].Text != "B" {
+		t.Fatalf("undone table = %#v, want both columns restored", restored)
+	}
+}
+
+func TestNotesTableActionsWorkWithoutCellFocus(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "before"},
+			{ID: "t", Type: common.NoteBlockTable, Table: &table},
+		}},
+	})
+	controller.focusedTableBlock = -1
+	controller.tableInsertRow(1)
+	if got := len(controller.document.Blocks[1].Table.Rows); got != 3 {
+		t.Fatalf("insert row without focus = %d rows, want 3", got)
+	}
+	controller.focusedTableBlock = -1
+	controller.tableDelete(1)
+	for _, block := range controller.document.Blocks {
+		if block.Type == common.NoteBlockTable {
+			t.Fatalf("delete table without focus left a table: %#v", controller.document.Blocks)
+		}
+	}
+}
+
 func TestNotesSearchHighlightsFirstResultAndMovesWithArrows(t *testing.T) {
 	app := &App{palette: defaultPalette()}
 	controller := newNotesWindowController(app, common.NoteRecord{
@@ -195,6 +260,21 @@ func TestNotesSearchHighlightsFirstResultAndMovesWithArrows(t *testing.T) {
 	}
 	if !controller.onSearchKey(woxui.KeyEvent{Key: woxui.KeyArrowUp, Down: true}) || controller.searchIndex != 0 {
 		t.Fatalf("arrow up index = %d, want 0", controller.searchIndex)
+	}
+}
+
+func TestNotesSearchUsesSharedScrollbar(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	controller.summaries = make([]common.NoteSummary, 8)
+	for index := range controller.summaries {
+		controller.summaries[index] = common.NoteSummary{ID: fmt.Sprintf("note-%d", index), Title: fmt.Sprintf("Note %d", index), UpdatedAt: int64(8 - index)}
+	}
+	props, ok := notesSearchScrollProps(controller.buildSearchOverlay(woxui.Size{Width: 420, Height: 320}, defaultPalette().componentTheme()))
+	if !ok || props.Key != "notes.search.results" || props.ContentHeight <= props.Height || props.AlwaysShowScrollbar || props.KeepVisible == nil {
+		t.Fatalf("search scroll = %#v, want overflowing fading WoxScrollView", props)
 	}
 }
 
@@ -316,8 +396,9 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	title := toolbar.Children[2]
 	alignment := title.Child.(woxwidget.Align)
 	if runtime.GOOS == "windows" {
-		if title.Left != 40 || title.Right != 220 || alignment.Horizontal != 0 {
-			t.Fatalf("Windows Notes title slot = %.0f/%.0f alignment %.1f, want left-aligned 40/220/0", title.Left, title.Right, alignment.Horizontal)
+		wantRight := woxcomponent.TitleBarChromeWidth("windows", true, true) + 174
+		if title.Left != 40 || title.Right != wantRight || alignment.Horizontal != 0 {
+			t.Fatalf("Windows Notes title slot = %.0f/%.0f alignment %.1f, want left-aligned 40/%.0f/0", title.Left, title.Right, alignment.Horizontal, wantRight)
 		}
 		icon := toolbar.Children[4]
 		iconAlignment, ok := icon.Child.(woxwidget.Align)
@@ -355,6 +436,23 @@ func collectNotesAutomationIDs(node woxwidget.Widget) map[string]bool {
 	return ids
 }
 
+func notesSearchScrollProps(node woxwidget.Widget) (woxcomponent.ScrollViewProps, bool) {
+	var found woxcomponent.ScrollViewProps
+	ok := false
+	walkNotesWidgets(node, func(widget woxwidget.Widget) {
+		stateful, isStateful := widget.(woxwidget.Stateful)
+		if !isStateful {
+			return
+		}
+		props, isScroll := stateful.Widget.(woxcomponent.ScrollViewProps)
+		if isScroll && props.Key == "notes.search.results" {
+			found = props
+			ok = true
+		}
+	})
+	return found, ok
+}
+
 func collectNotesSelectedIDs(node woxwidget.Widget) map[string]bool {
 	ids := map[string]bool{}
 	walkNotesWidgets(node, func(widget woxwidget.Widget) {
@@ -376,6 +474,8 @@ func walkNotesWidgets(widget woxwidget.Widget, visit func(woxwidget.Widget)) {
 	case woxwidget.Stateful:
 		if child, ok := typed.Widget.(woxwidget.Widget); ok {
 			walkNotesWidgets(child, visit)
+		} else if props, ok := typed.Widget.(woxcomponent.ScrollViewProps); ok {
+			walkNotesWidgets(props.Content, visit)
 		}
 	case woxwidget.Container:
 		walkNotesWidgets(typed.Child, visit)
@@ -405,7 +505,7 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 	})
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{R: 240, G: 240, B: 240, A: 255}}
 	items := controller.buildFormatBar(420, theme).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
-	if len(items) != 12 {
+	if len(items) != 13 {
 		t.Fatalf("format items = %d, want full bar", len(items))
 	}
 	first := items[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
@@ -454,6 +554,63 @@ func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
 	}
 }
 
+func TestNotesToolbarSupportsCaptionButtonsAndTitleBarDoubleClick(t *testing.T) {
+	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	toolbar := controller.buildToolbar(420, true, woxcomponent.Theme{}).(woxwidget.Container).Child.(woxwidget.Stack)
+	var drag woxwidget.Gesture
+	var chrome woxcomponent.WindowCloseChromeProps
+	for _, child := range toolbar.Children {
+		if semantics, ok := child.Child.(woxwidget.Semantics); ok && semantics.AutomationID == "notes.toolbar.drag" {
+			drag = semantics.Child.(woxwidget.Gesture)
+		}
+		if stateful, ok := child.Child.(woxwidget.Stateful); ok {
+			if props, ok := stateful.Widget.(woxcomponent.WindowCloseChromeProps); ok {
+				chrome = props
+			}
+		}
+	}
+	if drag.OnDoubleTap == nil {
+		t.Fatal("Notes title-bar drag must toggle maximize on double-click")
+	}
+	if chrome.OnMinimize == nil || chrome.OnMaximize == nil || chrome.OnClose == nil {
+		t.Fatalf("Notes caption chrome = %#v, want minimize, maximize, and close", chrome)
+	}
+}
+
+func TestNotesMaximizeBoundsUsesLogicalWorkArea(t *testing.T) {
+	displays := []screen.Display{
+		{ID: "left", WorkArea: screen.Rect{X: -1280, Y: 0, Width: 1280, Height: 720}, Scale: 1.25},
+		{ID: "main", WorkArea: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}, Scale: 2, Primary: true},
+	}
+	got := notesMaximizeBoundsToDisplays(woxui.Rect{X: -400, Y: 80, Width: 420, Height: 320}, displays)
+	if got.X != -1280 || got.Y != 0 || got.Width != 1280 || got.Height != 720 {
+		t.Fatalf("maximize bounds on negative-origin display = %#v", got)
+	}
+	got = notesMaximizeBoundsToDisplays(woxui.Rect{X: 200, Y: 80, Width: 420, Height: 320}, displays)
+	if got.X != 0 || got.Y != 0 || got.Width != 1920 || got.Height != 1040 {
+		t.Fatalf("maximize bounds on primary display = %#v", got)
+	}
+}
+
+func TestNotesWindowMaximizePersistsPerNote(t *testing.T) {
+	services := &notesWindowTestServices{local: map[string]string{}}
+	app := &App{services: services, palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	controller.windowMaximized = true
+	controller.restoreFrame = woxui.Rect{X: 40, Y: 60, Width: 420, Height: 320}
+	controller.persistMaximizePreference()
+	if services.local["windowMaximized:note"] != "1" {
+		t.Fatalf("window maximize preference = %#v", services.local)
+	}
+	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	if !reopened.readWindowMaximized() {
+		t.Fatal("reopened note lost maximized preference")
+	}
+}
+
 func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	services := &notesWindowTestServices{local: map[string]string{}}
 	app := &App{services: services, palette: defaultPalette()}
@@ -471,6 +628,21 @@ func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
 	if !reopened.windowPinned {
 		t.Fatal("reopened note lost window pin")
+	}
+}
+
+func TestNotesWindowUsesApplicationRoleForTaskbar(t *testing.T) {
+	if notesWindowRole != woxui.WindowRoleApplication {
+		t.Fatalf("notes window role = %v, want application so minimized notes stay on the taskbar", notesWindowRole)
+	}
+}
+
+func TestNotesWindowUsesNotesPluginIconOnTaskbar(t *testing.T) {
+	if notesWindowIcon() == nil {
+		t.Fatal("notes window icon failed to decode")
+	}
+	if notesWindowIcon() != notesTitleBarIcon {
+		t.Fatal("taskbar icon must use the notes plugin glyph, not the Wox app icon")
 	}
 }
 

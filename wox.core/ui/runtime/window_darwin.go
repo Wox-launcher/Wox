@@ -164,6 +164,9 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		window.handle.Delete()
 		return nil, errors.New("woxui: failed to create AppKit window or native renderer")
 	}
+	if options.MinSize.Width > 0 || options.MinSize.Height > 0 {
+		_ = C.wox_darwin_window_set_min_size(window.native, C.float(options.MinSize.Width), C.float(options.MinSize.Height))
+	}
 	if options.Topmost {
 		_ = C.wox_darwin_window_set_topmost(window.native, 1)
 	}

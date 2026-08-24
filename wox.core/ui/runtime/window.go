@@ -121,8 +121,13 @@ type WindowOptions struct {
 	Title string
 	Size  Size
 	Role  WindowRole
+	// Icon replaces the process icon on the taskbar and dock for this window.
+	Icon *Image
 	// Resizable enables native edge resizing for frameless windows.
 	Resizable bool
+	// MinSize is the smallest logical size the user can drag a resizable window to.
+	// A zero width or height leaves that axis unconstrained.
+	MinSize Size
 	// AspectRatio constrains native resizing to width/height when greater than zero.
 	AspectRatio float32
 	// Nonactivating keeps tooltips and recording chrome visible without stealing
