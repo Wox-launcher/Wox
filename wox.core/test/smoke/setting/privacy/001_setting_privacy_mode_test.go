@@ -36,7 +36,7 @@ func Test001SettingPrivacyMode(t *testing.T) {
 	if err != nil || phase < 1 || phase > 4 {
 		t.Fatalf("invalid privacy lifecycle phase %q", os.Getenv(automationdriver.SharedLifecyclePhaseEnvironment))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), smoke.CaseTimeout)
 	defer cancel()
 	client := smoke.SharedClient(t, ctx)
 	if err := client.Reset(ctx); err != nil {

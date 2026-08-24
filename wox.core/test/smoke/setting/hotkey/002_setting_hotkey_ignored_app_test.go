@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
@@ -83,7 +82,7 @@ func openIgnoredHotkeyApps(t *testing.T, ctx context.Context, client *automation
 // removeIgnoredHotkeyApp removes the row added by this case and waits for persistence to finish.
 func removeIgnoredHotkeyApp(t *testing.T, client *automationdriver.Client, rowIndex int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
 		t.Errorf("hide active window before removing ignored hotkey app: %v", err)

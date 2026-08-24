@@ -145,6 +145,7 @@ const (
 	windowCommandHideNativeFilePreview
 	windowCommandTrimRenderer
 	windowCommandRestoreForeground
+	windowCommandConfirmActivation
 	windowCommandClose
 )
 
@@ -202,6 +203,7 @@ type platformWindow struct {
 	renderer                    *nativeRenderer
 	rendererTrimTimer           *time.Timer
 	foregroundRestoreTimers     [2]*time.Timer
+	activationConfirmTimers     [2]*time.Timer
 	webView                     *webviewruntime.Controller
 	nativeFilePreview           *windowsFilePreview
 	nativeFilePreviewGeneration uint64
@@ -1797,6 +1799,9 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		}
 		activateWindow(command.restoreForeground)
 		return windowCommandResult{}
+	case windowCommandConfirmActivation:
+		w.confirmActivation()
+		return windowCommandResult{}
 	case windowCommandClose:
 		w.hideNative()
 		win.DestroyWindow(w.hwnd)
@@ -1985,6 +1990,7 @@ func monitorScale(monitor win.HMONITOR) float32 {
 // showNative combines renderer restoration, show, foreground activation, and keyboard focus into one epoch.
 func (w *platformWindow) showNative() (FocusEpoch, error) {
 	w.stopForegroundRestoreTimers()
+	w.stopActivationConfirmTimers()
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil
@@ -2033,13 +2039,19 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 		win.ShowWindow(w.hwnd, win.SW_SHOWNOACTIVATE)
 	} else {
 		win.ShowWindow(w.hwnd, showCommand)
-		activateWindow(w.hwnd)
+		if activateWindow(w.hwnd) {
+			w.confirmActivation()
+		}
 	}
 	if w.options.Topmost {
 		win.SetWindowPos(w.hwnd, win.HWND_TOP, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE)
 	}
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		w.confirmActivation()
+	} else if !w.options.Nonactivating {
+		// Re-Show of an already visible launcher after Settings close often skips
+		// WM_ACTIVATE, and GetForegroundWindow can still name the dying HWND.
+		w.scheduleActivationConfirm()
 	}
 	w.synchronizeBackdropAfterShow()
 	win.InvalidateRect(w.hwnd, nil, false)
@@ -2070,6 +2082,7 @@ func (w *platformWindow) hideNative() {
 	shouldRestore := w.focus.restorePreviousOnHide && w.isWithinFocusDomain(win.GetForegroundWindow())
 	previous := w.focus.previousForeground
 	w.stopForegroundRestoreTimers()
+	w.stopActivationConfirmTimers()
 	w.focus.visible = false
 	w.focus.activationConfirmed = false
 	w.focus.restorePreviousOnHide = false
@@ -2098,6 +2111,27 @@ func (w *platformWindow) stopForegroundRestoreTimers() {
 			timer.Stop()
 			w.foregroundRestoreTimers[index] = nil
 		}
+	}
+}
+
+// stopActivationConfirmTimers cancels a previous show's deferred focus confirmation.
+func (w *platformWindow) stopActivationConfirmTimers() {
+	for index, timer := range w.activationConfirmTimers {
+		if timer != nil {
+			timer.Stop()
+			w.activationConfirmTimers[index] = nil
+		}
+	}
+}
+
+// scheduleActivationConfirm retries native focus confirmation after a show that skipped WM_ACTIVATE.
+func (w *platformWindow) scheduleActivationConfirm() {
+	w.stopActivationConfirmTimers()
+	delays := [...]time.Duration{windowsForegroundRestoreDelay1, windowsForegroundRestoreDelay2}
+	for index, delay := range delays {
+		w.activationConfirmTimers[index] = time.AfterFunc(delay, func() {
+			_ = w.call(windowCommand{kind: windowCommandConfirmActivation})
+		})
 	}
 }
 
@@ -2188,14 +2222,16 @@ func activateWindow(hwnd win.HWND) bool {
 		return true
 	}
 
+	// Attach to the current foreground thread. Attaching to hwnd's own thread is a
+	// no-op when this runs on the window thread after Settings close or a smoke Show.
 	currentThread := win.GetCurrentThreadId()
-	targetThread := win.GetWindowThreadProcessId(hwnd, nil)
-	attached := targetThread != 0 && targetThread != currentThread && win.AttachThreadInput(int32(targetThread), int32(currentThread), true)
+	foregroundThread := win.GetWindowThreadProcessId(win.GetForegroundWindow(), nil)
+	attached := foregroundThread != 0 && foregroundThread != currentThread && win.AttachThreadInput(int32(foregroundThread), int32(currentThread), true)
 	win.SetForegroundWindow(hwnd)
 	win.SetFocus(hwnd)
 	win.BringWindowToTop(hwnd)
 	if attached {
-		win.AttachThreadInput(int32(targetThread), int32(currentThread), false)
+		win.AttachThreadInput(int32(foregroundThread), int32(currentThread), false)
 	}
 	if normalizeRootWindow(win.GetForegroundWindow()) == normalizeRootWindow(hwnd) {
 		return true

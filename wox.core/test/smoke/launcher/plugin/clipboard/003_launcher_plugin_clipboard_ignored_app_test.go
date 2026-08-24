@@ -105,7 +105,7 @@ func openClipboardIgnoredApplications(t *testing.T, ctx context.Context, client 
 // removeIgnoredClipboardApp removes the row created by this case through the real Settings UI.
 func removeIgnoredClipboardApp(t *testing.T, client *automationdriver.Client, rowIndex int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
 		t.Errorf("hide active window before removing ignored Clipboard app: %v", err)

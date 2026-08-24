@@ -99,7 +99,7 @@ func deleteTimer(t *testing.T, ctx context.Context, client *automationdriver.Cli
 func cleanupTimer(t *testing.T, client *automationdriver.Client, note string) {
 	t.Helper()
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 		defer cancel()
 		if err := client.FocusInstance(ctx, "primary"); err != nil {
 			t.Errorf("focus primary Launcher during Timer cleanup: %v", err)

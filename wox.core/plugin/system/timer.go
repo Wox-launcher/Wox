@@ -458,10 +458,12 @@ func (t *TimerPlugin) resumeTimer(ctx context.Context, id string) {
 }
 
 func (t *TimerPlugin) deleteTimer(ctx context.Context, id string) {
-	t.closeOverlay(id)
+	// Drop the timer before closing the HUD so a concurrent tick cannot recreate
+	// the overlay after Close returns and before the map entry is removed.
 	t.mu.Lock()
 	delete(t.timers, id)
 	t.mu.Unlock()
+	t.closeOverlay(id)
 	t.saveTimers(ctx)
 	t.logInfo(ctx, fmt.Sprintf("timer deleted: id=%s", id))
 }
@@ -537,10 +539,16 @@ func (t *TimerPlugin) showOverlay(ctx context.Context, timerID string, preserveP
 		Closable:  true,
 	})
 
+	// Show can recreate a window that a concurrent delete already closed. If the
+	// timer is gone or unpinned now, drop the HUD instead of leaving it orphaned.
 	t.mu.Lock()
-	if current, ok := t.timers[timerID]; ok && current.OverlayVisible {
-		current.OverlayPlaced = true
+	current, ok := t.timers[timerID]
+	if !ok || !current.OverlayVisible {
+		t.mu.Unlock()
+		t.closeOverlay(timerID)
+		return
 	}
+	current.OverlayPlaced = true
 	t.mu.Unlock()
 }
 
@@ -596,10 +604,10 @@ func (t *TimerPlugin) collectFinished(ctx context.Context) []*timerEntry {
 }
 
 func (t *TimerPlugin) finishTimer(ctx context.Context, entry *timerEntry) {
-	t.closeOverlay(entry.ID)
 	t.mu.Lock()
 	delete(t.timers, entry.ID)
 	t.mu.Unlock()
+	t.closeOverlay(entry.ID)
 	t.saveTimers(ctx)
 	t.notifyTimerFinished(ctx, entry)
 }

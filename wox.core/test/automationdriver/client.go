@@ -44,6 +44,17 @@ const (
 	SharedLifecycleStateEnvironment = "WOX_GO_UI_SMOKE_LIFECYCLE_STATE"
 )
 
+// ActionTimeout is the longest one smoke wait may block. A longer hang is a product bug.
+const ActionTimeout = 10 * time.Second
+
+// withActionTimeout caps one wait so a stuck predicate fails in 10s instead of the case budget.
+func withActionTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if deadline, ok := ctx.Deadline(); ok && !deadline.After(time.Now().Add(ActionTimeout)) {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, ActionTimeout)
+}
+
 type request struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      uint64 `json:"id"`
@@ -75,7 +86,7 @@ func NewClient(info automation.Info) (*Client, error) {
 	return &Client{
 		address:   strings.TrimRight(info.Address, "/"),
 		token:     info.Token,
-		http:      &http.Client{Timeout: 35 * time.Second},
+		http:      &http.Client{Timeout: ActionTimeout + time.Second},
 		stepDelay: stepDelay,
 	}, nil
 }
@@ -165,13 +176,13 @@ func (c *Client) InstallPerfFixture(ctx context.Context, name string) error {
 // WaitForChange waits for a generation newer than afterGeneration.
 func (c *Client) WaitForChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error) {
 	deadline, hasDeadline := ctx.Deadline()
-	timeoutMS := 5000
+	timeoutMS := int(ActionTimeout.Milliseconds())
 	if hasDeadline {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return woxwidget.AutomationSnapshot{}, context.DeadlineExceeded
 		}
-		timeoutMS = min(30000, max(1, int(remaining.Milliseconds())))
+		timeoutMS = min(timeoutMS, max(1, int(remaining.Milliseconds())))
 	}
 	return call[woxwidget.AutomationSnapshot](ctx, c, "semantics.wait", map[string]any{
 		"afterGeneration": afterGeneration,
@@ -181,6 +192,8 @@ func (c *Client) WaitForChange(ctx context.Context, afterGeneration uint64) (wox
 
 // WaitFor polls only after a published generation change until predicate succeeds.
 func (c *Client) WaitFor(ctx context.Context, predicate func(woxwidget.AutomationSnapshot) bool) (woxwidget.AutomationSnapshot, error) {
+	ctx, cancel := withActionTimeout(ctx)
+	defer cancel()
 	snapshot, err := c.Snapshot(ctx)
 	if err != nil {
 		return woxwidget.AutomationSnapshot{}, err
@@ -345,6 +358,8 @@ func (c *Client) WindowState(ctx context.Context, instanceName string) (automati
 
 // WaitForWindowState polls real managed-window state until predicate accepts it.
 func (c *Client) WaitForWindowState(ctx context.Context, instanceName string, predicate func(automation.WindowState) bool) (automation.WindowState, error) {
+	ctx, cancel := withActionTimeout(ctx)
+	defer cancel()
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	var last automation.WindowState
@@ -383,6 +398,8 @@ func (c *Client) Capture(ctx context.Context, path string) error {
 }
 
 func call[T any](ctx context.Context, client *Client, method string, params any) (T, error) {
+	ctx, cancel := withActionTimeout(ctx)
+	defer cancel()
 	var result T
 	payload, err := json.Marshal(request{JSONRPC: "2.0", ID: client.nextID.Add(1), Method: method, Params: params})
 	if err != nil {

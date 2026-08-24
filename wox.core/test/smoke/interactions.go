@@ -135,7 +135,7 @@ func RestoreGeneralSettingChoice(t *testing.T, client *automationdriver.Client, 
 // RestoreSettingChoice restores one shared Settings choice through its owning section.
 func RestoreSettingChoice(t *testing.T, client *automationdriver.Client, path, settingKey, previousValue string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
 		t.Errorf("hide active window before restoring setting %q: %v", settingKey, err)
@@ -156,7 +156,7 @@ func RestoreGeneralSettingSwitch(t *testing.T, client *automationdriver.Client, 
 // RestoreSettingSwitch restores one shared Settings switch through its owning section.
 func RestoreSettingSwitch(t *testing.T, client *automationdriver.Client, path, settingKey string, previousValue bool) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
 		t.Errorf("hide active window before restoring switch %q: %v", settingKey, err)

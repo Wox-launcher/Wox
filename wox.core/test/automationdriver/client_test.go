@@ -125,6 +125,82 @@ func TestWaitForReturnsLastSnapshotWhenWaitingFails(t *testing.T) {
 	}
 }
 
+func TestWithActionTimeoutCapsLongDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	limited, stop := withActionTimeout(ctx)
+	defer stop()
+	deadline, ok := limited.Deadline()
+	if !ok {
+		t.Fatal("action timeout must set a deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining > ActionTimeout || remaining < ActionTimeout-time.Second {
+		t.Fatalf("action timeout remaining = %s, want about %s", remaining, ActionTimeout)
+	}
+}
+
+func TestWithActionTimeoutKeepsShorterDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	limited, stop := withActionTimeout(ctx)
+	defer stop()
+	want, ok := ctx.Deadline()
+	got, limitedOK := limited.Deadline()
+	if !ok || !limitedOK || !got.Equal(want) {
+		t.Fatalf("shorter deadline was replaced: parent %v limited %v", want, got)
+	}
+}
+
+func TestWaitForChangeCapsTimeoutAtActionTimeout(t *testing.T) {
+	t.Parallel()
+
+	var timeoutMS int
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				TimeoutMS int `json:"timeoutMs"`
+			} `json:"params"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if requestPayload.Method != "semantics.wait" {
+			t.Fatalf("unexpected method %q", requestPayload.Method)
+		}
+		timeoutMS = requestPayload.Params.TimeoutMS
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      requestPayload.ID,
+			"result":  map[string]any{"Tree": map[string]any{"Generation": 2}},
+		})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	if _, err := client.WaitForChange(ctx, 1); err != nil {
+		t.Fatalf("wait for change: %v", err)
+	}
+	if timeoutMS != int(ActionTimeout.Milliseconds()) {
+		t.Fatalf("timeoutMs = %d, want %d", timeoutMS, ActionTimeout.Milliseconds())
+	}
+}
+
 func TestPressKeyHandledReturnsServerResult(t *testing.T) {
 	t.Parallel()
 

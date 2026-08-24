@@ -68,7 +68,7 @@ func Test001LauncherPluginClipboardHistory(t *testing.T) {
 // waitForClipboardResult retries completed queries until the asynchronous clipboard watcher has persisted the marker.
 func waitForClipboardResult(t *testing.T, ctx context.Context, client *automationdriver.Client, marker string) woxwidget.AutomationSnapshot {
 	t.Helper()
-	waitCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, automationdriver.ActionTimeout)
 	defer cancel()
 	queries := []string{"cb " + marker, "cb " + marker + " "}
 	for attempt := 0; ; attempt++ {

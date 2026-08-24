@@ -145,7 +145,7 @@ func waitForFileSearchRootRow(t *testing.T, ctx context.Context, client *automat
 // removeFileSearchRoot restores the plugin setting and waits until the index drops the root.
 func removeFileSearchRoot(t *testing.T, client *automationdriver.Client, root string, rowIndex int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), fileSearchInitialIndexTimeout)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
 		t.Errorf("hide active window before removing File Search root: %v", err)

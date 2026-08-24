@@ -5,7 +5,6 @@ package hotkey
 import (
 	"context"
 	"testing"
-	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
@@ -112,7 +111,7 @@ func stopMainHotkeyRecording(t *testing.T, ctx context.Context, client *automati
 
 func restoreMainHotkey(t *testing.T, client *automationdriver.Client, previous string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
 		t.Errorf("hide active window before restoring main hotkey: %v", err)

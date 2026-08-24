@@ -11,19 +11,27 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// CaseTimeout is the budget for one smoke case body. Individual waits still cap at ActionTimeout.
+const CaseTimeout = 30 * time.Second
+
 // Case runs one smoke case between mandatory resets of the shared Wox process.
 func Case(t *testing.T, run func(context.Context, *automationdriver.Client)) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	t.Cleanup(cancel)
-	client := sharedClient(t, ctx)
-	if err := client.Reset(ctx); err != nil {
+	connectCtx, connectCancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
+	client := sharedClient(t, connectCtx)
+	connectCancel()
+	resetCtx, resetCancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
+	err := client.Reset(resetCtx)
+	resetCancel()
+	if err != nil {
 		t.Fatalf("reset shared Wox before case: %v", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), CaseTimeout)
+	t.Cleanup(cancel)
 	t.Cleanup(func() {
-		resetCtx, resetCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer resetCancel()
-		if err := client.Reset(resetCtx); err != nil {
+		afterCtx, afterCancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
+		defer afterCancel()
+		if err := client.Reset(afterCtx); err != nil {
 			t.Errorf("reset shared Wox after case: %v", err)
 		}
 	})

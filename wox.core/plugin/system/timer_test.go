@@ -137,6 +137,33 @@ func TestTimerListSortedByRemaining(t *testing.T) {
 	}
 }
 
+// TestDeleteTimerStopsStaleOverlayRefresh keeps a tick that already copied overlay IDs from recreating a deleted timer.
+func TestDeleteTimerStopsStaleOverlayRefresh(t *testing.T) {
+	timer := &TimerPlugin{timers: map[string]*timerEntry{
+		"t1": {ID: "t1", DurationLabel: "2m", Note: "tea", OverlayVisible: true, OverlayPlaced: true, Deadline: time.Now().Add(2 * time.Minute)},
+	}}
+
+	timer.mu.Lock()
+	staleIDs := make([]string, 0, len(timer.timers))
+	for id, entry := range timer.timers {
+		if entry.OverlayVisible {
+			staleIDs = append(staleIDs, id)
+		}
+	}
+	timer.mu.Unlock()
+
+	timer.deleteTimer(context.Background(), "t1")
+	for _, id := range staleIDs {
+		if entry := timer.getTimer(id); entry != nil && entry.OverlayVisible {
+			t.Fatalf("deleted timer %s is still refreshable", id)
+		}
+		timer.showOverlay(context.Background(), id, true)
+	}
+	if timer.getTimer("t1") != nil {
+		t.Fatal("deleted timer should not remain after a stale overlay refresh")
+	}
+}
+
 func TestTimerUpdateNote(t *testing.T) {
 	plugin := &TimerPlugin{timers: make(map[string]*timerEntry)}
 	plugin.timers["t1"] = &timerEntry{ID: "t1", DurationLabel: "1m", Note: "old"}
