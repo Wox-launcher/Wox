@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -23,6 +24,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/samber/lo"
 )
+
+const pluginDownloadTimeout = 2 * time.Minute
 
 type storeManifest struct {
 	Name string
@@ -480,7 +483,7 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 	pluginZipPath := path.Join(pluginDirectory, "plugin.zip")
 
 	// Download with progress tracking
-	downloadErr := util.HttpDownloadWithProgress(ctx, manifest.DownloadUrl, pluginZipPath, func(downloaded int64, total int64) {
+	downloadErr := downloadPluginFile(ctx, manifest.DownloadUrl, pluginZipPath, pluginDownloadTimeout, func(downloaded int64, total int64) {
 		if progressCallback != nil {
 			if total > 0 {
 				percentage := float64(downloaded) / float64(total) * 100
@@ -493,10 +496,6 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 	})
 	if downloadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, downloadErr.Error()))
-		removeErr := os.Remove(pluginZipPath)
-		if removeErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
-		}
 		return fmt.Errorf("failed to download plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, downloadErr.Error())
 	}
 
@@ -686,7 +685,7 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_starting_download"))
 	}
 
-	downloadErr := util.HttpDownloadWithProgress(ctx, manifest.DownloadUrl, newScriptPath, func(downloaded int64, total int64) {
+	downloadErr := downloadPluginFile(ctx, manifest.DownloadUrl, newScriptPath, pluginDownloadTimeout, func(downloaded int64, total int64) {
 		if progressCallback != nil {
 			if total > 0 {
 				percentage := float64(downloaded) / float64(total) * 100
@@ -760,6 +759,23 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 
 	logger.Info(ctx, fmt.Sprintf("script plugin %s(%s) installed", metadata.GetName(ctx), metadata.Version))
 	return nil
+}
+
+// downloadPluginFile bounds store downloads so a stalled network request cannot block plugin operations indefinitely.
+func downloadPluginFile(ctx context.Context, downloadURL string, dest string, timeout time.Duration, progressCallback func(downloaded int64, total int64)) error {
+	downloadCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	err := util.HttpDownloadWithProgress(downloadCtx, downloadURL, dest, progressCallback)
+	if err != nil {
+		if removeErr := os.Remove(dest); removeErr != nil && !os.IsNotExist(removeErr) {
+			logger.Warn(ctx, fmt.Sprintf("failed to remove incomplete plugin download %s: %s", dest, removeErr.Error()))
+		}
+	}
+	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+		return fmt.Errorf("plugin download timed out after %s: %w", timeout, err)
+	}
+	return err
 }
 
 func (s *Store) ParsePluginManifestFromLocal(ctx context.Context, filePath string) (Metadata, error) {
