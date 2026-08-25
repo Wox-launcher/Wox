@@ -1519,6 +1519,8 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 	openPluginSettingActionStart := time.Now()
 	openPluginSettingAction := m.newOpenPluginSettingAction(ctx, pluginInstance)
 	openPluginSettingActionUs := time.Since(openPluginSettingActionStart).Microseconds()
+	// Default and plugin actions often repeat the same icons across every result.
+	actionIconCache := make(map[common.WoxImage]common.WoxImage)
 	for i := range response.Results {
 		resultStart := util.GetSystemTimestamp()
 		resultTimingStart := time.Now()
@@ -1533,7 +1535,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		polishStart := util.GetSystemTimestamp()
 		polishTimingStart := time.Now()
 		var polishTiming timetracking.ResultPolishTiming
-		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming)
+		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming, actionIconCache)
 		polishCost := util.GetSystemTimestamp() - polishStart
 		polishCostUs := time.Since(polishTimingStart).Microseconds()
 		totalPolishCost += polishCost
@@ -2246,7 +2248,7 @@ func (m *Manager) getCachedLayoutForPluginQuery(ctx context.Context, pluginInsta
 }
 
 // RecordQueryResultQueryElapsed stores backend receive and batch queue timings for debug tails.
-func (m *Manager) RecordQueryResultQueryElapsed(sessionId string, queryId string, results []QueryResultUI, elapsedMs int64, batchQueueElapsedMs int64) {
+func (m *Manager) RecordQueryResultQueryElapsed(sessionId string, queryId string, results []QueryResultUI, elapsedMs int64, batchQueueElapsedMs float64) {
 	if sessionId == "" || queryId == "" || len(results) == 0 {
 		return
 	}
@@ -2322,7 +2324,7 @@ func (m *Manager) RecordQueryResultFlushBatch(sessionId string, queryId string, 
 	}
 }
 
-func (m *Manager) GetQueryResultDebugInfo(sessionId string, queryId string, resultId string) (batch int, queryElapsed int64, batchQueueElapsed int64, batchQueueElapsedSet bool, pluginQueryElapsed int64, pluginQueryElapsedSet bool, ok bool) {
+func (m *Manager) GetQueryResultDebugInfo(sessionId string, queryId string, resultId string) (batch int, queryElapsed int64, batchQueueElapsed float64, batchQueueElapsedSet bool, pluginQueryElapsed int64, pluginQueryElapsedSet bool, ok bool) {
 	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
 	if !found {
 		return 0, 0, 0, false, 0, false, false
@@ -2645,12 +2647,12 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 }
 
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult) QueryResult {
-	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false)
+	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false, nil)
 	m.logPolishResultTiming(ctx, query, queryDiagnosticPluginLabel(pluginInstance), result, timing)
 	return result
 }
 
-func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool) (QueryResult, timetracking.ResultPolishTiming) {
+func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool, actionIconCache map[common.WoxImage]common.WoxImage) (QueryResult, timetracking.ResultPolishTiming) {
 	polishStart := util.GetSystemTimestamp()
 	polishTimingStart := time.Now()
 	var IconConversion timetracking.IconConversionTimingSummary
@@ -2690,13 +2692,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	ActionDefaultsCostUs := time.Since(actionDefaultsTimingStart).Microseconds()
 	actionIconStart := util.GetSystemTimestamp()
 	actionIconTimingStart := time.Now()
-	ActionIconCount := 0
-	for actionIndex := range result.Actions {
-		if !result.Actions[actionIndex].Icon.IsEmpty() {
-			ActionIconCount++
-			result.Actions[actionIndex].Icon = common.ConvertIcon(ctx, result.Actions[actionIndex].Icon, pluginInstance.PluginDirectory)
-		}
-	}
+	ActionIconCount := convertActionIcons(ctx, result.Actions, pluginInstance.PluginDirectory, actionIconCache)
 	ActionIconCost := util.GetSystemTimestamp() - actionIconStart
 	ActionIconCostUs := time.Since(actionIconTimingStart).Microseconds()
 	actionCallbackStart := util.GetSystemTimestamp()
@@ -3060,6 +3056,28 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 		CacheCostUs:                  CacheCostUs,
 		PreviewDataLen:               len(originalPreview.PreviewData),
 	}
+}
+
+// convertActionIcons normalizes each distinct source once within a plugin response.
+func convertActionIcons(ctx context.Context, actions []QueryResultAction, pluginDirectory string, cache map[common.WoxImage]common.WoxImage) int {
+	convertedCount := 0
+	for index := range actions {
+		source := actions[index].Icon
+		if source.IsEmpty() {
+			continue
+		}
+		if converted, found := cache[source]; found {
+			actions[index].Icon = converted
+			continue
+		}
+		converted := common.ConvertIcon(ctx, source, pluginDirectory)
+		actions[index].Icon = converted
+		convertedCount++
+		if cache != nil {
+			cache[source] = converted
+		}
+	}
+	return convertedCount
 }
 
 // logPolishResultTiming preserves the existing slow-result diagnostic for paths that are not already aggregated by query finalize.
@@ -3953,7 +3971,7 @@ func (m *Manager) updatePluginResultDeliveryLatency(pluginId string, costMs floa
 func (m *Manager) getQueryFirstFlushDeadlineMs(jobs []queryPluginJob, planElapsedMs int64) int64 {
 	const minDeadlineMs int64 = 12
 	const maxDeadlineMs int64 = 20
-	const deliveryGuardMs int64 = 2
+	const deliveryGuardMs int64 = 4
 
 	var maxDeliveryMs float64
 	hasDeliveryHistory := false

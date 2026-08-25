@@ -126,6 +126,23 @@ func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 	assert.Equal(t, pluginIcon, normalized.Icon)
 }
 
+func TestConvertActionIconsReusesConvertedSource(t *testing.T) {
+	icon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>`)
+	cache := make(map[common.WoxImage]common.WoxImage)
+	first := []QueryResultAction{{Icon: icon}, {Icon: icon}}
+	second := []QueryResultAction{{Icon: icon}}
+
+	if converted := convertActionIcons(context.Background(), first, "", cache); converted != 1 {
+		t.Fatalf("first conversion count = %d, want 1", converted)
+	}
+	if converted := convertActionIcons(context.Background(), second, "", cache); converted != 0 {
+		t.Fatalf("reused conversion count = %d, want 0", converted)
+	}
+	if first[0].Icon != icon || first[1].Icon != icon || second[0].Icon != icon {
+		t.Fatal("reused action icon changed converted value")
+	}
+}
+
 func TestConvertResultIconDefersRemoteURLWithoutRequest(t *testing.T) {
 	initPluginImageTestLocation(t)
 	requestCount := 0

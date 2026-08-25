@@ -507,8 +507,8 @@ type QueryResultCache struct {
 	Layout         QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
 	// FlushBatch is the debouncer batch that first sent this result in a visible response.
 	FlushBatch int
-	// BatchQueueElapsed is the elapsed time when queryRun put this result into the debouncer queue.
-	BatchQueueElapsed    int64
+	// BatchQueueElapsed is the elapsed time when queryRun made this result ready for the debouncer queue.
+	BatchQueueElapsed    float64
 	BatchQueueElapsedSet bool
 	// QueryElapsed is the elapsed time when queryRun received the plugin response, measured from the end-to-end query start.
 	QueryElapsed    int64

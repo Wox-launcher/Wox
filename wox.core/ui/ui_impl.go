@@ -567,7 +567,7 @@ func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instan
 	return fmt.Sprintf("%s(%s)", name, pluginInstance.Metadata.Id)
 }
 
-func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs int64, backendPreparedElapsedMs int64) []plugin.QueryResultUI {
+func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs float64, backendPreparedElapsedMs int64) []plugin.QueryResultUI {
 	if len(snapshot) == 0 {
 		return snapshot
 	}
@@ -594,9 +594,9 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 		if batch, _, batchQueueElapsed, batchQueueElapsedSet, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
 			if showBatchTail {
 				batchTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("B%d", batch), queryDebugBatchTailTextCategory(batch))
-				batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
+				batchTail.Tooltip = fmt.Sprintf("First batch flush tick: %.1fms", firstVisibleFlushElapsedMs)
 				if batchQueueElapsedSet {
-					batchTail.Tooltip = fmt.Sprintf("First flush: %dms\nQueued for batch: %dms", firstVisibleFlushElapsedMs, batchQueueElapsed)
+					batchTail.Tooltip = fmt.Sprintf("First batch flush tick: %.1fms\nReady for batch: %.1fms", firstVisibleFlushElapsedMs, batchQueueElapsed)
 				}
 				resultCopy.Tails = append(resultCopy.Tails, batchTail)
 			}

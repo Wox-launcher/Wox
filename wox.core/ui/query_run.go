@@ -34,10 +34,12 @@ type queryRun struct {
 	// startTimestamp records the end-to-end query start time for elapsed metrics and debug tails.
 	// Prefer the UI request send timestamp; fall back to backend start for non-UI callers.
 	startTimestamp int64
+	// startTime is the monotonic equivalent used by sub-millisecond debug timings.
+	startTime time.Time
 	// firstFlushDeadlineMs is the end-to-end deadline for the first visible snapshot.
 	firstFlushDeadlineMs int64
 	// firstVisibleFlushElapsedMs records when the first non-empty snapshot is sent.
-	firstVisibleFlushElapsedMs int64
+	firstVisibleFlushElapsedMs float64
 	// resultFlushBatch tracks the visible snapshot batch number shown in dev performance tails.
 	resultFlushBatch int
 	// totalResultCount counts all accepted results for fallback decisions and completion logging.
@@ -75,11 +77,13 @@ func newQueryRun(ctx context.Context, request contract.QueryRequest, view contra
 }
 
 func (r *queryRun) start() {
-	backendStartTimestamp := util.GetSystemTimestamp()
+	backendStartTime := time.Now()
+	backendStartTimestamp := backendStartTime.UnixMilli()
 	r.startTimestamp = r.request.SentTimestamp
 	if r.startTimestamp <= 0 {
 		r.startTimestamp = backendStartTimestamp
 	}
+	r.startTime = backendStartTime.Add(time.Duration(r.startTimestamp-backendStartTimestamp) * time.Millisecond)
 
 	managerQueryStart := util.GetSystemTimestamp()
 	if tracker := timetracking.New("manager_query_call"); tracker.Enabled() {
@@ -203,14 +207,15 @@ func (r *queryRun) addResponse(response plugin.QueryResponseUI) {
 		response.Results[index].QueryId = r.queryId
 	}
 	r.recordAcceptedResultIds(response.Results)
-	addStart := util.GetSystemTimestamp()
-	batchQueueElapsed := addStart - r.startTimestamp
+	addStartedAt := time.Now()
+	addStart := addStartedAt.UnixMilli()
+	batchQueueElapsed := r.elapsedMs(addStartedAt)
 	recordStart := util.GetSystemTimestamp()
 	plugin.GetPluginManager().RecordQueryResultQueryElapsed(r.sessionId, r.queryId, response.Results, receivedElapsed, batchQueueElapsed)
 	if tracker := timetracking.New("record_query_elapsed"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetInt("resultCount", len(response.Results))
-		tracker.SetInt64("batchQueueElapsedMs", batchQueueElapsed)
+		tracker.SetInt64("batchQueueElapsedUs", int64(batchQueueElapsed*1000))
 		tracker.SetInt64("costMs", util.GetSystemTimestamp()-recordStart)
 		tracker.Log(r.ctx)
 	}
@@ -240,6 +245,10 @@ func (r *queryRun) recordAcceptedResultIds(results []plugin.QueryResultUI) {
 		r.acceptedResultIdSet[result.Id] = struct{}{}
 		r.acceptedResultIds = append(r.acceptedResultIds, result.Id)
 	}
+}
+
+func (r *queryRun) elapsedMs(at time.Time) float64 {
+	return float64(at.Sub(r.startTime)) / float64(time.Millisecond)
 }
 
 // acceptedResultSnapshotIds returns a stable copy for concurrent debounced flushes.
@@ -305,7 +314,8 @@ func (r *queryRun) showFallbackResults() {
 }
 
 func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
-	flushStart := util.GetSystemTimestamp()
+	flushStartedAt := time.Now()
+	flushStart := flushStartedAt.UnixMilli()
 	isFinal := reason == "done"
 	if !isFinal && len(results) == 0 {
 		return
@@ -324,7 +334,7 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 	}
 	if len(results) > 0 {
 		if r.resultFlushBatch == 0 {
-			r.firstVisibleFlushElapsedMs = util.GetSystemTimestamp() - r.startTimestamp
+			r.firstVisibleFlushElapsedMs = r.elapsedMs(flushStartedAt)
 		}
 		r.resultFlushBatch++
 		recordBatchStart := util.GetSystemTimestamp()
@@ -333,7 +343,7 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 			tracker.SetRawString("queryId", r.queryId)
 			tracker.SetInt("batch", r.resultFlushBatch)
 			tracker.SetInt("resultCount", len(results))
-			tracker.SetInt64("firstVisibleFlushElapsedMs", r.firstVisibleFlushElapsedMs)
+			tracker.SetInt64("firstVisibleFlushElapsedUs", int64(r.firstVisibleFlushElapsedMs*1000))
 			tracker.SetInt64("costMs", util.GetSystemTimestamp()-recordBatchStart)
 			tracker.Log(r.ctx)
 		}

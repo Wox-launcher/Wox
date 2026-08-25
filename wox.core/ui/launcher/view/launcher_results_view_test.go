@@ -294,7 +294,7 @@ func TestLauncherResultTailHoverUsesTooltipAndKeepsRowActions(t *testing.T) {
 		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
 		Items: []LauncherResultItem{{
 			ID: "perf", Title: "Result", TailWidth: 160, TailHeight: 22,
-			Tails:     []LauncherResultTail{{Text: "B1", Width: 40, Height: 22, Tooltip: "First flush: 5ms"}, {Text: "1ms", Width: 40, Height: 22}},
+			Tails:     []LauncherResultTail{{Text: "B1", Width: 40, Height: 22, Tooltip: "First batch flush tick: 5.0ms"}, {Text: "1ms", Width: 40, Height: 22}},
 			OnSelect:  func() { tapped = true },
 			OnTooltip: func(inside bool, text string, bounds woxui.Rect) { hovered, tooltip, anchor = inside, text, bounds },
 		}},
@@ -305,12 +305,12 @@ func TestLauncherResultTailHoverUsesTooltipAndKeepsRowActions(t *testing.T) {
 	aligned := tailBoundary.Build(tailBoundary.Props).(woxwidget.Align)
 	rowFlex := aligned.Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	batch := rowFlex.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Semantics)
-	if batch.AutomationID != "result-tail-perf-0" || batch.Label != "B1" || batch.Description != "First flush: 5ms" {
+	if batch.AutomationID != "result-tail-perf-0" || batch.Label != "B1" || batch.Description != "First batch flush tick: 5.0ms" {
 		t.Fatalf("batch tail semantics = %+v, want a hoverable performance tooltip target", batch)
 	}
 	wantAnchor := woxui.Rect{X: 4, Y: 6, Width: 40, Height: 22}
 	batch.Child.(woxwidget.Gesture).OnHoverAt(true, wantAnchor)
-	if !hovered || tooltip != "First flush: 5ms" || anchor != wantAnchor {
+	if !hovered || tooltip != "First batch flush tick: 5.0ms" || anchor != wantAnchor {
 		t.Fatalf("hover = %v, %q, %#v; want tooltip and anchor", hovered, tooltip, anchor)
 	}
 	batch.Child.(woxwidget.Gesture).OnTap()

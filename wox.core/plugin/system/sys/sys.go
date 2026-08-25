@@ -8,6 +8,7 @@ import (
 	"path"
 	"runtime/pprof"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,8 @@ import (
 )
 
 var sysIcon = common.PluginSysIcon
+
+const sysQueryResultLimit = 30
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &SysPlugin{})
@@ -709,7 +712,19 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		tracker.Log(ctx)
 	}
 
-	return plugin.NewQueryResponse(results)
+	return plugin.NewQueryResponse(limitSysQueryResults(results))
+}
+
+// limitSysQueryResults caps broad matches before core performs per-result polishing.
+func limitSysQueryResults(results []plugin.QueryResult) []plugin.QueryResult {
+	if len(results) <= sysQueryResultLimit {
+		return results
+	}
+
+	sort.SliceStable(results, func(left, right int) bool {
+		return results[left].Score > results[right].Score
+	})
+	return results[:sysQueryResultLimit]
 }
 
 func (r *SysPlugin) findCommand(commandID string) (SysCommand, bool) {

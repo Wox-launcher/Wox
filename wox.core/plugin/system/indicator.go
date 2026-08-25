@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -17,6 +18,8 @@ import (
 )
 
 var indicatorIcon = common.PluginIndicatorIcon
+
+const indicatorQueryResultLimit = 30
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &IndicatorPlugin{})
@@ -248,7 +251,19 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			})
 		}
 	}
-	return plugin.NewQueryResponse(results)
+	return plugin.NewQueryResponse(limitIndicatorQueryResults(results))
+}
+
+// limitIndicatorQueryResults caps broad matches before core performs per-result polishing.
+func limitIndicatorQueryResults(results []plugin.QueryResult) []plugin.QueryResult {
+	if len(results) <= indicatorQueryResultLimit {
+		return results
+	}
+
+	sort.SliceStable(results, func(left, right int) bool {
+		return results[left].Score > results[right].Score
+	})
+	return results[:indicatorQueryResultLimit]
 }
 
 // getSearchIndex reuses translated and normalized plugin metadata until the plugin snapshot changes.
