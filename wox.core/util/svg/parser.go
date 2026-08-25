@@ -34,6 +34,7 @@ type pathStyle struct {
 	dashes        []float64
 	dashOffset    float64
 	matrix        rasterx.Matrix2D
+	maskID        string
 }
 
 type svgShape struct {
@@ -51,14 +52,25 @@ type Icon struct {
 	preserveAspectRatio string
 	shapes              []svgShape
 	gradients           map[string]*rasterx.Gradient
+	masks               map[string][]svgShape
 }
 
 // Parse reads the SVG subset used by Wox icons into a reusable document.
 func Parse(reader io.Reader) (*Icon, error) {
-	icon := &Icon{gradients: map[string]*rasterx.Gradient{}, preserveAspectRatio: "xMidYMid meet"}
-	styles := []pathStyle{defaultPathStyle()}
+	return parseIcon(reader, color.NRGBA{A: 255})
+}
+
+// parseIcon reads the SVG subset and resolves currentColor before shapes are stored.
+func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
+	icon := &Icon{gradients: map[string]*rasterx.Gradient{}, masks: map[string][]svgShape{}, preserveAspectRatio: "xMidYMid meet"}
+	style := defaultPathStyle()
+	if currentColor != nil {
+		style.currentColor = currentColor
+	}
+	styles := []pathStyle{style}
 	decoder := xml.NewDecoder(reader)
 	defsDepth := 0
+	maskIDs := []string{}
 	var currentGradient *rasterx.Gradient
 
 	for {
@@ -85,6 +97,8 @@ func Parse(reader io.Reader) (*Icon, error) {
 				}
 			case "defs":
 				defsDepth++
+			case "mask":
+				maskIDs = append(maskIDs, attributes["id"])
 			case "linearGradient":
 				gradient, id, err := readLinearGradient(attributes)
 				if err != nil {
@@ -112,13 +126,22 @@ func Parse(reader io.Reader) (*Icon, error) {
 					currentGradient.Stops = append(currentGradient.Stops, stop)
 				}
 			default:
-				if defsDepth == 0 {
+				// Mask contents live in <defs>, but they still have to be parsed so
+				// Iconify two-tone icons can punch a silhouette out of currentColor.
+				if defsDepth == 0 || len(maskIDs) > 0 {
 					path, recognized, err := readShape(element.Name.Local, attributes)
 					if err != nil {
 						return nil, fmt.Errorf("parse <%s>: %w", element.Name.Local, err)
 					}
 					if recognized && len(path) > 0 {
-						icon.shapes = append(icon.shapes, svgShape{path: path, style: style})
+						shape := svgShape{path: path, style: style}
+						if len(maskIDs) > 0 {
+							id := maskIDs[len(maskIDs)-1]
+							shape.style.maskID = ""
+							icon.masks[id] = append(icon.masks[id], shape)
+						} else {
+							icon.shapes = append(icon.shapes, shape)
+						}
 					}
 				}
 			}
@@ -126,6 +149,10 @@ func Parse(reader io.Reader) (*Icon, error) {
 			switch element.Name.Local {
 			case "defs":
 				defsDepth--
+			case "mask":
+				if len(maskIDs) > 0 {
+					maskIDs = maskIDs[:len(maskIDs)-1]
+				}
 			case "linearGradient", "radialGradient":
 				currentGradient = nil
 			}
@@ -305,7 +332,29 @@ func applyStyle(base pathStyle, attributes map[string]string) (pathStyle, error)
 		}
 		style.matrix = matrix
 	}
+	if value, ok := properties["mask"]; ok {
+		id, err := parseMaskReference(value)
+		if err == nil {
+			style.maskID = id
+		}
+	}
 	return style, nil
+}
+
+// parseMaskReference accepts url(#id) mask references used by Iconify two-tone SVGs.
+func parseMaskReference(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if strings.EqualFold(value, "none") || value == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(strings.ToLower(value), "url(") || !strings.HasSuffix(value, ")") {
+		return "", fmt.Errorf("unsupported mask reference %q", value)
+	}
+	reference := strings.Trim(strings.TrimSpace(value[4:len(value)-1]), `"'`)
+	if strings.HasPrefix(reference, "#") {
+		return reference[1:], nil
+	}
+	return "", fmt.Errorf("unsupported mask reference %q", value)
 }
 
 func parsePaint(value string, currentColor color.Color) (paint, error) {

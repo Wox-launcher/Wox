@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"math"
 	"strings"
 
@@ -13,7 +14,15 @@ import (
 
 // Render parses SVG data and rasterizes it into a transparent RGBA image.
 func Render(data string, width, height int) (*image.RGBA, error) {
-	icon, err := Parse(strings.NewReader(data))
+	return RenderWithCurrentColor(data, width, height, nil)
+}
+
+// RenderWithCurrentColor rasterizes SVG using currentColor for paints that reference it.
+func RenderWithCurrentColor(data string, width, height int, currentColor color.Color) (*image.RGBA, error) {
+	if currentColor == nil {
+		currentColor = color.NRGBA{A: 255}
+	}
+	icon, err := parseIcon(strings.NewReader(data), currentColor)
 	if err != nil {
 		return nil, err
 	}
@@ -31,19 +40,75 @@ func (icon *Icon) Render(width, height int) (*image.RGBA, error) {
 	target := icon.targetMatrix(width, height)
 
 	for _, shape := range icon.shapes {
-		matrix := target.Mult(shape.style.matrix)
-		if !shape.style.fill.disabled {
-			if err := icon.drawFill(dasher, scanner, shape, matrix, width, height); err != nil {
+		if shape.style.maskID == "" {
+			if err := icon.drawShape(dasher, scanner, shape, target, width, height); err != nil {
 				return nil, err
 			}
+			continue
 		}
-		if !shape.style.stroke.disabled && shape.style.lineWidth > 0 {
-			if err := icon.drawStroke(dasher, scanner, shape, matrix, width, height); err != nil {
-				return nil, err
-			}
+		layer := image.NewRGBA(image.Rect(0, 0, width, height))
+		layerScanner := newWindingScanner(width, height, layer)
+		layerDasher := rasterx.NewDasher(width, height, layerScanner)
+		if err := icon.drawShape(layerDasher, layerScanner, shape, target, width, height); err != nil {
+			return nil, err
+		}
+		if err := icon.applyMask(output, layer, shape.style.maskID, width, height); err != nil {
+			return nil, err
 		}
 	}
 	return output, nil
+}
+
+// drawShape paints one path's fill and stroke into the scanner destination.
+func (icon *Icon) drawShape(dasher *rasterx.Dasher, scanner *windingScanner, shape svgShape, target rasterx.Matrix2D, width, height int) error {
+	matrix := target.Mult(shape.style.matrix)
+	if !shape.style.fill.disabled {
+		if err := icon.drawFill(dasher, scanner, shape, matrix, width, height); err != nil {
+			return err
+		}
+	}
+	if !shape.style.stroke.disabled && shape.style.lineWidth > 0 {
+		return icon.drawStroke(dasher, scanner, shape, matrix, width, height)
+	}
+	return nil
+}
+
+// applyMask composites a shape through an SVG luminance mask, the format Iconify two-tone icons use.
+func (icon *Icon) applyMask(dest *image.RGBA, source *image.RGBA, maskID string, width, height int) error {
+	shapes := icon.masks[maskID]
+	if len(shapes) == 0 {
+		draw.Draw(dest, dest.Bounds(), source, image.Point{}, draw.Over)
+		return nil
+	}
+	maskColor := image.NewRGBA(image.Rect(0, 0, width, height))
+	scanner := newWindingScanner(width, height, maskColor)
+	dasher := rasterx.NewDasher(width, height, scanner)
+	target := icon.targetMatrix(width, height)
+	for _, shape := range shapes {
+		if err := icon.drawShape(dasher, scanner, shape, target, width, height); err != nil {
+			return err
+		}
+	}
+	draw.DrawMask(dest, dest.Bounds(), source, image.Point{}, luminanceMask(maskColor), image.Point{}, draw.Over)
+	return nil
+}
+
+// luminanceMask converts an SVG mask graphic into coverage using standard luminance.
+func luminanceMask(source *image.RGBA) *image.Alpha {
+	bounds := source.Bounds()
+	mask := image.NewAlpha(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			index := source.PixOffset(x, y)
+			r := uint32(source.Pix[index])
+			g := uint32(source.Pix[index+1])
+			b := uint32(source.Pix[index+2])
+			a := uint32(source.Pix[index+3])
+			luminance := (r*2126 + g*7152 + b*721) / 10000
+			mask.SetAlpha(x, y, color.Alpha{A: uint8((luminance*a + 127) / 255)})
+		}
+	}
+	return mask
 }
 
 func (icon *Icon) drawFill(dasher *rasterx.Dasher, scanner *windingScanner, shape svgShape, matrix rasterx.Matrix2D, width, height int) error {

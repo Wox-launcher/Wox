@@ -464,7 +464,12 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 }
 
 func decodeSVGImage(data string, width, height int, tint *woxui.Color) (*woxui.Image, error) {
-	rgba, err := woxsvg.Render(data, width, height)
+	// Match Flutter/CSS: currentColor defaults to black unless the caller tints the icon.
+	var currentColor color.Color
+	if tint != nil {
+		currentColor = color.NRGBA{R: tint.R, G: tint.G, B: tint.B, A: tint.A}
+	}
+	rgba, err := woxsvg.RenderWithCurrentColor(data, width, height, currentColor)
 	if err != nil {
 		return nil, err
 	}
