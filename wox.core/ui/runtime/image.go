@@ -13,13 +13,21 @@ import (
 	_ "image/png"
 )
 
-// Image stores immutable premultiplied RGBA pixels ready for native GPU upload.
+// Image stores immutable packed pixels ready for native GPU upload.
 type Image struct {
 	Width  int
 	Height int
 	id     uint64
 	pixels []byte
+	format imagePixelFormat
 }
+
+type imagePixelFormat uint8
+
+const (
+	imagePixelFormatRGBA imagePixelFormat = iota
+	imagePixelFormatBGRAOpaque
+)
 
 var nextImageID atomic.Uint64
 
@@ -43,7 +51,7 @@ func NewImage(source image.Image) (*Image, error) {
 	}
 	rgba := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	draw.Draw(rgba, rgba.Bounds(), source, bounds.Min, draw.Src)
-	return &Image{Width: rgba.Rect.Dx(), Height: rgba.Rect.Dy(), id: nextImageID.Add(1), pixels: rgba.Pix}, nil
+	return &Image{Width: rgba.Rect.Dx(), Height: rgba.Rect.Dy(), id: nextImageID.Add(1), pixels: rgba.Pix, format: imagePixelFormatRGBA}, nil
 }
 
 // NewImageFromPackedRGBA retains an immutable, tightly packed RGBA buffer without copying it.
@@ -59,7 +67,7 @@ func NewImageFromPackedRGBA(source *image.RGBA) (*Image, error) {
 	if len(source.Pix) < pixelCount {
 		return nil, fmt.Errorf("image pixel buffer is too small")
 	}
-	return &Image{Width: width, Height: height, id: nextImageID.Add(1), pixels: source.Pix[:pixelCount]}, nil
+	return &Image{Width: width, Height: height, id: nextImageID.Add(1), pixels: source.Pix[:pixelCount], format: imagePixelFormatRGBA}, nil
 }
 
 // ID is the stable native cache key for this immutable pixel buffer.
@@ -76,5 +84,8 @@ func (i *Image) RGBAAt(x, y int) color.RGBA {
 		return color.RGBA{}
 	}
 	offset := (y*i.Width + x) * 4
+	if i.format == imagePixelFormatBGRAOpaque {
+		return color.RGBA{R: i.pixels[offset+2], G: i.pixels[offset+1], B: i.pixels[offset], A: 255}
+	}
 	return color.RGBA{R: i.pixels[offset], G: i.pixels[offset+1], B: i.pixels[offset+2], A: i.pixels[offset+3]}
 }

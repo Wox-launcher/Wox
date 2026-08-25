@@ -167,9 +167,9 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		windowHost:     windowHost,
 		afterShow: func() {
 			util.GetLogger().Debug(context.Background(), fmt.Sprintf(
-				"screenshot overlay ready: total=%s capture=%s dwm=%s setup=%s bitblt=%s convert=%s renderer=%s desktop=%dx%d",
+				"screenshot overlay ready: total=%s capture=%s dwm=%s setup=%s bitblt=%s renderer=%s desktop=%dx%d",
 				time.Since(startedAt).Round(time.Millisecond), captured.captureTotal.Round(time.Millisecond), captured.flush.Round(time.Millisecond),
-				captured.capture.Timings.Setup.Round(time.Millisecond), captured.capture.Timings.BitBlt.Round(time.Millisecond), captured.capture.Timings.Convert.Round(time.Millisecond),
+				captured.capture.Timings.Setup.Round(time.Millisecond), captured.capture.Timings.BitBlt.Round(time.Millisecond),
 				prepareDuration.Round(time.Millisecond), virtualBounds.Dx(), virtualBounds.Dy(),
 			))
 		},

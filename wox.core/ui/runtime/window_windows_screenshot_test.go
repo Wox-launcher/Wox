@@ -3,6 +3,7 @@
 package woxui
 
 import (
+	"image"
 	"testing"
 
 	"github.com/lxn/win"
@@ -108,13 +109,23 @@ func TestWindowsScreenshotWindowSkipsSystemBackdrop(t *testing.T) {
 	}
 }
 
-func TestWindowsConvertDIBToRGBA(t *testing.T) {
+func TestWindowsPackedBGRAPreservesNativePixels(t *testing.T) {
 	pixels := []byte{30, 20, 10, 0, 90, 80, 70, 12}
-	windowsConvertDIBToRGBA(pixels)
-	want := []byte{10, 20, 30, 255, 70, 80, 90, 255}
-	for index := range want {
-		if pixels[index] != want[index] {
-			t.Fatalf("converted pixels = %v, want %v", pixels, want)
-		}
+	source := &PackedBGRA{Pix: pixels, Stride: 8, Rect: image.Rect(0, 0, 2, 1)}
+	if got := source.RGBAAt(0, 0); got.R != 10 || got.G != 20 || got.B != 30 || got.A != 255 {
+		t.Fatalf("first pixel = %+v", got)
+	}
+	if got := source.RGBAAt(1, 0); got.R != 70 || got.G != 80 || got.B != 90 || got.A != 255 {
+		t.Fatalf("second pixel = %+v", got)
+	}
+	if pixels[0] != 30 || pixels[3] != 0 {
+		t.Fatalf("native pixels were modified: %v", pixels)
+	}
+	retained, err := source.RetainedRendererImage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retained.format != imagePixelFormatBGRAOpaque || &retained.pixels[0] != &pixels[0] {
+		t.Fatal("renderer image did not retain the BGRA capture")
 	}
 }

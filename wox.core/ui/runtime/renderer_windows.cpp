@@ -729,14 +729,16 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
-  if (renderer == nullptr || !renderer->frame_open || pixels == nullptr || image_width == 0 || image_height == 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
+extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+  if (renderer == nullptr || !renderer->frame_open || pixels == nullptr || image_width == 0 || image_height == 0 || row_stride < image_width * 4 || pixel_format > 1 || width <= 0.0f || height <= 0.0f) {
     return E_INVALIDARG;
   }
 
+  const bool bgra_opaque = pixel_format == 1;
   D2D1_BITMAP_PROPERTIES1 properties = D2D1::BitmapProperties1(
       D2D1_BITMAP_OPTIONS_NONE,
-      D2D1::PixelFormat(DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+      D2D1::PixelFormat(bgra_opaque ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM,
+                        bgra_opaque ? D2D1_ALPHA_MODE_IGNORE : D2D1_ALPHA_MODE_PREMULTIPLIED),
       96.0f,
       96.0f);
   ID2D1Bitmap1 *bitmap = nullptr;

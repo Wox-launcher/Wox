@@ -474,9 +474,14 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	return result, nil
 }
 
-// newScreenshotEditorImage shares a tightly packed RGBA capture because the editor keeps the
+// newScreenshotEditorImage retains packed native or RGBA captures because the editor keeps the
 // source immutable and both views have the same lifetime. Other image layouts use the normal copy.
 func newScreenshotEditorImage(source image.Image) (*Image, error) {
+	if retained, ok := source.(interface {
+		RetainedRendererImage() (*Image, error)
+	}); ok {
+		return retained.RetainedRendererImage()
+	}
 	if rgba, ok := source.(*image.RGBA); ok && rgba.Stride == rgba.Rect.Dx()*4 {
 		return NewImageFromPackedRGBA(rgba)
 	}

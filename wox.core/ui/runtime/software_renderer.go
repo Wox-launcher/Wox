@@ -156,8 +156,8 @@ func (r *SoftwareRenderer) drawImage(command displayCommand, damage Rect, clip *
 		}
 		sourceX := min(command.image.Width-1, max(0, int(localX/command.rect.Width*float32(command.image.Width))))
 		sourceY := min(command.image.Height-1, max(0, int(localY/command.rect.Height*float32(command.image.Height))))
-		sourceOffset := (sourceY*command.image.Width + sourceX) * 4
-		r.blendPremultiplied(offset, command.image.pixels[sourceOffset], command.image.pixels[sourceOffset+1], command.image.pixels[sourceOffset+2], command.image.pixels[sourceOffset+3])
+		source := command.image.RGBAAt(sourceX, sourceY)
+		r.blendPremultiplied(offset, source.R, source.G, source.B, source.A)
 	})
 }
 

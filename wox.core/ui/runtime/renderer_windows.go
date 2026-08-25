@@ -244,6 +244,7 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint32_t(command.image.Width),
 				C.uint32_t(command.image.Height),
 				C.uint32_t(command.image.Width*4),
+				C.uint8_t(command.image.format),
 				C.float(command.rect.X),
 				C.float(command.rect.Y),
 				C.float(command.rect.Width),

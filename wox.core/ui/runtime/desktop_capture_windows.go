@@ -26,15 +26,14 @@ var dwmFlush = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmFlush")
 
 // WindowsDesktopCaptureTimings separates the native capture stages for diagnostics.
 type WindowsDesktopCaptureTimings struct {
-	Setup   time.Duration
-	BitBlt  time.Duration
-	Convert time.Duration
-	Total   time.Duration
+	Setup  time.Duration
+	BitBlt time.Duration
+	Total  time.Duration
 }
 
-// WindowsDesktopCapture owns a top-down DIB and its mapped RGBA view.
+// WindowsDesktopCapture owns an immutable top-down BGRX desktop image and its backing DIB.
 type WindowsDesktopCapture struct {
-	Image   *image.RGBA
+	Image   *PackedBGRA
 	Bounds  image.Rectangle
 	Timings WindowsDesktopCaptureTimings
 
@@ -65,7 +64,7 @@ func FlushWindowsDesktopComposition() {
 	}
 }
 
-// CaptureWindowsVirtualDesktop captures directly into one mapped top-down DIB.
+// CaptureWindowsVirtualDesktop captures directly into one mapped top-down BGRX DIB.
 func CaptureWindowsVirtualDesktop() (*WindowsDesktopCapture, error) {
 	startedAt := time.Now()
 	x := win.GetSystemMetrics(win.SM_XVIRTUALSCREEN)
@@ -122,16 +121,13 @@ func CaptureWindowsVirtualDesktop() (*WindowsDesktopCapture, error) {
 
 	pixelBytes := int(width) * int(height) * 4
 	pixels := unsafe.Slice((*byte)(bits), pixelBytes)
-	convertStartedAt := time.Now()
-	windowsConvertDIBToRGBA(pixels)
-	convertDuration := time.Since(convertStartedAt)
 	capture := &WindowsDesktopCapture{
-		Image:  &image.RGBA{Pix: pixels, Stride: int(width) * 4, Rect: image.Rect(0, 0, int(width), int(height))},
+		Image:  &PackedBGRA{Pix: pixels, Stride: int(width) * 4, Rect: image.Rect(0, 0, int(width), int(height))},
 		Bounds: image.Rect(int(x), int(y), int(x+width), int(y+height)),
 		bitmap: bitmap,
 	}
 	capture.Timings = WindowsDesktopCaptureTimings{
-		Setup: setupDuration, BitBlt: bitBltDuration, Convert: convertDuration, Total: time.Since(startedAt),
+		Setup: setupDuration, BitBlt: bitBltDuration, Total: time.Since(startedAt),
 	}
 	return capture, nil
 }
@@ -260,14 +256,6 @@ func CaptureWindowsRect(bounds image.Rectangle) (*image.RGBA, error) {
 	}
 	defer capturer.Close()
 	return capturer.Capture()
-}
-
-// windowsConvertDIBToRGBA converts GDI's BGRX bytes in place without another desktop buffer.
-func windowsConvertDIBToRGBA(pixels []byte) {
-	for offset := 0; offset+3 < len(pixels); offset += 4 {
-		pixels[offset], pixels[offset+2] = pixels[offset+2], pixels[offset]
-		pixels[offset+3] = 255
-	}
 }
 
 // WindowsLogicalRectFromPhysical converts a pixel rectangle using the DPI of its dominant monitor.
