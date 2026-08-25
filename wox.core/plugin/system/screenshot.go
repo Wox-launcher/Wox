@@ -298,7 +298,7 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 
 	items := make([]screenshotHistoryItem, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".png") {
+		if entry.IsDir() || !isScreenshotHistoryImage(entry.Name()) {
 			continue
 		}
 
@@ -407,7 +407,7 @@ func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".png") {
+		if entry.IsDir() || !isScreenshotHistoryImage(entry.Name()) {
 			continue
 		}
 
@@ -484,8 +484,8 @@ func (p *ScreenshotPlugin) screenshotHistoryItemFromPath(screenshotPath string) 
 	if info.IsDir() {
 		return screenshotHistoryItem{}, fmt.Errorf("screenshot path is a directory")
 	}
-	if !strings.EqualFold(filepath.Ext(screenshotPath), ".png") {
-		return screenshotHistoryItem{}, fmt.Errorf("screenshot path is not a png")
+	if !isScreenshotHistoryImage(screenshotPath) {
+		return screenshotHistoryItem{}, fmt.Errorf("screenshot path is not a supported image")
 	}
 	if info.Size() == 0 {
 		return screenshotHistoryItem{}, fmt.Errorf("screenshot file is empty")
@@ -497,6 +497,11 @@ func (p *ScreenshotPlugin) screenshotHistoryItemFromPath(screenshotPath string) 
 		size:      info.Size(),
 		timestamp: info.ModTime().UnixMilli(),
 	}, nil
+}
+
+func isScreenshotHistoryImage(path string) bool {
+	extension := strings.ToLower(filepath.Ext(path))
+	return extension == ".png" || extension == ".jpg" || extension == ".jpeg"
 }
 
 func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context, item screenshotHistoryItem) error {
@@ -610,7 +615,7 @@ func (p *ScreenshotPlugin) readScreenshotOCRSidecar(screenshotPath string, info 
 	}
 	if sidecar.SourceSize != info.Size() || sidecar.SourceModifiedAt != info.ModTime().UnixMilli() {
 		// Sidecars are intentionally file-adjacent instead of stored in a database. Matching size
-		// and mtime prevents an old OCR result from being reused if a PNG is replaced at the same path.
+		// and mtime prevents an old OCR result from being reused if an image is replaced at the same path.
 		return screenshotOCRSidecar{}, fmt.Errorf("screenshot ocr sidecar is stale")
 	}
 	sidecar.Text = strings.TrimSpace(sidecar.Text)
@@ -909,12 +914,12 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 			p.notifyCaptureFailure(ctx, "", "")
 			return
 		}
-		if err := p.ensureScreenshotHistoryThumbnailsForPath(ctx, result.ScreenshotPath); err != nil {
-			// A thumbnail failure should not turn a successful capture into a failed screenshot. The
-			// history result will temporarily fall back to the default icon and the next init warm-up
-			// can repair the cache.
-			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to generate screenshot history thumbnails: path=%s err=%s", result.ScreenshotPath, err.Error()))
-		}
+		screenshotPath := result.ScreenshotPath
+		p.runScreenshotBackgroundTask("generate screenshot history thumbnails", func(runtimeCtx context.Context) {
+			if err := p.ensureScreenshotHistoryThumbnailsForPath(runtimeCtx, screenshotPath); err != nil {
+				p.api.Log(runtimeCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to generate screenshot history thumbnails: path=%s err=%s", screenshotPath, err.Error()))
+			}
+		})
 		p.scheduleScreenshotOCR(result.ScreenshotPath)
 		if result.PinToScreen {
 			// UI owns final image composition, but the pinned desktop window belongs in Go because

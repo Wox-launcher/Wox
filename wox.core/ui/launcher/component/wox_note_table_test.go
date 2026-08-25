@@ -277,11 +277,11 @@ func TestWoxNoteTableExposesCellFields(t *testing.T) {
 	if !ok || semantics.AutomationID != "notes.table.demo" {
 		t.Fatalf("table widget = %#v", widget)
 	}
-	scroll, ok := semantics.Child.(woxwidget.ScrollView)
-	if !ok || scroll.Key != "notes.table.demo-hscroll" || !scroll.Horizontal {
-		t.Fatalf("table horizontal scroll = %#v", semantics.Child)
+	scroll := noteTableScroll(t, widget)
+	if scroll.Key != "notes.table.demo-hscroll" || !scroll.Horizontal {
+		t.Fatalf("table horizontal scroll = %#v", scroll)
 	}
-	cell := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[0].(woxwidget.Container)
+	cell := noteTableFirstCell(t, widget)
 	field := cell.Child.(woxwidget.Stateful).Widget.(TextFieldProps)
 	innerHeight := field.Height - field.Padding.Top - field.Padding.Bottom
 	if field.Padding == (woxwidget.Insets{}) || innerHeight < field.LineHeight || field.LineHeight < 24 {
@@ -296,9 +296,70 @@ func TestWoxNoteTableCellsUseDocumentUndo(t *testing.T) {
 		ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{}, Style: woxui.TextStyle{Size: 14},
 		OnUndo: func() bool { undone = true; return true },
 	})
-	cell := widget.(woxwidget.Semantics).Child.(woxwidget.ScrollView).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[0].(woxwidget.Container)
-	field := cell.Child.(woxwidget.Stateful).Widget.(TextFieldProps)
+	field := noteTableFirstCell(t, widget).Child.(woxwidget.Stateful).Widget.(TextFieldProps)
 	if field.OnUndo == nil || !field.OnUndo() || !undone {
 		t.Fatal("table cells must use document undo so Ctrl+Z can restore a deleted column")
 	}
+}
+
+func TestWoxNoteTableUsesCollapsedGridLines(t *testing.T) {
+	theme := Theme{PreviewSplit: woxui.Color{R: 90, G: 90, B: 90, A: 255}, PreviewText: woxui.Color{A: 255}}
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
+	widget := WoxNoteTable(NoteTableProps{ID: "notes.table.demo", Table: table, Width: 360, Theme: theme, Style: woxui.TextStyle{Size: 14}})
+	frame := widget.(woxwidget.Semantics).Child.(woxwidget.Stack)
+	if len(frame.Children) != 2 {
+		t.Fatalf("note table frame children = %d, want content plus one outer stroke", len(frame.Children))
+	}
+	outline := frame.Children[1].Child.(woxwidget.Container)
+	if outline.BorderWidth != TableGridBorderWidth || outline.BorderColor != noteTableBorder(theme) || outline.Color.A != 0 {
+		t.Fatalf("note table stroke = %#v, want the shared 1px frame", outline)
+	}
+
+	header := noteTableCellAt(t, widget, 0, 0)
+	if header.BorderWidth != 0 || header.RightBorderWidth != TableGridBorderWidth || header.BottomBorderWidth != TableGridBorderWidth {
+		t.Fatalf("header cell = %#v, want collapsed right+bottom", header)
+	}
+	last := noteTableCellAt(t, widget, 1, 1)
+	if last.BorderWidth != 0 || last.RightBorderWidth != 0 || last.BottomBorderWidth != 0 {
+		t.Fatalf("last cell = %#v, want the outer frame to own that corner", last)
+	}
+}
+
+func noteTableScroll(t *testing.T, widget woxwidget.Widget) woxwidget.ScrollView {
+	t.Helper()
+	child := widget.(woxwidget.Semantics).Child
+	if column, ok := child.(woxwidget.Flex); ok && column.Axis == woxwidget.Vertical && len(column.Children) == 2 {
+		child = column.Children[1]
+	}
+	frame, ok := child.(woxwidget.Stack)
+	if !ok || len(frame.Children) < 1 {
+		t.Fatalf("table grid = %T, want a stacked outer frame", child)
+	}
+	scroll, ok := frame.Children[0].Child.(woxwidget.ScrollView)
+	if !ok {
+		t.Fatalf("table grid body = %T, want a horizontal scroll view", frame.Children[0].Child)
+	}
+	return scroll
+}
+
+func noteTableFirstCell(t *testing.T, widget woxwidget.Widget) woxwidget.Container {
+	t.Helper()
+	return noteTableCellAt(t, widget, 0, 0)
+}
+
+func noteTableCellAt(t *testing.T, widget woxwidget.Widget, row, column int) woxwidget.Container {
+	t.Helper()
+	rows := noteTableScroll(t, widget).Child.(woxwidget.Flex)
+	if row < 0 || row >= len(rows.Children) {
+		t.Fatalf("table row %d, have %d", row, len(rows.Children))
+	}
+	cells := rows.Children[row].(woxwidget.Flex)
+	if column < 0 || column >= len(cells.Children) {
+		t.Fatalf("table column %d, have %d", column, len(cells.Children))
+	}
+	cell, ok := cells.Children[column].(woxwidget.Container)
+	if !ok {
+		t.Fatalf("table cell = %T, want a container", cells.Children[column])
+	}
+	return cell
 }

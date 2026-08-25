@@ -284,7 +284,7 @@ type DisplaySnapshot struct {
 
 // CaptureScreenshotResult carries the exported screenshot file back to Go.
 // Returning the exported file path keeps annotation state in the UI while giving
-// core the saved artifact path and clipboard warning state without copying the PNG
+// core the saved artifact path and clipboard warning state without copying the image
 // bytes back through the bridge.
 type CaptureScreenshotResult struct {
 	Status               CaptureScreenshotStatus `json:"status"`

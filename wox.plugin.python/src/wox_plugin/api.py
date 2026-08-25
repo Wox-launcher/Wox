@@ -746,6 +746,6 @@ class PublicAPI(Protocol):
             option: Screenshot options
 
         Returns:
-            ScreenshotResult: success state, saved PNG path, and error message
+            ScreenshotResult: success state, saved image path, and error message
         """
         ...

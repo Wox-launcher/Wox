@@ -7,10 +7,12 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"image/jpeg"
 	"image/png"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +23,16 @@ import (
 	woxsvg "wox/util/svg"
 )
 
+const screenshotJPEGQuality = 90
+
 type screenshotEditorOverlayOutcome struct {
 	cancelled   bool
 	pinned      bool
 	record      bool
 	copiedColor string
+	// saveAsPath is set when the user asked to download the image to a chosen file.
+	// Confirm still copies to the clipboard; save keeps that path as an extra export.
+	saveAsPath string
 }
 
 type screenshotEditorTool uint8
@@ -73,6 +80,7 @@ const (
 	screenshotEditorActionPin
 	screenshotEditorActionRecord
 	screenshotEditorActionCancel
+	screenshotEditorActionSave
 	screenshotEditorActionConfirm
 )
 
@@ -137,6 +145,7 @@ type screenshotEditorOverlayState struct {
 	selection               Rect
 	confirmRect             Rect
 	cancelRect              Rect
+	saveRect                Rect
 	pinRect                 Rect
 	undoRect                Rect
 	scrollRect              Rect
@@ -190,6 +199,8 @@ type screenshotEditorOverlayState struct {
 	autoConfirm             bool
 	hideTools               bool
 	allowVideoRecording     bool
+	saving                  bool
+	chooseSavePath          func() (string, error)
 	scrolling               bool
 	scrollingStarting       bool
 	scrollingFrames         []screenshotScrollingFrame
@@ -407,14 +418,16 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			}
 		}()
 	}
+	var exportedImage image.Image
 	if scrolling {
 		stitched, stitchErr := stitchScreenshotScrollingFrames(scrollingFrames)
 		if stitchErr != nil {
 			return ScreenshotResult{}, stitchErr
 		}
-		if err := writeScreenshotPNG(exportPath, stitched); err != nil {
+		if err := writeScreenshotImage(exportPath, stitched); err != nil {
 			return ScreenshotResult{}, err
 		}
+		exportedImage = stitched
 	} else {
 		pixelSelection, err := screenshotEditorPixelSelection(source.Bounds(), selection, frameSize)
 		if err != nil {
@@ -429,8 +442,16 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 				return ScreenshotResult{}, err
 			}
 		}
-		if err := writeScreenshotEditorPNG(exportPath, composited, pixelSelection); err != nil {
+		cropped := image.NewRGBA(image.Rect(0, 0, pixelSelection.Dx(), pixelSelection.Dy()))
+		draw.Draw(cropped, cropped.Bounds(), composited, pixelSelection.Min, draw.Src)
+		if err := writeScreenshotImage(exportPath, cropped); err != nil {
 			return ScreenshotResult{}, err
+		}
+		exportedImage = cropped
+	}
+	if savePath := screenshotSaveAsExportPath(outcome.saveAsPath); savePath != "" && !screenshotExportPathsEqual(savePath, exportPath) {
+		if err := writeScreenshotImage(savePath, exportedImage); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to write screenshot download: path=%s err=%s", savePath, err.Error()))
 		}
 	}
 
@@ -439,11 +460,11 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		ArtifactKind:            "image",
 		ArtifactPath:            exportPath,
 		ScreenshotPath:          exportPath,
-		ClipboardWriteSucceeded: outcome.pinned || !options.CopyToClipboard,
+		ClipboardWriteSucceeded: outcome.pinned || outcome.saveAsPath != "" || !options.CopyToClipboard,
 		LogicalSelection:        platform.logicalSelection(selection, frameSize),
 	}
-	if options.CopyToClipboard && !outcome.pinned {
-		if err := overlay.WriteClipboardImageFile(exportPath); err != nil {
+	if options.CopyToClipboard && !outcome.pinned && outcome.saveAsPath == "" {
+		if err := overlay.WriteClipboardImage(exportedImage); err != nil {
 			result.ClipboardWarningMessage = err.Error()
 		} else {
 			result.ClipboardWriteSucceeded = true
@@ -480,13 +501,8 @@ func screenshotEditorPixelSelection(sourceBounds image.Rectangle, selection Rect
 	return pixelSelection, nil
 }
 
-func writeScreenshotEditorPNG(path string, source image.Image, selection image.Rectangle) error {
-	cropped := image.NewRGBA(image.Rect(0, 0, selection.Dx(), selection.Dy()))
-	draw.Draw(cropped, cropped.Bounds(), source, selection.Min, draw.Src)
-	return writeScreenshotPNG(path, cropped)
-}
-
-func writeScreenshotPNG(path string, source image.Image) error {
+// writeScreenshotImage uses JPEG for default exports while honoring explicit PNG paths from callers.
+func writeScreenshotImage(path string, source image.Image) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create screenshot export directory: %w", err)
 	}
@@ -494,9 +510,15 @@ func writeScreenshotPNG(path string, source image.Image) error {
 	if err != nil {
 		return fmt.Errorf("create screenshot export file: %w", err)
 	}
-	if err := png.Encode(file, source); err != nil {
+	var encodeErr error
+	if extension := strings.ToLower(filepath.Ext(path)); extension == ".jpg" || extension == ".jpeg" {
+		encodeErr = jpeg.Encode(file, source, &jpeg.Options{Quality: screenshotJPEGQuality})
+	} else {
+		encodeErr = png.Encode(file, source)
+	}
+	if encodeErr != nil {
 		_ = file.Close()
-		return fmt.Errorf("encode screenshot PNG: %w", err)
+		return fmt.Errorf("encode screenshot image: %w", encodeErr)
 	}
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close screenshot export file: %w", err)
@@ -509,9 +531,10 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	if state.scrolling {
 		preview := state.scrollingPreview
 		uiScale := max(float32(1), state.uiScale)
-		toolbar, cancel, confirm := screenshotScrollingControlLayout(frame.Size, uiScale)
+		toolbar, cancel, save, confirm := screenshotScrollingControlLayout(frame.Size, uiScale)
 		state.confirmRect = confirm
 		state.cancelRect = cancel
+		state.saveRect = save
 		state.toolbarRect = toolbar
 		state.mu.Unlock()
 		drawScreenshotScrollingControls(displayList, frame.Size, preview, uiScale)
@@ -600,6 +623,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	state.confirmRect = Rect{}
 	state.cancelRect = Rect{}
+	state.saveRect = Rect{}
 	state.pinRect = Rect{}
 	state.undoRect = Rect{}
 	state.scrollRect = Rect{}
@@ -650,24 +674,26 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	green := Color{R: 41, G: 255, B: 114, A: 255}
 	displayList.StrokeRoundedRect(selection, 0, scaled(2), green)
 	drawScreenshotEditorHandles(displayList, selection, green, uiScale)
-	drawScreenshotEditorSizeLabel(displayList, fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height), selection, frame.Size, uiScale)
+	toolbarRect := Rect{}
+	if !dragging && !state.autoConfirm {
+		toolbarWidth := scaled(182)
+		if !hideTools {
+			toolbarWidth = scaled(686)
+			if state.allowVideoRecording {
+				toolbarWidth += scaled(54)
+			}
+		}
+		toolbarHeight := scaled(60)
+		toolbarStackHeight := toolbarHeight
+		if !hideTools {
+			toolbarStackHeight += scaled(64)
+		}
+		toolbarRect = screenshotEditorToolbarPlacement(selection, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
+	}
+	drawScreenshotEditorSizeLabel(displayList, fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height), selection, toolbarRect, frame.Size, uiScale)
 	if dragging || state.autoConfirm {
 		return
 	}
-
-	toolbarWidth := scaled(128)
-	if !hideTools {
-		toolbarWidth = scaled(632)
-		if state.allowVideoRecording {
-			toolbarWidth += scaled(54)
-		}
-	}
-	toolbarHeight := scaled(60)
-	toolbarStackHeight := toolbarHeight
-	if !hideTools {
-		toolbarStackHeight += scaled(64)
-	}
-	toolbarRect := screenshotEditorToolbarPlacement(selection, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
 	toolbarLeft := toolbarRect.X
 	toolbarTop := toolbarRect.Y
 	slotLeft := toolbarLeft + scaled(16)
@@ -698,6 +724,8 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	cancelRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
 	slotLeft += scaled(48)
+	saveRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+	slotLeft += scaled(48)
 	confirmRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
 	state.mu.Lock()
 	state.toolbarRect = toolbarRect
@@ -708,6 +736,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.cursorRect = cursorRect
 	state.recordRect = recordRect
 	state.cancelRect = cancelRect
+	state.saveRect = saveRect
 	state.confirmRect = confirmRect
 	state.mu.Unlock()
 
@@ -751,14 +780,8 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		}
 	}
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.download", saveRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirmRect, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
-	if hasHoveredTool {
-		tooltip := screenshotEditorToolTooltip(hoveredTool, tooltips)
-		drawScreenshotEditorToolTooltip(displayList, frame.Size, toolRects[hoveredTool], tooltip, uiScale)
-	} else if hasHoveredAction {
-		anchor, tooltip := screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, recordRect, cancelRect, confirmRect)
-		drawScreenshotEditorToolTooltip(displayList, frame.Size, anchor, tooltip, uiScale)
-	}
 	if !hideTools {
 		var selectedMark *screenshotEditorAnnotation
 		if hasSelectedMark {
@@ -769,7 +792,14 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			}
 			selectedMark = &selectedCopy
 		}
-		state.drawEditBar(displayList, frame.Size, toolbarRect, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize, uiScale)
+		state.drawEditBar(displayList, frame.Size, toolbarRect, selection, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize, uiScale)
+	}
+	if hasHoveredTool {
+		tooltip := screenshotEditorToolTooltip(hoveredTool, tooltips)
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, toolRects[hoveredTool], selection, tooltip, uiScale)
+	} else if hasHoveredAction {
+		anchor, tooltip := screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, recordRect, cancelRect, saveRect, confirmRect)
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, anchor, selection, tooltip, uiScale)
 	}
 	if pointerInside && !colorInspectorDismissed {
 		drawScreenshotEditorColorInspector(displayList, state.image, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
@@ -951,7 +981,7 @@ func screenshotEditorToolTooltip(tool int, configured [screenshotEditorToolCount
 	return fmt.Sprintf("%s (%s)", label, screenshotEditorToolShortcuts[tool])
 }
 
-func screenshotEditorActionTooltip(action screenshotEditorAction, configured ScreenshotActionTooltips, undo, scroll, cursor, pin, record, cancel, confirm Rect) (Rect, string) {
+func screenshotEditorActionTooltip(action screenshotEditorAction, configured ScreenshotActionTooltips, undo, scroll, cursor, pin, record, cancel, save, confirm Rect) (Rect, string) {
 	switch action {
 	case screenshotEditorActionUndo:
 		return undo, screenshotEditorTooltipWithShortcut(configured.Undo, "Undo", "U")
@@ -965,11 +995,20 @@ func screenshotEditorActionTooltip(action screenshotEditorAction, configured Scr
 		return record, screenshotEditorTooltipWithShortcut(configured.Record, "Record video", "V")
 	case screenshotEditorActionCancel:
 		return cancel, screenshotEditorTooltipWithShortcut(configured.Cancel, "Cancel", "Esc")
+	case screenshotEditorActionSave:
+		return save, screenshotEditorTooltipWithShortcut(configured.Save, "Save", screenshotEditorSaveShortcut())
 	case screenshotEditorActionConfirm:
 		return confirm, screenshotEditorTooltipWithShortcut(configured.Confirm, "Confirm", "Enter")
 	default:
 		return Rect{}, ""
 	}
+}
+
+func screenshotEditorSaveShortcut() string {
+	if runtime.GOOS == "darwin" {
+		return "⌘S"
+	}
+	return "Ctrl+S"
 }
 
 func screenshotEditorTooltipWithShortcut(configured, fallback, shortcut string) string {
@@ -979,21 +1018,25 @@ func screenshotEditorTooltipWithShortcut(configured, fallback, shortcut string) 
 	return fmt.Sprintf("%s (%s)", configured, shortcut)
 }
 
-// screenshotEditorToolTooltipRect places a compact label 8px above its tool, matching screenshot chrome.
-func screenshotEditorToolTooltipRect(frame Size, anchor Rect, text string, uiScale float32) Rect {
+// screenshotEditorToolTooltipRect keeps the hint on the selection side of its tool, matching screenshot chrome.
+func screenshotEditorToolTooltipRect(frame Size, anchor, selection Rect, text string, uiScale float32) Rect {
 	if text == "" || anchor.Width <= 0 {
 		return Rect{}
 	}
 	scaled := func(value float32) float32 { return value * uiScale }
 	width := max(scaled(72), screenshotEditorEstimatedTextWidth(text, scaled(12))+scaled(20))
+	height := scaled(28)
 	left := min(max(scaled(8), anchor.X+anchor.Width/2-width/2), max(scaled(8), frame.Width-width-scaled(8)))
 	top := max(scaled(8), anchor.Y-scaled(36))
-	return Rect{X: left, Y: top, Width: width, Height: scaled(28)}
+	if selection.Height > 0 && anchor.Y+anchor.Height <= selection.Y {
+		top = min(max(scaled(8), anchor.Y+anchor.Height+scaled(8)), max(scaled(8), frame.Height-height-scaled(8)))
+	}
+	return Rect{X: left, Y: top, Width: width, Height: height}
 }
 
-// drawScreenshotEditorToolTooltip renders one compact label above its annotation tool.
-func drawScreenshotEditorToolTooltip(displayList *DisplayList, frame Size, anchor Rect, text string, uiScale float32) {
-	drawScreenshotEditorToolTooltipAt(displayList, screenshotEditorToolTooltipRect(frame, anchor, text, uiScale), text, uiScale)
+// drawScreenshotEditorToolTooltip renders one compact label beside its annotation tool.
+func drawScreenshotEditorToolTooltip(displayList *DisplayList, frame Size, anchor, selection Rect, text string, uiScale float32) {
+	drawScreenshotEditorToolTooltipAt(displayList, screenshotEditorToolTooltipRect(frame, anchor, selection, text, uiScale), text, uiScale)
 }
 
 // drawScreenshotEditorToolTooltipAt paints an already-placed toolbar hint.
@@ -1057,6 +1100,7 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	displayList *DisplayList,
 	frame Size,
 	toolbar Rect,
+	selection Rect,
 	activeTool screenshotEditorTool,
 	selected *screenshotEditorAnnotation,
 	creationColor Color,
@@ -1093,8 +1137,9 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 		width += scaled(54)
 	}
 	left := min(max(scaled(24), toolbar.X), max(scaled(24), frame.Width-width-scaled(24)))
-	top := toolbar.Y + toolbar.Height + scaled(8)
-	bar := Rect{X: left, Y: top, Width: width, Height: scaled(56)}
+	barHeight := scaled(56)
+	top := screenshotEditorEditBarTop(toolbar, selection, barHeight, scaled(8), scaled(24))
+	bar := Rect{X: left, Y: top, Width: width, Height: barHeight}
 	displayList.FillRoundedRect(bar, scaled(18), Color{R: 27, G: 23, B: 21, A: 255})
 
 	var colorRects [6]Rect
@@ -1169,14 +1214,25 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	state.mu.Unlock()
 }
 
-// drawScreenshotEditorSizeLabel places a DPI-scaled dimension chip above the selection.
-func drawScreenshotEditorSizeLabel(displayList *DisplayList, label string, selection Rect, frame Size, uiScale float32) {
+// screenshotEditorSizeLabelRect keeps the dimension chip on the free side of the selection edge.
+func screenshotEditorSizeLabelRect(label string, selection, toolbar Rect, frame Size, uiScale float32) Rect {
 	scaled := func(value float32) float32 { return value * max(float32(1), uiScale) }
-	labelWidth := max(scaled(80), float32(len(label))*scaled(8)+scaled(16))
-	labelLeft := min(max(scaled(8), selection.X+scaled(12)), max(scaled(8), frame.Width-labelWidth-scaled(8)))
-	labelTop := max(scaled(8), selection.Y-scaled(32))
-	displayList.FillRoundedRect(Rect{X: labelLeft - scaled(8), Y: labelTop, Width: labelWidth, Height: scaled(26)}, scaled(10), Color{R: 23, G: 23, B: 23, A: 230})
-	displayList.DrawText(label, Rect{X: labelLeft, Y: labelTop + scaled(5), Width: labelWidth - scaled(16), Height: scaled(18)}, TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	width := max(scaled(80), float32(len(label))*scaled(8)+scaled(16))
+	height := scaled(26)
+	left := min(max(scaled(8), selection.X+scaled(12)), max(scaled(8), frame.Width-width-scaled(8))) - scaled(8)
+	top := max(scaled(8), selection.Y-scaled(32))
+	if toolbar.Height > 0 && toolbar.Y+toolbar.Height <= selection.Y {
+		top = min(max(scaled(8), selection.Y+scaled(8)), max(scaled(8), frame.Height-height-scaled(8)))
+	}
+	return Rect{X: left, Y: top, Width: width, Height: height}
+}
+
+// drawScreenshotEditorSizeLabel places a DPI-scaled dimension chip beside the selection.
+func drawScreenshotEditorSizeLabel(displayList *DisplayList, label string, selection, toolbar Rect, frame Size, uiScale float32) {
+	scaled := func(value float32) float32 { return value * max(float32(1), uiScale) }
+	chip := screenshotEditorSizeLabelRect(label, selection, toolbar, frame, uiScale)
+	displayList.FillRoundedRect(chip, scaled(10), Color{R: 23, G: 23, B: 23, A: 230})
+	displayList.DrawText(label, Rect{X: chip.X + scaled(8), Y: chip.Y + scaled(5), Width: chip.Width - scaled(16), Height: scaled(18)}, TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
 }
 
 // drawScreenshotEditorToolbarIcon renders the shared SVG at a consistent visual size.
@@ -1215,7 +1271,7 @@ func drawScreenshotEditorToolbarIconSized(displayList *DisplayList, name string,
 	displayList.DrawImage(actual.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
 }
 
-// drawScreenshotEditorCursor previews the captured pointer with the same marker exported to PNG.
+// drawScreenshotEditorCursor previews the captured pointer with the same marker exported to the image.
 func drawScreenshotEditorCursor(displayList *DisplayList, hotspot Point, captured *screenshotEditorCapturedCursor, source *Image, frame Size) {
 	if captured != nil && captured.preview != nil && source != nil && source.Width > 0 && source.Height > 0 {
 		scaleX := frame.Width / float32(source.Width)
@@ -1303,6 +1359,8 @@ func screenshotEditorCursorPixelFromDesktop(cursor Point, bounds Rect, source im
 }
 
 // screenshotEditorToolbarPlacement right-aligns the bar to the selection and prefers a 16px gap below, then above.
+// stackHeight only decides whether the toolbar plus optional property bar fit below. The returned toolbar
+// always uses toolbarHeight so the visible gap stays 16px on both sides instead of reserving empty stack space.
 func screenshotEditorToolbarPlacement(selection, frame Rect, toolbarWidth, toolbarHeight, stackHeight, uiScale float32) Rect {
 	if uiScale <= 0 {
 		uiScale = 1
@@ -1317,9 +1375,21 @@ func screenshotEditorToolbarPlacement(selection, frame Rect, toolbarWidth, toolb
 	left := min(max(frame.X+inset, selection.X+selection.Width-toolbarWidth), max(frame.X+inset, frameRight-toolbarWidth-inset))
 	top := selection.Y + selection.Height + gap
 	if top+stackHeight > frameBottom-inset {
-		top = max(frame.Y+inset, selection.Y-stackHeight-gap)
+		top = max(frame.Y+inset, selection.Y-toolbarHeight-gap)
 	}
 	return Rect{X: left, Y: top, Width: toolbarWidth, Height: toolbarHeight}
+}
+
+// screenshotEditorEditBarTop grows the property bar away from the selection so the toolbar gap stays 16px.
+func screenshotEditorEditBarTop(toolbar, selection Rect, barHeight, gap, inset float32) float32 {
+	below := toolbar.Y + toolbar.Height + gap
+	if toolbar.Y+toolbar.Height <= selection.Y {
+		above := toolbar.Y - gap - barHeight
+		if above >= inset {
+			return above
+		}
+	}
+	return below
 }
 
 func drawScreenshotEditorHandles(displayList *DisplayList, selection Rect, color Color, uiScale float32) {
@@ -1352,6 +1422,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		state.pointerPosition = event.Position
 		state.pointerInside = true
 		confirm := state.hasSelection && screenshotEditorRectContains(state.confirmRect, event.Position)
+		save := state.hasSelection && screenshotEditorRectContains(state.saveRect, event.Position)
 		cancel := state.hasSelection && screenshotEditorRectContains(state.cancelRect, event.Position)
 		pin := state.hasSelection && screenshotEditorRectContains(state.pinRect, event.Position)
 		record := state.hasSelection && screenshotEditorRectContains(state.recordRect, event.Position)
@@ -1502,6 +1573,9 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		} else if confirm {
 			state.commitText()
 			state.complete(false)
+		} else if save {
+			state.commitText()
+			state.requestSave()
 		} else if cancel {
 			state.complete(true)
 		} else if pin {
@@ -1594,7 +1668,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			state.selectedAnnotation = len(state.annotations) - 1
 			state.hasSelectedMark = true
 			state.hasHoveredMark = false
-			state.activeTool = screenshotEditorToolSelect
+			// Keep the creation tool so the next drag draws another mark instead of moving the capture.
 		}
 		state.mu.Unlock()
 		state.invalidate()
@@ -1715,6 +1789,20 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 		if colorShortcut && state.copyInspectedColor(format) {
 			return true
 		}
+	}
+	if !event.Composing && event.Key == Key("s") && event.Modifiers.HasPrimary() {
+		state.mu.Lock()
+		hasSelection := state.hasSelection
+		textEditing := state.textEditing
+		state.mu.Unlock()
+		if !hasSelection {
+			return true
+		}
+		if textEditing {
+			state.commitText()
+		}
+		state.requestSave()
+		return true
 	}
 	if event.Key == KeyEnter {
 		state.mu.Lock()
@@ -2018,6 +2106,83 @@ func (state *screenshotEditorOverlayState) complete(cancelled bool) {
 	})
 }
 
+// completeSave finishes the overlay after the user chose a download path.
+func (state *screenshotEditorOverlayState) completeSave(path string) {
+	state.once.Do(func() {
+		state.result <- screenshotEditorOverlayOutcome{saveAsPath: path}
+	})
+}
+
+// requestSave asks where to download the image and keeps the editor open if the dialog is cancelled.
+func (state *screenshotEditorOverlayState) requestSave() {
+	state.mu.Lock()
+	if state.saving || !state.hasSelection {
+		state.mu.Unlock()
+		return
+	}
+	state.saving = true
+	state.mu.Unlock()
+	path, err := state.chooseScreenshotSavePath()
+	state.mu.Lock()
+	state.saving = false
+	state.mu.Unlock()
+	if err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to choose screenshot save path: %s", err.Error()))
+		return
+	}
+	if path == "" {
+		return
+	}
+	state.completeSave(screenshotSaveAsExportPath(path))
+}
+
+// chooseScreenshotSavePath hides the overlay so the native Save As dialog is not covered.
+func (state *screenshotEditorOverlayState) chooseScreenshotSavePath() (string, error) {
+	if state.chooseSavePath != nil {
+		return state.chooseSavePath()
+	}
+	window := state.window
+	if window == nil {
+		return "", errors.New("screenshot window is not initialized")
+	}
+	_ = window.Hide()
+	title := strings.TrimSpace(state.actionTooltips.SaveTitle)
+	if title == "" {
+		title = "Save screenshot"
+	}
+	defaultName := time.Now().Format("20060102_150405") + "_wox_snapshots.jpg"
+	path, err := window.SaveFile(SaveFileOptions{Title: title, DefaultFileName: defaultName, Extension: "jpg"})
+	if path == "" || err != nil {
+		if _, showErr := window.Show(); showErr != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to restore screenshot overlay after save dialog: %s", showErr.Error()))
+		}
+		_ = window.Invalidate()
+	}
+	return path, err
+}
+
+// screenshotSaveAsExportPath keeps a user-chosen destination and adds JPEG only when no extension was given.
+func screenshotSaveAsExportPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if filepath.Ext(path) == "" {
+		return path + ".jpg"
+	}
+	return path
+}
+
+// screenshotExportPathsEqual treats the history file and the download path as the same destination when they resolve to one file.
+func screenshotExportPathsEqual(left, right string) bool {
+	leftAbs, leftErr := filepath.Abs(left)
+	rightAbs, rightErr := filepath.Abs(right)
+	if leftErr != nil || rightErr != nil {
+		return filepath.Clean(left) == filepath.Clean(right)
+	}
+	return strings.EqualFold(leftAbs, rightAbs)
+}
+
 func (state *screenshotEditorOverlayState) activeRecordingUI() *recordingToolbarState {
 	if state == nil {
 		return nil
@@ -2225,6 +2390,7 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 		{screenshotEditorActionPin, state.pinRect},
 		{screenshotEditorActionRecord, state.recordRect},
 		{screenshotEditorActionCancel, state.cancelRect},
+		{screenshotEditorActionSave, state.saveRect},
 		{screenshotEditorActionConfirm, state.confirmRect},
 	} {
 		if screenshotEditorRectContains(target.rect, point) {

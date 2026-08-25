@@ -203,14 +203,14 @@ Wox 会把规范化后的 `Query` 传给 `query()`：
 - OCR
 - 图片上传
 - 缺陷反馈
-- 插件自己后处理 PNG 的视觉流程
+- 插件自己后处理截图的视觉流程
 
 ### 返回结果
 
 `Screenshot()` 会返回：
 
 - `Success`：截图是否成功完成
-- `ScreenshotPath`：成功时导出的 PNG 路径
+- `ScreenshotPath`：成功时导出的图片路径
 - `ErrMsg`：失败原因；如果成功但存在提示信息，也会放在这里
 
 ### 可选参数

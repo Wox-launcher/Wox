@@ -47,7 +47,10 @@ type ScreenshotActionTooltips struct {
 	Pin              string
 	Record           string
 	Cancel           string
-	Confirm          string
+	// Save labels the download control. SaveTitle is the native Save As dialog title.
+	Save      string
+	SaveTitle string
+	Confirm   string
 }
 
 // ScreenshotAnnotationTooltips carries localized labels for the annotation creation tools.

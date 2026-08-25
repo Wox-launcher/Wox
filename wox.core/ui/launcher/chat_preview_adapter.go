@@ -323,7 +323,7 @@ func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	return previewview.ChatDebugProps{
 		Width: width, Height: height, Key: snapshot.key, Summary: summary, Value: value, Layout: layout,
 		Scroll: snapshot.panelScroll, Theme: palette.componentTheme(), OnScroll: a.scrollChatDebugPanel, OnGeometryChanged: a.setChatDebugGeometry,
-		OnCopy: func() { a.copyChatText(value) },
+		OnCopy: func() { _ = a.copyChatText(value) },
 	}
 }
 
@@ -690,7 +690,9 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 	}
 	props := previewview.ChatMessageProps{
 		Key: fmt.Sprintf("%s-%d", key, index), Role: conversation.Role, ShowMeta: showMeta, Theme: palette.componentTheme(),
-		CopyLabel: a.translate("i18n:ui_ai_chat_copy_message"), EditLabel: a.translate("i18n:ui_ai_chat_edit_message"), RetryLabel: a.translate("i18n:ui_ai_chat_regenerate_response"),
+		CopyLabel: a.translate("i18n:ui_ai_chat_copy_message"), CopiedLabel: a.translate("i18n:ui_ai_chat_message_copied"),
+		EditLabel: a.translate("i18n:ui_ai_chat_edit_message"), RetryLabel: a.translate("i18n:ui_ai_chat_regenerate_response"),
+		OnTooltip: a.setPreviewTooltip,
 	}
 	if conversation.Timestamp > 0 {
 		props.Timestamp = time.UnixMilli(conversation.Timestamp).Local().Format("15:04")
@@ -750,7 +752,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		props.ContentWidth = min(innerWidth, props.ContentWidth)
 	}
 	if copyText := chatConversationClipboardText(conversation); copyText != "" {
-		props.OnCopy = func() { a.copyChatText(copyText) }
+		props.OnCopy = func() bool { return a.copyChatText(copyText) }
 	}
 	if conversation.ID != "" {
 		conversationID := conversation.ID

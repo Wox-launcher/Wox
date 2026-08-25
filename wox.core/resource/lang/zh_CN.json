@@ -2427,6 +2427,8 @@
   "ui_screenshot_tool_cursor": "显示鼠标",
   "ui_screenshot_tool_pin": "固定到屏幕",
   "ui_screenshot_tool_cancel": "取消",
+  "ui_screenshot_tool_save": "保存",
+  "ui_screenshot_save_title": "保存截图",
   "ui_screenshot_tool_confirm": "确认",
   "ui_screenshot_record_enter": "录制视频",
   "ui_screenshot_record_start": "开始录制",

@@ -2222,6 +2222,8 @@
   "ui_screenshot_tool_cursor": "Показать курсор",
   "ui_screenshot_tool_pin": "Закрепить на экране",
   "ui_screenshot_tool_cancel": "Отмена",
+  "ui_screenshot_tool_save": "Сохранить",
+  "ui_screenshot_save_title": "Сохранить снимок",
   "ui_screenshot_tool_confirm": "Подтвердить",
   "ui_screenshot_record_enter": "Записать видео",
   "ui_screenshot_record_start": "Начать запись",

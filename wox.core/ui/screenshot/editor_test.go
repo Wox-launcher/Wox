@@ -4,8 +4,34 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"image/jpeg"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestWriteScreenshotImageUsesJPEGForJPG(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.jpg")
+	source := image.NewRGBA(image.Rect(0, 0, 32, 24))
+	draw.Draw(source, source.Bounds(), &image.Uniform{C: color.RGBA{R: 40, G: 80, B: 120, A: 255}}, image.Point{}, draw.Src)
+	if err := writeScreenshotImage(path, source); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	decoded, err := jpeg.Decode(file)
+	if err != nil {
+		t.Fatalf("decode screenshot JPEG: %v", err)
+	}
+	if decoded.Bounds().Size() != source.Bounds().Size() {
+		t.Fatalf("JPEG size = %v, want %v", decoded.Bounds().Size(), source.Bounds().Size())
+	}
+}
 
 func TestNewScreenshotEditorImageSharesPackedRGBA(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 4, 2))
@@ -298,8 +324,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 632 || state.toolbarRect.Height != 60 {
-		t.Fatalf("toolbar bounds = %+v, want 632x60", state.toolbarRect)
+	if state.toolbarRect.Width != 686 || state.toolbarRect.Height != 60 {
+		t.Fatalf("toolbar bounds = %+v, want 686x60", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -307,8 +333,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	if state.toolbarRect.Y != state.selection.Y+state.selection.Height+16 {
 		t.Fatalf("toolbar top = %v, want 16px below selection", state.toolbarRect.Y)
 	}
-	if state.pinRect.Width != 40 || state.cancelRect.Width != 40 || state.confirmRect.Width != 40 {
-		t.Fatalf("action bounds = pin %+v cancel %+v confirm %+v", state.pinRect, state.cancelRect, state.confirmRect)
+	if state.pinRect.Width != 40 || state.cancelRect.Width != 40 || state.saveRect.Width != 40 || state.confirmRect.Width != 40 {
+		t.Fatalf("action bounds = pin %+v cancel %+v save %+v confirm %+v", state.pinRect, state.cancelRect, state.saveRect, state.confirmRect)
 	}
 	if state.toolRects[screenshotEditorToolSelect] != (Rect{}) {
 		t.Fatalf("select tool should not occupy toolbar space: %+v", state.toolRects[screenshotEditorToolSelect])
@@ -349,7 +375,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 686 || state.recordRect.Width != 40 {
+	if state.toolbarRect.Width != 740 || state.recordRect.Width != 40 {
 		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
 	}
 
@@ -357,12 +383,118 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 632 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 686 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 }
 
-func TestScreenshotEditorToolbarReservesPropertyBarSpaceBeforeToolSelection(t *testing.T) {
+func TestScreenshotEditorSaveActionDownloadsToChosenPath(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image:        testScreenshotImage(t, 1, 1),
+		selection:    Rect{X: 100, Y: 100, Width: 900, Height: 400},
+		hasSelection: true,
+		result:       make(chan screenshotEditorOverlayOutcome, 1),
+	}
+	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
+	if state.saveRect.Width != 40 {
+		t.Fatalf("save button = %+v", state.saveRect)
+	}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: state.saveRect.X + 20, Y: state.saveRect.Y + 20}})
+	if !state.hasHoveredAction || state.hoveredAction != screenshotEditorActionSave {
+		t.Fatalf("hovered action = active:%t action:%d, want save", state.hasHoveredAction, state.hoveredAction)
+	}
+
+	cancelled := 0
+	state.chooseSavePath = func() (string, error) {
+		cancelled++
+		return "", nil
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.saveRect.X + 20, Y: state.saveRect.Y + 20}})
+	select {
+	case outcome := <-state.result:
+		t.Fatalf("cancelled save dialog completed overlay: %+v", outcome)
+	default:
+	}
+	if cancelled != 1 {
+		t.Fatalf("save dialog calls = %d", cancelled)
+	}
+
+	state.chooseSavePath = func() (string, error) {
+		return filepath.Join(t.TempDir(), "shot"), nil
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.saveRect.X + 20, Y: state.saveRect.Y + 20}})
+	outcome := <-state.result
+	if outcome.cancelled || !strings.HasSuffix(outcome.saveAsPath, "shot.jpg") {
+		t.Fatalf("save outcome = %+v", outcome)
+	}
+}
+
+func TestScreenshotEditorSaveShortcutUsesPrimaryModifier(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image:        testScreenshotImage(t, 1, 1),
+		selection:    Rect{X: 100, Y: 100, Width: 900, Height: 400},
+		hasSelection: true,
+		result:       make(chan screenshotEditorOverlayOutcome, 1),
+		chooseSavePath: func() (string, error) {
+			return filepath.Join(t.TempDir(), "shot.png"), nil
+		},
+	}
+	if !state.key(KeyEvent{Key: Key("s"), Down: true, Modifiers: KeyModifierControl | KeyModifierMeta}) {
+		t.Fatal("primary save shortcut was not handled")
+	}
+	outcome := <-state.result
+	if !strings.HasSuffix(outcome.saveAsPath, "shot.png") {
+		t.Fatalf("save shortcut path = %q", outcome.saveAsPath)
+	}
+}
+
+func TestScreenshotSaveAsExportPathAddsJPEGWhenMissing(t *testing.T) {
+	if got := screenshotSaveAsExportPath("shot"); got != "shot.jpg" {
+		t.Fatalf("path = %q", got)
+	}
+	if got := screenshotSaveAsExportPath("shot.png"); got != "shot.png" {
+		t.Fatalf("png path = %q", got)
+	}
+	if screenshotSaveAsExportPath("  ") != "" {
+		t.Fatal("blank path should stay empty")
+	}
+}
+
+func TestScreenshotEditorToolbarPlacementKeepsSixteenPixelGap(t *testing.T) {
+	frame := Rect{Width: 1200, Height: 700}
+	belowSelection := Rect{X: 100, Y: 100, Width: 900, Height: 400}
+	below := screenshotEditorToolbarPlacement(belowSelection, frame, 686, 60, 124, 1)
+	if below.Y != belowSelection.Y+belowSelection.Height+16 {
+		t.Fatalf("below toolbar = %+v, want 16px under selection", below)
+	}
+	if got := screenshotEditorEditBarTop(below, belowSelection, 56, 8, 24); got != below.Y+below.Height+8 {
+		t.Fatalf("below property bar Y = %v, want under toolbar", got)
+	}
+
+	aboveSelection := Rect{X: 100, Y: 300, Width: 900, Height: 290}
+	above := screenshotEditorToolbarPlacement(aboveSelection, frame, 686, 60, 124, 1)
+	if above.Y+above.Height != aboveSelection.Y-16 {
+		t.Fatalf("above toolbar = %+v, want 16px over selection", above)
+	}
+	if got := screenshotEditorEditBarTop(above, aboveSelection, 56, 8, 24); got != above.Y-8-56 {
+		t.Fatalf("above property bar Y = %v, want over toolbar", got)
+	}
+
+	aboveLabel := screenshotEditorSizeLabelRect("900 x 290", aboveSelection, above, Size{Width: 1200, Height: 700}, 1)
+	if aboveLabel.Y != aboveSelection.Y+8 {
+		t.Fatalf("above size label = %+v, want inside selection below the toolbar", aboveLabel)
+	}
+	if aboveLabel.Y < above.Y+above.Height && aboveLabel.Y+aboveLabel.Height > above.Y {
+		t.Fatalf("size label %+v overlaps toolbar %+v", aboveLabel, above)
+	}
+
+	belowLabel := screenshotEditorSizeLabelRect("900 x 400", belowSelection, below, Size{Width: 1200, Height: 700}, 1)
+	if belowLabel.Y != belowSelection.Y-32 {
+		t.Fatalf("below size label = %+v, want above selection", belowLabel)
+	}
+}
+
+func TestScreenshotEditorToolbarKeepsSameGapAboveAndBelowSelection(t *testing.T) {
 	state := &screenshotEditorOverlayState{
 		image:        testScreenshotImage(t, 1, 1),
 		selection:    Rect{X: 100, Y: 300, Width: 900, Height: 290},
@@ -372,8 +504,8 @@ func TestScreenshotEditorToolbarReservesPropertyBarSpaceBeforeToolSelection(t *t
 	frame := FrameInfo{Size: Size{Width: 1200, Height: 700}}
 	state.draw(&DisplayList{}, frame)
 	initialToolbar := state.toolbarRect
-	if initialToolbar.Y >= state.selection.Y {
-		t.Fatalf("toolbar = %+v, want full toolbar stack placed above selection", initialToolbar)
+	if initialToolbar.Y+initialToolbar.Height != state.selection.Y-16 {
+		t.Fatalf("toolbar = %+v, want 16px above selection %+v", initialToolbar, state.selection)
 	}
 
 	rectTool := state.toolRects[screenshotEditorToolRect]
@@ -382,8 +514,9 @@ func TestScreenshotEditorToolbarReservesPropertyBarSpaceBeforeToolSelection(t *t
 	if state.toolbarRect != initialToolbar {
 		t.Fatalf("toolbar jumped after property bar appeared: before %+v, after %+v", initialToolbar, state.toolbarRect)
 	}
-	if state.editBarRect.Y != state.toolbarRect.Y+state.toolbarRect.Height+8 {
-		t.Fatalf("property bar = %+v, toolbar = %+v", state.editBarRect, state.toolbarRect)
+	wantEditBarY := screenshotEditorEditBarTop(state.toolbarRect, state.selection, 56, 8, 24)
+	if state.editBarRect.Y != wantEditBarY || state.editBarRect.Y+state.editBarRect.Height+8 != state.toolbarRect.Y {
+		t.Fatalf("property bar = %+v, toolbar = %+v, want above toolbar at Y=%v", state.editBarRect, state.toolbarRect, wantEditBarY)
 	}
 }
 
@@ -394,6 +527,7 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 		"screenshot.cursor",
 		"screenshot.pin",
 		"control.close",
+		"control.download",
 		"control.check",
 		"control.remove",
 		"control.add",
@@ -418,17 +552,41 @@ func TestScreenshotEditorAnnotationToolsHaveTooltips(t *testing.T) {
 	if got := screenshotEditorToolTooltip(int(screenshotEditorToolRect), configured); got != "Localized rectangle (R)" {
 		t.Fatalf("configured tooltip = %q", got)
 	}
-	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{})
+	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{})
 	if anchor.X != 10 || actionTooltip != "Localized cursor (C)" {
 		t.Fatalf("cursor tooltip = anchor:%+v text:%q", anchor, actionTooltip)
+	}
+	saveAnchor, saveTooltip := screenshotEditorActionTooltip(screenshotEditorActionSave, ScreenshotActionTooltips{Save: "Localized save"}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{X: 40, Y: 20, Width: 40, Height: 40}, Rect{})
+	if saveAnchor.X != 40 || !strings.HasPrefix(saveTooltip, "Localized save (") {
+		t.Fatalf("save tooltip = anchor:%+v text:%q", saveAnchor, saveTooltip)
 	}
 	if got := screenshotEditorEstimatedTextWidth("椭圆", 12); got != 24 {
 		t.Fatalf("estimated CJK tooltip width = %v, want 24", got)
 	}
 	displayList := &DisplayList{}
-	drawScreenshotEditorToolTooltip(displayList, Size{Width: 400, Height: 240}, Rect{X: 100, Y: 100, Width: 40, Height: 40}, "Rectangle", 1)
+	drawScreenshotEditorToolTooltip(displayList, Size{Width: 400, Height: 240}, Rect{X: 100, Y: 100, Width: 40, Height: 40}, Rect{}, "Rectangle", 1)
 	if displayList.CommandCount() != 2 {
 		t.Fatalf("tooltip commands = %d, want background and text", displayList.CommandCount())
+	}
+}
+
+func TestScreenshotEditorToolTooltipStaysOnSelectionSide(t *testing.T) {
+	frame := Size{Width: 1200, Height: 700}
+	anchor := Rect{X: 400, Y: 100, Width: 40, Height: 40}
+	belowSelection := Rect{X: 100, Y: 20, Width: 900, Height: 60}
+	above := screenshotEditorToolTooltipRect(frame, anchor, belowSelection, "Arrow (A)", 1)
+	if above.Y != 64 {
+		t.Fatalf("below-toolbar tooltip = %+v, want 8px above the icon", above)
+	}
+
+	aboveSelection := Rect{X: 100, Y: 160, Width: 900, Height: 200}
+	below := screenshotEditorToolTooltipRect(frame, anchor, aboveSelection, "Arrow (A)", 1)
+	if below.Y != 148 {
+		t.Fatalf("above-toolbar tooltip = %+v, want 8px below the icon", below)
+	}
+	editBar := Rect{X: 400, Y: 36, Width: 192, Height: 56}
+	if below.Y < editBar.Y+editBar.Height && below.Y+below.Height > editBar.Y {
+		t.Fatalf("tooltip %+v overlaps property bar %+v", below, editBar)
 	}
 }
 
@@ -443,8 +601,8 @@ func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
 	if state.uiScale != 1.5 {
 		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
 	}
-	if state.toolbarRect.Width != 948 || state.toolbarRect.Height != 90 {
-		t.Fatalf("scaled toolbar = %+v, want 948x90", state.toolbarRect)
+	if state.toolbarRect.Width != 1029 || state.toolbarRect.Height != 90 {
+		t.Fatalf("scaled toolbar = %+v, want 1029x90", state.toolbarRect)
 	}
 	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
 		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)
@@ -562,8 +720,8 @@ func TestScreenshotEditorCreatesEveryAnnotationTool(t *testing.T) {
 		if len(state.annotations) != 1 || state.annotations[0].tool != tool {
 			t.Fatalf("tool %d annotations = %+v", tool, state.annotations)
 		}
-		if !state.hasSelectedMark || state.selectedAnnotation != 0 || state.activeTool != screenshotEditorToolSelect {
-			t.Fatalf("tool %d selection = selected:%t index:%d active:%d", tool, state.hasSelectedMark, state.selectedAnnotation, state.activeTool)
+		if !state.hasSelectedMark || state.selectedAnnotation != 0 || state.activeTool != tool {
+			t.Fatalf("tool %d selection = selected:%t index:%d active:%d, want tool kept", tool, state.hasSelectedMark, state.selectedAnnotation, state.activeTool)
 		}
 	}
 
@@ -580,11 +738,42 @@ func TestScreenshotEditorCreatesEveryAnnotationTool(t *testing.T) {
 		t.Fatal("text input did not immediately reveal the caret")
 	}
 	textState.key(KeyEvent{Key: KeyEnter, Down: true})
+	if textState.activeTool != screenshotEditorToolText {
+		t.Fatalf("text tool = %d, want kept after commit", textState.activeTool)
+	}
 	if len(textState.annotations) != 1 || textState.annotations[0].text != "中文" {
 		t.Fatalf("text annotations = %+v", textState.annotations)
 	}
 	if !textState.hasSelectedMark || textState.selectedAnnotation != 0 {
 		t.Fatalf("committed text selection = selected:%t index:%d", textState.hasSelectedMark, textState.selectedAnnotation)
+	}
+}
+
+func TestScreenshotEditorKeepsDrawingToolForConsecutiveAnnotations(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		frameSize:    Size{Width: 400, Height: 240},
+		selection:    Rect{X: 20, Y: 20, Width: 360, Height: 200},
+		hasSelection: true,
+		activeTool:   screenshotEditorToolArrow,
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 60, Y: 60}})
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: 140, Y: 100}})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: Point{X: 140, Y: 100}})
+	if state.activeTool != screenshotEditorToolArrow || len(state.annotations) != 1 {
+		t.Fatalf("after first arrow: tool=%d annotations=%d", state.activeTool, len(state.annotations))
+	}
+
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 200, Y: 80}})
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: 280, Y: 140}})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: Point{X: 280, Y: 140}})
+	if state.activeTool != screenshotEditorToolArrow {
+		t.Fatalf("tool = %d, want arrow kept for the second stroke", state.activeTool)
+	}
+	if len(state.annotations) != 2 || state.annotations[1].tool != screenshotEditorToolArrow {
+		t.Fatalf("second stroke annotations = %+v, want a second arrow instead of moving the selection", state.annotations)
+	}
+	if state.selection != (Rect{X: 20, Y: 20, Width: 360, Height: 200}) {
+		t.Fatalf("selection = %+v, consecutive drawing should not move the capture", state.selection)
 	}
 }
 
@@ -1160,26 +1349,32 @@ func TestScreenshotScrollingCaptureMatchesAndStitchesBothDirections(t *testing.T
 	}
 }
 
-func TestScreenshotScrollingControlLayoutMatchesFlutter(t *testing.T) {
-	toolbar, cancel, confirm := screenshotScrollingControlLayout(Size{Width: 168, Height: 300}, 1)
-	if toolbar != (Rect{X: 22, Y: 244, Width: 124, Height: 56}) {
+func TestScreenshotScrollingControlLayoutIncludesSave(t *testing.T) {
+	toolbar, cancel, save, confirm := screenshotScrollingControlLayout(Size{Width: 216, Height: 300}, 1)
+	if toolbar != (Rect{X: 22, Y: 244, Width: 172, Height: 56}) {
 		t.Fatalf("toolbar = %+v", toolbar)
 	}
 	if cancel != (Rect{X: 40, Y: 252, Width: 40, Height: 40}) {
 		t.Fatalf("cancel = %+v", cancel)
 	}
-	if confirm != (Rect{X: 88, Y: 252, Width: 40, Height: 40}) {
+	if save != (Rect{X: 88, Y: 252, Width: 40, Height: 40}) {
+		t.Fatalf("save = %+v", save)
+	}
+	if confirm != (Rect{X: 136, Y: 252, Width: 40, Height: 40}) {
 		t.Fatalf("confirm = %+v", confirm)
 	}
 
-	toolbar, cancel, confirm = screenshotScrollingControlLayout(Size{Width: 252, Height: 450}, 1.5)
-	if toolbar != (Rect{X: 33, Y: 366, Width: 186, Height: 84}) {
+	toolbar, cancel, save, confirm = screenshotScrollingControlLayout(Size{Width: 324, Height: 450}, 1.5)
+	if toolbar != (Rect{X: 33, Y: 366, Width: 258, Height: 84}) {
 		t.Fatalf("scaled toolbar = %+v", toolbar)
 	}
 	if cancel != (Rect{X: 60, Y: 378, Width: 60, Height: 60}) {
 		t.Fatalf("scaled cancel = %+v", cancel)
 	}
-	if confirm != (Rect{X: 132, Y: 378, Width: 60, Height: 60}) {
+	if save != (Rect{X: 132, Y: 378, Width: 60, Height: 60}) {
+		t.Fatalf("scaled save = %+v", save)
+	}
+	if confirm != (Rect{X: 204, Y: 378, Width: 60, Height: 60}) {
 		t.Fatalf("scaled confirm = %+v", confirm)
 	}
 }

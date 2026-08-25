@@ -125,6 +125,7 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	editor.pinRect = Rect{}
 	editor.recordRect = Rect{}
 	editor.cancelRect = Rect{}
+	editor.saveRect = Rect{}
 	editor.confirmRect = Rect{}
 	if editor.chromeScale != nil {
 		editor.uiScale = max(float32(1), editor.chromeScale(selection))
@@ -808,11 +809,15 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 		drawScreenshotEditorHandles(displayList, localSelection, blue, uiScale)
 	}
 	label := fmt.Sprintf("%d x %d", sessionPixelWidth(session, source, selection, frameSize), sessionPixelHeight(session, source, selection, frameSize))
-	drawScreenshotEditorSizeLabel(displayList, label, localSelection, frame.Size, uiScale)
+	localToolbar := Rect{}
+	if toolbarBounds.Width > 0 {
+		localToolbar = Rect{X: toolbarBounds.X - origin.X, Y: toolbarBounds.Y - origin.Y, Width: toolbarBounds.Width, Height: toolbarBounds.Height}
+	}
+	drawScreenshotEditorSizeLabel(displayList, label, localSelection, localToolbar, frame.Size, uiScale)
 	// After recording starts the toolbar draws this hint. Drawing it again here
 	// stacked a second tooltip when Linux kept the border window visible.
 	if !collapsed && status == recordingStateReady {
-		drawScreenshotEditorToolTooltipAt(displayList, recordingToolbarTooltipLocalRect(frameSize, toolbarBounds, hoverTooltipRect, origin, hoverTooltip, uiScale), hoverTooltip, uiScale)
+		drawScreenshotEditorToolTooltipAt(displayList, recordingToolbarTooltipLocalRect(frameSize, toolbarBounds, hoverTooltipRect, selection, origin, hoverTooltip, uiScale), hoverTooltip, uiScale)
 	}
 }
 
@@ -822,9 +827,9 @@ func recordingBorderLocalSelection(selection Rect, origin Point) Rect {
 }
 
 // recordingToolbarTooltipLocalRect places the toolbar hint in the screenshot 16px gap, using border-local coordinates.
-func recordingToolbarTooltipLocalRect(frame Size, toolbarBounds, anchor Rect, origin Point, text string, scale float32) Rect {
+func recordingToolbarTooltipLocalRect(frame Size, toolbarBounds, anchor, selection Rect, origin Point, text string, scale float32) Rect {
 	globalAnchor := Rect{X: toolbarBounds.X + anchor.X, Y: toolbarBounds.Y + anchor.Y, Width: anchor.Width, Height: anchor.Height}
-	global := screenshotEditorToolTooltipRect(frame, globalAnchor, text, scale)
+	global := screenshotEditorToolTooltipRect(frame, globalAnchor, selection, text, scale)
 	if global.Width <= 0 {
 		return Rect{}
 	}
@@ -1014,7 +1019,7 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	drawScreenshotEditorToolbarIcon(displayList, finishIcon, finishRect, finishColor, scale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, scale)
 	if recordingStatus != recordingStateReady {
-		drawScreenshotEditorToolTooltip(displayList, frame.Size, hoverTooltipRect, hoverTooltip, scale)
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, hoverTooltipRect, Rect{}, hoverTooltip, scale)
 	}
 }
 

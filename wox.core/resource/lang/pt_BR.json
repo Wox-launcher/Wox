@@ -2221,6 +2221,8 @@
   "ui_screenshot_tool_cursor": "Mostrar cursor",
   "ui_screenshot_tool_pin": "Fixar na tela",
   "ui_screenshot_tool_cancel": "Cancelar",
+  "ui_screenshot_tool_save": "Salvar",
+  "ui_screenshot_save_title": "Salvar captura",
   "ui_screenshot_tool_confirm": "Confirmar",
   "ui_screenshot_record_enter": "Gravar vídeo",
   "ui_screenshot_record_start": "Iniciar gravação",

@@ -586,17 +586,22 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 				weight = woxui.FontWeightSemibold
 				background = withAlpha(props.Theme.PreviewText, 12)
 			}
-			cells = append(cells, woxwidget.Container{
-				Width: cellWidth, Height: 38, Padding: woxwidget.Insets{Left: 8, Right: 8}, Color: background, BorderColor: withAlpha(props.Theme.PreviewSplit, 100), BorderWidth: 1,
+			cells = append(cells, WoxTableGridCell(TableGridCellProps{
+				Width: cellWidth, Height: 38, Color: background, Border: withAlpha(props.Theme.PreviewSplit, 100),
+				Trailing: column < columns-1, Bottom: rowIndex < len(table.rows)-1,
+				Padding: woxwidget.Insets{Left: 8, Right: 8},
 				Child: woxwidget.Align{Width: max(float32(0), cellWidth-16), Height: 38, Vertical: 0.5, Child: woxwidget.TextBlock{
 					Value: value, Width: max(float32(0), cellWidth-16), Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}, Color: props.Theme.PreviewText,
 				}},
-			})
+			}))
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})
 	}
 	height := float32(len(rows)) * 38
-	return woxwidget.ScrollView{Width: width, Height: height, ContentWidth: contentWidth, Horizontal: true, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+	return WoxTableGridFrame(width, height, withAlpha(props.Theme.PreviewSplit, 100), woxwidget.ScrollView{
+		Width: width, Height: height, ContentWidth: contentWidth, Horizontal: true,
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+	})
 }
 
 // markdownImageWidget reuses launcher image loading and overlay callbacks without owning I/O.

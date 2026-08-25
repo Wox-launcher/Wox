@@ -3,11 +3,14 @@ package preview
 import (
 	"math"
 	"strings"
+	"time"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+const chatCopyFeedbackDuration = 1200 * time.Millisecond
 
 // ChatPreviewProps contains the typed chat panes and optional catalog drawer.
 type ChatPreviewProps struct {
@@ -528,12 +531,15 @@ type ChatMessageProps struct {
 	Images           []*woxui.Image
 	Theme            woxcomponent.Theme
 	ShowMeta         bool
+	Copied           bool
 	CopyLabel        string
+	CopiedLabel      string
 	EditLabel        string
 	RetryLabel       string
-	OnCopy           func()
+	OnCopy           func() bool
 	OnEdit           func()
 	OnRetry          func()
+	OnTooltip        func(bool, string, woxui.Rect)
 	OnToggleRound    func()
 }
 
@@ -607,7 +613,11 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 
 // chatMessageState keeps hover-only metadata out of the launcher controller.
 type chatMessageState struct {
-	hovered bool
+	hovered       bool
+	actionHovered bool
+	copied        bool
+	copyAnchor    woxui.Rect
+	copyReset     *time.Timer
 }
 
 // ChatMessage maps a prepared conversation to the Flutter-aligned reading surface.
@@ -625,18 +635,61 @@ func (s *chatMessageState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {
 
 func (s *chatMessageState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(ChatMessageProps)
+	props.Copied = s.copied
+	if original := props.OnCopy; original != nil {
+		props.OnCopy = func() bool {
+			if !original() {
+				return false
+			}
+			s.confirmCopied(context, props.OnTooltip, props.CopiedLabel)
+			return true
+		}
+	}
 	width := props.AvailableWidth
-	return chatMessageContent(props, width, s.hovered, func(inside bool) {
+	return chatMessageContent(props, width, s.hovered || s.actionHovered, func(inside bool) {
 		if inside != s.hovered {
 			context.SetState(func() { s.hovered = inside })
+		}
+	}, func(inside bool, bounds woxui.Rect) {
+		if inside {
+			s.copyAnchor = bounds
+		}
+		if inside != s.actionHovered {
+			context.SetState(func() { s.actionHovered = inside })
 		}
 	})
 }
 
-func (s *chatMessageState) Dispose() {}
+func (s *chatMessageState) confirmCopied(context woxwidget.StateContext, tooltip func(bool, string, woxui.Rect), label string) {
+	if s.copyReset != nil {
+		s.copyReset.Stop()
+	}
+	context.SetState(func() { s.copied = true })
+	if tooltip != nil && label != "" && (s.copyAnchor.Width > 0 || s.copyAnchor.Height > 0) {
+		tooltip(true, label, s.copyAnchor)
+	}
+	s.copyReset = time.AfterFunc(chatCopyFeedbackDuration, func() {
+		_ = woxui.Call(func() {
+			if !context.Mounted() {
+				return
+			}
+			context.SetState(func() { s.copied = false })
+			if tooltip != nil {
+				tooltip(false, "", woxui.Rect{})
+			}
+		})
+	})
+}
+
+func (s *chatMessageState) Dispose() {
+	if s.copyReset != nil {
+		s.copyReset.Stop()
+		s.copyReset = nil
+	}
+}
 
 // chatMessageContent builds the message body while its retained owner supplies hover state.
-func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onHover func(bool)) woxwidget.Widget {
+func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onHover func(bool), onActionHover func(bool, woxui.Rect)) woxwidget.Widget {
 	if props.Kind == "round" {
 		disclosure := woxcomponent.KeyboardArrowRightGlyph(16, props.Theme.ResultSubtitle)
 		if props.RoundExpanded {
@@ -677,7 +730,7 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 	}
 
 	innerWidth := max(float32(24), cardWidth-24)
-	actions, _ := chatMessageActions(props, hovered, onHover)
+	actions, _ := chatMessageActions(props, hovered, onActionHover)
 	hasActions := len(actions) > 0
 	showRoleHeader := props.Role == "tool" || props.Role == "system" || props.ToolText != ""
 	children := make([]woxwidget.Widget, 0, 6)
@@ -729,8 +782,6 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: imageChildren})
 	}
 	if !showRoleHeader && props.ShowMeta {
-		reservedActionWidth := chatMessageActionWidth(props)
-		footerWidth := props.TimestampWidth + 24 + reservedActionWidth
 		metaColor := props.Theme.ResultSubtitle
 		if !hovered {
 			metaColor.A = 0
@@ -745,8 +796,10 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 		}
 		if hasActions {
 			footerChildren = append(footerChildren, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: actions})
+		} else if reserved := chatMessageActionWidth(props); reserved > 0 {
+			footerChildren = append(footerChildren, woxwidget.Container{Width: reserved})
 		}
-		footer = woxwidget.Align{Width: footerWidth, Height: 18, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: footerChildren}}
+		footer = woxwidget.Container{Height: 18, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: footerChildren}}
 	}
 
 	cardHeight := chatMessageHeight(props)
@@ -900,13 +953,15 @@ func chatToolActivityDetailsHeight(tools []ChatToolCallProps) float32 {
 }
 
 // chatMessageActions builds the available controller-owned message actions.
-func chatMessageActions(props ChatMessageProps, visible bool, onHover func(bool)) ([]woxwidget.Widget, float32) {
+func chatMessageActions(props ChatMessageProps, visible bool, onHover func(bool, woxui.Rect)) ([]woxwidget.Widget, float32) {
 	if !visible {
 		return nil, 0
 	}
+	hoverBackground := props.Theme.ResultSubtitle
+	hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
 	actions := make([]woxwidget.Widget, 0, 2)
 	width := float32(0)
-	appendAction := func(name, label string, actionWidth float32, action func()) {
+	appendAction := func(name, label string, actionWidth float32, icon woxwidget.Widget, action func()) {
 		if action == nil {
 			return
 		}
@@ -914,28 +969,44 @@ func chatMessageActions(props ChatMessageProps, visible bool, onHover func(bool)
 			width += 8
 		}
 		width += actionWidth
-		icon := woxcomponent.CopyGlyph(14, props.Theme.ResultSubtitle)
-		if name == "edit" {
-			icon = woxcomponent.EditGlyph(14, props.Theme.ResultSubtitle)
-		} else if name == "retry" {
-			icon = woxcomponent.RefreshGlyph(14, props.Theme.ResultSubtitle)
-		}
 		actions = append(actions, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: "chat-" + name + "-" + props.Key, Label: label, Icon: icon,
-			Width: actionWidth, Height: 18, Radius: 5, HoverBackground: props.Theme.ActionBackground, FocusRingColor: props.Theme.Cursor, OnTap: action,
-			OnHoverAt: func(inside bool, _ woxui.Rect) { onHover(inside) },
+			Width: actionWidth, Height: 18, Radius: 5, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: action,
+			OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				if onHover != nil {
+					onHover(inside, bounds)
+				}
+				if name == "copy" && props.OnTooltip != nil {
+					props.OnTooltip(inside, label, bounds)
+				}
+			},
 		}))
 	}
-	appendAction("copy", props.CopyLabel, 18, props.OnCopy)
-	appendAction("edit", props.EditLabel, 18, props.OnEdit)
-	appendAction("retry", props.RetryLabel, 18, props.OnRetry)
+	copyLabel := props.CopyLabel
+	copyIcon := woxcomponent.CopyGlyph(14, props.Theme.ResultSubtitle)
+	if props.Copied {
+		copyIcon = woxcomponent.CheckGlyph(14, props.Theme.ResultSubtitle)
+		if props.CopiedLabel != "" {
+			copyLabel = props.CopiedLabel
+		}
+	}
+	var onCopy func()
+	if props.OnCopy != nil {
+		onCopy = func() { _ = props.OnCopy() }
+	}
+	appendAction("copy", copyLabel, 18, copyIcon, onCopy)
+	appendAction("edit", props.EditLabel, 18, woxcomponent.EditGlyph(14, props.Theme.ResultSubtitle), props.OnEdit)
+	appendAction("retry", props.RetryLabel, 18, woxcomponent.RefreshGlyph(14, props.Theme.ResultSubtitle), props.OnRetry)
 	return actions, width
 }
 
 // chatMessageActionWidth reserves the Flutter toolbar width while hover metadata is hidden.
 func chatMessageActionWidth(props ChatMessageProps) float32 {
 	count := 0
-	for _, action := range []func(){props.OnCopy, props.OnEdit, props.OnRetry} {
+	if props.OnCopy != nil {
+		count++
+	}
+	for _, action := range []func(){props.OnEdit, props.OnRetry} {
 		if action != nil {
 			count++
 		}
@@ -1098,17 +1169,15 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	divider := props.Theme.ResultSubtitle
 	divider.A = uint8(float32(divider.A) * 0.14)
 	modelButton := ChatModelSelector(props)
-	label := "↵  " + props.ActionLabel
 	variant := woxcomponent.ButtonPrimary
 	if props.Sending {
-		label = props.ActionLabel
 		variant = woxcomponent.ButtonSurface
 	}
 	statusLeft := props.ModelWidth + 18
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
 		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: toolbarHeight, Vertical: 0.5, Child: modelButton}},
-		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: toolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: label, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})}},
+		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: toolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})}},
 	}
 	if props.Status != "" && statusWidth > 30 {
 		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: toolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})

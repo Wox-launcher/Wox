@@ -80,16 +80,16 @@ func WoxNoteTable(props NoteTableProps) woxwidget.Widget {
 			if column < len(row) {
 				cell = row[column]
 			}
-			cells = append(cells, noteTableCellField(props, *table, rowIndex, column, cell, cellWidth))
+			cells = append(cells, noteTableCellField(props, *table, rowIndex, column, columns, cell, cellWidth))
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})
 	}
 	gridHeight := float32(len(rows)) * noteTableRowHeight(props.Zoom)
-	grid := woxwidget.ScrollView{
+	grid := WoxTableGridFrame(props.Width, gridHeight, noteTableBorder(props.Theme), woxwidget.ScrollView{
 		Key: woxwidget.Key(props.ID + "-hscroll"), ID: props.ID + "-hscroll",
 		Width: props.Width, Height: gridHeight, ContentWidth: contentWidth, Horizontal: true,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}
+	})
 	var child woxwidget.Widget = grid
 	if toolbar := noteTableToolbar(props); toolbar != nil {
 		child = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: noteTableToolbarGap, Children: []woxwidget.Widget{toolbar, grid}}
@@ -154,7 +154,7 @@ func noteTableToolbar(props NoteTableProps) woxwidget.Widget {
 	}}
 }
 
-func noteTableCellField(props NoteTableProps, table common.NoteTable, row, column int, cell common.NoteTableCell, width float32) woxwidget.Widget {
+func noteTableCellField(props NoteTableProps, table common.NoteTable, row, column, columns int, cell common.NoteTableCell, width float32) woxwidget.Widget {
 	background := woxui.Color{}
 	weight := props.Style.Weight
 	if row < table.HeaderRows {
@@ -166,9 +166,9 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 	rowIndex, colIndex := row, column
 	cellHeight := noteTableRowHeight(props.Zoom)
 	lineHeight := noteTableLineHeight(props.Zoom)
-	return woxwidget.Container{
-		Width: width, Height: cellHeight, Color: background,
-		BorderColor: withAlpha(props.Theme.PreviewSplit, 100), BorderWidth: 1,
+	return WoxTableGridCell(TableGridCellProps{
+		Width: width, Height: cellHeight, Color: background, Border: noteTableBorder(props.Theme),
+		Trailing: column < columns-1, Bottom: row < len(table.Rows)-1,
 		Padding: woxwidget.Insets{Left: 8, Right: 8},
 		Child: WoxTextField(TextFieldProps{
 			ID: fmt.Sprintf("%s.%d.%d", props.ID, row, column), Label: "Table cell",
@@ -212,7 +212,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 			OnUndo: props.OnUndo,
 			OnRedo: props.OnRedo,
 		}),
-	}
+	})
 }
 
 func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle, theme Theme) []NoteTextRun {
@@ -359,6 +359,10 @@ func replaceNoteTable(document common.NoteDocument, block int, table *common.Not
 	updated.Blocks[block].Table = table
 	updated.Blocks[block].Text = noteTableMarkdown(*table)
 	return updated
+}
+
+func noteTableBorder(theme Theme) woxui.Color {
+	return withAlpha(theme.PreviewSplit, 100)
 }
 
 func noteTableZoom(zoom float32) float32 {

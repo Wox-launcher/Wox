@@ -199,7 +199,7 @@ Only enable features you actually need. They change how Wox routes queries and b
 
 Wox now exposes a built-in screenshot workflow to full-featured plugins.
 
-Use it when your plugin needs the user to draw a region and then continue processing the resulting PNG path itself, for example:
+Use it when your plugin needs the user to draw a region and then continue processing the resulting image path itself, for example:
 
 - OCR
 - image upload
@@ -211,7 +211,7 @@ Use it when your plugin needs the user to draw a region and then continue proces
 `Screenshot()` returns:
 
 - `Success`: whether the capture completed successfully
-- `ScreenshotPath`: exported PNG path when successful
+- `ScreenshotPath`: exported image path when successful
 - `ErrMsg`: failure reason, or a warning message when the capture completed with caveats
 
 ### Options

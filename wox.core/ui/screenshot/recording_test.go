@@ -427,7 +427,7 @@ func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
 	want.Clear(Color{})
 	want.StrokeRoundedRect(local, 0, 4, Color{R: 47, G: 128, B: 237, A: 255})
 	drawScreenshotEditorHandles(want, local, Color{R: 47, G: 128, B: 237, A: 255}, 2)
-	drawScreenshotEditorSizeLabel(want, "200 x 100", local, frame.Size, 2)
+	drawScreenshotEditorSizeLabel(want, "200 x 100", local, Rect{}, frame.Size, 2)
 	if err := got.Compare(want); err != nil {
 		t.Fatalf("recording border should use live chrome scale, not stale editor.uiScale: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestRecordingPreviewKeepsSelectionStrokeWithoutDuplicateTooltip(t *testing.
 	local := recordingBorderLocalSelection(state.selection, state.borderOrigin)
 	wantBorder := &DisplayList{}
 	wantBorder.Clear(Color{})
-	drawScreenshotEditorSizeLabel(wantBorder, "200 x 100", local, Size{Width: 400, Height: 300}, 1)
+	drawScreenshotEditorSizeLabel(wantBorder, "200 x 100", local, Rect{}, Size{Width: 400, Height: 300}, 1)
 	if err := border.Compare(wantBorder); err != nil {
 		t.Fatalf("save-state border should not restack the toolbar tooltip or covered stroke: %v", err)
 	}
@@ -622,7 +622,7 @@ func TestRecordingToolbarTooltipSitsInSelectionGapLikeScreenshot(t *testing.T) {
 	toolbar := Rect{X: selection.X + selection.Width - recordingToolbarWidth, Y: selection.Y + selection.Height + recordingToolbarSelectionGap, Width: recordingToolbarWidth, Height: recordingToolbarHeight}
 	anchor := Rect{X: 300, Y: 10, Width: 40, Height: 40}
 	origin := Point{X: selection.X - recordingBorderMargin, Y: selection.Y - recordingBorderMargin}
-	local := recordingToolbarTooltipLocalRect(Size{Width: 1920, Height: 1080}, toolbar, anchor, origin, "Show keystrokes", 1)
+	local := recordingToolbarTooltipLocalRect(Size{Width: 1920, Height: 1080}, toolbar, anchor, selection, origin, "Show keystrokes", 1)
 	globalY := local.Y + origin.Y
 	if globalY != toolbar.Y+anchor.Y-36 {
 		t.Fatalf("tooltip top = %v, want screenshot offset above the icon %v", globalY, toolbar.Y+anchor.Y-36)
@@ -630,6 +630,16 @@ func TestRecordingToolbarTooltipSitsInSelectionGapLikeScreenshot(t *testing.T) {
 	selectionBottom := selection.Y + selection.Height
 	if globalY >= selectionBottom || globalY+local.Height <= selectionBottom {
 		t.Fatalf("tooltip should occupy the screenshot gap overlapping the selection edge, tooltip=%+v selectionBottom=%v", Rect{X: local.X + origin.X, Y: globalY, Width: local.Width, Height: local.Height}, selectionBottom)
+	}
+
+	toolbar.Y = selection.Y - recordingToolbarHeight - recordingToolbarSelectionGap
+	local = recordingToolbarTooltipLocalRect(Size{Width: 1920, Height: 1080}, toolbar, anchor, selection, origin, "Show keystrokes", 1)
+	globalY = local.Y + origin.Y
+	if globalY != toolbar.Y+anchor.Y+anchor.Height+8 {
+		t.Fatalf("above-toolbar tooltip top = %v, want 8px below the icon %v", globalY, toolbar.Y+anchor.Y+anchor.Height+8)
+	}
+	if globalY >= selection.Y || globalY+local.Height <= selection.Y {
+		t.Fatalf("above-toolbar tooltip should occupy the screenshot gap overlapping the selection edge, tooltip=%+v selectionTop=%v", Rect{X: local.X + origin.X, Y: globalY, Width: local.Width, Height: local.Height}, selection.Y)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 	"wox/util"
 )
 
-// reserveScreenshotExportFilePath allocates a collision-safe PNG only after image confirmation.
+// reserveScreenshotExportFilePath allocates a collision-safe JPEG only after image confirmation.
 func reserveScreenshotExportFilePath() (string, error) {
 	directory := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "screenshots")
 	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
@@ -21,7 +21,7 @@ func reserveScreenshotExportFilePath() (string, error) {
 		if suffix > 0 {
 			suffixText = fmt.Sprintf("_%02d", suffix)
 		}
-		candidate := filepath.Join(directory, baseName+suffixText+".png")
+		candidate := filepath.Join(directory, baseName+suffixText+".jpg")
 		file, err := os.OpenFile(candidate, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
 			if closeErr := file.Close(); closeErr != nil {

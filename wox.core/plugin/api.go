@@ -204,7 +204,7 @@ type API interface {
 	// Supports text, image, or both simultaneously.
 	Copy(ctx context.Context, params CopyParams)
 
-	// Screenshot captures a user-selected screen area and returns the saved PNG path.
+	// Screenshot captures a user-selected screen area and returns the saved image path.
 	Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult
 }
 
@@ -222,11 +222,11 @@ type ScreenshotOption struct {
 	HideAnnotationToolbar bool `json:"hideAnnotationToolbar"`
 	// AutoConfirm completes the screenshot as soon as the user finishes drawing the selection.
 	// The previous API always required a manual confirm click, which is unnecessary for callers that
-	// only need the selected PNG path and do their own processing after capture.
+	// only need the selected image path and do their own processing after capture.
 	AutoConfirm bool `json:"autoConfirm"`
 }
 
-// ScreenshotResult reports the screenshot capture outcome and saved PNG path.
+// ScreenshotResult reports the screenshot capture outcome and saved image path.
 type ScreenshotResult struct {
 	Success        bool
 	ScreenshotPath string

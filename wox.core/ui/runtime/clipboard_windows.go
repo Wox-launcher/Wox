@@ -26,8 +26,12 @@ func writeClipboardTextNative(owner uintptr, text string) error {
 }
 
 func writeClipboardImageNative(owner uintptr, image *clipboardImage) error {
-	if image == nil || len(image.pixels) == 0 || len(image.png) == 0 {
+	if image == nil || len(image.pixels) == 0 {
 		return errors.New("clipboard image is empty")
+	}
+	var png *C.uint8_t
+	if len(image.png) > 0 {
+		png = (*C.uint8_t)(unsafe.Pointer(&image.png[0]))
 	}
 	result := C.wox_windows_write_clipboard_image(
 		C.uintptr_t(owner),
@@ -35,7 +39,7 @@ func writeClipboardImageNative(owner uintptr, image *clipboardImage) error {
 		C.uint32_t(image.width),
 		C.uint32_t(image.height),
 		C.uint32_t(image.stride),
-		(*C.uint8_t)(unsafe.Pointer(&image.png[0])),
+		png,
 		C.uint32_t(len(image.png)),
 	)
 	if result < 0 {

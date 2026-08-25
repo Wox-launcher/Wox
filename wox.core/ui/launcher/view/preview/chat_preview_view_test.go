@@ -10,8 +10,9 @@ import (
 
 func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 	action := func() {}
-	actions, actionWidth := chatMessageActions(ChatMessageProps{Key: "user", OnCopy: action, OnEdit: action}, true, func(bool) {})
-	if len(actions) != 2 || actionWidth != chatMessageActionWidth(ChatMessageProps{OnCopy: action, OnEdit: action}) {
+	copyAction := func() bool { return true }
+	actions, actionWidth := chatMessageActions(ChatMessageProps{Key: "user", OnCopy: copyAction, OnEdit: action}, true, func(bool, woxui.Rect) {})
+	if len(actions) != 2 || actionWidth != chatMessageActionWidth(ChatMessageProps{OnCopy: copyAction, OnEdit: action}) {
 		t.Fatalf("actions = %d, width = %.0f", len(actions), actionWidth)
 	}
 
@@ -19,7 +20,7 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 		Key: "user", Role: "user", ContentWidth: 26, Text: "你好",
 		TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 800, Height: 19}},
 		Theme:      woxcomponent.Theme{SelectedBackground: woxui.Color{A: 255}},
-	}, 1000, false, func(bool) {}).(woxwidget.Gesture)
+	}, 1000, false, func(bool) {}, nil).(woxwidget.Gesture)
 	stack := user.Child.(woxwidget.Stack)
 	if stack.Children[0].Left != 948 {
 		t.Fatalf("user bubble left = %.0f, want 948", stack.Children[0].Left)
@@ -30,8 +31,8 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 		t.Fatalf("user bubble = width %.0f, color %#v", body.Width, body.Color)
 	}
 
-	collapsed := chatMessageContent(ChatMessageProps{Key: "round", Kind: "round", RoundLabel: "Worked for 0s"}, 1000, false, func(bool) {}).(woxwidget.Gesture)
-	expanded := chatMessageContent(ChatMessageProps{Key: "round", Kind: "round", RoundLabel: "Worked for 0s", RoundExpanded: true}, 1000, false, func(bool) {}).(woxwidget.Gesture)
+	collapsed := chatMessageContent(ChatMessageProps{Key: "round", Kind: "round", RoundLabel: "Worked for 0s"}, 1000, false, func(bool) {}, nil).(woxwidget.Gesture)
+	expanded := chatMessageContent(ChatMessageProps{Key: "round", Kind: "round", RoundLabel: "Worked for 0s", RoundExpanded: true}, 1000, false, func(bool) {}, nil).(woxwidget.Gesture)
 	row := collapsed.Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	if row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("round alignment = %v", row.CrossAxisAlignment)
@@ -45,7 +46,7 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 		t.Fatal("collapsed and expanded round icons should point right and down")
 	}
 
-	assistant := chatMessageContent(ChatMessageProps{Key: "assistant", Role: "assistant", Text: "hello", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}}}, 1000, false, func(bool) {}).(woxwidget.Gesture)
+	assistant := chatMessageContent(ChatMessageProps{Key: "assistant", Role: "assistant", Text: "hello", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}}}, 1000, false, func(bool) {}, nil).(woxwidget.Gesture)
 	assistantStack := assistant.Child.(woxwidget.Stack)
 	assistantBody := assistantStack.Children[0].Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	if assistantStack.Children[0].Left != 2 || assistantBody.Width != 996 || assistantBody.Padding.Left != 0 {
@@ -56,7 +57,7 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 	markdownAssistant := chatMessageContent(ChatMessageProps{
 		Key: "assistant-markdown", Role: "assistant", Text: "**bold**", Markdown: &markdown,
 		TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}},
-	}, 1000, false, func(bool) {}).(woxwidget.Gesture)
+	}, 1000, false, func(bool) {}, nil).(woxwidget.Gesture)
 	markdownBody := markdownAssistant.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	markdownContent, ok := markdownBody.Child.(woxwidget.Flex)
 	if !ok || len(markdownContent.Children) != 1 {
@@ -68,6 +69,68 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 	}
 	if _, ok := sharedMarkdown.Children[0].(woxwidget.Wrap); !ok {
 		t.Fatalf("assistant Markdown block = %#v, want parsed inline runs", sharedMarkdown.Children[0])
+	}
+}
+
+func TestChatMessageActionsUseSharedIconButtonHover(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ResultSubtitle: woxui.Color{R: 180, G: 180, B: 180, A: 200},
+		Cursor:         woxui.Color{R: 30, G: 110, B: 220, A: 255},
+	}
+	wantHover := theme.ResultSubtitle
+	wantHover.A = uint8(float32(wantHover.A) * 0.1)
+	action := func() {}
+	copyAction := func() bool { return true }
+	actions, _ := chatMessageActions(ChatMessageProps{
+		Key: "assistant", Theme: theme, CopyLabel: "Copy", RetryLabel: "Regenerate",
+		OnCopy: copyAction, OnRetry: action,
+	}, true, func(bool, woxui.Rect) {})
+	if len(actions) != 2 {
+		t.Fatalf("actions = %d, want copy and retry", len(actions))
+	}
+	for index, name := range []string{"copy", "retry"} {
+		button := actions[index].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		if button.ID != "chat-"+name+"-assistant" || button.HoverBackground != wantHover || button.OnHoverAt == nil {
+			t.Fatalf("%s = id %q hover %#v hoverAt %v, want shared icon-button hover", name, button.ID, button.HoverBackground, button.OnHoverAt != nil)
+		}
+		if button.Width != 18 || button.Height != 18 || button.Radius != 5 {
+			t.Fatalf("%s geometry = %.0fx%.0f radius %.0f, want 18x18 at 5", name, button.Width, button.Height, button.Radius)
+		}
+	}
+
+	view := chatMessageContent(ChatMessageProps{
+		Key: "assistant", Role: "assistant", ShowMeta: true, Timestamp: "19:41", TimestampWidth: 20,
+		Text: "hello", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}},
+		CopyLabel: "Copy", RetryLabel: "Regenerate", OnCopy: copyAction, OnRetry: action, Theme: theme,
+	}, 1000, true, func(bool) {}, func(bool, woxui.Rect) {}).(woxwidget.Gesture)
+	footer := view.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
+	if _, isAlign := footer.Child.(woxwidget.Align); isAlign || footer.Width != 0 || footer.Height != 18 {
+		t.Fatalf("footer = %#v, want shrink-wrapped 18-high container so the last action stays hittable", footer)
+	}
+}
+
+func TestChatMessageCopyActionShowsCopiedFeedback(t *testing.T) {
+	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 180, G: 180, B: 180, A: 200}}
+	idleIcon := woxcomponent.CopyGlyph(14, theme.ResultSubtitle).(woxwidget.Image)
+	copiedIcon := woxcomponent.CheckGlyph(14, theme.ResultSubtitle).(woxwidget.Image)
+	copyAction := func() bool { return true }
+
+	idleActions, _ := chatMessageActions(ChatMessageProps{
+		Key: "user", Theme: theme, CopyLabel: "Copy message", CopiedLabel: "Message copied to clipboard",
+		OnCopy: copyAction,
+	}, true, nil)
+	idle := idleActions[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if idle.Label != "Copy message" || idle.Icon.(woxwidget.Image).Source != idleIcon.Source {
+		t.Fatalf("idle copy = label %q icon %#v, want copy glyph", idle.Label, idle.Icon)
+	}
+
+	copiedActions, _ := chatMessageActions(ChatMessageProps{
+		Key: "user", Theme: theme, Copied: true, CopyLabel: "Copy message", CopiedLabel: "Message copied to clipboard",
+		OnCopy: copyAction,
+	}, true, nil)
+	copied := copiedActions[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if copied.Label != "Message copied to clipboard" || copied.Icon.(woxwidget.Image).Source != copiedIcon.Source {
+		t.Fatalf("copied = label %q icon %#v, want check glyph and copied label", copied.Label, copied.Icon)
 	}
 }
 

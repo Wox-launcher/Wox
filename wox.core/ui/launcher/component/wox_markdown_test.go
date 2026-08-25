@@ -162,3 +162,24 @@ func TestMarkdownLinkCanExcludeKeyboardFocus(t *testing.T) {
 		t.Fatalf("excluded link child = %T, want pointer Gesture", semantics.Child)
 	}
 }
+
+func TestMarkdownTableUsesCollapsedGridLines(t *testing.T) {
+	theme := Theme{PreviewSplit: woxui.Color{R: 90, G: 90, B: 90, A: 255}, PreviewText: woxui.Color{A: 255}}
+	widget := renderMarkdownBlock(ParseMarkdown("| A | B |\n| - | - |\n| 1 | 2 |").blocks[0], MarkdownProps{Theme: theme}, 300, new(int)).(woxwidget.Stack)
+	if len(widget.Children) != 2 {
+		t.Fatalf("markdown table children = %d, want content plus one outer stroke", len(widget.Children))
+	}
+	outline := widget.Children[1].Child.(woxwidget.Container)
+	if outline.BorderWidth != TableGridBorderWidth || outline.Color.A != 0 {
+		t.Fatalf("markdown table stroke = %#v, want the shared 1px frame", outline)
+	}
+	rows := widget.Children[0].Child.(woxwidget.ScrollView).Child.(woxwidget.Flex)
+	header := rows.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Container)
+	if header.BorderWidth != 0 || header.RightBorderWidth != TableGridBorderWidth || header.BottomBorderWidth != TableGridBorderWidth {
+		t.Fatalf("markdown header cell = %#v, want collapsed right+bottom", header)
+	}
+	last := rows.Children[1].(woxwidget.Flex).Children[1].(woxwidget.Container)
+	if last.RightBorderWidth != 0 || last.BottomBorderWidth != 0 {
+		t.Fatalf("markdown last cell = %#v, want the outer frame to own that corner", last)
+	}
+}

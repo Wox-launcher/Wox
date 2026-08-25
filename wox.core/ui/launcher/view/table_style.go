@@ -10,7 +10,7 @@ const (
 	tableSurfaceHeaderHeight = float32(36)
 	tableSurfaceRowHeight    = float32(36)
 	tableSurfaceEmptyHeight  = float32(82)
-	tableSurfaceBorderWidth  = float32(1)
+	tableSurfaceBorderWidth  = woxcomponent.TableGridBorderWidth
 )
 
 // tableSurfaceStyle keeps every column-based table on the same theme-derived visual tokens.
@@ -36,19 +36,17 @@ func tableSurfaceAlpha(color woxui.Color, alpha uint8) woxui.Color {
 	return color
 }
 
-// tableSurfaceCell paints one cell with collapsed separators: only the trailing
-// and bottom edges. A full per-cell border would stack into a 2px internal line.
+// tableSurfaceCell maps Settings table colors onto the shared collapsed grid cell.
 func tableSurfaceCell(width, height float32, fill woxui.Color, style tableSurfaceStyle, trailing, bottom bool, padding woxwidget.Insets, child woxwidget.Widget) woxwidget.Container {
-	cell := woxwidget.Container{Width: width, Height: height, Color: fill, Padding: padding, Child: child}
-	if trailing {
-		cell.RightBorderColor = style.border
-		cell.RightBorderWidth = tableSurfaceBorderWidth
-	}
-	if bottom {
-		cell.BottomBorderColor = style.border
-		cell.BottomBorderWidth = tableSurfaceBorderWidth
-	}
-	return cell
+	return woxcomponent.WoxTableGridCell(woxcomponent.TableGridCellProps{
+		Width: width, Height: height, Color: fill, Border: style.border,
+		Trailing: trailing, Bottom: bottom, Padding: padding, Child: child,
+	})
+}
+
+// formTableGridChrome wraps a Settings table in the shared 1px outer frame.
+func formTableGridChrome(props FormTableFieldProps, width, height float32, child woxwidget.Widget) woxwidget.Widget {
+	return woxcomponent.WoxTableGridFrame(width, height, newTableSurfaceStyle(props.Theme).border, child)
 }
 
 // formTableHasTrailingSeparator reports whether this column should draw the

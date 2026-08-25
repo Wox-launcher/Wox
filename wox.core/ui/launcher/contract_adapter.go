@@ -396,6 +396,8 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			Pin:              a.translate("i18n:ui_screenshot_tool_pin"),
 			Record:           a.translate("i18n:ui_screenshot_record_enter"),
 			Cancel:           a.translate("i18n:ui_screenshot_tool_cancel"),
+			Save:             a.translate("i18n:ui_screenshot_tool_save"),
+			SaveTitle:        a.translate("i18n:ui_screenshot_save_title"),
 			Confirm:          a.translate("i18n:ui_screenshot_tool_confirm"),
 		},
 		RecordingTooltips: woxscreenshot.RecordingTooltips{

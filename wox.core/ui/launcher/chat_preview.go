@@ -1344,16 +1344,18 @@ func (a *App) stopChatMessage() {
 }
 
 // copyChatText reports clipboard failures inside the chat surface while keeping native details below Window.
-func (a *App) copyChatText(text string) {
+func (a *App) copyChatText(text string) bool {
 	if strings.TrimSpace(text) == "" {
-		return
+		return false
 	}
 	if err := a.window.WriteClipboardText(text); err != nil {
 		if state := a.chatPreview; state != nil {
 			state.error = fmt.Sprintf("Copy failed: %v", err)
 		}
 		_ = a.window.Invalidate()
+		return false
 	}
+	return true
 }
 
 // editChatConversation restores a user turn into the composer and discards the stale branch after it.

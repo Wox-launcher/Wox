@@ -496,13 +496,14 @@ func screenshotEditorRectsOverlap(left, right Rect) bool {
 		left.Y+left.Height > right.Y
 }
 
-// screenshotScrollingControlLayout matches Flutter's centered 124x56 action capsule.
-func screenshotScrollingControlLayout(frame Size, uiScale float32) (Rect, Rect, Rect) {
-	toolbarWidth, toolbarHeight := 124*uiScale, 56*uiScale
+// screenshotScrollingControlLayout places cancel, save, and confirm in a centered action capsule.
+func screenshotScrollingControlLayout(frame Size, uiScale float32) (Rect, Rect, Rect, Rect) {
+	toolbarWidth, toolbarHeight := 172*uiScale, 56*uiScale
 	toolbar := Rect{X: (frame.Width - toolbarWidth) / 2, Y: frame.Height - toolbarHeight, Width: toolbarWidth, Height: toolbarHeight}
 	cancel := Rect{X: toolbar.X + 18*uiScale, Y: toolbar.Y + 8*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
-	confirm := Rect{X: toolbar.X + 66*uiScale, Y: toolbar.Y + 8*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
-	return toolbar, cancel, confirm
+	save := Rect{X: toolbar.X + 66*uiScale, Y: toolbar.Y + 8*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
+	confirm := Rect{X: toolbar.X + 114*uiScale, Y: toolbar.Y + 8*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
+	return toolbar, cancel, save, confirm
 }
 
 func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, preview *Image, uiScale float32) {
@@ -517,8 +518,9 @@ func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, previ
 		displayList.DrawImage(preview, previewRect)
 		displayList.StrokeRoundedRect(previewRect, 0, 2*uiScale, Color{R: 255, G: 255, B: 255, A: 204})
 	}
-	toolbar, cancel, confirm := screenshotScrollingControlLayout(frame, uiScale)
+	toolbar, cancel, save, confirm := screenshotScrollingControlLayout(frame, uiScale)
 	displayList.FillRoundedRect(toolbar, 18*uiScale, Color{R: 30, G: 26, B: 24, A: 230})
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancel, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.download", save, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirm, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
 }

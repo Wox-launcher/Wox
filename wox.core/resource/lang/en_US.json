@@ -2427,6 +2427,8 @@
   "ui_screenshot_tool_cursor": "Show cursor",
   "ui_screenshot_tool_pin": "Pin to screen",
   "ui_screenshot_tool_cancel": "Cancel",
+  "ui_screenshot_tool_save": "Save",
+  "ui_screenshot_save_title": "Save screenshot",
   "ui_screenshot_tool_confirm": "Confirm",
   "ui_screenshot_record_enter": "Record video",
   "ui_screenshot_record_start": "Start recording",

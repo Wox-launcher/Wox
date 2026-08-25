@@ -389,16 +389,6 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	return formTableGridChrome(props, width, height, woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}})
 }
 
-// formTableGridChrome keeps one outer 1px frame above the cells so scrolling
-// does not lose the table edge, and so cell separators are not drawn twice.
-func formTableGridChrome(props FormTableFieldProps, width, height float32, child woxwidget.Widget) woxwidget.Widget {
-	style := newTableSurfaceStyle(props.Theme)
-	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
-		{Child: child},
-		{Child: woxwidget.Container{Width: width, Height: height, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth}},
-	}}
-}
-
 // formTableColumnWidths preserves Flutter's declared widths and leaves overflow
 // to the horizontally scrolling content area instead of shrinking every column.
 func formTableColumnWidths(columns []FormTableColumn, tableWidth float32) []float32 {

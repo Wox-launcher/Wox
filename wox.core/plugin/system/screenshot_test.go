@@ -30,6 +30,17 @@ func TestScreenshotHistoryThumbnailHasWidth(t *testing.T) {
 	}
 }
 
+func TestScreenshotHistoryImageExtensions(t *testing.T) {
+	for _, path := range []string{"capture.png", "capture.jpg", "capture.JPEG"} {
+		if !isScreenshotHistoryImage(path) {
+			t.Fatalf("screenshot history rejected %s", path)
+		}
+	}
+	if isScreenshotHistoryImage("capture.webp") {
+		t.Fatal("screenshot history accepted an unsupported image")
+	}
+}
+
 func TestNewScreenshotActionAllowsLauncherHide(t *testing.T) {
 	result := (&ScreenshotPlugin{}).newScreenshotResult()
 	if len(result.Actions) != 1 {
