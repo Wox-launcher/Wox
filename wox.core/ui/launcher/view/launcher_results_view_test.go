@@ -284,6 +284,45 @@ func launcherResultRowContent(row woxwidget.Semantics) woxwidget.Flex {
 	return stack.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
 }
 
+func TestLauncherResultTailHoverUsesTooltipAndKeepsRowActions(t *testing.T) {
+	var hovered bool
+	var tooltip string
+	var anchor woxui.Rect
+	tapped := false
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+		Items: []LauncherResultItem{{
+			ID: "perf", Title: "Result", TailWidth: 160, TailHeight: 22,
+			Tails:     []LauncherResultTail{{Text: "B1", Width: 40, Height: 22, Tooltip: "First flush: 5ms"}, {Text: "1ms", Width: 40, Height: 22}},
+			OnSelect:  func() { tapped = true },
+			OnTooltip: func(inside bool, text string, bounds woxui.Rect) { hovered, tooltip, anchor = inside, text, bounds },
+		}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	tailBoundary := launcherResultRowContent(row).Children[2].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultTailsProps])
+	aligned := tailBoundary.Build(tailBoundary.Props).(woxwidget.Align)
+	rowFlex := aligned.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	batch := rowFlex.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Semantics)
+	if batch.AutomationID != "result-tail-perf-0" || batch.Label != "B1" || batch.Description != "First flush: 5ms" {
+		t.Fatalf("batch tail semantics = %+v, want a hoverable performance tooltip target", batch)
+	}
+	wantAnchor := woxui.Rect{X: 4, Y: 6, Width: 40, Height: 22}
+	batch.Child.(woxwidget.Gesture).OnHoverAt(true, wantAnchor)
+	if !hovered || tooltip != "First flush: 5ms" || anchor != wantAnchor {
+		t.Fatalf("hover = %v, %q, %#v; want tooltip and anchor", hovered, tooltip, anchor)
+	}
+	batch.Child.(woxwidget.Gesture).OnTap()
+	if !tapped {
+		t.Fatal("tooltip tail should still activate the result row")
+	}
+	plain := rowFlex.Children[1].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Container)
+	if plain.Child == nil {
+		t.Fatal("tails without tooltip should stay unwrapped")
+	}
+}
+
 func TestLauncherResultImageTailOverlaysCenteredSVGText(t *testing.T) {
 	tails := launcherResultTails([]LauncherResultTail{{
 		Image: &woxui.Image{Width: 192, Height: 36}, Width: 96, Height: 18,

@@ -40,6 +40,7 @@ func LauncherResultTailsBoundaryKey(id string) woxwidget.Key {
 type LauncherResultTail struct {
 	Text           string
 	TextCategory   string
+	Tooltip        string
 	Image          *woxui.Image
 	ImageText      string
 	ImageTextColor woxui.Color
@@ -61,11 +62,12 @@ type LauncherResultItem struct {
 	TailWidth          float32
 	TailHeight         float32
 	QuickSelectNumber  string
-	OnHover            func(bool) `boundary:"stable"`
-	OnSelect           func()     `boundary:"stable"`
-	OnSecondaryTapDown func()     `boundary:"stable"`
-	OnActivate         func()     `boundary:"stable"`
-	OnDragStart        func()     `boundary:"stable"`
+	OnHover            func(bool)                     `boundary:"stable"`
+	OnSelect           func()                         `boundary:"stable"`
+	OnSecondaryTapDown func()                         `boundary:"stable"`
+	OnActivate         func()                         `boundary:"stable"`
+	OnDragStart        func()                         `boundary:"stable"`
+	OnTooltip          func(bool, string, woxui.Rect) `boundary:"stable"`
 }
 
 // LauncherResultsProps contains the prepared viewport slice and result-list geometry.
@@ -148,13 +150,19 @@ func launcherResultSingleLineText(value string) string {
 }
 
 type launcherResultTailsProps struct {
-	ID           string
-	Items        []LauncherResultTail
-	Width        float32
-	Height       float32
-	Foreground   woxui.Color
-	Selected     bool
-	DensityScale float32
+	ID                 string
+	Items              []LauncherResultTail
+	Width              float32
+	Height             float32
+	Foreground         woxui.Color
+	Selected           bool
+	DensityScale       float32
+	OnHover            func(bool)                     `boundary:"stable"`
+	OnSelect           func()                         `boundary:"stable"`
+	OnSecondaryTapDown func()                         `boundary:"stable"`
+	OnActivate         func()                         `boundary:"stable"`
+	OnDragStart        func()                         `boundary:"stable"`
+	OnTooltip          func(bool, string, woxui.Rect) `boundary:"stable"`
 }
 
 func (p launcherResultTailsProps) Equal(other launcherResultTailsProps) bool {
@@ -275,11 +283,14 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	var tail woxwidget.Widget
 	if len(item.Tails) > 0 {
-		tailProps := launcherResultTailsProps{ID: item.ID, Items: item.Tails, Width: item.TailWidth, Height: item.TailHeight, Foreground: tailColor, Selected: item.Selected, DensityScale: props.DensityScale}
+		tailProps := launcherResultTailsProps{
+			ID: item.ID, Items: item.Tails, Width: item.TailWidth, Height: item.TailHeight, Foreground: tailColor, Selected: item.Selected, DensityScale: props.DensityScale,
+			OnHover: item.OnHover, OnSelect: item.OnSelect, OnSecondaryTapDown: item.OnSecondaryTapDown, OnActivate: item.OnActivate, OnDragStart: item.OnDragStart, OnTooltip: item.OnTooltip,
+		}
 		tail = woxwidget.Boundary[launcherResultTailsProps]{
 			Key: LauncherResultTailsBoundaryKey(item.ID), Label: "result-tails:" + item.ID, Props: tailProps,
 			Build: func(props launcherResultTailsProps) woxwidget.Widget {
-				return launcherResultTailsWithDensity(props.Items, props.Width, props.Height, props.Foreground, props.Selected, props.DensityScale, woxwidget.Key("launcher-result-tails-"+props.ID))
+				return launcherResultTailsWithDensity(props, woxwidget.Key("launcher-result-tails-"+props.ID))
 			},
 		}
 	}
@@ -367,15 +378,17 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 
 // launcherResultTails restores Flutter's text-tag and image-tail presentation.
 func launcherResultTails(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool) woxwidget.Widget {
-	return launcherResultTailsWithDensity(tails, width, height, foreground, selected, 1, "")
+	return launcherResultTailsWithDensity(launcherResultTailsProps{
+		Items: tails, Width: width, Height: height, Foreground: foreground, Selected: selected, DensityScale: 1,
+	}, "")
 }
 
 // launcherResultTailsWithDensity scales launcher-only tail geometry without changing fixed theme previews.
-func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool, densityScale float32, scrollKey woxwidget.Key) woxwidget.Widget {
-	itemLeftPadding := scaledLauncherSize(10, densityScale)
-	children := make([]woxwidget.Widget, 0, len(tails))
+func launcherResultTailsWithDensity(props launcherResultTailsProps, scrollKey woxwidget.Key) woxwidget.Widget {
+	itemLeftPadding := scaledLauncherSize(10, props.DensityScale)
+	children := make([]woxwidget.Widget, 0, len(props.Items))
 	contentWidth := float32(0)
-	for _, item := range tails {
+	for index, item := range props.Items {
 		var content woxwidget.Widget
 		if item.Image != nil {
 			content = woxwidget.Image{Source: item.Image, Width: item.Width, Height: item.Height}
@@ -388,36 +401,68 @@ func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height fl
 				}}
 			}
 		} else {
-			textColor, background, border := launcherResultTextTailStyle(item.TextCategory, foreground, selected)
-			horizontalPadding := scaledLauncherSize(8, densityScale)
+			textColor, background, border := launcherResultTextTailStyle(item.TextCategory, props.Foreground, props.Selected)
+			horizontalPadding := scaledLauncherSize(8, props.DensityScale)
 			textWidth := max(float32(0), item.Width-horizontalPadding*2)
 			content = woxwidget.Container{
 				Width: item.Width, Height: item.Height, Radius: item.Height / 2, Color: background, BorderColor: border, BorderWidth: 1,
 				Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 				Child: woxwidget.Align{Width: textWidth, Height: item.Height, Vertical: 0.5, Child: woxwidget.Text{
-					Value: item.Text, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, densityScale)}, Color: textColor,
+					Value: item.Text, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale)}, Color: textColor,
 				}},
 			}
 		}
+		if tooltip := strings.TrimSpace(item.Tooltip); tooltip != "" && props.OnTooltip != nil {
+			content = launcherResultTailHover(props, index, tooltip, content)
+		}
 		itemWidth := itemLeftPadding + item.Width
 		children = append(children, woxwidget.Container{
-			Width: itemWidth, Height: height,
+			Width: itemWidth, Height: props.Height,
 			Padding: woxwidget.Insets{Left: itemLeftPadding},
-			Child:   woxwidget.Align{Width: item.Width, Height: height, Vertical: 0.5, Child: content},
+			Child:   woxwidget.Align{Width: item.Width, Height: props.Height, Vertical: 0.5, Child: content},
 		})
 		contentWidth += itemWidth
 	}
-	content := woxwidget.Container{Width: contentWidth, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
-	if contentWidth <= width {
-		return woxwidget.Align{Width: width, Height: height, Horizontal: 1, Vertical: 0.5, Child: content}
+	content := woxwidget.Container{Width: contentWidth, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+	if contentWidth <= props.Width {
+		return woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 1, Vertical: 0.5, Child: content}
 	}
 	if scrollKey == "" {
-		return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Align{Width: width, Height: height, Horizontal: 1, Child: content}}
+		return woxwidget.Clip{Width: props.Width, Height: props.Height, Child: woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 1, Child: content}}
 	}
 	return woxwidget.ScrollView{
-		Key: scrollKey, Width: width, Height: height, ContentWidth: contentWidth, Horizontal: true,
-		InitialOffset: contentWidth - width, KeepVisible: &woxwidget.ScrollRange{Start: contentWidth - width, End: contentWidth},
+		Key: scrollKey, Width: props.Width, Height: props.Height, ContentWidth: contentWidth, Horizontal: true,
+		InitialOffset: contentWidth - props.Width, KeepVisible: &woxwidget.ScrollRange{Start: contentWidth - props.Width, End: contentWidth},
 		Child: content,
+	}
+}
+
+// launcherResultTailHover keeps row activation on the tail because a nested
+// hover target wins hit-testing and would otherwise swallow select, actions, and drag.
+func launcherResultTailHover(props launcherResultTailsProps, index int, tooltip string, content woxwidget.Widget) woxwidget.Widget {
+	id := fmt.Sprintf("result-tail-%s-%d", props.ID, index)
+	label := strings.TrimSpace(props.Items[index].Text)
+	if label == "" {
+		label = strings.TrimSpace(props.Items[index].ImageText)
+	}
+	return woxwidget.Semantics{
+		Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleText, Label: label, Description: tooltip,
+		Child: woxwidget.Gesture{
+			ID: id, OnHover: props.OnHover, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				props.OnTooltip(inside, tooltip, bounds)
+			}, OnTap: props.OnSelect, OnSecondaryTapDown: func(woxui.Point) {
+				if props.OnSecondaryTapDown != nil {
+					props.OnSecondaryTapDown()
+				}
+			}, OnDragStart: props.OnDragStart, OnDoubleTap: func() {
+				if props.OnSelect != nil {
+					props.OnSelect()
+				}
+				if props.OnActivate != nil {
+					props.OnActivate()
+				}
+			}, Child: content,
+		},
 	}
 }
 

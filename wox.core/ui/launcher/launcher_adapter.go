@@ -994,7 +994,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
 			OnHover:           func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
-			OnDragStart: func() { a.startResultDrag(index) },
+			OnDragStart: func() { a.startResultDrag(index) }, OnTooltip: a.setResultTailTooltip,
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
@@ -1021,7 +1021,7 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 	used := float32(0)
 	height := float32(0)
 	for _, tail := range tails {
-		item := launcherview.LauncherResultTail{Text: tail.Text, TextCategory: tail.TextCategory}
+		item := launcherview.LauncherResultTail{Text: tail.Text, TextCategory: tail.TextCategory, Tooltip: tail.Tooltip}
 		switch tail.Type {
 		case "text":
 			if maximumTextWidth <= 0 {
@@ -1064,6 +1064,11 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 		items = append(items, item)
 	}
 	return items, min(maximum, used), height
+}
+
+// setResultTailTooltip anchors Flutter-style hover help for result tails to the launcher window.
+func (a *App) setResultTailTooltip(inside bool, text string, anchor woxui.Rect) {
+	a.setNativeHoverTooltip(&a.resultTailTooltipRevision, "go-ui-result-tail", "update result tail tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
 // visibleResultRange returns the viewport rows plus a small buffer for smooth scrolling.

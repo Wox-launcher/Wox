@@ -96,6 +96,7 @@ type App struct {
 	quickSelectTimer           *time.Timer
 	quickSelectViewport        quickSelectViewport
 	previewTooltipRevision     atomic.Uint64
+	resultTailTooltipRevision  atomic.Uint64
 	selected                   int
 	hoveredResult              int
 	pendingSelection           *pendingResultSelection
