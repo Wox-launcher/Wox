@@ -19,8 +19,7 @@ Local search, keyboard-first actions, and an extensible plugin system stay in on
 [Download Wox](https://github.com/Wox-launcher/Wox/releases) · [Browse plugins](https://wox-launcher.github.io/Wox/store/plugins.html) · [Read the docs](https://wox-launcher.github.io/Wox/)
 
 > Press <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd>, type what you need, and press <kbd>Enter</kbd>.
-
-https://github.com/user-attachments/assets/1b282fde-c1c5-426a-b45d-cd0aa329386a
+https://github.com/user-attachments/assets/15ad1370-bbc0-4f96-8729-56fcc769c41c
 
 ## Why Wox
 
