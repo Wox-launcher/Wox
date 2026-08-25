@@ -70,14 +70,22 @@ func (c *ScrollController) ScrollBy(delta float32) bool {
 }
 
 // EnsureVisible minimally scrolls so the supplied content interval is inside the viewport.
+// A range taller or wider than the viewport is left alone once any part is already visible,
+// so focusing a long editor does not yank the user back to the start of the field.
 func (c *ScrollController) EnsureVisible(start, end float32) bool {
 	if c == nil {
 		return false
+	}
+	if end < start {
+		start, end = end, start
 	}
 	c.mu.RLock()
 	offset := c.offset
 	viewport := c.viewport
 	c.mu.RUnlock()
+	if viewport > 0 && end-start > viewport && start < offset+viewport && end > offset {
+		return false
+	}
 	if start < offset {
 		return c.setOffset(start)
 	}
@@ -239,6 +247,9 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 		scrollDelta := delta.Y
 		if props.Horizontal {
 			scrollDelta = delta.X
+			if scrollDelta == 0 && props.MapVerticalWheel {
+				scrollDelta = delta.Y
+			}
 			if scrollDelta == 0 {
 				return false
 			}

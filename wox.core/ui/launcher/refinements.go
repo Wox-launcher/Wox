@@ -51,8 +51,24 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 		Revision: snapshot.refinementsRevision,
 		Width:    width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
 		Summary: a.refinementSummary(snapshot, fallback), DefaultLabel: fallback, Open: snapshot.refinementOpen,
-		Groups: groups, OnToggle: func() { a.toggleRefinementBar() },
+		Tooltip: a.refinementToggleTooltip(), Groups: groups, OnToggle: func() { a.toggleRefinementBar() },
+		OnTooltip: a.setRefinementTooltip,
 	}
+}
+
+// refinementToggleTooltip advertises the same Ctrl/Cmd+F shortcut the launcher binds to the filter bar.
+func (a *App) refinementToggleTooltip() string {
+	hotkey := strings.Join(formatHotkeyLabels(primaryHotkey("f")), "+")
+	text := a.translate("i18n:ui_query_refinement_filters_tooltip")
+	if strings.HasPrefix(text, "ui query refinement") || text == "" {
+		text = "Filter search results ({hotkey})"
+	}
+	return strings.ReplaceAll(text, "{hotkey}", hotkey)
+}
+
+// setRefinementTooltip anchors filter-button help to the launcher query accessory.
+func (a *App) setRefinementTooltip(inside bool, text string, anchor woxui.Rect) {
+	a.setNativeHoverTooltip(&a.refinementTooltipRevision, "go-ui-refinement", "update refinement tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
 func (a *App) buildRefinementToggle(snapshot viewSnapshot, imageScale float32) woxwidget.Widget {

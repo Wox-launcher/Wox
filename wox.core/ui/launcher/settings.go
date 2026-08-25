@@ -860,6 +860,7 @@ func (a *App) selectSettingTab(tab string) {
 	runtimeSnap := a.runtimeSettings.Snapshot()
 	loadRuntime = tab == "runtime" && !runtimeSnap.Loaded && !runtimeSnap.Loading
 	loadCloud = tab == "cloud" && !a.cloudSettings.Loaded() && !a.cloudSettings.Loading()
+	loadBilling := tab == "cloud" && !a.cloudSettings.BillingLoaded()
 	updateSnap := a.updateSettings.Snapshot()
 	loadUpdateChannels = tab == "updates" && len(updateSnap.ChannelVersions) == 0 && !updateSnap.ChannelsLoading
 	pluginStore := a.pluginSettings.PluginsStore()
@@ -914,6 +915,9 @@ func (a *App) selectSettingTab(tab string) {
 	}
 	if loadCloud {
 		util.Go(a.lifecycleCtx, "reload cloud sync", a.reloadCloudSync)
+	} else if loadBilling {
+		// Sync status can become loaded via silent progress refresh without prices.
+		a.ensureCloudBillingPlan()
 	}
 	if loadUpdateChannels {
 		util.Go(a.lifecycleCtx, "reload update channel versions", a.reloadUpdateChannelVersions)

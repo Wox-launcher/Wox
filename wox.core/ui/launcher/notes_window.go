@@ -857,7 +857,7 @@ func (c *notesWindowController) updateToolbarTooltip(inside bool, text string, a
 func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	formats := noteActiveFormats(c.document, c.blockRanges, c.selection)
 	if c.focusedTableBlock >= 0 {
-		formats["table"] = true
+		formats = noteActiveFormatsForTable(c.document, c.focusedTableBlock, c.focusedTableRow, c.focusedTableCol)
 	}
 	item := func(id string, action func()) woxwidget.Widget {
 		label := c.app.translate("i18n:notes_format_" + id)

@@ -2357,6 +2357,7 @@
   "plugin_converter_time_unit_weeks": "semanas",
   "plugin_converter_time_unit_years": "anos",
   "ui_query_refinement_filters": "Filtros",
+  "ui_query_refinement_filters_tooltip": "Filtrar resultados da pesquisa ({hotkey})",
   "ui_hotkey_overview_title": "Ver todos os atalhos do Wox",
   "ui_hotkey_overview_subtitle": "Todos os atalhos ativos do Wox agrupados por onde funcionam.",
   "ui_hotkey_overview_count": "{count} atalhos",

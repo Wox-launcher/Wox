@@ -2550,6 +2550,7 @@
   "onboarding_media_file_result": "Files",
   "onboarding_media_file_result_subtitle": "Search local files",
   "ui_query_refinement_filters": "Filters",
+  "ui_query_refinement_filters_tooltip": "Filter search results ({hotkey})",
   "ui_hotkey_overview_title": "View all Wox hotkeys",
   "ui_hotkey_overview_subtitle": "All active Wox shortcuts grouped by where they work.",
   "ui_hotkey_overview_count": "{count} shortcuts",

@@ -24,6 +24,18 @@ func TestNoteTextRunFieldRunUsesGenericDecorations(t *testing.T) {
 	}
 }
 
+func TestNoteActiveFormatsForTableIgnoreOutsideBullet(t *testing.T) {
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}}, {{Text: "1"}}}}
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "t", Type: common.NoteBlockTable, Table: &table},
+		{ID: "b", Type: common.NoteBlockBullet, Text: "example"},
+	}}
+	formats := NoteActiveFormatsForTable(document, 0, 1, 0)
+	if formats["bullet"] || !formats["table"] {
+		t.Fatalf("focused table cell = %#v, want table without leftover bullet", formats)
+	}
+}
+
 func TestInsertAndDeleteTableRowsKeepAGrid(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{{Type: common.NoteBlockParagraph}}}
 	document, index := InsertNoteTable(document, nil, woxui.TextSelection{})

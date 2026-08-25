@@ -10,6 +10,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
 const (
@@ -58,11 +59,15 @@ type Host struct {
 
 	hovered          woxui.AccessibilityNodeID
 	hoveredGestureID string
-	rawHovered       woxui.AccessibilityNodeID
-	rawPressed       woxui.AccessibilityNodeID
-	pressed          woxui.AccessibilityNodeID
-	pressedAt        woxui.Point
-	dragging         bool
+	// pointerInside/pointerAt remember the last in-window pointer so hover can
+	// be recomputed after layout when content moves under a stationary cursor.
+	pointerInside bool
+	pointerAt     woxui.Point
+	rawHovered    woxui.AccessibilityNodeID
+	rawPressed    woxui.AccessibilityNodeID
+	pressed       woxui.AccessibilityNodeID
+	pressedAt     woxui.Point
+	dragging      bool
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
 	selecting          woxui.AccessibilityNodeID
@@ -306,6 +311,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	h.sweepIdentities()
 	h.root = root
 	h.reconcileTransientState(oldHovered, oldHoveredBounds)
+	h.refreshHoverFromPointer()
 	h.reconcileOverlayOwner()
 	// Remap focus by stable key before reconcileFocus so autofocus never wins and
 	// pure ID remapping does not fire blur/focus or SetTextInputState.
@@ -603,6 +609,28 @@ func nodeKind(current *node) string {
 	}
 }
 
+// refreshHoverFromPointer re-hit-tests after layout so hover leave/enter follow
+// content that scrolled or rebuilt under a still pointer. The same gesture keeps
+// its dwell; a different control, or none, fires the normal hover callbacks.
+func (h *Host) refreshHoverFromPointer() {
+	if !h.pointerInside || h.root == nil {
+		return
+	}
+	target := h.root.hitTest(h.pointerAt)
+	if nodeID(target) == h.hovered {
+		return
+	}
+	targetGesture := ""
+	if target != nil && target.gesture != nil {
+		targetGesture = target.gesture.id
+	}
+	if targetGesture != "" && targetGesture == h.hoveredGestureID {
+		h.hovered = target.id
+		return
+	}
+	h.setHovered(target, h.pointerAt)
+}
+
 func (h *Host) reconcileTransientState(oldHovered *node, oldHoveredBounds woxui.Rect) {
 	if h.hovered != 0 && h.nodes[h.hovered] == nil {
 		// Rebuilds replace node IDs. Keep the same gesture hovered without
@@ -814,6 +842,14 @@ func (h *Host) setFocusNode(current *node) {
 }
 
 func (h *Host) setFocus(id woxui.AccessibilityNodeID) {
+	h.applyFocus(id, true)
+}
+
+func (h *Host) setPointerFocus(id woxui.AccessibilityNodeID) {
+	h.applyFocus(id, false)
+}
+
+func (h *Host) applyFocus(id woxui.AccessibilityNodeID, ensureVisible bool) {
 	if id != 0 && !h.isFocusable(h.nodes[id]) {
 		return
 	}
@@ -832,7 +868,10 @@ func (h *Host) setFocus(id woxui.AccessibilityNodeID) {
 	if current != nil && current.focus != nil && current.focus.onFocusChange != nil {
 		current.focus.onFocusChange(true)
 	}
-	h.ensureFocusedVisible()
+	logScrollFocus(fmt.Sprintf("apply-focus key=%q from=%q ensureVisible=%v", nodeFocusKey(current), nodeFocusKey(old), ensureVisible))
+	if ensureVisible {
+		h.ensureFocusedVisible()
+	}
 	h.resetCaretBlink()
 	h.syncTextInput()
 	h.invalidate()
@@ -855,7 +894,13 @@ func (h *Host) ensureFocusedVisible() {
 			start = offsetX + ancestor.scroll.offset
 			end = start + current.bounds.Width
 		}
-		if ancestor.scroll.ensureVisible(start, end) {
+		oldOffset := ancestor.scroll.offset
+		moved := ancestor.scroll.ensureVisible(start, end)
+		logScrollFocus(fmt.Sprintf(
+			"ensure-visible key=%q horizontal=%v start=%.1f end=%.1f height=%.1f offset=%.1f->%.1f moved=%v",
+			current.key, ancestor.scroll.horizontal, start, end, current.bounds.Height, oldOffset, ancestor.scroll.offset, moved,
+		))
+		if moved {
 			return
 		}
 	}
@@ -1113,11 +1158,23 @@ func (h *Host) syncTextInput() {
 	_ = h.window.SetTextInputState(current.focus.textInput(globalRect(current)))
 }
 
+// trackPointer records the last in-window position used to refresh hover after layout.
+func (h *Host) trackPointer(event woxui.PointerEvent) {
+	switch event.Kind {
+	case woxui.PointerLeave:
+		h.pointerInside = false
+	case woxui.PointerEnter, woxui.PointerMove, woxui.PointerDown, woxui.PointerUp, woxui.PointerScroll:
+		h.pointerInside = true
+		h.pointerAt = event.Position
+	}
+}
+
 // Pointer dispatches hover, focus, tap, drag, and scroll by retained node identity.
 func (h *Host) Pointer(event woxui.PointerEvent) {
 	if h.root == nil {
 		return
 	}
+	h.trackPointer(event)
 	if h.dispatchRawPointer(event) {
 		return
 	}
@@ -1284,7 +1341,7 @@ func (h *Host) updatePointerFocus(target *node) {
 	focused := h.nodes[h.focused]
 	for current := target; current != nil; current = current.parent {
 		if h.isFocusable(current) {
-			h.setFocus(current.id)
+			h.setPointerFocus(current.id)
 			return
 		}
 	}
@@ -1878,4 +1935,18 @@ func (h *Host) invalidateCaret() {
 		return
 	}
 	h.invalidate()
+}
+
+func nodeFocusKey(current *node) Key {
+	if current == nil {
+		return ""
+	}
+	return current.key
+}
+
+func logScrollFocus(message string) {
+	log.Printf("scroll-focus %s", message)
+	if util.GetLocation().GetWoxDataDirectory() != "" {
+		util.GetLogger().Info(stdcontext.Background(), "scroll-focus "+message)
+	}
 }

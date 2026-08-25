@@ -2358,6 +2358,7 @@
   "plugin_converter_time_unit_weeks": "нед.",
   "plugin_converter_time_unit_years": "г.",
   "ui_query_refinement_filters": "Фильтры",
+  "ui_query_refinement_filters_tooltip": "Фильтровать результаты поиска ({hotkey})",
   "ui_hotkey_overview_title": "Показать все сочетания Wox",
   "ui_hotkey_overview_subtitle": "Все активные сочетания Wox, сгруппированные по области действия.",
   "ui_hotkey_overview_count": "{count} сочетаний",

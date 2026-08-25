@@ -89,11 +89,13 @@ func TestThemePreviewUsesWallpaperBackdrop(t *testing.T) {
 	stage := preview.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Stack)
 	window := stage.Children[2].Child.(woxwidget.Stack)
 
-	if stage.Children[1].Child.(woxwidget.Image).Source != wallpaper || window.Children[0].Child.(woxwidget.Image).Source != blurred {
+	stageWallpaper := stage.Children[1].Child.(woxwidget.Image)
+	windowWallpaper := window.Children[0].Child.(woxwidget.Image)
+	if stageWallpaper.Source != wallpaper || windowWallpaper.Source != blurred {
 		t.Fatal("theme preview did not reuse the loaded wallpaper layers")
 	}
 	expectedRadius := 29 * stage.Width / 1440
-	if stage.Height != stage.Width*420/900 || stage.Children[0].Child.(woxwidget.Container).Radius != expectedRadius || stage.Children[3].Child.(woxwidget.Container).Radius != expectedRadius {
+	if stage.Height != stage.Width*420/900 || stage.Children[0].Child.(woxwidget.Container).Radius != expectedRadius || stage.Children[3].Child.(woxwidget.Container).Radius != expectedRadius || stageWallpaper.Radius != expectedRadius || windowWallpaper.Radius != 8 {
 		t.Fatal("theme preview wallpaper should preserve the cached image aspect ratio and rounded corners")
 	}
 }
@@ -137,7 +139,10 @@ func TestThemeAutoPreviewUsesSplitVariantsAndFlutterHint(t *testing.T) {
 	if hint.Padding != woxwidget.UniformInsets(12) || hintContent.CrossAxisAlignment != woxwidget.CrossAxisStart || len(hintContent.Children) != 2 || len(stage.Children) != 4 || len(autoPreview.Children) != 3 {
 		t.Fatalf("AUTO content = hint children %d preview layers %d, want icon/text and split background/content", len(hint.Child.(woxwidget.Flex).Children), len(autoPreview.Children))
 	}
-	if stage.Children[1].Child.(woxwidget.Image).Source != wallpaper || autoPreview.Children[0].Child.(woxwidget.Image).Source != blurred {
+	if stageWallpaper := stage.Children[1].Child.(woxwidget.Image); stageWallpaper.Source != wallpaper || stageWallpaper.Radius != 29*stage.Width/1440 {
+		t.Fatal("theme preview wallpaper should clip to the stage rounded corners")
+	}
+	if autoWallpaper := autoPreview.Children[0].Child.(woxwidget.Image); autoWallpaper.Source != blurred || autoWallpaper.Radius != 8 {
 		t.Fatal("theme preview did not reuse the loaded wallpaper layers")
 	}
 }

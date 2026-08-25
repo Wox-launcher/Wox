@@ -280,3 +280,68 @@ func TestFormTableRowFieldRendersInlineValidationError(t *testing.T) {
 		t.Fatalf("inline error = %#v", errorText)
 	}
 }
+
+func formTableGridFlex(t *testing.T, grid woxwidget.Widget) woxwidget.Flex {
+	t.Helper()
+	frame, ok := grid.(woxwidget.Stack)
+	if !ok || len(frame.Children) < 2 {
+		t.Fatalf("table grid = %T, want a stacked outer frame", grid)
+	}
+	body, ok := frame.Children[0].Child.(woxwidget.Flex)
+	if !ok {
+		t.Fatalf("table grid body = %T, want header/body flex", frame.Children[0].Child)
+	}
+	return body
+}
+
+func TestFormTableUsesCollapsedGridLines(t *testing.T) {
+	theme := woxcomponent.Theme{
+		PreviewSplit: woxui.Color{R: 80, G: 90, B: 100, A: 200},
+		ResultTitle:  woxui.Color{R: 240, G: 240, B: 240, A: 255},
+	}
+	props := FormTableFieldProps{
+		ID: "hotkeys", Width: 400, Height: tableSurfaceHeaderHeight + tableSurfaceRowHeight*2,
+		Columns: []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Hotkey", Width: 120}},
+		Rows: []FormTableRow{
+			{Index: 0, Cells: []FormTableCell{{Text: "one"}, {Text: "ctrl"}}},
+			{Index: 1, Cells: []FormTableCell{{Text: "two"}, {Text: "alt"}}},
+		},
+		Theme: theme,
+	}
+
+	frame := buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()).(woxwidget.Stack)
+	if len(frame.Children) != 2 {
+		t.Fatalf("table frame children = %d, want content plus one outer stroke", len(frame.Children))
+	}
+	outline := frame.Children[1].Child.(woxwidget.Container)
+	if outline.BorderWidth != tableSurfaceBorderWidth || outline.BorderColor != theme.PreviewSplit || outline.Color.A != 0 {
+		t.Fatalf("outer table stroke = %#v, want a single 1px PreviewSplit frame", outline)
+	}
+
+	headerCell := formTableHeaderCell(props, props.Columns[0], 130, 0).(woxwidget.Container)
+	if headerCell.BorderWidth != 0 || headerCell.RightBorderWidth != tableSurfaceBorderWidth || headerCell.BottomBorderWidth != tableSurfaceBorderWidth {
+		t.Fatalf("header separator = full %.0f right %.0f bottom %.0f, want collapsed right+bottom", headerCell.BorderWidth, headerCell.RightBorderWidth, headerCell.BottomBorderWidth)
+	}
+	operationHeader := formTableHeaderCell(props, FormTableColumn{Label: "Operation"}, 130, len(props.Columns)).(woxwidget.Container)
+	if operationHeader.RightBorderWidth != 0 || operationHeader.BottomBorderWidth != tableSurfaceBorderWidth {
+		t.Fatalf("last header separator = right %.0f bottom %.0f, want bottom only", operationHeader.RightBorderWidth, operationHeader.BottomBorderWidth)
+	}
+
+	firstBody := formTableDataCellAt(props, 0, 0, props.Rows[0].Cells[0], 130, false).(woxwidget.Container)
+	if firstBody.BorderWidth != 0 || firstBody.RightBorderWidth != tableSurfaceBorderWidth || firstBody.BottomBorderWidth != tableSurfaceBorderWidth {
+		t.Fatalf("body separator = full %.0f right %.0f bottom %.0f, want collapsed right+bottom", firstBody.BorderWidth, firstBody.RightBorderWidth, firstBody.BottomBorderWidth)
+	}
+	lastBody := formTableDataCellAt(props, 1, 1, props.Rows[1].Cells[1], 130, true).(woxwidget.Container)
+	if lastBody.RightBorderWidth != tableSurfaceBorderWidth || lastBody.BottomBorderWidth != 0 {
+		t.Fatalf("last data separator = right %.0f bottom %.0f, want trailing only before the operation column", lastBody.RightBorderWidth, lastBody.BottomBorderWidth)
+	}
+	lastOperation := formTableOperationCell(props, props.Rows[1], 130, true).(woxwidget.Container)
+	if lastOperation.BorderWidth != 0 || lastOperation.RightBorderWidth != 0 || lastOperation.BottomBorderWidth != 0 {
+		t.Fatalf("last operation separator = %#v, want the outer frame to own that corner", lastOperation)
+	}
+
+	empty := formTableEmptyState(FormTableFieldProps{EmptyLabel: "None", Theme: theme}, 240, tableSurfaceEmptyHeight).(woxwidget.Container)
+	if empty.BorderWidth != 0 || empty.RightBorderWidth != 0 || empty.BottomBorderWidth != 0 {
+		t.Fatalf("empty state = %#v, want fill only so it does not double the header or frame", empty)
+	}
+}

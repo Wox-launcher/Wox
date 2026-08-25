@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -196,6 +197,58 @@ func TestLauncherBrowserTitleBarRequiresDirectWebViewPreview(t *testing.T) {
 	snapshot.selectedPreviewType = "webview"
 	if !launcherPreviewUsesWebView(snapshot) {
 		t.Fatal("direct WebView previews need browser navigation chrome")
+	}
+}
+
+func TestPreviewImageOverlayAllowedForSidebarButNotSpacePreview(t *testing.T) {
+	if !previewImageOverlayAllowed(showAppParams{}) {
+		t.Fatal("sidebar image preview should still open the overlay")
+	}
+	if previewImageOverlayAllowed(showAppParams{ShowPreviewTitleBar: true, HideQueryBox: true, HideToolbar: true}) {
+		t.Fatal("space preview should not open another image overlay")
+	}
+	if !previewImageOverlayAllowed(showAppParams{HideQueryBox: true, HideToolbar: true}) {
+		t.Fatal("chrome-free queries without a full preview window should still open the overlay")
+	}
+}
+
+func TestBuildPreviewImageOmitsOverlayTapInSpacePreview(t *testing.T) {
+	source := previewImageTestSource()
+	app := newPreviewImageTestApp(showAppParams{ShowPreviewTitleBar: true, HideQueryBox: true, HideToolbar: true}, source, 400, 300)
+	if builtPreviewImageGesture(app, source, 400, 300).OnTap != nil {
+		t.Fatal("space preview image should not open an overlay on tap")
+	}
+}
+
+func TestBuildPreviewImageKeepsOverlayTapInSidebarPreview(t *testing.T) {
+	source := previewImageTestSource()
+	app := newPreviewImageTestApp(showAppParams{}, source, 400, 300)
+	if builtPreviewImageGesture(app, source, 400, 300).OnTap == nil {
+		t.Fatal("sidebar image preview should keep the overlay tap")
+	}
+}
+
+func builtPreviewImageGesture(app *App, source woxImage, width, height float32) woxwidget.Gesture {
+	view := app.buildPreviewImage(source, source, defaultPalette(), width, height).(woxwidget.Stateful)
+	return view.CreateState().Build(woxwidget.StateContext{}, view.Widget).(woxwidget.Gesture)
+}
+
+func previewImageTestSource() woxImage {
+	return woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ffffff"/></svg>`}
+}
+
+func newPreviewImageTestApp(show showAppParams, source woxImage, width, height float32) *App {
+	size := previewImageRequestSize(width, height)
+	key := imageKey(source) + fmt.Sprintf("-svg-%d", size)
+	image := &woxui.Image{Width: 16, Height: 16}
+	return &App{
+		show:             show,
+		images:           map[string]*woxui.Image{key: image},
+		imageRequested:   map[string]string{},
+		imageVariants:    map[string]string{imageVariantKey(source, nil): key},
+		imageVariantKeys: map[string]string{},
+		imageLastUsed:    map[string]uint64{},
+		imageErrors:      map[string]string{},
 	}
 }
 

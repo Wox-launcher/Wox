@@ -16,7 +16,7 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	}
 
 	icon := &woxui.Image{}
-	cell := formTableDataCellAt(FormTableFieldProps{ID: "notes", InfoIcon: icon, Theme: woxcomponent.Theme{}}, 2, 1, FormTableCell{Text: "Platform sync", Tooltip: "Per platform"}, 220)
+	cell := formTableDataCellAt(FormTableFieldProps{ID: "notes", InfoIcon: icon, Theme: woxcomponent.Theme{}}, 2, 1, FormTableCell{Text: "Platform sync", Tooltip: "Per platform"}, 220, false)
 	alignment := cell.(woxwidget.Container).Child.(woxwidget.Align)
 	content := alignment.Child.(woxwidget.Flex)
 	if len(content.Children) != 2 {

@@ -259,3 +259,36 @@ func TestGridAndWrapReportVerticalOverflowDiagnostics(t *testing.T) {
 		t.Fatalf("wrap overflow diagnostics = %v", wrapTree.diagnostics)
 	}
 }
+
+func TestContainerPaintsCollapsedSideBorders(t *testing.T) {
+	color := woxui.Color{R: 80, G: 90, B: 100, A: 200}
+	root := (Container{
+		Width: 40, Height: 20,
+		RightBorderColor: color, RightBorderWidth: 1,
+		BottomBorderColor: color, BottomBorderWidth: 1,
+	}).layout(context{}, constraints{width: 40, height: 20})
+
+	actual := &woxui.DisplayList{}
+	root.draw(actual, 0, 0, false, false, false, nil)
+	expected := &woxui.DisplayList{}
+	expected.FillRect(woxui.Rect{Y: 19, Width: 40, Height: 1}, color)
+	expected.FillRect(woxui.Rect{X: 39, Width: 1, Height: 19}, color)
+	if err := actual.Compare(expected); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestContainerLeftBorderKeepsFullHeightWithoutOtherEdges(t *testing.T) {
+	color := woxui.Color{R: 19, G: 121, B: 210, A: 255}
+	root := (Container{Width: 80, Height: 24, LeftBorderColor: color, LeftBorderWidth: 3}).layout(
+		context{}, constraints{width: 80, height: 24},
+	)
+
+	actual := &woxui.DisplayList{}
+	root.draw(actual, 0, 0, false, false, false, nil)
+	expected := &woxui.DisplayList{}
+	expected.FillRect(woxui.Rect{Width: 3, Height: 24}, color)
+	if err := actual.Compare(expected); err != nil {
+		t.Fatal(err)
+	}
+}

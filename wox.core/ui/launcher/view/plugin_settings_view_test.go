@@ -690,7 +690,7 @@ func TestFormTablePinsOperationColumnBesideScrollableContent(t *testing.T) {
 		Rows: []FormTableRow{{Index: 0, Cells: make([]FormTableCell, 6)}},
 	}
 
-	grid := buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()).(woxwidget.Container).Child.(woxwidget.Flex)
+	grid := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()))
 	header := grid.Children[0].(woxwidget.Flex)
 	left := header.Children[0].(woxwidget.ScrollView)
 	if !left.Horizontal {
@@ -711,7 +711,7 @@ func TestFormTableExpandsLastColumnBeforePinnedOperation(t *testing.T) {
 		Columns: []FormTableColumn{{Label: "Application", Tooltip: "Application help"}},
 	}
 
-	grid := buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()).(woxwidget.Container).Child.(woxwidget.Flex)
+	grid := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()))
 	header := grid.Children[0].(woxwidget.Flex)
 	left := header.Children[0].(woxwidget.ScrollView)
 	leftHeader := left.Child.(woxwidget.Flex)
@@ -735,7 +735,7 @@ func TestFormTableBodyScrollsAllRowsBeforeOuterPage(t *testing.T) {
 		Columns: []FormTableColumn{{Label: "Name", Width: 180}}, Rows: rows, Theme: woxcomponent.Theme{},
 	}
 
-	grid := buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()).(woxwidget.Container).Child.(woxwidget.Flex)
+	grid := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()))
 	body := grid.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	if body.Height != tableSurfaceRowHeight*3 || body.ContentHeight != tableSurfaceRowHeight*8 {
 		t.Fatalf("vertical body geometry = viewport %v, content %v; want %v and %v", body.Height, body.ContentHeight, tableSurfaceRowHeight*3, tableSurfaceRowHeight*8)
@@ -760,7 +760,7 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 		}},
 	}
 
-	cell := formTableOperationCell(props, row, 130).(woxwidget.Container)
+	cell := formTableOperationCell(props, row, 130, false).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("skills operation count = %d, want delete and open-folder", len(actions.Children))
@@ -799,7 +799,7 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 		ID: "commands", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
 		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}},
 	}
-	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130).(woxwidget.Container)
+	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130, false).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(actions.Children) != 3 {
 		t.Fatalf("operation action count = %d, want edit, clone, and delete", len(actions.Children))

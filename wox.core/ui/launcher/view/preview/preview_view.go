@@ -111,8 +111,12 @@ func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Wind
 		children = append(children, pill)
 		contentWidth += chipWidth
 	}
+	// Keep a stable key so this strip is a retained ScrollView, not a clip-only
+	// primitive. Map the vertical mouse wheel because this footer is not nested
+	// inside another scroller and Windows wheels rarely emit a horizontal delta.
 	return woxwidget.ScrollView{
-		Width: width, Height: 26, ContentWidth: max(width, contentWidth), Horizontal: true,
+		Key: "preview-tags", Width: width, Height: 26, ContentWidth: max(width, contentWidth),
+		Horizontal: true, MapVerticalWheel: true,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children},
 	}
 }

@@ -8,6 +8,35 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestPreviewImageOmitsOverlayGestureWithoutOnTap(t *testing.T) {
+	view := builtPreviewImage(PreviewImageProps{Width: 200, Height: 100, Image: &woxui.Image{Width: 10, Height: 20}})
+	if view.OnTap != nil {
+		t.Fatal("preview image should not open an overlay when OnTap is unset")
+	}
+	if view.OnPointer == nil {
+		t.Fatal("preview image should consume wheel zoom")
+	}
+}
+
+func TestPreviewImageWrapsOverlayGestureWithOnTap(t *testing.T) {
+	tapped := false
+	view := builtPreviewImage(PreviewImageProps{
+		Width: 200, Height: 100, Image: &woxui.Image{Width: 10, Height: 10}, OnTap: func() { tapped = true },
+	})
+	if view.ID != "preview-image-overlay" || view.OnTap == nil {
+		t.Fatalf("preview image gesture = %+v, want overlay tap", view)
+	}
+	view.OnTap()
+	if !tapped {
+		t.Fatal("preview image tap did not fire")
+	}
+}
+
+func builtPreviewImage(props PreviewImageProps) woxwidget.Gesture {
+	view := PreviewImage(props).(woxwidget.Stateful)
+	return view.CreateState().Build(woxwidget.StateContext{}, props).(woxwidget.Gesture)
+}
+
 func TestPreviewSurfaceUsesFlutterTranslucentFill(t *testing.T) {
 	theme := woxcomponent.Theme{
 		Background:   woxui.Color{R: 12, G: 18, B: 24, A: 180},
@@ -27,6 +56,20 @@ func TestPreviewSurfaceUsesFlutterTranslucentFill(t *testing.T) {
 	}
 	if _, nestedFill := surface.Child.(woxwidget.Container); nestedFill {
 		t.Fatal("preview uses a nested fill to simulate its border")
+	}
+}
+
+func TestPreviewTagsScrollHorizontallyWhenOverflowing(t *testing.T) {
+	tags := make([]PreviewTag, 8)
+	for index := range tags {
+		tags[index] = PreviewTag{Label: "tag"}
+	}
+	view := PreviewTags(tags, woxcomponent.Theme{}, &woxui.Window{}, 120, nil).(woxwidget.ScrollView)
+	if view.Key != "preview-tags" || !view.Horizontal || !view.MapVerticalWheel {
+		t.Fatalf("preview tags = key %q horizontal %v map-wheel %v, want a retained horizontal strip that accepts a vertical wheel", view.Key, view.Horizontal, view.MapVerticalWheel)
+	}
+	if view.Width != 120 || view.ContentWidth <= view.Width {
+		t.Fatalf("preview tags geometry = viewport %.0f content %.0f, want overflowing content", view.Width, view.ContentWidth)
 	}
 }
 

@@ -151,6 +151,7 @@ func (a *App) setCloudPlanTooltip(inside bool, anchor woxui.Rect) {
 	if a.cloudPlanTooltip != nil && a.cloudPlanTooltip.anchor == anchor {
 		return
 	}
+	a.ensureCloudBillingPlan()
 	revision := a.cloudPlanTooltipRevision.Add(1)
 	util.Go(a.lifecycleCtx, "show cloud plan tooltip after dwell", func() {
 		if !a.waitHoverTooltipDelay(&a.cloudPlanTooltipRevision, revision) {
@@ -351,11 +352,30 @@ func cloudBusyLabel(snapshot settingsSnapshot, operation, label string) string {
 	return label
 }
 
+const cloudDeviceInactiveAfter = 14 * 24 * time.Hour
+
+// cloudDeviceInactive reports whether a device should be omitted from the settings
+// list because it has not been seen for more than two weeks. The current device
+// stays visible so this machine cannot disappear from the list.
+func cloudDeviceInactive(device cloudDevice, now time.Time) bool {
+	if device.Current {
+		return false
+	}
+	if device.LastSeenAt <= 0 {
+		return false
+	}
+	return now.Sub(time.UnixMilli(device.LastSeenAt)) > cloudDeviceInactiveAfter
+}
+
 // cloudDevicesViewProps prepares device labels and revoke callbacks.
 func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, contentWidth, imageScale float32) launcherview.CloudDevicesProps {
 	items := make([]launcherview.CloudDeviceProps, 0, len(snapshot.cloud.Devices.Devices))
+	now := util.GetSystemTime()
 	for index, device := range snapshot.cloud.Devices.Devices {
 		if strings.EqualFold(snapshot.cloud.Account.Plan, "pro") && device.RevokedAt > 0 {
+			continue
+		}
+		if cloudDeviceInactive(device, now) {
 			continue
 		}
 		name := device.DeviceName

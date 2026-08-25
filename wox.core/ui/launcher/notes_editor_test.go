@@ -110,6 +110,22 @@ func TestNotesActiveFormatsFollowCaretAndSelection(t *testing.T) {
 	}
 }
 
+func TestNotesActiveFormatsInTableIgnoreOutsideBullet(t *testing.T) {
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}}, {{Text: "1"}}}}
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+		{ID: "t", Type: common.NoteBlockTable, Table: &table},
+		{ID: "b", Type: common.NoteBlockBullet, Text: "example"},
+	}}
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	if formats := noteActiveFormats(document, ranges, woxui.TextSelection{Anchor: ranges[0].TextStart + 1, Focus: ranges[0].TextStart + 1}); !formats["bullet"] {
+		t.Fatalf("caret in the following bullet = %#v", formats)
+	}
+	formats := noteActiveFormatsForTable(document, 0, 1, 0)
+	if formats["bullet"] || !formats["table"] {
+		t.Fatalf("focused table cell = %#v, want table without leftover bullet", formats)
+	}
+}
+
 func TestNotesLinkLooksClickableAndOpensFromText(t *testing.T) {
 	linkColor := woxui.Color{R: 19, G: 121, B: 210, A: 255}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{

@@ -103,6 +103,22 @@ func (f *fakeHostServices) UpdateAccessibility(tree woxui.AccessibilityTree, han
 	return nil
 }
 
+func testEditorField(id string, height float32) Widget {
+	return Semantics{
+		Key:          Key(id),
+		AutomationID: id,
+		Role:         woxui.AccessibilityRoleTextField,
+		Label:        id,
+		Child: Focusable{
+			Key: Key(id),
+			Child: Gesture{
+				ID:    id,
+				Child: Container{Width: 100, Height: height},
+			},
+		},
+	}
+}
+
 // testButton builds one keyed control whose visual, interaction, focus, and semantics identities coincide.
 func testButton(id string, onTap func()) Widget {
 	return Semantics{
@@ -617,6 +633,68 @@ func TestHorizontalScrollViewUsesHorizontalExtentAndPointerDelta(t *testing.T) {
 	}
 }
 
+func TestHorizontalScrollViewMapsVerticalWheelWhenRequested(t *testing.T) {
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "mapped-horizontal-scroll", Width: 100, Height: 20, ContentWidth: 200, Horizontal: true, MapVerticalWheel: true,
+			Child: Stack{Width: 200, Height: 20, Children: []StackChild{{
+				Left: 150,
+				Child: Semantics{
+					Key: "target", AutomationID: "target", Role: woxui.AccessibilityRoleText,
+					Child: Container{Width: 10, Height: 10},
+				},
+			}}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	before := findAutomationNode(t, host.Snapshot().Tree, "target")
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: -40}})
+	renderTestFrame(host)
+	after := findAutomationNode(t, host.Snapshot().Tree, "target")
+	if after.Bounds.X != before.Bounds.X-40 {
+		t.Fatalf("target x after mapped vertical wheel = %v, want %v", after.Bounds.X, before.Bounds.X-40)
+	}
+}
+
+func TestHostRefreshesHoverAfterContentScrollsUnderPointer(t *testing.T) {
+	var hover []string
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "hover-scroll", Width: 80, Height: 20, ContentWidth: 160, Horizontal: true, MapVerticalWheel: true,
+			Child: Flex{Axis: Horizontal, Children: []Widget{
+				Gesture{ID: "tag-a", OnHoverAt: func(inside bool, _ woxui.Rect) {
+					if inside {
+						hover = append(hover, "a")
+					} else {
+						hover = append(hover, "a-leave")
+					}
+				}, Child: Semantics{AutomationID: "tag-a", Role: woxui.AccessibilityRoleText, Child: Container{Width: 80, Height: 20}}},
+				Gesture{ID: "tag-b", OnHoverAt: func(inside bool, _ woxui.Rect) {
+					if inside {
+						hover = append(hover, "b")
+					} else {
+						hover = append(hover, "b-leave")
+					}
+				}, Child: Semantics{AutomationID: "tag-b", Role: woxui.AccessibilityRoleText, Child: Container{Width: 80, Height: 20}}},
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 10, Y: 10}})
+	if len(hover) != 1 || hover[0] != "a" {
+		t.Fatalf("hover before scroll = %v, want [a]", hover)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 10, Y: 10}, Scroll: woxui.Point{Y: -80}})
+	renderTestFrame(host)
+	if len(hover) != 3 || hover[0] != "a" || hover[1] != "a-leave" || hover[2] != "b" {
+		t.Fatalf("hover after scroll = %v, want [a a-leave b] under the still pointer", hover)
+	}
+}
+
 func TestScrollViewKeepsMeasuredKeyVisible(t *testing.T) {
 	controller := NewScrollController(0)
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
@@ -694,6 +772,64 @@ func TestHostKeepsTabFocusedControlVisibleInScrollView(t *testing.T) {
 	}
 	if controller.Offset() != 0 {
 		t.Fatalf("offset after Shift+Tab = %v, want 0", controller.Offset())
+	}
+}
+
+func TestHostPointerFocusDoesNotSnapPartiallyVisibleField(t *testing.T) {
+	controller := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "partial-editor-scroll", Width: 100, Height: 80, Controller: controller,
+			Child: Flex{Axis: Vertical, Children: []Widget{
+				testEditorField("editor", 60),
+				testButton("table", nil),
+				Container{Width: 100, Height: 100},
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	if !host.FocusAutomationID("table") {
+		t.Fatal("table cell should take focus first")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: -20}})
+	renderTestFrame(host)
+	if controller.Offset() != 20 {
+		t.Fatalf("offset after pointer scroll = %v, want 20", controller.Offset())
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 10}})
+	if controller.Offset() != 20 {
+		t.Fatalf("offset after clicking visible editor text = %v, want 20 without snap to start", controller.Offset())
+	}
+	if host.FocusedKey() != "editor" {
+		t.Fatalf("focused = %q, want editor", host.FocusedKey())
+	}
+}
+
+func TestHostDoesNotSnapTallFocusedEditorToStart(t *testing.T) {
+	controller := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "tall-editor-scroll", Width: 100, Height: 80, Controller: controller,
+			Child: Flex{Axis: Vertical, Children: []Widget{
+				Focusable{Key: "editor", Autofocus: true, Child: Container{Width: 100, Height: 200}},
+				testButton("below", nil),
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: -120}})
+	renderTestFrame(host)
+	if controller.Offset() != 120 {
+		t.Fatalf("offset after pointer scroll = %v, want 120", controller.Offset())
+	}
+	host.ClearFocus()
+	if !host.RequestFocus("editor") {
+		t.Fatal("tall editor should accept focus while partially visible")
+	}
+	if controller.Offset() != 120 {
+		t.Fatalf("offset after focusing tall editor = %v, want 120 without snap to start", controller.Offset())
 	}
 }
 

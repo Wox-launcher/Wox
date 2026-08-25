@@ -72,6 +72,25 @@ func TestRefinementToggleOwnsSharedHoverState(t *testing.T) {
 	}
 }
 
+func TestRefinementToggleForwardsHotkeyTooltip(t *testing.T) {
+	var gotInside bool
+	var gotText string
+	toggle := RefinementToggle(RefinementsProps{
+		Summary: "Filters", DefaultLabel: "Filters", Tooltip: "Filter search results (Ctrl+F)",
+		Theme:    woxcomponent.Theme{QueryText: woxui.Color{R: 230, G: 235, B: 240, A: 48}},
+		OnToggle: func() {},
+		OnTooltip: func(inside bool, text string, _ woxui.Rect) {
+			gotInside = inside
+			gotText = text
+		},
+	}).(woxwidget.Stateful)
+	gesture := toggle.CreateState().Build(woxwidget.StateContext{}, toggle.Widget).(woxwidget.Gesture)
+	gesture.OnHoverAt(true, woxui.Rect{Width: 80, Height: 26})
+	if !gotInside || gotText != "Filter search results (Ctrl+F)" {
+		t.Fatalf("refinement tooltip = inside %v text %q, want hover with hotkey hint", gotInside, gotText)
+	}
+}
+
 func TestRefinementBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, RefinementOption{})
 	woxwidget.AssertEqualCoversAllFields(t, RefinementGroup{})

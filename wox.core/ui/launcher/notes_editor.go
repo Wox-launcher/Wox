@@ -24,6 +24,10 @@ func noteActiveFormats(document common.NoteDocument, ranges []noteBlockRange, se
 	return woxcomponent.NoteActiveFormats(document, ranges, selection)
 }
 
+func noteActiveFormatsForTable(document common.NoteDocument, block, row, column int) map[string]bool {
+	return woxcomponent.NoteActiveFormatsForTable(document, block, row, column)
+}
+
 func noteBlockAt(ranges []noteBlockRange, offset int) int {
 	return woxcomponent.NoteBlockAt(ranges, offset)
 }

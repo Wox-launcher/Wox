@@ -209,16 +209,20 @@ func UniformInsets(value float32) Insets {
 
 // Container paints an optional background and positions one child.
 type Container struct {
-	Width           float32
-	Height          float32
-	Padding         Insets
-	Color           woxui.Color
-	BorderColor     woxui.Color
-	BorderWidth     float32
-	LeftBorderColor woxui.Color
-	LeftBorderWidth float32
-	Radius          float32
-	Child           Widget
+	Width             float32
+	Height            float32
+	Padding           Insets
+	Color             woxui.Color
+	BorderColor       woxui.Color
+	BorderWidth       float32
+	LeftBorderColor   woxui.Color
+	LeftBorderWidth   float32
+	RightBorderColor  woxui.Color
+	RightBorderWidth  float32
+	BottomBorderColor woxui.Color
+	BottomBorderWidth float32
+	Radius            float32
+	Child             Widget
 }
 
 // Align positions one child inside a fixed box using normalized axis factors.
@@ -338,7 +342,7 @@ func (w Container) layout(ctx context, available constraints) *node {
 	width = available.constrainWidth(width)
 	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
-	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || (w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0) {
+	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			if w.Color.A != 0 {
 				displayList.FillRoundedRect(bounds, w.Radius, w.Color)
@@ -346,15 +350,40 @@ func (w Container) layout(ctx context, available constraints) *node {
 			if w.BorderColor.A != 0 && w.BorderWidth > 0 {
 				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
 			}
-			if w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0 {
-				displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: min(w.LeftBorderWidth, bounds.Width), Height: bounds.Height}, w.LeftBorderColor)
-			}
+			paintContainerEdgeBorders(displayList, bounds, w)
 		}
 	}
 	if child != nil {
 		result.children = []*node{child}
 	}
 	return result
+}
+
+func containerHasEdgeBorder(w Container) bool {
+	return (w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0) ||
+		(w.RightBorderColor.A != 0 && w.RightBorderWidth > 0) ||
+		(w.BottomBorderColor.A != 0 && w.BottomBorderWidth > 0)
+}
+
+// paintContainerEdgeBorders draws per-side strokes inside the box. Horizontal
+// edges own shared corners so adjacent 1px sides do not darken the same pixel.
+func paintContainerEdgeBorders(displayList *woxui.DisplayList, bounds woxui.Rect, w Container) {
+	bottom := float32(0)
+	if w.BottomBorderColor.A != 0 && w.BottomBorderWidth > 0 {
+		bottom = min(w.BottomBorderWidth, bounds.Height)
+		displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - bottom, Width: bounds.Width, Height: bottom}, w.BottomBorderColor)
+	}
+	innerHeight := max(float32(0), bounds.Height-bottom)
+	if innerHeight <= 0 {
+		return
+	}
+	if w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0 {
+		displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: min(w.LeftBorderWidth, bounds.Width), Height: innerHeight}, w.LeftBorderColor)
+	}
+	if w.RightBorderColor.A != 0 && w.RightBorderWidth > 0 {
+		width := min(w.RightBorderWidth, bounds.Width)
+		displayList.FillRect(woxui.Rect{X: bounds.X + bounds.Width - width, Y: bounds.Y, Width: width, Height: innerHeight}, w.RightBorderColor)
+	}
 }
 
 // Axis names the main direction of a Flex widget.
@@ -448,14 +477,18 @@ type ScrollRange struct {
 
 // ScrollView clips a larger child and optionally retains its own offset when Key is set.
 type ScrollView struct {
-	Key               Key
-	ID                string
-	Width             float32
-	Height            float32
-	MaxHeight         float32
-	ContentWidth      float32
-	ContentHeight     float32
-	Horizontal        bool
+	Key           Key
+	ID            string
+	Width         float32
+	Height        float32
+	MaxHeight     float32
+	ContentWidth  float32
+	ContentHeight float32
+	Horizontal    bool
+	// MapVerticalWheel lets a standalone horizontal strip consume an ordinary
+	// mouse wheel. Nested strips must leave this unset so vertical wheels still
+	// reach the outer list instead of sliding the inner content sideways.
+	MapVerticalWheel  bool
 	Offset            float32
 	InitialOffset     float32
 	Controller        *ScrollController

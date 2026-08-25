@@ -61,13 +61,15 @@ type RefinementsProps struct {
 	Summary      string
 	DefaultLabel string
 	Open         bool
+	Tooltip      string
 	Groups       []RefinementGroup
-	OnToggle     func() `boundary:"stable"`
+	OnToggle     func()                         `boundary:"stable"`
+	OnTooltip    func(bool, string, woxui.Rect) `boundary:"stable"`
 }
 
 // Equal compares every render dependency for the expanded refinement section.
 func (p RefinementsProps) Equal(other RefinementsProps) bool {
-	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Summary != other.Summary || p.DefaultLabel != other.DefaultLabel || p.Open != other.Open || len(p.Groups) != len(other.Groups) {
+	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Summary != other.Summary || p.DefaultLabel != other.DefaultLabel || p.Open != other.Open || p.Tooltip != other.Tooltip || len(p.Groups) != len(other.Groups) {
 		return false
 	}
 	for groupIndex := range p.Groups {
@@ -121,7 +123,12 @@ func RefinementToggle(props RefinementsProps) woxwidget.Widget {
 		if hovered {
 			toggleBackground = woxcomponent.ControlHoverColor(toggleBackground, tint)
 		}
-		return woxwidget.Gesture{ID: "query-refinements-toggle", OnTap: props.OnToggle, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+		return woxwidget.Gesture{ID: "query-refinements-toggle", OnTap: props.OnToggle, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+			onHoverAt(inside, bounds)
+			if props.OnTooltip != nil {
+				props.OnTooltip(inside, props.Tooltip, bounds)
+			}
+		}, Child: woxwidget.Container{
 			Width: width, Height: toggleHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(4, props.DensityScale)}, Child: woxwidget.Container{
 				Width: width, Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: toggleBackground,
 				BorderColor: refinementColorWithOpacity(tint, borderOpacity), BorderWidth: 1,

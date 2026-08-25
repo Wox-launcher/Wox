@@ -525,6 +525,37 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 	}
 }
 
+func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}}, {{Text: "1"}}}}
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+		{ID: "t", Type: common.NoteBlockTable, Table: &table},
+		{ID: "b", Type: common.NoteBlockBullet, Text: "官方提供少而精的真实示例。"},
+	}}
+	controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: document})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	controller.document, controller.blockRanges = document, ranges
+	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 1, Focus: ranges[0].TextStart + 1}
+	controller.focusedTableBlock, controller.focusedTableRow, controller.focusedTableCol = 0, 1, 0
+	items := controller.buildFormatBar(420, woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}}).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	var bullet, tableButton woxcomponent.IconButtonProps
+	for _, child := range items {
+		button := child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		switch button.ID {
+		case "notes.format.bullet":
+			bullet = button
+		case "notes.format.table":
+			tableButton = button
+		}
+	}
+	if bullet.Selected {
+		t.Fatal("list control must stay inactive while the caret is in a table cell")
+	}
+	if !tableButton.Selected {
+		t.Fatal("table control should stay active while the caret is in a table cell")
+	}
+}
+
 func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
 	app := &App{palette: defaultPalette()}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{

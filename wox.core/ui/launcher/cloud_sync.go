@@ -159,22 +159,30 @@ func newCloudFormState(fields formFieldsState, kind, title string) *cloudFormSta
 }
 
 // reloadCloudSync refreshes account, sync, and device state as one revisioned settings snapshot.
-// Delegates to the controller; the onNeedBilling callback triggers the independent billing
-// plan fetch when the billing plan has not been loaded yet.
+// Billing prices are fetched independently so a local sync-status refresh cannot leave the
+// plan comparison stuck on the loading placeholder.
 func (a *App) reloadCloudSync() {
-	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, func() {
-		util.Go(a.lifecycleCtx, "reload cloud billing plan", a.reloadCloudBillingPlan)
-	}, true)
+	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, a.ensureCloudBillingPlan, true)
 }
 
 // reloadCloudSyncSilently refreshes final sync state without replacing operation progress with a loading placeholder.
 func (a *App) reloadCloudSyncSilently() {
-	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, nil, false)
+	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, a.ensureCloudBillingPlan, false)
+}
+
+// ensureCloudBillingPlan starts the independent price fetch when display pricing is still missing.
+func (a *App) ensureCloudBillingPlan() {
+	if a.cloudSettings == nil || a.services == nil || a.cloudSettings.BillingLoaded() {
+		return
+	}
+	util.Go(a.lifecycleCtx, "reload cloud billing plan", a.reloadCloudBillingPlan)
 }
 
 // reloadCloudBillingPlan fetches display pricing independently so it cannot delay local sync status.
 func (a *App) reloadCloudBillingPlan() {
-	a.cloudSettings.ReloadBillingPlan(context.Background(), a.services, a.sessionID)
+	if err := a.cloudSettings.ReloadBillingPlan(context.Background(), a.services, a.sessionID); err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to load cloud billing plan: %v", err))
+	}
 }
 
 // runCloudAction serializes account and sync mutations before reloading their shared status.

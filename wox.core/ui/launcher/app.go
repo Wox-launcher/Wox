@@ -170,6 +170,7 @@ type App struct {
 	glanceLoading                 bool
 	glanceRevision                uint64
 	glanceTooltipRevision         atomic.Uint64
+	refinementTooltipRevision     atomic.Uint64
 	glanceTimer                   *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
 	generalSettings      *generalSettingsController
@@ -605,6 +606,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.stopGlanceLocked(false)
 		a.setPreviewTooltip(false, "", woxui.Rect{})
 		a.setGlanceHover(false, "", woxui.Rect{})
+		a.setRefinementTooltip(false, "", woxui.Rect{})
 		launcher = a.launcher
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil

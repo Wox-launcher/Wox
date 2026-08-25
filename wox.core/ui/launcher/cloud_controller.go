@@ -335,8 +335,9 @@ func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service c
 }
 
 // ReloadBillingPlan fetches display pricing independently so it cannot delay local
-// sync status. On success BillingLoaded becomes true and BillingPlan is stored.
-func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, service contract.CloudSettingsServices, sessionID string) {
+// sync status. BillingLoaded becomes true after the attempt so the comparison
+// table can leave the loading placeholder even when the server has no price.
+func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, service contract.CloudSettingsServices, sessionID string) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	loaded, err := service.BillingPlan(timeoutCtx, sessionID)
@@ -348,6 +349,7 @@ func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, service
 		}
 		c.deps.Invalidate()
 	})
+	return err
 }
 
 // cloudAccountStatusFromContract adapts core account state to launcher-owned view state.

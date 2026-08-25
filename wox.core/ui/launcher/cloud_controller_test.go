@@ -279,3 +279,54 @@ func TestCloudControllerRevisionGuard(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestCloudControllerSilentReloadStillRequestsMissingBilling(t *testing.T) {
+	deps, _ := newCloudControllerDeps()
+	c := newCloudSettingsController(deps)
+	service := &cloudFakeService{
+		account: account.Status{LoggedIn: true, Email: "u@x.com"},
+		sync:    cloudsync.ServiceStatus{Enabled: true},
+	}
+	c.ReloadCloudSync(context.Background(), service, "session", nil, false)
+	if !c.Loaded() {
+		t.Fatal("silent reload should mark cloud status loaded")
+	}
+	if c.BillingLoaded() {
+		t.Fatal("silent reload without billing callback should leave prices unloaded")
+	}
+
+	requested := false
+	c.ReloadCloudSync(context.Background(), service, "session", func() { requested = true }, false)
+	if !requested {
+		t.Fatal("already-loaded cloud status should still request missing billing prices")
+	}
+}
+
+func TestCloudControllerReloadBillingPlan(t *testing.T) {
+	deps, invalidateCalled := newCloudControllerDeps()
+	c := newCloudSettingsController(deps)
+	amount := 300
+	service := &cloudFakeService{plan: account.BillingPlan{
+		Pro: account.BillingPlanTier{Price: account.BillingPlanPrice{Formatted: "$3/month", Currency: "usd", UnitAmount: &amount, Interval: "month"}},
+	}}
+	c.ReloadBillingPlan(context.Background(), service, "session")
+	if !c.BillingLoaded() {
+		t.Fatal("BillingLoaded should be true after a successful plan fetch")
+	}
+	if got := c.BillingPlan().Pro.Price.Formatted; got != "$3/month" {
+		t.Fatalf("Pro price = %q, want $3/month", got)
+	}
+	if *invalidateCalled < 1 {
+		t.Fatalf("Invalidate should be called after billing reload, got %d", *invalidateCalled)
+	}
+
+	c = newCloudSettingsController(deps)
+	service = &cloudFakeService{planErr: errors.New("plan unavailable")}
+	c.ReloadBillingPlan(context.Background(), service, "session")
+	if !c.BillingLoaded() {
+		t.Fatal("BillingLoaded should be true after a failed plan fetch so the UI can leave loading")
+	}
+	if got := c.BillingPlan().Pro.Price.Formatted; got != "" {
+		t.Fatalf("failed plan fetch should keep empty price, got %q", got)
+	}
+}

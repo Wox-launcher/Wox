@@ -343,18 +343,19 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 			headerChildren = append(headerChildren, operationHeader)
 		}
 		header := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: headerChildren}
-		return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{
+		return formTableGridChrome(props, width, height, woxwidget.Flex{
 			Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, formTableEmptyState(props, width, bodyHeight)},
-		}}
+		})
 	}
 
 	contentHeight := float32(len(props.Rows)) * tableSurfaceRowHeight
 	leftRows := make([]woxwidget.Widget, 0, len(props.Rows))
 	operationRows := make([]woxwidget.Widget, 0, len(props.Rows))
-	for _, row := range props.Rows {
-		leftRows = append(leftRows, formTableDataRowCells(props, row, widths[:len(props.Columns)], leftContentWidth))
+	for index, row := range props.Rows {
+		lastRow := index == len(props.Rows)-1
+		leftRows = append(leftRows, formTableDataRowCells(props, row, widths[:len(props.Columns)], leftContentWidth, lastRow))
 		if !props.ReadOnly {
-			operationRows = append(operationRows, formTableOperationCell(props, row, operationWidth))
+			operationRows = append(operationRows, formTableOperationCell(props, row, operationWidth, lastRow))
 		}
 	}
 	headerChildren := []woxwidget.Widget{
@@ -385,7 +386,17 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 		Key: woxwidget.Key(props.ID + "-rows"), Width: width, Height: bodyHeight,
 		ContentHeight: contentHeight, Controller: state.verticalBody, Content: bodyContent, ThumbColor: props.Theme.ResultSubtitle,
 	})
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}}}
+	return formTableGridChrome(props, width, height, woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}})
+}
+
+// formTableGridChrome keeps one outer 1px frame above the cells so scrolling
+// does not lose the table edge, and so cell separators are not drawn twice.
+func formTableGridChrome(props FormTableFieldProps, width, height float32, child woxwidget.Widget) woxwidget.Widget {
+	style := newTableSurfaceStyle(props.Theme)
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: child},
+		{Child: woxwidget.Container{Width: width, Height: height, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth}},
+	}}
 }
 
 // formTableColumnWidths preserves Flutter's declared widths and leaves overflow
@@ -458,10 +469,9 @@ func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, widt
 			}
 		}, Child: icon})
 	}
-	return woxwidget.Container{Width: width, Height: tableSurfaceHeaderHeight, Color: style.headerBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Width: contentWidth, Height: tableSurfaceHeaderHeight, Vertical: 0.5, Child: woxwidget.Flex{
-			Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
-		}}}
+	return tableSurfaceCell(width, tableSurfaceHeaderHeight, style.headerBackground, style, formTableHasTrailingSeparator(props.ReadOnly, len(props.Columns), index), true, woxwidget.Insets{Left: 8, Right: 8}, woxwidget.Align{Width: contentWidth, Height: tableSurfaceHeaderHeight, Vertical: 0.5, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
+	}})
 }
 
 func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwidget.Widget {
@@ -479,25 +489,24 @@ func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwi
 		woxwidget.Align{Width: contentWidth, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 		woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: woxcomponent.TableEmptyFontSize}, Color: props.Theme.ResultSubtitle}},
 	}}
-	return woxwidget.Container{Width: width, Height: height, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: content}}
+	return woxwidget.Container{Width: width, Height: height, Color: style.bodyBackground, Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: content}}
 }
 
 // formTableDataRowCells builds the horizontally scrolling portion of one row.
-func formTableDataRowCells(props FormTableFieldProps, row FormTableRow, widths []float32, width float32) woxwidget.Widget {
+func formTableDataRowCells(props FormTableFieldProps, row FormTableRow, widths []float32, width float32, lastRow bool) woxwidget.Widget {
 	cells := make([]woxwidget.Widget, 0, len(widths))
 	for index := range props.Columns {
 		cell := FormTableCell{}
 		if index < len(row.Cells) {
 			cell = row.Cells[index]
 		}
-		cells = append(cells, formTableDataCellAt(props, row.Index, index, cell, widths[index]))
+		cells = append(cells, formTableDataCellAt(props, row.Index, index, cell, widths[index], lastRow))
 	}
 	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}}
 }
 
 // formTableOperationCell builds the pinned action portion of one row.
-func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width float32) woxwidget.Widget {
+func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width float32, lastRow bool) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
 	actions := make([]woxwidget.Widget, 0, 3+len(row.TrailingActions))
 	if !props.HideEditAction {
@@ -529,8 +538,7 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, action.OnTap))
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
-	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 4, Right: 4}, Child: woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation}}
+	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, false, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})
 }
 
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, onTap func()) woxwidget.Widget {
@@ -551,11 +559,11 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 }
 
 func formTableDataCell(props FormTableFieldProps, cell FormTableCell, width float32) woxwidget.Widget {
-	return formTableDataCellAt(props, 0, 0, cell, width)
+	return formTableDataCellAt(props, 0, 0, cell, width, false)
 }
 
 // formTableDataCellAt gives row-specific tooltip triggers stable table coordinates.
-func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, cell FormTableCell, width float32) woxwidget.Widget {
+func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, cell FormTableCell, width float32, lastRow bool) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
 	contentWidth := max(float32(0), width-14)
 	if cell.Tooltip != "" && props.InfoIcon != nil {
@@ -590,8 +598,7 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 			}, Child: woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}},
 		}}
 	}
-	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Align{Width: contentWidth, Height: tableSurfaceRowHeight, Vertical: 0.5, Child: content}}
+	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, formTableHasTrailingSeparator(props.ReadOnly, len(props.Columns), columnIndex), !lastRow, woxwidget.Insets{Left: 8, Right: 6}, woxwidget.Align{Width: contentWidth, Height: tableSurfaceRowHeight, Vertical: 0.5, Child: content})
 }
 
 func formTableAlpha(color woxui.Color, alpha uint8) woxui.Color {

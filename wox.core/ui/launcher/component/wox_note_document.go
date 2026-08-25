@@ -620,6 +620,34 @@ func NoteActiveFormats(document common.NoteDocument, ranges []NoteBlockRange, se
 	return active
 }
 
+// NoteActiveFormatsForTable reports format-bar state for a focused table cell.
+// Block styles come from the table itself, not leftover text-caret selection outside the grid.
+func NoteActiveFormatsForTable(document common.NoteDocument, block, row, column int) map[string]bool {
+	active := map[string]bool{}
+	applyNoteBlockFormat(active, common.NoteBlockTable)
+	cell := noteTableCell(document, block, row, column)
+	if cell == nil || cell.Text == "" {
+		return active
+	}
+	styles := noteBlockStyles(common.NoteBlock{Text: cell.Text, Spans: cell.Spans}, cell.Text)
+	if len(styles) == 0 {
+		return active
+	}
+	combined := styles[0]
+	for _, style := range styles[1:] {
+		combined.bold = combined.bold && style.bold
+		combined.italic = combined.italic && style.italic
+		combined.underline = combined.underline && style.underline
+		combined.strike = combined.strike && style.strike
+		combined.code = combined.code && style.code
+		if combined.link != style.link {
+			combined.link = ""
+		}
+	}
+	applyNoteInlineFormat(active, combined)
+	return active
+}
+
 func applyNoteBlockFormat(active map[string]bool, blockType common.NoteBlockType) {
 	switch blockType {
 	case common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3:

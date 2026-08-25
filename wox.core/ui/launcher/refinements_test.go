@@ -2,10 +2,21 @@ package launcher
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	woxui "wox/ui/runtime"
 )
+
+func TestRefinementToggleTooltipUsesPlatformHotkey(t *testing.T) {
+	app := &App{translations: map[string]string{
+		"ui_query_refinement_filters_tooltip": "过滤搜索结果({hotkey})",
+	}}
+	want := "过滤搜索结果(" + strings.Join(formatHotkeyLabels(primaryHotkey("f")), "+") + ")"
+	if got := app.refinementToggleTooltip(); got != want {
+		t.Fatalf("refinement tooltip = %q, want %q", got, want)
+	}
+}
 
 func TestNextRefinementHotkeyValues(t *testing.T) {
 	options := []queryRefinementOption{{Value: "all"}, {Value: "text"}, {Value: "file"}}

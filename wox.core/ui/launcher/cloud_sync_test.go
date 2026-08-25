@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"testing"
+	"time"
 
 	"wox/cloudsync"
 	"wox/ui/contract"
@@ -87,6 +88,19 @@ func TestNewCloudBootstrapFormUsesI18nKeys(t *testing.T) {
 	}
 }
 
+func TestCloudBillingPriceTextPrefersFormattedServerPrice(t *testing.T) {
+	amount := 300
+	if got := cloudBillingPriceText(cloudBillingPlanPrice{Formatted: "$3/month", Currency: "usd", UnitAmount: &amount, Interval: "month"}); got != "$3/month" {
+		t.Fatalf("formatted price = %q, want $3/month", got)
+	}
+	if got := cloudBillingPriceText(cloudBillingPlanPrice{Currency: "usd", UnitAmount: &amount, Interval: "month"}); got != "USD 3/month" {
+		t.Fatalf("reconstructed price = %q, want USD 3/month", got)
+	}
+	if got := cloudBillingPriceText(cloudBillingPlanPrice{}); got != "" {
+		t.Fatalf("empty price = %q, want empty", got)
+	}
+}
+
 func TestFormatCloudSyncProgressUsesPushTargetAndTotal(t *testing.T) {
 	app := &App{
 		translations: map[string]string{
@@ -105,5 +119,24 @@ func TestFormatCloudSyncProgressUsesPushTargetAndTotal(t *testing.T) {
 	}, false)
 	if detail != "Uploading Wox settings (3/10 items processed)" {
 		t.Fatalf("push detail = %q", detail)
+	}
+}
+
+func TestCloudDeviceInactiveHidesStaleDevices(t *testing.T) {
+	now := time.Date(2026, 8, 25, 11, 34, 0, 0, time.Local)
+	stale := now.Add(-14*24*time.Hour - time.Second).UnixMilli()
+	fresh := now.Add(-14*24*time.Hour + time.Second).UnixMilli()
+
+	if !cloudDeviceInactive(cloudDevice{DeviceID: "old", LastSeenAt: stale}, now) {
+		t.Fatal("device unseen for more than two weeks should be hidden")
+	}
+	if cloudDeviceInactive(cloudDevice{DeviceID: "recent", LastSeenAt: fresh}, now) {
+		t.Fatal("device seen within two weeks should stay visible")
+	}
+	if cloudDeviceInactive(cloudDevice{DeviceID: "current", LastSeenAt: stale, Current: true}, now) {
+		t.Fatal("current device should stay visible even when last seen is stale")
+	}
+	if cloudDeviceInactive(cloudDevice{DeviceID: "unknown"}, now) {
+		t.Fatal("device without a last-seen timestamp should stay visible")
 	}
 }

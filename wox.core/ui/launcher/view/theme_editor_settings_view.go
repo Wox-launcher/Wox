@@ -273,9 +273,9 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 		{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, Color: stageColor}},
 	}}
 	if props.Wallpaper != nil {
-		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Clip{Width: stageWidth, Height: stageHeight, Child: woxwidget.Image{Source: props.Wallpaper, Width: stageWidth, Height: stageHeight}}})
+		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: stageWidth, Height: stageHeight, Radius: 18}})
 	} else {
-		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Color: woxui.Color{A: 255}}})
+		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, Color: woxui.Color{A: 255}}})
 	}
 	stage.Children = append(stage.Children,
 		woxwidget.StackChild{Left: windowLeft, Top: windowTop, Child: themeEditorPreviewWindow(props, windowWidth, windowHeight)},

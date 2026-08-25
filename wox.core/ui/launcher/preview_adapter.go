@@ -321,10 +321,20 @@ func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, wid
 			color = palette.componentTheme().ErrorText
 		}
 	}
+	var onTap func()
+	if previewImageOverlayAllowed(a.show) {
+		onTap = func() { a.openPreviewImageOverlay(overlay) }
+	}
 	return previewview.PreviewImage(previewview.PreviewImageProps{
-		Width: width, Height: height, Image: image, Message: message, MessageColor: color,
-		OnTap: func() { a.openPreviewImageOverlay(overlay) },
+		ID: imageKey(source), Width: width, Height: height, Image: image, Message: message, MessageColor: color, OnTap: onTap,
 	})
+}
+
+// previewImageOverlayAllowed keeps sticker overlays for sidebar and split image
+// previews. Full preview-only windows already show the image at window size, so
+// another tap should not open a second overlay.
+func previewImageOverlayAllowed(show showAppParams) bool {
+	return !(show.ShowPreviewTitleBar && show.HideQueryBox && show.HideToolbar)
 }
 
 func (a *App) openPreviewImageOverlay(image woxImage) {

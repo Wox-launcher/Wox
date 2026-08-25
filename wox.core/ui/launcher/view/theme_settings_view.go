@@ -301,7 +301,9 @@ func themePreviewTab(props ThemeSettingsProps, theme ThemeCatalogItem, width, he
 	}
 	stageChildren := []woxwidget.StackChild{{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: stageRadius, Color: props.Theme.QueryBackground}}}
 	if props.Wallpaper != nil {
-		stageChildren = append(stageChildren, woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: stageWidth, Height: stageHeight}})
+		// Clip the wallpaper to the stage radius. A square blit leaves dark
+		// corners outside the rounded border, even when the cache is pre-masked.
+		stageChildren = append(stageChildren, woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: stageWidth, Height: stageHeight, Radius: stageRadius}})
 	}
 	stageChildren = append(stageChildren,
 		woxwidget.StackChild{Left: (stageWidth - previewWidth) / 2, Top: (stageHeight - previewHeight) / 2, Child: preview},
@@ -361,7 +363,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 		return window
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height}},
+		{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height, Radius: 8}},
 		{Child: window},
 	}}
 }
@@ -425,7 +427,7 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 	}}
 	children := make([]woxwidget.StackChild, 0, 3)
 	if props.WallpaperBlurred != nil {
-		children = append(children, woxwidget.StackChild{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height}})
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height, Radius: 8}})
 	}
 	children = append(children, woxwidget.StackChild{Child: background}, woxwidget.StackChild{Child: content})
 	return woxwidget.Stack{Width: width, Height: height, Children: children}
