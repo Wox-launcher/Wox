@@ -1842,6 +1842,12 @@ type formDefinitionValue struct {
 	MinimumRowCount   int               `json:"MinimumRowCount"`
 	MinimumRowMessage string            `json:"MinimumRowMessage"`
 	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
+	Rows              []formStatsRow    `json:"Rows"`
+}
+
+type formStatsRow struct {
+	Label string `json:"Label"`
+	Value string `json:"Value"`
 }
 
 type formTableColumn struct {

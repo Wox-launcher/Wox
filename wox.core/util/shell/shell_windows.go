@@ -69,6 +69,17 @@ func OpenAsAdministrator(path string) error {
 	return executeShellVerb(path, "runas")
 }
 
+// OpenWithParameters launches a file through the Windows open verb with optional arguments.
+func OpenWithParameters(file string, parameters string) error {
+	_, err := shellExecute(shellExecuteRequest{
+		File:       file,
+		Verb:       "open",
+		Parameters: parameters,
+		Show:       shellExecuteShowNormal,
+	})
+	return err
+}
+
 // RunElevated launches a file through the Windows runas verb so UAC can elevate it.
 // parameters is the argument string passed to the executable. directory is optional.
 func RunElevated(file string, parameters string, directory string) (WaitFunc, error) {

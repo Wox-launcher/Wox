@@ -264,6 +264,45 @@ func TestFormTextFieldBrowseButtonSharesOneControlRow(t *testing.T) {
 	}
 }
 
+func TestFormStatsFieldUsesQuietCardLayout(t *testing.T) {
+	theme := woxcomponent.Theme{
+		QueryBackground: woxui.Color{R: 40, G: 40, B: 44, A: 255},
+		PreviewSplit:    woxui.Color{R: 80, G: 80, B: 84, A: 255},
+		ResultTitle:     woxui.Color{R: 250, G: 250, B: 250, A: 255},
+		ResultSubtitle:  woxui.Color{R: 160, G: 160, B: 164, A: 255},
+	}
+	field := FormStatsField(FormStatsFieldProps{
+		Width: 420, Title: "Index Stats",
+		Rows:  []FormStatsRow{{Label: "Disk Usage", Value: "29.4 MB"}, {Label: "Files", Value: "130,945"}},
+		Theme: theme,
+	})
+	semantics := field.(woxwidget.Semantics)
+	if semantics.Role != woxui.AccessibilityRoleGroup || semantics.Label != "Index Stats" {
+		t.Fatalf("stats semantics = role %q label %q", semantics.Role, semantics.Label)
+	}
+	wrapper := semantics.Child.(woxwidget.Container)
+	if wrapper.Padding.Top != 16 || wrapper.Padding.Bottom != 12 {
+		t.Fatalf("stats outer padding = %+v, want 16/12 section spacing", wrapper.Padding)
+	}
+	card := wrapper.Child.(woxwidget.Container)
+	if card.Radius != 8 || card.BorderWidth != 1 || card.Color != theme.QueryBackground || card.BorderColor != theme.PreviewSplit {
+		t.Fatalf("stats card chrome = radius %.0f border %.0f fill %#v stroke %#v", card.Radius, card.BorderWidth, card.Color, card.BorderColor)
+	}
+	column := card.Child.(woxwidget.Flex)
+	title := column.Children[0].(woxwidget.Text)
+	if title.Value != "Index Stats" || title.Style.Size != woxcomponent.SettingsLabelFontSize || title.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("stats title = %+v", title)
+	}
+	rows := column.Children[1].(woxwidget.Flex)
+	if rows.Gap != 8 || len(rows.Children) != 2 {
+		t.Fatalf("stats rows = gap %.0f count %d", rows.Gap, len(rows.Children))
+	}
+	first := rows.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	if first.Children[0].(woxwidget.Text).Value != "Disk Usage" || first.Children[2].(woxwidget.Text).Value != "29.4 MB" {
+		t.Fatalf("first stats row = %#v", first.Children)
+	}
+}
+
 func TestFormTextFieldUsesMeasuredActionLabelWidth(t *testing.T) {
 	field := FormTextField(FormTextFieldProps{ID: "content", Label: "内容", Width: 360, LabelWidth: 60, MaxLines: 8, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)

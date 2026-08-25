@@ -27,6 +27,7 @@ const (
 	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
 	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
 	PluginSettingDefinitionTypeOCRModel        PluginSettingDefinitionType = "ocrModel"
+	PluginSettingDefinitionTypeStats           PluginSettingDefinitionType = "stats"
 
 	// dynamic setting will be replaced by the actual setting when retrieved.
 	// The callback may return an empty PluginSettingDefinitionItem to hide it.
@@ -171,6 +172,14 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "ocrModel":
 		n.Type = PluginSettingDefinitionTypeOCRModel
 		var v PluginSettingValueOCRModel
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "stats":
+		n.Type = PluginSettingDefinitionTypeStats
+		var v PluginSettingValueStats
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr

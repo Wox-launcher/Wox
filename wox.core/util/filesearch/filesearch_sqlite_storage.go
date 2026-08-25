@@ -798,6 +798,15 @@ func (d *FileSearchDB) SearchIndexCounts(ctx context.Context) (int64, int64, err
 	return fileCount, entryCount, nil
 }
 
+// IndexDiskBytes reports the on-disk size of the main database plus WAL/shm
+// files without running the full diagnostic snapshot.
+func (d *FileSearchDB) IndexDiskBytes() int64 {
+	if d == nil {
+		return 0
+	}
+	return fileSizeOrZero(d.dbPath) + fileSizeOrZero(d.dbPath+"-wal") + fileSizeOrZero(d.dbPath+"-shm")
+}
+
 func (d *FileSearchDB) SearchIndexSnapshot(ctx context.Context) (sqliteIndexSnapshot, error) {
 	if d == nil || d.db == nil {
 		return sqliteIndexSnapshot{}, nil

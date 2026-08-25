@@ -602,6 +602,14 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 		}
 	}
 
+	if elapsedMs > 0 && s.db != nil {
+		// Persist the completed duration before the transient run snapshot is
+		// cleared. Settings reads this after GetStatus goes idle.
+		if err := s.db.SetLastFullIndexElapsedMs(ctx, elapsedMs); err != nil {
+			util.GetLogger().Warn(ctx, "filesearch failed to persist last full index duration: "+err.Error())
+		}
+	}
+
 	// Feature addition: the toolbar should receive one final full-index summary
 	// after SQLite bulk maintenance has completed. The executor's completed
 	// snapshot fires before deferred FTS rebuild/optimize work, so emitting this

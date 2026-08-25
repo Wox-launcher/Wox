@@ -49,6 +49,7 @@ const fileSearchStatusCommand = "status"
 // Content search setting keys.
 const contentSearchEnabledKey = "contentSearchEnabled"
 const contentSearchExtensionsKey = "contentSearchExtensions"
+const fileIndexStatsSettingKey = "indexStats"
 
 const contentSearchToolbarMsgID = "file-search-content-status"
 
@@ -240,12 +241,19 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 					},
 				},
 			},
+			{
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: fileIndexStatsSettingKey,
+				},
+			},
 		},
 	}
 }
 
 func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnGetDynamicSetting(ctx, c.dynamicIndexStatsSetting)
 	c.indexPolicy = newFileSearchIndexPolicy()
 	c.indexPolicy.SetIgnorePatterns(c.getConfiguredIgnorePatternValues(ctx))
 	c.indexPolicy.SetSkipHiddenFiles(c.getConfiguredSkipHiddenFiles(ctx))

@@ -23,6 +23,7 @@ Open the [Action Panel](../../usage/action-panel.md) on an app result for second
 | Open | Launch or activate the app |
 | Open containing folder | Reveal the app file in the system file manager |
 | Copy path | Copy the executable or bundle path |
+| Uninstall | On Windows, start the same ARP/`UninstallString` or Store package removal used by Settings |
 | Show context menu | Open the system context menu when supported |
 | Terminate app | Stop a running app when Wox can identify the process |
 

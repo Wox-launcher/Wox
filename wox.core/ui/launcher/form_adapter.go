@@ -93,6 +93,14 @@ func (a *App) measureFormLabelWidth(definitions []formDefinition, window *woxui.
 func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := definition.Value
 	switch definition.Type {
+	case "stats":
+		rows := make([]launcherview.FormStatsRow, 0, len(value.Rows))
+		for _, row := range value.Rows {
+			rows = append(rows, launcherview.FormStatsRow{Label: a.translate(row.Label), Value: row.Value})
+		}
+		return launcherview.FormStatsField(launcherview.FormStatsFieldProps{
+			Width: width, Height: height, Title: a.translate(value.Title), Rows: rows, Theme: palette.componentTheme(),
+		})
 	case "head", "label", "newline":
 		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: a.translate(value.Content), Kind: definition.Type, Theme: palette.componentTheme()})
 	case "textbox", "password", "dirPath":

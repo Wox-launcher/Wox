@@ -62,6 +62,19 @@ type StatusSnapshot struct {
 	LastError          string
 }
 
+// IndexStatsSnapshot is the cheap user-facing index summary used by File Search
+// settings. GetDiagnostics also has these counts, but that path samples FTS
+// vocab and size estimates that are too expensive for the plugin catalog load.
+type IndexStatsSnapshot struct {
+	FileCount     int64
+	EntryCount    int64
+	DiskBytes     int64
+	RootCount     int
+	LastElapsedMs int64
+	IsIndexing    bool
+	Error         string
+}
+
 type SearchResult struct {
 	Path       string
 	Name       string

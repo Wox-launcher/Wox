@@ -57,6 +57,69 @@ type FormStaticFieldProps struct {
 	Theme  woxcomponent.Theme
 }
 
+const (
+	formStatsCardRadius     = float32(8)
+	formStatsCardPadding    = float32(16)
+	formStatsTitleGap       = float32(12)
+	formStatsRowGap         = float32(8)
+	formStatsRowHeight      = float32(24)
+	formStatsOuterTopPad    = float32(16)
+	formStatsOuterBottomPad = float32(12)
+)
+
+// FormStatsRow is one read-only label/value pair inside a stats card.
+type FormStatsRow struct {
+	Label string
+	Value string
+}
+
+// FormStatsFieldProps contains one quiet key/value summary card.
+type FormStatsFieldProps struct {
+	Width  float32
+	Height float32
+	Title  string
+	Rows   []FormStatsRow
+	Theme  woxcomponent.Theme
+}
+
+// FormStatsField builds a full-width read-only summary card for plugin settings.
+func FormStatsField(props FormStatsFieldProps) woxwidget.Widget {
+	rows := make([]woxwidget.Widget, 0, len(props.Rows))
+	innerWidth := max(float32(0), props.Width)
+	contentWidth := max(float32(0), innerWidth-formStatsCardPadding*2)
+	for _, row := range props.Rows {
+		rows = append(rows, woxwidget.Container{
+			Width:  contentWidth,
+			Height: formStatsRowHeight,
+			Child: woxwidget.Flex{
+				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter,
+				Children: []woxwidget.Widget{
+					woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.ResultSubtitle},
+					woxwidget.Expanded{Child: woxwidget.Painter{}},
+					woxwidget.Text{Value: row.Value, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.ResultTitle},
+				},
+			},
+		})
+	}
+	card := woxwidget.Container{
+		Width: innerWidth, Radius: formStatsCardRadius, Color: props.Theme.QueryBackground,
+		BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(formStatsCardPadding),
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formStatsTitleGap, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formStatsRowGap, Children: rows},
+		}},
+	}
+	return woxwidget.Semantics{
+		Role: woxui.AccessibilityRoleGroup, Label: props.Title,
+		Child: woxwidget.Container{
+			Width:   innerWidth,
+			Height:  props.Height,
+			Padding: woxwidget.Insets{Top: formStatsOuterTopPad, Bottom: formStatsOuterBottomPad},
+			Child:   card,
+		},
+	}
+}
+
 // FormStaticField builds a heading, label, spacer, or unsupported field row.
 func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 	if props.Kind == "newline" {

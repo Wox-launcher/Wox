@@ -26,6 +26,16 @@ func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string
 		return "Incremental indexing %s %s"
 	case "plugin_file_status_index_duration_seconds":
 		return "%ds"
+	case "plugin_file_status_index_duration_minutes":
+		return "%dm %02ds"
+	case "plugin_file_status_index_duration_hours":
+		return "%dh %02dm"
+	case "plugin_file_setting_index_stats_unavailable":
+		return "-"
+	case "plugin_file_setting_index_stats_duration_ms":
+		return "%dms"
+	case "plugin_file_setting_index_stats_duration_seconds_ms":
+		return "%ds %dms"
 	default:
 		return key
 	}

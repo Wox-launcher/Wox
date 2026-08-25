@@ -293,6 +293,9 @@ func (d *FileSearchDB) ResetIndex(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE kind = ?`, RootKindDynamic); err != nil {
 		return fmt.Errorf("reset dynamic roots: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, lastFullIndexElapsedMsKey); err != nil {
+		return fmt.Errorf("reset last full index duration: %w", err)
+	}
 	now := util.GetSystemTimestamp()
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE roots

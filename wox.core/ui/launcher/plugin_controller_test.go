@@ -183,6 +183,35 @@ func TestPluginControllerPreservesInlineApplicationTableDefinition(t *testing.T)
 	}
 }
 
+func TestPluginControllerPreservesStatsSettingDefinition(t *testing.T) {
+	items := []contract.PluginCatalogItem{{
+		ID: "file-search",
+		SettingDefinitions: definition.PluginSettingDefinitions{{
+			Type: definition.PluginSettingDefinitionTypeStats,
+			Value: &definition.PluginSettingValueStats{
+				Key:   "indexStats",
+				Title: "Index Stats",
+				Rows: []definition.PluginSettingValueStatsRow{
+					{Label: "Disk Usage", Value: "29.4 MB"},
+					{Label: "Files", Value: "130,945"},
+				},
+			},
+		}},
+	}}
+
+	plugins, err := pluginSettingsPluginsFromContract(items)
+	if err != nil {
+		t.Fatalf("adapt plugin settings: %v", err)
+	}
+	definition := plugins[0].SettingDefinitions[0]
+	if definition.Type != "stats" || definition.Value.Key != "indexStats" || definition.Value.Title != "Index Stats" {
+		t.Fatalf("stats setting definition = %+v", definition)
+	}
+	if len(definition.Value.Rows) != 2 || definition.Value.Rows[0].Label != "Disk Usage" || definition.Value.Rows[0].Value != "29.4 MB" {
+		t.Fatalf("stats rows = %+v", definition.Value.Rows)
+	}
+}
+
 func TestPluginControllerReloadPluginsSuccess(t *testing.T) {
 	deps, invalidateCalled := newPluginControllerDeps()
 	c := newPluginSettingsController(deps)

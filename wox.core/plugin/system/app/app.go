@@ -882,6 +882,10 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		},
 	})
 
+	if uninstallAction, ok := a.buildUninstallAction(info, displayName, contextData); ok {
+		actions = append(actions, uninstallAction)
+	}
+
 	// Bug fix: Linux cannot show the true system context menu behind this action,
 	// so keep the entry only on platforms where nativecontextmenu can honor the
 	// label instead of exposing a file-manager fallback as if it were equivalent.

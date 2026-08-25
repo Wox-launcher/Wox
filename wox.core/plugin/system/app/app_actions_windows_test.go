@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"testing"
+	"wox/util"
+)
 
 func TestBuildAppActionsIncludesAdministratorActionForExecutableApps(t *testing.T) {
 	plugin := &ApplicationPlugin{}
@@ -31,6 +34,18 @@ func TestBuildAppActionsIncludesAdministratorActionForExecutableApps(t *testing.
 
 			if hasAdminAction != testCase.wantAdminAction {
 				t.Fatalf("administrator action presence = %t, want %t", hasAdminAction, testCase.wantAdminAction)
+			}
+
+			hasUninstallAction := false
+			for _, action := range actions {
+				if action.Name == "i18n:plugin_app_uninstall" {
+					hasUninstallAction = true
+					break
+				}
+			}
+			wantUninstallAction := shouldOfferWindowsUninstall(testCase.info) && util.IsWindows()
+			if hasUninstallAction != wantUninstallAction {
+				t.Fatalf("uninstall action presence = %t, want %t", hasUninstallAction, wantUninstallAction)
 			}
 		})
 	}
