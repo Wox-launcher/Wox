@@ -8,27 +8,55 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func TestLauncherToolbarSplitYieldsStatusToPreparedActions(t *testing.T) {
-	left, right := launcherToolbarSplit(740, 220, 600, 16, 200)
-	if left != 124 || right != 600 {
-		t.Fatalf("toolbar split = left %v right %v, want status to shrink to 124 so 600px of actions fit", left, right)
+func TestLauncherToolbarSplitGivesStatusPriority(t *testing.T) {
+	left, right := launcherToolbarSplit(740, 220, 150, 16)
+	if left != 220 || right != 504 {
+		t.Fatalf("toolbar split = left %v right %v, want status to keep 220 and leave 504 for shortcuts", left, right)
 	}
 }
 
-func TestFitLauncherToolbarActionsKeepsLeadingResultAndMore(t *testing.T) {
-	shown, used := fitLauncherToolbarActions([]measuredLauncherToolbarAction{
-		{id: "toolbar-action-result-hide-launcher-0", width: 80},
-		{id: "toolbar-action-toolbar-keep-open-0", width: 80},
-		{id: "toolbar-action-toolbar-clear-1", width: 70},
-		{id: launcherToolbarMoreActionID, width: 70},
-	}, 0, 200)
-	if used != 150 || len(shown) != 2 || shown[0].id != "toolbar-action-result-hide-launcher-0" || shown[1].id != launcherToolbarMoreActionID {
-		ids := make([]string, len(shown))
-		for index, action := range shown {
-			ids[index] = action.id
-		}
-		t.Fatalf("fitted toolbar actions = %v width %v, want result action and More in 150", ids, used)
+func TestLauncherToolbarSplitEllipsizesStatusToKeepReservedShortcuts(t *testing.T) {
+	left, right := launcherToolbarSplit(300, 220, 150, 16)
+	if left != 134 || right != 150 {
+		t.Fatalf("toolbar split = left %v right %v, want the long status to shrink to 134 so Enter and More stay", left, right)
 	}
+}
+
+func TestFitLauncherToolbarActionsKeepsEnterAndMoreThenFills(t *testing.T) {
+	actions := []measuredLauncherToolbarAction{
+		{id: "toolbar-action-result-hide-launcher-0", width: 80, pinned: true},
+		{id: "toolbar-action-result-open-folder-1", width: 80},
+		{id: "toolbar-action-toolbar-keep-open-0", width: 70},
+		{id: launcherToolbarMoreActionID, width: 70},
+	}
+	tight, used := fitLauncherToolbarActions(actions, 0, 150)
+	if used != 150 || !toolbarActionIDsEqual(tight, "toolbar-action-result-hide-launcher-0", launcherToolbarMoreActionID) {
+		t.Fatalf("tight toolbar actions = %v width %v, want Enter and More", toolbarActionIDs(tight), used)
+	}
+	wider, used := fitLauncherToolbarActions(actions, 0, 230)
+	if used != 230 || !toolbarActionIDsEqual(wider, "toolbar-action-result-hide-launcher-0", "toolbar-action-result-open-folder-1", launcherToolbarMoreActionID) {
+		t.Fatalf("wider toolbar actions = %v width %v, want Enter, the next hotkey, and More", toolbarActionIDs(wider), used)
+	}
+}
+
+func toolbarActionIDs(actions []measuredLauncherToolbarAction) []string {
+	ids := make([]string, len(actions))
+	for index, action := range actions {
+		ids[index] = action.id
+	}
+	return ids
+}
+
+func toolbarActionIDsEqual(actions []measuredLauncherToolbarAction, want ...string) bool {
+	if len(actions) != len(want) {
+		return false
+	}
+	for index, action := range actions {
+		if action.id != want[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestLauncherToolbarBoundaryEqualCoversAllFields(t *testing.T) {

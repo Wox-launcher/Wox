@@ -68,12 +68,17 @@ func webViewLocalActionPanelEntries(results []queryResult, selected int, goos st
 	}
 }
 
-// toolbarActionEntries preserves Flutter's source ordering while omitting actions without shortcuts.
+// toolbarActionEntries selects the shortcut chips shown on the launcher footer.
 func toolbarActionEntries(entries []actionPanelEntry, toolbarMessageVisible bool) []actionPanelEntry {
 	sources := []actionPanelSource{actionPanelSourceLocal, actionPanelSourceResult}
 	if toolbarMessageVisible {
 		sources = []actionPanelSource{actionPanelSourceResult, actionPanelSourceLocal, actionPanelSourceToolbar}
 	}
+	return toolbarActionEntriesBySources(entries, sources)
+}
+
+// toolbarActionEntriesBySources keeps shortcut chips from the requested sources in that order.
+func toolbarActionEntriesBySources(entries []actionPanelEntry, sources []actionPanelSource) []actionPanelEntry {
 	ordered := make([]actionPanelEntry, 0, len(entries))
 	for _, source := range sources {
 		for _, entry := range entries {
@@ -83,6 +88,16 @@ func toolbarActionEntries(entries []actionPanelEntry, toolbarMessageVisible bool
 		}
 	}
 	return ordered
+}
+
+// toolbarPinnedAction keeps default Enter on the footer while a status message is visible.
+func toolbarPinnedAction(entry actionPanelEntry) bool {
+	return entry.IsDefault || isBareEnterHotkey(entry.Hotkey)
+}
+
+func isBareEnterHotkey(hotkey string) bool {
+	key := normalizeToolbarHotkey(hotkey)
+	return key == "enter" || key == "return"
 }
 
 // unifiedActionPanelEntries mirrors Flutter's local-and-toolbar-before-plugin ordering and hotkey conflict handling.

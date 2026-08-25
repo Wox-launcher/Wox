@@ -42,16 +42,26 @@ func TestToolbarActionEntriesIncludesShortcutLocalActions(t *testing.T) {
 	entries := []actionPanelEntry{
 		{ID: localActionWebViewReloadID, Hotkey: "control+r", Source: actionPanelSourceLocal},
 		{ID: localActionWebViewOpenDevToolsID, Source: actionPanelSourceLocal},
-		{ID: "open", Hotkey: "enter", Source: actionPanelSourceResult},
+		{ID: "open", Hotkey: "enter", IsDefault: true, Source: actionPanelSourceResult},
+		{ID: "folder", Hotkey: "control+enter", Source: actionPanelSourceResult},
 		{ID: "message", Hotkey: "control+m", Source: actionPanelSourceToolbar},
 	}
 	withoutMessage := toolbarActionEntries(entries, false)
-	if len(withoutMessage) != 2 || withoutMessage[0].ID != localActionWebViewReloadID || withoutMessage[1].ID != "open" {
+	if len(withoutMessage) != 3 || withoutMessage[0].ID != localActionWebViewReloadID || withoutMessage[1].ID != "open" || withoutMessage[2].ID != "folder" {
 		t.Fatalf("toolbar actions without message = %+v", withoutMessage)
 	}
 	withMessage := toolbarActionEntries(entries, true)
-	if len(withMessage) != 3 || withMessage[0].ID != "open" || withMessage[1].ID != localActionWebViewReloadID || withMessage[2].ID != "message" {
-		t.Fatalf("toolbar actions with message = %+v", withMessage)
+	if len(withMessage) != 4 || withMessage[0].ID != "open" || withMessage[1].ID != "folder" || withMessage[2].ID != localActionWebViewReloadID || withMessage[3].ID != "message" {
+		t.Fatalf("toolbar actions with message = %+v, want result, local, then message shortcuts", withMessage)
+	}
+}
+
+func TestToolbarPinnedActionKeepsDefaultEnter(t *testing.T) {
+	if !toolbarPinnedAction(actionPanelEntry{ID: "open", Hotkey: "enter", IsDefault: true}) {
+		t.Fatal("default Enter should stay pinned on the footer")
+	}
+	if toolbarPinnedAction(actionPanelEntry{ID: "folder", Hotkey: "control+enter"}) {
+		t.Fatal("secondary hotkey actions should yield to leftover width")
 	}
 }
 

@@ -21,6 +21,7 @@ const (
 	smokeAutomationSlowCommand        = "slow"
 	smokeAutomationStreamingCommand   = "streaming-preview"
 	smokeAutomationToolbarCommand     = "toolbar"
+	smokeAutomationToolbarLongCommand = "toolbar-long"
 	smokeAutomationAttentionCommand   = "attention"
 	smokeAutomationQuickSelectCommand = "quick-select"
 	smokeAutomationTooltipCommand     = "tooltip"
@@ -28,6 +29,8 @@ const (
 	smokeAutomationKeepOpenAction     = "keep-open"
 	smokeAutomationClearAction        = "clear"
 	smokeAutomationResultAction       = "hide-launcher"
+	smokeAutomationSecondaryAction    = "open-folder"
+	smokeAutomationLongToolbarTitle   = "Indexing file contents across every configured search root: 18365 files are already processed and the catalog is still updating with additional paths that must remain visible in the launcher status"
 	smokeAutomationAttentionKey       = "attention-smoke-item"
 	smokeAutomationAttentionTitle     = "Attention smoke item"
 	smokeAutomationAttentionQuery     = "1+1"
@@ -53,6 +56,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
+			{Command: smokeAutomationToolbarLongCommand, Description: "Long toolbar message fixture"},
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
@@ -78,6 +82,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryStreamingPreview()
 	case smokeAutomationToolbarCommand:
 		return p.queryToolbar(ctx)
+	case smokeAutomationToolbarLongCommand:
+		return p.queryToolbarLong(ctx)
 	case smokeAutomationAttentionCommand:
 		return p.queryAttentionFixture()
 	case smokeAutomationQuickSelectCommand:
@@ -236,18 +242,40 @@ func (p *smokeAutomationPlugin) queryQuickSelect() plugin.QueryResponse {
 
 // queryToolbar publishes a persistent toolbar message through the real plugin API boundary.
 func (p *smokeAutomationPlugin) queryToolbar(ctx context.Context) plugin.QueryResponse {
-	p.showToolbarMessage(ctx, "Toolbar fixture ready")
+	return p.queryToolbarWithStatus(ctx, "Toolbar fixture ready")
+}
+
+// queryToolbarLong uses a status long enough to consume leftover footer width.
+func (p *smokeAutomationPlugin) queryToolbarLong(ctx context.Context) plugin.QueryResponse {
+	return p.queryToolbarWithStatus(ctx, smokeAutomationLongToolbarTitle)
+}
+
+// queryToolbarWithStatus publishes one toolbar status plus the shared Enter and extra result actions.
+func (p *smokeAutomationPlugin) queryToolbarWithStatus(ctx context.Context, title string) plugin.QueryResponse {
+	p.showToolbarMessage(ctx, title)
 	return plugin.NewQueryResponse([]plugin.QueryResult{{
 		Title: "Toolbar smoke fixture", Icon: common.PluginAppIcon,
-		Actions: []plugin.QueryResultAction{{
-			Id:                     smokeAutomationResultAction,
-			Name:                   "Hide launcher",
-			Hotkey:                 util.PrimaryHotkey("enter"),
-			PreventHideAfterAction: false,
-			Action: func(callbackCtx context.Context, _ plugin.ActionContext) {
-				p.api.Log(callbackCtx, plugin.LogLevelInfo, "Toolbar fixture result action executed")
+		Actions: []plugin.QueryResultAction{
+			{
+				Id:                     smokeAutomationResultAction,
+				Name:                   "Hide launcher",
+				IsDefault:              true,
+				Hotkey:                 "enter",
+				PreventHideAfterAction: false,
+				Action: func(callbackCtx context.Context, _ plugin.ActionContext) {
+					p.api.Log(callbackCtx, plugin.LogLevelInfo, "Toolbar fixture result action executed")
+				},
 			},
-		}},
+			{
+				Id:                     smokeAutomationSecondaryAction,
+				Name:                   "Open folder",
+				Hotkey:                 util.PrimaryHotkey("enter"),
+				PreventHideAfterAction: true,
+				Action: func(callbackCtx context.Context, _ plugin.ActionContext) {
+					p.api.Log(callbackCtx, plugin.LogLevelInfo, "Toolbar fixture secondary action executed")
+				},
+			},
+		},
 	}})
 }
 

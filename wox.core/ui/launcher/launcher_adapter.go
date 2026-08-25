@@ -1158,7 +1158,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 		}
 		actions = append(actions, launcherview.LauncherToolbarAction{
 			ID: "toolbar-action-" + entry.ID, Label: label, HotkeyLabels: formatHotkeyLabels(entry.Hotkey),
-			OnTap: func() { a.activateActionPanelEntry(entry) },
+			Pinned: toolbarPinnedAction(entry), OnTap: func() { a.activateActionPanelEntry(entry) },
 		})
 	}
 	if len(entries) > 0 {

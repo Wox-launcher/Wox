@@ -14,12 +14,13 @@ type LauncherToolbarAction struct {
 	ID           string
 	Label        string
 	HotkeyLabels []string
+	Pinned       bool
 	OnTap        func() `boundary:"stable"`
 }
 
 // Equal compares every visual dependency for one prepared toolbar action.
 func (a LauncherToolbarAction) Equal(other LauncherToolbarAction) bool {
-	if a.ID != other.ID || a.Label != other.Label || len(a.HotkeyLabels) != len(other.HotkeyLabels) {
+	if a.ID != other.ID || a.Label != other.Label || a.Pinned != other.Pinned || len(a.HotkeyLabels) != len(other.HotkeyLabels) {
 		return false
 	}
 	for index := range a.HotkeyLabels {
@@ -73,6 +74,7 @@ type measuredLauncherToolbarAction struct {
 	id     string
 	widget woxwidget.Widget
 	width  float32
+	pinned bool
 }
 
 // LauncherToolbarView builds the status footer and the actions that fit its current width.
@@ -89,7 +91,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
 	for _, action := range props.Actions {
 		widget, width := launcherToolbarActionView(action, props.Theme, props.Window, props.DensityScale)
-		measured = append(measured, measuredLauncherToolbarAction{id: action.ID, widget: widget, width: width})
+		measured = append(measured, measuredLauncherToolbarAction{id: action.ID, widget: widget, width: width, pinned: action.Pinned})
 	}
 	naturalLeft := float32(0)
 	labelWidth := float32(0)
@@ -104,7 +106,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			naturalLeft += scaledLauncherSize(22, props.DensityScale)
 		}
 	}
-	leftWidth, rightAvailable := launcherToolbarSplit(contentWidth, naturalLeft, toolbarActionsWidth(measured, actionGap), statusActionGap, scaledLauncherSize(200, props.DensityScale))
+	leftWidth, rightAvailable := launcherToolbarSplit(contentWidth, naturalLeft, toolbarReservedActionsWidth(measured, actionGap), statusActionGap)
 	shown, rightWidth := fitLauncherToolbarActions(measured, actionGap, rightAvailable)
 	rightChildren := make([]woxwidget.Widget, 0, len(shown))
 	for _, action := range shown {
@@ -234,22 +236,33 @@ func launcherToolbarContentHeight(densityScale float32) float32 {
 	return scaledLauncherSize(28, densityScale) + scaledLauncherSize(2, densityScale)*2
 }
 
-// launcherToolbarSplit lets prepared actions keep their measured width before the
-// status label consumes the leftover, so a long toolbar message does not hide
-// result and message actions that still fit the window.
-func launcherToolbarSplit(contentWidth, naturalLeft, wantedRight, statusGap, minRight float32) (leftWidth, rightAvailable float32) {
-	rightNeed := wantedRight
-	if rightNeed > 0 {
-		rightNeed = max(rightNeed, minRight)
-	}
-	if naturalLeft > 0 && rightNeed > 0 {
-		leftWidth = min(naturalLeft, max(float32(0), contentWidth-rightNeed-statusGap))
+// launcherToolbarSplit gives the status message its natural width first, then
+// leaves the leftover for shortcuts. Enter and More stay reserved so a long
+// message ellipsizes instead of pushing those two off the footer.
+func launcherToolbarSplit(contentWidth, naturalLeft, reservedRight, statusGap float32) (leftWidth, rightAvailable float32) {
+	if naturalLeft > 0 && reservedRight > 0 {
+		leftWidth = min(naturalLeft, max(float32(0), contentWidth-reservedRight-statusGap))
 		return leftWidth, max(float32(0), contentWidth-leftWidth-statusGap)
 	}
-	if rightNeed > 0 {
+	if reservedRight > 0 {
 		return 0, contentWidth
 	}
 	return min(naturalLeft, contentWidth), max(float32(0), contentWidth-min(naturalLeft, contentWidth))
+}
+
+func toolbarReservedActionsWidth(measured []measuredLauncherToolbarAction, gap float32) float32 {
+	return toolbarActionsWidth(toolbarReservedActions(measured), gap)
+}
+
+// toolbarReservedActions returns default Enter and More, which always keep a footer slot.
+func toolbarReservedActions(measured []measuredLauncherToolbarAction) []measuredLauncherToolbarAction {
+	reserved := make([]measuredLauncherToolbarAction, 0, 2)
+	for _, action := range measured {
+		if launcherToolbarActionReserved(action) {
+			reserved = append(reserved, action)
+		}
+	}
+	return reserved
 }
 
 func toolbarActionsWidth(measured []measuredLauncherToolbarAction, gap float32) float32 {
@@ -263,51 +276,68 @@ func toolbarActionsWidth(measured []measuredLauncherToolbarAction, gap float32) 
 	return total
 }
 
-// fitLauncherToolbarActions keeps More visible and then fills remaining width
-// from the start of the prepared list so result actions are not dropped first.
+func launcherToolbarActionReserved(action measuredLauncherToolbarAction) bool {
+	return action.pinned || action.id == launcherToolbarMoreActionID
+}
+
+// fitLauncherToolbarActions keeps Enter and More, then adds the remaining
+// hotkey actions in source order until the leftover width is gone.
 func fitLauncherToolbarActions(measured []measuredLauncherToolbarAction, gap, available float32) ([]measuredLauncherToolbarAction, float32) {
 	if len(measured) == 0 || available <= 0 {
 		return nil, 0
 	}
-	moreIndex := -1
-	for index, action := range measured {
-		if action.id == launcherToolbarMoreActionID {
-			moreIndex = index
-			break
-		}
-	}
-	reserved := float32(0)
-	if moreIndex >= 0 {
-		reserved = measured[moreIndex].width
-		if len(measured) > 1 {
-			reserved += gap
-		}
-	}
+	var more *measuredLauncherToolbarAction
 	shown := make([]measuredLauncherToolbarAction, 0, len(measured))
 	used := float32(0)
-	for index, action := range measured {
-		if index == moreIndex {
+	appendIfFits := func(action measuredLauncherToolbarAction) bool {
+		nextWidth := action.width
+		if len(shown) > 0 {
+			nextWidth += gap
+		}
+		if used+nextWidth > available {
+			return false
+		}
+		shown = append(shown, action)
+		used += nextWidth
+		return true
+	}
+	for index := range measured {
+		action := measured[index]
+		if action.id == launcherToolbarMoreActionID {
+			copy := action
+			more = &copy
+			continue
+		}
+		if !action.pinned {
+			continue
+		}
+		if !appendIfFits(action) {
+			return shown, used
+		}
+	}
+	moreWidth := float32(0)
+	if more != nil {
+		moreWidth = more.width
+		if len(shown) > 0 {
+			moreWidth += gap
+		}
+	}
+	for _, action := range measured {
+		if launcherToolbarActionReserved(action) {
 			continue
 		}
 		nextWidth := action.width
 		if len(shown) > 0 {
 			nextWidth += gap
 		}
-		if used+nextWidth > available-reserved {
+		if used+nextWidth+moreWidth > available {
 			break
 		}
 		shown = append(shown, action)
 		used += nextWidth
 	}
-	if moreIndex >= 0 {
-		nextWidth := measured[moreIndex].width
-		if len(shown) > 0 {
-			nextWidth += gap
-		}
-		if used+nextWidth <= available {
-			shown = append(shown, measured[moreIndex])
-			used += nextWidth
-		}
+	if more != nil {
+		appendIfFits(*more)
 	}
 	return shown, used
 }
