@@ -392,12 +392,13 @@ func (c *notesWindowController) onSegmentChanged(segmentStart int, value string)
 	c.document = woxcomponent.ReplaceNoteSegment(previous, segment, parsed.Blocks)
 	projected, runs, ranges := c.projectActiveText()
 	c.richRuns, c.blockRanges = runs, ranges
+	// SetText always moves the caret to the end. Keep the live editor selection
+	// when the projection already matches, and restore it after a rewrite.
 	if segment.Start == c.activeTextSegment.Start && projected != value {
-		focus := c.editor.State().Selection.Focus - (utf8.RuneCountInString(value) - utf8.RuneCountInString(projected))
+		state := c.editor.State()
+		delta := utf8.RuneCountInString(value) - utf8.RuneCountInString(projected)
 		c.editor.SetText(projected, false)
-		c.editor.SetCaret(max(0, focus))
-	} else if segment.Start == c.activeTextSegment.Start {
-		c.editor.SetText(projected, false)
+		c.editor.SetSelection(max(0, state.Selection.Anchor-delta), max(0, state.Selection.Focus-delta))
 	}
 	c.selection = c.editor.State().Selection
 	c.dirty, c.errorText = true, ""

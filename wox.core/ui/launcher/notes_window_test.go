@@ -813,3 +813,98 @@ func TestNotesDiscardEmptyDraftOnClose(t *testing.T) {
 		t.Fatal("discarded empty draft stayed dirty")
 	}
 }
+
+func TestNotesEditorRepeatedBackspaceKeepsCaret(t *testing.T) {
+	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "block", Type: common.NoteBlockParagraph, Text: "hello world"},
+		}},
+	})
+	controller.editor.SetCaret(5)
+	if handled, changed := controller.editor.HandleKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}); !handled || !changed {
+		t.Fatal("first Backspace must delete a character")
+	}
+	controller.onSegmentChanged(0, controller.editor.Text())
+	if controller.editor.Text() != "hell world" || controller.editor.State().Selection.Focus != 4 {
+		t.Fatalf("after first delete text=%q caret=%d, want %q at 4", controller.editor.Text(), controller.editor.State().Selection.Focus, "hell world")
+	}
+
+	if handled, changed := controller.editor.HandleKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}); !handled || !changed {
+		t.Fatal("second Backspace must keep deleting at the same caret")
+	}
+	controller.onSegmentChanged(0, controller.editor.Text())
+	if controller.editor.Text() != "hel world" || controller.editor.State().Selection.Focus != 3 {
+		t.Fatalf("after second delete text=%q caret=%d, want %q at 3", controller.editor.Text(), controller.editor.State().Selection.Focus, "hel world")
+	}
+}
+
+func TestNotesEditorHostBackspaceKeepsFocus(t *testing.T) {
+	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "block", Type: common.NoteBlockParagraph, Text: "hello"},
+		}},
+	})
+	controller.editor.SetCaret(3)
+	theme := app.palette.componentTheme()
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+			ID: "notes.editor", Document: controller.document, Width: 400, Height: 240,
+			Style: controller.editorStyle(), LineHeight: 24, Zoom: 1, TextColor: theme.PreviewText, Theme: theme,
+			Autofocus: true, Controller: controller.editor, FocusNode: controller.editorFocus,
+			Focused: controller.editorFocus.HasFocus() && controller.focusedTableBlock < 0, Selection: controller.selection,
+			OnChanged: controller.onSegmentChanged, OnSelectionChanged: func(selection woxui.TextSelection) {
+				if selection == controller.selection {
+					return
+				}
+				controller.selection = selection
+				controller.focusedTableBlock = -1
+			},
+		})
+	})
+	host.AttachServices(&notesEditorHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 240}, PixelSize: woxui.PixelSize{Width: 400, Height: 240}, Scale: 1}
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, frame)
+	if !host.RequestFocus("notes.editor") {
+		t.Fatal("notes editor must accept focus")
+	}
+	host.Frame(displayList, frame)
+
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}) {
+		t.Fatal("first Backspace must be handled")
+	}
+	host.Frame(displayList, frame)
+	if !host.HasFocus("notes.editor") || !controller.editorFocus.HasFocus() {
+		t.Fatalf("focus after first delete: host=%v node=%v", host.HasFocus("notes.editor"), controller.editorFocus.HasFocus())
+	}
+	if controller.editor.Text() != "helo" || controller.editor.State().Selection.Focus != 2 {
+		t.Fatalf("after first delete text=%q caret=%d, want helo at 2", controller.editor.Text(), controller.editor.State().Selection.Focus)
+	}
+
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}) {
+		t.Fatal("second Backspace must be handled while the caret stays in the editor")
+	}
+	host.Frame(displayList, frame)
+	if !host.HasFocus("notes.editor") || controller.editor.Text() != "hlo" || controller.editor.State().Selection.Focus != 1 {
+		t.Fatalf("after second delete text=%q caret=%d focus=%v, want hlo at 1 with editor focus", controller.editor.Text(), controller.editor.State().Selection.Focus, host.HasFocus("notes.editor"))
+	}
+}
+
+type notesEditorHostServices struct{}
+
+func (s *notesEditorHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * style.Size / 2, Height: style.Size}}, nil
+}
+
+func (s *notesEditorHostServices) Invalidate() error               { return nil }
+func (s *notesEditorHostServices) InvalidateRect(woxui.Rect) error { return nil }
+
+func (s *notesEditorHostServices) SetTextInputState(woxui.TextInputState) error { return nil }
+
+func (s *notesEditorHostServices) SetPointerCursor(woxui.PointerCursor) error { return nil }
+
+func (s *notesEditorHostServices) UpdateAccessibility(woxui.AccessibilityTree, woxui.AccessibilityActionHandler) error {
+	return nil
+}
