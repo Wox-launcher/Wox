@@ -874,8 +874,8 @@ func (w *platformWindow) consumePendingDamage() Rect {
 }
 
 //export woxGoLinuxStart
-func woxGoLinuxStart(context C.uintptr_t) C.int32_t {
-	state := cgo.Handle(context).Value().(*linuxRunState)
+func woxGoLinuxStart(runHandle C.uintptr_t) C.int32_t {
+	state := cgo.Handle(runHandle).Value().(*linuxRunState)
 	state.err = state.start()
 	if state.err == nil && os.Getenv(linuxRenderTraceEnvironment) == "1" {
 		util.GetLogger().Info(context.Background(), fmt.Sprintf(
