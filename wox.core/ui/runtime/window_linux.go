@@ -91,19 +91,6 @@ func platformRun(start func() error) error {
 	}()
 
 	renderTraceEnabled := os.Getenv(linuxRenderTraceEnvironment) == "1"
-	if renderTraceEnabled {
-		util.GetLogger().Info(context.Background(), fmt.Sprintf(
-			"linux render trace enabled: %s=1 XDG_CURRENT_DESKTOP=%q XDG_SESSION_DESKTOP=%q DESKTOP_SESSION=%q XDG_SESSION_TYPE=%q GDK_BACKEND=%q DISPLAY=%q WAYLAND_DISPLAY=%q",
-			linuxRenderTraceEnvironment,
-			os.Getenv("XDG_CURRENT_DESKTOP"),
-			os.Getenv("XDG_SESSION_DESKTOP"),
-			os.Getenv("DESKTOP_SESSION"),
-			os.Getenv("XDG_SESSION_TYPE"),
-			os.Getenv("GDK_BACKEND"),
-			os.Getenv("DISPLAY"),
-			os.Getenv("WAYLAND_DISPLAY"),
-		))
-	}
 	renderTrace := C.int32_t(0)
 	if renderTraceEnabled {
 		renderTrace = 1
@@ -890,6 +877,19 @@ func (w *platformWindow) consumePendingDamage() Rect {
 func woxGoLinuxStart(context C.uintptr_t) C.int32_t {
 	state := cgo.Handle(context).Value().(*linuxRunState)
 	state.err = state.start()
+	if state.err == nil && os.Getenv(linuxRenderTraceEnvironment) == "1" {
+		util.GetLogger().Info(context.Background(), fmt.Sprintf(
+			"linux render trace enabled: %s=1 XDG_CURRENT_DESKTOP=%q XDG_SESSION_DESKTOP=%q DESKTOP_SESSION=%q XDG_SESSION_TYPE=%q GDK_BACKEND=%q DISPLAY=%q WAYLAND_DISPLAY=%q",
+			linuxRenderTraceEnvironment,
+			os.Getenv("XDG_CURRENT_DESKTOP"),
+			os.Getenv("XDG_SESSION_DESKTOP"),
+			os.Getenv("DESKTOP_SESSION"),
+			os.Getenv("XDG_SESSION_TYPE"),
+			os.Getenv("GDK_BACKEND"),
+			os.Getenv("DISPLAY"),
+			os.Getenv("WAYLAND_DISPLAY"),
+		))
+	}
 	if state.err != nil {
 		state.mu.Lock()
 		state.accepting = false

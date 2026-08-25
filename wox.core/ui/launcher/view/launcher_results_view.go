@@ -140,13 +140,14 @@ func (p launcherResultTextProps) Equal(other launcherResultTextProps) bool {
 	return p == other
 }
 
-// launcherResultSingleLineText matches Flutter's one-line result labels by discarding later lines.
+// launcherResultSingleLineText keeps result titles and subtitles on one line.
+// List rows only have a single-line slot, so hard breaks would wrap inside the
+// row and look like a broken title instead of a compact label.
 func launcherResultSingleLineText(value string) string {
 	value = strings.ReplaceAll(value, "\r\n", "\n")
-	if index := strings.IndexByte(value, '\n'); index >= 0 {
-		value = value[:index]
-	}
-	return strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "\r", "\n")
+	value = strings.ReplaceAll(value, "\n", " ")
+	return strings.Join(strings.Fields(value), " ")
 }
 
 type launcherResultTailsProps struct {
@@ -264,8 +265,9 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		background = props.Theme.SelectedBackground
 		background.A = uint8(float32(background.A)*0.25 + 0.5)
 	}
+	titleValue := launcherResultSingleLineText(item.Title)
 	if item.Group {
-		titleProps := launcherResultTextProps{Value: item.Title, Style: props.TitleStyle, Color: title}
+		titleProps := launcherResultTextProps{Value: titleValue, Style: props.TitleStyle, Color: title}
 		return woxwidget.Container{
 			Width: props.RowWidth, Height: props.RowHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(18, props.DensityScale)},
 			Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps),
@@ -302,7 +304,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	labelContentWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-scaledLauncherSize(20, props.DensityScale))
 	labelWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-trailingWidth-props.IconGap*float32(gapCount))
-	titleProps := launcherResultTextProps{Value: item.Title, Style: props.TitleStyle, Color: title}
+	titleProps := launcherResultTextProps{Value: titleValue, Style: props.TitleStyle, Color: title}
 	labelChildren := []woxwidget.Widget{launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)}
 	subtitleValue := launcherResultSingleLineText(item.Subtitle)
 	labelGap := float32(0)
@@ -359,7 +361,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID)), AutomationID: "launcher.result." + item.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: item.Title, Description: subtitleValue, Value: item.QuickSelectNumber, Selected: item.Selected,
+		Label: titleValue, Description: subtitleValue, Value: item.QuickSelectNumber, Selected: item.Selected,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {

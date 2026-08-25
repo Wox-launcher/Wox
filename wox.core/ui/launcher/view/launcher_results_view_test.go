@@ -91,8 +91,26 @@ func TestLauncherResultMultilineSubtitleUsesSingleLineCenteredGroup(t *testing.T
 	labels := label.Child.(woxwidget.Flex)
 	subtitle := labels.Children[1].(woxwidget.Boundary[launcherResultTextProps])
 
-	if label.Vertical != 0.5 || subtitle.Props.Value != "Version: 1.0" {
-		t.Fatalf("multiline subtitle layout = vertical %.1f value %q, want 0.5/first line", label.Vertical, subtitle.Props.Value)
+	if label.Vertical != 0.5 || subtitle.Props.Value != "Version: 1.0 Description: details" {
+		t.Fatalf("multiline subtitle layout = vertical %.1f value %q, want 0.5/single-line flattened text", label.Vertical, subtitle.Props.Value)
+	}
+}
+
+func TestLauncherResultMultilineTitleUsesSingleLine(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Items: []LauncherResultItem{{ID: "multiline-title", Title: "你说得对，是我把战略\r\n真正的问题不是“Wox"}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	labels := launcherResultRowContent(row).Children[1].(woxwidget.Clip).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	title := labels.Children[0].(woxwidget.Boundary[launcherResultTextProps])
+
+	if title.Props.Value != "你说得对，是我把战略 真正的问题不是“Wox" {
+		t.Fatalf("multiline title = %q, want a single flattened line", title.Props.Value)
+	}
+	if row.Label != title.Props.Value {
+		t.Fatalf("result accessibility label = %q, want the flattened title", row.Label)
 	}
 }
 
