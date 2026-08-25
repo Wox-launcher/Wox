@@ -20,7 +20,9 @@
 #include <math.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -28,6 +30,7 @@
 extern int32_t woxGoLinuxStart(uintptr_t context);
 extern void woxGoLinuxCall(uintptr_t context);
 extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
+extern void woxGoLinuxRenderTrace(const char *message);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
@@ -179,6 +182,8 @@ struct WoxLinuxWindow {
   bool forwarding_embedded_pointer;
   uintptr_t context;
   uint64_t epoch;
+  // trace_frame_id correlates GTK callbacks and native framebuffer stages with Go frame metrics.
+  uint64_t trace_frame_id;
   unsigned long previous_active_window;
   float preferred_width;
   float preferred_height;
@@ -230,6 +235,30 @@ static pthread_t wox_linux_main_thread;
 static gint wox_linux_runtime_running = 0;
 static gint wox_linux_loop_active = 0;
 static gint wox_linux_window_count = 0;
+static bool wox_linux_render_trace_enabled = false;
+
+void wox_linux_set_render_trace(int32_t enabled) {
+  wox_linux_render_trace_enabled = enabled != 0;
+}
+
+// trace_linux_render keeps native diagnostics in Wox's configured log instead of stderr.
+static void trace_linux_render(const char *format, ...) {
+  if (!wox_linux_render_trace_enabled) {
+    return;
+  }
+  va_list arguments;
+  va_start(arguments, format);
+  char *message = g_strdup_vprintf(format, arguments);
+  va_end(arguments);
+  if (message != NULL) {
+    woxGoLinuxRenderTrace(message);
+    g_free(message);
+  }
+}
+
+static const char *linux_renderer_name(WoxLinuxWindow *window, WoxLinuxRenderer *renderer) {
+  return window != NULL && renderer == &window->overlay_renderer ? "overlay" : "main";
+}
 
 // Must match util.LinuxDesktopAppID / util.LinuxDesktopWMClass.
 #define WOX_LINUX_DEFAULT_APP_ID "io.github.WoxLauncher.Wox"
@@ -1239,16 +1268,35 @@ static GLuint upload_gl_texture(int width, int height, GLenum format, const void
   return texture;
 }
 
-static bool initialize_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
+static bool initialize_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
   GError *error = gtk_gl_area_get_error(GTK_GL_AREA(gl_area));
   if (error != NULL) {
+    trace_linux_render("event=renderer_init_failed surface=%s error=%s", linux_renderer_name(window, renderer), error->message);
     g_warning("Wox Go UI: failed to create OpenGL context: %s", error->message);
     return false;
   }
+  const char *vendor = (const char *)glGetString(GL_VENDOR);
+  const char *gl_renderer = (const char *)glGetString(GL_RENDERER);
+  const char *version = (const char *)glGetString(GL_VERSION);
+  const char *shading_language = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
+  GdkDisplay *display = gtk_widget_get_display(gl_area);
+  trace_linux_render(
+      "event=renderer_init surface=%s context=%p displayType=%s hasAlpha=%d vendor=%s renderer=%s version=%s shadingLanguage=%s",
+      linux_renderer_name(window, renderer),
+      (void *)gtk_gl_area_get_context(GTK_GL_AREA(gl_area)),
+      display != NULL ? G_OBJECT_TYPE_NAME(display) : "unknown",
+      gtk_gl_area_get_has_alpha(GTK_GL_AREA(gl_area)),
+      vendor != NULL ? vendor : "unknown",
+      gl_renderer != NULL ? gl_renderer : "unknown",
+      version != NULL ? version : "unknown",
+      shading_language != NULL ? shading_language : "unknown");
   renderer->rect_program = create_program(rect_vertex_source, rect_fragment_source);
   renderer->texture_program = create_program(texture_vertex_source, texture_fragment_source);
   if (renderer->rect_program == 0 || renderer->texture_program == 0) {
+    if (wox_linux_render_trace_enabled) {
+      trace_linux_render("event=renderer_init_failed surface=%s reason=shader_program rectProgram=%u textureProgram=%u glError=%#x", linux_renderer_name(window, renderer), renderer->rect_program, renderer->texture_program, (unsigned int)glGetError());
+    }
     if (renderer->texture_program != 0) {
       glDeleteProgram(renderer->texture_program);
     }
@@ -1287,6 +1335,9 @@ static bool initialize_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) 
   }
   renderer->context_generation++;
   renderer->ready = true;
+  if (wox_linux_render_trace_enabled) {
+    trace_linux_render("event=renderer_ready surface=%s generation=%llu rectProgram=%u textureProgram=%u vertexArray=%u glError=%#x", linux_renderer_name(window, renderer), (unsigned long long)renderer->context_generation, renderer->rect_program, renderer->texture_program, renderer->vertex_array, (unsigned int)glGetError());
+  }
   return true;
 }
 
@@ -1931,6 +1982,120 @@ static void restore_previous_x11_window(WoxLinuxWindow *window) {
 }
 #endif
 
+// linux_x11_compositor_present reports whether the current X screen owns the standard compositor selection.
+static int linux_x11_compositor_present(WoxLinuxWindow *window) {
+#ifdef GDK_WINDOWING_X11
+  Display *display = x11_display(window);
+  if (display != NULL) {
+    char selection_name[32];
+    snprintf(selection_name, sizeof(selection_name), "_NET_WM_CM_S%d", DefaultScreen(display));
+    Atom selection = XInternAtom(display, selection_name, True);
+    return selection != None && XGetSelectionOwner(display, selection) != None ? 1 : 0;
+  }
+#else
+  (void)window;
+#endif
+  return -1;
+}
+
+// trace_linux_window_environment records the display capabilities that affect GtkGLArea presentation.
+static void trace_linux_window_environment(WoxLinuxWindow *window) {
+  if (!wox_linux_render_trace_enabled || window == NULL) {
+    return;
+  }
+  GdkDisplay *display = gtk_widget_get_display(window->window);
+  GdkScreen *screen = gtk_widget_get_screen(window->window);
+  GdkVisual *rgba_visual = screen != NULL ? gdk_screen_get_rgba_visual(screen) : NULL;
+  GdkVisual *window_visual = gtk_widget_get_visual(window->window);
+  unsigned long xid = 0;
+#ifdef GDK_WINDOWING_X11
+  xid = (unsigned long)x11_window_id(window);
+#endif
+  trace_linux_render(
+      "event=window_environment displayType=%s xid=%#lx x11Compositor=%d rgbaVisualAvailable=%d usingRgbaVisual=%d perPixelAlpha=%d layerShell=%d applicationWindow=%d",
+      display != NULL ? G_OBJECT_TYPE_NAME(display) : "unknown",
+      xid,
+      linux_x11_compositor_present(window),
+      rgba_visual != NULL,
+      rgba_visual != NULL && rgba_visual == window_visual,
+      window->per_pixel_alpha,
+      window->layer_shell_enabled,
+      window->application_window);
+}
+
+// trace_linux_window_geometry compares requested, GTK, GDK, and GL-area sizes at one lifecycle point.
+static void trace_linux_window_geometry(WoxLinuxWindow *window, const char *event) {
+  if (!wox_linux_render_trace_enabled || window == NULL) {
+    return;
+  }
+  int gtk_x = 0;
+  int gtk_y = 0;
+  int gtk_width = 0;
+  int gtk_height = 0;
+  gtk_window_get_position(GTK_WINDOW(window->window), &gtk_x, &gtk_y);
+  gtk_window_get_size(GTK_WINDOW(window->window), &gtk_width, &gtk_height);
+  GdkWindow *native = gtk_widget_get_window(window->window);
+  int gdk_x = 0;
+  int gdk_y = 0;
+  int gdk_width = 0;
+  int gdk_height = 0;
+  if (native != NULL) {
+    gdk_window_get_geometry(native, &gdk_x, &gdk_y, &gdk_width, &gdk_height);
+  }
+  int scale = gtk_widget_get_scale_factor(window->gl_area);
+  unsigned long xid = 0;
+#ifdef GDK_WINDOWING_X11
+  xid = (unsigned long)x11_window_id(window);
+#endif
+  trace_linux_render(
+      "event=%s epoch=%llu preferred=%.0f,%.0f %.0fx%.0f gtk=%d,%d %dx%d gdk=%d,%d %dx%d glArea=%dx%d overlayArea=%dx%d scale=%d visible=%d mapped=%d viewable=%d xid=%#lx",
+      event,
+      (unsigned long long)window->epoch,
+      window->preferred_x,
+      window->preferred_y,
+      window->preferred_width,
+      window->preferred_height,
+      gtk_x,
+      gtk_y,
+      gtk_width,
+      gtk_height,
+      gdk_x,
+      gdk_y,
+      gdk_width,
+      gdk_height,
+      gtk_widget_get_allocated_width(window->gl_area),
+      gtk_widget_get_allocated_height(window->gl_area),
+      gtk_widget_get_allocated_width(window->overlay_gl_area),
+      gtk_widget_get_allocated_height(window->overlay_gl_area),
+      scale,
+      window->visible,
+      gtk_widget_get_mapped(window->window),
+      native != NULL && gdk_window_is_viewable(native),
+      xid);
+}
+
+static gboolean on_window_configure(GtkWidget *widget, GdkEventConfigure *event, gpointer data) {
+  (void)widget;
+  WoxLinuxWindow *window = data;
+  trace_linux_render("event=configure_event epoch=%llu eventBounds=%d,%d %dx%d", (unsigned long long)window->epoch, event->x, event->y, event->width, event->height);
+  trace_linux_window_geometry(window, "configure_state");
+  return FALSE;
+}
+
+static gboolean on_window_map(GtkWidget *widget, GdkEvent *event, gpointer data) {
+  (void)widget;
+  (void)event;
+  trace_linux_window_geometry(data, "map");
+  return FALSE;
+}
+
+static gboolean on_window_unmap(GtkWidget *widget, GdkEvent *event, gpointer data) {
+  (void)widget;
+  (void)event;
+  trace_linux_window_geometry(data, "unmap");
+  return FALSE;
+}
+
 // apply_utility_taskbar_hints keeps launcher/overlay windows out of the
 // taskbar and pager. GTK skip_* hints are X11-only; Wayland relies on layer-shell.
 static void apply_utility_taskbar_hints(WoxLinuxWindow *window) {
@@ -1949,6 +2114,8 @@ static void apply_linux_window_size(WoxLinuxWindow *window, int width, int heigh
   if (width <= 0 || height <= 0) {
     return;
   }
+  trace_linux_render("event=resize_begin epoch=%llu requested=%dx%d", (unsigned long long)window->epoch, width, height);
+  trace_linux_window_geometry(window, "resize_before");
   gtk_window_set_default_size(GTK_WINDOW(window->window), width, height);
   // Layer-shell and non-resizable X11 windows both need the size request; a resize
   // request alone can leave the widget allocation on its pre-map or previous-result size.
@@ -1973,6 +2140,7 @@ static void apply_linux_window_size(WoxLinuxWindow *window, int width, int heigh
     gdk_x11_display_error_trap_pop_ignored(gdk_display);
   }
 #endif
+  trace_linux_window_geometry(window, "resize_after_request");
 }
 
 // present_linux_window_now presents a full frame at the current allocation before
@@ -1981,6 +2149,7 @@ static void present_linux_window_now(WoxLinuxWindow *window) {
   if (window->closed || !window->visible || window->context == 0 || window->presenting) {
     return;
   }
+  trace_linux_window_geometry(window, "present_now_begin");
   window->presenting = true;
   gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
@@ -1991,6 +2160,7 @@ static void present_linux_window_now(WoxLinuxWindow *window) {
     G_GNUC_END_IGNORE_DEPRECATIONS
   }
   window->presenting = false;
+  trace_linux_window_geometry(window, "present_now_end");
 }
 
 static void stop_linux_animation_frames(WoxLinuxWindow *window);
@@ -1999,6 +2169,7 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
   if (window->closed || !window->visible) {
     return;
   }
+  trace_linux_window_geometry(window, "hide_begin");
   bool should_restore = restore_previous && window->active && window->restore_previous_on_hide;
   emit_focus(window, false);
   if (window->closed) {
@@ -2029,21 +2200,23 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
   }
   window->restore_previous_on_hide = false;
   window->previous_active_window = 0;
+  trace_linux_window_geometry(window, "hide_end");
 }
 
 static void on_gl_realize(GtkGLArea *area, gpointer data) {
   WoxLinuxWindow *window = data;
   WoxLinuxRenderer *renderer = GTK_WIDGET(area) == window->overlay_gl_area ? &window->overlay_renderer : &window->renderer;
-  initialize_renderer(renderer, GTK_WIDGET(area));
+  initialize_renderer(window, renderer, GTK_WIDGET(area));
 }
 
 static void on_gl_unrealize(GtkGLArea *area, gpointer data) {
   WoxLinuxWindow *window = data;
   WoxLinuxRenderer *renderer = GTK_WIDGET(area) == window->overlay_gl_area ? &window->overlay_renderer : &window->renderer;
+  trace_linux_render("event=renderer_unrealize surface=%s generation=%llu", linux_renderer_name(window, renderer), (unsigned long long)renderer->context_generation);
   destroy_renderer(renderer, GTK_WIDGET(area));
 }
 
-static void present_linux_renderer(WoxLinuxRenderer *renderer) {
+static void present_linux_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *renderer) {
   if (renderer == NULL || renderer->frame_framebuffer == 0) {
     return;
   }
@@ -2054,12 +2227,16 @@ static void present_linux_renderer(WoxLinuxRenderer *renderer) {
   glBlitFramebuffer(0, 0, renderer->frame_width, renderer->frame_height, 0, 0, renderer->frame_width, renderer->frame_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
   glBindFramebuffer(GL_FRAMEBUFFER, default_framebuffer);
   glFlush();
+  if (wox_linux_render_trace_enabled) {
+    GLenum gl_error = glGetError();
+    trace_linux_render("event=gtk_present frameId=%llu surface=%s size=%dx%d frameFramebuffer=%u defaultFramebuffer=%d glError=%#x", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), renderer->frame_width, renderer->frame_height, renderer->frame_framebuffer, default_framebuffer, (unsigned int)gl_error);
+  }
 }
 
 static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer data) {
-  (void)context;
   WoxLinuxWindow *window = data;
   WoxLinuxRenderer *renderer = GTK_WIDGET(area) == window->overlay_gl_area ? &window->overlay_renderer : &window->renderer;
+  trace_linux_render("event=gtk_render frameId=%llu surface=%s context=%p allocated=%dx%d scale=%d closed=%d visible=%d ready=%d", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), (void *)context, gtk_widget_get_allocated_width(GTK_WIDGET(area)), gtk_widget_get_allocated_height(GTK_WIDGET(area)), gtk_widget_get_scale_factor(GTK_WIDGET(area)), window->closed, window->visible, renderer->ready);
   if (window->closed || !window->visible || window->context == 0 || !renderer->ready) {
     return TRUE;
   }
@@ -2068,7 +2245,7 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
       glClear(GL_COLOR_BUFFER_BIT);
     } else {
-      present_linux_renderer(renderer);
+      present_linux_renderer(window, renderer);
     }
     return TRUE;
   }
@@ -2091,6 +2268,7 @@ static void on_scale_changed(GObject *object, GParamSpec *specification, gpointe
   (void)specification;
   WoxLinuxWindow *window = data;
   if (!window->closed) {
+    trace_linux_window_geometry(window, "scale_changed");
     gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
   }
 }
@@ -2445,6 +2623,9 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->window, "drag-data-received", G_CALLBACK(on_drag_data_received), window);
   g_signal_connect(window->window, "focus-in-event", G_CALLBACK(on_focus_in), window);
   g_signal_connect(window->window, "focus-out-event", G_CALLBACK(on_focus_out), window);
+  g_signal_connect(window->window, "configure-event", G_CALLBACK(on_window_configure), window);
+  g_signal_connect(window->window, "map-event", G_CALLBACK(on_window_map), window);
+  g_signal_connect(window->window, "unmap-event", G_CALLBACK(on_window_unmap), window);
   g_signal_connect(window->window, "key-press-event", G_CALLBACK(on_key_press), window);
   g_signal_connect(window->window, "key-release-event", G_CALLBACK(on_key_release), window);
   g_signal_connect(window->window, "realize", G_CALLBACK(on_linux_pointer_passthrough_realize), window);
@@ -2455,6 +2636,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_realize(window->window);
   gtk_widget_realize(window->gl_area);
   gtk_widget_realize(window->overlay_gl_area);
+  trace_linux_window_environment(window);
+  trace_linux_window_geometry(window, "window_created");
   apply_wayland_app_id(window);
   gtk_im_context_set_client_window(window->im_context, gtk_widget_get_window(window->window));
   if (!window->renderer.ready || !window->overlay_renderer.ready) {
@@ -2487,6 +2670,7 @@ static void show_main(void *data) {
   window->epoch++;
   call->epoch = window->epoch;
   window->visible = true;
+  trace_linux_window_geometry(window, "show_begin");
   save_previous_x11_window(window);
   place_window(window);
   gtk_widget_show_all(window->window);
@@ -2509,6 +2693,7 @@ static void show_main(void *data) {
     gtk_widget_grab_focus(window->gl_area);
   }
   apply_utility_taskbar_hints(window);
+  trace_linux_window_geometry(window, "show_end");
 }
 
 uint64_t wox_linux_window_show(WoxLinuxWindow *window) {
@@ -2555,6 +2740,8 @@ static void set_bounds_main(void *data) {
     call->result = -1;
     return;
   }
+  trace_linux_render("event=set_bounds_begin epoch=%llu requested=%.0f,%.0f %.0fx%.0f", (unsigned long long)window->epoch, call->x, call->y, call->width, call->height);
+  trace_linux_window_geometry(window, "set_bounds_before");
   window->preferred_x = call->x;
   window->preferred_y = call->y;
   window->preferred_width = call->width;
@@ -2568,6 +2755,7 @@ static void set_bounds_main(void *data) {
   if (window->visible) {
     present_linux_window_now(window);
   }
+  trace_linux_window_geometry(window, "set_bounds_after");
 }
 
 int32_t wox_linux_window_set_bounds(WoxLinuxWindow *window, float x, float y, float width, float height) {
@@ -3840,10 +4028,15 @@ int32_t wox_linux_window_close(WoxLinuxWindow *window) {
 
 static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRenderer *renderer, GtkWidget *gl_area, bool force_opaque, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->closed || renderer == NULL || gl_area == NULL || !renderer->ready || renderer->frame_open || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
+    if (window != NULL) {
+      trace_linux_render("event=frame_begin_failed frameId=%llu surface=%s reason=invalid_state closed=%d ready=%d frameOpen=%d logical=%.1fx%.1f scale=%.2f", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), window->closed, renderer != NULL && renderer->ready, renderer != NULL && renderer->frame_open, logical_width, logical_height, scale);
+    }
     return -1;
   }
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
-  if (gtk_gl_area_get_error(GTK_GL_AREA(gl_area)) != NULL) {
+  GError *context_error = gtk_gl_area_get_error(GTK_GL_AREA(gl_area));
+  if (context_error != NULL) {
+    trace_linux_render("event=frame_begin_failed frameId=%llu surface=%s reason=context error=%s", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), context_error->message);
     return -1;
   }
   gtk_gl_area_attach_buffers(GTK_GL_AREA(gl_area));
@@ -3859,6 +4052,11 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
   glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &renderer->default_framebuffer);
   bool recreated = false;
   if (!ensure_frame_storage(renderer, pixel_width, pixel_height, &recreated)) {
+    if (wox_linux_render_trace_enabled) {
+      GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+      GLenum gl_error = glGetError();
+      trace_linux_render("event=frame_begin_failed frameId=%llu surface=%s reason=framebuffer_incomplete size=%dx%d framebufferStatus=%#x glError=%#x", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), pixel_width, pixel_height, (unsigned int)framebuffer_status, (unsigned int)gl_error);
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->default_framebuffer);
     return -1;
   }
@@ -3891,13 +4089,44 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
   glBindVertexArray(renderer->vertex_array);
   renderer->frame_open = true;
   renderer->clip_active = false;
+  if (wox_linux_render_trace_enabled) {
+    GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    GLenum gl_error = glGetError();
+    trace_linux_render(
+        "event=frame_begin frameId=%llu surface=%s logical=%.1fx%.1f pixel=%dx%d scale=%.2f damage=%.1f,%.1f %.1fx%.1f damageActive=%d scissor=%d,%d %dx%d recreated=%d generation=%llu lastPresentedGeneration=%llu frameTexture=%u frameFramebuffer=%u defaultFramebuffer=%d framebufferStatus=%#x glError=%#x",
+        (unsigned long long)window->trace_frame_id,
+        linux_renderer_name(window, renderer),
+        logical_width,
+        logical_height,
+        pixel_width,
+        pixel_height,
+        scale,
+        damage_x,
+        damage_y,
+        damage_width,
+        damage_height,
+        renderer->damage_active,
+        renderer->damage_left,
+        renderer->damage_bottom,
+        renderer->damage_width,
+        renderer->damage_height,
+        recreated,
+        (unsigned long long)renderer->context_generation,
+        (unsigned long long)renderer->last_presented_generation,
+        renderer->frame_texture,
+        renderer->frame_framebuffer,
+        renderer->default_framebuffer,
+        (unsigned int)framebuffer_status,
+        (unsigned int)gl_error);
+  }
   return 0;
 }
 
-int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL) {
     return -1;
   }
+  window->trace_frame_id = frame_id;
   window->embedded_surface_overlay_active = false;
   window->active_renderer = &window->renderer;
   window->active_gl_area = window->gl_area;
@@ -4168,20 +4397,46 @@ int32_t wox_linux_window_clear_clip(WoxLinuxWindow *window) {
   return 0;
 }
 
-static int32_t finish_linux_renderer_frame(WoxLinuxRenderer *renderer) {
+// wox_linux_window_trace_encode separates draw-command failures from the following framebuffer blit.
+void wox_linux_window_trace_encode(WoxLinuxWindow *window) {
+  if (!wox_linux_render_trace_enabled || window == NULL || window->active_renderer == NULL) {
+    return;
+  }
+  WoxLinuxRenderer *renderer = window->active_renderer;
+  GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  GLenum gl_error = glGetError();
+  trace_linux_render("event=frame_encode frameId=%llu surface=%s framebuffer=%u framebufferStatus=%#x glError=%#x", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), renderer->frame_framebuffer, (unsigned int)framebuffer_status, (unsigned int)gl_error);
+}
+
+static int32_t finish_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRenderer *renderer) {
   if (renderer == NULL || !renderer->frame_open) {
+    if (window != NULL) {
+      trace_linux_render("event=frame_finish_failed frameId=%llu surface=%s reason=frame_not_open", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer));
+    }
     return -1;
   }
   glBindVertexArray(0);
   glUseProgram(0);
   glDisable(GL_SCISSOR_TEST);
   glBindFramebuffer(GL_READ_FRAMEBUFFER, renderer->frame_framebuffer);
+  GLenum read_status = GL_FRAMEBUFFER_COMPLETE;
+  if (wox_linux_render_trace_enabled) {
+    read_status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
+  }
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, renderer->default_framebuffer);
+  GLenum draw_status = GL_FRAMEBUFFER_COMPLETE;
+  if (wox_linux_render_trace_enabled) {
+    draw_status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+  }
   glBlitFramebuffer(0, 0, renderer->frame_width, renderer->frame_height, 0, 0, renderer->frame_width, renderer->frame_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
   glBindFramebuffer(GL_FRAMEBUFFER, renderer->default_framebuffer);
   glFlush();
   renderer->frame_open = false;
   renderer->last_presented_generation = renderer->context_generation;
+  if (wox_linux_render_trace_enabled) {
+    GLenum gl_error = glGetError();
+    trace_linux_render("event=frame_finish frameId=%llu surface=%s size=%dx%d frameFramebuffer=%u defaultFramebuffer=%d readStatus=%#x drawStatus=%#x generation=%llu glError=%#x", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), renderer->frame_width, renderer->frame_height, renderer->frame_framebuffer, renderer->default_framebuffer, (unsigned int)read_status, (unsigned int)draw_status, (unsigned long long)renderer->context_generation, (unsigned int)gl_error);
+  }
   return 0;
 }
 
@@ -4195,7 +4450,7 @@ int32_t wox_linux_window_begin_embedded_surface_overlay(WoxLinuxWindow *window) 
   float clip_y = background->clip_y;
   float clip_width = background->clip_width;
   float clip_height = background->clip_height;
-  int32_t result = finish_linux_renderer_frame(background);
+  int32_t result = finish_linux_renderer_frame(window, background);
   if (result != 0) {
     return result;
   }
@@ -4216,14 +4471,14 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
   if (window == NULL || window->active_renderer == NULL) {
     return -1;
   }
-  int32_t result = finish_linux_renderer_frame(window->active_renderer);
+  int32_t result = finish_linux_renderer_frame(window, window->active_renderer);
   if (result == 0 && !window->embedded_surface_overlay_active) {
     WoxLinuxRenderer *background = &window->renderer;
     window->active_renderer = &window->overlay_renderer;
     window->active_gl_area = window->overlay_gl_area;
     result = begin_linux_renderer_frame(window, window->active_renderer, window->active_gl_area, false, background->logical_width, background->logical_height, background->scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
     if (result == 0) {
-      result = finish_linux_renderer_frame(window->active_renderer);
+      result = finish_linux_renderer_frame(window, window->active_renderer);
     }
   }
   if (result == 0) {

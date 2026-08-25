@@ -11,6 +11,7 @@ int32_t wox_linux_run(uintptr_t context);
 int32_t wox_linux_call(uintptr_t context);
 // wox_linux_set_app_identity records the desktop id, X11 class, and icon path before gtk_init.
 void wox_linux_set_app_identity(const char *app_id, const char *wm_class, const char *icon_path);
+void wox_linux_set_render_trace(int32_t enabled);
 WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
 uint64_t wox_linux_window_show(WoxLinuxWindow *window);
 int32_t wox_linux_window_hide(WoxLinuxWindow *window);
@@ -47,7 +48,7 @@ int32_t wox_linux_accessibility_end(WoxLinuxWindow *window);
 int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline);
 int32_t wox_linux_window_close(WoxLinuxWindow *window);
 
-int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_linux_window_begin_embedded_surface_overlay(WoxLinuxWindow *window);
 int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_linux_window_fill_convex_polygon(WoxLinuxWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
@@ -56,6 +57,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
 int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius);
 int32_t wox_linux_window_set_clip_rect(WoxLinuxWindow *window, float x, float y, float width, float height);
 int32_t wox_linux_window_clear_clip(WoxLinuxWindow *window);
+void wox_linux_window_trace_encode(WoxLinuxWindow *window);
 int32_t wox_linux_window_end_frame(WoxLinuxWindow *window);
 int32_t wox_linux_window_take_frame_resource_stats(WoxLinuxWindow *window, WoxRendererResourceStats *out);
 int32_t wox_linux_test_resource_cache_generation(void);

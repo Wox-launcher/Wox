@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"runtime/cgo"
 	"sync"
@@ -24,6 +25,8 @@ import (
 	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util"
 )
+
+const linuxRenderTraceEnvironment = "WOX_LINUX_RENDER_TRACE"
 
 // applyLinuxAppIdentity publishes Wox's desktop id to GTK before gtk_init.
 func applyLinuxAppIdentity() {
@@ -87,6 +90,25 @@ func platformRun(start func() error) error {
 		linuxRuntime.Unlock()
 	}()
 
+	renderTraceEnabled := os.Getenv(linuxRenderTraceEnvironment) == "1"
+	if renderTraceEnabled {
+		util.GetLogger().Info(context.Background(), fmt.Sprintf(
+			"linux render trace enabled: %s=1 XDG_CURRENT_DESKTOP=%q XDG_SESSION_DESKTOP=%q DESKTOP_SESSION=%q XDG_SESSION_TYPE=%q GDK_BACKEND=%q DISPLAY=%q WAYLAND_DISPLAY=%q",
+			linuxRenderTraceEnvironment,
+			os.Getenv("XDG_CURRENT_DESKTOP"),
+			os.Getenv("XDG_SESSION_DESKTOP"),
+			os.Getenv("DESKTOP_SESSION"),
+			os.Getenv("XDG_SESSION_TYPE"),
+			os.Getenv("GDK_BACKEND"),
+			os.Getenv("DISPLAY"),
+			os.Getenv("WAYLAND_DISPLAY"),
+		))
+	}
+	renderTrace := C.int32_t(0)
+	if renderTraceEnabled {
+		renderTrace = 1
+	}
+	C.wox_linux_set_render_trace(renderTrace)
 	applyLinuxAppIdentity()
 	handle := cgo.NewHandle(state)
 	result := C.wox_linux_run(C.uintptr_t(handle))
@@ -630,10 +652,15 @@ func (w *platformWindow) markClosed() {
 
 func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
 	w.mu.Lock()
+	firstError := w.renderErr == nil
 	if w.renderErr == nil {
 		w.renderErr = fmt.Errorf("woxui: %s failed with status %d", operation, int32(result))
 	}
+	renderErr := w.renderErr
 	w.mu.Unlock()
+	if firstError {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("linux renderer error: operation=%q status=%d error=%q", operation, int32(result), renderErr.Error()))
+	}
 }
 
 func (w *platformWindow) drawFrame(frame FrameInfo) {
@@ -664,6 +691,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	nativeDamage := displayList.NativeDamage()
 	result := C.wox_linux_window_begin_frame(
 		native,
+		C.uint64_t(displayList.frameID),
 		C.float(frame.Size.Width),
 		C.float(frame.Size.Height),
 		C.float(frame.Scale),
@@ -781,6 +809,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		return true
 	})
 
+	C.wox_linux_window_trace_encode(native)
 	presentStart := time.Now()
 	endResult := C.wox_linux_window_end_frame(native)
 	presentCost := time.Since(presentStart)
@@ -800,6 +829,16 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	if result != 0 {
 		w.recordRenderError("finish OpenGL frame", result)
 	}
+}
+
+// woxGoLinuxRenderTrace routes native GTK/OpenGL diagnostics through Wox logging.
+//
+//export woxGoLinuxRenderTrace
+func woxGoLinuxRenderTrace(message *C.char) {
+	if message == nil {
+		return
+	}
+	util.GetLogger().Info(context.Background(), "linux render trace: "+C.GoString(message))
 }
 
 // rendererResourcesFromNative copies one native encode-stat snapshot into portable metrics.
