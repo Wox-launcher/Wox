@@ -17,6 +17,8 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/keyboard"
+	macospermission "wox/util/overlay/macos_permission"
+	"wox/util/permission"
 )
 
 const (
@@ -1019,6 +1021,7 @@ func (a *App) loadOnboardingPermissionStatusWithLoading(showLoading bool) {
 			util.GetLogger().Warn(context.Background(), "failed to reconcile macOS raw keyboard access: "+reconcileErr.Error())
 		}
 	}
+	var completedPermissionFlow permission.MacOSPermissionType
 	_ = a.runOnUI("apply onboarding permission status", func() {
 		a.onboardingLoading = false
 		if err != nil {
@@ -1026,9 +1029,18 @@ func (a *App) loadOnboardingPermissionStatusWithLoading(showLoading bool) {
 		} else {
 			a.onboardingPermission = status
 			a.onboardingError = ""
+			if a.permissionFlowHost != nil {
+				permissionType := a.permissionFlowHost.permissionType
+				if macOSPermissionGranted(permissionType, status) {
+					completedPermissionFlow = permissionType
+				}
+			}
 		}
 		a.invalidateOnboardingWindow()
 	})
+	if completedPermissionFlow != "" {
+		macospermission.Complete(completedPermissionFlow)
+	}
 }
 
 func (a *App) openOnboardingPermission(permissionType string) {

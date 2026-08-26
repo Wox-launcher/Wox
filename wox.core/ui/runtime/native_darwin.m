@@ -744,9 +744,9 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
   }
   NSRect source_frame = _owner->window.frame;
   int32_t status = NSPointInRect(screenPoint, source_frame) ? 2 : (operation & NSDragOperationCopy) != 0 ? 0 : 1;
-  if (status != 2) {
-    [_owner->window orderOut:nil];
-  }
+  // Window owners decide whether a completed drag should hide their surface.
+  // The launcher hides after exporting a result, while permission overlays must
+  // remain visible until macOS confirms that the requested permission is granted.
   woxGoDarwinFileDragEnded(_owner->context, status);
   _owner->result_drag_source = NULL;
   [self release];

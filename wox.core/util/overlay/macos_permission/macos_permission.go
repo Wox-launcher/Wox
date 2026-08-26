@@ -161,6 +161,16 @@ func Close() {
 	}
 }
 
+// Complete ends the matching active guide and notifies its owner that the permission flow finished.
+func Complete(permissionType permission.MacOSPermissionType) {
+	activeSession.Lock()
+	instance := activeSession.current
+	activeSession.Unlock()
+	if instance != nil && instance.opts.PermissionType == permissionType {
+		instance.finish(true)
+	}
+}
+
 // track follows System Settings until the user closes either side of the permission flow.
 func (s *session) track() {
 	ticker := time.NewTicker(trackingInterval)
