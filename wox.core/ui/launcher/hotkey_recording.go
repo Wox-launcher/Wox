@@ -125,6 +125,7 @@ func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
 	tableEditor := a.activeFormTableEditor()
 	return target != nil && (((a.onboardingOpen || (a.settingsOpen && a.settingTab == "general")) && target == a.hotkeySettings.Form()) ||
+		(a.onboardingOpen && a.onboardingQueryHotkey != nil && target == &a.onboardingQueryHotkey.form) ||
 		(tableEditor != nil && tableEditor.rowForm == target) ||
 		(a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
@@ -258,6 +259,11 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		editor.status = ""
 	}
 	a.invalidateHotkeyWindows()
+	if a.onboardingOpen && state.idPrefix == "onboarding-query-hotkey" {
+		a.saveOnboardingQueryHotkey(value)
+		a.stopHotkeyRecording()
+		return
+	}
 	if state.idPrefix == "plugin-settings" {
 		a.submitPluginSettings()
 	}
@@ -265,6 +271,10 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		util.Go(a.lifecycleCtx, "save recorded hotkey setting", func() {
 			a.saveRecordedHotkeySetting(state, key, value, previous)
 		})
+	}
+	// Onboarding treats one valid combination as completion; Settings keeps recording for rapid edits.
+	if a.onboardingOpen && state.idPrefix == "hotkey-settings" {
+		a.stopHotkeyRecording()
 	}
 }
 

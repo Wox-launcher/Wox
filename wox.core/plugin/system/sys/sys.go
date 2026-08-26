@@ -433,12 +433,11 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 func (r *SysPlugin) buildDevCommands() []SysCommand {
 	return []SysCommand{
 		{
-			ID:                     "open_onboarding",
-			Title:                  "Open onboarding",
-			SubTitle:               "Open the first-run onboarding window",
-			Icon:                   sysOnboardingIcon,
-			Aliases:                []string{"onboarding", "open onboarding", "first run", "setup guide", "引导", "打开引导"},
-			PreventHideAfterAction: true,
+			ID:       "open_onboarding",
+			Title:    "Open onboarding",
+			SubTitle: "Open the first-run onboarding window",
+			Icon:     sysOnboardingIcon,
+			Aliases:  []string{"onboarding", "open onboarding", "first run", "setup guide", "引导", "打开引导"},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				plugin.GetPluginManager().GetUI().OpenOnboardingWindow(ctx)
 			},

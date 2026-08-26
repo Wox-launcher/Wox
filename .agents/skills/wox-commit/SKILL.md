@@ -14,7 +14,7 @@ Treat explicit invocation as permission to inspect the current Wox diff and gene
 1. Read the repository instructions and inspect `git status --short`, the unstaged and staged diffs, and relevant untracked files.
 2. Infer the intended change from the actual diff and recent commit style. If multiple unrelated changes make the message ambiguous, ask which change the message should describe.
 3. Prefer `type(scope): imperative summary` for normal code changes; use the repository's established wording for automated, release, or store updates.
-4. Return one concise proposed subject and add a body only when the subject cannot capture a non-obvious behavioral constraint.
+4. Always return both a subject and a body in one copy-ready block.
 
 ## Message Rules
 
@@ -22,9 +22,15 @@ Treat explicit invocation as permission to inspect the current Wox diff and gene
 - Keep the subject specific, imperative, and free of trailing punctuation.
 - Choose the narrowest accurate scope already used by nearby commits.
 - Use `feat`, `fix`, `refactor`, `docs`, `test`, `build`, or `chore` only when it matches the diff.
-- Add a body only when the subject cannot capture a non-obvious behavioral constraint.
+- Always write a body of 1-2 sentences that expands the why or the non-obvious behavior. Do not leave the body empty.
 - Do not run formatting, tests, hooks, or other validation; the caller has already completed validation before requesting the message.
 
 ## Completion
 
-Report the proposed commit subject, optional body, and a brief note if the diff is empty or ambiguous. Do not claim that a commit was created.
+Return exactly one fenced text block the user can copy as a full commit message: subject, a blank line, then the body. After the block, add a brief note only if the diff is empty or ambiguous. Do not claim that a commit was created.
+
+```text
+type(scope): imperative summary
+
+Body that explains the why or the non-obvious behavior.
+```

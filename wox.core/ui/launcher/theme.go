@@ -216,7 +216,11 @@ func (a *App) applyTheme(theme themeData) {
 		_ = settingsView.Window().SetAppearance(isDark)
 	}
 	if onboardingView != nil {
-		_ = onboardingView.Window().SetAppearance(isDark)
+		onboardingDark := isDark
+		if a.onboardingOpen {
+			onboardingDark = true
+		}
+		_ = onboardingView.Window().SetAppearance(onboardingDark)
 	}
 	for _, controller := range a.noteWindows {
 		if controller.managed != nil {

@@ -175,7 +175,7 @@ func (s *CoreServices) SettingViewChanged(ctx context.Context, sessionID string,
 	return nil
 }
 
-// OnboardingViewChanged keeps core hotkey and tray gates synchronized with the guide.
+// OnboardingViewChanged keeps the independent onboarding window state synchronized with core.
 func (s *CoreServices) OnboardingViewChanged(ctx context.Context, sessionID string, inOnboardingView bool) error {
 	GetUIManager().PostOnOnboarding(uiServiceContext(ctx, sessionID), inOnboardingView)
 	return nil

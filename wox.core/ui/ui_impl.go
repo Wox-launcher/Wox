@@ -194,9 +194,7 @@ func (u *uiImpl) IsInSettingView() bool {
 }
 
 func (u *uiImpl) IsInManagementView() bool {
-	// Settings and onboarding are management surfaces even when they own
-	// independent native windows, so toolbar notifications should not overlay them.
-	return u.isInSettingView || u.isInOnboardingView
+	return u.isInSettingView
 }
 
 func (u *uiImpl) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {

@@ -149,6 +149,9 @@ type App struct {
 	onboardingPermission          contract.MacOSPermissionStatus
 	onboardingLoading             bool
 	onboardingError               string
+	onboardingQueryHotkey         *onboardingQueryHotkeyState
+	onboardingPlugins             onboardingPluginState
+	onboardingTheme               onboardingThemeState
 	permissionFlowHost            *macOSPermissionFlowHost
 	settingsCtx                   settingWindowContext
 	settingTab                    string

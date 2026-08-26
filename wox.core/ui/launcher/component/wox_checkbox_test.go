@@ -11,7 +11,8 @@ func TestWoxCheckboxMatchesFlutterGeometryAndSemantics(t *testing.T) {
 	active := woxui.Color{R: 20, G: 40, B: 60, A: 255}
 	checkbox := WoxCheckbox(CheckboxProps{ID: "filter", Label: "Filter", Value: true, OnChange: func(bool) {}, Theme: Theme{ActionSelected: active}}).(woxwidget.Semantics)
 	stateful := checkbox.Child.(woxwidget.Focusable).Child
-	visual := buildHoverable(stateful, false).(woxwidget.Gesture).Child.(woxwidget.Container)
+	gesture := buildHoverable(stateful, false).(woxwidget.Gesture)
+	visual := gesture.Child.(woxwidget.Container)
 
 	if checkbox.Role != woxui.AccessibilityRoleCheckBox || !checkbox.Checked {
 		t.Fatalf("checkbox semantics = role %q checked %v", checkbox.Role, checkbox.Checked)
@@ -19,9 +20,17 @@ func TestWoxCheckboxMatchesFlutterGeometryAndSemantics(t *testing.T) {
 	if visual.Width != 18 || visual.Height != 18 || visual.Radius != 4 || visual.Color != active {
 		t.Fatalf("checkbox geometry = %vx%v radius %v color %#v", visual.Width, visual.Height, visual.Radius, visual.Color)
 	}
+	if gesture.Cursor != woxui.PointerCursorHand {
+		t.Fatalf("checkbox cursor = %v, want hand", gesture.Cursor)
+	}
 	hovered := buildHoverable(stateful, true).(woxwidget.Gesture).Child.(woxwidget.Container)
 	if hovered.Color == visual.Color {
 		t.Fatal("checked checkbox hover background did not change")
+	}
+	disabled := WoxCheckbox(CheckboxProps{ID: "disabled", Disabled: true, OnChange: func(bool) {}, Theme: Theme{}}).(woxwidget.Semantics)
+	disabledGesture := buildHoverable(disabled.Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture)
+	if disabledGesture.Cursor != woxui.PointerCursorDefault {
+		t.Fatalf("disabled checkbox cursor = %v, want default", disabledGesture.Cursor)
 	}
 }
 

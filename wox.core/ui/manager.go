@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"wox/account"
 	"wox/analytics"
@@ -81,7 +80,6 @@ type Manager struct {
 	pendingStartupNotify    *common.NotifyMsg
 	mainHotkeyWarningMu     sync.RWMutex
 	mainHotkeyWarning       string
-	trayHiddenForOnboarding atomic.Bool
 	trayEmojiWarmMu         sync.Mutex
 	trayEmojiWarmInFlight   map[string]struct{}
 }
@@ -1126,7 +1124,6 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 		if isPrimary {
 			impl.isVisible = true
 			impl.isInSettingView = false
-			impl.isInOnboardingView = false
 			impl.isRecordingHotkey = false
 		}
 	}
@@ -1169,9 +1166,8 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 		isPrimary := sessionID == "" || sessionID == impl.primarySessionID
 		impl.sessionMu.Unlock()
 		if isPrimary {
-			impl.isVisible = false
+			impl.isVisible = impl.isInOnboardingView
 			impl.isInSettingView = false
-			impl.isInOnboardingView = false
 			impl.isRecordingHotkey = false
 		}
 	}
@@ -1233,29 +1229,17 @@ func (m *Manager) PostOnInstanceDestroyed(ctx context.Context) {
 
 func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		// Onboarding is a management surface like settings, but it needs its own
-		// state so UI can keep isInSettingView false while backend routing
-		// still suppresses toolbar notifications over the guide.
 		impl.isInOnboardingView = isInOnboardingView
 		if !isInOnboardingView {
 			impl.isRecordingHotkey = false
+			impl.sessionMu.RLock()
+			impl.isVisible = impl.sessionVisible[impl.primarySessionID] || impl.isInSettingView
+			impl.sessionMu.RUnlock()
 		}
 		if isInOnboardingView {
 			impl.isVisible = true
 			impl.isInSettingView = false
 		}
-	}
-
-	if isInOnboardingView {
-		// Suppress every tray entry before removing it so concurrent setting or
-		// icon refreshes cannot recreate a path around onboarding.
-		m.trayHiddenForOnboarding.Store(true)
-		m.HideTray()
-		return
-	}
-
-	if m.trayHiddenForOnboarding.Swap(false) && setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
-		m.ShowTray()
 	}
 }
 
@@ -1303,11 +1287,6 @@ func (m *Manager) IsThemeUpgradable(id string, version string) bool {
 
 func (m *Manager) ShowTray() {
 	ctx := util.NewTraceContext()
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if m.trayHiddenForOnboarding.Load() || !woxSetting.OnboardingFinished.Get() {
-		return
-	}
-
 	tray.CreateTray(resource.GetAppIcon(), func() {
 		m.GetUI(ctx).ToggleApp(ctx, common.ShowContext{
 			SelectAll: true,
@@ -1418,10 +1397,6 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 }
 
 func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
-	if m.trayHiddenForOnboarding.Load() || !setting.GetSettingManager().GetWoxSetting(ctx).OnboardingFinished.Get() {
-		return
-	}
-
 	if util.IsLinuxWaylandSession() {
 		logger.Info(ctx, "skip tray query icon refresh: tray query is unavailable on Wayland")
 		return
@@ -1993,16 +1968,6 @@ func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapsh
 }
 
 func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
-	if m.isOnboardingViewActive() {
-		// Bug fix: onboarding has its own hotkey setup UI and uses the shared
-		// Wox window. The previous guard only checked ignored foreground apps,
-		// so pressing a registered global hotkey during the guide could toggle
-		// or replace the onboarding surface. Keeping the check in the common
-		// hotkey gate blocks all global hotkey handlers while onboarding is active.
-		logger.Info(ctx, "ignore hotkey trigger while onboarding is active")
-		return true
-	}
-
 	if util.IsLinuxWaylandSession() {
 		logger.Info(ctx, "skip ignored hotkey app check: active window identity is unavailable on Wayland")
 		return false
@@ -2064,13 +2029,6 @@ func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string)
 func (m *Manager) isHotkeyRecordingActive() bool {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		return impl.isRecordingHotkey && impl.isVisible
-	}
-	return false
-}
-
-func (m *Manager) isOnboardingViewActive() bool {
-	if impl, ok := m.ui.(*uiImpl); ok {
-		return impl.isInOnboardingView && impl.isVisible
 	}
 	return false
 }

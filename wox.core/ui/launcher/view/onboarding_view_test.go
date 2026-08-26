@@ -14,7 +14,7 @@ func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
 	view := OnboardingView(OnboardingProps{
 		Width: 1040, Height: 800, ActiveStep: 0, ChoiceKind: "language",
 		Steps:   []OnboardingStep{{ID: "welcome", Title: "Welcome", Accent: woxui.Color{G: 200, A: 255}}},
-		Labels:  map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "skip": "Skip", "back": "Back", "next": "Next"},
+		Labels:  map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "back": "Back", "next": "Next"},
 		Choices: []OnboardingChoice{{Value: "en_US", Label: "English"}},
 		Theme:   woxcomponent.Theme{},
 	})
@@ -36,67 +36,375 @@ func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
 	}
 }
 
-func TestOnboardingInfoPanelUsesIntrinsicDescriptionHeight(t *testing.T) {
+func TestOnboardingPageCentersTitleAndUsesStaticFeatureVisual(t *testing.T) {
 	page := onboardingPage(OnboardingProps{
-		Width: 1040, Height: 800,
-		Labels: map[string]string{"trayQueries.body": "把常用查询钉到系统托盘，点一下就能直接触发，不用先唤起 Wox。"},
+		Width: 1040, MainHotkeyLabels: []string{"Alt", "Space"}, HotkeyStatus: "Available",
+		Labels: map[string]string{"mainHotkey.body": "Choose a hotkey.", "hotkey.change": "Click to record", "hotkey.preview": "Type to search"}, Theme: woxcomponent.Theme{},
+	}, OnboardingStep{ID: "mainHotkey", Title: "Set hotkey"}, 660).(woxwidget.Container)
+	content := page.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	title := content.Children[1].(woxwidget.TextBlock)
+	if !title.Centered || title.Width != 880 {
+		t.Fatalf("title = %#v, want centered 880-wide title", title)
+	}
+	gap := content.Children[2].(woxwidget.Container)
+	if gap.Height != 12 {
+		t.Fatalf("title gap = %v, want 12", gap.Height)
+	}
+	visual, ok := content.Children[len(content.Children)-1].(woxwidget.Align)
+	if !ok {
+		t.Fatalf("last page child = %#v, want centered feature visual", content.Children[len(content.Children)-1])
+	}
+	if visual.Vertical != 0.25 {
+		t.Fatalf("feature visual vertical alignment = %v, want 0.25", visual.Vertical)
+	}
+	if _, ok := visual.Child.(woxwidget.Flex); !ok {
+		t.Fatalf("feature visual = %#v, want onboarding-specific hotkey layout", visual.Child)
+	}
+	hotkeyVisual := visual.Child.(woxwidget.Flex)
+	stageGap := hotkeyVisual.Children[len(hotkeyVisual.Children)-2].(woxwidget.Container)
+	if stageGap.Height != 24 {
+		t.Fatalf("hotkey demo stage gap = %v, want 24", stageGap.Height)
+	}
+	preview := hotkeyVisual.Children[len(hotkeyVisual.Children)-1].(woxwidget.Stack)
+	if preview.Height != 232 {
+		t.Fatalf("hotkey preview height = %v, want 232", preview.Height)
+	}
+	grid, ok := preview.Children[0].Child.(woxwidget.Painter)
+	if !ok {
+		t.Fatalf("hotkey preview backdrop = %T, want fading grid painter", preview.Children[0].Child)
+	}
+	if grid.Height != 232 || preview.Children[0].Top != 0 {
+		t.Fatalf("hotkey grid = height %v top %v, want full-stage backdrop", grid.Height, preview.Children[0].Top)
+	}
+	queryPreview := onboardingQueryPreview(OnboardingProps{Theme: woxcomponent.Theme{
+		ActionBackground: woxui.Color{R: 35, G: 35, B: 38, A: 255}, PreviewSplit: woxui.Color{R: 255, G: 255, B: 255, A: 40}, ResultTitle: woxui.Color{R: 245, G: 245, B: 247, A: 255},
+	}}, woxui.Color{G: 184, A: 255}, 480, "Type to search", false).(woxwidget.Stack)
+	if queryPreview.Width != 544 || queryPreview.Height != 104 {
+		t.Fatalf("query preview = %vx%v, want 544x104 chrome", queryPreview.Width, queryPreview.Height)
+	}
+	chrome := queryPreview.Children[0].Child.(woxwidget.Painter)
+	displayList := &woxui.DisplayList{}
+	chrome.Paint(displayList, woxui.Rect{Width: chrome.Width, Height: chrome.Height})
+	if displayList.CommandCount() != 10 {
+		t.Fatalf("query preview chrome commands = %d, want ambient shadow, contact shadow, surface, and border", displayList.CommandCount())
+	}
+	if _, ok := DemoPreview(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360).(woxwidget.LoopAnimation); !ok {
+		t.Fatal("settings DemoPreview no longer exposes the preserved animated demo")
+	}
+}
+
+func TestOnboardingWelcomeUsesSharedGridAndQueryPreview(t *testing.T) {
+	visual := onboardingWelcomeVisual(OnboardingProps{
+		Labels: map[string]string{
+			"welcome.apps": "Apps", "welcome.files": "Files", "welcome.plugins": "Plugins", "welcome.ai": "AI", "welcome.hint": "A few steps remain",
+		},
+		Theme: woxcomponent.Theme{},
+	}, 640, woxui.Color{G: 184, A: 255}).(woxwidget.Flex)
+	stage := visual.Children[0].(woxwidget.Stack)
+	if _, ok := stage.Children[0].Child.(woxwidget.Painter); !ok {
+		t.Fatalf("welcome backdrop = %T, want shared fading grid painter", stage.Children[0].Child)
+	}
+	query := stage.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Stack)
+	if query.Width != 544 || query.Height != 104 {
+		t.Fatalf("welcome query preview = %vx%v, want 544x104", query.Width, query.Height)
+	}
+	if hint := visual.Children[1].(woxwidget.Text); hint.Value != "A few steps remain" {
+		t.Fatalf("welcome hint = %q", hint.Value)
+	}
+}
+
+func TestOnboardingQueryPreviewUsesConfiguredGlance(t *testing.T) {
+	preview := onboardingQueryPreview(OnboardingProps{
+		GlanceEnabled: true, GlanceValue: "62%", Theme: woxcomponent.Theme{},
+	}, woxui.Color{G: 184, A: 255}, 480, "setting", true).(woxwidget.Stack)
+	query := preview.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	trailing := query.Children[len(query.Children)-1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Container)
+	text := trailing.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	if text.Value != "62%" {
+		t.Fatalf("query glance value = %q, want configured value", text.Value)
+	}
+}
+
+func TestOnboardingHotkeyConflictDisablesNext(t *testing.T) {
+	footer := onboardingFooter(OnboardingProps{
+		Width: 1040, NextDisabled: true, Steps: []OnboardingStep{{ID: "mainHotkey", Title: "Hotkey"}, {ID: "finish", Title: "Finish"}},
+		Labels: map[string]string{"next": "Next", "finish": "Finish"}, Theme: woxcomponent.Theme{},
+	}, 0).(woxwidget.Container)
+	stack := footer.Child.(woxwidget.Stack)
+	next := stack.Children[len(stack.Children)-1].Child.(woxwidget.Semantics)
+	if !next.Disabled || len(next.Actions) != 0 {
+		t.Fatalf("next semantics = %#v, want disabled while hotkey conflicts", next)
+	}
+	dots := stack.Children[0].Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	future := dots.Children[1].(woxwidget.Semantics)
+	if !future.Disabled || len(future.Actions) != 0 {
+		t.Fatalf("future progress dot = %#v, want disabled while hotkey conflicts", future)
+	}
+}
+
+func TestOnboardingQueryHotkeyVisualShowsClipboardMapping(t *testing.T) {
+	toggled := true
+	selected := woxui.Color{R: 30, G: 60, B: 60, A: 255}
+	title := woxui.Color{R: 240, G: 240, B: 240, A: 255}
+	subtitle := woxui.Color{R: 160, G: 160, B: 160, A: 255}
+	visual := onboardingQueryHotkeysVisual(OnboardingProps{
+		QueryHotkeyLabels: []string{"Ctrl", "Shift", "V"}, QueryHotkeyStatus: "Available", QueryHotkeyReady: true, QueryHotkeySelected: true,
+		GlanceEnabled: true, GlanceValue: "62%",
+		Labels: map[string]string{
+			"queryHotkeys.clipboard": "Clipboard", "queryHotkeys.status.title": "Query Hotkey",
+			"queryHotkeys.status.body": "Add more in Settings", "queryHotkeys.configured": "1 configured", "queryHotkeys.notConfigured": "Not configured", "queryHotkeys.shortcut": "Clipboard search",
+			"hotkey.change": "Click the hotkey to record another one",
+		},
+		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: subtitle, SelectedBackground: selected}, OnToggleQueryHotkey: func(value bool) { toggled = value },
+	}, 640, woxui.Color{G: 184, A: 255}).(woxwidget.Flex)
+	showcase := visual.Children[0].(woxwidget.Flex)
+	shortcutColumn := showcase.Children[0].(woxwidget.Flex)
+	shortcut := shortcutColumn.Children[0].(woxwidget.Semantics)
+	if shortcut.Label != "Ctrl + Shift + V" || shortcut.AutomationID != "onboarding.query_hotkey" {
+		t.Fatalf("query shortcut = %#v", shortcut)
+	}
+	if caption := shortcutColumn.Children[1].(woxwidget.Text); caption.Value != "Clipboard search" {
+		t.Fatalf("shortcut caption = %q", caption.Value)
+	}
+	if hint := shortcutColumn.Children[2].(woxwidget.Text); hint.Value != "Click the hotkey to record another one" {
+		t.Fatalf("shortcut hint = %q", hint.Value)
+	}
+	window := showcase.Children[2].(woxwidget.Container)
+	queryWindow := window.Child.(woxwidget.Flex)
+	query := queryWindow.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Text)
+	caret := queryWindow.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
+	accessory := queryWindow.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Container)
+	accessoryText := accessory.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	firstResult := queryWindow.Children[1].(woxwidget.Align).Child.(woxwidget.Container)
+	if query.Value != "cb" || caret.Width != 2 || caret.Height != 22 || accessoryText.Value != "62%" || firstResult.Color != selected || window.Width != 420 || window.Height != 188 {
+		t.Fatalf("query demo = value %q caret %#v result %#v window %.0f", query.Value, caret, firstResult.Color, window.Height)
+	}
+	if spacer := visual.Children[1].(woxwidget.Container); spacer.Height != 100 {
+		t.Fatalf("demo-to-divider spacing = %.0f, want 100", spacer.Height)
+	}
+	bottom := visual.Children[4].(woxwidget.Container).Child.(woxwidget.Flex)
+	if icon := bottom.Children[0].(woxwidget.Container); icon.Color != settingsColorAlpha(title, 14) {
+		t.Fatalf("keyboard background = %#v", icon.Color)
+	}
+	status := bottom.Children[3].(woxwidget.Flex)
+	if label := status.Children[0].(woxwidget.Text); label.Value != "1 configured" || label.Color != subtitle {
+		t.Fatalf("status order = %#v", status.Children)
+	}
+	checkbox := status.Children[1].(woxwidget.Semantics)
+	if !checkbox.Checked {
+		t.Fatal("query hotkey checkbox is not checked")
+	}
+	if err := checkbox.OnAction(woxui.AccessibilityActionToggle, ""); err != nil || toggled {
+		t.Fatalf("toggle result = %v, value %v", err, toggled)
+	}
+}
+
+func TestOnboardingHotkeyRecordingHighlightsKeyBorders(t *testing.T) {
+	accent := woxui.Color{G: 184, A: 255}
+	main := onboardingMainHotkeyVisual(OnboardingProps{
+		MainHotkeyLabels: []string{"Alt", "Space"}, HotkeyRecording: true, Labels: map[string]string{}, Theme: woxcomponent.Theme{},
+	}, 640, accent).(woxwidget.Flex)
+	mainKeys := main.Children[0].(woxwidget.Align).Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Flex)
+	mainKey := mainKeys.Children[0].(woxwidget.Container)
+	if mainKey.Width != 52 || mainKey.Height != 44 || mainKey.Radius != 7 || mainKey.BorderColor != accent || mainKey.BorderWidth != 2 {
+		t.Fatalf("main recording key = %#v", mainKey)
+	}
+
+	query := onboardingQueryHotkeysVisual(OnboardingProps{
+		QueryHotkeyLabels: []string{"Ctrl", "Shift", "V"}, QueryHotkeyRecording: true, Labels: map[string]string{}, Theme: woxcomponent.Theme{},
+	}, 640, accent).(woxwidget.Flex)
+	queryKeys := query.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Flex)
+	queryKey := queryKeys.Children[0].(woxwidget.Container)
+	if queryKey.BorderColor != accent || queryKey.BorderWidth != 2 {
+		t.Fatalf("query recording border = %#v/%.0f", queryKey.BorderColor, queryKey.BorderWidth)
+	}
+}
+
+func TestOnboardingPluginsVisualUsesStoreMetadataAndInstallActions(t *testing.T) {
+	installedIcon := &woxui.Image{Width: 40, Height: 40}
+	clickedID := ""
+	visual := onboardingPluginsVisual(OnboardingProps{
+		Plugins: []OnboardingPlugin{
+			{ID: "awake", Name: "Awake", Description: "Keep your computer awake", Icon: installedIcon},
+			{ID: "unsplash", Name: "Unsplash", Description: "Search images", Installed: true},
+		},
+		Labels: map[string]string{"plugins.install": "Install", "plugins.installing": "Installing", "plugins.installed": "Installed", "plugins.more": "More in Store"},
+		Theme:  woxcomponent.Theme{}, OnInstallPlugin: func(id string) { clickedID = id },
+	}, 640).(woxwidget.Flex)
+	rows := visual.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	first := rows.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	icon := first.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Image)
+	button := first.Children[2].(woxwidget.Semantics)
+	if icon.Source != installedIcon || icon.Width != 28 || icon.Height != 28 || button.Label != "Install" {
+		t.Fatalf("plugin row = icon %#v button %#v", icon.Source, button)
+	}
+	focusedControlGesture(button).OnTap()
+	if clickedID != "awake" {
+		t.Fatalf("install action id = %q", clickedID)
+	}
+	second := rows.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	if status := second.Children[2].(woxwidget.Flex).Children[1].(woxwidget.Text); status.Value != "Installed" {
+		t.Fatalf("installed status = %q", status.Value)
+	}
+}
+
+func TestOnboardingQueryHotkeySelectedResultUsesSelectedForeground(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ResultTitle: woxui.Color{R: 1, A: 255}, ResultSubtitle: woxui.Color{R: 2, A: 255},
+		SelectedBackground: woxui.Color{R: 3, A: 255}, SelectedTitle: woxui.Color{R: 4, A: 255}, SelectedSubtitle: woxui.Color{R: 5, A: 255},
+	}
+	row := onboardingQueryHotkeyResult(OnboardingProps{Theme: theme}, 420, "Clipboard", "Clipboard history", true).(woxwidget.Align).Child.(woxwidget.Container)
+	content := row.Child.(woxwidget.Flex)
+	texts := content.Children[1].(woxwidget.Flex)
+	if row.Color != theme.SelectedBackground || texts.Children[0].(woxwidget.Text).Color != theme.SelectedTitle || texts.Children[1].(woxwidget.Text).Color != theme.SelectedSubtitle {
+		t.Fatalf("selected result colors = background %#v title %#v subtitle %#v", row.Color, texts.Children[0].(woxwidget.Text).Color, texts.Children[1].(woxwidget.Text).Color)
+	}
+	wantIcon := woxcomponent.CopyGlyph(18, theme.SelectedSubtitle).(woxwidget.Image)
+	if icon := content.Children[0].(woxwidget.Image); icon.Source != wantIcon.Source {
+		t.Fatal("selected result icon does not use selected subtitle color")
+	}
+}
+
+func TestOnboardingThemeCardIsSelectableAndUsesThemePreview(t *testing.T) {
+	selectedID := ""
+	accent := woxui.Color{R: 20, G: 184, B: 166, A: 255}
+	card := onboardingThemeCard(OnboardingProps{
+		Theme: woxcomponent.Theme{}, ThemePreviewTitle: "wox",
+		ThemePreviewTexts: []string{"Wox", "Wox Settings"}, ThemePreviewSubs: []string{"Launcher", "Settings"}, ThemePreviewOpen: "Open",
+		OnSelectTheme: func(id string) { selectedID = id },
+	}, OnboardingTheme{ID: "glass", Name: "Wox Glass Dark", Selected: true}, 180, accent).(woxwidget.Semantics)
+	if !card.Selected {
+		t.Fatal("selected theme card does not expose selected semantics")
+	}
+	container := focusedControlGesture(card).Child.(woxwidget.Container)
+	if container.BorderColor != accent || container.BorderWidth != 1 {
+		t.Fatalf("selected theme border = %#v width %.0f", container.BorderColor, container.BorderWidth)
+	}
+	if container.Height != 232 || container.Padding != woxwidget.UniformInsets(8) {
+		t.Fatalf("theme card geometry = height %.0f padding %#v", container.Height, container.Padding)
+	}
+	cardContent := container.Child.(woxwidget.Stack)
+	preview := cardContent.Children[0].Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	if len(preview.Children) != 2 {
+		t.Fatalf("selected theme preview children = %d, want preview and check", len(preview.Children))
+	}
+	hitTarget := cardContent.Children[1].Child.(woxwidget.Gesture)
+	if target := hitTarget.Child.(woxwidget.Container); target.Width != 164 || target.Height != 216 {
+		t.Fatalf("theme hit target = %.0fx%.0f", target.Width, target.Height)
+	}
+	hitTarget.OnTap()
+	if selectedID != "glass" {
+		t.Fatalf("selected theme id = %q", selectedID)
+	}
+}
+
+func TestOnboardingThemesUseTwoColumnGrid(t *testing.T) {
+	visual := onboardingThemesVisual(OnboardingProps{
+		Themes: []OnboardingTheme{{ID: "glass"}, {ID: "dark"}, {ID: "light"}, {ID: "auto"}},
 		Theme:  woxcomponent.Theme{},
-	}, OnboardingStep{ID: "trayQueries", Title: "Tray Queries"}, 728).(woxwidget.Container)
-
-	content := page.Child.(woxwidget.Flex)
-	panel := content.Children[2].(woxwidget.Container)
-	if panel.Height != 65 || panel.Color != settingsColorAlpha(woxui.Color{}, 14) {
-		t.Fatalf("info panel = %#v, want one-line intrinsic height 65 with translucent surface", panel)
+	}, 760, woxui.Color{R: 20, G: 184, B: 166, A: 255}).(woxwidget.Flex)
+	grid := visual.Children[0].(woxwidget.Flex)
+	if grid.Axis != woxwidget.Vertical || len(grid.Children) != 2 {
+		t.Fatalf("theme grid axis = %v rows = %d", grid.Axis, len(grid.Children))
 	}
-	if description := panel.Child.(woxwidget.TextBlock); description.Height != 0 {
-		t.Fatalf("description height = %v, want natural text height", description.Height)
-	}
-	preview := content.Children[4].(woxwidget.Container)
-	if preview.Height != 535 {
-		t.Fatalf("preview height = %v, want remaining height after intrinsic panel", preview.Height)
+	for index, child := range grid.Children {
+		row := child.(woxwidget.Flex)
+		if row.Axis != woxwidget.Horizontal || len(row.Children) != 2 {
+			t.Fatalf("theme row %d axis = %v columns = %d", index, row.Axis, len(row.Children))
+		}
 	}
 }
 
-func TestOnboardingSingleLineTextSlotsAlignLineHeight(t *testing.T) {
-	page := onboardingPage(OnboardingProps{Width: 1040, Height: 800, Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome", Title: "Welcome"}, 728).(woxwidget.Container)
-	title := page.Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
-	if title.Height != 44 || title.LineHeight != 44 {
-		t.Fatalf("page title slot = height %v line height %v, want 44/44", title.Height, title.LineHeight)
-	}
-
-	step := onboardingRailStep(OnboardingStep{ID: "welcome", Title: "Welcome"}, 0, 0, 214, nil, woxcomponent.Theme{})
-	label := step.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.TextBlock)
-	if label.Height != 18 || label.LineHeight != 18 {
-		t.Fatalf("rail step slot = height %v line height %v, want 18/18", label.Height, label.LineHeight)
+func TestOnboardingThemeStepUsesContinueLabel(t *testing.T) {
+	footer := onboardingFooter(OnboardingProps{
+		Width: 1040, Steps: []OnboardingStep{{ID: "themeInstall", Title: "Theme"}, {ID: "finish", Title: "Finish"}},
+		Labels: map[string]string{"next": "Continue"}, Theme: woxcomponent.Theme{},
+	}, 0).(woxwidget.Container)
+	button := footer.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Semantics)
+	if button.Label != "Continue" {
+		t.Fatalf("theme step action = %q", button.Label)
 	}
 }
 
-func TestOnboardingContentCardsUseSurfaceColors(t *testing.T) {
-	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 240, G: 240, B: 240, A: 255}, ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255}}
-	for _, test := range []struct {
-		id     string
-		height float32
-		alpha  uint8
-	}{
-		{id: "welcome", height: 138, alpha: 14},
-		{id: "permissions", height: 172, alpha: 10},
-		{id: "mainHotkey", height: 90, alpha: 10},
-		{id: "selectionHotkey", height: 90, alpha: 10},
-		{id: "glance", height: 154, alpha: 14},
-		{id: "queryHotkeys", height: 65, alpha: 14},
-		{id: "trayQueries", height: 65, alpha: 14},
-		{id: "wpmInstall", height: 65, alpha: 14},
-		{id: "themeInstall", height: 65, alpha: 14},
-		{id: "finish", height: 65, alpha: 14},
-	} {
-		props := OnboardingProps{Theme: theme}
-		if test.id == "mainHotkey" || test.id == "selectionHotkey" {
-			props.Hotkey = woxwidget.Container{Width: 400, Height: 62}
-		}
-		card := onboardingStepContent(props, OnboardingStep{ID: test.id}, 720, test.height).(woxwidget.Container)
-		if card.Color != settingsColorAlpha(theme.ResultTitle, test.alpha) {
-			t.Fatalf("%s card color = %#v, want translucent surface", test.id, card.Color)
-		}
+func TestOnboardingFinishVisualShowsSettingQueryAndConfiguredSummary(t *testing.T) {
+	visual := onboardingFinishVisual(OnboardingProps{
+		MainHotkeyLabels: []string{"Alt", "Space"}, GlanceEnabled: true, GlanceLabel: "Current time",
+		Plugins: []OnboardingPlugin{{Name: "Awake", Installed: true}, {Name: "Everything", Installed: true}},
+		Labels: map[string]string{
+			"finish.query": "setting", "finish.hotkey": "Open hotkey", "finish.glance": "Glance",
+			"finish.plugins": "Starter plugin", "finish.hint": "Change more in Settings",
+		},
+		Theme: woxcomponent.Theme{},
+	}, 640, woxui.Color{G: 184, A: 255}).(woxwidget.Flex)
+	queryStage := visual.Children[0].(woxwidget.Stack)
+	if queryStage.Height != 224 {
+		t.Fatalf("finish query stage height = %.0f, want 224", queryStage.Height)
+	}
+	if _, ok := queryStage.Children[0].Child.(woxwidget.Painter); !ok {
+		t.Fatalf("finish query backdrop = %T, want fading grid painter", queryStage.Children[0].Child)
+	}
+	queryPreview := queryStage.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Stack)
+	query := queryPreview.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if text := query.Children[0].(woxwidget.Text); text.Value != "setting" {
+		t.Fatalf("finish query = %q", text.Value)
+	}
+	if caret := query.Children[1].(woxwidget.Container); caret.Width != 2 || caret.Height != 24 {
+		t.Fatalf("finish caret = %#v", caret)
+	}
+	rows := visual.Children[1].(woxwidget.Flex)
+	if len(rows.Children) != 5 {
+		t.Fatalf("finish summary children = %d, want three rows and two dividers", len(rows.Children))
+	}
+	pluginRow := rows.Children[4].(woxwidget.Container).Child.(woxwidget.Flex)
+	pluginIcons := pluginRow.Children[2].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(pluginIcons.Children) != 2 {
+		t.Fatalf("finish plugin icons = %d, want all two installed plugins", len(pluginIcons.Children))
+	}
+}
+
+func TestOnboardingGlanceVisualIncludesLiveQueryBox(t *testing.T) {
+	props := OnboardingProps{
+		GlanceEnabled: true, GlanceValue: "09:41",
+		Labels: map[string]string{
+			"glance.query": "wox", "glance.enable": "Enable Glance", "glance.enable.body": "Show useful information", "glance.primary": "Primary Glance",
+		},
+		Theme: woxcomponent.Theme{
+			QueryBackground: woxui.Color{R: 20, G: 21, B: 24, A: 255},
+			ResultTitle:     woxui.Color{R: 240, G: 240, B: 240, A: 255},
+			ResultSubtitle:  woxui.Color{R: 160, G: 160, B: 160, A: 255},
+		},
+	}
+	visual := onboardingGlanceVisual(props, 640).(woxwidget.Flex)
+	queryStage := visual.Children[0].(woxwidget.Stack)
+	backdrop, ok := queryStage.Children[0].Child.(woxwidget.Painter)
+	if !ok {
+		t.Fatalf("glance query backdrop = %T, want fading grid painter", queryStage.Children[0].Child)
+	}
+	if queryStage.Children[0].Top != -176 || backdrop.Height != 332 {
+		t.Fatalf("glance query backdrop = top %.0f height %.0f, want extended fade above QueryBox", queryStage.Children[0].Top, backdrop.Height)
+	}
+	queryBox := queryStage.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stack)
+	if queryBox.Width != 616 || queryBox.Height != 96 {
+		t.Fatalf("query box = %#v, want elevated 560-wide preview", queryBox)
+	}
+	query := queryBox.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(query.Children) != 2 {
+		t.Fatalf("query children = %d, want query and Glance value without a divider", len(query.Children))
+	}
+	if divider := visual.Children[1].(woxwidget.Container); divider.Color.A != 48 {
+		t.Fatalf("divider alpha = %d, want 48", divider.Color.A)
+	}
+	glanceRow := visual.Children[3].(woxwidget.Container).Child.(woxwidget.Flex)
+	if icon := glanceRow.Children[0].(woxwidget.Container); icon.Width != 40 || icon.Height != 40 || icon.Color != settingsColorAlpha(props.Theme.ResultTitle, 14) {
+		t.Fatalf("glance row icon = %#v", icon)
+	}
+
+	props.GlanceEnabled = false
+	disabledStage := onboardingGlanceVisual(props, 640).(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	disabledBox := disabledStage.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stack)
+	disabled := disabledBox.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(disabled.Children) != 1 {
+		t.Fatalf("disabled query children = %d, want Glance value hidden", len(disabled.Children))
 	}
 }
 
@@ -144,41 +452,31 @@ func TestOnboardingPermissionsCenterCopyAndUseMonochromeIcons(t *testing.T) {
 	}
 }
 
-func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
+func TestOnboardingHeaderAndFooterUseCompactChrome(t *testing.T) {
+	accent := woxui.Color{R: 20, G: 184, B: 166, A: 255}
 	props := OnboardingProps{
 		Width: 1040, Height: 800, ActiveStep: 0,
-		Steps:  []OnboardingStep{{ID: "welcome", Title: "Welcome"}},
-		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "skip": "跳过", "back": "Back", "next": "Next"},
-		Theme:  woxcomponent.Theme{},
+		Steps:  []OnboardingStep{{ID: "welcome", Title: "Welcome", Accent: accent}, {ID: "finish", Title: "Finish", Accent: accent}},
+		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "back": "Back", "next": "Next"},
+		Theme:  woxcomponent.Theme{Cursor: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
 	}
-	rail, ok := onboardingRail(props, 0, 728).(woxwidget.Stack)
-	if !ok || len(rail.Children) != 2 || !rail.Children[1].AnchorRight || !rail.Children[1].StretchHeight {
-		t.Fatalf("rail = %#v, want content plus right divider", rail)
+	header := onboardingHeader(props).(woxwidget.Container)
+	if header.Height != OnboardingHeaderHeight {
+		t.Fatalf("header height = %v, want %v", header.Height, OnboardingHeaderHeight)
 	}
-	footer, ok := onboardingFooter(props, 0).(woxwidget.Stack)
-	if !ok || len(footer.Children) != 2 {
-		t.Fatalf("footer = %#v, want content plus top divider", footer)
+	footer := onboardingFooter(props, 0).(woxwidget.Container)
+	stack := footer.Child.(woxwidget.Stack)
+	if len(stack.Children) != 2 {
+		t.Fatalf("first-step footer children = %d, want progress and continue only", len(stack.Children))
 	}
-	content := footer.Children[0].Child.(woxwidget.Container)
-	if content.Color.A != 0 {
-		t.Fatalf("footer fill alpha = %d, want the window canvas material", content.Color.A)
-	}
-	actions := content.Child.(woxwidget.Flex)
-	skip := actions.Children[0].(woxwidget.Semantics)
-	gesture := focusedControlGesture(skip)
-	button := gesture.Child.(woxwidget.Container)
-	if button.Width != 0 {
-		t.Fatalf("skip width = %v, want content-sized", button.Width)
-	}
-	if button.Padding.Left != 8 || button.Padding.Right != 8 {
-		t.Fatalf("skip padding = %#v, want room for two CJK glyphs", button.Padding)
-	}
-	if actions.MainAxisAlignment != woxwidget.MainAxisSpaceBetween {
-		t.Fatalf("footer alignment = %v, want space-between", actions.MainAxisAlignment)
+	progress := stack.Children[0].Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	activeDot := progress.Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Align).Child.(woxwidget.Container)
+	if activeDot.Color != accent {
+		t.Fatalf("active progress color = %#v, want onboarding accent %#v", activeDot.Color, accent)
 	}
 }
 
-func TestOnboardingHeaderAreasStartWindowDragging(t *testing.T) {
+func TestOnboardingHeaderStartsWindowDragging(t *testing.T) {
 	dragged := false
 	props := OnboardingProps{
 		Width: 1040, Height: 800, ActiveStep: 0, OnDrag: func() { dragged = true },
@@ -186,37 +484,17 @@ func TestOnboardingHeaderAreasStartWindowDragging(t *testing.T) {
 		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup"},
 		Theme:  woxcomponent.Theme{},
 	}
-	rail, ok := onboardingRail(props, 0, 728).(woxwidget.Stack)
-	if !ok || len(rail.Children) != 3 {
-		t.Fatalf("rail = %#v, want drag strip, content, and divider", rail)
-	}
-	railDrag := rail.Children[0].Child.(woxwidget.Gesture)
-	railDrag.OnDragStart()
+	header := onboardingHeader(props).(woxwidget.Stack)
+	drag := header.Children[0].Child.(woxwidget.Gesture)
+	drag.OnDragStart()
 	if !dragged {
 		t.Fatal("rail header did not start window dragging")
 	}
-	if railDrag.ID != "onboarding-rail-drag" {
-		t.Fatalf("rail drag id = %q, want onboarding-rail-drag", railDrag.ID)
+	if drag.ID != "onboarding-header-drag" {
+		t.Fatalf("header drag id = %q, want onboarding-header-drag", drag.ID)
 	}
-	if drag := railDrag.Child.(woxwidget.Container); drag.Width != OnboardingSidebarWidth || drag.Height != OnboardingRailDragHeight {
-		t.Fatalf("rail drag size = %vx%v, want %vx%v", drag.Width, drag.Height, OnboardingSidebarWidth, OnboardingRailDragHeight)
-	}
-
-	dragged = false
-	page, ok := onboardingPage(props, props.Steps[0], 728).(woxwidget.Stack)
-	if !ok || len(page.Children) != 2 {
-		t.Fatalf("page = %#v, want drag strip and content", page)
-	}
-	pageDrag := page.Children[0].Child.(woxwidget.Gesture)
-	pageDrag.OnDragStart()
-	if !dragged {
-		t.Fatal("page header did not start window dragging")
-	}
-	if pageDrag.ID != "onboarding-page-drag" {
-		t.Fatalf("page drag id = %q, want onboarding-page-drag", pageDrag.ID)
-	}
-	if drag := pageDrag.Child.(woxwidget.Container); drag.Width != 784 || drag.Height != OnboardingPageDragHeight {
-		t.Fatalf("page drag size = %vx%v, want 784x%v", drag.Width, drag.Height, OnboardingPageDragHeight)
+	if target := drag.Child.(woxwidget.Container); target.Width != 1040 || target.Height != OnboardingHeaderHeight {
+		t.Fatalf("header drag size = %vx%v", target.Width, target.Height)
 	}
 }
 
@@ -757,27 +1035,28 @@ func TestOnboardingGlanceAccessoryWidthStaysContentSized(t *testing.T) {
 	}
 }
 
-func TestOnboardingGlanceUsesSharedRichDropdown(t *testing.T) {
-	icon := &woxui.Image{Width: 18, Height: 18}
-	panel := onboardingGlance(OnboardingProps{
-		GlanceEnabled: true, GlanceLabel: "CPU", GlanceValue: "62%", GlanceIcon: icon,
+func TestOnboardingGlanceUsesCompactInlineSettings(t *testing.T) {
+	settings := onboardingGlance(OnboardingProps{
+		GlanceEnabled: true, GlanceLabel: "CPU", GlanceValue: "62%",
 		Labels: map[string]string{"glance.enable": "Glance", "glance.enable.body": "Status", "glance.primary": "Primary"},
 		Theme:  woxcomponent.Theme{},
 	}, 720, 150).(woxwidget.Container)
-	rows := panel.Child.(woxwidget.Flex)
-	selectorRow := rows.Children[1].(woxwidget.Stack)
-	selectorSlot := selectorRow.Children[1]
-	semantics := selectorSlot.Child.(woxwidget.Semantics)
+	row := settings.Child.(woxwidget.Flex)
+	controls := row.Children[3].(woxwidget.Flex)
+	semantics := controls.Children[1].(woxwidget.Semantics)
 	trigger := focusedControlGesture(semantics).Child.(woxwidget.Container)
 	content := trigger.Child.(woxwidget.Flex)
 
-	if trigger.Width != 300 || !selectorSlot.AnchorRight || len(content.Children) != 6 {
-		t.Fatalf("glance dropdown = anchor %v, width %v, children %d", selectorSlot.AnchorRight, trigger.Width, len(content.Children))
+	if settings.Color.A != 0 || settings.BorderWidth != 0 || trigger.Width != 220 {
+		t.Fatalf("glance settings = surface %#v, border %v, dropdown width %v", settings.Color, settings.BorderWidth, trigger.Width)
 	}
-	leading := content.Children[0].(woxwidget.Align).Child.(woxwidget.Image)
-	trailingSlot := content.Children[4].(woxwidget.Align)
-	trailing := trailingSlot.Child.(woxwidget.Text)
-	if leading.Source != icon || trailing.Value != "62%" || trailingSlot.Horizontal != 1 {
-		t.Fatalf("glance dropdown content = icon %#v, trailing %q", leading.Source, trailing.Value)
+	if len(content.Children) == 0 {
+		t.Fatal("glance dropdown has no content")
+	}
+	disabled := onboardingGlance(OnboardingProps{
+		GlanceLabel: "CPU", Labels: map[string]string{"glance.enable": "Glance", "glance.enable.body": "Status", "glance.primary": "Primary"}, Theme: woxcomponent.Theme{},
+	}, 720, 150).(woxwidget.Container).Child.(woxwidget.Flex).Children[3].(woxwidget.Flex)
+	if len(disabled.Children) != 2 {
+		t.Fatalf("disabled Glance controls = %d, want stable switch and dropdown", len(disabled.Children))
 	}
 }

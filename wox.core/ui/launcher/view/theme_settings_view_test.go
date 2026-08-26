@@ -36,6 +36,14 @@ func TestThemeApplyUsesIntrinsicOutlinedButton(t *testing.T) {
 	}
 }
 
+func TestThemeCatalogRowsShowOnlyCenteredTitle(t *testing.T) {
+	row := themeCatalogRowText(200, "Result", woxui.Color{A: 255}).(woxwidget.Clip)
+	centered := row.Child.(woxwidget.Align)
+	if centered.Height != 42 || centered.Vertical != 0.5 || centered.Child.(woxwidget.Text).Value != "Result" {
+		t.Fatalf("selected preview text = %#v", centered)
+	}
+}
+
 func TestThemeDetailKeepsVersionBesideTitle(t *testing.T) {
 	detail := ThemeCatalogItem{Name: "Aquarium", Version: "1.1.0"}
 	view := themeDetail(ThemeSettingsProps{Detail: &detail}, 600, 700).(woxwidget.Flex)

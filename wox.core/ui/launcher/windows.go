@@ -121,7 +121,8 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 				}
 				return a.onOnboardingWindowKey(event)
 			},
-			OnCloseRequested: a.finishOnboarding,
+			// First-run setup must complete through its finish action.
+			OnCloseRequested: func() {},
 			OnClosed: func() {
 				host.Dispose()
 				a.onOnboardingWindowClosed()
@@ -132,7 +133,7 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 			a.onboardingView = managed
 			a.onboardingHost = host
 			fontFamily = a.generalSettings.Data().AppFontFamily
-			isDark = themeColorIsDark(a.palette.background)
+			isDark = true
 			created = true
 		}
 	}); err != nil {
@@ -298,7 +299,7 @@ func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 
 func (a *App) hotkeyRecordingUsesOnboardingWindow() bool {
 	state := a.hotkeySettings.Recording()
-	return a.onboardingOpen && state != nil && state.target == a.hotkeySettings.Form()
+	return a.onboardingOpen && state != nil && (state.target == a.hotkeySettings.Form() || (a.onboardingQueryHotkey != nil && state.target == &a.onboardingQueryHotkey.form))
 }
 
 func (a *App) hotkeyRecordingNativeWindow() *woxui.Window {
@@ -317,7 +318,7 @@ func (a *App) invalidateHotkeyWindows() {
 
 func (a *App) formFieldNativeWindow(idPrefix string) *woxui.Window {
 	switch idPrefix {
-	case "hotkey-settings":
+	case "hotkey-settings", "onboarding-query-hotkey":
 		if a.onboardingOpen {
 			return a.onboardingNativeWindow()
 		}

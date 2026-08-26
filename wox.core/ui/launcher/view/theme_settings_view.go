@@ -322,29 +322,21 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	const queryAreaHeight = float32(60)
 	const toolbarHeight = float32(40)
 	rowsHeight := max(float32(0), height-queryAreaHeight-toolbarHeight)
+	rowHeight := themeCatalogRowHeight(rowsHeight, len(props.PreviewTexts))
 	rowWidgets := make([]woxwidget.Widget, 0, len(props.PreviewTexts))
 	for index, title := range props.PreviewTexts {
-		subtitle := ""
-		if index < len(props.PreviewSubtitles) {
-			subtitle = props.PreviewSubtitles[index]
-		}
 		selected := index == 1
 		background := woxui.Color{}
 		titleColor := theme.ResultTitle
-		subtitleColor := theme.ResultSubtitle
 		if selected {
 			background = theme.SelectedBackground
 			titleColor = theme.SelectedTitle
-			subtitleColor = theme.SelectedSubtitle
 		}
-		rowWidgets = append(rowWidgets, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 60, Color: background, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: 60, Vertical: 0.5, Child: woxwidget.Flex{
+		rowWidgets = append(rowWidgets, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: rowHeight, Color: background, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
 				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-					return woxwidget.Clip{Width: size.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-						woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
-						woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
-					}}}
+					return themeCatalogRowText(size.Width, title, titleColor)
 				}}},
 			},
 		}}}})
@@ -376,12 +368,13 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 	const queryAreaHeight = float32(60)
 	const toolbarHeight = float32(40)
 	rowsHeight := max(float32(0), height-queryAreaHeight-toolbarHeight)
+	rowHeight := themeCatalogRowHeight(rowsHeight, len(props.PreviewTexts))
 	background := woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		fillThemeDiagonalRect(displayList, bounds, bounds, light.Background, dark.Background)
+		fillThemeDiagonalPolygon(displayList, themeRoundedRectPoints(bounds, 8), bounds, light.Background, dark.Background)
 		query := woxui.Rect{X: bounds.X + 10, Y: bounds.Y + 10, Width: max(float32(0), bounds.Width-20), Height: 40}
 		fillThemeDiagonalRect(displayList, query, bounds, light.QueryBackground, dark.QueryBackground)
 		for index := range props.PreviewTexts {
-			row := woxui.Rect{X: bounds.X + 10, Y: bounds.Y + queryAreaHeight + float32(index)*60, Width: max(float32(0), bounds.Width-20), Height: 60}
+			row := woxui.Rect{X: bounds.X + 10, Y: bounds.Y + queryAreaHeight + float32(index)*rowHeight, Width: max(float32(0), bounds.Width-20), Height: rowHeight}
 			lightColor, darkColor := light.Background, dark.Background
 			if index == 1 {
 				lightColor, darkColor = light.SelectedBackground, dark.SelectedBackground
@@ -389,28 +382,22 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 			fillThemeDiagonalRect(displayList, row, bounds, lightColor, darkColor)
 		}
 		toolbar := woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - toolbarHeight, Width: bounds.Width, Height: toolbarHeight}
-		fillThemeDiagonalRect(displayList, toolbar, bounds, light.ToolbarBackground, dark.ToolbarBackground)
+		fillThemeDiagonalPolygon(displayList, themeRoundedRectPoints(toolbar, 8), bounds, light.ToolbarBackground, dark.ToolbarBackground)
 		fillThemeDiagonalRect(displayList, woxui.Rect{X: toolbar.X, Y: toolbar.Y, Width: toolbar.Width, Height: 1}, bounds, themeAlpha(light.ToolbarText, 26), themeAlpha(dark.ToolbarText, 26))
 		drawThemeDiagonalLine(displayList, bounds, 2)
 	}}
 	rows := make([]woxwidget.Widget, 0, len(props.PreviewTexts))
 	for index, title := range props.PreviewTexts {
-		subtitle := ""
-		if index < len(props.PreviewSubtitles) {
-			subtitle = props.PreviewSubtitles[index]
+		selected := index == 1
+		titleColor := light.ResultTitle
+		if selected {
+			titleColor = light.SelectedTitle
 		}
-		titleColor, subtitleColor := light.ResultTitle, light.ResultSubtitle
-		if index == 1 {
-			titleColor, subtitleColor = light.SelectedTitle, light.SelectedSubtitle
-		}
-		rows = append(rows, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 60, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: 60, Vertical: 0.5, Child: woxwidget.Flex{
+		rows = append(rows, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: rowHeight, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
 				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-					return woxwidget.Clip{Width: size.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-						woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
-						woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
-					}}}
+					return themeCatalogRowText(size.Width, title, titleColor)
 				}}},
 			},
 		}}}})
@@ -433,6 +420,11 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 	return woxwidget.Stack{Width: width, Height: height, Children: children}
 }
 
+// themeCatalogRowText keeps every preview result title vertically centered.
+func themeCatalogRowText(width float32, title string, titleColor woxui.Color) woxwidget.Widget {
+	return woxwidget.Clip{Width: width, Height: 42, Child: woxwidget.Align{Width: width, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor}}}
+}
+
 // themeCatalogToolbar mirrors Flutter's installed-theme preview footer.
 func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, width float32, paintBackground bool) woxwidget.Widget {
 	const height = float32(40)
@@ -450,7 +442,7 @@ func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	if paintBackground {
 		background = theme.ToolbarBackground
 	}
-	body := woxwidget.Container{Width: width, Height: height, Color: background, Padding: woxwidget.Insets{Left: horizontalPadding, Top: 6, Right: horizontalPadding, Bottom: 6}, Child: woxwidget.Flex{
+	body := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: horizontalPadding, Top: 6, Right: horizontalPadding, Bottom: 6}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisEnd, Children: []woxwidget.Widget{action},
 	}}
 	if !paintBackground {
@@ -460,6 +452,13 @@ func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 		{Child: body},
 		{Child: woxwidget.Container{Width: width, Height: 1, Color: themeAlpha(theme.ToolbarText, 26)}},
 	}}
+}
+
+func themeCatalogRowHeight(available float32, count int) float32 {
+	if count == 0 {
+		return 0
+	}
+	return min(float32(60), max(float32(42), available/float32(count)))
 }
 
 // themeAutoSwatch mirrors Flutter's compact diagonal AUTO theme icon.

@@ -48,7 +48,11 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 				visualBorder = props.Theme.ActionSelected
 			}
 		}
-		return woxwidget.Gesture{ID: props.ID, OnTap: toggle, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+		cursor := woxui.PointerCursorDefault
+		if !props.Disabled && props.OnChange != nil {
+			cursor = woxui.PointerCursorHand
+		}
+		return woxwidget.Gesture{ID: props.ID, Cursor: cursor, OnTap: toggle, OnHoverAt: onHoverAt, Child: woxwidget.Container{
 			Width: 18, Height: 18, Radius: 4, Color: visualBackground, BorderColor: visualBorder, BorderWidth: 1, Child: mark,
 		}}
 	}
