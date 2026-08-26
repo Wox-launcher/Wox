@@ -39,27 +39,13 @@
 				"source.fixAll": "explicit",
 				"source.organizeImports": "explicit"
 			},
-			"editor.defaultFormatter": "charliermarsh.ruff"
-		},
-		"[swift]": {
-			"editor.defaultFormatter": "swiftlang.swift-vscode"
 		},
 		"editor.formatOnSave": true,
 		"go.lintOnSave": "off"
 	},
 	"extensions": {
 		"recommendations": [
-			// for go
 			"golang.go",
-			// for python
-			"ms-python.python",
-			"charliermarsh.ruff",
-			"ms-python.mypy-type-checker",
-			// for js
-			"dbaeumer.vscode-eslint",
-			"esbenp.prettier-vscode",
-			// others
-			"ms-vscode.makefile-tools"
 		]
 	},
 	"tasks": {
