@@ -55,6 +55,8 @@ func onboardingDemoDuration(stepID string) time.Duration {
 		return 6200 * time.Millisecond
 	case "themeInstall":
 		return 5600 * time.Millisecond
+	case "finish":
+		return 4200 * time.Millisecond
 	default:
 		return 0
 	}
@@ -90,8 +92,10 @@ func onboardingDemoScene(props OnboardingProps, step OnboardingStep, width, heig
 		return onboardingPluginStoreDemo(props, step, width, height, progress)
 	case "themeInstall":
 		return onboardingThemeInstallDemo(props, step, width, height, progress)
+	case "finish":
+		return onboardingFinishDemo(props, step, width, height, progress)
 	default:
-		return onboardingFinishDemo(props, step, width, height)
+		return onboardingFinishDemo(props, step, width, height, 1)
 	}
 }
 
@@ -257,9 +261,6 @@ func onboardingDemoWindowsTaskbar(props OnboardingProps, width float32) woxwidge
 	)
 	textColor := settingsColorAlpha(props.Theme.ResultTitle, 212)
 	mutedColor := settingsColorAlpha(props.Theme.ResultTitle, 176)
-	appIcon := func(glyph string, background, color woxui.Color) woxwidget.Widget {
-		return onboardingDemoWindowsTaskbarIcon(woxwidget.Text{Value: glyph, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: color}, background)
-	}
 	apps := []woxwidget.Widget{
 		onboardingDemoWindowsTaskbarIcon(woxcomponent.WindowsGlyph(16, woxui.Color{R: 77, G: 190, B: 245, A: 255}), woxui.Color{}),
 		onboardingDemoWindowsTaskbarIcon(woxcomponent.FolderGlyph(16, woxui.Color{R: 247, G: 190, B: 46, A: 255}), woxui.Color{}),
@@ -267,11 +268,6 @@ func onboardingDemoWindowsTaskbar(props OnboardingProps, width float32) woxwidge
 		onboardingDemoWindowsTaskbarIcon(woxcomponent.TerminalGlyph(15, woxui.Color{R: 232, G: 235, B: 238, A: 255}), woxui.Color{}),
 		onboardingDemoWindowsTaskbarIcon(woxcomponent.SparklesGlyph(15, woxui.Color{R: 240, G: 240, B: 240, A: 255}), woxui.Color{R: 45, G: 45, B: 50, A: 255}),
 		onboardingDemoWindowsTaskbarIcon(woxcomponent.CodeGlyph(16, woxui.Color{R: 55, G: 165, B: 240, A: 255}), woxui.Color{}),
-	}
-	if props.AppIcon != nil {
-		apps = append(apps, onboardingDemoWindowsTaskbarIcon(woxwidget.Image{Source: props.AppIcon, Width: 18, Height: 18, Radius: 4}, woxui.Color{R: 245, G: 245, B: 245, A: 255}))
-	} else {
-		apps = append(apps, appIcon("W", woxui.Color{R: 45, G: 45, B: 50, A: 255}, woxui.Color{R: 245, G: 245, B: 245, A: 255}))
 	}
 	centerWidth := float32(len(apps))*iconSize + float32(len(apps)-1)*iconGap
 	center := woxwidget.Container{
@@ -405,8 +401,7 @@ func onboardingWelcomeDemo(props OnboardingProps, step OnboardingStep, width, he
 		cardOpacity = 1 - demoEaseOutCubic(demoInterval(progress, .20, .28))
 	}
 	windowProgress := demoEaseOutCubic(demoInterval(progress, .20, .28))
-	query := demoTypedQuery("wpm install everything", progress, .28, onboardingDemoDuration(step.ID))
-	resultsOpacity := demoEaseOutCubic(demoInterval(progress, .44, .50))
+	query, resultsOpacity := demoTypedQueryScene("wpm install everything", progress, .28, onboardingDemoDuration(step.ID))
 	actionProgress := float32(0)
 	if progress >= .56 && progress < .62 {
 		actionProgress = demoEaseOutCubic(demoInterval(progress, .56, .62))
@@ -508,8 +503,10 @@ func onboardingMainHotkeyDemo(props OnboardingProps, step OnboardingStep, width,
 	if windowProgress > .01 {
 		windowWidth := width - 68
 		windowHeight := height - 84
+		// Opening via the main hotkey presents an already-complete query. There
+		// is no typing cadence, so the results arrive with the window.
 		children = append(children, onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
-			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: demoTypedQuery("app", progress, .52, onboardingDemoDuration(step.ID)), Accent: step.Accent, Theme: props.Theme, Opacity: windowProgress, ShowQuery: true, ShowToolbar: true,
+			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "app", Accent: step.Accent, Theme: props.Theme, Opacity: windowProgress, ShowQuery: true, ShowToolbar: true,
 			Results: []onboardingDemoResult{
 				{Title: step.Title, Subtitle: props.Labels[step.ID+".body"], Tail: strings.Join(labels, "+"), Glyph: "⌨", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
 				{Title: "Applications", Subtitle: "Open installed applications", Tail: "Apps", Glyph: "▦", GlyphColor: step.Accent},
@@ -870,7 +867,7 @@ func onboardingColorFlag(color woxui.Color) woxwidget.Widget {
 
 // onboardingQueryShortcutsDemo shows that the visible alias stays unchanged while its provider query expands.
 func onboardingQueryShortcutsDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
-	query := demoTypedQuery("gh repo", progress, .18, onboardingDemoDuration(step.ID))
+	query, resultsOpacity := demoTypedQueryScene("gh repo", progress, .18, onboardingDemoDuration(step.ID))
 	expanded := progress >= .68 && progress < .94
 	contentLeft := float32(48)
 	contentTop := demoHintTop()
@@ -883,16 +880,18 @@ func onboardingQueryShortcutsDemo(props OnboardingProps, step OnboardingStep, wi
 		subtitle = "github repo"
 		tail = "gh"
 	}
+	results := []onboardingDemoResult{
+		{Title: "Open repository", Subtitle: subtitle, Tail: tail, Glyph: "≡", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
+		{Title: "Repository search", Subtitle: "github repo", Tail: "Enter", Glyph: "↗", GlyphColor: step.Accent},
+		{Title: "Search issues", Subtitle: "github issues", Glyph: "⌕", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
+	}
+	demoFadeResultGlyphs(results, resultsOpacity)
 	children := []woxwidget.StackChild{
 		{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, "gh repo", "github repo", contentWidth, 255)},
 		onboardingPlaceLauncher(width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
 			Width: contentWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: query,
 			Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
-			Results: []onboardingDemoResult{
-				{Title: "Open repository", Subtitle: subtitle, Tail: tail, Glyph: "≡", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
-				{Title: "Repository search", Subtitle: "github repo", Tail: "Enter", Glyph: "↗", GlyphColor: step.Accent},
-				{Title: "Search issues", Subtitle: "github issues", Glyph: "⌕", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
-			},
+			FadeResults: true, ResultsOpacity: resultsOpacity, Results: results,
 		}),
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
@@ -950,17 +949,23 @@ func onboardingPluginStoreDemo(props OnboardingProps, step OnboardingStep, width
 	}
 	windowProgress := demoEaseOutCubic(demoInterval(progress, .34, .50))
 	if windowProgress > .01 {
-		windowHeight := height - contentTop - 82
+		// Preview keeps WoxLauncherDemo at the requested height instead of
+		// shrinking to the result list. Fit the window to the desktop content
+		// slot so the toolbar stays above the simulated taskbar.
+		areaTop := onboardingDemoHintContentTop()
+		areaBottom := onboardingDemoDesktopContentBottom(height)
+		windowHeight := max(float32(0), areaBottom-areaTop)
 		tail := props.Labels["demo.install"]
 		if progress >= .82 && progress < .90 {
 			tail = props.Labels["demo.installing"]
 		} else if progress >= .90 && progress < .97 {
 			tail = props.Labels["demo.installed"]
 		}
+		query, resultsOpacity := demoTypedQueryScene("wpm install", progress, .50, onboardingDemoDuration(step.ID))
 		children = append(children, onboardingPlaceExpandedWidget(
-			width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height),
+			width, areaTop, areaBottom,
 			onboardingPluginStoreWindow(
-				props, step, contentWidth, windowHeight, demoTypedQuery("wpm install", progress, .50, onboardingDemoDuration(step.ID)), tail, windowProgress,
+				props, step, contentWidth, windowHeight, query, tail, windowProgress, resultsOpacity,
 			),
 			contentWidth, windowHeight,
 		))
@@ -1004,7 +1009,7 @@ func onboardingPluginIconGrid(props OnboardingProps, step OnboardingStep, left, 
 	return children
 }
 
-func onboardingPluginStoreWindow(props OnboardingProps, step OnboardingStep, width, height float32, query, installLabel string, opacity float32) woxwidget.Widget {
+func onboardingPluginStoreWindow(props OnboardingProps, step OnboardingStep, width, height float32, query, installLabel string, opacity, resultsOpacity float32) woxwidget.Widget {
 	alpha := demoAlpha(opacity)
 	listWidth := min(float32(300), width*.38)
 	items := []onboardingDemoResult{
@@ -1013,23 +1018,25 @@ func onboardingPluginStoreWindow(props OnboardingProps, step OnboardingStep, wid
 		{Title: "RSS Reader", Subtitle: "Read RSS feeds", Tail: "✓", Glyph: "RSS", GlyphColor: woxui.Color{R: 249, G: 115, B: 22, A: 255}},
 		{Title: "Recent Files", Subtitle: "List recently used files", Tail: "✓", Glyph: "◷", GlyphColor: woxui.Color{R: 148, G: 163, B: 184, A: 255}},
 	}
-	renderHeight := min(height, float32(72+len(items)*51+36))
-	detailWidth := width - listWidth - 14
-	detailHeight := max(float32(40), renderHeight-116)
+	// Match WoxLauncherDemo's preview clip: query+results top (77) and
+	// toolbar+AppPaddingBottom (50), so the pane reaches the live footer gap.
+	previewWidth := max(float32(0), width-listWidth-16)
+	previewHeight := max(float32(40), height-127)
 	detail := woxwidget.Container{
-		Width: detailWidth, Height: detailHeight, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 14)), BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 26)), BorderWidth: 1,
+		Width: previewWidth, Height: previewHeight, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 14)), BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 26)), BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: 16, Top: 14, Right: 16, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: "▧   RImage", Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, alpha)},
 			woxwidget.TextBlock{Value: "使用 rimage 压缩选中的图片 · qianlifeng", Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 9}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha)},
 			woxwidget.Text{Value: "v0.0.1     NodeJS     GitHub ↗", Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha)},
-			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: max(float32(40), detailHeight-86), Radius: 7, Color: settingsColorAlpha(woxui.Color{A: 255}, demoScaledAlpha(opacity, 58)), Child: woxwidget.Align{
-				Height: max(float32(40), detailHeight-86), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "RImage", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)},
+			woxwidget.Expanded{Child: woxwidget.Container{Radius: 7, Color: settingsColorAlpha(woxui.Color{A: 255}, demoScaledAlpha(opacity, 58)), Child: woxwidget.Align{
+				Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "RImage", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)},
 			}}},
 		}},
 	}
 	return onboardingDemoWindow(onboardingDemoWindowProps{
 		Width: width, Height: height, Backdrop: props.WallpaperBlurred, Query: query, Results: items, Accent: step.Accent, Theme: props.Theme, Opacity: opacity,
 		ShowQuery: true, ShowToolbar: true, ResultWidth: listWidth, Preview: detail, PrimaryAction: installLabel,
+		FadeResults: true, ResultsOpacity: resultsOpacity,
 	})
 }
 
@@ -1056,35 +1063,63 @@ func onboardingThemeInstallDemo(props OnboardingProps, step OnboardingStep, widt
 		tail = props.Labels["demo.apply"]
 	}
 	windowHeight := height - contentTop - 82
+	query, resultsOpacity := demoTypedQueryScene("theme ocean dark", progress, .08, onboardingDemoDuration(step.ID))
+	results := []onboardingDemoResult{
+		{Title: "Ocean Dark", Subtitle: "A calm blue dark theme", Tail: tail, Glyph: "◈", GlyphColor: woxui.Color{R: 56, G: 189, B: 248, A: 255}, Selected: true},
+		{Title: "Aurora", Subtitle: "Theme Store", Tail: props.Labels["demo.install"], Glyph: "◈", GlyphColor: woxui.Color{R: 232, G: 121, B: 249, A: 255}},
+		{Title: "Default Dark", Subtitle: "Current theme", Tail: "System", Glyph: "◈", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
+	}
+	demoFadeResultGlyphs(results, resultsOpacity)
 	children := []woxwidget.StackChild{
 		{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, "theme", "theme ocean dark", contentWidth, 255)},
 		onboardingPlaceLauncher(width, onboardingDemoHintContentTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
-			Width: contentWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: demoTypedQuery("theme ocean dark", progress, .08, onboardingDemoDuration(step.ID)), Accent: boolColor(applied, woxui.Color{R: 56, G: 189, B: 248, A: 255}, step.Accent), Theme: theme, Background: background,
-			Opacity: 1, ShowQuery: true, ShowToolbar: true,
-			Results: []onboardingDemoResult{
-				{Title: "Ocean Dark", Subtitle: "A calm blue dark theme", Tail: tail, Glyph: "◈", GlyphColor: woxui.Color{R: 56, G: 189, B: 248, A: 255}, Selected: true},
-				{Title: "Aurora", Subtitle: "Theme Store", Tail: props.Labels["demo.install"], Glyph: "◈", GlyphColor: woxui.Color{R: 232, G: 121, B: 249, A: 255}},
-				{Title: "Default Dark", Subtitle: "Current theme", Tail: "System", Glyph: "◈", GlyphColor: woxui.Color{R: 96, G: 165, B: 250, A: 255}},
-			},
+			Width: contentWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: query, Accent: boolColor(applied, woxui.Color{R: 56, G: 189, B: 248, A: 255}, step.Accent), Theme: theme, Background: background,
+			Opacity: 1, ShowQuery: true, ShowToolbar: true, FadeResults: true, ResultsOpacity: resultsOpacity, Results: results,
 		}),
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }
 
-func onboardingFinishDemo(props OnboardingProps, step OnboardingStep, width, height float32) woxwidget.Widget {
+func onboardingFinishDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
 	windowWidth := width - 100
 	windowHeight := height - 88
+	settingsTitle := onboardingDemoLabel(props, "demo.finish.settings", "Open Wox Settings")
+	systemTitle := onboardingDemoLabel(props, "demo.finish.system_settings", "Open System Settings")
+	query, resultsOpacity := demoTypedQueryScene("setting", progress, .16, onboardingDemoDuration("finish"))
+	results := []onboardingDemoResult{
+		{Title: settingsTitle, Glyph: "W", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
+		{Title: systemTitle, Glyph: "⚙", GlyphColor: step.Accent},
+	}
+	demoFadeResultGlyphs(results, resultsOpacity)
 	return onboardingDemoDesktop(props, step, width, height, false, []woxwidget.StackChild{
 		onboardingPlaceLauncher(width, onboardingDemoDesktopChromeTop(), onboardingDemoDesktopContentBottom(height), onboardingDemoWindowProps{
-			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "ready", Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
-			Results: []onboardingDemoResult{
-				{Title: props.Labels["demo.finish.title"], Subtitle: props.Labels["finish.body"], Tail: props.Labels["demo.finish.badge"], Glyph: "✓", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
-				{Title: "Open Wox Settings", Subtitle: `C:\Users\qianl\AppData\Roaming\Wox`, Glyph: "W", GlyphColor: step.Accent},
-				{Title: props.Labels["demo.actions"], Subtitle: props.Labels["welcome.body"], Tail: demoActionHotkey(), Glyph: "▶", GlyphColor: step.Accent},
-				{Title: props.Labels["queryHotkeys.body"], Subtitle: props.Labels["trayQueries.body"], Tail: "Tray Queries", Glyph: "⌕", GlyphColor: woxui.Color{R: 167, G: 139, B: 250, A: 255}},
-			},
+			Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: query,
+			Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
+			FadeResults: true, ResultsOpacity: resultsOpacity, Results: results,
 		}),
 	})
+}
+
+// demoTypedQueryScene types the query first, then fades results in after the last character.
+func demoTypedQueryScene(target string, progress, start float32, duration time.Duration) (query string, resultsOpacity float32) {
+	query = demoTypedQuery(target, progress, start, duration)
+	done := demoTypedQueryDoneProgress(target, start, duration)
+	return query, demoEaseOutCubic(demoInterval(progress, done, min(done+.06, 1)))
+}
+
+// demoTypedQueryDoneProgress is the timeline point when every character of target is visible.
+func demoTypedQueryDoneProgress(target string, start float32, duration time.Duration) float32 {
+	if duration <= 0 {
+		return start
+	}
+	return start + float32(len([]rune(target)))*float32(demoQueryTypingInterval)/float32(duration)
+}
+
+// demoFadeResultGlyphs keeps result icons in sync with the post-query result fade.
+func demoFadeResultGlyphs(results []onboardingDemoResult, opacity float32) {
+	for index := range results {
+		results[index].GlyphColor = settingsColorAlpha(results[index].GlyphColor, demoAlpha(opacity))
+	}
 }
 
 // demoTypedQuery reveals every animated query at one shared fast per-character cadence.

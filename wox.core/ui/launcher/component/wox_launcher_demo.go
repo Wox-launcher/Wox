@@ -102,8 +102,17 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	}
 	listHeight := min(visibleResults*rowHeight, max(float32(0), props.Height-resultTop-footerHeight))
 	renderHeight := props.Height
-	if props.Preview == nil && (props.ShowToolbar || !props.ShowQuery) {
-		renderHeight = min(renderHeight, resultTop+listHeight+footerHeight)
+	compactHeight := resultTop + listHeight + footerHeight
+	if props.ShowToolbar || !props.ShowQuery {
+		if props.Preview == nil {
+			renderHeight = min(renderHeight, compactHeight)
+		} else if props.FadeResults {
+			// Preview would otherwise pin the window to the full slot while the
+			// query is still being typed. Grow from the compact query chrome to
+			// the preview pane as results fade in.
+			fade := min(max(float32(0), props.ResultsOpacity), 1)
+			renderHeight = min(renderHeight, compactHeight+(props.Height-compactHeight)*fade)
+		}
 	}
 	resultWidth := props.Width
 	if props.Preview != nil && props.ResultWidth > 0 {
@@ -132,7 +141,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 			Child: demoResultRow(props, result, rowWidth, rowHeight, resultAlpha),
 		})
 	}
-	if props.Preview != nil {
+	if props.Preview != nil && (!props.FadeResults || props.ResultsOpacity > .01) {
 		previewTop := resultTop + 4
 		// Live results keep AppPaddingBottom above the toolbar; the preview pane should too.
 		previewBottom := footerHeight + appPadding

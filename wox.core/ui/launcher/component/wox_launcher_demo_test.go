@@ -232,3 +232,24 @@ func TestWoxLauncherDemoReservesPreviewAboveToolbar(t *testing.T) {
 		t.Fatalf("preview/toolbar gap = %.0f, want 10px app padding above the toolbar", gap)
 	}
 }
+
+func TestWoxLauncherDemoHidesPreviewUntilTypedQueryResultsFadeIn(t *testing.T) {
+	props := LauncherDemoProps{
+		Width: 600, Height: 320, Opacity: 1, ShowQuery: true, ShowToolbar: true, ResultWidth: 350,
+		Preview: woxwidget.Container{Width: 234, Height: 201}, FadeResults: true,
+		Results: []LauncherDemoResult{{Title: "One"}, {Title: "Two"}, {Title: "Three"}},
+	}
+	typing := WoxLauncherDemo(props).(woxwidget.Clip)
+	if typing.Height != 113 {
+		t.Fatalf("typed-query demo height before results = %.0f, want query plus toolbar", typing.Height)
+	}
+	props.ResultsOpacity = 1
+	done := WoxLauncherDemo(props).(woxwidget.Clip)
+	children := done.Child.(woxwidget.Stack).Children
+	if done.Height != 320 {
+		t.Fatalf("typed-query demo height after results = %.0f, want the preview pane", done.Height)
+	}
+	if _, ok := children[len(children)-3].Child.(woxwidget.Clip); !ok {
+		t.Fatal("typed-query demo dropped the preview after results appeared")
+	}
+}

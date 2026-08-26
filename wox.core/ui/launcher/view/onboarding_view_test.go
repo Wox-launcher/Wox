@@ -300,6 +300,65 @@ func TestOnboardingSelectionPreviewKeepsGapBelowTags(t *testing.T) {
 	}
 }
 
+func TestOnboardingTypedQueryDemosShowResultsAfterQuery(t *testing.T) {
+	labels := map[string]string{
+		"demo.finish.settings":        "Open Wox Settings",
+		"demo.finish.system_settings": "Open System Settings",
+	}
+	cases := []struct {
+		name     string
+		query    string
+		start    float32
+		duration time.Duration
+		build    func(progress float32) woxwidget.Clip
+	}{
+		{"welcome", "wpm install everything", .28, onboardingDemoDuration("welcome"), func(progress float32) woxwidget.Clip {
+			return onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, progress).(woxwidget.Clip)
+		}},
+		{"queryShortcuts", "gh repo", .18, onboardingDemoDuration("queryShortcuts"), func(progress float32) woxwidget.Clip {
+			return onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, OnboardingStep{ID: "queryShortcuts"}, 640, 360, progress).(woxwidget.Clip)
+		}},
+		{"wpmInstall", "wpm install", .50, onboardingDemoDuration("wpmInstall"), func(progress float32) woxwidget.Clip {
+			return onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "wpmInstall"}, 640, 360, progress).(woxwidget.Clip)
+		}},
+		{"themeInstall", "theme ocean dark", .08, onboardingDemoDuration("themeInstall"), func(progress float32) woxwidget.Clip {
+			return onboardingThemeInstallDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "themeInstall"}, 640, 360, progress).(woxwidget.Clip)
+		}},
+		{"finish", "setting", .16, onboardingDemoDuration("finish"), func(progress float32) woxwidget.Clip {
+			return onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, OnboardingStep{ID: "finish"}, 640, 360, progress).(woxwidget.Clip)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			done := demoTypedQueryDoneProgress(tc.query, tc.start, tc.duration)
+			mid := (tc.start + done) / 2
+			typing := tc.build(mid)
+			_, _, typingWindow := onboardingPlacedLauncherSlot(typing)
+			if typingWindow.Height != 113 {
+				t.Fatalf("height while typing = %.0f at %.2f, want query plus toolbar before results", typingWindow.Height, mid)
+			}
+			resultsProgress := min(float32(1), done+.08)
+			doneDemo := tc.build(resultsProgress)
+			_, _, doneWindow := onboardingPlacedLauncherSlot(doneDemo)
+			if doneWindow.Height <= typingWindow.Height {
+				t.Fatalf("height after query = %.0f at %.2f, want results to grow the window", doneWindow.Height, resultsProgress)
+			}
+		})
+	}
+}
+
+func TestOnboardingMainHotkeyDemoShowsCompletedQueryWithResults(t *testing.T) {
+	demo := onboardingMainHotkeyDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "mainHotkey"}, 640, 360, .72).(woxwidget.Clip)
+	_, _, window := onboardingPlacedLauncherSlot(demo)
+	query := window.Child.(woxwidget.Stack).Children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if query.Value != "app" {
+		t.Fatalf("main hotkey query = %q, want a completed app query with no typing", query.Value)
+	}
+	if window.Height <= 113 {
+		t.Fatalf("main hotkey height = %.0f, want results already visible when the window opens", window.Height)
+	}
+}
+
 func TestOnboardingDemoQueriesUseSharedFastTypingSpeed(t *testing.T) {
 	const start = float32(.2)
 	for _, duration := range []time.Duration{4400 * time.Millisecond, 5600 * time.Millisecond, 7000 * time.Millisecond} {
@@ -372,8 +431,8 @@ func TestOnboardingWindowsTaskbarUsesCenteredAppsAndSystemTray(t *testing.T) {
 		t.Fatalf("taskbar layout = %#v, want centered apps plus right tray", content.Children)
 	}
 	center := content.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	if len(center.Children) != 7 || content.Children[0].Left <= 0 {
-		t.Fatalf("centered taskbar apps = %d at left %v, want seven centered icons", len(center.Children), content.Children[0].Left)
+	if len(center.Children) != 6 || content.Children[0].Left <= 0 {
+		t.Fatalf("centered taskbar apps = %d at left %v, want six centered icons without the Wox pin", len(center.Children), content.Children[0].Left)
 	}
 	tray := content.Children[1].Child.(woxwidget.Align)
 	if tray.Width != 180 || tray.Horizontal != 1 {
@@ -444,7 +503,7 @@ func TestOnboardingWelcomeDemoFadesConceptCardAsLauncherAppears(t *testing.T) {
 func TestOnboardingLauncherDemosShareCenteredDownwardSlot(t *testing.T) {
 	demos := []woxwidget.Clip{
 		onboardingPermissionsDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
-		onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
+		onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
 		onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
 	}
 	for _, demo := range demos {
@@ -508,7 +567,7 @@ func TestOnboardingDemoHintCardTextIsCentered(t *testing.T) {
 }
 
 func TestOnboardingPluginStoreUsesSharedWindowMetrics(t *testing.T) {
-	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1).(woxwidget.Clip)
+	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1, 1).(woxwidget.Clip)
 	children := window.Child.(woxwidget.Stack).Children
 	query := children[2].Child.(woxwidget.Container)
 	result := children[3].Child.(woxwidget.Container)
@@ -516,6 +575,85 @@ func TestOnboardingPluginStoreUsesSharedWindowMetrics(t *testing.T) {
 
 	if query.Height != 55 || result.Height != 56 || toolbar.Height != 40 {
 		t.Fatalf("plugin store metrics = query %v, result %v, toolbar %v", query.Height, result.Height, toolbar.Height)
+	}
+}
+
+func TestOnboardingPluginStorePreviewFillsToToolbar(t *testing.T) {
+	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1, 1).(woxwidget.Clip)
+	children := window.Child.(woxwidget.Stack).Children
+	preview := children[len(children)-3]
+	toolbar := children[len(children)-2]
+	previewClip := preview.Child.(woxwidget.Clip)
+	detail := previewClip.Child.(woxwidget.Container)
+
+	if detail.Height != previewClip.Height {
+		t.Fatalf("plugin store preview height = %v, want %v to fill the live preview pane", detail.Height, previewClip.Height)
+	}
+	if gap := toolbar.Top - (preview.Top + previewClip.Height); gap != 10 {
+		t.Fatalf("plugin store preview/toolbar gap = %.0f, want 10px app padding above the toolbar", gap)
+	}
+}
+
+func TestOnboardingPluginStoreWindowFitsAboveDesktopChrome(t *testing.T) {
+	const width, height = float32(640), float32(360)
+	demo := onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "wpmInstall"}, width, height, 1).(woxwidget.Clip)
+	slot, frame, window := onboardingPlacedLauncherSlot(demo)
+	areaTop := onboardingDemoHintContentTop()
+	areaHeight := onboardingDemoDesktopContentBottom(height) - areaTop
+
+	if slot.Top != areaTop {
+		t.Fatalf("plugin store slot top = %v, want %v below the hint card", slot.Top, areaTop)
+	}
+	align := slot.Child.(woxwidget.Align)
+	if align.Height != areaHeight {
+		t.Fatalf("plugin store desktop align height = %v, want %v above the desktop chrome", align.Height, areaHeight)
+	}
+	if window.Height > areaHeight || frame.Height > areaHeight {
+		t.Fatalf("plugin store window %v overflows the %v desktop content area", window.Height, areaHeight)
+	}
+	if toolbarTop := window.Height - 40; toolbarTop+40 > areaHeight {
+		t.Fatalf("plugin store toolbar bottom = %v, want at or above the desktop chrome", toolbarTop+40)
+	}
+}
+
+func TestOnboardingFinishDemoTypesSettingToOpenSettings(t *testing.T) {
+	labels := map[string]string{
+		"demo.finish.settings":        "Open Wox Settings",
+		"demo.finish.system_settings": "Open System Settings",
+	}
+	step := OnboardingStep{ID: "finish"}
+	typing := onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, step, 640, 360, .20).(woxwidget.Clip)
+	_, _, typingWindow := onboardingPlacedLauncherSlot(typing)
+	typingQuery := typingWindow.Child.(woxwidget.Stack).Children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if typingQuery.Value == "" || typingQuery.Value == "setting" {
+		t.Fatalf("finish query while typing = %q, want a partial setting", typingQuery.Value)
+	}
+	if typingWindow.Height != 113 {
+		t.Fatalf("finish height while typing = %.0f, want query plus toolbar before results", typingWindow.Height)
+	}
+
+	demo := onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, step, 640, 360, 1).(woxwidget.Clip)
+	_, _, window := onboardingPlacedLauncherSlot(demo)
+	children := window.Child.(woxwidget.Stack).Children
+	query := children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if query.Value != "setting" {
+		t.Fatalf("finish query = %q, want setting", query.Value)
+	}
+	if window.Height <= typingWindow.Height {
+		t.Fatalf("finish height after typing = %.0f, want results to grow the window", window.Height)
+	}
+
+	var titles []string
+	for _, child := range children[3 : len(children)-2] {
+		row := child.Child.(woxwidget.Container)
+		rowLabels := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Clip).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+		if len(rowLabels.Children) != 1 {
+			t.Fatalf("finish result labels = %#v, want title only", rowLabels.Children)
+		}
+		titles = append(titles, rowLabels.Children[0].(woxwidget.Text).Value)
+	}
+	if len(titles) != 2 || titles[0] != "Open Wox Settings" || titles[1] != "Open System Settings" {
+		t.Fatalf("finish titles = %v, want Wox and system settings", titles)
 	}
 }
 

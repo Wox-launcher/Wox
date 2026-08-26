@@ -35,7 +35,7 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 	telemetryControls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "privacy-view-sample", Label: props.ViewSampleLabel, FontSize: 12,
-			Padding: woxwidget.Insets{Right: 8}, Variant: woxcomponent.ButtonText, OnTap: props.OnViewSample, Theme: props.Theme,
+			Variant: woxcomponent.ButtonText, OnTap: props.OnViewSample, Theme: props.Theme,
 		}),
 		woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
 			ID: "privacy-telemetry-switch", Label: props.TelemetryTitle, Value: props.TelemetryEnabled,

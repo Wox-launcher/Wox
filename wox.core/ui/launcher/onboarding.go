@@ -243,16 +243,10 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 		specs = append(specs, onboardingStepSpec{"permissions", "onboarding_permissions_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
 	}
 	specs = append(specs, onboardingStepSpec{"mainHotkey", "onboarding_main_hotkey_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
-	if includeOnboardingSelectionHotkey(runtime.GOOS) {
-		specs = append(specs, onboardingStepSpec{"selectionHotkey", "onboarding_selection_hotkey_title", woxui.Color{R: 96, G: 165, B: 250, A: 255}})
-	}
 	specs = append(specs,
 		onboardingStepSpec{"glance", "onboarding_glance_title", woxui.Color{R: 250, G: 204, B: 21, A: 255}},
 		onboardingStepSpec{"queryHotkeys", "onboarding_query_hotkeys_title", woxui.Color{R: 244, G: 63, B: 94, A: 255}},
 	)
-	if includeOnboardingTrayQueries(runtime.GOOS) {
-		specs = append(specs, onboardingStepSpec{"trayQueries", "onboarding_tray_queries_title", woxui.Color{R: 34, G: 197, B: 94, A: 255}})
-	}
 	specs = append(specs,
 		onboardingStepSpec{"wpmInstall", "onboarding_wpm_install_title", woxui.Color{R: 56, G: 189, B: 248, A: 255}},
 		onboardingStepSpec{"themeInstall", "onboarding_theme_install_title", woxui.Color{R: 232, G: 121, B: 249, A: 255}},
@@ -263,20 +257,6 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 		steps[index] = launcherview.OnboardingStep{ID: spec.id, Title: a.translate("i18n:" + spec.key), Accent: spec.accent}
 	}
 	return steps
-}
-
-// includeOnboardingSelectionHotkey reports whether the selection-query setup
-// step should appear. Linux cannot capture the current selection, so that
-// first-run page is omitted there.
-func includeOnboardingSelectionHotkey(goos string) bool {
-	return goos != "linux"
-}
-
-// includeOnboardingTrayQueries reports whether the tray-query setup step
-// should appear. Linux does not host extra tray query icons yet, so that
-// first-run page is omitted there.
-func includeOnboardingTrayQueries(goos string) bool {
-	return goos != "linux"
 }
 
 func (a *App) onboardingLabels() map[string]string {
@@ -302,7 +282,7 @@ func (a *App) onboardingLabels() map[string]string {
 		"trayQueries.query":             "weather",
 		"wpmInstall.query":              "wpm install",
 		"themeInstall.query":            "theme",
-		"finish.query":                  "ready",
+		"finish.query":                  "setting",
 		"preview.more":                  a.translate("i18n:onboarding_action_panel_title"),
 		"demo.concept.title":            a.translate("i18n:onboarding_query_concept_title"),
 		"demo.concept.trigger":          a.translate("i18n:onboarding_query_concept_trigger_keyword"),
@@ -327,6 +307,8 @@ func (a *App) onboardingLabels() map[string]string {
 		"demo.permission.ready":         a.translate("i18n:onboarding_permission_ready"),
 		"demo.finish.title":             a.translate("i18n:onboarding_finish_card_title"),
 		"demo.finish.badge":             a.translate("i18n:onboarding_finish_badge"),
+		"demo.finish.settings":          a.translate("i18n:plugin_sys_open_wox_settings"),
+		"demo.finish.system_settings":   a.translate("i18n:plugin_sys_open_system_settings"),
 	}
 	for _, step := range []string{"welcome", "permissions", "mainHotkey", "selectionHotkey", "glance", "queryHotkeys", "trayQueries", "wpmInstall", "themeInstall", "finish"} {
 		labels[step+".preview"] = labels[step+".body"]
