@@ -11,8 +11,9 @@ import (
 
 func TestSettingsDataFromContract(t *testing.T) {
 	loaded := contract.GeneralSettings{
-		MainHotkey: "Alt+Space",
-		LangCode:   i18n.LangCodeZhCn,
+		MainHotkey:                   "Alt+Space",
+		MainHotkeyRegistrationFailed: true,
+		LangCode:                     i18n.LangCodeZhCn,
 		QueryHotkeys: []setting.QueryHotkey{{
 			Name: "Docs", Hotkey: "Ctrl+D", Query: "docs", Position: setting.QueryHotkeyPositionTopCenter, MaxResultCount: 8,
 		}},
@@ -30,6 +31,9 @@ func TestSettingsDataFromContract(t *testing.T) {
 	}
 	if data.MainHotkey != "Alt+Space" || data.LangCode != "zh_CN" || data.UIDensity != "compact" {
 		t.Fatalf("basic settings = %+v", data)
+	}
+	if !data.MainHotkeyRegistrationFailed {
+		t.Fatal("main hotkey registration failure was not copied")
 	}
 	if !data.EnablePrivacyMode {
 		t.Fatal("private mode was not copied")

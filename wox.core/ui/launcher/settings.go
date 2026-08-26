@@ -41,6 +41,7 @@ type settingsData struct {
 	EnableAutostart                    bool
 	LogLevel                           string
 	MainHotkey                         string
+	MainHotkeyRegistrationFailed       bool
 	SelectionHotkey                    string
 	IgnoredHotkeyApps                  json.RawMessage
 	QueryHotkeys                       []queryHotkeySetting
@@ -577,6 +578,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		EnableAutostart:                    loaded.EnableAutostart,
 		LogLevel:                           loaded.LogLevel,
 		MainHotkey:                         loaded.MainHotkey,
+		MainHotkeyRegistrationFailed:       loaded.MainHotkeyRegistrationFailed,
 		SelectionHotkey:                    loaded.SelectionHotkey,
 		IgnoredHotkeyApps:                  ignoredHotkeyApps,
 		QueryHotkeys:                       queryHotkeys,

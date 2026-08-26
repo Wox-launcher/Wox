@@ -127,6 +127,7 @@ type AppearanceSettingsServices interface {
 type GeneralSettings struct {
 	EnableAutostart                    bool
 	MainHotkey                         string
+	MainHotkeyRegistrationFailed       bool
 	SelectionHotkey                    string
 	IgnoredHotkeyApps                  []setting.IgnoredHotkeyApp
 	LogLevel                           string

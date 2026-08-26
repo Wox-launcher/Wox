@@ -15,6 +15,7 @@ type formFieldCallbacks struct {
 	labelWidth        float32
 	settingsLayout    bool
 	alignHotkeyRight  bool
+	hotkeyError       string
 	imageScale        float32
 	focus             func(index int)
 	change            func(index, delta int)
@@ -237,6 +238,10 @@ func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbac
 func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := fields.values[definition.Value.Key]
 	presentation := a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
+	if !presentation.Active && callbacks.hotkeyError != "" {
+		presentation.Status = callbacks.hotkeyError
+		presentation.Error = true
+	}
 	if presentation.Active {
 		value = presentation.Value
 	}

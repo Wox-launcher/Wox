@@ -284,7 +284,10 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 		} else {
 			switch state.persistKey {
 			case "MainHotkey":
-				a.generalSettings.Update(func(d *settingsData) { d.MainHotkey = value })
+				a.generalSettings.Update(func(d *settingsData) {
+					d.MainHotkey = value
+					d.MainHotkeyRegistrationFailed = false
+				})
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
 			}

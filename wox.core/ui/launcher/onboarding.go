@@ -156,8 +156,12 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			fields := *snapshot.hotkey.Form
 			fields.active = true
 			fields.focused = index
+			hotkeyError := ""
+			if step.ID == "mainHotkey" && snapshot.general.Data.MainHotkeyRegistrationFailed {
+				hotkeyError = a.translate("i18n:ui_hotkey_conflict_system")
+			}
 			hotkey = a.buildFormHotkey(fields, formFieldCallbacks{
-				idPrefix: "hotkey-settings", labelWidth: 280, settingsLayout: true, alignHotkeyRight: true, imageScale: frame.Scale,
+				idPrefix: "hotkey-settings", labelWidth: 280, settingsLayout: true, alignHotkeyRight: true, hotkeyError: hotkeyError, imageScale: frame.Scale,
 				focus: a.focusOnboardingHotkey, recordKey: a.recordHotkeySettingsField,
 			}, snapshot.palette, index, fields.definitions[index], max(float32(0), frame.Size.Width-launcherview.OnboardingSidebarWidth-112), 62)
 		}

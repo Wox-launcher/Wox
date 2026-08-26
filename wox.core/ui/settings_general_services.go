@@ -33,6 +33,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 	return contract.GeneralSettings{
 		EnableAutostart:                    woxSetting.EnableAutostart.Get(),
 		MainHotkey:                         woxSetting.MainHotkey.Get(),
+		MainHotkeyRegistrationFailed:       GetUIManager().hasMainHotkeyToolbarWarning(),
 		SelectionHotkey:                    woxSetting.SelectionHotkey.Get(),
 		IgnoredHotkeyApps:                  append([]setting.IgnoredHotkeyApp(nil), woxSetting.IgnoredHotkeyApps.Get()...),
 		LogLevel:                           util.NormalizeLogLevel(woxSetting.LogLevel.Get()),

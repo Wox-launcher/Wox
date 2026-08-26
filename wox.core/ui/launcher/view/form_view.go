@@ -226,7 +226,7 @@ type FormHotkeyFieldProps struct {
 // FormHotkeyField builds the shared recorder row for form and built-in settings layouts.
 func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	description := props.Description
-	if props.Recording && props.Status != "" {
+	if (props.Recording || props.Error) && props.Status != "" {
 		description = strings.TrimSpace(description + " " + props.Status)
 	}
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
@@ -272,7 +272,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		controlWidth = max(float32(0), props.Width-settingsLabelWidth-gap-edgeInset*2)
 		controlChildren[0] = woxwidget.StackChild{Right: edgeInset, AnchorRight: true, Child: recorderSlot}
 	}
-	if props.Recording && props.Status != "" && controlWidth > recorderWidth+statusGap {
+	if (props.Recording || props.Error) && props.Status != "" && controlWidth > recorderWidth+statusGap {
 		statusColor := props.Theme.ResultSubtitle
 		if props.Error {
 			statusColor = props.Theme.ErrorText
