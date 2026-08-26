@@ -10,6 +10,14 @@ import (
 	"wox/common"
 )
 
+func TestFilePreviewForUsesLoadingKindBeforeContentArrives(t *testing.T) {
+	app := &App{}
+	content := app.filePreviewFor(filepath.Join(t.TempDir(), "notes.txt"))
+	if content.Kind != "loading" {
+		t.Fatalf("uncached file preview kind = %q, want loading", content.Kind)
+	}
+}
+
 func TestInspectPreviewFileUsesWebViewForMP4(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "clip.mp4")

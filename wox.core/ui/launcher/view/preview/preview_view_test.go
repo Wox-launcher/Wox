@@ -8,6 +8,17 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestPreviewLoadingCentersSharedIndicator(t *testing.T) {
+	color := woxui.Color{R: 12, G: 18, B: 24, A: 255}
+	loading := PreviewLoading(320, 180, color).(woxwidget.Align)
+	if loading.Width != 320 || loading.Height != 180 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
+		t.Fatalf("preview loading align = %#v, want a centered placeholder", loading)
+	}
+	if indicator := loading.Child.(woxwidget.LoopAnimation); indicator.Key != "wox-loading-indicator" {
+		t.Fatalf("preview loading child = %#v, want WoxLoadingIndicator", indicator)
+	}
+}
+
 func TestPreviewImageOmitsOverlayGestureWithoutOnTap(t *testing.T) {
 	view := builtPreviewImage(PreviewImageProps{Width: 200, Height: 100, Image: &woxui.Image{Width: 10, Height: 20}})
 	if view.OnTap != nil {

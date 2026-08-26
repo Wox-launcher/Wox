@@ -95,6 +95,8 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return a.buildPreviewImage(file.Image, file.Image, palette, width, height)
 		case "error":
 			return content(file.Text, errorText)
+		case "loading":
+			return previewview.PreviewLoading(width, height, palette.componentTheme().PreviewText)
 		case "markdown":
 			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
 		case "webview":
@@ -313,12 +315,11 @@ func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, 
 
 func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
 	image := a.imageForSize(source, previewImageRequestSize(width, height))
-	message := "Loading image preview…"
-	color := palette.resultSubtitle
+	theme := palette.componentTheme()
+	message := ""
 	if image == nil {
 		if imageErr := a.imageErrorFor(source); imageErr != "" {
 			message = "Unable to decode image preview:\n" + imageErr
-			color = palette.componentTheme().ErrorText
 		}
 	}
 	var onTap func()
@@ -326,7 +327,7 @@ func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, wid
 		onTap = func() { a.openPreviewImageOverlay(overlay) }
 	}
 	return previewview.PreviewImage(previewview.PreviewImageProps{
-		ID: imageKey(source), Width: width, Height: height, Image: image, Message: message, MessageColor: color, OnTap: onTap,
+		ID: imageKey(source), Width: width, Height: height, Image: image, Message: message, MessageColor: theme.ErrorText, LoadingColor: theme.PreviewText, OnTap: onTap,
 	})
 }
 

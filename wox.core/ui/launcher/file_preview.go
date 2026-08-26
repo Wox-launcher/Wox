@@ -50,7 +50,7 @@ func (a *App) filePreviewFor(path string) filePreviewContent {
 	if content, ok := a.filePreviews[path]; ok {
 		return content
 	}
-	return filePreviewContent{Kind: "info", Text: "Loading file preview…"}
+	return filePreviewContent{Kind: "loading"}
 }
 
 // prepareFilePreview starts local file inspection once before the next render.

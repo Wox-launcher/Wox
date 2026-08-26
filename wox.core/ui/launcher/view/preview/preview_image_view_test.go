@@ -83,6 +83,27 @@ func TestPreviewImageZoomedGestureEnablesPan(t *testing.T) {
 	}
 }
 
+func TestPreviewImageShowsCenteredLoadingIndicator(t *testing.T) {
+	color := woxui.Color{R: 10, G: 20, B: 30, A: 255}
+	loading := PreviewImage(PreviewImageProps{Width: 240, Height: 180, LoadingColor: color}).(woxwidget.Align)
+	if loading.Width != 240 || loading.Height != 180 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
+		t.Fatalf("image loading align = %#v, want a centered preview placeholder", loading)
+	}
+	if indicator := loading.Child.(woxwidget.LoopAnimation); indicator.Key != "wox-loading-indicator" {
+		t.Fatalf("image loading child = %#v, want WoxLoadingIndicator", indicator)
+	}
+}
+
+func TestPreviewImageShowsErrorTextInsteadOfLoadingIndicator(t *testing.T) {
+	view := PreviewImage(PreviewImageProps{
+		Width: 240, Height: 180, Message: "Unable to decode image preview:\nbad data", MessageColor: woxui.Color{R: 244, G: 67, B: 54, A: 255},
+	}).(woxwidget.Container)
+	block := view.Child.(woxwidget.TextBlock)
+	if block.Value != "Unable to decode image preview:\nbad data" {
+		t.Fatalf("image error = %q, want the decode failure copy", block.Value)
+	}
+}
+
 func TestPreviewImageFitGestureDoesNotPan(t *testing.T) {
 	props := PreviewImageProps{Width: 400, Height: 300, Image: &woxui.Image{Width: 40, Height: 800}}
 	gesture := builtPreviewImage(props)

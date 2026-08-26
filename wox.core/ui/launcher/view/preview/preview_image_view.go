@@ -2,6 +2,7 @@ package preview
 
 import (
 	"math"
+	"strings"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -25,6 +26,7 @@ type PreviewImageProps struct {
 	Image        *woxui.Image
 	Message      string
 	MessageColor woxui.Color
+	LoadingColor woxui.Color
 	OnTap        func()
 }
 
@@ -47,10 +49,13 @@ type previewImageFrame struct {
 // PreviewImage builds a centered image preview that can zoom with the scroll wheel.
 func PreviewImage(props PreviewImageProps) woxwidget.Widget {
 	if props.Image == nil {
-		return woxwidget.Container{
-			Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(24),
-			Child: woxwidget.TextBlock{Value: props.Message, Width: max(float32(0), props.Width-48), Height: max(float32(0), props.Height-48), Style: woxui.TextStyle{Size: 13}, Color: props.MessageColor},
+		if message := strings.TrimSpace(props.Message); message != "" {
+			return woxwidget.Container{
+				Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(24),
+				Child: woxwidget.TextBlock{Value: message, Width: max(float32(0), props.Width-48), Height: max(float32(0), props.Height-48), Style: woxui.TextStyle{Size: 13}, Color: props.MessageColor},
+			}
 		}
+		return PreviewLoading(props.Width, props.Height, props.LoadingColor)
 	}
 	key := props.ID
 	if key == "" {

@@ -67,7 +67,7 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		return previewview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height)
 	}
 	if !active {
-		return previewview.WebViewPreviewMessage("Loading WebView preview…", theme.PreviewText, theme, width, height)
+		return previewview.WebViewPreviewLoading(theme, width, height)
 	}
 	content := data.content()
 	content.CornerRadius = previewview.WebViewPreviewCornerRadius

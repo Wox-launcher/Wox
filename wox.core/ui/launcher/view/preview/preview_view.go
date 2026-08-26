@@ -126,3 +126,11 @@ func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {
 	color.A = uint8(opacity*255 + 0.5)
 	return color
 }
+
+// PreviewLoading centers the shared loading ring in a deferred preview region.
+func PreviewLoading(width, height float32, color woxui.Color) woxwidget.Widget {
+	return woxwidget.Align{
+		Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5,
+		Child: woxcomponent.WoxLoadingIndicator(20, color),
+	}
+}

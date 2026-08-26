@@ -3,9 +3,25 @@ package preview
 import (
 	"testing"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+func TestWebViewPreviewLoadingCentersSharedIndicator(t *testing.T) {
+	theme := woxcomponent.Theme{QueryBackground: woxui.Color{R: 20, G: 24, B: 28, A: 255}, PreviewText: woxui.Color{R: 220, G: 230, B: 240, A: 255}}
+	surface := WebViewPreviewLoading(theme, 320, 180).(woxwidget.Container)
+	if surface.Width != 320 || surface.Height != 180 || surface.Color != theme.QueryBackground {
+		t.Fatalf("WebView loading surface = %#v, want the deferred preview shell", surface)
+	}
+	loading := surface.Child.(woxwidget.Align)
+	if loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
+		t.Fatalf("WebView loading align = %#v, want a centered placeholder", loading)
+	}
+	if indicator := loading.Child.(woxwidget.LoopAnimation); indicator.Key != "wox-loading-indicator" {
+		t.Fatalf("WebView loading child = %#v, want WoxLoadingIndicator", indicator)
+	}
+}
 
 func TestWebViewPreviewCornerRadiusStaysConcentricWithPreviewShell(t *testing.T) {
 	if WebViewPreviewCornerRadius != previewSurfaceRadius-previewSurfaceBorderWidth {
