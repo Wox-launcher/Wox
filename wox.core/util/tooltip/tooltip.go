@@ -61,6 +61,10 @@ type Options struct {
 	OwnerY        float64
 	OwnerWidth    float64
 	OwnerHeight   float64
+	// IgnoreOwnerLeave skips leftover-owner dismiss. Automation hovers do not
+	// move the OS pointer onto the trigger, so an idle cursor resting on the
+	// owner would otherwise flash-close the overlay after the grace period.
+	IgnoreOwnerLeave bool
 }
 
 // Show renders a native tooltip window that is independent of the UI
@@ -116,9 +120,9 @@ func Close(name string) {
 //
 // After the dwell, the pointer may already be on another control in the same
 // owner window. Waiting forever for a later enter would leave that leftover
-// tooltip stuck. Automation stays safe because it never moves the OS cursor
-// onto the owner, so overOwner stays false.
-func tooltipTrackingClose(seenInside bool, inside bool, overOwner bool, positionOK bool, elapsed time.Duration) (shouldClose bool, nowSeenInside bool) {
+// tooltip stuck. IgnoreOwnerLeave keeps a synthetic hover visible when the OS
+// cursor never entered the trigger but still rests on the owner.
+func tooltipTrackingClose(seenInside bool, inside bool, overOwner bool, positionOK bool, elapsed time.Duration, ignoreOwnerLeave bool) (shouldClose bool, nowSeenInside bool) {
 	if !positionOK {
 		return false, seenInside
 	}
@@ -128,7 +132,7 @@ func tooltipTrackingClose(seenInside bool, inside bool, overOwner bool, position
 	if seenInside {
 		return true, true
 	}
-	if overOwner && elapsed >= tooltipOwnerLeaveGrace {
+	if overOwner && !ignoreOwnerLeave && elapsed >= tooltipOwnerLeaveGrace {
 		return true, seenInside
 	}
 	return false, seenInside
@@ -137,7 +141,7 @@ func tooltipTrackingClose(seenInside bool, inside bool, overOwner bool, position
 // evaluateVisibility samples the OS cursor once and applies tooltipTrackingClose.
 func evaluateVisibility(opts Options, seenInside bool, elapsed time.Duration) (shouldClose bool, nowSeenInside bool) {
 	inside, overOwner, ok := cursorTooltipRelation(opts)
-	return tooltipTrackingClose(seenInside, inside, overOwner, ok, elapsed)
+	return tooltipTrackingClose(seenInside, inside, overOwner, ok, elapsed, opts.IgnoreOwnerLeave)
 }
 
 func cursorTooltipRelation(opts Options) (inside bool, overOwner bool, ok bool) {
@@ -160,21 +164,22 @@ func rectContains(cursorX float64, cursorY float64, left float64, top float64, w
 
 func (opts Options) withBounds(x float64, y float64, width float64, height float64) Options {
 	return Options{
-		Name:          opts.Name,
-		Text:          opts.Text,
-		Side:          opts.Side,
-		X:             x,
-		Y:             y,
-		TooltipWidth:  width,
-		TooltipHeight: height,
-		AnchorX:       opts.AnchorX,
-		AnchorY:       opts.AnchorY,
-		AnchorWidth:   opts.AnchorWidth,
-		AnchorHeight:  opts.AnchorHeight,
-		OwnerX:        opts.OwnerX,
-		OwnerY:        opts.OwnerY,
-		OwnerWidth:    opts.OwnerWidth,
-		OwnerHeight:   opts.OwnerHeight,
+		Name:             opts.Name,
+		Text:             opts.Text,
+		Side:             opts.Side,
+		X:                x,
+		Y:                y,
+		TooltipWidth:     width,
+		TooltipHeight:    height,
+		AnchorX:          opts.AnchorX,
+		AnchorY:          opts.AnchorY,
+		AnchorWidth:      opts.AnchorWidth,
+		AnchorHeight:     opts.AnchorHeight,
+		OwnerX:           opts.OwnerX,
+		OwnerY:           opts.OwnerY,
+		OwnerWidth:       opts.OwnerWidth,
+		OwnerHeight:      opts.OwnerHeight,
+		IgnoreOwnerLeave: opts.IgnoreOwnerLeave,
 	}
 }
 

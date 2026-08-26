@@ -44,9 +44,11 @@ const (
 	notesSearchSectionTextHeight = float32(16)
 	notesSearchTextHeight        = float32(18)
 	notesSearchListGap           = float32(4)
-	notesSearchFieldHeight       = float32(36)
-	notesSearchOverlayPadding    = float32(12)
-	notesSearchOverlayGap        = float32(8)
+	// WoxTextField's default chrome is 40 logical pixels; a shorter slot overflows the overlay flex.
+	notesSearchFieldHeight    = float32(40)
+	notesSearchOverlayPadding = float32(12)
+	notesSearchOverlayGap     = float32(8)
+	notesSearchOverlayTop     = float32(44)
 )
 
 var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(common.PluginNotesIcon), nil, 256)
@@ -917,7 +919,8 @@ func (c *notesWindowController) buildStatus(width float32, theme woxcomponent.Th
 
 func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
 	width := max(float32(260), size.Width-24)
-	height := min(float32(300), size.Height-40)
+	// Keep the panel below the title-bar inset so the overlay flex stays inside the window.
+	height := min(float32(300), max(float32(0), size.Height-notesSearchOverlayTop))
 	items := c.searchItems()
 	c.clampSearchIndex()
 	rows := make([]woxwidget.Widget, 0, len(items)+6)
@@ -973,7 +976,7 @@ func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcom
 	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(notesSearchOverlayPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchOverlayGap, Children: []woxwidget.Widget{
 		search, results,
 	}}}
-	return c.overlayScrim(size, panel, 12, 44, func() { c.searchOpen = false; c.invalidate() })
+	return c.overlayScrim(size, panel, 12, notesSearchOverlayTop, func() { c.searchOpen = false; c.invalidate() })
 }
 
 func (c *notesWindowController) notesListRow(summary common.NoteSummary, width float32, theme woxcomponent.Theme, selected bool) woxwidget.Widget {
@@ -1122,6 +1125,8 @@ func (c *notesWindowController) showNoteInCurrentWindow(record common.NoteRecord
 		return nil
 	}
 	if existing := c.app.noteWindows[record.ID]; existing != nil && existing != c && existing.managed != nil && existing.managed.Lifecycle() != woxui.WindowLifecycleClosed {
+		c.searchOpen = false
+		c.invalidate()
 		return existing.open(common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 	}
 	previousID := c.record.ID

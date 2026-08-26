@@ -10,6 +10,7 @@ import (
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	"wox/util"
+	"wox/util/mouse"
 )
 
 // nativeHoverTooltipDelay is the shared dwell before hover help or a demo overlay appears.
@@ -27,6 +28,34 @@ func nativeHoverTooltipExplicitDismiss(inside bool, text string, anchor woxui.Re
 
 func nativeHoverTooltipArmed(inside bool, text string, anchor woxui.Rect) bool {
 	return inside && strings.TrimSpace(text) != "" && anchor.Width > 0 && anchor.Height > 0
+}
+
+// nativeHoverTooltipOSCursorOnAnchor reports whether the real OS pointer is on
+// the trigger. Sample at hover-arm time: leftover user hovers have already
+// left the anchor by show time, and must still use leftover-owner dismiss.
+func nativeHoverTooltipOSCursorOnAnchor(windowFn func() *woxui.Window, anchor woxui.Rect) bool {
+	if windowFn == nil {
+		return false
+	}
+	window := windowFn()
+	if window == nil {
+		return false
+	}
+	windowBounds, err := window.Bounds()
+	if err != nil {
+		return false
+	}
+	point, ok := mouse.CurrentPosition()
+	if !ok {
+		return false
+	}
+	return nativeHoverTooltipPointOnAnchor(point.X, point.Y, windowBounds, anchor)
+}
+
+func nativeHoverTooltipPointOnAnchor(x, y float64, windowBounds woxui.Rect, anchor woxui.Rect) bool {
+	left := float64(windowBounds.X + anchor.X)
+	top := float64(windowBounds.Y + anchor.Y)
+	return x >= left && x < left+float64(anchor.Width) && y >= top && y < top+float64(anchor.Height)
 }
 
 // nativeHoverTooltipIdentity remembers the last shown trigger for one overlay name.
@@ -69,11 +98,12 @@ func (a *App) setNativeHoverTooltip(revision *atomic.Uint64, name, job string, i
 		if a.nativeHoverTooltipNeedsReplace(name, text, anchor) {
 			a.hideNativeHoverTooltip(name, job)
 		}
+		ignoreOwnerLeave := !nativeHoverTooltipOSCursorOnAnchor(windowFn, anchor)
 		util.Go(a.lifecycleCtx, job, func() {
 			if !a.waitHoverTooltipDelay(revision, revisionID) {
 				return
 			}
-			a.showNativeHoverTooltip(revision, revisionID, name, text, anchor, side, windowFn)
+			a.showNativeHoverTooltip(revision, revisionID, name, text, anchor, side, windowFn, ignoreOwnerLeave)
 		})
 		return
 	}
@@ -107,7 +137,7 @@ func (a *App) hideNativeHoverTooltip(name, job string) {
 	})
 }
 
-func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64, name, text string, anchor woxui.Rect, side string, windowFn func() *woxui.Window) {
+func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64, name, text string, anchor woxui.Rect, side string, windowFn func() *woxui.Window, ignoreOwnerLeave bool) {
 	a.tooltipMu.Lock()
 	defer a.tooltipMu.Unlock()
 	if revisionID != revision.Load() {
@@ -130,6 +160,7 @@ func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64,
 		AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
 		OwnerX: float64(windowBounds.X), OwnerY: float64(windowBounds.Y),
 		OwnerWidth: float64(windowBounds.Width), OwnerHeight: float64(windowBounds.Height),
+		IgnoreOwnerLeave: ignoreOwnerLeave,
 	}); err != nil {
 		log.Printf("show %s tooltip: %v", name, err)
 		return

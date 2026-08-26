@@ -109,6 +109,22 @@ func stopMainHotkeyRecording(t *testing.T, ctx context.Context, client *automati
 	}
 }
 
+// ensureMainHotkey records a dedicated chord when the shared process still has
+// another main hotkey. Platform defaults such as alt+space are often occupied
+// on developer machines, and earlier recording cases leave ctrl+f12 behind.
+func ensureMainHotkey(t *testing.T, ctx context.Context, client *automationdriver.Client, hotkey string) {
+	t.Helper()
+	current := openMainHotkeySettings(t, ctx, client)
+	t.Cleanup(func() { restoreMainHotkey(t, client, current) })
+	if current == hotkey {
+		return
+	}
+	recorderDescription := startMainHotkeyRecording(t, ctx, client)
+	sendNativeHotkey(t, hotkey)
+	waitForMainHotkeyValue(t, ctx, client, hotkey)
+	stopMainHotkeyRecording(t, ctx, client, recorderDescription)
+}
+
 func restoreMainHotkey(t *testing.T, client *automationdriver.Client, previous string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)

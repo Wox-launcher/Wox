@@ -21,6 +21,9 @@ type TooltipOptions struct {
 	OwnerY       float64
 	OwnerWidth   float64
 	OwnerHeight  float64
+	// IgnoreOwnerLeave keeps a synthetic hover visible when the OS cursor is
+	// idle on the owner window but never entered the trigger.
+	IgnoreOwnerLeave bool
 }
 
 // InteractionServices owns launcher actions that are not part of query execution.

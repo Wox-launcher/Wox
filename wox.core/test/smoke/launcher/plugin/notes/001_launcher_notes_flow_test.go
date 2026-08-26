@@ -25,7 +25,7 @@ func Test001LauncherNotesFlow(t *testing.T) {
 
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
-		snapshot := smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, "notes new ")
+		snapshot := smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, "note new ")
 		resultID := selectedResultID(t, snapshot)
 		if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("create note from Launcher: %v", err)
@@ -92,7 +92,14 @@ func Test001LauncherNotesFlow(t *testing.T) {
 		if err := client.Perform(ctx, rowID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("restore deleted note: %v", err)
 		}
-		snapshot = waitForEditorValue(t, ctx, client, projected)
+		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			editor, found := automationdriver.Find(snapshot, "notes.editor")
+			_, searchOpen := automationdriver.Find(snapshot, "notes.search")
+			return found && editor.Value == projected && !searchOpen
+		})
+		if err != nil {
+			t.Fatalf("wait for restored Notes editor: %v", err)
+		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})
 }
@@ -122,12 +129,13 @@ func assertEditorSelection(t *testing.T, snapshot woxwidget.AutomationSnapshot, 
 
 func selectedResultID(t *testing.T, snapshot woxwidget.AutomationSnapshot) string {
 	t.Helper()
+	const notesNewID = "launcher.result.notes:new"
 	for _, node := range snapshot.Tree.Nodes {
-		if strings.HasPrefix(node.AutomationID, "launcher.result.") && node.Selected {
+		if node.AutomationID == notesNewID && node.Selected {
 			return node.AutomationID
 		}
 	}
-	t.Fatal("Notes result is not selected")
+	t.Fatal("Notes new result is not selected")
 	return ""
 }
 

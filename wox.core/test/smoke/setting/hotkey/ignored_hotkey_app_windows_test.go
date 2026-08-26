@@ -22,7 +22,7 @@ func ignoredHotkeyAppTarget(t *testing.T) (string, string) {
 
 func ignoredHotkeyAppHotkey(t *testing.T) string {
 	t.Helper()
-	return "alt+space"
+	return "ctrl+f12"
 }
 
 func sendIgnoredAppNativeHotkey(t *testing.T, hotkey string) {

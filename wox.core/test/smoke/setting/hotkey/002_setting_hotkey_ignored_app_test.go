@@ -18,7 +18,7 @@ import (
 const ignoredHotkeyAppsFieldID = "hotkey-settings-field-2"
 
 // Test002SettingHotkeyIgnoredApp verifies that a configured foreground system editor suppresses the registered main hotkey.
-// Flow: select the platform editor in Ignore Hotkey Apps -> focus a new editor process -> press the registered Ctrl+F12 hotkey.
+// Flow: bind a dedicated main hotkey -> select the platform editor in Ignore Hotkey Apps -> focus a new editor process -> press that hotkey.
 // Evidence: Wox logs the matched application identity and the real launcher remains hidden.
 func Test002SettingHotkeyIgnoredApp(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
@@ -27,9 +27,7 @@ func Test002SettingHotkeyIgnoredApp(t *testing.T) {
 		hotkey := ignoredHotkeyAppHotkey(t)
 		logPath := filepath.Join(os.Getenv(automationdriver.SharedDataDirectoryEnvironment), "log", "wox.log")
 		smoke.WaitForApplicationCatalog(t, ctx, logPath)
-		if current := openMainHotkeySettings(t, ctx, client); current != hotkey {
-			t.Fatalf("isolated main hotkey = %q, want platform default %q", current, hotkey)
-		}
+		ensureMainHotkey(t, ctx, client, hotkey)
 		addedRow := addIgnoredHotkeyApp(t, ctx, client, appQuery)
 		t.Cleanup(func() { removeIgnoredHotkeyApp(t, client, addedRow) })
 

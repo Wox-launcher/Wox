@@ -56,6 +56,23 @@ func TestWaitHoverTooltipDelayRespectsCancellation(t *testing.T) {
 	}
 }
 
+func TestNativeHoverTooltipPointOnAnchor(t *testing.T) {
+	window := woxui.Rect{X: 100, Y: 200, Width: 400, Height: 300}
+	anchor := woxui.Rect{X: 10, Y: 20, Width: 80, Height: 26}
+	if !nativeHoverTooltipPointOnAnchor(110, 220, window, anchor) {
+		t.Fatal("cursor on the trigger must count as an OS hover")
+	}
+	if nativeHoverTooltipPointOnAnchor(150, 250, window, anchor) {
+		t.Fatal("cursor idle elsewhere on the owner must not count as an OS hover")
+	}
+	if nativeHoverTooltipOSCursorOnAnchor(nil, anchor) {
+		t.Fatal("a missing window must not count as an OS hover")
+	}
+	if nativeHoverTooltipOSCursorOnAnchor(func() *woxui.Window { return nil }, anchor) {
+		t.Fatal("a nil window must not count as an OS hover")
+	}
+}
+
 func TestWaitHoverTooltipDelayCompletesForCurrentRevision(t *testing.T) {
 	app := &App{lifecycleCtx: t.Context()}
 	var revision atomic.Uint64

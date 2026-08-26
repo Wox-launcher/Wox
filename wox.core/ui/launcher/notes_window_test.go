@@ -908,3 +908,26 @@ func (s *notesEditorHostServices) SetPointerCursor(woxui.PointerCursor) error { 
 func (s *notesEditorHostServices) UpdateAccessibility(woxui.AccessibilityTree, woxui.AccessibilityActionHandler) error {
 	return nil
 }
+
+func TestNotesSearchOverlayDoesNotOverflow(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	controller.summaries = []common.NoteSummary{{ID: "note", Title: "Wox Notes Smoke", UpdatedAt: 1, DeletedAt: 1}}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return controller.buildSearchOverlay(woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight}, defaultPalette().componentTheme())
+	})
+	host.AttachServices(&notesEditorHostServices{})
+	if err := host.SetRepaintDebugMode(woxwidget.RepaintDebugVerify); err != nil {
+		t.Fatal(err)
+	}
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{
+		Size:      woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight},
+		PixelSize: woxui.PixelSize{Width: int(notesDefaultWidth), Height: int(notesDefaultHeight)},
+		Scale:     1,
+	})
+	if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) != 0 {
+		t.Fatalf("search overlay diagnostics = %v, want none", diagnostics)
+	}
+}

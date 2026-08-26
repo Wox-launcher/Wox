@@ -51,16 +51,45 @@ func Test005SettingGeneralHideOnLostFocusTooltip(t *testing.T) {
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 
-		if _, err := client.MovePointerTo(ctx, "preview-tag-0"); err != nil {
-			t.Fatalf("hover preview tag: %v", err)
-		}
-		if _, err := client.WaitForWindowState(ctx, previewTagTooltipOverlay, func(state automationdriver.WindowState) bool {
-			return state.Exists && state.Visible && state.Lifecycle == "visible"
-		}); err != nil {
-			t.Fatalf("wait for native preview tag tooltip: %v", err)
-		}
+		waitForPreviewTagTooltip(t, ctx, client)
 		assertLauncherStaysVisibleAfterTooltip(t, ctx, client)
 	})
+}
+
+// waitForPreviewTagTooltip re-arms the synthetic hover until the overlay stays visible.
+// A query rebuild can cancel the 300ms dwell, so one MovePointerTo is not enough.
+func waitForPreviewTagTooltip(t *testing.T, ctx context.Context, client *automationdriver.Client) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, automationdriver.ActionTimeout)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	rearmAt := time.Time{}
+	var last automationdriver.WindowState
+	for {
+		if rearmAt.IsZero() || !time.Now().Before(rearmAt) {
+			if _, err := client.MovePointerTo(ctx, "preview-tag-0"); err != nil {
+				t.Fatalf("hover preview tag: %v", err)
+			}
+			rearmAt = time.Now().Add(400 * time.Millisecond)
+		}
+		state, err := client.WindowState(ctx, previewTagTooltipOverlay)
+		if err != nil {
+			if ctx.Err() != nil {
+				t.Fatalf("wait for native preview tag tooltip: %v; last state: %+v", err, last)
+			}
+		} else {
+			last = state
+			if state.Exists && state.Visible && state.Lifecycle == "visible" {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for native preview tag tooltip: %v; last state: %+v", ctx.Err(), last)
+		case <-ticker.C:
+		}
+	}
 }
 
 // assertLauncherStaysVisibleAfterTooltip watches the async hide-on-lost-focus path after a tooltip has already appeared.

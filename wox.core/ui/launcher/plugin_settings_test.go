@@ -147,7 +147,7 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	grid := table.Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful)
 	state := grid.CreateState()
 	state.InitState(woxwidget.StateContext{}, grid.Widget)
-	rendered := state.Build(woxwidget.StateContext{}, grid.Widget).(woxwidget.Container).Child.(woxwidget.Flex)
+	rendered := state.Build(woxwidget.StateContext{}, grid.Widget).(woxwidget.Stack).Children[0].Child.(woxwidget.Flex)
 	header := rendered.Children[0].(woxwidget.Flex).Children[0].(woxwidget.ScrollView).Child.(woxwidget.Flex)
 	if header.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock).Value != "Name" {
 		t.Fatal("command table should expose Flutter's localized name column")
