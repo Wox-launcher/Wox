@@ -778,10 +778,12 @@ func (state *recordingToolbarState) drawPreview(displayList *DisplayList, select
 func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame FrameInfo) {
 	uiScale := max(float32(1), state.toolbarChromeScale())
 	var source *Image
+	var labelWindow *Window
 	if state.editor != nil {
 		state.editor.mu.Lock()
 		state.editor.uiScale = uiScale
 		source = state.editor.image
+		labelWindow = state.editor.window
 		state.editor.mu.Unlock()
 	}
 	state.mu.Lock()
@@ -813,7 +815,7 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	if toolbarBounds.Width > 0 {
 		localToolbar = Rect{X: toolbarBounds.X - origin.X, Y: toolbarBounds.Y - origin.Y, Width: toolbarBounds.Width, Height: toolbarBounds.Height}
 	}
-	drawScreenshotEditorSizeLabel(displayList, label, localSelection, localToolbar, frame.Size, uiScale)
+	drawScreenshotEditorSizeLabel(displayList, labelWindow, label, localSelection, localToolbar, frame.Size, uiScale)
 	// After recording starts the toolbar draws this hint. Drawing it again here
 	// stacked a second tooltip when Linux kept the border window visible.
 	if !collapsed && status == recordingStateReady {

@@ -146,6 +146,8 @@ Do not wrap every Settings group in a card. Use section spacing and a divider fo
 
 Verify contrast in light and dark themes. Status must never depend on hue, alpha, or animation alone.
 
+Read-only Markdown links use the shared document blue accent and an underline, with a native hand cursor on hover. Keep keyboard focus rings on the theme's `Cursor` color; the caret color must not determine link text color.
+
 ## Typography
 
 Use the configured application font and shared constants in `launcher/component/typography.go`.

@@ -79,6 +79,7 @@ func (host *screenshotEditorWindowHost) textInput(event TextInputEvent) {
 
 func (host *screenshotEditorWindowHost) closed() {
 	if state := host.current(); state != nil {
+		state.closeSizeDialog(false)
 		if recording := state.activeRecordingUI(); recording != nil {
 			recording.closed()
 		} else {

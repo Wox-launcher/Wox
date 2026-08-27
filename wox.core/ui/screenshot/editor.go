@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 	woxsvg "wox/util/svg"
 )
@@ -143,6 +144,9 @@ type screenshotEditorOverlayState struct {
 	workspaceSize           Size
 	start                   Point
 	selection               Rect
+	sizeLabelRect           Rect
+	sizeDialog              *screenshotSizeDialog
+	sizeDialogOptions       ScreenshotOptions
 	confirmRect             Rect
 	cancelRect              Rect
 	saveRect                Rect
@@ -269,6 +273,7 @@ func (capture screenshotDesktopCapture) close() {
 func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, platform screenshotEditorPlatform) *screenshotEditorOverlayState {
 	state := &screenshotEditorOverlayState{
 		image:               uiImage,
+		sizeDialogOptions:   options,
 		frameSize:           platform.frameSize,
 		autoConfirm:         options.AutoConfirm,
 		hideTools:           options.HideAnnotationToolbar,
@@ -337,6 +342,9 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		return ScreenshotResult{}, err
 	}
 	defer host.end(state)
+	defer func() {
+		_ = Call(func() { state.closeSizeDialog(false) })
+	}()
 	var openErr error
 	err = Call(func() {
 		if managed == nil {
@@ -541,7 +549,9 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		state.cancelRect = cancel
 		state.saveRect = save
 		state.toolbarRect = toolbar
+		state.sizeLabelRect = Rect{}
 		state.mu.Unlock()
+		state.publishSizeLabel(Rect{}, "")
 		drawScreenshotScrollingControls(displayList, frame.Size, preview, uiScale)
 		return
 	}
@@ -635,6 +645,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.cursorRect = Rect{}
 	state.recordRect = Rect{}
 	state.toolbarRect = Rect{}
+	state.sizeLabelRect = Rect{}
 	state.toolRects = [screenshotEditorToolCount]Rect{}
 	state.editBarRect = Rect{}
 	state.editColorRects = [6]Rect{}
@@ -648,6 +659,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	displayList.DrawImage(state.image, Rect{Width: frame.Size.Width, Height: frame.Size.Height})
 	dim := Color{A: 119}
 	if !hasSelection || selection.Width <= 0 || selection.Height <= 0 {
+		state.publishSizeLabel(Rect{}, "")
 		displayList.FillRect(Rect{Width: frame.Size.Width, Height: frame.Size.Height}, dim)
 		if pointerInside && !colorInspectorDismissed {
 			drawScreenshotEditorColorInspector(displayList, state.image, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
@@ -695,9 +707,24 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		}
 		toolbarRect = screenshotEditorToolbarPlacement(selection, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
 	}
-	drawScreenshotEditorSizeLabel(displayList, fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height), selection, toolbarRect, frame.Size, uiScale)
+	label := fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height)
+	if state.image != nil {
+		if pixels, err := screenshotEditorPixelSelection(image.Rect(0, 0, state.image.Width, state.image.Height), selection, frame.Size); err == nil {
+			label = fmt.Sprintf("%d x %d", pixels.Dx(), pixels.Dy())
+		}
+	}
+	drawScreenshotEditorSizeLabel(displayList, state.window, label, selection, toolbarRect, frame.Size, uiScale)
 	if dragging || state.autoConfirm {
+		state.publishSizeLabel(Rect{}, "")
 		return
+	}
+	chip := screenshotEditorSizeLabelRect(label, selection, toolbarRect, frame.Size, uiScale)
+	state.mu.Lock()
+	state.sizeLabelRect = chip
+	state.mu.Unlock()
+	state.publishSizeLabel(chip, label)
+	if pointerInside && screenshotEditorRectContains(chip, pointerPosition) {
+		displayList.StrokeRoundedRect(chip, scaled(10), scaled(1), green)
 	}
 	toolbarLeft := toolbarRect.X
 	toolbarTop := toolbarRect.Y
@@ -808,6 +835,9 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	if pointerInside && !colorInspectorDismissed {
 		drawScreenshotEditorColorInspector(displayList, state.image, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
+	}
+	if pointerInside && screenshotEditorRectContains(chip, pointerPosition) && state.activeSizeDialog() == nil {
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, chip, selection, state.sizeDialogOptions.SizeLabels.Title+" (S)", uiScale)
 	}
 }
 
@@ -1233,11 +1263,16 @@ func screenshotEditorSizeLabelRect(label string, selection, toolbar Rect, frame 
 }
 
 // drawScreenshotEditorSizeLabel places a DPI-scaled dimension chip beside the selection.
-func drawScreenshotEditorSizeLabel(displayList *DisplayList, label string, selection, toolbar Rect, frame Size, uiScale float32) {
+func drawScreenshotEditorSizeLabel(displayList *DisplayList, window woxwidget.HostServices, label string, selection, toolbar Rect, frame Size, uiScale float32) {
 	scaled := func(value float32) float32 { return value * max(float32(1), uiScale) }
 	chip := screenshotEditorSizeLabelRect(label, selection, toolbar, frame, uiScale)
-	displayList.FillRoundedRect(chip, scaled(10), Color{R: 23, G: 23, B: 23, A: 230})
-	displayList.DrawText(label, Rect{X: chip.X + scaled(8), Y: chip.Y + scaled(5), Width: chip.Width - scaled(16), Height: scaled(18)}, TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	woxwidget.PaintStateless(window, woxwidget.Container{
+		Width: chip.Width, Height: chip.Height, Radius: scaled(10), Color: Color{R: 23, G: 23, B: 23, A: 255},
+		Child: woxwidget.TextBlock{
+			Value: label, Width: chip.Width, Height: chip.Height, LineHeight: chip.Height, MaxLines: 1, Centered: true, AlignmentY: 0.5,
+			Style: TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color: Color{R: 255, G: 255, B: 255, A: 255},
+		},
+	}, displayList, chip)
 }
 
 // drawScreenshotEditorToolbarIcon renders the shared SVG at a consistent visual size.
@@ -1418,12 +1453,24 @@ func screenshotEditorRectHandlePoints(rect Rect) []Point {
 }
 
 func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
+	if dialog := state.activeSizeDialog(); dialog != nil {
+		if event.Kind == PointerDown && dialog.window != nil {
+			_, _ = dialog.window.Show()
+		}
+		return
+	}
 	if event.Button != PointerButtonPrimary && event.Kind != PointerMove && event.Kind != PointerLeave {
 		return
 	}
 	switch event.Kind {
 	case PointerDown:
 		state.mu.Lock()
+		if state.hasSelection && screenshotEditorRectContains(state.sizeLabelRect, event.Position) {
+			state.commitTextLocked()
+			state.mu.Unlock()
+			state.openSizeDialog()
+			return
+		}
 		state.pointerPosition = event.Position
 		state.pointerInside = true
 		confirm := state.hasSelection && screenshotEditorRectContains(state.confirmRect, event.Position)
@@ -1681,8 +1728,15 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 }
 
 func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
+	if dialog := state.activeSizeDialog(); dialog != nil {
+		dialog.key(event)
+		return true
+	}
 	if !event.Down {
 		return false
+	}
+	if !event.Composing && event.Key == Key("s") && event.Modifiers == 0 {
+		return state.openSizeDialog()
 	}
 	if event.Key == KeyEscape {
 		state.mu.Lock()
@@ -1957,6 +2011,12 @@ func (state *screenshotEditorOverlayState) addNumberAnnotationLocked(point Point
 }
 
 func (state *screenshotEditorOverlayState) textInput(event TextInputEvent) {
+	if dialog := state.activeSizeDialog(); dialog != nil {
+		if dialog.host != nil {
+			dialog.host.TextInput(event)
+		}
+		return
+	}
 	state.mu.Lock()
 	if !state.textEditing {
 		state.mu.Unlock()
@@ -2378,6 +2438,10 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 	state.hasHoveredTool = false
 	state.hasHoveredAction = false
 	state.pointerCursor = PointerCursorDefault
+	if screenshotEditorRectContains(state.sizeLabelRect, point) {
+		state.pointerCursor = PointerCursorHand
+		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousCursor != PointerCursorHand
+	}
 	for index := 1; index < len(state.toolRects); index++ {
 		if screenshotEditorRectContains(state.toolRects[index], point) {
 			state.hoveredTool = index

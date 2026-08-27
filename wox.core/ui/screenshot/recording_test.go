@@ -427,7 +427,7 @@ func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
 	want.Clear(Color{})
 	want.StrokeRoundedRect(local, 0, 4, Color{R: 47, G: 128, B: 237, A: 255})
 	drawScreenshotEditorHandles(want, local, Color{R: 47, G: 128, B: 237, A: 255}, 2)
-	drawScreenshotEditorSizeLabel(want, "200 x 100", local, Rect{}, frame.Size, 2)
+	drawScreenshotEditorSizeLabel(want, (*Window)(nil), "200 x 100", local, Rect{}, frame.Size, 2)
 	if err := got.Compare(want); err != nil {
 		t.Fatalf("recording border should use live chrome scale, not stale editor.uiScale: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestRecordingPreviewKeepsSelectionStrokeWithoutDuplicateTooltip(t *testing.
 	local := recordingBorderLocalSelection(state.selection, state.borderOrigin)
 	wantBorder := &DisplayList{}
 	wantBorder.Clear(Color{})
-	drawScreenshotEditorSizeLabel(wantBorder, "200 x 100", local, Rect{}, Size{Width: 400, Height: 300}, 1)
+	drawScreenshotEditorSizeLabel(wantBorder, (*Window)(nil), "200 x 100", local, Rect{}, Size{Width: 400, Height: 300}, 1)
 	if err := border.Compare(wantBorder); err != nil {
 		t.Fatalf("save-state border should not restack the toolbar tooltip or covered stroke: %v", err)
 	}

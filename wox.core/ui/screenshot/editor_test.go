@@ -7,9 +7,329 @@ import (
 	"image/jpeg"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+// screenshotTestSurface supplies nonzero font metrics without opening a native window.
+type screenshotTestSurface struct{ *Window }
+
+func (*screenshotTestSurface) MeasureText(text string, style TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: Size{Width: float32(len([]rune(text))) * style.Size / 2, Height: style.Size + 6}}, nil
+}
+
+// TestScreenshotSizeLabelCentersOpaqueChrome covers the stateless widget path at fractional DPI scales.
+func TestScreenshotSizeLabelCentersOpaqueChrome(t *testing.T) {
+	surface := &screenshotTestSurface{}
+	for _, scale := range []float32{1, 1.25, 1.5, 2.5} {
+		label := "1814 x 1280"
+		selection, frame := Rect{X: 200, Y: 300, Width: 400, Height: 200}, Size{Width: 1600, Height: 1000}
+		chip := screenshotEditorSizeLabelRect(label, selection, Rect{}, frame, scale)
+		actual := &DisplayList{}
+		drawScreenshotEditorSizeLabel(actual, surface, label, selection, Rect{}, frame, scale)
+		style := TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}
+		metrics, _ := surface.MeasureText(label, style)
+		expected := &DisplayList{}
+		expected.FillRoundedRect(chip, 10*scale, Color{R: 23, G: 23, B: 23, A: 255})
+		expected.DrawText(label, Rect{X: chip.X + (chip.Width-metrics.Size.Width)/2, Y: chip.Y + (chip.Height-metrics.Size.Height)/2, Width: metrics.Size.Width, Height: metrics.Size.Height}, style, Color{R: 255, G: 255, B: 255, A: 255})
+		if err := actual.Compare(expected); err != nil {
+			t.Fatalf("scale %v: size label is not centered and opaque: %v", scale, err)
+		}
+	}
+}
+
+// TestScreenshotSelectionPixelSize covers fractional capture scales independently from desktop origins and chrome DPI.
+func TestScreenshotSelectionPixelSize(t *testing.T) {
+	for _, frame := range []Size{{Width: 1920, Height: 1080}, {Width: 1536, Height: 864}, {Width: 1280, Height: 720}, {Width: 960, Height: 540}, {Width: 1417, Height: 833}} {
+		for _, origin := range []Point{{X: 10, Y: 20}, {X: 100.3, Y: 50.7}, {X: 0.1, Y: 0.2}} {
+			original := Rect{X: origin.X, Y: origin.Y, Width: 200, Height: 100}
+			bounds := image.Rect(-1920, -1080, 0, 0)
+			before, err := screenshotEditorPixelSelection(bounds, original, frame)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, size := range []image.Point{image.Pt(1, 1), image.Pt(101, 73), image.Pt(800, 400), bounds.Max.Sub(before.Min)} {
+				selection := screenshotEditorSelectionWithPixelSize(original, frame, bounds.Size(), size.X, size.Y)
+				got, err := screenshotEditorPixelSelection(bounds, selection, frame)
+				if err != nil || got.Size() != size || got.Min != before.Min || selection.X != original.X || selection.Y != original.Y {
+					t.Fatalf("frame=%+v origin=%+v size=%v: selection=%+v crop=%v err=%v", frame, origin, size, selection, got, err)
+				}
+			}
+		}
+	}
+}
+
+// TestScreenshotSizeDialog exercises the rendered chip, draft validation, modal input, and the applied crop.
+func TestScreenshotSizeDialog(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 1200, 800), frameSize: Size{Width: 1200, Height: 800},
+		selection: Rect{X: 200, Y: 200, Width: 300, Height: 200}, hasSelection: true,
+		chromeScale: func(Rect) float32 { return 1.5 }, desktopPixelOrigin: Point{X: -1200, Y: -800},
+		annotations: []screenshotEditorAnnotation{{tool: screenshotEditorToolRect, rect: Rect{X: 220, Y: 220, Width: 20, Height: 20}}},
+		result:      make(chan screenshotEditorOverlayOutcome, 1),
+	}
+	frame := FrameInfo{Size: state.frameSize}
+	state.annotationDragging = true
+	if state.openSizeDialog() {
+		t.Fatal("size editing must not interrupt an annotation drag")
+	}
+	state.annotationDragging = false
+	state.editMode = screenshotEditorEditMoveSelection
+	if state.openSizeDialog() {
+		t.Fatal("size editing must not interrupt a selection drag")
+	}
+	state.editMode = screenshotEditorEditNone
+	state.draw(&DisplayList{}, frame)
+	chip := state.sizeLabelRect
+	point := Point{X: chip.X + chip.Width/2, Y: chip.Y + chip.Height/2}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: point})
+	if state.pointerCursor != PointerCursorHand {
+		t.Fatal("size chip must show an actionable cursor")
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+	dialog := state.activeSizeDialog()
+	if dialog == nil || dialog.width.Text() != "300" || dialog.height.Text() != "200" || state.dragging {
+		t.Fatalf("click did not open the size draft: %+v", dialog)
+	}
+	original := state.selection
+	for _, values := range [][2]string{{"", "200"}, {"0", "200"}, {"-1", "200"}, {"1.5", "200"}, {"abc", "200"}, {"99999999999999999999999", "200"}, {"1001", "200"}, {"300", "601"}} {
+		dialog.width.SetText(values[0], false)
+		dialog.height.SetText(values[1], false)
+		dialog.apply()
+		if !dialog.invalid || state.selection != original || state.activeSizeDialog() != dialog {
+			t.Fatalf("invalid draft %v changed capture or closed dialog", values)
+		}
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 10, Y: 10}})
+	state.key(KeyEvent{Key: Key("r"), Down: true})
+	state.textInput(TextInputEvent{Kind: TextInputCommit, Text: "annotation"})
+	if state.selection != original || state.dragging || state.activeTool != screenshotEditorToolSelect || len(state.annotations) != 1 {
+		t.Fatal("dialog input leaked to the capture editor")
+	}
+	state.key(KeyEvent{Key: KeyEscape, Down: true})
+	if state.activeSizeDialog() != nil || state.selection != original || len(state.result) != 0 {
+		t.Fatal("Escape should discard only the size draft")
+	}
+	state.key(KeyEvent{Key: Key("s"), Down: true})
+	dialog = state.activeSizeDialog()
+	if dialog == nil {
+		t.Fatal("S must reopen the size editor")
+	}
+	dialog.width.SetText(" 501 ", false)
+	dialog.height.SetText("303", false)
+	dialog.apply()
+	if state.activeSizeDialog() != nil || state.selection != (Rect{X: 200, Y: 200, Width: 501, Height: 303}) || len(state.annotations) != 1 {
+		t.Fatalf("apply changed the anchor or annotations: %+v", state.selection)
+	}
+	state.chromeScale = func(Rect) float32 { return 2.5 }
+	state.draw(&DisplayList{}, frame)
+	if state.sizeLabelRect.Height <= chip.Height {
+		t.Fatal("size chip did not follow display DPI transition")
+	}
+}
+
+// TestScreenshotSizeDialogKeyboardAndLayout uses the retained controls without opening a native window.
+func TestScreenshotSizeDialogKeyboardAndLayout(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 1200, 800), frameSize: Size{Width: 600, Height: 400},
+		selection: Rect{X: 20, Y: 30, Width: 200, Height: 100}, hasSelection: true,
+		sizeDialogOptions: ScreenshotOptions{SizeLabels: ScreenshotSizeLabels{Title: "修改选区大小", Width: "宽度（像素）", Height: "高度（像素）", Apply: "应用", Cancel: "取消", InvalidSize: "请输入整数：宽度 1–%d，高度 1–%d。", LockAspectRatio: "固定宽高比", Swap: "互换宽度和高度"}},
+	}
+	state.openSizeDialog()
+	dialog := state.activeSizeDialog()
+	dialog.host = woxwidget.NewHost(dialog.build)
+	dialog.host.AttachServices(&screenshotTestSurface{})
+	defer dialog.host.Dispose()
+	frame := FrameInfo{Size: dialog.size(), Scale: 1.5}
+	draw := func() {
+		dialog.host.Frame(&DisplayList{}, frame)
+	}
+	draw()
+	draw()
+	fieldCount := 0
+	var heightBounds Rect
+	for _, node := range dialog.host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "screenshot.size.width" && !node.Focused {
+			t.Fatal("width should receive initial focus")
+		}
+		if node.Role == woxui.AccessibilityRoleTextField || node.Role == woxui.AccessibilityRoleButton {
+			if node.Bounds.Height != 32 || node.Bounds.Y+node.Bounds.Height > frame.Size.Height {
+				t.Fatalf("control outside standard size or dialog: %+v", node)
+			}
+		}
+		if node.Role == woxui.AccessibilityRoleTextField {
+			fieldCount++
+			if node.Bounds.Width < 100 {
+				t.Fatalf("field has no usable input width: %+v", node)
+			}
+			if node.AutomationID == "screenshot.size.height" {
+				heightBounds = node.Bounds
+			}
+		}
+	}
+	if fieldCount != 2 {
+		t.Fatalf("editable fields = %d, want 2", fieldCount)
+	}
+	if runtime.GOOS == "windows" {
+		displayList := &DisplayList{}
+		dialog.draw(displayList, frame)
+		renderer, _ := woxui.NewSoftwareRenderer(int(frame.Size.Width), int(frame.Size.Height))
+		if err := renderer.Render(displayList); err != nil {
+			t.Fatal(err)
+		}
+		if renderer.RGBA().RGBAAt(0, 0).A != 255 {
+			t.Fatal("Windows client corners must be opaque so only DWM draws the outer rounding")
+		}
+	}
+	dialog.host.TextInput(TextInputEvent{Kind: TextInputCommit, Text: "301"})
+	point := Point{X: heightBounds.X + heightBounds.Width/2, Y: heightBounds.Y + heightBounds.Height/2}
+	dialog.host.Pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+	dialog.host.Pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: point})
+	primaryModifier := KeyModifierControl
+	if !primaryModifier.HasPrimary() {
+		primaryModifier = KeyModifierMeta
+	}
+	dialog.key(KeyEvent{Key: Key("a"), Modifiers: primaryModifier, Down: true})
+	dialog.host.TextInput(TextInputEvent{Kind: TextInputCommit, Text: "151"})
+	dialog.key(KeyEvent{Key: KeyEnter, Down: true})
+	pixels, err := screenshotEditorPixelSelection(image.Rect(0, 0, 1200, 800), state.selection, state.frameSize)
+	if err != nil || state.activeSizeDialog() != nil || pixels.Size() != image.Pt(301, 151) {
+		t.Fatalf("keyboard apply: crop=%v err=%v open=%v", pixels, err, state.activeSizeDialog() != nil)
+	}
+	state.openSizeDialog()
+	next := state.activeSizeDialog()
+	dialog.closed()
+	if state.activeSizeDialog() != next {
+		t.Fatal("a late close callback discarded the newly opened dialog")
+	}
+	next.closed()
+	if state.activeSizeDialog() != nil {
+		t.Fatal("external dialog close left the screenshot modal")
+	}
+}
+
+// TestScreenshotSizeDialogRatioAndSwap routes pointer and text events through the actual form controls.
+func TestScreenshotSizeDialogRatioAndSwap(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 1200, 800), frameSize: Size{Width: 1200, Height: 800},
+		selection: Rect{X: 200, Y: 200, Width: 300, Height: 200}, hasSelection: true,
+		sizeDialogOptions: ScreenshotOptions{SizeLabels: ScreenshotSizeLabels{Title: "Edit size", Width: "Width", Height: "Height", Apply: "Apply", Cancel: "Cancel", LockAspectRatio: "Lock aspect ratio", Swap: "Swap", InvalidSize: "Width 1–%d, height 1–%d"}},
+	}
+	state.openSizeDialog()
+	dialog := state.activeSizeDialog()
+	dialog.host = woxwidget.NewHost(dialog.build)
+	dialog.host.AttachServices(&screenshotTestSurface{})
+	defer dialog.host.Dispose()
+	frame := FrameInfo{}
+	draw := func() {
+		t.Helper()
+		frame.Size = dialog.size()
+		dialog.draw(&DisplayList{}, frame)
+		var lock, apply, errorBounds Rect
+		for _, node := range dialog.host.Snapshot().Tree.Nodes {
+			switch node.AutomationID {
+			case "screenshot.size.lock-row":
+				lock = node.Bounds
+			case "screenshot.size.apply":
+				apply = node.Bounds
+			case "screenshot.size.error":
+				errorBounds = node.Bounds
+			}
+		}
+		if bottom := frame.Size.Height - apply.Y - apply.Height; bottom != 20 {
+			t.Fatalf("footer bottom padding = %v, want 20", bottom)
+		}
+		previous := lock
+		if dialog.invalid {
+			if errorBounds.Height != 36 || errorBounds.Y-lock.Y-lock.Height != 12 {
+				t.Fatalf("validation must fit between checkbox and actions: lock=%+v error=%+v", lock, errorBounds)
+			}
+			previous = errorBounds
+		} else if errorBounds != (Rect{}) {
+			t.Fatal("valid draft must not reserve validation space")
+		}
+		if gap := apply.Y - previous.Y - previous.Height; gap != 12 {
+			t.Fatalf("footer gap = %v, want 12", gap)
+		}
+	}
+	draw()
+	draw()
+	click := func(id string) {
+		t.Helper()
+		for _, node := range dialog.host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "screenshot.size."+id {
+				if node.Bounds.X < 0 || node.Bounds.Y < 0 || node.Bounds.X+node.Bounds.Width > frame.Size.Width || node.Bounds.Y+node.Bounds.Height > frame.Size.Height {
+					t.Fatalf("control %s exceeds dialog: %+v", id, node.Bounds)
+				}
+				point := Point{X: node.Bounds.X + node.Bounds.Width/2, Y: node.Bounds.Y + node.Bounds.Height/2}
+				dialog.host.Pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+				dialog.host.Pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: point})
+				draw()
+				return
+			}
+		}
+		t.Fatalf("missing control %s", id)
+	}
+	typeValue := func(id, value string) {
+		t.Helper()
+		click(id)
+		primary := KeyModifierControl
+		if !primary.HasPrimary() {
+			primary = KeyModifierMeta
+		}
+		dialog.key(KeyEvent{Key: Key("a"), Down: true, Modifiers: primary})
+		dialog.host.TextInput(TextInputEvent{Kind: TextInputCommit, Text: value})
+		draw()
+	}
+	assertSize := func(width, height string) {
+		t.Helper()
+		if dialog.width.Text() != width || dialog.height.Text() != height {
+			t.Fatalf("draft = %s x %s, want %s x %s", dialog.width.Text(), dialog.height.Text(), width, height)
+		}
+	}
+	typeValue("width", "450")
+	typeValue("height", "100")
+	click("lock-row")
+	assertSize("450", "300")
+	if !dialog.lockRatio || dialog.aspectRatio != 1.5 {
+		t.Fatal("lock must use the selected region's 3:2 ratio")
+	}
+	typeValue("width", "501")
+	assertSize("501", "334")
+	typeValue("height", "333")
+	assertSize("500", "333")
+	click("swap")
+	assertSize("333", "500")
+	typeValue("width", "200")
+	assertSize("200", "300")
+	click("lock")
+	typeValue("width", "250")
+	assertSize("250", "300")
+	click("lock")
+	assertSize("250", "167")
+	if dialog.aspectRatio != 1.5 {
+		t.Fatal("relocking must return to the actual selection ratio")
+	}
+	original := state.selection
+	typeValue("width", "1001")
+	click("apply")
+	if !dialog.invalid || state.activeSizeDialog() != dialog || state.selection != original {
+		t.Fatalf("out-of-bounds linked dimensions: invalid=%v open=%v selection=%+v draft=%s x %s", dialog.invalid, state.activeSizeDialog() == dialog, state.selection, dialog.width.Text(), dialog.height.Text())
+	}
+	typeValue("height", "0")
+	click("apply")
+	if !dialog.invalid {
+		t.Fatal("zero dimensions must remain invalid while ratio is locked")
+	}
+	click("cancel")
+	if state.activeSizeDialog() != nil || state.selection != original {
+		t.Fatal("cancel changed the capture selection")
+	}
+}
 
 func TestWriteScreenshotImageUsesJPEGForJPG(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "capture.jpg")

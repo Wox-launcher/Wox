@@ -381,6 +381,14 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
 		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 30, ShowPointer: true}, WindowManager: a.windows,
+		Theme: a.palette.componentTheme(), FontFamily: a.generalSettings.Data().AppFontFamily,
+		SizeLabels: woxscreenshot.ScreenshotSizeLabels{
+			Title: a.translate("i18n:plugin_screenshot_size_title"),
+			Width: a.translate("i18n:plugin_screenshot_size_width"), Height: a.translate("i18n:plugin_screenshot_size_height"),
+			Apply: a.translate("i18n:plugin_screenshot_size_apply"), Cancel: a.translate("i18n:ui_screenshot_tool_cancel"),
+			InvalidSize:     a.translate("i18n:plugin_screenshot_size_invalid"),
+			LockAspectRatio: a.translate("i18n:plugin_screenshot_size_lock_ratio"), Swap: a.translate("i18n:plugin_screenshot_size_swap"),
+		},
 		AnnotationTooltips: woxscreenshot.ScreenshotAnnotationTooltips{
 			Rectangle: a.translate("i18n:ui_screenshot_tool_rectangle"),
 			Ellipse:   a.translate("i18n:ui_screenshot_tool_ellipse"),

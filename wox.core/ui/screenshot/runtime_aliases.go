@@ -46,6 +46,7 @@ const (
 	PointerButtonPrimary          = woxui.PointerButtonPrimary
 	PointerCursorCrosshair        = woxui.PointerCursorCrosshair
 	PointerCursorDefault          = woxui.PointerCursorDefault
+	PointerCursorHand             = woxui.PointerCursorHand
 	PointerCursorMove             = woxui.PointerCursorMove
 	PointerCursorResizeHorizontal = woxui.PointerCursorResizeHorizontal
 	PointerCursorResizeNESW       = woxui.PointerCursorResizeNESW

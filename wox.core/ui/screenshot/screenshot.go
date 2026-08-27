@@ -1,6 +1,9 @@
 package screenshot
 
-import woxui "wox/ui/runtime"
+import (
+	woxcomponent "wox/ui/launcher/component"
+	woxui "wox/ui/runtime"
+)
 
 // ScreenshotOptions configures one interactive desktop-region capture.
 type ScreenshotOptions struct {
@@ -14,6 +17,15 @@ type ScreenshotOptions struct {
 	AnnotationTooltips    ScreenshotAnnotationTooltips
 	ActionTooltips        ScreenshotActionTooltips
 	RecordingTooltips     RecordingTooltips
+	SizeLabels            ScreenshotSizeLabels
+	Theme                 woxcomponent.Theme
+	FontFamily            string
+}
+
+// ScreenshotSizeLabels carries localized copy for editing capture dimensions in pixels.
+type ScreenshotSizeLabels struct {
+	Title, Width, Height, Apply, Cancel, InvalidSize string
+	LockAspectRatio, Swap                            string
 }
 
 // RecordingDefaults configures the options shown before the countdown begins.

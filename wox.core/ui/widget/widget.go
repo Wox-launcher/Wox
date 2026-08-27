@@ -23,6 +23,13 @@ func MeasureStateless(window HostServices, widget Widget, width float32) woxui.S
 	return woxui.Size{Width: node.bounds.Width, Height: node.bounds.Height}
 }
 
+// PaintStateless lets immediate-mode surfaces reuse layout primitives without retaining an input or focus tree.
+func PaintStateless(window HostServices, widget Widget, displayList *woxui.DisplayList, bounds woxui.Rect) {
+	root := widget.layout(context{window: window}, constraints{width: bounds.Width, height: bounds.Height})
+	root.place(bounds.X, bounds.Y)
+	root.draw(displayList, 0, 0, false, false, false, nil)
+}
+
 type textMeasurer interface {
 	MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error)
 }
@@ -834,8 +841,11 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	switch {
 	case !mainBounded:
 	case w.MainAxisAlignment == MainAxisCenter:
+		// The aligned children occupy the allocated extent; shrink-wrapping here leaves them outside pointer hit-testing bounds.
+		mainExtent = mainAvailable
 		startOffset = freeExtent / 2
 	case w.MainAxisAlignment == MainAxisEnd:
+		mainExtent = mainAvailable
 		startOffset = freeExtent
 	case w.MainAxisAlignment == MainAxisSpaceBetween:
 		mainExtent = mainAvailable

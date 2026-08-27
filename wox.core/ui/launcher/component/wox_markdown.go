@@ -457,7 +457,8 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 			if label == "" {
 				continue
 			}
-			link := woxwidget.Gesture{ID: id, OnTap: func() { props.OnOpenLink(target) }, Child: woxwidget.Text{Value: label, Style: style, Color: props.Theme.Cursor, Underline: true}}
+			// The caret color can match body text; use the document accent to keep links recognizable.
+			link := woxwidget.Gesture{ID: id, Cursor: woxui.PointerCursorHand, OnTap: func() { props.OnOpenLink(target) }, Child: woxwidget.Text{Value: label, Style: style, Color: DocumentListMarkerColor, Underline: true}}
 			semantics := woxwidget.Semantics{
 				Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleLink, Label: label, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 				OnAction: func(action woxui.AccessibilityAction, _ string) error {

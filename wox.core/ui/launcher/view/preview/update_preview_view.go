@@ -1,13 +1,24 @@
 package preview
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/text"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+)
+
+var (
+	updateMarkdownParser = goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
+	updateIssueReference = regexp.MustCompile(`(^|[[:space:](,])#([0-9]+)\b`)
 )
 
 // UpdatePreviewProps contains the update state, translated labels, and launcher-owned Markdown renderer.
@@ -127,7 +138,9 @@ func UpdatePreviewView(props UpdatePreviewProps) woxwidget.Widget {
 			header,
 			woxwidget.Container{Width: innerWidth, Height: scaled(15), Padding: woxwidget.Insets{Top: scaled(14)}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
-			woxwidget.ScrollView{Key: woxwidget.Key("update-preview-scroll-" + props.ID), ID: "update-preview-scroll-" + props.ID, Width: innerWidth, Height: bodyHeight, Child: body},
+			woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+				Key: woxwidget.Key("update-preview-scroll-" + props.ID), Width: innerWidth, Height: bodyHeight, Content: body, ThumbColor: props.Theme.PreviewText,
+			}),
 		}},
 	}
 }
@@ -163,11 +176,7 @@ func buildUpdateReleaseNotes(props UpdatePreviewProps, markdown string, width fl
 
 	children := make([]woxwidget.Widget, 0, len(parsed.sections)*2+2)
 	if parsed.intro != "" {
-		children = append(children, woxwidget.Container{
-			Width: width, Padding: woxwidget.Insets{Left: scaled(12), Top: scaled(10), Right: scaled(12), Bottom: scaled(10)}, Radius: scaled(8),
-			Color: updateColorAlpha(props.Theme.PreviewText, 0.05), BorderColor: updateColorAlpha(props.Theme.PreviewSplit, 0.45), BorderWidth: 1,
-			Child: renderUpdateMarkdown(props, props.ID+"-intro", parsed.intro, max(float32(0), width-scaled(24))),
-		})
+		children = append(children, renderUpdateMarkdown(props, props.ID+"-intro", parsed.intro, width))
 	}
 	tagWidth := updateTagColumnWidth(props, parsed.sections, scaled)
 	for sectionIndex, section := range parsed.sections {
@@ -202,9 +211,41 @@ func buildUpdateReleaseNotes(props UpdatePreviewProps, markdown string, width fl
 
 func renderUpdateMarkdown(props UpdatePreviewProps, id, markdown string, width float32) woxwidget.Widget {
 	if props.RenderMarkdown != nil {
-		return props.RenderMarkdown(id, markdown, width)
+		return props.RenderMarkdown(id, linkUpdateIssueReferences(markdown), width)
 	}
 	return woxwidget.TextBlock{Value: markdown, Width: width, Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: props.Theme.PreviewText}
+}
+
+// linkUpdateIssueReferences links bare issue numbers without rewriting code, images, or existing links.
+func linkUpdateIssueReferences(markdown string) string {
+	if !strings.Contains(markdown, "#") {
+		return markdown
+	}
+	source := []byte(markdown)
+	document := updateMarkdownParser.Parse(text.NewReader(source))
+	var result strings.Builder
+	last := 0
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch node.(type) {
+		case *ast.Link, *ast.AutoLink, *ast.Image, *ast.CodeSpan, *ast.RawHTML:
+			return ast.WalkSkipChildren, nil
+		}
+		if value, ok := node.(*ast.Text); ok {
+			original := string(value.Segment.Value(source))
+			linked := updateIssueReference.ReplaceAllString(original, "${1}[#${2}](https://github.com/Wox-launcher/Wox/issues/${2})")
+			if linked != original {
+				result.Write(source[last:value.Segment.Start])
+				result.WriteString(linked)
+				last = value.Segment.Stop
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	result.Write(source[last:])
+	return result.String()
 }
 
 // parseUpdateReleaseNotes recognizes the stable Wox changelog headings and optional area tags.

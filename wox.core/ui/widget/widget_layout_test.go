@@ -148,6 +148,22 @@ func TestFlexMainAxisSpaceBetweenUsesUnusedExtent(t *testing.T) {
 	}
 }
 
+// TestFlexAlignedChildrenRemainClickable ensures visual alignment and parent hit bounds describe the same space.
+func TestFlexAlignedChildrenRemainClickable(t *testing.T) {
+	for _, axis := range []Axis{Horizontal, Vertical} {
+		for _, alignment := range []MainAxisAlignment{MainAxisCenter, MainAxisEnd} {
+			root := (Flex{Axis: axis, MainAxisAlignment: alignment, Children: []Widget{
+				Gesture{ID: "aligned", OnTap: func() {}, Child: Container{Width: 20, Height: 10}},
+			}}).layout(context{window: &fakeHostServices{}}, constraints{width: 100, height: 80})
+			bounds := root.children[0].bounds
+			point := woxui.Point{X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2}
+			if hit := root.hitTest(point); hit == nil || hit.gesture == nil || hit.gesture.id != "aligned" {
+				t.Fatalf("axis=%v alignment=%v: drawn child %+v is outside hit bounds %+v", axis, alignment, bounds, root.bounds)
+			}
+		}
+	}
+}
+
 func TestFlexCrossAxisStretchFillsAvailableExtent(t *testing.T) {
 	builtWith := woxui.Size{}
 	root := (Flex{Axis: Horizontal, CrossAxisAlignment: CrossAxisStretch, Children: []Widget{

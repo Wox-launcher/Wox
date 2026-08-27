@@ -127,10 +127,10 @@ func TestParseMarkdownRejectsUnsafeLinksWithoutDroppingText(t *testing.T) {
 }
 
 func TestMarkdownLinkOpensFromPointerAction(t *testing.T) {
-	document := ParseMarkdown(`https://wox.one`)
+	document := ParseMarkdown(`[#4497](https://github.com/Wox-launcher/Wox/issues/4497)`)
 	opened := ""
 	widget := renderMarkdownBlock(document.blocks[0], MarkdownProps{
-		ID: "preview", Theme: Theme{Cursor: woxui.Color{A: 255}}, OnOpenLink: func(target string) { opened = target },
+		ID: "preview", Theme: Theme{Cursor: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, OnOpenLink: func(target string) { opened = target },
 	}, 300, new(int))
 
 	wrap := widget.(woxwidget.Wrap)
@@ -139,12 +139,19 @@ func TestMarkdownLinkOpensFromPointerAction(t *testing.T) {
 	gesture := focusable.Child.(woxwidget.Gesture)
 	gesture.OnTap()
 
-	if opened != "https://wox.one" {
-		t.Fatalf("opened link = %q, want https://wox.one", opened)
+	if opened != "https://github.com/Wox-launcher/Wox/issues/4497" {
+		t.Fatalf("opened link = %q, want the Wox issue URL", opened)
+	}
+	if gesture.Cursor != woxui.PointerCursorHand {
+		t.Fatalf("link cursor = %v, want hand", gesture.Cursor)
 	}
 	text := gesture.Child.(woxwidget.Text)
-	if text.Style.Size != 12 || !text.Underline {
-		t.Fatalf("link style = %#v, want Flutter preview size 12 with underline", text)
+	if text.Value != "#4497" || text.Style.Size != 12 || !text.Underline || text.Color != DocumentListMarkerColor {
+		t.Fatalf("link style = %#v, want the issue label with document accent and underline", text)
+	}
+	opened = ""
+	if !focusable.OnKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || opened != "https://github.com/Wox-launcher/Wox/issues/4497" {
+		t.Fatalf("keyboard activation opened %q, want the Wox issue URL", opened)
 	}
 }
 
