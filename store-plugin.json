@@ -197,7 +197,7 @@
     "Id": "6f920562-1570-4e63-991b-0b39e7d4a2e9",
     "Name": "每日60秒新闻",
     "Author": "qianlifeng",
-    "Version": "1.0.1",
+    "Version": "1.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "script",
     "Description": "基于 https://60s.viki.moe/v2/60s 的每日新闻展示",
@@ -213,7 +213,7 @@
       "Linux"
     ],
     "DateCreated": "2025-08-25 21:15:00",
-    "DateUpdated": "2025-12-13 13:55:00"
+    "DateUpdated": "2026-08-27 15:39:10"
   },
   {
     "Id": "25cb95b8-af4c-4ccb-82d6-38843a9999c1",
