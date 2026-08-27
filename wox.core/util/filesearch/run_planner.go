@@ -453,7 +453,6 @@ func (p *RunPlanner) planRootTopLevelScopes(ctx context.Context, root RootRecord
 		return nil, fmt.Errorf("read root top-level scopes %q: %w", cleanRootPath, err)
 	}
 
-	policyContext := p.policy.newTraversalContext(root, cleanRootPath)
 	for _, dirEntry := range dirEntries {
 		select {
 		case <-ctx.Done():
@@ -486,10 +485,9 @@ func (p *RunPlanner) planRootTopLevelScopes(ctx context.Context, root RootRecord
 		if shouldSkipSystemPathForRoot(root, childPath, true) {
 			continue
 		}
-		if !policyContext.ShouldIndexPath(childPath, true) {
-			continue
-		}
-
+		// Always own top-level directories, including those the current ignore
+		// rules reject. Omitting a rejected folder leaves already-indexed
+		// descendants in SQLite because no later job replaces that scope.
 		children = append(children, &runPlannerScopeBuffer{
 			scopePath:       childPath,
 			scopeKind:       ScopeKindSubtree,

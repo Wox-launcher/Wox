@@ -452,6 +452,85 @@ func TestScannerFullScanWideDirectFilesPrunesRemovedFiles(t *testing.T) {
 	}
 }
 
+func TestScannerFullScanPolicyRejectedTopLevelDirPrunesIndexedFiles(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-policy-prune")
+	ignoredDir := filepath.Join(rootPath, "ignored-dir")
+	keptDir := filepath.Join(rootPath, "kept-dir")
+	ignoredPath := filepath.Join(ignoredDir, "nested", "ignored.txt")
+	keptPath := filepath.Join(keptDir, "kept.txt")
+
+	mustWriteTestFile(t, ignoredPath, "ignored")
+	mustWriteTestFile(t, keptPath, "kept")
+
+	root := RootRecord{ID: "root-policy-prune", Path: rootPath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.scanAllRoots(ctx)
+	assertTestEntryPresence(t, ctx, db, root.ID, ignoredPath, true)
+	assertTestEntryPresence(t, ctx, db, root.ID, keptPath, true)
+
+	scanner.policy.Set(Policy{
+		NewTraversalContext: func(root RootRecord, scopePath string) TraversalPolicyContext {
+			return denyPathPrefixPolicyContext{prefix: ignoredDir}
+		},
+	})
+	scanner.scanAllRoots(ctx)
+
+	assertTestEntryPresence(t, ctx, db, root.ID, ignoredPath, false)
+	assertTestEntryPresence(t, ctx, db, root.ID, keptPath, true)
+}
+
+type denyPathPrefixPolicyContext struct {
+	prefix string
+}
+
+func (c denyPathPrefixPolicyContext) ShouldIndexPath(path string, isDir bool) bool {
+	clean := filepath.Clean(path)
+	prefix := filepath.Clean(c.prefix)
+	if fileSearchTestPathsEqual(clean, prefix) {
+		return false
+	}
+	separator := string(os.PathSeparator)
+	if strings.HasPrefix(strings.ToLower(clean), strings.ToLower(prefix)+separator) {
+		return false
+	}
+	return true
+}
+
+func (c denyPathPrefixPolicyContext) Descend(directoryPath string) TraversalPolicyContext {
+	return c
+}
+
+func assertTestEntryPresence(t *testing.T, ctx context.Context, db *FileSearchDB, rootID, path string, present bool) {
+	t.Helper()
+	entries, err := db.ListEntriesByRoot(ctx, rootID)
+	if err != nil {
+		t.Fatalf("list entries: %v", err)
+	}
+	found := false
+	for _, entry := range entries {
+		if fileSearchTestPathsEqual(entry.Path, path) {
+			found = true
+			break
+		}
+	}
+	if found != present {
+		t.Fatalf("entry %q present=%t, want %t", path, found, present)
+	}
+}
+
+func fileSearchTestPathsEqual(left, right string) bool {
+	left = filepath.Clean(left)
+	right = filepath.Clean(right)
+	if os.PathSeparator == '\\' {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
+}
+
 func TestScannerStartupRestoreReconcilesFallbackRoots(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	now := time.Now()
