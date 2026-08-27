@@ -206,6 +206,30 @@ func TestQueryHotkeyEditorHeaderHidesDemoForCustomPreset(t *testing.T) {
 	}
 }
 
+func TestFormTableRowDescriptionWrapsLongPlainText(t *testing.T) {
+	description := "填写名称、通配规则或绝对路径。不含路径分隔符的规则匹配任意路径片段；相对路径匹配搜索目录内的路径；绝对路径（如 D:\\Games\\Cache 或 /Users/me/Downloads）会排除该文件夹及其内容。"
+	width := float32(500)
+	labelWidth := float32(80)
+	controlWidth := width - labelWidth - 10
+	height := FormTableRowFieldHeightFor("textbox", description, "", 1, false, controlWidth)
+	singleLine := FormTableRowFieldHeightFor("textbox", "短说明", "", 1, false, controlWidth)
+	if height <= singleLine {
+		t.Fatalf("wrapped height = %.0f, want more than single-line height %.0f", height, singleLine)
+	}
+
+	row := FormTableRowField(FormTableRowFieldProps{
+		Kind: "textbox", Description: description, Width: width, Height: height, LabelWidth: labelWidth, MaxLines: 1, Theme: woxcomponent.Theme{},
+	}).(woxwidget.Container)
+	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	help := right.Children[1].(woxwidget.TextBlock)
+	if help.MaxLines < 2 {
+		t.Fatalf("description max lines = %d, want wrapping so the full tip stays visible", help.MaxLines)
+	}
+	if help.Height < float32(help.MaxLines)*18 {
+		t.Fatalf("description height = %.0f, want room for %d wrapped lines", help.Height, help.MaxLines)
+	}
+}
+
 func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 	description := "Type { to insert variables.\n\nInstall the browser extension."
 	height := FormTableRowFieldHeight("textbox", description, 1)

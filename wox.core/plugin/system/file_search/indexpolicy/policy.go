@@ -2,6 +2,7 @@ package indexpolicy
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -505,19 +506,21 @@ func (c *TraversalContext) shouldIgnoreByConfiguredPattern(fullPath string, name
 		return true
 	}
 
+	childRelSlash, hasChildRel := c.childRelPath(name)
+	if c.ignoreRules.matchesPathPrefixCandidates(normalizeIgnoreSlashPath(fullPath), prefixMatchRelPath(childRelSlash, hasChildRel)) {
+		ignored = true
+		return true
+	}
+
 	if c.ignoreRules.matchesTraversalChildSegments(name, c.dirSegmentsLower) {
 		ignored = true
 		return true
 	}
 	if c.ignoreRules.hasPathCandidateRules() {
-		childRelSlash, hasChildRel := c.childRelPath(name)
-		pathCandidate := filepath.ToSlash(fullPath)
-		if hasChildRel {
-			pathCandidate = childRelSlash
-			childRelSlash = ""
-			hasChildRel = false
-		}
-		if c.ignoreRules.matchesTraversalChildPathCandidates(pathCandidate, childRelSlash, hasChildRel) {
+		// Keep both the absolute and root-relative candidates. Absolute Windows
+		// paths such as D:\Games\Cache only match the full path, while relative
+		// globs still need the search-root-relative form.
+		if c.ignoreRules.matchesTraversalChildPathCandidates(normalizeIgnoreSlashPath(fullPath), childRelSlash, hasChildRel) {
 			ignored = true
 			return true
 		}
@@ -529,12 +532,6 @@ func (c *TraversalContext) configuredChildPathIgnored(cleanPath string, name str
 	if c == nil {
 		return false
 	}
-	if c.ignoreRules.matchesTraversalChildSegments(name, c.dirSegmentsLower) {
-		return true
-	}
-	if !c.ignoreRules.hasPathCandidateRules() {
-		return false
-	}
 	childRelSlash, hasChildRel := c.childRelPath(name)
 	if filepath.Dir(cleanPath) != c.dirPath {
 		childRelSlash, hasChildRel = relativePathForGitIgnoreMatch(c.matchRootPath, cleanPath)
@@ -542,13 +539,16 @@ func (c *TraversalContext) configuredChildPathIgnored(cleanPath string, name str
 			childRelSlash = ""
 		}
 	}
-	pathCandidate := filepath.ToSlash(cleanPath)
-	if hasChildRel {
-		pathCandidate = childRelSlash
-		childRelSlash = ""
-		hasChildRel = false
+	if c.ignoreRules.matchesPathPrefixCandidates(normalizeIgnoreSlashPath(cleanPath), prefixMatchRelPath(childRelSlash, hasChildRel)) {
+		return true
 	}
-	return c.ignoreRules.matchesTraversalChildPathCandidates(pathCandidate, childRelSlash, hasChildRel)
+	if c.ignoreRules.matchesTraversalChildSegments(name, c.dirSegmentsLower) {
+		return true
+	}
+	if !c.ignoreRules.hasPathCandidateRules() {
+		return false
+	}
+	return c.ignoreRules.matchesTraversalChildPathCandidates(normalizeIgnoreSlashPath(cleanPath), childRelSlash, hasChildRel)
 }
 
 func (c *TraversalContext) shouldIgnoreByGitIgnore(name string, isDir bool, diagnostics *Diagnostics) bool {
@@ -643,6 +643,7 @@ type fileSearchIgnoreRule struct {
 	segmentSimpleGlob bool
 	segmentParts      []string
 	pathSegmentParts  []string
+	pathPrefix        string
 	leadingStar       bool
 	trailingStar      bool
 	hasQuestion       bool
@@ -665,7 +666,7 @@ func compileFileSearchIgnoreRules(patterns []string) fileSearchIgnoreRules {
 			continue
 		}
 
-		normalized := filepath.ToSlash(raw)
+		normalized := normalizeIgnorePattern(raw)
 		key := strings.ToLower(normalized)
 		if _, ok := seen[key]; ok {
 			continue
@@ -690,7 +691,7 @@ func compileFileSearchIgnoreRules(patterns []string) fileSearchIgnoreRules {
 }
 
 func compileFileSearchIgnoreRule(pattern string) (fileSearchIgnoreRule, bool) {
-	pattern = strings.TrimSpace(filepath.ToSlash(pattern))
+	pattern = normalizeIgnorePattern(pattern)
 	if pattern == "" {
 		return fileSearchIgnoreRule{}, false
 	}
@@ -708,7 +709,7 @@ func compileFileSearchIgnoreRule(pattern string) (fileSearchIgnoreRule, bool) {
 	// "node_modules" match any path segment, while path patterns such as
 	// "**/Library/Application Support/**" can prune a whole subtree before the
 	// scanner descends into it.
-	hasSlash := strings.Contains(pattern, "/")
+	hasSlash := strings.Contains(pattern, "/") || isWindowsDriveIgnorePath(pattern)
 	if !hasSlash && !strings.ContainsAny(pattern, "*?[") {
 		return fileSearchIgnoreRule{
 			segmentLiteral: strings.ToLower(pattern),
@@ -724,6 +725,9 @@ func compileFileSearchIgnoreRule(pattern string) (fileSearchIgnoreRule, bool) {
 			trailingStar:      strings.HasSuffix(normalized, "*"),
 			hasQuestion:       strings.Contains(normalized, "?"),
 		}, true
+	}
+	if prefixRule, ok := compilePathPrefixIgnoreRule(pattern); ok {
+		return prefixRule, true
 	}
 	if hasSlash {
 		if parts, ok := recursivePathSegmentPattern(pattern); ok {
@@ -932,7 +936,12 @@ func globPatternToRegex(pattern string, segmentOnly bool) string {
 }
 
 func configuredPatternMatchesPath(rules fileSearchIgnoreRules, matchRootPath string, fullPath string) bool {
+	fullSlash := normalizeIgnoreSlashPath(fullPath)
 	relPath, hasRelPath := relativePathForGitIgnoreMatch(filepath.Clean(matchRootPath), fullPath)
+	relSlash := prefixMatchRelPath(relPath, hasRelPath)
+	if rules.matchesPathPrefixCandidates(fullSlash, relSlash) {
+		return true
+	}
 	if hasRelPath {
 		if relPath == "." || relPath == "" {
 			return false
@@ -942,10 +951,11 @@ func configuredPatternMatchesPath(rules fileSearchIgnoreRules, matchRootPath str
 		// under %TEMP% look ignored by the default **/temp/** rule. Use the
 		// root-relative path when available so defaults describe content inside the
 		// configured root, not every ancestor chosen by the OS or test harness.
-		return rules.matches([]string{relPath}, splitFileSearchPathSegments(relPath))
+		// Absolute folder prefixes are handled above, and path globs still see the
+		// full path so D:\Games\*.tmp style rules keep working.
+		return rules.matches([]string{relPath, fullSlash}, splitFileSearchPathSegments(relPath))
 	}
 
-	fullSlash := filepath.ToSlash(filepath.Clean(fullPath))
 	candidates := []string{fullSlash}
 	segments := splitFileSearchPathSegments(fullSlash)
 	return rules.matches(candidates, segments)
@@ -995,11 +1005,98 @@ func (rules fileSearchIgnoreRules) matchesTraversalChildSegments(segment string,
 
 func (rules fileSearchIgnoreRules) hasPathCandidateRules() bool {
 	for _, rule := range rules.pathRules {
+		if rule.pathPrefix != "" {
+			continue
+		}
 		if len(rule.pathSegmentParts) == 0 {
 			return true
 		}
 	}
 	return false
+}
+
+func (rules fileSearchIgnoreRules) matchesPathPrefixCandidates(fullSlash string, relSlash string) bool {
+	for _, rule := range rules.pathRules {
+		if rule.matchesPathPrefix(fullSlash) || rule.matchesPathPrefix(relSlash) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r fileSearchIgnoreRule) matchesPathPrefix(candidate string) bool {
+	if r.pathPrefix == "" || candidate == "" || candidate == "." {
+		return false
+	}
+	prefix := strings.ToLower(r.pathPrefix)
+	candidate = strings.ToLower(candidate)
+	return candidate == prefix || strings.HasPrefix(candidate, prefix+"/")
+}
+
+func prefixMatchRelPath(relPath string, hasRelPath bool) string {
+	if !hasRelPath || relPath == "." {
+		return ""
+	}
+	return relPath
+}
+
+// normalizeIgnorePattern converts user-facing ignore text into a slash path.
+// Windows users paste D:\Folder, so backslashes must be normalized on every OS
+// before we decide whether a rule is a segment, relative glob, or absolute path.
+func normalizeIgnorePattern(pattern string) string {
+	return strings.TrimSpace(strings.ReplaceAll(pattern, "\\", "/"))
+}
+
+// normalizeIgnoreSlashPath cleans a filesystem or user path for prefix matching.
+func normalizeIgnoreSlashPath(raw string) string {
+	normalized := normalizeIgnorePattern(raw)
+	if normalized == "" {
+		return ""
+	}
+	cleaned := path.Clean(normalized)
+	if cleaned == "." {
+		return ""
+	}
+	return cleaned
+}
+
+// isWindowsDriveIgnorePath reports whether the slash-normalized pattern starts
+// with a drive letter so D:\Folder is treated as an absolute path on every OS.
+func isWindowsDriveIgnorePath(pattern string) bool {
+	if len(pattern) < 2 || pattern[1] != ':' {
+		return false
+	}
+	letter := pattern[0]
+	return (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z')
+}
+
+func isAbsoluteIgnorePath(pattern string) bool {
+	return strings.HasPrefix(pattern, "/") || isWindowsDriveIgnorePath(pattern)
+}
+
+// compilePathPrefixIgnoreRule treats a literal folder path as that folder and
+// every descendant. Leading **/ globs stay on the recursive segment matcher so
+// **/Library/Application Support/** still matches anywhere in a relative path.
+func compilePathPrefixIgnoreRule(pattern string) (fileSearchIgnoreRule, bool) {
+	stripped := strings.TrimSuffix(pattern, "/**")
+	if strings.HasPrefix(stripped, "**/") || strings.ContainsAny(stripped, "*?[") {
+		return fileSearchIgnoreRule{}, false
+	}
+	if !isAbsoluteIgnorePath(stripped) && !strings.Contains(stripped, "/") {
+		return fileSearchIgnoreRule{}, false
+	}
+
+	prefix := normalizeIgnoreSlashPath(stripped)
+	if prefix == "" {
+		return fileSearchIgnoreRule{}, false
+	}
+	if prefix != "/" {
+		prefix = strings.TrimRight(prefix, "/")
+	}
+	return fileSearchIgnoreRule{
+		hasSlash:   true,
+		pathPrefix: prefix,
+	}, true
 }
 
 func (rules fileSearchIgnoreRules) matchesTraversalChildPathCandidates(fullSlash string, relSlash string, hasRelSlash bool) bool {

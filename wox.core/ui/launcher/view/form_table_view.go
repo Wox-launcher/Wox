@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -24,6 +23,8 @@ const (
 	formTableMarkdownDescriptionGap    = float32(4)
 	formTableMarkdownDescriptionLine   = float32(15)
 	formTableMarkdownDescriptionRunGap = float32(3)
+	formTableHelpASCIIAdvance          = float32(7)
+	formTableHelpWideAdvance           = float32(12)
 )
 
 var formTableMarkdownLinkPattern = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
@@ -869,13 +870,13 @@ func FormTableRowFieldHeightFor(kind, description, errorMessage string, maxLines
 	}
 }
 
-// formTableRowDescriptionHeight mirrors Flutter's intrinsic help-text sizing for plain and markdown tips.
+// formTableRowDescriptionHeight sizes help text for both explicit newlines and wrapped long lines.
 func formTableRowDescriptionHeight(description string, markdown bool, controlWidth float32) float32 {
 	if description == "" {
 		return 0
 	}
 	if !markdown {
-		return 22 + float32(strings.Count(description, "\n"))*18
+		return float32(formTableEstimateWrappedLines(description, controlWidth))*18 + 4
 	}
 	plain := formTableMarkdownPlainText(description)
 	paragraphs := strings.Split(plain, "\n\n")
@@ -896,7 +897,9 @@ func formTableMarkdownPlainText(value string) string {
 	return formTableMarkdownLinkPattern.ReplaceAllString(value, "$1")
 }
 
-// formTableEstimateWrappedLines approximates Flutter markdown wrapping without a native text measurer.
+// formTableEstimateWrappedLines approximates help-text wrapping without a native measurer.
+// ASCII stays on the previous 7-unit advance so English markdown heights do not jump;
+// wider CJK glyphs use the 12 help-text size so long Chinese tips get enough lines.
 func formTableEstimateWrappedLines(value string, width float32) int {
 	if value == "" {
 		return 1
@@ -904,34 +907,50 @@ func formTableEstimateWrappedLines(value string, width float32) int {
 	if width <= 0 {
 		return strings.Count(value, "\n") + 1
 	}
-	charWidth := float32(7)
-	maxChars := max(1, int(width/charWidth))
 	lines := 0
 	for _, paragraph := range strings.Split(value, "\n") {
 		if strings.TrimSpace(paragraph) == "" {
 			lines++
 			continue
 		}
-		current := 0
+		current := float32(0)
 		lines++
 		for _, word := range strings.Fields(paragraph) {
-			need := utf8.RuneCountInString(word)
+			need := formTableEstimateTextWidth(word)
 			if current == 0 {
 				current = need
-			} else if current+1+need <= maxChars {
-				current += 1 + need
+			} else if current+formTableHelpASCIIAdvance+need <= width {
+				current += formTableHelpASCIIAdvance + need
 				continue
 			} else {
 				lines++
 				current = need
 			}
-			for current > maxChars {
+			for current > width {
 				lines++
-				current -= maxChars
+				current -= width
 			}
 		}
 	}
 	return max(1, lines)
+}
+
+// formTableEstimateTextWidth sums the same advance units used to wrap help text.
+func formTableEstimateTextWidth(value string) float32 {
+	width := float32(0)
+	for _, r := range value {
+		width += formTableHelpRuneAdvance(r)
+	}
+	return width
+}
+
+// formTableHelpRuneAdvance keeps Latin text on the old 7-unit grid and gives CJK
+// the 12-unit help font size so wrapped Chinese descriptions are not under-counted.
+func formTableHelpRuneAdvance(r rune) float32 {
+	if r <= 0x7F {
+		return formTableHelpASCIIAdvance
+	}
+	return formTableHelpWideAdvance
 }
 
 // FormTableRowField renders labels, controls, and help text with the same split layout as Flutter.
@@ -946,7 +965,7 @@ func FormTableRowField(props FormTableRowFieldProps) woxwidget.Widget {
 		// DescriptionHeight includes trailing slack used by the row height formula; the widget itself should not.
 		widgetHeight := max(float32(18), descriptionHeight-4)
 		var description woxwidget.Widget = woxwidget.TextBlock{
-			Value: props.Description, Width: controlWidth, Height: widgetHeight, MaxLines: max(1, strings.Count(props.Description, "\n")+1), LineHeight: 18,
+			Value: props.Description, Width: controlWidth, Height: widgetHeight, MaxLines: max(1, formTableEstimateWrappedLines(props.Description, controlWidth)), LineHeight: 18,
 			Style: woxui.TextStyle{Size: 12}, Color: formTableAlpha(props.Theme.ActionText, 154),
 		}
 		if props.DescriptionMarkdown {
