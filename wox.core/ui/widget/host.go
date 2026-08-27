@@ -79,6 +79,8 @@ type Host struct {
 	lastTapCount       int
 
 	focused woxui.AccessibilityNodeID
+	// Reveal the caret after input has rebuilt and laid out the editor, not on idle or scroll frames.
+	revealCaret bool
 	// focusVisible mirrors :focus-visible so pointer focus keeps keyboard behavior without painting a ring.
 	focusVisible bool
 	modalScopes  []woxui.AccessibilityNodeID
@@ -326,6 +328,10 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		}
 	}
 	h.reconcileFocus()
+	if h.revealCaret {
+		// A moved inner scroller needs another layout before checking its outer ancestors.
+		h.revealCaret = h.ensureFocusedVisible(true)
+	}
 	h.updateCaretBlink(nodeHasActiveCaret(root, h.focused, false, false))
 	h.setCaretDamage(activeCaretDamage(root, h.focused, false, false))
 	h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
@@ -870,40 +876,54 @@ func (h *Host) applyFocus(id woxui.AccessibilityNodeID, ensureVisible bool) {
 	}
 	logScrollFocus(fmt.Sprintf("apply-focus key=%q from=%q ensureVisible=%v", nodeFocusKey(current), nodeFocusKey(old), ensureVisible))
 	if ensureVisible {
-		h.ensureFocusedVisible()
+		h.ensureFocusedVisible(false)
 	}
 	h.resetCaretBlink()
 	h.syncTextInput()
 	h.invalidate()
 }
 
-// ensureFocusedVisible minimally scrolls the nearest clipped ancestor that hides the focused node.
-func (h *Host) ensureFocusedVisible() {
+// ensureFocusedVisible reveals the focused box, or just its caret after editing, in logical coordinates.
+func (h *Host) ensureFocusedVisible(caretOnly bool) bool {
 	current := h.nodes[h.focused]
 	if current == nil {
-		return
+		return false
+	}
+	bounds := woxui.Rect{Width: current.bounds.Width, Height: current.bounds.Height}
+	if caretOnly {
+		if current.focus == nil || current.focus.textInput == nil {
+			return false
+		}
+		input := current.focus.textInput(bounds)
+		if !input.Enabled {
+			return false
+		}
+		bounds = input.CursorRect
 	}
 	for ancestor := current.parent; ancestor != nil; ancestor = ancestor.parent {
 		if ancestor.scroll == nil {
 			continue
 		}
 		offsetX, offsetY := offsetInAncestor(current, ancestor)
-		start := offsetY + ancestor.scroll.offset
-		end := start + current.bounds.Height
+		start := offsetY + bounds.Y + ancestor.scroll.offset
+		end := start + bounds.Height
 		if ancestor.scroll.horizontal {
-			start = offsetX + ancestor.scroll.offset
-			end = start + current.bounds.Width
+			start = offsetX + bounds.X + ancestor.scroll.offset
+			end = start + bounds.Width
 		}
 		oldOffset := ancestor.scroll.offset
 		moved := ancestor.scroll.ensureVisible(start, end)
-		logScrollFocus(fmt.Sprintf(
-			"ensure-visible key=%q horizontal=%v start=%.1f end=%.1f height=%.1f offset=%.1f->%.1f moved=%v",
-			current.key, ancestor.scroll.horizontal, start, end, current.bounds.Height, oldOffset, ancestor.scroll.offset, moved,
-		))
+		if !caretOnly {
+			logScrollFocus(fmt.Sprintf(
+				"ensure-visible key=%q horizontal=%v start=%.1f end=%.1f height=%.1f offset=%.1f->%.1f moved=%v",
+				current.key, ancestor.scroll.horizontal, start, end, current.bounds.Height, oldOffset, ancestor.scroll.offset, moved,
+			))
+		}
 		if moved {
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // SetOverlay places a window-coordinate widget above the retained build tree.
@@ -1094,9 +1114,14 @@ func (h *Host) PerformAutomationAction(automationID string, action woxui.Accessi
 }
 
 // Key routes one semantic key event through capture, target, and bubble phases.
-func (h *Host) Key(event woxui.KeyEvent) bool {
+func (h *Host) Key(event woxui.KeyEvent) (handled bool) {
 	if event.Down {
 		h.resetCaretBlink()
+		defer func() {
+			if handled {
+				h.revealCaret = true
+			}
+		}()
 	}
 	// The active modal gets first refusal so a nested dialog cannot let Escape reach its parent.
 	if scope := h.nodes[h.activeModalScope()]; scope != nil && scope.scope != nil && scope.scope.onKey != nil && scope.scope.onKey(event) {
@@ -1140,7 +1165,11 @@ func (h *Host) Key(event woxui.KeyEvent) bool {
 func (h *Host) TextInput(event woxui.TextInputEvent) bool {
 	h.resetCaretBlink()
 	current := h.nodes[h.focused]
-	return current != nil && current.focus != nil && current.focus.onTextInput != nil && current.focus.onTextInput(event)
+	handled := current != nil && current.focus != nil && current.focus.onTextInput != nil && current.focus.onTextInput(event)
+	if handled {
+		h.revealCaret = true
+	}
+	return handled
 }
 
 func (h *Host) syncTextInput() {
@@ -1173,6 +1202,9 @@ func (h *Host) trackPointer(event woxui.PointerEvent) {
 func (h *Host) Pointer(event woxui.PointerEvent) {
 	if h.root == nil {
 		return
+	}
+	if event.Kind == woxui.PointerDown || event.Kind == woxui.PointerScroll {
+		h.revealCaret = false
 	}
 	h.trackPointer(event)
 	if h.dispatchRawPointer(event) {

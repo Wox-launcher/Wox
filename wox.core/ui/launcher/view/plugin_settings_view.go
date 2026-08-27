@@ -466,19 +466,21 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 			actionsWidth += 4
 		}
 	}
-	identity := woxwidget.Expanded{Child: woxwidget.Container{
-		Height: 40,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+	// Keep the icon and title as siblings. A 40-high title-only box top-aligns
+	// the text while CrossAxisCenter lifts the 32 icon against that taller box.
+	identity := woxwidget.Container{Width: width, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		icon,
+		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.QueryText},
 			woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle},
-		}},
-	}}
+		}}},
+	}}}
 	author := woxwidget.Expanded{Child: woxwidget.Container{
 		Height: 30, Padding: woxwidget.Insets{Left: 8},
 		Child: woxwidget.Align{Height: 30, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
 	}}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, identity}},
+		identity,
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			author,
 			woxwidget.Container{Width: actionsWidth, Height: 32, Child: pluginTextActions(props.MetadataActions, theme)},

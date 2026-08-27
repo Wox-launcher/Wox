@@ -117,8 +117,12 @@ func (r *Repository) Discard(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return errors.New("note id is empty")
 	}
+	record, getErr := r.Get(id)
 	if err := r.store.DeleteWithSync(noteSettingPrefix+id, true); err != nil {
 		return err
+	}
+	if getErr == nil {
+		r.removeUnreferencedAttachments(record.Document)
 	}
 	go r.notify(id)
 	return nil
@@ -140,6 +144,7 @@ func (r *Repository) PurgeEmpty() (int, error) {
 		if err := r.store.DeleteWithSync(noteSettingPrefix+record.ID, true); err != nil {
 			return count, err
 		}
+		r.removeUnreferencedAttachments(record.Document)
 		count++
 		go r.notify(record.ID)
 	}
@@ -195,11 +200,15 @@ func (r *Repository) Save(id, expectedRevision string, document common.NoteDocum
 		go r.notify(conflict.ID)
 		return conflict, true, nil
 	}
+	orphans := attachmentIDsMissing(NoteAttachmentIDs(current.Document), NoteAttachmentIDs(document))
 	current.Document = NormalizeDocument(document)
 	current.UpdatedAt = now
 	current.Revision = uuid.NewString()
 	if err := r.write(current); err != nil {
 		return common.NoteRecord{}, false, err
+	}
+	if len(orphans) > 0 {
+		r.removeUnreferencedAttachments(attachmentDocument(orphans))
 	}
 	go r.notify(current.ID)
 	return current, false, nil
@@ -280,10 +289,38 @@ func (r *Repository) PurgeDeletedBefore(cutoff time.Time) (int, error) {
 		if err := r.store.DeleteWithSync(noteSettingPrefix+record.ID, true); err != nil {
 			return count, err
 		}
+		r.removeUnreferencedAttachments(record.Document)
 		count++
 		go r.notify(record.ID)
 	}
 	return count, nil
+}
+
+// removeUnreferencedAttachments deletes local image files that no remaining note still points at.
+func (r *Repository) removeUnreferencedAttachments(document common.NoteDocument) {
+	ids := NoteAttachmentIDs(document)
+	if len(ids) == 0 {
+		return
+	}
+	records, err := r.List(true)
+	if err != nil {
+		util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("list notes while removing attachments: %s", err.Error()))
+		return
+	}
+	used := map[string]struct{}{}
+	for _, record := range records {
+		for _, id := range NoteAttachmentIDs(record.Document) {
+			used[id] = struct{}{}
+		}
+	}
+	for _, id := range ids {
+		if _, ok := used[id]; ok {
+			continue
+		}
+		if err := RemoveNoteAttachment(id); err != nil {
+			util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("remove note attachment %s: %s", id, err.Error()))
+		}
+	}
 }
 
 // GetLocal loads one device-only Notes preference.

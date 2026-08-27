@@ -22,7 +22,10 @@ import (
 )
 
 const (
-	folderResultScore int64 = 1000
+	PluginID                      = "527ba64f-c8f5-4fc7-bb98-306f79d27f32"
+	PluginCommandBrowsePath       = "browse_path"
+	PluginCommandDataPath         = "path"
+	folderResultScore       int64 = 1000
 
 	folderOpenActionID               = "open_folder"
 	folderEnterActionID              = "enter_folder"
@@ -60,7 +63,7 @@ type folderFavoriteMatch struct {
 // GetMetadata returns the system plugin metadata for direct folder browsing.
 func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "527ba64f-c8f5-4fc7-bb98-306f79d27f32",
+		Id:            PluginID,
 		Name:          "i18n:plugin_folder_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -124,6 +127,67 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 
 func (p *FolderPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
+	p.api.OnHandlePluginCommand(ctx, p.handlePluginCommand)
+}
+
+// handlePluginCommand opens Folder browsing at a path provided by another plugin.
+func (p *FolderPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
+	if request.Command != PluginCommandBrowsePath {
+		return plugin.PluginCommandResult{Handled: false}
+	}
+
+	browsePath, err := resolveFolderBrowsePath(request.Data[PluginCommandDataPath])
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	if p.api == nil {
+		return plugin.PluginCommandResult{Handled: true, Message: "folder plugin is not initialized"}
+	}
+
+	p.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType: plugin.QueryTypeInput,
+		QueryText: ensureFolderQueryTrailingSeparator(browsePath),
+	})
+	return plugin.PluginCommandResult{Handled: true}
+}
+
+// BrowsePathAction hands a filesystem location to Folder without exposing extra query syntax.
+func BrowsePathAction(api plugin.API, path string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_folder_browse_here",
+		Icon:                   common.FolderIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
+				PluginId: PluginID,
+				Command:  PluginCommandBrowsePath,
+				Data: common.ContextData{
+					PluginCommandDataPath: path,
+				},
+			})
+		},
+	}
+}
+
+// resolveFolderBrowsePath accepts a file or folder and returns the directory Folder should list.
+func resolveFolderBrowsePath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", errors.New("path is required")
+	}
+
+	cleaned, cleanErr := filepath.Abs(path)
+	if cleanErr != nil {
+		cleaned = filepath.Clean(path)
+	}
+	info, statErr := os.Stat(cleaned)
+	if statErr != nil {
+		return "", fmt.Errorf("invalid path: %s", path)
+	}
+	if !info.IsDir() {
+		cleaned = filepath.Dir(cleaned)
+	}
+	return cleaned, nil
 }
 
 // Query handles global input that points to an existing folder path.
@@ -356,46 +420,9 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 
 // buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
 func (p *FolderPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
-	workingDirectory := path
-	if !isDir {
-		workingDirectory = filepath.Dir(path)
-	}
-
-	return plugin.QueryResultAction{
-		Id:                     folderExecuteCommandHereActionID,
-		Name:                   "i18n:plugin_file_execute_command_here",
-		Icon:                   common.PluginShellIcon,
-		PreventHideAfterAction: true,
-		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			if p.api == nil {
-				return
-			}
-			result, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
-				PluginId: shellplugin.PluginID,
-				Command:  shellplugin.PluginCommandPrepareCommandAtDirectory,
-				Data: common.ContextData{
-					shellplugin.PluginCommandDataWorkingDirectory: workingDirectory,
-				},
-			})
-			if err != nil {
-				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to invoke shell plugin command: %s", err.Error()))
-				p.api.Notify(ctx, err.Error())
-				return
-			}
-			if !result.Handled {
-				message := result.Message
-				if message == "" {
-					message = "shell plugin command was not handled"
-				}
-				p.api.Log(ctx, plugin.LogLevelWarning, message)
-				p.api.Notify(ctx, message)
-				return
-			}
-			if result.Message != "" {
-				p.api.Notify(ctx, result.Message)
-			}
-		},
-	}
+	action := shellplugin.PrepareCommandAtDirectoryAction(p.api, path, isDir)
+	action.Id = folderExecuteCommandHereActionID
+	return action
 }
 
 // buildToggleHiddenFilesAction flips hidden-child visibility and refreshes the current folder query.

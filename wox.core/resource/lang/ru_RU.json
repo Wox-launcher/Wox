@@ -683,6 +683,8 @@
   "ui_cloud_sync_plugin_exclusions_plugin": "Плагин",
   "ui_cloud_sync_plugin_exclusions_plugin_tips": "Выберите плагин, который нужно исключить из облачной синхронизации.",
   "ui_cloud_sync_plugin_exclusions_uninstalled": "Не установлен",
+  "ui_cloud_sync_config_note_notes": "Заметки",
+  "ui_cloud_sync_config_note_notes_tips": "Текст заметок синхронизируется. Изображения остаются на этом устройстве.",
   "ui_cloud_sync_intro_title": "Облачная синхронизация",
   "ui_cloud_sync_intro_feature_label": "Возможности",
   "ui_cloud_sync_intro_feature_value": "Синхронизация настроек Wox, настроек плагинов и ключей шифрования между устройствами.",
@@ -1227,6 +1229,7 @@
   "plugin_notes_action_export_html": "Экспортировать как HTML",
   "plugin_notes_action_delete": "Удалить заметку",
   "plugin_notes_action_restore": "Восстановить заметку",
+  "plugin_notes_action_save": "Сохранить в заметки",
   "plugin_file_plugin_name": "Поиск файлов",
   "plugin_file_plugin_description": "Поиск файлов и папок",
   "plugin_file_setting_roots_title": "Каталоги поиска",
@@ -2007,6 +2010,7 @@
   "plugin_converter_copy_result": "Копировать",
   "plugin_folder_open": "Открыть",
   "plugin_folder_enter": "Войти в папку",
+  "plugin_folder_browse_here": "Открыть папку здесь",
   "plugin_folder_show_hidden_files": "Показать скрытые файлы",
   "plugin_folder_hide_hidden_files": "Скрыть скрытые файлы",
   "plugin_folder_favorites": "Избранное",
@@ -2499,5 +2503,11 @@
   "notes_table_insert_column": "Вставить столбец",
   "notes_table_delete_row": "Удалить строку",
   "notes_table_delete_column": "Удалить столбец",
-  "notes_table_delete": "Удалить таблицу"
+  "notes_table_delete": "Удалить таблицу",
+  "notes_image_missing": "Изображение отсутствует",
+  "notes_image_smaller": "Уменьшить",
+  "notes_image_larger": "Увеличить",
+  "notes_image_delete": "Удалить изображение",
+  "notes_view_markdown": "Переключить на Markdown",
+  "notes_view_preview": "Переключить на предпросмотр"
 }

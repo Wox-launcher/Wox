@@ -8,6 +8,8 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system/explorer"
+	notesplugin "wox/plugin/system/notes"
+	shellplugin "wox/plugin/system/shell"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/airdrop"
@@ -346,6 +348,13 @@ func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string
 
 	if util.IsFileExists(strings.TrimSpace(text)) {
 		results = append(results, i.queryForFile(ctx, strings.TrimSpace(text))...)
+	} else {
+		noteAction := notesplugin.CreateNoteAction(i.api, "", text, "")
+		results = append(results, plugin.QueryResult{
+			Title:   noteAction.Name,
+			Icon:    noteAction.Icon,
+			Actions: []plugin.QueryResultAction{noteAction},
+		})
 	}
 
 	return results
@@ -417,6 +426,21 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 				},
 			},
 		},
+	})
+
+	isDir := util.IsDirExists(filePath)
+	executeAction := shellplugin.PrepareCommandAtDirectoryAction(i.api, filePath, isDir)
+	results = append(results, plugin.QueryResult{
+		Title:   executeAction.Name,
+		Icon:    executeAction.Icon,
+		Actions: []plugin.QueryResultAction{executeAction},
+	})
+
+	noteAction := notesplugin.CreateNoteAction(i.api, "", "", filePath)
+	results = append(results, plugin.QueryResult{
+		Title:   noteAction.Name,
+		Icon:    noteAction.Icon,
+		Actions: []plugin.QueryResultAction{noteAction},
 	})
 
 	results = append(results, plugin.QueryResult{

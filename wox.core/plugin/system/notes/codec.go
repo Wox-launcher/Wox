@@ -5,6 +5,7 @@ import (
 	"html"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -48,9 +49,26 @@ func NormalizeDocument(document common.NoteDocument) common.NoteDocument {
 		if !validBlockType(block.Type) {
 			block.Type = common.NoteBlockParagraph
 		}
-		if block.Type == common.NoteBlockParagraph && block.Table == nil && looksLikeGFMTable(block.Text) {
-			if upgraded := tableFromMarkdown(block.Text); upgraded != nil {
-				block.Type, block.Table, block.Spans = common.NoteBlockTable, upgraded, nil
+		if block.Type == common.NoteBlockParagraph && block.Table == nil {
+			if extracted := splitParagraphTables(block); len(extracted) > 0 {
+				for _, part := range extracted {
+					if part.ID == "" {
+						part.ID = uuid.NewString()
+					}
+					if part.Type == common.NoteBlockTable {
+						part.Table = normalizeTable(part.Table, part.Text)
+						part.Text = tableToMarkdown(*part.Table)
+						part.Spans = nil
+						part.Image = nil
+						blocks = append(blocks, part)
+						continue
+					}
+					part.Table = nil
+					part.Image = nil
+					part.Spans = normalizeSpans(part.Text, part.Spans)
+					blocks = append(blocks, part)
+				}
+				continue
 			}
 		}
 		if block.Type != common.NoteBlockTask {
@@ -65,10 +83,22 @@ func NormalizeDocument(document common.NoteDocument) common.NoteDocument {
 			block.Table = normalizeTable(block.Table, block.Text)
 			block.Text = tableToMarkdown(*block.Table)
 			block.Spans = nil
+			block.Image = nil
 			blocks = append(blocks, block)
 			continue
 		}
+		if block.Type == common.NoteBlockImage {
+			if image := normalizeNoteImage(block.Image); image != nil {
+				block.Image = image
+				block.Table = nil
+				block.Text = ""
+				block.Spans = nil
+				blocks = append(blocks, block)
+			}
+			continue
+		}
 		block.Table = nil
+		block.Image = nil
 		block.Spans = normalizeSpans(block.Text, block.Spans)
 		if block.Type == common.NoteBlockCode && strings.Contains(block.Text, "\n") {
 			for index, line := range strings.Split(strings.ReplaceAll(block.Text, "\r\n", "\n"), "\n") {
@@ -83,6 +113,31 @@ func NormalizeDocument(document common.NoteDocument) common.NoteDocument {
 		}
 		blocks = append(blocks, block)
 	}
+	if len(blocks) == 0 {
+		return EmptyDocument()
+	}
+	document.Blocks = blocks
+	return EnsureNoteImageEditGaps(document)
+}
+
+// EnsureNoteImageEditGaps keeps an empty paragraph before, after, and between images so the caret can land there.
+func EnsureNoteImageEditGaps(document common.NoteDocument) common.NoteDocument {
+	if len(document.Blocks) == 0 {
+		return document
+	}
+	blocks := make([]common.NoteBlock, 0, len(document.Blocks)+2)
+	if document.Blocks[0].Type == common.NoteBlockImage {
+		blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+	}
+	for index, block := range document.Blocks {
+		if index > 0 && document.Blocks[index-1].Type == common.NoteBlockImage && block.Type == common.NoteBlockImage {
+			blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+		}
+		blocks = append(blocks, block)
+	}
+	if blocks[len(blocks)-1].Type == common.NoteBlockImage {
+		blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+	}
 	document.Blocks = blocks
 	return document
 }
@@ -95,7 +150,7 @@ func validBlockType(blockType common.NoteBlockType) bool {
 	switch blockType {
 	case common.NoteBlockParagraph, common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3,
 		common.NoteBlockQuote, common.NoteBlockCode, common.NoteBlockBullet, common.NoteBlockOrdered,
-		common.NoteBlockTask, common.NoteBlockDivider, common.NoteBlockTable:
+		common.NoteBlockTask, common.NoteBlockDivider, common.NoteBlockTable, common.NoteBlockImage:
 		return true
 	default:
 		return false
@@ -127,7 +182,7 @@ func normalizeSpans(value string, spans []common.NoteSpan) []common.NoteSpan {
 // DocumentIsEmpty reports whether the user has not entered any note content.
 func DocumentIsEmpty(document common.NoteDocument) bool {
 	for _, block := range NormalizeDocument(document).Blocks {
-		if block.Type == common.NoteBlockDivider || block.Type == common.NoteBlockTable || strings.TrimSpace(block.Text) != "" {
+		if block.Type == common.NoteBlockDivider || block.IsStructural() || strings.TrimSpace(block.Text) != "" {
 			return false
 		}
 	}
@@ -136,23 +191,55 @@ func DocumentIsEmpty(document common.NoteDocument) bool {
 
 // NoteTitle returns the plain first line used throughout the Notes UI.
 func NoteTitle(document common.NoteDocument) string {
-	if len(document.Blocks) == 0 {
-		return untitledNote
+	if title := CustomNoteTitle(document); title != "" {
+		return title
 	}
-	title := strings.TrimSpace(strings.SplitN(document.Blocks[0].Text, "\n", 2)[0])
-	if title == "" && document.Blocks[0].Type == common.NoteBlockTable && document.Blocks[0].Table != nil {
-		for _, row := range document.Blocks[0].Table.Rows {
+	return untitledNote
+}
+
+// CustomNoteTitle returns the first visible title, or empty when the note should use the untitled fallback.
+func CustomNoteTitle(document common.NoteDocument) string {
+	for _, block := range document.Blocks {
+		if title := noteBlockTitle(block); title != "" {
+			return title
+		}
+	}
+	return ""
+}
+
+func noteBlockTitle(block common.NoteBlock) string {
+	if block.Type == common.NoteBlockImage && block.Image != nil {
+		name := strings.TrimSpace(block.Image.FileName)
+		if name == "" {
+			name = strings.TrimSpace(block.Image.ID)
+		}
+		if name == "" {
+			return ""
+		}
+		return strings.TrimSuffix(name, extForNoteTitle(name))
+	}
+	if title := strings.TrimSpace(strings.SplitN(block.Text, "\n", 2)[0]); title != "" {
+		return title
+	}
+	if block.Type == common.NoteBlockTable && block.Table != nil {
+		for _, row := range block.Table.Rows {
 			for _, cell := range row {
-				if title = strings.TrimSpace(cell.Text); title != "" {
+				if title := strings.TrimSpace(cell.Text); title != "" {
 					return title
 				}
 			}
 		}
 	}
-	if title == "" {
-		return untitledNote
+	return ""
+}
+
+func extForNoteTitle(name string) string {
+	for i := len(name) - 1; i >= 0; i-- {
+		if name[i] == '.' {
+			return name[i:]
+		}
 	}
-	return title
+	return ""
 }
 
 // NotePreview returns a compact plain-text list preview.
@@ -168,7 +255,29 @@ func NotePreview(document common.NoteDocument) string {
 // AppendTitleSuffix preserves document formatting while distinguishing a conflict copy.
 func AppendTitleSuffix(document common.NoteDocument, suffix string) common.NoteDocument {
 	document = NormalizeDocument(document)
-	block := &document.Blocks[0]
+	index := 0
+	for index < len(document.Blocks) && !document.Blocks[index].IsStructural() && strings.TrimSpace(document.Blocks[index].Text) == "" {
+		index++
+	}
+	if index >= len(document.Blocks) {
+		document.Blocks = append([]common.NoteBlock{{
+			ID: uuid.NewString(), Type: common.NoteBlockHeading1, Text: untitledNote + suffix,
+		}}, document.Blocks...)
+		return document
+	}
+	block := &document.Blocks[index]
+	if strings.TrimSpace(block.Text) == "" {
+		if block.Type == common.NoteBlockImage && block.Image != nil && strings.TrimSpace(block.Image.FileName) != "" {
+			name := block.Image.FileName
+			ext := extForNoteTitle(name)
+			block.Image.FileName = strings.TrimSuffix(name, ext) + suffix + ext
+			return document
+		}
+		document.Blocks = append([]common.NoteBlock{{
+			ID: uuid.NewString(), Type: common.NoteBlockHeading1, Text: untitledNote + suffix,
+		}}, document.Blocks...)
+		return document
+	}
 	first, rest, found := strings.Cut(block.Text, "\n")
 	block.Text = first + suffix
 	if found {
@@ -205,11 +314,19 @@ func ToPlainText(document common.NoteDocument) string {
 				lines = append(lines, tableToPlainText(*block.Table))
 			}
 			continue
+		case common.NoteBlockImage:
+			if name := noteImagePlainLabel(block.Image); name != "" {
+				lines = append(lines, name)
+			}
+			continue
 		default:
 			ordered = 1
 		}
 		if noteListBlockType(block.Type) {
 			prefix = strings.Repeat("    ", block.Indent) + prefix
+		}
+		if prefix == "" && strings.TrimSpace(block.Text) == "" {
+			continue
 		}
 		lines = append(lines, prefix+block.Text)
 	}
@@ -219,8 +336,9 @@ func ToPlainText(document common.NoteDocument) string {
 // ToMarkdown exports every Notes block and supported inline style.
 func ToMarkdown(document common.NoteDocument) string {
 	document = NormalizeDocument(document)
-	lines := make([]string, 0, len(document.Blocks))
+	lines := make([]string, 0, len(document.Blocks)*2)
 	ordered := [common.NoteMaximumIndent + 1]int{1, 1, 1}
+	var previous common.NoteBlockType
 	for index := 0; index < len(document.Blocks); index++ {
 		block := document.Blocks[index]
 		indent := max(0, min(common.NoteMaximumIndent, block.Indent))
@@ -261,15 +379,28 @@ func ToMarkdown(document common.NoteDocument) string {
 			if block.Table != nil {
 				value = tableToMarkdown(*block.Table)
 			}
+		case common.NoteBlockImage:
+			value = noteImageMarkdown(block.Image)
 		default:
 			ordered = [common.NoteMaximumIndent + 1]int{1, 1, 1}
 		}
 		if noteListBlockType(block.Type) {
 			value = strings.Repeat("    ", indent) + value
 		}
+		// GFM tables, fences, and headings must start a new block. A single
+		// newline after a paragraph keeps pipe rows inside that paragraph.
+		if len(lines) > 0 && !keepTightMarkdown(previous, block.Type) {
+			lines = append(lines, "")
+		}
 		lines = append(lines, value)
+		previous = block.Type
 	}
 	return strings.Join(lines, "\n")
+}
+
+// keepTightMarkdown leaves adjacent list items without a blank line between them.
+func keepTightMarkdown(previous, next common.NoteBlockType) bool {
+	return noteListBlockType(previous) && noteListBlockType(next)
 }
 
 type inlineStyle struct {
@@ -359,6 +490,8 @@ func ToHTML(document common.NoteDocument) string {
 				if block.Table != nil {
 					output.WriteString(tableToHTML(*block.Table))
 				}
+			case common.NoteBlockImage:
+				output.WriteString(noteImageHTML(block.Image))
 			default:
 				output.WriteString("<p>" + value + "</p>\n")
 			}
@@ -462,6 +595,11 @@ func markdownBlocks(node ast.Node, source []byte) []common.NoteBlock {
 	block := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph}
 	switch value := node.(type) {
 	case *ast.Paragraph, *ast.TextBlock:
+		if image, ok := standaloneMarkdownImage(node, source); ok {
+			block.Type = common.NoteBlockImage
+			block.Image = &image
+			break
+		}
 		block.Text, block.Spans = markdownInlineContent(node, source)
 	case *ast.Heading:
 		block.Text, block.Spans = markdownInlineContent(node, source)
@@ -667,7 +805,19 @@ func htmlBlocks(node *goquery.Selection) []common.NoteBlock {
 		block.Type = common.NoteBlockHeading3
 		block.Text, block.Spans = htmlSelectionText(node)
 	case "p":
+		if image := standaloneHTMLImage(node); image != nil {
+			block.Type = common.NoteBlockImage
+			block.Image = image
+			break
+		}
 		block.Text, block.Spans = htmlSelectionText(node)
+	case "img":
+		if image := standaloneHTMLImage(node); image != nil {
+			block.Type = common.NoteBlockImage
+			block.Image = image
+			break
+		}
+		return nil
 	case "blockquote":
 		block.Type = common.NoteBlockQuote
 		block.Text, block.Spans = htmlSelectionText(node)
@@ -909,6 +1059,64 @@ func looksLikeGFMTable(value string) bool {
 	return len(lines) >= 2 && strings.Contains(lines[0], "|") && isTableSeparator(lines[1])
 }
 
+// splitParagraphTables pulls GFM tables out of a paragraph that Goldmark treated as one block.
+func splitParagraphTables(block common.NoteBlock) []common.NoteBlock {
+	text := block.Text
+	if !strings.Contains(text, "|") {
+		return nil
+	}
+	var blocks []common.NoteBlock
+	for strings.TrimSpace(text) != "" {
+		prefix, table, suffix, ok := extractEmbeddedGFMTable(text)
+		if !ok {
+			if len(blocks) == 0 {
+				return nil
+			}
+			rest := block
+			rest.ID = uuid.NewString()
+			rest.Type = common.NoteBlockParagraph
+			rest.Text = text
+			rest.Table = nil
+			rest.Spans = nil
+			return append(blocks, rest)
+		}
+		if strings.TrimSpace(prefix) != "" {
+			para := block
+			if len(blocks) > 0 {
+				para.ID = uuid.NewString()
+			}
+			para.Type = common.NoteBlockParagraph
+			para.Text = strings.TrimRight(prefix, "\n")
+			para.Table = nil
+			para.Spans = nil
+			blocks = append(blocks, para)
+		}
+		blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockTable, Table: table})
+		text = strings.TrimLeft(suffix, "\n")
+	}
+	return blocks
+}
+
+// extractEmbeddedGFMTable finds the first pipe table even when it shares a paragraph.
+func extractEmbeddedGFMTable(value string) (prefix string, table *common.NoteTable, suffix string, ok bool) {
+	lines := strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")
+	for start := 0; start < len(lines)-1; start++ {
+		if !strings.Contains(lines[start], "|") || !isTableSeparator(lines[start+1]) {
+			continue
+		}
+		end := start + 2
+		for end < len(lines) && strings.TrimSpace(lines[end]) != "" && strings.Contains(lines[end], "|") {
+			end++
+		}
+		parsed := tableFromMarkdown(strings.Join(lines[start:end], "\n"))
+		if parsed == nil {
+			continue
+		}
+		return strings.Join(lines[:start], "\n"), parsed, strings.Join(lines[end:], "\n"), true
+	}
+	return "", nil, "", false
+}
+
 func looksLikeHTML(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	return strings.Contains(strings.ToLower(trimmed), "<table") || strings.Contains(strings.ToLower(trimmed), "<article")
@@ -953,6 +1161,136 @@ func isTableSeparator(line string) bool {
 		}
 	}
 	return strings.Contains(line, "-")
+}
+
+func normalizeNoteImage(image *common.NoteImage) *common.NoteImage {
+	if image == nil {
+		return nil
+	}
+	id := SanitizeNoteImageID(image.ID)
+	if id == "" {
+		return nil
+	}
+	normalized := *image
+	normalized.ID = id
+	normalized.FileName = strings.TrimSpace(image.FileName)
+	if normalized.Width < 0 {
+		normalized.Width = 0
+	}
+	if normalized.Height < 0 {
+		normalized.Height = 0
+	}
+	normalized.Scale = ClampNoteImageScale(normalized.Scale)
+	if normalized.Scale == 100 {
+		normalized.Scale = 0
+	}
+	return &normalized
+}
+
+func noteImagePlainLabel(image *common.NoteImage) string {
+	if image == nil {
+		return ""
+	}
+	if name := strings.TrimSpace(image.FileName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(image.ID)
+}
+
+func noteImageMarkdown(image *common.NoteImage) string {
+	if image == nil || SanitizeNoteImageID(image.ID) == "" {
+		return ""
+	}
+	alt := noteImagePlainLabel(image)
+	alt = strings.ReplaceAll(alt, "]", "")
+	ref := notesImageRefPrefix + image.ID
+	params := make([]string, 0, 3)
+	if scale := ClampNoteImageScale(image.Scale); scale > 0 && scale < 100 {
+		params = append(params, fmt.Sprintf("scale=%d", scale))
+	}
+	if image.Width > 0 && image.Height > 0 {
+		params = append(params, fmt.Sprintf("width=%d", image.Width), fmt.Sprintf("height=%d", image.Height))
+	}
+	if len(params) > 0 {
+		ref += "?" + strings.Join(params, "&")
+	}
+	return fmt.Sprintf("![%s](%s)", alt, ref)
+}
+
+func noteImageHTML(image *common.NoteImage) string {
+	if image == nil || SanitizeNoteImageID(image.ID) == "" {
+		return ""
+	}
+	attrs := ""
+	if scale := ClampNoteImageScale(image.Scale); scale > 0 && scale < 100 {
+		attrs += fmt.Sprintf(" data-notes-image-scale=\"%d\"", scale)
+	}
+	if image.Width > 0 && image.Height > 0 {
+		attrs += fmt.Sprintf(" data-notes-image-width=\"%d\" data-notes-image-height=\"%d\"", image.Width, image.Height)
+	}
+	return fmt.Sprintf("<img alt=\"%s\" data-notes-image=\"%s\"%s>\n", html.EscapeString(noteImagePlainLabel(image)), html.EscapeString(image.ID), attrs)
+}
+
+func standaloneMarkdownImage(node ast.Node, source []byte) (common.NoteImage, bool) {
+	child := node.FirstChild()
+	if child == nil {
+		return common.NoteImage{}, false
+	}
+	image, ok := child.(*ast.Image)
+	if !ok {
+		return common.NoteImage{}, false
+	}
+	for sibling := child.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
+		text, isText := sibling.(*ast.Text)
+		if !isText || strings.TrimSpace(string(text.Segment.Value(source))) != "" {
+			return common.NoteImage{}, false
+		}
+	}
+	ref := parseNoteImageDestination(string(image.Destination))
+	if ref.ID == "" {
+		return common.NoteImage{}, false
+	}
+	alt, _ := markdownInlineContent(image, source)
+	return common.NoteImage{ID: ref.ID, FileName: strings.TrimSpace(alt), Scale: ref.Scale, Width: ref.Width, Height: ref.Height}, true
+}
+
+func standaloneHTMLImage(node *goquery.Selection) *common.NoteImage {
+	img := node
+	if !strings.EqualFold(goquery.NodeName(node), "img") {
+		img = node.Find("img").First()
+		if img.Length() == 0 {
+			return nil
+		}
+		clone := node.Clone()
+		clone.Find("img").Remove()
+		if strings.TrimSpace(clone.Text()) != "" {
+			return nil
+		}
+	}
+	ref := parsedNoteImageRef{ID: SanitizeNoteImageID(img.AttrOr("data-notes-image", ""))}
+	if ref.ID == "" {
+		ref = parseNoteImageDestination(img.AttrOr("src", ""))
+	} else {
+		if value := strings.TrimSpace(img.AttrOr("data-notes-image-scale", "")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil {
+				ref.Scale = ClampNoteImageScale(parsed)
+			}
+		}
+		if value := strings.TrimSpace(img.AttrOr("data-notes-image-width", "")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil {
+				ref.Width = parsed
+			}
+		}
+		if value := strings.TrimSpace(img.AttrOr("data-notes-image-height", "")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil {
+				ref.Height = parsed
+			}
+		}
+	}
+	if ref.ID == "" {
+		return nil
+	}
+	return &common.NoteImage{ID: ref.ID, FileName: strings.TrimSpace(img.AttrOr("alt", "")), Scale: ref.Scale, Width: ref.Width, Height: ref.Height}
 }
 
 func nonEmptyLines(value string) []string {

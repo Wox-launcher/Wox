@@ -1,6 +1,8 @@
 package system
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"wox/setting/definition"
 	"wox/util"
@@ -50,6 +52,26 @@ func TestIgnoredClipboardApplicationMatching(t *testing.T) {
 	}
 	if isIgnoredClipboardApplication(rows, "com.apple.Safari") {
 		t.Fatal("unexpected identity match")
+	}
+}
+
+func TestResolveClipboardFilesystemPathAcceptsFileAndDirectory(t *testing.T) {
+	root := t.TempDir()
+	filePath := filepath.Join(root, "notes.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	dir, isDir := resolveClipboardFilesystemPath(`"` + root + `"`)
+	if !isDir || dir != filepath.Clean(root) {
+		t.Fatalf("directory path = %q isDir=%v", dir, isDir)
+	}
+	file, isDir := resolveClipboardFilesystemPath(filePath)
+	if isDir || file != filepath.Clean(filePath) {
+		t.Fatalf("file path = %q isDir=%v", file, isDir)
+	}
+	if path, ok := resolveClipboardFilesystemPath("relative/path"); path != "" || ok {
+		t.Fatalf("relative path should be rejected: %q %v", path, ok)
 	}
 }
 

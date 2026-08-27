@@ -74,6 +74,7 @@ type notesWindowController struct {
 	host              *woxwidget.Host
 	editor            *woxwidget.TextEditingController
 	editorFocus       *woxwidget.FocusNode
+	requestTextFocus  bool
 	searchEditor      *woxwidget.TextEditingController
 	searchFocus       *woxwidget.FocusNode
 	linkEditor        *woxwidget.TextEditingController
@@ -86,6 +87,8 @@ type notesWindowController struct {
 	focusedTableBlock int
 	focusedTableRow   int
 	focusedTableCol   int
+	focusedImageBlock int
+	markdownView      bool
 	activeTextSegment woxcomponent.NoteDocumentSegment
 	summaries         []common.NoteSummary
 	searchIndex       int
@@ -116,7 +119,7 @@ func newNotesWindowController(app *App, record common.NoteRecord) *notesWindowCo
 		app: app, editor: woxwidget.NewTextEditingController(""), editorFocus: woxwidget.NewFocusNode(),
 		searchEditor: woxwidget.NewTextEditingController(""), searchFocus: woxwidget.NewFocusNode(),
 		linkEditor: woxwidget.NewTextEditingController("https://"), linkFocus: woxwidget.NewFocusNode(),
-		windowID: woxui.WindowID("wox.notes." + newID()), formatVisible: true, zoom: 1, focusedTableBlock: -1,
+		windowID: woxui.WindowID("wox.notes." + newID()), formatVisible: true, zoom: 1, focusedTableBlock: -1, focusedImageBlock: -1,
 	}
 	controller.applyRecord(record)
 	return controller
@@ -363,11 +366,19 @@ func (c *notesWindowController) open(request common.NotesWindowRequest) error {
 
 // applyRecord projects a durable record into this window's editor state.
 func (c *notesWindowController) applyRecord(record common.NoteRecord) {
-	c.record, c.document = record, record.Document
+	c.record, c.document = record, notesplugin.EnsureNoteImageEditGaps(record.Document)
+	notesplugin.HydrateNoteImageDimensions(c.document)
+	c.activeTextSegment = woxcomponent.NoteDocumentSegment{}
 	c.focusedTableBlock = -1
-	value, runs, ranges := c.projectActiveText()
-	c.richRuns, c.blockRanges = runs, ranges
-	c.editor.SetText(value, false)
+	c.focusedImageBlock = -1
+	if c.markdownView {
+		c.editor.SetText(notesplugin.ToMarkdown(c.document), false)
+		c.richRuns, c.blockRanges = nil, nil
+	} else {
+		value, runs, ranges := c.projectActiveText()
+		c.richRuns, c.blockRanges = runs, ranges
+		c.editor.SetText(value, false)
+	}
 	c.selection = c.editor.State().Selection
 	c.dirty, c.errorText = false, ""
 	c.undoDocuments, c.redoDocuments = nil, nil
@@ -409,17 +420,215 @@ func (c *notesWindowController) onSegmentChanged(segmentStart int, value string)
 }
 
 func (c *notesWindowController) projectActiveText() (string, []woxcomponent.NoteTextRun, []noteBlockRange) {
-	c.activeTextSegment = c.firstTextSegment()
+	// Loaded, pasted, or edited documents can end in a table without a field for typing below it.
+	if count := len(c.document.Blocks); count > 0 && c.document.Blocks[count-1].IsStructural() {
+		c.document.Blocks = append(c.document.Blocks, common.NoteBlock{ID: newID(), Type: common.NoteBlockParagraph})
+	}
+	c.activeTextSegment = c.resolveActiveTextSegment()
 	return woxcomponent.ProjectNoteSegment(c.document, c.activeTextSegment, c.editorStyle(), c.app.palette.componentTheme())
+}
+
+// resolveActiveTextSegment keeps the caret in the text run the user last entered.
+func (c *notesWindowController) resolveActiveTextSegment() woxcomponent.NoteDocumentSegment {
+	if c.activeTextSegment.End > c.activeTextSegment.Start && !c.activeTextSegment.Structural() {
+		resolved := woxcomponent.NoteSegmentAtBlock(c.document, c.activeTextSegment.Start)
+		if !resolved.Structural() {
+			return resolved
+		}
+	}
+	return c.preferredTextSegment()
 }
 
 func (c *notesWindowController) firstTextSegment() woxcomponent.NoteDocumentSegment {
 	for _, segment := range woxcomponent.NoteDocumentSegments(c.document) {
-		if !segment.Table {
+		if !segment.Structural() {
 			return segment
 		}
 	}
 	return woxcomponent.NoteDocumentSegment{Start: 0, End: len(c.document.Blocks)}
+}
+
+func (c *notesWindowController) lastTextSegment() woxcomponent.NoteDocumentSegment {
+	found := c.firstTextSegment()
+	for _, segment := range woxcomponent.NoteDocumentSegments(c.document) {
+		if !segment.Structural() {
+			found = segment
+		}
+	}
+	return found
+}
+
+// preferredTextSegment puts the caret below a leading image so the large empty editor area is editable.
+func (c *notesWindowController) preferredTextSegment() woxcomponent.NoteDocumentSegment {
+	first := c.firstTextSegment()
+	if first.End < len(c.document.Blocks) && c.document.Blocks[first.End].Type == common.NoteBlockImage && woxcomponent.NoteSegmentIsEmpty(c.document, first) {
+		return c.lastTextSegment()
+	}
+	return first
+}
+
+// viewModeMenuLabel names the Markdown/preview toggle with its platform shortcut.
+func (c *notesWindowController) viewModeMenuLabel() string {
+	key := "i18n:notes_view_markdown"
+	if c.markdownView {
+		key = "i18n:notes_view_preview"
+	}
+	return c.app.translate(key) + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("e")), "+") + ")"
+}
+
+// toggleMarkdownView switches the note between the rich preview and raw Markdown source.
+func (c *notesWindowController) toggleMarkdownView() {
+	if c.markdownView {
+		c.applyMarkdownToDocument()
+		c.markdownView = false
+		c.reproject(false)
+	} else {
+		c.markdownView = true
+		c.focusedTableBlock = -1
+		c.focusedImageBlock = -1
+		c.editor.SetText(notesplugin.ToMarkdown(c.document), false)
+	}
+	if c.editorFocus != nil {
+		c.editorFocus.RequestFocus()
+	}
+	c.invalidate()
+}
+
+// applyMarkdownToDocument parses the raw source editor into the durable document.
+func (c *notesWindowController) applyMarkdownToDocument() {
+	if !c.markdownView {
+		return
+	}
+	c.document = notesplugin.NormalizeDocument(notesplugin.ParseMarkdown(c.editor.Text()))
+	notesplugin.HydrateNoteImageDimensions(c.document)
+}
+
+// buildMarkdownEditor hosts the raw Markdown source instead of the rich preview.
+func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+	return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+		ID: "notes.editor.markdown", Label: c.app.translate("i18n:notes_editor"), Width: width, Height: height,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24}, Transparent: true, DisableHover: true,
+		Style: woxui.TextStyle{Size: 14 * c.zoom, Family: woxui.FontFamilyMonospace}, LineHeight: 22 * c.zoom,
+		TextAlignmentY: 0.5, TextColor: theme.PreviewText, Value: c.editor.Text(), Controller: c.editor,
+		FocusNode: c.editorFocus, Focused: c.editorFocus.HasFocus(), Autofocus: true,
+		ReadOnly: c.record.DeletedAt > 0, MaxLines: 10000, Window: c.managed.Window(), Theme: theme,
+		OnChanged: c.onMarkdownChanged, OnKey: c.onKey, OnUndo: c.undoDocument, OnRedo: c.redoDocument,
+	})
+}
+
+// onMarkdownChanged keeps the durable document in sync while the source editor is open.
+func (c *notesWindowController) onMarkdownChanged(value string) {
+	c.rememberDocumentUndo(c.document, time.Since(c.lastTextEdit) < 750*time.Millisecond)
+	c.lastTextEdit = time.Now()
+	c.document = notesplugin.NormalizeDocument(notesplugin.ParseMarkdown(value))
+	c.dirty, c.errorText = true, ""
+	c.scheduleSave()
+	c.invalidate()
+}
+
+// focusImage selects one attachment so its action bar can appear.
+func (c *notesWindowController) focusImage(block int) {
+	c.focusedImageBlock = block
+	c.focusedTableBlock = -1
+	c.invalidate()
+}
+
+// focusTextBesideImage puts the caret in the paragraph before or after the selected image.
+func (c *notesWindowController) focusTextBesideImage(block int, after bool) {
+	id := ""
+	if block >= 0 && block < len(c.document.Blocks) {
+		id = c.document.Blocks[block].ID
+	}
+	c.document = notesplugin.EnsureNoteImageEditGaps(c.document)
+	if id != "" {
+		for index, item := range c.document.Blocks {
+			if item.ID == id {
+				block = index
+				break
+			}
+		}
+	}
+	target := block
+	if after {
+		target = min(block+1, len(c.document.Blocks)-1)
+	} else if block > 0 {
+		target = block - 1
+	} else {
+		target = 0
+	}
+	c.bindActiveText(target, !after)
+	// The shared FocusNode still belongs to the previous segment until the next build.
+	// Let the target field request focus after it has attached that node.
+	c.requestTextFocus = true
+}
+
+// focusNoteText moves editing into a text run after the user taps it.
+func (c *notesWindowController) focusNoteText(segmentStart int) {
+	if c.focusedImageBlock < 0 && c.focusedTableBlock < 0 && c.activeTextSegment.Start == segmentStart && (c.editorFocus == nil || c.editorFocus.HasFocus()) {
+		return
+	}
+	c.bindActiveText(segmentStart, true)
+}
+
+// bindActiveText projects a text run without requesting focus through the previous segment's attachment.
+func (c *notesWindowController) bindActiveText(segmentStart int, caretAtEnd bool) {
+	c.focusedImageBlock = -1
+	c.focusedTableBlock = -1
+	c.activeTextSegment = woxcomponent.NoteSegmentAtBlock(c.document, segmentStart)
+	if c.activeTextSegment.Structural() {
+		c.activeTextSegment = c.preferredTextSegment()
+	}
+	value, runs, ranges := woxcomponent.ProjectNoteSegment(c.document, c.activeTextSegment, c.editorStyle(), c.app.palette.componentTheme())
+	c.richRuns, c.blockRanges = runs, ranges
+	c.editor.SetText(value, false)
+	if caretAtEnd {
+		end := utf8.RuneCountInString(value)
+		c.editor.SetSelection(end, end)
+	} else {
+		c.editor.SetSelection(0, 0)
+	}
+	c.selection = c.editor.State().Selection
+	c.invalidate()
+}
+
+// scaleImage changes display width while preserving the image's aspect ratio.
+func (c *notesWindowController) scaleImage(block, delta int) {
+	if block < 0 || block >= len(c.document.Blocks) || c.document.Blocks[block].Image == nil {
+		return
+	}
+	c.rememberDocumentUndo(c.document, false)
+	updated := woxcomponent.CloneNoteDocument(c.document)
+	updated.Blocks[block].Image.Scale = notesplugin.AdjustNoteImageScale(updated.Blocks[block].Image.Scale, delta)
+	c.document = updated
+	c.focusedImageBlock = block
+	c.dirty, c.errorText = true, ""
+	c.scheduleSave()
+	c.invalidate()
+}
+
+// deleteImage removes the focused attachment block from the document.
+func (c *notesWindowController) deleteImage(block int) {
+	if block < 0 || block >= len(c.document.Blocks) || c.document.Blocks[block].Type != common.NoteBlockImage {
+		return
+	}
+	c.rememberDocumentUndo(c.document, false)
+	c.document = woxcomponent.DeleteNoteImage(c.document, block)
+	c.focusedImageBlock = -1
+	c.reproject(false)
+}
+
+// resolveNoteImage loads a note attachment at preview resolution so large screenshots stay in cache.
+func (c *notesWindowController) resolveNoteImage(image common.NoteImage) *woxui.Image {
+	path := notesplugin.ResolveNoteImagePath(image)
+	if path == "" {
+		return nil
+	}
+	width := c.lastFrame.Width
+	if width <= 0 {
+		width = notesDefaultWidth
+	}
+	height := woxcomponent.NoteEditorImageMaxHeight * max(c.zoom, 1)
+	return c.app.imageForSize(woxImage{ImageType: "absolute", ImageData: path}, previewImageRequestSize(width, height))
 }
 
 // scheduleSave coalesces typing into the 500 ms autosave boundary.
@@ -439,6 +648,7 @@ func (c *notesWindowController) scheduleSave() {
 
 // flush persists dirty state while keeping failed edits retryable.
 func (c *notesWindowController) flush() error {
+	c.applyMarkdownToDocument()
 	if !c.dirty || c.record.ID == "" || c.app == nil || c.app.services == nil {
 		return nil
 	}
@@ -534,6 +744,7 @@ func (c *notesWindowController) close() error {
 		return nil
 	}
 	c.updateToolbarTooltip(false, "", woxui.Rect{})
+	c.applyMarkdownToDocument()
 	if notesplugin.DocumentIsEmpty(c.document) {
 		c.discardEmptyNote()
 	} else if err := c.flush(); err != nil {
@@ -720,7 +931,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 	toolbar := c.buildToolbar(frame.Size.Width, frame.WindowFocused, theme)
 	formatHeight := float32(0)
 	var formatBar woxwidget.Widget
-	if c.formatVisible {
+	if c.formatVisible && !c.markdownView {
 		formatHeight = launcherview.NotesFormatBarHeight
 		formatBar = c.buildFormatBar(frame.Size.Width, theme)
 	}
@@ -731,33 +942,48 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 		status = c.buildStatus(frame.Size.Width, theme)
 	}
 	editorHeight := max(float32(0), frame.Size.Height-launcherview.NotesToolbarHeight-formatHeight-statusHeight)
-	editor := woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
-		ID: "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
-		Width: frame.Size.Width, Height: editorHeight, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme,
-		Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
-		FocusNode: c.editorFocus, Focused: c.editorFocus.HasFocus() && c.focusedTableBlock < 0, Selection: c.selection,
-		OnChanged: c.onSegmentChanged, OnSelectionChanged: func(selection woxui.TextSelection) {
-			if selection == c.selection {
-				return
-			}
-			c.selection = selection
-			c.focusedTableBlock = -1
-			c.invalidate()
-		}, OnTapOffset: c.handleBlockTap, CursorAtOffset: c.editorCursorAt, OnKey: c.onKey,
-		OnUndo: c.undoDocument, OnRedo: c.redoDocument, OnPaste: c.pasteDocument,
-		TransformPaste: func(value string) string { return notesplugin.ToMarkdown(notesplugin.ParseMarkdown(value)) },
-		OnTableChange:  c.replaceTable, OnTableFocus: c.focusTableCell, OnTableKey: c.onTableKey, OnTablePaste: c.pasteTableClipboard,
-		OnDeleteEmptySegment: c.deleteEmptyTextSegment,
-		OnTableInsertRow:     c.tableInsertRow, OnTableInsertColumn: c.tableInsertColumn, OnTableDeleteRow: c.tableDeleteRow,
-		OnTableDeleteColumn: c.tableDeleteColumn, OnTableDelete: c.tableDelete, OnTableActionHover: c.updateTableActionTooltip,
-		TableActionLabels: woxcomponent.NoteTableActionLabels{
-			InsertRow: c.app.translate("i18n:notes_table_insert_row"), InsertColumn: c.app.translate("i18n:notes_table_insert_column"),
-			DeleteRow: c.app.translate("i18n:notes_table_delete_row"), DeleteColumn: c.app.translate("i18n:notes_table_delete_column"),
-			DeleteTable: c.app.translate("i18n:notes_table_delete"),
-		},
-		FocusedTableBlock: c.focusedTableBlock, FocusedTableRow: c.focusedTableRow, FocusedTableCol: c.focusedTableCol,
-	})
+	var editor woxwidget.Widget
+	if c.markdownView {
+		editor = c.buildMarkdownEditor(frame.Size.Width, editorHeight, theme)
+	} else {
+		editor = woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+			ID: "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
+			Width: frame.Size.Width, Height: editorHeight, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+			Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme,
+			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
+			FocusNode: c.editorFocus, Focused: (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
+			ActiveSegmentStart: c.activeTextSegment.Start, OnTextFocus: c.focusNoteText,
+			OnChanged: c.onSegmentChanged, OnSelectionChanged: func(selection woxui.TextSelection) {
+				if selection == c.selection {
+					return
+				}
+				c.selection = selection
+				c.focusedTableBlock = -1
+				c.focusedImageBlock = -1
+				c.invalidate()
+			}, OnTapOffset: c.handleBlockTap, OnTapBelowText: c.appendParagraphBelowText, CursorAtOffset: c.editorCursorAt, OnKey: c.onKey,
+			OnUndo: c.undoDocument, OnRedo: c.redoDocument, OnPaste: c.pasteDocument,
+			TransformPaste: func(value string) string { return notesplugin.ToMarkdown(notesplugin.ParseMarkdown(value)) },
+			OnTableChange:  c.replaceTable, OnTableFocus: c.focusTableCell, OnTableKey: c.onTableKey, OnTablePaste: c.pasteTableClipboard,
+			OnDeleteEmptySegment: c.deleteEmptyTextSegment,
+			OnTableInsertRow:     c.tableInsertRow, OnTableInsertColumn: c.tableInsertColumn, OnTableDeleteRow: c.tableDeleteRow,
+			OnTableDeleteColumn: c.tableDeleteColumn, OnTableDelete: c.tableDelete, OnTableActionHover: c.updateTableActionTooltip,
+			TableActionLabels: woxcomponent.NoteTableActionLabels{
+				InsertRow: c.app.translate("i18n:notes_table_insert_row"), InsertColumn: c.app.translate("i18n:notes_table_insert_column"),
+				DeleteRow: c.app.translate("i18n:notes_table_delete_row"), DeleteColumn: c.app.translate("i18n:notes_table_delete_column"),
+				DeleteTable: c.app.translate("i18n:notes_table_delete"),
+			},
+			FocusedTableBlock: c.focusedTableBlock, FocusedTableRow: c.focusedTableRow, FocusedTableCol: c.focusedTableCol,
+			ResolveImage: c.resolveNoteImage, MissingImageLabel: a.translate("i18n:notes_image_missing"),
+			FocusedImageBlock: c.focusedImageBlock, OnImageFocus: c.focusImage, OnImageLeave: c.focusTextBesideImage, OnImageScale: c.scaleImage, OnImageDelete: c.deleteImage,
+			OnImageActionHover: c.updateTableActionTooltip,
+			ImageActionLabels: woxcomponent.NoteImageActionLabels{
+				Smaller: c.app.translate("i18n:notes_image_smaller"), Larger: c.app.translate("i18n:notes_image_larger"),
+				Delete: c.app.translate("i18n:notes_image_delete"),
+			},
+		})
+		c.requestTextFocus = false
+	}
 	var overlay woxwidget.Widget
 	if c.linkOpen {
 		overlay = c.buildLinkOverlay(frame.Size, theme)
@@ -790,8 +1016,8 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	}
 	color := theme.ToolbarText
 	title := c.app.translate("i18n:notes_untitled")
-	if len(c.document.Blocks) > 0 && strings.TrimSpace(c.document.Blocks[0].Text) != "" {
-		title = strings.TrimSpace(strings.SplitN(c.document.Blocks[0].Text, "\n", 2)[0])
+	if custom := notesplugin.CustomNoteTitle(c.document); custom != "" {
+		title = custom
 	}
 	searchLabel := c.app.translate("i18n:notes_search") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+") + ")"
 	pinHotkey := "(" + strings.Join(formatHotkeyLabels(primaryHotkey("shift+p")), "+") + ")"
@@ -1109,6 +1335,7 @@ func (c *notesWindowController) openSearchItem(summary common.NoteSummary) {
 
 // persistCurrentNote saves edits, or drops an unused empty draft, before this window changes notes.
 func (c *notesWindowController) persistCurrentNote() error {
+	c.applyMarkdownToDocument()
 	if notesplugin.DocumentIsEmpty(c.document) {
 		c.discardEmptyNote()
 		return nil
@@ -1154,7 +1381,7 @@ func (c *notesWindowController) activateSearchSelection() {
 }
 
 func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
-	width := float32(190)
+	width := float32(240)
 	if c.formatMore {
 		rows := []woxwidget.Widget{
 			c.menuRow("format-bullet", c.app.translate("i18n:notes_format_bullet"), width, theme, func() { c.setBlock(common.NoteBlockBullet) }),
@@ -1176,6 +1403,7 @@ func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcompo
 		return c.moreOverlay(size, width, rows, theme)
 	}
 	rows := []woxwidget.Widget{
+		c.menuRow("view", c.viewModeMenuLabel(), width, theme, c.toggleMarkdownView),
 		c.menuRow("copy-link", c.app.translate("i18n:notes_copy_link"), width, theme, c.copyLink),
 		c.menuRow("export-md", c.app.translate("i18n:notes_export_markdown"), width, theme, func() { c.export("md") }),
 		c.menuRow("export-txt", c.app.translate("i18n:notes_export_text"), width, theme, func() { c.export("txt") }),
@@ -1307,8 +1535,25 @@ func (c *notesWindowController) onKey(event woxui.KeyEvent) bool {
 			c.invalidate()
 			return true
 		}
+		if c.focusedImageBlock >= 0 {
+			c.focusTextBesideImage(c.focusedImageBlock, true)
+			return true
+		}
 		c.requestClose()
 		return true
+	}
+	if c.focusedImageBlock >= 0 && event.Modifiers == 0 {
+		switch event.Key {
+		case woxui.KeyBackspace, woxui.KeyDelete:
+			c.deleteImage(c.focusedImageBlock)
+			return true
+		case woxui.KeyArrowLeft, woxui.KeyArrowUp:
+			c.focusTextBesideImage(c.focusedImageBlock, false)
+			return true
+		case woxui.KeyArrowRight, woxui.KeyArrowDown, woxui.KeyEnter:
+			c.focusTextBesideImage(c.focusedImageBlock, true)
+			return true
+		}
 	}
 	if event.Key == woxui.KeyEnter && event.Modifiers == 0 && c.continueBlock() {
 		return true
@@ -1344,7 +1589,7 @@ func (c *notesWindowController) onKey(event woxui.KeyEvent) bool {
 		}
 		c.toggleInline("strike")
 	case woxui.Key("e"):
-		c.toggleInline("code")
+		c.toggleMarkdownView()
 	case woxui.Key("k"):
 		c.openLink()
 	case woxui.Key("z"):
@@ -1395,11 +1640,10 @@ func (c *notesWindowController) continueBlock() bool {
 	c.rememberDocumentUndo(c.document, false)
 	c.document = document
 	c.reproject(false)
-	if block < len(c.blockRanges) {
-		c.editor.SetCaret(c.blockRanges[block].TextStart)
-		c.selection = c.editor.State().Selection
-		c.invalidate()
-	}
+	// Document block numbers are not slice indexes after an image or table splits the editor.
+	c.editor.SetCaret(woxcomponent.NoteRangeForBlock(c.blockRanges, block).TextStart)
+	c.selection = c.editor.State().Selection
+	c.invalidate()
 	return true
 }
 
@@ -1412,11 +1656,11 @@ func (c *notesWindowController) changeListIndent(delta int) bool {
 	if !handled || !changed {
 		return handled
 	}
-	oldTextStart := c.blockRanges[block].TextStart
+	oldTextStart := woxcomponent.NoteRangeForBlock(c.blockRanges, block).TextStart
 	c.rememberDocumentUndo(c.document, false)
 	c.document = document
 	c.reproject(false)
-	shift := c.blockRanges[block].TextStart - oldTextStart
+	shift := woxcomponent.NoteRangeForBlock(c.blockRanges, block).TextStart - oldTextStart
 	c.editor.SetCaret(selection.Focus + shift)
 	c.selection = c.editor.State().Selection
 	c.invalidate()
@@ -1515,6 +1759,22 @@ func (c *notesWindowController) toggleTask() {
 		return
 	}
 	c.toggleTaskBlock(noteBlockAt(c.blockRanges, c.selection.Focus))
+}
+
+// appendParagraphBelowText lets blank-space clicks leave a formatted block without changing Enter's continuation rules.
+func (c *notesWindowController) appendParagraphBelowText() bool {
+	if c.record.DeletedAt > 0 || len(c.document.Blocks) == 0 {
+		return false
+	}
+	if last := c.document.Blocks[len(c.document.Blocks)-1]; last.Type == common.NoteBlockParagraph && last.Text == "" {
+		return false
+	}
+	c.rememberDocumentUndo(c.document, false)
+	c.document.Blocks = append(c.document.Blocks, common.NoteBlock{ID: newID(), Type: common.NoteBlockParagraph})
+	c.reproject(false)
+	c.editor.SetCaret(utf8.RuneCountInString(c.editor.Text()))
+	c.selection = c.editor.State().Selection
+	return true
 }
 
 func (c *notesWindowController) handleBlockTap(offset int) bool {
@@ -1629,6 +1889,7 @@ func (c *notesWindowController) replaceTable(block int, table common.NoteTable) 
 
 func (c *notesWindowController) focusTableCell(block, row, column int) {
 	c.focusedTableBlock, c.focusedTableRow, c.focusedTableCol = block, row, column
+	c.focusedImageBlock = -1
 	c.invalidate()
 }
 
@@ -1762,12 +2023,23 @@ func (c *notesWindowController) tableDeleteColumn(block int) {
 	c.reproject(false)
 }
 
+// noteSegmentTouchesImage reports empty caret gaps that must stay so typing can land beside an image.
+func noteSegmentTouchesImage(document common.NoteDocument, segment woxcomponent.NoteDocumentSegment) bool {
+	if segment.Start > 0 && segment.Start <= len(document.Blocks) && document.Blocks[segment.Start-1].Type == common.NoteBlockImage {
+		return true
+	}
+	return segment.End < len(document.Blocks) && document.Blocks[segment.End].Type == common.NoteBlockImage
+}
+
 // deleteEmptyTextSegment removes a blank paragraph so Backspace can close the gap between tables.
 func (c *notesWindowController) deleteEmptyTextSegment(segmentStart int) bool {
 	if c.record.DeletedAt > 0 {
 		return false
 	}
 	segment := woxcomponent.NoteSegmentAtBlock(c.document, segmentStart)
+	if noteSegmentTouchesImage(c.document, segment) {
+		return false
+	}
 	updated, ok := woxcomponent.RemoveEmptyNoteSegment(c.document, segment)
 	if !ok {
 		return false
@@ -1852,7 +2124,7 @@ func (c *notesWindowController) undoDocument() bool {
 	c.redoDocuments = append(c.redoDocuments, cloneNoteDocument(c.document))
 	c.document = previous
 	c.lastTextEdit = time.Time{}
-	c.reproject(true)
+	c.syncEditorAfterDocumentChange(true)
 	return true
 }
 
@@ -1865,18 +2137,33 @@ func (c *notesWindowController) redoDocument() bool {
 	c.undoDocuments = append(c.undoDocuments, cloneNoteDocument(c.document))
 	c.document = next
 	c.lastTextEdit = time.Time{}
-	c.reproject(true)
+	c.syncEditorAfterDocumentChange(true)
 	return true
+}
+
+// syncEditorAfterDocumentChange refreshes the visible editor after undo or redo.
+func (c *notesWindowController) syncEditorAfterDocumentChange(resetSelection bool) {
+	if c.markdownView {
+		c.editor.SetText(notesplugin.ToMarkdown(c.document), false)
+		c.richRuns, c.blockRanges = nil, nil
+		c.dirty, c.errorText = true, ""
+		c.scheduleSave()
+		c.invalidate()
+		return
+	}
+	c.reproject(resetSelection)
 }
 
 func (c *notesWindowController) setZoom(value float32) {
 	c.zoom = max(float32(.75), min(float32(2), value))
-	projected, runs, ranges := c.projectActiveText()
-	c.richRuns, c.blockRanges = runs, ranges
-	if projected != c.editor.Text() {
-		selection := c.editor.State().Selection
-		c.editor.SetText(projected, false)
-		c.editor.SetSelection(selection.Anchor, selection.Focus)
+	if !c.markdownView {
+		projected, runs, ranges := c.projectActiveText()
+		c.richRuns, c.blockRanges = runs, ranges
+		if projected != c.editor.Text() {
+			selection := c.editor.State().Selection
+			c.editor.SetText(projected, false)
+			c.editor.SetSelection(selection.Anchor, selection.Focus)
+		}
 	}
 	_ = c.app.services.NotesSetLocal(context.Background(), c.preferenceKey("zoom"), fmt.Sprintf("%.2f", c.zoom))
 	c.invalidate()
@@ -2108,8 +2395,8 @@ func (c *notesWindowController) export(format string) {
 			return err
 		}
 		title := "Untitled Note"
-		if len(c.document.Blocks) > 0 && strings.TrimSpace(c.document.Blocks[0].Text) != "" {
-			title = c.document.Blocks[0].Text
+		if custom := notesplugin.CustomNoteTitle(c.document); custom != "" {
+			title = custom
 		}
 		name := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`).ReplaceAllString(title, "-")
 		name = strings.Trim(strings.TrimSpace(name), ".")

@@ -18,6 +18,12 @@ const (
 	trashRetention     = 60 * 24 * time.Hour
 	notesMRUContextKey = "noteId"
 	notesMRUNewID      = "new"
+
+	PluginCommandCreateNote = "create_note"
+	PluginCommandDataText   = "text"
+	PluginCommandDataPath   = "path"
+	PluginCommandDataTitle  = "title"
+	createNoteMaxFileBytes  = 256 * 1024
 )
 
 func init() {
@@ -67,6 +73,7 @@ func (p *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	})
 	p.api.OnDeepLink(ctx, p.handleDeepLink)
 	p.api.OnMRURestore(ctx, p.handleMRURestore)
+	p.api.OnHandlePluginCommand(ctx, p.handlePluginCommand)
 	p.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
 		if strings.HasPrefix(key, noteSettingPrefix) {
 			p.repository.ExternalChanged(strings.TrimPrefix(key, noteSettingPrefix))
@@ -225,6 +232,55 @@ func noteResultGroup(record common.NoteRecord) (string, int64) {
 // createAndOpen opens a new draft window. The draft is not persisted until the user types.
 func (p *Plugin) createAndOpen(ctx context.Context) {
 	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowNew})
+}
+
+// handlePluginCommand creates a note from another plugin's text, file, or image path.
+func (p *Plugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
+	if request.Command != PluginCommandCreateNote {
+		return plugin.PluginCommandResult{Handled: false}
+	}
+
+	title := strings.TrimSpace(request.Data[PluginCommandDataTitle])
+	text := request.Data[PluginCommandDataText]
+	path := strings.TrimSpace(request.Data[PluginCommandDataPath])
+	document, err := documentFromPluginCommand(title, text, path)
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	if DocumentIsEmpty(document) {
+		return plugin.PluginCommandResult{Handled: true, Message: "note content is empty"}
+	}
+
+	record, err := p.repository.Create()
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	saved, _, err := p.repository.Save(record.ID, record.Revision, document)
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+
+	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: saved.ID})
+	return plugin.PluginCommandResult{Handled: true}
+}
+
+// CreateNoteAction asks Notes to persist and open a note built from the caller's context.
+func CreateNoteAction(api plugin.API, title string, text string, path string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name: "i18n:plugin_notes_action_save",
+		Icon: common.PluginNotesIcon,
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
+				PluginId: common.NotesPluginID,
+				Command:  PluginCommandCreateNote,
+				Data: common.ContextData{
+					PluginCommandDataTitle: title,
+					PluginCommandDataText:  text,
+					PluginCommandDataPath:  path,
+				},
+			})
+		},
+	}
 }
 
 // handleMRURestore rebuilds a homepage result from the note id recorded by a previous action.

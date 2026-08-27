@@ -438,7 +438,7 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 			return nil, err
 		}
 		defer file.Close()
-		return woxui.DecodeImage(file)
+		return woxui.DecodeImageMax(file, max(svgWidth, svgHeight))
 	case "base64":
 		encoded := source.ImageData
 		if comma := strings.IndexByte(encoded, ','); comma >= 0 {
@@ -451,7 +451,7 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 		if strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml") {
 			return decodeSVGImage(string(pixels), svgWidth, svgHeight, tint)
 		}
-		return woxui.DecodeImage(bytes.NewReader(pixels))
+		return woxui.DecodeImageMax(bytes.NewReader(pixels), max(svgWidth, svgHeight))
 	case "svg":
 		return decodeSVGImage(source.ImageData, svgWidth, svgHeight, tint)
 	case "theme":

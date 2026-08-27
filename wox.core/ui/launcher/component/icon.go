@@ -407,6 +407,9 @@ var formatGlyphNames = map[string]string{
 	"table-delete-row":    "control.table-delete-row",
 	"table-delete-column": "control.table-delete-column",
 	"table-delete":        "control.delete",
+	"image-smaller":       "control.remove",
+	"image-larger":        "control.add",
+	"image-delete":        "control.delete",
 	"more":                "control.more-horizontal",
 }
 

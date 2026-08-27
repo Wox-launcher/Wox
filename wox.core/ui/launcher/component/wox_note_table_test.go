@@ -60,6 +60,173 @@ func TestInsertAndDeleteTableRowsKeepAGrid(t *testing.T) {
 	}
 }
 
+func TestEnsureNoteImageEditGapsInsertsCaretParagraphs(t *testing.T) {
+	document := ensureNoteImageEditGaps(common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png"}},
+	}})
+	segments := NoteDocumentSegments(document)
+	if len(segments) != 3 || segments[0].Structural() || !segments[1].Image || segments[2].Structural() {
+		t.Fatalf("image edit gaps = %#v", segments)
+	}
+}
+
+func TestNoteEditorImageTapHitsCenteredPicture(t *testing.T) {
+	if !noteEditorImageTapHitsPicture(woxui.Point{X: 160, Y: 40}, 320, 200, 80) {
+		t.Fatal("center of the picture should select the image")
+	}
+	if noteEditorImageTapHitsPicture(woxui.Point{X: 8, Y: 40}, 320, 200, 80) {
+		t.Fatal("padding beside the picture should move the caret instead of selecting the image")
+	}
+}
+
+func TestNoteDocumentSegmentsTreatImagesAsStructural(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+		{ID: "p", Type: common.NoteBlockParagraph, Text: "after"},
+	}}
+	segments := NoteDocumentSegments(document)
+	if len(segments) != 2 || !segments[0].Image || segments[0].Table || segments[1].Structural() {
+		t.Fatalf("image segments = %#v", segments)
+	}
+	value, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	if value != "after" || len(ranges) != 1 || ranges[0].Block != 1 {
+		t.Fatalf("image projection = %q %#v", value, ranges)
+	}
+}
+
+func TestWoxNoteEditorHidesImageActionsUntilSelected(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png", Width: 400, Height: 200}},
+		{ID: "p", Type: common.NoteBlockParagraph, Text: "caption"},
+	}}
+	props := func(focused int) NoteEditorProps {
+		return NoteEditorProps{
+			ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+			Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+			Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}, Cursor: woxui.Color{R: 80, G: 160, B: 255, A: 255}},
+			FocusedImageBlock: focused, OnImageFocus: func(int) {}, OnImageScale: func(int, int) {}, OnImageDelete: func(int) {},
+			ImageActionLabels: NoteImageActionLabels{Smaller: "Smaller", Larger: "Larger", Delete: "Delete image"},
+			ResolveImage:      func(common.NoteImage) *woxui.Image { return &woxui.Image{Width: 400, Height: 200} },
+		}
+	}
+	idle := WoxNoteEditor(props(-1))
+	focused := WoxNoteEditor(props(0))
+	idleIDs := noteTableActionIDs(noteEditorImageChrome(t, idle))
+	if idleIDs["notes.editor.image.img.image-smaller"] || idleIDs["notes.editor.image.img.image-delete"] {
+		t.Fatalf("idle image actions = %#v, want them hidden until the image is selected", idleIDs)
+	}
+	idleSlot, ok := noteEditorImageChrome(t, idle).(woxwidget.Container)
+	if !ok || idleSlot.Height != noteEditorImageToolbarHeight || idleSlot.Width != 288 {
+		t.Fatalf("idle image toolbar slot = %#v, want a reserved 288x28 row above the picture", noteEditorImageChrome(t, idle))
+	}
+	focusedBar, ok := noteEditorImageChrome(t, focused).(woxwidget.Container)
+	if !ok || focusedBar.Height != noteEditorImageToolbarHeight || focusedBar.Width != 288 {
+		t.Fatalf("focused image toolbar = %#v, want the same reserved 288x28 row so the picture does not jump", noteEditorImageChrome(t, focused))
+	}
+	focusedIDs := noteTableActionIDs(noteEditorImageChrome(t, focused))
+	for _, id := range []string{"notes.editor.image.img.image-smaller", "notes.editor.image.img.image-larger", "notes.editor.image.img.image-delete"} {
+		if !focusedIDs[id] {
+			t.Fatalf("focused image missing %s in %#v", id, focusedIDs)
+		}
+	}
+	idlePicture := noteEditorImagePictureBox(t, idle)
+	focusedPicture := noteEditorImagePictureBox(t, focused)
+	if idlePicture.BorderWidth != 0 || focusedPicture.BorderWidth != 2 {
+		t.Fatalf("image highlight idle/focused = %.0f/%.0f, want 0 then 2", idlePicture.BorderWidth, focusedPicture.BorderWidth)
+	}
+}
+
+func TestWoxNoteEditorPlacesImageDeleteOnTheRight(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png", Width: 400, Height: 200}},
+	}}
+	chrome := noteEditorImageChrome(t, WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}},
+		FocusedImageBlock: 0, OnImageFocus: func(int) {}, OnImageScale: func(int, int) {}, OnImageDelete: func(int) {},
+		ImageActionLabels: NoteImageActionLabels{Smaller: "Smaller", Larger: "Larger", Delete: "Delete image"},
+		ResolveImage:      func(common.NoteImage) *woxui.Image { return &woxui.Image{Width: 400, Height: 200} },
+	})).(woxwidget.Container)
+	toolbar, ok := chrome.Child.(woxwidget.Flex)
+	if !ok || toolbar.Axis != woxwidget.Horizontal || toolbar.MainAxisAlignment != woxwidget.MainAxisSpaceBetween || len(toolbar.Children) != 2 {
+		t.Fatalf("image toolbar = %#v, want left scale actions and a trailing delete", chrome.Child)
+	}
+	left := noteTableActionIDs(toolbar.Children[0])
+	right := noteTableActionIDs(toolbar.Children[1])
+	if left["notes.editor.image.img.image-delete"] || !right["notes.editor.image.img.image-delete"] {
+		t.Fatalf("delete placement = left %#v right %#v, want delete only on the right", left, right)
+	}
+	if !left["notes.editor.image.img.image-smaller"] || !left["notes.editor.image.img.image-larger"] {
+		t.Fatalf("left image actions = %#v, want scale controls on the left", left)
+	}
+}
+
+func TestWoxNoteEditorKeepsImageSkeletonWithoutFilename(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "clipboard.png", Width: 400, Height: 200}},
+	}}
+	editor := WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{PreviewText: woxui.Color{A: 255}},
+		MissingImageLabel: "Image is missing",
+	})
+	if _, ok := findNoteEditorTextBlock(noteEditorColumn(t, editor)); ok {
+		t.Fatal("sized image should reserve a blank skeleton, not filename or missing-image text")
+	}
+}
+
+func findNoteEditorTextBlock(widget woxwidget.Widget) (woxwidget.TextBlock, bool) {
+	switch typed := widget.(type) {
+	case woxwidget.TextBlock:
+		return typed, true
+	case woxwidget.Semantics:
+		return findNoteEditorTextBlock(typed.Child)
+	case woxwidget.Gesture:
+		return findNoteEditorTextBlock(typed.Child)
+	case woxwidget.Stateful:
+		if child, ok := typed.Widget.(woxwidget.Widget); ok {
+			return findNoteEditorTextBlock(child)
+		}
+	case woxwidget.Align:
+		return findNoteEditorTextBlock(typed.Child)
+	case woxwidget.Container:
+		return findNoteEditorTextBlock(typed.Child)
+	case woxwidget.Expanded:
+		return findNoteEditorTextBlock(typed.Child)
+	case woxwidget.Flex:
+		for _, child := range typed.Children {
+			if found, ok := findNoteEditorTextBlock(child); ok {
+				return found, true
+			}
+		}
+	}
+	return woxwidget.TextBlock{}, false
+}
+
+func TestWoxNoteEditorRendersImageSegments(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png", Width: 400, Height: 200}},
+		{ID: "p", Type: common.NoteBlockParagraph, Text: "caption"},
+	}}
+	editor := WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}},
+		ResolveImage: func(common.NoteImage) *woxui.Image {
+			return &woxui.Image{Width: 400, Height: 200}
+		},
+	})
+	column := noteEditorColumn(t, editor)
+	if column.Gap != noteEditorSegmentGap || len(column.Children) != 2 {
+		t.Fatalf("image editor column = %#v, want image then text", column)
+	}
+	if _, ok := column.Children[1].(woxwidget.Stateful); !ok {
+		t.Fatalf("trailing text = %T, want a text field", column.Children[1])
+	}
+}
+
 func TestWoxNoteEditorKeepsDocumentInsetsOffTableGaps(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{ID: "p", Type: common.NoteBlockParagraph, Text: "before"},
@@ -232,6 +399,46 @@ func collectNoteTableIDs(widget woxwidget.Widget, ids map[string]bool) {
 	case woxwidget.Flex:
 		for _, child := range typed.Children {
 			collectNoteTableIDs(child, ids)
+		}
+	}
+}
+
+func noteEditorImageChrome(t *testing.T, widget woxwidget.Widget) woxwidget.Widget {
+	t.Helper()
+	box, ok := noteEditorColumn(t, widget).Children[0].(woxwidget.Container)
+	if !ok {
+		t.Fatalf("image slot = %T, want a padded container", noteEditorColumn(t, widget).Children[0])
+	}
+	column, ok := box.Child.(woxwidget.Flex)
+	if !ok || column.Axis != woxwidget.Vertical || len(column.Children) != 2 {
+		t.Fatalf("image chrome = %#v, want a reserved toolbar above the picture", box.Child)
+	}
+	return column.Children[0]
+}
+
+func noteEditorImagePictureBox(t *testing.T, widget woxwidget.Widget) woxwidget.Container {
+	t.Helper()
+	box, ok := noteEditorColumn(t, widget).Children[0].(woxwidget.Container)
+	if !ok {
+		t.Fatalf("image slot = %T, want a padded container", noteEditorColumn(t, widget).Children[0])
+	}
+	column, ok := box.Child.(woxwidget.Flex)
+	if !ok || len(column.Children) != 2 {
+		t.Fatalf("image chrome = %#v, want toolbar plus picture", box.Child)
+	}
+	picture := column.Children[1]
+	for {
+		switch typed := picture.(type) {
+		case woxwidget.Semantics:
+			picture = typed.Child
+		case woxwidget.Gesture:
+			picture = typed.Child
+		default:
+			container, ok := picture.(woxwidget.Container)
+			if !ok {
+				t.Fatalf("image picture = %T, want a highlight container", picture)
+			}
+			return container
 		}
 	}
 }

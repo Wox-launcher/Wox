@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"wox/common"
+	notesplugin "wox/plugin/system/notes"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -411,6 +412,35 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	}
 }
 
+func TestNotesImageActionsScaleAndDelete(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "caption"},
+		}},
+	})
+	imageIndex := notesTestImageIndex(controller.document)
+	controller.scaleImage(imageIndex, -10)
+	if got := notesTestImageBlock(controller.document).Scale; got != 90 {
+		t.Fatalf("image scale = %d, want 90", got)
+	}
+	controller.deleteImage(imageIndex)
+	if notesTestImageBlock(controller.document) != nil {
+		t.Fatalf("delete image = %#v, want the remaining caption", controller.document.Blocks)
+	}
+	hasCaption := false
+	for _, block := range controller.document.Blocks {
+		if strings.Contains(block.Text, "caption") {
+			hasCaption = true
+			break
+		}
+	}
+	if !hasCaption {
+		t.Fatalf("delete image = %#v, want the remaining caption", controller.document.Blocks)
+	}
+}
+
 func TestNotesMoreMenuOmitsListPin(t *testing.T) {
 	app := &App{palette: defaultPalette()}
 	controller := newNotesWindowController(app, common.NoteRecord{
@@ -424,6 +454,536 @@ func TestNotesMoreMenuOmitsListPin(t *testing.T) {
 	if !ids["notes.menu.copy-link"] {
 		t.Fatalf("more menu ids = %#v, want copy-link after removing list pin", ids)
 	}
+	if !ids["notes.menu.view"] {
+		t.Fatalf("more menu ids = %#v, want the Markdown/preview toggle", ids)
+	}
+}
+
+func TestNotesMoreMenuViewLabelFollowsEditorMode(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "hello"}}},
+	})
+	shortcut := strings.Join(formatHotkeyLabels(primaryHotkey("e")), "+")
+	preview := controller.viewModeMenuLabel()
+	if !strings.Contains(preview, shortcut) || !strings.Contains(strings.ToLower(preview), "markdown") {
+		t.Fatalf("preview-mode view label = %q, want Markdown plus %s", preview, shortcut)
+	}
+	controller.markdownView = true
+	source := controller.viewModeMenuLabel()
+	if !strings.Contains(source, shortcut) || !strings.Contains(strings.ToLower(source), "preview") {
+		t.Fatalf("markdown-mode view label = %q, want Preview plus %s", source, shortcut)
+	}
+}
+
+func TestNotesTogglesMarkdownViewWithPrimaryE(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "h", Type: common.NoteBlockHeading1, Text: "Title"},
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "body"},
+		}},
+	})
+	event := woxui.KeyEvent{Key: woxui.Key("e"), Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true}
+	if !controller.onKey(event) || !controller.markdownView {
+		t.Fatal("Ctrl/Cmd+E should open the Markdown source view")
+	}
+	if got := controller.editor.Text(); got != "# Title\n\nbody" {
+		t.Fatalf("markdown source = %q", got)
+	}
+	if !controller.onKey(event) || controller.markdownView {
+		t.Fatal("Ctrl/Cmd+E should return to the preview editor")
+	}
+	if got := controller.editor.Text(); got != "Title\nbody" {
+		t.Fatalf("preview text = %q", got)
+	}
+}
+
+func TestNotesMarkdownViewRoundTripsTables(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "intro"},
+			{ID: "t", Type: common.NoteBlockTable, Table: &common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{
+				{{Text: "A"}, {Text: "B"}},
+				{{Text: "1"}, {Text: "2"}},
+			}}},
+		}},
+	})
+	controller.toggleMarkdownView()
+	controller.toggleMarkdownView()
+	if len(controller.document.Blocks) != 3 || controller.document.Blocks[1].Type != common.NoteBlockTable || controller.document.Blocks[1].Table == nil {
+		t.Fatalf("preview after Ctrl+E = %#v, want the table to stay structural", controller.document.Blocks)
+	}
+	if tail := controller.document.Blocks[2]; tail.Type != common.NoteBlockParagraph || tail.Text != "" {
+		t.Fatalf("preview after Ctrl+E needs an empty paragraph below the table: %+v", tail)
+	}
+	if got := controller.document.Blocks[1].Table.Rows[1][1].Text; got != "2" {
+		t.Fatalf("table cell after Ctrl+E = %q", got)
+	}
+}
+
+func TestNotesMarkdownViewRoundTripsImages(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "clipboard.png", Width: 800, Height: 400}},
+		}},
+	})
+	controller.toggleMarkdownView()
+	if !strings.Contains(controller.editor.Text(), "notes-image:shot.png") || !strings.Contains(controller.editor.Text(), "width=800") {
+		t.Fatalf("markdown source = %q", controller.editor.Text())
+	}
+	controller.toggleMarkdownView()
+	image := notesTestImageBlock(controller.document)
+	if image == nil || image.ID != "shot.png" {
+		t.Fatalf("preview after Ctrl+E = %#v, want the image block kept", controller.document.Blocks)
+	}
+	if image.Width != 800 || image.Height != 400 {
+		t.Fatalf("image size after Ctrl+E = %#v", image)
+	}
+}
+
+func TestNotesArrowKeysLeaveAFocusedImage(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+		}},
+	})
+	imageIndex := notesTestImageIndex(controller.document)
+	controller.focusedImageBlock = imageIndex
+	if !controller.onKey(woxui.KeyEvent{Key: woxui.KeyArrowRight, Down: true}) || controller.focusedImageBlock >= 0 {
+		t.Fatal("right arrow should move the caret below the image")
+	}
+	if controller.activeTextSegment.Start <= imageIndex {
+		t.Fatalf("active text after right arrow = %#v, want the paragraph below the image", controller.activeTextSegment)
+	}
+	controller.focusedImageBlock = notesTestImageIndex(controller.document)
+	if !controller.onKey(woxui.KeyEvent{Key: woxui.KeyArrowLeft, Down: true}) || controller.focusedImageBlock >= 0 {
+		t.Fatal("left arrow should move the caret above the image")
+	}
+	if controller.activeTextSegment.Start >= notesTestImageIndex(controller.document) {
+		t.Fatalf("active text after left arrow = %#v, want the paragraph above the image", controller.activeTextSegment)
+	}
+}
+
+// TestNotesListKeyboardAfterStructuralBlocks verifies caret offsets belong to the active text segment.
+func TestNotesListKeyboardAfterStructuralBlocks(t *testing.T) {
+	for _, prefix := range []common.NoteBlockType{common.NoteBlockParagraph, common.NoteBlockTable, common.NoteBlockImage} {
+		for _, kind := range []common.NoteBlockType{common.NoteBlockBullet, common.NoteBlockOrdered, common.NoteBlockTask, common.NoteBlockQuote} {
+			t.Run(string(prefix)+"/"+string(kind), func(t *testing.T) {
+				image := common.NoteImage{ID: "shot.png", Width: 400, Height: 200}
+				source := woxImage{ImageType: "absolute", ImageData: notesplugin.ResolveNoteImagePath(image)}
+				key := fmt.Sprintf("%s-svg-%d", imageKey(source), previewImageRequestSize(800, woxcomponent.NoteEditorImageMaxHeight))
+				app := &App{palette: defaultPalette(), images: map[string]*woxui.Image{key: {Width: 400, Height: 200}}, imageLastUsed: map[string]uint64{}}
+				blocks := []common.NoteBlock{{ID: "intro", Type: common.NoteBlockParagraph, Text: "intro"}}
+				switch prefix {
+				case common.NoteBlockTable:
+					blocks = append(blocks, common.NoteBlock{ID: "table", Type: prefix, Table: &common.NoteTable{Rows: [][]common.NoteTableCell{{{Text: "cell"}}}}})
+				case common.NoteBlockImage:
+					blocks = append(blocks, common.NoteBlock{ID: "image", Type: prefix, Image: &image})
+				}
+				item := len(blocks)
+				blocks = append(blocks, common.NoteBlock{ID: "first", Type: kind, Text: "first"})
+				controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: common.NoteDocument{Version: 1, Blocks: blocks}})
+				t.Cleanup(func() {
+					if controller.saveTimer != nil {
+						controller.saveTimer.Stop()
+					}
+				})
+				controller.bindActiveText(item, true)
+				host := woxwidget.NewHost(controller.buildNotes)
+				host.AttachServices(&notesEditorHostServices{})
+				render := func() {
+					for range 3 {
+						host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5})
+					}
+				}
+				press := func(key woxui.Key, modifiers woxui.KeyModifiers) {
+					if !host.Key(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}) {
+						t.Fatalf("key %q was not handled", key)
+					}
+					render()
+				}
+				assertCaret := func(block int) {
+					for _, span := range controller.blockRanges {
+						if span.Block == block {
+							if !controller.editorFocus.HasFocus() || controller.editor.State().Selection.Focus != span.TextEnd {
+								t.Fatalf("caret=%+v focused=%v, want end of block %d at %d", controller.editor.State().Selection, controller.editorFocus.HasFocus(), block, span.TextEnd)
+							}
+							return
+						}
+					}
+					t.Fatalf("missing text range for block %d", block)
+				}
+				render()
+				press(woxui.KeyEnter, 0)
+				assertCaret(item + 1)
+				host.TextInput(woxui.TextInputEvent{Text: "second"})
+				render()
+				if controller.document.Blocks[item].Text != "first" || controller.document.Blocks[item+1].Text != "second" || controller.document.Blocks[item+1].Type != kind {
+					t.Fatalf("typing after Enter changed the wrong item: %+v", controller.document.Blocks)
+				}
+				if kind != common.NoteBlockQuote {
+					press(woxui.KeyTab, 0)
+					assertCaret(item + 1)
+					if controller.document.Blocks[item+1].Indent != 1 {
+						t.Fatal("Tab must indent the new list item")
+					}
+					press(woxui.KeyTab, woxui.KeyModifierShift)
+					assertCaret(item + 1)
+					if controller.document.Blocks[item+1].Indent != 0 {
+						t.Fatal("Shift+Tab must restore the list item's indentation")
+					}
+				}
+				press(woxui.KeyEnter, 0)
+				assertCaret(item + 2)
+				press(woxui.KeyEnter, 0)
+				assertCaret(item + 2)
+				if controller.document.Blocks[item+2].Type != common.NoteBlockParagraph {
+					t.Fatal("Enter on an empty list item must exit into a paragraph")
+				}
+			})
+		}
+	}
+}
+
+// TestNotesListCaretScrollsDocument exercises the outer scroller while a trailing text segment grows.
+func TestNotesListCaretScrollsDocument(t *testing.T) {
+	for _, kind := range []common.NoteBlockType{common.NoteBlockBullet, common.NoteBlockOrdered, common.NoteBlockTask, common.NoteBlockQuote} {
+		t.Run(string(kind), func(t *testing.T) {
+			controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+				ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+					{ID: "table", Type: common.NoteBlockTable, Table: &common.NoteTable{Rows: [][]common.NoteTableCell{{{Text: "cell"}}}}},
+					{ID: "first", Type: kind, Text: "first"},
+				}},
+			})
+			t.Cleanup(func() {
+				if controller.saveTimer != nil {
+					controller.saveTimer.Stop()
+				}
+			})
+			controller.bindActiveText(1, true)
+			window := &woxui.Window{}
+			services := &notesEditorHostServices{}
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+					ID: "notes.editor", Document: controller.document, Width: 400, Height: 240, LineHeight: 24, Zoom: 1,
+					Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24}, Style: controller.editorStyle(),
+					Theme: controller.app.palette.componentTheme(), Window: window, Autofocus: true,
+					Controller: controller.editor, FocusNode: controller.editorFocus, Focused: controller.editorFocus.HasFocus(),
+					FocusedTableBlock: -1, FocusedImageBlock: -1, ActiveSegmentStart: controller.activeTextSegment.Start,
+					OnTextFocus: controller.focusNoteText, OnChanged: controller.onSegmentChanged, OnKey: controller.onKey,
+				})
+			})
+			host.AttachServices(services)
+			t.Cleanup(host.Dispose)
+			render := func() {
+				for range 3 {
+					host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 240}, PixelSize: woxui.PixelSize{Width: 600, Height: 360}, Scale: 1.5})
+				}
+			}
+			assertVisible := func() {
+				t.Helper()
+				caret := services.textInput.CursorRect
+				if !services.textInput.Enabled || caret.Y < 0 || caret.Y+caret.Height > 240 {
+					t.Fatalf("caret must remain inside the document viewport: %+v", services.textInput)
+				}
+			}
+			render()
+			for range 20 {
+				if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+					t.Fatal("Enter must continue the list")
+				}
+				render()
+				assertVisible()
+				if !host.TextInput(woxui.TextInputEvent{Text: "next"}) {
+					t.Fatal("list item must accept text")
+				}
+				render()
+				assertVisible()
+			}
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 200, Y: 100}, Scroll: woxui.Point{Y: 100}})
+			render()
+			if services.textInput.CursorRect.Y < 240 {
+				t.Fatal("manual scrolling must not snap back to the caret")
+			}
+			host.TextInput(woxui.TextInputEvent{Text: "more"})
+			render()
+			assertVisible()
+		})
+	}
+}
+
+// TestNotesClickBelowTextBlocks uses pointer hit testing to leave each text block through blank space.
+func TestNotesClickBelowTextBlocks(t *testing.T) {
+	for _, blockType := range []common.NoteBlockType{
+		common.NoteBlockParagraph, common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3,
+		common.NoteBlockTask, common.NoteBlockBullet, common.NoteBlockOrdered, common.NoteBlockQuote, common.NoteBlockCode, common.NoteBlockDivider,
+	} {
+		t.Run(string(blockType), func(t *testing.T) {
+			block := common.NoteBlock{ID: "body", Type: blockType, Text: "body"}
+			if blockType == common.NoteBlockDivider {
+				block.Text = ""
+			}
+			controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+				ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{block}},
+			})
+			t.Cleanup(func() {
+				if controller.saveTimer != nil {
+					controller.saveTimer.Stop()
+				}
+			})
+			// Vertical line hit testing needs a Window handle but no native text measurements.
+			window := &woxui.Window{}
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+					ID: "notes.editor", Document: controller.document, Width: 400, Height: 240, LineHeight: 24,
+					Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24}, Style: controller.editorStyle(),
+					Window: window, Autofocus: true, Controller: controller.editor, FocusNode: controller.editorFocus,
+					Focused: controller.editorFocus.HasFocus(), FocusedTableBlock: -1, FocusedImageBlock: -1,
+					ActiveSegmentStart: controller.activeTextSegment.Start, OnTextFocus: controller.focusNoteText,
+					OnChanged: controller.onSegmentChanged, OnTapOffset: controller.handleBlockTap, CursorAtOffset: controller.editorCursorAt,
+					OnTapBelowText: controller.appendParagraphBelowText, OnKey: controller.onKey,
+				})
+			})
+			host.AttachServices(&notesEditorHostServices{})
+			render := func() {
+				for range 3 {
+					host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 240}, PixelSize: woxui.PixelSize{Width: 600, Height: 360}, Scale: 1.5})
+				}
+			}
+			click := func(point woxui.Point) {
+				host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+				render()
+				host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+				render()
+			}
+			render()
+			click(woxui.Point{X: 350, Y: 20})
+			if len(controller.document.Blocks) != 1 {
+				t.Fatal("clicking beside the current line must not append a paragraph")
+			}
+			if blockType == common.NoteBlockTask {
+				click(woxui.Point{X: 20, Y: 20})
+				if !controller.document.Blocks[0].Checked {
+					t.Fatal("checkbox click must still toggle the task")
+				}
+			}
+			click(woxui.Point{X: 20, Y: 100})
+			if len(controller.document.Blocks) != 2 || controller.document.Blocks[1].Type != common.NoteBlockParagraph || controller.editor.State().Selection.Focus != controller.blockRanges[1].TextStart {
+				t.Fatalf("click below %s did not enter a new paragraph: blocks=%+v selection=%+v", blockType, controller.document.Blocks, controller.editor.State().Selection)
+			}
+			click(woxui.Point{X: 20, Y: 140})
+			if len(controller.document.Blocks) != 2 {
+				t.Fatal("repeated blank-space clicks must reuse the empty paragraph")
+			}
+			host.TextInput(woxui.TextInputEvent{Text: "next"})
+			render()
+			if controller.document.Blocks[0].Type != blockType || controller.document.Blocks[0].Text != block.Text || controller.document.Blocks[1].Type != common.NoteBlockParagraph || controller.document.Blocks[1].Text != "next" {
+				t.Fatalf("typing below %s changed the original block: %+v", blockType, controller.document.Blocks)
+			}
+			if blockType == common.NoteBlockTask && !controller.document.Blocks[0].Checked {
+				t.Fatal("typing below the checkbox must preserve its checked state")
+			}
+		})
+	}
+}
+
+// TestNotesTypingBelowTrailingTable exercises the trailing input field after loading, pasting, and deleting a gap.
+func TestNotesTypingBelowTrailingTable(t *testing.T) {
+	for _, source := range []string{"loaded", "existing-paragraph", "pasted"} {
+		t.Run(source, func(t *testing.T) {
+			document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+				{ID: "above", Type: common.NoteBlockParagraph, Text: "above"},
+				{ID: "table", Type: common.NoteBlockTable, Table: &common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "Header"}}, {{Text: "Cell"}}}}},
+			}}
+			if source == "existing-paragraph" {
+				document.Blocks = append(document.Blocks, common.NoteBlock{ID: "below", Type: common.NoteBlockParagraph})
+			}
+			if source == "pasted" {
+				document.Blocks = document.Blocks[:1]
+			}
+			controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note", Document: document})
+			t.Cleanup(func() {
+				if controller.saveTimer != nil {
+					controller.saveTimer.Stop()
+				}
+			})
+			if source == "pasted" && !controller.pasteDocument("| Header |\n| --- |\n| Cell |") {
+				t.Fatal("table paste was not handled")
+			}
+			host := woxwidget.NewHost(controller.buildNotes)
+			host.AttachServices(&notesEditorHostServices{})
+			render := func() {
+				for range 3 {
+					host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5})
+				}
+			}
+			click := func(id string) {
+				for _, node := range host.Snapshot().Tree.Nodes {
+					if node.AutomationID != id {
+						continue
+					}
+					point := woxui.Point{X: node.Bounds.X + 20, Y: node.Bounds.Y + node.Bounds.Height/2}
+					host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+					render()
+					host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+					render()
+					return
+				}
+				t.Fatalf("missing clickable node %q", id)
+			}
+			render()
+			click("notes.editor.1")
+			click("notes.editor.table." + controller.document.Blocks[1].ID + ".1.0")
+			if controller.focusedTableBlock != 1 {
+				t.Fatal("clicking the table must focus its cell")
+			}
+			click("notes.editor.1")
+			if !host.HasFocus("notes.editor.1") || !controller.editorFocus.HasFocus() || controller.focusedTableBlock >= 0 {
+				t.Fatalf("click below table did not enter text: focus=%q table=%d", host.FocusedKey(), controller.focusedTableBlock)
+			}
+			if !controller.deleteEmptyTextSegment(2) {
+				t.Fatal("empty trailing paragraph was not removed")
+			}
+			render()
+			click("notes.editor.1")
+			host.TextInput(woxui.TextInputEvent{Text: "after table"})
+			render()
+			click("notes.editor")
+			if controller.editor.Text() != "above" || controller.document.Blocks[2].Text != "after table" || controller.document.Blocks[1].Table.Rows[1][0].Text != "Cell" {
+				t.Fatalf("typing below the table changed other content: %+v", controller.document.Blocks)
+			}
+		})
+	}
+}
+
+// TestNotesImageSelectionSurvivesFrames exercises focus reconciliation after a real pointer click.
+func TestNotesImageSelectionSurvivesFrames(t *testing.T) {
+	image := common.NoteImage{ID: "shot.png", Width: 400, Height: 200}
+	source := woxImage{ImageType: "absolute", ImageData: notesplugin.ResolveNoteImagePath(image)}
+	key := fmt.Sprintf("%s-svg-%d", imageKey(source), previewImageRequestSize(800, woxcomponent.NoteEditorImageMaxHeight))
+	app := &App{palette: defaultPalette(), images: map[string]*woxui.Image{key: {Width: 400, Height: 200}}, imageLastUsed: map[string]uint64{}}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "above", Type: common.NoteBlockParagraph, Text: "above"},
+			{ID: "img", Type: common.NoteBlockImage, Image: &image},
+		}},
+	})
+	t.Cleanup(func() {
+		if controller.saveTimer != nil {
+			controller.saveTimer.Stop()
+		}
+	})
+	host := woxwidget.NewHost(controller.buildNotes)
+	host.AttachServices(&notesEditorHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5}
+	render := func() {
+		for range 3 {
+			host.Frame(&woxui.DisplayList{}, frame)
+		}
+	}
+	bounds := func(id string) woxui.Rect {
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == id {
+				return node.Bounds
+			}
+		}
+		t.Fatalf("missing node %q", id)
+		return woxui.Rect{}
+	}
+	click := func(position woxui.Point) {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: position})
+		render()
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: position})
+		render()
+	}
+	render()
+	if !host.HasFocus("notes.editor") || !controller.editorFocus.HasFocus() {
+		t.Fatal("text above the image must initially accept typing")
+	}
+	below := bounds("notes.editor.1")
+	click(woxui.Point{X: below.X + 20, Y: below.Y + below.Height/2})
+	if !host.HasFocus("notes.editor.1") || controller.activeTextSegment.Start <= notesTestImageIndex(controller.document) {
+		t.Fatalf("click below image kept focus at %q, segment=%+v", host.FocusedKey(), controller.activeTextSegment)
+	}
+	picture := bounds("notes.editor.image.img")
+	click(woxui.Point{X: picture.X + picture.Width/2, Y: picture.Y + picture.Height/2})
+	if controller.focusedImageBlock != notesTestImageIndex(controller.document) || controller.editorFocus.HasFocus() {
+		t.Fatalf("image selection lost after frames: image=%d textFocused=%v", controller.focusedImageBlock, controller.editorFocus.HasFocus())
+	}
+	bounds("notes.editor.image.img.image-delete")
+	for _, key := range []woxui.Key{woxui.KeyArrowUp, woxui.KeyArrowDown} {
+		if !controller.onKey(woxui.KeyEvent{Key: key, Down: true}) {
+			t.Fatalf("image did not handle %q", key)
+		}
+		render()
+		wantFocus := "notes.editor"
+		if key == woxui.KeyArrowDown {
+			wantFocus = "notes.editor.1"
+		}
+		if !host.HasFocus(woxwidget.Key(wantFocus)) || !controller.editorFocus.HasFocus() || controller.focusedImageBlock >= 0 {
+			t.Fatalf("image exit with %q: focus=%q, want %q", key, host.FocusedKey(), wantFocus)
+		}
+		click(woxui.Point{X: picture.X + picture.Width/2, Y: picture.Y + picture.Height/2})
+	}
+
+	text := bounds("notes.editor.1")
+	click(woxui.Point{X: text.X + 20, Y: text.Y + 12})
+	if controller.focusedImageBlock >= 0 || !controller.editorFocus.HasFocus() {
+		t.Fatal("clicking text must leave the image and restore editor focus")
+	}
+	host.TextInput(woxui.TextInputEvent{Text: "caption"})
+	render()
+	if controller.editor.Text() != "caption" {
+		t.Fatalf("text after leaving image = %q, want caption", controller.editor.Text())
+	}
+	above := bounds("notes.editor")
+	click(woxui.Point{X: above.X + 20, Y: above.Y + 12})
+	if !host.HasFocus("notes.editor") || controller.editor.Text() != "above" {
+		t.Fatalf("return to text above image: focus=%q text=%q", host.FocusedKey(), controller.editor.Text())
+	}
+	if controller.document.Blocks[2].Text != "caption" {
+		t.Fatalf("text below image was not preserved: %+v", controller.document.Blocks)
+	}
+}
+
+func TestNotesClickingTextLeavesAFocusedImage(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+		}},
+	})
+	imageIndex := notesTestImageIndex(controller.document)
+	controller.focusedImageBlock = imageIndex
+	controller.focusNoteText(imageIndex + 1)
+	if controller.focusedImageBlock >= 0 {
+		t.Fatal("clicking the paragraph below an image should clear the image highlight")
+	}
+	if controller.activeTextSegment.Start <= imageIndex {
+		t.Fatalf("active text after click = %#v, want the paragraph below the image", controller.activeTextSegment)
+	}
+}
+
+func notesTestImageBlock(document common.NoteDocument) *common.NoteImage {
+	for _, block := range document.Blocks {
+		if block.Type == common.NoteBlockImage && block.Image != nil {
+			return block.Image
+		}
+	}
+	return nil
+}
+
+func notesTestImageIndex(document common.NoteDocument) int {
+	for index, block := range document.Blocks {
+		if block.Type == common.NoteBlockImage {
+			return index
+		}
+	}
+	return -1
 }
 
 func collectNotesAutomationIDs(node woxwidget.Widget) map[string]bool {
@@ -892,7 +1452,9 @@ func TestNotesEditorHostBackspaceKeepsFocus(t *testing.T) {
 	}
 }
 
-type notesEditorHostServices struct{}
+type notesEditorHostServices struct {
+	textInput woxui.TextInputState
+}
 
 func (s *notesEditorHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * style.Size / 2, Height: style.Size}}, nil
@@ -901,7 +1463,10 @@ func (s *notesEditorHostServices) MeasureText(text string, style woxui.TextStyle
 func (s *notesEditorHostServices) Invalidate() error               { return nil }
 func (s *notesEditorHostServices) InvalidateRect(woxui.Rect) error { return nil }
 
-func (s *notesEditorHostServices) SetTextInputState(woxui.TextInputState) error { return nil }
+func (s *notesEditorHostServices) SetTextInputState(state woxui.TextInputState) error {
+	s.textInput = state
+	return nil
+}
 
 func (s *notesEditorHostServices) SetPointerCursor(woxui.PointerCursor) error { return nil }
 

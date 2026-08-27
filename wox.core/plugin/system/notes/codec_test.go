@@ -130,9 +130,112 @@ func TestNormalizeDocumentUpgradesPipeTableParagraphs(t *testing.T) {
 	}
 }
 
+func TestToMarkdownRoundTripsTableAfterParagraph(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockParagraph, Text: "intro"},
+		{Type: common.NoteBlockTable, Table: &common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{
+			{{Text: "A"}, {Text: "B"}},
+			{{Text: "1"}, {Text: "2"}},
+		}}},
+	}}
+	markdown := ToMarkdown(document)
+	if !strings.Contains(markdown, "intro\n\n|") {
+		t.Fatalf("table markdown must leave a blank line after the paragraph: %q", markdown)
+	}
+	parsed := ParseMarkdown(markdown)
+	if len(parsed.Blocks) != 2 || parsed.Blocks[0].Text != "intro" || parsed.Blocks[1].Type != common.NoteBlockTable || parsed.Blocks[1].Table == nil {
+		t.Fatalf("round-tripped table = %#v from %q", parsed.Blocks, markdown)
+	}
+	if parsed.Blocks[1].Table.Rows[0][0].Text != "A" || parsed.Blocks[1].Table.Rows[1][1].Text != "2" {
+		t.Fatalf("round-tripped cells = %#v", parsed.Blocks[1].Table)
+	}
+}
+
+func TestNormalizeDocumentExtractsTableGluedToParagraph(t *testing.T) {
+	document := NormalizeDocument(common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockParagraph, Text: "intro\n| A | B |\n| --- | --- |\n| 1 | 2 |\nafter",
+	}}})
+	if len(document.Blocks) != 3 || document.Blocks[0].Text != "intro" || document.Blocks[1].Type != common.NoteBlockTable || document.Blocks[2].Text != "after" {
+		t.Fatalf("glued table = %#v", document.Blocks)
+	}
+	if document.Blocks[1].Table == nil || document.Blocks[1].Table.Rows[1][1].Text != "2" {
+		t.Fatalf("extracted cells = %#v", document.Blocks[1].Table)
+	}
+}
+
 func TestDocumentIsEmptyKeepsTables(t *testing.T) {
 	if DocumentIsEmpty(common.NoteDocument{Blocks: []common.NoteBlock{{Type: common.NoteBlockTable, Table: &common.NoteTable{Rows: [][]common.NoteTableCell{{{Text: "A"}}}}}}}) {
 		t.Fatal("tables should keep a note from being empty")
+	}
+}
+
+func TestDocumentIsEmptyKeepsImages(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"},
+	}}}
+	if DocumentIsEmpty(document) {
+		t.Fatal("image notes should be kept")
+	}
+	if CustomNoteTitle(document) != "shot" || NoteTitle(document) != "shot" {
+		t.Fatalf("image title = %q", NoteTitle(document))
+	}
+}
+
+func TestNoteImageCodecsRoundTripAttachmentRefs(t *testing.T) {
+	document := NormalizeDocument(common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "abc.png", FileName: "capture.png"},
+	}}})
+	markdown := ToMarkdown(document)
+	if !strings.Contains(markdown, "![capture.png](notes-image:abc.png)") {
+		t.Fatalf("image markdown = %q", markdown)
+	}
+	parsed := ParseMarkdown(markdown)
+	image := noteTestImageBlock(parsed)
+	if image == nil || image.ID != "abc.png" {
+		t.Fatalf("parsed image = %#v", parsed.Blocks)
+	}
+	html := ToHTML(document)
+	if !strings.Contains(html, `data-notes-image="abc.png"`) || !strings.Contains(html, `alt="capture.png"`) {
+		t.Fatalf("image html = %s", html)
+	}
+	if ToPlainText(document) != "capture.png" {
+		t.Fatalf("image plain text = %q", ToPlainText(document))
+	}
+}
+
+func TestNoteImageCodecsRoundTripDisplayScale(t *testing.T) {
+	document := NormalizeDocument(common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "abc.png", FileName: "capture.png", Scale: 60},
+	}}})
+	markdown := ToMarkdown(document)
+	if !strings.Contains(markdown, "![capture.png](notes-image:abc.png?scale=60)") {
+		t.Fatalf("scaled image markdown = %q", markdown)
+	}
+	parsed := ParseMarkdown(markdown)
+	if image := noteTestImageBlock(parsed); image == nil || image.Scale != 60 {
+		t.Fatalf("parsed scaled image = %#v", parsed.Blocks)
+	}
+	html := ToHTML(document)
+	if !strings.Contains(html, `data-notes-image-scale="60"`) {
+		t.Fatalf("scaled image html = %s", html)
+	}
+}
+
+func TestNoteImageCodecsRoundTripIntrinsicSize(t *testing.T) {
+	document := NormalizeDocument(common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "abc.png", FileName: "capture.png", Width: 1920, Height: 1080, Scale: 60},
+	}}})
+	markdown := ToMarkdown(document)
+	if !strings.Contains(markdown, "![capture.png](notes-image:abc.png?scale=60&width=1920&height=1080)") {
+		t.Fatalf("sized image markdown = %q", markdown)
+	}
+	parsed := ParseMarkdown(markdown)
+	if image := noteTestImageBlock(parsed); image == nil || image.Width != 1920 || image.Height != 1080 || image.Scale != 60 {
+		t.Fatalf("parsed sized image = %#v", parsed.Blocks)
+	}
+	html := ToHTML(document)
+	if !strings.Contains(html, `data-notes-image-width="1920"`) || !strings.Contains(html, `data-notes-image-height="1080"`) {
+		t.Fatalf("sized image html = %s", html)
 	}
 }
 
@@ -153,4 +256,26 @@ func TestNoteCodecsPreserveNestedTaskLevels(t *testing.T) {
 	if plain := ToPlainText(document); plain != "☐ parent\n    ☐ child\n        ☑ grandchild" {
 		t.Fatalf("nested task plain text = %q", plain)
 	}
+}
+
+func TestEnsureNoteImageEditGapsAddsCaretParagraphs(t *testing.T) {
+	document := EnsureNoteImageEditGaps(common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png"}},
+	}})
+	if len(document.Blocks) != 3 || document.Blocks[0].Type != common.NoteBlockParagraph || document.Blocks[1].Type != common.NoteBlockImage || document.Blocks[2].Type != common.NoteBlockParagraph {
+		t.Fatalf("image gaps = %#v", document.Blocks)
+	}
+	again := EnsureNoteImageEditGaps(document)
+	if len(again.Blocks) != 3 {
+		t.Fatalf("image gaps should be idempotent: %#v", again.Blocks)
+	}
+}
+
+func noteTestImageBlock(document common.NoteDocument) *common.NoteImage {
+	for _, block := range document.Blocks {
+		if block.Type == common.NoteBlockImage && block.Image != nil {
+			return block.Image
+		}
+	}
+	return nil
 }

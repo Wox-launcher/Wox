@@ -111,12 +111,14 @@ type TextFieldProps struct {
 	OnChanged          func(string)
 	OnSelectionChanged func(woxui.TextSelection)
 	OnTapOffset        func(int) bool
-	CursorAtOffset     func(int) woxui.PointerCursor
-	OnSetValue         func(string) error
-	editingState       woxui.TextEditingState
-	onCaret            func(int)
-	onWordSelection    func(int)
-	onLineSelection    func(int)
+	// OnTapBelowText optionally handles a click beneath the final rendered line of a multiline field.
+	OnTapBelowText  func() bool
+	CursorAtOffset  func(int) woxui.PointerCursor
+	OnSetValue      func(string) error
+	editingState    woxui.TextEditingState
+	onCaret         func(int)
+	onWordSelection func(int)
+	onLineSelection func(int)
 	// onSelectionStart begins a drag selection anchored at the given rune offset.
 	onSelectionStart func(int, woxui.KeyModifiers)
 	// onSelectionExtendAt updates selection from a local pointer point, including edge auto-scroll.
@@ -940,6 +942,12 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	}, OnHoverAt: props.onHoverAt, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
+		}
+		if !props.ReadOnly && maxLines > 1 && props.OnTapBelowText != nil {
+			lines := textFieldRichLines(state.Text, props.Window, style, innerWidth, softWrap, props.RichRuns)
+			if contentPoint(position).Y+props.verticalOffset >= float32(len(lines))*props.LineHeight && props.OnTapBelowText() {
+				return
+			}
 		}
 		if offset, hit := glyphHitAt(position); hit && props.OnTapOffset != nil && props.OnTapOffset(offset) {
 			return

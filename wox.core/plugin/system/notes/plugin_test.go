@@ -2,6 +2,11 @@ package notes
 
 import (
 	"context"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"wox/common"
@@ -167,6 +172,117 @@ func TestNotesSearchMatcherSupportsPinyin(t *testing.T) {
 	}
 }
 
+func TestCreateNoteCommandPersistsTextAndOpensDocument(t *testing.T) {
+	repository, _ := newRepositoryForTest(t)
+	p := &Plugin{repository: repository}
+	result := p.handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: PluginCommandCreateNote,
+		Data: common.ContextData{
+			PluginCommandDataTitle: "Roadmap",
+			PluginCommandDataText:  "Ship the folder browse handoff",
+		},
+	})
+	if !result.Handled || result.Message != "" {
+		t.Fatalf("create note command = %#v", result)
+	}
+	records, err := repository.List(false)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("saved notes = %#v, err=%v", records, err)
+	}
+	if NoteTitle(records[0].Document) != "Roadmap" {
+		t.Fatalf("note title = %q", NoteTitle(records[0].Document))
+	}
+	if !strings.Contains(ToPlainText(records[0].Document), "Ship the folder browse handoff") {
+		t.Fatalf("note text = %q", ToPlainText(records[0].Document))
+	}
+}
+
+func TestCreateNoteCommandImportsImageWithoutOCR(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	repository, _ := newRepositoryForTest(t)
+	p := &Plugin{repository: repository}
+	imagePath := filepath.Join(t.TempDir(), "20260827_wox_snapshots.jpg")
+	writeTestNotePNG(t, imagePath)
+
+	result := p.handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: PluginCommandCreateNote,
+		Data: common.ContextData{
+			PluginCommandDataPath: imagePath,
+			PluginCommandDataText: "master Public 0 + 5 Branches",
+		},
+	})
+	if !result.Handled || result.Message != "" {
+		t.Fatalf("create note from image = %#v", result)
+	}
+	records, err := repository.List(false)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("saved notes = %#v, err=%v", records, err)
+	}
+	body := ToPlainText(records[0].Document)
+	if strings.Contains(body, "master Public") || strings.Contains(body, imagePath) {
+		t.Fatalf("image note kept OCR or absolute path: %q", body)
+	}
+	found := false
+	for _, block := range records[0].Document.Blocks {
+		if block.Type == common.NoteBlockImage && block.Image != nil && block.Image.ID != "" {
+			found = true
+			if _, err := os.Stat(ResolveNoteImagePath(*block.Image)); err != nil {
+				t.Fatalf("attachment missing: %v", err)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("image block missing: %#v", records[0].Document.Blocks)
+	}
+	if NoteTitle(records[0].Document) != "20260827_wox_snapshots" {
+		t.Fatalf("image note title = %q", NoteTitle(records[0].Document))
+	}
+}
+
+func TestCreateNoteCommandImportsFilePath(t *testing.T) {
+	repository, _ := newRepositoryForTest(t)
+	p := &Plugin{repository: repository}
+	filePath := filepath.Join(t.TempDir(), "main.go")
+	if err := os.WriteFile(filePath, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	result := p.handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: PluginCommandCreateNote,
+		Data:    common.ContextData{PluginCommandDataPath: filePath},
+	})
+	if !result.Handled || result.Message != "" {
+		t.Fatalf("create note from path = %#v", result)
+	}
+	records, err := repository.List(false)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("saved notes = %#v, err=%v", records, err)
+	}
+	body := ToPlainText(records[0].Document)
+	if !strings.Contains(body, "main.go") || !strings.Contains(body, "package main") {
+		t.Fatalf("imported note = %q", body)
+	}
+}
+
+func TestCreateNoteActionUsesPluginCommand(t *testing.T) {
+	action := CreateNoteAction(nil, "Title", "Body", "/tmp/file.go")
+	if action.Name != "i18n:plugin_notes_action_save" {
+		t.Fatalf("action name = %q", action.Name)
+	}
+	if action.Icon.String() != common.PluginNotesIcon.String() {
+		t.Fatalf("action icon = %q", action.Icon.String())
+	}
+}
+
+func TestCreateNoteCommandRequiresContent(t *testing.T) {
+	result := (&Plugin{}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: PluginCommandCreateNote,
+	})
+	if !result.Handled || result.Message == "" {
+		t.Fatalf("empty create note command = %#v", result)
+	}
+}
+
 func TestNoteDeepLinkUsesStablePluginID(t *testing.T) {
 	if got := noteDeepLink("note-id"); got != "wox://plugin/"+common.NotesPluginID+"?action=open&id=note-id" {
 		t.Fatalf("unexpected deep link: %s", got)
@@ -259,5 +375,20 @@ func TestNotesMRURestoreRebuildsCurrentNote(t *testing.T) {
 		ContextData: common.ContextData{notesMRUContextKey: saved.ID},
 	}); err == nil {
 		t.Fatal("deleted note should fail restore")
+	}
+}
+
+func writeTestNotePNG(t *testing.T, path string) {
+	t.Helper()
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create image: %v", err)
+	}
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 8, 6))); err != nil {
+		file.Close()
+		t.Fatalf("encode image: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close image: %v", err)
 	}
 }

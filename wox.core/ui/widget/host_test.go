@@ -833,6 +833,64 @@ func TestHostDoesNotSnapTallFocusedEditorToStart(t *testing.T) {
 	}
 }
 
+// TestHostRevealsCaretThroughNestedScrollViews checks that each ancestor uses the latest inner offset.
+func TestHostRevealsCaretThroughNestedScrollViews(t *testing.T) {
+	outer, inner := NewScrollController(0), NewScrollController(0)
+	caretY := float32(0)
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "outer", Width: 100, Height: 60, Controller: outer,
+			Child: Flex{Axis: Vertical, Children: []Widget{
+				Container{Width: 100, Height: 20},
+				ScrollView{
+					Key: "inner", Width: 100, Height: 80, Controller: inner,
+					Child: Focusable{
+						Key: "editor", Autofocus: true,
+						OnKey: func(event woxui.KeyEvent) bool {
+							if event.Down && event.Key == woxui.KeyEnd {
+								caretY = 220
+								return true
+							}
+							return false
+						},
+						TextInput: func(bounds woxui.Rect) woxui.TextInputState {
+							return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X, Y: bounds.Y + caretY, Width: 2, Height: 20}}
+						},
+						Child: Container{Width: 100, Height: 240},
+					},
+				},
+			}},
+		}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	t.Cleanup(host.Dispose)
+	renderTestFrame(host)
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnd, Down: true}) {
+		t.Fatal("End must move the caret")
+	}
+	for range 3 {
+		renderTestFrame(host)
+	}
+	if inner.Offset() != 160 || outer.Offset() != 40 || services.textInput.CursorRect.Y != 40 {
+		t.Fatalf("nested caret reveal: inner=%v outer=%v caret=%+v", inner.Offset(), outer.Offset(), services.textInput.CursorRect)
+	}
+	outer.JumpTo(0)
+	renderTestFrame(host)
+	host.Key(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true})
+	renderTestFrame(host)
+	if outer.Offset() != 0 {
+		t.Fatal("idle frames and unhandled keys must preserve manual scrolling")
+	}
+	host.Key(woxui.KeyEvent{Key: woxui.KeyEnd, Down: true})
+	// A pointer action wins over an input-triggered reveal that has not reached layout yet.
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: 20}})
+	renderTestFrame(host)
+	if outer.Offset() != 0 {
+		t.Fatal("pointer scrolling must cancel a pending caret reveal")
+	}
+}
+
 func TestScrollViewShrinksToMeasuredContentBelowMaximumHeight(t *testing.T) {
 	controller := NewScrollController(0)
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

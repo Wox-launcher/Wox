@@ -631,6 +631,29 @@ func (s *ShellPlugin) handlePluginCommand(ctx context.Context, request plugin.Pl
 	return plugin.PluginCommandResult{Handled: true}
 }
 
+// PrepareCommandAtDirectoryAction hands a filesystem location to Shell without exposing it in the visible query.
+func PrepareCommandAtDirectoryAction(api plugin.API, path string, isDir bool) plugin.QueryResultAction {
+	workingDirectory := path
+	if !isDir {
+		workingDirectory = filepath.Dir(path)
+	}
+
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_file_execute_command_here",
+		Icon:                   common.PluginShellIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
+				PluginId: PluginID,
+				Command:  PluginCommandPrepareCommandAtDirectory,
+				Data: common.ContextData{
+					PluginCommandDataWorkingDirectory: workingDirectory,
+				},
+			})
+		},
+	}
+}
+
 // resolveExecutionWorkingDirectory applies the default directory when none was provided, then validates it.
 func (s *ShellPlugin) resolveExecutionWorkingDirectory(ctx context.Context, workingDirectory string, notify bool) string {
 	if resolved, ok := s.resolveWorkingDirectory(ctx, s.effectiveWorkingDirectory(ctx, workingDirectory), notify); ok {

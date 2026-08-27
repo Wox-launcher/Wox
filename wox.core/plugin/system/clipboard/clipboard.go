@@ -22,6 +22,8 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system"
+	notesplugin "wox/plugin/system/notes"
+	shellplugin "wox/plugin/system/shell"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
@@ -974,9 +976,18 @@ func (c *ClipboardPlugin) buildClipboardFileRecordContent(filePaths []string) st
 }
 
 func resolveClipboardDirectoryPath(content string) string {
+	path, isDir := resolveClipboardFilesystemPath(content)
+	if !isDir {
+		return ""
+	}
+	return path
+}
+
+// resolveClipboardFilesystemPath accepts an absolute file or folder path from clipboard text.
+func resolveClipboardFilesystemPath(content string) (string, bool) {
 	path := strings.TrimSpace(content)
 	if path == "" {
-		return ""
+		return "", false
 	}
 
 	if len(path) >= 2 {
@@ -987,33 +998,42 @@ func resolveClipboardDirectoryPath(content string) string {
 		}
 	}
 	if path == "" {
-		return ""
+		return "", false
 	}
 
 	if path == "~" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return ""
+			return "", false
 		}
 		path = homeDir
 	} else if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, "~\\") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return ""
+			return "", false
 		}
 		path = filepath.Join(homeDir, path[2:])
 	}
 
 	if !filepath.IsAbs(path) {
-		return ""
+		return "", false
 	}
 
 	path = filepath.Clean(path)
-	if !util.IsDirExists(path) {
-		return ""
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", false
 	}
+	return path, info.IsDir()
+}
 
-	return path
+// locationLinkActions hands a clipboard filesystem location to Shell, Folder, and Notes.
+func (c *ClipboardPlugin) locationLinkActions(path string, isDir bool) []plugin.QueryResultAction {
+	return []plugin.QueryResultAction{
+		shellplugin.PrepareCommandAtDirectoryAction(c.api, path, isDir),
+		system.BrowsePathAction(c.api, path),
+		notesplugin.CreateNoteAction(c.api, "", "", path),
+	}
 }
 
 // convertRecordToResult converts a database record to a query result
@@ -1119,6 +1139,9 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 				},
 			})
 		}
+		actions = append(actions, c.locationLinkActions(singlePath, util.IsDirExists(singlePath))...)
+	} else if len(filePaths) > 0 {
+		actions = append(actions, notesplugin.CreateNoteAction(c.api, "", strings.Join(filePaths, "\n"), ""))
 	}
 
 	if !record.IsFavorite {
@@ -1326,6 +1349,7 @@ func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePat
 func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
 	openDirectoryPath := resolveClipboardDirectoryPath(record.Content)
+	filesystemPath, filesystemIsDir := resolveClipboardFilesystemPath(record.Content)
 	normalizedLink := ""
 	if util.IsUrl(record.Content) {
 		normalizedLink = util.NormalizeUrl(record.Content)
@@ -1382,6 +1406,12 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 				}
 			},
 		})
+	}
+
+	if filesystemPath != "" {
+		actions = append(actions, c.locationLinkActions(filesystemPath, filesystemIsDir)...)
+	} else {
+		actions = append(actions, notesplugin.CreateNoteAction(c.api, "", record.Content, ""))
 	}
 
 	if !record.IsFavorite {
@@ -1739,6 +1769,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			result.Actions = append(actions, result.Actions[1:]...)
 		}
 	}
+	result.Actions = append(result.Actions, notesplugin.CreateNoteAction(c.api, "", "", record.FilePath))
 	return result
 }
 

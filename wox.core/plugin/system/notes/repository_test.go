@@ -1,6 +1,8 @@
 package notes
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"wox/common"
 	"wox/database"
 	"wox/setting"
+	"wox/util"
 )
 
 func newRepositoryForTest(t *testing.T) (*Repository, *gorm.DB) {
@@ -205,4 +208,61 @@ func TestRepositoryCoalescesDeferredSyncPerNoteKey(t *testing.T) {
 	if len(oplogs) != 2 || !keys[noteSettingPrefix+first.ID] || !keys[noteSettingPrefix+second.ID] {
 		t.Fatalf("note oplogs were not coalesced per key: %#v", oplogs)
 	}
+}
+
+func TestRepositoryRemovesAttachmentsOnPermanentDelete(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	repository, _ := newRepositoryForTest(t)
+	imported, err := ImportNoteImage(writeTempNotePNG(t))
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	path := ResolveNoteImagePath(imported)
+
+	record, err := repository.Create()
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	record, _, err = repository.Save(record.ID, record.Revision, common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockImage, Image: &imported},
+	}})
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if _, err := repository.Delete(record.ID); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("trash should keep attachments: %v", err)
+	}
+
+	shared, err := repository.Create()
+	if err != nil {
+		t.Fatalf("create shared: %v", err)
+	}
+	if _, _, err := repository.Save(shared.ID, shared.Revision, common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockImage, Image: &imported},
+	}}); err != nil {
+		t.Fatalf("save shared: %v", err)
+	}
+	if err := repository.Discard(record.ID); err != nil {
+		t.Fatalf("discard first: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("shared attachment was removed too early: %v", err)
+	}
+	if err := repository.Discard(shared.ID); err != nil {
+		t.Fatalf("discard last: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("last note should remove its attachments, err=%v", err)
+	}
+}
+
+func writeTempNotePNG(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "shot.png")
+	writeTestNotePNG(t, path)
+	return path
 }

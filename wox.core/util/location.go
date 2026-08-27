@@ -142,6 +142,9 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetFileSearchDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetNotesAttachmentsDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 
 	return nil
 }
@@ -278,6 +281,11 @@ func (l *Location) GetBackupDirectory() string {
 
 func (l *Location) GetFileSearchDirectory() string {
 	return path.Join(l.woxDataDirectory, "filesearch")
+}
+
+// GetNotesAttachmentsDirectory stores note image files on disk so Cloud Sync only transports the attachment id.
+func (l *Location) GetNotesAttachmentsDirectory() string {
+	return path.Join(l.userDataDirectory, "notes", "attachments")
 }
 
 func (l *Location) GetAppLockPath() string {

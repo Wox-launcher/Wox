@@ -6,7 +6,10 @@ import (
 	"image/color"
 	"image/draw"
 	"io"
+	"math"
 	"sync/atomic"
+
+	xdraw "golang.org/x/image/draw"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -33,11 +36,33 @@ var nextImageID atomic.Uint64
 
 // DecodeImage decodes a supported raster image into the renderer's shared pixel format.
 func DecodeImage(reader io.Reader) (*Image, error) {
+	return DecodeImageMax(reader, 0)
+}
+
+// DecodeImageMax decodes a raster and downscales it when either edge exceeds maxDimension.
+func DecodeImageMax(reader io.Reader, maxDimension int) (*Image, error) {
 	source, _, err := image.Decode(reader)
 	if err != nil {
 		return nil, err
 	}
-	return NewImage(source)
+	return NewImage(constrainDecodedImage(source, maxDimension))
+}
+
+// constrainDecodedImage keeps decoded rasters inside the caller's cache budget.
+func constrainDecodedImage(source image.Image, maxDimension int) image.Image {
+	if source == nil {
+		return source
+	}
+	width, height := source.Bounds().Dx(), source.Bounds().Dy()
+	if maxDimension <= 0 || width <= maxDimension && height <= maxDimension {
+		return source
+	}
+	scale := float64(maxDimension) / float64(max(width, height))
+	nextWidth := max(1, int(math.Round(float64(width)*scale)))
+	nextHeight := max(1, int(math.Round(float64(height)*scale)))
+	dst := image.NewRGBA(image.Rect(0, 0, nextWidth, nextHeight))
+	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), source, source.Bounds(), xdraw.Src, nil)
+	return dst
 }
 
 // NewImage copies a Go image into tightly packed, top-down premultiplied RGBA pixels.

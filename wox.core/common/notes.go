@@ -18,6 +18,7 @@ const (
 	NoteBlockTask      NoteBlockType = "task"
 	NoteBlockDivider   NoteBlockType = "divider"
 	NoteBlockTable     NoteBlockType = "table"
+	NoteBlockImage     NoteBlockType = "image"
 	NoteMaximumIndent                = 2
 )
 
@@ -45,6 +46,16 @@ type NoteTable struct {
 	Rows       [][]NoteTableCell `json:"rows"`
 }
 
+// NoteImage is a local attachment referenced by id. Bytes stay on disk, not in note JSON.
+// Scale is a display-width percent (20-100). Zero means 100% so full-size images omit the field.
+type NoteImage struct {
+	ID       string `json:"id"`
+	FileName string `json:"fileName,omitempty"`
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	Scale    int    `json:"scale,omitempty"`
+}
+
 // NoteBlock is one editable block in a note document.
 type NoteBlock struct {
 	ID      string        `json:"id"`
@@ -54,6 +65,12 @@ type NoteBlock struct {
 	Indent  int           `json:"indent,omitempty"`
 	Spans   []NoteSpan    `json:"spans,omitempty"`
 	Table   *NoteTable    `json:"table,omitempty"`
+	Image   *NoteImage    `json:"image,omitempty"`
+}
+
+// IsStructural reports blocks that sit outside the linear text field, such as tables and images.
+func (b NoteBlock) IsStructural() bool {
+	return b.Type == NoteBlockTable || b.Type == NoteBlockImage
 }
 
 // NoteDocument is the versioned rich-text payload stored with a note.

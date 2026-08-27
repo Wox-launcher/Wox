@@ -520,7 +520,7 @@ func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialo
 // cloudConfigNotesViewProps translates platform-aware sync caveats for the view.
 func (a *App) cloudConfigNotesViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudConfigNotesProps {
 	notes := [][3]string{
-		{"clipboard", "partial", "clipboard"}, {"query_hotkeys", "platform", "query_hotkeys"}, {"launch_hotkeys", "platform", "launch_hotkeys"},
+		{"clipboard", "partial", "clipboard"}, {"notes", "partial", "notes"}, {"query_hotkeys", "platform", "query_hotkeys"}, {"launch_hotkeys", "platform", "launch_hotkeys"},
 		{"ignored_hotkey_apps", "platform", "ignored_hotkey_apps"}, {"autostart", "platform", "autostart"}, {"http_proxy", "platform", "http_proxy"},
 		{"runtime_paths", "platform", "runtime_paths"}, {"app_font", "platform", "app_font"}, {"app_indexing", "platform", "app_indexing"},
 		{"file_search", "platform", "file_search"}, {"explorer_quick_jump", "platform", "explorer_quick_jump"}, {"local_plugin_directories", "platform", "local_plugin_directories"},

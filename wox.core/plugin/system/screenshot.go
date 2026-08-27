@@ -16,6 +16,7 @@ import (
 	"time"
 	"wox/common"
 	"wox/plugin"
+	notesplugin "wox/plugin/system/notes"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
@@ -768,6 +769,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 					}
 				},
 			},
+			notesplugin.CreateNoteAction(p.api, "", "", item.path),
 		},
 	}
 	if ocrText := strings.TrimSpace(item.ocrText); ocrText != "" {

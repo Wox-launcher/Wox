@@ -44,11 +44,17 @@ type noteInlineStyle struct {
 	link                                  string
 }
 
-// NoteDocumentSegment is one linear text run or one structural table block.
+// NoteDocumentSegment is one linear text run or one structural table/image block.
 type NoteDocumentSegment struct {
 	Start int
 	End   int
 	Table bool
+	Image bool
+}
+
+// Structural reports segments that render outside the linear text field.
+func (s NoteDocumentSegment) Structural() bool {
+	return s.Table || s.Image
 }
 
 var noteInlineRules = []struct {
@@ -119,7 +125,7 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 	codeBackground.A = min(uint8(150), codeBackground.A)
 	first := true
 	for index, block := range document.Blocks {
-		if block.Type == common.NoteBlockTable {
+		if block.IsStructural() {
 			ordered = [common.NoteMaximumIndent + 1]int{1, 1, 1}
 			continue
 		}
@@ -271,7 +277,7 @@ func DocumentFromEditor(value string, previous common.NoteDocument) common.NoteD
 		index := len(blocks)
 		if index < len(previous.Blocks) {
 			old = previous.Blocks[index]
-			if old.Type == common.NoteBlockTable {
+			if old.IsStructural() {
 				old = common.NoteBlock{ID: old.ID, Type: common.NoteBlockParagraph}
 			}
 		} else if index > 0 && blocks[index-1].Type == common.NoteBlockCode {
@@ -325,7 +331,7 @@ func parseNoteBlock(raw string, previous common.NoteBlockType, checked bool) (co
 	if raw == "---" || raw == "────────" {
 		return common.NoteBlockDivider, false, 0, ""
 	}
-	if previous == common.NoteBlockBullet || previous == common.NoteBlockOrdered || previous == common.NoteBlockTask || previous == common.NoteBlockQuote || previous == common.NoteBlockDivider || previous == common.NoteBlockTable {
+	if previous == common.NoteBlockBullet || previous == common.NoteBlockOrdered || previous == common.NoteBlockTask || previous == common.NoteBlockQuote || previous == common.NoteBlockDivider || previous == common.NoteBlockTable || previous == common.NoteBlockImage {
 		previous = common.NoteBlockParagraph
 	}
 	return previous, checked && previous == common.NoteBlockTask, 0, raw
@@ -844,7 +850,7 @@ func NoteLinkAtOffset(document common.NoteDocument, ranges []NoteBlockRange, off
 		return ""
 	}
 	index := NoteBlockAt(ranges, offset)
-	blockRange := rangeForBlock(ranges, index)
+	blockRange := NoteRangeForBlock(ranges, index)
 	if offset < blockRange.TextStart || offset > blockRange.TextEnd {
 		return ""
 	}
@@ -868,7 +874,8 @@ func NoteLinkAtOffset(document common.NoteDocument, ranges []NoteBlockRange, off
 	return ""
 }
 
-func rangeForBlock(ranges []NoteBlockRange, block int) NoteBlockRange {
+// NoteRangeForBlock resolves a document block index to offsets within the projected text segment.
+func NoteRangeForBlock(ranges []NoteBlockRange, block int) NoteBlockRange {
 	for _, blockRange := range ranges {
 		if blockRange.Block == block {
 			return blockRange
@@ -883,7 +890,7 @@ func NoteTaskAtOffset(document common.NoteDocument, ranges []NoteBlockRange, off
 		return 0, false
 	}
 	index := NoteBlockAt(ranges, offset)
-	blockRange := rangeForBlock(ranges, index)
+	blockRange := NoteRangeForBlock(ranges, index)
 	return index, document.Blocks[index].Type == common.NoteBlockTask && offset >= blockRange.Marker && offset <= blockRange.TextStart
 }
 
@@ -893,7 +900,7 @@ func NoteDividerAtOffset(document common.NoteDocument, ranges []NoteBlockRange, 
 		return false
 	}
 	index := NoteBlockAt(ranges, offset)
-	blockRange := rangeForBlock(ranges, index)
+	blockRange := NoteRangeForBlock(ranges, index)
 	return document.Blocks[index].Type == common.NoteBlockDivider && offset >= blockRange.Start && offset <= blockRange.End
 }
 
@@ -919,7 +926,7 @@ func ContinueNoteBlock(document common.NoteDocument, ranges []NoteBlockRange, se
 	}
 
 	runes := []rune(block.Text)
-	blockRange := rangeForBlock(ranges, index)
+	blockRange := NoteRangeForBlock(ranges, index)
 	offset := max(0, min(len(runes), selection.Focus-blockRange.TextStart))
 	styles := noteBlockStyles(block, block.Text)
 	updated.Blocks[index].Text = string(runes[:offset])
@@ -976,6 +983,10 @@ func CloneNoteDocument(document common.NoteDocument) common.NoteDocument {
 			}
 			clone.Blocks[index].Table = &table
 		}
+		if block.Image != nil {
+			image := *block.Image
+			clone.Blocks[index].Image = &image
+		}
 	}
 	return clone
 }
@@ -994,13 +1005,13 @@ func noteDocumentSegments(document common.NoteDocument) []NoteDocumentSegment {
 	segments := make([]NoteDocumentSegment, 0)
 	start := 0
 	for index, block := range document.Blocks {
-		if block.Type != common.NoteBlockTable {
+		if !block.IsStructural() {
 			continue
 		}
 		if start < index {
 			segments = append(segments, NoteDocumentSegment{Start: start, End: index})
 		}
-		segments = append(segments, NoteDocumentSegment{Start: index, End: index + 1, Table: true})
+		segments = append(segments, NoteDocumentSegment{Start: index, End: index + 1, Table: block.Type == common.NoteBlockTable, Image: block.Type == common.NoteBlockImage})
 		start = index + 1
 	}
 	if start < len(document.Blocks) || len(segments) == 0 {
@@ -1041,7 +1052,7 @@ func noteSegmentDocument(document common.NoteDocument, segment NoteDocumentSegme
 }
 
 func noteBlockIsEmptyText(block common.NoteBlock) bool {
-	if block.Type == common.NoteBlockTable || block.Table != nil {
+	if block.IsStructural() {
 		return false
 	}
 	return strings.TrimSpace(block.Text) == ""
@@ -1049,7 +1060,7 @@ func noteBlockIsEmptyText(block common.NoteBlock) bool {
 
 // NoteSegmentIsEmpty reports whether a text segment contains only blank blocks.
 func NoteSegmentIsEmpty(document common.NoteDocument, segment NoteDocumentSegment) bool {
-	if segment.Table || segment.Start < 0 || segment.Start >= segment.End || segment.End > len(document.Blocks) {
+	if segment.Structural() || segment.Start < 0 || segment.Start >= segment.End || segment.End > len(document.Blocks) {
 		return false
 	}
 	for index := segment.Start; index < segment.End; index++ {
@@ -1065,12 +1076,38 @@ func ensureNoteDocumentHasTextBlock(document common.NoteDocument) common.NoteDoc
 		document.Blocks = []common.NoteBlock{{ID: uuid.NewString(), Type: common.NoteBlockParagraph}}
 		return document
 	}
+	hasText := false
 	for _, block := range document.Blocks {
-		if block.Type != common.NoteBlockTable {
-			return document
+		if !block.IsStructural() {
+			hasText = true
+			break
 		}
 	}
-	document.Blocks = append(document.Blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+	if !hasText {
+		document.Blocks = append(document.Blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+	}
+	return ensureNoteImageEditGaps(document)
+}
+
+// ensureNoteImageEditGaps keeps empty paragraphs around images so clicks and arrow keys can land a caret.
+func ensureNoteImageEditGaps(document common.NoteDocument) common.NoteDocument {
+	if len(document.Blocks) == 0 {
+		return document
+	}
+	blocks := make([]common.NoteBlock, 0, len(document.Blocks)+2)
+	if document.Blocks[0].Type == common.NoteBlockImage {
+		blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+	}
+	for index, block := range document.Blocks {
+		if index > 0 && document.Blocks[index-1].Type == common.NoteBlockImage && block.Type == common.NoteBlockImage {
+			blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+		}
+		blocks = append(blocks, block)
+	}
+	if blocks[len(blocks)-1].Type == common.NoteBlockImage {
+		blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph})
+	}
+	document.Blocks = blocks
 	return document
 }
 

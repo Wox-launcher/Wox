@@ -116,3 +116,26 @@ func TestIncrementalToolbarMessageWaitsForMinimumVisibleDuration(t *testing.T) {
 		t.Fatalf("expected incremental indexing title, got %q", msg.Title)
 	}
 }
+
+func TestFileSearchResultActionsIncludeNotesAndShell(t *testing.T) {
+	plugin := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}
+	actions := plugin.buildFileSearchResultActions(context.Background(), filesearch.SearchResult{
+		Path:  `/Users/demo/main.go`,
+		IsDir: false,
+	})
+
+	want := map[string]bool{
+		"i18n:plugin_file_execute_command_here": false,
+		"i18n:plugin_notes_action_save":         false,
+	}
+	for _, action := range actions {
+		if _, ok := want[action.Name]; ok {
+			want[action.Name] = true
+		}
+	}
+	for name, found := range want {
+		if !found {
+			t.Fatalf("missing file search action %s in %#v", name, actions)
+		}
+	}
+}

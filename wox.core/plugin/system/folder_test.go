@@ -1,6 +1,8 @@
 package system
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"wox/plugin"
@@ -34,6 +36,43 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 		"delete_folder_favorite",
 		folderToggleHiddenFilesActionID,
 	})
+}
+
+func TestResolveFolderBrowsePathUsesDirectoryOrParent(t *testing.T) {
+	root := t.TempDir()
+	filePath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(filePath, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	folder, err := resolveFolderBrowsePath(root)
+	if err != nil || folder != root {
+		t.Fatalf("folder path = %q, err=%v", folder, err)
+	}
+
+	parent, err := resolveFolderBrowsePath(filePath)
+	if err != nil || parent != root {
+		t.Fatalf("file parent = %q, err=%v, want %q", parent, err, root)
+	}
+
+	if _, err := resolveFolderBrowsePath(""); err == nil {
+		t.Fatal("empty path should fail")
+	}
+	if _, err := resolveFolderBrowsePath(filepath.Join(root, "missing")); err == nil {
+		t.Fatal("missing path should fail")
+	}
+}
+
+func TestFolderBrowseCommandRejectsUnknownCommand(t *testing.T) {
+	result := (&FolderPlugin{}).handlePluginCommand(t.Context(), plugin.PluginCommandRequest{Command: "unknown"})
+	if result.Handled {
+		t.Fatalf("unknown command should not be handled: %#v", result)
+	}
+
+	empty := (&FolderPlugin{}).handlePluginCommand(t.Context(), plugin.PluginCommandRequest{Command: PluginCommandBrowsePath})
+	if !empty.Handled || empty.Message == "" {
+		t.Fatalf("empty browse path = %#v", empty)
+	}
 }
 
 // assertFolderActionIDs verifies the ordered action contract exposed to the launcher.

@@ -250,6 +250,27 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	}
 }
 
+func TestPluginDetailHeaderAlignsTitleWithIcon(t *testing.T) {
+	header := pluginDetailHeader(PluginHeaderProps{
+		Name: "Wox Query History", Version: "1.0.0", Author: "Wox Launcher",
+	}, 600, 114, woxcomponent.Theme{}).(woxwidget.Container)
+	identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	row := identity.Child.(woxwidget.Flex)
+	if identity.Height != 40 || row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("identity row = height %v alignment %v, want a 40-high centered icon/title row", identity.Height, row.CrossAxisAlignment)
+	}
+	if _, ok := row.Children[0].(woxwidget.Container); !ok {
+		t.Fatalf("identity leading child = %T, want the plugin icon", row.Children[0])
+	}
+	title := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	if title.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("title alignment = %v, want the same cross-axis center as the icon", title.CrossAxisAlignment)
+	}
+	if name := title.Children[0].(woxwidget.Text); name.Value != "Wox Query History" {
+		t.Fatalf("title = %q, want the plugin name beside the icon", name.Value)
+	}
+}
+
 func TestPluginManagementButtonsUseIntrinsicWidth(t *testing.T) {
 	actions := pluginOutlineActions([]PluginAction{{ID: "plugin-uninstall", Label: "Uninstall", Width: 124, Enabled: true}}, woxcomponent.Theme{})
 	button := focusedControlGesture(actions.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)

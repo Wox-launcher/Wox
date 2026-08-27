@@ -683,6 +683,8 @@
   "ui_cloud_sync_plugin_exclusions_plugin": "Plugin",
   "ui_cloud_sync_plugin_exclusions_plugin_tips": "Selecione um plugin para excluir da sincronização em nuvem.",
   "ui_cloud_sync_plugin_exclusions_uninstalled": "Não instalado",
+  "ui_cloud_sync_config_note_notes": "Notas",
+  "ui_cloud_sync_config_note_notes_tips": "O texto das notas é sincronizado. As imagens permanecem neste dispositivo.",
   "ui_cloud_sync_intro_title": "Sincronização em nuvem",
   "ui_cloud_sync_intro_feature_label": "Recursos",
   "ui_cloud_sync_intro_feature_value": "Sincronize configurações do Wox, configurações de plugins e chaves de criptografia entre seus dispositivos.",
@@ -1227,6 +1229,7 @@
   "plugin_notes_action_export_html": "Exportar como HTML",
   "plugin_notes_action_delete": "Excluir Nota",
   "plugin_notes_action_restore": "Restaurar Nota",
+  "plugin_notes_action_save": "Salvar nas Notas",
   "plugin_file_plugin_name": "Busca de Arquivos",
   "plugin_file_plugin_description": "Pesquisar arquivos e pastas",
   "plugin_file_setting_roots_title": "Diretórios de busca",
@@ -2006,6 +2009,7 @@
   "plugin_converter_copy_result": "Copiar",
   "plugin_folder_open": "Abrir",
   "plugin_folder_enter": "Entrar na pasta",
+  "plugin_folder_browse_here": "Navegar nesta pasta",
   "plugin_folder_show_hidden_files": "Mostrar arquivos ocultos",
   "plugin_folder_hide_hidden_files": "Ocultar arquivos ocultos",
   "plugin_folder_favorites": "Favoritos",
@@ -2498,5 +2502,11 @@
   "notes_table_insert_column": "Inserir coluna",
   "notes_table_delete_row": "Excluir linha",
   "notes_table_delete_column": "Excluir coluna",
-  "notes_table_delete": "Excluir tabela"
+  "notes_table_delete": "Excluir tabela",
+  "notes_image_missing": "Imagem ausente",
+  "notes_image_smaller": "Reduzir",
+  "notes_image_larger": "Ampliar",
+  "notes_image_delete": "Excluir imagem",
+  "notes_view_markdown": "Alternar para visualização Markdown",
+  "notes_view_preview": "Alternar para visualização de prévia"
 }
