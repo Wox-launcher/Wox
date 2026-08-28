@@ -96,9 +96,6 @@ func TestTooltipOverlayStaysNonactivating(t *testing.T) {
 	if !options.Nonactivating {
 		t.Fatal("tooltips must not steal focus")
 	}
-	if !options.TransientOverlay {
-		t.Fatal("tooltips must use the shared overlay material")
-	}
 	if !options.Topmost {
 		t.Fatal("tooltips must stay above the settings window")
 	}
@@ -114,9 +111,6 @@ func TestPreviewOverlayFloatsAboveLauncher(t *testing.T) {
 	}
 	if options.Nonactivating {
 		t.Fatal("escape-to-close preview overlays still take focus")
-	}
-	if !options.TransientOverlay {
-		t.Fatal("focus-taking previews must keep the shared overlay material")
 	}
 	if !options.Resizable {
 		t.Fatal("preview overlays should keep native resizing")

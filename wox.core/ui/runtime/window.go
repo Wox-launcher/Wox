@@ -96,7 +96,9 @@ type FocusEvent struct {
 	Active bool
 }
 
-// WindowRole selects the native chrome and coordinate space for a window.
+// WindowRole selects taskbar, coordinate, and focus behavior. It does not
+// select window material; Open always applies the process default except for
+// WindowRoleScreenshot, which shows the desktop.
 type WindowRole uint8
 
 const (
@@ -133,8 +135,6 @@ type WindowOptions struct {
 	// Nonactivating keeps tooltips and recording chrome visible without stealing
 	// focus. It is a focus policy only; native window materials still apply.
 	Nonactivating bool
-	// TransientOverlay selects the platform material used by shared overlay windows.
-	TransientOverlay bool
 	// Topmost raises a utility window above the launcher so preview overlays
 	// cannot open behind Wox when both share the floating window band.
 	Topmost                    bool
@@ -193,6 +193,12 @@ func Open(options WindowOptions) (*Window, error) {
 		return nil, err
 	}
 	window.native = native
+	if windowUsesDefaultMaterial(options.Role) {
+		if err := native.setAppearance(DefaultAppearanceIsDark()); err != nil {
+			_ = native.close()
+			return nil, err
+		}
+	}
 	return window, nil
 }
 

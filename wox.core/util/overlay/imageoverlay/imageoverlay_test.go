@@ -116,18 +116,18 @@ func TestImageOverlayChromePaintsThemeBackground(t *testing.T) {
 	}
 }
 
-func TestImageOverlayChromeLeavesWindowsTitleBarTransparent(t *testing.T) {
+func TestImageOverlayChromePaintsWindowsTitleBar(t *testing.T) {
+	background := woxui.Color{R: 24, G: 29, B: 38, A: 242}
 	chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{
 		Width: 400, Height: 280, Title: "shot.png", Platform: "windows",
-		Colors: ThemeColors{Background: woxui.Color{A: 255}, Foreground: woxui.Color{A: 255}, Toolbar: woxui.Color{A: 255}},
+		Colors: ThemeColors{Background: background, Foreground: woxui.Color{A: 255}, Toolbar: woxui.Color{A: 255}},
 	}, "", "", nil, nil).(woxwidget.Stack)
-	background := chrome.Children[0]
-	panel, ok := background.Child.(woxwidget.Container)
+	panel, ok := chrome.Children[0].Child.(woxwidget.Container)
 	if !ok {
-		t.Fatalf("Windows chrome panel = %T, want Container", background.Child)
+		t.Fatalf("Windows chrome panel = %T, want Container", chrome.Children[0].Child)
 	}
-	if background.Top != imageOverlayTitleBarHeight || panel.Height != 280-imageOverlayTitleBarHeight {
-		t.Fatalf("Windows background = top %v height %v, want title bar left transparent", background.Top, panel.Height)
+	if chrome.Children[0].Top != 0 || panel.Height != 280 || panel.Color != background {
+		t.Fatalf("Windows background = top %v height %v color %+v, want a full AppBackgroundColor wash", chrome.Children[0].Top, panel.Height, panel.Color)
 	}
 }
 

@@ -103,7 +103,7 @@ func (dialog *screenshotSizeDialog) open() error {
 	size := dialog.size()
 	dialog.host = woxwidget.NewHost(dialog.build)
 	managed, _, err := manager.Open("wox.screenshot.size", WindowOptions{
-		Title: options.SizeLabels.Title, Size: size, Role: role, Topmost: true, TransientOverlay: true,
+		Title: options.SizeLabels.Title, Size: size, Role: role, Topmost: true,
 		OnFrame: dialog.draw, OnPointer: dialog.host.Pointer, OnKey: dialog.key,
 		OnTextInput: func(event TextInputEvent) { dialog.host.TextInput(event) },
 		OnFocus:     func(event woxui.FocusEvent) { dialog.host.SetWindowFocused(event.Active) },

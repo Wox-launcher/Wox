@@ -286,7 +286,7 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 		managed, _, openErr = c.app.windows.Open(c.windowID, woxui.WindowOptions{
 			Title: c.app.translate("i18n:notes_title"), Size: woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight},
 			MinSize: notesNativeMinSize(),
-			Role:    notesWindowRole, Icon: notesWindowIcon(), Resizable: true, TransientOverlay: true, Topmost: c.windowPinned, HideOnBlur: false,
+			Role:    notesWindowRole, Icon: notesWindowIcon(), Resizable: true, Topmost: c.windowPinned, HideOnBlur: false,
 			OnFrame: host.Frame, OnPointer: host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)

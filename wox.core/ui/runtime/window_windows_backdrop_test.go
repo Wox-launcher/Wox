@@ -22,27 +22,46 @@ func TestWindows11SystemBackdropValuesMatchWindowsSDK(t *testing.T) {
 	}
 }
 
-func TestWindowsOverlayWindowsUseAccentBackdrop(t *testing.T) {
-	if !windowsUsesAccentBackdrop("win11", true) {
-		t.Fatal("Windows 11 overlays need Accent Acrylic")
+func TestWindows11WindowsShareDesktopAcrylic(t *testing.T) {
+	if windowsUsesAccentBackdrop("win11") {
+		t.Fatal("Windows 11 windows share Desktop Acrylic")
 	}
-	if windowsUsesAccentBackdrop("win11", false) {
-		t.Fatal("the Windows 11 launcher should keep the supported system backdrop")
-	}
-	if !windowsUsesAccentBackdrop("win10", false) {
+	if !windowsUsesAccentBackdrop("win10") {
 		t.Fatal("Windows 10 windows need the Accent Acrylic fallback")
+	}
+	for _, options := range []WindowOptions{
+		{},
+		{Role: WindowRoleApplication},
+		{Nonactivating: true},
+		{Resizable: true, Topmost: true},
+	} {
+		if !windowsWindowUsesSystemBackdrop(options) {
+			t.Fatalf("window options %#v must keep the process Desktop Acrylic", options)
+		}
 	}
 	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot, Nonactivating: true}) {
 		t.Fatal("screenshot windows must keep skipping system backdrop")
 	}
 }
 
-func TestWindowsTransientOverlaySkipsThickFrame(t *testing.T) {
-	if windowsWindowStyle(WindowOptions{Resizable: true})&windowsWSSizeBox == 0 {
-		t.Fatal("regular resizable windows need WS_THICKFRAME")
+func TestWindowsNCActivateKeepsSystemBackdropActive(t *testing.T) {
+	if windowsWMNCActivate != 0x0086 {
+		t.Fatalf("WM_NCACTIVATE = %#x, want 0x0086", windowsWMNCActivate)
 	}
-	if windowsWindowStyle(WindowOptions{Resizable: true, TransientOverlay: true})&windowsWSSizeBox != 0 {
-		t.Fatal("Accent overlays must resize through hit testing without WS_THICKFRAME")
+	if !windowsWindowUsesSystemBackdrop(WindowOptions{Nonactivating: true}) {
+		t.Fatal("notifications must keep Desktop Acrylic even though they never take focus")
+	}
+	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot}) {
+		t.Fatal("screenshot windows must not force an active system backdrop")
+	}
+}
+
+func TestWindowsWindowsStayFrameless(t *testing.T) {
+	if windowsWindowStyle(WindowOptions{Resizable: true})&windowsWSSizeBox != 0 {
+		t.Fatal("Desktop Acrylic stays stable only without WS_THICKFRAME")
+	}
+	if windowsWindowStyle(WindowOptions{})&windowsWSSizeBox != 0 {
+		t.Fatal("fixed windows must stay frameless")
 	}
 }
 

@@ -2936,6 +2936,8 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       // turn those transparent pixels into a fullscreen blur.
       native_window.contentView = view;
     } else {
+      // Process default material. Every non-screenshot window uses this
+      // Popover vibrancy; do not specialize it per window or focus state.
       NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
       effect_view.material = NSVisualEffectMaterialPopover;
       effect_view.state = NSVisualEffectStateActive;

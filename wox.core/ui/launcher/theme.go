@@ -204,6 +204,7 @@ func (a *App) reloadTheme() error {
 func (a *App) applyTheme(theme themeData) {
 	palette := paletteForTheme(theme)
 	isDark := themeColorIsDark(palette.background)
+	woxui.SetDefaultAppearance(isDark)
 	a.palette = palette
 	settingsView := a.settingsView
 	onboardingView := a.onboardingView

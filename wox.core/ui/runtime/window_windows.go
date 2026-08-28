@@ -65,6 +65,7 @@ const (
 	win10LightAcrylicTint    = 0xCCF5F5F5
 	windowsWSSizeBox         = uint32(0x00040000)
 	windowsWMSizing          = uint32(0x0214)
+	windowsWMNCActivate      = uint32(0x0086)
 	windowsResizeGrip        = float32(10)
 )
 
@@ -490,7 +491,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		options:        options,
 		uiThreadID:     uiThreadID,
 		done:           make(chan struct{}),
-		darkAppearance: true,
+		darkAppearance: DefaultAppearanceIsDark(),
 	}
 	var pointerScreen win.POINT
 	if win.GetCursorPos(&pointerScreen) {
@@ -774,14 +775,12 @@ func (w *platformWindow) close() error {
 	return w.call(windowCommand{kind: windowCommandClose}).err
 }
 
-// windowsWindowStyle keeps Accent overlays frameless while preserving edge resize hit testing.
-func windowsWindowStyle(options WindowOptions) uint32 {
-	style := uint32(win.WS_POPUP)
-	if options.Resizable && !options.TransientOverlay {
-		// Accent Acrylic becomes opaque with WS_THICKFRAME; overlays already resize through WM_NCHITTEST.
-		style |= windowsWSSizeBox
-	}
-	return style
+// windowsWindowStyle keeps every Wox window frameless. WS_THICKFRAME makes
+// Desktop Acrylic go glass-like on the active window and opaque when it
+// blurs, which is why Notes looked different from WebView after gaining focus.
+// Resizable windows already resize through WM_NCHITTEST.
+func windowsWindowStyle(_ WindowOptions) uint32 {
+	return uint32(win.WS_POPUP)
 }
 
 // createNativeWindow publishes the HWND only after CreateWindowEx has completed its synchronous messages.
@@ -858,7 +857,7 @@ func (w *platformWindow) createNativeWindow() error {
 	}
 	w.renderer = renderer
 	if windowsWindowUsesSystemBackdrop(w.options) {
-		applyWindowsBackdrop(hwnd, w.darkAppearance, w.options.TransientOverlay)
+		applyWindowsBackdrop(hwnd, w.darkAppearance)
 	}
 	nativeWindows.Store(uintptr(hwnd), w)
 	platformRuntime.Lock()
@@ -987,9 +986,9 @@ func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintp
 	}
 }
 
-// applyWindowsBackdrop keeps shared overlays on Accent Acrylic so their material
-// does not change when they gain focus. Other Windows 11 windows use DWM Acrylic.
-func applyWindowsBackdrop(hwnd win.HWND, isDark, transientOverlay bool) {
+// applyWindowsBackdrop is the Windows implementation of the process default
+// material. Callers must not pick a different backdrop per window.
+func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 	dark := int32(0)
 	if isDark {
 		dark = 1
@@ -997,37 +996,41 @@ func applyWindowsBackdrop(hwnd win.HWND, isDark, transientOverlay bool) {
 	if dwmSetWindowAttribute.Find() == nil {
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaUseImmersiveDark, uintptr(unsafe.Pointer(&dark)), unsafe.Sizeof(dark))
 	}
-	platformVariant := osvariant.GetCurrentPlatformVariant()
-	if platformVariant == "win11" {
-		applyWindows11Backdrop(hwnd, isDark, windowsUsesAccentBackdrop(platformVariant, transientOverlay))
+	if osvariant.GetCurrentPlatformVariant() == "win11" {
+		applyWindows11Backdrop(hwnd)
 		return
 	}
 	applyWindowsAccentBackdrop(hwnd, isDark)
 }
 
-func windowsUsesAccentBackdrop(platformVariant string, transientOverlay bool) bool {
-	return platformVariant != "win11" || transientOverlay
+func windowsUsesAccentBackdrop(platformVariant string) bool {
+	return platformVariant != "win11"
 }
 
-func applyWindows11Backdrop(hwnd win.HWND, isDark, useAccent bool) {
+func applyWindows11Backdrop(hwnd win.HWND) {
 	corner := int32(dwmWindowCornerRound)
 	backdrop := int32(dwmSystemBackdropWox)
-	if useAccent {
-		backdrop = dwmSystemBackdropNone
-	} else {
-		// The launcher needs live translucency over the windows behind it; standard Mica is a wallpaper-derived opaque material.
-		margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
-		if dwmExtendFrameIntoClientArea.Find() == nil {
-			_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
-		}
+	// Desktop Acrylic needs the frame extended into the client; Mica is a
+	// wallpaper-derived opaque material and would hide the desktop behind Wox.
+	margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
+	if dwmExtendFrameIntoClientArea.Find() == nil {
+		_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
 	}
 	if dwmSetWindowAttribute.Find() == nil {
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaWindowCorner, uintptr(unsafe.Pointer(&corner)), unsafe.Sizeof(corner))
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
-	if useAccent {
-		applyWindowsAccentBackdrop(hwnd, isDark)
+	windowsForceActiveBackdrop(hwnd)
+}
+
+// windowsForceActiveBackdrop keeps Desktop Acrylic on the live material.
+// Notifications never become the foreground window, and ordinary windows
+// otherwise switch to an opaque inactive tint as soon as they blur.
+func windowsForceActiveBackdrop(hwnd win.HWND) {
+	if hwnd == 0 {
+		return
 	}
+	win.SendMessage(hwnd, windowsWMNCActivate, 1, 0)
 }
 
 func applyWindowsAccentBackdrop(hwnd win.HWND, isDark bool) {
@@ -1396,6 +1399,10 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	case wmIMEChar:
 		if window.textInputEnabled() {
 			return 0
+		}
+	case windowsWMNCActivate:
+		if windowsWindowUsesSystemBackdrop(window.options) {
+			return win.DefWindowProc(hwnd, message, 1, lParam)
 		}
 	case win.WM_ACTIVATE:
 		if win.LOWORD(uint32(wParam)) == win.WA_INACTIVE {
@@ -1801,7 +1808,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
 		if windowsWindowUsesSystemBackdrop(w.options) {
-			applyWindowsBackdrop(w.hwnd, command.darkAppearance, w.options.TransientOverlay)
+			applyWindowsBackdrop(w.hwnd, command.darkAppearance)
 		}
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
@@ -2157,7 +2164,7 @@ func (w *platformWindow) synchronizeBackdropAfterShow() {
 		backdrop := int32(dwmSystemBackdropNone)
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(w.hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
-	applyWindowsBackdrop(w.hwnd, w.darkAppearance, w.options.TransientOverlay)
+	applyWindowsBackdrop(w.hwnd, w.darkAppearance)
 	if dwmFlush.Find() == nil {
 		_, _, _ = dwmFlush.Call()
 	}

@@ -347,18 +347,11 @@ func (s *imageOverlayTitleBarState) Build(context woxwidget.StateContext, widget
 func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered, pressed string, onHover, onPress func(string, bool)) woxwidget.Widget {
 	bodyHeight := max(float32(1), props.Height-imageOverlayTitleBarHeight)
 	theme := woxcomponent.Theme{Background: props.Colors.Background, ToolbarText: props.Colors.Toolbar}
-	backgroundTop := float32(0)
-	backgroundHeight := props.Height
-	if props.Platform == "windows" {
-		// Leave the title bar unpainted so the native Accent Acrylic remains visible.
-		backgroundTop = imageOverlayTitleBarHeight
-		backgroundHeight = bodyHeight
-	}
 	children := []woxwidget.StackChild{
 		// Fill only: the platform window owns the outer shape. A widget
 		// radius/stroke stacks a second corner on top of that clip.
-		{Top: backgroundTop, Child: woxwidget.Container{
-			Width: props.Width, Height: backgroundHeight, Color: props.Colors.Background,
+		{Child: woxwidget.Container{
+			Width: props.Width, Height: props.Height, Color: props.Colors.Background,
 		}},
 		{Top: imageOverlayTitleBarHeight, Child: woxwidget.Image{
 			Source: props.Image, Width: props.Width, Height: bodyHeight, Fit: woxwidget.ImageFitContain,
