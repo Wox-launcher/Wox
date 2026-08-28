@@ -37,7 +37,7 @@ var screenshotPinnedOverlayPrefix = "wox_screenshot_pin_"
 var screenshotRetentionDaysSettingKey = "retention_days"
 var screenshotOCREnabledSettingKey = "ocr_enabled"
 var screenshotOCRModelSettingKey = "ocr_model"
-var screenshotDefaultRetentionDays = 30
+var screenshotDefaultRetentionDays = 15
 var screenshotOCRSidecarVersion = 1
 
 const screenshotPermissionDeniedErrorCode = "permission_denied"
