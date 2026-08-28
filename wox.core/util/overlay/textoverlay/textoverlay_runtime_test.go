@@ -239,6 +239,12 @@ func TestRuntimeTextWindowChromeDefersToSystemCorners(t *testing.T) {
 
 func TestRuntimeTextWindowChromeStrokesLinuxAlphaCorners(t *testing.T) {
 	radius, borderWidth, borderColor := runtimeTextWindowChrome("linux")
+	if woxui.HasNativeWindowMaterial() {
+		if radius != 0 || borderWidth != 0 || borderColor.A != 0 {
+			t.Fatalf("linux compositor blur chrome = radius %v border %v/%#v, want square corners", radius, borderWidth, borderColor)
+		}
+		return
+	}
 	if radius != runtimeTextSystemCornerRadius || borderWidth != 1 || borderColor.A != 30 {
 		t.Fatalf("linux chrome = radius %v border %v/%#v, want 14px stroke for square GTK windows", radius, borderWidth, borderColor)
 	}
@@ -314,8 +320,8 @@ func TestRuntimeTextOverlayBuildPaintsThemeBackground(t *testing.T) {
 	if panel.Color != want || panel.Color.A == 0 {
 		t.Fatalf("overlay panel fill = %#v, want theme chrome %#v", panel.Color, want)
 	}
-	if runtime.GOOS == "linux" && panel.Color.A != 255 {
-		t.Fatalf("linux overlay panel fill = %#v, want opaque because Linux has no acrylic", panel.Color)
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() && panel.Color.A != 255 {
+		t.Fatalf("linux overlay panel fill = %#v, want opaque when compositor blur is unavailable", panel.Color)
 	}
 }
 

@@ -97,9 +97,30 @@ func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
 	}
 }
 
+func TestSettingsRailBackgroundMatchesWindowMaterial(t *testing.T) {
+	theme := woxcomponent.Theme{
+		Background:  woxui.Color{R: 24, G: 29, B: 38, A: 242},
+		ToolbarText: woxui.Color{R: 166, G: 176, B: 190, A: 255},
+	}
+	overlay := settingsColorAlpha(theme.ToolbarText, 9)
+
+	if got := settingsRailBackground(theme, false, true); got != overlay {
+		t.Fatalf("non-linux rail = %#v, want toolbar overlay %#v", got, overlay)
+	}
+	if got := settingsRailBackground(theme, true, false); got != theme.Background {
+		t.Fatalf("opaque linux rail = %#v, want page background %#v", got, theme.Background)
+	}
+	if got := settingsRailBackground(theme, true, true); got.A != 0 {
+		t.Fatalf("translucent linux rail = %#v, want no extra fill", got)
+	}
+}
+
 func TestSettingsRailLinuxUsesPageBackground(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-specific rail background behavior")
+	}
+	if woxui.HasNativeWindowMaterial() {
+		t.Skip("translucent linux rails stay empty so they match the page wash")
 	}
 	background := woxui.Color{R: 248, G: 248, B: 248, A: 255}
 	rail := SettingsRail(SettingsRailProps{
@@ -108,6 +129,39 @@ func TestSettingsRailLinuxUsesPageBackground(t *testing.T) {
 
 	if rail.Color != background {
 		t.Fatalf("linux settings rail background = %#v, want page background %#v", rail.Color, background)
+	}
+}
+
+func TestSettingsRailLinuxTranslucentUsesNoFill(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-specific rail background behavior")
+	}
+	if !woxui.HasNativeWindowMaterial() {
+		t.Skip("opaque linux rails match the page background")
+	}
+	rail := SettingsRail(SettingsRailProps{
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50},
+		Theme: woxcomponent.Theme{ToolbarText: woxui.Color{R: 166, G: 176, B: 190, A: 255}, Background: woxui.Color{R: 24, G: 29, B: 38, A: 242}},
+	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+
+	if rail.Color.A != 0 {
+		t.Fatalf("translucent linux settings rail background = %#v, want no extra fill", rail.Color)
+	}
+}
+
+func TestSettingsRailUsesToolbarOverlayWhenWindowIsTranslucent(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("linux rails do not use the windows toolbar overlay")
+	}
+	toolbarText := woxui.Color{R: 166, G: 176, B: 190, A: 255}
+	want := settingsColorAlpha(toolbarText, 9)
+	rail := SettingsRail(SettingsRailProps{
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50},
+		Theme: woxcomponent.Theme{ToolbarText: toolbarText, Background: woxui.Color{R: 24, G: 29, B: 38, A: 242}},
+	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+
+	if rail.Color != want {
+		t.Fatalf("translucent settings rail background = %#v, want toolbar overlay %#v", rail.Color, want)
 	}
 }
 

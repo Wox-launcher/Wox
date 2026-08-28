@@ -863,6 +863,22 @@ func testLinuxResizeHit(x, y float32, width, height, grip int32) int32 {
 	return int32(C.wox_linux_test_resize_hit(C.float(x), C.float(y), C.int32_t(width), C.int32_t(height), C.int32_t(grip)))
 }
 
+func nativeWindowMaterialAvailable() bool {
+	return C.wox_linux_background_blur_available() != 0
+}
+
+func testLinuxWindowRequestsBackgroundBlur(screenshot, blurAvailable bool) bool {
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	nativeBlur := C.int32_t(0)
+	if blurAvailable {
+		nativeBlur = 1
+	}
+	return C.wox_linux_test_window_requests_background_blur(nativeScreenshot, nativeBlur) != 0
+}
+
 func testLinuxLayerShellStackLayer(topmost, screenshot bool) int32 {
 	nativeTopmost := C.int32_t(0)
 	if topmost {
@@ -890,10 +906,23 @@ func (w *platformWindow) consumePendingDamage() Rect {
 	return damage
 }
 
+//export woxGoLinuxInfo
+func woxGoLinuxInfo(message *C.char) {
+	if message == nil {
+		return
+	}
+	util.GetLogger().Info(context.Background(), C.GoString(message))
+}
+
 //export woxGoLinuxStart
 func woxGoLinuxStart(runHandle C.uintptr_t) C.int32_t {
 	state := cgo.Handle(runHandle).Value().(*linuxRunState)
 	state.err = state.start()
+	if C.wox_linux_background_blur_available() != 0 {
+		util.GetLogger().Info(context.Background(), "linux window material: ext-background-effect-v1 blur")
+	} else {
+		util.GetLogger().Info(context.Background(), "linux window material: opaque theme wash")
+	}
 	if state.err == nil && os.Getenv(linuxRenderTraceEnvironment) == "1" {
 		util.GetLogger().Info(context.Background(), fmt.Sprintf(
 			"linux render trace enabled: %s=1 XDG_CURRENT_DESKTOP=%q XDG_SESSION_DESKTOP=%q DESKTOP_SESSION=%q XDG_SESSION_TYPE=%q GDK_BACKEND=%q DISPLAY=%q WAYLAND_DISPLAY=%q",

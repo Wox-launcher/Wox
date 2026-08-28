@@ -359,6 +359,10 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	return nil
 }
 
+func nativeWindowMaterialAvailable() bool {
+	return true
+}
+
 func (w *platformWindow) focusReadyForBlur() bool {
 	return true
 }

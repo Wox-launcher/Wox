@@ -27,8 +27,8 @@ func TestThemeBackgroundUsesAppBackgroundColor(t *testing.T) {
 	if chrome.Background != SurfaceFill(runtime.GOOS, want, false) {
 		t.Fatalf("chrome background = %#v, want SurfaceFill of theme AppBackgroundColor", chrome.Background)
 	}
-	if runtime.GOOS == "linux" && chrome.Background.A != 255 {
-		t.Fatalf("linux chrome background = %#v, want opaque because Linux has no acrylic", chrome.Background)
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() && chrome.Background.A != 255 {
+		t.Fatalf("linux chrome background = %#v, want opaque when compositor blur is unavailable", chrome.Background)
 	}
 }
 

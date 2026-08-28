@@ -89,20 +89,30 @@ func TestSurfaceFillKeepsThemeRGBButDropsLinuxAlpha(t *testing.T) {
 	if got := SurfaceFill("darwin", translucent, false); got != translucent {
 		t.Fatalf("darwin surface fill = %#v, want theme alpha for vibrancy", got)
 	}
-	opaque := SurfaceFill("linux", translucent, false)
+	opaque := surfaceFill("linux", translucent, false, false)
 	if opaque != (woxui.Color{R: 22, G: 22, B: 26, A: 255}) {
 		t.Fatalf("linux surface fill = %#v, want opaque theme RGB", opaque)
 	}
-	if got := SurfaceFill("linux", woxui.Color{}, true); got != PanelFill("linux", true) {
+	if got := surfaceFill("linux", woxui.Color{}, true, false); got != PanelFill("linux", true) {
 		t.Fatalf("linux empty surface fill = %#v, want light PanelFill", got)
+	}
+}
+
+func TestSurfaceFillKeepsLinuxAlphaWhenNativeMaterialIsAvailable(t *testing.T) {
+	translucent := woxui.Color{R: 22, G: 22, B: 26, A: 132}
+	if got := surfaceFill("linux", translucent, false, true); got != translucent {
+		t.Fatalf("linux surface fill with compositor blur = %#v, want theme alpha", got)
+	}
+	if got := surfaceFill("linux", woxui.Color{}, true, true); got != (woxui.Color{}) {
+		t.Fatalf("linux empty surface fill with compositor blur = %#v, want empty so blur shows through", got)
 	}
 }
 
 func TestHUDSurfaceUsesThemeBackground(t *testing.T) {
 	child := woxwidget.Container{Width: 10, Height: 10}
 	panel := HUDSurface(120, 48, 12, false, child)
-	if panel.Width != 120 || panel.Height != 48 || panel.Radius != 12 {
-		t.Fatalf("hud surface geometry = %+v, want 120x48 r12", panel)
+	if panel.Width != 120 || panel.Height != 48 || panel.Radius != woxui.NativeWindowCornerRadius(12) {
+		t.Fatalf("hud surface geometry = %+v, want 120x48 radius %v", panel, woxui.NativeWindowCornerRadius(12))
 	}
 	if panel.Color != CurrentThemeChrome().Background {
 		t.Fatalf("hud surface fill = %#v, want theme AppBackgroundColor %#v", panel.Color, CurrentThemeChrome().Background)
@@ -121,8 +131,8 @@ func TestHUDSurfaceIsOpaqueOnLinuxWithTranslucentTheme(t *testing.T) {
 	if panel.Color != CurrentThemeChrome().Background {
 		t.Fatalf("hud surface fill = %#v, want chrome %#v", panel.Color, CurrentThemeChrome().Background)
 	}
-	if runtime.GOOS == "linux" && panel.Color.A != 255 {
-		t.Fatalf("linux hud surface fill = %#v, want opaque because Linux has no acrylic", panel.Color)
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() && panel.Color.A != 255 {
+		t.Fatalf("linux hud surface fill = %#v, want opaque when compositor blur is unavailable", panel.Color)
 	}
 	if runtime.GOOS != "linux" && panel.Color.A == 255 {
 		t.Fatalf("non-linux hud surface fill = %#v, want theme alpha so acrylic shows through", panel.Color)

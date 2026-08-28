@@ -462,11 +462,16 @@ func textOverlayPadding(options Options) woxwidget.Insets {
 
 // runtimeTextWindowChrome returns the widget-drawn window outline. Windows DWM
 // and macOS NSVisualEffectView already clip the overlay, so a second 14px stroke
-// reads as double corners. Linux utility windows stay square; nonactivating
-// tooltips still need this stroke so their alpha corners read as rounded.
+// reads as double corners. Linux without compositor blur paints a rounded
+// outline on a square GTK window. Linux compositor blur is a rectangle, so
+// the overlay stays square instead of leaking the desktop at the corners.
 func runtimeTextWindowChrome(goos string) (radius, borderWidth float32, borderColor woxui.Color) {
 	if goos == "linux" {
-		return runtimeTextSystemCornerRadius, 1, woxui.Color{R: 255, G: 255, B: 255, A: 30}
+		radius = woxui.NativeWindowCornerRadius(runtimeTextSystemCornerRadius)
+		if radius <= 0 {
+			return 0, 0, woxui.Color{}
+		}
+		return radius, 1, woxui.Color{R: 255, G: 255, B: 255, A: 30}
 	}
 	return 0, 0, woxui.Color{}
 }

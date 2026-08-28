@@ -34,13 +34,22 @@ type SettingsRailProps struct {
 	Theme       woxcomponent.Theme
 }
 
+// settingsRailBackground is the rail wash. Opaque Linux matches the page surface.
+// Linux compositor blur must stay empty: the Windows toolbar overlay is invisible
+// on Acrylic, but the same fill reads as a sidebar color mismatch on a colorful desktop.
+func settingsRailBackground(theme woxcomponent.Theme, linux, nativeMaterial bool) woxui.Color {
+	if linux {
+		if nativeMaterial {
+			return woxui.Color{}
+		}
+		return theme.Background
+	}
+	return settingsColorAlpha(theme.ToolbarText, 9)
+}
+
 // SettingsRail builds the settings navigation rail.
 func SettingsRail(props SettingsRailProps) woxwidget.Widget {
-	railColor := settingsColorAlpha(props.Theme.ToolbarText, 9)
-	if util.IsLinux() {
-		// Linux settings windows are fully opaque, so keep the rail background flush with the page surface.
-		railColor = props.Theme.Background
-	}
+	railColor := settingsRailBackground(props.Theme, util.IsLinux(), woxui.HasNativeWindowMaterial())
 	rail := woxwidget.Container{
 		Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.UniformInsets(14),
 		Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {

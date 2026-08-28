@@ -11,6 +11,8 @@
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #endif
 
+#include "native_linux_background_effect.h"
+
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #include <X11/Xatom.h>
@@ -32,6 +34,7 @@ extern int32_t woxGoLinuxStart(uintptr_t context);
 extern void woxGoLinuxCall(uintptr_t context);
 extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoLinuxRenderTrace(const char *message);
+extern void woxGoLinuxInfo(const char *message);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
@@ -217,6 +220,8 @@ struct WoxLinuxWindow {
   bool screenshot_window;
   bool topmost;
   bool layer_shell_enabled;
+  void *background_effect;
+  void *background_effect_surface;
   // Layer-shell surfaces are not xdg_toplevels, so gtk_window_begin_move_drag is a
   // no-op. Interactive moves rewrite overlay margins from pointer deltas instead.
   bool layer_move_active;
@@ -2463,13 +2468,14 @@ static void trace_linux_window_environment(WoxLinuxWindow *window) {
   xid = (unsigned long)x11_window_id(window);
 #endif
   trace_linux_render(
-      "event=window_environment displayType=%s xid=%#lx x11Compositor=%d rgbaVisualAvailable=%d usingRgbaVisual=%d perPixelAlpha=%d layerShell=%d applicationWindow=%d",
+      "event=window_environment displayType=%s xid=%#lx x11Compositor=%d rgbaVisualAvailable=%d usingRgbaVisual=%d perPixelAlpha=%d backgroundBlur=%d layerShell=%d applicationWindow=%d",
       display != NULL ? G_OBJECT_TYPE_NAME(display) : "unknown",
       xid,
       linux_x11_compositor_present(window),
       rgba_visual != NULL,
       rgba_visual != NULL && rgba_visual == window_visual,
       window->per_pixel_alpha,
+      window->background_effect != NULL,
       window->layer_shell_enabled,
       window->application_window);
 }
@@ -2525,17 +2531,71 @@ static void trace_linux_window_geometry(WoxLinuxWindow *window, const char *even
       xid);
 }
 
+static void destroy_linux_background_effect(WoxLinuxWindow *window);
+
+static void linux_background_effect_info(const char *message) {
+  if (message != NULL) {
+    woxGoLinuxInfo(message);
+  }
+}
+
+// apply_linux_background_effect attaches ext-background-effect-v1 once to the
+// current toplevel wl_surface. GtkGLArea is a no-window widget, so a second
+// bind on the parent surface is a protocol error. GTK also recreates the
+// Wayland surface across hide/show, so a stale effect object must be dropped.
+static void apply_linux_background_effect(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || window->window == NULL || window->screenshot_window || !wox_linux_background_blur_available()) {
+    return;
+  }
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window == NULL) {
+    return;
+  }
+  gdk_window_set_opaque_region(gdk_window, NULL);
+  void *surface = wox_linux_background_effect_surface(gdk_window);
+  if (surface == NULL) {
+    return;
+  }
+  if (window->background_effect != NULL && window->background_effect_surface != surface) {
+    linux_background_effect_info("linux background effect: dropping stale protocol object after wl_surface recreate");
+    destroy_linux_background_effect(window);
+  }
+  if (window->background_effect == NULL) {
+    window->background_effect = wox_linux_background_effect_attach(gdk_window);
+    window->background_effect_surface = window->background_effect != NULL ? surface : NULL;
+    if (window->background_effect != NULL) {
+      linux_background_effect_info("linux background effect: attached ext-background-effect-v1");
+    }
+  }
+  if (window->background_effect == NULL) {
+    return;
+  }
+  wox_linux_background_effect_update(window->background_effect, gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window));
+}
+
+// destroy_linux_background_effect drops protocol objects before GTK destroys the wl_surface.
+static void destroy_linux_background_effect(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+  wox_linux_background_effect_destroy(window->background_effect);
+  window->background_effect = NULL;
+  window->background_effect_surface = NULL;
+}
+
 static gboolean on_window_configure(GtkWidget *widget, GdkEventConfigure *event, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
   trace_linux_render("event=configure_event epoch=%llu eventBounds=%d,%d %dx%d", (unsigned long long)window->epoch, event->x, event->y, event->width, event->height);
   trace_linux_window_geometry(window, "configure_state");
+  apply_linux_background_effect(window);
   return FALSE;
 }
 
 static gboolean on_window_map(GtkWidget *widget, GdkEvent *event, gpointer data) {
   (void)widget;
   (void)event;
+  apply_linux_background_effect(data);
   trace_linux_window_geometry(data, "map");
   return FALSE;
 }
@@ -2543,6 +2603,7 @@ static gboolean on_window_map(GtkWidget *widget, GdkEvent *event, gpointer data)
 static gboolean on_window_unmap(GtkWidget *widget, GdkEvent *event, gpointer data) {
   (void)widget;
   (void)event;
+  destroy_linux_background_effect(data);
   trace_linux_window_geometry(data, "unmap");
   return FALSE;
 }
@@ -2653,6 +2714,7 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
     clear_linux_resource_caches(&window->overlay_renderer, false);
   }
   reset_large_image_policy(window);
+  destroy_linux_background_effect(window);
   if (window->window != NULL) {
     gtk_widget_hide(window->window);
   }
@@ -2776,6 +2838,7 @@ static gboolean on_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer d
 static void on_window_destroy(GtkWidget *widget, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
+  destroy_linux_background_effect(window);
   end_layer_shell_move(window);
   if (window->closed) {
     return;
@@ -2831,6 +2894,7 @@ int32_t wox_linux_run(uintptr_t context) {
     return -2;
   }
   apply_linux_app_icon();
+  wox_linux_background_effect_probe(gdk_display_get_default());
   wox_linux_main_thread = pthread_self();
   g_atomic_int_set(&wox_linux_runtime_running, 1);
   int32_t start_result = woxGoLinuxStart(context);
@@ -2870,8 +2934,9 @@ static void on_linux_transparent_screen_changed(GtkWidget *widget, GdkScreen *pr
 }
 
 // Recording chrome and screenshot toolbars call Clear(Color{}) so the live
-// desktop shows through. Launcher windows stay opaque because their widget
-// host also clears with A=0 and relies on force_opaque for a solid backdrop.
+// desktop shows through. Launcher windows stay opaque unless the compositor
+// advertises ext-background-effect-v1 blur, in which case the theme wash
+// keeps its alpha and the compositor blurs the desktop behind it.
 static void enable_linux_per_pixel_alpha(WoxLinuxWindow *window) {
   GtkCssProvider *provider = gtk_css_provider_new();
   gtk_css_provider_load_from_data(provider, "window, overlay { background-color: rgba(0,0,0,0); background-image: none; }", -1, NULL);
@@ -2959,7 +3024,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->application_window = application_window;
   window->screenshot_window = window_role == WOX_WINDOW_ROLE_SCREENSHOT;
   window->nonactivating = nonactivating != 0;
-  window->per_pixel_alpha = window->nonactivating || window_role == WOX_WINDOW_ROLE_SCREENSHOT;
+  window->per_pixel_alpha = window->nonactivating || window->screenshot_window || wox_linux_background_blur_available();
   window->im_context = gtk_im_multicontext_new();
   window->pressed_keys = g_hash_table_new(g_direct_hash, g_direct_equal);
   window->web_view_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
@@ -3106,6 +3171,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_realize(window->window);
   gtk_widget_realize(window->gl_area);
   gtk_widget_realize(window->overlay_gl_area);
+  apply_linux_background_effect(window);
   trace_linux_window_environment(window);
   trace_linux_window_geometry(window, "window_created");
   apply_wayland_app_id(window);
@@ -3145,6 +3211,7 @@ static void show_main(void *data) {
   save_previous_x11_window(window);
   place_window(window);
   gtk_widget_show_all(window->window);
+  apply_linux_background_effect(window);
   apply_linux_pointer_passthrough(window);
   apply_utility_taskbar_hints(window);
   apply_wayland_app_id(window);

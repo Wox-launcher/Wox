@@ -4,6 +4,10 @@ package woxui
 
 type platformWindow struct{}
 
+func nativeWindowMaterialAvailable() bool {
+	return false
+}
+
 func platformRun(start func() error) error {
 	return ErrPlatformUnsupported
 }

@@ -77,8 +77,8 @@ func TestImageOverlayThemeColorsFollowsProvider(t *testing.T) {
 	if translucent.Background != overlay.SurfaceFill(runtime.GOOS, woxui.Color{R: 22, G: 22, B: 26, A: 132}, false) {
 		t.Fatalf("translucent background = %+v, want SurfaceFill of AppBackgroundColor", translucent.Background)
 	}
-	if runtime.GOOS == "linux" && translucent.Background.A != 255 {
-		t.Fatalf("linux image overlay background = %+v, want opaque because Linux has no acrylic", translucent.Background)
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() && translucent.Background.A != 255 {
+		t.Fatalf("linux image overlay background = %+v, want opaque when compositor blur is unavailable", translucent.Background)
 	}
 	SetThemeProvider(nil)
 	fallback := imageOverlayThemeColors()

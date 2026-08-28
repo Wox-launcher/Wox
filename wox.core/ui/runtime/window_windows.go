@@ -881,6 +881,10 @@ func windowsWindowUsesSystemBackdrop(options WindowOptions) bool {
 	return options.Role != WindowRoleScreenshot
 }
 
+func nativeWindowMaterialAvailable() bool {
+	return true
+}
+
 // windowsPhysicalMinSize converts a logical MinSize to the physical tracking size Windows expects.
 func windowsPhysicalMinSize(min Size, scale float32) (width, height int32) {
 	if scale <= 0 {

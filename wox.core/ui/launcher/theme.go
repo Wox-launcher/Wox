@@ -135,7 +135,7 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 
 // opaqueWindowBackground disables unsupported desktop translucency without changing component blending.
 func opaqueWindowBackground(color woxui.Color) woxui.Color {
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() {
 		color.A = 255
 	}
 	return color
