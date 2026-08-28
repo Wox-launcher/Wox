@@ -87,6 +87,74 @@ func (a *App) waitHoverTooltipDelay(revision *atomic.Uint64, revisionID uint64) 
 	return revisionID == revision.Load()
 }
 
+// linuxInlineTooltipTarget is the owner-window paint path used when native
+// overlay windows cannot be positioned. Linux cannot control tooltip window
+// placement, so the same hover dwell paints SettingsInlineTooltipOverlay inside the owner.
+type linuxInlineTooltipTarget struct {
+	revision   *atomic.Uint64
+	state      **settingsInlineTooltipState
+	open       bool
+	invalidate func()
+	job        string
+}
+
+// scheduleLinuxInlineTooltip paints one in-window tooltip after the shared hover dwell.
+func (a *App) scheduleLinuxInlineTooltip(target linuxInlineTooltipTarget, inside bool, text string, anchor woxui.Rect, side string) {
+	if target.revision == nil || target.state == nil {
+		return
+	}
+	job := strings.TrimSpace(target.job)
+	if job == "" {
+		job = "show linux inline tooltip"
+	}
+	if !target.open {
+		target.revision.Add(1)
+		a.clearLinuxInlineTooltipState(target.state, target.invalidate)
+		return
+	}
+	message := strings.TrimSpace(text)
+	if !nativeHoverTooltipArmed(inside, message, anchor) {
+		target.revision.Add(1)
+		a.clearLinuxInlineTooltipState(target.state, target.invalidate)
+		return
+	}
+	next := settingsInlineTooltipState{Text: message, Side: side, Anchor: anchor}
+	if current := *target.state; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
+		return
+	}
+	revisionID := target.revision.Add(1)
+	util.Go(a.lifecycleCtx, job+" after dwell", func() {
+		if !a.waitHoverTooltipDelay(target.revision, revisionID) {
+			return
+		}
+		apply := func() {
+			if revisionID != target.revision.Load() {
+				return
+			}
+			if current := *target.state; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
+				return
+			}
+			*target.state = &next
+			if target.invalidate != nil {
+				target.invalidate()
+			}
+		}
+		if err := a.runOnUI(job, apply); err != nil {
+			apply()
+		}
+	})
+}
+
+func (a *App) clearLinuxInlineTooltipState(state **settingsInlineTooltipState, invalidate func()) {
+	if state == nil || *state == nil {
+		return
+	}
+	*state = nil
+	if invalidate != nil {
+		invalidate()
+	}
+}
+
 // setNativeHoverTooltip shows one named overlay tooltip after a hover dwell, or
 // hides it only on an explicit dismiss such as window close. Ordinary leave
 // cancels a pending dwell without closing an already visible overlay.
@@ -121,6 +189,38 @@ func (a *App) nativeHoverTooltipNeedsReplace(name, text string, anchor woxui.Rec
 	defer a.tooltipMu.Unlock()
 	previous, shown := a.nativeHoverTooltipShown[name]
 	return nativeHoverTooltipShouldReplace(shown, previous.text, previous.anchor, text, anchor)
+}
+
+// launcherHoverTooltipNames are the overlay IDs owned by the launcher query window.
+var launcherHoverTooltipNames = []string{
+	"go-ui-preview-tag",
+	"go-ui-glance",
+	"go-ui-refinement",
+	"go-ui-titlebar-action",
+	"go-ui-result-tail",
+}
+
+// dismissLauncherHoverTooltipsOnUI closes launcher overlay tooltips on the current
+// UI turn. Async HideTooltip from hideWindow raced gtk_widget_hide and SIGSEGV'd
+// GTK on KDE Wayland when Notes was also open.
+func (a *App) dismissLauncherHoverTooltipsOnUI() {
+	a.previewTooltipRevision.Add(1)
+	a.resultTailTooltipRevision.Add(1)
+	a.glanceTooltipRevision.Add(1)
+	a.refinementTooltipRevision.Add(1)
+	a.tooltipMu.Lock()
+	for _, name := range launcherHoverTooltipNames {
+		delete(a.nativeHoverTooltipShown, name)
+	}
+	a.tooltipMu.Unlock()
+	if a.services == nil {
+		return
+	}
+	for _, name := range launcherHoverTooltipNames {
+		if err := a.services.HideTooltip(context.Background(), a.sessionID, name); err != nil {
+			log.Printf("hide %s tooltip: %v", name, err)
+		}
+	}
 }
 
 // hideNativeHoverTooltip closes one named overlay and forgets its last shown trigger.

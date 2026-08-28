@@ -96,6 +96,7 @@ func imageOverlayThemeColors() ThemeColors {
 	}
 	theme := provider()
 	background := overlay.ThemeBackground(fallback.Background)
+	background = overlay.SurfaceFill(runtime.GOOS, background, !overlay.ColorIsDark(background))
 	return ThemeColors{
 		Background: background,
 		Foreground: parseImageOverlayCSSColor(theme.ActionItemFontColor, fallback.Foreground),

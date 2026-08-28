@@ -1,8 +1,10 @@
 package overlay
 
 import (
+	"runtime"
 	"testing"
 
+	"wox/common"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -40,6 +42,11 @@ func TestWorkAreaUsesTrackedPlatformCoordinates(t *testing.T) {
 	}
 }
 
+func TestCloseUnknownOverlayDoesNotRequireUIRuntime(t *testing.T) {
+	Close("wox_tooltip_never_opened")
+	Close("wox_tooltip_never_opened")
+}
+
 func TestRequestCloseFiresCallbackOnce(t *testing.T) {
 	called := 0
 	RegisterCloseCallback("test", func() { called++ })
@@ -74,6 +81,23 @@ func TestPanelFillIsOpaqueOnLinuxOnly(t *testing.T) {
 	}
 }
 
+func TestSurfaceFillKeepsThemeRGBButDropsLinuxAlpha(t *testing.T) {
+	translucent := woxui.Color{R: 22, G: 22, B: 26, A: 132}
+	if got := SurfaceFill("windows", translucent, false); got != translucent {
+		t.Fatalf("windows surface fill = %#v, want theme alpha for acrylic", got)
+	}
+	if got := SurfaceFill("darwin", translucent, false); got != translucent {
+		t.Fatalf("darwin surface fill = %#v, want theme alpha for vibrancy", got)
+	}
+	opaque := SurfaceFill("linux", translucent, false)
+	if opaque != (woxui.Color{R: 22, G: 22, B: 26, A: 255}) {
+		t.Fatalf("linux surface fill = %#v, want opaque theme RGB", opaque)
+	}
+	if got := SurfaceFill("linux", woxui.Color{}, true); got != PanelFill("linux", true) {
+		t.Fatalf("linux empty surface fill = %#v, want light PanelFill", got)
+	}
+}
+
 func TestHUDSurfaceUsesThemeBackground(t *testing.T) {
 	child := woxwidget.Container{Width: 10, Height: 10}
 	panel := HUDSurface(120, 48, 12, false, child)
@@ -85,6 +109,23 @@ func TestHUDSurfaceUsesThemeBackground(t *testing.T) {
 	}
 	if panel.Child != child {
 		t.Fatal("hud surface dropped its child")
+	}
+}
+
+func TestHUDSurfaceIsOpaqueOnLinuxWithTranslucentTheme(t *testing.T) {
+	SetThemeProvider(func() common.Theme {
+		return common.Theme{AppBackgroundColor: "rgba(22, 22, 26, 0.52)"}
+	})
+	defer SetThemeProvider(nil)
+	panel := HUDSurface(120, 48, 12, false, woxwidget.Container{})
+	if panel.Color != CurrentThemeChrome().Background {
+		t.Fatalf("hud surface fill = %#v, want chrome %#v", panel.Color, CurrentThemeChrome().Background)
+	}
+	if runtime.GOOS == "linux" && panel.Color.A != 255 {
+		t.Fatalf("linux hud surface fill = %#v, want opaque because Linux has no acrylic", panel.Color)
+	}
+	if runtime.GOOS != "linux" && panel.Color.A == 255 {
+		t.Fatalf("non-linux hud surface fill = %#v, want theme alpha so acrylic shows through", panel.Color)
 	}
 }
 

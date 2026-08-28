@@ -348,6 +348,14 @@ func (a *App) Start() error {
 	return a.start()
 }
 
+// launcherQueryWindowTopmost reports whether the query window shares the always-on-top
+// band with overlay HUDs. Windows needs HWND_TOPMOST to stay above other apps.
+// macOS floating windows and Linux layer-shell TOP already sit above ordinary
+// apps, so the launcher stays below Topmost timer and tooltip overlays.
+func launcherQueryWindowTopmost(goos string) bool {
+	return goos == "windows"
+}
+
 // start initializes one independent launcher session against the shared window runtime.
 func (a *App) start() error {
 	if a.services == nil {
@@ -367,9 +375,10 @@ func (a *App) start() error {
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
 		Title: "Wox",
 		Size:  woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
-		// Windows and Linux no longer imply always-on-top for every utility window.
-		// macOS keeps the launcher at NSFloatingWindowLevel so Topmost overlays stay above it.
-		Topmost:         runtime.GOOS != "darwin",
+		// Windows uses HWND_TOPMOST so the query window stays above other apps.
+		// macOS floating level and Linux layer-shell TOP already do that without
+		// occupying the overlay band, so timer/tooltip HUDs can sit above Wox.
+		Topmost:         launcherQueryWindowTopmost(runtime.GOOS),
 		OnFrame:         host.Frame,
 		OnPointer:       host.Pointer,
 		OnFileDrop:      a.handleFileDrop,
@@ -596,6 +605,7 @@ func (a *App) hideWindow(notify bool) error {
 
 	var launcher *woxui.ManagedWindow
 	alreadyHidden := false
+	var hideErr error
 	if err := a.runOnUI("prepare launcher hide", func() {
 		if !a.visible {
 			alreadyHidden = true
@@ -610,14 +620,15 @@ func (a *App) hideWindow(notify bool) error {
 		a.visible = false
 		a.bottomAnchorY = 0
 		a.stopGlanceLocked(false)
-		a.setPreviewTooltip(false, "", woxui.Rect{})
-		a.setGlanceHover(false, "", woxui.Rect{})
-		a.setRefinementTooltip(false, "", woxui.Rect{})
+		a.dismissLauncherHoverTooltipsOnUI()
 		launcher = a.launcher
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
 		a.triggerConflict = nil
 		a.resetChatPreview()
+		if launcher != nil {
+			hideErr = launcher.Hide()
+		}
 	}); err != nil {
 		return err
 	}
@@ -627,8 +638,8 @@ func (a *App) hideWindow(notify bool) error {
 	if launcher == nil {
 		return errors.New("launcher window is not initialized")
 	}
-	if err := launcher.Hide(); err != nil {
-		return err
+	if hideErr != nil {
+		return hideErr
 	}
 	// Quick re-shows keep their warm icon cache; only trim decoded images after
 	// the launcher stays hidden long enough to be considered idle.

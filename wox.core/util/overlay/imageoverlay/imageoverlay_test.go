@@ -2,6 +2,7 @@ package imageoverlay
 
 import (
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"wox/common"
@@ -68,6 +69,16 @@ func TestImageOverlayThemeColorsFollowsProvider(t *testing.T) {
 	}
 	if light.Background != (woxui.Color{R: 0xF5, G: 0xF5, B: 0xF5, A: 255}) {
 		t.Fatalf("light background = %+v, want AppBackgroundColor #F5F5F5", light.Background)
+	}
+	SetThemeProvider(func() common.Theme {
+		return common.Theme{AppBackgroundColor: "rgba(22, 22, 26, 0.52)"}
+	})
+	translucent := imageOverlayThemeColors()
+	if translucent.Background != overlay.SurfaceFill(runtime.GOOS, woxui.Color{R: 22, G: 22, B: 26, A: 132}, false) {
+		t.Fatalf("translucent background = %+v, want SurfaceFill of AppBackgroundColor", translucent.Background)
+	}
+	if runtime.GOOS == "linux" && translucent.Background.A != 255 {
+		t.Fatalf("linux image overlay background = %+v, want opaque because Linux has no acrylic", translucent.Background)
 	}
 	SetThemeProvider(nil)
 	fallback := imageOverlayThemeColors()

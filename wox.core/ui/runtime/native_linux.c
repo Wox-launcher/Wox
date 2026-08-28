@@ -8,6 +8,7 @@
 
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
+#include "relative-pointer-unstable-v1-client-protocol.h"
 #endif
 
 #ifdef GDK_WINDOWING_X11
@@ -37,6 +38,7 @@ extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifie
 extern void woxGoLinuxWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
 extern void woxGoLinuxTextInput(uintptr_t context, uint8_t kind, const char *text);
 extern void woxGoLinuxPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
+extern void woxGoLinuxObservePointer(uintptr_t context, float desktop_x, float desktop_y, int32_t inside);
 extern void woxGoLinuxFileDrop(uintptr_t context, const char *paths);
 extern int32_t woxGoLinuxAccessibilityAction(uintptr_t context, uint64_t node_id, const char *action, const char *value);
 
@@ -75,6 +77,10 @@ enum {
   WOX_LINUX_TEXT_CACHE_MAX = 1024,
   WOX_LINUX_TEXT_CACHE_MAX_CHARS = 256,
 };
+
+// wox_linux_resize_grip is the logical edge width used for frameless resize,
+// matching windowsResizeGrip. Undecorated GTK windows have no SSD borders.
+static const int wox_linux_resize_grip = 10;
 
 static const uint64_t wox_linux_image_cache_max_bytes = 8ULL * 1024ULL * 1024ULL;
 static const uint64_t wox_linux_image_cache_max_entry_bytes = 1ULL * 1024ULL * 1024ULL;
@@ -194,6 +200,8 @@ struct WoxLinuxWindow {
   float min_height;
   double pointer_root_x;
   double pointer_root_y;
+  double pointer_client_x;
+  double pointer_client_y;
   guint32 pointer_time;
   bool visible;
   bool active;
@@ -206,12 +214,28 @@ struct WoxLinuxWindow {
   bool pointer_passthrough;
   bool restore_previous_on_hide;
   bool application_window;
+  bool screenshot_window;
+  bool topmost;
   bool layer_shell_enabled;
+  // Layer-shell surfaces are not xdg_toplevels, so gtk_window_begin_move_drag is a
+  // no-op. Interactive moves rewrite overlay margins from pointer deltas instead.
+  bool layer_move_active;
+  bool layer_move_grabbed;
+  guint layer_move_tick_id;
+  void *layer_move_relative_pointer;
+  float layer_move_pending_dx;
+  float layer_move_pending_dy;
+  double layer_move_last_local_x;
+  double layer_move_last_local_y;
+  bool layer_move_skip_sample;
   bool input_enabled;
   bool input_composing;
   bool active_web_view_transient;
   bool pointer_over_web_view;
   uint8_t pointer_cursor;
+  // resize_cursor_active keeps the edge cursor from being overwritten by Go hover.
+  bool resize_cursor_active;
+  int resize_edge;
   // updating_accessibility swallows leave/enter from destroying GTK a11y
   // mirrors. Query keystrokes rebuild those widgets under the pointer and
   // would otherwise flicker the host cursor between text and default.
@@ -235,6 +259,7 @@ static pthread_t wox_linux_main_thread;
 static gint wox_linux_runtime_running = 0;
 static gint wox_linux_loop_active = 0;
 static gint wox_linux_window_count = 0;
+static GList *linux_windows;
 static bool wox_linux_render_trace_enabled = false;
 
 void wox_linux_set_render_trace(int32_t enabled) {
@@ -474,6 +499,9 @@ static int32_t apply_linux_cursor_name(WoxLinuxWindow *window, const char *curso
 
 // apply_linux_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
 static int32_t apply_linux_pointer_cursor(WoxLinuxWindow *window) {
+  if (window != NULL && window->resize_cursor_active) {
+    return 0;
+  }
   static const char *const host_cursor_names[] = {
       "default",
       "text",
@@ -1268,6 +1296,13 @@ static GLuint upload_gl_texture(int width, int height, GLenum format, const void
   return texture;
 }
 
+// linux_gl_area_can_make_current reports whether gtk_gl_area_make_current is
+// safe. GTK dereferences a NULL GdkGLContext when the area is unrealized, which
+// is the SIGSEGV seen when hiding a layer-shell launcher on Wayland.
+static bool linux_gl_area_can_make_current(GtkWidget *gl_area) {
+  return gl_area != NULL && GTK_IS_GL_AREA(gl_area) && gtk_widget_get_realized(gl_area) && gtk_gl_area_get_context(GTK_GL_AREA(gl_area)) != NULL;
+}
+
 static bool initialize_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
   GError *error = gtk_gl_area_get_error(GTK_GL_AREA(gl_area));
@@ -1374,19 +1409,24 @@ static void destroy_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
   if (!renderer->ready) {
     return;
   }
-  gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
-  if (gtk_gl_area_get_error(GTK_GL_AREA(gl_area)) == NULL) {
-    clear_linux_resource_caches(renderer, true);
-    if (renderer->frame_framebuffer != 0) {
-      glDeleteFramebuffers(1, &renderer->frame_framebuffer);
+  bool deleted_gl = false;
+  if (linux_gl_area_can_make_current(gl_area)) {
+    gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
+    if (gtk_gl_area_get_error(GTK_GL_AREA(gl_area)) == NULL) {
+      clear_linux_resource_caches(renderer, true);
+      if (renderer->frame_framebuffer != 0) {
+        glDeleteFramebuffers(1, &renderer->frame_framebuffer);
+      }
+      if (renderer->frame_texture != 0) {
+        glDeleteTextures(1, &renderer->frame_texture);
+      }
+      glDeleteVertexArrays(1, &renderer->vertex_array);
+      glDeleteProgram(renderer->texture_program);
+      glDeleteProgram(renderer->rect_program);
+      deleted_gl = true;
     }
-    if (renderer->frame_texture != 0) {
-      glDeleteTextures(1, &renderer->frame_texture);
-    }
-    glDeleteVertexArrays(1, &renderer->vertex_array);
-    glDeleteProgram(renderer->texture_program);
-    glDeleteProgram(renderer->rect_program);
-  } else {
+  }
+  if (!deleted_gl) {
     clear_linux_resource_caches(renderer, false);
   }
   free(renderer->texts);
@@ -1555,6 +1595,96 @@ static uint8_t portable_pointer_button(guint button) {
   }
 }
 
+static void update_layer_shell_move(WoxLinuxWindow *window);
+static void end_layer_shell_move(WoxLinuxWindow *window);
+static void store_linux_pointer_event(WoxLinuxWindow *window, double x, double y, GdkWindow *event_window, double x_root, double y_root, guint32 time);
+
+// linux_resize_hit_test maps client coordinates onto a GdkWindowEdge, or -1 for the client area.
+static int linux_resize_hit_test(double x, double y, int width, int height, int grip) {
+  if (width <= 0 || height <= 0 || grip <= 0) {
+    return -1;
+  }
+  bool left = x <= (double)grip;
+  bool right = x >= (double)(width - grip);
+  bool top = y <= (double)grip;
+  bool bottom = y >= (double)(height - grip);
+  if (top && left) {
+    return GDK_WINDOW_EDGE_NORTH_WEST;
+  }
+  if (top && right) {
+    return GDK_WINDOW_EDGE_NORTH_EAST;
+  }
+  if (bottom && left) {
+    return GDK_WINDOW_EDGE_SOUTH_WEST;
+  }
+  if (bottom && right) {
+    return GDK_WINDOW_EDGE_SOUTH_EAST;
+  }
+  if (left) {
+    return GDK_WINDOW_EDGE_WEST;
+  }
+  if (right) {
+    return GDK_WINDOW_EDGE_EAST;
+  }
+  if (top) {
+    return GDK_WINDOW_EDGE_NORTH;
+  }
+  if (bottom) {
+    return GDK_WINDOW_EDGE_SOUTH;
+  }
+  return -1;
+}
+
+static const char *linux_resize_cursor_name(int edge) {
+  switch (edge) {
+  case GDK_WINDOW_EDGE_NORTH_WEST:
+    return "nw-resize";
+  case GDK_WINDOW_EDGE_NORTH:
+    return "ns-resize";
+  case GDK_WINDOW_EDGE_NORTH_EAST:
+    return "ne-resize";
+  case GDK_WINDOW_EDGE_WEST:
+  case GDK_WINDOW_EDGE_EAST:
+    return "ew-resize";
+  case GDK_WINDOW_EDGE_SOUTH_WEST:
+    return "sw-resize";
+  case GDK_WINDOW_EDGE_SOUTH:
+    return "ns-resize";
+  case GDK_WINDOW_EDGE_SOUTH_EAST:
+    return "se-resize";
+  default:
+    return "default";
+  }
+}
+
+static int linux_window_resize_edge(WoxLinuxWindow *window, double client_x, double client_y) {
+  if (window == NULL || window->window == NULL || window->layer_shell_enabled || !gtk_window_get_resizable(GTK_WINDOW(window->window))) {
+    return -1;
+  }
+  return linux_resize_hit_test(client_x, client_y, gtk_widget_get_allocated_width(window->window), gtk_widget_get_allocated_height(window->window), wox_linux_resize_grip);
+}
+
+static void apply_linux_resize_cursor(WoxLinuxWindow *window, int edge) {
+  if (window == NULL) {
+    return;
+  }
+  if (window->resize_cursor_active && window->resize_edge == edge) {
+    return;
+  }
+  window->resize_edge = edge;
+  window->resize_cursor_active = true;
+  apply_linux_cursor_name(window, linux_resize_cursor_name(edge));
+}
+
+static void clear_linux_resize_cursor(WoxLinuxWindow *window) {
+  if (window == NULL || !window->resize_cursor_active) {
+    return;
+  }
+  window->resize_cursor_active = false;
+  window->resize_edge = -1;
+  apply_linux_pointer_cursor(window);
+}
+
 // pointer_client_position translates child-surface coordinates into the shared window client space.
 static void pointer_client_position(WoxLinuxWindow *window, GdkWindow *event_window, double x, double y, double *client_x, double *client_y) {
   *client_x = x;
@@ -1573,11 +1703,41 @@ static void pointer_client_position(WoxLinuxWindow *window, GdkWindow *event_win
   *client_y = y + (double)(event_origin_y - top_level_origin_y);
 }
 
+static void store_linux_pointer_event(WoxLinuxWindow *window, double x, double y, GdkWindow *event_window, double x_root, double y_root, guint32 time) {
+  double client_x = x;
+  double client_y = y;
+  pointer_client_position(window, event_window, x, y, &client_x, &client_y);
+  window->pointer_root_x = x_root;
+  window->pointer_root_y = y_root;
+  window->pointer_client_x = client_x;
+  window->pointer_client_y = client_y;
+  window->pointer_time = time;
+}
+
+// observe_linux_pointer publishes desktop coordinates so tooltip tracking can
+// dismiss glance hints after the cursor leaves, including on Wayland.
+static void observe_linux_pointer(WoxLinuxWindow *window, double client_x, double client_y, bool inside) {
+  float desktop_x = (float)client_x;
+  float desktop_y = (float)client_y;
+  if (window->layer_shell_enabled && window->has_preferred_position) {
+    desktop_x += window->preferred_x;
+    desktop_y += window->preferred_y;
+  } else if (window->window != NULL) {
+    int origin_x = 0;
+    int origin_y = 0;
+    gtk_window_get_position(GTK_WINDOW(window->window), &origin_x, &origin_y);
+    desktop_x += (float)origin_x;
+    desktop_y += (float)origin_y;
+  }
+  woxGoLinuxObservePointer(window->context, desktop_x, desktop_y, inside ? 1 : 0);
+}
+
 static void emit_pointer(WoxLinuxWindow *window, GdkEvent *event, uint8_t kind, double x, double y, uint8_t button, double scroll_x, double scroll_y, GdkModifierType state, GdkWindow *event_window) {
   if (!window->closed && window->context != 0) {
     double client_x = x;
     double client_y = y;
     pointer_client_position(window, event_window, x, y, &client_x, &client_y);
+    observe_linux_pointer(window, client_x, client_y, kind != WOX_POINTER_LEAVE);
     window->dispatching_pointer_event = event;
     woxGoLinuxPointer(window->context, kind, (float)client_x, (float)client_y, button, (float)scroll_x, (float)scroll_y, portable_modifiers(state));
     window->dispatching_pointer_event = NULL;
@@ -1590,9 +1750,26 @@ static gboolean on_pointer_motion(GtkWidget *widget, GdkEventMotion *event, gpoi
   if (window->forwarding_embedded_pointer) {
     return FALSE;
   }
-  window->pointer_root_x = event->x_root;
-  window->pointer_root_y = event->y_root;
-  window->pointer_time = event->time;
+  store_linux_pointer_event(window, event->x, event->y, event->window, event->x_root, event->y_root, event->time);
+  if (window->layer_move_active) {
+    update_layer_shell_move(window);
+    return TRUE;
+  }
+  double client_x = event->x;
+  double client_y = event->y;
+  pointer_client_position(window, event->window, event->x, event->y, &client_x, &client_y);
+  int edge = linux_window_resize_edge(window, client_x, client_y);
+  if (edge >= 0) {
+    if (!window->resize_cursor_active) {
+      emit_pointer(window, (GdkEvent *)event, WOX_POINTER_LEAVE, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
+    }
+    apply_linux_resize_cursor(window, edge);
+    return TRUE;
+  }
+  if (window->resize_cursor_active) {
+    clear_linux_resize_cursor(window);
+    emit_pointer(window, (GdkEvent *)event, WOX_POINTER_ENTER, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
+  }
   emit_pointer(window, (GdkEvent *)event, WOX_POINTER_MOVE, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
   return TRUE;
 }
@@ -1600,7 +1777,7 @@ static gboolean on_pointer_motion(GtkWidget *widget, GdkEventMotion *event, gpoi
 static gboolean on_pointer_crossing(GtkWidget *widget, GdkEventCrossing *event, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
-  if (window->forwarding_embedded_pointer || window->updating_accessibility) {
+  if (window->forwarding_embedded_pointer || window->updating_accessibility || window->layer_move_active) {
     return TRUE;
   }
   // Inferior crossings mean the pointer is still inside this window, usually
@@ -1609,6 +1786,19 @@ static gboolean on_pointer_crossing(GtkWidget *widget, GdkEventCrossing *event, 
     return TRUE;
   }
   uint8_t kind = event->type == GDK_ENTER_NOTIFY ? WOX_POINTER_ENTER : WOX_POINTER_LEAVE;
+  if (kind == WOX_POINTER_LEAVE) {
+    clear_linux_resize_cursor(window);
+    emit_pointer(window, (GdkEvent *)event, kind, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
+    return TRUE;
+  }
+  double client_x = event->x;
+  double client_y = event->y;
+  pointer_client_position(window, event->window, event->x, event->y, &client_x, &client_y);
+  int edge = linux_window_resize_edge(window, client_x, client_y);
+  if (edge >= 0) {
+    apply_linux_resize_cursor(window, edge);
+    return TRUE;
+  }
   emit_pointer(window, (GdkEvent *)event, kind, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
   return TRUE;
 }
@@ -1619,9 +1809,25 @@ static gboolean on_pointer_button(GtkWidget *widget, GdkEventButton *event, gpoi
   if (window->forwarding_embedded_pointer) {
     return FALSE;
   }
-  window->pointer_root_x = event->x_root;
-  window->pointer_root_y = event->y_root;
-  window->pointer_time = event->time;
+  store_linux_pointer_event(window, event->x, event->y, event->window, event->x_root, event->y_root, event->time);
+  if (window->layer_move_active) {
+    if (event->type == GDK_BUTTON_RELEASE) {
+      update_layer_shell_move(window);
+      end_layer_shell_move(window);
+      emit_pointer(window, (GdkEvent *)event, WOX_POINTER_UP, event->x, event->y, portable_pointer_button(event->button), 0.0, 0.0, event->state, event->window);
+    }
+    return TRUE;
+  }
+  if (event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_PRIMARY) {
+    double client_x = event->x;
+    double client_y = event->y;
+    pointer_client_position(window, event->window, event->x, event->y, &client_x, &client_y);
+    int edge = linux_window_resize_edge(window, client_x, client_y);
+    if (edge >= 0) {
+      gtk_window_begin_resize_drag(GTK_WINDOW(window->window), (GdkWindowEdge)edge, GDK_BUTTON_PRIMARY, (int)round(window->pointer_root_x), (int)round(window->pointer_root_y), event->time);
+      return TRUE;
+    }
+  }
   if (event->type == GDK_BUTTON_PRESS) {
     gtk_widget_grab_focus(window->gl_area);
   }
@@ -1784,13 +1990,48 @@ static bool enable_layer_shell(GtkWindow *window) {
     return false;
   }
   layer_init_for_window(window);
-  layer_set_layer(window, WOX_LAYER_OVERLAY);
+  // TOP sits above ordinary xdg_toplevels. OVERLAY is reserved for Topmost
+  // HUDs so showing the launcher cannot cover a timer or tooltip.
+  layer_set_layer(window, WOX_LAYER_TOP);
   layer_set_keyboard_mode(window, WOX_KEYBOARD_EXCLUSIVE);
   layer_set_anchor(window, WOX_EDGE_TOP, TRUE);
   layer_set_anchor(window, WOX_EDGE_LEFT, TRUE);
   layer_set_anchor(window, WOX_EDGE_BOTTOM, FALSE);
   layer_set_anchor(window, WOX_EDGE_RIGHT, FALSE);
   return true;
+}
+
+// layer_shell_stack_layer maps Topmost onto the layer-shell band above the launcher.
+static WoxLayer layer_shell_stack_layer(bool topmost, bool screenshot) {
+  if (topmost || screenshot) {
+    return WOX_LAYER_OVERLAY;
+  }
+  return WOX_LAYER_TOP;
+}
+
+static void apply_layer_shell_stack(WoxLinuxWindow *window) {
+  if (window == NULL || !window->layer_shell_enabled || layer_set_layer == NULL || window->window == NULL) {
+    return;
+  }
+  layer_set_layer(GTK_WINDOW(window->window), layer_shell_stack_layer(window->topmost, window->screenshot_window));
+}
+
+// raise_linux_topmost_windows puts HUD/screenshot surfaces back above a just-shown launcher.
+static void raise_linux_topmost_windows(WoxLinuxWindow *except) {
+  for (GList *node = linux_windows; node != NULL; node = node->next) {
+    WoxLinuxWindow *window = node->data;
+    if (window == except || window->closed || !window->visible || (!window->topmost && !window->screenshot_window)) {
+      continue;
+    }
+    if (window->layer_shell_enabled) {
+      apply_layer_shell_stack(window);
+      continue;
+    }
+    GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+    if (gdk_window != NULL) {
+      gdk_window_raise(gdk_window);
+    }
+  }
 }
 
 static void place_window(WoxLinuxWindow *window) {
@@ -1817,6 +2058,216 @@ static void place_window(WoxLinuxWindow *window) {
   } else {
     gtk_window_move(GTK_WINDOW(window->window), x, y);
   }
+}
+
+#ifdef GDK_WINDOWING_WAYLAND
+static struct zwp_relative_pointer_manager_v1 *wox_relative_pointer_manager;
+
+static void wox_relative_registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version) {
+  (void)data;
+  (void)version;
+  if (strcmp(interface, zwp_relative_pointer_manager_v1_interface.name) == 0) {
+    wox_relative_pointer_manager = wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
+  }
+}
+
+static void wox_relative_registry_remove(void *data, struct wl_registry *registry, uint32_t name) {
+  (void)data;
+  (void)registry;
+  (void)name;
+}
+
+static const struct wl_registry_listener wox_relative_registry_listener = {
+    .global = wox_relative_registry_global,
+    .global_remove = wox_relative_registry_remove,
+};
+
+static void ensure_relative_pointer_manager(GdkDisplay *display) {
+  static bool checked;
+  if (checked || display == NULL || !GDK_IS_WAYLAND_DISPLAY(display)) {
+    return;
+  }
+  checked = true;
+  struct wl_display *wl_display = gdk_wayland_display_get_wl_display(display);
+  if (wl_display == NULL) {
+    return;
+  }
+  struct wl_registry *registry = wl_display_get_registry(wl_display);
+  if (registry == NULL) {
+    return;
+  }
+  wl_registry_add_listener(registry, &wox_relative_registry_listener, NULL);
+  wl_display_roundtrip(wl_display);
+}
+
+static void on_relative_pointer_motion(void *data, struct zwp_relative_pointer_v1 *pointer, uint32_t utime_hi, uint32_t utime_lo, wl_fixed_t dx, wl_fixed_t dy, wl_fixed_t dx_unaccel, wl_fixed_t dy_unaccel) {
+  (void)pointer;
+  (void)utime_hi;
+  (void)utime_lo;
+  (void)dx_unaccel;
+  (void)dy_unaccel;
+  WoxLinuxWindow *window = data;
+  if (!window->layer_move_active) {
+    return;
+  }
+  // Accelerated relative motion is the cursor's on-screen movement and does
+  // not invert when the layer surface moves under a stationary pointer.
+  window->layer_move_pending_dx += (float)wl_fixed_to_double(dx);
+  window->layer_move_pending_dy += (float)wl_fixed_to_double(dy);
+}
+
+static const struct zwp_relative_pointer_v1_listener wox_relative_pointer_listener = {
+    .relative_motion = on_relative_pointer_motion,
+};
+
+static void *start_relative_pointer(WoxLinuxWindow *window) {
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  GdkDisplay *display = gdk_window != NULL ? gdk_window_get_display(gdk_window) : gtk_widget_get_display(window->window);
+  ensure_relative_pointer_manager(display);
+  if (wox_relative_pointer_manager == NULL || display == NULL || !GDK_IS_WAYLAND_DISPLAY(display)) {
+    return NULL;
+  }
+  GdkSeat *seat = gdk_display_get_default_seat(display);
+  GdkDevice *pointer = seat != NULL ? gdk_seat_get_pointer(seat) : NULL;
+  struct wl_pointer *wl_pointer = pointer != NULL ? gdk_wayland_device_get_wl_pointer(pointer) : NULL;
+  if (wl_pointer == NULL) {
+    return NULL;
+  }
+  struct zwp_relative_pointer_v1 *relative = zwp_relative_pointer_manager_v1_get_relative_pointer(wox_relative_pointer_manager, wl_pointer);
+  if (relative == NULL) {
+    return NULL;
+  }
+  zwp_relative_pointer_v1_add_listener(relative, &wox_relative_pointer_listener, window);
+  return relative;
+}
+
+static void stop_relative_pointer(WoxLinuxWindow *window) {
+  if (window->layer_move_relative_pointer == NULL) {
+    return;
+  }
+  zwp_relative_pointer_v1_destroy(window->layer_move_relative_pointer);
+  window->layer_move_relative_pointer = NULL;
+}
+#else
+static void *start_relative_pointer(WoxLinuxWindow *window) {
+  (void)window;
+  return NULL;
+}
+
+static void stop_relative_pointer(WoxLinuxWindow *window) {
+  (void)window;
+}
+#endif
+
+static void flush_layer_shell_move(WoxLinuxWindow *window) {
+  if (!window->layer_move_active) {
+    return;
+  }
+  if (window->layer_move_pending_dx == 0 && window->layer_move_pending_dy == 0) {
+    return;
+  }
+  window->preferred_x += window->layer_move_pending_dx;
+  window->preferred_y += window->layer_move_pending_dy;
+  window->layer_move_pending_dx = 0;
+  window->layer_move_pending_dy = 0;
+  window->has_preferred_position = true;
+  place_window(window);
+  if (window->layer_move_relative_pointer == NULL) {
+    window->layer_move_skip_sample = true;
+  }
+}
+
+static void update_layer_shell_move(WoxLinuxWindow *window) {
+  if (!window->layer_move_active) {
+    return;
+  }
+  if (window->layer_move_relative_pointer != NULL) {
+    return;
+  }
+  float dx = (float)(window->pointer_client_x - window->layer_move_last_local_x);
+  float dy = (float)(window->pointer_client_y - window->layer_move_last_local_y);
+  window->layer_move_last_local_x = window->pointer_client_x;
+  window->layer_move_last_local_y = window->pointer_client_y;
+  if (window->layer_move_skip_sample) {
+    window->layer_move_skip_sample = false;
+    return;
+  }
+  window->layer_move_pending_dx += dx;
+  window->layer_move_pending_dy += dy;
+}
+
+static gboolean layer_shell_move_tick(GtkWidget *widget, GdkFrameClock *clock, gpointer data) {
+  (void)widget;
+  (void)clock;
+  WoxLinuxWindow *window = data;
+  if (!window->layer_move_active) {
+    window->layer_move_tick_id = 0;
+    return G_SOURCE_REMOVE;
+  }
+  flush_layer_shell_move(window);
+  return G_SOURCE_CONTINUE;
+}
+
+static void end_layer_shell_move(WoxLinuxWindow *window) {
+  if (!window->layer_move_active) {
+    return;
+  }
+  flush_layer_shell_move(window);
+  stop_relative_pointer(window);
+  if (window->layer_move_tick_id != 0 && window->gl_area != NULL) {
+    gtk_widget_remove_tick_callback(window->gl_area, window->layer_move_tick_id);
+    window->layer_move_tick_id = 0;
+  }
+  if (window->layer_move_grabbed) {
+    GdkWindow *gdk_window = window->window != NULL ? gtk_widget_get_window(window->window) : NULL;
+    GdkDisplay *display = gdk_window != NULL ? gdk_window_get_display(gdk_window) : NULL;
+    GdkSeat *seat = display != NULL ? gdk_display_get_default_seat(display) : NULL;
+    if (seat != NULL) {
+      gdk_seat_ungrab(seat);
+    }
+    window->layer_move_grabbed = false;
+  }
+  window->layer_move_active = false;
+}
+
+static void start_layer_shell_move(WoxLinuxWindow *window) {
+  if (window->layer_move_active) {
+    return;
+  }
+  window->layer_move_last_local_x = window->pointer_client_x;
+  window->layer_move_last_local_y = window->pointer_client_y;
+  window->layer_move_pending_dx = 0;
+  window->layer_move_pending_dy = 0;
+  window->layer_move_skip_sample = false;
+  window->has_preferred_position = true;
+  window->layer_move_active = true;
+  window->layer_move_grabbed = false;
+  window->layer_move_relative_pointer = start_relative_pointer(window);
+  if (window->layer_move_tick_id == 0 && window->gl_area != NULL) {
+    window->layer_move_tick_id = gtk_widget_add_tick_callback(window->gl_area, layer_shell_move_tick, window, NULL);
+  }
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  GdkDisplay *display = gdk_window != NULL ? gdk_window_get_display(gdk_window) : NULL;
+  if (display == NULL) {
+    return;
+  }
+  GdkCursor *cursor = gdk_cursor_new_from_name(display, "grabbing");
+  if (cursor == NULL) {
+    cursor = gdk_cursor_new_for_display(display, GDK_FLEUR);
+  }
+  GdkGrabStatus status = gdk_seat_grab(
+      gdk_display_get_default_seat(display),
+      gdk_window,
+      GDK_SEAT_CAPABILITY_POINTER,
+      FALSE,
+      cursor,
+      window->dispatching_pointer_event,
+      NULL,
+      NULL);
+  if (cursor != NULL) {
+    g_object_unref(cursor);
+  }
+  window->layer_move_grabbed = status == GDK_GRAB_SUCCESS;
 }
 
 #ifdef GDK_WINDOWING_X11
@@ -2166,6 +2617,10 @@ static void present_linux_window_now(WoxLinuxWindow *window) {
 static void stop_linux_animation_frames(WoxLinuxWindow *window);
 
 static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
+  if (window == NULL) {
+    return;
+  }
+  end_layer_shell_move(window);
   if (window->closed || !window->visible) {
     return;
   }
@@ -2177,24 +2632,30 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
   }
   window->visible = false;
   stop_linux_animation_frames(window);
-  if (window->renderer.ready && window->gl_area != NULL) {
+  if (window->renderer.ready && linux_gl_area_can_make_current(window->gl_area)) {
     gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
     if (gtk_gl_area_get_error(GTK_GL_AREA(window->gl_area)) == NULL) {
       clear_linux_resource_caches(&window->renderer, true);
     } else {
       clear_linux_resource_caches(&window->renderer, false);
     }
+  } else if (window->renderer.ready) {
+    clear_linux_resource_caches(&window->renderer, false);
   }
-  if (window->overlay_renderer.ready && window->overlay_gl_area != NULL) {
+  if (window->overlay_renderer.ready && linux_gl_area_can_make_current(window->overlay_gl_area)) {
     gtk_gl_area_make_current(GTK_GL_AREA(window->overlay_gl_area));
     if (gtk_gl_area_get_error(GTK_GL_AREA(window->overlay_gl_area)) == NULL) {
       clear_linux_resource_caches(&window->overlay_renderer, true);
     } else {
       clear_linux_resource_caches(&window->overlay_renderer, false);
     }
+  } else if (window->overlay_renderer.ready) {
+    clear_linux_resource_caches(&window->overlay_renderer, false);
   }
   reset_large_image_policy(window);
-  gtk_widget_hide(window->window);
+  if (window->window != NULL) {
+    gtk_widget_hide(window->window);
+  }
   if (should_restore) {
     restore_previous_x11_window(window);
   }
@@ -2315,6 +2776,7 @@ static gboolean on_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer d
 static void on_window_destroy(GtkWidget *widget, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
+  end_layer_shell_move(window);
   if (window->closed) {
     return;
   }
@@ -2325,6 +2787,7 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
   window->visible = false;
   window->active = false;
   window->context = 0;
+  linux_windows = g_list_remove(linux_windows, window);
   if (window->invalidate_idle != 0) {
     g_source_remove(window->invalidate_idle);
     window->invalidate_idle = 0;
@@ -2494,6 +2957,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->hide_on_blur = hide_on_blur != 0;
   bool application_window = window_role == WOX_WINDOW_ROLE_APPLICATION;
   window->application_window = application_window;
+  window->screenshot_window = window_role == WOX_WINDOW_ROLE_SCREENSHOT;
   window->nonactivating = nonactivating != 0;
   window->per_pixel_alpha = window->nonactivating || window_role == WOX_WINDOW_ROLE_SCREENSHOT;
   window->im_context = gtk_im_multicontext_new();
@@ -2537,7 +3001,10 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   }
 #endif
   gtk_window_set_decorated(GTK_WINDOW(window->window), FALSE);
+  // Frameless windows still need gtk_window_begin_resize_drag from the edge hit
+  // test; gtk_window_set_resizable only tells the WM that interactive resize is allowed.
   gtk_window_set_resizable(GTK_WINDOW(window->window), resizable != 0);
+  window->resize_edge = -1;
   window->aspect_ratio = aspect_ratio;
   apply_window_geometry_hints(window);
   // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
@@ -2564,10 +3031,13 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_drag_dest_set(window->window, GTK_DEST_DEFAULT_ALL, &file_drop_target, 1, GDK_ACTION_COPY);
 
   window->layer_shell_enabled = !application_window && enable_layer_shell(GTK_WINDOW(window->window));
-  if (window->layer_shell_enabled && window->nonactivating) {
-    // Exclusive keyboard on the fullscreen recording border steals Escape from
-    // the screenshot toolbar. Nonactivating chrome must not own the seat.
-    layer_set_keyboard_mode(GTK_WINDOW(window->window), WOX_KEYBOARD_NONE);
+  if (window->layer_shell_enabled) {
+    apply_layer_shell_stack(window);
+    if (window->nonactivating) {
+      // Exclusive keyboard on the fullscreen recording border steals Escape from
+      // the screenshot toolbar. Nonactivating chrome must not own the seat.
+      layer_set_keyboard_mode(GTK_WINDOW(window->window), WOX_KEYBOARD_NONE);
+    }
   }
 
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
@@ -2646,6 +3116,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
     return NULL;
   }
   window->context = context;
+  linux_windows = g_list_prepend(linux_windows, window);
   g_atomic_int_inc(&wox_linux_window_count);
   return window;
 }
@@ -2693,6 +3164,7 @@ static void show_main(void *data) {
     gtk_widget_grab_focus(window->gl_area);
   }
   apply_utility_taskbar_hints(window);
+  raise_linux_topmost_windows(window);
   trace_linux_window_geometry(window, "show_end");
 }
 
@@ -2742,17 +3214,23 @@ static void set_bounds_main(void *data) {
   }
   trace_linux_render("event=set_bounds_begin epoch=%llu requested=%.0f,%.0f %.0fx%.0f", (unsigned long long)window->epoch, call->x, call->y, call->width, call->height);
   trace_linux_window_geometry(window, "set_bounds_before");
-  window->preferred_x = call->x;
-  window->preferred_y = call->y;
+  // A layer-shell drag owns the live position. Go resizes still apply, but
+  // writing the pre-drag origin would fight the pointer and flicker.
+  if (!window->layer_move_active) {
+    window->preferred_x = call->x;
+    window->preferred_y = call->y;
+  }
   window->preferred_width = call->width;
   window->preferred_height = call->height;
   window->has_preferred_position = true;
   int width = (int)ceilf(call->width);
   int height = (int)ceilf(call->height);
   apply_linux_window_size(window, width, height);
-  place_window(window);
+  if (!window->layer_move_active) {
+    place_window(window);
+  }
   apply_linux_pointer_passthrough(window);
-  if (window->visible) {
+  if (window->visible && !window->layer_move_active) {
     present_linux_window_now(window);
   }
   trace_linux_window_geometry(window, "set_bounds_after");
@@ -2992,6 +3470,13 @@ static void start_dragging_main(void *data) {
     call->result = -1;
     return;
   }
+  // Layer-shell launchers are not xdg_toplevels. GDK's begin_move_drag returns
+  // immediately on those surfaces, which is why query/toolbar drags appear dead
+  // while application windows such as Notes still move.
+  if (window->layer_shell_enabled) {
+    start_layer_shell_move(window);
+    return;
+  }
   gtk_window_begin_move_drag(GTK_WINDOW(window->window), GDK_BUTTON_PRIMARY, (int)round(window->pointer_root_x), (int)round(window->pointer_root_y), window->pointer_time);
 }
 
@@ -3045,11 +3530,24 @@ int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enable
 
 static void set_topmost_main(void *data) {
   WoxBoolCall *call = data;
-  if (call->window->closed || call->window->window == NULL) {
+  WoxLinuxWindow *window = call->window;
+  if (window->closed || window->window == NULL) {
     call->result = -1;
     return;
   }
-  gtk_window_set_keep_above(GTK_WINDOW(call->window->window), call->enabled);
+  window->topmost = call->enabled;
+  if (window->layer_shell_enabled) {
+    apply_layer_shell_stack(window);
+    return;
+  }
+  gtk_window_set_keep_above(GTK_WINDOW(window->window), window->topmost || !window->application_window);
+  if (!window->topmost) {
+    return;
+  }
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window != NULL) {
+    gdk_window_raise(gdk_window);
+  }
 }
 
 int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled) {
@@ -4010,7 +4508,7 @@ int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, 
 
 static void close_main(void *data) {
   WoxWindowCall *call = data;
-  if (!call->window->closed) {
+  if (call->window != NULL && !call->window->closed && call->window->window != NULL) {
     gtk_widget_destroy(call->window->window);
   }
 }
@@ -4027,7 +4525,7 @@ int32_t wox_linux_window_close(WoxLinuxWindow *window) {
 }
 
 static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRenderer *renderer, GtkWidget *gl_area, bool force_opaque, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->closed || renderer == NULL || gl_area == NULL || !renderer->ready || renderer->frame_open || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
+  if (window == NULL || window->closed || renderer == NULL || !linux_gl_area_can_make_current(gl_area) || !renderer->ready || renderer->frame_open || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     if (window != NULL) {
       trace_linux_render("event=frame_begin_failed frameId=%llu surface=%s reason=invalid_state closed=%d ready=%d frameOpen=%d logical=%.1fx%.1f scale=%.2f", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), window->closed, renderer != NULL && renderer->ready, renderer != NULL && renderer->frame_open, logical_width, logical_height, scale);
     }
@@ -4481,10 +4979,12 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
       result = finish_linux_renderer_frame(window, window->active_renderer);
     }
   }
-  if (result == 0) {
+  if (result == 0 && window->overlay_gl_area != NULL) {
     gtk_gl_area_queue_render(GTK_GL_AREA(window->overlay_gl_area));
   }
-  gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
+  if (linux_gl_area_can_make_current(window->gl_area)) {
+    gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
+  }
   window->active_renderer = NULL;
   window->active_gl_area = NULL;
   return result;
@@ -4547,4 +5047,12 @@ int32_t wox_linux_test_resource_cache_generation(void) {
                        : -1;
   free(renderer.texts);
   return result;
+}
+
+int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t height, int32_t grip) {
+  return (int32_t)linux_resize_hit_test((double)x, (double)y, (int)width, (int)height, (int)grip);
+}
+
+int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot) {
+  return (int32_t)layer_shell_stack_layer(topmost != 0, screenshot != 0);
 }

@@ -102,6 +102,71 @@ func TestWaitHoverTooltipDelayCompletesForCurrentRevision(t *testing.T) {
 	}
 }
 
+type recordingTooltipServices struct {
+	contract.Services
+	hidden []string
+}
+
+func (s *recordingTooltipServices) HideTooltip(_ context.Context, _ string, name string) error {
+	s.hidden = append(s.hidden, name)
+	return nil
+}
+
+func TestDismissLauncherHoverTooltipsClosesNamedOverlaysOnUITurn(t *testing.T) {
+	services := &recordingTooltipServices{}
+	app := &App{
+		services: services,
+		nativeHoverTooltipShown: map[string]nativeHoverTooltipIdentity{
+			"go-ui-preview-tag": {text: "Tag", anchor: woxui.Rect{Width: 10, Height: 10}},
+			"go-ui-glance":      {text: "CPU", anchor: woxui.Rect{Width: 10, Height: 10}},
+		},
+	}
+	app.previewTooltipRevision.Store(4)
+	app.dismissLauncherHoverTooltipsOnUI()
+	if app.previewTooltipRevision.Load() != 5 {
+		t.Fatalf("preview tooltip revision = %d, want 5 so a pending dwell cannot show after hide", app.previewTooltipRevision.Load())
+	}
+	if _, ok := app.nativeHoverTooltipShown["go-ui-preview-tag"]; ok {
+		t.Fatal("dismiss must forget the preview tooltip trigger")
+	}
+	if _, ok := app.nativeHoverTooltipShown["go-ui-glance"]; ok {
+		t.Fatal("dismiss must forget the glance tooltip trigger")
+	}
+	if len(services.hidden) != len(launcherHoverTooltipNames) {
+		t.Fatalf("hidden = %v, want %v", services.hidden, launcherHoverTooltipNames)
+	}
+	for i, name := range launcherHoverTooltipNames {
+		if services.hidden[i] != name {
+			t.Fatalf("hidden[%d] = %q, want %q", i, services.hidden[i], name)
+		}
+	}
+}
+
+func TestHideWindowDismissesLauncherTooltipsOnTheSameUITurn(t *testing.T) {
+	services := &recordingTooltipServices{}
+	app := &App{
+		isPrimary: true,
+		visible:   true,
+		services:  services,
+		nativeHoverTooltipShown: map[string]nativeHoverTooltipIdentity{
+			"go-ui-preview-tag": {text: "Tag", anchor: woxui.Rect{Width: 8, Height: 8}},
+		},
+	}
+	err := app.hideWindow(false)
+	if err == nil || err.Error() != "launcher window is not initialized" {
+		t.Fatalf("hideWindow error = %v, want missing native window", err)
+	}
+	if app.visible {
+		t.Fatal("hide must clear visible before returning the missing-window error")
+	}
+	if _, ok := app.nativeHoverTooltipShown["go-ui-preview-tag"]; ok {
+		t.Fatal("hide must close launcher tooltips before gtk_widget_hide")
+	}
+	if len(services.hidden) != len(launcherHoverTooltipNames) {
+		t.Fatalf("hidden = %v, want launcher overlay names closed on the hide turn", services.hidden)
+	}
+}
+
 func TestNativeHoverTooltipServiceCallsAllowReentrantStateAccess(t *testing.T) {
 	services := &reentrantTooltipServices{hideCalled: make(chan struct{})}
 	app := &App{lifecycleCtx: t.Context(), services: services}

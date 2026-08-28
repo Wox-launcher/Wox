@@ -17,3 +17,7 @@ func GetActiveScreen() Size {
 func listDisplays() ([]Display, error) {
 	return nil, errLinuxScreenCGODisabled
 }
+
+func GetX11PointerPosition() (int, int, error) {
+	return 0, 0, errLinuxScreenCGODisabled
+}

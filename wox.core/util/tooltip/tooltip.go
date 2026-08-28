@@ -124,6 +124,11 @@ func Close(name string) {
 // cursor never entered the trigger but still rests on the owner.
 func tooltipTrackingClose(seenInside bool, inside bool, overOwner bool, positionOK bool, elapsed time.Duration, ignoreOwnerLeave bool) (shouldClose bool, nowSeenInside bool) {
 	if !positionOK {
+		// Wayland sessions can lose the cursor once it leaves every Wox window.
+		// After it has been seen on the trigger, a missing sample is a leave.
+		if seenInside && elapsed >= tooltipOwnerLeaveGrace {
+			return true, seenInside
+		}
 		return false, seenInside
 	}
 	if inside {

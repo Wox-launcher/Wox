@@ -4,7 +4,7 @@ package woxui
 
 /*
 #cgo CFLAGS: -std=c11 -Wall -Wextra -Werror
-#cgo pkg-config: gtk+-3.0 epoxy x11
+#cgo pkg-config: gtk+-3.0 epoxy x11 wayland-client
 #cgo LDFLAGS: -ldl -lm
 #include <stdlib.h>
 #include "native_linux.h"
@@ -24,6 +24,7 @@ import (
 
 	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util"
+	"wox/util/mouse"
 )
 
 const linuxRenderTraceEnvironment = "WOX_LINUX_RENDER_TRACE"
@@ -858,6 +859,22 @@ func testLinuxResourceCacheGeneration() int32 {
 	return int32(C.wox_linux_test_resource_cache_generation())
 }
 
+func testLinuxResizeHit(x, y float32, width, height, grip int32) int32 {
+	return int32(C.wox_linux_test_resize_hit(C.float(x), C.float(y), C.int32_t(width), C.int32_t(height), C.int32_t(grip)))
+}
+
+func testLinuxLayerShellStackLayer(topmost, screenshot bool) int32 {
+	nativeTopmost := C.int32_t(0)
+	if topmost {
+		nativeTopmost = 1
+	}
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	return int32(C.wox_linux_test_layer_shell_stack_layer(nativeTopmost, nativeScreenshot))
+}
+
 func (w *platformWindow) consumePendingDamage() Rect {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -964,6 +981,13 @@ func woxGoLinuxTextInput(context C.uintptr_t, kind C.uint8_t, text *C.char) {
 	if window.options.OnTextInput != nil {
 		window.options.OnTextInput(TextInputEvent{Kind: TextInputEventKind(kind), Text: C.GoString(text)})
 	}
+}
+
+// woxGoLinuxObservePointer records desktop pointer coordinates for tooltip tracking.
+//
+//export woxGoLinuxObservePointer
+func woxGoLinuxObservePointer(context C.uintptr_t, desktopX C.float, desktopY C.float, inside C.int32_t) {
+	mouse.ObserveWindowPointer(uintptr(context), mouse.Point{X: float64(desktopX), Y: float64(desktopY)}, inside != 0)
 }
 
 // woxGoLinuxPointer forwards GDK mouse and trackpad events in logical coordinates.

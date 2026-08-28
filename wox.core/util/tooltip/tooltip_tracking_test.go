@@ -25,6 +25,11 @@ func TestTooltipTrackingCloseWaitsForCursorToEnter(t *testing.T) {
 	if shouldClose || seenInside {
 		t.Fatalf("close=%v seen=%v, want to ignore a missing cursor sample", shouldClose, seenInside)
 	}
+
+	shouldClose, seenInside = tooltipTrackingClose(true, false, false, false, tooltipOwnerLeaveGrace, false)
+	if !shouldClose || !seenInside {
+		t.Fatalf("close=%v seen=%v, want to dismiss after the cursor left every observed window", shouldClose, seenInside)
+	}
 }
 
 func TestTooltipTrackingCloseDismissesLeftoverAfterOwnerMove(t *testing.T) {

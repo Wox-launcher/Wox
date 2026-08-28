@@ -71,6 +71,11 @@ func GetHyprlandMonitors() ([]HyprlandMonitor, error) {
 	return monitors, nil
 }
 
+// GetHyprlandCursorPosition reads compositor-owned cursor coordinates without spawning a process.
+func GetHyprlandCursorPosition() (int, int, error) {
+	return getHyprlandCursorPosition()
+}
+
 // getHyprlandCursorPosition reads compositor-owned cursor coordinates without spawning a process.
 func getHyprlandCursorPosition() (int, int, error) {
 	response, err := queryHyprlandIPC("j/cursorpos", 4096)

@@ -49,8 +49,8 @@ const (
 	notesSearchOverlayGap     = float32(8)
 	notesSearchOverlayTop     = float32(44)
 	// notesToolbarActionsWidth is the five 32-wide title-bar buttons plus gaps
-	// and the 6px inset used to place that cluster. Equal macOS/Linux title
-	// insets used to be 220, which left only 20px at the 460 default width.
+	// and the 6px inset used to place that cluster. Equal macOS title insets
+	// used to be 220, which left only 20px at the 460 default width.
 	notesToolbarActionsWidth = float32(174)
 )
 
@@ -112,6 +112,7 @@ type notesWindowController struct {
 	redoDocuments     []common.NoteDocument
 	lastTextEdit      time.Time
 	tooltipRev        atomic.Uint64
+	inlineTooltip     *settingsInlineTooltipState
 	windowPinned      bool
 	windowMaximized   bool
 	restoreFrame      woxui.Rect
@@ -993,6 +994,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 	} else if c.moreOpen {
 		overlay = c.buildMoreOverlay(frame.Size, theme)
 	}
+	overlay = c.composeLinuxInlineTooltip(frame.Size, theme, overlay)
 	return launcherview.NotesWindow(launcherview.NotesWindowProps{
 		Width: frame.Size.Width, Height: frame.Size.Height, Label: a.translate("i18n:notes_title"), Toolbar: toolbar, Editor: editor,
 		FormatBar: formatBar, Status: status, Overlay: overlay, Theme: theme,
@@ -1062,7 +1064,7 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		}}},
 		{Right: contentRight + 6, AnchorRight: true, Top: 4, Child: right},
 	}
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "darwin" {
 		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: launcherview.NotesToolbarHeight, Vertical: .5, Child: woxwidget.Image{Source: notesTitleBarIcon, Width: 20, Height: 20}}})
 	}
 	children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
@@ -1074,22 +1076,52 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 }
 
 // notesTitleSlot places the window title like other Wox chrome: centered on
-// macOS/Linux, left-aligned after the app icon on Windows.
+// macOS, left-aligned after the app icon on Windows and Linux.
 func notesTitleSlot(goos string, contentRight float32) (left, right, alignment float32) {
-	if goos == "windows" {
-		return 40, contentRight + notesToolbarActionsWidth, 0
+	if goos == "darwin" {
+		return notesToolbarActionsWidth, notesToolbarActionsWidth, 0.5
 	}
-	return notesToolbarActionsWidth, notesToolbarActionsWidth, 0.5
+	return 40, contentRight + notesToolbarActionsWidth, 0
 }
 
-// updateToolbarTooltip keeps Notes chrome hints in the same native overlay used by the launcher.
+// updateToolbarTooltip keeps Notes chrome hints in the same hover path as settings.
+// Linux cannot position a native overlay window, so the owner window paints the
+// same in-window tooltip settings already uses. Other platforms keep the native overlay.
 func (c *notesWindowController) updateToolbarTooltip(inside bool, text string, anchor woxui.Rect) {
+	if util.IsLinux() {
+		c.app.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{
+			revision: &c.tooltipRev, state: &c.inlineTooltip,
+			open: true, invalidate: c.invalidate, job: "show Notes inline tooltip",
+		}, inside, text, anchor, "top")
+		return
+	}
 	c.app.setNativeHoverTooltip(&c.tooltipRev, "go-ui-notes-titlebar", "update Notes chrome tooltip", inside, text, anchor, "top", func() *woxui.Window {
 		if c.managed == nil {
 			return nil
 		}
 		return c.managed.Window()
 	})
+}
+
+// composeLinuxInlineTooltip stacks the in-window Linux tooltip above search, link, or more overlays.
+func (c *notesWindowController) composeLinuxInlineTooltip(size woxui.Size, theme woxcomponent.Theme, overlay woxwidget.Widget) woxwidget.Widget {
+	if c.inlineTooltip == nil {
+		return overlay
+	}
+	tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
+		Width: size.Width, Height: size.Height, Anchor: c.inlineTooltip.Anchor, Message: c.inlineTooltip.Text, Side: c.inlineTooltip.Side, Theme: theme,
+	})
+	if tooltip == nil {
+		return overlay
+	}
+	layer := woxwidget.StackChild{Left: left, Top: top, Child: tooltip}
+	if overlay == nil {
+		return woxwidget.Stack{Width: size.Width, Height: size.Height, Children: []woxwidget.StackChild{layer}}
+	}
+	return woxwidget.Stack{Width: size.Width, Height: size.Height, Children: []woxwidget.StackChild{
+		{Child: overlay},
+		layer,
+	}}
 }
 
 func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent.Theme) woxwidget.Widget {

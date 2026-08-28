@@ -404,12 +404,12 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	if !ok || label.MaxLines != 1 || !label.ShrinkWrap || label.AlignmentY != 0.5 {
 		t.Fatalf("Notes title = %#v, want a single-line ellipsized TextBlock", alignment.Child)
 	}
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "darwin" {
 		icon := toolbar.Children[4]
 		iconAlignment, ok := icon.Child.(woxwidget.Align)
 		iconImage, imageOK := iconAlignment.Child.(woxwidget.Image)
 		if !ok || !imageOK || icon.Left != 12 || iconAlignment.Width != 20 || iconImage.Source == nil || iconImage.Width != 20 || iconImage.Height != 20 {
-			t.Fatalf("Windows Notes title-bar icon slot = %#v, want 20x20 icon at left 12", icon)
+			t.Fatalf("Notes title-bar icon slot = %#v, want 20x20 icon at left 12", icon)
 		}
 	}
 }
@@ -425,6 +425,10 @@ func TestNotesTitleSlotLeavesRoomAtDefaultWidth(t *testing.T) {
 	left, right, alignment = notesTitleSlot("windows", woxcomponent.TitleBarChromeWidth("windows", true, true))
 	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("windows", true, true)+notesToolbarActionsWidth {
 		t.Fatalf("Windows title slot = %.0f/%.0f/%.1f, want a leading cluster", left, right, alignment)
+	}
+	left, right, alignment = notesTitleSlot("linux", woxcomponent.TitleBarChromeWidth("linux", true, true))
+	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("linux", true, true)+notesToolbarActionsWidth {
+		t.Fatalf("Linux title slot = %.0f/%.0f/%.1f, want a leading cluster", left, right, alignment)
 	}
 }
 
@@ -1099,6 +1103,93 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 			t.Fatalf("format item %d = icon %#v hover %v, want SVG with tooltip", index, button.Icon, button.OnHoverAt != nil)
 		}
 	}
+}
+
+func TestNotesToolbarTooltipUsesLinuxInlineFallback(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-only tooltip fallback")
+	}
+	app := &App{palette: defaultPalette(), lifecycleCtx: t.Context()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	anchor := woxui.Rect{X: 300, Y: 4, Width: 32, Height: 32}
+	controller.updateToolbarTooltip(true, "  Search (Ctrl+P)  ", anchor)
+	if controller.inlineTooltip != nil {
+		t.Fatal("inline tooltip must wait for the shared hover dwell")
+	}
+	deadline := time.Now().Add(nativeHoverTooltipDelay + 300*time.Millisecond)
+	for controller.inlineTooltip == nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if controller.inlineTooltip == nil {
+		t.Fatal("expected inline tooltip state on linux after the hover dwell")
+	}
+	if controller.inlineTooltip.Text != "Search (Ctrl+P)" {
+		t.Fatalf("tooltip text = %q, want trimmed content", controller.inlineTooltip.Text)
+	}
+	if controller.inlineTooltip.Anchor != anchor {
+		t.Fatalf("tooltip anchor = %#v, want %#v", controller.inlineTooltip.Anchor, anchor)
+	}
+	if controller.inlineTooltip.Side != "top" {
+		t.Fatalf("tooltip side = %q, want top", controller.inlineTooltip.Side)
+	}
+
+	controller.updateToolbarTooltip(false, "", woxui.Rect{})
+	if controller.inlineTooltip != nil {
+		t.Fatalf("tooltip state = %#v, want nil after hide", controller.inlineTooltip)
+	}
+}
+
+func TestNotesLinuxInlineTooltipPaintsInsideWindow(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	controller.inlineTooltip = &settingsInlineTooltipState{
+		Text: "Search", Side: "top", Anchor: woxui.Rect{X: 300, Y: 4, Width: 32, Height: 32},
+	}
+	theme := app.palette.componentTheme()
+	overlay := controller.composeLinuxInlineTooltip(woxui.Size{Width: 460, Height: 320}, theme, nil)
+	if !notesOverlayContainsText(overlay, "Search") {
+		t.Fatal("expected in-window tooltip overlay")
+	}
+	root := controller.buildNotes(woxui.FrameInfo{Size: woxui.Size{Width: 460, Height: 320}})
+	if !notesOverlayContainsText(root, "Search") {
+		t.Fatal("expected tooltip text in the notes window tree")
+	}
+}
+
+func TestNotesLinuxInlineTooltipStacksAboveSearchOverlay(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	controller.inlineTooltip = &settingsInlineTooltipState{
+		Text: "Search", Side: "top", Anchor: woxui.Rect{X: 300, Y: 4, Width: 32, Height: 32},
+	}
+	search := woxwidget.Container{Width: 460, Height: 320}
+	overlay := controller.composeLinuxInlineTooltip(woxui.Size{Width: 460, Height: 320}, app.palette.componentTheme(), search)
+	stack, ok := overlay.(woxwidget.Stack)
+	if !ok || len(stack.Children) != 2 {
+		t.Fatalf("overlay = %#v, want search under the tooltip", overlay)
+	}
+	if _, isSearch := stack.Children[0].Child.(woxwidget.Container); !isSearch {
+		t.Fatalf("bottom overlay = %#v, want the existing search layer", stack.Children[0].Child)
+	}
+	if !notesOverlayContainsText(stack.Children[1].Child, "Search") {
+		t.Fatal("expected tooltip stacked above the search overlay")
+	}
+}
+
+func notesOverlayContainsText(widget woxwidget.Widget, want string) bool {
+	found := false
+	walkNotesWidgets(widget, func(child woxwidget.Widget) {
+		if text, ok := child.(woxwidget.TextBlock); ok && text.Value == want {
+			found = true
+		}
+	})
+	return found
 }
 
 func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {

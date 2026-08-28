@@ -211,6 +211,12 @@ func GetMouseScreenX11() (Size, error) {
 	return size, err
 }
 
+// GetX11PointerPosition returns the X11 root pointer in the same space gtk_window_move uses.
+func GetX11PointerPosition() (int, int, error) {
+	_, x, y, err := getMouseScreenX11WithPointer()
+	return x, y, err
+}
+
 func getMouseScreenX11WithPointer() (Size, int, int, error) {
 	display := C.openDisplay()
 	if display == nil {

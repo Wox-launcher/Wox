@@ -315,8 +315,13 @@ func syncOverlayAppearance(options *WindowOptions, isDark bool) bool {
 }
 
 // Close removes one overlay without firing its user-close callback.
+// Missing IDs skip the UI-thread marshal so launcher hide cannot queue empty
+// GTK round-trips that race gtk_widget_hide of the layer-shell window.
 func Close(id string) {
 	RegisterCloseCallback(id, nil)
+	if runtimeOverlayByID(id) == nil {
+		return
+	}
 	_ = woxui.Call(func() {
 		if instance := runtimeOverlayByID(id); instance != nil {
 			_ = instance.managed.Close()
@@ -362,9 +367,13 @@ func (instance *runtimeOverlay) dispose() {
 
 // overlayNativeWindowOptions maps overlay chrome onto a utility window. Topmost
 // preview surfaces take focus but still float above the launcher. Tooltips stay
-// nonactivating so they do not steal focus. Windows and macOS still take their
-// material from the native window; Linux paints PanelFill because it has no
-// acrylic or vibrancy.
+// nonactivating so they do not steal focus. Utility overlays stay positionable
+// on Linux: Wayland compositors that support gtk-layer-shell place them with
+// exclusive-zone margins, and X11 uses gtk_window_move. That is a different
+// contract from application windows, whose xdg-toplevel placement the
+// compositor owns. Windows and macOS take their material from the native
+// window; Linux paints an opaque SurfaceFill because it has no acrylic or
+// vibrancy.
 func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.WindowOptions {
 	return woxui.WindowOptions{
 		Title:         "Wox Overlay",
@@ -390,13 +399,24 @@ func PanelFill(goos string, lightAppearance bool) woxui.Color {
 	return woxui.Color{R: 24, G: 24, B: 26, A: 255}
 }
 
+// SurfaceFill is the painted overlay wash. Windows and macOS keep theme alpha
+// so native acrylic or vibrancy shows through. Linux has neither material, so
+// a translucent wash would just show the desktop through the window.
+func SurfaceFill(goos string, color woxui.Color, lightAppearance bool) woxui.Color {
+	if goos != "linux" {
+		return color
+	}
+	if color.A == 0 {
+		return PanelFill(goos, lightAppearance)
+	}
+	color.A = 255
+	return color
+}
+
 // HUDSurface is the rounded overlay panel used by compact HUD windows.
 // It paints the same AppBackgroundColor wash as launcher, Notes, and WebView.
 func HUDSurface(width, height, radius float32, lightAppearance bool, child woxwidget.Widget) woxwidget.Container {
-	fill := CurrentThemeChrome().Background
-	if runtime.GOOS == "linux" && fill.A == 0 {
-		fill = PanelFill(runtime.GOOS, lightAppearance)
-	}
+	fill := SurfaceFill(runtime.GOOS, CurrentThemeChrome().Background, lightAppearance)
 	return woxwidget.Container{
 		Width: width, Height: height, Radius: radius,
 		Color: fill,

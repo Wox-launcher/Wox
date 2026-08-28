@@ -310,9 +310,12 @@ func TestRuntimeTextOverlayBuildPaintsThemeBackground(t *testing.T) {
 	}
 	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}}).(woxwidget.Stack)
 	panel := root.Children[0].Child.(woxwidget.Container)
-	want := overlay.ThemeBackground(defaultTextOverlayBackground)
+	want := overlay.CurrentThemeChrome().Background
 	if panel.Color != want || panel.Color.A == 0 {
-		t.Fatalf("overlay panel fill = %#v, want theme AppBackgroundColor %#v", panel.Color, want)
+		t.Fatalf("overlay panel fill = %#v, want theme chrome %#v", panel.Color, want)
+	}
+	if runtime.GOOS == "linux" && panel.Color.A != 255 {
+		t.Fatalf("linux overlay panel fill = %#v, want opaque because Linux has no acrylic", panel.Color)
 	}
 }
 

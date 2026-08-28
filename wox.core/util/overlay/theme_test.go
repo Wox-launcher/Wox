@@ -1,6 +1,7 @@
 package overlay
 
 import (
+	"runtime"
 	"testing"
 
 	"wox/common"
@@ -21,6 +22,13 @@ func TestThemeBackgroundUsesAppBackgroundColor(t *testing.T) {
 	want := woxui.Color{R: 22, G: 22, B: 26, A: 132}
 	if got != want {
 		t.Fatalf("theme background = %#v, want %#v", got, want)
+	}
+	chrome := CurrentThemeChrome()
+	if chrome.Background != SurfaceFill(runtime.GOOS, want, false) {
+		t.Fatalf("chrome background = %#v, want SurfaceFill of theme AppBackgroundColor", chrome.Background)
+	}
+	if runtime.GOOS == "linux" && chrome.Background.A != 255 {
+		t.Fatalf("linux chrome background = %#v, want opaque because Linux has no acrylic", chrome.Background)
 	}
 }
 

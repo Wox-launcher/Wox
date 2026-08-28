@@ -1,5 +1,3 @@
-//go:build darwin
-
 package tooltip
 
 import (
@@ -21,7 +19,11 @@ var (
 	trackers   = map[string]*tracker{}
 )
 
-// startVisibilityTracking mirrors the Windows tooltip lifetime behavior on macOS.
+// startVisibilityTracking polls the OS cursor until it leaves the trigger and overlay.
+// Showing a native tooltip window generates an owner-window leave, so widget
+// pointer-leave cannot dismiss the hint. Linux also needs this path: glance
+// leave is not an explicit dismiss, and Wayland cannot rely on that leave when
+// the overlay sits above the trigger.
 func startVisibilityTracking(opts Options) {
 	if opts.Name == "" {
 		return
@@ -54,7 +56,6 @@ func stopVisibilityTracking(name string) {
 	}
 }
 
-// run closes the tooltip once the cursor leaves the trigger, overlay, or owner.
 func (current *tracker) run() {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()

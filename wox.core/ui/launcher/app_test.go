@@ -54,6 +54,18 @@ func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryWindowLeavesOverlayBandOnLinuxAndMac(t *testing.T) {
+	if !launcherQueryWindowTopmost("windows") {
+		t.Fatal("Windows query window must stay HWND_TOPMOST above other apps")
+	}
+	if launcherQueryWindowTopmost("linux") {
+		t.Fatal("Linux query window must stay on layer-shell TOP so timer overlays can cover it")
+	}
+	if launcherQueryWindowTopmost("darwin") {
+		t.Fatal("macOS query window must stay at floating level so Topmost overlays can cover it")
+	}
+}
+
 func TestLauncherPreviewRatioUsesChatLayout(t *testing.T) {
 	ratio := 0.25
 	if got := launcherPreviewRatio(queryLayout{ResultPreviewWidthRatio: &ratio}, false); got != 0.25 {

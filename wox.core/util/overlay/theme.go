@@ -3,6 +3,7 @@ package overlay
 import (
 	"encoding/hex"
 	"math"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,7 +66,8 @@ func CurrentThemeChrome() ThemeChrome {
 		theme := provider()
 		foreground = parseThemeCSSColor(theme.ActionItemFontColor, parseThemeCSSColor(theme.ToolbarFontColor, fallbackText))
 	}
-	return ThemeChrome{Background: background, Foreground: foreground, Light: !ColorIsDark(background)}
+	light := !ColorIsDark(background)
+	return ThemeChrome{Background: SurfaceFill(runtime.GOOS, background, light), Foreground: foreground, Light: light}
 }
 
 // ApplyThemeAppearance makes an overlay follow the current Wox light/dark material.
