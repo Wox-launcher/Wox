@@ -2376,6 +2376,7 @@
   "plugin_theme_group_available": "可用",
   "plugin_theme_group_current": "当前",
   "plugin_theme_group_store": "商店",
+  "plugin_theme_group_system": "系统主题",
   "plugin_theme_install_theme": "安装主题",
   "plugin_theme_no_embed_theme": "未找到内置主题",
   "plugin_theme_open_containing_folder": "打开主题所在目录",

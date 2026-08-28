@@ -77,6 +77,7 @@ func SetThemeProvider(provider func() common.Theme) {
 	imageOverlayThemeMu.Lock()
 	imageOverlayThemeProvider = provider
 	imageOverlayThemeMu.Unlock()
+	overlay.SetThemeProvider(provider)
 }
 
 func imageOverlayThemeColors() ThemeColors {
@@ -94,17 +95,14 @@ func imageOverlayThemeColors() ThemeColors {
 		return fallback
 	}
 	theme := provider()
-	// Paint the same AppBackgroundColor the launcher and WebView windows use.
-	// Leaving this empty lets NSVisualEffectMaterialPopover sample the desktop
-	// wallpaper, which makes the title bar look warmer and dirtier than WebView.
-	background := parseImageOverlayCSSColor(theme.AppBackgroundColor, fallback.Background)
+	background := overlay.ThemeBackground(fallback.Background)
 	return ThemeColors{
 		Background: background,
 		Foreground: parseImageOverlayCSSColor(theme.ActionItemFontColor, fallback.Foreground),
 		Toolbar:    parseImageOverlayCSSColor(theme.ToolbarFontColor, fallback.Toolbar),
 		Border:     parseImageOverlayCSSColor(theme.PreviewSplitLineColor, fallback.Border),
 		Separator:  parseImageOverlayCSSColor(theme.PreviewSplitLineColor, fallback.Separator),
-		Dark:       imageOverlayColorIsDark(background),
+		Dark:       overlay.ColorIsDark(background),
 	}
 }
 

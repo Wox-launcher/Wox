@@ -34,6 +34,9 @@ const (
 	runtimeTextTooltipGap         = float32(4)
 )
 
+// defaultTextOverlayBackground matches the launcher palette when no theme is registered.
+var defaultTextOverlayBackground = woxui.Color{R: 24, G: 29, B: 38, A: 242}
+
 var (
 	runtimeTextOverlays  = map[string]*runtimeTextOverlay{}
 	runtimeTextOverlaysM sync.Mutex
@@ -73,6 +76,7 @@ func showRuntimeTextOverlay(opts Options) bool {
 	if opts.Window.ID == "" {
 		return false
 	}
+	applyTextOverlayTheme(&opts)
 	icon, err := runtimeOverlayImage(opts.Icon)
 	if err != nil {
 		return false
@@ -292,8 +296,9 @@ func runtimeTextWindowHeight(natural, requested, maximum float32) float32 {
 
 func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widget {
 	layout := instance.layout
-	textColor := woxui.Color{R: 246, G: 246, B: 246, A: 255}
-	mutedColor := woxui.Color{R: 230, G: 230, B: 230, A: 235}
+	chrome := overlay.CurrentThemeChrome()
+	textColor := chrome.Foreground
+	mutedColor := textOverlayMutedColor(chrome)
 	style := woxui.TextStyle{Size: textOverlayFontSize(instance.options)}
 	text := woxwidget.TextBlock{
 		Value: instance.options.Message, Style: style, Color: textColor, Width: layout.textWidth,
@@ -342,7 +347,7 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		row = append(row, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: "text-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(14, textColor),
 			Width: runtimeTextCloseSize, Height: runtimeTextCloseSize, Radius: runtimeTextCloseSize / 2,
-			HoverBackground: woxui.Color{R: 255, G: 255, B: 255, A: 35}, OnTap: func() { overlay.RequestClose(instance.id) },
+			HoverBackground: textOverlayHoverFill(chrome), OnTap: func() { overlay.RequestClose(instance.id) },
 		}))
 	}
 	crossAxis := woxwidget.CrossAxisCenter
@@ -383,13 +388,11 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	rootChildren := []woxwidget.StackChild{{Child: woxwidget.Container{
 		Width: frame.Size.Width, Height: frame.Size.Height,
-		// Windows and macOS keep Color empty so native acrylic or vibrancy
-		// shows through. Linux has neither, so PanelFill is an opaque surface.
-		Color:  overlay.PanelFill(runtime.GOOS, instance.options.Window.LightAppearance),
+		Color:  chrome.Background,
 		Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
 	}}}
 	if layout.titleBarHeight > 0 {
-		rootChildren = append(rootChildren, woxwidget.StackChild{Child: instance.buildTitleBar(frame.Size.Width, frame.WindowFocused, textColor)})
+		rootChildren = append(rootChildren, woxwidget.StackChild{Child: instance.buildTitleBar(frame.Size.Width, frame.WindowFocused, chrome)})
 	}
 	padding := textOverlayPadding(instance.options)
 	rootChildren = append(rootChildren, woxwidget.StackChild{Left: padding.Left, Top: layout.titleBarHeight + padding.Top, Child: content})
@@ -398,6 +401,45 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		return woxwidget.Gesture{ID: "text-overlay-click", OnTap: func() { instance.options.OnClick() }, Child: root}
 	}
 	return root
+}
+
+// applyTextOverlayTheme matches native vibrancy and painted chrome to the Wox theme.
+func applyTextOverlayTheme(opts *Options) {
+	overlay.ApplyThemeAppearance(&opts.Window)
+}
+
+// textOverlayTitleSlot places the title like Notes and image overlay chrome:
+// centered on macOS, leading-aligned on Windows and Linux.
+func textOverlayTitleSlot(goos string, width, leading, reservedWidth float32) (left, slot, horizontal float32) {
+	if goos == "darwin" {
+		return 0, width, 0.5
+	}
+	return leading, reservedWidth, 0
+}
+
+func textOverlaySurfaceFill() woxui.Color {
+	return overlay.CurrentThemeChrome().Background
+}
+
+func textOverlayMutedColor(chrome overlay.ThemeChrome) woxui.Color {
+	if chrome.Light {
+		return woxui.Color{R: chrome.Foreground.R, G: chrome.Foreground.G, B: chrome.Foreground.B, A: 160}
+	}
+	return woxui.Color{R: 230, G: 230, B: 230, A: 235}
+}
+
+func textOverlayHairline(chrome overlay.ThemeChrome) woxui.Color {
+	if chrome.Light {
+		return woxui.Color{R: 0, G: 0, B: 0, A: 40}
+	}
+	return woxui.Color{R: 255, G: 255, B: 255, A: 76}
+}
+
+func textOverlayHoverFill(chrome overlay.ThemeChrome) woxui.Color {
+	if chrome.Light {
+		return woxui.Color{R: 0, G: 0, B: 0, A: 20}
+	}
+	return woxui.Color{R: 255, G: 255, B: 255, A: 20}
 }
 
 // textOverlayFontSize resolves the message font size, defaulting to the shared
@@ -434,7 +476,7 @@ func runtimeTextCopyTooltip(width float32, label string, style woxui.TextStyle, 
 	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	return woxwidget.Container{
 		Width: width, Height: runtimeTextTooltipHeight,
-		Color:  overlay.PanelFill(runtime.GOOS, false),
+		Color:  textOverlaySurfaceFill(),
 		Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
 		Child: woxwidget.Align{Width: width, Height: runtimeTextTooltipHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.TextBlock{
 			Value: label, Width: width - 16, Height: 18, MaxLines: 1, Centered: true, Style: style, Color: foreground,
@@ -442,8 +484,9 @@ func runtimeTextCopyTooltip(width float32, label string, style woxui.TextStyle, 
 	}
 }
 
-func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, foreground woxui.Color) woxwidget.Widget {
-	hoverBackground := woxui.Color{R: 255, G: 255, B: 255, A: 20}
+func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, chrome overlay.ThemeChrome) woxwidget.Widget {
+	foreground := chrome.Foreground
+	hoverBackground := textOverlayHoverFill(chrome)
 	titleSurface := woxwidget.Widget(woxwidget.Container{Width: width, Height: runtimeTextTitleBarHeight})
 	if instance.options.Window.Movable {
 		// Caption drag sits behind copy/close. Dialog overlays wrap the body in
@@ -457,7 +500,7 @@ func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, fo
 	}
 	children := []woxwidget.StackChild{
 		{Child: titleSurface},
-		{Top: runtimeTextTitleBarHeight - 1, Child: woxwidget.Container{Width: width, Height: 1, Color: woxui.Color{R: 255, G: 255, B: 255, A: 76}}},
+		{Top: runtimeTextTitleBarHeight - 1, Child: woxwidget.Container{Width: width, Height: 1, Color: textOverlayHairline(chrome)}},
 	}
 	closeWidth := float32(46)
 	actionWidth := float32(0)
@@ -471,26 +514,38 @@ func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, fo
 		actionWidth += 2
 	}
 	actionsLeft := width - actionWidth
-	titleLeft := float32(12)
-	iconLeft := float32(12)
+	leading := float32(12)
 	if runtime.GOOS == "darwin" && instance.options.Closable {
-		titleLeft = 44
-		iconLeft = 44
+		leading = 44
 	}
+	reservedWidth := max(float32(0), actionsLeft-leading-8)
+	titleLeft, titleSlot, titleAlign := textOverlayTitleSlot(runtime.GOOS, width, leading, reservedWidth)
+	var titleRow []woxwidget.Widget
 	if instance.titleIcon != nil {
-		children = append(children, woxwidget.StackChild{Left: iconLeft, Top: 10, Child: woxwidget.Image{Source: instance.titleIcon, Width: runtimeTextTitleIconSize, Height: runtimeTextTitleIconSize, Fit: woxwidget.ImageFitContain}})
-		titleLeft = iconLeft + 28
+		titleRow = append(titleRow, woxwidget.Image{Source: instance.titleIcon, Width: runtimeTextTitleIconSize, Height: runtimeTextTitleIconSize, Fit: woxwidget.ImageFitContain})
 	}
 	if instance.options.Title != "" {
-		children = append(children, woxwidget.StackChild{Left: titleLeft, Top: 9, Child: woxwidget.TextBlock{
-			Value: instance.options.Title, Width: max(float32(0), actionsLeft-titleLeft-8), Height: 24, MaxLines: 1,
+		textWidth := reservedWidth
+		if instance.titleIcon != nil {
+			textWidth = max(float32(0), reservedWidth-runtimeTextTitleIconSize-8)
+		}
+		titleRow = append(titleRow, woxwidget.TextBlock{
+			Value: instance.options.Title, Width: textWidth, MaxLines: 1, ShrinkWrap: true,
 			Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: foreground,
+		})
+	}
+	if len(titleRow) > 0 {
+		// macOS centers the icon+title cluster in the window; Windows and Linux
+		// keep that cluster on the leading edge, matching Notes and image overlay.
+		children = append(children, woxwidget.StackChild{Left: titleLeft, Child: woxwidget.Align{
+			Width: titleSlot, Height: runtimeTextTitleBarHeight, Horizontal: titleAlign, Vertical: 0.5,
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: titleRow},
 		}})
 	}
 	right := width - 6
 	if instance.options.Closable {
 		background := woxui.Color{}
-		if instance.options.Window.LightAppearance {
+		if chrome.Light {
 			background = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 		}
 		children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
@@ -562,11 +617,13 @@ func (instance *runtimeTextOverlay) showCopyTooltip() {
 	metrics, _ := instance.window.MeasureText(label, style)
 	width := max(float32(48), metrics.Size.Width+16)
 	x, y := runtimeTextCopyTooltipAnchor(windowBounds, instance.copyAnchor)
-	foreground := woxui.Color{R: 246, G: 246, B: 246, A: 255}
-	overlay.ShowWindow(overlay.WindowOptions{
+	foreground := overlay.CurrentThemeChrome().Foreground
+	tooltipWindow := overlay.WindowOptions{
 		ID: instance.copyTooltipID(), Topmost: true, AbsolutePosition: true, Anchor: overlay.AnchorBottomCenter,
 		OffsetX: x, OffsetY: y, Width: float64(width), Height: float64(runtimeTextTooltipHeight),
-	}, overlay.View{Kind: "text-copy-tooltip", Build: func(_ *woxui.Window, _ woxui.FrameInfo) woxwidget.Widget {
+	}
+	overlay.ApplyThemeAppearance(&tooltipWindow)
+	overlay.ShowWindow(tooltipWindow, overlay.View{Kind: "text-copy-tooltip", Build: func(_ *woxui.Window, _ woxui.FrameInfo) woxwidget.Widget {
 		return runtimeTextCopyTooltip(width, label, style, foreground)
 	}})
 }

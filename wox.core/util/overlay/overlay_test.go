@@ -1,7 +1,6 @@
 package overlay
 
 import (
-	"runtime"
 	"testing"
 
 	woxui "wox/ui/runtime"
@@ -75,14 +74,14 @@ func TestPanelFillIsOpaqueOnLinuxOnly(t *testing.T) {
 	}
 }
 
-func TestHUDSurfaceUsesPlatformPanelFill(t *testing.T) {
+func TestHUDSurfaceUsesThemeBackground(t *testing.T) {
 	child := woxwidget.Container{Width: 10, Height: 10}
 	panel := HUDSurface(120, 48, 12, false, child)
 	if panel.Width != 120 || panel.Height != 48 || panel.Radius != 12 {
 		t.Fatalf("hud surface geometry = %+v, want 120x48 r12", panel)
 	}
-	if panel.Color != PanelFill(runtime.GOOS, false) {
-		t.Fatalf("hud surface fill = %#v, want %#v", panel.Color, PanelFill(runtime.GOOS, false))
+	if panel.Color != CurrentThemeChrome().Background {
+		t.Fatalf("hud surface fill = %#v, want theme AppBackgroundColor %#v", panel.Color, CurrentThemeChrome().Background)
 	}
 	if panel.Child != child {
 		t.Fatal("hud surface dropped its child")

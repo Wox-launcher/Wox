@@ -40,6 +40,8 @@ func NotesWindow(props NotesWindowProps) woxwidget.Widget {
 	if props.FormatBar != nil {
 		children = append(children, props.FormatBar)
 	}
+	// Paint AppBackgroundColor over native acrylic or vibrancy, matching the
+	// launcher and WebView windows so editor text stays readable.
 	body := woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 	layers := []woxwidget.StackChild{{Child: body}}
 	if props.Overlay != nil {

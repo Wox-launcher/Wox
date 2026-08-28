@@ -51,7 +51,7 @@ func TestSettingsAnchorRemainsOwnedByPermissionPackage(t *testing.T) {
 func TestPermissionContentUsesFullPanelCenterline(t *testing.T) {
 	instance := &session{opts: Options{Title: "Accessibility"}}
 	root := instance.build(nil, woxui.FrameInfo{Size: woxui.Size{Width: panelWidth, Height: panelHeightManual}}, "Manual setup")
-	stack := root.(woxwidget.Stack)
+	stack := root.(woxwidget.Container).Child.(woxwidget.Stack)
 	contentAlign, ok := stack.Children[0].Child.(woxwidget.Align)
 	if !ok {
 		t.Fatalf("content root = %T, want full-panel Align", stack.Children[0].Child)

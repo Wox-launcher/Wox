@@ -285,10 +285,10 @@ func (s *session) build(window *woxui.Window, frame woxui.FrameInfo, instruction
 		ID: "macos-permission-close", Label: closeLabel, Icon: woxcomponent.CloseGlyph(16, theme.ResultSubtitle),
 		Width: 28, Height: 28, Radius: 14, HoverBackground: permissionAlpha(theme.ResultSubtitle, 28), OnTap: func() { overlay.RequestClose(s.id) },
 	})
-	return woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: []woxwidget.StackChild{
+	return woxwidget.Container{Width: frame.Size.Width, Height: frame.Size.Height, Color: overlay.CurrentThemeChrome().Background, Child: woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Align{Width: frame.Size.Width, Height: frame.Size.Height, Horizontal: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: content}}},
 		{Left: frame.Size.Width - 38, Top: 8, Child: closeButton},
-	}}
+	}}}
 }
 
 // requestRefresh throttles passive permission probes while the System Settings window is tracked.

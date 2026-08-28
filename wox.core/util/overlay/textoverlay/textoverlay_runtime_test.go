@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"testing"
 
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -59,29 +60,29 @@ func TestRuntimeTextTitleBarContainsCopyAndCloseControls(t *testing.T) {
 		options:   Options{Title: "Summarize", Closable: true, ShowCopyButton: true, Window: overlay.WindowOptions{Movable: true}},
 		titleIcon: &woxui.Image{},
 	}
-	titleBar := instance.buildTitleBar(420, true, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
+	titleBar := instance.buildTitleBar(420, true, overlay.ThemeChrome{Foreground: woxui.Color{R: 255, G: 255, B: 255, A: 255}}).(woxwidget.Stack)
 	controls := map[woxwidget.Key]bool{}
 	hasTitle := false
 	hasIcon := false
 	hasCopyTooltip := false
 	hasTitleDrag := false
-	for _, child := range titleBar.Children {
-		switch widget := child.Child.(type) {
+	walkTextOverlayTitleBar(titleBar, func(widget woxwidget.Widget) {
+		switch typed := widget.(type) {
 		case woxwidget.Stateful:
-			controls[widget.Key] = true
-			if widget.Key == "text-overlay-copy" {
-				hasCopyTooltip = widget.Widget.(woxcomponent.IconButtonProps).OnHoverAt != nil
+			controls[typed.Key] = true
+			if typed.Key == "text-overlay-copy" {
+				hasCopyTooltip = typed.Widget.(woxcomponent.IconButtonProps).OnHoverAt != nil
 			}
 		case woxwidget.TextBlock:
-			hasTitle = widget.Value == "Summarize"
+			hasTitle = typed.Value == "Summarize"
 		case woxwidget.Image:
 			hasIcon = true
 		case woxwidget.Gesture:
-			if widget.ID == "text-overlay-title-drag" && widget.OnDragStart != nil {
+			if typed.ID == "text-overlay-title-drag" && typed.OnDragStart != nil {
 				hasTitleDrag = true
 			}
 		}
-	}
+	})
 	for _, key := range []woxwidget.Key{"text-overlay-copy", "text-overlay-close"} {
 		if !controls[key] {
 			t.Fatalf("text overlay title bar missing %q", key)
@@ -138,11 +139,77 @@ func TestRuntimeTextTitleBarRemainsDraggableWhenBodyIsClickable(t *testing.T) {
 	}
 }
 
+func TestTextOverlayTitleSlotFollowsPlatformChrome(t *testing.T) {
+	left, slot, horizontal := textOverlayTitleSlot("darwin", 420, 44, 300)
+	if left != 0 || slot != 420 || horizontal != 0.5 {
+		t.Fatalf("macOS title slot = left %v width %v align %v, want centered in the window", left, slot, horizontal)
+	}
+	left, slot, horizontal = textOverlayTitleSlot("windows", 420, 12, 300)
+	if left != 12 || slot != 300 || horizontal != 0 {
+		t.Fatalf("Windows title slot = left %v width %v align %v, want a leading cluster", left, slot, horizontal)
+	}
+}
+
+func TestRuntimeTextTitleBarCentersTitleAndIcon(t *testing.T) {
+	instance := &runtimeTextOverlay{
+		options:   Options{Title: "翻译并显示", Closable: true},
+		titleIcon: &woxui.Image{},
+	}
+	titleBar := instance.buildTitleBar(420, true, overlay.ThemeChrome{Foreground: woxui.Color{A: 255}}).(woxwidget.Stack)
+	var cluster woxwidget.Align
+	var clusterLeft float32
+	found := false
+	for _, child := range titleBar.Children {
+		align, ok := child.Child.(woxwidget.Align)
+		if !ok || align.Height != runtimeTextTitleBarHeight {
+			continue
+		}
+		cluster = align
+		clusterLeft = child.Left
+		found = true
+		break
+	}
+	if !found || cluster.Vertical != 0.5 {
+		t.Fatalf("title cluster = %#v, want a full-height vertically centered row", cluster)
+	}
+	if runtime.GOOS == "darwin" {
+		if cluster.Horizontal != 0.5 || cluster.Width != 420 || clusterLeft != 0 {
+			t.Fatalf("macOS title cluster = left %v width %v align %v, want centered in the window", clusterLeft, cluster.Width, cluster.Horizontal)
+		}
+	} else if cluster.Horizontal != 0 || clusterLeft != 12 {
+		t.Fatalf("title cluster = left %v align %v, want a leading Windows/Linux cluster", clusterLeft, cluster.Horizontal)
+	}
+	row, ok := cluster.Child.(woxwidget.Flex)
+	if !ok || row.Axis != woxwidget.Horizontal || row.CrossAxisAlignment != woxwidget.CrossAxisCenter || len(row.Children) != 2 {
+		t.Fatalf("title row = %#v, want icon and label on one centered line", cluster.Child)
+	}
+}
+
+func walkTextOverlayTitleBar(widget woxwidget.Widget, visit func(woxwidget.Widget)) {
+	visit(widget)
+	switch typed := widget.(type) {
+	case woxwidget.Stack:
+		for _, child := range typed.Children {
+			walkTextOverlayTitleBar(child.Child, visit)
+		}
+	case woxwidget.Align:
+		walkTextOverlayTitleBar(typed.Child, visit)
+	case woxwidget.Flex:
+		for _, child := range typed.Children {
+			walkTextOverlayTitleBar(child, visit)
+		}
+	case woxwidget.Container:
+		walkTextOverlayTitleBar(typed.Child, visit)
+	case woxwidget.Gesture:
+		walkTextOverlayTitleBar(typed.Child, visit)
+	}
+}
+
 func TestRuntimeTextTitleBarOmitsDragWhenNotMovable(t *testing.T) {
 	instance := &runtimeTextOverlay{
 		options: Options{Title: "Translate", Closable: true, ShowCopyButton: true},
 	}
-	titleBar := instance.buildTitleBar(420, true, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
+	titleBar := instance.buildTitleBar(420, true, overlay.ThemeChrome{Foreground: woxui.Color{R: 255, G: 255, B: 255, A: 255}}).(woxwidget.Stack)
 	if _, ok := titleBar.Children[0].Child.(woxwidget.Gesture); ok {
 		t.Fatal("fixed text overlay title bar unexpectedly starts window dragging")
 	}
@@ -183,7 +250,7 @@ func TestRuntimeTextCopyTooltipUsesWindowChrome(t *testing.T) {
 	if tooltip.Radius != radius || tooltip.BorderWidth != borderWidth || tooltip.BorderColor != borderColor {
 		t.Fatalf("copy tooltip chrome = radius %v border %v/%#v, want %+v/%v/%#v", tooltip.Radius, tooltip.BorderWidth, tooltip.BorderColor, radius, borderWidth, borderColor)
 	}
-	fill := overlay.PanelFill(runtime.GOOS, false)
+	fill := textOverlaySurfaceFill()
 	if tooltip.Color != fill {
 		t.Fatalf("copy tooltip fill = %#v, want %#v", tooltip.Color, fill)
 	}
@@ -210,26 +277,42 @@ func TestRuntimeTextOverlayBuildUsesWindowChrome(t *testing.T) {
 	if panel.Radius != radius || panel.BorderWidth != borderWidth || panel.BorderColor != borderColor {
 		t.Fatalf("overlay panel chrome = radius %v border %v/%#v, want %v/%v/%#v", panel.Radius, panel.BorderWidth, panel.BorderColor, radius, borderWidth, borderColor)
 	}
-	fill := overlay.PanelFill(runtime.GOOS, false)
+	fill := textOverlaySurfaceFill()
 	if panel.Color != fill {
 		t.Fatalf("overlay panel fill = %#v, want %#v", panel.Color, fill)
 	}
 }
 
-func TestRuntimeTextOverlayBuildUsesAppearancePanelFill(t *testing.T) {
+func TestApplyTextOverlayThemeFollowsLightTheme(t *testing.T) {
+	overlay.SetThemeProvider(func() common.Theme {
+		return common.Theme{AppBackgroundColor: "#F5F5F5", ToolbarFontColor: "#1C1C1E"}
+	})
+	defer overlay.SetThemeProvider(nil)
+	opts := Options{Window: overlay.WindowOptions{ID: "ai-command"}}
+	applyTextOverlayTheme(&opts)
+	if !opts.Window.LightAppearance || !opts.Window.FollowsThemeAppearance {
+		t.Fatalf("text overlay appearance = light %v follow %v, want the light Wox theme", opts.Window.LightAppearance, opts.Window.FollowsThemeAppearance)
+	}
+}
+
+func TestRuntimeTextOverlayBuildPaintsThemeBackground(t *testing.T) {
+	overlay.SetThemeProvider(func() common.Theme {
+		return common.Theme{AppBackgroundColor: "rgba(22, 22, 26, 0.52)"}
+	})
+	defer overlay.SetThemeProvider(nil)
 	instance := &runtimeTextOverlay{
 		layout: runtimeTextLayout{
 			windowSize:  woxui.Size{Width: 160, Height: 48},
 			contentSize: woxui.Size{Width: 140, Height: 28},
 			textWidth:   140,
 		},
-		options: Options{Message: "hello", Window: overlay.WindowOptions{LightAppearance: true}},
+		options: Options{Message: "hello"},
 	}
 	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}}).(woxwidget.Stack)
 	panel := root.Children[0].Child.(woxwidget.Container)
-	fill := overlay.PanelFill(runtime.GOOS, true)
-	if panel.Color != fill {
-		t.Fatalf("light overlay panel fill = %#v, want %#v", panel.Color, fill)
+	want := overlay.ThemeBackground(defaultTextOverlayBackground)
+	if panel.Color != want || panel.Color.A == 0 {
+		t.Fatalf("overlay panel fill = %#v, want theme AppBackgroundColor %#v", panel.Color, want)
 	}
 }
 

@@ -116,6 +116,8 @@ struct WoxDarwinWindow {
   bool restore_previous_app_on_hide;
   bool hide_on_blur;
   bool screenshot_window;
+  bool application_window;
+  bool topmost;
   bool nonactivating;
   bool native_dialog_active;
   bool input_enabled;
@@ -182,8 +184,10 @@ struct WoxDarwinRenderer {
 };
 
 static NSInteger wox_open_window_count = 0;
+static NSInteger wox_unpinned_application_window_count = 0;
 static const CGFloat wox_window_corner_radius = 14.0;
 static CGFloat desktop_top(void);
+static void update_darwin_activation_policy(void);
 
 // save_previous_active_app_if_needed keeps the app-level focus target used by the legacy Flutter launcher.
 static void save_previous_active_app_if_needed(WoxDarwinWindow *window) {
@@ -2420,7 +2424,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       [[native_window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
       [[native_window standardWindowButton:NSWindowZoomButton] setHidden:YES];
     }
-    // Management windows keep their titled style while sharing the launcher's cross-space activation behavior.
+    // Management windows keep their titled style. Cross-space collection is the
+    // default so Settings stays reachable after a Space switch; SetTopmost(false)
+    // later opts Notes out of that floating band so pin can actually unstick.
     if (is_application_window) {
       native_window.level = NSNormalWindowLevel;
       native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
@@ -2490,6 +2496,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
+    window->application_window = is_application_window;
     if (is_screenshot_window) {
       // Recording border and countdown windows intentionally clear their
       // IOSurfaces to reveal the live desktop. A visual-effect container would
@@ -2513,6 +2520,10 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     [native_window center];
     [view updateBackingScale];
     wox_open_window_count++;
+    if (is_application_window) {
+      wox_unpinned_application_window_count++;
+      update_darwin_activation_policy();
+    }
     return window;
   }
 }
@@ -2975,6 +2986,76 @@ int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enab
   return result;
 }
 
+// update_darwin_activation_policy keeps unpinned Notes in the regular app layer
+// so they stack behind other apps. Pinned-only Notes stay accessory; Regular
+// windows are bound to one Space and ignore CanJoinAllSpaces.
+static void update_darwin_activation_policy(void) {
+  NSApplicationActivationPolicy desired = wox_unpinned_application_window_count > 0
+                                              ? NSApplicationActivationPolicyRegular
+                                              : NSApplicationActivationPolicyAccessory;
+  if ([NSApp activationPolicy] != desired) {
+    [NSApp setActivationPolicy:desired];
+  }
+}
+
+// darwin_pinned_collection_behavior keeps a pinned note on every Space, including
+// fullscreen and Stage Manager sessions.
+static NSWindowCollectionBehavior darwin_pinned_collection_behavior(void) {
+  NSWindowCollectionBehavior behavior =
+      NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+  if (@available(macOS 13.0, *)) {
+    behavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
+  }
+  return behavior;
+}
+
+// apply_darwin_window_topmost toggles always-on-top and the Space assignment.
+// A visible window keeps its previous Space until it is ordered out and shown again.
+static void apply_darwin_window_topmost(WoxDarwinWindow *window, bool topmost) {
+  if (window == NULL || window->window == nil || window->screenshot_window || window->nonactivating) {
+    return;
+  }
+  bool was_topmost = window->topmost;
+  if (window->application_window && was_topmost != topmost) {
+    if (topmost) {
+      if (wox_unpinned_application_window_count > 0) {
+        wox_unpinned_application_window_count--;
+      }
+    } else {
+      wox_unpinned_application_window_count++;
+    }
+    window->topmost = topmost;
+    update_darwin_activation_policy();
+  } else {
+    window->topmost = topmost;
+  }
+
+  if (topmost) {
+    window->window.level = NSModalPanelWindowLevel;
+    window->window.collectionBehavior = darwin_pinned_collection_behavior();
+  } else {
+    window->window.level = NSNormalWindowLevel;
+    if (window->application_window) {
+      window->window.collectionBehavior = NSWindowCollectionBehaviorManaged;
+    }
+  }
+
+  if (!window->application_window || was_topmost == topmost || !window->window.isVisible) {
+    return;
+  }
+  // Collection-behavior changes are ignored until the window leaves and re-enters the screen.
+  BOOL was_key = window->window.isKeyWindow;
+  NSWindowAnimationBehavior previous_animation = window->window.animationBehavior;
+  window->window.animationBehavior = NSWindowAnimationBehaviorNone;
+  [window->window orderOut:nil];
+  if (was_key) {
+    [window->window makeKeyAndOrderFront:nil];
+  } else {
+    [window->window orderFront:nil];
+  }
+  window->window.animationBehavior = previous_animation;
+}
+
 // wox_darwin_window_set_topmost raises activating utility windows above the
 // launcher's NSFloatingWindowLevel so preview overlays cannot open behind Wox.
 int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost) {
@@ -2987,10 +3068,7 @@ int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost) 
       result = -1;
       return;
     }
-    if (window->screenshot_window || window->nonactivating) {
-      return;
-    }
-    window->window.level = topmost != 0 ? NSModalPanelWindowLevel : NSNormalWindowLevel;
+    apply_darwin_window_topmost(window, topmost != 0);
   });
   return result;
 }
@@ -3959,6 +4037,12 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     if (wox_open_window_count > 0) {
       wox_open_window_count--;
+    }
+    if (window->application_window) {
+      if (!window->topmost && wox_unpinned_application_window_count > 0) {
+        wox_unpinned_application_window_count--;
+      }
+      update_darwin_activation_policy();
     }
     if (wox_open_window_count == 0) {
       [NSApp stop:nil];

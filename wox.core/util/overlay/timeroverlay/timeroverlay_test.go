@@ -6,6 +6,7 @@ import (
 	"wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/overlay"
 )
 
 func TestTimerSizeExpandsOnceDetailsAreVisible(t *testing.T) {
@@ -61,5 +62,12 @@ func TestTimerOverlayExposesCountdownAndHoverControls(t *testing.T) {
 	closeProps := closeButton.Widget.(component.IconButtonProps)
 	if closeProps.ID != "timer-overlay-close" || closeProps.OnTap == nil {
 		t.Fatalf("close button = %#v", closeProps)
+	}
+}
+
+func TestTimerOverlayPaintsThemeBackground(t *testing.T) {
+	panel := buildTimerOverlay(Options{Countdown: "01:00"}, woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 56}}, false).(woxwidget.Container)
+	if panel.Color != overlay.CurrentThemeChrome().Background {
+		t.Fatalf("timer fill = %#v, want theme AppBackgroundColor %#v", panel.Color, overlay.CurrentThemeChrome().Background)
 	}
 }

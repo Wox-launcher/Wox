@@ -264,7 +264,7 @@ func MacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxu
 		case "−":
 			symbol = woxwidget.Container{Width: 7, Height: 2, Radius: 1, Color: glyphColor}
 		default:
-			symbol = woxwidget.Text{Value: glyph, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: glyphColor}
+			symbol = MacZoomGlyph(glyphColor)
 		}
 	}
 	control := woxwidget.Align{Width: 20, Height: TitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 14, Height: 14, Radius: 7, Color: color, Child: woxwidget.Align{Width: 14, Height: 14, Horizontal: 0.5, Vertical: 0.5, Child: symbol}}}
@@ -318,5 +318,14 @@ func MacCloseGlyph(color woxui.Color) woxwidget.Widget {
 			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4 + offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
 			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 8 - offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
 		}
+	}}
+}
+
+// MacZoomGlyph draws a geometrically centered plus. A font "+" sits on the text
+// baseline and looks shifted up and right inside the 14-unit traffic light.
+func MacZoomGlyph(color woxui.Color) woxwidget.Widget {
+	return woxwidget.Painter{Width: 14, Height: 14, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 6, Width: 6, Height: 2}, 1, color)
+		displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 6, Y: bounds.Y + 4, Width: 2, Height: 6}, 1, color)
 	}}
 }

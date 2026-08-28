@@ -125,6 +125,28 @@ func TestMacTrafficLightUsesInactiveGrayWhileUnfocused(t *testing.T) {
 	}
 }
 
+func TestMacTrafficLightZoomUsesCenteredPainter(t *testing.T) {
+	color := woxui.Color{R: 17, G: 96, B: 27, A: 255}
+	control := MacTrafficLight(
+		"maximize", woxui.Color{R: 40, G: 200, B: 64, A: 255}, "+", color,
+		true, false, true, Theme{}, func() {}, nil, nil,
+	)
+	symbol := macTrafficLightSymbol(control)
+	painter, ok := symbol.(woxwidget.Painter)
+	if !ok || painter.Width != 14 || painter.Height != 14 || painter.Paint == nil {
+		t.Fatalf("macOS zoom symbol = %#v, want a 14x14 pixel painter", symbol)
+	}
+
+	actual := &woxui.DisplayList{}
+	painter.Paint(actual, woxui.Rect{Width: 14, Height: 14})
+	expected := &woxui.DisplayList{}
+	expected.FillRoundedRect(woxui.Rect{X: 4, Y: 6, Width: 6, Height: 2}, 1, color)
+	expected.FillRoundedRect(woxui.Rect{X: 6, Y: 4, Width: 2, Height: 6}, 1, color)
+	if err := actual.Compare(expected); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMacTrafficLightRestoresNativeColorOnHoverWhileUnfocused(t *testing.T) {
 	dark := Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	native := woxui.Color{R: 255, G: 92, B: 95, A: 255}

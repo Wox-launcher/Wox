@@ -95,6 +95,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
 	uninstallThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_theme")
 	currentGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_current")
+	systemGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_system")
 	availableGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_available")
 	storeGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_store")
 	installThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_install_theme")
@@ -147,13 +148,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				})
 			}
 			currentThemeId := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId.Get()
-			if currentThemeId == theme.ThemeId {
-				result.Group = currentGroup
-				result.GroupScore = 100
-			} else {
-				result.Group = availableGroup
-				result.GroupScore = 50
-			}
+			result.Group, result.GroupScore = installedThemeListGroup(currentThemeId == theme.ThemeId, theme.IsSystem, currentGroup, systemGroup, availableGroup)
 
 			return result, true
 		} else {
@@ -461,4 +456,16 @@ func extractJsonObject(raw string) string {
 		}
 	}
 	return ""
+}
+
+// installedThemeListGroup places the active theme first, then remaining system
+// themes, then user-installed themes. Higher GroupScore sorts a group higher.
+func installedThemeListGroup(isCurrent, isSystem bool, currentGroup, systemGroup, availableGroup string) (string, int64) {
+	if isCurrent {
+		return currentGroup, 100
+	}
+	if isSystem {
+		return systemGroup, 75
+	}
+	return availableGroup, 50
 }

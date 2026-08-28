@@ -396,19 +396,35 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	}
 	title := toolbar.Children[2]
 	alignment := title.Child.(woxwidget.Align)
+	wantLeft, wantRight, wantAlign := notesTitleSlot(runtime.GOOS, woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true))
+	if title.Left != wantLeft || title.Right != wantRight || alignment.Horizontal != wantAlign {
+		t.Fatalf("Notes title slot = %.0f/%.0f alignment %.1f, want %.0f/%.0f/%.1f", title.Left, title.Right, alignment.Horizontal, wantLeft, wantRight, wantAlign)
+	}
+	label, ok := alignment.Child.(woxwidget.TextBlock)
+	if !ok || label.MaxLines != 1 || !label.ShrinkWrap || label.AlignmentY != 0.5 {
+		t.Fatalf("Notes title = %#v, want a single-line ellipsized TextBlock", alignment.Child)
+	}
 	if runtime.GOOS == "windows" {
-		wantRight := woxcomponent.TitleBarChromeWidth("windows", true, true) + 174
-		if title.Left != 40 || title.Right != wantRight || alignment.Horizontal != 0 {
-			t.Fatalf("Windows Notes title slot = %.0f/%.0f alignment %.1f, want left-aligned 40/%.0f/0", title.Left, title.Right, alignment.Horizontal, wantRight)
-		}
 		icon := toolbar.Children[4]
 		iconAlignment, ok := icon.Child.(woxwidget.Align)
 		iconImage, imageOK := iconAlignment.Child.(woxwidget.Image)
 		if !ok || !imageOK || icon.Left != 12 || iconAlignment.Width != 20 || iconImage.Source == nil || iconImage.Width != 20 || iconImage.Height != 20 {
 			t.Fatalf("Windows Notes title-bar icon slot = %#v, want 20x20 icon at left 12", icon)
 		}
-	} else if title.Left != 220 || title.Right != 220 || alignment.Horizontal != .5 {
-		t.Fatalf("Notes title slot = %.0f/%.0f alignment %.1f, want centered 220/220/0.5", title.Left, title.Right, alignment.Horizontal)
+	}
+}
+
+func TestNotesTitleSlotLeavesRoomAtDefaultWidth(t *testing.T) {
+	left, right, alignment := notesTitleSlot("darwin", 0)
+	if left != notesToolbarActionsWidth || right != notesToolbarActionsWidth || alignment != 0.5 {
+		t.Fatalf("macOS title slot = %.0f/%.0f/%.1f, want equal %.0f insets", left, right, alignment, notesToolbarActionsWidth)
+	}
+	if room := notesDefaultWidth - left - right; room < 80 {
+		t.Fatalf("macOS title room at default width = %.0f, want enough for a short CJK title plus ellipsis", room)
+	}
+	left, right, alignment = notesTitleSlot("windows", woxcomponent.TitleBarChromeWidth("windows", true, true))
+	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("windows", true, true)+notesToolbarActionsWidth {
+		t.Fatalf("Windows title slot = %.0f/%.0f/%.1f, want a leading cluster", left, right, alignment)
 	}
 }
 
@@ -1171,6 +1187,30 @@ func TestNotesToolbarSupportsCaptionButtonsAndTitleBarDoubleClick(t *testing.T) 
 	}
 }
 
+func TestNotesBuildKeepsThemeBackground(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	root := controller.buildNotes(woxui.FrameInfo{Size: woxui.Size{Width: 460, Height: 320}}).(woxwidget.Semantics)
+	body := root.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	want := defaultPalette().componentTheme().Background
+	if body.Color != want || body.Color.A == 0 {
+		t.Fatalf("notes window fill = %#v, want theme.Background %#v", body.Color, want)
+	}
+}
+
+func TestNotesFormatBarDoesNotPaintToolbarBackground(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	bar := controller.buildFormatBar(420, woxcomponent.Theme{ToolbarBackground: woxui.Color{R: 245, G: 245, B: 245, A: 255}}).(woxwidget.Container)
+	if bar.Color != (woxui.Color{}) {
+		t.Fatalf("format bar fill = %#v, want the window theme wash instead of ToolbarBackground", bar.Color)
+	}
+}
+
 func TestNotesMaximizeBoundsUsesLogicalWorkArea(t *testing.T) {
 	displays := []screen.Display{
 		{ID: "left", WorkArea: screen.Rect{X: -1280, Y: 0, Width: 1280, Height: 720}, Scale: 1.25},
@@ -1219,6 +1259,13 @@ func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
 	if !reopened.windowPinned {
 		t.Fatal("reopened note lost window pin")
+	}
+	controller.toggleWindowPin()
+	if controller.windowPinned {
+		t.Fatal("toggle did not unpin the window")
+	}
+	if services.local["windowPinned:note"] != "0" {
+		t.Fatalf("window unpin preference = %#v", services.local)
 	}
 }
 

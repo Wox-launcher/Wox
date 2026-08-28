@@ -2122,6 +2122,7 @@
   "plugin_theme_group_available": "Disponíveis",
   "plugin_theme_group_current": "Atual",
   "plugin_theme_group_store": "Loja",
+  "plugin_theme_group_system": "Temas do sistema",
   "plugin_theme_install_theme": "Instalar tema",
   "plugin_theme_no_embed_theme": "Nenhum tema incorporado encontrado",
   "plugin_theme_open_containing_folder": "Abrir pasta do tema",

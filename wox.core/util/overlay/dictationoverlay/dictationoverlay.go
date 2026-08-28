@@ -49,6 +49,8 @@ func Show(opts Options) {
 	if window.Height <= 0 {
 		window.Height = dictationOverlayHeight
 	}
+	overlay.ApplyThemeAppearance(&window)
+	opts.Window = window
 	state := stateForID(window.ID)
 	state.setActive(window.ID, opts.Active)
 
@@ -58,11 +60,16 @@ func Show(opts Options) {
 			state.Lock()
 			active, phase := state.active, state.phase
 			state.Unlock()
-			children := []woxwidget.StackChild{{Child: waveform(dictationWaveformWidth(frame.Size.Width, opts.Closable), frame.Size.Height, active, phase)}}
+			chrome := overlay.CurrentThemeChrome()
+			hover := woxui.Color{R: 255, G: 255, B: 255, A: 28}
+			if chrome.Light {
+				hover = woxui.Color{R: 0, G: 0, B: 0, A: 20}
+			}
+			children := []woxwidget.StackChild{{Child: waveform(dictationWaveformWidth(frame.Size.Width, opts.Closable), frame.Size.Height, active, phase, chrome.Foreground)}}
 			if opts.Closable {
 				children = append(children, woxwidget.StackChild{Right: 8, Top: 10, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-					ID: "dictation-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(13, woxui.Color{R: 245, G: 245, B: 245, A: 255}),
-					Width: 28, Height: 28, Radius: 6, HoverBackground: woxui.Color{R: 255, G: 255, B: 255, A: 28}, OnTap: func() { overlay.RequestClose(window.ID) },
+					ID: "dictation-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(13, chrome.Foreground),
+					Width: 28, Height: 28, Radius: 6, HoverBackground: hover, OnTap: func() { overlay.RequestClose(window.ID) },
 				})})
 			}
 			return overlay.HUDSurface(frame.Size.Width, frame.Size.Height, 12, window.LightAppearance, woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: children})
@@ -168,7 +175,7 @@ func releaseState(id string) {
 }
 
 // waveform paints the compact idle or animated seven-bar voice indicator.
-func waveform(width, height float32, active bool, phase float64) woxwidget.Widget {
+func waveform(width, height float32, active bool, phase float64, color woxui.Color) woxwidget.Widget {
 	return woxwidget.Painter{Width: width, Height: height, Paint: func(list *woxui.DisplayList, bounds woxui.Rect) {
 		const barWidth, gap = float32(4), float32(5)
 		idle := [...]float32{.32, .46, .36, .56, .36, .46, .32}
@@ -179,7 +186,7 @@ func waveform(width, height float32, active bool, phase float64) woxwidget.Widge
 				scale = .28 + .72*float32(.5+.5*math.Sin(phase*.32+float64(i)*.85))
 			}
 			barHeight := dictationOverlayContentHeight * scale
-			list.FillRoundedRect(woxui.Rect{X: x, Y: (bounds.Height - barHeight) / 2, Width: barWidth, Height: barHeight}, barWidth/2, woxui.Color{R: 245, G: 245, B: 245, A: 255})
+			list.FillRoundedRect(woxui.Rect{X: x, Y: (bounds.Height - barHeight) / 2, Width: barWidth, Height: barHeight}, barWidth/2, color)
 			x += barWidth + gap
 		}
 	}}

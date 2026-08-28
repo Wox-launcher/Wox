@@ -23,7 +23,6 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/clipboard"
-	"wox/util/overlay"
 	"wox/util/screen"
 )
 
@@ -49,6 +48,10 @@ const (
 	notesSearchOverlayPadding = float32(12)
 	notesSearchOverlayGap     = float32(8)
 	notesSearchOverlayTop     = float32(44)
+	// notesToolbarActionsWidth is the five 32-wide title-bar buttons plus gaps
+	// and the 6px inset used to place that cluster. Equal macOS/Linux title
+	// insets used to be 220, which left only 20px at the 460 default width.
+	notesToolbarActionsWidth = float32(174)
 )
 
 var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(common.PluginNotesIcon), nil, 256)
@@ -926,8 +929,6 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 		c.requestedSize = woxui.Size{}
 	}
 	theme := a.palette.componentTheme()
-	// Match shared text overlays: let native acrylic or vibrancy paint the window surface.
-	theme.Background = overlay.PanelFill(runtime.GOOS, !themeColorIsDark(theme.Background))
 	toolbar := c.buildToolbar(frame.Size.Width, frame.WindowFocused, theme)
 	formatHeight := float32(0)
 	var formatBar woxwidget.Widget
@@ -1038,11 +1039,7 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		button("more", c.app.translate("i18n:notes_more"), woxcomponent.MenuGlyph(15, color), false, func() { c.moreOpen = !c.moreOpen; c.formatMore = false; c.searchOpen = false; c.invalidate() }),
 	}}
 	contentRight := woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true)
-	const titleSlot = float32(220)
-	titleLeft, titleRight, titleAlignment := titleSlot, titleSlot, float32(.5)
-	if runtime.GOOS == "windows" {
-		titleLeft, titleRight, titleAlignment = 40, contentRight+174, 0
-	}
+	titleLeft, titleRight, titleAlignment := notesTitleSlot(runtime.GOOS, contentRight)
 	drag := woxwidget.Semantics{AutomationID: "notes.toolbar.drag", Role: woxui.AccessibilityRoleGroup, Label: c.app.translate("i18n:notes_title"), Child: woxwidget.Gesture{
 		ID: "notes.toolbar.drag",
 		OnDragStart: func() {
@@ -1059,7 +1056,10 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	children := []woxwidget.StackChild{
 		{Child: drag},
 		{AnchorBottom: true, Child: woxwidget.Container{Width: width, Height: 1, Color: woxcomponent.TitleBarAlpha(theme.PreviewSplit, 76)}},
-		{Left: titleLeft, Right: titleRight, StretchWidth: true, Child: woxwidget.Align{Height: launcherview.NotesToolbarHeight, Horizontal: titleAlignment, Vertical: .5, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ToolbarText}}},
+		{Left: titleLeft, Right: titleRight, StretchWidth: true, Child: woxwidget.Align{Height: launcherview.NotesToolbarHeight, Horizontal: titleAlignment, Vertical: .5, Child: woxwidget.TextBlock{
+			Value: title, MaxLines: 1, ShrinkWrap: true, AlignmentY: 0.5,
+			Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ToolbarText,
+		}}},
 		{Right: contentRight + 6, AnchorRight: true, Top: 4, Child: right},
 	}
 	if runtime.GOOS == "windows" {
@@ -1070,7 +1070,16 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		OnMinimize: c.minimizeWindow, OnMaximize: c.toggleMaximize, OnClose: c.requestClose,
 	})})
 	content := woxwidget.Stack{Width: width, Height: launcherview.NotesToolbarHeight, Children: children}
-	return woxwidget.Container{Width: width, Height: launcherview.NotesToolbarHeight, Color: theme.Background, Child: content}
+	return woxwidget.Container{Width: width, Height: launcherview.NotesToolbarHeight, Child: content}
+}
+
+// notesTitleSlot places the window title like other Wox chrome: centered on
+// macOS/Linux, left-aligned after the app icon on Windows.
+func notesTitleSlot(goos string, contentRight float32) (left, right, alignment float32) {
+	if goos == "windows" {
+		return 40, contentRight + notesToolbarActionsWidth, 0
+	}
+	return notesToolbarActionsWidth, notesToolbarActionsWidth, 0.5
 }
 
 // updateToolbarTooltip keeps Notes chrome hints in the same native overlay used by the launcher.
@@ -1127,7 +1136,7 @@ func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent
 	if width < 390 {
 		items = append(items[:7], item("more", func() { c.moreOpen, c.formatMore = true, true; c.invalidate() }))
 	}
-	return woxwidget.Container{Width: width, Height: launcherview.NotesFormatBarHeight, Color: theme.ToolbarBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1,
+	return woxwidget.Container{Width: width, Height: launcherview.NotesFormatBarHeight, BorderColor: theme.PreviewSplit, BorderWidth: 1,
 		Child: woxwidget.Align{Width: width, Height: launcherview.NotesFormatBarHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, Children: items}}}
 }
 
@@ -1140,7 +1149,7 @@ func (c *notesWindowController) buildStatus(width float32, theme woxcomponent.Th
 	if c.errorText != "" && c.dirty {
 		children = append(children, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.retry", Label: c.app.translate("i18n:notes_retry"), Width: 52, FontSize: 11, Theme: theme, OnTap: func() { c.runAction(c.flush) }}))
 	}
-	return woxwidget.Container{Width: width, Height: launcherview.NotesStatusHeight, Padding: woxwidget.Insets{Left: 12, Right: 8}, Color: theme.ToolbarBackground, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}}
+	return woxwidget.Container{Width: width, Height: launcherview.NotesStatusHeight, Padding: woxwidget.Insets{Left: 12, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}}
 }
 
 func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
@@ -2178,6 +2187,8 @@ func (c *notesWindowController) readWindowPinned() bool {
 }
 
 // applyWindowTopmost mirrors the persisted pin onto the live native window.
+// On macOS, pin also joins every Space; unpin returns the note to the current
+// Space and normal app stacking.
 func (c *notesWindowController) applyWindowTopmost() {
 	if c.managed == nil {
 		return
@@ -2329,7 +2340,7 @@ func notesMaximizeBoundsToDisplays(current woxui.Rect, displays []screen.Display
 	return woxui.Rect{X: float32(best.X), Y: float32(best.Y), Width: float32(best.Width), Height: float32(best.Height)}
 }
 
-// toggleWindowPin keeps this note's utility window above other applications.
+// toggleWindowPin keeps this note above other applications and on every Space.
 func (c *notesWindowController) toggleWindowPin() {
 	c.windowPinned = !c.windowPinned
 	if c.app != nil && c.app.services != nil && c.record.ID != "" {

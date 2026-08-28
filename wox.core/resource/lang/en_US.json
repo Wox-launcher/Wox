@@ -2376,6 +2376,7 @@
   "plugin_theme_group_available": "Available",
   "plugin_theme_group_current": "Current",
   "plugin_theme_group_store": "Store",
+  "plugin_theme_group_system": "System Themes",
   "plugin_theme_install_theme": "Install theme",
   "plugin_theme_no_embed_theme": "No embed theme found",
   "plugin_theme_open_containing_folder": "Open theme folder",

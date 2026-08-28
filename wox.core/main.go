@@ -383,9 +383,11 @@ func run() {
 	coreServices := ui.NewCoreServices()
 	embeddedGoUIApp = golauncher.New(util.IsDev(), coreServices)
 	overlay.SetWindowManager(embeddedGoUIApp.WindowManager())
-	imageoverlay.SetThemeProvider(func() common.Theme {
+	themeProvider := func() common.Theme {
 		return ui.GetUIManager().GetCurrentTheme(context.Background())
-	})
+	}
+	overlay.SetThemeProvider(themeProvider)
+	imageoverlay.SetThemeProvider(themeProvider)
 	coreServices.AttachView(embeddedGoUIApp)
 	// Wire text-field copy/cut/paste to the cross-platform clipboard backend.
 	golauncher.SetClipboardProvider(golauncher.NewUtilClipboardProvider())

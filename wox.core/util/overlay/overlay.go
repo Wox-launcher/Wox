@@ -391,12 +391,16 @@ func PanelFill(goos string, lightAppearance bool) woxui.Color {
 	return woxui.Color{R: 24, G: 24, B: 26, A: 255}
 }
 
-// HUDSurface is the rounded overlay panel used by compact HUD windows. Linux
-// paints PanelFill; other platforms keep the native window material.
+// HUDSurface is the rounded overlay panel used by compact HUD windows.
+// It paints the same AppBackgroundColor wash as launcher, Notes, and WebView.
 func HUDSurface(width, height, radius float32, lightAppearance bool, child woxwidget.Widget) woxwidget.Container {
+	fill := CurrentThemeChrome().Background
+	if runtime.GOOS == "linux" && fill.A == 0 {
+		fill = PanelFill(runtime.GOOS, lightAppearance)
+	}
 	return woxwidget.Container{
 		Width: width, Height: height, Radius: radius,
-		Color: PanelFill(runtime.GOOS, lightAppearance),
+		Color: fill,
 		Child: child,
 	}
 }
