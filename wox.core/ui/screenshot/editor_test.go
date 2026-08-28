@@ -486,6 +486,18 @@ func TestScreenshotEditorColorInspectorMapsPointerToCapturedPixel(t *testing.T) 
 	}
 }
 
+func TestScreenshotEditorColorInspectorInfoRowFitsWidestRGB(t *testing.T) {
+	previewWidth := float32(12) * screenshotEditorInspectorColumns
+	panelWidth := previewWidth + screenshotEditorInspectorInfoExtraWidth
+	valueLeft := float32(104)
+	badgeLeft := panelWidth - 30
+	valueWidth := badgeLeft - valueLeft - screenshotEditorInspectorValueBadgeGap
+	widest := screenshotEditorEstimatedTextWidth("255, 255, 255", 11)
+	if valueWidth < widest {
+		t.Fatalf("RGB value slot = %v, widest RGB = %v", valueWidth, widest)
+	}
+}
+
 func TestScreenshotEditorColorInspectorLayoutAvoidsFrameEdges(t *testing.T) {
 	panel := Size{Width: 150, Height: 138}
 	if got := screenshotEditorInspectorRect(Size{Width: 800, Height: 600}, Point{X: 100, Y: 100}, panel, 1); got != (Rect{X: 120, Y: 120, Width: 150, Height: 138}) {

@@ -126,9 +126,14 @@ func (a *App) nativeHoverTooltipNeedsReplace(name, text string, anchor woxui.Rec
 // hideNativeHoverTooltip closes one named overlay and forgets its last shown trigger.
 func (a *App) hideNativeHoverTooltip(name, job string) {
 	util.Go(a.lifecycleCtx, job, func() {
+		// Service calls can synchronously enter the native UI thread and emit
+		// another hover callback. Serialize them separately from tooltip state so
+		// that callback never waits on a lock owned by the calling goroutine.
+		a.tooltipCallMu.Lock()
+		defer a.tooltipCallMu.Unlock()
 		a.tooltipMu.Lock()
-		defer a.tooltipMu.Unlock()
 		delete(a.nativeHoverTooltipShown, name)
+		a.tooltipMu.Unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if err := a.services.HideTooltip(ctx, a.sessionID, name); err != nil {
@@ -138,8 +143,6 @@ func (a *App) hideNativeHoverTooltip(name, job string) {
 }
 
 func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64, name, text string, anchor woxui.Rect, side string, windowFn func() *woxui.Window, ignoreOwnerLeave bool) {
-	a.tooltipMu.Lock()
-	defer a.tooltipMu.Unlock()
 	if revisionID != revision.Load() {
 		return
 	}
@@ -150,6 +153,16 @@ func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64,
 	windowBounds, err := window.Bounds()
 	if err != nil {
 		log.Printf("read bounds for %s tooltip: %v", name, err)
+		return
+	}
+	a.showNativeHoverTooltipAtBounds(revision, revisionID, name, text, anchor, side, windowBounds, ignoreOwnerLeave)
+}
+
+// showNativeHoverTooltipAtBounds presents one tooltip without holding the state lock across the synchronous UI boundary.
+func (a *App) showNativeHoverTooltipAtBounds(revision *atomic.Uint64, revisionID uint64, name, text string, anchor woxui.Rect, side string, windowBounds woxui.Rect, ignoreOwnerLeave bool) {
+	a.tooltipCallMu.Lock()
+	defer a.tooltipCallMu.Unlock()
+	if revisionID != revision.Load() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -165,6 +178,8 @@ func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64,
 		log.Printf("show %s tooltip: %v", name, err)
 		return
 	}
+	a.tooltipMu.Lock()
+	defer a.tooltipMu.Unlock()
 	if a.nativeHoverTooltipShown == nil {
 		a.nativeHoverTooltipShown = map[string]nativeHoverTooltipIdentity{}
 	}

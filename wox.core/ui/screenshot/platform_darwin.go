@@ -14,6 +14,7 @@ int32_t wox_screenshot_cursor_png(const char *path, float *hotspot_x, float *hot
 import "C"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -23,6 +24,9 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	"wox/util"
+	"wox/util/clipboard"
 )
 
 func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, error) {
@@ -31,9 +35,15 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	var cursorX, cursorY C.float
 	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
 	capturedCursor := captureDarwinCursor()
-	source, sessionHandle, displayID, bounds, selection, cancelled, err := selectDarwinScreenshotRegion()
+	source, sessionHandle, displayID, bounds, selection, copiedColor, cancelled, err := selectDarwinScreenshotRegion()
 	if err != nil {
 		return ScreenshotResult{}, err
+	}
+	if copiedColor != "" {
+		if err := clipboard.WriteText(copiedColor); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to copy screenshot color: %s", err.Error()))
+		}
+		return ScreenshotResult{CopiedColor: copiedColor}, nil
 	}
 	if cancelled {
 		return ScreenshotResult{Cancelled: true}, nil
@@ -148,15 +158,16 @@ func captureDarwinCursor() *screenshotEditorCapturedCursor {
 	}
 }
 
-// selectDarwinScreenshotRegion keeps one cached native image and overlay window per display until the user finishes selecting.
-func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, bool, error) {
+// selectDarwinScreenshotRegion keeps one cached native image and overlay window per display until
+// the user finishes selecting or copies a color from the pre-selection inspector.
+func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, string, bool, error) {
 	file, err := os.CreateTemp("", "wox-screenshot-*.png")
 	if err != nil {
-		return nil, 0, 0, Rect{}, Rect{}, false, fmt.Errorf("create screenshot capture file: %w", err)
+		return nil, 0, 0, Rect{}, Rect{}, "", false, fmt.Errorf("create screenshot capture file: %w", err)
 	}
 	path := file.Name()
 	if err := file.Close(); err != nil {
-		return nil, 0, 0, Rect{}, Rect{}, false, fmt.Errorf("close screenshot capture file: %w", err)
+		return nil, 0, 0, Rect{}, Rect{}, "", false, fmt.Errorf("close screenshot capture file: %w", err)
 	}
 	defer os.Remove(path)
 
@@ -166,6 +177,7 @@ func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, b
 	var displayID C.uint32_t
 	var displayX, displayY, displayWidth, displayHeight C.float
 	var selectionX, selectionY, selectionWidth, selectionHeight C.float
+	var copiedColor *C.char
 	switch result := C.wox_darwin_select_screenshot_region(
 		nativePath,
 		&sessionHandle,
@@ -178,26 +190,34 @@ func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, b
 		&selectionY,
 		&selectionWidth,
 		&selectionHeight,
+		&copiedColor,
 	); result {
 	case 0:
 	case 1:
-		return nil, 0, 0, Rect{}, Rect{}, true, nil
+		return nil, 0, 0, Rect{}, Rect{}, "", true, nil
+	case 2:
+		value := C.GoString(copiedColor)
+		if copiedColor != nil {
+			C.free(unsafe.Pointer(copiedColor))
+		}
+		return nil, 0, 0, Rect{}, Rect{}, value, false, nil
 	case -2:
-		return nil, 0, 0, Rect{}, Rect{}, false, errors.New("screen recording permission is required to capture screenshots")
+		return nil, 0, 0, Rect{}, Rect{}, "", false, errors.New("screen recording permission is required to capture screenshots")
 	default:
-		return nil, 0, 0, Rect{}, Rect{}, false, errors.New("failed to start the macOS screenshot selector")
+		return nil, 0, 0, Rect{}, Rect{}, "", false, errors.New("failed to start the macOS screenshot selector")
 	}
 
 	source, err := decodeDarwinScreenshot(path)
 	if err != nil {
 		C.wox_darwin_dismiss_screenshot_selection(sessionHandle)
-		return nil, 0, 0, Rect{}, Rect{}, false, err
+		return nil, 0, 0, Rect{}, Rect{}, "", false, err
 	}
 	return source,
 		uintptr(sessionHandle),
 		uint32(displayID),
 		Rect{X: float32(displayX), Y: float32(displayY), Width: float32(displayWidth), Height: float32(displayHeight)},
 		Rect{X: float32(selectionX), Y: float32(selectionY), Width: float32(selectionWidth), Height: float32(selectionHeight)},
+		"",
 		false,
 		nil
 }
@@ -233,4 +253,52 @@ func decodeDarwinScreenshot(path string) (image.Image, error) {
 		return nil, fmt.Errorf("decode captured desktop image: %w", err)
 	}
 	return source, nil
+}
+
+// darwinScreenshotPixelAtPoint exposes the native selector's capture mapping for tests.
+func darwinScreenshotPixelAtPoint(imageWidth, imageHeight int, frame Size, point Point) (int, int, bool) {
+	var pixelX, pixelY C.int32_t
+	if C.wox_darwin_test_screenshot_pixel_at_point(
+		C.int32_t(imageWidth),
+		C.int32_t(imageHeight),
+		C.float(frame.Width),
+		C.float(frame.Height),
+		C.float(point.X),
+		C.float(point.Y),
+		&pixelX,
+		&pixelY,
+	) != 0 {
+		return 0, 0, false
+	}
+	return int(pixelX), int(pixelY), true
+}
+
+// darwinScreenshotInspectorRect exposes the native selector's inspector placement for tests.
+func darwinScreenshotInspectorRect(frame Size, pointer Point, panel Size, uiScale float32) Rect {
+	var x, y, width, height C.float
+	if C.wox_darwin_test_screenshot_inspector_rect(
+		C.float(frame.Width),
+		C.float(frame.Height),
+		C.float(pointer.X),
+		C.float(pointer.Y),
+		C.float(panel.Width),
+		C.float(panel.Height),
+		C.float(uiScale),
+		&x,
+		&y,
+		&width,
+		&height,
+	) != 0 {
+		return Rect{}
+	}
+	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}
+}
+
+// darwinScreenshotColorShortcut reports whether a macOS key code copies RGB or HEX like Windows.
+func darwinScreenshotColorShortcut(keyCode uint16) (asHex bool, ok bool) {
+	var hex C.int32_t
+	if C.wox_darwin_test_screenshot_color_shortcut(C.uint16_t(keyCode), &hex) != 0 {
+		return false, false
+	}
+	return hex != 0, true
 }

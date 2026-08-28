@@ -20,7 +20,7 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, float width, float height);
 int32_t wox_darwin_window_get_bounds(WoxDarwinWindow *window, float *x, float *y, float *width, float *height);
 int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path);
-int32_t wox_darwin_select_screenshot_region(const char *path, uintptr_t *session_handle, uint32_t *display_id, float *display_x, float *display_y, float *display_width, float *display_height, float *selection_x, float *selection_y, float *selection_width, float *selection_height);
+int32_t wox_darwin_select_screenshot_region(const char *path, uintptr_t *session_handle, uint32_t *display_id, float *display_x, float *display_y, float *display_width, float *display_height, float *selection_x, float *selection_y, float *selection_width, float *selection_height, char **copied_color);
 void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle);
 uintptr_t wox_darwin_show_screenshot_border(float x, float y, float width, float height, float thickness);
 void wox_darwin_dismiss_screenshot_border(uintptr_t border_handle);
@@ -76,5 +76,8 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
 int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out);
 int32_t wox_darwin_test_cached_image_owns_pixels(void);
 int32_t wox_darwin_test_large_image_admission(void);
+int32_t wox_darwin_test_screenshot_pixel_at_point(int32_t image_width, int32_t image_height, float frame_width, float frame_height, float x, float y, int32_t *pixel_x, int32_t *pixel_y);
+int32_t wox_darwin_test_screenshot_inspector_rect(float frame_width, float frame_height, float pointer_x, float pointer_y, float panel_width, float panel_height, float ui_scale, float *x, float *y, float *width, float *height);
+int32_t wox_darwin_test_screenshot_color_shortcut(uint16_t key_code, int32_t *as_hex);
 
 #endif

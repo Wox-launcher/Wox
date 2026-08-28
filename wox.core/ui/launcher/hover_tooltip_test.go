@@ -1,11 +1,31 @@
 package launcher
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
+
+type reentrantTooltipServices struct {
+	contract.Services
+	app        *App
+	hideCalled chan struct{}
+}
+
+func (s *reentrantTooltipServices) ShowTooltip(_ context.Context, _ string, options contract.TooltipOptions) error {
+	s.app.nativeHoverTooltipNeedsReplace(options.Name, options.Text, woxui.Rect{Width: 1, Height: 1})
+	return nil
+}
+
+func (s *reentrantTooltipServices) HideTooltip(_ context.Context, _ string, name string) error {
+	s.app.nativeHoverTooltipNeedsReplace(name, "next", woxui.Rect{Width: 1, Height: 1})
+	close(s.hideCalled)
+	return nil
+}
 
 func TestNativeHoverTooltipIgnoresOwnerPointerLeave(t *testing.T) {
 	anchor := woxui.Rect{X: 10, Y: 20, Width: 80, Height: 26}
@@ -79,5 +99,34 @@ func TestWaitHoverTooltipDelayCompletesForCurrentRevision(t *testing.T) {
 	revisionID := revision.Add(1)
 	if !app.waitHoverTooltipDelay(&revision, revisionID) {
 		t.Fatal("an uncancelled dwell must show after the shared delay")
+	}
+}
+
+func TestNativeHoverTooltipServiceCallsAllowReentrantStateAccess(t *testing.T) {
+	services := &reentrantTooltipServices{hideCalled: make(chan struct{})}
+	app := &App{lifecycleCtx: t.Context(), services: services}
+	services.app = app
+
+	var revision atomic.Uint64
+	revisionID := revision.Add(1)
+	showDone := make(chan struct{})
+	go func() {
+		app.showNativeHoverTooltipAtBounds(
+			&revision, revisionID, "tooltip", "Help", woxui.Rect{Width: 20, Height: 20}, "top",
+			woxui.Rect{X: 100, Y: 100, Width: 400, Height: 300}, false,
+		)
+		close(showDone)
+	}()
+	select {
+	case <-showDone:
+	case <-time.After(time.Second):
+		t.Fatal("show tooltip deadlocked during reentrant state access")
+	}
+
+	app.hideNativeHoverTooltip("tooltip", "hide tooltip in test")
+	select {
+	case <-services.hideCalled:
+	case <-time.After(time.Second):
+		t.Fatal("hide tooltip deadlocked during reentrant state access")
 	}
 }

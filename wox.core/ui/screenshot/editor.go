@@ -844,6 +844,9 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 const (
 	screenshotEditorInspectorColumns = 17
 	screenshotEditorInspectorRows    = 9
+	// Extra chrome width keeps 3-digit RGB values from colliding with the G/H shortcut badges.
+	screenshotEditorInspectorInfoExtraWidth = 24
+	screenshotEditorInspectorValueBadgeGap  = 8
 )
 
 // drawScreenshotEditorColorInspector shows the exact captured pixel under the pointer and its surrounding pixels.
@@ -857,8 +860,9 @@ func drawScreenshotEditorColorInspector(displayList *DisplayList, source *Image,
 	cellSize := scaled(12)
 	previewWidth := cellSize * screenshotEditorInspectorColumns
 	previewHeight := cellSize * screenshotEditorInspectorRows
-	panelSize := Size{Width: previewWidth, Height: previewHeight + scaled(104)}
+	panelSize := Size{Width: previewWidth + scaled(screenshotEditorInspectorInfoExtraWidth), Height: previewHeight + scaled(104)}
 	panel := screenshotEditorInspectorRect(frame, pointer, panelSize, uiScale)
+	gridX := panel.X + (panel.Width-previewWidth)/2
 
 	displayList.FillRoundedRect(panel, scaled(10), Color{R: 20, G: 18, B: 17, A: 248})
 	halfColumns := screenshotEditorInspectorColumns / 2
@@ -870,7 +874,7 @@ func drawScreenshotEditorColorInspector(displayList *DisplayList, source *Image,
 			sampleY := min(max(0, pixelY+row-halfRows), source.Height-1)
 			sample := source.RGBAAt(sampleX, sampleY)
 			cell := Rect{
-				X:      panel.X + float32(column)*cellSize,
+				X:      gridX + float32(column)*cellSize,
 				Y:      panel.Y + float32(row)*cellSize,
 				Width:  cellSize,
 				Height: cellSize,
@@ -880,7 +884,7 @@ func drawScreenshotEditorColorInspector(displayList *DisplayList, source *Image,
 		}
 	}
 	center := Rect{
-		X:      panel.X + float32(halfColumns)*cellSize,
+		X:      gridX + float32(halfColumns)*cellSize,
 		Y:      panel.Y + float32(halfRows)*cellSize,
 		Width:  cellSize,
 		Height: cellSize,
@@ -907,7 +911,7 @@ func drawScreenshotEditorColorInspector(displayList *DisplayList, source *Image,
 		badge := Rect{X: panel.X + panel.Width - scaled(30), Y: top, Width: scaled(18), Height: scaled(18)}
 		valueLeft := labelLeft + scaled(32)
 		displayList.DrawText(label, Rect{X: labelLeft, Y: top + scaled(1), Width: scaled(28), Height: scaled(18)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, secondaryTextColor)
-		displayList.DrawText(value, Rect{X: valueLeft, Y: top + scaled(1), Width: badge.X - valueLeft - scaled(4), Height: scaled(18)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, textColor)
+		displayList.DrawText(value, Rect{X: valueLeft, Y: top + scaled(1), Width: badge.X - valueLeft - scaled(screenshotEditorInspectorValueBadgeGap), Height: scaled(18)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, textColor)
 		displayList.FillRoundedRect(badge, scaled(5), Color{R: 255, G: 255, B: 255, A: 25})
 		displayList.DrawText(shortcut, Rect{X: badge.X + scaled(5), Y: badge.Y + scaled(1), Width: scaled(8), Height: scaled(16)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, secondaryTextColor)
 	}

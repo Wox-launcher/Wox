@@ -37,10 +37,12 @@ const (
 // App owns one launcher window and its typed core service boundary.
 type App struct {
 	// These narrow locks protect the few resources intentionally accessed outside the UI thread.
-	translationsMu          sync.RWMutex
-	terminalSubscriptionMu  sync.Mutex
-	unsubscribersMu         sync.Mutex
-	tooltipMu               sync.Mutex
+	translationsMu         sync.RWMutex
+	terminalSubscriptionMu sync.Mutex
+	unsubscribersMu        sync.Mutex
+	tooltipMu              sync.Mutex
+	// tooltipCallMu serializes blocking native tooltip calls without blocking reentrant UI state callbacks.
+	tooltipCallMu           sync.Mutex
 	nativeHoverTooltipShown map[string]nativeHoverTooltipIdentity
 	terminalSubscribed      string
 	terminalDesired         atomic.Value
