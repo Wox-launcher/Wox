@@ -15,3 +15,11 @@ func windowsPlatformVariantForBuildNumber(buildNumber uint32) string {
 	}
 	return ""
 }
+
+// linuxPlatformVariantForSession maps Linux desktop session facts to theme variant names.
+func linuxPlatformVariantForSession(hyprland bool) string {
+	if hyprland {
+		return "hyprland"
+	}
+	return ""
+}

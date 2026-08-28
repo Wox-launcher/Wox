@@ -23,3 +23,12 @@ func TestWindowsPlatformVariantForBuildNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestLinuxPlatformVariantForSession(t *testing.T) {
+	if got := linuxPlatformVariantForSession(true); got != "hyprland" {
+		t.Fatalf("linuxPlatformVariantForSession(true) = %q, want hyprland", got)
+	}
+	if got := linuxPlatformVariantForSession(false); got != "" {
+		t.Fatalf("linuxPlatformVariantForSession(false) = %q, want empty", got)
+	}
+}

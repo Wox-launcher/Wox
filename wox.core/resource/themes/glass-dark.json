@@ -64,5 +64,12 @@
         "AppBackgroundColor": "#12121663"
       }
     }
+  },
+  "linux": {
+    "variants": {
+      "hyprland": {
+        "AppBackgroundColor": "rgba(22, 22, 26, 0.98)"
+      }
+    }
   }
 }

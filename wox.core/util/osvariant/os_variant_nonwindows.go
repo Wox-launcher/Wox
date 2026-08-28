@@ -1,8 +1,8 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package osvariant
 
-// GetCurrentPlatformVariant returns an empty variant until non-Windows platforms define stable theme variants.
+// GetCurrentPlatformVariant returns an empty variant until this platform defines stable theme variants.
 func GetCurrentPlatformVariant() string {
 	return ""
 }

@@ -65,6 +65,30 @@ func TestResolvePlatformThemeForTargetFallsBackToPlatformWhenVariantMissing(t *t
 	}
 }
 
+func TestResolvePlatformThemeForTargetAppliesLinuxHyprlandVariant(t *testing.T) {
+	theme := common.Theme{
+		ThemeId:            "variant-theme",
+		AppBackgroundColor: "rgba(35, 41, 51, 0.75)",
+		Linux: &common.ThemePlatformOverride{
+			"variants": json.RawMessage(`{
+				"hyprland": {
+					"AppBackgroundColor": "rgba(35, 41, 51, 0.98)"
+				}
+			}`),
+		},
+	}
+
+	hyprlandTheme := resolvePlatformThemeForTarget(context.Background(), theme, "linux", "hyprland")
+	if hyprlandTheme.AppBackgroundColor != "rgba(35, 41, 51, 0.98)" {
+		t.Fatalf("hyprland AppBackgroundColor = %q, want 98%% wash", hyprlandTheme.AppBackgroundColor)
+	}
+
+	otherLinuxTheme := resolvePlatformThemeForTarget(context.Background(), theme, "linux", "")
+	if otherLinuxTheme.AppBackgroundColor != "rgba(35, 41, 51, 0.75)" {
+		t.Fatalf("other linux AppBackgroundColor = %q, want the shared wash", otherLinuxTheme.AppBackgroundColor)
+	}
+}
+
 func TestResolvePlatformThemeForTargetKeepsLegacyPlatformOverride(t *testing.T) {
 	theme := common.Theme{
 		ThemeId:                "variant-theme",
