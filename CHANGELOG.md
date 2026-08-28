@@ -4,23 +4,24 @@
 
 This release adds built-in floating Notes so you can capture text, tables, and images in dedicated windows, search and pin them from the launcher, and save selections from Clipboard, Screenshot, and other plugins.
 
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/note.png)
+
+
 - Add
   - [`Notes`] Add built-in floating notes for quick capture without leaving your workflow: create and search notes from the launcher, edit rich text with tables and image attachments in dedicated windows, pin notes (including across macOS Spaces), restore recent notes, export Markdown, text, or HTML, sync note text with Cloud Sync while keeping images on the device, and save text, files, or images to Notes from Clipboard, Explorer, File Search, Screenshot, Selection, and Shell.
-
-    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/note.png)
 
 - Improve
   - [`Launcher`] Support running visible results with Alt (Windows/Linux) or Command (macOS) plus 1–9, keep toolbar shortcuts visible beside long plugin messages, and show tooltips on result tails #4513
   - [`App`] Support uninstalling Windows apps, including UWP packages, from launcher results
   - [`Glance`] Enable Glance by default so live information such as the current time appears beside the query box
   - [`Onboarding`] Move first-run setup into an independent window that stays available when the launcher hides, let users apply a query hotkey, starter plugin, and theme before starting Wox, and complete the macOS permission flow more reliably
-  - [`File Search`] Support absolute folder paths in ignore patterns #4518 and show index size, entry counts, and last index duration in settings
+  - [`File Search`] Support absolute folder paths in ignore patterns and show index size, entry counts, and last index duration in settings #4518
   - [`Screenshot`] Improve the editor with typed pixel width and height (click the size chip or press S), lock-ratio and swap, a more readable color inspector that copies the selected color on macOS, and JPEG export that keeps native pixels
   - [`Shell`] Support default and per-command working directories (home, last used, or custom) with a directory picker
   - [`Linux`] Support compositor background blur via `ext-background-effect-v1`, Hyprland-specific dark and light theme variants, overlay HUDs above the launcher, and layer-shell window dragging
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/linux_ext-background-effect-v1.png)
   - [`Theme`] Unify window material across Windows acrylic, macOS vibrancy, and Linux blur, and keep overlay chrome readable over native backdrop
-  - [`Preview`] Improve preview-tag scrolling, image zoom and pan, and auto-link issue references such as `#123` in update-preview Markdown
+  - [`Preview`] Improve preview-tag scrolling, image zoom and pan, and auto-link issue references in update-preview Markdown
   - [`Hotkey`] Surface main hotkey registration failures in settings and onboarding
   - [`Updater`] Clean up stale Windows update backup files
   - [`Plugin`] Time out hung plugin downloads
