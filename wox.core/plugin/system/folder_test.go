@@ -75,6 +75,33 @@ func TestFolderBrowseCommandRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestFolderQueryCompletesHomePathPrefix(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	projectsPath := filepath.Join(homeDir, "Projects")
+	if err := os.Mkdir(projectsPath, 0o755); err != nil {
+		t.Fatalf("create Projects folder: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(homeDir, "Documents"), 0o755); err != nil {
+		t.Fatalf("create Documents folder: %v", err)
+	}
+
+	response := (&FolderPlugin{}).Query(t.Context(), plugin.Query{
+		Type:   plugin.QueryTypeInput,
+		Search: "~/Proj",
+	})
+
+	if len(response.Results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(response.Results))
+	}
+	if response.Results[0].Title != "Projects" || response.Results[0].SubTitle != projectsPath {
+		t.Fatalf("result = %#v, want Projects at %q", response.Results[0], projectsPath)
+	}
+	if response.Results[0].Score != folderResultScore {
+		t.Fatalf("result score = %d, want %d", response.Results[0].Score, folderResultScore)
+	}
+}
+
 // assertFolderActionIDs verifies the ordered action contract exposed to the launcher.
 func assertFolderActionIDs(t *testing.T, actions []plugin.QueryResultAction, expected []string) {
 	t.Helper()

@@ -203,11 +203,18 @@ func (p *FolderPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 
 	info, statErr := os.Stat(folderPath)
 	if statErr != nil || !info.IsDir() {
+		parentPath := filepath.Dir(folderPath)
+		namePrefix := filepath.Base(folderPath)
+		if parentInfo, parentStatErr := os.Stat(parentPath); parentStatErr == nil && parentInfo.IsDir() {
+			if results := p.queryChildren(ctx, parentPath, namePrefix); len(results) > 0 {
+				return plugin.NewQueryResponse(results)
+			}
+		}
 		return plugin.NewQueryResponse(p.queryFavorites(ctx, query.Search))
 	}
 
 	if shouldListChildren {
-		return plugin.NewQueryResponse(p.queryChildren(ctx, folderPath))
+		return plugin.NewQueryResponse(p.queryChildren(ctx, folderPath, ""))
 	}
 
 	favoriteMatch := p.findFavoriteByPath(ctx, folderPath, p.loadFavorites(ctx))
@@ -248,8 +255,8 @@ func (p *FolderPlugin) queryFavorites(ctx context.Context, search string) []plug
 	return results
 }
 
-// queryChildren lists one folder level so path browsing stays local and predictable.
-func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string) []plugin.QueryResult {
+// queryChildren lists one folder level and optionally filters entries for path completion.
+func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, namePrefix string) []plugin.QueryResult {
 	entries, readErr := os.ReadDir(folderPath)
 	if readErr != nil {
 		if p.api != nil {
@@ -274,8 +281,12 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string) []p
 	results := make([]plugin.QueryResult, 0, len(entries))
 	showHiddenFiles := p.showHiddenFiles.Load()
 	favorites := p.loadFavorites(ctx)
+	namePrefixLower := strings.ToLower(namePrefix)
 	for _, entry := range entries {
 		if !showHiddenFiles && isHiddenFolderEntry(entry) {
+			continue
+		}
+		if namePrefixLower != "" && !strings.HasPrefix(strings.ToLower(entry.Name()), namePrefixLower) {
 			continue
 		}
 
@@ -284,7 +295,11 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string) []p
 		if entry.IsDir() {
 			favoriteMatch = p.findFavoriteByPath(ctx, fullPath, favorites)
 		}
-		results = append(results, p.buildPathResult(fullPath, entry.Name(), entry.IsDir(), 0, favoriteMatch))
+		score := int64(0)
+		if namePrefixLower != "" {
+			score = folderResultScore
+		}
+		results = append(results, p.buildPathResult(fullPath, entry.Name(), entry.IsDir(), score, favoriteMatch))
 	}
 	return results
 }
