@@ -78,6 +78,7 @@ func TestFolderBrowseCommandRejectsUnknownCommand(t *testing.T) {
 func TestFolderQueryCompletesHomePathPrefix(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	projectsPath := filepath.Join(homeDir, "Projects")
 	if err := os.Mkdir(projectsPath, 0o755); err != nil {
 		t.Fatalf("create Projects folder: %v", err)
@@ -99,6 +100,23 @@ func TestFolderQueryCompletesHomePathPrefix(t *testing.T) {
 	}
 	if response.Results[0].Score != folderResultScore {
 		t.Fatalf("result score = %d, want %d", response.Results[0].Score, folderResultScore)
+	}
+}
+
+func TestFolderQueryFuzzyMatchesChildName(t *testing.T) {
+	root := t.TempDir()
+	woxVideoPath := filepath.Join(root, "wox.video")
+	if err := os.Mkdir(woxVideoPath, 0o755); err != nil {
+		t.Fatalf("create wox.video folder: %v", err)
+	}
+
+	response := (&FolderPlugin{}).Query(t.Context(), plugin.Query{
+		Type:   plugin.QueryTypeInput,
+		Search: filepath.Join(root, "video"),
+	})
+
+	if len(response.Results) != 1 || response.Results[0].SubTitle != woxVideoPath {
+		t.Fatalf("results = %#v, want wox.video at %q", response.Results, woxVideoPath)
 	}
 }
 

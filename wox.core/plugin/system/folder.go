@@ -281,12 +281,11 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, nam
 	results := make([]plugin.QueryResult, 0, len(entries))
 	showHiddenFiles := p.showHiddenFiles.Load()
 	favorites := p.loadFavorites(ctx)
-	namePrefixLower := strings.ToLower(namePrefix)
 	for _, entry := range entries {
 		if !showHiddenFiles && isHiddenFolderEntry(entry) {
 			continue
 		}
-		if namePrefixLower != "" && !strings.HasPrefix(strings.ToLower(entry.Name()), namePrefixLower) {
+		if namePrefix != "" && !plugin.IsStringMatchNoPinYin(ctx, entry.Name(), namePrefix) {
 			continue
 		}
 
@@ -296,7 +295,7 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, nam
 			favoriteMatch = p.findFavoriteByPath(ctx, fullPath, favorites)
 		}
 		score := int64(0)
-		if namePrefixLower != "" {
+		if namePrefix != "" {
 			score = folderResultScore
 		}
 		results = append(results, p.buildPathResult(fullPath, entry.Name(), entry.IsDir(), score, favoriteMatch))
