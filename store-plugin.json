@@ -931,5 +931,28 @@
     ],
     "DateCreated": "2026-07-25 02:10:59",
     "DateUpdated": "2026-07-25 21:17:02"
+  },
+  {
+    "Id": "d30c9661-fa55-4ea6-b6f1-bc61e7aa8586",
+    "Name": "need",
+    "Author": "zed",
+    "Version": "0.2.0",
+    "MinWoxVersion": "2.0.4",
+    "Runtime": "nodejs",
+    "Description": "Store and quickly retrieve local key-value notes",
+    "IconEmoji": "📌",
+    "Website": "https://github.com/zzedbot/wox-plugin-need",
+    "DownloadUrl": "https://github.com/zzedbot/wox-plugin-need/releases/latest/download/wox.plugin.need.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/zzedbot/wox-plugin-need/main/screenshots/createkey.png",
+      "https://raw.githubusercontent.com/zzedbot/wox-plugin-need/main/screenshots/searchkey.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-08-28 21:27:52",
+    "DateUpdated": "2026-08-29 10:51:00"
   }
 ]
