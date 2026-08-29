@@ -954,5 +954,37 @@
     ],
     "DateCreated": "2026-08-28 21:27:52",
     "DateUpdated": "2026-08-29 10:51:00"
+  },
+  {
+    "Id": "5e693e9d-4683-4982-8929-d4ea5e364c5b",
+    "Name": "i18n:plugin_name",
+    "Author": "zzedbot",
+    "Version": "0.5.0",
+    "MinWoxVersion": "2.0.4",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/zzedbot/wox-plugin-nextcloud-password/main/icon.svg",
+    "Website": "https://github.com/zzedbot/wox-plugin-nextcloud-password",
+    "DownloadUrl": "https://github.com/zzedbot/wox-plugin-nextcloud-password/releases/latest/download/wox.plugin.NextcloudPasswords.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/zzedbot/wox-plugin-nextcloud-password/main/preview.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-08-29 10:22:22",
+    "DateUpdated": "2026-08-29 10:22:22",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Nextcloud Passwords",
+        "plugin_description": "Search, inspect, copy, and update passwords stored in Nextcloud Passwords"
+      },
+      "zh_CN": {
+        "plugin_name": "Nextcloud 密码",
+        "plugin_description": "搜索、查看、复制和修改 Nextcloud Passwords 中保存的密码"
+      }
+    }
   }
 ]
