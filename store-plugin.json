@@ -943,6 +943,10 @@
     "IconEmoji": "📌",
     "Website": "https://github.com/zzedbot/wox-plugin-need",
     "DownloadUrl": "https://github.com/zzedbot/wox-plugin-need/releases/latest/download/wox.plugin.need.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/zzedbot/wox-plugin-need/main/screenshots/createkey.png",
+      "https://raw.githubusercontent.com/zzedbot/wox-plugin-need/main/screenshots/searchkey.png"
+    ],
     "SupportedOS": [
       "Windows",
       "Darwin",
