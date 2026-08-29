@@ -507,6 +507,7 @@ class ResultAction:
 
     Attributes:
         name: Display name of the action
+        search_aliases: Additional terms that can find the action
         action: Callback function for EXECUTE type actions
         id: Unique identifier for this action
         type: Action type (EXECUTE or FORM)
@@ -659,6 +660,13 @@ class ResultAction:
         context_data={"file_id": "123", "operation": "delete"}
     """
 
+    search_aliases: List[str] = field(default_factory=list)
+    """
+    Additional terms that can find this action in the action panel.
+
+    Wox automatically includes the English translation of name when available.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -671,6 +679,7 @@ class ResultAction:
         """
         data: Dict[str, Any] = {
             "Name": self.name,
+            "SearchAliases": self.search_aliases,
             "Id": self.id,
             "Type": self.type,
             "IsDefault": self.is_default,
@@ -715,6 +724,7 @@ class ResultAction:
 
         return cls(
             name=data.get("Name", ""),
+            search_aliases=data.get("SearchAliases", []) or [],
             id=data.get("Id", ""),
             type=action_type,
             form=form,

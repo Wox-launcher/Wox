@@ -234,6 +234,7 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 		ID:                     action.Id,
 		Type:                   action.Type,
 		Name:                   action.Name,
+		SearchAliases:          append([]string(nil), action.SearchAliases...),
 		Icon:                   fromCoreImage(action.Icon),
 		IsDefault:              action.IsDefault,
 		PreventHideAfterAction: action.PreventHideAfterAction,

@@ -1731,6 +1731,7 @@ func (m *Manager) newOpenPluginSettingAction(ctx context.Context, pluginInstance
 	return QueryResultAction{
 		Id:                     systemActionOpenPluginSettingID,
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.GetName(ctx)),
+		SearchAliases:          []string{fmt.Sprintf(i18n.GetI18nManager().TranslateWoxEnUs(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.Metadata.GetNameEn(ctx))},
 		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
@@ -2803,6 +2804,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	translationActionTimingStart := time.Now()
 	// translate action names
 	for actionIndex := range result.Actions {
+		result.Actions[actionIndex].SearchAliases = appendActionEnglishAlias(ctx, pluginInstance, result.Actions[actionIndex].Name, result.Actions[actionIndex].SearchAliases)
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
 		if result.Actions[actionIndex].Type == QueryResultActionTypeForm {
 			for definitionIndex := range result.Actions[actionIndex].Form {
@@ -3254,6 +3256,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 		// Translate action names
 		for actionIndex := range actions {
+			actions[actionIndex].SearchAliases = appendActionEnglishAlias(ctx, pluginInstance, actions[actionIndex].Name, actions[actionIndex].SearchAliases)
 			actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, actions[actionIndex].Name)
 			if actions[actionIndex].Type == QueryResultActionTypeForm {
 				for definitionIndex := range actions[actionIndex].Form {
@@ -3266,9 +3269,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 		result.Actions = &actions
 
-		// Update cache: merge new actions with cached actions to preserve callbacks
-		// When updating actions, we need to preserve the Action callbacks from cache
-		// because callbacks cannot be serialized and may be nil in the updated actions
+		// Merge callbacks that cannot round-trip through plugin hosts.
 		for i := range actions {
 			// Find matching action in cache by ID
 			var cachedAction *QueryResultAction
@@ -3279,7 +3280,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				}
 			}
 
-			// If action callback is nil in the new action but exists in cache, preserve it
+			// Preserve callbacks when a host returns only UI-safe fields.
 			if cachedAction != nil {
 				if actions[i].Action == nil && cachedAction.Action != nil {
 					actions[i].Action = cachedAction.Action
@@ -3952,6 +3953,18 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 	}
 
 	return pluginInstance.Metadata.translate(ctx, common.I18nString(key))
+}
+
+// appendActionEnglishAlias makes the default English translation searchable without plugin boilerplate.
+func appendActionEnglishAlias(ctx context.Context, pluginInstance *Instance, name string, aliases []string) []string {
+	if !strings.HasPrefix(name, "i18n:") {
+		return aliases
+	}
+	englishName := pluginInstance.Metadata.translateEn(ctx, common.I18nString(name))
+	if englishName == name || lo.Contains(aliases, englishName) {
+		return aliases
+	}
+	return append(aliases, englishName)
 }
 
 func (m *Manager) GetUI() common.UI {

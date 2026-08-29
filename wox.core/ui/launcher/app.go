@@ -1825,6 +1825,7 @@ type resultAction struct {
 	ID                     string           `json:"Id"`
 	Type                   string           `json:"Type"`
 	Name                   string           `json:"Name"`
+	SearchAliases          []string         `json:"SearchAliases"`
 	Icon                   woxImage         `json:"Icon"`
 	IsDefault              bool             `json:"IsDefault"`
 	PreventHideAfterAction bool             `json:"PreventHideAfterAction"`

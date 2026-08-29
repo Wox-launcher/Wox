@@ -398,6 +398,7 @@ func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StoreP
 func (i *IndicatorPlugin) createOpenPluginSettingsAction(ctx context.Context, pluginInstance *plugin.Instance, pluginName string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_open_plugin_settings"), pluginName),
+		SearchAliases:          []string{fmt.Sprintf(i18n.GetI18nManager().TranslateWoxEnUs(ctx, "plugin_indicator_open_plugin_settings"), pluginInstance.Metadata.GetNameEn(ctx))},
 		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {

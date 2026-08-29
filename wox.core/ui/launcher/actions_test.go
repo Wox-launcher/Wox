@@ -106,6 +106,19 @@ func TestOnActionKeyIgnoresKeyUp(t *testing.T) {
 	}
 }
 
+func TestFilteredActionIndicesMatchNameAndAliases(t *testing.T) {
+	actions := []actionPanelEntry{{Name: "复制路径", SearchAliases: []string{"Copy Path", "文件地址"}}}
+	if matches := filteredActionIndices(actions, "复制", nil, true); len(matches) != 1 {
+		t.Fatalf("localized action matches = %v, want [0]", matches)
+	}
+	if matches := filteredActionIndices(actions, "copy", nil, true); len(matches) != 1 {
+		t.Fatalf("English action matches = %v, want [0]", matches)
+	}
+	if matches := filteredActionIndices(actions, "文件地址", nil, true); len(matches) != 1 {
+		t.Fatalf("custom alias matches = %v, want [0]", matches)
+	}
+}
+
 func TestOnResultActionHotkeyHandlesClosedPanel(t *testing.T) {
 	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Type: "local", Hotkey: "cmd+d"}}}}}
 	if !app.onResultActionHotkey(woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta, Down: true}) {

@@ -37,6 +37,7 @@ type actionPanelEntry struct {
 	Key                  string
 	ID                   string
 	Name                 string
+	SearchAliases        []string
 	Icon                 woxImage
 	Hotkey               string
 	IsDefault            bool
@@ -140,7 +141,7 @@ func unifiedActionPanelEntries(results []queryResult, selected int, message *too
 		}
 		entries = append(entries, actionPanelEntry{
 			Key: fmt.Sprintf("result:%s:%s:%d", result.ID, action.ID, index), ID: fmt.Sprintf("result-%s-%d", action.ID, index),
-			Name: action.Name, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
+			Name: action.Name, SearchAliases: action.SearchAliases, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
 			ResultIndex: selected, ActionIndex: index,
 		})
 	}
@@ -409,7 +410,11 @@ func filteredActionIndices(actions []actionPanelEntry, query string, translation
 	indices := make([]int, 0, len(actions))
 	for index, action := range actions {
 		label := translatedActionLabel(action.Name, translations)
-		if query == "" || util.IsStringMatch(label, query, usePinYin) {
+		matched := query == "" || util.IsStringMatch(label, query, usePinYin)
+		for _, alias := range action.SearchAliases {
+			matched = matched || util.IsStringMatch(alias, query, usePinYin)
+		}
+		if matched {
 			indices = append(indices, index)
 		}
 	}

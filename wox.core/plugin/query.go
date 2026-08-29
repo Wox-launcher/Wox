@@ -321,7 +321,9 @@ type QueryResultAction struct {
 	Type QueryResultActionType
 	// Name support i18n
 	Name string
-	Icon common.WoxImage
+	// SearchAliases are additional terms that can find this action in the action panel
+	SearchAliases []string
+	Icon          common.WoxImage
 	// If true, Wox will use this action as default action. There can be only one default action in results
 	// This can be omitted, if you don't set it, Wox will use the first action as default action
 	IsDefault bool
@@ -387,6 +389,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				Id:                     action.Id,
 				Type:                   actionType,
 				Name:                   action.Name,
+				SearchAliases:          append([]string(nil), action.SearchAliases...),
 				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
@@ -447,6 +450,7 @@ type QueryResultActionUI struct {
 	Id                     string
 	Type                   QueryResultActionType
 	Name                   string
+	SearchAliases          []string
 	Icon                   common.WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool

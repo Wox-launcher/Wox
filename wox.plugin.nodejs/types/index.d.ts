@@ -825,6 +825,13 @@ export interface ExecuteResultAction {
   Name: string
 
   /**
+   * Additional terms that can find this action in the action panel.
+   *
+   * Wox automatically includes the English translation of Name when available.
+   */
+  SearchAliases?: string[]
+
+  /**
    * Icon displayed next to the action name.
    */
   Icon?: WoxImage
@@ -931,6 +938,13 @@ export interface FormResultAction {
    * Display name for the action.
    */
   Name: string
+
+  /**
+   * Additional terms that can find this action in the action panel.
+   *
+   * Wox automatically includes the English translation of Name when available.
+   */
+  SearchAliases?: string[]
 
   /**
    * Icon displayed next to the action name.

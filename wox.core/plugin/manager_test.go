@@ -126,6 +126,21 @@ func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 	assert.Equal(t, pluginIcon, normalized.Icon)
 }
 
+func TestAppendActionEnglishAliasPreservesCustomAliases(t *testing.T) {
+	pluginInstance := &Instance{Metadata: Metadata{I18n: map[string]map[string]string{
+		"en_US": {"copy_path": "Copy Path"},
+	}}}
+	aliases := appendActionEnglishAlias(context.Background(), pluginInstance, "i18n:copy_path", []string{"文件地址"})
+	assert.Equal(t, []string{"文件地址", "Copy Path"}, aliases)
+	assert.Equal(t, aliases, appendActionEnglishAlias(context.Background(), pluginInstance, "i18n:copy_path", aliases))
+}
+
+func TestOpenPluginSettingActionIncludesEnglishAlias(t *testing.T) {
+	pluginInstance := &Instance{Metadata: Metadata{Name: "System Command"}}
+	action := (&Manager{}).newOpenPluginSettingAction(context.Background(), pluginInstance)
+	assert.Equal(t, []string{"Open System Command settings"}, action.SearchAliases)
+}
+
 func TestConvertActionIconsReusesConvertedSource(t *testing.T) {
 	icon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>`)
 	cache := make(map[common.WoxImage]common.WoxImage)

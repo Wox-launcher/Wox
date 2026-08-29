@@ -194,6 +194,7 @@ func (m *Manager) newTriggerKeywordConflictOpenPluginSettingAction(ctx context.C
 	return QueryResultAction{
 		Id:                     fmt.Sprintf("%s_%s", systemActionOpenPluginSettingID, pluginInstance.Metadata.Id),
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.GetName(ctx)),
+		SearchAliases:          []string{fmt.Sprintf(i18n.GetI18nManager().TranslateWoxEnUs(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.Metadata.GetNameEn(ctx))},
 		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,

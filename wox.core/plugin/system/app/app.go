@@ -2122,8 +2122,9 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 				// Capture current Pid for the closure
 				currentAppPid := appInfo.Pid
 				actions = append(actions, plugin.QueryResultAction{
-					Name: "i18n:plugin_app_terminate",
-					Icon: common.TerminateAppIcon,
+					Name:          "i18n:plugin_app_terminate",
+					SearchAliases: []string{"kill"},
+					Icon:          common.TerminateAppIcon,
 					ContextData: common.ContextData{
 						"name":   appInfo.Name,
 						"path":   appInfo.Path,
