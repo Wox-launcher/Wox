@@ -1337,19 +1337,8 @@ func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	services := &notesWindowTestServices{local: map[string]string{}}
 	app := &App{services: services, palette: defaultPalette()}
 	controller := newNotesWindowController(app, common.NoteRecord{ID: "note"})
-	if controller.windowPinned {
-		t.Fatal("new notes must start unpinned")
-	}
-	controller.toggleWindowPin()
 	if !controller.windowPinned {
-		t.Fatal("toggle did not pin the window")
-	}
-	if services.local["windowPinned:note"] != "1" {
-		t.Fatalf("window pin preference = %#v", services.local)
-	}
-	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
-	if !reopened.windowPinned {
-		t.Fatal("reopened note lost window pin")
+		t.Fatal("new notes must start pinned")
 	}
 	controller.toggleWindowPin()
 	if controller.windowPinned {
@@ -1357,6 +1346,17 @@ func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	}
 	if services.local["windowPinned:note"] != "0" {
 		t.Fatalf("window unpin preference = %#v", services.local)
+	}
+	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	if reopened.windowPinned {
+		t.Fatal("reopened note lost window unpin preference")
+	}
+	controller.toggleWindowPin()
+	if !controller.windowPinned {
+		t.Fatal("toggle did not pin the window")
+	}
+	if services.local["windowPinned:note"] != "1" {
+		t.Fatalf("window pin preference = %#v", services.local)
 	}
 }
 

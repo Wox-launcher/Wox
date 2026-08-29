@@ -2210,12 +2210,13 @@ func (c *notesWindowController) setZoom(value float32) {
 	c.invalidate()
 }
 
-// readWindowPinned loads the per-note always-on-top preference. Missing values stay unpinned.
+// readWindowPinned loads the per-note always-on-top preference. New notes default to pinned.
 func (c *notesWindowController) readWindowPinned() bool {
 	if c == nil || c.app == nil || c.app.services == nil || c.record.ID == "" {
 		return false
 	}
-	return c.localPreference("windowPinned") == "1"
+	value := c.localPreference("windowPinned")
+	return value == "" || value == "1"
 }
 
 // applyWindowTopmost mirrors the persisted pin onto the live native window.
