@@ -1206,6 +1206,22 @@ func (s *ShellPlugin) buildGlobalCommandTails(ctx context.Context, interpreter s
 	return tails
 }
 
+// buildHistoryTails marks active commands without adding noise to completed history rows.
+func (s *ShellPlugin) buildHistoryTails(ctx context.Context, status string) []plugin.QueryResultTail {
+	if status != "running" {
+		return nil
+	}
+	size := 10.0
+
+	return []plugin.QueryResultTail{{
+		Type:        plugin.QueryResultTailTypeImage,
+		Image:       common.RunningIcon,
+		ImageWidth:  &size,
+		ImageHeight: &size,
+		Tooltip:     s.statusText(ctx, status),
+	}}
+}
+
 func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, triggerKeyword string) []plugin.QueryResult {
 	if s.historyManager == nil {
 		return nil
@@ -1343,6 +1359,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 			Title:      title,
 			SubTitle:   subTitle,
 			Icon:       shellIcon,
+			Tails:      s.buildHistoryTails(ctx, history.Status),
 			Score:      s.getHistoryResultScore(history.StartTime),
 			Group:      group,
 			GroupScore: groupScore,
@@ -1730,12 +1747,14 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 			PreviewTags:    s.buildShellPreviewTags(ctx, data),
 			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 		}
+		tails := s.buildHistoryTails(ctx, status)
 
 		updatable := plugin.UpdatableResult{
 			Id:       resultId,
 			Title:    &title,
 			SubTitle: &subTitle,
 			Preview:  &preview,
+			Tails:    &tails,
 		}
 
 		currentResult := s.api.GetUpdatableResult(ctx, resultId)

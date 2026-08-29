@@ -7,7 +7,7 @@ import (
 )
 
 func TestStaticActivityIconsRenderAsSVG(t *testing.T) {
-	for name, icon := range map[string]WoxImage{"media playing": MediaPlayingIcon, "loading": LoadingIcon} {
+	for name, icon := range map[string]WoxImage{"media playing": MediaPlayingIcon, "running": RunningIcon, "loading": LoadingIcon} {
 		if icon.ImageType != WoxImageTypeSvg {
 			t.Fatalf("%s icon type = %q, want svg", name, icon.ImageType)
 		}

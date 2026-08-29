@@ -66,6 +66,20 @@ func TestBuildEmptyCommandResultSurfacesWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestBuildHistoryTailsMarksOnlyRunningCommands(t *testing.T) {
+	shellPlugin := &ShellPlugin{}
+	tails := shellPlugin.buildHistoryTails(context.Background(), "running")
+	if len(tails) != 1 || tails[0].Type != plugin.QueryResultTailTypeImage || tails[0].Image != common.RunningIcon || tails[0].Tooltip == "" {
+		t.Fatalf("running tails = %#v, want one labeled running dot", tails)
+	}
+	if tails[0].ImageWidth == nil || *tails[0].ImageWidth != 10 || tails[0].ImageHeight == nil || *tails[0].ImageHeight != 10 {
+		t.Fatalf("running tail size = %v x %v, want 10 x 10", tails[0].ImageWidth, tails[0].ImageHeight)
+	}
+	if tails := shellPlugin.buildHistoryTails(context.Background(), "completed"); len(tails) != 0 {
+		t.Fatalf("completed tails = %#v, want none", tails)
+	}
+}
+
 func TestEffectiveWorkingDirectoryUsesHomeAndConfiguredDefault(t *testing.T) {
 	home := userHomeDirectory()
 	if home == "" {
