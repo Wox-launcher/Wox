@@ -140,6 +140,21 @@ func TestPluginSettingsFormDefinitionsKeepMixedFormsInLabelLayout(t *testing.T) 
 	}
 }
 
+func TestPluginSettingsPluginsFromContractPreservesEnglishNames(t *testing.T) {
+	items := []contract.PluginCatalogItem{{
+		ID: "file-search", Name: "文件搜索", NameEn: "File Search",
+		Description: "搜索本地文件", DescriptionEn: "Search local files",
+	}}
+
+	plugins, err := pluginSettingsPluginsFromContract(items)
+	if err != nil {
+		t.Fatalf("adapt plugin settings: %v", err)
+	}
+	if plugins[0].NameEn != "File Search" || plugins[0].DescriptionEn != "Search local files" {
+		t.Fatalf("english fields = %+v, want NameEn and DescriptionEn preserved", plugins[0])
+	}
+}
+
 func TestPluginControllerPreservesDirPathSettingDefinition(t *testing.T) {
 	items := []contract.PluginCatalogItem{{
 		ID: "shell",

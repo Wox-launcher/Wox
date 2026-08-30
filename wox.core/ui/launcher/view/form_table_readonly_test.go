@@ -8,6 +8,28 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestReadonlyFormTableRowDisablesOperationActions(t *testing.T) {
+	icon := &woxui.Image{}
+	disabledIcon := &woxui.Image{}
+	cell := formTableOperationCell(FormTableFieldProps{
+		ID: "roots", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon,
+		DisabledEditIcon: disabledIcon, DisabledCloneIcon: disabledIcon, DisabledDeleteIcon: disabledIcon,
+		Theme: woxcomponent.Theme{},
+	}, FormTableRow{Index: -1, ReadOnly: true}, 130, false).(woxwidget.Container)
+	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(actions.Children) != 3 {
+		t.Fatalf("readonly operation count = %d, want the same edit, clone, and delete buttons", len(actions.Children))
+	}
+	for index, action := range actions.Children {
+		button := action.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		glyph, _ := button.Icon.(woxwidget.Image)
+		if !button.Disabled || button.OnTap != nil || button.HoverBackground.A != 0 || glyph.Source != disabledIcon {
+			t.Fatalf("readonly action %d = %+v, want a visible faded disabled icon button", index, button)
+		}
+	}
+}
+
 func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	columns := []FormTableColumn{{Label: "Item"}, {Label: "Mode", Width: 220}}
 	widths := formTableColumnWidthsWithOperation(columns, 800, false)

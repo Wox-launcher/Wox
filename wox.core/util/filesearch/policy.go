@@ -33,7 +33,8 @@ type DirectoryEntryAwareTraversalPolicyContext interface {
 }
 
 type EngineOptions struct {
-	Policy Policy
+	Policy        Policy
+	SkipNameIndex bool
 }
 
 const runPlannerSplitPolicyVersionV1 = 1

@@ -64,6 +64,23 @@ func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 	}
 }
 
+func TestSettingsSearchMatchesPluginEnglishName(t *testing.T) {
+	app := &App{}
+	results := app.settingsSearchResults(settingsSnapshot{
+		search: settingsSearchSnapshot{
+			Query:   woxui.TextEditingState{Text: "File Search"},
+			Plugins: []pluginSettingsPlugin{{ID: "file-search", Name: "文件搜索", NameEn: "File Search"}},
+		},
+	})
+
+	for _, result := range results {
+		if result.kind == settingsSearchPlugin && result.pluginID == "file-search" {
+			return
+		}
+	}
+	t.Fatalf("english plugin name missing from results: %#v", results)
+}
+
 func TestSettingsSearchMatchesLocalizedBuiltInSetting(t *testing.T) {
 	app := &App{translations: map[string]string{
 		"ui_general": "通用",

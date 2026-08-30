@@ -329,6 +329,18 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 			options[index] = formOption{ID: option.ID, Value: option.ID, DisplayName: option.DisplayName, Description: option.Description, Languages: option.Languages, Recommended: option.Recommended, Available: option.Available, Status: option.Status, DownloadProgress: option.DownloadProgress, SizeMB: option.SizeMB, Error: option.Error}
 		}
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue, Options: options}
+	case *definition.PluginSettingValueStats:
+		rows := make([]formStatsRow, len(value.Rows))
+		for index, row := range value.Rows {
+			rows[index] = formStatsRow{Label: row.Label, Value: row.Value}
+		}
+		converted.Value = formDefinitionValue{Key: value.Key, Title: value.Title, Tooltip: value.Tooltip, Rows: rows}
+	case *definition.PluginSettingValueService:
+		actions := make([]formServiceAction, len(value.Actions))
+		for index, action := range value.Actions {
+			actions[index] = formServiceAction{ID: action.ID, Label: action.Label, Primary: action.Primary, Danger: action.Danger, Enabled: action.Enabled}
+		}
+		converted.Value = formDefinitionValue{Key: value.Key, Title: value.Title, Description: value.Description, Status: value.Status, Detail: value.Detail, Actions: actions}
 	default:
 		log.Printf("skip unsupported typed form definition %s (%T)", item.Type, item.Value)
 		return formDefinition{}, false

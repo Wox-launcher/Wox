@@ -12,6 +12,9 @@ import (
 // dynamicIndexStatsSetting fills the settings-page index card from cheap engine
 // stats instead of the full `f status` diagnostic snapshot.
 func (c *FileSearchPlugin) dynamicIndexStatsSetting(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+	if key == fileIndexServiceSettingKey {
+		return c.fileIndexServiceSetting()
+	}
 	if key != fileIndexStatsSettingKey {
 		return definition.PluginSettingDefinitionItem{}
 	}

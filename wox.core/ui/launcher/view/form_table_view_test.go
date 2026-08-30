@@ -8,6 +8,17 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestFormTableSideTitleMatchesFormLabel(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "actions", Title: "Actions", Width: 720, LabelWidth: 80,
+		AddLabel: "Add", Theme: woxcomponent.Theme{ActionText: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
+	})
+	title := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if title.Value != "Actions" || title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightRegular || title.Color.R != 240 {
+		t.Fatalf("table title = %+v, want the shared 13 regular form label", title)
+	}
+}
+
 func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 	focused := 0
 	props := FormTableRowFieldProps{

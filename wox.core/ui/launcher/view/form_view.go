@@ -120,6 +120,100 @@ func FormStatsField(props FormStatsFieldProps) woxwidget.Widget {
 	}
 }
 
+// FormServiceAction is one button in a Wox-owned service status row.
+type FormServiceAction struct {
+	ID      string
+	Label   string
+	Primary bool
+	Danger  bool
+	Enabled bool
+	OnTap   func()
+}
+
+// FormServiceFieldProps contains one service state and its lifecycle actions.
+type FormServiceFieldProps struct {
+	Width       float32
+	Height      float32
+	LabelWidth  float32
+	Title       string
+	Description string
+	Status      string
+	Detail      string
+	Error       string
+	Actions     []FormServiceAction
+	Theme       woxcomponent.Theme
+}
+
+// FormServiceField builds the same label/control/help layout used by switch rows.
+func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
+	row := []woxwidget.Widget{
+		woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+	}
+	if tag := formServiceVersionLabel(props.Detail); tag != "" {
+		row = append(row, woxcomponent.WoxTag(tag, props.Theme.ResultSubtitle))
+	} else if detail := strings.TrimSpace(props.Detail); detail != "" {
+		row = append(row, woxwidget.Text{Value: detail, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.ResultSubtitle})
+	}
+	row = append(row, woxwidget.Expanded{Child: woxwidget.Painter{}})
+	for _, action := range props.Actions {
+		row = append(row, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "service-action-" + action.ID, Label: action.Label, Variant: woxcomponent.ButtonOutline, Disabled: !action.Enabled, OnTap: action.OnTap, Theme: props.Theme,
+		}))
+	}
+	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}
+	if props.Error != "" {
+		control = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
+			control,
+			woxwidget.Semantics{Role: woxui.AccessibilityRoleText, Label: props.Error, LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: woxwidget.Text{
+				Value: props.Error, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.ErrorText,
+			}},
+		}}
+	}
+	return woxwidget.Semantics{Role: woxui.AccessibilityRoleGroup, Label: props.Title, Description: props.Description, Child: formFieldLayout(
+		props.Title, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme,
+	)}
+}
+
+// formServiceVersionLabel turns an installed or pending version into a compact tag label.
+func formServiceVersionLabel(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if !formServiceVersionLike(detail) {
+		return ""
+	}
+	if from, to, ok := strings.Cut(detail, " → "); ok {
+		return formServiceVersionPrefix(from) + " → " + formServiceVersionPrefix(to)
+	}
+	return formServiceVersionPrefix(detail)
+}
+
+func formServiceVersionPrefix(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" || strings.HasPrefix(strings.ToLower(version), "v") {
+		return version
+	}
+	return "v" + version
+}
+
+func formServiceVersionLike(detail string) bool {
+	if from, to, ok := strings.Cut(detail, " → "); ok {
+		return formServiceSingleVersionLike(from) && formServiceSingleVersionLike(to)
+	}
+	return formServiceSingleVersionLike(detail)
+}
+
+func formServiceSingleVersionLike(version string) bool {
+	version = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(version)), "v")
+	if version == "" || !strings.Contains(version, ".") {
+		return false
+	}
+	for _, r := range version {
+		if (r < '0' || r > '9') && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
 // FormStaticField builds a heading, label, spacer, or unsupported field row.
 func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 	if props.Kind == "newline" {
@@ -129,13 +223,20 @@ func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 		}
 		return woxwidget.Painter{Width: props.Width, Height: height}
 	}
+	if props.Kind == "head" {
+		// Plugin forms pack fields tightly, so add the same lead-in other
+		// settings pages get from 64-high rows or an explicit spacer.
+		return woxwidget.Container{
+			Width:   props.Width,
+			Padding: woxwidget.Insets{Top: woxcomponent.SectionHeaderLead},
+			Child: woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{
+				Label: props.Value, Width: props.Width, Theme: props.Theme,
+			}),
+		}
+	}
 	style := woxui.TextStyle{Size: 12}
 	color := props.Theme.ActionHeader
 	padding := woxwidget.Insets{Top: 8}
-	if props.Kind == "head" {
-		style = woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
-		color = props.Theme.ActionText
-	}
 	if props.Kind == "unsupported" {
 		style = woxui.TextStyle{Size: 11}
 		padding.Top = 10
@@ -505,8 +606,10 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 		browseWidth = formBrowseButtonWidth(browseLabel)
 		inputWidth = max(float32(80), fieldWidth-browseWidth-8)
 	}
+	suffixWidth := float32(0)
 	if props.Suffix != "" {
-		inputWidth = max(float32(60), inputWidth-28)
+		suffixWidth = formSuffixWidth(props.Window, props.Suffix)
+		inputWidth = max(float32(60), inputWidth-suffixWidth-8)
 	}
 	fieldHeight := woxcomponent.SettingsControlHeight
 	if props.MaxLines > 1 {
@@ -528,7 +631,9 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 	if props.Suffix != "" {
 		valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 			input,
-			woxwidget.Align{Width: 20, Height: fieldHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Suffix, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText}},
+			woxwidget.Align{Width: suffixWidth, Height: fieldHeight, Vertical: 0.5, Child: woxwidget.Text{
+				Value: props.Suffix, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.ActionText,
+			}},
 		}}
 	}
 	if props.OnBrowse != nil {
@@ -546,6 +651,25 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 // formBrowseButtonWidth sizes the directory picker so the path field and button share one full control row.
 func formBrowseButtonWidth(label string) float32 {
 	return max(float32(62), min(float32(96), float32(len([]rune(label)))*8+24))
+}
+
+// formSuffixWidth sizes a unit label so translated suffixes such as "items" stay visible.
+func formSuffixWidth(window *woxui.Window, suffix string) float32 {
+	style := woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}
+	if window != nil {
+		if metrics, err := window.MeasureText(suffix, style); err == nil && metrics.Size.Width > 0 {
+			return metrics.Size.Width
+		}
+	}
+	width := float32(0)
+	for _, r := range suffix {
+		if r <= 0x7F {
+			width += 8
+		} else {
+			width += woxcomponent.SettingsControlFontSize
+		}
+	}
+	return max(float32(1), width)
 }
 
 func formFieldLayout(label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.Theme) woxwidget.Widget {

@@ -57,50 +57,54 @@ type FormTableRowAction struct {
 // FormTableRow keeps display ordering tied to the source row used by the editor.
 type FormTableRow struct {
 	Index           int
+	ReadOnly        bool
 	Cells           []FormTableCell
 	TrailingActions []FormTableRowAction
 }
 
 // FormTableFieldProps contains the full inline table presentation and actions.
 type FormTableFieldProps struct {
-	ID              string
-	Title           string
-	Description     string
-	Width           float32
-	Height          float32
-	LabelWidth      float32
-	MaxHeight       int
-	InlineTitle     bool
-	ReadOnly        bool
-	Invalid         bool
-	Columns         []FormTableColumn
-	Rows            []FormTableRow
-	SecondaryLabel  string
-	HideEditAction  bool
-	HideCloneAction bool
-	AddLabel        string
-	EditLabel       string
-	CloneLabel      string
-	DeleteLabel     string
-	OperationLabel  string
-	EmptyLabel      string
-	InfoIcon        *woxui.Image
-	DemoIcon        *woxui.Image
-	DemoKind        string
-	SecondaryIcon   *woxui.Image
-	AddIcon         *woxui.Image
-	EditIcon        *woxui.Image
-	CloneIcon       *woxui.Image
-	DeleteIcon      *woxui.Image
-	EmptyIcon       *woxui.Image
-	Theme           woxcomponent.Theme
-	OnSecondary     func()
-	OnAdd           func()
-	OnOpenRow       func(int)
-	OnCloneRow      func(int)
-	OnDeleteRow     func(int)
-	OnTooltip       func(bool, string, woxui.Rect)
-	OnDemoHover     func(string, bool, woxui.Rect)
+	ID                 string
+	Title              string
+	Description        string
+	Width              float32
+	Height             float32
+	LabelWidth         float32
+	MaxHeight          int
+	InlineTitle        bool
+	ReadOnly           bool
+	Invalid            bool
+	Columns            []FormTableColumn
+	Rows               []FormTableRow
+	SecondaryLabel     string
+	HideEditAction     bool
+	HideCloneAction    bool
+	AddLabel           string
+	EditLabel          string
+	CloneLabel         string
+	DeleteLabel        string
+	OperationLabel     string
+	EmptyLabel         string
+	InfoIcon           *woxui.Image
+	DemoIcon           *woxui.Image
+	DemoKind           string
+	SecondaryIcon      *woxui.Image
+	AddIcon            *woxui.Image
+	EditIcon           *woxui.Image
+	CloneIcon          *woxui.Image
+	DeleteIcon         *woxui.Image
+	DisabledEditIcon   *woxui.Image
+	DisabledCloneIcon  *woxui.Image
+	DisabledDeleteIcon *woxui.Image
+	EmptyIcon          *woxui.Image
+	Theme              woxcomponent.Theme
+	OnSecondary        func()
+	OnAdd              func()
+	OnOpenRow          func(int)
+	OnCloneRow         func(int)
+	OnDeleteRow        func(int)
+	OnTooltip          func(bool, string, woxui.Rect)
+	OnDemoHover        func(string, bool, woxui.Rect)
 }
 
 // FormTableFieldHeight returns the content height used by form scrolling and rendering.
@@ -157,9 +161,6 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	}
 	const labelGap = float32(12)
 	fieldWidth := max(float32(0), props.Width-labelWidth-labelGap)
-	labelChildren := []woxwidget.Widget{
-		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
-	}
 	tableChildren := []woxwidget.Widget{formTableGrid(props, fieldWidth, gridHeight)}
 	if props.Description != "" {
 		tableChildren = append(tableChildren, woxwidget.TextBlock{
@@ -171,7 +172,7 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	if props.Height > 0 {
 		labelHeight = max(float32(0), props.Height-16)
 	}
-	label := woxwidget.Container{Width: labelWidth, Height: labelHeight, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: labelChildren}}
+	label := formFieldLabel(props.Title, labelWidth, labelHeight, 6, props.Theme)
 	table := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: tableChildren}
 	fieldChildren := []woxwidget.Widget{table}
 	if !props.ReadOnly {
@@ -196,7 +197,7 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 	if !props.ReadOnly {
 		actionsWidth += 74
 	}
-	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}
+	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText}
 	if props.DemoKind != "" && props.DemoIcon != nil {
 		title = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			title,
@@ -501,21 +502,21 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 	style := newTableSurfaceStyle(props.Theme)
 	actions := make([]woxwidget.Widget, 0, 3+len(row.TrailingActions))
 	if !props.HideEditAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, props.EditIcon, func() {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, row.ReadOnly), row.ReadOnly, func() {
 			if props.OnOpenRow != nil {
 				props.OnOpenRow(row.Index)
 			}
 		}))
 	}
 	if !props.HideCloneAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, props.CloneIcon, func() {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, row.ReadOnly), row.ReadOnly, func() {
 			if props.OnCloneRow != nil {
 				props.OnCloneRow(row.Index)
 			}
 		}))
 	}
 	actions = append(actions,
-		formTableIconButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, props.DeleteIcon, func() {
+		formTableIconButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, row.ReadOnly), row.ReadOnly, func() {
 			if props.OnDeleteRow != nil {
 				props.OnDeleteRow(row.Index)
 			}
@@ -526,25 +527,40 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		if actionID == "" {
 			actionID = fmt.Sprintf("trailing-%d", index)
 		}
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, action.OnTap))
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, row.ReadOnly, action.OnTap))
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
 	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, false, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})
 }
 
-func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, onTap func()) woxwidget.Widget {
+// formTableActionIcon uses the faded glyph on locked rows so disabled actions
+// stay visible but quieter than the editable ones.
+func formTableActionIcon(icon, disabledIcon *woxui.Image, disabled bool) *woxui.Image {
+	if disabled && disabledIcon != nil {
+		return disabledIcon
+	}
+	return icon
+}
+
+func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, disabled bool, onTap func()) woxwidget.Widget {
+	if disabled {
+		onTap = nil
+	}
 	if icon != nil {
 		hoverBackground := props.Theme.ResultSubtitle
 		hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
+		if disabled {
+			hoverBackground = woxui.Color{}
+		}
 		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, Width: 26, Height: 24, Radius: 4,
-			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: onTap,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, Disabled: disabled, OnTap: onTap,
 		})
 	}
 	theme := props.Theme
 	theme.ResultTitle = props.Theme.ResultSubtitle
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: id, Label: label,
+		ID: id, Label: label, Disabled: disabled,
 		Variant: woxcomponent.ButtonText, FontSize: 10, OnTap: onTap, Theme: theme,
 	})
 }

@@ -7,6 +7,9 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// SectionHeaderLead is the empty space settings pages leave above a section divider.
+const SectionHeaderLead = float32(20)
+
 // SectionHeaderProps describes a divider and label between settings groups.
 type SectionHeaderProps struct {
 	Label       string

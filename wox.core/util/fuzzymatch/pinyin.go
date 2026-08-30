@@ -114,7 +114,9 @@ func getPinYin(term string) []PinyinSegment {
 		pinyinCache.Clear()
 		pinyinCacheSize.Store(0)
 	}
-	pinyinCache.Store(term, segments)
+	// Cache keys must own their bytes because callers may pass a short-lived
+	// view over a memory-mapped index or a much larger backing buffer.
+	pinyinCache.Store(strings.Clone(term), segments)
 	pinyinCacheSize.Add(1)
 
 	return segments

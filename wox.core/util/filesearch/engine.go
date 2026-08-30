@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"wox/util"
+	"wox/util/filesearchservice"
 
 	"github.com/google/uuid"
 )
@@ -25,6 +26,7 @@ type Engine struct {
 	policy          *policyState
 	statusListeners *util.HashMap[string, func(StatusSnapshot)]
 	contentHook     ContentHook
+	nameIndexActive bool
 }
 
 func NewEngine(ctx context.Context) (*Engine, error) {
@@ -45,22 +47,70 @@ func NewEngineWithOptions(ctx context.Context, options EngineOptions) (*Engine, 
 		statusListeners: util.NewHashMap[string, func(StatusSnapshot)](),
 	}
 
-	engine.scanner = newScannerWithPolicyState(db, policyState)
-	engine.scanner.SetStateChangeHandler(engine.notifyStatusChanged)
+	if !options.SkipNameIndex {
+		engine.scanner = newScannerWithPolicyState(db, policyState)
+		engine.scanner.SetStateChangeHandler(engine.notifyStatusChanged)
+		engine.nameIndexActive = true
+	}
 
 	// Keep the built-in file engine focused on the persisted SQLite search index.
 	// The previous runtime mirrored every entry into a second in-memory provider,
 	// which doubled storage responsibilities and made memory usage scale with the
 	// number of indexed roots.
-	if db.NeedsSearchArtifactRebuild() {
+	if options.SkipNameIndex {
+		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=service-search local_name_index=disabled")
+	} else if db.NeedsSearchArtifactRebuild() {
+		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search search_artifacts=rebuilding")
 		engine.startScannerAfterSearchArtifactRebuild(ctx)
 	} else {
 		engine.scanner.Start(util.NewTraceContext())
+		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search")
 	}
-	util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search")
 	engine.logInitSnapshotAsync(ctx)
 
 	return engine, nil
+}
+
+// EnableLocalNameIndex starts configured-root metadata indexing when content
+// search needs it after a service-only engine startup.
+func (e *Engine) EnableLocalNameIndex(ctx context.Context) {
+	if e == nil {
+		return
+	}
+	e.resetMu.Lock()
+	defer e.resetMu.Unlock()
+	e.mu.Lock()
+	if e.closed || e.nameIndexActive || e.db == nil {
+		e.mu.Unlock()
+		return
+	}
+	scanner := newScannerWithPolicyState(e.db, e.policy)
+	scanner.SetStateChangeHandler(e.notifyStatusChanged)
+	e.scanner = scanner
+	e.nameIndexActive = true
+	e.mu.Unlock()
+	scanner.Start(util.NewTraceContext())
+}
+
+// DisableLocalNameIndex stops configured-root metadata indexing once the service owns filename search.
+func (e *Engine) DisableLocalNameIndex() {
+	if e == nil {
+		return
+	}
+	e.resetMu.Lock()
+	defer e.resetMu.Unlock()
+	e.mu.Lock()
+	if e.closed || !e.nameIndexActive {
+		e.mu.Unlock()
+		return
+	}
+	scanner := e.scanner
+	e.scanner = nil
+	e.nameIndexActive = false
+	e.mu.Unlock()
+	if scanner != nil {
+		scanner.StopAndWait()
+	}
 }
 
 // startScannerAfterSearchArtifactRebuild keeps schema migration work off the plugin init path.
@@ -180,9 +230,23 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
 	e.resetMu.Lock()
 	defer e.resetMu.Unlock()
+	servicePaused, err := pauseFileIndexService(ctx)
+	if err != nil {
+		return fmt.Errorf("pause file index service: %w", err)
+	}
+	resumePending := servicePaused
+	defer func() {
+		if !resumePending {
+			return
+		}
+		resumeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := resumeFileIndexService(resumeCtx); err != nil {
+			util.GetLogger().Error(resumeCtx, "resume file index service after failed rebuild: "+err.Error())
+		}
+	}()
 
 	e.mu.RLock()
 	if e.closed {
@@ -228,11 +292,9 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	}
 
 	fileSearchDir := util.GetLocation().GetFileSearchDirectory()
-	// Feature addition: "Index Files" is now a true rebuild. The previous reset
-	// deleted rows inside the live SQLite database, which left WAL/SHM files,
-	// old pragmas, and any corrupted side tables in place. Close SQLite first,
-	// remove the whole storage directory, then open a fresh database before
-	// writing configured roots and starting the scan.
+	// SQLite and the service mappings must both be closed before replacing their
+	// shared parent directory, otherwise Windows can leave the rebuild blocked on
+	// an open database, WAL, or mapped column file.
 	if err := os.RemoveAll(fileSearchDir); err != nil {
 		e.mu.Unlock()
 		return fmt.Errorf("remove filesearch directory: %w", err)
@@ -249,10 +311,23 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 
 	e.db = newDB
 	e.searchProvider = newProvider
-	e.scanner = newScanner
+	nameIndexActive := e.nameIndexActive
+	if nameIndexActive {
+		e.scanner = newScanner
+	} else {
+		e.scanner = nil
+	}
 	e.mu.Unlock()
 
-	newScanner.Start(util.NewTraceContext())
+	if nameIndexActive {
+		newScanner.Start(util.NewTraceContext())
+	}
+	if servicePaused {
+		if err := resumeFileIndexService(ctx); err != nil {
+			return fmt.Errorf("resume file index service: %w", err)
+		}
+		resumePending = false
+	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("filesearch storage rebuilt: directory=%s", fileSearchDir))
 	return nil
 }
@@ -417,6 +492,30 @@ func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
 	if e == nil {
 		return StatusSnapshot{}, nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if serviceStatus, serviceRunning, err := getFileIndexServiceStatus(ctx); serviceRunning {
+		return serviceStatus, err
+	}
+	return e.getLocalStatus(ctx)
+}
+
+// IsLocalIndexing lets content crawl coordination wait for the configured-root
+// SQLite index without exposing that secondary work as the service-mode UI status.
+func (e *Engine) IsLocalIndexing(ctx context.Context) (bool, error) {
+	if e == nil {
+		return false, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	status, err := e.getLocalStatus(ctx)
+	return status.IsIndexing, err
+}
+
+// getLocalStatus builds the original scanner-backed status without consulting the Windows service.
+func (e *Engine) getLocalStatus(ctx context.Context) (StatusSnapshot, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	if e.closed {
@@ -873,6 +972,16 @@ func syncUserRootsToDB(ctx context.Context, db *FileSearchDB, scanner *Scanner, 
 func (e *Engine) Search(ctx context.Context, query SearchQuery, limit int) ([]SearchResult, error) {
 	if e == nil {
 		return nil, nil
+	}
+	if results, used, err := tryServiceNameSearch(ctx, query, limit); used {
+		if err == nil {
+			return results, nil
+		}
+		// Service startup keeps the previous SQLite index usable while the new
+		// all-volume column snapshot is being prepared.
+		if !errors.Is(err, filesearchservice.ErrIndexNotReady) {
+			util.GetLogger().Warn(ctx, "file index service query failed, using SQLite fallback: "+err.Error())
+		}
 	}
 
 	e.mu.RLock()

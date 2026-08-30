@@ -103,7 +103,7 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 		}
 		candidates = append(candidates, settingsSearchResult{
 			kind: settingsSearchPlugin, title: pluginTitle, subtitle: firstNonEmpty(plugin.Description, plugin.ID), icon: plugin.Icon, tab: "plugins", pluginID: plugin.ID,
-			searchTexts: normalizeSettingsSearchTexts(append([]string{plugin.ID, pluginTitle, plugin.Author, plugin.Runtime}, plugin.TriggerKeywords...)),
+			searchTexts: normalizeSettingsSearchTexts(append([]string{plugin.ID, pluginTitle, plugin.NameEn, plugin.Author, plugin.Description, plugin.DescriptionEn, plugin.Runtime}, plugin.TriggerKeywords...)),
 		})
 		for _, definition := range plugin.SettingDefinitions {
 			key := strings.TrimSpace(definition.Value.Key)

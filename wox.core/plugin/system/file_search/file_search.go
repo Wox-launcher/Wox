@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"wox/util"
 	"wox/util/fileicon"
 	"wox/util/filesearch"
+	"wox/util/filesearchservice"
 	"wox/util/nativecontextmenu"
 	"wox/util/permission"
 	"wox/util/shell"
@@ -41,6 +43,7 @@ const (
 )
 
 const fileRootsSettingKey = "roots"
+const contentRootsSettingKey = "contentRoots"
 const fileIgnorePatternsSettingKey = "ignorePatterns"
 const fileSkipHiddenFilesSettingKey = "skipHiddenFiles"
 const fileShowPreviewSettingKey = "showPreview"
@@ -51,6 +54,7 @@ const fileSearchStatusCommand = "status"
 const contentSearchEnabledKey = "contentSearchEnabled"
 const contentSearchExtensionsKey = "contentSearchExtensions"
 const fileIndexStatsSettingKey = "indexStats"
+const fileIndexServiceSettingKey = "indexService"
 
 const contentSearchToolbarMsgID = "file-search-content-status"
 
@@ -146,6 +150,10 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
+				Type:  definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{Key: fileIndexServiceSettingKey},
+			},
+			{
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
@@ -212,12 +220,41 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 			},
 			// Content search settings.
 			{
+				Type: definition.PluginSettingDefinitionTypeHead,
+				Value: &definition.PluginSettingValueHead{
+					Content: "i18n:plugin_file_setting_content_search_head",
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          contentSearchEnabledKey,
 					Label:        "i18n:plugin_file_setting_content_search_enabled",
 					Tooltip:      "i18n:plugin_file_setting_content_search_enabled_tooltip",
 					DefaultValue: "false",
+				},
+			},
+			{
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
+				Value: &definition.PluginSettingValueTable{
+					Key:          contentRootsSettingKey,
+					DefaultValue: defaultFileSearchRootPathsJSON(),
+					Title:        "i18n:plugin_file_setting_content_roots_title",
+					Tooltip:      "i18n:plugin_file_setting_content_roots_tooltip",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   "Path",
+							Label: "i18n:plugin_file_setting_root_path",
+							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+					},
 				},
 			},
 			{
@@ -259,8 +296,20 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.indexPolicy.SetIgnorePatterns(c.getConfiguredIgnorePatternValues(ctx))
 	c.indexPolicy.SetSkipHiddenFiles(c.getConfiguredSkipHiddenFiles(ctx))
 
+	if runtime.GOOS == "windows" {
+		filesearchservice.GetStatus()
+	}
+	serviceRunning := runtime.GOOS == "windows" && filesearchservice.IsRunning()
+	if serviceRunning {
+		indexPath := filepath.Join(util.GetLocation().GetFileSearchDirectory(), filesearchservice.IndexDirectory)
+		if err := filesearchservice.Resume(ctx, indexPath); err != nil {
+			serviceRunning = false
+			util.GetLogger().Warn(ctx, "file index service could not open its Wox cache directory: "+err.Error())
+		}
+	}
 	engine, initErr := filesearch.NewEngineWithOptions(ctx, filesearch.EngineOptions{
-		Policy: c.indexPolicy.toFilesearchPolicy(),
+		Policy:        c.indexPolicy.toFilesearchPolicy(),
+		SkipNameIndex: serviceRunning && !c.isContentSearchEnabled(ctx),
 	})
 	if initErr != nil {
 		c.api.Log(ctx, plugin.LogLevelError, initErr.Error())
@@ -298,6 +347,30 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	})
 
 	c.syncUserRoots(ctx)
+	if runtime.GOOS == "windows" {
+		util.Go(ctx, "auto-update file index service", func() {
+			status := filesearchservice.GetStatus()
+			if status.State != filesearchservice.StateUpdateReady {
+				return
+			}
+			util.GetLogger().Info(ctx, fmt.Sprintf("updating file index service from %s to %s", status.InstalledVersion, status.EmbeddedVersion))
+			if err := filesearchservice.Execute(ctx, "update"); err != nil {
+				util.GetLogger().Warn(ctx, "failed to update file index service automatically: "+err.Error())
+				return
+			}
+			indexPath := filepath.Join(util.GetLocation().GetFileSearchDirectory(), filesearchservice.IndexDirectory)
+			if err := filesearchservice.Resume(ctx, indexPath); err != nil {
+				util.GetLogger().Warn(ctx, "updated file index service could not open its Wox cache directory: "+err.Error())
+				return
+			}
+			if !c.isContentSearchEnabled(ctx) {
+				c.engine.DisableLocalNameIndex()
+			} else {
+				c.syncUserRoots(ctx)
+			}
+			util.GetLogger().Info(ctx, "file index service updated automatically to "+status.EmbeddedVersion)
+		})
+	}
 
 	// Initialize content index if enabled. Full crawl requests are debounced and
 	// serialized; the incremental hook is installed before the crawl so changes
@@ -312,7 +385,11 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == fileRootsSettingKey {
 			c.syncUserRoots(callbackCtx)
-			c.onFileSearchPolicyChanged(callbackCtx)
+			return
+		}
+		if key == contentRootsSettingKey {
+			c.syncUserRoots(callbackCtx)
+			c.onContentPolicyChanged(callbackCtx)
 			return
 		}
 		if key == fileIgnorePatternsSettingKey {
@@ -327,6 +404,8 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		}
 		if key == contentSearchEnabledKey {
 			if value == "true" {
+				c.engine.EnableLocalNameIndex(callbackCtx)
+				c.syncUserRoots(callbackCtx)
 				generation := c.nextContentSearchGeneration()
 				c.requestContentCrawl(callbackCtx, generation)
 			} else {
@@ -336,6 +415,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 					c.api.Log(callbackCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to remove content search database: %s", err.Error()))
 				}
 				c.api.ClearToolbarMsg(callbackCtx, contentSearchToolbarMsgID)
+				c.syncUserRoots(callbackCtx)
 			}
 			return
 		}
@@ -357,6 +437,64 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		}
 		c.api.ClearToolbarMsg(ctx, contentSearchToolbarMsgID)
 	})
+}
+
+// HandleSettingAction runs lifecycle operations exposed by the File Search service row.
+func (c *FileSearchPlugin) HandleSettingAction(ctx context.Context, actionID string) error {
+	if err := filesearchservice.Execute(ctx, actionID); err != nil {
+		return err
+	}
+	if c.engine == nil {
+		return nil
+	}
+	if actionID == "uninstall" {
+		c.engine.EnableLocalNameIndex(ctx)
+	} else if !c.isContentSearchEnabled(ctx) {
+		c.engine.DisableLocalNameIndex()
+	}
+	c.syncUserRoots(ctx)
+	return nil
+}
+
+// fileIndexServiceSetting maps current SCM state into the Windows-only settings row.
+func (c *FileSearchPlugin) fileIndexServiceSetting() definition.PluginSettingDefinitionItem {
+	if runtime.GOOS != "windows" {
+		return definition.PluginSettingDefinitionItem{}
+	}
+	status := filesearchservice.GetStatus()
+	value := &definition.PluginSettingValueService{
+		Key: fileIndexServiceSettingKey, Title: "i18n:plugin_file_setting_service_title", Description: "i18n:plugin_file_setting_service_description",
+		Detail: status.InstalledVersion,
+	}
+	switch status.State {
+	case filesearchservice.StateNotInstalled:
+		value.Status = "i18n:plugin_file_setting_service_not_installed"
+		value.Actions = []definition.PluginSettingValueServiceAction{{ID: "install", Label: "i18n:plugin_file_setting_service_install", Primary: true, Enabled: true}}
+	case filesearchservice.StateRunning:
+		value.Status = "i18n:plugin_file_setting_service_running"
+		value.Actions = []definition.PluginSettingValueServiceAction{{ID: "uninstall", Label: "i18n:plugin_file_setting_service_uninstall", Danger: true, Enabled: true}}
+	case filesearchservice.StateStopped:
+		value.Status = "i18n:plugin_file_setting_service_stopped"
+		value.Actions = []definition.PluginSettingValueServiceAction{{ID: "start", Label: "i18n:plugin_file_setting_service_start", Primary: true, Enabled: true}, {ID: "uninstall", Label: "i18n:plugin_file_setting_service_uninstall", Danger: true, Enabled: true}}
+	case filesearchservice.StateUpdateReady:
+		value.Status = "i18n:plugin_file_setting_service_update_ready"
+		value.Detail = status.InstalledVersion + " → " + status.EmbeddedVersion
+		value.Actions = []definition.PluginSettingValueServiceAction{{ID: "update", Label: "i18n:plugin_file_setting_service_update", Primary: true, Enabled: true}, {ID: "uninstall", Label: "i18n:plugin_file_setting_service_uninstall", Danger: true, Enabled: true}}
+	case filesearchservice.StateNeedsUpdate:
+		value.Status = "i18n:plugin_file_setting_service_needs_update"
+		value.Detail = status.Detail
+		// Legacy services do not have the authenticated self-update method yet,
+		// so this one-time update reuses the elevated install/repair path.
+		value.Actions = []definition.PluginSettingValueServiceAction{{ID: "start", Label: "i18n:plugin_file_setting_service_update", Primary: true, Enabled: true}, {ID: "uninstall", Label: "i18n:plugin_file_setting_service_uninstall", Danger: true, Enabled: true}}
+	case filesearchservice.StateUnhealthy:
+		value.Status = "i18n:plugin_file_setting_service_unhealthy"
+		value.Detail = status.Detail
+		value.Actions = []definition.PluginSettingValueServiceAction{{ID: "start", Label: "i18n:plugin_file_setting_service_repair", Primary: true, Enabled: true}, {ID: "uninstall", Label: "i18n:plugin_file_setting_service_uninstall", Danger: true, Enabled: true}}
+	default:
+		value.Status = "i18n:plugin_file_setting_service_unavailable"
+		value.Detail = status.Detail
+	}
+	return definition.PluginSettingDefinitionItem{Type: definition.PluginSettingDefinitionTypeFileIndexService, Value: value, SearchAliases: []string{"MFT", "USN", "service"}}
 }
 
 // isContentSearchEnabled returns whether content search is toggled on in settings.
@@ -564,9 +702,31 @@ func (c *FileSearchPlugin) waitForFileSearchIdle(ctx context.Context) {
 	if c.engine == nil {
 		return
 	}
+	var activeFullRun filesearch.StatusSnapshot
 	for {
 		status, err := c.engine.GetStatus(ctx)
-		if err != nil || !status.IsIndexing {
+		if err == nil && status.IsIndexing {
+			c.handleStatusChanged(status)
+			if status.ActiveRunKind == filesearch.RunKindFull {
+				activeFullRun = status
+			}
+		} else if err == nil && activeFullRun.ActiveRunKind == filesearch.RunKindFull {
+			stats, statsErr := c.engine.GetIndexStats(ctx)
+			if statsErr == nil {
+				activeFullRun.ActiveRunFileCount = stats.FileCount
+				activeFullRun.ActiveRunEntryCount = stats.EntryCount
+				if stats.LastElapsedMs > 0 {
+					activeFullRun.ActiveRunElapsedMs = stats.LastElapsedMs
+				}
+			}
+			activeFullRun.IsIndexing = false
+			activeFullRun.ActiveRunStatus = filesearch.RunStatusCompleted
+			activeFullRun.ActiveStage = ""
+			c.handleStatusChanged(activeFullRun)
+			activeFullRun = filesearch.StatusSnapshot{}
+		}
+		localIndexing, localErr := c.engine.IsLocalIndexing(ctx)
+		if (err != nil || !status.IsIndexing) && (localErr != nil || !localIndexing) {
 			// Also check if FTS rebuild is still in progress — the DB is locked
 			// during rebuild and content crawl writes would fail.
 			if !c.engine.NeedsSearchArtifactRebuild() {
@@ -576,7 +736,7 @@ func (c *FileSearchPlugin) waitForFileSearchIdle(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(3 * time.Second):
+		case <-time.After(time.Second):
 		}
 	}
 }
@@ -609,7 +769,7 @@ func (c *FileSearchPlugin) handleContentCrawlProgress(ctx context.Context, gener
 	})
 }
 
-// onFileSearchPolicyChanged handles roots/ignore/hidden setting changes by
+// onFileSearchPolicyChanged handles ignore/hidden setting changes by
 // resetting the content index and queueing a crawl with the new policy.
 func (c *FileSearchPlugin) onFileSearchPolicyChanged(ctx context.Context) {
 	if !c.isContentSearchEnabled(ctx) {
@@ -638,9 +798,9 @@ func (c *FileSearchPlugin) onContentPolicyChanged(ctx context.Context) {
 }
 
 // getContentSearchRootRecords builds []filesearch.RootRecord from the
-// configured file search roots.
+// configured content search directories.
 func (c *FileSearchPlugin) getContentSearchRootRecords(ctx context.Context) []filesearch.RootRecord {
-	paths := c.getEffectiveRootPaths(ctx)
+	paths := c.getEffectiveContentRootPaths(ctx)
 	roots := make([]filesearch.RootRecord, 0, len(paths))
 	for i, p := range paths {
 		roots = append(roots, filesearch.RootRecord{
@@ -1228,42 +1388,80 @@ func (c *FileSearchPlugin) syncUserRoots(ctx context.Context) {
 		return
 	}
 
-	effectiveRoots := c.getEffectiveRootPaths(ctx)
+	effectiveRoots := c.getEngineRootPaths(ctx)
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Syncing file search roots: %d roots", len(effectiveRoots)))
 	if err := c.engine.SyncUserRoots(ctx, effectiveRoots); err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, "Failed to sync file search roots: "+err.Error())
 	}
 }
 
-func (c *FileSearchPlugin) getEffectiveRootPaths(ctx context.Context) []string {
-	paths := c.getConfiguredRootPaths(ctx)
-	// Bug fix: settings can accidentally contain overlapping roots such as the
-	// home directory plus a child project directory. The engine also normalizes
-	// this boundary, but doing it here keeps plugin logs and status messages in
-	// terms of the roots that will actually be indexed.
+// getEngineRootPaths returns the local name-index roots. Filename directories
+// are omitted when the Windows service already owns full-disk filename search.
+// Content crawl still reads candidates from this index, so enabled content
+// directories stay included.
+func (c *FileSearchPlugin) getEngineRootPaths(ctx context.Context) []string {
+	var paths []string
+	if !c.usesServiceFilenameIndex() {
+		paths = append(paths, c.getConfiguredRootPaths(ctx)...)
+	}
+	if c.isContentSearchEnabled(ctx) {
+		paths = append(paths, c.getConfiguredContentRootPaths(ctx)...)
+	}
 	return filesearch.NormalizeUserRootPaths(ctx, paths)
 }
 
+func (c *FileSearchPlugin) usesServiceFilenameIndex() bool {
+	return runtime.GOOS == "windows" && filesearchservice.IsRunning()
+}
+
+func (c *FileSearchPlugin) getEffectiveContentRootPaths(ctx context.Context) []string {
+	return filesearch.NormalizeUserRootPaths(ctx, c.getConfiguredContentRootPaths(ctx))
+}
+
 func (c *FileSearchPlugin) getConfiguredRootPaths(ctx context.Context) []string {
-	raw := strings.TrimSpace(c.api.GetSetting(ctx, fileRootsSettingKey))
+	return c.parseConfiguredRootPaths(ctx, fileRootsSettingKey, false)
+}
+
+func (c *FileSearchPlugin) getConfiguredContentRootPaths(ctx context.Context) []string {
+	// Missing or unreadable contentRoots falls back to filename roots so
+	// upgrades before the split migration still crawl the same directories.
+	return c.parseConfiguredRootPaths(ctx, contentRootsSettingKey, true)
+}
+
+func (c *FileSearchPlugin) parseConfiguredRootPaths(ctx context.Context, key string, fallbackToFilenameRoots bool) []string {
+	raw := strings.TrimSpace(c.api.GetSetting(ctx, key))
 	if raw == "" {
+		if fallbackToFilenameRoots {
+			return c.getConfiguredRootPaths(ctx)
+		}
 		return nil
 	}
 
+	paths, err := parseFileSearchRootSettingJSON(raw)
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to parse %s setting: %s", key, err.Error()))
+		if fallbackToFilenameRoots {
+			return c.getConfiguredRootPaths(ctx)
+		}
+		return nil
+	}
+	return paths
+}
+
+// parseFileSearchRootSettingJSON expands a roots/contentRoots table value into
+// cleaned directory paths. An empty JSON array is a deliberate empty list.
+func parseFileSearchRootSettingJSON(raw string) ([]string, error) {
 	var roots []fileRootSetting
 	if err := json.Unmarshal([]byte(raw), &roots); err != nil {
-		c.api.Log(ctx, plugin.LogLevelWarning, "Failed to parse file search roots setting: "+err.Error())
-		return nil
+		return nil, err
 	}
-
 	paths := make([]string, 0, len(roots))
 	for _, root := range roots {
 		if path := expandFileSearchRootPath(root.Path); path != "" {
 			paths = append(paths, path)
 		}
 	}
-
-	return paths
+	return paths, nil
 }
 
 func (c *FileSearchPlugin) syncIgnorePatterns(ctx context.Context) {

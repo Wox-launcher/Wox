@@ -101,10 +101,10 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 	statusHeight := runtimeStatusGridHeight(props.Statuses, contentWidth)
 	children = append(children,
 		runtimeStatusGrid(props, contentWidth, statusHeight),
-		woxwidget.Container{Width: contentWidth, Height: 20},
+		woxwidget.Container{Width: contentWidth, Height: woxcomponent.SectionHeaderLead},
 		woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Labels.ExecutableSection, Width: contentWidth, Theme: props.Theme}),
 	)
-	rowsTop := woxcomponent.PageHeaderHeight + 32 + messageHeight + statusHeight + 20 + 43
+	rowsTop := woxcomponent.PageHeaderHeight + 32 + messageHeight + statusHeight + woxcomponent.SectionHeaderLead + 43
 	for _, row := range props.Settings {
 		children = append(children, runtimeExecutableSettingRow(props, row, contentWidth, settingRowHeight))
 	}

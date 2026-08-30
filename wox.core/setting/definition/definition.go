@@ -24,10 +24,11 @@ const (
 
 	// Wox-internal setting types used by system plugins. These are not part
 	// of the public plugin API and are rendered by dedicated UI widgets.
-	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
-	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
-	PluginSettingDefinitionTypeOCRModel        PluginSettingDefinitionType = "ocrModel"
-	PluginSettingDefinitionTypeStats           PluginSettingDefinitionType = "stats"
+	PluginSettingDefinitionTypeDictationHotkey  PluginSettingDefinitionType = "dictationHotkey"
+	PluginSettingDefinitionTypeDictationModel   PluginSettingDefinitionType = "dictationModel"
+	PluginSettingDefinitionTypeOCRModel         PluginSettingDefinitionType = "ocrModel"
+	PluginSettingDefinitionTypeStats            PluginSettingDefinitionType = "stats"
+	PluginSettingDefinitionTypeFileIndexService PluginSettingDefinitionType = "fileIndexService"
 
 	// dynamic setting will be replaced by the actual setting when retrieved.
 	// The callback may return an empty PluginSettingDefinitionItem to hide it.
@@ -183,6 +184,13 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr
+		}
+		n.Value = &v
+	case "fileIndexService":
+		n.Type = PluginSettingDefinitionTypeFileIndexService
+		var v PluginSettingValueService
+		if err := json.Unmarshal([]byte(contentResult.String()), &v); err != nil {
+			return err
 		}
 		n.Value = &v
 	default:

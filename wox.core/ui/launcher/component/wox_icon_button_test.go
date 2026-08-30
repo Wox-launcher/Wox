@@ -25,6 +25,30 @@ func TestWoxIconButtonOwnsHoverAndTapGesture(t *testing.T) {
 	}
 }
 
+func TestWoxIconButtonDisabledSkipsHoverAndTap(t *testing.T) {
+	tapped := false
+	props := IconButtonProps{
+		ID: "locked", Label: "Edit", Icon: woxwidget.Painter{Width: 16, Height: 16},
+		Width: 26, Height: 24, HoverBackground: woxui.Color{A: 40}, Disabled: true,
+		OnTap: func() { tapped = true },
+	}
+	state := &iconButtonState{hovered: true}
+	built := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if !built.Disabled || len(built.Actions) != 0 {
+		t.Fatal("disabled icon button must expose disabled semantics without activation")
+	}
+	gesture := built.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
+	if gesture.OnTap != nil {
+		t.Fatal("disabled icon button must not keep a tap handler")
+	}
+	if background := gesture.Child.(woxwidget.Container).Color; background.A != 0 {
+		t.Fatalf("disabled hover background = %#v, want no hover fill", background)
+	}
+	if tapped {
+		t.Fatal("disabled icon button must not invoke OnTap")
+	}
+}
+
 func TestWoxIconButtonSelectedKeepsActiveBackground(t *testing.T) {
 	selectedColor := woxui.Color{R: 20, G: 30, B: 40, A: 40}
 	props := IconButtonProps{ID: "underline", Label: "Underline", Icon: woxwidget.Painter{Width: 16, Height: 16}, Width: 28, Height: 28, Radius: 6, Selected: true, SelectedBackground: selectedColor}

@@ -10,6 +10,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/filesearchservice"
 )
 
 func formTableTitle(definition formDefinition) string {
@@ -124,6 +125,8 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	theme := palette.componentTheme()
 	foreground := theme.ResultSubtitle
+	disabledForeground := foreground
+	disabledForeground.A = woxcomponent.DisabledContentAlpha
 	infoIconRasterSize := physicalImageSize(14, callbacks.imageScale)
 	headerIconRasterSize := physicalImageSize(15, callbacks.imageScale)
 	rowIconRasterSize := physicalImageSize(16, callbacks.imageScale)
@@ -139,6 +142,12 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		columns[columnIndex] = launcherview.FormTableColumn{Label: a.translate(column.Label), Tooltip: a.translate(column.Tooltip), Width: float32(column.Width)}
 	}
 	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
+	if isFileSearchRootsTable(callbacks.idPrefix, definition, a.selectedPluginID()) {
+		volumeRows := fileSearchServiceVolumeRows(visibleColumns, filesearchservice.IndexedVolumeRoots(), a.translate("i18n:plugin_file_setting_service_volume_tooltip"))
+		if len(volumeRows) > 0 {
+			viewRows = append(volumeRows, viewRows...)
+		}
+	}
 	onTooltip := (func(bool, string, woxui.Rect))(nil)
 	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "plugin-settings" || callbacks.idPrefix == "ai-settings" {
 		onTooltip = a.setSettingChoiceTooltip
@@ -184,18 +193,26 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
 		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
-		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
-		Theme: theme, OnTooltip: onTooltip, OnDemoHover: a.setSettingsDemoHover, OnSecondary: onSecondary,
+		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
+		DisabledEditIcon: a.imageForTint(settingControlIconSource("edit"), &disabledForeground, rowIconRasterSize), DisabledCloneIcon: a.imageForTint(settingControlIconSource("copy"), &disabledForeground, rowIconRasterSize), DisabledDeleteIcon: a.imageForTint(settingControlIconSource("delete"), &disabledForeground, rowIconRasterSize),
+		EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
+		Theme:     theme, OnTooltip: onTooltip, OnDemoHover: a.setSettingsDemoHover, OnSecondary: onSecondary,
 		OnAdd: func() {
 			openTable()
 			a.beginAddFormTableRowDirect()
 		},
 		OnOpenRow: func(rowIndex int) {
+			if rowIndex < 0 || rowIndex >= len(rows) {
+				return
+			}
 			openTable()
 			a.selectFormTableRow(rowIndex)
 			a.beginEditFormTableRowDirect()
 		},
 		OnCloneRow: func(rowIndex int) {
+			if rowIndex < 0 || rowIndex >= len(rows) {
+				return
+			}
 			openTable()
 			a.selectFormTableRow(rowIndex)
 			a.beginCloneFormTableRowDirect()

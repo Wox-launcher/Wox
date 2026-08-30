@@ -514,6 +514,18 @@ func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
 	}
 }
 
+func TestFormTableInlineTitleMatchesFormLabelWeight(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "roots", Title: "Search Roots", Width: 720, Height: 220, InlineTitle: true,
+		AddLabel: "Add", Theme: woxcomponent.Theme{ActionText: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
+	})
+	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightRegular || title.Color.R != 240 {
+		t.Fatalf("inline table title = size %.0f weight %v color %#v, want the shared 13 regular form label", title.Style.Size, title.Style.Weight, title.Color)
+	}
+}
+
 func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "commands", Title: "Commands", Width: 720, Height: 220, InlineTitle: true,
@@ -651,9 +663,9 @@ func TestFormTableMixedLayoutPlacesDescriptionBelowTable(t *testing.T) {
 	})
 
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
-	label := row.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
-	if len(label.Children) != 1 {
-		t.Fatalf("label child count = %d, want title only", len(label.Children))
+	title := row.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if title.Value != "Commands" || title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("mixed-layout title = %+v, want the shared form label", title)
 	}
 	fieldColumn := row.Children[1].(woxwidget.Flex)
 	table := fieldColumn.Children[1].(woxwidget.Flex)

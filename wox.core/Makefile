@@ -1,4 +1,4 @@
-.PHONY: clean build help ui-resources window-hook-build crash-handler-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help ui-resources window-hook-build crash-handler-build file-index-service-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -92,6 +92,7 @@ build: clean
 	$(MAKE) woxmr-build
 	$(MAKE) window-hook-build
 	$(MAKE) crash-handler-build
+	$(MAKE) file-index-service-build
 ifeq ($(PLATFORM),windows)
 	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
 	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
@@ -101,7 +102,7 @@ ifeq ($(PLATFORM),windows)
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
 	# Keep Go symbols and DWARF data so crash minidumps can be symbolized against the exact release executable.
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 
 ifeq ($(PLATFORM),linux)
@@ -129,6 +130,34 @@ endif
 
 CRASH_HANDLER_SOURCE := diagnostic/native/wox_crash_handler.c
 CRASH_HANDLER_DIR := resource/others/crash_handler
+
+FILE_INDEX_SERVICE_DIR := resource/others/file_index_service
+FILE_INDEX_SERVICE_EXE := $(FILE_INDEX_SERVICE_DIR)/wox-file-index-service.exe
+FILE_INDEX_SERVICE_VERSIONINFO := cmd/file_index_service/resource_windows.syso
+FILE_INDEX_SERVICE_VERSION := $(shell sed -n 's/^var EmbeddedVersion = "\(.*\)"/\1/p' util/filesearchservice/service.go)
+FILE_INDEX_SERVICE_PREBUILT ?= 0
+
+# Build the privileged helper before the main binary so it is embedded in Wox's resources.
+file-index-service-build:
+ifeq ($(PLATFORM),windows)
+ifeq ($(FILE_INDEX_SERVICE_PREBUILT),1)
+	test -f $(FILE_INDEX_SERVICE_EXE)
+else
+	rm -f $(FILE_INDEX_SERVICE_EXE) $(FILE_INDEX_SERVICE_VERSIONINFO)
+	mkdir -p $(FILE_INDEX_SERVICE_DIR)
+	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
+		-o $(FILE_INDEX_SERVICE_VERSIONINFO) -64 \
+		-product-name "Wox File Index Service" -description "Wox File Index Service" \
+		-internal-name "WoxFileIndexService" -original-name "wox-file-index-service.exe" \
+		-product-version "$(FILE_INDEX_SERVICE_VERSION)" -file-version "$(FILE_INDEX_SERVICE_VERSION)" \
+		-propagate-ver-strings
+	CGO_ENABLED=0 GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-H windowsgui -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(FILE_INDEX_SERVICE_EXE) ./cmd/file_index_service
+	rm -f $(FILE_INDEX_SERVICE_VERSIONINFO)
+endif
+else
+	mkdir -p $(FILE_INDEX_SERVICE_DIR)
+	@echo "File index service is only supported on Windows"
+endif
 CRASH_HANDLER_DLL := $(CRASH_HANDLER_DIR)/WoxCrashHandler64.dll
 
 # WER loads this module in its own process after Wox has crashed.

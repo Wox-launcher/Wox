@@ -63,7 +63,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		return props
 	}
 
-	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore)
+	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore, snapshot.general.Data.UsePinYin)
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
 	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
 	props.Items = make([]launcherview.PluginListItem, 0, len(filtered))
@@ -157,6 +157,11 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		finishAIModelEdit: a.finishPluginAIModelEdit,
 		openModel:         a.openPluginModelManager,
 		recordKey:         a.recordPluginFormHotkey,
+		runServiceAction:  a.runPluginServiceAction,
+		serviceBusy:       form.saving,
+	}
+	if form.statusError {
+		callbacks.serviceError = form.status
 	}
 	if detailTab == "description" {
 		editor.DescriptionDetail = a.pluginStoreDetailProps(snapshot, plugin, max(float32(0), width-80), imageScale)

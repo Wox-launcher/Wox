@@ -441,9 +441,35 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Build unsigned file index service
+        if: ${{ inputs.require_windows_signpath }}
+        shell: bash
+        run: make -C wox.core file-index-service-build
+
+      - name: Upload unsigned file index service
+        id: upload-unsigned-file-index-service
+        if: ${{ inputs.require_windows_signpath }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-wox-file-index-service.exe
+          path: ./wox.core/resource/others/file_index_service/wox-file-index-service.exe
+          retention-days: 1
+
+      - name: Sign file index service with SignPath
+        if: ${{ inputs.require_windows_signpath }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: Wox
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.upload-unsigned-file-index-service.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ./wox.core/resource/others/file_index_service
+
       - name: Build
         shell: bash
-        run: make build
+        run: make build FILE_INDEX_SERVICE_PREBUILT=${{ inputs.require_windows_signpath && '1' || '0' }}
 
       - name: Upload unsigned artifact (Windows)
         id: upload-unsigned-artifact
@@ -488,6 +514,14 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 artifact_id: target.id,
+              });
+            }
+            const helper = artifacts.find(artifact => artifact.name === 'unsigned-wox-file-index-service.exe');
+            if (helper) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: helper.id,
               });
             }
 

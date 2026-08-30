@@ -96,8 +96,8 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 
 	onTap := props.OnTap
 	if props.Disabled {
-		foreground = withAlpha(foreground, 88)
-		border = withAlpha(border, 88)
+		foreground = withAlpha(foreground, DisabledContentAlpha)
+		border = withAlpha(border, DisabledContentAlpha)
 		onTap = nil
 	}
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}

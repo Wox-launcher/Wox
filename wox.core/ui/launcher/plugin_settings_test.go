@@ -8,6 +8,29 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestFilterPluginsMatchesPinyinAndEnglishName(t *testing.T) {
+	plugins := []pluginSettingsPlugin{{
+		ID:            "file-search",
+		Name:          "文件搜索",
+		NameEn:        "File Search",
+		Description:   "搜索本地文件",
+		DescriptionEn: "Search local files",
+	}}
+
+	if got := filterPlugins(plugins, "wenjian", pluginFilterState{}, false, true); len(got) != 1 {
+		t.Fatalf("pinyin query matches = %d, want 1", len(got))
+	}
+	if got := filterPlugins(plugins, "wenjian", pluginFilterState{}, false, false); len(got) != 0 {
+		t.Fatalf("pinyin-disabled query matches = %d, want 0", len(got))
+	}
+	if got := filterPlugins(plugins, "file", pluginFilterState{}, false, false); len(got) != 1 {
+		t.Fatalf("english name query matches = %d, want 1", len(got))
+	}
+	if got := filterPlugins(plugins, "文件", pluginFilterState{}, false, false); len(got) != 1 {
+		t.Fatalf("localized name query matches = %d, want 1", len(got))
+	}
+}
+
 func TestSplitPluginTriggerKeywords(t *testing.T) {
 	got := splitPluginTriggerKeywords(" web, translate ,, clipboard ")
 	want := []string{"web", "translate", "clipboard"}

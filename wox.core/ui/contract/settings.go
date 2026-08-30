@@ -384,7 +384,9 @@ type PluginSetting struct {
 type PluginCatalogItem struct {
 	ID                 string
 	Name               string
+	NameEn             string
 	Description        string
+	DescriptionEn      string
 	Author             string
 	Website            string
 	Version            string
@@ -425,6 +427,7 @@ const (
 // PluginOperationSettingsServices exposes plugin lifecycle and persisted setting changes.
 type PluginOperationSettingsServices interface {
 	OperatePlugin(ctx context.Context, sessionID string, pluginID string, operation PluginOperation) error
+	ExecutePluginSettingAction(ctx context.Context, sessionID string, pluginID string, actionID string) error
 	UpdatePluginSettings(ctx context.Context, sessionID string, pluginID string, values map[string]string) error
 }
 

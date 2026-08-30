@@ -30,6 +30,9 @@ type formFieldCallbacks struct {
 	pickApp           func(index int)
 	recordKey         func(index int)
 	openModel         func(index int, anchor woxui.Rect)
+	runServiceAction  func(actionID string)
+	serviceBusy       bool
+	serviceError      string
 }
 
 // buildFormPanel maps action form state into the shared form view.
@@ -73,6 +76,9 @@ func (a *App) measureFormLabelWidth(definitions []formDefinition, window *woxui.
 	style := woxui.TextStyle{Size: 13}
 	for _, definition := range definitions {
 		labelKey := definition.Value.Label
+		if labelKey == "" {
+			labelKey = definition.Value.Title
+		}
 		if definition.Type == "table" {
 			labelKey = formTableTitle(definition)
 		}
@@ -101,6 +107,23 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		}
 		return launcherview.FormStatsField(launcherview.FormStatsFieldProps{
 			Width: width, Height: height, Title: a.translate(value.Title), Rows: rows, Theme: palette.componentTheme(),
+		})
+	case "fileIndexService":
+		actions := make([]launcherview.FormServiceAction, 0, len(value.Actions))
+		for _, action := range value.Actions {
+			actionID := action.ID
+			actions = append(actions, launcherview.FormServiceAction{
+				ID: action.ID, Label: a.translate(action.Label), Primary: action.Primary, Danger: action.Danger, Enabled: action.Enabled && !callbacks.serviceBusy,
+				OnTap: func() {
+					if callbacks.runServiceAction != nil {
+						callbacks.runServiceAction(actionID)
+					}
+				},
+			})
+		}
+		return launcherview.FormServiceField(launcherview.FormServiceFieldProps{
+			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Title: a.translate(value.Title), Description: a.translate(value.Description),
+			Status: a.translate(value.Status), Detail: value.Detail, Error: callbacks.serviceError, Actions: actions, Theme: palette.componentTheme(),
 		})
 	case "head", "label", "newline":
 		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: a.translate(value.Content), Kind: definition.Type, Theme: palette.componentTheme()})

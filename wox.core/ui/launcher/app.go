@@ -861,7 +861,7 @@ func (a *App) shouldPreserveQueryOnShowLocked() bool {
 }
 
 // usePinYin is a cross-domain reader for the general-domain UsePinYin setting.
-// Query, action filter, and settings search all use pinyin matching when this is on.
+// Query, action filter, settings search, and plugin catalog search all use pinyin matching when this is on.
 func (a *App) usePinYin() bool {
 	return a.generalSettings.Data().UsePinYin
 }
@@ -1840,26 +1840,38 @@ type formDefinition struct {
 }
 
 type formDefinitionValue struct {
-	Key               string            `json:"Key"`
-	Label             string            `json:"Label"`
-	Title             string            `json:"Title"`
-	Suffix            string            `json:"Suffix"`
-	DefaultValue      string            `json:"DefaultValue"`
-	Tooltip           string            `json:"Tooltip"`
-	Content           string            `json:"Content"`
-	MaxLines          int               `json:"MaxLines"`
-	IsMulti           bool              `json:"IsMulti"`
-	Options           []formOption      `json:"Options"`
-	Validators        []formValidator   `json:"Validators"`
-	Columns           []formTableColumn `json:"Columns"`
-	SortColumnKey     string            `json:"SortColumnKey"`
-	SortOrder         string            `json:"SortOrder"`
-	MaxHeight         int               `json:"MaxHeight"`
-	InlineTable       bool              `json:"InlineTable"`
-	MinimumRowCount   int               `json:"MinimumRowCount"`
-	MinimumRowMessage string            `json:"MinimumRowMessage"`
-	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
-	Rows              []formStatsRow    `json:"Rows"`
+	Key               string              `json:"Key"`
+	Label             string              `json:"Label"`
+	Title             string              `json:"Title"`
+	Suffix            string              `json:"Suffix"`
+	DefaultValue      string              `json:"DefaultValue"`
+	Tooltip           string              `json:"Tooltip"`
+	Content           string              `json:"Content"`
+	MaxLines          int                 `json:"MaxLines"`
+	IsMulti           bool                `json:"IsMulti"`
+	Options           []formOption        `json:"Options"`
+	Validators        []formValidator     `json:"Validators"`
+	Columns           []formTableColumn   `json:"Columns"`
+	SortColumnKey     string              `json:"SortColumnKey"`
+	SortOrder         string              `json:"SortOrder"`
+	MaxHeight         int                 `json:"MaxHeight"`
+	InlineTable       bool                `json:"InlineTable"`
+	MinimumRowCount   int                 `json:"MinimumRowCount"`
+	MinimumRowMessage string              `json:"MinimumRowMessage"`
+	UpdateDialogWidth int                 `json:"UpdateDialogWidth"`
+	Rows              []formStatsRow      `json:"Rows"`
+	Description       string              `json:"Description"`
+	Status            string              `json:"Status"`
+	Detail            string              `json:"Detail"`
+	Actions           []formServiceAction `json:"Actions"`
+}
+
+type formServiceAction struct {
+	ID      string `json:"ID"`
+	Label   string `json:"Label"`
+	Primary bool   `json:"Primary"`
+	Danger  bool   `json:"Danger"`
+	Enabled bool   `json:"Enabled"`
 }
 
 type formStatsRow struct {

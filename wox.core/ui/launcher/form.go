@@ -217,7 +217,7 @@ func handleFormEditorKey(editor formEditingController, definition formDefinition
 }
 
 func formDefinitionFocusable(definition formDefinition) bool {
-	return formDefinitionTextEditable(definition) || definition.Type == "checkbox" || definition.Type == "select" || definition.Type == "selectAIModel" || definition.Type == "hotkey" || definition.Type == "dictationHotkey" || definition.Type == "app" || definition.Type == "table" || definition.Type == "dictationModel" || definition.Type == "ocrModel"
+	return formDefinitionTextEditable(definition) || definition.Type == "checkbox" || definition.Type == "select" || definition.Type == "selectAIModel" || definition.Type == "hotkey" || definition.Type == "dictationHotkey" || definition.Type == "app" || definition.Type == "table" || definition.Type == "dictationModel" || definition.Type == "ocrModel" || definition.Type == "fileIndexService"
 }
 
 func formDefinitionTextEditable(definition formDefinition) bool {

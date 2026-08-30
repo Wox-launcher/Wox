@@ -37,7 +37,8 @@ func (s *CoreServices) Plugins(ctx context.Context, sessionID string, catalog co
 	result := make([]contract.PluginCatalogItem, len(plugins))
 	for index, item := range plugins {
 		result[index] = contract.PluginCatalogItem{
-			ID: item.Id, Name: item.Name, Description: item.Description, Author: item.Author, Website: item.Website, Version: item.Version,
+			ID: item.Id, Name: item.Name, NameEn: item.NameEn, Description: item.Description, DescriptionEn: item.DescriptionEn,
+			Author: item.Author, Website: item.Website, Version: item.Version,
 			Runtime: item.Runtime, Entry: item.Entry, PluginDirectory: item.PluginDirectory, Icon: item.Icon,
 			ScreenshotURLs: append([]string(nil), item.ScreenshotUrls...), TriggerKeywords: append([]string(nil), item.TriggerKeywords...),
 			Commands: append([]plugin.MetadataCommand(nil), item.Commands...), SupportedOS: append([]string(nil), item.SupportedOS...),
@@ -83,6 +84,22 @@ func (s *CoreServices) OperatePlugin(ctx context.Context, sessionID string, plug
 	default:
 		return fmt.Errorf("unsupported plugin operation %q", operation)
 	}
+}
+
+// ExecutePluginSettingAction dispatches an explicit action owned by a system plugin.
+func (s *CoreServices) ExecutePluginSettingAction(ctx context.Context, sessionID string, pluginID string, actionID string) error {
+	ctx = uiServiceContext(ctx, sessionID)
+	instance, exists := findPluginInstance(pluginID)
+	if !exists {
+		return fmt.Errorf("plugin %q is not installed", pluginID)
+	}
+	handler, ok := instance.Plugin.(interface {
+		HandleSettingAction(context.Context, string) error
+	})
+	if !ok {
+		return fmt.Errorf("plugin %q does not support setting actions", pluginID)
+	}
+	return handler.HandleSettingAction(ctx, actionID)
 }
 
 // UpdatePluginSettings persists a deterministic batch of changes for one installed plugin.

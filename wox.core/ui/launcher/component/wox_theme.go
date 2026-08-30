@@ -29,6 +29,9 @@ type Theme struct {
 	ToolbarText            woxui.Color
 }
 
+// DisabledContentAlpha is the shared reduced emphasis for disabled labels and icons.
+const DisabledContentAlpha = 88
+
 func withAlpha(color woxui.Color, alpha uint8) woxui.Color {
 	color.A = alpha
 	return color

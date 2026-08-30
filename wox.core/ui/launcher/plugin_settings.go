@@ -17,7 +17,9 @@ import (
 type pluginSettingsPlugin struct {
 	ID                 string             `json:"Id"`
 	Name               string             `json:"Name"`
+	NameEn             string             `json:"NameEn"`
 	Description        string             `json:"Description"`
+	DescriptionEn      string             `json:"DescriptionEn"`
 	Author             string             `json:"Author"`
 	Website            string             `json:"Website"`
 	Version            string             `json:"Version"`
@@ -76,16 +78,36 @@ func (filters pluginFilterState) applied(store bool) bool {
 }
 
 // filterPlugins applies the same keyword and advanced-filter contract as the retired Flutter catalog.
-func filterPlugins(plugins []pluginSettingsPlugin, query string, filters pluginFilterState, store bool) []filteredPlugin {
-	query = strings.ToLower(strings.TrimSpace(query))
+// Keyword matching follows the action panel: fuzzy + optional pinyin on localized text, and English
+// names/descriptions always stay searchable.
+func filterPlugins(plugins []pluginSettingsPlugin, query string, filters pluginFilterState, store bool, usePinYin bool) []filteredPlugin {
+	query = strings.TrimSpace(query)
 	filtered := make([]filteredPlugin, 0, len(plugins))
 	for index, plugin := range plugins {
-		searchText := strings.ToLower(strings.Join(append([]string{plugin.Name, plugin.ID, plugin.Author, plugin.Description, plugin.Runtime}, plugin.TriggerKeywords...), " "))
-		if (query == "" || strings.Contains(searchText, query)) && pluginMatchesFilters(plugin, filters, store) {
+		if pluginMatchesQuery(plugin, query, usePinYin) && pluginMatchesFilters(plugin, filters, store) {
 			filtered = append(filtered, filteredPlugin{index: index, plugin: plugin})
 		}
 	}
 	return filtered
+}
+
+// pluginMatchesQuery keeps catalog search aligned with action-panel matching.
+func pluginMatchesQuery(plugin pluginSettingsPlugin, query string, usePinYin bool) bool {
+	if query == "" {
+		return true
+	}
+	for _, text := range pluginSearchTexts(plugin) {
+		if text != "" && util.IsStringMatch(text, query, usePinYin) {
+			return true
+		}
+	}
+	return false
+}
+
+// pluginSearchTexts includes localized fields plus English aliases used by the action panel.
+func pluginSearchTexts(plugin pluginSettingsPlugin) []string {
+	texts := []string{plugin.Name, plugin.NameEn, plugin.ID, plugin.Author, plugin.Description, plugin.DescriptionEn, plugin.Runtime}
+	return append(texts, plugin.TriggerKeywords...)
 }
 
 // pluginMatchesFilters keeps store and installed-only predicates from leaking into each other.
@@ -671,7 +693,7 @@ func (a *App) togglePluginFilter(id string) {
 	plugins := a.pluginSettings.Plugins()
 	store := a.pluginSettings.PluginsStore()
 	selected := a.pluginSettings.Selected()
-	filtered := filterPlugins(plugins, query, filters, store)
+	filtered := filterPlugins(plugins, query, filters, store, a.usePinYin())
 	selectedVisible := false
 	for _, entry := range filtered {
 		if entry.index == selected {
@@ -723,7 +745,7 @@ func (a *App) moveFilteredPluginSelection(delta int) {
 	selected := a.pluginSettings.Selected()
 	filters := a.pluginSettings.Filters()
 	store := a.pluginSettings.PluginsStore()
-	filtered := filterPlugins(plugins, query, filters, store)
+	filtered := filterPlugins(plugins, query, filters, store, a.usePinYin())
 	if len(filtered) == 0 {
 		return
 	}
@@ -907,6 +929,8 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	case woxui.KeySpace, woxui.KeyEnter:
 		if event.Key == woxui.KeyEnter && multiline {
 			a.editPluginFormKey(event)
+		} else if fieldType == "fileIndexService" {
+			a.runFocusedPluginServiceAction(focused)
 		} else if fieldType == "table" {
 			a.openPluginFormTable(focused)
 		} else if fieldType == "dictationModel" || fieldType == "ocrModel" {
@@ -926,6 +950,50 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 		a.editPluginFormKey(event)
 	}
 	return true
+}
+
+func (a *App) runFocusedPluginServiceAction(index int) {
+	form := a.pluginSettings.Form()
+	if form == nil || index < 0 || index >= len(form.definitions) {
+		return
+	}
+	for _, action := range form.definitions[index].Value.Actions {
+		if action.Primary && action.Enabled {
+			a.runPluginServiceAction(action.ID)
+			return
+		}
+	}
+}
+
+// runPluginServiceAction executes one service lifecycle operation and reloads its dynamic state.
+func (a *App) runPluginServiceAction(actionID string) {
+	form := a.pluginSettings.Form()
+	if form == nil || form.saving || actionID == "" {
+		return
+	}
+	pluginID := form.pluginID
+	form.saving = true
+	form.status = ""
+	form.statusError = false
+	a.invalidateSettingsWindow()
+	util.Go(a.lifecycleCtx, "run plugin service action", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		err := a.services.ExecutePluginSettingAction(ctx, a.sessionID, pluginID, actionID)
+		cancel()
+		if err == nil {
+			err = a.reloadPlugins(false, pluginID)
+		}
+		_ = a.runOnUI("finish plugin service action", func() {
+			if current := a.pluginSettings.Form(); current != nil && current.pluginID == pluginID {
+				current.saving = false
+				if err != nil {
+					current.status = err.Error()
+					current.statusError = true
+				}
+			}
+			a.invalidateSettingsWindow()
+		})
+	})
 }
 
 // recordPluginFormHotkey reuses core's dictation-aware recorder while keeping the value staged with other plugin changes.

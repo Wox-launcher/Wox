@@ -47,7 +47,7 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 		if background.A == 0 {
 			background = props.HoverBackground
 		}
-	} else if s.hovered {
+	} else if s.hovered && !props.Disabled {
 		background = props.HoverBackground
 	}
 	onTap := props.OnTap

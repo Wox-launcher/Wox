@@ -2,9 +2,28 @@ package fuzzymatch
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestPinyinCacheOwnsMappedTerm(t *testing.T) {
+	ReleaseIdleCaches()
+	defer ReleaseIdleCaches()
+	bytes := []byte("项目")
+	term := unsafe.String(&bytes[0], len(bytes))
+	getPinYin(term)
+	bytes[0] = '?'
+
+	found := false
+	pinyinCache.Range(func(key, _ any) bool {
+		found = key.(string) == "项目"
+		return false
+	})
+	if !found {
+		t.Fatal("pinyin cache retained the caller's mutable backing memory")
+	}
+}
 
 func TestFuzzyMatchExact(t *testing.T) {
 	// Exact match should have highest score

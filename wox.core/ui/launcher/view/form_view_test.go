@@ -244,13 +244,42 @@ func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 }
 
 func TestFormTextFieldKeepsSuffixOutsideInput(t *testing.T) {
-	field := FormTextField(FormTextFieldProps{ID: "days", Label: "Days", Suffix: "天", Width: 400, Height: 44, LabelWidth: 100, MaxLines: 1, Theme: woxcomponent.Theme{}})
+	assertFormTextFieldSuffix(t, "天", formSuffixWidth(nil, "天"))
+	assertFormTextFieldSuffix(t, "items", formSuffixWidth(nil, "items"))
+}
+
+func TestFormSuffixWidthKeepsLatinUnitsVisible(t *testing.T) {
+	if got := formSuffixWidth(nil, "ms"); got != 16 {
+		t.Fatalf("ms width = %.0f, want 16", got)
+	}
+	if got := formSuffixWidth(nil, "item"); got != 32 {
+		t.Fatalf("item width = %.0f, want 32 so it is wider than the old 20 slot", got)
+	}
+	if got := formSuffixWidth(nil, "items"); got != 40 {
+		t.Fatalf("items width = %.0f, want 40", got)
+	}
+	if got := formSuffixWidth(nil, "天"); got != woxcomponent.SettingsControlFontSize {
+		t.Fatalf("天 width = %.0f, want the 13 control size", got)
+	}
+}
+
+func assertFormTextFieldSuffix(t *testing.T, suffix string, wantWidth float32) {
+	t.Helper()
+	field := FormTextField(FormTextFieldProps{ID: "days", Label: "Days", Suffix: suffix, Width: 400, Height: 44, LabelWidth: 100, MaxLines: 1, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	valueRow := controlColumn.Children[0].(woxwidget.Flex)
-	suffix := valueRow.Children[1].(woxwidget.Align).Child.(woxwidget.Text)
-	if suffix.Value != "天" {
-		t.Fatalf("suffix = %q, want 天", suffix.Value)
+	input := valueRow.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	slot := valueRow.Children[1].(woxwidget.Align)
+	label := slot.Child.(woxwidget.Text)
+	if label.Value != suffix {
+		t.Fatalf("suffix = %q, want %q", label.Value, suffix)
+	}
+	if slot.Width != wantWidth {
+		t.Fatalf("suffix slot = %.0f, want measured %.0f so %q is not clipped", slot.Width, wantWidth, suffix)
+	}
+	if input.Width != 288-wantWidth-8 {
+		t.Fatalf("input width = %.0f, want %.0f so the suffix keeps its own slot", input.Width, 288-wantWidth-8)
 	}
 }
 
@@ -279,6 +308,32 @@ func TestFormTextFieldBrowseButtonSharesOneControlRow(t *testing.T) {
 	}
 	if container.BorderWidth != 1 {
 		t.Fatalf("browse border width = %v, want outline", container.BorderWidth)
+	}
+}
+
+func TestFormStaticFieldHeadUsesSectionHeader(t *testing.T) {
+	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 140, G: 146, B: 154, A: 255}}
+	field := FormStaticField(FormStaticFieldProps{
+		Width: 400, Value: "Content Search", Kind: "head", Theme: theme,
+	}).(woxwidget.Container)
+	if field.Width != 400 || field.Padding.Top != woxcomponent.SectionHeaderLead {
+		t.Fatalf("head lead-in = %#v, want 20 above the shared section divider", field)
+	}
+	header := field.Child.(woxwidget.Container)
+	if header.Width != 400 || header.Height != 43 {
+		t.Fatalf("head geometry = %#v, want a 43-high section header", header)
+	}
+	column := header.Child.(woxwidget.Flex)
+	if column.Axis != woxwidget.Vertical || len(column.Children) != 2 {
+		t.Fatalf("head children = %#v, want divider and title", column)
+	}
+	divider := column.Children[0].(woxwidget.Container)
+	if divider.Height != 1 {
+		t.Fatalf("head divider = %#v, want a 1-unit rule", divider)
+	}
+	title := column.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if title.Value != "CONTENT SEARCH" || title.Style.Size != woxcomponent.SettingsSectionTitleFontSize || title.Style.Weight != woxui.FontWeightSemibold || title.Color != theme.ResultSubtitle {
+		t.Fatalf("head label = %#v, want 11 semibold uppercase ResultSubtitle", title)
 	}
 }
 
@@ -318,6 +373,56 @@ func TestFormStatsFieldUsesQuietCardLayout(t *testing.T) {
 	first := rows.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
 	if first.Children[0].(woxwidget.Text).Value != "Disk Usage" || first.Children[2].(woxwidget.Text).Value != "29.4 MB" {
 		t.Fatalf("first stats row = %#v", first.Children)
+	}
+}
+
+func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
+	field := FormServiceField(FormServiceFieldProps{
+		Width: 420, LabelWidth: 80, Title: "Fast indexing", Description: "Install the optional Windows service.", Status: "Running", Detail: "2.8.0",
+		Actions: []FormServiceAction{{ID: "install", Label: "Install service", Primary: true, Enabled: true}},
+		Theme:   woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 160, G: 160, B: 164, A: 255}},
+	})
+	semantics := field.(woxwidget.Semantics)
+	if semantics.Role != woxui.AccessibilityRoleGroup || semantics.Label != "Fast indexing" {
+		t.Fatalf("service semantics = role %q label %q", semantics.Role, semantics.Label)
+	}
+	row := semantics.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	label := row.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if label.Value != "Fast indexing" {
+		t.Fatalf("service label = %q, want the shared form label column", label.Value)
+	}
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	control := controlColumn.Children[0].(woxwidget.Flex)
+	if control.Children[0].(woxwidget.Text).Value != "Running" {
+		t.Fatalf("service status = %#v", control.Children[0])
+	}
+	tag := control.Children[1].(woxwidget.Container).Child.(woxwidget.Text)
+	if tag.Value != "v2.8.0" {
+		t.Fatalf("service version tag = %q, want v2.8.0", tag.Value)
+	}
+	button := control.Children[3].(woxwidget.Semantics)
+	if button.Label != "Install service" || button.Role != woxui.AccessibilityRoleButton || button.Disabled {
+		t.Fatalf("service action = %+v", button)
+	}
+	chrome := focusedControlGesture(button).Child.(woxwidget.Container)
+	if chrome.BorderWidth != 1 || chrome.Color.A != 0 {
+		t.Fatalf("service action chrome = border %.0f fill %#v, want the shared outline add button", chrome.BorderWidth, chrome.Color)
+	}
+	description := controlColumn.Children[1].(woxwidget.TextBlock)
+	if description.Value != "Install the optional Windows service." {
+		t.Fatalf("service description = %q", description.Value)
+	}
+}
+
+func TestFormServiceVersionLabelPrefixesInstalledVersions(t *testing.T) {
+	if got := formServiceVersionLabel("2.8.0"); got != "v2.8.0" {
+		t.Fatalf("version = %q, want v2.8.0", got)
+	}
+	if got := formServiceVersionLabel("2.8.0 → 2.9.0"); got != "v2.8.0 → v2.9.0" {
+		t.Fatalf("update version = %q", got)
+	}
+	if got := formServiceVersionLabel("Administrator update required"); got != "" {
+		t.Fatalf("status detail = %q, want no version tag", got)
 	}
 }
 

@@ -20,6 +20,7 @@ wox.plugin.python/wox_plugin.egg-info/
 wox.core/resource/others/woxmr
 wox.core/resource/others/window_hook
 wox.core/resource/others/crash_handler
+wox.core/resource/others/file_index_service/*.exe
 wox.exe
 wox.core/wox
 *.syso
