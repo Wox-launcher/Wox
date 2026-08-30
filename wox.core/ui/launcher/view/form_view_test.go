@@ -81,6 +81,27 @@ func TestFormFieldNaturalHeightMeasuresWrappedDescription(t *testing.T) {
 	}
 }
 
+func TestFormFieldMarkdownDescriptionOpensLinks(t *testing.T) {
+	opened := ""
+	field := FormSelectField(FormSelectFieldProps{
+		ID: "browser-port", Label: "Server Port", Description: "Install the [Chrome extension](https://example.com).",
+		Value: "34988", Width: 500, LabelWidth: 100, Theme: woxcomponent.Theme{}, OnOpenLink: func(target string) { opened = target },
+	})
+	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	markdown := controlColumn.Children[1].(woxwidget.Flex)
+	paragraph := markdown.Children[0].(woxwidget.Wrap)
+	for _, child := range paragraph.Children {
+		if link, ok := child.(woxwidget.Semantics); ok && link.Role == woxui.AccessibilityRoleLink {
+			_ = link.OnAction(woxui.AccessibilityActionActivate, "")
+			break
+		}
+	}
+	if opened != "https://example.com" {
+		t.Fatalf("opened link = %q, want Markdown target", opened)
+	}
+}
+
 func TestFormModelFieldUsesCompactAnchoredDropdown(t *testing.T) {
 	var openedAt woxui.Rect
 	field := FormModelField(FormModelFieldProps{

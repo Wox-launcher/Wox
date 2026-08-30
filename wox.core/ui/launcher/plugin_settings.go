@@ -1523,12 +1523,8 @@ func (a *App) submitPluginSettings() {
 			log.Printf("save plugin settings: %v", saveErr)
 			return
 		}
-		// Dynamic settings are resolved from saved values when the catalog is fetched.
-		// Reload this plugin's definitions after the mode dropdown is persisted so the
-		// detail field under it can change immediately.
-		if _, ok := persistedValues["default_working_directory_mode"]; ok {
-			a.refreshPluginFormDefinitions(pluginID)
-		}
+		// Dynamic settings may depend on any saved value, so always resolve them again.
+		a.refreshPluginFormDefinitions(pluginID)
 	})
 }
 

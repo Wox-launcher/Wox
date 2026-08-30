@@ -9,6 +9,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 // buildPluginSettingsPage maps plugin state into the shared catalog and detail views.
@@ -158,6 +159,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		openModel:         a.openPluginModelManager,
 		recordKey:         a.recordPluginFormHotkey,
 		runServiceAction:  a.runPluginServiceAction,
+		openLink:          a.openPluginSettingLink,
 		serviceBusy:       form.saving,
 	}
 	if form.statusError {
@@ -216,6 +218,17 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	}
 	props.Editor = editor
 	return props
+}
+
+// openPluginSettingLink opens Markdown links from plugin setting help text.
+func (a *App) openPluginSettingLink(target string) {
+	window := a.settingsNativeWindow()
+	if window == nil {
+		return
+	}
+	if err := window.OpenExternalURL(target); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open plugin setting link: %v", err))
+	}
 }
 
 // pluginFormLabelWidth mirrors Flutter's shared measured label column for each plugin.

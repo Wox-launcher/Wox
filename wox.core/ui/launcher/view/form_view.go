@@ -132,6 +132,7 @@ type FormServiceAction struct {
 
 // FormServiceFieldProps contains one service state and its lifecycle actions.
 type FormServiceFieldProps struct {
+	ID          string
 	Width       float32
 	Height      float32
 	LabelWidth  float32
@@ -142,6 +143,7 @@ type FormServiceFieldProps struct {
 	Error       string
 	Actions     []FormServiceAction
 	Theme       woxcomponent.Theme
+	OnOpenLink  func(string)
 }
 
 // FormServiceField builds the same label/control/help layout used by switch rows.
@@ -170,7 +172,7 @@ func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 		}}
 	}
 	return woxwidget.Semantics{Role: woxui.AccessibilityRoleGroup, Label: props.Title, Description: props.Description, Child: formFieldLayout(
-		props.Title, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme,
+		props.ID, props.Title, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink,
 	)}
 }
 
@@ -260,6 +262,7 @@ type FormModelFieldProps struct {
 	Focused     bool
 	Theme       woxcomponent.Theme
 	OnTap       func(woxui.Rect)
+	OnOpenLink  func(string)
 }
 
 // FormModelField builds the same compact outlined dropdown trigger used by Flutter.
@@ -269,7 +272,7 @@ func FormModelField(props FormModelFieldProps) woxwidget.Widget {
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
 		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTapBounds: props.OnTap,
 	})
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink)
 }
 
 // FormAppFieldProps contains one application selector row.
@@ -322,6 +325,7 @@ type FormHotkeyFieldProps struct {
 	Theme              woxcomponent.Theme
 	OnTap              func()
 	OnFocusChange      func(bool)
+	OnOpenLink         func(string)
 }
 
 // FormHotkeyField builds the shared recorder row for form and built-in settings layouts.
@@ -410,7 +414,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			Child:   control, Theme: props.Theme,
 		})
 	}
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink)
 }
 
 // FormSwitchFieldProps contains one Flutter-style plugin boolean row.
@@ -424,12 +428,13 @@ type FormSwitchFieldProps struct {
 	Checked     bool
 	Theme       woxcomponent.Theme
 	OnChange    func(bool)
+	OnOpenLink  func(string)
 }
 
 // FormSwitchField builds a real switch instead of exposing the boolean as text.
 func FormSwitchField(props FormSwitchFieldProps) woxwidget.Widget {
 	control := woxcomponent.WoxSwitch(woxcomponent.SwitchProps{ID: props.ID, Label: props.Label, Value: props.Checked, OnChange: props.OnChange, Theme: props.Theme})
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 22, props.Theme)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 22, props.Theme, props.OnOpenLink)
 }
 
 // FormSelectFieldProps contains one outlined form dropdown.
@@ -445,6 +450,7 @@ type FormSelectFieldProps struct {
 	Theme       woxcomponent.Theme
 	OnTap       func()
 	OnChoiceTap func(woxui.Rect)
+	OnOpenLink  func(string)
 }
 
 // FormSelectField builds an expanded dropdown with the same value and indicator split as Flutter.
@@ -454,7 +460,7 @@ func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
 		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink)
 }
 
 // FormAIModelFieldProps contains Flutter's two-part provider/model selector state.
@@ -481,6 +487,7 @@ type FormAIModelFieldProps struct {
 	OnModelNameChanged func(string)
 	OnFinishEdit       func(string)
 	OnEditModeChanged  func(bool)
+	OnOpenLink         func(string)
 }
 
 // FormAIModelField retains only edit-mode and text interaction state; the committed model stays in the form.
@@ -565,7 +572,7 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 		Disabled: !props.ModelsAvailable || props.Model == "", OnTap: toggleEditing,
 	})
 	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, toggle}}
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, formAIModelControlHeight, props.Theme)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, formAIModelControlHeight, props.Theme, props.OnOpenLink)
 }
 
 func (s *formAIModelFieldState) Dispose() {}
@@ -591,6 +598,7 @@ type FormTextFieldProps struct {
 	OnKey       func(woxui.KeyEvent) bool
 	OnBrowse    func()
 	BrowseLabel string
+	OnOpenLink  func(string)
 }
 
 // FormTextField builds a shared text input row with an optional directory picker.
@@ -645,7 +653,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 			}),
 		}}
 	}
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, valueField, fieldHeight, props.Theme)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, valueField, fieldHeight, props.Theme, props.OnOpenLink)
 }
 
 // formBrowseButtonWidth sizes the directory picker so the path field and button share one full control row.
@@ -672,17 +680,26 @@ func formSuffixWidth(window *woxui.Window, suffix string) float32 {
 	return max(float32(1), width)
 }
 
-func formFieldLayout(label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.Theme) woxwidget.Widget {
+func formFieldLayout(id, label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.Theme, onOpenLink func(string)) woxwidget.Widget {
 	if labelWidth <= 0 {
 		labelWidth = 132
 	}
 	const gap = float32(12)
 	rightChildren := []woxwidget.Widget{control}
 	if description != "" {
-		rightChildren = append(rightChildren, woxwidget.TextBlock{
+		var descriptionWidget woxwidget.Widget = woxwidget.TextBlock{
 			Value: description, LineHeight: 18,
 			Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
-		})
+		}
+		if onOpenLink != nil {
+			markdownTheme := theme
+			markdownTheme.PreviewText = theme.ResultSubtitle
+			descriptionWidget = woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
+				ID: id + "-description", Document: woxcomponent.ParseMarkdown(description), Width: formFieldControlWidth(width, labelWidth),
+				FontSize: 11, BlockGap: 4, ExcludeLinkFocus: true, Theme: markdownTheme, OnOpenLink: onOpenLink,
+			})
+		}
+		rightChildren = append(rightChildren, descriptionWidget)
 	}
 	padding := woxwidget.Insets{}
 	if height <= 0 {

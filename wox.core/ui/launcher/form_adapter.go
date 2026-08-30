@@ -31,6 +31,7 @@ type formFieldCallbacks struct {
 	recordKey         func(index int)
 	openModel         func(index int, anchor woxui.Rect)
 	runServiceAction  func(actionID string)
+	openLink          func(target string)
 	serviceBusy       bool
 	serviceError      string
 }
@@ -122,8 +123,9 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 			})
 		}
 		return launcherview.FormServiceField(launcherview.FormServiceFieldProps{
-			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Title: a.translate(value.Title), Description: a.translate(value.Description),
+			ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Width: width, Height: height, LabelWidth: callbacks.labelWidth, Title: a.translate(value.Title), Description: a.translate(value.Description),
 			Status: a.translate(value.Status), Detail: value.Detail, Error: callbacks.serviceError, Actions: actions, Theme: palette.componentTheme(),
+			OnOpenLink: callbacks.openLink,
 		})
 	case "head", "label", "newline":
 		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: a.translate(value.Content), Kind: definition.Type, Theme: palette.componentTheme()})
@@ -191,6 +193,7 @@ func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFie
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(18, callbacks.imageScale)),
 		ListIcon: a.imageForTint(settingControlIconSource("list"), &foreground, physicalImageSize(18, callbacks.imageScale)),
 		Window:   a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		OnOpenLink:         callbacks.openLink,
 		OnProviderTap:      func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, true, anchor) },
 		OnModelTap:         func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, false, anchor) },
 		OnModelNameChanged: func(value string) { callbacks.setAIModelName(index, value) },
@@ -226,6 +229,7 @@ func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formField
 	return launcherview.FormModelField(launcherview.FormModelFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+		OnOpenLink: callbacks.openLink,
 		OnTap: func(anchor woxui.Rect) {
 			callbacks.focus(index)
 			if callbacks.openModel != nil {
@@ -279,6 +283,7 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 		Hold: hold, HoldPrefix: a.translate("i18n:ui_hotkey_hold_prefix"),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, SettingsLayout: callbacks.settingsLayout, AlignRecorderRight: callbacks.alignHotkeyRight,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		OnOpenLink: callbacks.openLink,
 		OnTap: func() {
 			callbacks.focus(index)
 			if callbacks.recordKey != nil {
@@ -305,6 +310,7 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 		return launcherview.FormSwitchField(launcherview.FormSwitchFieldProps{
 			ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
 			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Checked: checked, Theme: palette.componentTheme(),
+			OnOpenLink: callbacks.openLink,
 			OnChange: func(bool) {
 				callbacks.focus(index)
 				callbacks.change(index, 1)
@@ -314,6 +320,7 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 	props := launcherview.FormSelectFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+		OnOpenLink: callbacks.openLink,
 		OnTap: func() {
 			callbacks.focus(index)
 			callbacks.change(index, 1)
@@ -349,7 +356,8 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth,
 		State: state, Controller: controller, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse, BrowseLabel: a.translate("i18n:ui_runtime_browse"),
-		OnFocus: func() { callbacks.focus(index) },
+		OnOpenLink: callbacks.openLink,
+		OnFocus:    func() { callbacks.focus(index) },
 		OnChanged: func(value string) {
 			if callbacks.setText != nil {
 				callbacks.setText(index, value)
