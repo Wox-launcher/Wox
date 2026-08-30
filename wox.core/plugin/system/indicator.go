@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"wox/common"
 	"wox/i18n"
@@ -19,7 +20,10 @@ import (
 
 var indicatorIcon = common.PluginIndicatorIcon
 
-const indicatorQueryResultLimit = 30
+const (
+	indicatorQueryResultLimit           = 30
+	indicatorDescriptionMinScorePerRune = 16
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &IndicatorPlugin{})
@@ -45,13 +49,14 @@ type indicatorCommandSearchEntry struct {
 }
 
 type indicatorSearchEntry struct {
-	pluginInstance        *plugin.Instance
-	primaryTriggerKeyword string
-	triggerKeywords       []indicatorSearchCandidate
-	pluginName            string
-	preparedPluginName    *fuzzymatch.PreparedText
-	preparedDescription   *fuzzymatch.PreparedText
-	commands              []indicatorCommandSearchEntry
+	pluginInstance         *plugin.Instance
+	primaryTriggerKeyword  string
+	triggerKeywords        []indicatorSearchCandidate
+	pluginName             string
+	preparedPluginName     *fuzzymatch.PreparedText
+	preparedDescription    *fuzzymatch.PreparedText
+	preparedResultSubtitle *fuzzymatch.PreparedText
+	commands               []indicatorCommandSearchEntry
 }
 
 type indicatorMatchedCommand struct {
@@ -119,16 +124,13 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			}
 		}
 
-		pluginNameMatch := fuzzymatch.FuzzyMatchPrepared(entry.preparedPluginName, preparedPattern, usePinyin)
-		pluginDescriptionMatch := fuzzymatch.FuzzyMatchPrepared(entry.preparedDescription, preparedPattern, usePinyin)
-		pluginTextMatch := pluginNameMatch.IsMatch || pluginDescriptionMatch.IsMatch
-		pluginTextScore := max(pluginNameMatch.Score, pluginDescriptionMatch.Score)
+		pluginTextMatch, pluginTextScore := matchIndicatorPluginText(entry, preparedPattern, search, usePinyin)
 
 		var matchedCommands []indicatorMatchedCommand
 		var matchedCommandsBestScore int64
 		for _, commandEntry := range entry.commands {
 			commandMatch := fuzzymatch.FuzzyMatchPrepared(commandEntry.preparedCommand, preparedPattern, false)
-			descriptionMatch := fuzzymatch.FuzzyMatchPrepared(commandEntry.preparedDescription, preparedPattern, usePinyin)
+			descriptionMatch := strongIndicatorDescriptionMatch(fuzzymatch.FuzzyMatchPrepared(commandEntry.preparedDescription, preparedPattern, usePinyin), search)
 			if !commandMatch.IsMatch && !descriptionMatch.IsMatch {
 				continue
 			}
@@ -254,6 +256,22 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	return plugin.NewQueryResponse(limitIndicatorQueryResults(results))
 }
 
+// strongIndicatorDescriptionMatch prevents long prose from matching through widely scattered characters.
+func strongIndicatorDescriptionMatch(match fuzzymatch.FuzzyMatchResult, search string) fuzzymatch.FuzzyMatchResult {
+	if match.IsMatch && match.Score >= int64(utf8.RuneCountInString(search)*indicatorDescriptionMinScorePerRune) {
+		return match
+	}
+	return fuzzymatch.FuzzyMatchResult{}
+}
+
+// matchIndicatorPluginText searches every string displayed by the plugin activation result.
+func matchIndicatorPluginText(entry indicatorSearchEntry, pattern *fuzzymatch.PreparedPattern, search string, usePinyin bool) (bool, int64) {
+	nameMatch := fuzzymatch.FuzzyMatchPrepared(entry.preparedPluginName, pattern, usePinyin)
+	descriptionMatch := strongIndicatorDescriptionMatch(fuzzymatch.FuzzyMatchPrepared(entry.preparedDescription, pattern, usePinyin), search)
+	subtitleMatch := strongIndicatorDescriptionMatch(fuzzymatch.FuzzyMatchPrepared(entry.preparedResultSubtitle, pattern, usePinyin), search)
+	return nameMatch.IsMatch || descriptionMatch.IsMatch || subtitleMatch.IsMatch, max(nameMatch.Score, descriptionMatch.Score, subtitleMatch.Score)
+}
+
 // limitIndicatorQueryResults caps broad matches before core performs per-result polishing.
 func limitIndicatorQueryResults(results []plugin.QueryResult) []plugin.QueryResult {
 	if len(results) <= indicatorQueryResultLimit {
@@ -286,6 +304,7 @@ func (i *IndicatorPlugin) getSearchIndex(ctx context.Context, pluginInstances []
 			preparedDescription: fuzzymatch.PrepareText(pluginInstance.GetDescription(ctx)),
 		}
 		entry.preparedPluginName = fuzzymatch.PrepareText(entry.pluginName)
+		entry.preparedResultSubtitle = fuzzymatch.PrepareText(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), entry.pluginName))
 		for _, triggerKeyword := range triggerKeywords {
 			if triggerKeyword == "*" {
 				continue
