@@ -1511,6 +1511,7 @@
   "plugin_paste_to_window": "Colar em %s",
   "plugin_sys_empty_trash": "Esvaziar lixeira",
   "plugin_sys_lock_computer": "Bloquear PC",
+  "plugin_sys_confetti": "Confete",
   "plugin_sys_shutdown_computer": "Desligar PC",
   "plugin_sys_restart_computer": "Reiniciar PC",
   "plugin_sys_shutdown_confirm_title": "Confirmar desligamento do PC",

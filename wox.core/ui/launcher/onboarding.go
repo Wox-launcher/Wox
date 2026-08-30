@@ -17,6 +17,7 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/keyboard"
+	"wox/util/overlay/confettioverlay"
 	macospermission "wox/util/overlay/macos_permission"
 	"wox/util/permission"
 )
@@ -170,6 +171,9 @@ func (a *App) finishOnboarding() {
 		}
 		if err := a.showWindow(show); err != nil {
 			log.Printf("show launcher after onboarding: %v", err)
+		}
+		if err := confettioverlay.Show(); err != nil {
+			util.GetLogger().Warn(context.Background(), "show onboarding confetti: "+err.Error())
 		}
 	})
 }

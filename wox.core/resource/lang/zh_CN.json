@@ -1687,6 +1687,7 @@
   "plugin_paste_to_window": "粘贴到%s",
   "plugin_sys_empty_trash": "清空回收站",
   "plugin_sys_lock_computer": "锁定电脑",
+  "plugin_sys_confetti": "撒花",
   "plugin_sys_shutdown_computer": "关闭电脑",
   "plugin_sys_restart_computer": "重启电脑",
   "plugin_sys_shutdown_confirm_title": "确认关闭电脑",

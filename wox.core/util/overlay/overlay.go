@@ -98,6 +98,14 @@ func SetWindowManager(manager *woxui.WindowManager) {
 	runtimeOverlays.Unlock()
 }
 
+// WindowManager returns the process-local manager shared by specialized overlay packages.
+func WindowManager() *woxui.WindowManager {
+	runtimeOverlays.Lock()
+	manager := runtimeOverlays.manager
+	runtimeOverlays.Unlock()
+	return manager
+}
+
 // ShowWindow creates or updates one runtime-rendered overlay.
 func ShowWindow(options WindowOptions, view View) bool {
 	if options.ID == "" || view.Build == nil {

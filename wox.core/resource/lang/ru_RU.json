@@ -1512,6 +1512,7 @@
   "plugin_paste_to_window": "Вставить в %s",
   "plugin_sys_empty_trash": "Очистить корзину",
   "plugin_sys_lock_computer": "Заблокировать ПК",
+  "plugin_sys_confetti": "Конфетти",
   "plugin_sys_shutdown_computer": "Выключить ПК",
   "plugin_sys_restart_computer": "Перезагрузить ПК",
   "plugin_sys_shutdown_confirm_title": "Подтвердить выключение ПК",

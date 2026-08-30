@@ -23,12 +23,15 @@ import (
 	"wox/util/clipboard"
 	"wox/util/fuzzymatch"
 	"wox/util/notifier"
+	"wox/util/overlay/confettioverlay"
 	"wox/util/timetracking"
 
 	"github.com/google/uuid"
 )
 
 var sysIcon = common.PluginSysIcon
+
+var setVolumeAliases = []string{"set volume", "volume", "音量", "设置音量"}
 
 const sysQueryResultLimit = 30
 
@@ -125,6 +128,17 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 func (r *SysPlugin) buildCommands() []SysCommand {
 	return []SysCommand{
 		{
+			ID:      "confetti",
+			Title:   "i18n:plugin_sys_confetti",
+			Icon:    common.NewWoxImageEmoji("🎉"),
+			Aliases: []string{"confetti", "celebrate", "party", "撒花", "庆祝"},
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := confettioverlay.Show(); err != nil {
+					r.api.Log(ctx, plugin.LogLevelError, "failed to show confetti: "+err.Error())
+				}
+			},
+		},
+		{
 			ID:          "lock_computer",
 			Title:       "i18n:plugin_sys_lock_computer",
 			Icon:        common.LockIcon,
@@ -213,7 +227,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			Title:            "i18n:plugin_sys_set_volume",
 			SubTitle:         "i18n:plugin_sys_set_volume_subtitle",
 			Icon:             sysVolumeIcon,
-			Aliases:          []string{"set volume", "volume", "音量", "设置音量"},
+			Aliases:          setVolumeAliases,
 			SupportedOS:      []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable:      isVolumeCommandAvailable,
 			BuildContextData: buildSetVolumeContextData,
@@ -739,6 +753,16 @@ func (r *SysPlugin) commandMatches(command SysCommand, search string, candidates
 	if !r.isCommandAvailable(command) {
 		return false, 0
 	}
+	if _, hasCommand := cutSetVolumeArgument(search); hasCommand {
+		if _, valid := parseVolumePercent(search); valid {
+			switch {
+			case command.ID == "set-volume":
+				return true, 1000
+			case strings.HasPrefix(command.ID, "set-volume-"):
+				return false, 0
+			}
+		}
+	}
 
 	if search == "" {
 		return true, 100
@@ -867,6 +891,20 @@ func (r *SysPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 }
 
 func (r *SysPlugin) buildCommandAction(command SysCommand, contextData common.ContextData) plugin.QueryResultAction {
+	if command.ID == "set-volume" {
+		if _, valid := parseVolumeContext(contextData); !valid {
+			return plugin.QueryResultAction{
+				Name:                   command.Title,
+				Icon:                   command.Icon,
+				PreventHideAfterAction: true,
+				ContextData:            contextData,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					r.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "set volume "})
+				},
+			}
+		}
+	}
+
 	actionName := command.ActionName
 	if actionName == "" {
 		actionName = "i18n:plugin_sys_execute"
@@ -982,6 +1020,9 @@ func parseVolumeContext(contextData common.ContextData) (int, bool) {
 }
 
 func parseVolumePercent(raw string) (int, bool) {
+	if argument, ok := cutSetVolumeArgument(raw); ok {
+		raw = argument
+	}
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimSuffix(raw, "%")
 	if raw == "" {
@@ -993,6 +1034,17 @@ func parseVolumePercent(raw string) (int, bool) {
 		return 0, false
 	}
 	return percent, true
+}
+
+// cutSetVolumeArgument extracts the percentage following a complete volume command alias.
+func cutSetVolumeArgument(raw string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	for _, alias := range setVolumeAliases {
+		if argument, ok := strings.CutPrefix(normalized, alias+" "); ok {
+			return strings.TrimSpace(argument), true
+		}
+	}
+	return "", false
 }
 
 func runShutdownCommand() (*exec.Cmd, error) {

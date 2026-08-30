@@ -28,6 +28,12 @@ static BOOL openClipboardRetry() {
     return FALSE;
 }
 
+// copyReadableMemory avoids crashing when another application publishes an invalid clipboard handle.
+static BOOL copyReadableMemory(void *destination, const void *source, SIZE_T size) {
+    SIZE_T copied = 0;
+    return ReadProcessMemory(GetCurrentProcess(), source, destination, size, &copied) && copied == size;
+}
+
 // clipboardGetContentType checks what type of data is on the clipboard.
 // Returns: 0=empty, 1=text, 2=image, 3=file
 // Priority: file > image > text
@@ -210,7 +216,12 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
                 if (pPng != NULL) {
                     unsigned char *buf = (unsigned char *)malloc(pngSize);
                     if (buf != NULL) {
-                        memcpy(buf, pPng, pngSize);
+                        if (!copyReadableMemory(buf, pPng, pngSize)) {
+                            free(buf);
+                            buf = NULL;
+                        }
+                    }
+                    if (buf != NULL) {
                         GlobalUnlock(hPng);
                         CloseClipboard();
 
@@ -245,9 +256,25 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
             return -5;
         }
 
-        // Copy DIB header info for Go side
+        unsigned char *buf = (unsigned char *)malloc(dibSize);
+        if (buf == NULL) {
+            GlobalUnlock(hDib);
+            CloseClipboard();
+            return -7;
+        }
+        if (!copyReadableMemory(buf, pDib, dibSize)) {
+            free(buf);
+            GlobalUnlock(hDib);
+            CloseClipboard();
+            return -8;
+        }
+
+        GlobalUnlock(hDib);
+        CloseClipboard();
+
+        // Read metadata only from the validated private copy.
         if (dibSize >= sizeof(BITMAPINFOHEADER)) {
-            BITMAPINFOHEADER *hdr = (BITMAPINFOHEADER *)pDib;
+            BITMAPINFOHEADER *hdr = (BITMAPINFOHEADER *)buf;
             outInfo->headerSize = (int)hdr->biSize;
             outInfo->width = (int)hdr->biWidth;
             outInfo->height = (int)hdr->biHeight;
@@ -256,17 +283,6 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
             outInfo->sizeImage = (int)hdr->biSizeImage;
             outInfo->clrUsed = (int)hdr->biClrUsed;
         }
-
-        unsigned char *buf = (unsigned char *)malloc(dibSize);
-        if (buf == NULL) {
-            GlobalUnlock(hDib);
-            CloseClipboard();
-            return -7;
-        }
-        memcpy(buf, pDib, dibSize);
-
-        GlobalUnlock(hDib);
-        CloseClipboard();
 
         *outData = buf;
         *outLen = (int)dibSize;
