@@ -77,7 +77,9 @@ type LauncherResultsProps struct {
 	ContentHeight     float32
 	Offset            float32
 	StartIndex        int
+	StartOffset       float32
 	RowHeight         float32
+	GroupRowHeight    float32
 	RowGap            float32
 	ContainerPadding  woxwidget.Insets
 	ItemPadding       woxwidget.Insets
@@ -96,6 +98,7 @@ type launcherResultRowProps struct {
 	Item              LauncherResultItem
 	RowWidth          float32
 	RowHeight         float32
+	GroupRowHeight    float32
 	InnerRowWidth     float32
 	BaseHeight        float32
 	IconSize          float32
@@ -217,7 +220,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		}
 		item.ID = key
 		rowProps := launcherResultRowProps{
-			Item: item, RowWidth: rowWidth, RowHeight: props.RowHeight, InnerRowWidth: innerRowWidth,
+			Item: item, RowWidth: rowWidth, RowHeight: props.RowHeight, GroupRowHeight: props.GroupRowHeight, InnerRowWidth: innerRowWidth,
 			BaseHeight: baseHeight, IconSize: iconSize, IconGap: iconGap, ItemPadding: props.ItemPadding, ItemRadius: props.ItemRadius,
 			TailColor: props.TailColor, SelectedTailColor: props.SelectedTailColor, Theme: props.Theme, DensityScale: props.DensityScale,
 			TitleStyle: titleStyle, SubtitleStyle: subtitleStyle,
@@ -225,7 +228,11 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		rows = append(rows, launcherResultRow(rowProps))
 	}
 	visiblePadding := props.ContainerPadding
-	visiblePadding.Top += float32(props.StartIndex) * (props.RowHeight + props.RowGap)
+	if props.StartOffset > 0 {
+		visiblePadding.Top += props.StartOffset
+	} else {
+		visiblePadding.Top += float32(props.StartIndex) * (props.RowHeight + props.RowGap)
+	}
 	content := woxwidget.Container{
 		Width: props.Width, Height: props.ContentHeight, Padding: visiblePadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.RowGap, Children: rows},
@@ -268,9 +275,13 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	titleValue := launcherResultSingleLineText(item.Title)
 	if item.Group {
 		titleProps := launcherResultTextProps{Value: titleValue, Style: props.TitleStyle, Color: title}
+		groupHeight := props.GroupRowHeight
+		if groupHeight <= 0 {
+			groupHeight = props.RowHeight
+		}
 		return woxwidget.Container{
-			Width: props.RowWidth, Height: props.RowHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(18, props.DensityScale)},
-			Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps),
+			Width: props.RowWidth, Height: groupHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale)},
+			Child: woxwidget.Align{Height: groupHeight, Vertical: 0.5, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)},
 		}
 	}
 	iconProps := launcherResultIconProps{Image: item.Icon, Size: props.IconSize}

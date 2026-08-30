@@ -1071,7 +1071,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if layout.GridLayout != nil {
 			height += min(gridResultsHeight(results, float32(width), layout.GridLayout), maxResults*resultRowHeight)
 		} else {
-			height += resultVerticalPadding + visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
+			height += resultVerticalPadding + int(listVisibleResultsHeight(results, visibleResults, float32(resultRowHeight), densityMetrics.groupHeaderHeight(), float32(resultRowGap)))
 		}
 	}
 	if toolbarHeightIncluded {

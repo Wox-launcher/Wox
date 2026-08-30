@@ -48,6 +48,7 @@ const (
 	previewDataMaxSize           = 1024
 	maxCachedQueriesPerSession   = 32
 	globalQueryPluginScoreLimit  = 200
+	fileSearchPluginID           = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
 )
 
 type debounceTimer struct {
@@ -1895,6 +1896,18 @@ func shouldHidePreviewForGlobalQuery(query Query, preview WoxPreview) bool {
 		preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict
 }
 
+// shouldClearGroupForGlobalQuery keeps global search as a flat ranked list.
+// File search is the exception: its many hits stay in one group below others.
+func shouldClearGroupForGlobalQuery(query Query, pluginInstance *Instance) bool {
+	if !query.IsGlobalQuery() {
+		return false
+	}
+	if pluginInstance != nil && pluginInstance.Metadata.Id == fileSearchPluginID {
+		return false
+	}
+	return true
+}
+
 // limitGlobalQueryPluginScore keeps plugin-provided global scores within Wox's shared ranking scale.
 func limitGlobalQueryPluginScore(query Query, score int64) int64 {
 	if !query.IsGlobalQuery() || score <= globalQueryPluginScoreLimit {
@@ -2882,9 +2895,11 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	previewRemoteTimingStart := time.Now()
 	previewGlobalStart := util.GetSystemTimestamp()
 	previewGlobalTimingStart := time.Now()
-	// If query is input and trigger keyword is global, disable preview and group.
+	// Global search stays compact: hide previews, and flatten groups except file search.
 	if shouldHidePreviewForGlobalQuery(query, result.Preview) {
 		result.Preview = WoxPreview{}
+	}
+	if shouldClearGroupForGlobalQuery(query, pluginInstance) {
 		result.Group = ""
 		result.GroupScore = 0
 	}

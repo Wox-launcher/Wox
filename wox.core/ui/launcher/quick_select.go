@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"math"
 	"runtime"
 	"strconv"
 	"time"
@@ -19,14 +18,15 @@ const (
 // quickSelectViewport remembers the last painted result viewport so number keys
 // resolve against the same visible rows the badges were drawn on.
 type quickSelectViewport struct {
-	grid       bool
-	offset     float32
-	height     float32
-	topPadding float32
-	rowHeight  float32
-	gap        float32
-	columns    int
-	cellHeight float32
+	grid        bool
+	offset      float32
+	height      float32
+	topPadding  float32
+	rowHeight   float32
+	groupHeight float32
+	gap         float32
+	columns     int
+	cellHeight  float32
 }
 
 // onQuickSelectKey holds Alt (Windows/Linux) or Command (macOS) to number visible results.
@@ -145,7 +145,7 @@ func (a *App) quickSelectVisibleLocked() []bool {
 	if viewport.grid {
 		return quickSelectVisibleGridResults(a.results, viewport.columns, viewport.cellHeight, viewport.offset, viewport.height)
 	}
-	return quickSelectVisibleListResults(len(a.results), viewport.offset, viewport.height, viewport.topPadding, viewport.rowHeight, viewport.gap)
+	return quickSelectVisibleListResults(a.results, viewport.offset, viewport.height, viewport.topPadding, viewport.rowHeight, viewport.groupHeight, viewport.gap)
 }
 
 func quickSelectLogContext(a *App) context.Context {
@@ -200,25 +200,22 @@ func allQuickSelectVisible(count int) []bool {
 }
 
 // quickSelectVisibleListResults marks rows that intersect the result viewport without overscan.
-func quickSelectVisibleListResults(count int, offset, viewport, topPadding, rowHeight, gap float32) []bool {
-	visible := make([]bool, count)
-	if count <= 0 || rowHeight <= 0 || viewport <= 0 {
+func quickSelectVisibleListResults(results []queryResult, offset, viewport, topPadding, rowHeight, groupHeight, gap float32) []bool {
+	visible := make([]bool, len(results))
+	if len(results) == 0 || rowHeight <= 0 || viewport <= 0 {
 		return visible
 	}
-	stride := rowHeight + gap
-	start := int(math.Floor(float64((offset - topPadding) / stride)))
-	end := int(math.Ceil(float64((offset + viewport - topPadding) / stride)))
-	if start < 0 {
-		start = 0
+	if groupHeight <= 0 {
+		groupHeight = rowHeight
 	}
-	if end > count {
-		end = count
-	}
-	if start > end {
-		start = end
-	}
-	for index := start; index < end; index++ {
-		visible[index] = true
+	bottom := offset + viewport
+	y := topPadding
+	for index, result := range results {
+		extent := listItemRowHeight(result, rowHeight, groupHeight)
+		if y+extent > offset && y < bottom {
+			visible[index] = true
+		}
+		y += extent + gap
 	}
 	return visible
 }

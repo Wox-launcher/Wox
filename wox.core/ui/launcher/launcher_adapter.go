@@ -952,6 +952,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 	}
 	densityMetrics := snapshot.densityMetrics.normalized()
 	rowHeight := densityMetrics.resultRowHeight(snapshot.palette)
+	groupHeight := densityMetrics.groupHeaderHeight()
 	containerPadding := snapshot.palette.resultContainerPadding
 	containerPadding.Left += snapshot.palette.appPadding.Left
 	containerPadding.Right += snapshot.palette.appPadding.Right
@@ -967,14 +968,15 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 	rowPadding.Left += densityMetrics.scaled(5)
 	rowPadding.Right += densityMetrics.scaled(5)
 	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
-	contentHeight := containerPadding.Top + containerPadding.Bottom + float32(len(snapshot.results))*rowHeight + float32(max(0, len(snapshot.results)-1)*resultRowGap)
+	contentHeight := listResultsContentHeight(snapshot.results, containerPadding.Top, containerPadding.Bottom, rowHeight, groupHeight, resultRowGap)
 	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, containerPadding.Top)
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	a.rememberQuickSelectViewport(quickSelectViewport{
-		offset: scroll.offset, height: height, topPadding: containerPadding.Top, rowHeight: rowHeight, gap: resultRowGap,
+		offset: scroll.offset, height: height, topPadding: containerPadding.Top, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
 	})
 	offset := scroll.offset
-	start, end := visibleResultRange(len(snapshot.results), offset, height, containerPadding.Top, rowHeight, resultRowGap)
+	start, end := visibleListResultRange(snapshot.results, offset, height, containerPadding.Top, rowHeight, groupHeight, resultRowGap)
+	startOffset := listResultsPrefixHeight(snapshot.results, start, rowHeight, groupHeight, resultRowGap)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {
 		quickSelectVisible = a.quickSelectVisibleLocked()
@@ -998,7 +1000,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
-		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
+		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, StartOffset: startOffset, RowHeight: rowHeight, GroupRowHeight: groupHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
 		Complete: snapshot.queryComplete, ScrollDetached: snapshot.resultScrollDetached,
@@ -1071,17 +1073,100 @@ func (a *App) setResultTailTooltip(inside bool, text string, anchor woxui.Rect) 
 	a.setNativeHoverTooltip(&a.resultTailTooltipRevision, "go-ui-result-tail", "update result tail tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
+// listItemRowHeight returns the painted height of one list row.
+func listItemRowHeight(result queryResult, rowHeight, groupHeight float32) float32 {
+	if result.IsGroup {
+		return groupHeight
+	}
+	return rowHeight
+}
+
+// listResultsContentHeight sums mixed result and group extents so the scroll
+// surface matches the painted list instead of assuming a uniform row stride.
+func listResultsContentHeight(results []queryResult, topPadding, bottomPadding, rowHeight, groupHeight, gap float32) float32 {
+	height := topPadding + bottomPadding
+	for index, result := range results {
+		height += listItemRowHeight(result, rowHeight, groupHeight)
+		if index < len(results)-1 {
+			height += gap
+		}
+	}
+	return height
+}
+
+// listResultOffset is the top of results[index] in list content coordinates.
+func listResultOffset(results []queryResult, index int, topPadding, rowHeight, groupHeight, gap float32) float32 {
+	return topPadding + listResultsPrefixHeight(results, index, rowHeight, groupHeight, gap)
+}
+
+// listResultsPrefixHeight is the offset of results[count] including the gap after
+// each skipped row, matching the previous startIndex * (rowHeight + gap) formula.
+func listResultsPrefixHeight(results []queryResult, count int, rowHeight, groupHeight, gap float32) float32 {
+	height := float32(0)
+	limit := min(count, len(results))
+	for index := 0; index < limit; index++ {
+		height += listItemRowHeight(results[index], rowHeight, groupHeight) + gap
+	}
+	return height
+}
+
+// listVisibleResultsHeight sizes the launcher window to the first visibleCount rows.
+func listVisibleResultsHeight(results []queryResult, visibleCount int, rowHeight, groupHeight, gap float32) float32 {
+	limit := min(visibleCount, len(results))
+	height := float32(0)
+	for index := 0; index < limit; index++ {
+		height += listItemRowHeight(results[index], rowHeight, groupHeight)
+		if index < limit-1 {
+			height += gap
+		}
+	}
+	return height
+}
+
 // visibleResultRange returns the viewport rows plus a small buffer for smooth scrolling.
 func visibleResultRange(count int, offset, viewport, topPadding, rowHeight, gap float32) (int, int) {
-	if count <= 0 || rowHeight <= 0 {
+	return visibleResultRangeAt(count, offset, viewport, topPadding, gap, func(int) float32 { return rowHeight })
+}
+
+// visibleListResultRange uses each row's real height so shorter group headers
+// do not shift later result indexes in the virtual window.
+func visibleListResultRange(results []queryResult, offset, viewport, topPadding, rowHeight, groupHeight, gap float32) (int, int) {
+	return visibleResultRangeAt(len(results), offset, viewport, topPadding, gap, func(index int) float32 {
+		return listItemRowHeight(results[index], rowHeight, groupHeight)
+	})
+}
+
+func visibleResultRangeAt(count int, offset, viewport, topPadding, gap float32, heightAt func(int) float32) (int, int) {
+	if count <= 0 || heightAt == nil {
+		return 0, 0
+	}
+	firstHeight := heightAt(0)
+	if firstHeight <= 0 {
 		return 0, 0
 	}
 	const overscan = 2
-	stride := rowHeight + gap
-	start := int(math.Floor(float64((offset-topPadding)/stride))) - overscan
-	end := int(math.Ceil(float64((offset+viewport-topPadding)/stride))) + overscan
-	start = max(0, min(count, start))
-	end = max(start, min(count, end))
+	start := 0
+	y := topPadding
+	for start < count {
+		extent := heightAt(start)
+		if y+extent > offset {
+			break
+		}
+		y += extent + gap
+		start++
+	}
+	start = max(0, start-overscan)
+	end := start
+	y = topPadding
+	for index := 0; index < start; index++ {
+		y += heightAt(index) + gap
+	}
+	bottom := offset + viewport
+	for end < count && y < bottom {
+		y += heightAt(end) + gap
+		end++
+	}
+	end = min(count, end+overscan)
 	return start, end
 }
 
@@ -1092,15 +1177,16 @@ func resolveResultScroll(results []queryResult, layout *gridLayout, selected int
 		return scroll
 	}
 	rowHeight := densityMetrics.normalized().resultRowHeight(palette)
-	top := listTopPadding + float32(selected)*(rowHeight+resultRowGap)
-	bottom := top + rowHeight
+	groupHeight := densityMetrics.normalized().groupHeaderHeight()
+	top := listResultOffset(results, selected, listTopPadding, rowHeight, groupHeight, resultRowGap)
+	bottom := top + listItemRowHeight(results[selected], rowHeight, groupHeight)
 	if layout != nil {
 		top, bottom = gridResultVerticalBounds(results, selected, width, layout)
 	} else {
 		for index := selected - 1; index >= 0; index-- {
 			if results[index].IsGroup {
 				if selected-index <= 2 {
-					top = listTopPadding + float32(index)*(rowHeight+resultRowGap)
+					top = listResultOffset(results, index, listTopPadding, rowHeight, groupHeight, resultRowGap)
 				}
 				break
 			}

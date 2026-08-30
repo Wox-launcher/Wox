@@ -911,13 +911,16 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
 		actions := c.buildFileSearchResultActions(ctx, item)
 
+		group, groupScore := fileSearchResultGroup(query)
 		queryResult := plugin.QueryResult{
-			Title:    item.Name,
-			SubTitle: item.Path,
-			Icon:     icon,
-			Score:    item.Score,
-			Tails:    fileSearchResultTails(item),
-			Actions:  actions,
+			Title:      item.Name,
+			SubTitle:   item.Path,
+			Icon:       icon,
+			Score:      item.Score,
+			Group:      group,
+			GroupScore: groupScore,
+			Tails:      fileSearchResultTails(item),
+			Actions:    actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
 				Files: []string{item.Path},
@@ -941,6 +944,15 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	response := plugin.NewQueryResponse(queryResults)
 	response.Refinements = c.buildFileSearchRefinements(ctx)
 	return response
+}
+
+// fileSearchResultGroup keeps global-search file hits in their own section so
+// they do not interleave with other plugins when the user adds "*".
+func fileSearchResultGroup(query plugin.Query) (string, int64) {
+	if !query.IsGlobalQuery() {
+		return "", 0
+	}
+	return "i18n:plugin_file_group", 0
 }
 
 // searchFileQuery recalls name and content candidates for the selected type filter.

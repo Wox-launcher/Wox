@@ -11,11 +11,12 @@ const launcherQueryMaxLines = 4
 
 // launcherDensityMetrics contains the launcher-only values derived from the shared UiDensity setting.
 type launcherDensityMetrics struct {
-	scale               float32
-	queryBoxHeight      float32
-	resultRowBaseHeight float32
-	toolbarHeight       float32
-	refinementBarHeight float32
+	scale                   float32
+	queryBoxHeight          float32
+	resultRowBaseHeight     float32
+	resultGroupHeaderHeight float32
+	toolbarHeight           float32
+	refinementBarHeight     float32
 }
 
 // launcherDensityMetricsFor keeps native launcher geometry aligned with Flutter's density buckets.
@@ -30,6 +31,7 @@ func launcherDensityMetricsFor(value string) launcherDensityMetrics {
 	metrics := launcherDensityMetrics{scale: scale}
 	metrics.queryBoxHeight = metrics.scaled(55)
 	metrics.resultRowBaseHeight = metrics.scaled(50)
+	metrics.resultGroupHeaderHeight = metrics.scaled(28)
 	metrics.toolbarHeight = metrics.scaled(40)
 	metrics.refinementBarHeight = metrics.scaled(44)
 	return metrics
@@ -52,6 +54,10 @@ func (metrics launcherDensityMetrics) scaled(value float32) float32 {
 
 func (metrics launcherDensityMetrics) resultRowHeight(palette uiPalette) float32 {
 	return metrics.resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
+}
+
+func (metrics launcherDensityMetrics) groupHeaderHeight() float32 {
+	return metrics.resultGroupHeaderHeight
 }
 
 func (metrics launcherDensityMetrics) queryLineHeight(measuredHeight float32) float32 {

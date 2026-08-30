@@ -259,3 +259,52 @@ func newTestManagerWithCachedResult(query Query, result QueryResult) (*Manager, 
 
 	return manager, pluginInstance
 }
+
+func TestShouldClearGroupForGlobalQueryKeepsFilePlugin(t *testing.T) {
+	globalQuery := Query{Type: QueryTypeInput, Search: "scottqian"}
+	filePlugin := &Instance{Metadata: Metadata{Id: fileSearchPluginID}}
+	otherPlugin := &Instance{Metadata: Metadata{Id: "other-plugin"}}
+
+	assert.False(t, shouldClearGroupForGlobalQuery(globalQuery, filePlugin))
+	assert.True(t, shouldClearGroupForGlobalQuery(globalQuery, otherPlugin))
+	assert.False(t, shouldClearGroupForGlobalQuery(Query{Type: QueryTypeInput, TriggerKeyword: "f"}, filePlugin))
+}
+
+func TestShouldHidePreviewForGlobalQueryStillHidesFilePreview(t *testing.T) {
+	globalQuery := Query{Type: QueryTypeInput, Search: "scottqian"}
+	preview := WoxPreview{PreviewType: WoxPreviewTypeFile, PreviewData: `C:\tmp\readme.txt`}
+
+	assert.True(t, shouldHidePreviewForGlobalQuery(globalQuery, preview))
+	assert.False(t, shouldHidePreviewForGlobalQuery(Query{Type: QueryTypeInput, TriggerKeyword: "f"}, preview))
+}
+
+func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing.T) {
+	query := Query{Id: "query-1", SessionId: "session-1", Type: QueryTypeInput, Search: "scottqian"}
+	manager := &Manager{
+		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+	}
+	resultSet := newQueryResultSet(query)
+	resultSet.Results.Store("app", &QueryResultCache{
+		Result: QueryResult{Id: "app", Title: "App", Score: 80},
+	})
+	resultSet.Results.Store("file", &QueryResultCache{
+		Result: QueryResult{Id: "file", Title: "readme.txt", Score: 200, Group: "Files", GroupScore: 0},
+	})
+	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
+	sessionQueries.Store(query.Id, resultSet)
+	manager.sessionQueryResultCache.Store(query.SessionId, sessionQueries)
+
+	results := manager.BuildQueryResultsSnapshot(query.SessionId, query.Id)
+	if len(results) != 3 {
+		t.Fatalf("snapshot length = %d, want 3", len(results))
+	}
+	if results[0].Id != "app" || results[0].IsGroup {
+		t.Fatalf("first result = %#v, want ungrouped app", results[0])
+	}
+	if !results[1].IsGroup || results[1].Title != "Files" {
+		t.Fatalf("second result = %#v, want Files group header", results[1])
+	}
+	if results[2].Id != "file" || results[2].IsGroup {
+		t.Fatalf("third result = %#v, want file result under group", results[2])
+	}
+}

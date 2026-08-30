@@ -26,7 +26,10 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
 	content := scroll.Child.(woxwidget.Container)
 	row := content.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
-	titleBoundary := row.Child.(woxwidget.Boundary[launcherResultTextProps])
+	if row.Height != 50 {
+		t.Fatalf("group row height = %.0f, want the supplied row height when GroupRowHeight is unset", row.Height)
+	}
+	titleBoundary := row.Child.(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultTextProps])
 	label := titleBoundary.Build(titleBoundary.Props).(woxwidget.Text)
 
 	if label.Color != titleColor {
@@ -34,6 +37,21 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	}
 	if label.Style.Size != 15 || label.Style.Weight != woxui.FontWeightRegular {
 		t.Fatalf("group title style = %#v, want Flutter 15px normal result title typography", label.Style)
+	}
+}
+
+func TestLauncherResultGroupUsesCompactHeaderHeight(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 28, ContentHeight: 28, RowHeight: 56, GroupRowHeight: 28,
+		Items: []LauncherResultItem{{Title: "Files", Group: true}},
+	}).(woxwidget.Semantics)
+	scrollGesture := result.Child.(woxwidget.Gesture)
+	stack := scrollGesture.Child.(woxwidget.Stack)
+	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
+	content := scroll.Child.(woxwidget.Container)
+	row := content.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	if row.Height != 28 {
+		t.Fatalf("group row height = %.0f, want compact header height 28", row.Height)
 	}
 }
 

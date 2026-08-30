@@ -1307,6 +1307,7 @@
   "plugin_notes_action_restore": "Restore Note",
   "plugin_notes_action_save": "Save to Notes",
   "plugin_file_plugin_name": "File Search",
+  "plugin_file_group": "Files",
   "plugin_file_plugin_description": "Search files and folders",
   "plugin_file_setting_roots_title": "File Search Directories",
   "plugin_file_setting_roots_tooltip": "Directories whose filenames should be indexed",

@@ -10,7 +10,7 @@ import (
 func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	results := make([]queryResult, 241)
 	for index := range results {
-		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: fmt.Sprintf("Result %d", index), IsGroup: true}
+		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: fmt.Sprintf("Result %d", index)}
 	}
 	app := &App{selected: -1}
 	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1)
@@ -63,5 +63,16 @@ func TestVisibleResultRangeHandlesEmptyResults(t *testing.T) {
 	start, end := visibleResultRange(0, 0, 500, 0, 50, 0)
 	if start != 0 || end != 0 {
 		t.Fatalf("visible range = %d:%d, want 0:0", start, end)
+	}
+}
+
+func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
+	results := []queryResult{{Title: "App"}, {Title: "Files", IsGroup: true}, {Title: "readme.txt"}}
+	if height := listResultsContentHeight(results, 0, 0, 56, 28, 0); height != 140 {
+		t.Fatalf("mixed content height = %.0f, want 140", height)
+	}
+	start, end := visibleListResultRange(results, 0, 70, 0, 56, 28, 0)
+	if start != 0 || end != 3 {
+		t.Fatalf("mixed visible range = %d:%d, want 0:3 including overscan", start, end)
 	}
 }

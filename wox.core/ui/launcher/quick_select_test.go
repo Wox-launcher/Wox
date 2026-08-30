@@ -43,16 +43,24 @@ func TestQuickSelectNumbersSkipGroupsAndCapAtNine(t *testing.T) {
 }
 
 func TestQuickSelectVisibleListRangeIgnoresOverscan(t *testing.T) {
-	visible := quickSelectVisibleListResults(10, 0, 200, 0, 50, 0)
+	visible := quickSelectVisibleListResults(make([]queryResult, 10), 0, 200, 0, 50, 0, 0)
 	if !visible[0] || !visible[3] || visible[4] {
 		t.Fatalf("list visible = %v, want first four 50px rows in a 200px viewport", visible)
 	}
 }
 
 func TestQuickSelectVisibleListRangeIncludesPartiallyVisibleScaledRow(t *testing.T) {
-	visible := quickSelectVisibleListResults(4, 0, 101.2, 0, 50.5, 0)
+	visible := quickSelectVisibleListResults(make([]queryResult, 4), 0, 101.2, 0, 50.5, 0, 0)
 	if !visible[2] || visible[3] {
 		t.Fatalf("list visible = %v, want the partially visible third scaled row", visible)
+	}
+}
+
+func TestQuickSelectVisibleListRangeUsesGroupHeaderHeight(t *testing.T) {
+	results := []queryResult{{ID: "app"}, {ID: "files", IsGroup: true}, {ID: "readme"}}
+	visible := quickSelectVisibleListResults(results, 0, 70, 0, 56, 28, 0)
+	if !visible[0] || !visible[1] || visible[2] {
+		t.Fatalf("list visible = %v, want the first result and compact Files header", visible)
 	}
 }
 

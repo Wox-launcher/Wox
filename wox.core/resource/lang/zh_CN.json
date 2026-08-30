@@ -1307,6 +1307,7 @@
   "plugin_notes_action_restore": "恢复笔记",
   "plugin_notes_action_save": "保存到笔记",
   "plugin_file_plugin_name": "文件搜索",
+  "plugin_file_group": "文件",
   "plugin_file_plugin_description": "搜索文件和文件夹",
   "plugin_file_setting_roots_title": "文件搜索目录",
   "plugin_file_setting_roots_tooltip": "需要索引的文件名目录",

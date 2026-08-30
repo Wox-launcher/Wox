@@ -1231,6 +1231,7 @@
   "plugin_notes_action_restore": "Восстановить заметку",
   "plugin_notes_action_save": "Сохранить в заметки",
   "plugin_file_plugin_name": "Поиск файлов",
+  "plugin_file_group": "Файлы",
   "plugin_file_plugin_description": "Поиск файлов и папок",
   "plugin_file_setting_roots_title": "Каталоги поиска файлов",
   "plugin_file_setting_roots_tooltip": "Каталоги, в которых нужно индексировать имена файлов",

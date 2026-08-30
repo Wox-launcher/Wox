@@ -1231,6 +1231,7 @@
   "plugin_notes_action_restore": "Restaurar Nota",
   "plugin_notes_action_save": "Salvar nas Notas",
   "plugin_file_plugin_name": "Busca de Arquivos",
+  "plugin_file_group": "Arquivos",
   "plugin_file_plugin_description": "Pesquisar arquivos e pastas",
   "plugin_file_setting_roots_title": "Diretórios de busca de arquivos",
   "plugin_file_setting_roots_tooltip": "Diretórios cujos nomes de arquivo devem ser indexados",
