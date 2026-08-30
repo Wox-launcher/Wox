@@ -97,14 +97,18 @@ type FormTableFieldProps struct {
 	DisabledCloneIcon  *woxui.Image
 	DisabledDeleteIcon *woxui.Image
 	EmptyIcon          *woxui.Image
-	Theme              woxcomponent.Theme
-	OnSecondary        func()
-	OnAdd              func()
-	OnOpenRow          func(int)
-	OnCloneRow         func(int)
-	OnDeleteRow        func(int)
-	OnTooltip          func(bool, string, woxui.Rect)
-	OnDemoHover        func(string, bool, woxui.Rect)
+	// HeaderWeight styles the field title above the table. Column titles stay
+	// regular. Zero keeps regular body weight for plugin tables; Wox-owned
+	// Settings tables pass FontWeightSemibold.
+	HeaderWeight woxui.FontWeight
+	Theme        woxcomponent.Theme
+	OnSecondary  func()
+	OnAdd        func()
+	OnOpenRow    func(int)
+	OnCloneRow   func(int)
+	OnDeleteRow  func(int)
+	OnTooltip    func(bool, string, woxui.Rect)
+	OnDemoHover  func(string, bool, woxui.Rect)
 }
 
 // FormTableFieldHeight returns the content height used by form scrolling and rendering.
@@ -172,7 +176,7 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	if props.Height > 0 {
 		labelHeight = max(float32(0), props.Height-16)
 	}
-	label := formFieldLabel(props.Title, labelWidth, labelHeight, 6, props.Theme)
+	label := formFieldLabel(props.Title, labelWidth, labelHeight, 6, props.Theme, props.HeaderWeight)
 	table := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: tableChildren}
 	fieldChildren := []woxwidget.Widget{table}
 	if !props.ReadOnly {
@@ -197,7 +201,7 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 	if !props.ReadOnly {
 		actionsWidth += 74
 	}
-	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText}
+	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: props.HeaderWeight}, Color: props.Theme.ActionText}
 	if props.DemoKind != "" && props.DemoIcon != nil {
 		title = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			title,
@@ -445,7 +449,7 @@ func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, widt
 	// AlignmentY centers CJK fonts whose logical box is taller than that slot.
 	label := woxwidget.TextBlock{
 		Value: column.Label, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5,
-		Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
+		Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightRegular}, Color: style.headerText,
 	}
 	children := []woxwidget.Widget{label}
 	if column.Tooltip != "" {

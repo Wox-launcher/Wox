@@ -51,6 +51,40 @@ func TestSettingsRailSelectedItemUsesThemeHighlight(t *testing.T) {
 	}
 }
 
+func settingsRailItemLabel(item woxwidget.Widget) woxwidget.Text {
+	child := item.(woxwidget.Semantics).Child
+	if focusable, ok := child.(woxwidget.Focusable); ok {
+		child = focusable.Child
+		if stateful, ok := child.(woxwidget.Stateful); ok {
+			child = stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget)
+		}
+	}
+	row := child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	return row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+}
+
+func TestSettingsRailUsesRegularLabelWeight(t *testing.T) {
+	rail := SettingsRail(SettingsRailProps{
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{},
+		Items: []SettingsNavItem{
+			{ID: "network", Label: "Network"},
+			{ID: "data", Label: "Data", Parent: true},
+		},
+	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
+	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := props.Content.(woxwidget.Flex).Children
+
+	destination := settingsRailItemLabel(rows[0])
+	group := settingsRailItemLabel(rows[1])
+	if destination.Style.Size != 13 || destination.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("destination label = %+v, want 13 regular", destination.Style)
+	}
+	if group.Style.Size != 13 || group.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("group header label = %+v, want the same 13 regular weight as destinations", group.Style)
+	}
+}
+
 func TestSettingsRailHoversDestinationsButNotGroupHeaders(t *testing.T) {
 	text := woxui.Color{R: 180, G: 190, B: 200, A: 255}
 	clicked := 0

@@ -299,20 +299,29 @@ static std::wstring utf8_to_wide(const char *text) {
   return result;
 }
 
+static bool native_ui_font_weight(uint8_t font_weight, DWRITE_FONT_WEIGHT *native_font_weight) {
+  if (native_font_weight == nullptr) {
+    return false;
+  }
+  switch (font_weight) {
+  case 0:
+    *native_font_weight = DWRITE_FONT_WEIGHT_NORMAL;
+    return true;
+  case 1:
+    *native_font_weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+    return true;
+  default:
+    return false;
+  }
+}
+
 // create_text_format keeps drawing and measurement on identical DirectWrite settings.
 static HRESULT create_text_format(WoxRenderer *renderer, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, IDWriteTextFormat **format) {
   if (renderer == nullptr || renderer->dwrite_factory == nullptr || format == nullptr || font_size <= 0.0f) {
     return E_INVALIDARG;
   }
   DWRITE_FONT_WEIGHT native_font_weight;
-  switch (font_weight) {
-  case 0:
-    native_font_weight = DWRITE_FONT_WEIGHT_NORMAL;
-    break;
-  case 1:
-    native_font_weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
-    break;
-  default:
+  if (!native_ui_font_weight(font_weight, &native_font_weight)) {
     return E_INVALIDARG;
   }
   const wchar_t *family = font_family == 1 ? L"Consolas" : renderer->font_family.c_str();
@@ -349,8 +358,10 @@ static_assert(is_cjk_codepoint(0x4E2D));
 static_assert(is_cjk_codepoint(0x20000));
 static_assert(!is_cjk_codepoint(L'A'));
 
-// apply_default_cjk_font keeps the Windows default aligned with Flutter without overriding a configured application font.
-static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstring &text) {
+// apply_default_cjk_font keeps the Windows default aligned with Flutter without
+// overriding a configured application font. YaHei UI is required because the
+// print YaHei face has no Semibold; CJK then silently renders as Regular.
+static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstring &text, DWRITE_FONT_WEIGHT font_weight) {
   for (UINT32 index = 0; index < text.size();) {
     const UINT32 run_start = index;
     uint32_t codepoint = text[index++];
@@ -365,7 +376,11 @@ static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstr
       continue;
     }
     const DWRITE_TEXT_RANGE range = {run_start, index - run_start};
-    const HRESULT result = layout->SetFontFamilyName(L"Microsoft YaHei", range);
+    HRESULT result = layout->SetFontFamilyName(L"Microsoft YaHei UI", range);
+    if (FAILED(result)) {
+      return result;
+    }
+    result = layout->SetFontWeight(font_weight, range);
     if (FAILED(result)) {
       return result;
     }
@@ -382,8 +397,9 @@ static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &tex
   }
   result = renderer->dwrite_factory->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format, width, height, layout);
   format->Release();
-  if (SUCCEEDED(result) && renderer->uses_default_font_family && font_family == 0) {
-    result = apply_default_cjk_font(*layout, text);
+  DWRITE_FONT_WEIGHT native_font_weight;
+  if (SUCCEEDED(result) && renderer->uses_default_font_family && font_family == 0 && native_ui_font_weight(font_weight, &native_font_weight)) {
+    result = apply_default_cjk_font(*layout, text, native_font_weight);
     if (FAILED(result)) {
       release_com(layout);
     }

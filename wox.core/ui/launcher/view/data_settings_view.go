@@ -171,7 +171,8 @@ func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 		ID: "data-backups", Title: props.Labels.BackupListTitle, Width: width,
 		Height: FormTableFieldHeight(true, "", visibleRows, maxHeight), MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true,
 		Columns: []FormTableColumn{{Label: props.Labels.BackupDate, Width: 350}, {Label: props.Labels.BackupType, Width: 220}, {Label: props.Labels.BackupOperation, Width: dataBackupOperationColumnWidth}},
-		Rows:    rows, SecondaryLabel: props.Labels.BackupNow, EmptyLabel: props.Labels.BackupEmpty, Theme: props.Theme, OnSecondary: props.OnCreateBackup,
+		Rows:    rows, SecondaryLabel: props.Labels.BackupNow, EmptyLabel: props.Labels.BackupEmpty,
+		HeaderWeight: woxui.FontWeightSemibold, Theme: props.Theme, OnSecondary: props.OnCreateBackup,
 	})
 }
 

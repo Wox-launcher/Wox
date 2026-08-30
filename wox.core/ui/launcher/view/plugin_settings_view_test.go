@@ -95,6 +95,30 @@ func TestPluginTabsProvideHoverFeedback(t *testing.T) {
 	}
 }
 
+func TestPluginTabsUseRegularLabelWeight(t *testing.T) {
+	tabs := PluginTabs(PluginTabsProps{
+		Width: 240, Height: 44, Active: "settings", Theme: woxcomponent.Theme{},
+		Tabs: []PluginTab{{ID: "settings", Label: "Settings", Width: 120}, {ID: "commands", Label: "Commands", Width: 96}},
+	}).(woxwidget.Container)
+	row := tabs.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+
+	selected := pluginTabLabel(t, row.Children[0])
+	idle := pluginTabLabel(t, row.Children[1])
+	if selected.Style.Size != 14 || selected.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("selected tab label = %+v, want 14 regular", selected.Style)
+	}
+	if idle.Style.Size != 14 || idle.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("idle tab label = %+v, want the same 14 regular weight as the selected tab", idle.Style)
+	}
+}
+
+func pluginTabLabel(t *testing.T, tab woxwidget.Widget) woxwidget.Text {
+	t.Helper()
+	stateful := tab.(woxwidget.Stateful)
+	gesture := stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+	return gesture.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Text)
+}
+
 func TestPluginListLoadingUsesCenteredIndicator(t *testing.T) {
 	loading := PluginList(PluginListProps{Width: 260, Height: 660, Message: "Loading"}).(woxwidget.Align)
 	if loading.Width != 260 || loading.Height != 660 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
@@ -526,6 +550,18 @@ func TestFormTableInlineTitleMatchesFormLabelWeight(t *testing.T) {
 	}
 }
 
+func TestFormTableInlineTitleUsesHeaderWeight(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "query-hotkeys", Title: "Query Hotkeys", Width: 720, Height: 220, InlineTitle: true,
+		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.Theme{},
+	})
+	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("settings table title = size %.0f weight %v, want 13 semibold", title.Style.Size, title.Style.Weight)
+	}
+}
+
 func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "commands", Title: "Commands", Width: 720, Height: 220, InlineTitle: true,
@@ -815,8 +851,8 @@ func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
 	body := formTableDataCell(props, FormTableCell{Text: "Translate"}, 120).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
 	empty := formTableEmptyState(props, 240, tableSurfaceEmptyHeight).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
 
-	if header.Style.Size != woxcomponent.TableHeaderFontSize || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
-		t.Fatalf("table typography = %v/%v/%v, want %v/%v/%v", header.Style.Size, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
+	if header.Style.Size != woxcomponent.TableHeaderFontSize || header.Style.Weight != woxui.FontWeightRegular || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
+		t.Fatalf("table typography = size %v weight %v / %v / %v, want regular %v/%v/%v", header.Style.Size, header.Style.Weight, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
 	}
 	if header.Height != 18 || header.LineHeight != 18 || header.AlignmentY != 0.5 {
 		t.Fatalf("table header slot = height %v line height %v alignment %v, want an 18px optically centered slot", header.Height, header.LineHeight, header.AlignmentY)

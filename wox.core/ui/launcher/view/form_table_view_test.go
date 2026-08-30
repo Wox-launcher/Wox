@@ -19,6 +19,17 @@ func TestFormTableSideTitleMatchesFormLabel(t *testing.T) {
 	}
 }
 
+func TestFormTableSideTitleUsesHeaderWeight(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "hotkeys", Title: "Query Hotkeys", Width: 720, LabelWidth: 80,
+		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.Theme{},
+	})
+	title := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("settings side title = %+v, want 13 semibold", title.Style)
+	}
+}
+
 func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 	focused := 0
 	props := FormTableRowFieldProps{
@@ -327,6 +338,25 @@ func formTableGridFlex(t *testing.T, grid woxwidget.Widget) woxwidget.Flex {
 		t.Fatalf("table grid body = %T, want header/body flex", frame.Children[0].Child)
 	}
 	return body
+}
+
+func formTableHeaderLabel(props FormTableFieldProps) woxwidget.TextBlock {
+	cell := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container)
+	return cell.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
+}
+
+func TestFormTableColumnTitleStaysRegular(t *testing.T) {
+	regular := formTableHeaderLabel(FormTableFieldProps{ID: "plugin-commands", Theme: woxcomponent.Theme{}})
+	if regular.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("plugin table column title weight = %v, want regular", regular.Style.Weight)
+	}
+
+	settings := formTableHeaderLabel(FormTableFieldProps{
+		ID: "query-hotkeys", HeaderWeight: woxui.FontWeightSemibold, Theme: woxcomponent.Theme{},
+	})
+	if settings.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("settings table column title weight = %v, want regular", settings.Style.Weight)
+	}
 }
 
 func TestFormTableUsesCollapsedGridLines(t *testing.T) {

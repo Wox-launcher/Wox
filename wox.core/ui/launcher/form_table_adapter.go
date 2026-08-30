@@ -13,6 +13,16 @@ import (
 	"wox/util/filesearchservice"
 )
 
+// formTableHeaderWeight keeps plugin table field titles regular and uses
+// semibold field titles on Wox-owned Settings pages such as General and AI.
+// Column titles stay regular on every table.
+func formTableHeaderWeight(idPrefix string) woxui.FontWeight {
+	if idPrefix == "plugin-settings" {
+		return woxui.FontWeightRegular
+	}
+	return woxui.FontWeightSemibold
+}
+
 func formTableTitle(definition formDefinition) string {
 	if definition.Value.Title != "" {
 		return definition.Value.Title
@@ -190,7 +200,8 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	return launcherview.FormTableFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil,
-		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
+		HeaderWeight: formTableHeaderWeight(callbacks.idPrefix),
+		Columns:      columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
 		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),

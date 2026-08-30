@@ -64,9 +64,6 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 					foreground = props.Theme.SelectedTitle
 				}
 				labelStyle := woxui.TextStyle{Size: 13}
-				if item.Parent {
-					labelStyle.Weight = woxui.FontWeightSemibold
-				}
 				leftPadding := float32(10 + item.Depth*18)
 				var icon woxwidget.Widget = woxwidget.Text{Value: item.FallbackIcon, Style: woxui.TextStyle{Size: 15}, Color: foreground}
 				if item.Icon != nil {

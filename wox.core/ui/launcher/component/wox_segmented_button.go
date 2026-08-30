@@ -41,7 +41,7 @@ func WoxSegmentedButton(props SegmentedButtonProps) woxwidget.Widget {
 		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{
 			Width: props.Width, Height: SettingsControlHeight, Radius: 6, Color: buttonBackground,
 			Child: woxwidget.Align{Width: props.Width, Height: SettingsControlHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Label, Style: woxui.TextStyle{Size: CompactButtonFontSize, Weight: woxui.FontWeightSemibold}, Color: foreground,
+				Value: props.Label, Style: woxui.TextStyle{Size: CompactButtonFontSize}, Color: foreground,
 			}},
 		}}
 	})

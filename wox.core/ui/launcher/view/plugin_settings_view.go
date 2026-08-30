@@ -566,7 +566,7 @@ func (s *pluginDetailTabState) Build(context woxwidget.StateContext, widget any)
 			context.SetState(func() { s.hovered = inside })
 		}
 	}, Child: woxwidget.Container{Width: props.Width, Height: props.Height - 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Align{Width: props.Width, Height: props.Height - 3, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.TextColor}},
+		woxwidget.Align{Width: props.Width, Height: props.Height - 3, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 14}, Color: props.TextColor}},
 		woxwidget.Align{Width: props.Width, Height: 2, Horizontal: 0.5, Child: woxwidget.Container{Width: props.IndicatorWidth, Height: 2, Color: underline}},
 	}}}}
 }

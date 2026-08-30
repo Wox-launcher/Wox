@@ -296,7 +296,7 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 		}},
 	}}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		formFieldLabel(props.Label, 132, 42, 11, props.Theme), value,
+		formFieldLabel(props.Label, 132, 42, 11, props.Theme, woxui.FontWeightRegular), value,
 	}}}
 }
 
@@ -689,7 +689,7 @@ func formFieldLayout(label, description string, width, height, labelWidth float3
 		padding.Bottom = 10
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
-		formFieldLabel(label, labelWidth, controlHeight, 6, theme),
+		formFieldLabel(label, labelWidth, controlHeight, 6, theme, woxui.FontWeightRegular),
 		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: rightChildren}},
 	}}}
 }
@@ -701,9 +701,9 @@ func formFieldControlWidth(width, labelWidth float32) float32 {
 	return max(float32(0), width-labelWidth-12)
 }
 
-func formFieldLabel(label string, width, height, top float32, theme woxcomponent.Theme) woxwidget.Widget {
+func formFieldLabel(label string, width, height, top float32, theme woxcomponent.Theme, weight woxui.FontWeight) woxwidget.Widget {
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: top}, Child: woxwidget.Text{
-		Value: label, Style: woxui.TextStyle{Size: 13}, Color: theme.ActionText,
+		Value: label, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: theme.ActionText,
 	}}
 }
 

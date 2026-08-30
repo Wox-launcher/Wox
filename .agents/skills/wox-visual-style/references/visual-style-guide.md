@@ -92,7 +92,7 @@ Do not use size to distinguish primary and secondary actions. Keep adjacent acti
 
 | Control | Target geometry |
 | --- | --- |
-| Button | 32 high, 4 radius, 12 horizontal padding, 11 semibold label, 16 leading icon, 8 icon gap |
+| Button | 32 high, 4 radius, 12 horizontal padding, 11 regular label, 16 leading icon, 8 icon gap |
 | Single-line Settings text field | 32 high, 4 radius, 1 border, 13 regular text |
 | Dropdown | 32 high, 4 radius, 1 border, 13 regular value |
 | Ordinary icon button | 32 by 32; center the icon and provide an accessible label |
@@ -158,6 +158,11 @@ Use the configured application font and shared constants in `launcher/component/
 | Primary body, label, value | 13 | Regular or semibold by emphasis |
 | Help and secondary control text | 12 | Regular |
 | Section label | 11 | Semibold, uppercase when already established |
+| Settings table field title | 13 | Semibold on Wox-owned Settings pages; regular on plugin tables |
+| Settings table column title | 13 | Regular |
+| Settings navigation item | 13 | Regular, including group headers |
+| Settings plugin detail tab | 14 | Regular; selection uses the underline, not weight |
+| Ordinary button label | 11 | Regular; opt into semibold only for a specific emphasis |
 | Supporting dense metadata | 10-11 | Regular or medium |
 
 Use weight before adding another size. Keep ordinary body text at 13 and avoid text below 10. Apple uses 13 points as the default macOS body size and 10 points as the recommended minimum for custom type.

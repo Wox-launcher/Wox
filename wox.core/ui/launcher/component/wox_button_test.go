@@ -28,8 +28,22 @@ func TestWoxButtonCentersContentInsideSymmetricPadding(t *testing.T) {
 		t.Fatalf("button content alignment = (%v, %v), want (0.5, 0.5)", content.Horizontal, content.Vertical)
 	}
 	label := content.Child.(woxwidget.TextBlock)
-	if label.Style.Size != CompactButtonFontSize || label.Style.Weight != woxui.FontWeightSemibold || label.Height != 18 || label.AlignmentY != 0.5 {
-		t.Fatalf("button label slot = %+v, want semibold %.0fpx in an 18px centered line", label, CompactButtonFontSize)
+	if label.Style.Size != CompactButtonFontSize || label.Style.Weight != woxui.FontWeightRegular || label.Height != 18 || label.AlignmentY != 0.5 {
+		t.Fatalf("button label slot = %+v, want regular %.0fpx in an 18px centered line", label, CompactButtonFontSize)
+	}
+}
+
+func TestWoxButtonLabelWeightIsConfigurable(t *testing.T) {
+	regular := WoxButton(ButtonProps{ID: "disable", Label: "Disable"})
+	regularLabel := buildHoverable(regular.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.TextBlock)
+	if regularLabel.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("default button weight = %v, want regular", regularLabel.Style.Weight)
+	}
+
+	emphasized := WoxButton(ButtonProps{ID: "save", Label: "Save", FontWeight: woxui.FontWeightSemibold})
+	emphasizedLabel := buildHoverable(emphasized.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.TextBlock)
+	if emphasizedLabel.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("explicit button weight = %v, want semibold", emphasizedLabel.Style.Weight)
 	}
 }
 

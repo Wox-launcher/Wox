@@ -644,7 +644,8 @@ func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height f
 		ID: "cloud-plugin-exclusions", Title: props.SectionLabel, Description: props.Tips, Width: width, Height: height, MaxHeight: 260, InlineTitle: true,
 		Columns: []FormTableColumn{{Label: props.ColumnLabel}}, Rows: rows, HideEditAction: true, HideCloneAction: true,
 		AddLabel: props.AddLabel, OperationLabel: props.OperationLabel, EmptyLabel: props.EmptyLabel,
-		AddIcon: props.AddIcon, DeleteIcon: props.DeleteIcon, EmptyIcon: props.EmptyIcon, Theme: theme, OnAdd: props.OnAdd,
+		AddIcon: props.AddIcon, DeleteIcon: props.DeleteIcon, EmptyIcon: props.EmptyIcon,
+		HeaderWeight: woxui.FontWeightSemibold, Theme: theme, OnAdd: props.OnAdd,
 		OnDeleteRow: func(index int) {
 			if index >= 0 && index < len(props.Items) {
 				props.Items[index].OnDelete()
@@ -662,7 +663,7 @@ func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, th
 	return FormTableField(FormTableFieldProps{
 		ID: "cloud-config-notes", Title: props.SectionLabel, Description: props.Tips, Width: width, Height: height, MaxHeight: 720, InlineTitle: true, ReadOnly: true,
 		Columns: []FormTableColumn{{Label: props.ItemLabel}, {Label: props.ModeLabel, Width: 220}}, Rows: rows,
-		InfoIcon: props.InfoIcon, Theme: theme, OnTooltip: props.OnTooltip,
+		InfoIcon: props.InfoIcon, HeaderWeight: woxui.FontWeightSemibold, Theme: theme, OnTooltip: props.OnTooltip,
 	})
 }
 

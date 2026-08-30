@@ -7,6 +7,14 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxSegmentedButtonUsesRegularLabelWeight(t *testing.T) {
+	button := WoxSegmentedButton(SegmentedButtonProps{ID: "period-30d", Label: "最近 30 天", Width: 100, Theme: Theme{}})
+	label := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if label.Style.Size != CompactButtonFontSize || label.Style.Weight != woxui.FontWeightRegular {
+		t.Fatalf("segmented button label = %+v, want regular %.0fpx", label.Style, CompactButtonFontSize)
+	}
+}
+
 func TestWoxSegmentedButtonAddsHoverSurface(t *testing.T) {
 	foreground := woxui.Color{R: 220, G: 230, B: 240, A: 255}
 	theme := Theme{ResultSubtitle: foreground}

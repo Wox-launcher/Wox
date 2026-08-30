@@ -31,11 +31,14 @@ type ButtonProps struct {
 	IconGap          float32
 	// IntrinsicWidth sizes the button to its label/icon content. Omitted Width already does this;
 	// keep the flag for call sites that want the intent to be explicit.
-	IntrinsicWidth    bool
-	Width             float32
-	Radius            float32
-	Padding           woxwidget.Insets
-	FontSize          float32
+	IntrinsicWidth bool
+	Width          float32
+	Radius         float32
+	Padding        woxwidget.Insets
+	FontSize       float32
+	// FontWeight overrides the default regular button label. Leave zero unless
+	// a specific surface needs extra emphasis.
+	FontWeight        woxui.FontWeight
 	Disabled          bool
 	Variant           ButtonVariant
 	OnTap             func()
@@ -50,7 +53,10 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	radius := float32(4)
 	padding := woxwidget.Insets{Left: 12, Right: 12}
 	fontSize := CompactButtonFontSize
-	fontWeight := woxui.FontWeightSemibold
+	fontWeight := woxui.FontWeightRegular
+	if props.FontWeight != 0 {
+		fontWeight = props.FontWeight
+	}
 	if props.Radius > 0 {
 		radius = props.Radius
 	}
