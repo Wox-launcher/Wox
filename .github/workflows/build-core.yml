@@ -463,6 +463,8 @@ jobs:
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
           project-slug: Wox
           signing-policy-slug: release-signing
+          # Default artifact config only matches Wox-windows-amd64.exe.
+          artifact-configuration-slug: file-index-service
           github-artifact-id: ${{ steps.upload-unsigned-file-index-service.outputs.artifact-id }}
           wait-for-completion: true
           output-artifact-directory: ./wox.core/resource/others/file_index_service
