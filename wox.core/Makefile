@@ -146,7 +146,7 @@ else
 	rm -f $(FILE_INDEX_SERVICE_EXE) $(FILE_INDEX_SERVICE_VERSIONINFO)
 	mkdir -p $(FILE_INDEX_SERVICE_DIR)
 	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
-		-o $(FILE_INDEX_SERVICE_VERSIONINFO) -64 \
+		-o $(FILE_INDEX_SERVICE_VERSIONINFO) -64 -icon resource/app.ico \
 		-product-name "Wox File Index Service" -description "Wox File Index Service" \
 		-internal-name "WoxFileIndexService" -original-name "wox-file-index-service.exe" \
 		-product-version "$(FILE_INDEX_SERVICE_VERSION)" -file-version "$(FILE_INDEX_SERVICE_VERSION)" \

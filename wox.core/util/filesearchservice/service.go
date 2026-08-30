@@ -16,7 +16,7 @@ const (
 	IndexDirectory  = "file-index-service"
 )
 
-var EmbeddedVersion = "2.8.0"
+var EmbeddedVersion = "2.8.1"
 var running atomic.Bool
 
 // ErrIndexNotReady lets Wox keep using its local fallback during the first build.

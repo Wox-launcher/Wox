@@ -421,7 +421,7 @@ func TestFormServiceVersionLabelPrefixesInstalledVersions(t *testing.T) {
 	if got := formServiceVersionLabel("2.8.0 → 2.9.0"); got != "v2.8.0 → v2.9.0" {
 		t.Fatalf("update version = %q", got)
 	}
-	if got := formServiceVersionLabel("Administrator update required"); got != "" {
+	if got := formServiceVersionLabel("Update required"); got != "" {
 		t.Fatalf("status detail = %q, want no version tag", got)
 	}
 }
