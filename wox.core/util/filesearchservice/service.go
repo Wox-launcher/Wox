@@ -1,6 +1,7 @@
 package filesearchservice
 
 import (
+	"errors"
 	"sync/atomic"
 
 	"github.com/Masterminds/semver/v3"
@@ -17,6 +18,9 @@ const (
 
 var EmbeddedVersion = "2.8.0"
 var running atomic.Bool
+
+// ErrIndexNotReady lets Wox keep using its local fallback during the first build.
+var ErrIndexNotReady = errors.New("file index service is still building its index")
 
 // IsRunning returns the last SCM or health state observed by Wox.
 func IsRunning() bool { return running.Load() }

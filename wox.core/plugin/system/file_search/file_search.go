@@ -73,10 +73,11 @@ const (
 )
 
 const (
-	fileSearchTypeRefinementKey    = "file_type"
-	fileSearchTypeRefinementAll    = "all"
-	fileSearchTypeRefinementFile   = "file"
-	fileSearchTypeRefinementFolder = "folder"
+	fileSearchTypeRefinementKey     = "file_type"
+	fileSearchTypeRefinementAll     = "all"
+	fileSearchTypeRefinementFile    = "file"
+	fileSearchTypeRefinementFolder  = "folder"
+	fileSearchTypeRefinementContent = "content"
 
 	fileSearchSortRefinementKey       = "file_sort"
 	fileSearchSortRefinementRelevance = "relevance"
@@ -885,14 +886,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	searchStartedAt := util.GetSystemTimestamp()
 	selectedType := selectedFileSearchType(query)
 	selectedSort := selectedFileSearchSort(query)
-	searchLimit := fileSearchResultLimit
-	if selectedType != fileSearchTypeRefinementAll || selectedSort != fileSearchSortRefinementRelevance {
-		// Feature addition: type filters and non-relevance sorting need a wider
-		// candidate window before plugin-side refinement. Keeping the old limit
-		// for the default path preserves the fast historical relevance search.
-		searchLimit = fileSearchRefinedCandidateLimit
-	}
-	results, err := c.search(ctx, query.Search, searchLimit)
+	results, err := c.searchFileQuery(ctx, query.Search, selectedType, selectedSort)
 	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	if err != nil {
 		c.logQueryDiagnostics(ctx, query.Search, diagnostics, 0, util.GetSystemTimestamp()-queryStartedAt)
@@ -900,14 +894,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		c.api.Notify(ctx, err.Error())
 		return plugin.QueryResponse{}
 	}
-	resultLimit := fileSearchResultLimit
-	if selectedType != fileSearchTypeRefinementFolder {
-		results = c.appendContentSearchResults(ctx, query.Search, results, fileSearchResultLimit+fileSearchContentResultLimit)
-		if selectedSort == fileSearchSortRefinementRelevance {
-			resultLimit += fileSearchContentResultLimit
-		}
-	}
-	results = refineFileSearchResults(results, selectedType, selectedSort, resultLimit)
+	results = refineFileSearchResults(results, selectedType, selectedSort, fileSearchResultLimitFor(selectedType, selectedSort))
 
 	// Split result-materialization timing out from engine search timing because
 	// os.Stat/icon setup can make the plugin itself look slow even when the
@@ -929,6 +916,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			SubTitle: item.Path,
 			Icon:     icon,
 			Score:    item.Score,
+			Tails:    fileSearchResultTails(item),
 			Actions:  actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
@@ -951,22 +939,72 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
 	response := plugin.NewQueryResponse(queryResults)
-	response.Refinements = c.buildFileSearchRefinements()
+	response.Refinements = c.buildFileSearchRefinements(ctx)
 	return response
 }
 
-// appendContentSearchResults adds existing content hits to the common result envelope before refinements run.
-func (c *FileSearchPlugin) appendContentSearchResults(ctx context.Context, queryText string, nameResults []filesearch.SearchResult, limit int) []filesearch.SearchResult {
-	if !c.isContentSearchEnabled(ctx) {
-		return nameResults
+// searchFileQuery recalls name and content candidates for the selected type filter.
+func (c *FileSearchPlugin) searchFileQuery(ctx context.Context, queryText string, selectedType string, selectedSort string) ([]filesearch.SearchResult, error) {
+	if selectedType == fileSearchTypeRefinementContent {
+		// Query the content index directly so name-matching files that also hit
+		// content stay visible, instead of only the extras appended after names.
+		return c.queryContentSearchResults(ctx, queryText, fileSearchCandidateLimit(selectedType, selectedSort)), nil
+	}
+
+	results, err := c.search(ctx, queryText, fileSearchCandidateLimit(selectedType, selectedSort))
+	if err != nil {
+		return nil, err
+	}
+	if selectedType != fileSearchTypeRefinementFolder {
+		results = c.appendContentSearchResults(ctx, queryText, results, fileSearchResultLimit+fileSearchContentResultLimit)
+	}
+	return results, nil
+}
+
+func fileSearchCandidateLimit(selectedType string, selectedSort string) int {
+	if selectedType != fileSearchTypeRefinementAll || selectedSort != fileSearchSortRefinementRelevance {
+		// Feature addition: type filters and non-relevance sorting need a wider
+		// candidate window before plugin-side refinement. Keeping the old limit
+		// for the default path preserves the fast historical relevance search.
+		return fileSearchRefinedCandidateLimit
+	}
+	return fileSearchResultLimit
+}
+
+func fileSearchResultLimitFor(selectedType string, selectedSort string) int {
+	if selectedType != fileSearchTypeRefinementFolder && selectedType != fileSearchTypeRefinementContent && selectedSort == fileSearchSortRefinementRelevance {
+		return fileSearchResultLimit + fileSearchContentResultLimit
+	}
+	return fileSearchResultLimit
+}
+
+// queryContentSearchResults converts current content-index hits into result rows.
+func (c *FileSearchPlugin) queryContentSearchResults(ctx context.Context, queryText string, limit int) []filesearch.SearchResult {
+	if !c.isContentSearchEnabled(ctx) || c.engine == nil {
+		return nil
 	}
 
 	contentHits, err := c.engine.SearchContent(ctx, queryText, limit)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("content search failed for query %q: %s", queryText, err.Error()))
-		return nameResults
+		return nil
 	}
-	if len(contentHits) == 0 {
+
+	results := make([]filesearch.SearchResult, 0, len(contentHits))
+	for index, hit := range contentHits {
+		result, ok := contentHitToSearchResult(hit, index, len(contentHits))
+		if !ok {
+			continue
+		}
+		results = append(results, result)
+	}
+	return results
+}
+
+// appendContentSearchResults adds existing content hits to the common result envelope before refinements run.
+func (c *FileSearchPlugin) appendContentSearchResults(ctx context.Context, queryText string, nameResults []filesearch.SearchResult, limit int) []filesearch.SearchResult {
+	contentResults := c.queryContentSearchResults(ctx, queryText, limit)
+	if len(contentResults) == 0 {
 		return nameResults
 	}
 
@@ -975,28 +1013,45 @@ func (c *FileSearchPlugin) appendContentSearchResults(ctx context.Context, query
 		existingPaths[result.Path] = true
 	}
 
-	for index, hit := range contentHits {
-		if existingPaths[hit.Path] {
+	for _, result := range contentResults {
+		if existingPaths[result.Path] {
 			continue
 		}
-		info, err := os.Lstat(hit.Path)
-		if err != nil || info.IsDir() {
-			continue
-		}
-		nameResults = append(nameResults, filesearch.SearchResult{
-			Path:       hit.Path,
-			Name:       filepath.Base(hit.Path),
-			ParentPath: filepath.Dir(hit.Path),
-			Mtime:      info.ModTime().UnixMilli(),
-			Size:       info.Size(),
-			Score:      int64(len(contentHits) - index),
-		})
-		existingPaths[hit.Path] = true
+		nameResults = append(nameResults, result)
+		existingPaths[result.Path] = true
 		if limit > 0 && len(nameResults) >= limit {
 			break
 		}
 	}
 	return nameResults
+}
+
+// contentHitToSearchResult materializes one content-index hit after confirming the path is still a file.
+func contentHitToSearchResult(hit filesearch.ContentSearchResult, index int, total int) (filesearch.SearchResult, bool) {
+	info, err := os.Lstat(hit.Path)
+	if err != nil || info.IsDir() {
+		return filesearch.SearchResult{}, false
+	}
+	return filesearch.SearchResult{
+		Path:           hit.Path,
+		Name:           filepath.Base(hit.Path),
+		ParentPath:     filepath.Dir(hit.Path),
+		Mtime:          info.ModTime().UnixMilli(),
+		Size:           info.Size(),
+		Score:          int64(total - index),
+		IsContentMatch: true,
+	}, true
+}
+
+// fileSearchResultTails marks content-index hits so they stay distinct from name matches.
+func fileSearchResultTails(item filesearch.SearchResult) []plugin.QueryResultTail {
+	if !item.IsContentMatch {
+		return nil
+	}
+
+	tail := plugin.NewQueryResultTailText("i18n:plugin_file_result_tail_content")
+	tail.Tooltip = "i18n:plugin_file_result_tail_content_tooltip"
+	return []plugin.QueryResultTail{tail}
 }
 
 // buildFileSearchResultActions keeps folder navigation integrated with the path-browse plugin.
@@ -1186,17 +1241,19 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 	})
 }
 
-func (c *FileSearchPlugin) buildFileSearchRefinements() []plugin.QueryRefinement {
+func (c *FileSearchPlugin) buildFileSearchRefinements(ctx context.Context) []plugin.QueryRefinement {
 	return []plugin.QueryRefinement{
-		c.buildFileSearchTypeRefinement(),
+		c.buildFileSearchTypeRefinement(ctx),
 		c.buildFileSearchSortRefinement(),
 	}
 }
 
-func (c *FileSearchPlugin) buildFileSearchTypeRefinement() plugin.QueryRefinement {
+func (c *FileSearchPlugin) buildFileSearchTypeRefinement(ctx context.Context) plugin.QueryRefinement {
 	// Feature addition: type filtering belongs in QueryRefinement instead of
 	// command syntax so users can keep typing the same file query while quickly
-	// narrowing results to files or folders from the keyboard.
+	// narrowing results to files or folders from the keyboard. Content is only
+	// offered when that search mode is enabled so the extra chip stays hidden
+	// for name-only users.
 	return plugin.QueryRefinement{
 		Id:           fileSearchTypeRefinementKey,
 		Title:        "i18n:plugin_file_refinement_type",
@@ -1204,12 +1261,23 @@ func (c *FileSearchPlugin) buildFileSearchTypeRefinement() plugin.QueryRefinemen
 		DefaultValue: []string{fileSearchTypeRefinementAll},
 		Hotkey:       fileSearchPlatformHotkey("t"),
 		Persist:      false,
-		Options: []plugin.QueryRefinementOption{
-			{Value: fileSearchTypeRefinementAll, Title: "i18n:plugin_file_refinement_type_all"},
-			{Value: fileSearchTypeRefinementFile, Title: "i18n:plugin_file_refinement_type_file"},
-			{Value: fileSearchTypeRefinementFolder, Title: "i18n:plugin_file_refinement_type_folder"},
-		},
+		Options:      fileSearchTypeRefinementOptions(c.isContentSearchEnabled(ctx)),
 	}
+}
+
+func fileSearchTypeRefinementOptions(includeContent bool) []plugin.QueryRefinementOption {
+	options := []plugin.QueryRefinementOption{
+		{Value: fileSearchTypeRefinementAll, Title: "i18n:plugin_file_refinement_type_all"},
+		{Value: fileSearchTypeRefinementFile, Title: "i18n:plugin_file_refinement_type_file"},
+		{Value: fileSearchTypeRefinementFolder, Title: "i18n:plugin_file_refinement_type_folder"},
+	}
+	if includeContent {
+		options = append(options, plugin.QueryRefinementOption{
+			Value: fileSearchTypeRefinementContent,
+			Title: "i18n:plugin_file_refinement_type_content",
+		})
+	}
+	return options
 }
 
 func (c *FileSearchPlugin) buildFileSearchSortRefinement() plugin.QueryRefinement {
@@ -1238,7 +1306,7 @@ func fileSearchPlatformHotkey(key string) string {
 
 func selectedFileSearchType(query plugin.Query) string {
 	switch query.Refinements[fileSearchTypeRefinementKey] {
-	case fileSearchTypeRefinementFile, fileSearchTypeRefinementFolder:
+	case fileSearchTypeRefinementFile, fileSearchTypeRefinementFolder, fileSearchTypeRefinementContent:
 		return query.Refinements[fileSearchTypeRefinementKey]
 	default:
 		return fileSearchTypeRefinementAll

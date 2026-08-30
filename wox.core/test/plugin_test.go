@@ -420,6 +420,9 @@ func TestFilePlugin_RefinementsTypeAndSort(t *testing.T) {
 	if !hasQueryRefinement(refinements, "file_type") || !hasQueryRefinement(refinements, "file_sort") {
 		t.Fatalf("expected file type and sort refinements, got %#v", refinements)
 	}
+	if hasQueryRefinementOption(refinements, "file_type", "content") {
+		t.Fatal("content type should stay hidden when content search is disabled")
+	}
 
 	folderResults, _, err := runQueryWithRefinements(ctx, "f "+typePrefix, map[string]string{"file_type": "folder"})
 	if err != nil {
@@ -882,6 +885,20 @@ func hasQueryRefinement(refinements []plugin.QueryRefinement, id string) bool {
 	for _, refinement := range refinements {
 		if refinement.Id == id {
 			return true
+		}
+	}
+	return false
+}
+
+func hasQueryRefinementOption(refinements []plugin.QueryRefinement, id string, value string) bool {
+	for _, refinement := range refinements {
+		if refinement.Id != id {
+			continue
+		}
+		for _, option := range refinement.Options {
+			if option.Value == value {
+				return true
+			}
 		}
 	}
 	return false

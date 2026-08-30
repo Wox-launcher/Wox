@@ -86,6 +86,9 @@ type SearchResult struct {
 	Mtime int64
 	Size  int64
 	Score int64
+	// IsContentMatch is set by the File Search plugin for content-index hits so
+	// the result row can keep a content tail after plugin-side refinement.
+	IsContentMatch bool
 }
 
 type DirtySignalKind string

@@ -39,9 +39,6 @@ const (
 	maxPathDepth                  = 1024
 )
 
-// ErrIndexNotReady lets Wox keep using its local fallback during the first build.
-var ErrIndexNotReady = errors.New("file index service is still building its index")
-
 type usnJournalData struct {
 	JournalID       uint64
 	FirstUSN        int64
