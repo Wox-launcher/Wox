@@ -55,6 +55,7 @@ const (
 	explorerPluginID                = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
 	explorerCommandAdd              = "add"
 	explorerDialogHintOverlayName   = "explorer_dialog_hint"
+	explorerDialogHintCloseDelay    = 250 * time.Millisecond
 	explorerDialogPathCacheDuration = 30 * time.Second
 )
 
@@ -1188,12 +1189,26 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 
 		var handoffTimer *time.Timer
 		var handoffC <-chan time.Time
+		var dialogHintCloseTimer *time.Timer
+		var dialogHintCloseC <-chan time.Time
 		stopHandoffTimer := func() {
 			if handoffTimer != nil {
 				handoffTimer.Stop()
 				handoffTimer = nil
 			}
 			handoffC = nil
+		}
+		stopDialogHintCloseTimer := func() {
+			if dialogHintCloseTimer != nil {
+				dialogHintCloseTimer.Stop()
+				dialogHintCloseTimer = nil
+			}
+			dialogHintCloseC = nil
+		}
+		scheduleDialogHintClose := func() {
+			stopDialogHintCloseTimer()
+			dialogHintCloseTimer = time.NewTimer(explorerDialogHintCloseDelay)
+			dialogHintCloseC = dialogHintCloseTimer.C
 		}
 
 		resetState := func() {
@@ -1218,15 +1233,18 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 			select {
 			case <-runtime.stopCh:
 				stopHandoffTimer()
+				stopDialogHintCloseTimer()
 				return
 			case ev := <-events:
 				if c.integrationRuntime.Load() != runtime {
 					stopHandoffTimer()
+					stopDialogHintCloseTimer()
 					return
 				}
 				switch ev.eventType {
 				case overlayEventActivate:
 					c.typeToSearchDebugLog(ctx, "event activate active=%v handoff=%v pending=%q", active, inHandoff(), pending)
+					stopDialogHintCloseTimer()
 					active = true
 					activePid = ev.pid
 					if ev.isDialog {
@@ -1253,7 +1271,14 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 					active = false
 					activePid = 0
 					c.quickSwitch.Invalidate()
-					overlay.Close(explorerDialogHintOverlayName)
+					if util.IsWindows() {
+						// Closing the secondary can briefly report another foreground window
+						// before the dialog focus retry succeeds. Keep the existing hint alive
+						// through that handoff so it does not close and recreate visibly.
+						scheduleDialogHintClose()
+					} else {
+						overlay.Close(explorerDialogHintOverlayName)
+					}
 					if !inHandoff() {
 						resetState()
 					}
@@ -1296,6 +1321,10 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 				}
 			case <-handoffC:
 				resetState()
+			case <-dialogHintCloseC:
+				dialogHintCloseTimer = nil
+				dialogHintCloseC = nil
+				overlay.Close(explorerDialogHintOverlayName)
 			}
 		}
 	}()
