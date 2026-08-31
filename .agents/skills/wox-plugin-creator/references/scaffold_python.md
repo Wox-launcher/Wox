@@ -1,5 +1,7 @@
 # Python Plugin Scaffold
 
+Wox requires **Python 3.10 or later**. Store install and plugin load fail on older versions.
+
 Best practice: clone the official template repo instead of hardcoding a scaffold.
 
 ```bash

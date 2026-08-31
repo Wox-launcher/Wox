@@ -31,6 +31,7 @@
  *
  * This is a template for creating Wox script plugins.
  * Script plugins are single-file plugins that are executed once per query.
+ * Wox requires Node.js 20 or later. Store install and queries fail on older versions.
  *
  * IMPORTANT:
  * - Do not modify the base implementation in this file.

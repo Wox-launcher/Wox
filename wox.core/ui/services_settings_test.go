@@ -54,6 +54,13 @@ func TestCoreServicesRestartRuntimeRejectsUnsupportedRuntime(t *testing.T) {
 	}
 }
 
+func TestCoreServicesRefreshRuntimeRejectsUnsupportedRuntime(t *testing.T) {
+	err := NewCoreServices().RefreshRuntime(context.Background(), "session", "GO")
+	if err == nil || !strings.Contains(err.Error(), "does not support refresh") {
+		t.Fatalf("RefreshRuntime error = %v, want unsupported runtime error", err)
+	}
+}
+
 func TestCoreServicesRejectsUnsupportedPluginOperation(t *testing.T) {
 	err := NewCoreServices().OperatePlugin(context.Background(), "session", "plugin", contract.PluginOperation("unknown"))
 	if err == nil || !strings.Contains(err.Error(), "unsupported plugin operation") {

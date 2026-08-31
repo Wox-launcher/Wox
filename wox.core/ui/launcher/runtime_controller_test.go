@@ -34,6 +34,14 @@ func (b *runtimeBlockingSettingsService) RestartRuntime(_ context.Context, _ str
 	return nil
 }
 
+func (b *runtimeBlockingSettingsService) RefreshRuntime(_ context.Context, _ string, _ string) error {
+	if b.operation == "refresh" {
+		close(b.entered)
+		<-b.release
+	}
+	return nil
+}
+
 type fakeRuntimeSettingsService struct {
 	statuses   []contract.RuntimeStatus
 	statusErr  error
@@ -53,6 +61,10 @@ func (f *fakeRuntimeSettingsService) RuntimeStatuses(_ context.Context, _ string
 }
 
 func (f *fakeRuntimeSettingsService) RestartRuntime(_ context.Context, _ string, _ string) error {
+	return f.restartErr
+}
+
+func (f *fakeRuntimeSettingsService) RefreshRuntime(_ context.Context, _ string, _ string) error {
 	return f.restartErr
 }
 
@@ -223,5 +235,134 @@ func TestRuntimeControllerRestartRejectsWhenAlreadyRestarting(t *testing.T) {
 		if got = runtimeSnapshotOnUI(ui, c).Restarting; got != "" {
 			t.Fatalf("Restarting = %q after release, want empty", got)
 		}
+	}
+}
+
+func TestRuntimeControllerRefreshSetsRefreshingThenClears(t *testing.T) {
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
+	c := newRuntimeSettingsController(deps)
+
+	enteredPost := make(chan struct{})
+	releasePost := make(chan struct{})
+	blockingService := &runtimeBlockingSettingsService{
+		entered:   enteredPost,
+		release:   releasePost,
+		operation: "refresh",
+		statuses:  []contract.RuntimeStatus{{Runtime: "PYTHON", CanRestart: false}},
+	}
+	c.Reload(context.Background(), blockingService, "session")
+
+	reloadCalled := make(chan struct{})
+	var reloadOnce sync.Once
+	reloadAfter := func() {
+		reloadOnce.Do(func() { close(reloadCalled) })
+	}
+
+	c.Refresh(context.Background(), blockingService, "session", "python", reloadAfter)
+
+	if got := runtimeSnapshotOnUI(ui, c).Refreshing; got != "PYTHON" {
+		t.Fatalf("Refreshing = %q, want PYTHON", got)
+	}
+
+	select {
+	case <-enteredPost:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for refresh Post to be entered")
+	}
+	close(releasePost)
+
+	select {
+	case <-reloadCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("reloadAfter was not invoked after refresh completed")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if runtimeSnapshotOnUI(ui, c).Refreshing == "" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := runtimeSnapshotOnUI(ui, c).Refreshing; got != "" {
+		t.Fatalf("Refreshing = %q after goroutine completed, want empty", got)
+	}
+}
+
+func TestRuntimeControllerRefreshRejectsWhenAlreadyRefreshing(t *testing.T) {
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
+	c := newRuntimeSettingsController(deps)
+
+	enteredPost := make(chan struct{})
+	releasePost := make(chan struct{})
+	blockingService := &runtimeBlockingSettingsService{
+		entered:   enteredPost,
+		release:   releasePost,
+		operation: "refresh",
+		statuses:  []contract.RuntimeStatus{{Runtime: "PYTHON"}},
+	}
+	c.Reload(context.Background(), blockingService, "session")
+
+	c.Refresh(context.Background(), blockingService, "session", "python", nil)
+	if got := runtimeSnapshotOnUI(ui, c).Refreshing; got != "PYTHON" {
+		t.Fatalf("first Refresh should set Refreshing = PYTHON, got %q", got)
+	}
+
+	select {
+	case <-enteredPost:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for first refresh Post to be entered")
+	}
+
+	secondReload := make(chan struct{}, 1)
+	c.Refresh(context.Background(), blockingService, "session", "python", func() {
+		select {
+		case secondReload <- struct{}{}:
+		default:
+		}
+	})
+
+	select {
+	case <-secondReload:
+		t.Fatalf("second Refresh while already refreshing must not call reloadAfter")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(releasePost)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && runtimeSnapshotOnUI(ui, c).Refreshing != "" {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := runtimeSnapshotOnUI(ui, c).Refreshing; got != "" {
+		t.Fatalf("Refreshing = %q after release, want empty", got)
+	}
+}
+
+func TestRuntimeControllerRefreshKeepsCardStatusWithoutBannerWhenReadyCheckFails(t *testing.T) {
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
+	c := newRuntimeSettingsController(deps)
+	service := &fakeRuntimeSettingsService{statuses: []contract.RuntimeStatus{
+		{Runtime: "PYTHON", StatusCode: "unsupported_version", CanRestart: false},
+	}}
+	c.Reload(context.Background(), service, "session")
+
+	c.Refresh(context.Background(), service, "session", "python", nil)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && runtimeSnapshotOnUI(ui, c).Refreshing != "" {
+		time.Sleep(5 * time.Millisecond)
+	}
+	snap := runtimeSnapshotOnUI(ui, c)
+	if snap.Refreshing != "" {
+		t.Fatalf("Refreshing = %q, want empty", snap.Refreshing)
+	}
+	if snap.Error != "" {
+		t.Fatalf("Error = %q, want empty so unsupported Python does not flash a banner", snap.Error)
+	}
+	if len(snap.Statuses) != 1 || snap.Statuses[0].StatusCode != "unsupported_version" {
+		t.Fatalf("Statuses = %+v, want unsupported Python card", snap.Statuses)
 	}
 }

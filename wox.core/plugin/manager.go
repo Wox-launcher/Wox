@@ -656,6 +656,78 @@ func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, sk
 	return m.restartHostInternal(ctx, pluginHost, skipPluginIDs, progressCallback)
 }
 
+// RefreshHostForRuntime re-detects a Node.js or Python interpreter after the
+// user installs or upgrades it, starts the host if it is not running, and
+// loads any installed plugins that were skipped because the host failed at
+// startup. Script plugins stay loaded and pick up the new interpreter on the
+// next query.
+func (m *Manager) RefreshHostForRuntime(ctx context.Context, runtime Runtime) error {
+	if runtime != PLUGIN_RUNTIME_NODEJS && runtime != PLUGIN_RUNTIME_PYTHON {
+		return fmt.Errorf("runtime %s does not support refresh from settings", runtime)
+	}
+
+	m.hostRestartMu.Lock()
+	defer m.hostRestartMu.Unlock()
+
+	if err := m.EnsureHostStarted(ctx, runtime); err != nil {
+		// Feature: refresh is a re-check, not a command that must start the host.
+		// A still-missing or unsupported interpreter is already shown on the
+		// settings card. Returning that start error produced a red banner that
+		// Reload immediately cleared, which looked like a flash.
+		if status, ok := RuntimeStatusForRegisteredHost(ctx, runtime); ok && runtimeRefreshStillPending(status) {
+			return nil
+		}
+		return err
+	}
+	return m.loadUnloadedUserPluginsForRuntime(ctx, runtime)
+}
+
+// loadUnloadedUserPluginsForRuntime loads installed plugins for one runtime
+// that never entered the instance list because the host was missing at startup.
+func (m *Manager) loadUnloadedUserPluginsForRuntime(ctx context.Context, runtime Runtime) error {
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
+	})
+	if !exist {
+		return fmt.Errorf("unsupported runtime: %s", runtime)
+	}
+
+	basePluginDirectory := util.GetLocation().GetPluginDirectory()
+	pluginDirectories, readErr := os.ReadDir(basePluginDirectory)
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			return nil
+		}
+		return fmt.Errorf("failed to read plugin directory: %w", readErr)
+	}
+
+	var loadErrors []string
+	for _, entry := range pluginDirectories {
+		if entry.Name() == ".DS_Store" || !entry.IsDir() {
+			continue
+		}
+
+		metadata, metadataErr := m.ParseMetadata(ctx, path.Join(basePluginDirectory, entry.Name()))
+		if metadataErr != nil {
+			continue
+		}
+		if !strings.EqualFold(metadata.Runtime, string(runtime)) {
+			continue
+		}
+		if m.GetPluginInstanceById(metadata.Id) != nil {
+			continue
+		}
+		if err := m.loadHostPlugin(ctx, pluginHost, metadata); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to load %s plugin %s(%s) after runtime refresh: %s", runtime, metadata.GetName(ctx), metadata.Version, err.Error()))
+			loadErrors = append(loadErrors, fmt.Sprintf("%s: %s", metadata.GetName(ctx), err.Error()))
+		}
+	}
+	if len(loadErrors) > 0 {
+		return fmt.Errorf("started %s host, but some plugins failed to load: %s", runtime, strings.Join(loadErrors, "; "))
+	}
+	return nil
+}
+
 // restartHostInternal stops and restarts a shared runtime host process, then
 // reloads every plugin of that runtime so the shared process returns to a
 // consistent state. It is shared by user-triggered restarts (settings/uninstall)
@@ -4434,17 +4506,10 @@ func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
 }
 
 func (m *Manager) RuntimeStatusForRuntime(ctx context.Context, runtime Runtime) (RuntimeHostStatus, bool) {
-	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
-		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
-	})
-	if !exist {
-		return RuntimeHostStatus{}, false
-	}
-
 	// Feature: callers that present install/load failures can reuse the same
 	// structured runtime diagnosis as /runtime/status instead of parsing wrapped
 	// startup errors that are meant for logs.
-	return pluginHost.RuntimeStatus(ctx), true
+	return RuntimeStatusForRegisteredHost(ctx, runtime)
 }
 
 // EnsureHostStarted makes runtime startup an explicit, reusable preflight for

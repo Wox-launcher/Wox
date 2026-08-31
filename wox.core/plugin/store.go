@@ -125,6 +125,16 @@ func IsVersionUpgradable(installedVersion string, availableVersion string) bool 
 	return available.GreaterThan(installed)
 }
 
+// ensureStorePluginRuntimeReady checks the interpreter before download/load.
+// Script plugins do not start a persistent host, so they reuse the Python/Node
+// version floor instead of the always-ready script host status.
+func ensureStorePluginRuntimeReady(ctx context.Context, manifest StorePluginManifest) error {
+	if manifest.Runtime == PLUGIN_RUNTIME_SCRIPT {
+		return EnsureScriptInterpreterReady(ctx, manifest.DownloadUrl)
+	}
+	return GetPluginManager().EnsureHostStarted(ctx, manifest.Runtime)
+}
+
 var storeInstance *Store
 var storeOnce sync.Once
 
@@ -417,7 +427,7 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 		return err
 	}
 
-	if err := GetPluginManager().EnsureHostStarted(ctx, manifest.Runtime); err != nil {
+	if err := ensureStorePluginRuntimeReady(ctx, manifest); err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to prepare %s runtime for plugin %s(%s): %s", manifest.Runtime, manifest.GetName(ctx), manifest.Version, err.Error()))
 		return fmt.Errorf("failed to prepare %s runtime for plugin %s(%s): %w", manifest.Runtime, manifest.GetName(ctx), manifest.Version, err)
 	}

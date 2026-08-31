@@ -45,6 +45,15 @@ description: Create, scaffold, implement, and package Wox plugins (nodejs, pytho
 - For submitting a plugin to the official Wox store, prefer `wox-plugin-submit2store` skill.
 - Script plugins do not use `plugin.json`; they embed a JSON metadata block in the script header comments.
 
+## Runtime Requirements
+
+Wox enforces the same interpreter floors for SDK plugins and script plugins. Store install fails, and queries show a setup result, when the machine is below these versions:
+
+- **Python**: 3.10 or later
+- **Node.js**: 20 or later
+
+Do not target older interpreters. Script plugins still use the user's system Python or Node.js; they do not use a bundled runtime.
+
 ## Resources
 
 - scripts: `scripts/scaffold_wox_plugin.py`, `scripts/search_iconify.py`

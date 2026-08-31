@@ -31,9 +31,12 @@ type RuntimeStatus struct {
 	Actionable   bool
 	InstallLabel string
 	InstallIcon  *woxui.Image
+	RefreshLabel string
+	RefreshIcon  *woxui.Image
 	RestartLabel string
 	RestartIcon  *woxui.Image
 	OnInstall    func()
+	OnRefresh    func()
 	OnRestart    func()
 }
 
@@ -65,6 +68,7 @@ type RuntimeSettingsProps struct {
 	Labels           RuntimeSettingsLabels
 	Loading          bool
 	Restarting       bool
+	Refreshing       bool
 	Error            string
 	Selected         int
 	Statuses         []RuntimeStatus
@@ -216,17 +220,24 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		}},
 	}
 	if status.Actionable {
-		buttons := make([]woxwidget.Widget, 0, 2)
+		busy := props.Restarting || props.Refreshing
+		buttons := make([]woxwidget.Widget, 0, 3)
 		if status.OnInstall != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-install-" + status.Runtime, Label: status.InstallLabel, Icon: status.InstallIcon, IconSize: 14,
-				Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnInstall, Theme: theme,
+				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonOutline, OnTap: status.OnInstall, Theme: theme,
+			}))
+		}
+		if status.OnRefresh != nil {
+			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "runtime-refresh-" + status.Runtime, Label: status.RefreshLabel, Icon: status.RefreshIcon, IconSize: 14,
+				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRefresh, Theme: theme,
 			}))
 		}
 		if status.OnRestart != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel, Icon: status.RestartIcon, IconSize: 14,
-				Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRestart, Theme: theme,
+				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRestart, Theme: theme,
 			}))
 		}
 		children = append(children,

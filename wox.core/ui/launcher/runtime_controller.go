@@ -17,6 +17,7 @@ type runtimeSettingsSnapshot struct {
 	Loaded     bool
 	Error      string
 	Restarting string
+	Refreshing string
 	Revision   uint64
 }
 
@@ -29,6 +30,7 @@ type runtimeSettingsController struct {
 	loaded     bool
 	errMsg     string
 	restarting string
+	refreshing string
 	revision   uint64
 }
 
@@ -79,7 +81,7 @@ func (c *runtimeSettingsController) Restart(ctx context.Context, service contrac
 	runtime = strings.ToUpper(strings.TrimSpace(runtime))
 	shouldRestart := false
 	if !c.deps.OnUI("start restarting plugin runtime", func() {
-		if runtime == "" || c.restarting != "" {
+		if runtime == "" || c.restarting != "" || c.refreshing != "" {
 			return
 		}
 		for _, status := range c.statuses {
@@ -106,6 +108,64 @@ func (c *runtimeSettingsController) Restart(ctx context.Context, service contrac
 			c.restarting = ""
 			if err != nil {
 				c.errMsg = fmt.Sprintf("Could not restart %s: %v", runtimeDisplayName(runtime), err)
+			}
+			c.deps.Invalidate()
+		})
+		if reloadAfter != nil {
+			reloadAfter()
+		}
+	})
+}
+
+// Refresh re-detects a runtime interpreter, then invokes reloadAfter to refresh statuses.
+func (c *runtimeSettingsController) Refresh(ctx context.Context, service contract.RuntimeSettingsServices, sessionID string, runtime string, reloadAfter func()) {
+	runtime = strings.ToUpper(strings.TrimSpace(runtime))
+	shouldRefresh := false
+	if !c.deps.OnUI("start refreshing plugin runtime", func() {
+		if runtime == "" || c.restarting != "" || c.refreshing != "" {
+			return
+		}
+		for _, status := range c.statuses {
+			if strings.EqualFold(status.Runtime, runtime) {
+				shouldRefresh = true
+				break
+			}
+		}
+		if !shouldRefresh {
+			return
+		}
+		c.refreshing = runtime
+		c.errMsg = ""
+		c.deps.Invalidate()
+	}) || !shouldRefresh {
+		return
+	}
+
+	util.Go(ctx, "refresh plugin runtime", func() {
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := service.RefreshRuntime(timeoutCtx, sessionID, runtime)
+		loaded, statusErr := service.RuntimeStatuses(timeoutCtx, sessionID)
+		cancel()
+		statuses := make([]runtimeStatus, len(loaded))
+		for index, status := range loaded {
+			statuses[index] = runtimeStatusFromContract(status)
+		}
+
+		// Apply the refresh result and the new inventory together so a still-
+		// unsupported interpreter cannot paint a red banner for one frame and
+		// then have Reload immediately clear it.
+		c.deps.OnUI("finish refreshing plugin runtime", func() {
+			c.refreshing = ""
+			c.loading = false
+			if statusErr != nil {
+				c.errMsg = statusErr.Error()
+			} else {
+				c.statuses = statuses
+				c.loaded = true
+				c.errMsg = ""
+			}
+			if err != nil {
+				c.errMsg = fmt.Sprintf("Could not refresh %s: %v", runtimeDisplayName(runtime), err)
 			}
 			c.deps.Invalidate()
 		})
@@ -148,6 +208,7 @@ func (c *runtimeSettingsController) Snapshot() runtimeSettingsSnapshot {
 		Loaded:     c.loaded,
 		Error:      c.errMsg,
 		Restarting: c.restarting,
+		Refreshing: c.refreshing,
 		Revision:   c.revision,
 	}
 }

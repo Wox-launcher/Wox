@@ -1,5 +1,7 @@
 # Wox Python Plugin SDK Reference
 
+Wox requires **Python 3.10 or later**.
+
 ## Installation
 
 `uv add wox-plugin`

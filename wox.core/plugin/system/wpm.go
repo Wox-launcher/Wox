@@ -755,7 +755,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 					w.api.Notify(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
-						formatPluginInstallError(ctx, w.api, pluginManifest.Runtime, pluginName, pluginManifest.Version, installErr),
+						formatStorePluginInstallError(ctx, w.api, pluginManifest, installErr),
 					))
 					return
 				}
@@ -824,7 +824,7 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 					w.api.Notify(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
-						formatPluginInstallError(ctx, w.api, pluginManifest.Runtime, pluginName, pluginManifest.Version, installErr),
+						formatStorePluginInstallError(ctx, w.api, pluginManifest, installErr),
 					))
 					return
 				}

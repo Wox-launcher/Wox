@@ -39,6 +39,7 @@ Wox Python Script Plugin Template
 
 This is a template for creating Wox script plugins in Python.
 Script plugins are single-file plugins that are executed once per query.
+Wox requires Python 3.10 or later. Store install and queries fail on older versions.
 
 IMPORTANT:
 - Do not modify the base implementation in this file.

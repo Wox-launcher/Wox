@@ -77,6 +77,11 @@ func (s *CoreServices) RestartRuntime(ctx context.Context, sessionID string, run
 	return restartRuntimeHost(uiServiceContext(ctx, sessionID), runtime)
 }
 
+// RefreshRuntime re-detects one plugin host interpreter and starts it when possible.
+func (s *CoreServices) RefreshRuntime(ctx context.Context, sessionID string, runtime string) error {
+	return refreshRuntimeHost(uiServiceContext(ctx, sessionID), runtime)
+}
+
 // AttachView binds the embedded launcher to the core-owned UI manager.
 func (s *CoreServices) AttachView(view contract.View) {
 	GetUIManager().AttachView(view)

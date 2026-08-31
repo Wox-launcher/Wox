@@ -128,3 +128,12 @@ func restartRuntimeHost(ctx context.Context, runtimeName string) error {
 	}
 	return plugin.GetPluginManager().RestartHostForRuntime(ctx, runtime, nil, nil)
 }
+
+// refreshRuntimeHost re-detects a Node.js or Python interpreter and starts the host.
+func refreshRuntimeHost(ctx context.Context, runtimeName string) error {
+	runtime := plugin.ConvertToRuntime(runtimeName)
+	if runtime != plugin.PLUGIN_RUNTIME_NODEJS && runtime != plugin.PLUGIN_RUNTIME_PYTHON {
+		return fmt.Errorf("runtime %s does not support refresh from settings", runtime)
+	}
+	return plugin.GetPluginManager().RefreshHostForRuntime(ctx, runtime)
+}

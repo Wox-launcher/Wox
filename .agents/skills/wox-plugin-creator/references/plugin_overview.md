@@ -17,8 +17,8 @@ A Wox plugin is an event-driven module that interacts with the main application 
 
 Designed for complex, production-grade extensions. Wox manages the lifecycle of these plugins.
 
-- **Node.js**: Written in TypeScript/JavaScript. Uses `@wox-launcher/wox-plugin`.
-- **Python**: Written in Python 3.x. Uses `wox-plugin`.
+- **Node.js**: Written in TypeScript/JavaScript. Uses `@wox-launcher/wox-plugin`. Requires Node.js 20+.
+- **Python**: Written in Python 3.10+. Uses `wox-plugin`.
 
 **Benefits**:
 
@@ -30,8 +30,9 @@ Designed for complex, production-grade extensions. Wox manages the lifecycle of 
 
 Designed for simple, one-off tasks or shell scripts.
 
-- Can be Python or Node.js.
+- Can be Python 3.10+ or Node.js 20+.
 - Stateless and short-lived.
+- Store install and query execution reject older interpreters. Script plugins run with the user's system Python or Node.js, not a bundled runtime.
 
 ## Development Workflow
 

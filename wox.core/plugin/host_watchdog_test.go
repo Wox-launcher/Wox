@@ -16,6 +16,7 @@ type fakeHost struct {
 	started    bool
 	stopCount  int
 	startCount int
+	status     RuntimeHostStatus
 }
 
 func (f *fakeHost) GetRuntime(ctx context.Context) Runtime {
@@ -37,7 +38,7 @@ func (f *fakeHost) IsStarted(ctx context.Context) bool {
 }
 
 func (f *fakeHost) RuntimeStatus(ctx context.Context) RuntimeHostStatus {
-	return RuntimeHostStatus{}
+	return f.status
 }
 
 func (f *fakeHost) LoadPlugin(ctx context.Context, metadata Metadata, pluginDirectory string) (Plugin, error) {

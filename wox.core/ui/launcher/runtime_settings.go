@@ -51,6 +51,14 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			converted.InstallIcon = a.imageForTint(settingControlIconSource("external"), &snapshot.palette.resultTitle, physicalImageSize(14, imageScale))
 			converted.OnInstall = func() { a.openRuntimeInstallURL(status) }
 		}
+		if runtimeStatusRefreshable(status) {
+			converted.RefreshLabel = a.translate("i18n:ui_runtime_status_refresh")
+			if strings.EqualFold(snapshot.runtime.Refreshing, status.Runtime) {
+				converted.RefreshLabel = a.translate("i18n:ui_runtime_refreshing_host")
+			}
+			converted.RefreshIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.resultTitle, physicalImageSize(14, imageScale))
+			converted.OnRefresh = func() { a.refreshRuntimeHost(status.Runtime) }
+		}
 		if status.CanRestart {
 			converted.RestartLabel = a.translate("i18n:ui_runtime_restart_host")
 			if strings.EqualFold(snapshot.runtime.Restarting, status.Runtime) {
@@ -81,7 +89,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
 		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette.componentTheme(), Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
-		Restarting: snapshot.runtime.Restarting != "", Error: snapshot.runtime.Error,
+		Restarting: snapshot.runtime.Restarting != "", Refreshing: snapshot.runtime.Refreshing != "", Error: snapshot.runtime.Error,
 		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})
 }
@@ -209,6 +217,11 @@ func (a *App) restartRuntimeHost(runtime string) {
 	a.runtimeSettings.Restart(context.Background(), a.services, a.sessionID, runtime, a.reloadRuntimeStatuses)
 }
 
+// refreshRuntimeHost re-detects a Node.js or Python interpreter after the user installs it.
+func (a *App) refreshRuntimeHost(runtime string) {
+	a.runtimeSettings.Refresh(context.Background(), a.services, a.sessionID, runtime, nil)
+}
+
 // openRuntimeInstallURL delegates installation guidance to the platform browser without owning platform code in the page.
 func (a *App) openRuntimeInstallURL(status runtimeStatus) {
 	if strings.TrimSpace(status.InstallURL) == "" {
@@ -248,4 +261,13 @@ func runtimeStatusDetail(status runtimeStatus) string {
 
 func runtimeStatusActionable(status runtimeStatus) bool {
 	return status.StatusCode == "executable_missing" || status.StatusCode == "unsupported_version" || status.StatusCode == "start_failed"
+}
+
+// runtimeStatusRefreshable shows Refresh next to Install so users can re-detect
+// a newly installed Python or Node.js interpreter without restarting Wox.
+func runtimeStatusRefreshable(status runtimeStatus) bool {
+	if !strings.EqualFold(status.Runtime, "PYTHON") && !strings.EqualFold(status.Runtime, "NODEJS") {
+		return false
+	}
+	return runtimeStatusActionable(status)
 }

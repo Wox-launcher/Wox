@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -121,34 +122,8 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		requestJSON, _ := json.Marshal(request)
 		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.GetName(ctx), err.Error(), requestJSON))
 
-		// Check if this is a missing runtime error
-		if runtimeName := s.detectMissingRuntime(ctx, err); runtimeName != "" {
-			displayRuntimeName, installURL := s.getRuntimeDisplayName(runtimeName)
-			var actions []plugin.QueryResultAction
-			if installURL != "" {
-				actions = append(actions, plugin.QueryResultAction{
-					Name: "i18n:plugin_script_runtime_install_action",
-					Icon: common.InstallIcon,
-					Action: func(actionCtx context.Context, _ plugin.ActionContext) {
-						if openErr := shell.Open(installURL); openErr != nil {
-							util.GetLogger().Error(actionCtx, fmt.Sprintf("script plugin %s failed to open runtime install url %s: %s", s.metadata.GetName(actionCtx), installURL, openErr.Error()))
-						}
-					},
-				})
-			}
-			util.GetLogger().Info(ctx, fmt.Sprintf("script plugin %s missing runtime: %s", s.metadata.GetName(ctx), runtimeName))
-			return plugin.NewQueryResponse([]plugin.QueryResult{
-				{
-					Title:    s.metadata.GetName(ctx),
-					SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_subtitle"), displayRuntimeName),
-					Icon:     s.metadata.GetIconOrDefault(s.metadata.Directory, common.NewWoxImageEmoji("⚠️")),
-					Preview: plugin.WoxPreview{
-						PreviewType: plugin.WoxPreviewTypeMarkdown,
-						PreviewData: s.buildMissingRuntimeMarkdown(ctx, runtimeName),
-					},
-					Actions: actions,
-				},
-			})
+		if response, handled := s.runtimeIssueResponse(ctx, err); handled {
+			return response
 		}
 
 		s.api.Notify(ctx, err.Error())
@@ -505,11 +480,17 @@ func (s *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
 	if err == nil {
 		return interpreter, nil
 	}
+	if isScriptRuntimeError(err) {
+		return "", err
+	}
 
 	// If extension is unknown or missing, try to read shebang from file
 	shebangInterpreter, shebangErr := s.getInterpreterFromShebang(ctx)
 	if shebangErr == nil && shebangInterpreter != "" {
 		return shebangInterpreter, nil
+	}
+	if isScriptRuntimeError(shebangErr) {
+		return "", shebangErr
 	}
 
 	// If no extension and no valid shebang, assume it's executable
@@ -524,9 +505,9 @@ func (s *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
 func (s *ScriptPlugin) getInterpreterFromExtension(ctx context.Context, ext string) (string, error) {
 	switch ext {
 	case ".py":
-		return FindPythonPath(ctx), nil
+		return resolveScriptPythonPath(ctx)
 	case ".js":
-		return FindNodejsPath(ctx), nil
+		return resolveScriptNodejsPath(ctx)
 	case ".rb":
 		return "ruby", nil
 	case ".pl":
@@ -590,8 +571,10 @@ func (s *ScriptPlugin) getInterpreterFromShebang(ctx context.Context) (string, e
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Detected direct path shebang, using: %s", interpreterPath))
 	}
 
-	// Map common interpreter names and apply custom paths if configured
-	interpreterPath = s.mapInterpreterWithCustomPath(ctx, interpreterPath)
+	interpreterPath, mapErr := s.mapInterpreterWithCustomPath(ctx, interpreterPath)
+	if mapErr != nil {
+		return "", mapErr
+	}
 
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Final interpreter after mapping: %s", interpreterPath))
 	if interpreterPath == "bash" || interpreterPath == "sh" {
@@ -600,24 +583,73 @@ func (s *ScriptPlugin) getInterpreterFromShebang(ctx context.Context) (string, e
 	return interpreterPath, nil
 }
 
-// mapInterpreterWithCustomPath maps interpreter names to the best available path
-// It reuses the same path detection logic from host_python.go and host_nodejs.go
-func (s *ScriptPlugin) mapInterpreterWithCustomPath(ctx context.Context, interpreter string) string {
-	// Normalize interpreter name
+func (s *ScriptPlugin) mapInterpreterWithCustomPath(ctx context.Context, interpreter string) (string, error) {
 	interpreter = strings.ToLower(interpreter)
 
-	// Check for Python interpreters - use the same logic as host_python.go
 	if strings.HasPrefix(interpreter, "python") {
-		return FindPythonPath(ctx)
+		return resolveScriptPythonPath(ctx)
 	}
-
-	// Check for Node.js interpreters - use the same logic as host_nodejs.go
 	if interpreter == "node" || interpreter == "nodejs" {
-		return FindNodejsPath(ctx)
+		return resolveScriptNodejsPath(ctx)
+	}
+	return interpreter, nil
+}
+
+func resolveScriptPythonPath(ctx context.Context) (string, error) {
+	return (&PythonHost{}).resolvePythonPath(ctx)
+}
+
+func resolveScriptNodejsPath(ctx context.Context) (string, error) {
+	return (&NodejsHost{}).resolveNodejsPath(ctx)
+}
+
+func isScriptRuntimeError(err error) bool {
+	var executableErr *runtimeExecutableError
+	return errors.As(err, &executableErr)
+}
+
+func (s *ScriptPlugin) runtimeIssueResponse(ctx context.Context, err error) (plugin.QueryResponse, bool) {
+	runtimeName := s.getScriptRuntimeName()
+	statusCode := plugin.RuntimeHostStatusExecutableMissing
+	var executableErr *runtimeExecutableError
+	if errors.As(err, &executableErr) {
+		statusCode = executableErr.statusCode
+	} else if runtimeName = s.detectMissingRuntime(ctx, err); runtimeName == "" {
+		return plugin.QueryResponse{}, false
 	}
 
-	// Return as-is for other interpreters (bash, ruby, perl, etc.)
-	return interpreter
+	displayRuntimeName, installURL := s.getRuntimeDisplayName(runtimeName)
+	subtitleKey := "plugin_script_runtime_missing_subtitle"
+	if statusCode == plugin.RuntimeHostStatusUnsupportedVersion {
+		subtitleKey = "plugin_script_runtime_unsupported_subtitle"
+	}
+
+	var actions []plugin.QueryResultAction
+	if installURL != "" {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_script_runtime_install_action",
+			Icon: common.InstallIcon,
+			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
+				if openErr := shell.Open(installURL); openErr != nil {
+					util.GetLogger().Error(actionCtx, fmt.Sprintf("script plugin %s failed to open runtime install url %s: %s", s.metadata.GetName(actionCtx), installURL, openErr.Error()))
+				}
+			},
+		})
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("script plugin %s runtime issue: %s (%s)", s.metadata.GetName(ctx), runtimeName, statusCode))
+	return plugin.NewQueryResponse([]plugin.QueryResult{
+		{
+			Title:    s.metadata.GetName(ctx),
+			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, subtitleKey), displayRuntimeName),
+			Icon:     s.metadata.GetIconOrDefault(s.metadata.Directory, common.NewWoxImageEmoji("⚠️")),
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeMarkdown,
+				PreviewData: s.buildRuntimeIssueMarkdown(ctx, runtimeName, statusCode),
+			},
+			Actions: actions,
+		},
+	}), true
 }
 
 // detectMissingRuntime checks if a script execution error is caused by a missing runtime.
@@ -671,7 +703,19 @@ func (s *ScriptPlugin) getRuntimeDisplayName(runtimeName string) (string, string
 	}
 }
 
-func (s *ScriptPlugin) buildMissingRuntimeMarkdown(ctx context.Context, runtimeName string) string {
+func (s *ScriptPlugin) buildRuntimeIssueMarkdown(ctx context.Context, runtimeName string, statusCode plugin.RuntimeHostStatusCode) string {
+	if statusCode == plugin.RuntimeHostStatusUnsupportedVersion {
+		switch strings.ToLower(runtimeName) {
+		case "python":
+			return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_python_unsupported_markdown")
+		case "nodejs", "node":
+			return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_nodejs_unsupported_markdown")
+		default:
+			displayRuntimeName, _ := s.getRuntimeDisplayName(runtimeName)
+			return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_unsupported_markdown"), displayRuntimeName, displayRuntimeName)
+		}
+	}
+
 	switch strings.ToLower(runtimeName) {
 	case "python":
 		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_python_missing_markdown")

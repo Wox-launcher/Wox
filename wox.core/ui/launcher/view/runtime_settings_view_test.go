@@ -59,3 +59,38 @@ func TestRuntimeStatusPillCentersLabel(t *testing.T) {
 		t.Fatalf("status pill alignment = %#v, want centered in the pill", align)
 	}
 }
+
+func TestRuntimeStatusCardShowsRefreshNextToInstall(t *testing.T) {
+	card := runtimeStatusCard(RuntimeSettingsProps{}, RuntimeStatus{
+		Runtime: "PYTHON", DisplayName: "Python", Actionable: true,
+		InstallLabel: "Install Python", OnInstall: func() {},
+		RefreshLabel: "Refresh", OnRefresh: func() {},
+	}, 360, 224).(woxwidget.Container)
+	ids := runtimeCardButtonIDs(card)
+	if len(ids) != 2 || ids[0] != "runtime-install-PYTHON" || ids[1] != "runtime-refresh-PYTHON" {
+		t.Fatalf("runtime card buttons = %v, want install then refresh", ids)
+	}
+}
+
+func TestRuntimeStatusCardOmitsRefreshWhenNotProvided(t *testing.T) {
+	card := runtimeStatusCard(RuntimeSettingsProps{}, RuntimeStatus{
+		Runtime: "PYTHON", DisplayName: "Python", Actionable: true,
+		InstallLabel: "Install Python", OnInstall: func() {},
+	}, 360, 224).(woxwidget.Container)
+	ids := runtimeCardButtonIDs(card)
+	if len(ids) != 1 || ids[0] != "runtime-install-PYTHON" {
+		t.Fatalf("runtime card buttons = %v, want install only", ids)
+	}
+}
+
+func runtimeCardButtonIDs(card woxwidget.Container) []string {
+	column := card.Child.(woxwidget.Flex)
+	row := column.Children[len(column.Children)-1].(woxwidget.Container).Child.(woxwidget.Flex)
+	ids := make([]string, 0, len(row.Children))
+	for _, child := range row.Children {
+		if semantics, ok := child.(woxwidget.Semantics); ok {
+			ids = append(ids, semantics.AutomationID)
+		}
+	}
+	return ids
+}

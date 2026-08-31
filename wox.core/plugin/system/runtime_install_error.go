@@ -18,13 +18,31 @@ func runtimeDisplayName(runtime plugin.Runtime) string {
 	}
 }
 
+func installErrorRuntime(runtime plugin.Runtime, downloadURL string) plugin.Runtime {
+	if runtime == plugin.PLUGIN_RUNTIME_SCRIPT {
+		if interpreted := plugin.ScriptInterpreterRuntime(downloadURL); interpreted != "" {
+			return interpreted
+		}
+	}
+	return runtime
+}
+
 func formatPluginInstallError(ctx context.Context, api plugin.API, runtime plugin.Runtime, pluginName string, version string, installErr error) string {
-	status, hasStatus := plugin.GetPluginManager().RuntimeStatusForRuntime(ctx, runtime)
+	return formatPluginInstallErrorWithDownloadURL(ctx, api, runtime, "", pluginName, version, installErr)
+}
+
+func formatStorePluginInstallError(ctx context.Context, api plugin.API, manifest plugin.StorePluginManifest, installErr error) string {
+	return formatPluginInstallErrorWithDownloadURL(ctx, api, manifest.Runtime, manifest.DownloadUrl, manifest.GetName(ctx), manifest.Version, installErr)
+}
+
+func formatPluginInstallErrorWithDownloadURL(ctx context.Context, api plugin.API, runtime plugin.Runtime, downloadURL string, pluginName string, version string, installErr error) string {
+	statusRuntime := installErrorRuntime(runtime, downloadURL)
+	status, hasStatus := plugin.GetPluginManager().RuntimeStatusForRuntime(ctx, statusRuntime)
 	if !hasStatus || (status.StatusCode != plugin.RuntimeHostStatusExecutableMissing && status.StatusCode != plugin.RuntimeHostStatusUnsupportedVersion && status.StatusCode != plugin.RuntimeHostStatusStartFailed) {
 		return fmt.Sprintf("%s(%s): %s", pluginName, version, installErr.Error())
 	}
 
-	runtimeName := runtimeDisplayName(runtime)
+	runtimeName := runtimeDisplayName(statusRuntime)
 	switch status.StatusCode {
 	case plugin.RuntimeHostStatusExecutableMissing:
 		// Bug fix: runtime-missing install failures used to surface the full wrapped

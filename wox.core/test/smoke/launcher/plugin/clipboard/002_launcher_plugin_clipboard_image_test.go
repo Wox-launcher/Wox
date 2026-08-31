@@ -33,9 +33,7 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		smoke.ShowLauncher(t, ctx, client)
 
 		imagePath, width, height, expectedColor := createClipboardSmokeImage(t)
-		if err := writeExternalImageClipboard(imagePath); err != nil {
-			t.Fatalf("write external image clipboard: %v", err)
-		}
+		injectClipboardSmokeImage(t, ctx, imagePath, expectedColor, width, height)
 
 		labelPrefix := fmt.Sprintf("Image (%d×%d)", width, height)
 		waitForClipboardImageResult(t, ctx, client, width, height)
@@ -57,6 +55,77 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})
+}
+
+const (
+	// clipboardImageInjectAttempts retries the external write because a clipboard
+	// owner can drop the selection right after the writer exits successfully.
+	clipboardImageInjectAttempts = 5
+	// clipboardImageInjectTimeout bounds one readback. Selection ownership settles
+	// in milliseconds, so this only has to absorb scheduling jitter on CI.
+	clipboardImageInjectTimeout = 2 * time.Second
+)
+
+// injectClipboardSmokeImage puts the PNG on the OS clipboard and confirms it is
+// readable there before Wox is involved. The writer's exit code is not proof of
+// ownership: xclip forks a selection owner that can disappear before the watcher
+// polls, which used to surface as a Clipboard plugin failure instead of a failed
+// injection.
+func injectClipboardSmokeImage(t *testing.T, ctx context.Context, imagePath string, expectedColor color.RGBA, width, height int) {
+	t.Helper()
+	for attempt := 1; attempt <= clipboardImageInjectAttempts; attempt++ {
+		if err := writeExternalImageClipboard(imagePath); err != nil {
+			t.Fatalf("write external image clipboard: %v", err)
+		}
+		if clipboardInjectionSettled(ctx, imagePath, expectedColor, width, height) {
+			return
+		}
+		t.Logf("external clipboard image was not readable after write attempt %d/%d", attempt, clipboardImageInjectAttempts)
+	}
+	t.Fatalf("external clipboard image %dx%d never became readable on the OS clipboard after %d writes; the platform clipboard owner did not retain the injected payload", width, height, clipboardImageInjectAttempts)
+}
+
+// clipboardInjectionSettled polls the OS clipboard for one write attempt and
+// reports whether the injected payload became readable within the timeout.
+func clipboardInjectionSettled(ctx context.Context, imagePath string, expectedColor color.RGBA, width, height int) bool {
+	settleCtx, cancel := context.WithTimeout(ctx, clipboardImageInjectTimeout)
+	defer cancel()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if clipboardHoldsInjection(imagePath, expectedColor, width, height) {
+			return true
+		}
+		select {
+		case <-settleCtx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
+}
+
+// clipboardHoldsInjection reports whether the OS clipboard still exposes what
+// writeExternalImageClipboard put there. Windows injects a file drop list that the
+// Clipboard plugin promotes to an image, so the readback has to match the format
+// that was written instead of always expecting image bytes.
+func clipboardHoldsInjection(imagePath string, expectedColor color.RGBA, width, height int) bool {
+	if runtime.GOOS != "windows" {
+		return clipboardImageMatches(expectedColor, width, height)
+	}
+	data, err := woxclipboard.Read()
+	if err != nil {
+		return false
+	}
+	fileData, ok := data.(*woxclipboard.FilePathData)
+	if !ok {
+		return false
+	}
+	for _, path := range fileData.FilePaths {
+		if strings.EqualFold(filepath.Clean(path), filepath.Clean(imagePath)) {
+			return true
+		}
+	}
+	return false
 }
 
 // waitForClipboardImage polls the OS clipboard because clipboard ownership changes do not publish UI semantics.

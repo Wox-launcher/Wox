@@ -1,5 +1,7 @@
 # Wox Node.js Plugin SDK Reference
 
+Wox requires **Node.js 20 or later**.
+
 ## Installation
 
 `pnpm add @wox-launcher/wox-plugin`

@@ -48,6 +48,7 @@ type UpdateSettingsServices interface {
 type RuntimeSettingsServices interface {
 	RuntimeStatuses(ctx context.Context, sessionID string) ([]RuntimeStatus, error)
 	RestartRuntime(ctx context.Context, sessionID string, runtime string) error
+	RefreshRuntime(ctx context.Context, sessionID string, runtime string) error
 }
 
 // UsageStatsDay contains one calendar bucket in a usage report.

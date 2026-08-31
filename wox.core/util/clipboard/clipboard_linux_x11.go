@@ -25,13 +25,14 @@ const (
 // Openbox, XFCE, i3, MATE, and Xvfb all share this path. GTK is not used here
 // because Watch runs off the UI thread and Wox's Linux UI already owns GTK.
 type x11Clipboard struct {
-	mu          sync.Mutex
-	tool        x11ClipboardTool
-	toolErr     error
-	toolOnce    sync.Once
-	fingerprint string
-	lastNoData  time.Time
-	activeLog   bool
+	mu               sync.Mutex
+	tool             x11ClipboardTool
+	toolErr          error
+	toolOnce         sync.Once
+	fingerprint      string
+	lastNoData       time.Time
+	lastNoDataReason string
+	activeLog        bool
 }
 
 type x11ClipboardTool struct {
@@ -112,7 +113,16 @@ func (c *x11Clipboard) writeImageBytes(pngData []byte) error {
 }
 
 func (c *x11Clipboard) isChanged() bool {
-	contentType := c.readContentType()
+	// Read TARGETS directly instead of through readContentType so an ignored
+	// clipboard can report the atoms it actually advertised. Without them, an
+	// image the watcher never picked up is indistinguishable from an empty
+	// clipboard.
+	targets, targetsErr := c.readTargets()
+	if targetsErr != nil {
+		c.logNoData(targets, "", targetsErr)
+		return false
+	}
+	contentType := x11TargetsContentType(targets)
 	var payload []byte
 	var err error
 	switch contentType {
@@ -127,11 +137,11 @@ func (c *x11Clipboard) isChanged() bool {
 	case ClipboardTypeImage:
 		payload, err = c.readMIME(portalMimePNG)
 	default:
-		c.logNoData(noDataErr)
+		c.logNoData(targets, contentType, noDataErr)
 		return false
 	}
 	if err != nil {
-		c.logNoData(err)
+		c.logNoData(targets, contentType, err)
 		return false
 	}
 
@@ -146,8 +156,16 @@ func (c *x11Clipboard) isChanged() bool {
 	return true
 }
 
+// watchSnapshot annotates a failed read with the atoms the selection advertised.
+// The content type alone could not explain a read that failed right after TARGETS
+// reported data, because each xclip call queries a selection owner that may have
+// already exited.
 func (c *x11Clipboard) watchSnapshot() string {
-	return fmt.Sprintf("backend=x11 type=%s", c.readContentType())
+	targets, err := c.readTargets()
+	if err != nil {
+		return fmt.Sprintf("backend=x11 targets_err=%v", err)
+	}
+	return fmt.Sprintf("backend=x11 type=%s targets=%v", x11TargetsContentType(targets), targets)
 }
 
 func (c *x11Clipboard) readTargets() ([]string, error) {
@@ -230,15 +248,22 @@ func (c *x11Clipboard) clipboardTool() (x11ClipboardTool, error) {
 	return c.tool, c.toolErr
 }
 
-func (c *x11Clipboard) logNoData(err error) {
+// logNoData explains why the watcher ignored the clipboard. Only an unchanged
+// reason is throttled, so an idle empty clipboard still cannot spam the log while
+// a new observation is always reported once. Throttling by time alone muted the
+// whole window where a clipboard write went missing, leaving no record of what
+// the watcher saw.
+func (c *x11Clipboard) logNoData(targets []string, contentType Type, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	reason := fmt.Sprintf("type=%q targets=%v: %v", contentType, targets, err)
 	now := time.Now()
-	if !c.lastNoData.IsZero() && now.Sub(c.lastNoData) < linuxClipboardNoDataLogInterval {
+	if reason == c.lastNoDataReason && now.Sub(c.lastNoData) < linuxClipboardNoDataLogInterval {
 		return
 	}
 	c.lastNoData = now
-	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: Linux X11 watcher sees no readable clipboard content: %v", err))
+	c.lastNoDataReason = reason
+	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: Linux X11 watcher sees no readable clipboard content: %s", reason))
 }
 
 func (c *x11Clipboard) logActiveLocked() {
