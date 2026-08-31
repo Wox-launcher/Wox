@@ -30,6 +30,64 @@ func TestFormTableSideTitleUsesHeaderWeight(t *testing.T) {
 	}
 }
 
+// translatedLabelHostServices measures CJK runes at full width like a real font,
+// which the halved-width stub understates. The Linux language smoke failure came
+// from a Chinese label, so a Latin-only approximation hides the regression.
+type translatedLabelHostServices struct {
+	actionSearchHostServices
+}
+
+func (translatedLabelHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	width := float32(0)
+	for _, glyph := range text {
+		advance := max(style.Size/2, 1)
+		if glyph > 0x2E80 {
+			advance = max(style.Size, 1)
+		}
+		width += advance
+	}
+	return woxui.TextMetrics{Size: woxui.Size{Width: width, Height: max(style.Size, 1)}}, nil
+}
+
+// TestFormTableInlineHeaderKeepsTranslatedActionLabelsVisible guards the header
+// against a fixed action reserve. A hardcoded width tuned for the English labels
+// clipped the leading icon and gap of every longer translation, which only the
+// language smoke case caught because English never overflows.
+func TestFormTableInlineHeaderKeepsTranslatedActionLabelsVisible(t *testing.T) {
+	icon := &woxui.Image{}
+	for _, label := range []struct {
+		language string
+		add      string
+		template string
+	}{
+		{language: "en_US", add: "Add", template: "From Templates"},
+		{language: "zh_CN", add: "添加", template: "从模板添加"},
+		{language: "ru_RU", add: "Добавить", template: "Из шаблонов"},
+		{language: "pt_BR", add: "Adicionar", template: "A partir de modelos"},
+	} {
+		t.Run(label.language, func(t *testing.T) {
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				return FormTableField(FormTableFieldProps{
+					ID: "query-hotkeys", Title: "Query Hotkeys", Description: "Open a configured query from a hotkey.",
+					Width: 720, InlineTitle: true, MaxHeight: 300,
+					Columns:  []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Hotkey"}},
+					AddLabel: label.add, SecondaryLabel: label.template, AddIcon: icon, SecondaryIcon: icon,
+					OperationLabel: "Operation", EmptyLabel: "No data", Theme: woxcomponent.Theme{},
+				})
+			})
+			host.AttachServices(translatedLabelHostServices{})
+			if err := host.SetRepaintDebugMode(woxwidget.RepaintDebugVerify); err != nil {
+				t.Fatal(err)
+			}
+			frame := woxui.FrameInfo{Size: woxui.Size{Width: 720, Height: 400}, PixelSize: woxui.PixelSize{Width: 720, Height: 400}, Scale: 1}
+			host.Frame(&woxui.DisplayList{}, frame)
+			if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) != 0 {
+				t.Fatalf("%s table header diagnostics = %v, want translated action labels to fit", label.language, diagnostics)
+			}
+		})
+	}
+}
+
 func TestFormTableDisabledBlocksMutatingActions(t *testing.T) {
 	props := FormTableFieldProps{ID: "commands", AddLabel: "Add", Disabled: true, Theme: woxcomponent.Theme{}}
 	add := formTableAddButton(props).(woxwidget.Semantics)

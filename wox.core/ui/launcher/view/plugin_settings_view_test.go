@@ -571,11 +571,7 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	container := field.(woxwidget.Container)
 	column := container.Child.(woxwidget.Flex)
 	header := column.Children[0].(woxwidget.Flex)
-	actionSlot := header.Children[1].(woxwidget.Align)
-	if actionSlot.Width != 204 || actionSlot.Height != 32 || actionSlot.Horizontal != 1 {
-		t.Fatalf("header action slot = %vx%v alignment %v, want a compact slot right-aligned to the table edge", actionSlot.Width, actionSlot.Height, actionSlot.Horizontal)
-	}
-	actions := actionSlot.Child.(woxwidget.Flex)
+	actions := header.Children[1].(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("header action count = %d, want template and add", len(actions.Children))
 	}
@@ -593,10 +589,19 @@ func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
 		AddLabel: "Add", Theme: woxcomponent.Theme{},
 	})
 
+	// Expanded on the title consumes the leftover width, so a content-sized action
+	// row lands on the table's right edge. A fixed-width slot would align the same
+	// way but caps the buttons, which clipped every non-English label.
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	actionSlot := header.Children[1].(woxwidget.Align)
-	if actionSlot.Width != 74 || actionSlot.Height != 32 || actionSlot.Horizontal != 1 {
-		t.Fatalf("add action slot = %vx%v alignment %v, want compact height and its right edge aligned with the table", actionSlot.Width, actionSlot.Height, actionSlot.Horizontal)
+	if _, expanded := header.Children[0].(woxwidget.Expanded); !expanded {
+		t.Fatalf("header title = %T, want Expanded so the actions sit on the table right edge", header.Children[0])
+	}
+	actions, ok := header.Children[1].(woxwidget.Flex)
+	if !ok {
+		t.Fatalf("header actions = %T, want an intrinsically sized row", header.Children[1])
+	}
+	if len(actions.Children) != 1 {
+		t.Fatalf("header action count = %d, want only add", len(actions.Children))
 	}
 }
 

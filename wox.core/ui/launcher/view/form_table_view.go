@@ -195,13 +195,7 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 }
 
 func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.Widget {
-	actionsWidth := float32(0)
-	if props.SecondaryLabel != "" {
-		actionsWidth += 130
-	}
-	if !props.ReadOnly {
-		actionsWidth += 74
-	}
+	hasActions := props.SecondaryLabel != "" || !props.ReadOnly
 	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: props.HeaderWeight}, Color: props.Theme.ActionText}
 	if props.DemoKind != "" && props.DemoIcon != nil {
 		title = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -233,11 +227,13 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 	}
 	children := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Container{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: leftChildren}}}}
 	gap := float32(0)
-	if actionsWidth > 0 {
+	if hasActions {
 		gap = 16
-		children = append(children, woxwidget.Align{
-			Width: actionsWidth, Height: 32, Horizontal: 1, Child: formTableHeaderActions(props),
-		})
+		// The actions row sizes to its own content. A fixed reserve was tuned for the
+		// English labels, so every longer translation clipped the button's leading icon
+		// and gap. Expanded already pins the group to the trailing edge, and WoxButton
+		// owns the standard control height.
+		children = append(children, formTableHeaderActions(props))
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisEnd, Children: children}
 }
