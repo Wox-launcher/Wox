@@ -224,18 +224,23 @@ static void restore_previous_active_app(WoxDarwinWindow *window, BOOL was_wox_fr
   }
 
   if (was_wox_frontmost && window->restore_previous_app_on_hide) {
-    NSRunningApplication *previous_app = window->previous_active_app;
-    NSRunningApplication *current_app = [NSRunningApplication currentApplication];
-    if (previous_app != nil && previous_app != current_app && !previous_app.isTerminated) {
-      if (@available(macOS 14.0, *)) {
-        [previous_app activateWithOptions:0];
-      } else {
+    NSRunningApplication *previous_app = [window->previous_active_app retain];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      // A new Wox window may become key in the same AppKit turn. Restoring
+      // immediately would steal focus back and close that window on blur.
+      NSRunningApplication *current_app = [NSRunningApplication currentApplication];
+      if (NSApp.keyWindow == nil && previous_app != nil && previous_app != current_app && !previous_app.isTerminated) {
+        if (@available(macOS 14.0, *)) {
+          [previous_app activateWithOptions:0];
+        } else {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        [previous_app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+          [previous_app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
 #pragma clang diagnostic pop
+        }
       }
-    }
+      [previous_app release];
+    });
   }
   clear_previous_active_app(window);
 }

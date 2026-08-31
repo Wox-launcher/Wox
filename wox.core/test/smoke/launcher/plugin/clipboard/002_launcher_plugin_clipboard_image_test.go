@@ -191,7 +191,13 @@ end run`, imagePath)
 		command.Stdin = bytes.NewReader(data)
 	}
 	var stderr bytes.Buffer
-	command.Stderr = &stderr
+	if runtime.GOOS == "linux" {
+		// xclip forks a selection owner that inherits stderr. A Go pipe would keep
+		// Cmd.Run waiting for EOF until that owner exits.
+		command.Stderr = os.Stderr
+	} else {
+		command.Stderr = &stderr
+	}
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}

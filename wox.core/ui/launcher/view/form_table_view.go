@@ -74,6 +74,7 @@ type FormTableFieldProps struct {
 	InlineTitle        bool
 	ReadOnly           bool
 	Invalid            bool
+	Disabled           bool
 	Columns            []FormTableColumn
 	Rows               []FormTableRow
 	SecondaryLabel     string
@@ -249,7 +250,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 		actions = append(actions, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5,
 			Variant:  woxcomponent.ButtonOutline,
-			Disabled: props.Invalid, OnTap: props.OnSecondary, Theme: props.Theme,
+			Disabled: props.Invalid || props.Disabled, OnTap: props.OnSecondary, Theme: props.Theme,
 		}))
 	}
 	if !props.ReadOnly {
@@ -262,7 +263,7 @@ func formTableAddButton(props FormTableFieldProps) woxwidget.Widget {
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: props.ID + "-add", Label: props.AddLabel, Icon: props.AddIcon, IconSize: 15, IconGap: 5,
 		Variant:  woxcomponent.ButtonOutline,
-		Disabled: props.Invalid, OnTap: props.OnAdd, Theme: props.Theme,
+		Disabled: props.Invalid || props.Disabled, OnTap: props.OnAdd, Theme: props.Theme,
 	})
 }
 
@@ -505,22 +506,23 @@ func formTableDataRowCells(props FormTableFieldProps, row FormTableRow, widths [
 func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width float32, lastRow bool) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
 	actions := make([]woxwidget.Widget, 0, 3+len(row.TrailingActions))
+	disabled := row.ReadOnly || props.Disabled
 	if !props.HideEditAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, row.ReadOnly), row.ReadOnly, func() {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, disabled), disabled, func() {
 			if props.OnOpenRow != nil {
 				props.OnOpenRow(row.Index)
 			}
 		}))
 	}
 	if !props.HideCloneAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, row.ReadOnly), row.ReadOnly, func() {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, disabled), disabled, func() {
 			if props.OnCloneRow != nil {
 				props.OnCloneRow(row.Index)
 			}
 		}))
 	}
 	actions = append(actions,
-		formTableIconButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, row.ReadOnly), row.ReadOnly, func() {
+		formTableIconButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, disabled), disabled, func() {
 			if props.OnDeleteRow != nil {
 				props.OnDeleteRow(row.Index)
 			}
@@ -531,7 +533,7 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		if actionID == "" {
 			actionID = fmt.Sprintf("trailing-%d", index)
 		}
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, row.ReadOnly, action.OnTap))
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, disabled, action.OnTap))
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
 	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, false, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})

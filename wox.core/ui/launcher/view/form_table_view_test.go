@@ -30,6 +30,15 @@ func TestFormTableSideTitleUsesHeaderWeight(t *testing.T) {
 	}
 }
 
+func TestFormTableDisabledBlocksMutatingActions(t *testing.T) {
+	props := FormTableFieldProps{ID: "commands", AddLabel: "Add", Disabled: true, Theme: woxcomponent.Theme{}}
+	add := formTableAddButton(props).(woxwidget.Semantics)
+	edit := formTableIconButton(props, "commands-row-0-edit", "Edit", nil, props.Disabled, func() {}).(woxwidget.Semantics)
+	if !add.Disabled || len(add.Actions) != 0 || !edit.Disabled || len(edit.Actions) != 0 {
+		t.Fatal("disabled table must not expose mutating actions")
+	}
+}
+
 func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 	focused := 0
 	props := FormTableRowFieldProps{
