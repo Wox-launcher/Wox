@@ -177,10 +177,11 @@ func confirmShellCommandRowPersisted(t *testing.T, ctx context.Context, client *
 func waitForShellCommandRow(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	t.Helper()
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, editFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-edit")
-		_, deleteFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-delete")
+		add, addFound := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
+		edit, editFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-edit")
+		remove, deleteFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-delete")
 		_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
-		return editFound && deleteFound && !editorFound
+		return addFound && add.Enabled && editFound && edit.Enabled && deleteFound && remove.Enabled && !editorFound
 	}); err != nil {
 		t.Fatalf("wait for Shell command row: %v", err)
 	}

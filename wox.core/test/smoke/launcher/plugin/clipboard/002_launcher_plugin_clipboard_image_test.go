@@ -51,11 +51,7 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		if err := client.Perform(ctx, copyAction.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("activate Clipboard image Copy action: %v", err)
 		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			return clipboardImageMatches(expectedColor, width, height)
-		}); err != nil {
-			t.Fatalf("wait for Clipboard image Copy result: %v", err)
-		}
+		waitForClipboardImage(t, ctx, expectedColor, width, height)
 
 		snapshot, err := client.Snapshot(ctx)
 		if err != nil {
@@ -63,6 +59,23 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})
+}
+
+// waitForClipboardImage polls the OS clipboard because clipboard ownership changes do not publish UI semantics.
+func waitForClipboardImage(t *testing.T, ctx context.Context, expectedColor color.RGBA, width, height int) {
+	t.Helper()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if clipboardImageMatches(expectedColor, width, height) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for Clipboard image Copy result: %v", ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 // createClipboardSmokeImage writes a uniquely sized solid-color PNG for the external clipboard boundary.

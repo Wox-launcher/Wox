@@ -240,6 +240,7 @@ func selectLauncherResult(t *testing.T, ctx context.Context, client *automationd
 		if targetIndex == selectedIndex {
 			return snapshot
 		}
+		generation := snapshot.Tree.Generation
 		key := woxui.KeyArrowDown
 		if targetIndex < selectedIndex {
 			key = woxui.KeyArrowUp
@@ -249,7 +250,7 @@ func selectLauncherResult(t *testing.T, ctx context.Context, client *automationd
 		}
 		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			_, selectedIndex, targetIndex = launcherResultMatchIndexes(snapshot, match)
-			return selectedIndex >= 0 && targetIndex >= 0
+			return snapshot.Tree.Generation > generation && selectedIndex >= 0 && targetIndex >= 0
 		})
 		if err != nil {
 			t.Fatalf("wait for launcher result %q while selecting: %v", description, err)
