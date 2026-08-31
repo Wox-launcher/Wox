@@ -5,7 +5,6 @@ package notes
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 )
 
 // Test001LauncherNotesFlow verifies the native Notes window preserves a rich note through its core lifecycle.
-// Flow: create from Launcher -> enter Markdown -> pin the window -> create an independent note window -> search the saved note -> delete and restore it.
+// Flow: create from Launcher -> enter Markdown -> confirm the window is pinned by default -> create an independent note window -> search the saved note -> delete and restore it.
 // Evidence: the utility window exposes formatted backing text, window-pin state, persisted search results, trash state, and restored content.
 func Test001LauncherNotesFlow(t *testing.T) {
 	const title = "Wox Notes Smoke"
@@ -56,9 +55,6 @@ func Test001LauncherNotesFlow(t *testing.T) {
 		snapshot = waitForEditorValue(t, ctx, client, projected)
 		assertEditorSelection(t, snapshot, selectionStart, selectionEnd)
 
-		if err := client.PressKey(ctx, woxui.Key("p"), primaryModifier()|woxui.KeyModifierShift); err != nil {
-			t.Fatalf("pin Notes window: %v", err)
-		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			pin, found := automationdriver.Find(snapshot, "notes.toolbar.pin")
 			return found && (strings.Contains(pin.Label, "Unpin") || strings.Contains(pin.Label, "取消窗口置顶"))
@@ -208,11 +204,4 @@ func formatNotesSearchNodes(snapshot woxwidget.AutomationSnapshot) string {
 		return "search nodes=[]"
 	}
 	return "search nodes=[" + strings.Join(rows, "; ") + "]"
-}
-
-func primaryModifier() woxui.KeyModifiers {
-	if runtime.GOOS == "darwin" {
-		return woxui.KeyModifierMeta
-	}
-	return woxui.KeyModifierControl
 }

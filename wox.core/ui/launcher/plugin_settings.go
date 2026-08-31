@@ -441,9 +441,18 @@ func (a *App) setPluginSelectionLocked(index int) {
 	if index < 0 || index >= len(plugins) {
 		return
 	}
+	plugin := plugins[index]
+	if form := a.pluginSettings.Form(); form != nil && form.pluginID == plugin.ID {
+		if editor := a.settingsTableEditor; editor != nil && editor.target == &form.formFieldsState {
+			// A post-save definition refresh rebuilds this form. The settings overlay
+			// is published only while settingsTableEditor.target matches the live form
+			// pointer, so replacing it here would hide an in-flight row editor.
+			a.pluginSettings.SetSelected(index)
+			return
+		}
+	}
 	a.aiSettings.SetModelManager(nil)
 	a.pluginSettings.SetDetailTab("settings")
-	plugin := plugins[index]
 	if a.pluginSettings.PluginsStore() {
 		a.pluginSettings.SetDetailTab("description")
 		a.pluginSettings.SetSelected(index)
@@ -571,6 +580,7 @@ func (a *App) selectPlugin(index int) {
 	if index < 0 || index >= len(plugins) || index == current {
 		return
 	}
+	a.pluginSettings.SetSearchFocused(false)
 	form := a.pluginSettings.Form()
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)

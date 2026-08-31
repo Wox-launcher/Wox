@@ -25,9 +25,12 @@ import (
 )
 
 const (
-	fileSearchPluginID              = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
-	fileSearchRootsFieldID          = "plugin-settings-field-1"
-	fileSearchIgnorePatternsFieldID = "plugin-settings-field-4"
+	fileSearchPluginID = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	// Form index 0 is TriggerKeywords on the keywords tab. Settings then start
+	// with the file-index-service control, so the roots and ignore-pattern
+	// tables are field 2 and field 5.
+	fileSearchRootsFieldID          = "plugin-settings-field-2"
+	fileSearchIgnorePatternsFieldID = "plugin-settings-field-5"
 	fileSearchInitialIndexTimeout   = 30 * time.Second
 	fileSearchIncrementalTimeout    = 8 * time.Second
 	fileSearchIndexPollInterval     = 25 * time.Millisecond

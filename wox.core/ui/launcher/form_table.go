@@ -340,6 +340,7 @@ func (a *App) openRequirementFormTable(index int) {
 }
 
 func (a *App) openPluginFormTable(index int) {
+	a.pluginSettings.SetSearchFocused(false)
 	pluginForm := a.pluginSettings.Form()
 	if pluginForm != nil {
 		a.openFormTableLocked(&pluginForm.formFieldsState, index)
