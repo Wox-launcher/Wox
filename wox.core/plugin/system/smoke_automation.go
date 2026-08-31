@@ -5,7 +5,6 @@ package system
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -34,7 +33,6 @@ const (
 	smokeAutomationAttentionKey       = "attention-smoke-item"
 	smokeAutomationAttentionTitle     = "Attention smoke item"
 	smokeAutomationAttentionQuery     = "1+1"
-	smokeStepDelayEnvironment         = "WOX_GO_UI_SMOKE_STEP_DELAY"
 )
 
 func init() {
@@ -169,18 +167,22 @@ func (*smokeAutomationPlugin) querySlow(ctx context.Context) plugin.QueryRespons
 	}
 }
 
-// queryStreamingPreview returns a compact result before publishing its first preview chunk.
+// queryStreamingPreview returns a compact result whose smoke-only action publishes its first preview chunk.
 func (p *smokeAutomationPlugin) queryStreamingPreview() plugin.QueryResponse {
 	resultID := uuid.NewString()
-	api := p.api
-	time.AfterFunc(streamingPreviewUpdateDelay(), func() {
-		title := "Streaming preview received"
-		api.UpdateResult(context.Background(), plugin.UpdatableResult{
-			Id: resultID, Title: &title,
-			Preview: &plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "# Streaming preview\n\nFirst preview chunk"},
-		})
-	})
-	return plugin.NewQueryResponse([]plugin.QueryResult{{Id: resultID, Title: "Streaming preview pending", Icon: common.PluginAppIcon}})
+	return plugin.NewQueryResponse([]plugin.QueryResult{{
+		Id: resultID, Title: "Streaming preview pending", Icon: common.PluginAppIcon,
+		Actions: []plugin.QueryResultAction{{
+			Id: "publish-preview", Name: "Publish preview", PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				title := "Streaming preview received"
+				p.api.UpdateResult(ctx, plugin.UpdatableResult{
+					Id: actionContext.ResultId, Title: &title,
+					Preview: &plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "# Streaming preview\n\nFirst preview chunk"},
+				})
+			},
+		}},
+	}})
 }
 
 // queryTooltipPreview exposes one selected result whose preview tag opens a native tooltip.
@@ -308,13 +310,4 @@ func (p *smokeAutomationPlugin) showToolbarMessage(ctx context.Context, title st
 			},
 		},
 	})
-}
-
-// streamingPreviewUpdateDelay leaves the compact result observable after an optional smoke step pause.
-func streamingPreviewUpdateDelay() time.Duration {
-	delay := 250 * time.Millisecond
-	if stepDelay, err := time.ParseDuration(os.Getenv(smokeStepDelayEnvironment)); err == nil && stepDelay > 0 {
-		delay += stepDelay
-	}
-	return delay
 }

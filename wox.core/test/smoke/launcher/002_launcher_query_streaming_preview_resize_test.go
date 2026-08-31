@@ -14,7 +14,7 @@ import (
 )
 
 // Test002LauncherQueryStreamingPreviewResize verifies a streamed Preview expands the native launcher.
-// Flow: enter the streaming-preview query -> receive its compact initial result -> receive the first Preview update.
+// Flow: enter the streaming-preview query -> receive its compact initial result -> request the first Preview update.
 // Evidence: the updated result is visible and the real launcher window grows beyond its pre-Preview height.
 func Test002LauncherQueryStreamingPreviewResize(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
@@ -33,6 +33,7 @@ func Test002LauncherQueryStreamingPreviewResize(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read compact result bounds: %v", err)
 		}
+		smoke.ActivateSelectedResultAction(t, ctx, client, "action-result-publish-preview-")
 
 		updatedSnapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			return hasResultTitle(snapshot, "Streaming preview received")

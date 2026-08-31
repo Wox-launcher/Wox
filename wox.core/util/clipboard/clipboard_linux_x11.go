@@ -293,6 +293,17 @@ func runX11ClipboardCommand(bin string, args []string, stdin []byte) ([]byte, er
 }
 
 func runX11ClipboardCommandErr(bin string, args []string, stdin []byte) error {
-	_, err := runX11ClipboardCommand(bin, args, stdin)
+	ctx, cancel := context.WithTimeout(context.Background(), x11ClipboardCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
+	// Clipboard writers fork an owner that keeps the selection alive. Run avoids
+	// the output pipe that would otherwise stay open for that owner's lifetime.
+	err := cmd.Run()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("clipboard: X11 clipboard command timed out: %s", bin)
+	}
 	return err
 }

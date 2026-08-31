@@ -5,6 +5,7 @@ package clipboard
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,12 @@ func TestX11TargetsContentType(t *testing.T) {
 	assert.Equal(t, ClipboardTypeText, x11TargetsContentType([]string{"UTF8_STRING", "STRING"}))
 	assert.Equal(t, ClipboardTypeText, x11TargetsContentType([]string{"text/plain;charset=utf-8"}))
 	assert.Equal(t, Type(""), x11TargetsContentType([]string{"TIMESTAMP", "TARGETS"}))
+}
+
+func TestX11ClipboardWriteDoesNotWaitForSelectionOwner(t *testing.T) {
+	started := time.Now()
+	require.NoError(t, runX11ClipboardCommandErr("sh", []string{"-c", "(sleep 2) &"}, []byte("clipboard")))
+	require.Less(t, time.Since(started), time.Second)
 }
 
 func TestLinuxDataControlLiveRead(t *testing.T) {
