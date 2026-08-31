@@ -242,6 +242,27 @@ func TestWaitForChangeCapsTimeoutAtActionTimeout(t *testing.T) {
 	}
 }
 
+func TestProcessExitStateDistinguishesRunningFromCrashed(t *testing.T) {
+	t.Parallel()
+
+	running := &Process{done: make(chan struct{})}
+	if _, exited := running.ExitState(); exited {
+		t.Fatal("a running process must not report an exit state")
+	}
+
+	crashed := &Process{done: make(chan struct{}), waitErr: errors.New("exit status 3221225477")}
+	close(crashed.done)
+	if state, exited := crashed.ExitState(); !exited || state != "exit status 3221225477" {
+		t.Fatalf("crashed state = %q exited %v, want the native exit status", state, exited)
+	}
+
+	clean := &Process{done: make(chan struct{})}
+	close(clean.done)
+	if state, exited := clean.ExitState(); !exited || state != "exited with status 0" {
+		t.Fatalf("clean state = %q exited %v", state, exited)
+	}
+}
+
 func TestWaitForReasonTimeoutReportsRejectedStateAndDiagnostics(t *testing.T) {
 	t.Parallel()
 

@@ -8,7 +8,7 @@ This release speeds up File Search on Windows with optional Fast Indexing throug
 
 - Improve
   - [`File Search`] Support optional Fast Indexing on Windows by installing a service that indexes NTFS volumes through MFT and USN, let content-search directories be configured independently of filename-search roots, group file results in global queries, and filter results to content matches
-  - [`System`] Show a fullscreen confetti overlay from the Confetti command and at the end of onboarding
+  - [`Confetti`] Show a fullscreen confetti overlay from the Confetti command, try `confetti` query
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/confetti.png)
   - [`Clipboard`] Support searching clipboard images by their OCR text [#4525](https://github.com/Wox-launcher/Wox/issues/4525)
   - [`Folder`] Support fuzzy matching for child names and complete parent-directory paths while typing

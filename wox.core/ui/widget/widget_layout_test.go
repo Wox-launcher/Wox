@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -134,6 +135,21 @@ func TestFlexOverflowReportsDebugDiagnostic(t *testing.T) {
 	}
 	if len(tree.diagnostics) != 1 || !strings.Contains(tree.diagnostics[0], "horizontal flex overflowed by 20.0") {
 		t.Fatalf("overflow diagnostics = %v", tree.diagnostics)
+	}
+}
+
+func TestFlexOverflowDiagnosticNamesWidgetLocation(t *testing.T) {
+	tree := &elementTree{}
+	parent := &stateElement{widgetType: reflect.TypeOf(Container{})}
+	element := &stateElement{parent: parent, key: "LangCode", widgetType: reflect.TypeOf(Flex{})}
+	(Flex{Axis: Horizontal, Gap: 10, Children: []Widget{
+		Container{Width: 60, Height: 12},
+		Container{Width: 50, Height: 12},
+	}}).layout(context{window: &fakeHostServices{}, debug: &repaintDebugFrame{mode: RepaintDebugCounts}, elements: tree, element: element}, constraints{width: 100, height: 30})
+
+	want := "horizontal flex overflowed by 20.0 logical pixels in Container/Flex{LangCode}"
+	if len(tree.diagnostics) != 1 || tree.diagnostics[0] != want {
+		t.Fatalf("overflow diagnostics = %v, want %q", tree.diagnostics, want)
 	}
 }
 

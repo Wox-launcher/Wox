@@ -141,6 +141,9 @@ func run(caseSelector string) (int, error) {
 			command.Stderr = os.Stderr
 			if err := command.Run(); err != nil {
 				retainSuiteDirectory = true
+				if state, exited := process.ExitState(); exited {
+					fmt.Fprintf(os.Stderr, "shared Wox process died during %v: %s\n", testArgs[len(testArgs)-1], state)
+				}
 				var exitErr *exec.ExitError
 				if errors.As(err, &exitErr) {
 					return exitErr.ExitCode(), nil

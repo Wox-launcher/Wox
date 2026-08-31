@@ -111,6 +111,26 @@ func Launch(ctx context.Context, executable string, options LaunchOptions) (*Pro
 	}
 }
 
+// ExitState reports how Wox exited, or false while it is still running. A crashed
+// Wox makes every later automation call fail with a connection error that reads
+// like a test bug, so callers report the process exit before the test failure.
+func (p *Process) ExitState() (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	select {
+	case <-p.done:
+	default:
+		return "", false
+	}
+	if p.waitErr == nil {
+		return "exited with status 0", true
+	}
+	// On Windows an unhandled native exception surfaces as the exception code in
+	// the exit status, which is the only signal distinguishing a crash from a kill.
+	return p.waitErr.Error(), true
+}
+
 // Wait blocks until Wox exits or the caller's context is canceled.
 func (p *Process) Wait(ctx context.Context) error {
 	if p == nil {

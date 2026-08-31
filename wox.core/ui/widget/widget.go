@@ -3,6 +3,7 @@ package widget
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -924,6 +925,10 @@ func (w Flex) layoutSequential(ctx context, available constraints) *node {
 	return available.constrainNode(result)
 }
 
+// overflowLocationDepth keeps an overflow location identifying but short. The
+// innermost ancestors name the control; the outer shell adds no information.
+const overflowLocationDepth = 6
+
 // recordLayoutOverflow exposes clipped content while repaint diagnostics are enabled.
 func recordLayoutOverflow(ctx context, layout string, axis Axis, contentExtent, availableExtent float32) {
 	if availableExtent >= math.MaxFloat32 || contentExtent <= availableExtent+0.5 || ctx.debug == nil || ctx.elements == nil {
@@ -933,7 +938,31 @@ func recordLayoutOverflow(ctx context, layout string, axis Axis, contentExtent, 
 	if axis == Vertical {
 		axisLabel = "vertical"
 	}
-	ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("%s %s overflowed by %.1f logical pixels", axisLabel, layout, contentExtent-availableExtent))
+	ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("%s %s overflowed by %.1f logical pixels in %s", axisLabel, layout, contentExtent-availableExtent, overflowLocation(ctx.element)))
+}
+
+// overflowLocation names the widget subtree that produced an overflow. Without it
+// a diagnostic reports only the layout kind, which cannot be traced to a control.
+func overflowLocation(element *stateElement) string {
+	segments := make([]string, 0, overflowLocationDepth)
+	for current := element; current != nil && len(segments) < overflowLocationDepth; current = current.parent {
+		if current.widgetType == nil {
+			continue
+		}
+		segment := current.widgetType.Name()
+		if segment == "" {
+			segment = current.widgetType.String()
+		}
+		if current.key != "" {
+			segment += "{" + string(current.key) + "}"
+		}
+		segments = append(segments, segment)
+	}
+	if len(segments) == 0 {
+		return "unknown widget"
+	}
+	slices.Reverse(segments)
+	return strings.Join(segments, "/")
 }
 
 func flexMainExtent(child *node, axis Axis) float32 {
