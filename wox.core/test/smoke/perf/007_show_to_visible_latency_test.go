@@ -32,7 +32,7 @@ const (
 
 // Test007ShowToVisibleLatency measures in-process activation latency after a hidden launcher is shown.
 // Flow: hide the primary launcher -> show through the product window path -> wait for the query input and a presented frame.
-// Evidence: twenty steady hide/show cycles report p50/p95/max, and p95 stays under the catastrophic 500ms smoke gate.
+// Evidence: twenty steady hide/show cycles report p50/p95/max, and p95 stays under the catastrophic 300ms smoke gate.
 func Test007ShowToVisibleLatency(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		samples := make([]time.Duration, 0, showToVisibleWarmupSamples+showToVisibleSampleCount)
@@ -78,7 +78,6 @@ func measureShowToVisible(t *testing.T, ctx context.Context, client *automationd
 	}); err != nil {
 		t.Fatalf("wait for query input: %v", err)
 	}
-	elapsed := time.Since(started)
 	state, err := client.WindowState(ctx, "primary")
 	if err != nil {
 		t.Fatalf("read launcher state after show: %v", err)
@@ -86,14 +85,24 @@ func measureShowToVisible(t *testing.T, ctx context.Context, client *automationd
 	if !state.Visible {
 		t.Fatalf("launcher was not visible after show; last state: %+v", state)
 	}
-	metrics, err := client.FrameMetrics(ctx)
-	if err != nil {
-		t.Fatalf("read frame metrics after show: %v", err)
+	waitCtx, cancel := context.WithTimeout(ctx, automationdriver.ActionTimeout)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		metrics, metricsErr := client.FrameMetrics(waitCtx)
+		if metricsErr != nil {
+			t.Fatalf("read frame metrics after show: %v", metricsErr)
+		}
+		if metrics.PresentedFrameCount > 0 {
+			return time.Since(started)
+		}
+		select {
+		case <-waitCtx.Done():
+			t.Fatalf("wait for presented show frame: %v (last metrics: %+v)", waitCtx.Err(), metrics)
+		case <-ticker.C:
+		}
 	}
-	if metrics.PresentedFrameCount < 1 {
-		t.Fatalf("show produced no presented frame: %+v", metrics)
-	}
-	return elapsed
 }
 
 // hideLauncher dismisses the primary launcher and waits until it is no longer visible.
