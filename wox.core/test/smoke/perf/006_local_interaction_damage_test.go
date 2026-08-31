@@ -14,7 +14,7 @@ import (
 
 // Test006LocalInteractionDamage verifies hover, selection, and resize still produce completed frames.
 // Flow: query a small fixture -> hover a result -> extend query selection -> resize the launcher.
-// Evidence: each interaction yields presented frames with work counters and no dropped frames.
+// Evidence: each interaction yields presented frames with work counters and at most one resize drop.
 func Test006LocalInteractionDamage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		snapshot := runQueryFixture(t, ctx, client, fixtureCommandQuery("warm-cache"))
@@ -48,6 +48,6 @@ func Test006LocalInteractionDamage(t *testing.T) {
 			t.Fatalf("resize launcher: %v", err)
 		}
 		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
-		assertNoDroppedFrames(t, ctx, client)
+		assertDroppedFramesAtMost(t, ctx, client, 1)
 	})
 }

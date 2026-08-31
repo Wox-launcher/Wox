@@ -231,11 +231,6 @@ func maxInt(values []int) int {
 	return result
 }
 
-func assertNoDroppedFrames(t *testing.T, ctx context.Context, client *automationdriver.Client) {
-	t.Helper()
-	assertDroppedFramesAtMost(t, ctx, client, 0)
-}
-
 // assertDroppedFramesAtMost allows a small drop budget for fixtures that invalidate faster than vsync.
 func assertDroppedFramesAtMost(t *testing.T, ctx context.Context, client *automationdriver.Client, maxDropped uint64) {
 	t.Helper()

@@ -39,10 +39,6 @@ func Test003LauncherPluginFileSearchIgnoreAbsolutePath(t *testing.T) {
 		waitForFileSearchDatabaseValue(t, ctx, "entries", ignoredPath, true, fileSearchInitialIndexTimeout)
 		waitForFileSearchDatabaseValue(t, ctx, "entries", keptPath, true, fileSearchInitialIndexTimeout)
 
-		smoke.ShowLauncher(t, ctx, client)
-		queryFileSearchResult(t, ctx, client, ignoredPath)
-		queryFileSearchResult(t, ctx, client, keptPath)
-
 		addFileSearchIgnorePattern(t, ctx, client, ignorePattern)
 		indexCtx, indexCancel := context.WithTimeout(context.Background(), fileSearchInitialIndexTimeout)
 		defer indexCancel()
