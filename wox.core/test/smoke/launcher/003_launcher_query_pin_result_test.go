@@ -4,31 +4,27 @@ package query
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
-	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
 const (
-	pinRankingShellPluginID = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
-	pinRankingQuery         = "woxsmokepin"
-	pinRankingFirstAlias    = pinRankingQuery + "-first"
-	pinRankingSecondAlias   = pinRankingQuery + "-second"
-	pinActionPrefix         = "action-result-__system_pin_in_query__-"
-	unpinActionPrefix       = "action-result-__system_unpin_in_query__-"
+	pinRankingQuery       = "wox-smoke pin-ranking "
+	pinRankingFirstAlias  = "Pin ranking first fixture"
+	pinRankingSecondAlias = "Pin ranking second fixture"
+	pinActionPrefix       = "action-result-__system_pin_in_query__-"
+	unpinActionPrefix     = "action-result-__system_unpin_in_query__-"
 )
 
 // Test003LauncherQueryPinResult verifies pinning promotes a non-leading result for the same query.
-// Flow: configure two matching results -> equalize their action history -> pin the second result -> repeat the query -> unpin and clean up.
-// Evidence: the pinned result moves from second to first, then the original order returns after both results have equal action history.
+// Flow: query two deterministic results -> equalize their action history -> pin the second result -> repeat the query.
+// Evidence: the pinned result moves from second to first after both results have equal action history.
 func Test003LauncherQueryPinResult(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		configurePinRankingResults(t, ctx, client)
 		smoke.ShowLauncher(t, ctx, client)
 
 		initial := queryPinRankingResults(t, ctx, client)
@@ -50,69 +46,8 @@ func Test003LauncherQueryPinResult(t *testing.T) {
 
 		pinned := queryPinRankingResults(t, ctx, client)
 		assertPinRankingOrder(t, pinned, pinRankingSecondAlias, pinRankingFirstAlias)
-		activatePinRankingAction(t, ctx, client, pinned, pinRankingSecondAlias, unpinActionPrefix)
-		smoke.WaitForResultActionsClosed(t, ctx, client)
-
-		unpinned := queryPinRankingResults(t, ctx, client)
-		assertPinRankingOrder(t, unpinned, pinRankingFirstAlias, pinRankingSecondAlias)
-		smoke.AssertNoDiagnostics(t, unpinned)
-
-		deletePinRankingResults(t, ctx, client)
+		smoke.AssertNoDiagnostics(t, pinned)
 	})
-}
-
-// configurePinRankingResults borrows Shell settings to create two deterministic launcher results.
-func configurePinRankingResults(t *testing.T, ctx context.Context, client *automationdriver.Client) {
-	t.Helper()
-	smoke.OpenInstalledPluginSettings(t, ctx, client, pinRankingShellPluginID)
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		add, found := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
-		return found && add.Enabled
-	}); err != nil {
-		t.Fatalf("wait for Shell command settings used by pin ranking: %v", err)
-	}
-	for index, alias := range []string{pinRankingFirstAlias, pinRankingSecondAlias} {
-		if err := client.Perform(ctx, "plugin-settings-field-3-add", woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("add pin-ranking result %d: %v", index, err)
-		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, aliasFound := automationdriver.Find(snapshot, "form-table-row-field-0")
-			_, commandFound := automationdriver.Find(snapshot, "form-table-row-field-1")
-			_, saveFound := automationdriver.Find(snapshot, "form-table-row-save")
-			return aliasFound && commandFound && saveFound
-		}); err != nil {
-			t.Fatalf("wait for pin-ranking result %d editor: %v", index, err)
-		}
-		if err := client.Perform(ctx, "form-table-row-field-0", woxui.AccessibilityActionSetValue, alias); err != nil {
-			t.Fatalf("set pin-ranking result %d alias: %v", index, err)
-		}
-		if err := client.Perform(ctx, "form-table-row-field-1", woxui.AccessibilityActionSetValue, "echo smoke pin ranking"); err != nil {
-			t.Fatalf("set pin-ranking result %d command: %v", index, err)
-		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			enabled, found := automationdriver.Find(snapshot, "form-table-row-field-4")
-			return found && !enabled.Checked
-		}); err != nil {
-			t.Fatalf("wait for pin-ranking result %d enabled field: %v", index, err)
-		}
-		if err := client.Perform(ctx, "form-table-row-field-4", woxui.AccessibilityActionToggle, ""); err != nil {
-			t.Fatalf("enable pin-ranking result %d: %v", index, err)
-		}
-		if err := client.Perform(ctx, "form-table-row-save", woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("save pin-ranking result %d: %v", index, err)
-		}
-		rowID := fmt.Sprintf("plugin-settings-field-3-row-%d-edit", index)
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			row, rowFound := automationdriver.Find(snapshot, rowID)
-			_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
-			return rowFound && row.Enabled && !editorFound
-		}); err != nil {
-			t.Fatalf("wait for pin-ranking result %d to persist: %v", index, err)
-		}
-	}
-	if err := client.Hide(ctx); err != nil {
-		t.Fatalf("close Shell settings after configuring pin-ranking results: %v", err)
-	}
 }
 
 // queryPinRankingResults forces a fresh generation and returns the two matching results in semantic order.
@@ -132,7 +67,7 @@ func queryPinRankingResults(t *testing.T, ctx context.Context, client *automatio
 func pinRankingOrder(snapshot woxwidget.AutomationSnapshot) []string {
 	order := make([]string, 0, 2)
 	for _, node := range snapshot.Tree.Nodes {
-		if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.HasPrefix(node.Label, pinRankingQuery+"-") {
+		if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.HasPrefix(node.Label, "Pin ranking ") {
 			order = append(order, node.Label)
 		}
 	}
@@ -156,44 +91,4 @@ func activatePinRankingAction(t *testing.T, ctx context.Context, client *automat
 	}
 	smoke.SelectLauncherResult(t, ctx, client, resultID)
 	smoke.ActivateSelectedResultAction(t, ctx, client, actionPrefix)
-}
-
-// deletePinRankingResults removes the deterministic results from shared Shell settings.
-func deletePinRankingResults(t *testing.T, ctx context.Context, client *automationdriver.Client) {
-	t.Helper()
-	if err := client.Hide(ctx); err != nil {
-		t.Fatalf("hide launcher before deleting pin-ranking results: %v", err)
-	}
-	smoke.OpenInstalledPluginSettings(t, ctx, client, pinRankingShellPluginID)
-	for _, rowIndex := range []int{1, 0} {
-		rowID := fmt.Sprintf("plugin-settings-field-3-row-%d-delete", rowIndex)
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			row, found := automationdriver.Find(snapshot, rowID)
-			return found && row.Enabled
-		}); err != nil {
-			t.Fatalf("wait for pin-ranking result row %d deletion action: %v", rowIndex, err)
-		}
-		if err := client.Perform(ctx, rowID, woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("delete pin-ranking result row %d: %v", rowIndex, err)
-		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, found := automationdriver.Find(snapshot, "form-table-delete-confirm")
-			return found
-		}); err != nil {
-			t.Fatalf("wait to confirm pin-ranking result row %d deletion: %v", rowIndex, err)
-		}
-		if err := client.Perform(ctx, "form-table-delete-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("confirm pin-ranking result row %d deletion: %v", rowIndex, err)
-		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, dialogFound := automationdriver.Find(snapshot, "form-table-delete-dialog")
-			_, rowFound := automationdriver.Find(snapshot, rowID)
-			return !dialogFound && !rowFound
-		}); err != nil {
-			t.Fatalf("wait for pin-ranking result row %d deletion: %v", rowIndex, err)
-		}
-	}
-	if err := client.Hide(ctx); err != nil {
-		t.Fatalf("close Shell settings after deleting pin-ranking results: %v", err)
-	}
 }

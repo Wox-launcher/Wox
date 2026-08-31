@@ -125,6 +125,47 @@ func TestWaitForReturnsLastSnapshotWhenWaitingFails(t *testing.T) {
 	}
 }
 
+func TestWaitForPollsSnapshotWithoutGenerationChange(t *testing.T) {
+	t.Parallel()
+
+	requestCount := 0
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requestCount++
+		value := "pending"
+		if requestCount > 1 {
+			value = "ready"
+		}
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      requestCount,
+			"result": map[string]any{"Tree": map[string]any{
+				"Generation": 9,
+				"Nodes":      []map[string]any{{"ID": 1, "AutomationID": "status", "Value": value}},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("encode snapshot response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	snapshot, err := client.WaitFor(context.Background(), func(snapshot woxwidget.AutomationSnapshot) bool {
+		node, found := Find(snapshot, "status")
+		return found && node.Value == "ready"
+	})
+	if err != nil {
+		t.Fatalf("wait for unchanged generation: %v", err)
+	}
+	if snapshot.Tree.Generation != 9 || requestCount != 2 {
+		t.Fatalf("snapshot generation = %d requests = %d, want generation 9 after two snapshots", snapshot.Tree.Generation, requestCount)
+	}
+}
+
 func TestWithActionTimeoutCapsLongDeadline(t *testing.T) {
 	t.Parallel()
 

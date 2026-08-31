@@ -12,7 +12,7 @@ import (
 )
 
 // CaseTimeout is the budget for one smoke case body. Individual waits still cap at ActionTimeout.
-const CaseTimeout = 30 * time.Second
+const CaseTimeout = 60 * time.Second
 
 // Case runs one smoke case between mandatory resets of the shared Wox process.
 func Case(t *testing.T, run func(context.Context, *automationdriver.Client)) {

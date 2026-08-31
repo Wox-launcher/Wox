@@ -190,7 +190,7 @@ func (c *Client) WaitForChange(ctx context.Context, afterGeneration uint64) (wox
 	})
 }
 
-// WaitFor polls only after a published generation change until predicate succeeds.
+// WaitFor polls the active surface until predicate succeeds.
 func (c *Client) WaitFor(ctx context.Context, predicate func(woxwidget.AutomationSnapshot) bool) (woxwidget.AutomationSnapshot, error) {
 	ctx, cancel := withActionTimeout(ctx)
 	defer cancel()
@@ -198,13 +198,20 @@ func (c *Client) WaitFor(ctx context.Context, predicate func(woxwidget.Automatio
 	if err != nil {
 		return woxwidget.AutomationSnapshot{}, err
 	}
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		if predicate(snapshot) {
 			return snapshot, nil
 		}
-		next, err := c.WaitForChange(ctx, snapshot.Tree.Generation)
+		select {
+		case <-ctx.Done():
+			return snapshot, fmt.Errorf("wait for semantics after generation %d: %w", snapshot.Tree.Generation, ctx.Err())
+		case <-ticker.C:
+		}
+		next, err := c.Snapshot(ctx)
 		if err != nil {
-			return snapshot, fmt.Errorf("wait for semantics after generation %d: %w", snapshot.Tree.Generation, err)
+			return snapshot, fmt.Errorf("refresh semantics after generation %d: %w", snapshot.Tree.Generation, err)
 		}
 		snapshot = next
 	}

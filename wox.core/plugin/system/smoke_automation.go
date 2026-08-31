@@ -23,6 +23,7 @@ const (
 	smokeAutomationToolbarLongCommand = "toolbar-long"
 	smokeAutomationAttentionCommand   = "attention"
 	smokeAutomationQuickSelectCommand = "quick-select"
+	smokeAutomationPinRankingCommand  = "pin-ranking"
 	smokeAutomationTooltipCommand     = "tooltip"
 	smokeAutomationToolbarMessageID   = "wox-smoke-toolbar-message"
 	smokeAutomationKeepOpenAction     = "keep-open"
@@ -57,6 +58,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationToolbarLongCommand, Description: "Long toolbar message fixture"},
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
+			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
 			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
@@ -86,6 +88,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryAttentionFixture()
 	case smokeAutomationQuickSelectCommand:
 		return p.queryQuickSelect()
+	case smokeAutomationPinRankingCommand:
+		return queryPinRanking()
 	case smokeAutomationTooltipCommand:
 		return queryTooltipPreview()
 	case smokeAutomationListCommand:
@@ -99,6 +103,14 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 	default:
 		return plugin.QueryResponse{}
 	}
+}
+
+// queryPinRanking returns stable ordering without mutating persisted plugin settings.
+func queryPinRanking() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{
+		{Id: "pin-ranking-first-fixture", Title: "Pin ranking first fixture", Icon: common.PluginAppIcon},
+		{Id: "pin-ranking-second-fixture", Title: "Pin ranking second fixture", Icon: common.PluginAppIcon},
+	})
 }
 
 // queryAttentionFixture exposes fresh and repeated pushes through the real plugin API boundary.
