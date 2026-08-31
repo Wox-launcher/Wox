@@ -280,6 +280,21 @@ func launcherResultMatchIndexes(snapshot woxwidget.AutomationSnapshot, match fun
 // OpenResultActionPanel opens the action panel through its platform shortcut and waits for the focused filter.
 func OpenResultActionPanel(t *testing.T, ctx context.Context, client *automationdriver.Client) woxwidget.AutomationSnapshot {
 	t.Helper()
+	ready, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		search, searchFound := automationdriver.Find(snapshot, "action-search")
+		if searchFound && search.Focused {
+			return true
+		}
+		query, queryFound := automationdriver.Find(snapshot, "launcher.query.input")
+		_, actionsFound := automationdriver.Find(snapshot, "result-toolbar-more")
+		return queryFound && query.Focused && actionsFound
+	})
+	if err != nil {
+		t.Fatalf("wait for launcher result actions: %v", err)
+	}
+	if _, alreadyOpen := automationdriver.Find(ready, "action-search"); alreadyOpen {
+		return ready
+	}
 	modifier := woxui.KeyModifierControl
 	if runtime.GOOS == "darwin" {
 		modifier = woxui.KeyModifierMeta
