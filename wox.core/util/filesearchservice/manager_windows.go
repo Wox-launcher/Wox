@@ -46,6 +46,11 @@ func GetStatus() (result Status) {
 	defer func() {
 		running.Store(result.State == StateRunning || result.State == StateUpdateReady)
 	}()
+	// Isolated test runs must not attach to the machine-wide service and its production index.
+	if util.IsTestMode() {
+		result.State = StateUnavailable
+		return result
+	}
 	_, embeddedErr := os.Stat(embeddedExecutable())
 	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
