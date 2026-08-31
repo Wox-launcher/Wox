@@ -507,7 +507,7 @@ func onboardingQueryHotkeysVisual(props OnboardingProps, width float32, accent w
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: demoWidth, Height: 52, Padding: woxwidget.Insets{Left: 16, Top: 11, Right: 8, Bottom: 11}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: queryHeader}},
 			onboardingQueryHotkeyResult(props, demoWidth, props.Labels["queryHotkeys.clipboard"], "Clipboard history", true),
-			onboardingQueryHotkeyResult(props, demoWidth, "https://wox-launcher.github.io", "Copied link", false),
+			onboardingQueryHotkeyResult(props, demoWidth, "https://www.woxlauncher.com", "Copied link", false),
 			onboardingQueryHotkeyResult(props, demoWidth, "Wox", "Copied text", false),
 		}},
 	}

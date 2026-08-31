@@ -21,7 +21,7 @@ const waylandHotkeysHelpAnchor = "wayland-double-modifier-hotkeys"
 // permissions guide. The docs site serves English under /guide and Chinese
 // under /zh/guide; other languages fall back to the English page.
 func waylandHotkeysHelpURL() string {
-	base := "https://wox-launcher.github.io/Wox"
+	base := "https://www.woxlauncher.com"
 	if i18n.GetI18nManager().GetCurrentLangCode() == i18n.LangCodeZhCn {
 		return base + "/zh/guide/faq#" + waylandHotkeysHelpAnchor
 	}

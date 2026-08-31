@@ -16,7 +16,7 @@ Wox is a **fully native**, open-source launcher for macOS, Linux, and Windows 鈥
 
 Local search, keyboard-first actions, and an extensible plugin system stay in one focused input.
 
-[Download Wox](https://github.com/Wox-launcher/Wox/releases) 路 [Browse plugins](https://wox-launcher.github.io/Wox/store/plugins.html) 路 [Read the docs](https://wox-launcher.github.io/Wox/)
+[Download Wox](https://github.com/Wox-launcher/Wox/releases) 路 [Browse plugins](https://www.woxlauncher.com/store/plugins) 路 [Read the docs](https://www.woxlauncher.com/)
 
 > Press <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd>, type what you need, and press <kbd>Enter</kbd>.
 
@@ -47,9 +47,9 @@ https://github.com/user-attachments/assets/15ad1370-bbc0-4f96-8729-56fcc769c41c
 
 ## Documentation
 
-- [Project documentation](https://wox-launcher.github.io/Wox/)
-- [Plugin store](https://wox-launcher.github.io/Wox/store/plugins.html)
-- [Theme store](https://wox-launcher.github.io/Wox/store/themes.html)
+- [Project documentation](https://www.woxlauncher.com/)
+- [Plugin store](https://www.woxlauncher.com/store/plugins)
+- [Theme store](https://www.woxlauncher.com/store/themes)
 
 ## Contributing
 

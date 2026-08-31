@@ -404,7 +404,7 @@ This version adds many new features and improvements. we hope you’ll like it, 
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/new_preview.png)
   - [`Query Refinement`] Add refinement controls so plugins can expose filters and sort options directly in the launcher. File Search can filter files or folders and sort by relevance, name, modified time, or size; Clipboard and WPM can expose their own type and install-status filters.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/query_refinement.png)
-  - [`AI Command`] Add default actions and Run And Paste support for silent query hotkey workflows. Users can select text in any app, press a hotkey, let an AI command optimize or translate the selected text, and replace the original selection in place when the final answer is ready. You can refer [https://wox-launcher.github.io/Wox/blog/did-you-know-ai-command-silent-translation-query-hotkey.html](https://wox-launcher.github.io/Wox/blog/did-you-know-ai-command-silent-translation-query-hotkey.html) for more details.
+  - [`AI Command`] Add default actions and Run And Paste support for silent query hotkey workflows. Users can select text in any app, press a hotkey, let an AI command optimize or translate the selected text, and replace the original selection in place when the final answer is ready. You can refer [https://www.woxlauncher.com/blog/did-you-know-ai-command-silent-translation-query-hotkey](https://www.woxlauncher.com/blog/did-you-know-ai-command-silent-translation-query-hotkey) for more details.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_run_paste_query_hotkey.mp4)
   - [`WebView`] Add actions to open preview pages in the system browser and clear saved WebView state, making embedded website previews easier to inspect, reset, and recover when a site keeps stale session data.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/webview_open_in_browser.png)
@@ -558,13 +558,13 @@ It's time to release the official 2.0 version! There are no major issues in ever
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/emoji_ai_search.png)
   - Add auto theme which changes theme based on system light/dark mode
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/auto_theme.png)
-  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](https://wox-launcher.github.io/Wox/guide/plugins/system/explorer.html) for more details
+  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](https://www.woxlauncher.com/guide/plugins/system/explorer) for more details
   - Add loading animation to query box during plugin metadata fetching to improve user experience
 
 - Improve
   - Improve markdown preview rendering performance and stability
   - Critical deletion actions have been implemented to recycle bin, this will prevent accidental data loss #3958
-  - Improve docs website [https://wox-launcher.github.io/Wox/guide/introduction.html](https://wox-launcher.github.io/Wox/guide/introduction.html)
+  - Improve docs website [https://www.woxlauncher.com/guide/introduction](https://www.woxlauncher.com/guide/introduction)
   - Support multiple-line text in query input box #3797
     ![](https://github.com/user-attachments/assets/64040d63-5d9b-46b4-93a8-449becf70762)
   - Improve database recovery mechanism to prevent database corruption on cloud disk sync (icloud, onedrive, dropbox, etc.)
