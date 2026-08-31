@@ -986,5 +986,28 @@
         "plugin_description": "搜索、查看、复制和修改 Nextcloud Passwords 中保存的密码"
       }
     }
+  },
+  {
+    "Id": "c3e8a1d4-7b2f-4f19-9e6a-2d5c8b1a4f70",
+    "Name": "Timestamp",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "Convert between Unix timestamps and datetime strings",
+    "IconEmoji": "🕗",
+    "Website": "https://gist.github.com/qianlifeng/31363d95905325e9969d93d999e94b07",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/31363d95905325e9969d93d999e94b07/raw/Wox.Plugin.Script.Timestamp.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/9fa4ac8e-271b-4893-b213-79e88a66fe02",
+      "https://gist.github.com/user-attachments/assets/a3a38b13-95d5-474a-8068-b90903c910b6"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-08-31 18:54:00",
+    "DateUpdated": "2026-08-31 18:54:00"
   }
 ]
