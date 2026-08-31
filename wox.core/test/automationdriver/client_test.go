@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -317,6 +318,77 @@ func TestWaitForReasonTimeoutReportsRejectedStateAndDiagnostics(t *testing.T) {
 		if !strings.Contains(message, want) {
 			t.Fatalf("wait error %q must explain %q", message, want)
 		}
+	}
+}
+
+func TestWaitForTimeoutReportsObservedSurfaceWithoutPredicateReason(t *testing.T) {
+	t.Parallel()
+
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID uint64 `json:"id"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      requestPayload.ID,
+			"result": map[string]any{
+				"Tree": map[string]any{
+					"Generation": 549,
+					"RootIDs":    []int{1},
+					"Nodes": []map[string]any{
+						{"ID": 1, "AutomationID": "launcher-query-input-key", "Focused": true},
+						{"ID": 2, "AutomationID": "launcher.result.0"},
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, waitErr := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := Find(snapshot, "action-search")
+		return found
+	})
+	if waitErr == nil {
+		t.Fatal("stuck wait must fail")
+	}
+	message := waitErr.Error()
+	for _, want := range []string{"generation 549", "focus=\"launcher-query-input-key\"", "nodes=2", "launcher.result.0"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("wait error %q must explain %q", message, want)
+		}
+	}
+}
+
+func TestDescribeSnapshotTruncatesLongIDListsAndReportsMissingFocus(t *testing.T) {
+	t.Parallel()
+
+	nodes := make([]woxui.AccessibilityNode, 0, waitSnapshotIDBudget+5)
+	for index := range waitSnapshotIDBudget + 5 {
+		nodes = append(nodes, woxui.AccessibilityNode{AutomationID: fmt.Sprintf("row-%d", index)})
+	}
+	description := DescribeSnapshot(woxwidget.AutomationSnapshot{Tree: woxui.AccessibilityTree{Nodes: nodes}})
+	if !strings.Contains(description, "focus=none") {
+		t.Fatalf("description %q must report an unfocused surface", description)
+	}
+	if !strings.Contains(description, "(+5 more)") {
+		t.Fatalf("description %q must report the truncated ID count", description)
+	}
+	if strings.Contains(description, fmt.Sprintf("row-%d ", waitSnapshotIDBudget)) {
+		t.Fatalf("description %q must not exceed the ID budget", description)
 	}
 }
 

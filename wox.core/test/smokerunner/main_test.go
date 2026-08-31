@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestSuiteArtifactRootCreatesConfiguredDirectory(t *testing.T) {
@@ -27,6 +29,39 @@ func TestSuiteArtifactRootCreatesConfiguredDirectory(t *testing.T) {
 	}
 	if info, statErr := os.Stat(configured); statErr != nil || !info.IsDir() {
 		t.Fatalf("artifact root was not created: %v", statErr)
+	}
+}
+
+func TestWaitForAppIndexSettledReturnsWhenTheIndexAppears(t *testing.T) {
+	woxDataDirectory := t.TempDir()
+	cachePath := filepath.Join(woxDataDirectory, appIndexCacheRelativePath)
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		_ = os.WriteFile(cachePath, []byte(`{"version":14,"apps":[]}`), 0o644)
+	}()
+
+	start := time.Now()
+	waitForAppIndexSettled(context.Background(), woxDataDirectory)
+	elapsed := time.Since(start)
+	if elapsed < 100*time.Millisecond {
+		t.Fatalf("wait returned after %s, want it to block until the index existed", elapsed)
+	}
+	if elapsed >= appIndexSettleTimeout {
+		t.Fatalf("wait returned after %s, want it to notice the index instead of burning the budget", elapsed)
+	}
+}
+
+func TestWaitForAppIndexSettledStopsWithTheSuiteContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	waitForAppIndexSettled(ctx, t.TempDir())
+	if elapsed := time.Since(start); elapsed >= appIndexSettleTimeout {
+		t.Fatalf("cancelled wait took %s, want a prompt return", elapsed)
 	}
 }
 

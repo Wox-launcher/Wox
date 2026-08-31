@@ -234,6 +234,11 @@ func (c *Client) WaitForReason(ctx context.Context, predicate func(woxwidget.Aut
 	}
 }
 
+// waitSnapshotIDBudget caps the automation IDs one timeout prints. A settings page
+// exposes far more nodes than a launcher surface, so the budget is generous enough
+// to reach list and table rows, which are usually the nodes a wait is missing.
+const waitSnapshotIDBudget = 120
+
 // waitTimeoutError explains a stuck wait with the rejected state and any
 // semantics diagnostics, which are a common reason a predicate never passes.
 func waitTimeoutError(snapshot woxwidget.AutomationSnapshot, reason string, cause error) error {
@@ -244,7 +249,32 @@ func waitTimeoutError(snapshot woxwidget.AutomationSnapshot, reason string, caus
 	if len(snapshot.Diagnostics) > 0 {
 		detail += fmt.Sprintf(": diagnostics %q", snapshot.Diagnostics)
 	}
+	// Every timeout carries the observed surface, not just predicates that describe
+	// what they rejected. A plain WaitFor cannot explain itself, and identifying the
+	// missing node used to require downloading the whole smoke suite directory from CI.
+	detail += ": observed " + DescribeSnapshot(snapshot)
 	return fmt.Errorf("%s: %w", detail, cause)
+}
+
+// DescribeSnapshot summarizes the surface a wait observed. Most stuck waits are
+// waiting for a node that never appeared, so the focused node and the list of
+// present automation IDs are what identify the actual UI state.
+func DescribeSnapshot(snapshot woxwidget.AutomationSnapshot) string {
+	focused := "none"
+	automationIDs := make([]string, 0, len(snapshot.Tree.Nodes))
+	for _, node := range snapshot.Tree.Nodes {
+		if node.Focused {
+			focused = fmt.Sprintf("%q", node.AutomationID)
+		}
+		if node.AutomationID != "" {
+			automationIDs = append(automationIDs, node.AutomationID)
+		}
+	}
+	summary := fmt.Sprintf("focus=%s nodes=%d", focused, len(snapshot.Tree.Nodes))
+	if len(automationIDs) > waitSnapshotIDBudget {
+		return fmt.Sprintf("%s ids=%v (+%d more)", summary, automationIDs[:waitSnapshotIDBudget], len(automationIDs)-waitSnapshotIDBudget)
+	}
+	return fmt.Sprintf("%s ids=%v", summary, automationIDs)
 }
 
 // Find returns the semantics node with the requested stable automation ID.

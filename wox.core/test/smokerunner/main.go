@@ -100,7 +100,12 @@ func run(caseSelector string) (int, error) {
 		StartupTimeout: 45 * time.Second,
 	}
 	launchProcess := func() (*automationdriver.Process, error) {
-		return automationdriver.Launch(ctx, absoluteExecutable, launchOptions)
+		process, err := automationdriver.Launch(ctx, absoluteExecutable, launchOptions)
+		if err != nil {
+			return nil, err
+		}
+		waitForAppIndexSettled(ctx, woxDataDirectory)
+		return process, nil
 	}
 	process, err := launchProcess()
 	if err != nil {
@@ -201,6 +206,45 @@ func suiteArtifactRoot() (string, error) {
 		return "", fmt.Errorf("create smoke artifact directory %q: %w", root, err)
 	}
 	return root, nil
+}
+
+// appIndexSettleTimeout bounds the wait for a cold app index. A cold macOS CI pass
+// costs over twelve seconds, so the budget has to clear that with margin.
+const appIndexSettleTimeout = 40 * time.Second
+
+// appIndexCacheRelativePath is where the Apps plugin writes its index, which it
+// only does once an indexing pass completes.
+var appIndexCacheRelativePath = filepath.Join("cache", "wox-app-cache.json")
+
+// waitForAppIndexSettled waits until an app index exists on disk. Wox answers
+// automation RPCs as soon as its endpoint binds, while a cold app index keeps
+// hammering CPU and disk for another twelve seconds on macOS CI. Cases that start
+// inside that window pushed asynchronous settings saves past the smoke action
+// timeout, so they failed for machine load instead of behavior; the privacy
+// lifecycle package made this systematic by wiping the data directory, which left
+// the next package facing a cold index every run.
+//
+// The wait is best effort on purpose. A machine with no applications writes no
+// cache, and that is also the case where no indexing storm exists to wait for.
+func waitForAppIndexSettled(ctx context.Context, woxDataDirectory string) {
+	cachePath := filepath.Join(woxDataDirectory, appIndexCacheRelativePath)
+	deadline := time.Now().Add(appIndexSettleTimeout)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(cachePath); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintf(os.Stderr, "app index did not settle within %s; running cases anyway\n", appIndexSettleTimeout)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // waitForPrivacyCleanup waits until the exit helper leaves only the profile needed by the next startup.
