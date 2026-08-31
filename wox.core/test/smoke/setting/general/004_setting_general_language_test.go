@@ -4,6 +4,7 @@ package general
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"wox/test/automationdriver"
@@ -30,12 +31,20 @@ func Test004SettingGeneralLanguage(t *testing.T) {
 		})
 
 		smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-LangCode", targetLanguage)
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		// The localized labels are the only wait condition. Requiring an empty
+		// Diagnostics list here instead made a stuck rebuild report a bare
+		// deadline, so diagnostics stay an explicit assertion below.
+		snapshot, err := client.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
 			generalNav, generalFound := automationdriver.Find(snapshot, "settings-nav-general")
 			languageChoice, languageFound := automationdriver.Find(snapshot, "setting-choice-LangCode")
-			return generalFound && generalNav.Label == expectedGeneralLabel &&
-				languageFound && languageChoice.Label == expectedLanguageLabel && languageChoice.Value == targetLanguage &&
-				len(snapshot.Diagnostics) == 0
+			localized := generalFound && generalNav.Label == expectedGeneralLabel &&
+				languageFound && languageChoice.Label == expectedLanguageLabel && languageChoice.Value == targetLanguage
+			if localized {
+				return true, ""
+			}
+			return false, fmt.Sprintf("want nav %q, language label %q, language value %q; got %s",
+				expectedGeneralLabel, expectedLanguageLabel, targetLanguage,
+				automationdriver.DescribeNodes(snapshot, "settings-nav-general", "setting-choice-LangCode"))
 		})
 		if err != nil {
 			t.Fatalf("wait for Settings to switch to %q: %v", targetLanguage, err)

@@ -192,6 +192,16 @@ func (c *Client) WaitForChange(ctx context.Context, afterGeneration uint64) (wox
 
 // WaitFor polls the active surface until predicate succeeds.
 func (c *Client) WaitFor(ctx context.Context, predicate func(woxwidget.AutomationSnapshot) bool) (woxwidget.AutomationSnapshot, error) {
+	return c.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
+		return predicate(snapshot), ""
+	})
+}
+
+// WaitForReason polls like WaitFor but lets the predicate describe the state it
+// rejected. Timeouts then name the unmet condition, because a bare deadline
+// message looks identical whether the wait was stuck on a label, a value, or
+// semantics diagnostics.
+func (c *Client) WaitForReason(ctx context.Context, predicate func(woxwidget.AutomationSnapshot) (bool, string)) (woxwidget.AutomationSnapshot, error) {
 	ctx, cancel := withActionTimeout(ctx)
 	defer cancel()
 	snapshot, err := c.Snapshot(ctx)
@@ -201,20 +211,40 @@ func (c *Client) WaitFor(ctx context.Context, predicate func(woxwidget.Automatio
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if predicate(snapshot) {
+		satisfied, reason := predicate(snapshot)
+		if satisfied {
 			return snapshot, nil
 		}
 		select {
 		case <-ctx.Done():
-			return snapshot, fmt.Errorf("wait for semantics after generation %d: %w", snapshot.Tree.Generation, ctx.Err())
+			return snapshot, waitTimeoutError(snapshot, reason, ctx.Err())
 		case <-ticker.C:
 		}
 		next, err := c.Snapshot(ctx)
 		if err != nil {
+			// The polling snapshot shares the wait deadline, so a request cut off
+			// at that deadline is still an unmet predicate. Reporting it as a
+			// transport error made every stuck wait look like a dead endpoint.
+			if ctx.Err() != nil {
+				return snapshot, waitTimeoutError(snapshot, reason, ctx.Err())
+			}
 			return snapshot, fmt.Errorf("refresh semantics after generation %d: %w", snapshot.Tree.Generation, err)
 		}
 		snapshot = next
 	}
+}
+
+// waitTimeoutError explains a stuck wait with the rejected state and any
+// semantics diagnostics, which are a common reason a predicate never passes.
+func waitTimeoutError(snapshot woxwidget.AutomationSnapshot, reason string, cause error) error {
+	detail := fmt.Sprintf("wait for semantics after generation %d", snapshot.Tree.Generation)
+	if reason != "" {
+		detail += ": " + reason
+	}
+	if len(snapshot.Diagnostics) > 0 {
+		detail += fmt.Sprintf(": diagnostics %q", snapshot.Diagnostics)
+	}
+	return fmt.Errorf("%s: %w", detail, cause)
 }
 
 // Find returns the semantics node with the requested stable automation ID.
@@ -225,6 +255,21 @@ func Find(snapshot woxwidget.AutomationSnapshot, automationID string) (woxui.Acc
 		}
 	}
 	return woxui.AccessibilityNode{}, false
+}
+
+// DescribeNodes renders the label and value of the requested nodes so a wait
+// timeout can report the state it observed instead of only the deadline.
+func DescribeNodes(snapshot woxwidget.AutomationSnapshot, automationIDs ...string) string {
+	descriptions := make([]string, 0, len(automationIDs))
+	for _, automationID := range automationIDs {
+		node, found := Find(snapshot, automationID)
+		if !found {
+			descriptions = append(descriptions, fmt.Sprintf("%s missing", automationID))
+			continue
+		}
+		descriptions = append(descriptions, fmt.Sprintf("%s label=%q value=%q", automationID, node.Label, node.Value))
+	}
+	return strings.Join(descriptions, ", ")
 }
 
 // FindByAutomationIDPrefix returns the first semantics node with the requested dynamic ID prefix.

@@ -50,17 +50,17 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 - Keep the same feature in one bullet whenever possible. For example, combine Screenshot scrolling capture, pinning, and plugin API changes into one `[`Screenshot`]` bullet instead of splitting them into separate bullets.
 - If a new feature needs screenshots but the images are not available yet, leave clearly named screenshot placeholder image lines in the same bullet so the screenshots can be added later.
 - Prefer plugin/module prefix when clear, e.g. ``[`Shell`]`` or ``[`Clipboard`]``.
-- Keep issue references in existing style, e.g. `#4339`.
+- Write issue references as Markdown links, e.g. `[#4339](https://github.com/Wox-launcher/Wox/issues/4339)`. Do not leave a bare `#4339` for the preview to rewrite later.
 - Keep existing screenshots. Add new screenshot lines when screenshots already exist, or when a user explicitly asks to reserve screenshot positions for upcoming images.
-- Write `Store` as two nested groups, omitting an empty group: `Plugin` then `Theme`. Each item is ``[`Name`] Description``. Resolve `i18n:` names and descriptions from `I18n.en_US` (`plugin_name`, `plugin_desc` or `plugin_description`). Use `ThemeName` and `Description` for themes. Do not add store screenshots, download URLs, or version numbers.
+- Write `Store` as two nested groups, omitting an empty group: `Plugin` then `Theme`. Each item is already-clickable Markdown: `[Name](page_url) Description [@github_username](https://github.com/github_username)`. Resolve `i18n:` names and descriptions from `I18n.en_US` (`plugin_name`, `plugin_desc` or `plugin_description`). Use `ThemeName` and `Description` for themes. Link the name to `Website` (plugin) or `ThemeUrl` (theme). If that URL is empty, write the plain name without a link. Append the author as a GitHub profile link. Prefer the username from a `github.com` / `gist.github.com` `Website` or `ThemeUrl`; otherwise use `Author` or `ThemeAuthor` when it is a single handle. Skip the author link when the author is only a display name. Do not add store screenshots, download URLs, or version numbers.
 
   ```markdown
   - Store
     - Plugin
-      - [`Color Picker`] Wox plugin to pick colors
-      - [`Strava`] A plugin to interact with Strava workouts
+      - [Color Picker](https://github.com/author/wox-plugin-color) Wox plugin to pick colors [@author](https://github.com/author)
+      - [Strava](https://github.com/author/wox-plugin-strava) A plugin to interact with Strava workouts [@author](https://github.com/author)
     - Theme
-      - [`Wox Dracula`] Wox theme inspired by the Dracula color scheme
+      - [Wox Dracula](https://github.com/author/wox-theme-dracula) Wox theme inspired by the Dracula color scheme [@author](https://github.com/author)
   ```
 
 5. Validate before finishing.
@@ -97,12 +97,12 @@ old_p = {p['Id'] for p in load(tag, 'store-plugin.json')}
 new_p = json.load(open('store-plugin.json', encoding='utf-8'))
 for p in new_p:
     if p['Id'] not in old_p:
-        print('plugin', p.get('Name'), p.get('Description'))
+        print('plugin', p.get('Name'), p.get('Description'), p.get('Author'), p.get('Website'))
 old_t = {t['ThemeId'] for t in load(tag, 'store-theme.json')}
 new_t = json.load(open('store-theme.json', encoding='utf-8'))
 for t in new_t:
     if t['ThemeId'] not in old_t:
-        print('theme', t.get('ThemeName'), t.get('Description'))
+        print('theme', t.get('ThemeName'), t.get('Description'), t.get('ThemeAuthor'), t.get('ThemeUrl'))
 " <last_tag>
 ```
 

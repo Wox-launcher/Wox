@@ -10,7 +10,7 @@ This release speeds up File Search on Windows with optional Fast Indexing throug
   - [`File Search`] Support optional Fast Indexing on Windows by installing a service that indexes NTFS volumes through MFT and USN, let content-search directories be configured independently of filename-search roots, group file results in global queries, and filter results to content matches
   - [`System`] Show a fullscreen confetti overlay from the Confetti command and at the end of onboarding
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/confetti.png)
-  - [`Clipboard`] Support searching clipboard images by their OCR text #4525
+  - [`Clipboard`] Support searching clipboard images by their OCR text [#4525](https://github.com/Wox-launcher/Wox/issues/4525)
   - [`Folder`] Support fuzzy matching for child names and complete parent-directory paths while typing
   - [`Shell`] Show a running indicator on active commands in history
   - [`Launcher`] Improve action-panel search with aliases so localized actions stay findable by English names and extra terms
@@ -25,9 +25,9 @@ This release speeds up File Search on Windows with optional Fast Indexing throug
 
 - Store
   - Plugin
-    - [`need`] Store and quickly retrieve local key-value notes
-    - [`Nextcloud Passwords`] Search, inspect, copy, and update passwords stored in Nextcloud Passwords
-    - [`Timestamp`] Convert between Unix timestamps and datetime strings
+    - [need](https://github.com/zzedbot/wox-plugin-need) Store and quickly retrieve local key-value notes [@zzedbot](https://github.com/zzedbot)
+    - [Nextcloud Passwords](https://github.com/zzedbot/wox-plugin-nextcloud-password) Search, inspect, copy, and update passwords stored in Nextcloud Passwords [@zzedbot](https://github.com/zzedbot)
+    - [Timestamp](https://gist.github.com/qianlifeng/31363d95905325e9969d93d999e94b07) Convert between Unix timestamps and datetime strings [@qianlifeng](https://github.com/qianlifeng)
 
 ## v2.4.1 - 2026-08-28
 

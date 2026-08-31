@@ -38,9 +38,7 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		}
 
 		labelPrefix := fmt.Sprintf("Image (%d×%d)", width, height)
-		if _, resultID := waitForClipboardImageResult(t, ctx, client, width, height); resultID == "" {
-			t.Fatal("Clipboard image result was not found")
-		}
+		waitForClipboardImageResult(t, ctx, client, width, height)
 		smoke.SelectLauncherResultLabelPrefix(t, ctx, client, labelPrefix)
 
 		snapshot := smoke.OpenResultActionPanel(t, ctx, client)
@@ -107,12 +105,18 @@ func createClipboardSmokeImage(t *testing.T) (string, int, int, color.RGBA) {
 	return path, width, height, expectedColor
 }
 
+// clipboardImageResultAttempts bounds the retry loop. A healthy run finds the image
+// on the first attempts, so exhausting this budget reports the rows the launcher
+// actually showed instead of silently burning the whole case timeout.
+const clipboardImageResultAttempts = 20
+
 // waitForClipboardImageResult retries fresh query generations until the asynchronous image watcher has persisted the PNG.
-func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *automationdriver.Client, width, height int) (woxwidget.AutomationSnapshot, string) {
+func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *automationdriver.Client, width, height int) {
 	t.Helper()
 	queries := []string{"cb", "cb "}
 	labelPrefix := fmt.Sprintf("Image (%d×%d)", width, height)
-	for attempt := 0; ; attempt++ {
+	var lastSnapshot woxwidget.AutomationSnapshot
+	for attempt := 0; attempt < clipboardImageResultAttempts; attempt++ {
 		query := queries[attempt%len(queries)]
 		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 			t.Fatalf("enter Clipboard image query %q: %v", query, err)
@@ -135,18 +139,30 @@ func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *auto
 			return false
 		})
 		cancel()
+		lastSnapshot = snapshot
 		if err != nil {
 			if ctx.Err() != nil {
-				t.Fatalf("wait for Clipboard image query %q: %v", query, ctx.Err())
+				t.Fatalf("wait for Clipboard image query %q: %v; %s", query, ctx.Err(), describeClipboardResults(snapshot))
 			}
 			continue
 		}
-		for _, node := range snapshot.Tree.Nodes {
-			if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.HasPrefix(node.Label, labelPrefix) {
-				return snapshot, node.AutomationID
-			}
+		return
+	}
+	t.Fatalf("Clipboard image result %q did not appear after %d queries; %s", labelPrefix, clipboardImageResultAttempts, describeClipboardResults(lastSnapshot))
+}
+
+// describeClipboardResults lists the launcher rows a failing image wait observed.
+func describeClipboardResults(snapshot woxwidget.AutomationSnapshot) string {
+	var labels []string
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "launcher.result.") {
+			labels = append(labels, node.Label)
 		}
 	}
+	if len(labels) == 0 {
+		return "no launcher result rows were present"
+	}
+	return fmt.Sprintf("observed result rows %q", labels)
 }
 
 // writeExternalImageClipboard changes the OS clipboard outside Wox so its watcher treats the image as user-originated.

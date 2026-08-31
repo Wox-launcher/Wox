@@ -152,6 +152,8 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 		SectionNew: a.translate("i18n:plugin_update_section_new"), SectionImprovements: a.translate("i18n:plugin_update_section_improvements"),
 		SectionFixes: a.translate("i18n:plugin_update_section_fixes"), SectionChanged: a.translate("i18n:plugin_update_section_changed"),
 		SectionRemoved: a.translate("i18n:plugin_update_section_removed"), SectionSecurity: a.translate("i18n:plugin_update_section_security"),
+		SectionStore: a.translate("i18n:plugin_update_section_store"), GroupPlugin: a.translate("i18n:plugin_update_group_plugin"),
+		GroupTheme: a.translate("i18n:plugin_update_group_theme"),
 		MeasureText: func(value string, style woxui.TextStyle) float32 {
 			metrics, _ := a.window.MeasureText(value, style)
 			return metrics.Size.Width

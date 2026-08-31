@@ -25,6 +25,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// smokeArtifactDirEnvironment relocates retained failure artifacts out of the OS
+// temp directory so CI can upload them.
+const smokeArtifactDirEnvironment = "WOX_SMOKE_ARTIFACT_DIR"
+
 var caseSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*/[0-9]{3}$`)
 var packageSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*$`)
 var caseFilePattern = regexp.MustCompile(`^[0-9]{3}_.+_test\.go$`)
@@ -53,7 +57,11 @@ func run(caseSelector string) (int, error) {
 	if err != nil {
 		return 2, fmt.Errorf("resolve Wox smoke binary: %w", err)
 	}
-	suiteDirectory, err := os.MkdirTemp("", "wox-smoke-suite-")
+	artifactRoot, err := suiteArtifactRoot()
+	if err != nil {
+		return 2, err
+	}
+	suiteDirectory, err := os.MkdirTemp(artifactRoot, "wox-smoke-suite-")
 	if err != nil {
 		return 1, fmt.Errorf("create smoke suite directory: %w", err)
 	}
@@ -175,6 +183,21 @@ func run(caseSelector string) (int, error) {
 		return 1, fmt.Errorf("close shared Wox smoke process: %w", err)
 	}
 	return 0, nil
+}
+
+// suiteArtifactRoot returns the parent directory for the suite directory, or an
+// empty string for the OS temp directory. CI sets WOX_SMOKE_ARTIFACT_DIR so a
+// failing suite leaves its Wox data, logs, and settings inside the workspace,
+// where the workflow can upload them; a temp directory dies with the runner.
+func suiteArtifactRoot() (string, error) {
+	root := strings.TrimSpace(os.Getenv(smokeArtifactDirEnvironment))
+	if root == "" {
+		return "", nil
+	}
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return "", fmt.Errorf("create smoke artifact directory %q: %w", root, err)
+	}
+	return root, nil
 }
 
 // waitForPrivacyCleanup waits until the exit helper leaves only the profile needed by the next startup.

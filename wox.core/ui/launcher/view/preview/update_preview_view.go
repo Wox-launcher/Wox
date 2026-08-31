@@ -1,24 +1,13 @@
 package preview
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/text"
-
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
-)
-
-var (
-	updateMarkdownParser = goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
-	updateIssueReference = regexp.MustCompile(`(^|[[:space:](,])#([0-9]+)\b`)
 )
 
 // UpdatePreviewProps contains the update state, translated labels, and launcher-owned Markdown renderer.
@@ -47,6 +36,9 @@ type UpdatePreviewProps struct {
 	SectionChanged      string
 	SectionRemoved      string
 	SectionSecurity     string
+	SectionStore        string
+	GroupPlugin         string
+	GroupTheme          string
 	MeasureText         func(string, woxui.TextStyle) float32
 	RenderMarkdown      func(string, string, float32) woxwidget.Widget
 }
@@ -57,6 +49,12 @@ type updateReleaseNotes struct {
 }
 
 type updateReleaseNotesSection struct {
+	title  string
+	groups []updateReleaseNotesGroup
+	items  []updateReleaseNotesItem
+}
+
+type updateReleaseNotesGroup struct {
 	title string
 	items []updateReleaseNotesItem
 }
@@ -178,32 +176,28 @@ func buildUpdateReleaseNotes(props UpdatePreviewProps, markdown string, width fl
 	if parsed.intro != "" {
 		children = append(children, renderUpdateMarkdown(props, props.ID+"-intro", parsed.intro, width))
 	}
-	tagWidth := updateTagColumnWidth(props, parsed.sections, scaled)
 	for sectionIndex, section := range parsed.sections {
-		if len(section.items) == 0 {
+		if !updateSectionHasItems(section) {
 			continue
 		}
 		if len(children) > 0 {
 			children = append(children, woxwidget.Container{Width: width, Height: scaled(16)})
 		}
+		tagWidth := updateTagColumnWidth(props, []updateReleaseNotesSection{section}, scaled)
 		sectionChildren := []woxwidget.Widget{
 			woxwidget.Text{Value: updateSectionTitle(props, section.title), Style: woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},
 			woxwidget.Container{Width: width, Height: scaled(10)},
 		}
-		for itemIndex, item := range section.items {
-			bodyWidth := width
-			rowChildren := make([]woxwidget.Widget, 0, 2)
-			if tagWidth > 0 {
-				bodyWidth = max(float32(0), width-tagWidth-scaled(10))
-				rowChildren = append(rowChildren, woxwidget.Container{Width: tagWidth, Padding: woxwidget.Insets{Top: scaled(2)}, Child: woxwidget.Text{Value: item.tag, Style: woxui.TextStyle{Size: scaled(11), Weight: woxui.FontWeightSemibold}, Color: updateColorAlpha(updateSectionColor(section.title, props.Theme.PreviewText), 0.9)}})
+		itemIndex := 0
+		for _, group := range section.groups {
+			if len(group.items) == 0 {
+				continue
 			}
-			itemMarkdown := item.summary
-			if item.continuation != "" {
-				itemMarkdown += "\n\n" + item.continuation
-			}
-			rowChildren = append(rowChildren, woxwidget.Container{Width: bodyWidth, Child: renderUpdateMarkdown(props, props.ID+"-item-"+strconv.Itoa(sectionIndex)+"-"+strconv.Itoa(itemIndex), itemMarkdown, bodyWidth)})
-			sectionChildren = append(sectionChildren, woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisStart, Gap: scaled(10), Children: rowChildren}, woxwidget.Container{Width: width, Height: scaled(10)})
+			sectionChildren = append(sectionChildren, woxwidget.Text{Value: updateGroupTitle(props, group.title), Style: woxui.TextStyle{Size: scaled(13), Weight: woxui.FontWeightSemibold}, Color: updateColorAlpha(props.Theme.PreviewText, 0.72)})
+			sectionChildren = append(sectionChildren, woxwidget.Container{Width: width, Height: scaled(8)})
+			sectionChildren, itemIndex = appendUpdateReleaseNoteItems(props, sectionChildren, section, group.items, sectionIndex, &itemIndex, width, tagWidth, scaled)
 		}
+		sectionChildren, _ = appendUpdateReleaseNoteItems(props, sectionChildren, section, section.items, sectionIndex, &itemIndex, width, tagWidth, scaled)
 		children = append(children, woxwidget.Flex{Axis: woxwidget.Vertical, Children: sectionChildren})
 	}
 	return woxwidget.Container{Width: width, Padding: woxwidget.Insets{Right: scaled(8), Bottom: scaled(10)}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
@@ -211,41 +205,30 @@ func buildUpdateReleaseNotes(props UpdatePreviewProps, markdown string, width fl
 
 func renderUpdateMarkdown(props UpdatePreviewProps, id, markdown string, width float32) woxwidget.Widget {
 	if props.RenderMarkdown != nil {
-		return props.RenderMarkdown(id, linkUpdateIssueReferences(markdown), width)
+		return props.RenderMarkdown(id, markdown, width)
 	}
 	return woxwidget.TextBlock{Value: markdown, Width: width, Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: props.Theme.PreviewText}
 }
 
-// linkUpdateIssueReferences links bare issue numbers without rewriting code, images, or existing links.
-func linkUpdateIssueReferences(markdown string) string {
-	if !strings.Contains(markdown, "#") {
-		return markdown
+// appendUpdateReleaseNoteItems renders one changelog item list.
+func appendUpdateReleaseNoteItems(props UpdatePreviewProps, children []woxwidget.Widget, section updateReleaseNotesSection, items []updateReleaseNotesItem, sectionIndex int, itemIndex *int, width, tagWidth float32, scaled func(float32) float32) ([]woxwidget.Widget, int) {
+	for _, item := range items {
+		index := *itemIndex
+		*itemIndex++
+		bodyWidth := width
+		rowChildren := make([]woxwidget.Widget, 0, 2)
+		if tagWidth > 0 {
+			bodyWidth = max(float32(0), width-tagWidth-scaled(10))
+			rowChildren = append(rowChildren, woxwidget.Container{Width: tagWidth, Padding: woxwidget.Insets{Top: scaled(2)}, Child: woxwidget.Text{Value: item.tag, Style: woxui.TextStyle{Size: scaled(11), Weight: woxui.FontWeightSemibold}, Color: updateColorAlpha(updateSectionColor(section.title, props.Theme.PreviewText), 0.9)}})
+		}
+		itemMarkdown := item.summary
+		if item.continuation != "" {
+			itemMarkdown += "\n\n" + item.continuation
+		}
+		rowChildren = append(rowChildren, woxwidget.Container{Width: bodyWidth, Child: renderUpdateMarkdown(props, props.ID+"-item-"+strconv.Itoa(sectionIndex)+"-"+strconv.Itoa(index), itemMarkdown, bodyWidth)})
+		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisStart, Gap: scaled(10), Children: rowChildren}, woxwidget.Container{Width: width, Height: scaled(10)})
 	}
-	source := []byte(markdown)
-	document := updateMarkdownParser.Parse(text.NewReader(source))
-	var result strings.Builder
-	last := 0
-	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		switch node.(type) {
-		case *ast.Link, *ast.AutoLink, *ast.Image, *ast.CodeSpan, *ast.RawHTML:
-			return ast.WalkSkipChildren, nil
-		}
-		if value, ok := node.(*ast.Text); ok {
-			original := string(value.Segment.Value(source))
-			linked := updateIssueReference.ReplaceAllString(original, "${1}[#${2}](https://github.com/Wox-launcher/Wox/issues/${2})")
-			if linked != original {
-				result.Write(source[last:value.Segment.Start])
-				result.WriteString(linked)
-				last = value.Segment.Stop
-			}
-		}
-		return ast.WalkContinue, nil
-	})
-	result.Write(source[last:])
-	return result.String()
+	return children, *itemIndex
 }
 
 // parseUpdateReleaseNotes recognizes the stable Wox changelog headings and optional area tags.
@@ -253,6 +236,7 @@ func parseUpdateReleaseNotes(markdown string) updateReleaseNotes {
 	intro := make([]string, 0)
 	sections := make([]updateReleaseNotesSection, 0)
 	sectionIndex := -1
+	groupIndex := -1
 	itemIndex := -1
 	seenSection := false
 	for _, rawLine := range strings.Split(strings.ReplaceAll(strings.ReplaceAll(markdown, "\r\n", "\n"), "\r", "\n"), "\n") {
@@ -263,19 +247,33 @@ func parseUpdateReleaseNotes(markdown string) updateReleaseNotes {
 		if title, ok := parseUpdateSectionTitle(line); ok {
 			sections = append(sections, updateReleaseNotesSection{title: title})
 			sectionIndex = len(sections) - 1
+			groupIndex = -1
 			itemIndex = -1
 			seenSection = true
 			continue
 		}
+		if sectionIndex >= 0 && isUpdateStoreSection(sections[sectionIndex].title) {
+			if groupTitle, ok := parseUpdateGroupTitle(line); ok {
+				sections[sectionIndex].groups = append(sections[sectionIndex].groups, updateReleaseNotesGroup{title: groupTitle})
+				groupIndex = len(sections[sectionIndex].groups) - 1
+				itemIndex = -1
+				continue
+			}
+		}
 		if sectionIndex >= 0 {
 			if item, ok := parseUpdateReleaseNotesItem(line); ok {
-				sections[sectionIndex].items = append(sections[sectionIndex].items, item)
-				itemIndex = len(sections[sectionIndex].items) - 1
+				if groupIndex >= 0 {
+					sections[sectionIndex].groups[groupIndex].items = append(sections[sectionIndex].groups[groupIndex].items, item)
+					itemIndex = len(sections[sectionIndex].groups[groupIndex].items) - 1
+				} else {
+					sections[sectionIndex].items = append(sections[sectionIndex].items, item)
+					itemIndex = len(sections[sectionIndex].items) - 1
+				}
 				continue
 			}
 		}
 		if sectionIndex >= 0 && itemIndex >= 0 {
-			item := &sections[sectionIndex].items[itemIndex]
+			item := lastUpdateReleaseNotesItem(&sections[sectionIndex], groupIndex, itemIndex)
 			if item.continuation != "" {
 				item.continuation += "\n"
 			}
@@ -286,7 +284,7 @@ func parseUpdateReleaseNotes(markdown string) updateReleaseNotes {
 	}
 	structured := make([]updateReleaseNotesSection, 0, len(sections))
 	for _, section := range sections {
-		if len(section.items) > 0 {
+		if updateSectionHasItems(section) {
 			structured = append(structured, section)
 		}
 	}
@@ -299,11 +297,48 @@ func parseUpdateSectionTitle(line string) (string, bool) {
 	}
 	title := strings.TrimSpace(strings.TrimPrefix(line, "- "))
 	switch strings.ToLower(title) {
-	case "add", "added", "new", "improve", "improvements", "fix", "fixed", "fixes", "changed", "change", "remove", "removed", "security":
+	case "add", "added", "new", "improve", "improvements", "fix", "fixed", "fixes", "changed", "change", "remove", "removed", "security", "store":
 		return title, true
 	default:
 		return "", false
 	}
+}
+
+func parseUpdateGroupTitle(line string) (string, bool) {
+	trimmed := strings.TrimLeft(line, " \t")
+	if !strings.HasPrefix(trimmed, "- ") || trimmed == line {
+		return "", false
+	}
+	title := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+	switch strings.ToLower(title) {
+	case "plugin", "plugins", "theme", "themes":
+		return title, true
+	default:
+		return "", false
+	}
+}
+
+func lastUpdateReleaseNotesItem(section *updateReleaseNotesSection, groupIndex, itemIndex int) *updateReleaseNotesItem {
+	if groupIndex >= 0 {
+		return &section.groups[groupIndex].items[itemIndex]
+	}
+	return &section.items[itemIndex]
+}
+
+func updateSectionHasItems(section updateReleaseNotesSection) bool {
+	if len(section.items) > 0 {
+		return true
+	}
+	for _, group := range section.groups {
+		if len(group.items) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func isUpdateStoreSection(title string) bool {
+	return strings.EqualFold(title, "store")
 }
 
 func parseUpdateReleaseNotesItem(line string) (updateReleaseNotesItem, bool) {
@@ -336,9 +371,28 @@ func updateSectionTitle(props UpdatePreviewProps, raw string) string {
 		return props.SectionRemoved
 	case "security":
 		return props.SectionSecurity
+	case "store":
+		if props.SectionStore != "" {
+			return props.SectionStore
+		}
+		return raw
 	default:
 		return raw
 	}
+}
+
+func updateGroupTitle(props UpdatePreviewProps, raw string) string {
+	switch strings.ToLower(raw) {
+	case "plugin", "plugins":
+		if props.GroupPlugin != "" {
+			return props.GroupPlugin
+		}
+	case "theme", "themes":
+		if props.GroupTheme != "" {
+			return props.GroupTheme
+		}
+	}
+	return raw
 }
 
 func updateSectionColor(raw string, fallback woxui.Color) woxui.Color {
@@ -355,6 +409,8 @@ func updateSectionColor(raw string, fallback woxui.Color) woxui.Color {
 		return woxui.Color{R: 255, G: 122, B: 102, A: 255}
 	case "changed", "change":
 		return woxui.Color{R: 180, G: 140, B: 255, A: 255}
+	case "store":
+		return woxui.Color{R: 72, G: 187, B: 165, A: 255}
 	default:
 		return fallback
 	}
@@ -364,7 +420,7 @@ func updateTagColumnWidth(props UpdatePreviewProps, sections []updateReleaseNote
 	widest := float32(0)
 	style := woxui.TextStyle{Size: scaled(11), Weight: woxui.FontWeightSemibold}
 	for _, section := range sections {
-		for _, item := range section.items {
+		for _, item := range updateSectionItems(section) {
 			width := scaled(float32(utf8.RuneCountInString(item.tag)) * 7)
 			if props.MeasureText != nil {
 				width = props.MeasureText(item.tag, style)
@@ -373,6 +429,14 @@ func updateTagColumnWidth(props UpdatePreviewProps, sections []updateReleaseNote
 		}
 	}
 	return min(scaled(180), widest+scaled(2))
+}
+
+func updateSectionItems(section updateReleaseNotesSection) []updateReleaseNotesItem {
+	items := append([]updateReleaseNotesItem{}, section.items...)
+	for _, group := range section.groups {
+		items = append(items, group.items...)
+	}
+	return items
 }
 
 func updatePillWidth(props UpdatePreviewProps, label string, scaled func(float32) float32) float32 {

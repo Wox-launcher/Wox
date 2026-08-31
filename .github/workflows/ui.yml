@@ -110,6 +110,7 @@ jobs:
         env:
           GO_UI_SMOKE_RUNNER: xvfb-run -a
           WOX_PERF_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/perf
+          WOX_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/smoke
         run: make smoke
       - name: Upload Linux perf artifacts
         if: always()
@@ -117,6 +118,15 @@ jobs:
         with:
           name: ui-perf-linux-pr
           path: artifacts/perf/
+          if-no-files-found: ignore
+      # The suite directory is only retained on failure and holds the Wox data,
+      # logs, and settings needed to diagnose a stuck smoke wait.
+      - name: Upload Linux smoke failure artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-failure-linux-pr
+          path: artifacts/smoke/
           if-no-files-found: ignore
 
   native-smoke-daily:
@@ -172,6 +182,7 @@ jobs:
         env:
           GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
           WOX_PERF_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/perf
+          WOX_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/smoke
         run: make smoke
       - name: Upload perf artifacts
         if: always()
@@ -179,4 +190,13 @@ jobs:
         with:
           name: ui-perf-${{ matrix.name }}
           path: artifacts/perf/
+          if-no-files-found: ignore
+      # The suite directory is only retained on failure and holds the Wox data,
+      # logs, and settings needed to diagnose a stuck smoke wait.
+      - name: Upload smoke failure artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-failure-${{ matrix.name }}
+          path: artifacts/smoke/
           if-no-files-found: ignore

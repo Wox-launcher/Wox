@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func TestSuiteArtifactRootCreatesConfiguredDirectory(t *testing.T) {
+	root, err := suiteArtifactRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root != "" {
+		t.Fatalf("unset artifact root = %q, want the OS temp directory", root)
+	}
+
+	configured := filepath.Join(t.TempDir(), "artifacts", "smoke")
+	t.Setenv(smokeArtifactDirEnvironment, configured)
+	root, err = suiteArtifactRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root != configured {
+		t.Fatalf("artifact root = %q, want %q", root, configured)
+	}
+	if info, statErr := os.Stat(configured); statErr != nil || !info.IsDir() {
+		t.Fatalf("artifact root was not created: %v", statErr)
+	}
+}
+
 func TestSmokeTestArgs(t *testing.T) {
 	directory := t.TempDir()
 	t.Chdir(directory)

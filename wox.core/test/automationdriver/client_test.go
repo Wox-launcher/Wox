@@ -242,6 +242,76 @@ func TestWaitForChangeCapsTimeoutAtActionTimeout(t *testing.T) {
 	}
 }
 
+func TestWaitForReasonTimeoutReportsRejectedStateAndDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID uint64 `json:"id"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      requestPayload.ID,
+			"result": map[string]any{
+				"Tree": map[string]any{
+					"Generation": 17,
+					"RootIDs":    []int{1},
+					"Nodes": []map[string]any{{
+						"ID":           1,
+						"AutomationID": "settings-nav-general",
+						"Role":         "button",
+						"Label":        "General",
+					}},
+				},
+				"Diagnostics": []string{"duplicate automation id \"settings-nav-general\" on nodes 1 and 2"},
+			},
+		})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, waitErr := client.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
+		return false, "want nav \"通用\"; got " + DescribeNodes(snapshot, "settings-nav-general")
+	})
+	if waitErr == nil {
+		t.Fatal("stuck wait must fail")
+	}
+	if !errors.Is(waitErr, context.DeadlineExceeded) {
+		t.Fatalf("wait error = %v, want a deadline cause", waitErr)
+	}
+	message := waitErr.Error()
+	for _, want := range []string{"generation 17", "want nav \"通用\"", "label=\"General\"", "duplicate automation id"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("wait error %q must explain %q", message, want)
+		}
+	}
+}
+
+func TestDescribeNodesReportsLabelsValuesAndMissingNodes(t *testing.T) {
+	t.Parallel()
+
+	snapshot := woxwidget.AutomationSnapshot{Tree: woxui.AccessibilityTree{Nodes: []woxui.AccessibilityNode{
+		{ID: 1, AutomationID: "setting-choice-LangCode", Label: "Language", Value: "English"},
+	}}}
+	described := DescribeNodes(snapshot, "setting-choice-LangCode", "settings-nav-general")
+	want := `setting-choice-LangCode label="Language" value="English", settings-nav-general missing`
+	if described != want {
+		t.Fatalf("described = %q, want %q", described, want)
+	}
+}
+
 func TestPressKeyHandledReturnsServerResult(t *testing.T) {
 	t.Parallel()
 
