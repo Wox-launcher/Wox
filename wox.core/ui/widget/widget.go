@@ -938,7 +938,10 @@ func recordLayoutOverflow(ctx context, layout string, axis Axis, contentExtent, 
 	if axis == Vertical {
 		axisLabel = "vertical"
 	}
-	ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("%s %s overflowed by %.1f logical pixels in %s", axisLabel, layout, contentExtent-availableExtent, overflowLocation(ctx.element)))
+	// Both extents are reported because the overflow amount alone hides the scale it
+	// came from. A window collapsed to zero during a hide or resize transition and a
+	// genuinely oversized child produce the same delta but need opposite fixes.
+	ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("%s %s overflowed by %.1f logical pixels (content %.1f, available %.1f) in %s", axisLabel, layout, contentExtent-availableExtent, contentExtent, availableExtent, overflowLocation(ctx.element)))
 }
 
 // overflowLocation names the widget subtree that produced an overflow. Without it
@@ -959,6 +962,12 @@ func overflowLocation(element *stateElement) string {
 		segments = append(segments, segment)
 	}
 	if len(segments) == 0 {
+		// The synthetic tree root carries no widget type, so a layout composed above
+		// every Stateful widget collects no segments. Naming it separates a top-level
+		// window layout from a detached tree, which used to report the same nothing.
+		if element != nil {
+			return "window root"
+		}
 		return "unknown widget"
 	}
 	slices.Reverse(segments)

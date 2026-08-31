@@ -54,5 +54,18 @@ func Test009LauncherActionPanelKeyboardFocus(t *testing.T) {
 			t.Fatalf("reopened Action Panel search = found %v value %q, want empty", searchFound, search.Value)
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
+
+		// Close the reopened panel before returning. OpenResultActionPanel accepts an
+		// already-open panel, so leaving one open let the next case satisfy its own
+		// "panel opened" wait from this leftover state instead of its own open path.
+		if err := client.PressKey(ctx, woxui.KeyEscape, 0); err != nil {
+			t.Fatalf("close reopened Action Panel: %v", err)
+		}
+		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			_, searchFound := automationdriver.Find(snapshot, "action-search")
+			return !searchFound && len(actionPanelResultNodes(snapshot)) == 0
+		}); err != nil {
+			t.Fatalf("wait for reopened Action Panel close: %v", err)
+		}
 	})
 }

@@ -27,6 +27,11 @@ func Test010LauncherActionPanelSecondaryClick(t *testing.T) {
 		if !found {
 			t.Fatalf("result node %q was not found before secondary click", resultID)
 		}
+		// The wait below is satisfied by any open panel, so an Action Panel left open by
+		// an earlier case would pass it without the secondary click doing anything.
+		if _, alreadyOpen := automationdriver.Find(snapshot, "action-search"); alreadyOpen {
+			t.Fatal("Action Panel was already open before the secondary click, so this case cannot prove the secondary-click path")
+		}
 
 		// Result semantics expose activation but not the secondary-click gesture, so resolve the pointer target from the current semantic bounds.
 		position := woxui.Point{X: result.Bounds.X + result.Bounds.Width/2, Y: result.Bounds.Y + result.Bounds.Height/2}

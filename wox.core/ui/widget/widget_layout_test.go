@@ -147,9 +147,32 @@ func TestFlexOverflowDiagnosticNamesWidgetLocation(t *testing.T) {
 		Container{Width: 50, Height: 12},
 	}}).layout(context{window: &fakeHostServices{}, debug: &repaintDebugFrame{mode: RepaintDebugCounts}, elements: tree, element: element}, constraints{width: 100, height: 30})
 
-	want := "horizontal flex overflowed by 20.0 logical pixels in Container/Flex{LangCode}"
+	want := "horizontal flex overflowed by 20.0 logical pixels (content 120.0, available 100.0) in Container/Flex{LangCode}"
 	if len(tree.diagnostics) != 1 || tree.diagnostics[0] != want {
 		t.Fatalf("overflow diagnostics = %v, want %q", tree.diagnostics, want)
+	}
+}
+
+// TestFlexOverflowDiagnosticNamesWindowRootAndReportsExtents covers a layout composed
+// above every Stateful widget, which collects no named ancestors and used to report
+// only "unknown widget". The extents come with it because an overflow delta alone
+// cannot distinguish a collapsed window from a genuinely oversized child.
+func TestFlexOverflowDiagnosticNamesWindowRootAndReportsExtents(t *testing.T) {
+	tree := newElementTree(&Host{})
+	(Flex{Axis: Vertical, Children: []Widget{
+		Container{Width: 750, Height: 65},
+		Container{Width: 750, Height: 40},
+	}}).layout(context{window: &fakeHostServices{}, debug: &repaintDebugFrame{mode: RepaintDebugCounts}, elements: tree, element: tree.root}, constraints{width: 750, height: 100})
+
+	want := "vertical flex overflowed by 5.0 logical pixels (content 105.0, available 100.0) in window root"
+	if len(tree.diagnostics) != 1 || tree.diagnostics[0] != want {
+		t.Fatalf("window root overflow diagnostics = %v, want %q", tree.diagnostics, want)
+	}
+}
+
+func TestOverflowLocationReportsUnknownWidgetWithoutAnElement(t *testing.T) {
+	if location := overflowLocation(nil); location != "unknown widget" {
+		t.Fatalf("detached overflow location = %q, want %q", location, "unknown widget")
 	}
 }
 
