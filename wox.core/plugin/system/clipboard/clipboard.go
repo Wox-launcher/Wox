@@ -601,60 +601,76 @@ func clipboardRecordMatchesType(recordType string, content string, selectedType 
 	return selectedType == clipboardTypeRefinementAll || recordType == selectedType
 }
 
+// clipboardSearchItem is the shared search view of a history or favorite record.
+type clipboardSearchItem struct {
+	Type      string
+	Content   string
+	Alias     *string
+	OCRText   *string
+	FilePaths []string
+}
+
 func clipboardFavoriteMatchesSearch(ctx context.Context, favoriteItem FavoriteClipboardItem, search string, selectedType string) bool {
-	if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
+	return clipboardItemMatchesSearch(ctx, clipboardSearchItem{
+		Type:      favoriteItem.Type,
+		Content:   favoriteItem.Content,
+		Alias:     favoriteItem.Alias,
+		OCRText:   favoriteItem.OCRText,
+		FilePaths: clipboardFavoriteFilePaths(favoriteItem),
+	}, search, selectedType)
+}
+
+func clipboardRecordMatchesSearch(ctx context.Context, record ClipboardRecord, search string, selectedType string) bool {
+	return clipboardItemMatchesSearch(ctx, clipboardSearchItem{
+		Type:      record.Type,
+		Content:   record.Content,
+		Alias:     record.Alias,
+		OCRText:   record.OCRText,
+		FilePaths: clipboardRecordFilePaths(record),
+	}, search, selectedType)
+}
+
+func clipboardItemMatchesSearch(ctx context.Context, item clipboardSearchItem, search string, selectedType string) bool {
+	if !clipboardRecordMatchesType(item.Type, item.Content, selectedType) {
 		return false
 	}
 
-	// Preserve the historical "All" search behavior: it searched text history
-	// only. Image search becomes available only when the Image refinement is
-	// explicitly selected, which avoids surprising broad matches on metadata.
-	if selectedType == clipboardTypeRefinementAll && favoriteItem.Type != string(clipboard.ClipboardTypeText) {
-		return false
-	}
-
-	if clipboardSearchCandidateMatches(ctx, favoriteItem.Content, search) {
-		return true
-	}
-	if favoriteItem.Alias != nil && clipboardSearchCandidateMatches(ctx, *favoriteItem.Alias, search) {
-		return true
-	}
-	if favoriteItem.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && clipboardSearchCandidateMatches(ctx, *favoriteItem.OCRText, search) {
-		return true
-	}
-	if favoriteItem.Type == string(clipboard.ClipboardTypeFile) && clipboardFilePathsMatchSearch(ctx, clipboardFavoriteFilePaths(favoriteItem), search) {
-		return true
+	for _, candidate := range clipboardSearchCandidates(item, selectedType) {
+		if clipboardSearchCandidateMatches(ctx, candidate, search) {
+			return true
+		}
 	}
 
 	return false
 }
 
-func clipboardRecordMatchesSearch(ctx context.Context, record ClipboardRecord, search string, selectedType string) bool {
-	if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
-		return false
+// clipboardSearchCandidates returns the fields a query may match for one record.
+func clipboardSearchCandidates(item clipboardSearchItem, selectedType string) []string {
+	// All stays text-plus-image-OCR. File history is still opt-in through the
+	// File refinement so path fragments do not leak into everyday cb searches.
+	if selectedType == clipboardTypeRefinementAll && item.Type == string(clipboard.ClipboardTypeFile) {
+		return nil
 	}
 
-	// Preserve the historical "All" search behavior: it searched text history
-	// only. Image OCR search stays tied to the Image refinement so broad global
-	// clipboard searches do not unexpectedly surface screenshots.
-	if selectedType == clipboardTypeRefinementAll && record.Type != string(clipboard.ClipboardTypeText) {
-		return false
+	var candidates []string
+	// Image content is usually a cache path. Matching it in All would make
+	// queries like "png" return every screenshot; Image refinement still can.
+	if item.Type != string(clipboard.ClipboardTypeImage) || selectedType != clipboardTypeRefinementAll {
+		candidates = append(candidates, item.Content)
+	}
+	if item.Alias != nil {
+		candidates = append(candidates, *item.Alias)
+	}
+	if item.OCRText != nil && (selectedType == clipboardTypeRefinementAll || selectedType == string(clipboard.ClipboardTypeImage)) {
+		candidates = append(candidates, *item.OCRText)
+	}
+	if item.Type == string(clipboard.ClipboardTypeFile) {
+		for _, filePath := range item.FilePaths {
+			candidates = append(candidates, filePath, filepath.Base(filePath))
+		}
 	}
 
-	if clipboardSearchCandidateMatches(ctx, record.Content, search) {
-		return true
-	}
-	if record.Alias != nil && clipboardSearchCandidateMatches(ctx, *record.Alias, search) {
-		return true
-	}
-	if record.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && clipboardSearchCandidateMatches(ctx, *record.OCRText, search) {
-		return true
-	}
-	if record.Type == string(clipboard.ClipboardTypeFile) && clipboardFilePathsMatchSearch(ctx, clipboardRecordFilePaths(record), search) {
-		return true
-	}
-
-	return false
+	return candidates
 }
 
 func clipboardSearchCandidateMatches(ctx context.Context, candidate string, search string) bool {
@@ -671,19 +687,6 @@ func clipboardSearchCandidateMatches(ctx context.Context, candidate string, sear
 	// UsePinYin setting instead of using SQLite LIKE or plain substring checks.
 	matched, _ := plugin.IsStringMatchScore(ctx, candidate, search)
 	return matched
-}
-
-func clipboardFilePathsMatchSearch(ctx context.Context, filePaths []string, search string) bool {
-	for _, filePath := range filePaths {
-		if clipboardSearchCandidateMatches(ctx, filepath.Base(filePath), search) {
-			return true
-		}
-		if clipboardSearchCandidateMatches(ctx, filePath, search) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -759,8 +762,8 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		return c.newClipboardQueryResponse(results)
 	}
 
-	// Search historical content. The default All path keeps the old text-only
-	// behavior, while explicit type refinements narrow the search to that type.
+	// Search historical content. All matches text records and image OCR text.
+	// Explicit type refinements stay scoped to that type.
 	var allResults []ClipboardRecord
 
 	// Search in favorites from settings
@@ -774,9 +777,8 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		}
 	}
 
-	// Search in database records. The old SQL LIKE path could only match raw
-	// text, so pinyin queries never reached Chinese OCR text. Fetch typed
-	// history candidates and apply the same plugin matcher used elsewhere.
+	// Search in database records. Fetch history candidates and apply the same
+	// plugin matcher used elsewhere so pinyin queries reach Chinese OCR text.
 	searchResults, err := c.searchClipboardRecords(ctx, query.Search, selectedType, 100)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to search clipboard records: %s", err.Error()))
@@ -802,8 +804,13 @@ func (c *ClipboardPlugin) searchClipboardRecords(ctx context.Context, search str
 
 	var records []ClipboardRecord
 	var err error
-	if selectedType == clipboardTypeRefinementAll || selectedType == clipboardTypeRefinementLink {
+	if selectedType == clipboardTypeRefinementLink {
 		records, err = c.db.GetRecentByType(ctx, string(clipboard.ClipboardTypeText), scanLimit, 0)
+	} else if selectedType == clipboardTypeRefinementAll {
+		// All needs both text and image rows so OCR text can participate.
+		// GetRecent keeps timestamp order across types; file rows are skipped
+		// later by clipboardSearchCandidates.
+		records, err = c.db.GetRecent(ctx, scanLimit, 0)
 	} else {
 		records, err = c.db.GetRecentByType(ctx, selectedType, scanLimit, 0)
 	}

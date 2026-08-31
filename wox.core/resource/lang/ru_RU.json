@@ -2224,7 +2224,7 @@
   "plugin_clipboard_keep_image_history": "Хранить историю изображений",
   "plugin_clipboard_enable_image_history": "Включить историю изображений",
   "plugin_clipboard_image_text_recognition": "Распознавание текста в изображениях",
-  "plugin_clipboard_image_text_recognition_tooltip": "Локально распознает текст в изображениях буфера обмена, чтобы поиск по изображениям находил текст внутри них.",
+  "plugin_clipboard_image_text_recognition_tooltip": "Локально распознает текст в изображениях буфера обмена, чтобы поиск по истории находил текст внутри них.",
   "plugin_clipboard_primary_action": "Основное действие",
   "plugin_clipboard_primary_action_tooltip": "Выберите действие по умолчанию для элемента буфера обмена при нажатии Enter.",
   "plugin_clipboard_primary_action_copy_to_clipboard": "Копировать в буфер обмена",

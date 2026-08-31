@@ -39,27 +39,19 @@ func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automati
 	if err := client.ResetFrameMetrics(ctx); err != nil {
 		t.Fatalf("reset frame metrics: %v", err)
 	}
-	snapshot, err := client.Snapshot(ctx)
-	if err != nil {
-		t.Fatalf("read snapshot before collecting frames: %v", err)
-	}
-	generation := snapshot.Tree.Generation
 	lastFrameID := uint64(0)
 	observed := make([]woxui.FrameMetricsSample, 0, want)
 	waitCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
 	for waitCtx.Err() == nil && len(observed) < want {
 		if requestErr := client.RequestFrame(waitCtx); requestErr != nil {
 			t.Fatalf("request performance sample frame: %v", requestErr)
 		}
 		observedBeforeRequest := len(observed)
 		for waitCtx.Err() == nil && len(observed) == observedBeforeRequest {
-			next, waitErr := client.WaitForChange(waitCtx, generation)
-			if waitErr != nil {
-				break
-			}
-			generation = next.Tree.Generation
-			metrics, metricsErr := client.FrameMetrics(ctx)
+			metrics, metricsErr := client.FrameMetrics(waitCtx)
 			if metricsErr != nil {
 				t.Fatalf("read frame metrics: %v", metricsErr)
 			}
@@ -72,6 +64,12 @@ func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automati
 				if len(observed) >= want {
 					writePerfArtifact(t, observed)
 					return observed
+				}
+			}
+			if len(observed) == observedBeforeRequest {
+				select {
+				case <-waitCtx.Done():
+				case <-ticker.C:
 				}
 			}
 		}

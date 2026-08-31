@@ -3,9 +3,11 @@ package system
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"wox/setting/definition"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 func TestClipboardIgnoredApplicationsSettingUsesSharedAppPicker(t *testing.T) {
@@ -78,5 +80,57 @@ func TestResolveClipboardFilesystemPathAcceptsFileAndDirectory(t *testing.T) {
 func TestParseIgnoredClipboardApplicationsRejectsMalformedJSON(t *testing.T) {
 	if _, err := parseIgnoredClipboardApplications("["); err == nil {
 		t.Fatal("expected malformed setting to fail")
+	}
+}
+
+func TestClipboardSearchCandidatesIncludeImageOCRInAllSearch(t *testing.T) {
+	ocrText := "invoice total 42"
+	alias := "receipt"
+	image := clipboardSearchItem{
+		Type:    string(clipboard.ClipboardTypeImage),
+		Content: `C:\Users\me\AppData\Local\Wox\shot.png`,
+		Alias:   &alias,
+		OCRText: &ocrText,
+	}
+
+	allCandidates := clipboardSearchCandidates(image, clipboardTypeRefinementAll)
+	if slices.Contains(allCandidates, image.Content) {
+		t.Fatal("All search must not match image cache paths")
+	}
+	if !slices.Contains(allCandidates, ocrText) || !slices.Contains(allCandidates, alias) {
+		t.Fatalf("All search candidates = %v, want OCR text and alias", allCandidates)
+	}
+
+	imageCandidates := clipboardSearchCandidates(image, string(clipboard.ClipboardTypeImage))
+	if !slices.Contains(imageCandidates, image.Content) || !slices.Contains(imageCandidates, ocrText) {
+		t.Fatalf("Image search candidates = %v, want cache path and OCR text", imageCandidates)
+	}
+}
+
+func TestClipboardSearchCandidatesKeepTypedRefinementsScoped(t *testing.T) {
+	text := clipboardSearchItem{Type: string(clipboard.ClipboardTypeText), Content: "hello world"}
+	if candidates := clipboardSearchCandidates(text, clipboardTypeRefinementAll); !slices.Contains(candidates, text.Content) {
+		t.Fatalf("All text candidates = %v, want content", candidates)
+	}
+
+	file := clipboardSearchItem{
+		Type:      string(clipboard.ClipboardTypeFile),
+		Content:   "notes.txt",
+		FilePaths: []string{`C:\tmp\notes.txt`},
+	}
+	if candidates := clipboardSearchCandidates(file, clipboardTypeRefinementAll); len(candidates) != 0 {
+		t.Fatalf("All file candidates = %v, want none", candidates)
+	}
+
+	fileCandidates := clipboardSearchCandidates(file, string(clipboard.ClipboardTypeFile))
+	if !slices.Contains(fileCandidates, file.Content) || !slices.Contains(fileCandidates, file.FilePaths[0]) || !slices.Contains(fileCandidates, "notes.txt") {
+		t.Fatalf("File search candidates = %v, want content and path", fileCandidates)
+	}
+
+	if clipboardRecordMatchesType(text.Type, text.Content, string(clipboard.ClipboardTypeImage)) {
+		t.Fatal("text records must not match the Image refinement")
+	}
+	if !clipboardRecordMatchesType(string(clipboard.ClipboardTypeImage), "", clipboardTypeRefinementAll) {
+		t.Fatal("image records must remain visible to All search")
 	}
 }

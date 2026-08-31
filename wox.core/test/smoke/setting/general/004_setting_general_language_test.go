@@ -34,7 +34,8 @@ func Test004SettingGeneralLanguage(t *testing.T) {
 			generalNav, generalFound := automationdriver.Find(snapshot, "settings-nav-general")
 			languageChoice, languageFound := automationdriver.Find(snapshot, "setting-choice-LangCode")
 			return generalFound && generalNav.Label == expectedGeneralLabel &&
-				languageFound && languageChoice.Label == expectedLanguageLabel && languageChoice.Value == targetLanguage
+				languageFound && languageChoice.Label == expectedLanguageLabel && languageChoice.Value == targetLanguage &&
+				len(snapshot.Diagnostics) == 0
 		})
 		if err != nil {
 			t.Fatalf("wait for Settings to switch to %q: %v", targetLanguage, err)

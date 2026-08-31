@@ -1635,7 +1635,7 @@
   "plugin_clipboard_keep_image_history": "Keep image history for",
   "plugin_clipboard_enable_image_history": "Enable image history",
   "plugin_clipboard_image_text_recognition": "Image text recognition",
-  "plugin_clipboard_image_text_recognition_tooltip": "Recognize text in clipboard images locally so Image searches can match the text inside them.",
+  "plugin_clipboard_image_text_recognition_tooltip": "Recognize text in clipboard images locally so clipboard searches can match the text inside them.",
   "plugin_clipboard_ocr_model": "OCR model",
   "plugin_clipboard_ocr_model_tooltip": "Choose the OCR model used for new clipboard images. Each OCR feature keeps its own selection.",
   "plugin_clipboard_primary_action": "Primary action",

@@ -1636,7 +1636,7 @@
   "plugin_clipboard_keep_image_history": "保留图片历史记录",
   "plugin_clipboard_enable_image_history": "启用图片历史记录",
   "plugin_clipboard_image_text_recognition": "图片文字识别",
-  "plugin_clipboard_image_text_recognition_tooltip": "本地识别剪贴板图片中的文字，让图片搜索可以匹配图片里的文本。",
+  "plugin_clipboard_image_text_recognition_tooltip": "本地识别剪贴板图片中的文字，让剪贴板搜索可以匹配图片里的文本。",
   "plugin_clipboard_ocr_model": "OCR 模型",
   "plugin_clipboard_ocr_model_tooltip": "选择新剪贴板图片使用的 OCR 模型。每个 OCR 功能分别保存自己的选择。",
   "plugin_clipboard_primary_action": "主要操作",

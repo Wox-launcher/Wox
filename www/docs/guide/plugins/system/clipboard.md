@@ -13,7 +13,7 @@ cb fav
 | Query | Result |
 | --- | --- |
 | `cb` | Show recent clipboard history |
-| `cb <keyword>` | Filter by text or alias |
+| `cb <keyword>` | Filter by text, alias, or image OCR text |
 | `cb fav` | Show favorites |
 
 Press `Enter` to run the configured primary action: copy the item back to the clipboard or paste it into the active app.
