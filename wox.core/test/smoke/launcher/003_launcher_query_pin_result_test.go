@@ -66,8 +66,8 @@ func configurePinRankingResults(t *testing.T, ctx context.Context, client *autom
 	t.Helper()
 	smoke.OpenInstalledPluginSettings(t, ctx, client, pinRankingShellPluginID)
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
-		return found
+		add, found := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
+		return found && add.Enabled
 	}); err != nil {
 		t.Fatalf("wait for Shell command settings used by pin ranking: %v", err)
 	}
@@ -103,9 +103,9 @@ func configurePinRankingResults(t *testing.T, ctx context.Context, client *autom
 		}
 		rowID := fmt.Sprintf("plugin-settings-field-3-row-%d-edit", index)
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, rowFound := automationdriver.Find(snapshot, rowID)
+			row, rowFound := automationdriver.Find(snapshot, rowID)
 			_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
-			return rowFound && !editorFound
+			return rowFound && row.Enabled && !editorFound
 		}); err != nil {
 			t.Fatalf("wait for pin-ranking result %d to persist: %v", index, err)
 		}
@@ -165,15 +165,14 @@ func deletePinRankingResults(t *testing.T, ctx context.Context, client *automati
 		t.Fatalf("hide launcher before deleting pin-ranking results: %v", err)
 	}
 	smoke.OpenInstalledPluginSettings(t, ctx, client, pinRankingShellPluginID)
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, firstFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-delete")
-		_, secondFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-1-delete")
-		return firstFound && secondFound
-	}); err != nil {
-		t.Fatalf("wait for pin-ranking result deletion actions: %v", err)
-	}
 	for _, rowIndex := range []int{1, 0} {
 		rowID := fmt.Sprintf("plugin-settings-field-3-row-%d-delete", rowIndex)
+		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			row, found := automationdriver.Find(snapshot, rowID)
+			return found && row.Enabled
+		}); err != nil {
+			t.Fatalf("wait for pin-ranking result row %d deletion action: %v", rowIndex, err)
+		}
 		if err := client.Perform(ctx, rowID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("delete pin-ranking result row %d: %v", rowIndex, err)
 		}

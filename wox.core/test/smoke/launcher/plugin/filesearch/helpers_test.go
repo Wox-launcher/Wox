@@ -114,7 +114,7 @@ func addFileSearchRoot(t *testing.T, ctx context.Context, client *automationdriv
 	if err := client.Perform(ctx, "form-table-row-save", woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("save File Search root %q: %v", root, err)
 	}
-	waitForFileSearchSettingTableRow(t, ctx, client, fileSearchRootsFieldID, rowIndex)
+	waitForFileSearchDatabaseValue(t, ctx, "roots", root, true, fileSearchInitialIndexTimeout)
 
 	// Reopen and inspect the row before relying on the asynchronous index rebuild.
 	if err := client.Hide(ctx); err != nil {
@@ -164,10 +164,10 @@ func waitForFileSearchSettingTableRow(t *testing.T, ctx context.Context, client 
 	editID := fmt.Sprintf("%s-row-%d-edit", fieldID, rowIndex)
 	deleteID := fmt.Sprintf("%s-row-%d-delete", fieldID, rowIndex)
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, editFound := automationdriver.Find(snapshot, editID)
-		_, deleteFound := automationdriver.Find(snapshot, deleteID)
+		edit, editFound := automationdriver.Find(snapshot, editID)
+		remove, deleteFound := automationdriver.Find(snapshot, deleteID)
 		_, editorFound := automationdriver.Find(snapshot, "form-table-row-save")
-		return editFound && deleteFound && !editorFound
+		return editFound && edit.Enabled && deleteFound && remove.Enabled && !editorFound
 	}); err != nil {
 		t.Fatalf("wait for File Search settings table %s row %d: %v", fieldID, rowIndex, err)
 	}
