@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.4.2 - 
+
+This release speeds up File Search on Windows with optional Fast Indexing through an NTFS service, so large volumes stay current without a full crawl.
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/fast_file_index.png)
+
+- Improve
+  - [`File Search`] Support optional Fast Indexing on Windows by installing a service that indexes NTFS volumes through MFT and USN, let content-search directories be configured independently of filename-search roots, group file results in global queries, and filter results to content matches
+  - [`System`] Show a fullscreen confetti overlay from the Confetti command and at the end of onboarding
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/confetti.png)
+  - [`Clipboard`] Support searching clipboard images by their OCR text #4525
+  - [`Folder`] Support fuzzy matching for child names and complete parent-directory paths while typing
+  - [`Shell`] Show a running indicator on active commands in history
+  - [`Launcher`] Improve action-panel search with aliases so localized actions stay findable by English names and extra terms
+  - [`Indicator`] Support matching plugins by description as well as name
+  - [`Settings`] Support opening links from plugin setting help text
+  - [`Screenshot`] Lower the default screenshot history retention from 30 to 15 days
+
+- Fix
+  - [`Notes`] Fix new notes not being pinned by default
+  - [`Explorer`] Fix the type-to-search dialog hint closing too early during focus handoff
+  - [`Linux`] Fix X11 clipboard reads hanging by timing out clipboard commands
+
+- Store
+  - Plugin
+    - [`need`] Store and quickly retrieve local key-value notes
+    - [`Nextcloud Passwords`] Search, inspect, copy, and update passwords stored in Nextcloud Passwords
+    - [`Timestamp`] Convert between Unix timestamps and datetime strings
+
 ## v2.4.1 - 2026-08-28
 
 This release adds built-in floating Notes so you can capture text, tables, and images in dedicated windows, search and pin them from the launcher, and save selections from Clipboard, Screenshot, and other plugins.
