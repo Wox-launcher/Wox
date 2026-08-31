@@ -29,6 +29,6 @@ func Test004ChatStreamWork(t *testing.T) {
 		waitForSnapshotQuiet(t, ctx, client, 350*time.Millisecond)
 		steadySamples := waitForPresentedSamples(t, ctx, client)
 		assertSettledWork(t, steadySamples)
-		assertNoDroppedFrames(t, ctx, client)
+		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

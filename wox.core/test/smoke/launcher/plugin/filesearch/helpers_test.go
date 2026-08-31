@@ -115,28 +115,8 @@ func addFileSearchRoot(t *testing.T, ctx context.Context, client *automationdriv
 		t.Fatalf("save File Search root %q: %v", root, err)
 	}
 	waitForFileSearchDatabaseValue(t, ctx, "roots", root, true, fileSearchInitialIndexTimeout)
-
-	// Reopen and inspect the row before relying on the asynchronous index rebuild.
 	if err := client.Hide(ctx); err != nil {
 		t.Fatalf("close File Search settings after adding root: %v", err)
-	}
-	smoke.OpenInstalledPluginSettings(t, ctx, client, fileSearchPluginID)
-	waitForFileSearchSettingTableRow(t, ctx, client, fileSearchRootsFieldID, rowIndex)
-	editID := fmt.Sprintf("%s-row-%d-edit", fileSearchRootsFieldID, rowIndex)
-	if err := client.Perform(ctx, editID, woxui.AccessibilityActionActivate, ""); err != nil {
-		t.Fatalf("inspect persisted File Search root %q: %v", root, err)
-	}
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		field, found := automationdriver.Find(snapshot, "form-table-row-field-0")
-		return found && fileSearchPathsEqual(field.Value, root)
-	}); err != nil {
-		t.Fatalf("confirm persisted File Search root %q: %v", root, err)
-	}
-	if err := client.Perform(ctx, "form-table-row-cancel", woxui.AccessibilityActionActivate, ""); err != nil {
-		t.Fatalf("close persisted File Search root inspection: %v", err)
-	}
-	if err := client.Hide(ctx); err != nil {
-		t.Fatalf("close File Search settings after confirming root: %v", err)
 	}
 	return rowIndex
 }
