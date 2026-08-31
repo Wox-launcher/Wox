@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"unsafe"
 
 	"wox/util"
@@ -26,14 +27,18 @@ type nativeRenderer struct {
 	height                       int
 	enableEmbeddedSurfaceOverlay bool
 	fontFamily                   string
+	traceFrameCount              uint64
 }
 
 const (
-	d2dErrRecreateTarget       = uint32(0x8899000C)
-	dxgiErrDeviceRemoved       = uint32(0x887A0005)
-	dxgiErrDeviceHung          = uint32(0x887A0006)
-	dxgiErrDeviceReset         = uint32(0x887A0007)
-	dxgiErrDriverInternalError = uint32(0x887A0020)
+	windowsRenderTraceEnvironment = "WOX_WINDOWS_RENDER_TRACE"
+	windowsForceWARPEnvironment   = "WOX_WINDOWS_FORCE_WARP"
+	windowsRenderTraceFrameLimit  = 5
+	d2dErrRecreateTarget          = uint32(0x8899000C)
+	dxgiErrDeviceRemoved          = uint32(0x887A0005)
+	dxgiErrDeviceHung             = uint32(0x887A0006)
+	dxgiErrDeviceReset            = uint32(0x887A0007)
+	dxgiErrDriverInternalError    = uint32(0x887A0020)
 )
 
 type windowsRendererError struct {
@@ -51,6 +56,20 @@ func traceNativeCall(format string, args ...any) {
 	}
 }
 
+func windowsRenderTraceEnabled() bool {
+	return os.Getenv(windowsRenderTraceEnvironment) == "1"
+}
+
+func windowsForceWARPEnabled() bool {
+	return os.Getenv(windowsForceWARPEnvironment) == "1"
+}
+
+func logWindowsRenderTrace(format string, args ...any) {
+	if windowsRenderTraceEnabled() {
+		util.GetLogger().Info(context.Background(), fmt.Sprintf("windows render trace: "+format, args...))
+	}
+}
+
 // newNativeRenderer attaches a DirectComposition swap chain to windowHandle.
 func newNativeRenderer(windowHandle uintptr, width, height int, enableEmbeddedSurfaceOverlay bool) (*nativeRenderer, error) {
 	var handle *C.WoxRenderer
@@ -59,18 +78,36 @@ func newNativeRenderer(windowHandle uintptr, width, height int, enableEmbeddedSu
 	if enableEmbeddedSurfaceOverlay {
 		enableOverlay = 1
 	}
-	result := C.wox_renderer_create(C.uintptr_t(windowHandle), C.uint32_t(width), C.uint32_t(height), enableOverlay, &handle)
+	forceWARP := C.int32_t(0)
+	if windowsForceWARPEnabled() {
+		forceWARP = 1
+	}
+	result := C.wox_renderer_create(C.uintptr_t(windowHandle), C.uint32_t(width), C.uint32_t(height), enableOverlay, forceWARP, &handle)
 	traceNativeCall("renderer create exit hwnd=%#x handle=%p result=%d", windowHandle, handle, result)
 	if result < 0 {
 		return nil, hresultError("create renderer", result)
 	}
-	return &nativeRenderer{
+	renderer := &nativeRenderer{
 		handle:                       handle,
 		windowHandle:                 windowHandle,
 		width:                        width,
 		height:                       height,
 		enableEmbeddedSurfaceOverlay: enableEmbeddedSurfaceOverlay,
-	}, nil
+	}
+	if diagnostics, err := renderer.diagnostics(); err == nil {
+		logWindowsRenderTrace("event=renderer_init forceWARP=%t %s", windowsForceWARPEnabled(), diagnostics)
+	}
+	return renderer, nil
+}
+
+// diagnostics reads the native device and presentation state without changing the renderer.
+func (r *nativeRenderer) diagnostics() (string, error) {
+	buffer := make([]byte, 1024)
+	result := C.wox_renderer_get_diagnostics(r.handle, (*C.char)(unsafe.Pointer(&buffer[0])), C.uint32_t(len(buffer)))
+	if result < 0 {
+		return "", hresultError("get renderer diagnostics", result)
+	}
+	return C.GoString((*C.char)(unsafe.Pointer(&buffer[0]))), nil
 }
 
 func (r *nativeRenderer) resize(width, height int) error {
@@ -165,7 +202,11 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 
 // render replays one logical display list into the physical DirectComposition surface.
 func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
+	r.traceFrameCount++
 	damage := displayList.NativeDamage()
+	if r.traceFrameCount <= windowsRenderTraceFrameLimit {
+		logWindowsRenderTrace("event=frame_begin frame=%d frameId=%d commands=%d scale=%.2f damage=%+v clear=%+v", r.traceFrameCount, displayList.FrameMetricsID(), len(displayList.commands), scale, damage, displayList.clearColor)
+	}
 	traceNativeCall("renderer frame begin frameId=%d handle=%p commands=%d scale=%.2f damage=%+v", displayList.FrameMetricsID(), r.handle, len(displayList.commands), scale, damage)
 	result := C.wox_renderer_begin_frame(r.handle, C.float(scale), C.float(damage.X), C.float(damage.Y), C.float(damage.Width), C.float(damage.Height), C.uint8_t(displayList.clearColor.R), C.uint8_t(displayList.clearColor.G), C.uint8_t(displayList.clearColor.B), C.uint8_t(displayList.clearColor.A))
 	traceNativeCall("renderer begin_frame exit frameId=%d handle=%p result=%d", displayList.FrameMetricsID(), r.handle, result)
@@ -273,6 +314,11 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	traceNativeCall("renderer end_frame enter frameId=%d handle=%p", displayList.FrameMetricsID(), r.handle)
 	err := r.endFrame()
 	traceNativeCall("renderer frame exit frameId=%d handle=%p err=%v", displayList.FrameMetricsID(), r.handle, err)
+	if r.traceFrameCount <= windowsRenderTraceFrameLimit || err != nil {
+		if diagnostics, diagnosticsErr := r.diagnostics(); diagnosticsErr == nil {
+			logWindowsRenderTrace("event=frame_finish frame=%d frameId=%d error=%v %s", r.traceFrameCount, displayList.FrameMetricsID(), err, diagnostics)
+		}
+	}
 	return err
 }
 

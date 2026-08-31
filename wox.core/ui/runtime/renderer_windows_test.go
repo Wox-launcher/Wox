@@ -21,6 +21,19 @@ func TestRecoverableRendererErrors(t *testing.T) {
 	}
 }
 
+func TestWindowsRendererDiagnosticEnvironment(t *testing.T) {
+	t.Setenv(windowsRenderTraceEnvironment, "1")
+	t.Setenv(windowsForceWARPEnvironment, "1")
+	if !windowsRenderTraceEnabled() || !windowsForceWARPEnabled() {
+		t.Fatal("Windows renderer diagnostic environment was not enabled")
+	}
+	t.Setenv(windowsRenderTraceEnvironment, "true")
+	t.Setenv(windowsForceWARPEnvironment, "true")
+	if windowsRenderTraceEnabled() || windowsForceWARPEnabled() {
+		t.Fatal("Windows renderer diagnostic environment should require value 1")
+	}
+}
+
 func TestSuspendedRendererKeepsPendingState(t *testing.T) {
 	renderer := nativeRenderer{width: 640, height: 480}
 	if err := renderer.trim(); err != nil {

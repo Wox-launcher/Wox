@@ -9,7 +9,8 @@ extern "C" {
 
 typedef struct WoxRenderer WoxRenderer;
 
-int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, uint32_t height, int32_t enable_embedded_surface_overlay, WoxRenderer **renderer);
+int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, uint32_t height, int32_t enable_embedded_surface_overlay, int32_t force_warp, WoxRenderer **renderer);
+int32_t wox_renderer_get_diagnostics(WoxRenderer *renderer, char *buffer, uint32_t buffer_size);
 int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, uint32_t height);
 int32_t wox_renderer_set_font_family(WoxRenderer *renderer, const char *font_family);
 int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer);

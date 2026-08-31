@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <new>
 #include <mutex>
 #include <string>
@@ -59,6 +60,12 @@ struct WoxRenderer {
   bool cache_large_images = false;
   bool embedded_surface_overlay_enabled = false;
   bool simulate_device_removed = false;
+  bool uses_warp = false;
+  D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_9_1;
+  DXGI_ADAPTER_DESC adapter_description = {};
+  HRESULT last_composition_commit_result = S_OK;
+  HRESULT last_end_draw_result = S_OK;
+  HRESULT last_present_result = S_OK;
   uint32_t width = 1;
   uint32_t height = 1;
 };
@@ -66,11 +73,13 @@ struct WoxRenderer {
 static std::mutex shared_d3d_device_mutex;
 static ID3D11Device *shared_d3d_device = nullptr;
 static uint32_t shared_d3d_device_users = 0;
+static bool shared_d3d_uses_warp = false;
+static D3D_FEATURE_LEVEL shared_d3d_feature_level = D3D_FEATURE_LEVEL_9_1;
 
 // All renderers run on the UI thread and can share the process GPU device. Screenshot windows
 // still own and release their swap chains and D2D contexts, avoiding another slow D3D cold start.
-static HRESULT acquire_shared_d3d_device(ID3D11Device **device_out) {
-  if (device_out == nullptr) {
+static HRESULT acquire_shared_d3d_device(bool force_warp, ID3D11Device **device_out, bool *uses_warp_out, D3D_FEATURE_LEVEL *feature_level_out) {
+  if (device_out == nullptr || uses_warp_out == nullptr || feature_level_out == nullptr) {
     return E_INVALIDARG;
   }
   std::lock_guard<std::mutex> lock(shared_d3d_device_mutex);
@@ -82,13 +91,18 @@ static HRESULT acquire_shared_d3d_device(ID3D11Device **device_out) {
   }
   if (shared_d3d_device == nullptr) {
     const UINT device_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    HRESULT result = D3D11CreateDevice(
-        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, device_flags, nullptr, 0,
-        D3D11_SDK_VERSION, &shared_d3d_device, nullptr, nullptr);
-    if (FAILED(result)) {
+    shared_d3d_uses_warp = force_warp;
+    HRESULT result = E_FAIL;
+    if (!force_warp) {
+      result = D3D11CreateDevice(
+          nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, device_flags, nullptr, 0,
+          D3D11_SDK_VERSION, &shared_d3d_device, &shared_d3d_feature_level, nullptr);
+    }
+    if (force_warp || FAILED(result)) {
+      shared_d3d_uses_warp = true;
       result = D3D11CreateDevice(
           nullptr, D3D_DRIVER_TYPE_WARP, nullptr, device_flags, nullptr, 0,
-          D3D11_SDK_VERSION, &shared_d3d_device, nullptr, nullptr);
+          D3D11_SDK_VERSION, &shared_d3d_device, &shared_d3d_feature_level, nullptr);
     }
     if (FAILED(result)) {
       shared_d3d_device = nullptr;
@@ -97,6 +111,8 @@ static HRESULT acquire_shared_d3d_device(ID3D11Device **device_out) {
   }
   shared_d3d_device->AddRef();
   *device_out = shared_d3d_device;
+  *uses_warp_out = shared_d3d_uses_warp;
+  *feature_level_out = shared_d3d_feature_level;
   shared_d3d_device_users++;
   return S_OK;
 }
@@ -456,7 +472,7 @@ static void destroy_renderer(WoxRenderer *renderer) {
   delete renderer;
 }
 
-extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, uint32_t height, int32_t enable_embedded_surface_overlay, WoxRenderer **renderer_out) {
+extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, uint32_t height, int32_t enable_embedded_surface_overlay, int32_t force_warp, WoxRenderer **renderer_out) {
   if (window_handle == 0 || renderer_out == nullptr) {
     return E_INVALIDARG;
   }
@@ -470,7 +486,7 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   renderer->width = width == 0 ? 1 : width;
   renderer->height = height == 0 ? 1 : height;
 
-  HRESULT result = acquire_shared_d3d_device(&renderer->device);
+  HRESULT result = acquire_shared_d3d_device(force_warp != 0, &renderer->device, &renderer->uses_warp, &renderer->feature_level);
   if (FAILED(result)) {
     destroy_renderer(renderer);
     return result;
@@ -483,6 +499,9 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   result = renderer->device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&dxgi_device));
   if (SUCCEEDED(result)) {
     result = dxgi_device->GetAdapter(&adapter);
+  }
+  if (SUCCEEDED(result)) {
+    adapter->GetDesc(&renderer->adapter_description);
   }
   if (SUCCEEDED(result)) {
     result = adapter->GetParent(IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgi_factory));
@@ -534,6 +553,7 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   }
   if (SUCCEEDED(result)) {
     result = renderer->composition_device->Commit();
+    renderer->last_composition_commit_result = result;
   }
   if (SUCCEEDED(result)) {
     result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);
@@ -557,6 +577,37 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   }
 
   *renderer_out = renderer;
+  return S_OK;
+}
+
+// wox_renderer_get_diagnostics returns a compact snapshot suitable for user-provided logs.
+extern "C" int32_t wox_renderer_get_diagnostics(WoxRenderer *renderer, char *buffer, uint32_t buffer_size) {
+  if (renderer == nullptr || buffer == nullptr || buffer_size == 0) {
+    return E_INVALIDARG;
+  }
+  char adapter_name[256] = {};
+  WideCharToMultiByte(CP_UTF8, 0, renderer->adapter_description.Description, -1, adapter_name, sizeof(adapter_name), nullptr, nullptr);
+  const HRESULT removed_reason = renderer->device == nullptr ? E_UNEXPECTED : renderer->device->GetDeviceRemovedReason();
+  std::snprintf(
+      buffer,
+      buffer_size,
+      "adapter=%s vendorId=0x%04X deviceId=0x%04X subsystemId=0x%08X revision=%u luid=%08X:%08X warp=%d featureLevel=0x%04X size=%ux%u swapEffect=flip_sequential bufferCount=2 alpha=premultiplied compositionCommit=0x%08X endDraw=0x%08X present=0x%08X deviceRemovedReason=0x%08X",
+      adapter_name,
+      renderer->adapter_description.VendorId,
+      renderer->adapter_description.DeviceId,
+      renderer->adapter_description.SubSysId,
+      renderer->adapter_description.Revision,
+      static_cast<uint32_t>(renderer->adapter_description.AdapterLuid.HighPart),
+      renderer->adapter_description.AdapterLuid.LowPart,
+      renderer->uses_warp,
+      static_cast<uint32_t>(renderer->feature_level),
+      renderer->width,
+      renderer->height,
+      static_cast<uint32_t>(renderer->last_composition_commit_result),
+      static_cast<uint32_t>(renderer->last_end_draw_result),
+      static_cast<uint32_t>(renderer->last_present_result),
+      static_cast<uint32_t>(removed_reason));
+  buffer[buffer_size - 1] = '\0';
   return S_OK;
 }
 
@@ -1062,6 +1113,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     renderer->d2d_context->Clear(&transparent);
     result = renderer->d2d_context->EndDraw();
   }
+  renderer->last_end_draw_result = result;
   renderer->frame_open = false;
   if (renderer->simulate_device_removed) {
     renderer->simulate_device_removed = false;
@@ -1076,11 +1128,14 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     parameters.pDirtyRects = &renderer->present_dirty_rect;
   }
   result = renderer->swap_chain->Present1(1, 0, &parameters);
+  renderer->last_present_result = result;
   if (FAILED(result)) {
     return result;
   }
   if (renderer->overlay_swap_chain != nullptr) {
-    return renderer->overlay_swap_chain->Present1(1, 0, &parameters);
+    result = renderer->overlay_swap_chain->Present1(1, 0, &parameters);
+    renderer->last_present_result = result;
+    return result;
   }
   return S_OK;
 }
