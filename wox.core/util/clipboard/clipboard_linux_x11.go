@@ -152,6 +152,11 @@ func (c *x11Clipboard) isChanged() bool {
 		return false
 	}
 	c.fingerprint = fingerprint
+	// Let the next unreadable clipboard speak up again. The reason throttle spans
+	// far more than a single user interaction, so a reason that repeats after a
+	// real change was silently dropped and left no trace of what the watcher saw
+	// during the window where a copy went missing.
+	c.lastNoDataReason = ""
 	c.logActiveLocked()
 	return true
 }
