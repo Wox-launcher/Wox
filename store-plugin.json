@@ -1039,5 +1039,37 @@
         "plugin_description": "用 Scoop 搜索和管理 Windows 应用"
       }
     }
+  },
+  {
+    "Id": "b8e3d1a4-6c2f-4a9e-8d71-3f5c0a2e9b16",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "i18n:plugin_description",
+    "IconEmoji": "🎬",
+    "Website": "https://gist.github.com/qianlifeng/c6b0e26b0db6efa9e9e9cd6a9252e08b",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/c6b0e26b0db6efa9e9e9cd6a9252e08b/raw/Wox.Plugin.Script.VideoDownloader.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/e1a930cb-5ba9-45d2-a7a2-e1365764193b"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-01 23:00:00",
+    "DateUpdated": "2026-09-01 23:00:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Video Downloader",
+        "plugin_description": "Download videos and audio from 1000+ sites with yt-dlp"
+      },
+      "zh_CN": {
+        "plugin_name": "视频下载",
+        "plugin_description": "用 yt-dlp 从 1000+ 网站下载视频和音频"
+      }
+    }
   }
 ]
