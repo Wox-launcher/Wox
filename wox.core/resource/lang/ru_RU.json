@@ -1497,6 +1497,8 @@
   "plugin_explorer_open": "Открыть",
   "plugin_explorer_reveal_in_explorer": "Показать в проводнике",
   "plugin_explorer_jump_to": "Перейти к",
+  "plugin_explorer_result_tail_current_folder": "Текущая папка",
+  "plugin_explorer_result_tail_current_folder_tooltip": "Этот элемент находится в текущей папке",
   "plugin_explorer_command_add": "Добавить текущий путь в быстрые переходы",
   "plugin_explorer_add_quick_jump_title": "Добавить этот путь в быстрые переходы",
   "plugin_explorer_setting_enable_type_to_search": "Включить ввод для поиска в проводнике",

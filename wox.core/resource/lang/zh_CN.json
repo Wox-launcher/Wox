@@ -1609,6 +1609,8 @@
   "plugin_explorer_open": "打开",
   "plugin_explorer_reveal_in_explorer": "在文件管理器中显示",
   "plugin_explorer_jump_to": "跳转到",
+  "plugin_explorer_result_tail_current_folder": "当前文件夹",
+  "plugin_explorer_result_tail_current_folder_tooltip": "此项位于当前文件管理器窗口的文件夹中",
   "plugin_explorer_command_add": "将当前路径添加到快速跳转路径",
   "plugin_explorer_add_quick_jump_title": "将此路径添加到快速跳转路径",
   "plugin_explorer_setting_enable_type_to_search": "启用键入搜索",

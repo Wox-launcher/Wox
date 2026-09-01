@@ -1497,6 +1497,8 @@
   "plugin_explorer_open": "Abrir",
   "plugin_explorer_reveal_in_explorer": "Revelar no explorador de arquivos",
   "plugin_explorer_jump_to": "Ir para",
+  "plugin_explorer_result_tail_current_folder": "Pasta atual",
+  "plugin_explorer_result_tail_current_folder_tooltip": "Este item está na pasta que você está visualizando",
   "plugin_explorer_command_add": "Adicionar caminho atual aos caminhos de salto rápido",
   "plugin_explorer_add_quick_jump_title": "Adicionar este caminho aos caminhos de salto rápido",
   "plugin_explorer_setting_enable_type_to_search": "Ativar pesquisa ao digitar no explorador de arquivos",

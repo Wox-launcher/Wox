@@ -57,6 +57,11 @@ const (
 	explorerDialogHintOverlayName   = "explorer_dialog_hint"
 	explorerDialogHintCloseDelay    = 250 * time.Millisecond
 	explorerDialogPathCacheDuration = 30 * time.Second
+
+	// Current-folder hits keep a higher tier than global indexed scores
+	// (typically a few thousand). Type-to-search still searches beyond the
+	// active folder, but files the user is already looking at should rank first.
+	currentDirectoryScoreBoost int64 = 100000
 )
 
 func init() {
@@ -217,7 +222,7 @@ func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.
 	if search == "" {
 		directoryResults = c.queryCurrentDirectoryEntries(ctx, query)
 	} else if indexedResults, ok := c.queryFileSearchResults(ctx, query, search); ok {
-		directoryResults = indexedResults
+		directoryResults = c.prioritizeCurrentDirectoryHits(ctx, query, indexedResults)
 	} else {
 		directoryResults = c.queryCurrentDirectoryEntries(ctx, query)
 	}
@@ -227,6 +232,17 @@ func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.
 	results = append(results, directoryResults...)
 	results = append(results, jumpResults...)
 	return results
+}
+
+// prioritizeCurrentDirectoryHits boosts and backfills matches that live in the
+// active Explorer/Finder folder so they outrank otherwise-equal global hits.
+func (c *ExplorerPlugin) prioritizeCurrentDirectoryHits(ctx context.Context, query plugin.Query, indexedResults []plugin.QueryResult) []plugin.QueryResult {
+	currentPath := c.getCurrentFileExplorerPath(ctx, query.Env)
+	var localResults []plugin.QueryResult
+	if currentPath != "" {
+		localResults = c.queryDirectoryEntriesAtPath(ctx, query, currentPath, strings.TrimSpace(query.Search))
+	}
+	return mergeCurrentDirectoryResults(indexedResults, localResults, currentPath, c.normalizePathKey)
 }
 
 // queryFileSearchResults converts global indexed results into Explorer-specific actions.
@@ -880,6 +896,71 @@ func (c *ExplorerPlugin) normalizePathKey(path string) string {
 		return strings.ToLower(path)
 	}
 	return path
+}
+
+// mergeCurrentDirectoryResults ranks direct children of currentDir above global
+// indexed hits and inserts local matches the index missed. Nested paths keep
+// their original global scores so only the folder the user is viewing is boosted.
+func mergeCurrentDirectoryResults(indexedResults []plugin.QueryResult, localResults []plugin.QueryResult, currentDir string, normalize func(string) string) []plugin.QueryResult {
+	localByPath := make(map[string]plugin.QueryResult, len(localResults))
+	for _, item := range localResults {
+		localByPath[normalize(item.SubTitle)] = item
+	}
+
+	seen := make(map[string]bool, len(indexedResults)+len(localResults))
+	results := make([]plugin.QueryResult, 0, len(indexedResults)+len(localResults))
+	for _, item := range indexedResults {
+		pathKey := normalize(item.SubTitle)
+		seen[pathKey] = true
+		if !isDirectChildPath(item.SubTitle, currentDir, normalize) {
+			results = append(results, item)
+			continue
+		}
+
+		// Prefer the local row so reveal/select stays in the current folder.
+		if localItem, ok := localByPath[pathKey]; ok {
+			if item.Score > localItem.Score {
+				localItem.Score = item.Score
+			}
+			localItem.Score += currentDirectoryScoreBoost
+			results = append(results, markCurrentDirectoryResult(localItem))
+			continue
+		}
+
+		item.Score += currentDirectoryScoreBoost
+		results = append(results, markCurrentDirectoryResult(item))
+	}
+
+	for _, item := range localResults {
+		pathKey := normalize(item.SubTitle)
+		if seen[pathKey] {
+			continue
+		}
+		item.Score += currentDirectoryScoreBoost
+		results = append(results, markCurrentDirectoryResult(item))
+	}
+	return results
+}
+
+// markCurrentDirectoryResult labels current-folder hits so they stay visually
+// distinct from global indexed results in the same list.
+func markCurrentDirectoryResult(result plugin.QueryResult) plugin.QueryResult {
+	result.Tails = append([]plugin.QueryResultTail{newCurrentDirectoryTail()}, result.Tails...)
+	return result
+}
+
+func newCurrentDirectoryTail() plugin.QueryResultTail {
+	tail := plugin.NewQueryResultTailText("i18n:plugin_explorer_result_tail_current_folder")
+	tail.Tooltip = "i18n:plugin_explorer_result_tail_current_folder_tooltip"
+	return tail
+}
+
+func isDirectChildPath(path string, dir string, normalize func(string) string) bool {
+	if strings.TrimSpace(path) == "" || strings.TrimSpace(dir) == "" {
+		return false
+	}
+	parent := filepath.Dir(filepath.Clean(path))
+	return normalize(parent) == normalize(filepath.Clean(dir))
 }
 
 func (c *ExplorerPlugin) typeToSearchDebugLog(ctx context.Context, format string, args ...any) {

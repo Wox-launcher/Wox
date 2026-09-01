@@ -1608,6 +1608,8 @@
   "plugin_explorer_open": "Open",
   "plugin_explorer_reveal_in_explorer": "Reveal in file explorer",
   "plugin_explorer_jump_to": "Jump to",
+  "plugin_explorer_result_tail_current_folder": "Current folder",
+  "plugin_explorer_result_tail_current_folder_tooltip": "This item is in the folder you are viewing",
   "plugin_explorer_command_add": "Add current path to quick jump paths",
   "plugin_explorer_add_quick_jump_title": "Add this path to quick jump paths",
   "plugin_explorer_setting_enable_type_to_search": "Enable type-to-search",
