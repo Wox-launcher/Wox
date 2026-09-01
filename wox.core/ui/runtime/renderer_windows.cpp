@@ -615,6 +615,9 @@ extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, ui
   if (renderer == nullptr || width == 0 || height == 0) {
     return S_OK;
   }
+  if (width == renderer->width && height == renderer->height) {
+    return S_OK;
+  }
 
   renderer->d2d_context->SetTarget(nullptr);
   release_com(&renderer->target_bitmap);

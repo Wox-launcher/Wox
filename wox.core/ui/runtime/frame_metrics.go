@@ -67,6 +67,7 @@ type FrameMetricsSample struct {
 	LogicalDamage             Rect                         `json:"logicalDamage"`
 	HostCompleted             bool                         `json:"hostCompleted"`
 	NativeEncodingCompleted   bool                         `json:"nativeEncodingCompleted"`
+	PreparedWindowResize      bool                         `json:"preparedWindowResize"`
 	Presented                 bool                         `json:"presented"`
 	Dropped                   bool                         `json:"dropped"`
 	Coalesced                 bool                         `json:"coalesced"`
@@ -194,6 +195,21 @@ func (r *frameMetricsRecorder) recordCounts(frameID uint64, nodes, commands, acc
 		sample.AccessibilityNodeCount = accessibilityNodes
 		sample.LogicalDamage = logicalDamage
 		sample.HostCompleted = true
+	}
+}
+
+// markPreparedWindowResize identifies a frame presented before a Windows HWND grows.
+func (r *frameMetricsRecorder) markPreparedWindowResize(frameID uint64) {
+	if r == nil || frameID == 0 {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if frameID < r.minimumFrameID {
+		return
+	}
+	if sample := r.samples[frameID]; sample != nil {
+		sample.PreparedWindowResize = true
 	}
 }
 

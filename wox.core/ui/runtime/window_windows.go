@@ -1108,6 +1108,10 @@ func logicalToPhysical(value, scale float32) int {
 	return max(1, int(value*scale+0.5))
 }
 
+func windowsResizeNeedsPreparedFrame(currentWidth, currentHeight, width, height int) bool {
+	return width >= currentWidth && height >= currentHeight && (width > currentWidth || height > currentHeight)
+}
+
 // windowsSuggestedDPIBounds validates the rectangle supplied by WM_DPICHANGED.
 func windowsSuggestedDPIBounds(parameter uintptr) (win.RECT, bool) {
 	if parameter == 0 {
@@ -1117,9 +1121,66 @@ func windowsSuggestedDPIBounds(parameter uintptr) (win.RECT, bool) {
 	return bounds, bounds.Right > bounds.Left && bounds.Bottom > bounds.Top
 }
 
-// redrawWindowAfterResize presents the target-size swap chain before the bounds command returns.
-func redrawWindowAfterResize(hwnd win.HWND) {
+// finishWindowResize avoids rebuilding a frame that was already prepared at the target size.
+func finishWindowResize(hwnd win.HWND, prepared bool) {
+	if prepared {
+		win.RedrawWindow(hwnd, nil, 0, win.RDW_VALIDATE|win.RDW_NOINTERNALPAINT)
+		return
+	}
 	win.RedrawWindow(hwnd, nil, 0, win.RDW_INVALIDATE|win.RDW_UPDATENOW)
+}
+
+// prepareWindowForResize presents the target-size frame while the old HWND still clips it.
+func (w *platformWindow) prepareWindowForResize(width, height int) bool {
+	if !w.focus.visible || w.renderer == nil || w.renderer.handle == nil || width <= 0 || height <= 0 {
+		return false
+	}
+	var client win.RECT
+	if !win.GetClientRect(w.hwnd, &client) {
+		return false
+	}
+	currentWidth := int(client.Right - client.Left)
+	currentHeight := int(client.Bottom - client.Top)
+	// Wox uses a borderless WS_POPUP, so its window and client sizes are identical.
+	// Preparing a smaller dimension would expose the backdrop before the HWND catches up.
+	if !windowsResizeNeedsPreparedFrame(currentWidth, currentHeight, width, height) {
+		return false
+	}
+	w.damageHistory.reset()
+	if err := w.renderer.resize(width, height); err != nil {
+		if !isRecoverableRendererError(err) {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("prepare Windows window resize failed; using normal resize: %s", err.Error()))
+			return false
+		}
+		if err = w.recoverWindowsRenderer(err); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("prepare Windows window resize failed; using normal resize: %s", err.Error()))
+			return false
+		}
+	}
+	scale := w.scale
+	if scale <= 0 {
+		scale = 1
+	}
+	displayList := w.buildWindowsDisplayList(PixelSize{Width: width, Height: height}, scale, Rect{})
+	err := w.renderWindowsDisplayList(&displayList, scale)
+	if isRecoverableRendererError(err) {
+		if err = w.recoverWindowsRenderer(err); err == nil {
+			displayList = w.buildWindowsDisplayList(PixelSize{Width: width, Height: height}, scale, Rect{})
+			err = w.renderWindowsDisplayList(&displayList, scale)
+		}
+	}
+	if err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("prepare Windows window resize failed; using normal resize: %s", err.Error()))
+		return false
+	}
+	if w.options.frameMetrics != nil {
+		w.options.frameMetrics.markPreparedWindowResize(displayList.frameID)
+	}
+	if dwmFlush.Find() == nil {
+		// Do not expose the larger HWND until DWM has consumed the prepared surface.
+		_, _, _ = dwmFlush.Call()
+	}
+	return true
 }
 
 // WindowsHandle returns the HWND used by Windows-only native integrations.
@@ -1960,11 +2021,12 @@ func (w *platformWindow) setBoundsNative(bounds Rect) error {
 	y := int32(math.Round(float64(bounds.Y * scale)))
 	width := int32(logicalToPhysical(bounds.Width, scale))
 	height := int32(logicalToPhysical(bounds.Height, scale))
+	prepared := w.prepareWindowForResize(int(width), int(height))
 	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to set Windows window bounds")
 	}
 	w.syncScaleFromNativeWindow()
-	redrawWindowAfterResize(w.hwnd)
+	finishWindowResize(w.hwnd, prepared)
 	return nil
 }
 
@@ -1977,11 +2039,14 @@ func (w *platformWindow) setPhysicalBoundsNative(bounds Rect) error {
 		w.suppressDPIBounds = false
 		w.mu.Unlock()
 	}()
-	if !win.SetWindowPos(w.hwnd, 0, int32(math.Round(float64(bounds.X))), int32(math.Round(float64(bounds.Y))), int32(math.Round(float64(bounds.Width))), int32(math.Round(float64(bounds.Height))), win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
+	width := int32(math.Round(float64(bounds.Width)))
+	height := int32(math.Round(float64(bounds.Height)))
+	prepared := w.prepareWindowForResize(int(width), int(height))
+	if !win.SetWindowPos(w.hwnd, 0, int32(math.Round(float64(bounds.X))), int32(math.Round(float64(bounds.Y))), width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to set physical Windows window bounds")
 	}
 	w.syncScaleFromNativeWindow()
-	redrawWindowAfterResize(w.hwnd)
+	finishWindowResize(w.hwnd, prepared)
 	return nil
 }
 
@@ -2033,11 +2098,12 @@ func (w *platformWindow) centerNative(size Size) error {
 	height = min(height, info.RcWork.Bottom-info.RcWork.Top)
 	x := info.RcWork.Left + (info.RcWork.Right-info.RcWork.Left-width)/2
 	y := info.RcWork.Top + (info.RcWork.Bottom-info.RcWork.Top-height)/2
+	prepared := w.prepareWindowForResize(int(width), int(height))
 	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to center Windows window")
 	}
 	w.syncScaleFromNativeWindow()
-	redrawWindowAfterResize(w.hwnd)
+	finishWindowResize(w.hwnd, prepared)
 	return nil
 }
 
