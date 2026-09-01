@@ -94,8 +94,9 @@ const (
 )
 
 const (
-	appChangeDebounceWindow = 3 * time.Second
-	appChangeMaxWait        = 20 * time.Second
+	appChangeDebounceWindow      = 3 * time.Second
+	appChangeMaxWait             = 20 * time.Second
+	appFallbackReconcileInterval = 30 * time.Second
 )
 
 type appPendingChange struct {
@@ -1023,6 +1024,15 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 		return
 	}
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app change feed started: roots=%d mode=%s", len(roots), feed.Mode()))
+	fallbackDirectories := a.getFallbackReconcileDirectories(ctx, feed, roots, directories)
+	var fallbackTicker *time.Ticker
+	var fallbackTickerC <-chan time.Time
+	if len(fallbackDirectories) > 0 {
+		fallbackTicker = time.NewTicker(appFallbackReconcileInterval)
+		fallbackTickerC = fallbackTicker.C
+		defer fallbackTicker.Stop()
+		util.GetLogger().Info(ctx, fmt.Sprintf("app fallback reconciliation started: roots=%d interval=%s", len(fallbackDirectories), appFallbackReconcileInterval))
+	}
 	rootPaths := map[string]string{}
 	for _, root := range roots {
 		rootPaths[root.ID] = root.Path
@@ -1084,6 +1094,8 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 			pending = map[string]appPendingChange{}
 			firstPendingAt = time.Time{}
 			stopTimer()
+		case <-fallbackTickerC:
+			a.reconcileFallbackAppDirectories(ctx, fallbackDirectories)
 		case signal, ok := <-feed.Signals():
 			if !ok {
 				stopTimer()
@@ -1100,6 +1112,40 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 			scheduleFlush(time.Now())
 		}
 	}
+}
+
+// getFallbackReconcileDirectories selects tracked roots whose platform feed cannot observe subdirectories recursively.
+func (a *ApplicationPlugin) getFallbackReconcileDirectories(ctx context.Context, feed filesearch.ChangeFeed, roots []filesearch.RootRecord, directories []appDirectory) []appDirectory {
+	directoriesByPath := make(map[string]appDirectory, len(directories))
+	for _, directory := range directories {
+		if directory.trackChanges {
+			directoriesByPath[a.pathCacheKey(filepath.Clean(directory.Path))] = directory
+		}
+	}
+
+	snapshotter, ok := feed.(filesearch.RootFeedSnapshotter)
+	selected := make([]appDirectory, 0)
+	seen := make(map[string]bool)
+	for _, root := range roots {
+		if ok {
+			snapshot, snapshotErr := snapshotter.SnapshotRootFeed(ctx, root)
+			if snapshotErr == nil && snapshot.FeedType != filesearch.RootFeedTypeFallback {
+				continue
+			}
+			if snapshotErr != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to inspect app change feed for %s, enabling fallback reconciliation: %s", root.Path, snapshotErr.Error()))
+			}
+		}
+
+		key := a.pathCacheKey(filepath.Clean(root.Path))
+		directory, exists := directoriesByPath[key]
+		if !exists || seen[key] {
+			continue
+		}
+		seen[key] = true
+		selected = append(selected, directory)
+	}
+	return selected
 }
 
 func (a *ApplicationPlugin) logAppChangeFeedSignal(ctx context.Context, signal filesearch.ChangeSignal, rootPaths map[string]string) {
@@ -1360,10 +1406,15 @@ func (a *ApplicationPlugin) removeIndexedAppsUnderDirectory(ctx context.Context,
 }
 
 func (a *ApplicationPlugin) reconcileIndexedAppsInDirectory(ctx context.Context, directoryPath string) bool {
-	info, statErr := os.Stat(directoryPath)
+	return a.reconcileIndexedAppsInAppDirectory(ctx, a.getLocalAppDirectoryForChange(ctx, directoryPath))
+}
+
+// reconcileIndexedAppsInAppDirectory compares one bounded scan scope with the current app cache.
+func (a *ApplicationPlugin) reconcileIndexedAppsInAppDirectory(ctx context.Context, directory appDirectory) bool {
+	info, statErr := os.Stat(directory.Path)
 	if statErr != nil {
-		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app change feed directory stat failed, removing cached entries if present: path=%s err=%s", directoryPath, statErr.Error()))
-		return a.removeIndexedAppsUnderDirectory(ctx, directoryPath)
+		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app change feed directory stat failed, removing cached entries if present: path=%s err=%s", directory.Path, statErr.Error()))
+		return a.removeIndexedAppsUnderDirectory(ctx, directory.Path)
 	}
 	if !info.IsDir() {
 		return false
@@ -1372,16 +1423,26 @@ func (a *ApplicationPlugin) reconcileIndexedAppsInDirectory(ctx context.Context,
 	// Bug fix: directory-only notifications from Start Menu installers need a
 	// bounded local reconciliation. Scanning just the changed directory preserves
 	// the user's no-full-index requirement while discovering nested shortcuts.
-	paths := a.getAppPaths(ctx, []appDirectory{a.getLocalAppDirectoryForChange(ctx, directoryPath)})
+	paths := a.getAppPaths(ctx, []appDirectory{directory})
 	currentPaths := make(map[string]bool, len(paths))
+	cachedByPath := make(map[string]appInfo, len(a.apps))
+	for _, app := range a.apps {
+		cachedByPath[a.pathCacheKey(app.Path)] = app
+	}
 	changed := false
 	for _, appPath := range paths {
-		currentPaths[a.pathCacheKey(appPath)] = true
+		key := a.pathCacheKey(appPath)
+		currentPaths[key] = true
+		if fileInfo, statErr := os.Stat(appPath); statErr == nil {
+			if _, fresh := a.reuseAppFromCache(ctx, appPath, fileInfo, cachedByPath); fresh {
+				continue
+			}
+		}
 		changed = a.upsertIndexedAppByPath(ctx, appPath) || changed
 	}
 
 	for _, app := range append([]appInfo(nil), a.apps...) {
-		if !a.isPathAtOrUnderDirectory(app.Path, directoryPath) {
+		if !a.isAppPathInDirectoryScope(app.Path, directory) {
 			continue
 		}
 		if currentPaths[a.pathCacheKey(app.Path)] {
@@ -1390,8 +1451,52 @@ func (a *ApplicationPlugin) reconcileIndexedAppsInDirectory(ctx context.Context,
 		changed = a.removeIndexedAppByPath(ctx, app.Path) || changed
 	}
 
-	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app directory %s reconciled by change feed: paths=%d changed=%t", directoryPath, len(paths), changed))
+	message := fmt.Sprintf("app directory %s reconciled by change feed: paths=%d changed=%t", directory.Path, len(paths), changed)
+	if changed {
+		a.api.Log(ctx, plugin.LogLevelInfo, message)
+	} else {
+		a.api.Log(ctx, plugin.LogLevelDebug, message)
+	}
 	return changed
+}
+
+// isAppPathInDirectoryScope applies the same recursion depth and exclusions used by getAppPaths.
+func (a *ApplicationPlugin) isAppPathInDirectoryScope(appPath string, directory appDirectory) bool {
+	relativePath, err := filepath.Rel(filepath.Clean(directory.Path), filepath.Clean(appPath))
+	if err != nil || relativePath == "." || relativePath == "" || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) {
+		return false
+	}
+
+	parentPath := filepath.Dir(relativePath)
+	depth := 0
+	if parentPath != "." {
+		depth = len(strings.Split(parentPath, string(os.PathSeparator)))
+	}
+	if depth > 0 && (!directory.Recursive || depth > directory.RecursiveDepth) {
+		return false
+	}
+	for _, exclude := range directory.RecursiveExcludes {
+		if a.isPathAtOrUnderDirectory(appPath, filepath.Join(directory.Path, exclude)) {
+			return false
+		}
+	}
+	return true
+}
+
+// reconcileFallbackAppDirectories provides eventual subtree updates without allocating one watcher per directory.
+func (a *ApplicationPlugin) reconcileFallbackAppDirectories(ctx context.Context, directories []appDirectory) {
+	changed := false
+	for _, directory := range directories {
+		changed = a.reconcileIndexedAppsInAppDirectory(ctx, directory) || changed
+	}
+	if !changed {
+		return
+	}
+
+	a.rebuildHotkeyAppCandidates(ctx)
+	a.rebuildQueryEntries(ctx)
+	a.saveAppToCache(ctx)
+	a.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 }
 
 func (a *ApplicationPlugin) getLocalAppDirectoryForChange(ctx context.Context, directoryPath string) appDirectory {

@@ -30,7 +30,7 @@ func TestFallbackChangeFeedHandleEventEmitsDirtyPathForDirectChildCreate(t *test
 
 	feed.handleEvent(fsnotify.Event{Name: filePath, Op: fsnotify.Create})
 
-	signal := mustReadChangeSignal(t, feed.Signals())
+	signal := mustReadChangeSignalForPath(t, feed.Signals(), filePath)
 	if signal.Kind != ChangeSignalKindDirtyPath {
 		t.Fatalf("expected dirty path signal, got %q", signal.Kind)
 	}
@@ -60,12 +60,30 @@ func TestFallbackChangeFeedHandleEventUsesRefreshedLongestRootMatcher(t *testing
 
 	feed.handleEvent(fsnotify.Event{Name: filePath, Op: fsnotify.Write})
 
-	signal := mustReadChangeSignal(t, feed.Signals())
+	signal := mustReadChangeSignalForPath(t, feed.Signals(), filePath)
 	if signal.RootID != dynamic.ID {
 		t.Fatalf("expected refreshed matcher to choose dynamic root, got %#v", signal)
 	}
 	if signal.Path != filePath {
 		t.Fatalf("expected dirty path %q, got %q", filePath, signal.Path)
+	}
+}
+
+func TestFallbackChangeFeedKeepsOneWatchPerRoot(t *testing.T) {
+	rootPath := filepath.Join(t.TempDir(), "Programs")
+	mustMkdirAll(t, filepath.Join(rootPath, "Scoop Apps", "Nested"))
+
+	feed := NewFallbackChangeFeed()
+	defer feed.Close()
+	if err := feed.Refresh(context.Background(), []RootRecord{{ID: "root-bounded", Path: rootPath}}); err != nil {
+		t.Fatalf("refresh fallback change feed: %v", err)
+	}
+
+	feed.mu.RLock()
+	watches := feed.watcher.WatchList()
+	feed.mu.RUnlock()
+	if len(watches) != 1 || watches[0] != rootPath {
+		t.Fatalf("expected one root watch, got %#v", watches)
 	}
 }
 
@@ -132,5 +150,23 @@ func mustReadChangeSignal(t *testing.T, signals <-chan ChangeSignal) ChangeSigna
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for change signal")
 		return ChangeSignal{}
+	}
+}
+
+func mustReadChangeSignalForPath(t *testing.T, signals <-chan ChangeSignal, targetPath string) ChangeSignal {
+	t.Helper()
+
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case signal := <-signals:
+			if signal.Path == targetPath {
+				return signal
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for change signal for %q", targetPath)
+			return ChangeSignal{}
+		}
 	}
 }
