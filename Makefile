@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins plugin-health help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -37,8 +37,12 @@ endif
 PNPM ?= $(shell if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then echo pnpm; elif command -v corepack >/dev/null 2>&1 && corepack pnpm --version >/dev/null 2>&1; then echo "corepack pnpm"; else echo pnpm; fi)
 export PNPM
 
-CURRENT_NODEJS_SDK_VERSION := $(shell node -p "require('./wox.plugin.nodejs/package.json').version")
-CURRENT_PYTHON_SDK_VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' wox.plugin.python/pyproject.toml)
+# The macOS bundle target re-invokes this Makefile from release/, so version
+# reads must use this file's directory instead of the current working directory.
+REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
+
+CURRENT_NODEJS_SDK_VERSION := $(shell node -p "require('$(REPO_ROOT)/wox.plugin.nodejs/package.json').version")
+CURRENT_PYTHON_SDK_VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' $(REPO_ROOT)/wox.plugin.python/pyproject.toml)
 NEXT_NODEJS_SDK_VERSION := $(shell node -e "const parts='$(CURRENT_NODEJS_SDK_VERSION)'.split('.').map(Number); if (parts.length !== 3 || parts.some(Number.isNaN)) process.exit(1); parts[2] += 1; console.log(parts.join('.'))")
 NEXT_PYTHON_SDK_VERSION := $(shell node -e "const parts='$(CURRENT_PYTHON_SDK_VERSION)'.split('.').map(Number); if (parts.length !== 3 || parts.some(Number.isNaN)) process.exit(1); parts[2] += 1; console.log(parts.join('.'))")
 SYNC_NODEJS_SDK_VERSION ?= $(NEXT_NODEJS_SDK_VERSION)
@@ -67,7 +71,7 @@ endif
 
 RELEASE_DIR := release
 # Keep package version in sync with the embedded updater constant used by release binaries.
-VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' wox.core/updater/version.go)
+VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' $(REPO_ROOT)/wox.core/updater/version.go)
 APPIMAGE_TOOL ?= appimagetool.AppImage
 APPIMAGE_DIR := $(RELEASE_DIR)/wox.AppDir
 APPIMAGE_NAME := wox-linux-$(ARCH).AppImage
@@ -120,6 +124,7 @@ help:
 	@echo "  deb        Build Linux .deb package"
 	@echo "  rpm        Build Linux .rpm package"
 	@echo "  plugins    Update plugin store"
+	@echo "  plugin-health  Install store plugins headlessly and probe init/query"
 	@echo "  www        Run docs dev server"
 	@echo "  clean      Clean release directory"
 	@echo "  host       Build plugin hosts"
@@ -548,6 +553,13 @@ release-continue:
 
 plugins:
 	cd ci && go run . plugin
+
+# PLUGIN and OUT are optional. Example: make plugin-health PLUGIN=Obsidian OUT=plugin-health.json
+plugin-health:
+	cd ci/pluginhealth && go run -tags "$(SQLITE_BUILD_TAGS)" . \
+		-store "$(CURDIR)/store-plugin.json" \
+		$(if $(strip $(PLUGIN)),-plugin "$(PLUGIN)",) \
+		$(if $(strip $(OUT)),-out "$(OUT)",)
 
 # Keep the docs dev shortcut at the repository root so contributors can discover the website workflow without duplicating the script definition from www/package.json.
 www:

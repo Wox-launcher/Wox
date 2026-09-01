@@ -186,7 +186,9 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		return "", marshalErr
 	}
 
-	resultChan := make(chan JsonRpcResponse)
+	// Buffer the response so a cancellation racing with delivery cannot strand
+	// the websocket reader after the caller removes this request from the map.
+	resultChan := make(chan JsonRpcResponse, 1)
 	w.requestMap.Store(request.Id, resultChan)
 	defer w.requestMap.Delete(request.Id)
 
@@ -196,8 +198,12 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		return "", sendErr
 	}
 
+	timer := time.NewTimer(time.Second * 30)
+	defer timer.Stop()
 	select {
-	case <-time.NewTimer(time.Second * 30).C:
+	case <-ctx.Done():
+		return "", fmt.Errorf("request canceled, request id: %s: %w", request.Id, ctx.Err())
+	case <-timer.C:
 		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 		return "", fmt.Errorf("request timeout, request id: %s", request.Id)
 	case response := <-resultChan:

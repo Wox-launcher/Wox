@@ -9,6 +9,13 @@ type Plugin interface {
 	Query(ctx context.Context, query Query) QueryResponse
 }
 
+// FallibleInit is implemented by host-backed plugins whose Init can fail.
+// System plugins keep the void Init contract; the manager calls this when present
+// so load/enable/health paths can distinguish a finished init from a failed one.
+type FallibleInit interface {
+	InitWithError(ctx context.Context, initParams InitParams) error
+}
+
 type SystemPlugin interface {
 	Plugin
 	GetMetadata() Metadata

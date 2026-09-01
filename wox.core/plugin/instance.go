@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"wox/common"
 	"wox/setting"
 	"wox/setting/definition"
@@ -35,6 +37,97 @@ type Instance struct {
 	LoadFinishedTimestamp int64
 	InitStartTimestamp    int64
 	InitFinishedTimestamp int64
+
+	// InitError is set when Init finishes unsuccessfully. Waiters distinguish
+	// "still initializing" from "init completed with an error" through initDone.
+	InitError       error
+	initDone        chan struct{}
+	initStateMu     sync.Mutex
+	initLifecycleMu sync.Mutex
+}
+
+// beginInitCycle opens a new wait channel so later WaitInit calls block on this
+// enable/load attempt instead of observing a previous finished cycle.
+func (i *Instance) beginInitCycle() {
+	if i == nil {
+		return
+	}
+	i.initStateMu.Lock()
+	defer i.initStateMu.Unlock()
+	i.Initialized = false
+	i.InitError = nil
+	i.initDone = make(chan struct{})
+}
+
+// finishInit publishes the result before waking every waiter for this cycle.
+func (i *Instance) finishInit(initialized bool, err error) {
+	if i == nil {
+		return
+	}
+	i.initStateMu.Lock()
+	defer i.initStateMu.Unlock()
+	i.Initialized = initialized
+	i.InitError = err
+	if i.initDone == nil {
+		return
+	}
+	select {
+	case <-i.initDone:
+	default:
+		close(i.initDone)
+	}
+}
+
+func (i *Instance) resetInitState() {
+	i.initStateMu.Lock()
+	defer i.initStateMu.Unlock()
+	i.Initialized = false
+	i.InitError = nil
+}
+
+func (i *Instance) initStatus() (bool, error) {
+	i.initStateMu.Lock()
+	defer i.initStateMu.Unlock()
+	return i.Initialized, i.InitError
+}
+
+// initCycleFinished reports whether the current cycle has notified its waiters.
+func (i *Instance) initCycleFinished() bool {
+	if i == nil {
+		return true
+	}
+	i.initStateMu.Lock()
+	defer i.initStateMu.Unlock()
+	if i.initDone == nil {
+		return true
+	}
+	select {
+	case <-i.initDone:
+		return true
+	default:
+		return false
+	}
+}
+
+// WaitInit blocks until this instance's current init cycle finishes or ctx ends.
+func (i *Instance) WaitInit(ctx context.Context) error {
+	if i == nil {
+		return fmt.Errorf("plugin instance is nil")
+	}
+	i.initStateMu.Lock()
+	initDone := i.initDone
+	i.initStateMu.Unlock()
+	if initDone == nil {
+		return fmt.Errorf("plugin init has not started")
+	}
+	select {
+	case <-initDone:
+		i.initStateMu.Lock()
+		defer i.initStateMu.Unlock()
+		return i.InitError
+	case <-ctx.Done():
+		return fmt.Errorf("timed out waiting for plugin init: %w", ctx.Err())
+	}
 }
 
 func (i *Instance) translateMetadataText(ctx context.Context, text common.I18nString) string {

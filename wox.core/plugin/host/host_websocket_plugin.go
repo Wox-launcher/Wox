@@ -22,9 +22,17 @@ func NewWebsocketPlugin(metadata plugin.Metadata, websocketHost *WebsocketHost) 
 }
 
 func (w *WebsocketPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	w.websocketHost.invokeMethod(ctx, w.metadata, "init", map[string]string{
+	if err := w.InitWithError(ctx, initParams); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] init failed: %s", w.metadata.GetName(ctx), err.Error()))
+	}
+}
+
+// InitWithError runs the host init RPC and returns the transport or plugin error.
+func (w *WebsocketPlugin) InitWithError(ctx context.Context, initParams plugin.InitParams) error {
+	_, err := w.websocketHost.invokeMethod(ctx, w.metadata, "init", map[string]string{
 		"PluginDirectory": initParams.PluginDirectory,
 	})
+	return err
 }
 
 // CreateActionProxy creates a proxy callback for an action that will invoke the host's action method
@@ -74,16 +82,25 @@ func (w *WebsocketPlugin) CreateToolbarMsgActionProxy(actionId string) func(cont
 }
 
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	response, queryErr := w.QueryWithError(ctx, query)
+	if queryErr != nil {
+		return plugin.QueryResponse{
+			Results: []plugin.QueryResult{plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr)},
+		}
+	}
+	return response
+}
+
+// QueryWithError runs the host query RPC and returns the transport or decode error.
+func (w *WebsocketPlugin) QueryWithError(ctx context.Context, query plugin.Query) (plugin.QueryResponse, error) {
 	selectionJson, marshalErr := json.Marshal(query.Selection)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query selection: %s", w.metadata.GetName(ctx), marshalErr.Error()))
-		return plugin.QueryResponse{}
+		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query selection: %w", marshalErr)
 	}
 
 	envJson, marshalEnvErr := json.Marshal(query.Env)
 	if marshalEnvErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query env: %s", w.metadata.GetName(ctx), marshalEnvErr.Error()))
-		return plugin.QueryResponse{}
+		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query env: %w", marshalEnvErr)
 	}
 
 	queryRefinements := query.Refinements
@@ -94,8 +111,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 	refinementsJson, marshalRefinementsErr := json.Marshal(queryRefinements)
 	if marshalRefinementsErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query refinements: %s", w.metadata.GetName(ctx), marshalRefinementsErr.Error()))
-		return plugin.QueryResponse{}
+		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query refinements: %w", marshalRefinementsErr)
 	}
 	queryContextData := query.ContextData
 	if queryContextData == nil {
@@ -103,8 +119,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 	contextDataJson, marshalContextDataErr := json.Marshal(queryContextData)
 	if marshalContextDataErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query context data: %s", w.metadata.GetName(ctx), marshalContextDataErr.Error()))
-		return plugin.QueryResponse{}
+		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query context data: %w", marshalContextDataErr)
 	}
 
 	// Send both Id and QueryId while hosts move to QueryResponse. Older host
@@ -126,24 +141,20 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	})
 	if queryErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.GetName(ctx), queryErr.Error()))
-		return plugin.QueryResponse{
-			Results: []plugin.QueryResult{plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr)},
-		}
+		return plugin.QueryResponse{}, queryErr
 	}
 
 	var response plugin.QueryResponse
 	marshalData, marshalErr := json.Marshal(rawResults)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query response: %s", w.metadata.GetName(ctx), marshalErr.Error()))
-		return plugin.QueryResponse{}
+		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query response: %w", marshalErr)
 	}
 	// Node.js and Python hosts normalize legacy Result[] returns before they
 	// cross back into Go, so core only accepts the QueryResponse object here.
 	unmarshalErr := json.Unmarshal(marshalData, &response)
 	if unmarshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query response: %s", w.metadata.GetName(ctx), unmarshalErr.Error()))
-		return plugin.QueryResponse{}
+		return plugin.QueryResponse{}, fmt.Errorf("failed to unmarshal query response: %w", unmarshalErr)
 	}
 
-	return response
+	return response, nil
 }

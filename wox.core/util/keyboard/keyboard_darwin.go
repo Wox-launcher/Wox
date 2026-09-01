@@ -135,7 +135,8 @@ const char* simulateType(const char* text) {
             remaining = chunkSize;
         }
 
-        UniChar buffer[chunkSize];
+        // C requires a constant size; a const CFIndex is folded as a GNU VLA extension.
+        UniChar buffer[20];
         CFStringGetCharacters(cfStr, CFRangeMake(i, remaining), buffer);
 
         CGEventRef keyDown = CGEventCreateKeyboardEvent(NULL, 0, true);

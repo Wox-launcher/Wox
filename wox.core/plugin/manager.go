@@ -486,10 +486,12 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		IsDevPlugin:           metadata.IsDev,
 		DevPluginDirectory:    metadata.DevPluginDirectory,
 	}
+	instance.beginInitCycle()
 	instance.API = NewAPI(instance)
 	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
 	if settingErr != nil {
 		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.GetName(ctx), settingErr).Error())
+		instance.finishInit(false, settingErr)
 		return settingErr
 	}
 	instance.Setting = pluginSetting
@@ -499,6 +501,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	if pluginSetting.Disabled.Get() {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.GetName(ctx)).Error())
 		instance.API.Log(ctx, LogLevelWarning, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
+		instance.finishInit(false, nil)
 		return nil
 	}
 
@@ -582,13 +585,16 @@ func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance
 	if pluginInstance == nil {
 		return
 	}
-	if pluginInstance.Initialized {
+	pluginInstance.initLifecycleMu.Lock()
+	defer pluginInstance.initLifecycleMu.Unlock()
+	initialized, _ := pluginInstance.initStatus()
+	if initialized {
 		for _, callback := range pluginInstance.UnloadCallbacks {
 			callback(ctx)
 		}
 	}
 	m.clearRuntimeCallbacks(pluginInstance)
-	pluginInstance.Initialized = false
+	pluginInstance.resetInitState()
 
 	if pluginInstance.Host != nil && pluginInstance.RuntimeLoaded {
 		pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
@@ -603,7 +609,10 @@ func (m *Manager) activatePlugin(ctx context.Context, pluginInstance *Instance) 
 	if pluginInstance == nil {
 		return fmt.Errorf("can't find plugin")
 	}
-	if pluginInstance.Initialized {
+	pluginInstance.initLifecycleMu.Lock()
+	defer pluginInstance.initLifecycleMu.Unlock()
+	initialized, _ := pluginInstance.initStatus()
+	if initialized {
 		return nil
 	}
 	if pluginInstance.Host != nil && !pluginInstance.RuntimeLoaded {
@@ -622,7 +631,17 @@ func (m *Manager) activatePlugin(ctx context.Context, pluginInstance *Instance) 
 	if pluginInstance.Plugin == nil {
 		return fmt.Errorf("plugin runtime is not loaded: %s", pluginInstance.Metadata.GetName(ctx))
 	}
-	m.initPlugin(ctx, pluginInstance)
+	if pluginInstance.initCycleFinished() {
+		pluginInstance.beginInitCycle()
+	}
+	m.initPluginLocked(ctx, pluginInstance)
+	initialized, initErr := pluginInstance.initStatus()
+	if initErr != nil {
+		return initErr
+	}
+	if !initialized {
+		return fmt.Errorf("plugin did not initialize: %s", pluginInstance.Metadata.GetName(ctx))
+	}
 	return nil
 }
 
@@ -816,12 +835,14 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			LoadStartTimestamp:    util.GetSystemTimestamp(),
 			LoadFinishedTimestamp: util.GetSystemTimestamp(),
 		}
+		instance.beginInitCycle()
 		instance.API = NewAPI(instance)
 
 		startTimestamp := util.GetSystemTimestamp()
 		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
 		if settingErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.GetName(ctx), settingErr.Error()))
+			instance.finishInit(false, settingErr)
 			continue
 		}
 
@@ -832,6 +853,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 		if pluginSetting.Disabled.Get() {
 			logger.Info(ctx, fmt.Sprintf("system plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
 			// Keep the instance discoverable so EnablePlugin can initialize it later.
+			instance.finishInit(false, nil)
 			m.appendPluginInstance(instance)
 			continue
 		}
@@ -847,15 +869,47 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 }
 
 func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
+	instance.initLifecycleMu.Lock()
+	defer instance.initLifecycleMu.Unlock()
+	m.initPluginLocked(ctx, instance)
+}
+
+// initPluginLocked runs Init while the caller holds the instance lifecycle lock.
+func (m *Manager) initPluginLocked(ctx context.Context, instance *Instance) {
 	logger.Info(ctx, fmt.Sprintf("start init plugin: %s", instance.Metadata.GetName(ctx)))
 	instance.InitStartTimestamp = util.GetSystemTimestamp()
-	instance.Plugin.Init(ctx, InitParams{
+	defer func() {
+		if r := recover(); r != nil {
+			err := fmt.Errorf("plugin init panic: %v", r)
+			instance.InitFinishedTimestamp = util.GetSystemTimestamp()
+			logger.Error(ctx, fmt.Sprintf("init plugin %s panicked: %s", instance.Metadata.GetName(ctx), err.Error()))
+			instance.finishInit(false, err)
+		}
+	}()
+
+	err := runPluginInit(ctx, instance)
+	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("init plugin %s failed, cost %d ms: %s", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp, err.Error()))
+		instance.finishInit(false, err)
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp))
+	instance.finishInit(true, nil)
+}
+
+// runPluginInit preserves the legacy Plugin contract while exposing host errors.
+func runPluginInit(ctx context.Context, instance *Instance) error {
+	params := InitParams{
 		API:             instance.API,
 		PluginDirectory: instance.PluginDirectory,
-	})
-	instance.Initialized = true
-	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
-	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp))
+	}
+	if initer, ok := instance.Plugin.(FallibleInit); ok {
+		return initer.InitWithError(ctx, params)
+	}
+	instance.Plugin.Init(ctx, params)
+	return nil
 }
 
 func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {
@@ -4056,6 +4110,30 @@ func appendActionEnglishAlias(ctx context.Context, pluginInstance *Instance, nam
 
 func (m *Manager) GetUI() common.UI {
 	return m.ui
+}
+
+// AttachUI sets the UI used by plugin APIs without loading plugins or hosts.
+func (m *Manager) AttachUI(ui common.UI) {
+	m.ui = ui
+}
+
+// WaitPluginInit waits until the named plugin finishes its current init cycle.
+func (m *Manager) WaitPluginInit(ctx context.Context, pluginID string) error {
+	instance := m.GetPluginInstanceById(pluginID)
+	if instance == nil {
+		return fmt.Errorf("plugin %s is not loaded", pluginID)
+	}
+	if err := instance.WaitInit(ctx); err != nil {
+		return err
+	}
+	initialized, initErr := instance.initStatus()
+	if initialized {
+		return nil
+	}
+	if initErr != nil {
+		return initErr
+	}
+	return fmt.Errorf("plugin %s did not initialize", pluginID)
 }
 
 // updatePluginResultDeliveryLatency learns only from jobs that produced visible results.

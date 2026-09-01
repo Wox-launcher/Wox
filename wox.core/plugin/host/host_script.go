@@ -103,8 +103,37 @@ func (s *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 }
 
 func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	// Prepare JSON-RPC request
-	request := map[string]interface{}{
+	response, err := s.query(ctx, query)
+	if err != nil {
+		requestJSON, _ := json.Marshal(scriptQueryRequest(ctx, query))
+		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.GetName(ctx), err.Error(), requestJSON))
+
+		if issueResponse, handled := s.runtimeIssueResponse(ctx, err); handled {
+			return issueResponse
+		}
+
+		s.api.Notify(ctx, err.Error())
+		return plugin.QueryResponse{}
+	}
+
+	return response
+}
+
+// QueryWithError executes the script query and returns interpreter or protocol errors.
+func (s *ScriptPlugin) QueryWithError(ctx context.Context, query plugin.Query) (plugin.QueryResponse, error) {
+	return s.query(ctx, query)
+}
+
+func (s *ScriptPlugin) query(ctx context.Context, query plugin.Query) (plugin.QueryResponse, error) {
+	results, err := s.executeScript(ctx, scriptQueryRequest(ctx, query))
+	if err != nil {
+		return plugin.QueryResponse{}, err
+	}
+	return plugin.NewQueryResponse(results), nil
+}
+
+func scriptQueryRequest(ctx context.Context, query plugin.Query) map[string]interface{} {
+	return map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "query",
 		"params": map[string]interface{}{
@@ -115,22 +144,6 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		},
 		"id": util.GetContextTraceId(ctx),
 	}
-
-	// Execute script and get results
-	results, err := s.executeScript(ctx, request)
-	if err != nil {
-		requestJSON, _ := json.Marshal(request)
-		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.GetName(ctx), err.Error(), requestJSON))
-
-		if response, handled := s.runtimeIssueResponse(ctx, err); handled {
-			return response
-		}
-
-		s.api.Notify(ctx, err.Error())
-		return plugin.QueryResponse{}
-	}
-
-	return plugin.NewQueryResponse(results)
 }
 
 // executeScript executes the script with the given JSON-RPC request and returns the results

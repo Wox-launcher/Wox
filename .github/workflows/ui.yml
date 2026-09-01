@@ -111,7 +111,7 @@ jobs:
         run: make smoke
       - name: Upload Linux perf artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-perf-linux-pr
           path: artifacts/perf/
@@ -120,7 +120,7 @@ jobs:
       # logs, and settings needed to diagnose a stuck smoke wait.
       - name: Upload Linux smoke failure artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-smoke-failure-linux-pr
           path: artifacts/smoke/
@@ -182,7 +182,7 @@ jobs:
         run: make smoke
       - name: Upload perf artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-perf-${{ matrix.name }}
           path: artifacts/perf/
@@ -191,7 +191,7 @@ jobs:
       # logs, and settings needed to diagnose a stuck smoke wait.
       - name: Upload smoke failure artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-smoke-failure-${{ matrix.name }}
           path: artifacts/smoke/

@@ -104,7 +104,7 @@ permissions:
   attestations: write
   artifact-metadata: write
 
-# GitHub-owned checkout/setup/attest actions use Node 24-compatible majors here; project toolchains remain pinned by each setup step's inputs. Dependency caches are off because GitHub Cache restore/save fails reliably in this repo.
+# Checkout/setup/attest/upload actions use Node 24-compatible majors; project toolchains stay pinned by each setup step. Dependency caches are off because GitHub Cache restore/save fails reliably in this repo.
 jobs:
   test:
     if: ${{ inputs.run_tests }}
@@ -163,7 +163,7 @@ jobs:
           go-version-file: wox.core/go.mod
           cache: false
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
       - name: Setup Node.js
@@ -175,11 +175,14 @@ jobs:
         with:
           python-version: "3.11"
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
         with:
           enable-cache: false
       - name: Install create-dmg
-        run: brew install create-dmg
+        run: |
+          # GitHub's macOS image ships an untrusted aws/tap that Homebrew now warns about on every brew command.
+          brew untap aws/tap >/dev/null 2>&1 || true
+          brew install create-dmg
 
       - name: Validate macOS signing/notarization secrets
         if: ${{ inputs.require_macos_notarize }}
@@ -256,7 +259,7 @@ jobs:
           spctl -a -vv -t install ./release/wox-mac-arm64.dmg
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-mac-arm64.dmg
           path: ./release/wox-mac-arm64.dmg
@@ -275,7 +278,7 @@ jobs:
           go-version-file: wox.core/go.mod
           cache: false
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
       - name: Setup Node.js
@@ -287,11 +290,14 @@ jobs:
         with:
           python-version: "3.11"
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
         with:
           enable-cache: false
       - name: Install create-dmg
-        run: brew install create-dmg
+        run: |
+          # GitHub's macOS image ships an untrusted aws/tap that Homebrew now warns about on every brew command.
+          brew untap aws/tap >/dev/null 2>&1 || true
+          brew install create-dmg
 
       - name: Validate macOS signing/notarization secrets
         if: ${{ inputs.require_macos_notarize }}
@@ -368,7 +374,7 @@ jobs:
           spctl -a -vv -t install ./release/wox-mac-amd64.dmg
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-mac-amd64.dmg
           path: ./release/wox-mac-amd64.dmg
@@ -408,7 +414,7 @@ jobs:
           cache: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
 
@@ -422,7 +428,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
         with:
           enable-cache: false
 
@@ -434,7 +440,7 @@ jobs:
       - name: Upload unsigned file index service
         id: upload-unsigned-file-index-service
         if: ${{ inputs.require_windows_signpath }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unsigned-wox-file-index-service.exe
           path: ./wox.core/resource/others/file_index_service/wox-file-index-service.exe
@@ -461,7 +467,7 @@ jobs:
       - name: Upload unsigned artifact (Windows)
         id: upload-unsigned-artifact
         if: ${{ inputs.require_windows_signpath }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unsigned-wox-windows-amd64.exe
           path: ./release/wox-windows-amd64.exe
@@ -481,7 +487,7 @@ jobs:
 
       - name: Delete unsigned artifact (Windows)
         if: ${{ inputs.require_windows_signpath }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const runId = context.runId;
@@ -518,7 +524,7 @@ jobs:
           subject-path: ./release/wox-windows-amd64.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-windows-amd64.exe
           path: ./release/wox-windows-amd64.exe
@@ -565,7 +571,7 @@ jobs:
           go-version-file: wox.core/go.mod
           cache: false
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
       - name: Setup Node.js
@@ -577,7 +583,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
         with:
           enable-cache: false
       - name: Download appimagetool
@@ -605,25 +611,25 @@ jobs:
         with:
           subject-path: ./release/wox-linux-amd64.rpm
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-linux-amd64
           path: ./release/wox-linux-amd64
           retention-days: ${{ inputs.artifact_retention_days }}
       - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-linux-amd64.AppImage
           path: ./release/wox-linux-amd64.AppImage
           retention-days: ${{ inputs.artifact_retention_days }}
       - name: Upload deb artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-linux-amd64.deb
           path: ./release/wox-linux-amd64.deb
           retention-days: ${{ inputs.artifact_retention_days }}
       - name: Upload rpm artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wox-linux-amd64.rpm
           path: ./release/wox-linux-amd64.rpm
