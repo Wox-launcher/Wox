@@ -1071,5 +1071,37 @@
         "plugin_description": "用 yt-dlp 从 1000+ 网站下载视频和音频"
       }
     }
+  },
+  {
+    "Id": "a7c3e9f2-4b81-4d6e-9f1a-2c8d5e0b7a13",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://news.ycombinator.com/y18.svg",
+    "Website": "https://gist.github.com/qianlifeng/5505503cf2ab741e2073e8bc120fba77",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/5505503cf2ab741e2073e8bc120fba77/raw/Wox.Plugin.Script.HackerNews.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/6c4743e5-de71-42aa-9ff8-2916de349a03"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-01 23:37:00",
+    "DateUpdated": "2026-09-01 23:37:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Hacker News",
+        "plugin_description": "Browse Hacker News stories and discussions"
+      },
+      "zh_CN": {
+        "plugin_name": "Hacker News",
+        "plugin_description": "浏览 Hacker News 首页、话题和讨论"
+      }
+    }
   }
 ]
