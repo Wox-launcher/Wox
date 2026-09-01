@@ -680,6 +680,39 @@ func newRetainedMRUTestApp(t *testing.T) *App {
 	return app
 }
 
+// TestInPlaceQueryGenerationsClearPreviousCompletion covers the invariant that query
+// completion describes one generation. These paths start a generation in place while the
+// transition deliberately keeps the previous results on screen, so a completion carried
+// over from them reported the new query as finished before it had requested anything.
+func TestInPlaceQueryGenerationsClearPreviousCompletion(t *testing.T) {
+	starts := map[string]func(*App){
+		"query text change":   func(app *App) { app.applyQueryTextChangeLocked("> echo") },
+		"query scope cleared": func(app *App) { app.clearQueryScopeLocked() },
+	}
+	for name, start := range starts {
+		t.Run(name, func(t *testing.T) {
+			app := newRetainedMRUTestApp(t)
+			app.queryComplete = true
+			previousQueryID := app.query.QueryID
+
+			start(app)
+			if app.queryTransitionTimer != nil {
+				defer app.queryTransitionTimer.Stop()
+			}
+
+			if app.query.QueryID == previousQueryID {
+				t.Fatal("reused the previous query generation")
+			}
+			if app.queryComplete {
+				t.Fatal("kept the previous generation's completion")
+			}
+			if len(app.results) == 0 {
+				t.Fatal("dropped the retained results this invariant depends on")
+			}
+		})
+	}
+}
+
 func TestEmptyMRUResponseDropsRetainedResults(t *testing.T) {
 	app := newRetainedMRUTestApp(t)
 

@@ -165,9 +165,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 		a.query.QueryRefinements = map[string]string{}
 	}
 	a.query.QueryText = text
-	a.query.QueryID = newID()
-	a.queryContext = queryContext{}
-	a.queryContextKnown = false
+	a.beginQueryGenerationLocked()
 	a.resultScrollDetached = false
 	a.beginQueryTransitionLocked(preservePluginLayout)
 	// Preserve the visible global accessory until the backend classifies the new query.
@@ -406,9 +404,7 @@ func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []
 	} else {
 		a.query.QueryRefinements[refinement.ID] = strings.Join(selected, ",")
 	}
-	a.query.QueryID = newID()
-	a.queryContext = queryContext{}
-	a.queryContextKnown = false
+	a.beginQueryGenerationLocked()
 	a.completionHint = nil
 	a.resultScrollDetached = false
 	a.beginQueryTransitionLocked(preservePluginLayout)

@@ -768,6 +768,17 @@ func (a *App) notifySettingViewChanged(inSettingView bool) error {
 	return a.services.SettingViewChanged(ctx, a.sessionID, inSettingView)
 }
 
+// beginQueryGenerationLocked stamps a new query generation in place. Every field it
+// clears describes the results some earlier generation produced, so a caller that mints
+// a QueryID without clearing them keeps reporting that older state for the new query.
+// Callers that replace the whole query, such as setQuery, own this bookkeeping already.
+func (a *App) beginQueryGenerationLocked() {
+	a.query.QueryID = newID()
+	a.queryContext = queryContext{}
+	a.queryContextKnown = false
+	a.queryComplete = false
+}
+
 func (a *App) setQuery(query plainQuery) {
 	if query.QueryID == "" {
 		query.QueryID = newID()
@@ -1409,9 +1420,7 @@ func (a *App) clearQueryScopeLocked() {
 	a.refinementOpen = false
 	a.refinementScope = ""
 	a.layout = queryLayout{}
-	a.query.QueryID = newID()
-	a.queryContext = queryContext{}
-	a.queryContextKnown = false
+	a.beginQueryGenerationLocked()
 	a.beginQueryTransitionLocked(false)
 	a.stopGlanceLocked(false)
 }
