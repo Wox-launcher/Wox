@@ -5,6 +5,7 @@ package perf
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,12 @@ const (
 	// gate sensitive to a large isolated stall without extending every smoke case to 20+ frames.
 	perfSampleCount   = 8
 	perfWarmupSamples = 2
+
+	// quietFrameRequestInterval re-arms a frame request that produced nothing. A single
+	// invalidate can be coalesced into an in-flight frame or dropped before it presents,
+	// and the sampler used to fire exactly once and then wait out its entire budget, so
+	// one lost request failed the case indistinguishably from a stalled renderer.
+	quietFrameRequestInterval = 500 * time.Millisecond
 )
 
 func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
@@ -45,37 +52,57 @@ func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automati
 	defer cancel()
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
+	var metrics woxui.FrameMetricsSnapshot
+	requestFrame := true
+	requestedAt := time.Now()
 	for waitCtx.Err() == nil && len(observed) < want {
-		if requestErr := client.RequestFrame(waitCtx); requestErr != nil {
-			t.Fatalf("request performance sample frame: %v", requestErr)
+		if requestFrame {
+			if requestErr := client.RequestFrame(waitCtx); requestErr != nil {
+				t.Fatalf("request performance sample frame: %v", requestErr)
+			}
+			requestFrame = false
+			requestedAt = time.Now()
 		}
-		observedBeforeRequest := len(observed)
-		for waitCtx.Err() == nil && len(observed) == observedBeforeRequest {
-			metrics, metricsErr := client.FrameMetrics(waitCtx)
-			if metricsErr != nil {
-				t.Fatalf("read frame metrics: %v", metricsErr)
+		observedBeforePoll := len(observed)
+		var metricsErr error
+		if metrics, metricsErr = client.FrameMetrics(waitCtx); metricsErr != nil {
+			t.Fatalf("read frame metrics: %v", metricsErr)
+		}
+		for _, sample := range metrics.Recent {
+			if sample.FrameID <= lastFrameID || !sample.HostCompleted || !sample.Presented {
+				continue
 			}
-			for _, sample := range metrics.Recent {
-				if sample.FrameID <= lastFrameID || !sample.HostCompleted || !sample.Presented {
-					continue
-				}
-				lastFrameID = sample.FrameID
-				observed = append(observed, sample)
-				if len(observed) >= want {
-					writePerfArtifact(t, observed)
-					return observed
-				}
-			}
-			if len(observed) == observedBeforeRequest {
-				select {
-				case <-waitCtx.Done():
-				case <-ticker.C:
-				}
-			}
+			lastFrameID = sample.FrameID
+			observed = append(observed, sample)
+		}
+		if len(observed) >= want {
+			writePerfArtifact(t, observed)
+			return observed[:want]
+		}
+		if len(observed) > observedBeforePoll {
+			// Every sample needs its own frame, so the next request goes out as soon as
+			// this one lands instead of waiting for the quiet-request interval.
+			requestFrame = true
+			continue
+		}
+		requestFrame = time.Since(requestedAt) >= quietFrameRequestInterval
+		select {
+		case <-waitCtx.Done():
+		case <-ticker.C:
 		}
 	}
-	t.Fatalf("collected %d presented frames, want %d: %+v", len(observed), want, observed)
+	t.Fatalf("collected %d presented frames, want %d: %s; samples %+v", len(observed), want, describeFrameMetrics(metrics), observed)
 	return nil
+}
+
+// describeFrameMetrics reports what the renderer did with the requested frames. A
+// presented count of zero has causes the sample list alone cannot separate: frames that
+// were never produced, produced and dropped, coalesced into a newer frame, or skipped
+// because every bounded native render surface was busy.
+func describeFrameMetrics(metrics woxui.FrameMetricsSnapshot) string {
+	return fmt.Sprintf("frames=%d nativeEncoded=%d presented=%d dropped=%d coalesced=%d backpressured=%d recent=%d",
+		metrics.FrameCount, metrics.NativeEncodedFrameCount, metrics.PresentedFrameCount,
+		metrics.DroppedFrameCount, metrics.CoalescedFrameCount, metrics.BackpressuredFrameCount, len(metrics.Recent))
 }
 
 func assertSettledWork(t *testing.T, samples []woxui.FrameMetricsSample) {

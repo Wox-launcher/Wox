@@ -34,6 +34,30 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	}
 }
 
+// TestBuildContentReportsCompletionWithoutResults covers the automation contract that a
+// finished query stays observable when it produced nothing. Without the status node a
+// wait for completion cannot tell an empty result set from a query still in flight.
+func TestBuildContentReportsCompletionWithoutResults(t *testing.T) {
+	app := &App{selected: -1}
+	for _, complete := range []bool{false, true} {
+		built := app.buildContent(viewSnapshot{selected: -1, queryComplete: complete}, 760, 0, 1)
+		semantics, ok := built.(woxwidget.Semantics)
+		if !ok {
+			t.Fatalf("empty result content = %T, want a semantics node carrying query completion", built)
+		}
+		if semantics.AutomationID != "launcher.results" {
+			t.Fatalf("empty result automation ID = %q, want launcher.results", semantics.AutomationID)
+		}
+		want := "loading"
+		if complete {
+			want = "complete"
+		}
+		if semantics.Value != want {
+			t.Fatalf("empty result status for complete=%v = %q, want %q", complete, semantics.Value, want)
+		}
+	}
+}
+
 func TestLauncherPreparedSectionEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, launcherPreparedSectionProps{})
 }

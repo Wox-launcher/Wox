@@ -1912,11 +1912,11 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 	return
 }
 
+// saveAppToCache persists the result of a completed indexing pass, including an empty
+// one. Skipping the write for an empty index made "found no applications" and "never
+// finished indexing" look identical on disk, so such a machine re-ran the full scan on
+// every start and no observer could tell that indexing had settled.
 func (a *ApplicationPlugin) saveAppToCache(ctx context.Context) {
-	if len(a.apps) == 0 {
-		return
-	}
-
 	var cachePath = a.getAppCachePath()
 	cacheContent, marshalErr := json.Marshal(appCacheFile{
 		Version: appCacheVersion,

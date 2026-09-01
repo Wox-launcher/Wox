@@ -208,24 +208,29 @@ func suiteArtifactRoot() (string, error) {
 	return root, nil
 }
 
-// appIndexSettleTimeout bounds the wait for a cold app index. A cold macOS CI pass
-// costs over twelve seconds, so the budget has to clear that with margin.
-const appIndexSettleTimeout = 40 * time.Second
+// appIndexSettleTimeout bounds the wait for a cold app index. A healthy runner
+// settles in well under a second, but a Windows runner with a cold disk cache has
+// been observed still scanning after 110 seconds, and giving up early is what puts
+// the suite back inside the storm this wait exists to avoid. The budget therefore
+// covers that worst case rather than the typical one; it costs nothing when the
+// index is already warm.
+const appIndexSettleTimeout = 3 * time.Minute
 
 // appIndexCacheRelativePath is where the Apps plugin writes its index, which it
 // only does once an indexing pass completes.
 var appIndexCacheRelativePath = filepath.Join("cache", "wox-app-cache.json")
 
-// waitForAppIndexSettled waits until an app index exists on disk. Wox answers
-// automation RPCs as soon as its endpoint binds, while a cold app index keeps
-// hammering CPU and disk for another twelve seconds on macOS CI. Cases that start
-// inside that window pushed asynchronous settings saves past the smoke action
-// timeout, so they failed for machine load instead of behavior; the privacy
-// lifecycle package made this systematic by wiping the data directory, which left
-// the next package facing a cold index every run.
+// waitForAppIndexSettled waits until a completed app index exists on disk. Wox
+// answers automation RPCs as soon as its endpoint binds, while a cold app index
+// keeps hammering CPU and disk long after that. Cases that start inside that window
+// fail for machine load instead of behavior: an asynchronous settings save misses
+// the action timeout, or a query fans out slowly enough that the result flush holds
+// the UI thread past a synchronous RPC's budget. The privacy lifecycle package makes
+// this systematic by wiping the data directory, which leaves the next package facing
+// a cold index every run.
 //
-// The wait is best effort on purpose. A machine with no applications writes no
-// cache, and that is also the case where no indexing storm exists to wait for.
+// The wait is best effort on purpose, and it stays correct on a machine with no
+// applications because a completed empty pass still writes the cache.
 func waitForAppIndexSettled(ctx context.Context, woxDataDirectory string) {
 	cachePath := filepath.Join(woxDataDirectory, appIndexCacheRelativePath)
 	deadline := time.Now().Add(appIndexSettleTimeout)

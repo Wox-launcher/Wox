@@ -824,7 +824,11 @@ func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compos
 
 func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	if len(snapshot.results) == 0 {
-		return woxwidget.Container{Width: width, Height: height}
+		// A query that finished with nothing still has to report completion. Dropping the
+		// status node made "results pending" and "finished empty" indistinguishable to
+		// automation, so waiting for completion could only ever succeed on a non-empty
+		// result set, and callers had to guess by treating a missing node as settled.
+		return launcherview.WrapLauncherResultsStatus(snapshot.queryComplete, woxwidget.Container{Width: width, Height: height})
 	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && launcherPreviewVisible(snapshot.layout, snapshot.results[snapshot.selected].Preview)
 	if !previewVisible {
