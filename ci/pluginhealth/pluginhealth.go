@@ -36,6 +36,9 @@ const (
 
 	defaultHealthTimeout = 3 * time.Minute
 	healthCleanupTimeout = time.Minute
+	// Matches the Node/Python host RPC wait in WebsocketHost.invokeMethod.
+	// Script plugins still use the 10s host execution cap inside ScriptPlugin.
+	healthQueryTimeout = 30 * time.Second
 )
 
 type healthOptions struct {
@@ -55,7 +58,11 @@ type healthResult struct {
 	Stage      string   `json:"stage,omitempty"`
 	Error      string   `json:"error,omitempty"`
 	DurationMs int64    `json:"durationMs"`
+	InitMs     int64    `json:"initMs,omitempty"`
+	QueryMs    int64    `json:"queryMs,omitempty"`
 	Queries    []string `json:"queries,omitempty"`
+	hasInitMs  bool
+	hasQueryMs bool
 }
 
 type healthReport struct {
@@ -152,6 +159,8 @@ func runStorePluginHealth(ctx context.Context, opts healthOptions) (healthReport
 		opts.PerPluginTimeout = defaultHealthTimeout
 	}
 
+	fmt.Printf("plugin health timeouts: plugin=%s query=%s\n", opts.PerPluginTimeout, healthQueryTimeout)
+
 	dataDir, err := bootstrapPluginHealth(ctx, opts.DataDir)
 	if err != nil {
 		return healthReport{}, err
@@ -236,7 +245,7 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 	started := time.Now()
 	result := healthResult{
 		Id:      manifest.Id,
-		Name:    manifest.Name,
+		Name:    pluginDisplayName(manifest, nil),
 		Version: manifest.Version,
 		Runtime: string(manifest.Runtime),
 	}
@@ -258,6 +267,7 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 
 	instance := plugin.GetPluginManager().GetPluginInstanceById(manifest.Id)
 	defer uninstallCheckedPlugin(ctx, instance)
+	result.Name = pluginDisplayName(manifest, instance)
 
 	if instance == nil {
 		result.Status = healthStatusFailed
@@ -268,16 +278,23 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 	}
 
 	if err := plugin.GetPluginManager().WaitPluginInit(ctx, manifest.Id); err != nil {
+		recordInitDuration(&result, instance)
 		result.Status = healthStatusFailed
 		result.Stage = healthStageInit
 		result.Error = err.Error()
 		result.DurationMs = time.Since(started).Milliseconds()
 		return result
 	}
+	recordInitDuration(&result, instance)
 
 	for _, query := range buildHealthProbeQueries(instance) {
 		result.Queries = append(result.Queries, query.RawQuery)
-		if err := probePluginQuery(ctx, instance, query); err != nil {
+		queryCtx, queryCancel := context.WithTimeout(ctx, healthQueryTimeout)
+		queryStarted := time.Now()
+		err := probePluginQuery(queryCtx, instance, query)
+		recordQueryDuration(&result, time.Since(queryStarted))
+		queryCancel()
+		if err != nil {
 			result.Status = healthStatusFailed
 			result.Stage = healthStageQuery
 			result.Error = fmt.Sprintf("%s: %s", query.RawQuery, err.Error())
@@ -357,7 +374,7 @@ func selectManifests(manifests []plugin.StorePluginManifest, pluginIDs []string)
 		if matchesPluginFilter(manifest, pluginIDs) {
 			selected = append(selected, manifest)
 			seen[strings.ToLower(manifest.Id)] = true
-			seen[strings.ToLower(manifest.Name)] = true
+			seen[strings.ToLower(pluginDisplayName(manifest, nil))] = true
 		}
 	}
 
@@ -384,7 +401,9 @@ func matchesPluginFilter(manifest plugin.StorePluginManifest, pluginIDs []string
 		if id == "" {
 			continue
 		}
-		if strings.EqualFold(manifest.Id, id) || strings.EqualFold(manifest.Name, id) {
+		if strings.EqualFold(manifest.Id, id) ||
+			strings.EqualFold(manifest.Name, id) ||
+			strings.EqualFold(pluginDisplayName(manifest, nil), id) {
 			return true
 		}
 	}
@@ -397,13 +416,38 @@ func skipUnsupportedOS(manifest plugin.StorePluginManifest) (healthResult, bool)
 	}
 	return healthResult{
 		Id:      manifest.Id,
-		Name:    manifest.Name,
+		Name:    pluginDisplayName(manifest, nil),
 		Version: manifest.Version,
 		Runtime: string(manifest.Runtime),
 		Status:  healthStatusSkipped,
 		Stage:   healthStageOS,
 		Error:   fmt.Sprintf("unsupported on %s", util.GetCurrentPlatform()),
 	}, true
+}
+
+// pluginDisplayName prefers the English name from the installed plugin.json,
+// then the store manifest I18n map, and never prints a raw i18n: key.
+func pluginDisplayName(manifest plugin.StorePluginManifest, instance *plugin.Instance) string {
+	if instance != nil {
+		if name := resolvedEnglishName(instance.Metadata.GetNameEn(context.Background())); name != "" {
+			return name
+		}
+	}
+	if name := resolvedEnglishName(manifest.GetNameEnUs()); name != "" {
+		return name
+	}
+	if name := resolvedEnglishName(manifest.Name); name != "" {
+		return name
+	}
+	return manifest.Id
+}
+
+func resolvedEnglishName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.HasPrefix(name, "i18n:") {
+		return ""
+	}
+	return name
 }
 
 func buildHealthProbeQueries(instance *plugin.Instance) []plugin.Query {
@@ -444,17 +488,53 @@ func writeHealthReport(path string, report healthReport) error {
 	return nil
 }
 
+func recordInitDuration(result *healthResult, instance *plugin.Instance) {
+	if instance == nil || instance.InitStartTimestamp == 0 || instance.InitFinishedTimestamp == 0 {
+		return
+	}
+	ms := instance.InitFinishedTimestamp - instance.InitStartTimestamp
+	if ms < 0 {
+		return
+	}
+	result.InitMs = ms
+	result.hasInitMs = true
+}
+
+func recordQueryDuration(result *healthResult, elapsed time.Duration) {
+	ms := elapsed.Milliseconds()
+	if ms < 0 {
+		return
+	}
+	result.QueryMs += ms
+	result.hasQueryMs = true
+}
+
+func formatTimingSuffix(result healthResult) string {
+	var parts []string
+	if result.hasInitMs {
+		parts = append(parts, fmt.Sprintf("%dms@init", result.InitMs))
+	}
+	if result.hasQueryMs {
+		parts = append(parts, fmt.Sprintf("%dms@query", result.QueryMs))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, " ")
+}
+
 func formatHealthResultLine(result healthResult) string {
+	timing := formatTimingSuffix(result)
 	switch result.Status {
 	case healthStatusPassed:
-		return fmt.Sprintf("[PASS] %s %s (%s)", result.Name, result.Version, result.Runtime)
+		return fmt.Sprintf("[PASS] %s %s (%s)%s", result.Name, result.Version, result.Runtime, timing)
 	case healthStatusSkipped:
 		return fmt.Sprintf("[SKIP] %s %s: %s", result.Name, result.Version, result.Error)
 	default:
 		if result.Stage == "" {
-			return fmt.Sprintf("[FAIL] %s %s: %s", result.Name, result.Version, result.Error)
+			return fmt.Sprintf("[FAIL] %s %s: %s%s", result.Name, result.Version, result.Error, timing)
 		}
-		return fmt.Sprintf("[FAIL] %s %s [%s]: %s", result.Name, result.Version, result.Stage, result.Error)
+		return fmt.Sprintf("[FAIL] %s %s [%s]: %s%s", result.Name, result.Version, result.Stage, result.Error, timing)
 	}
 }
 

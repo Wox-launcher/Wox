@@ -43,16 +43,55 @@ func TestLoadStoreManifestsNormalizesRuntime(t *testing.T) {
 	assert.Equal(t, plugin.PLUGIN_RUNTIME_SCRIPT, manifests[1].Runtime)
 }
 
-func TestSelectManifestsReportsMissingFilters(t *testing.T) {
-	manifests := []plugin.StorePluginManifest{
-		{Id: "aaa", Name: "Alpha"},
-		{Id: "bbb", Name: "Beta"},
+func TestPluginDisplayNameUsesStoreEnglishI18n(t *testing.T) {
+	manifest := plugin.StorePluginManifest{
+		Id:   "9014abc5-7a57-46c4-8961-abf3d8f1b008",
+		Name: "i18n:plugin_name",
+		I18n: map[string]map[string]string{
+			"en_US": {"plugin_name": "Color Picker"},
+			"zh_CN": {"plugin_name": "取色器"},
+		},
 	}
 
-	selected, missing := selectManifests(manifests, []string{"Alpha", "missing"})
+	assert.Equal(t, "Color Picker", pluginDisplayName(manifest, nil))
+}
+
+func TestPluginDisplayNamePrefersInstalledPluginJSON(t *testing.T) {
+	manifest := plugin.StorePluginManifest{
+		Id:   "id",
+		Name: "i18n:plugin_name",
+		I18n: map[string]map[string]string{
+			"en_US": {"plugin_name": "Store Name"},
+		},
+	}
+	instance := &plugin.Instance{
+		Metadata: plugin.Metadata{
+			Name: "i18n:plugin_name",
+			I18n: map[string]map[string]string{
+				"en_US": {"plugin_name": "Unsplash"},
+			},
+		},
+	}
+
+	assert.Equal(t, "Unsplash", pluginDisplayName(manifest, instance))
+}
+
+func TestSelectManifestsMatchesEnglishName(t *testing.T) {
+	manifests := []plugin.StorePluginManifest{
+		{Id: "aaa", Name: "Alpha"},
+		{
+			Id:   "bbb",
+			Name: "i18n:plugin_name",
+			I18n: map[string]map[string]string{
+				"en_US": {"plugin_name": "Kill Process"},
+			},
+		},
+	}
+
+	selected, missing := selectManifests(manifests, []string{"Kill Process", "missing"})
 
 	require.Len(t, selected, 1)
-	assert.Equal(t, "aaa", selected[0].Id)
+	assert.Equal(t, "bbb", selected[0].Id)
 	require.Len(t, missing, 1)
 	assert.Equal(t, healthStatusFailed, missing[0].Status)
 	assert.Equal(t, healthStageCatalog, missing[0].Stage)
@@ -81,6 +120,20 @@ func TestSkipUnsupportedOS(t *testing.T) {
 
 	_, skipped = skipUnsupportedOS(plugin.StorePluginManifest{Id: "z", Name: "Z"})
 	assert.False(t, skipped)
+}
+
+func TestFormatHealthResultLineIncludesInitAndQueryDuration(t *testing.T) {
+	line := formatHealthResultLine(healthResult{
+		Name:       "Unsplash",
+		Version:    "0.0.1",
+		Runtime:    "PYTHON",
+		Status:     healthStatusPassed,
+		InitMs:     10,
+		QueryMs:    8,
+		hasInitMs:  true,
+		hasQueryMs: true,
+	})
+	assert.Equal(t, "[PASS] Unsplash 0.0.1 (PYTHON) 10ms@init 8ms@query", line)
 }
 
 func TestWriteHealthReportRoundTrip(t *testing.T) {
