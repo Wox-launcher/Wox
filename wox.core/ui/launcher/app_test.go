@@ -662,6 +662,93 @@ func TestRequestMRUPreservesVisibleResultsDuringTransition(t *testing.T) {
 	}
 }
 
+// newRetainedMRUTestApp reproduces the launcher state the smoke suite hits when it
+// clears a query that produced results: the default StartPage is "mru", so the
+// transition keeps the previous results visible instead of blanking the list.
+func newRetainedMRUTestApp(t *testing.T) *App {
+	t.Helper()
+	app := New(false, requestMRUTestServices{})
+	app.uiCall = nil
+	t.Cleanup(app.cancel)
+	app.show = showAppParams{StartPage: "mru"}
+	app.visible = true
+	app.query = newInputQuery("1+1")
+	app.editor = woxui.NewTextEditor("1+1")
+	app.results = []queryResult{{ID: "calculator", QueryID: app.query.QueryID}}
+	app.resultsQueryID = app.query.QueryID
+	app.selected = 0
+	return app
+}
+
+func TestEmptyMRUResponseDropsRetainedResults(t *testing.T) {
+	app := newRetainedMRUTestApp(t)
+
+	if err := app.requestMRU(); err != nil {
+		t.Fatalf("request MRU: %v", err)
+	}
+	mruQueryID := app.query.QueryID
+	if app.queryTransitionTimer == nil {
+		t.Fatal("MRU request did not retain the previous results behind a transition timer")
+	}
+	app.queryTransitionTimer.Stop()
+	app.queryTransitionTimer = nil
+
+	app.applyResults(mruQueryID, nil, &queryLayout{}, nil, nil, 0, true)
+
+	if len(app.results) != 0 || app.resultsQueryID != mruQueryID || app.selected != -1 {
+		t.Fatalf("state after an empty MRU response = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
+	}
+}
+
+func TestQueryTransitionTimerDropsRetainedResultsWhenMRUNeverApplies(t *testing.T) {
+	app := newRetainedMRUTestApp(t)
+
+	if err := app.requestMRU(); err != nil {
+		t.Fatalf("request MRU: %v", err)
+	}
+	mruQueryID := app.query.QueryID
+
+	app.showPendingQueryResults(mruQueryID, false)
+
+	if len(app.results) != 0 || app.resultsQueryID != "" || app.selected != -1 {
+		t.Fatalf("state after the transition timer = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
+	}
+}
+
+// TestStaleMRUResponseStillDropsRetainedResults covers the interleaving the smoke
+// suite produces by clearing and retyping a query faster than the transition
+// window: a newer query replaces the MRU generation before its empty response
+// arrives, so the stale response is discarded and only the newer transition can
+// still drop the retained results.
+func TestStaleMRUResponseStillDropsRetainedResults(t *testing.T) {
+	app := newRetainedMRUTestApp(t)
+
+	if err := app.requestMRU(); err != nil {
+		t.Fatalf("request MRU: %v", err)
+	}
+	staleQueryID := app.query.QueryID
+
+	app.applyQueryTextChangeLocked("h 1+1")
+	if app.query.QueryID == staleQueryID {
+		t.Fatal("query text change reused the MRU generation")
+	}
+	app.applyResults(staleQueryID, nil, &queryLayout{}, nil, nil, 0, true)
+	if len(app.results) == 0 {
+		t.Fatal("stale MRU response cleared results for a newer query generation")
+	}
+
+	if app.queryTransitionTimer == nil {
+		t.Fatal("newer query did not retain the previous results behind a transition timer")
+	}
+	app.queryTransitionTimer.Stop()
+	app.queryTransitionTimer = nil
+	app.showPendingQueryResults(app.query.QueryID, false)
+
+	if len(app.results) != 0 {
+		t.Fatalf("retained results after the newer transition = %#v, want cleared", app.results)
+	}
+}
+
 type sendQueryRecorderServices struct {
 	contract.Services
 	startedQuery common.PlainQuery

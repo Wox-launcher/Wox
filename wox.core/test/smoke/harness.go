@@ -62,11 +62,22 @@ func sharedClient(t *testing.T, ctx context.Context) *automationdriver.Client {
 	return client
 }
 
-// ShowLauncher presents the launcher and waits for its query input.
+// ShowLauncher presents the launcher and waits for a visible window carrying its query input.
+//
+// The window state has to be confirmed before the semantics tree is trusted. A
+// hidden window stops producing frames but keeps answering snapshots from its
+// last one, so every launcher node, including stale results, stays visible to
+// automation. A tree-only wait is therefore satisfied by a launcher that never
+// came back, and each following wait then polls a frozen tree until it times out.
 func ShowLauncher(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	t.Helper()
 	if err := client.Show(ctx); err != nil {
 		t.Fatalf("show launcher: %v", err)
+	}
+	if _, err := client.WaitForWindowState(ctx, "primary", func(state automationdriver.WindowState) bool {
+		return state.Exists && state.Visible && state.Lifecycle == "visible"
+	}); err != nil {
+		t.Fatalf("wait for visible launcher window: %v", err)
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		_, found := automationdriver.Find(snapshot, "launcher.query.input")

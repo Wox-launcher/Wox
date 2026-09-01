@@ -192,6 +192,18 @@ func recordSettingsQuery(t *testing.T, ctx context.Context, client *automationdr
 	if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("activate calculator result to record query history: %v", err)
 	}
+	// Activating a result hides the launcher asynchronously, so the next show has to
+	// wait for a settled hidden window instead of racing it. Losing that race left
+	// the launcher hidden while its last frame still advertised the activated query
+	// and result, which no later wait could clear.
+	if err := client.Hide(ctx); err != nil {
+		t.Fatalf("hide launcher after recording query history: %v", err)
+	}
+	if _, err := client.WaitForWindowState(ctx, "primary", func(state automationdriver.WindowState) bool {
+		return state.Exists && !state.Visible
+	}); err != nil {
+		t.Fatalf("wait for launcher to hide after recording query history: %v", err)
+	}
 	waitForRecordedHistory(t, ctx, client)
 }
 
