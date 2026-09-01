@@ -10,7 +10,7 @@
 
 ## A launcher that stays out of your way
 
-You already know what you want to do. Wox helps you get there: open an app, find a file, run an action — then get out of the way.
+![Confetti](./screenshots/confetti.png)
 
 Wox is a **fully native**, open-source launcher for macOS, Linux, and Windows — with GPU rendering on every platform. Everyday use typically stays around **~150 MB of memory**, so it can live in the background without feeling like another heavy desktop app.
 
