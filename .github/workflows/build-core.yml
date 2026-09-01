@@ -102,8 +102,9 @@ permissions:
   actions: write
   id-token: write
   attestations: write
+  artifact-metadata: write
 
-# GitHub-owned checkout/setup actions use Node 24-compatible majors here; project toolchains remain pinned by each setup step's inputs.
+# GitHub-owned checkout/setup/attest actions use Node 24-compatible majors here; project toolchains remain pinned by each setup step's inputs. Dependency caches are off because GitHub Cache restore/save fails reliably in this repo.
 jobs:
   test:
     if: ${{ inputs.run_tests }}
@@ -145,8 +146,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Test
         run: xvfb-run -a make test
 
@@ -161,8 +161,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -171,10 +170,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: |
-            wox.plugin.host.nodejs/pnpm-lock.yaml
-            wox.plugin.nodejs/pnpm-lock.yaml
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -182,7 +177,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
-          enable-cache: true
+          enable-cache: false
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -249,7 +244,7 @@ jobs:
           MACOS_SIGN_IDENTITY: ${{ inputs.require_macos_notarize && secrets.MACOS_SIGN_IDENTITY || '' }}
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-mac-arm64.dmg
 
@@ -278,8 +273,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -288,10 +282,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: |
-            wox.plugin.host.nodejs/pnpm-lock.yaml
-            wox.plugin.nodejs/pnpm-lock.yaml
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -299,7 +289,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
-          enable-cache: true
+          enable-cache: false
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -366,7 +356,7 @@ jobs:
           MACOS_SIGN_IDENTITY: ${{ inputs.require_macos_notarize && secrets.MACOS_SIGN_IDENTITY || '' }}
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-mac-amd64.dmg
 
@@ -415,8 +405,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -427,10 +416,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: |
-            wox.plugin.host.nodejs/pnpm-lock.yaml
-            wox.plugin.nodejs/pnpm-lock.yaml
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -439,7 +424,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
-          enable-cache: true
+          enable-cache: false
 
       - name: Build unsigned file index service
         if: ${{ inputs.require_windows_signpath }}
@@ -528,7 +513,7 @@ jobs:
             }
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-windows-amd64.exe
 
@@ -578,7 +563,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
+          cache: false
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -587,10 +572,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: |
-            wox.plugin.host.nodejs/pnpm-lock.yaml
-            wox.plugin.nodejs/pnpm-lock.yaml
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -598,7 +579,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
-          enable-cache: true
+          enable-cache: false
       - name: Download appimagetool
         run: |
           curl -L -o appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -608,19 +589,19 @@ jobs:
         env:
           APPIMAGE_TOOL: ./appimagetool.AppImage
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-linux-amd64
       - name: Attest AppImage provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-linux-amd64.AppImage
       - name: Attest deb provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-linux-amd64.deb
       - name: Attest rpm provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest@v4
         with:
           subject-path: ./release/wox-linux-amd64.rpm
       - name: Upload artifact

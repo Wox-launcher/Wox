@@ -38,8 +38,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: "pnpm"
-          cache-dependency-path: "www/pnpm-lock.yaml"
 
       - name: Install dependencies
         run: cd www && pnpm install --frozen-lockfile

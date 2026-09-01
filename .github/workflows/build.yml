@@ -10,6 +10,7 @@ permissions:
   actions: write
   id-token: write
   attestations: write
+  artifact-metadata: write
 
 jobs:
   build:

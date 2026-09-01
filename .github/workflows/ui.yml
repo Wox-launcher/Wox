@@ -46,8 +46,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Test UI contracts
         run: make test-go-ui-unit
 
@@ -69,8 +68,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Compile native UI packages
         shell: bash
         working-directory: wox.core
@@ -104,8 +102,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Run native smoke
         env:
           GO_UI_SMOKE_RUNNER: xvfb-run -a
@@ -175,8 +172,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
-          cache: true
-          cache-dependency-path: wox.core/go.sum
+          cache: false
       - name: Run native smoke
         shell: bash
         env:
