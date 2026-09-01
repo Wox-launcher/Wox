@@ -15,6 +15,7 @@ import (
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/screen"
 	utilselection "wox/util/selection"
 )
 
@@ -486,6 +487,32 @@ func TestLauncherWindowOriginBottomQueryKeepsShowBottomFixed(t *testing.T) {
 	x, y, anchor = launcherWindowOrigin(params, woxui.Rect{}, 80, true, anchor)
 	if x != 100 || y != 500 || anchor != 580 {
 		t.Fatalf("initial-height show origin = %.0f,%.0f anchor %.0f, want 100,500 anchor 580", x, y, anchor)
+	}
+}
+
+func TestConstrainLauncherHeightToWorkArea(t *testing.T) {
+	displays := []screen.Display{
+		{ID: "left", Bounds: screen.Rect{X: -1280, Y: -720, Width: 1280, Height: 720}, WorkArea: screen.Rect{X: -1280, Y: -680, Width: 1280, Height: 680}, Scale: 1.25},
+		{ID: "main", Bounds: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1080}, WorkArea: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}, Scale: 2, Primary: true},
+	}
+
+	y, height, anchor := constrainLauncherHeightToWorkArea(false, 400, 850, 760, 500, 75, 0, displays)
+	if y != 850 || height != 190 || anchor != 0 {
+		t.Fatalf("downward launcher = y %.0f height %.0f anchor %.0f, want 850/190/0", y, height, anchor)
+	}
+
+	y, height, anchor = constrainLauncherHeightToWorkArea(true, -1100, -600, 500, 500, 75, -480, displays)
+	if y != -680 || height != 200 || anchor != -480 {
+		t.Fatalf("upward launcher = y %.0f height %.0f anchor %.0f, want -680/200/-480", y, height, anchor)
+	}
+}
+
+func TestConstrainLauncherHeightKeepsQueryChromeInWorkArea(t *testing.T) {
+	displays := []screen.Display{{Bounds: screen.Rect{Width: 1920, Height: 1080}, WorkArea: screen.Rect{Width: 1920, Height: 1040}, Primary: true}}
+
+	y, height, _ := constrainLauncherHeightToWorkArea(false, 400, 1020, 760, 500, 75, 0, displays)
+	if y != 965 || height != 75 {
+		t.Fatalf("low launcher = y %.0f height %.0f, want 965/75", y, height)
 	}
 }
 

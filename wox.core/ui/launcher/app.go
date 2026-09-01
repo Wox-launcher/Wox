@@ -20,6 +20,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/emojisearch"
+	"wox/util/screen"
 )
 
 const (
@@ -1152,6 +1153,19 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if height <= 0 {
 		height = resultRowHeight
 	}
+	minimumHeight := 0
+	if !params.HideQueryBox {
+		minimumHeight += queryAreaHeight
+	}
+	if refinementVisible {
+		minimumHeight += int(densityMetrics.refinementBarHeight)
+	}
+	if toolbarHeightIncluded {
+		minimumHeight += int(densityMetrics.toolbarHeight)
+	}
+	if minimumHeight <= 0 {
+		minimumHeight = min(height, resultRowHeight)
+	}
 	current, err := a.window.Bounds()
 	if err != nil {
 		return err
@@ -1162,12 +1176,16 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	}); err != nil {
 		return err
 	}
-	x, y, nextAnchor := launcherWindowOrigin(params, current, float32(height), useShowPosition, bottomAnchor)
+	targetHeight := float32(height)
+	x, y, nextAnchor := launcherWindowOrigin(params, current, targetHeight, useShowPosition, bottomAnchor)
+	if displays, listErr := screen.ListDisplays(); listErr == nil {
+		y, targetHeight, nextAnchor = constrainLauncherHeightToWorkArea(params.QueryBoxAtBottom, x, y, float32(width), targetHeight, float32(minimumHeight), nextAnchor, displays)
+	}
 	target := woxui.Rect{
 		X:      x,
 		Y:      y,
 		Width:  float32(width),
-		Height: float32(height),
+		Height: targetHeight,
 	}
 	if launcherBoundsEffectivelyEqual(current, target) {
 		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
@@ -1218,6 +1236,65 @@ func launcherWindowOrigin(params showAppParams, current woxui.Rect, targetHeight
 		nextAnchor = current.Y + current.Height
 	}
 	return x, nextAnchor - targetHeight, nextAnchor
+}
+
+// constrainLauncherHeightToWorkArea keeps the query chrome anchored while shrinking overflowing content into its scroll viewport.
+func constrainLauncherHeightToWorkArea(queryAtBottom bool, x, y, width, height, minimumHeight, bottomAnchor float32, displays []screen.Display) (constrainedY, constrainedHeight, constrainedBottomAnchor float32) {
+	anchorInset := max(float32(1), minimumHeight/2)
+	anchorY := y + anchorInset
+	if queryAtBottom {
+		anchorY = bottomAnchor - anchorInset
+	}
+	workArea, ok := launcherWorkAreaAt(x+width/2, anchorY, displays)
+	if !ok {
+		return y, height, bottomAnchor
+	}
+
+	workTop := float32(workArea.Y)
+	workBottom := float32(workArea.Bottom())
+	minimumHeight = min(max(0, minimumHeight), float32(workArea.Height))
+	if queryAtBottom {
+		bottomAnchor = max(workTop+minimumHeight, min(bottomAnchor, workBottom))
+		height = min(height, bottomAnchor-workTop)
+		return bottomAnchor - height, height, bottomAnchor
+	}
+
+	y = max(workTop, min(y, workBottom-minimumHeight))
+	height = min(height, workBottom-y)
+	return y, height, bottomAnchor
+}
+
+// launcherWorkAreaAt resolves the nearest logical display work area for a launcher anchor.
+func launcherWorkAreaAt(x, y float32, displays []screen.Display) (screen.Rect, bool) {
+	if len(displays) == 0 {
+		return screen.Rect{}, false
+	}
+
+	best := screen.Rect{}
+	bestDistance := float32(-1)
+	bestPrimary := false
+	for _, display := range displays {
+		bounds := display.Bounds
+		if bounds.IsEmpty() {
+			bounds = display.WorkArea
+		}
+		if bounds.IsEmpty() {
+			continue
+		}
+		dx := max(float32(bounds.X)-x, 0, x-float32(bounds.Right()))
+		dy := max(float32(bounds.Y)-y, 0, y-float32(bounds.Bottom()))
+		distance := dx*dx + dy*dy
+		if bestDistance >= 0 && (distance > bestDistance || distance == bestDistance && bestPrimary) {
+			continue
+		}
+		best = display.WorkArea
+		if best.IsEmpty() {
+			best = bounds
+		}
+		bestDistance = distance
+		bestPrimary = display.Primary
+	}
+	return best, bestDistance >= 0
 }
 
 // launcherBoundsEffectivelyEqual tolerates DPI round-trip noise from SetBounds/Bounds.
