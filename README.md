@@ -8,8 +8,6 @@
 <a href="https://github.com/Wox-launcher/Wox/releases"><img src="https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg" alt="Downloads"></a>
 </p>
 
-## A launcher that stays out of your way
-
 ![Confetti](./screenshots/confetti.png)
 
 Wox is a **fully native**, open-source launcher for macOS, Linux, and Windows — with GPU rendering on every platform. Everyday use typically stays around **~150 MB of memory**, so it can live in the background without feeling like another heavy desktop app.
@@ -18,16 +16,14 @@ Local search, keyboard-first actions, and an extensible plugin system stay in on
 
 [Download Wox](https://github.com/Wox-launcher/Wox/releases) · [Browse plugins](https://www.woxlauncher.com/store/plugins) · [Read the docs](https://www.woxlauncher.com/)
 
-> Press <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd>, type what you need, and press <kbd>Enter</kbd>.
-
 https://github.com/user-attachments/assets/15ad1370-bbc0-4f96-8729-56fcc769c41c
 
 ## Why Wox
 
-| | |
+| Feature | Description |
 | --- | --- |
 | **Fully native** | Full native GPU rendering on macOS, Linux, and Windows — not Electron, not a browser shell. |
-| **~150 MB memory** | Built to stay light while idle and during everyday queries, so the launcher can stay resident without taxing the machine. |
+| **150 MB memory** | Built to stay light while idle and during everyday queries, so the launcher can stay resident without taxing the machine. |
 | **Keyboard-first** | Open apps, find files, run actions, and finish the next step without leaving the input. |
 | **Plugin-driven** | Start with built-ins, then extend with Node.js, Python, or script plugins from the store. |
 
@@ -40,9 +36,6 @@ https://github.com/user-attachments/assets/15ad1370-bbc0-4f96-8729-56fcc769c41c
 | Windows | Scoop | `scoop install extras/wox` |
 | Windows | Chocolatey | `choco install wox` |
 | Arch Linux | AUR | `yay -S wox-bin` |
-| Debian / Ubuntu | `.deb` | Download `wox-linux-amd64.deb` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo apt install ./wox-linux-amd64.deb` |
-| Fedora / RHEL | `.rpm` | Download `wox-linux-amd64.rpm` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo dnf install ./wox-linux-amd64.rpm` |
-| openSUSE | `.rpm` | Download `wox-linux-amd64.rpm` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo zypper install ./wox-linux-amd64.rpm` |
 | macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
 
 ## Documentation
