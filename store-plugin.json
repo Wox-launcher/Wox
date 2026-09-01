@@ -1009,5 +1009,35 @@
     ],
     "DateCreated": "2026-08-31 18:54:00",
     "DateUpdated": "2026-08-31 18:54:00"
+  },
+  {
+    "Id": "c3e8a7d2-4b1f-4e6a-9d2c-8f5a1b0e7c34",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://avatars.githubusercontent.com/u/16618068?s=128",
+    "Website": "https://gist.github.com/qianlifeng/75ee2660ab0bd347623a752b0f2d4cd9",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/75ee2660ab0bd347623a752b0f2d4cd9/raw/Wox.Plugin.Script.Scoop.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/f210a5f3-e97d-42da-a8bd-da708af62c84"
+    ],
+    "SupportedOS": [
+      "Windows"
+    ],
+    "DateCreated": "2026-09-01 22:55:00",
+    "DateUpdated": "2026-09-01 22:55:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Scoop",
+        "plugin_description": "Search and manage Windows apps with Scoop"
+      },
+      "zh_CN": {
+        "plugin_name": "Scoop",
+        "plugin_description": "用 Scoop 搜索和管理 Windows 应用"
+      }
+    }
   }
 ]

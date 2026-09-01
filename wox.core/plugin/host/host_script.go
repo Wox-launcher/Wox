@@ -240,8 +240,18 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 						// Capture actionMap in closure
 						actionMapCopy := actionMap
 						queryResult.Actions = append(queryResult.Actions, plugin.QueryResultAction{
-							Name: actionName,
-							Icon: actionIcon,
+							Name:      actionName,
+							Icon:      actionIcon,
+							IsDefault: getFirstBoolFromMap(actionMapCopy, []string{"isDefault", "is_default", "IsDefault"}),
+							Hotkey: getFirstStringFromMap(actionMapCopy, []string{
+								"hotkey",
+								"Hotkey",
+							}),
+							PreventHideAfterAction: getFirstBoolFromMap(actionMapCopy, []string{
+								"preventHideAfterAction",
+								"prevent_hide_after_action",
+								"PreventHideAfterAction",
+							}),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								s.executeAction(ctx, actionMapCopy)
 							},
@@ -465,6 +475,16 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 		message := getStringFromMap(actionData, "message")
 		if message != "" {
 			s.api.Notify(ctx, message)
+		}
+		return true
+
+	case "change-query":
+		queryText := getFirstStringFromMap(actionData, []string{"query", "text", "queryText"})
+		if queryText != "" && s.api != nil {
+			s.api.ChangeQuery(ctx, common.PlainQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: queryText,
+			})
 		}
 		return true
 
@@ -738,6 +758,30 @@ func (s *ScriptPlugin) buildRuntimeIssueMarkdown(ctx context.Context, runtimeNam
 		displayRuntimeName, _ := s.getRuntimeDisplayName(runtimeName)
 		return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_markdown"), displayRuntimeName, displayRuntimeName, displayRuntimeName)
 	}
+}
+
+func getBoolFromMap(m map[string]interface{}, key string) (bool, bool) {
+	value, exists := m[key]
+	if !exists {
+		return false, false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed, true
+	case string:
+		return strings.EqualFold(typed, "true"), true
+	default:
+		return false, true
+	}
+}
+
+func getFirstBoolFromMap(m map[string]interface{}, keys []string) bool {
+	for _, key := range keys {
+		if value, exists := getBoolFromMap(m, key); exists {
+			return value
+		}
+	}
+	return false
 }
 
 // Helper functions to safely extract values from maps

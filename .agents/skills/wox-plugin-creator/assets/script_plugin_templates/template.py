@@ -60,6 +60,9 @@ Available methods in WoxAPI:
 Actions:
 - Use "actions" field with an array of action objects (even for single action)
 - Each action can have a "name" field (displayed in UI, defaults to "Execute")
+- Set "isDefault": true to make Enter run that action. The first action is the default if omitted.
+- Set "hotkey" for extra shortcuts, such as "ctrl+enter"
+- Set "preventHideAfterAction": true on an action to keep Wox open after it runs
 
 Built-in Actions (handled automatically by Wox, no need to implement in action):
 - copy-to-clipboard: Copy text to clipboard
@@ -70,6 +73,8 @@ Built-in Actions (handled automatically by Wox, no need to implement in action):
   Usage: {"id": "open-directory", "path": "/path/to/directory"}
 - notify: Show notification
   Usage: {"id": "notify", "message": "notification message"}
+- change-query: Replace the current query. Set preventHideAfterAction to keep Wox open.
+  Usage: {"id": "change-query", "query": "my keyword ", "preventHideAfterAction": true}
 
 Custom Actions:
 - Define your own action IDs and handle them in action()
@@ -126,6 +131,10 @@ class WoxPluginBase:
         url: str
         path: str
         message: str
+        query: str
+        isDefault: bool
+        hotkey: str
+        preventHideAfterAction: bool
         data: dict[str, str]
 
     class TailItem(TypedDict, total=False):
@@ -230,7 +239,7 @@ class WoxPluginBase:
         """
         Handle action requests (OPTIONAL - only needed for custom actions)
 
-        Built-in actions (copy-to-clipboard, open-url, open-directory, notify) are handled
+        Built-in actions (copy-to-clipboard, open-url, open-directory, notify, change-query) are handled
         automatically by Wox. You only need to implement this method if you have custom actions.
 
         Note: This method is called as a hook for ALL actions (built-in and custom), so you can

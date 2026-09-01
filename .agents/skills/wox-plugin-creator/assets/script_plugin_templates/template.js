@@ -52,6 +52,9 @@
  * Actions:
  * - Use "actions" field with an array of action objects (even for single action)
  * - Each action can have a "name" field (displayed in UI, defaults to "Execute")
+ * - Set isDefault: true to make Enter run that action. The first action is the default if omitted.
+ * - Set hotkey for extra shortcuts, such as "ctrl+enter"
+ * - Set preventHideAfterAction: true on an action to keep Wox open after it runs
  *
  * Built-in Actions (handled automatically by Wox, no need to implement in handleAction):
  * - copy-to-clipboard: Copy text to clipboard
@@ -62,6 +65,8 @@
  *   Usage: {id: "open-directory", path: "/path/to/directory"}
  * - notify: Show notification
  *   Usage: {id: "notify", message: "notification message"}
+ * - change-query: Replace the current query. Set preventHideAfterAction to keep Wox open.
+ *   Usage: {id: "change-query", query: "my keyword ", preventHideAfterAction: true}
  *
  * Custom Actions:
  * - Define your own action IDs and handle them in handleAction()
