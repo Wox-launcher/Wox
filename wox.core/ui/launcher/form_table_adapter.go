@@ -61,6 +61,9 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 		}
 	}
 	if column.Type == "aiSkillSource" {
+		if strings.EqualFold(value, "builtin") {
+			return a.translate("i18n:ui_ai_skill_type_builtin")
+		}
 		if strings.EqualFold(value, "remote") {
 			return a.translate("i18n:ui_ai_skill_type_remote")
 		}
@@ -279,7 +282,7 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 		for columnIndex, column := range columns {
 			cells[columnIndex] = a.formTableViewCell(column, current.row, theme, imageScale)
 		}
-		viewRows = append(viewRows, launcherview.FormTableRow{Index: current.index, Cells: cells})
+		viewRows = append(viewRows, launcherview.FormTableRow{Index: current.index, ReadOnly: formTableSkillRowReadOnly(definition, current.row), Cells: cells})
 	}
 	return viewRows
 }

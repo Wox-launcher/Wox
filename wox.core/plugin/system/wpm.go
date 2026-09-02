@@ -59,6 +59,19 @@ var scriptPluginTemplates = []pluginTemplate{
 	},
 }
 
+var singleFilePluginTemplates = []pluginTemplate{
+	{
+		Runtime: plugin.PLUGIN_RUNTIME_PYTHON,
+		Name:    "plugin_wpm_singlefile_template_python",
+		Url:     "template.py",
+	},
+	{
+		Runtime: plugin.PLUGIN_RUNTIME_NODEJS,
+		Name:    "plugin_wpm_singlefile_template_nodejs",
+		Url:     "template.js",
+	},
+}
+
 type LocalPlugin struct {
 	Path string
 }
@@ -502,6 +515,69 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 					},
 				},
 			}})
+	}
+
+	for _, template := range singleFilePluginTemplates {
+		templateCopy := template
+		templateDisplayName := i18n.GetI18nManager().TranslateWox(ctx, template.Name)
+		exists, fileName := w.checkSingleFilePluginExists(pluginName, template.Url)
+
+		var title, subtitle string
+		var actions []plugin.QueryResultAction
+		if exists {
+			title = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_singlefile_plugin_exists_title"), templateDisplayName)
+			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_script_plugin_exists_subtitle"), fileName)
+			actions = []plugin.QueryResultAction{
+				{
+					Name: "i18n:plugin_wpm_script_plugin_open_existing_file",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						scriptFilePath := path.Join(util.GetLocation().GetUserSingleFilePluginsDirectory(), fileName)
+						openErr := shell.Open(scriptFilePath)
+						if openErr != nil {
+							w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_file_failed"), openErr.Error()))
+						}
+					},
+				},
+				{
+					Name:                   "i18n:plugin_wpm_script_plugin_overwrite_existing_file",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						pluginName := query.Search
+						util.Go(ctx, "overwrite single-file plugin", func() {
+							w.createSingleFilePluginWithTemplate(ctx, templateCopy, pluginName, query)
+						})
+						w.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
+						})
+					},
+				},
+			}
+		} else {
+			title = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_singlefile_plugin_create_title"), templateDisplayName)
+			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin_name"), query.Search)
+			actions = []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_wpm_create",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						pluginName := query.Search
+						util.Go(ctx, "create single-file plugin", func() {
+							w.createSingleFilePluginWithTemplate(ctx, templateCopy, pluginName, query)
+						})
+					},
+				},
+			}
+		}
+
+		results = append(results, plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    title,
+			SubTitle: subtitle,
+			Icon:     wpmIcon,
+			Group:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_group_singlefile_plugins"),
+			Actions:  actions,
+		})
 	}
 
 	// Add script plugin templates with group
@@ -1454,6 +1530,160 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 		time.Sleep(300 * time.Millisecond)
 
 		// Change query to the new plugin
+		w.api.ChangeQuery(ctx, common.PlainQuery{
+			QueryType: plugin.QueryTypeInput,
+			QueryText: fmt.Sprintf("%s ", triggerKeyword),
+		})
+	})
+}
+
+func singleFilePluginFileName(pluginName string, templateFile string) string {
+	safeName := strings.TrimSpace(pluginName)
+	safeName = strings.ReplaceAll(safeName, " ", "")
+	safeName = strings.Map(func(r rune) rune {
+		if r == '.' || r == '_' || r == '-' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return -1
+	}, safeName)
+	if safeName == "" {
+		safeName = "Plugin"
+	}
+	fileExtension := ".js"
+	if templateFile == "template.py" {
+		fileExtension = ".py"
+	}
+	return "Wox.Plugin." + safeName + fileExtension
+}
+
+func (w *WPMPlugin) checkSingleFilePluginExists(pluginName string, templateFile string) (bool, string) {
+	fileName := singleFilePluginFileName(pluginName, templateFile)
+	filePath := path.Join(util.GetLocation().GetUserSingleFilePluginsDirectory(), fileName)
+	if _, err := os.Stat(filePath); err == nil {
+		return true, fileName
+	}
+	return false, fileName
+}
+
+func (w *WPMPlugin) createSingleFilePluginWithTemplate(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
+	w.api.Notify(ctx, "i18n:plugin_wpm_creating_singlefile_plugin")
+
+	directory := util.GetLocation().GetUserSingleFilePluginsDirectory()
+	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create single-file plugin directory: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_create_script_dir_failed: %s", err.Error()))
+		return
+	}
+
+	templateFile := template.Url
+	w.api.Notify(ctx, "i18n:plugin_wpm_copying_template")
+	templatePath := path.Join(util.GetLocation().GetSingleFilePluginTemplatesDirectory(), templateFile)
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read template file: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_read_template_failed: %s", err.Error()))
+		return
+	}
+
+	cleanPluginName := strings.TrimSpace(pluginName)
+	if cleanPluginName == "" {
+		w.api.Log(ctx, plugin.LogLevelError, "Plugin name is empty")
+		w.api.Notify(ctx, "i18n:plugin_wpm_plugin_name_empty")
+		return
+	}
+
+	scriptFileName := singleFilePluginFileName(cleanPluginName, templateFile)
+	scriptFilePath := path.Join(directory, scriptFileName)
+	if _, err := os.Stat(scriptFilePath); err == nil {
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_overwriting_script_plugin: %s", scriptFileName))
+	}
+
+	triggerKeyword := strings.ToLower(strings.ReplaceAll(cleanPluginName, " ", ""))
+	if len(triggerKeyword) > 10 {
+		triggerKeyword = triggerKeyword[:10]
+	}
+	triggerKeywordsJSON, err := json.Marshal([]string{triggerKeyword})
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error()))
+		return
+	}
+
+	author := "Wox User"
+	if currentUser, userErr := user.Current(); userErr == nil {
+		if currentUser.Name != "" {
+			author = currentUser.Name
+		} else if currentUser.Username != "" {
+			author = currentUser.Username
+		}
+	}
+
+	templateData := struct {
+		PluginID            string
+		Name                string
+		Author              string
+		Description         string
+		TriggerKeywordsJSON string
+		Runtime             string
+		MinWoxVersion       string
+	}{
+		PluginID:            uuid.NewString(),
+		Name:                cleanPluginName,
+		Author:              author,
+		Description:         fmt.Sprintf("A single-file SDK plugin for %s", cleanPluginName),
+		TriggerKeywordsJSON: string(triggerKeywordsJSON),
+		Runtime:             string(template.Runtime),
+		MinWoxVersion:       plugin.SingleFilePluginMinWoxVersion,
+	}
+
+	scriptTemplate, err := texttmpl.New("single-file-plugin").Option("missingkey=error").Parse(string(templateContent))
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error()))
+		return
+	}
+
+	var renderedTemplate bytes.Buffer
+	if err := scriptTemplate.Execute(&renderedTemplate, templateData); err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error()))
+		return
+	}
+
+	pluginManager := plugin.GetPluginManager()
+	pluginManager.IgnoreSingleFileWatch(scriptFilePath)
+	if err := os.WriteFile(scriptFilePath, renderedTemplate.Bytes(), 0644); err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write plugin file: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_create_script_file_failed: %s", err.Error()))
+		return
+	}
+
+	w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_singlefile_plugin_created_success: %s", scriptFileName))
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Created single-file plugin: %s", scriptFilePath))
+	if openErr := shell.Open(scriptFilePath); openErr != nil {
+		w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_file_failed"), openErr.Error()))
+	}
+
+	util.Go(ctx, "load single-file plugin immediately", func() {
+		metadata, parseErr := pluginManager.ParseSingleFilePluginMetadata(ctx, scriptFilePath)
+		if parseErr != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse single-file metadata: %s", parseErr.Error()))
+			w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword))
+			return
+		}
+		if loadErr := pluginManager.ReloadPlugin(ctx, metadata); loadErr != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load single-file plugin: %s", loadErr.Error()))
+			w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword))
+			return
+		}
+		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Successfully loaded single-file plugin: %s", metadata.GetName(ctx)))
+		initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		if initErr := pluginManager.WaitPluginInit(initCtx, metadata.Id); initErr != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Single-file plugin failed to initialize: %s", initErr.Error()))
+			w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword))
+			return
+		}
 		w.api.ChangeQuery(ctx, common.PlainQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: fmt.Sprintf("%s ", triggerKeyword),

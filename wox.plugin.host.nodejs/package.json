@@ -6,11 +6,12 @@
     "type": "git",
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
-  "scripts": {
-    "build": "node ./scripts/clean.mjs && ncc build src/index.ts -o dist && babel dist --out-dir dist",
-    "clean": "node ./scripts/clean.mjs",
-    "clean:all": "npm run clean && (rm -r ./node_modules || true)"
-  },
+    "scripts": {
+      "build": "node ./scripts/clean.mjs && ncc build src/index.ts -o dist && babel dist --out-dir dist",
+      "clean": "node ./scripts/clean.mjs",
+      "clean:all": "npm run clean && (rm -r ./node_modules || true)",
+      "test": "node --test tests/*.cjs"
+    },
   "devDependencies": {
     "@babel/cli": "^7.22.15",
     "@babel/core": "^7.22.20",

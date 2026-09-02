@@ -10,7 +10,7 @@ Wox plugins are categorized by their installation type:
 
 ## Plugin Implementation Types
 
-Wox supports two different plugin implementation approaches:
+Wox supports three plugin implementation approaches:
 
 If you use Codex or another compatible agent, see [AI Skills For Plugin Development](./ai-skills.md).
 
@@ -44,6 +44,25 @@ Script plugins are lightweight, single-file plugins that are perfect for simple 
 - No support for plugin settings interface
 - Execution timeout limit (10 seconds)
 
+### Single-file SDK Plugin
+
+Single-file SDK plugins are one `.py` or CommonJS `.js` file with the full Wox Public API. They load into the existing Python or Node.js runtime host.
+
+See the [Single-file SDK Plugin](./single-file-plugin.md) guide.
+
+**Features:**
+
+- One file, same as a script plugin
+- Persistent host process: query/action do not start a new interpreter
+- Full Public API: settings, AI, UpdateResult, PushResults, deep links, unload callbacks
+- Save to reload
+- Python can import `wox_plugin`; Node.js uses `params.API`
+
+**Limitations:**
+
+- No pip/npm dependencies, extra files, or relative images
+- Node.js first version is CommonJS only
+
 ### Full-featured Plugin
 
 Full-featured plugins are comprehensive plugins designed for complex application scenarios and high-performance requirements.
@@ -76,22 +95,24 @@ Full-featured plugins are comprehensive plugins designed for complex application
 
 ### Choose Script Plugin when:
 
-- ✅ Functionality is relatively simple with clear logic
-- ✅ No complex state management required
-- ✅ Query frequency is not high
-- ✅ Rapid prototyping and personal tools
-- ✅ Learning Wox plugin development
-- ✅ Single-execution tasks
+- Functionality is relatively simple with clear logic
+- No complex state management required
+- You only need to wrap a command or one-shot script
+- Rapid prototyping and personal tools
+- Learning Wox plugin development
+
+### Choose Single-file SDK Plugin when:
+
+- You want one file, but need the Wox API
+- You need settings, AI, UpdateResult, or unload callbacks
+- You can stay on Python, or CommonJS Node.js, without extra files
 
 ### Choose Full-featured Plugin when:
 
-- ✅ Complex business logic required
-- ✅ High-frequency queries and real-time responses
-- ✅ AI integration functionality needed
-- ✅ Custom settings interface required
-- ✅ Complex async operations
-- ✅ High performance requirements
-- ✅ Commercial plugin development
+- You need dependencies, resources, TypeScript, or multiple files
+- Complex business logic required
+- High-frequency queries and real-time responses
+- Commercial plugin development
 
 ## Plugin Commands
 

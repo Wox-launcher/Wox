@@ -195,6 +195,7 @@ _sync_sdk_versions:
 # Ensure required resource directories exist with dummy files for go:embed
 ensure-resources:
 	@echo "Ensuring required resource directories exist..."
+	@$(MAKE) -C wox.core sync-ai-skills
 	@mkdir -p wox.core/resource/hosts
 	@touch wox.core/resource/hosts/placeholder
 	@mkdir -p wox.core/resource/others
@@ -204,6 +205,7 @@ ensure-resources:
 # empty directory, and deleting it after tests makes the next Go build fail.
 clean-resources:
 	@rm -f wox.core/resource/hosts/placeholder
+	@rm -rf wox.core/resource/ai/skills
 
 # GNOME Software and Discover read AppStream metadata plus 64/128/256 hicolor icons from the package itself.
 _linux_package_icons:

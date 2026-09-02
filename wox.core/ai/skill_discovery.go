@@ -98,12 +98,10 @@ func discoverSkillRoots(ctx context.Context) []skillDiscoveryRoot {
 		ctx = context.Background()
 	}
 
-	var roots []skillDiscoveryRoot
+	roots := []skillDiscoveryRoot{builtinSkillRoot()}
 	remoteCacheByURL := map[string]string{}
 
-	// Skills are only added by the user (local directory or remote git URL).
-	// There is no built-in Wox skill directory scan — all skills come from the
-	// AISkills setting.
+	// User skills may come from a local directory or a remote git URL.
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	for _, skill := range woxSetting.AISkills.Get() {
 		dir := strings.TrimSpace(skill.Path)
@@ -153,6 +151,29 @@ func discoverSkillRoots(ctx context.Context) []skillDiscoveryRoot {
 	}
 
 	return dedupeSkillRoots(roots)
+}
+
+// builtinSkillRoot identifies the immutable skill bundle shipped with Wox.
+func builtinSkillRoot() skillDiscoveryRoot {
+	return skillDiscoveryRoot{
+		Path:       filepath.Join(util.GetLocation().GetAISkillsDirectory(), "wox-plugin-creator"),
+		Source:     "builtin",
+		SourceName: "Wox",
+		Builtin:    true,
+	}
+}
+
+// SanitizeUserSkills keeps built-in skills out of user settings and cloud sync.
+func SanitizeUserSkills(skills []common.Skill) []common.Skill {
+	builtinPath := filepath.Clean(builtinSkillRoot().Path)
+	userSkills := make([]common.Skill, 0, len(skills))
+	for _, skill := range skills {
+		if skill.Builtin || strings.EqualFold(filepath.Clean(skill.Path), builtinPath) {
+			continue
+		}
+		userSkills = append(userSkills, skill)
+	}
+	return userSkills
 }
 
 // isPathInside reports whether path is equal to or nested inside root after cleaning both paths.

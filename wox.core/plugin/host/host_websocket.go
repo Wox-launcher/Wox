@@ -148,6 +148,7 @@ func (w *WebsocketHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata
 		"PluginId":        metadata.Id,
 		"PluginDirectory": pluginDirectory,
 		"Entry":           metadata.Entry,
+		"EntryMode":       plugin.PluginEntryMode(metadata),
 	})
 	if loadPluginErr != nil {
 		return nil, loadPluginErr

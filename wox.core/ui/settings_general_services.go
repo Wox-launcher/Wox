@@ -247,7 +247,7 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		if err := json.Unmarshal([]byte(value), &skills); err != nil {
 			return err
 		}
-		woxSetting.AISkills.Set(skills)
+		woxSetting.AISkills.Set(ai.SanitizeUserSkills(skills))
 	case "AIDisabledBuiltinTools":
 		var names []string
 		if err := json.Unmarshal([]byte(value), &names); err != nil {

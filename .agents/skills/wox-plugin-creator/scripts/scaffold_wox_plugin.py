@@ -7,11 +7,19 @@ import subprocess
 import uuid
 from pathlib import Path
 
-RUNTIMES = ["nodejs", "python", "script-nodejs", "script-python"]
+RUNTIMES = [
+    "nodejs",
+    "python",
+    "script-nodejs",
+    "script-python",
+    "singlefile-nodejs",
+    "singlefile-python",
+]
 TEMPLATE_REPOS = {
     "nodejs": "https://github.com/Wox-launcher/Wox.Plugin.Template.Nodejs",
     "python": "https://github.com/Wox-launcher/Wox.Plugin.Template.Python",
 }
+SINGLE_FILE_MIN_WOX_VERSION = "2.4.2"
 
 
 def detect_repo_root() -> Path:
@@ -22,7 +30,7 @@ def detect_repo_root() -> Path:
     raise SystemExit("Unable to locate repo root containing 'wox.core'.")
 
 
-def get_skill_templates_dir() -> Path:
+def get_skill_template(asset_name: str, template_name: str) -> Path:
     home_dir = Path.home()
     skills_dir = (
         home_dir
@@ -31,16 +39,28 @@ def get_skill_templates_dir() -> Path:
         / "skills"
         / "wox-plugin-creator"
         / "assets"
-        / "script_plugin_templates"
+        / asset_name
     )
-    if skills_dir.is_dir():
-        return skills_dir
+    installed_template = skills_dir / template_name
+    if installed_template.is_file():
+        return installed_template
 
     repo_root = detect_repo_root()
-    return (
-        repo_root
-        / "wox.core/resource/ai/skills/wox-plugin-creator/assets/script_plugin_templates"
+    repo_skill_dir = (
+        repo_root / ".agents/skills/wox-plugin-creator/assets" / asset_name
     )
+    repo_template = repo_skill_dir / template_name
+    if repo_template.is_file():
+        return repo_template
+    resource_template = (
+        repo_root
+        / "wox.core/resource/ai/skills/wox-plugin-creator/assets"
+        / asset_name
+        / template_name
+    )
+    if resource_template.is_file():
+        return resource_template
+    raise SystemExit(f"Plugin template not found: {template_name}")
 
 
 def ensure_empty_dir(path: Path, force: bool) -> None:
@@ -110,6 +130,11 @@ def default_script_entry(name: str, ext: str) -> str:
     return f"Wox.Plugin.Script.{safe_name}.{ext}"
 
 
+def default_single_file_entry(name: str, ext: str) -> str:
+    safe_name = sanitize_script_name(name)
+    return f"Wox.Plugin.{safe_name}.{ext}"
+
+
 def resolve_script_output(
     output_dir: Path, entry: str, ext: str, force: bool
 ) -> tuple[Path, str]:
@@ -164,12 +189,23 @@ def main() -> None:
     description = args.description or args.name
     author = args.author or getpass.getuser()
 
+    min_wox_version = args.min_wox_version
+    runtime = ""
+    if args.type in ("singlefile-python", "script-python"):
+        runtime = "PYTHON"
+    elif args.type in ("singlefile-nodejs", "script-nodejs"):
+        runtime = "NODEJS"
+    if args.type.startswith("singlefile-") and args.min_wox_version == "2.0.0":
+        min_wox_version = SINGLE_FILE_MIN_WOX_VERSION
+
     values = {
         "PluginID": plugin_id,
         "Name": args.name,
         "Description": description,
         "Author": author,
         "TriggerKeywordsJSON": trigger_keywords_json,
+        "Runtime": runtime,
+        "MinWoxVersion": min_wox_version,
     }
 
     if args.type in TEMPLATE_REPOS:
@@ -181,15 +217,34 @@ def main() -> None:
         print(f"Cloned {args.type} template into {output_dir}")
         return
 
-    templates_dir = get_skill_templates_dir()
+    if args.type.startswith("singlefile-"):
+        if args.type == "singlefile-nodejs":
+            template_path = get_skill_template("single_file_plugin_templates", "template.js")
+            entry = args.entry or default_single_file_entry(args.name, "js")
+            output_path, entry_name = resolve_script_output(
+                output_dir, entry, "js", args.force
+            )
+        elif args.type == "singlefile-python":
+            template_path = get_skill_template("single_file_plugin_templates", "template.py")
+            entry = args.entry or default_single_file_entry(args.name, "py")
+            output_path, entry_name = resolve_script_output(
+                output_dir, entry, "py", args.force
+            )
+        else:
+            raise SystemExit(f"Unsupported single-file runtime: {args.type}")
+        values["ENTRY"] = entry_name
+        scaffold_script_plugin(template_path, output_path, values)
+        print(f"Scaffolded {args.type} plugin at {output_path}")
+        return
+
     if args.type == "script-nodejs":
-        template_path = templates_dir / "template.js"
+        template_path = get_skill_template("script_plugin_templates", "template.js")
         entry = args.entry or default_script_entry(args.name, "js")
         output_path, entry_name = resolve_script_output(
             output_dir, entry, "js", args.force
         )
     elif args.type == "script-python":
-        template_path = templates_dir / "template.py"
+        template_path = get_skill_template("script_plugin_templates", "template.py")
         entry = args.entry or default_script_entry(args.name, "py")
         output_path, entry_name = resolve_script_output(
             output_dir, entry, "py", args.force

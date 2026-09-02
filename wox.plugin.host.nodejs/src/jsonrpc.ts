@@ -6,6 +6,7 @@ import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
 import { PluginInstance, PluginJsonRpcRequest, ToolbarMsgActionContext } from "./types"
+import { assertPathWithinDirectory, evictCommonJSModule, getPluginExport, loadCommonJSModule } from "./singleFile"
 
 export const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
@@ -136,23 +137,34 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
 async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   const pluginDirectory = request.Params.PluginDirectory
   const entry = request.Params.Entry
+  const entryMode = request.Params.EntryMode || "package"
   const modulePath = path.join(pluginDirectory, entry)
-
-  const module = await import(modulePath)
-  if (module["plugin"] === undefined || module["plugin"] === null) {
-    logger.error(ctx, `<${request.PluginName}> plugin doesn't export plugin object`)
-    return
-  }
+  const pluginExport = await loadPluginExport(ctx, request, modulePath, entryMode)
 
   logger.info(ctx, `<${request.PluginName}> load plugin successfully`)
   pluginInstances.set(request.PluginId, {
-    Plugin: module["plugin"] as Plugin,
+    Plugin: pluginExport as Plugin,
     API: {} as PluginAPI,
     ModulePath: modulePath,
     Actions: new Map<Result["Id"], (ctx: Context, actionContext: ActionContext) => Promise<void>>(),
     FormActions: new Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>(),
     ToolbarMsgActions: new Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>()
   })
+}
+
+async function loadPluginExport(ctx: Context, request: PluginJsonRpcRequest, modulePath: string, entryMode: string): Promise<unknown> {
+  if (entryMode === "singleFile") {
+    const resolvedPath = assertPathWithinDirectory(modulePath, request.Params.PluginDirectory)
+    return getPluginExport(loadCommonJSModule(resolvedPath) as { plugin?: unknown; default?: { plugin?: unknown } })
+  }
+
+  const module = await import(modulePath)
+  try {
+    return getPluginExport(module)
+  } catch (error) {
+    logger.error(ctx, `<${request.PluginName}> plugin doesn't export plugin object`)
+    throw error
+  }
 }
 
 function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
@@ -162,7 +174,7 @@ function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`plugin instance not found: ${request.PluginName}`)
   }
 
-  delete require.cache[require.resolve(pluginInstance.ModulePath)]
+  evictCommonJSModule(pluginInstance.ModulePath)
   pluginInstances.delete(request.PluginId)
 
   logger.info(ctx, `<${request.PluginName}> unload plugin successfully`)

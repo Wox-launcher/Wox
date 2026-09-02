@@ -10,7 +10,7 @@ Wox 插件按安装类型分类：
 
 ## 插件实现类型
 
-Wox 支持两种不同的插件实现方法：
+Wox 支持三种不同的插件实现方法：
 
 如果你使用 Codex 或其他兼容的 agent，可查看 [用于插件开发的 AI Skills](./ai-skills.md)。
 
@@ -44,6 +44,25 @@ Wox 支持两种不同的插件实现方法：
 - 不支持插件设置界面
 - 执行超时限制（10 秒）
 
+### 单文件 SDK 插件 (Single-file SDK Plugin)
+
+单文件 SDK 插件是一个 `.py` 或 CommonJS `.js` 文件，拥有完整的 Wox Public API，并加载到现有的 Python / Node.js runtime host。
+
+详见 [单文件 SDK 插件](./single-file-plugin.md)。
+
+**特点：**
+
+- 和脚本插件一样只维护一个文件
+- host 进程常驻：query/action 不启动新解释器
+- 完整 Public API：设置、AI、UpdateResult、PushResults、深度链接、unload callback
+- 保存后自动 reload
+- Python 可以直接 import `wox_plugin`；Node.js 通过 `params.API` 使用能力
+
+**局限性：**
+
+- 不支持 pip/npm 依赖、额外文件或相对路径图片
+- Node.js 第一版必须是 CommonJS
+
 ### 全功能插件 (Full-featured Plugin)
 
 全功能插件是为复杂应用场景和高性能要求设计的综合插件。
@@ -76,22 +95,24 @@ Wox 支持两种不同的插件实现方法：
 
 ### 选择脚本插件，当：
 
-- ✅ 功能相对简单，逻辑清晰
-- ✅ 不需要复杂的状态管理
-- ✅ 查询频率不高
-- ✅ 快速原型设计和个人工具
-- ✅ 学习 Wox 插件开发
-- ✅ 单次执行任务
+- 功能相对简单，逻辑清晰
+- 不需要复杂的状态管理
+- 只需要包装一条命令或一次性脚本
+- 快速原型设计和个人工具
+- 学习 Wox 插件开发
+
+### 选择单文件 SDK 插件，当：
+
+- 只要一个文件，但需要 Wox API
+- 需要设置、AI、UpdateResult 或 unload callback
+- 可以停留在 Python，或 CommonJS Node.js，并且不需要额外文件
 
 ### 选择全功能插件，当：
 
-- ✅ 需要复杂的业务逻辑
-- ✅ 高频查询和实时响应
-- ✅ 需要 AI 集成功能
-- ✅ 需要自定义设置界面
-- ✅ 复杂的异步操作
-- ✅ 高性能要求
-- ✅ 商业插件开发
+- 需要依赖、资源、TypeScript 或多文件
+- 需要复杂的业务逻辑
+- 高频查询和实时响应
+- 商业插件开发
 
 ## 插件命令
 

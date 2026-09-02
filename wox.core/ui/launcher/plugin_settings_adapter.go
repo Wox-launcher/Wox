@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	woxplugin "wox/plugin"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -628,8 +629,14 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(plugins, "disable", plugin.ID, a.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
 	}
 	if !plugin.IsSystem && strings.TrimSpace(plugin.PluginDirectory) != "" {
+		label := a.translate("i18n:ui_plugin_open_directory")
+		width := float32(132)
+		if woxplugin.IsSingleFilePluginDirectory(plugin.PluginDirectory) {
+			label = a.translate("i18n:ui_plugin_locate_file")
+			width = 160
+		}
 		actions = append(actions, launcherview.PluginAction{
-			ID: "plugin-directory", Label: a.translate("i18n:ui_plugin_open_directory"), Width: 132, Enabled: !busy, OnTap: a.openSelectedPluginDirectory,
+			ID: "plugin-directory", Label: label, Width: width, Enabled: !busy, OnTap: a.openSelectedPluginDirectory,
 		})
 	}
 	return actions

@@ -426,6 +426,15 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 		logger.Error(ctx, fmt.Sprintf("failed to install plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, err.Error()))
 		return err
 	}
+	if err := ValidateStorePluginManifest(manifest); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to install plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, err.Error()))
+		return err
+	}
+	kind, classifyErr := ClassifyPluginArtifact(manifest.Runtime, manifest.DownloadUrl)
+	if classifyErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to install plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, classifyErr.Error()))
+		return classifyErr
+	}
 
 	if err := ensureStorePluginRuntimeReady(ctx, manifest); err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to prepare %s runtime for plugin %s(%s): %s", manifest.Runtime, manifest.GetName(ctx), manifest.Version, err.Error()))
@@ -438,6 +447,10 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 	})
 	if exist {
 		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version))
+		existingKind := InstalledPluginArtifactKind(installedPlugin)
+		if existingKind != kind {
+			return fmt.Errorf("plugin %s cannot change delivery form from %s to %s", manifest.Id, existingKind, kind)
+		}
 		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
 		currentVersion, currentErr := semver.NewVersion(manifest.Version)
 		if installedErr == nil && currentErr == nil {
@@ -447,10 +460,9 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 			}
 		}
 
-		// only uninstall for non-script plugins; script plugins will be hot-swapped with rollback
-		if manifest.Runtime != PLUGIN_RUNTIME_SCRIPT {
-			// Use uninstallLocked because InstallWithProgress already holds installMu.
-			// Calling Uninstall here would deadlock.
+		// Package plugins replace the directory. Script and single-file plugins
+		// keep the old file as a rollback backup until the new file loads.
+		if kind == PluginArtifactPackage {
 			uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, nil)
 			if uninstallErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
@@ -459,12 +471,16 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 		}
 	}
 
-	// handle script plugins differently
-	if manifest.Runtime == PLUGIN_RUNTIME_SCRIPT {
+	switch kind {
+	case PluginArtifactScript:
 		if err := s.installScriptPluginWithProgress(ctx, manifest, progressCallback); err != nil {
 			return err
 		}
-	} else {
+	case PluginArtifactSingleFile:
+		if err := s.installSingleFilePluginWithProgress(ctx, manifest, progressCallback); err != nil {
+			return err
+		}
+	default:
 		if err := s.installNormalPluginWithProgress(ctx, manifest, progressCallback); err != nil {
 			return err
 		}
@@ -1001,6 +1017,12 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 					return removeErr
 				}
 			}
+		} else if IsSingleFilePlugin(plugin.Metadata) {
+			reportProgress("plugin_uninstall_progress_unloading")
+			if removeErr := s.uninstallSingleFilePlugin(ctx, plugin); removeErr != nil {
+				return removeErr
+			}
+			pluginAlreadyUnloaded = true
 		} else {
 			reportProgress("plugin_uninstall_progress_unloading")
 			// Bug fix: native plugins can keep DLL/.node handles open until their unload callbacks run.

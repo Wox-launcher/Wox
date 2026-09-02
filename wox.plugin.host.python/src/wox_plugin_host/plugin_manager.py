@@ -13,6 +13,7 @@ class PluginInstance:
     actions: Dict[str, Callable[[Context, ActionContext], Awaitable[None]]]
     form_actions: Dict[str, Callable[[Context, FormActionContext], Awaitable[None]]]
     toolbar_msg_actions: Dict[str, Callable[[Context, ToolbarMsgActionContext], Awaitable[None] | None]]
+    sys_paths: list[str]
 
 
 # Global state with strong typing

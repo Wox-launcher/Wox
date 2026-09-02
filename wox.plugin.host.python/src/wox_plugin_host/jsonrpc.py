@@ -26,6 +26,7 @@ from wox_plugin import (
 from . import logger
 from .plugin_api import PluginAPI
 from .plugin_manager import PluginInstance, plugin_instances
+from .single_file import load_single_file_module
 
 legacy_query_return_warnings: set[str] = set()
 
@@ -93,27 +94,46 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     params: Dict[str, str] = request.get("Params", {})
     plugin_directory: str = params.get("PluginDirectory", "")
     entry: str = params.get("Entry", "")
+    entry_mode: str = params.get("EntryMode", "package")
     plugin_id: str = request.get("PluginId", "")
     plugin_name: str = request.get("PluginName", "")
 
     await logger.info(
         ctx.get_trace_id(),
-        f"<{plugin_name}> load plugin, directory: {plugin_directory}, entry: {entry}",
+        f"<{plugin_name}> load plugin, directory: {plugin_directory}, entry: {entry}, mode: {entry_mode}",
     )
 
     try:
         if not plugin_directory or not entry:
             raise ValueError("plugin_directory and entry must not be None")
 
+        if entry_mode == "singleFile":
+            module, module_name = load_single_file_module(plugin_id, plugin_directory, entry)
+            plugin_instances[plugin_id] = PluginInstance(
+                plugin=module.plugin,
+                api=None,
+                plugin_dir=plugin_directory,
+                module_name=module_name,
+                actions={},
+                form_actions={},
+                toolbar_msg_actions={},
+                sys_paths=[],
+            )
+            await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
+            return
+
+        added_paths: list[str] = []
         # Add plugin directory to Python path
         if plugin_directory not in sys.path:
             await logger.info(ctx.get_trace_id(), f"add: {plugin_directory} to sys.path")
             sys.path.append(plugin_directory)
+            added_paths.append(plugin_directory)
 
         deps_dir = path.join(plugin_directory, "dependencies")
         if path.exists(deps_dir) and deps_dir not in sys.path:
             await logger.info(ctx.get_trace_id(), f"add: {deps_dir} to sys.path")
             sys.path.append(deps_dir)
+            added_paths.append(deps_dir)
 
         # Convert entry path to module path
         # e.g., "replaceme_with_projectname/main.py" -> "replaceme_with_projectname.main"
@@ -135,16 +155,16 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
                 actions={},
                 form_actions={},
                 toolbar_msg_actions={},
+                sys_paths=added_paths,
             )
 
             await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
         except Exception as e:
             # A failed package import can remain cached and shadow a newly installed plugin on retry.
             _remove_module(module_name.split(".", 1)[0])
-            if deps_dir in sys.path:
-                sys.path.remove(deps_dir)
-            if plugin_directory in sys.path:
-                sys.path.remove(plugin_directory)
+            for added_path in added_paths:
+                if added_path in sys.path:
+                    sys.path.remove(added_path)
             error_stack = traceback.format_exc()
             await logger.error(
                 ctx.get_trace_id(),
@@ -486,12 +506,13 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         root_package = plugin_instance.module_name.split(".", 1)[0]
         _remove_module(root_package)
 
-        # Remove plugin directory and dependencies from Python path
-        if plugin_instance.plugin_dir in sys.path:
-            sys.path.remove(plugin_instance.plugin_dir)
-        deps_dir = path.join(plugin_instance.plugin_dir, "dependencies")
-        if deps_dir in sys.path:
-            sys.path.remove(deps_dir)
+        for added_path in plugin_instance.sys_paths:
+            if added_path in sys.path:
+                sys.path.remove(added_path)
+
+        plugin_instance.actions.clear()
+        plugin_instance.form_actions.clear()
+        plugin_instance.toolbar_msg_actions.clear()
 
         await logger.info(ctx.get_trace_id(), f"<{plugin_name}> unload plugin successfully")
     except Exception as e:

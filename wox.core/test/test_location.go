@@ -60,6 +60,10 @@ func (tl *TestLocation) GetUserScriptPluginsDirectory() string {
 	return filepath.Join(tl.GetPluginDirectory(), "scripts")
 }
 
+func (tl *TestLocation) GetUserSingleFilePluginsDirectory() string {
+	return filepath.Join(tl.GetPluginDirectory(), "single-file")
+}
+
 func (tl *TestLocation) GetThemeDirectory() string {
 	return filepath.Join(tl.GetUserDataDirectory(), "themes")
 }
@@ -96,6 +100,10 @@ func (tl *TestLocation) GetScriptPluginTemplatesDirectory() string {
 	return filepath.Join(tl.GetWoxDataDirectory(), "script_plugin_templates")
 }
 
+func (tl *TestLocation) GetSingleFilePluginTemplatesDirectory() string {
+	return filepath.Join(tl.GetWoxDataDirectory(), "single_file_plugin_templates")
+}
+
 func (tl *TestLocation) GetCacheDirectory() string {
 	return filepath.Join(tl.GetWoxDataDirectory(), "cache")
 }
@@ -130,6 +138,7 @@ func (tl *TestLocation) InitTestDirectories() error {
 		tl.GetLogHostsDirectory(),
 		tl.GetPluginDirectory(),
 		tl.GetUserScriptPluginsDirectory(),
+		tl.GetUserSingleFilePluginsDirectory(),
 		tl.GetThemeDirectory(),
 		tl.GetPluginSettingDirectory(),
 		tl.GetHostDirectory(),
@@ -137,6 +146,7 @@ func (tl *TestLocation) InitTestDirectories() error {
 		tl.GetUIDirectory(),
 		tl.GetOthersDirectory(),
 		tl.GetScriptPluginTemplatesDirectory(),
+		tl.GetSingleFilePluginTemplatesDirectory(),
 		tl.GetCacheDirectory(),
 		tl.GetImageCacheDirectory(),
 		tl.GetBackupDirectory(),

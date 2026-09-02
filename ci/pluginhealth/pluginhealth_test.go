@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -173,6 +174,46 @@ func TestProbePluginQueryFailsOnHostQueryError(t *testing.T) {
 	err := probePluginQuery(context.Background(), instance, plugin.Query{Type: plugin.QueryTypeInput})
 
 	require.EqualError(t, err, "rpc timeout")
+}
+
+func TestCheckStorePluginRejectsInvalidArtifactBeforeInstall(t *testing.T) {
+	result := checkStorePlugin(context.Background(), time.Second, plugin.StorePluginManifest{
+		Id:          "bad",
+		Name:        "Bad",
+		Runtime:     plugin.PLUGIN_RUNTIME_PYTHON,
+		DownloadUrl: "https://example.com/plugin",
+		Version:     "1.0.0",
+	})
+	assert.Equal(t, healthStatusFailed, result.Status)
+	assert.Equal(t, healthStageManifest, result.Stage)
+	assert.Contains(t, result.Error, "extension")
+}
+
+func TestCheckStorePluginRejectsSingleFileWithoutMinWoxVersion(t *testing.T) {
+	result := checkStorePlugin(context.Background(), time.Second, plugin.StorePluginManifest{
+		Id:          "sf",
+		Name:        "Single",
+		Runtime:     plugin.PLUGIN_RUNTIME_PYTHON,
+		DownloadUrl: "https://example.com/plugin.py",
+		Version:     "1.0.0",
+	})
+	assert.Equal(t, healthStatusFailed, result.Status)
+	assert.Equal(t, healthStageManifest, result.Stage)
+	assert.Contains(t, result.Error, "MinWoxVersion")
+}
+
+func TestCheckStorePluginRejectsSingleFileMinWoxVersionBelowFloor(t *testing.T) {
+	result := checkStorePlugin(context.Background(), time.Second, plugin.StorePluginManifest{
+		Id:            "sf",
+		Name:          "Single",
+		Runtime:       plugin.PLUGIN_RUNTIME_NODEJS,
+		DownloadUrl:   "https://example.com/plugin.js",
+		Version:       "1.0.0",
+		MinWoxVersion: "2.0.0",
+	})
+	assert.Equal(t, healthStatusFailed, result.Status)
+	assert.Equal(t, healthStageManifest, result.Stage)
+	assert.Contains(t, result.Error, "below")
 }
 
 func TestIsTransientHealthQueryError(t *testing.T) {

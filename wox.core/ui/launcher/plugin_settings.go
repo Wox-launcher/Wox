@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"wox/plugin"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/shell"
 )
 
 type pluginSettingsPlugin struct {
@@ -401,13 +404,19 @@ func (a *App) openSelectedPluginDirectory() {
 	if selected < 0 || selected >= len(plugins) {
 		return
 	}
-	directory := strings.TrimSpace(plugins[selected].PluginDirectory)
+	target := plugins[selected]
+	directory := strings.TrimSpace(target.PluginDirectory)
 	if directory == "" {
 		return
 	}
 	util.Go(a.lifecycleCtx, "open selected plugin directory", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := a.services.OpenPath(ctx, a.sessionID, directory)
+		var err error
+		if plugin.IsSingleFilePluginDirectory(directory) && strings.TrimSpace(target.Entry) != "" {
+			err = shell.OpenFileInFolder(filepath.Join(directory, target.Entry))
+		} else {
+			err = a.services.OpenPath(ctx, a.sessionID, directory)
+		}
 		cancel()
 		if err != nil {
 			_ = a.runOnUI("apply plugin directory error", func() {

@@ -846,14 +846,15 @@ func TestFormTableBodyScrollsAllRowsBeforeOuterPage(t *testing.T) {
 }
 
 func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) {
+	icon := &woxui.Image{}
 	props := FormTableFieldProps{
 		ID: "ai-skills", HideEditAction: true, HideCloneAction: true,
-		DeleteLabel: "Delete", Theme: woxcomponent.Theme{},
+		DeleteLabel: "Delete", DeleteIcon: icon, Theme: woxcomponent.Theme{},
 	}
 	row := FormTableRow{
-		Index: 4,
+		Index: 4, ReadOnly: true,
 		TrailingActions: []FormTableRowAction{{
-			ID: "open-folder", Label: "Open folder",
+			ID: "open-folder", Label: "Open folder", Icon: icon, OnTap: func() {},
 		}},
 	}
 
@@ -861,6 +862,14 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("skills operation count = %d, want delete and open-folder", len(actions.Children))
+	}
+	deleteButton := actions.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	openButton := actions.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if !deleteButton.Disabled || deleteButton.OnTap != nil {
+		t.Fatal("read-only skill delete action should be disabled")
+	}
+	if openButton.Disabled || openButton.OnTap == nil {
+		t.Fatal("read-only skill open-folder action should remain enabled")
 	}
 }
 

@@ -13,7 +13,7 @@ Choose this model when your plugin needs one or more of these:
 - plugin-driven screenshot or clipboard workflows
 - AI or MRU integration
 
-If your plugin is a small one-file automation script, start with the [Script Plugin](./script-plugin.md) guide instead.
+If your plugin is a small one-file automation script, start with the [Script Plugin](./script-plugin.md) guide. If you want one file but need the Wox API, use a [Single-file SDK Plugin](./single-file-plugin.md).
 
 ## Quickstart
 

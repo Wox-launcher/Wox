@@ -1,4 +1,4 @@
-.PHONY: clean build help ui-resources window-hook-build crash-handler-build file-index-service-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help ui-resources sync-ai-skills window-hook-build crash-handler-build file-index-service-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -50,6 +50,8 @@ else
 endif
 
 RELEASE_DIR := ../release
+WOX_PLUGIN_CREATOR_SKILL_SOURCE := ../.agents/skills/wox-plugin-creator
+WOX_PLUGIN_CREATOR_SKILL_DESTINATION := resource/ai/skills/wox-plugin-creator
 
 # GNU Make on Windows can detect Git's sh.exe while still leaving Git's
 # usr/bin tools out of PATH. The build uses sed/rm and POSIX env assignments, so
@@ -88,7 +90,15 @@ else
 	@echo "The embedded Go UI does not require staged resources on $(PLATFORM)"
 endif
 
-build: clean
+# Keep the repository skill as the only authored copy; go:embed consumes this staged tree.
+sync-ai-skills:
+	test -f $(WOX_PLUGIN_CREATOR_SKILL_SOURCE)/SKILL.md
+	rm -rf $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)
+	mkdir -p $(dir $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION))
+	cp -R $(WOX_PLUGIN_CREATOR_SKILL_SOURCE) $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)
+	rm -rf $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)/scripts/__pycache__
+
+build: clean sync-ai-skills
 	$(MAKE) woxmr-build
 	$(MAKE) window-hook-build
 	$(MAKE) crash-handler-build

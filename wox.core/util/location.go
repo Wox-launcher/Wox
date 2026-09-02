@@ -127,7 +127,13 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetScriptPluginTemplatesDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetSingleFilePluginTemplatesDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetUserScriptPluginsDirectory()); directoryErr != nil {
+		return directoryErr
+	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetUserSingleFilePluginsDirectory()); directoryErr != nil {
 		return directoryErr
 	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetCacheDirectory()); directoryErr != nil {
@@ -182,6 +188,11 @@ func (l *Location) GetPluginDirectory() string {
 
 func (l *Location) GetUserScriptPluginsDirectory() string {
 	return path.Join(l.GetPluginDirectory(), "scripts")
+}
+
+// GetUserSingleFilePluginsDirectory returns the shared directory for single-file SDK plugins.
+func (l *Location) GetUserSingleFilePluginsDirectory() string {
+	return path.Join(l.GetPluginDirectory(), "single-file")
 }
 
 func (l *Location) GetThemeDirectory() string {
@@ -265,6 +276,11 @@ func (l *Location) GetAISkillsCacheDirectory() string {
 
 func (l *Location) GetScriptPluginTemplatesDirectory() string {
 	return path.Join(l.GetAISkillsDirectory(), "wox-plugin-creator", "assets", "script_plugin_templates")
+}
+
+// GetSingleFilePluginTemplatesDirectory returns WPM templates for single-file SDK plugins.
+func (l *Location) GetSingleFilePluginTemplatesDirectory() string {
+	return path.Join(l.GetAISkillsDirectory(), "wox-plugin-creator", "assets", "single_file_plugin_templates")
 }
 
 func (l *Location) GetCacheDirectory() string {

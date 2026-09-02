@@ -31,6 +31,9 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
+//go:embed ai
+var AIFS embed.FS
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -61,6 +64,19 @@ func Extract(ctx context.Context) error {
 	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
 	if othersErr != nil {
 		return othersErr
+	}
+
+	// AI skill assets used by WPM must be available in installed builds, not only in the source tree.
+	if _, err := AIFS.ReadFile("ai/skills/wox-plugin-creator/SKILL.md"); err != nil {
+		return fmt.Errorf("embedded wox-plugin-creator skill is missing; run make sync-ai-skills: %w", err)
+	}
+	builtinSkillDirectory := path.Join(util.GetLocation().GetAISkillsDirectory(), "wox-plugin-creator")
+	if err := os.RemoveAll(builtinSkillDirectory); err != nil {
+		return err
+	}
+	aiErr := extractFiles(ctx, AIFS, filepath.Dir(util.GetLocation().GetAISkillsDirectory()), "ai", true)
+	if aiErr != nil {
+		return aiErr
 	}
 
 	// themes

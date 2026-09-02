@@ -29,11 +29,12 @@ const (
 	healthStatusFailed  = "failed"
 	healthStatusSkipped = "skipped"
 
-	healthStageCatalog = "catalog"
-	healthStageOS      = "os"
-	healthStageInstall = "install"
-	healthStageInit    = "init"
-	healthStageQuery   = "query"
+	healthStageCatalog  = "catalog"
+	healthStageOS       = "os"
+	healthStageManifest = "manifest"
+	healthStageInstall  = "install"
+	healthStageInit     = "init"
+	healthStageQuery    = "query"
 
 	defaultHealthTimeout = 3 * time.Minute
 	healthCleanupTimeout = time.Minute
@@ -260,6 +261,14 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 	if skipped, ok := skipUnsupportedOS(manifest); ok {
 		skipped.DurationMs = time.Since(started).Milliseconds()
 		return skipped
+	}
+
+	if err := plugin.ValidateStorePluginManifest(manifest); err != nil {
+		result.Status = healthStatusFailed
+		result.Stage = healthStageManifest
+		result.Error = err.Error()
+		result.DurationMs = time.Since(started).Milliseconds()
+		return result
 	}
 
 	ctx, cancel := context.WithTimeout(parent, timeout)

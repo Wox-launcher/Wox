@@ -4,6 +4,8 @@
 .DS_Store
 publish
 wox.core/resource/hosts/
+wox.core/resource/ai/*
+!wox.core/resource/ai/placeholder
 wox.plugin.host.python/python-host/
 wox.plugin.host.python/python-host.pyz
 *.pyz

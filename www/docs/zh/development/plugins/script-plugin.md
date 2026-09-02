@@ -4,7 +4,7 @@
 
 ## 概览
 
-脚本插件使用 JSON-RPC 通过标准输入/输出 (stdin/stdout) 与 Wox 通信。每个脚本在进行查询时按需执行，这使得它们非常适合简单的无状态操作。
+脚本插件使用 JSON-RPC 通过标准输入/输出 (stdin/stdout) 与 Wox 通信。每个脚本在进行查询时按需执行，这使得它们非常适合简单的无状态操作。如果只要一个文件但又需要完整 Wox API，请改用 [单文件 SDK 插件](./single-file-plugin.md)。
 
 想要快速上手可以参考这个示例脚本：https://gist.github.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28
 

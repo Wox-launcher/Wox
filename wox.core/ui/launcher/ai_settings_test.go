@@ -5,6 +5,7 @@ import (
 
 	"wox/common"
 	"wox/setting/definition"
+	woxcomponent "wox/ui/launcher/component"
 )
 
 func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
@@ -54,6 +55,17 @@ func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 		t.Fatalf("skills table options = inline %v, sort %q, max height %d; want inline, Name, 360", skills.InlineTable, skills.SortColumnKey, skills.MaxHeight)
 	}
 	assertFormTableColumnWidths(t, skills.Columns[:3], []int{200, 100, 400})
+}
+
+func TestBuiltinSkillViewRowIsReadOnly(t *testing.T) {
+	definition := newAISettingsForm(settingsData{}).definitions[3]
+	rows := (&App{}).formTableViewRows(definition, nil, []map[string]any{
+		{"Name": "wox-plugin-creator", "Builtin": true},
+		{"Name": "user-skill"},
+	}, woxcomponent.Theme{}, 1)
+	if len(rows) != 2 || !rows[1].ReadOnly || rows[0].ReadOnly {
+		t.Fatalf("skill view rows = %+v, want only the built-in row read-only", rows)
+	}
 }
 
 func TestBuiltinToolRowsJSONUsesDisableList(t *testing.T) {

@@ -13,7 +13,7 @@
 - 由插件发起的截图或剪贴板流程
 - AI 或 MRU 集成
 
-如果只是一个单文件的小自动化脚本，先看 [脚本插件](./script-plugin.md)。
+如果只是一个单文件的小自动化脚本，先看 [脚本插件](./script-plugin.md)。如果只要一个文件但又需要 Wox API，使用 [单文件 SDK 插件](./single-file-plugin.md)。
 
 ## 快速开始
 

@@ -174,6 +174,12 @@ type Manager struct {
 	scriptPluginWatcher *fsnotify.Watcher
 	scriptReloadTimers  *util.HashMap[string, *time.Timer]
 
+	// Single-file SDK plugin monitoring is a separate watcher so script and
+	// packaged plugin reload behavior can stay unchanged.
+	singleFilePluginWatcher *fsnotify.Watcher
+	singleFileReloadTimers  *util.HashMap[string, *time.Timer]
+	singleFileWatchIgnored  *util.HashMap[string, int64]
+
 	// Result delivery latency tracks result-producing jobs from start through channel delivery.
 	pluginResultDeliveryLatency *util.HashMap[string, *util.EWMA]
 
@@ -221,6 +227,8 @@ func GetPluginManager() *Manager {
 			}),
 			aiProviders:                 util.NewHashMap[string, ai.Provider](),
 			scriptReloadTimers:          util.NewHashMap[string, *time.Timer](),
+			singleFileReloadTimers:      util.NewHashMap[string, *time.Timer](),
+			singleFileWatchIgnored:      util.NewHashMap[string, int64](),
 			pluginResultDeliveryLatency: util.NewHashMap[string, *util.EWMA](),
 			toolbarMsgActions:           util.NewHashMap[string, *toolbarMsgActionEntry](),
 			pluginToolbarMsgIds:         util.NewHashMap[string, string](),
@@ -248,6 +256,9 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 	util.Go(ctx, "start script plugin monitoring", func() {
 		m.startScriptPluginMonitoring(util.NewTraceContext())
 	})
+	util.Go(ctx, "start single-file plugin monitoring", func() {
+		m.startSingleFilePluginMonitoring(util.NewTraceContext())
+	})
 
 	// Start shared runtime host health monitoring
 	m.startHostWatchdog(ctx)
@@ -268,6 +279,19 @@ func (m *Manager) Stop(ctx context.Context) {
 	if m.scriptPluginWatcher != nil {
 		m.scriptPluginWatcher.Close()
 	}
+	if m.singleFilePluginWatcher != nil {
+		m.singleFilePluginWatcher.Close()
+	}
+	m.scriptReloadTimers.Range(func(_ string, timer *time.Timer) bool {
+		timer.Stop()
+		return true
+	})
+	m.scriptReloadTimers.Clear()
+	m.singleFileReloadTimers.Range(func(_ string, timer *time.Timer) bool {
+		timer.Stop()
+		return true
+	})
+	m.singleFileReloadTimers.Clear()
 
 	for _, host := range AllHosts {
 		host.Stop(ctx)
@@ -321,7 +345,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 
 	var metaDataList []Metadata
 	for _, entry := range pluginDirectories {
-		if entry.Name() == ".DS_Store" {
+		if entry.Name() == ".DS_Store" || IsReservedUserPluginDirectory(entry.Name()) {
 			continue
 		}
 		if !entry.IsDir() {
@@ -369,6 +393,29 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	} else {
 		metaDataList = append(metaDataList, scriptMetaDataList...)
 	}
+
+	singleFileMetaDataList, err := m.loadSingleFilePlugins(ctx)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to load single-file plugins: %s", err.Error()))
+	} else {
+		metaDataList = append(metaDataList, singleFileMetaDataList...)
+	}
+
+	uniqueMetadata := make([]Metadata, 0, len(metaDataList))
+	seenPluginIDs := make(map[string]Metadata, len(metaDataList))
+	for _, instance := range m.pluginInstancesSnapshot() {
+		seenPluginIDs[strings.ToLower(instance.Metadata.Id)] = instance.Metadata
+	}
+	for _, metadata := range metaDataList {
+		key := strings.ToLower(metadata.Id)
+		if existing, exists := seenPluginIDs[key]; exists {
+			logger.Error(ctx, fmt.Sprintf("skip plugin %s from %s: ID is already used by %s from %s", metadata.Id, metadata.Directory, existing.Id, existing.Directory))
+			continue
+		}
+		seenPluginIDs[key] = metadata
+		uniqueMetadata = append(uniqueMetadata, metadata)
+	}
+	metaDataList = uniqueMetadata
 
 	logger.Info(ctx, fmt.Sprintf("start loading user plugins, found %d user plugins", len(metaDataList)))
 
@@ -433,6 +480,11 @@ func (m *Manager) loadScriptPlugins(ctx context.Context) ([]Metadata, error) {
 
 func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.GetName(ctx)))
+	if IsSingleFilePlugin(metadata) {
+		if err := m.ensureSingleFilePluginIDAvailable(metadata); err != nil {
+			return err
+		}
+	}
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
 		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Runtime)
@@ -440,9 +492,16 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 	if !exist {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
 	}
+	if IsSingleFilePlugin(metadata) {
+		filePath, pathErr := singleFilePluginPath(metadata)
+		if pathErr != nil {
+			return pathErr
+		}
+		m.unloadSingleFilePluginByPath(ctx, filePath)
+	}
 
 	pluginInstance, pluginInstanceExist := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
-		return item.Metadata.Id == metadata.Id
+		return strings.EqualFold(item.Metadata.Id, metadata.Id)
 	})
 	if pluginInstanceExist {
 		logger.Info(ctx, fmt.Sprintf("plugin(%s) is loaded, unload first", metadata.GetName(ctx)))
@@ -722,7 +781,7 @@ func (m *Manager) loadUnloadedUserPluginsForRuntime(ctx context.Context, runtime
 
 	var loadErrors []string
 	for _, entry := range pluginDirectories {
-		if entry.Name() == ".DS_Store" || !entry.IsDir() {
+		if entry.Name() == ".DS_Store" || IsReservedUserPluginDirectory(entry.Name()) || !entry.IsDir() {
 			continue
 		}
 
@@ -730,6 +789,22 @@ func (m *Manager) loadUnloadedUserPluginsForRuntime(ctx context.Context, runtime
 		if metadataErr != nil {
 			continue
 		}
+		if !strings.EqualFold(metadata.Runtime, string(runtime)) {
+			continue
+		}
+		if m.GetPluginInstanceById(metadata.Id) != nil {
+			continue
+		}
+		if err := m.loadHostPlugin(ctx, pluginHost, metadata); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to load %s plugin %s(%s) after runtime refresh: %s", runtime, metadata.GetName(ctx), metadata.Version, err.Error()))
+			loadErrors = append(loadErrors, fmt.Sprintf("%s: %s", metadata.GetName(ctx), err.Error()))
+		}
+	}
+	singleFileMetaDataList, err := m.loadSingleFilePlugins(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to scan single-file plugins after runtime refresh: %w", err)
+	}
+	for _, metadata := range singleFileMetaDataList {
 		if !strings.EqualFold(metadata.Runtime, string(runtime)) {
 			continue
 		}
@@ -951,88 +1026,6 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 	return metadata, nil
 }
 
-// ParseScriptMetadata parses metadata from script plugin file comments
-// Supports formats:
-// 1. JSON block format (preferred): # { ... } with complete plugin.json structure
-func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
-	content, err := os.ReadFile(scriptPath)
-	if err != nil {
-		return Metadata{}, fmt.Errorf("failed to read script file: %w", err)
-	}
-
-	lines := strings.Split(string(content), "\n")
-
-	// Parse JSON block format
-	var jsonBuilder strings.Builder
-	inJsonBlock := false
-	jsonStartLine := -1
-	braceDepth := 0
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Stop parsing when we reach non-comment lines (except shebang)
-		if !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "//") && !strings.HasPrefix(trimmed, "#!/") {
-			if trimmed != "" {
-				break
-			}
-			continue
-		}
-
-		// Remove comment markers
-		cleaned := strings.TrimPrefix(trimmed, "#")
-		cleaned = strings.TrimPrefix(cleaned, "//")
-		cleaned = strings.TrimSpace(cleaned)
-
-		// Check for JSON block start
-		if !inJsonBlock && cleaned == "{" {
-			inJsonBlock = true
-			jsonStartLine = i
-			braceDepth = 1
-			jsonBuilder.WriteString(cleaned)
-			continue
-		}
-
-		// Collect JSON content
-		if inJsonBlock {
-			jsonBuilder.WriteString("\n")
-			jsonBuilder.WriteString(cleaned)
-
-			// Track brace depth
-			for _, ch := range cleaned {
-				if ch == '{' {
-					braceDepth++
-				} else if ch == '}' {
-					braceDepth--
-				}
-			}
-
-			// Check for JSON block end (when braces are balanced)
-			if braceDepth == 0 {
-				// Try to parse the collected JSON
-				jsonStr := jsonBuilder.String()
-				var metadata Metadata
-				unmarshalErr := json.Unmarshal([]byte(jsonStr), &metadata)
-				if unmarshalErr != nil {
-					return Metadata{}, fmt.Errorf("failed to parse JSON metadata block (starting at line %d): %w", jsonStartLine+1, unmarshalErr)
-				}
-
-				// Set script-specific fields
-				metadata.Runtime = string(PLUGIN_RUNTIME_SCRIPT)
-				metadata.Entry = filepath.Base(scriptPath)
-				metadata.Directory = filepath.Dir(scriptPath)
-				metadata.LoadPluginI18nFromDirectory(ctx)
-
-				// Validate and set defaults
-				return m.validateAndSetScriptMetadataDefaults(metadata)
-			}
-		}
-	}
-
-	// No JSON block found
-	return Metadata{}, fmt.Errorf("no JSON metadata block found in script file. Script plugins must define metadata as a JSON object in comments")
-}
-
 // validateAndSetScriptMetadataDefaults validates required fields and sets default values
 func (m *Manager) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metadata, error) {
 	// Validate required fields
@@ -1245,7 +1238,7 @@ func (m *Manager) GetPluginInstances() []*Instance {
 
 func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
 	for _, instance := range m.pluginInstancesSnapshot() {
-		if instance.Metadata.Id == pluginId {
+		if strings.EqualFold(instance.Metadata.Id, pluginId) {
 			return instance
 		}
 	}

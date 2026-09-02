@@ -9,6 +9,11 @@ import (
 
 const defaultMinWoxVersion = "2.0.0"
 
+// SingleFilePluginMinWoxVersion is the first Wox release that can load
+// single-file SDK plugins. Store manifests and CI reject older floors so
+// previous Wox builds never attempt to install this artifact type.
+const SingleFilePluginMinWoxVersion = "2.4.2"
+
 func normalizeMinWoxVersion(minWoxVersion string) string {
 	if minWoxVersion == "" {
 		return defaultMinWoxVersion

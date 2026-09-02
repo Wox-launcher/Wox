@@ -546,7 +546,7 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		if actionID == "" {
 			actionID = fmt.Sprintf("trailing-%d", index)
 		}
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, disabled, action.OnTap))
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, props.Disabled, action.OnTap))
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
 	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, false, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})

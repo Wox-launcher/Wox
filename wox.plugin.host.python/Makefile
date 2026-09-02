@@ -35,6 +35,9 @@ lint:
 format:
 	uv run ruff format src
 
+test:
+	uv run python -m unittest discover -s tests -v
+
 build: clean install lint format
 	# uv sources keep the development environment on the local SDK, but shiv
 	# resolves its own wheel set; pass the SDK path explicitly so the bundled
