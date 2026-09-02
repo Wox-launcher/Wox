@@ -1167,5 +1167,37 @@
         "plugin_description": "快速切换音频输入和输出设备"
       }
     }
+  },
+  {
+    "Id": "a8c4e2b1-6d3f-4a19-9e7c-2b5f0d8a1c63",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "2.2.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "python",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/ef2e0790-64cc-4d99-9717-3c9e2caace09",
+    "Website": "https://gist.github.com/qianlifeng/ab5524eecdf36a9484265cd94b22f359",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/ab5524eecdf36a9484265cd94b22f359/raw/Wox.Plugin.GifSearch.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/6e87dcdd-2a92-4337-9175-61836741dd8b"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-02 23:40:00",
+    "DateUpdated": "2026-09-02 23:40:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Gif Search",
+        "plugin_description": "Search animated GIFs from GIPHY and The Finer Gifs Club"
+      },
+      "zh_CN": {
+        "plugin_name": "GIF 搜索",
+        "plugin_description": "从 GIPHY 和 The Finer Gifs Club 搜索 GIF 动图"
+      }
+    }
   }
 ]
