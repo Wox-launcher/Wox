@@ -1,9 +1,14 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/gif"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -183,6 +188,74 @@ func TestConvertResultIconDefersRemoteURLWithoutRequest(t *testing.T) {
 	if _, found := manager.lazyResultIcons.Load(payload.Token); !found {
 		t.Fatal("registered lazy remote icon token is missing from manager cache")
 	}
+}
+
+func TestLoadLazyResultIconHydratesRemoteGIF(t *testing.T) {
+	initPluginImageTestLocation(t)
+	served := encodedPluginTestGIF(t)
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		response.Header().Set("Content-Type", "image/gif")
+		if _, err := response.Write(served); err != nil {
+			t.Errorf("write remote gif: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	query := Query{Id: "query-remote-gif", SessionId: "session-remote-gif"}
+	result := QueryResult{Id: "result-remote-gif"}
+	manager, _ := newTestManagerWithCachedResult(query, result)
+	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
+	token := "remote-gif-token"
+	source := common.NewWoxImageUrl(server.URL + "/doge.gif")
+	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), common.ImageThumbnailPlaceholderIcon, common.ResultListIconSize)
+	cachedResult, found := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
+	if !found {
+		t.Fatal("expected cached result")
+	}
+	cachedResult.Result.Icon = lazyIcon
+	manager.lazyResultIcons.Store(token, &lazyResultIconEntry{
+		SessionId: query.SessionId, QueryId: query.Id, ResultId: result.Id,
+		OriginalIcon: source, TargetSize: common.ResultListIconSize,
+	})
+
+	loaded, err := manager.LoadLazyResultIcon(context.Background(), token)
+	if err != nil {
+		t.Fatalf("load lazy remote gif: %v", err)
+	}
+	if loaded.ImageType != common.WoxImageTypeAbsolutePath || !loaded.IsAnimatedGif() {
+		t.Fatalf("hydrated remote GIF = %+v, want cached GIF file", loaded)
+	}
+	if loaded == common.ImageThumbnailPlaceholderIcon {
+		t.Fatal("remote GIF should not fall back to the placeholder icon")
+	}
+	if requestCount != 1 {
+		t.Fatalf("remote GIF made %d requests, want 1", requestCount)
+	}
+	if _, err := os.Stat(loaded.ImageData); err != nil {
+		t.Fatalf("cached GIF file missing: %v", err)
+	}
+}
+
+func encodedPluginTestGIF(t *testing.T) []byte {
+	t.Helper()
+	frame := image.NewPaletted(image.Rect(0, 0, 8, 8), color.Palette{color.RGBA{R: 255, A: 255}})
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			frame.SetColorIndex(x, y, 0)
+		}
+	}
+	var encoded bytes.Buffer
+	if err := gif.EncodeAll(&encoded, &gif.GIF{
+		Image:     []*image.Paletted{frame, frame},
+		Delay:     []int{10, 10},
+		LoopCount: 0,
+		Config:    image.Config{ColorModel: frame.Palette, Width: 8, Height: 8},
+	}); err != nil {
+		t.Fatalf("encode gif: %v", err)
+	}
+	return encoded.Bytes()
 }
 
 func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {

@@ -2344,6 +2344,9 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 	// result. That keeps the query response fast while still reusing the existing
 	// crop/resize/cache behavior for the actual thumbnail artifact.
 	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
+	// URL GIFs used to stay typed as url because conversion skipped resize.
+	// UI cannot decode that type, so they collapsed to the placeholder. The
+	// converter now downloads the file first; a remaining url means the fetch failed.
 	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad || converted.ImageType == common.WoxImageTypeUrl {
 		converted = common.ImageThumbnailPlaceholderIcon
 	}
@@ -2351,7 +2354,9 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 	entry.icon = converted
 	entry.resolved = true
 	resultCache.Result.Icon = converted
-	logger.Debug(ctx, fmt.Sprintf("lazy result icon hydrated, result: %s, elapsed: %dms", entry.ResultId, util.GetSystemTimestamp()-startedAt))
+	if logger != nil {
+		logger.Debug(ctx, fmt.Sprintf("lazy result icon hydrated, result: %s, elapsed: %dms", entry.ResultId, util.GetSystemTimestamp()-startedAt))
+	}
 	return converted, nil
 }
 

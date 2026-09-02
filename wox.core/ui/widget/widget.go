@@ -1178,7 +1178,19 @@ type Image struct {
 }
 
 func (w Image) layout(ctx context, available constraints) *node {
-	_ = ctx
+	if w.Source != nil && w.Source.IsAnimated() {
+		// FrameAnimation owns the timeline so a result-icon Boundary only
+		// rebuilds when the visible GIF frame actually changes.
+		return (FrameAnimation{
+			Key:    Key(fmt.Sprintf("image-gif-%d", w.Source.ID())),
+			Delays: w.Source.FrameDelays(),
+			Builder: func(index int) Widget {
+				frame := w
+				frame.Source = w.Source.Frame(index)
+				return frame
+			},
+		}).layout(ctx, available)
+	}
 	width := available.constrainWidth(min(w.Width, available.width))
 	height := available.constrainHeight(min(w.Height, available.height))
 	return &node{

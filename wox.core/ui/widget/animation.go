@@ -69,6 +69,32 @@ func (w LoopAnimation) layout(ctx context, available constraints) *node {
 	return child.layout(ctx, available)
 }
 
+// FrameAnimation rebuilds its child only when the current GIF-style frame index changes.
+type FrameAnimation struct {
+	Key     Key
+	Delays  []time.Duration
+	Paused  bool
+	Builder func(int) Widget
+}
+
+func (w FrameAnimation) layout(ctx context, available constraints) *node {
+	index := 0
+	if w.Key != "" && len(w.Delays) > 1 {
+		index = ctx.animation.frameIndex(w.Key, w.Delays, w.Paused)
+		if ctx.dynamic != nil {
+			ctx.dynamic.animations = append(ctx.dynamic.animations, animationDependency{key: w.Key, kind: animationDependencyFrame, value: float32(index)})
+		}
+	}
+	if w.Builder == nil {
+		return &node{}
+	}
+	child := w.Builder(index)
+	if child == nil {
+		return &node{}
+	}
+	return child.layout(ctx, available)
+}
+
 type animationFrame struct {
 	host       *animationHost
 	generation uint64
@@ -87,6 +113,13 @@ func (f animationFrame) loopValue(key Key, duration time.Duration, paused bool) 
 		return 0
 	}
 	return f.host.loopValue(f, key, duration, paused)
+}
+
+func (f animationFrame) frameIndex(key Key, delays []time.Duration, paused bool) int {
+	if f.host == nil {
+		return 0
+	}
+	return f.host.frameIndex(f, key, delays, paused)
 }
 
 func (f animationFrame) observe(dependency animationDependency) (float32, bool) {
@@ -111,6 +144,7 @@ type loopAnimation struct {
 	pausedAt   time.Time
 	paused     bool
 	lastSeenAt uint64
+	delays     []time.Duration
 }
 
 // valueAt resolves the current value without mutating the animation timeline.
@@ -190,6 +224,20 @@ func (h *animationHost) observe(frame animationFrame, dependency animationDepend
 			h.active = true
 		}
 		return float32(now.Sub(animation.startedAt)%animation.duration) / float32(animation.duration), true
+	case animationDependencyFrame:
+		animation := h.loops[dependency.key]
+		if animation == nil || animation.duration <= 0 {
+			return 0, false
+		}
+		animation.lastSeenAt = frame.generation
+		now := frame.now
+		if animation.paused {
+			now = animation.pausedAt
+		} else {
+			h.active = true
+		}
+		elapsed := now.Sub(animation.startedAt) % animation.duration
+		return float32(frameIndexAtElapsed(animation.delays, elapsed)), true
 	default:
 		return 0, false
 	}
@@ -236,12 +284,37 @@ func (h *animationHost) value(frame animationFrame, key Key, target float32, dur
 func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.Duration, paused bool) float32 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	animation := h.ensureLoopLocked(frame, key, duration, paused, nil)
+	now := frame.now
+	if paused {
+		now = animation.pausedAt
+	}
+	return float32(now.Sub(animation.startedAt)%duration) / float32(duration)
+}
+
+func (h *animationHost) frameIndex(frame animationFrame, key Key, delays []time.Duration, paused bool) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	duration := sumFrameDelays(delays)
+	if duration <= 0 || len(delays) <= 1 {
+		return 0
+	}
+	animation := h.ensureLoopLocked(frame, key, duration, paused, delays)
+	now := frame.now
+	if paused {
+		now = animation.pausedAt
+	}
+	return frameIndexAtElapsed(delays, now.Sub(animation.startedAt)%duration)
+}
+
+// ensureLoopLocked creates or updates one repeating timeline used by both progress loops and GIF frames.
+func (h *animationHost) ensureLoopLocked(frame animationFrame, key Key, duration time.Duration, paused bool, delays []time.Duration) *loopAnimation {
 	if h.loops == nil {
 		h.loops = map[Key]*loopAnimation{}
 	}
 	animation := h.loops[key]
 	if animation == nil || animation.duration != duration {
-		animation = &loopAnimation{startedAt: frame.now, duration: duration, paused: paused}
+		animation = &loopAnimation{startedAt: frame.now, duration: duration, paused: paused, delays: delays}
 		if paused {
 			animation.pausedAt = frame.now
 		}
@@ -254,15 +327,39 @@ func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.D
 		}
 		animation.paused = paused
 	}
+	if delays != nil {
+		animation.delays = delays
+	}
 	animation.lastSeenAt = frame.generation
 	if !paused {
 		h.active = true
 	}
-	now := frame.now
-	if paused {
-		now = animation.pausedAt
+	return animation
+}
+
+func sumFrameDelays(delays []time.Duration) time.Duration {
+	var total time.Duration
+	for _, delay := range delays {
+		total += delay
 	}
-	return float32(now.Sub(animation.startedAt)%duration) / float32(duration)
+	return total
+}
+
+func frameIndexAtElapsed(delays []time.Duration, elapsed time.Duration) int {
+	if len(delays) == 0 {
+		return 0
+	}
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	var cursor time.Duration
+	for index, delay := range delays {
+		cursor += delay
+		if elapsed < cursor {
+			return index
+		}
+	}
+	return len(delays) - 1
 }
 
 // endFrame drops absent animations and requests the next frame only while a value is moving.

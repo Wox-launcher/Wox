@@ -171,6 +171,29 @@ func TestLoopAnimationAdvancesAndWraps(t *testing.T) {
 	}
 }
 
+func TestFrameAnimationAdvancesOnFrameBoundary(t *testing.T) {
+	host := &animationHost{}
+	start := time.Now()
+	delays := []time.Duration{100 * time.Millisecond, 100 * time.Millisecond}
+	frame := animationFrame{host: host, generation: 1, now: start}
+	if index := host.frameIndex(frame, "gif", delays, false); index != 0 {
+		t.Fatalf("initial frame = %d, want 0", index)
+	}
+	if !host.active {
+		t.Fatal("frame animation did not request another frame")
+	}
+	frame.generation++
+	frame.now = start.Add(150 * time.Millisecond)
+	if index := host.frameIndex(frame, "gif", delays, false); index != 1 {
+		t.Fatalf("second frame = %d, want 1", index)
+	}
+	frame.generation++
+	frame.now = start.Add(250 * time.Millisecond)
+	if index := host.frameIndex(frame, "gif", delays, false); index != 0 {
+		t.Fatalf("wrapped frame = %d, want 0", index)
+	}
+}
+
 func TestLoopAnimationPreservesPhaseWhilePaused(t *testing.T) {
 	host := &animationHost{}
 	start := time.Now()

@@ -1,7 +1,11 @@
 package launcher
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
 	"sync"
 	"testing"
 
@@ -216,6 +220,44 @@ func TestImageCacheHiddenTrimUsesCountAndByteBudget(t *testing.T) {
 	if _, ok := app.images["icon-79"]; !ok {
 		t.Fatal("expected the most recently used hidden image to be kept")
 	}
+}
+
+func TestImageCacheCountsAnimatedFrames(t *testing.T) {
+	animated := decodeLauncherTestGIF(t)
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	app.insertImageLocked("gif", animated)
+	if got := app.imageCacheByteSizeLocked(); got != animated.PixelBytes() {
+		t.Fatalf("animated cache bytes = %d, want %d", got, animated.PixelBytes())
+	}
+	if animated.PixelBytes() <= animated.Width*animated.Height*4 {
+		t.Fatal("expected GIF cache bytes to include every decoded frame")
+	}
+}
+
+func decodeLauncherTestGIF(t *testing.T) *woxui.Image {
+	t.Helper()
+	red := image.NewPaletted(image.Rect(0, 0, 8, 8), color.Palette{color.RGBA{}, color.RGBA{R: 255, A: 255}})
+	blue := image.NewPaletted(image.Rect(0, 0, 8, 8), color.Palette{color.RGBA{}, color.RGBA{B: 255, A: 255}})
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			red.Set(x, y, color.RGBA{R: 255, A: 255})
+			blue.Set(x, y, color.RGBA{B: 255, A: 255})
+		}
+	}
+	var encoded bytes.Buffer
+	if err := gif.EncodeAll(&encoded, &gif.GIF{
+		Image:     []*image.Paletted{red, blue},
+		Delay:     []int{10, 10},
+		LoopCount: 0,
+		Config:    image.Config{ColorModel: red.Palette, Width: 8, Height: 8},
+	}); err != nil {
+		t.Fatalf("encode gif: %v", err)
+	}
+	decoded, err := woxui.DecodeImage(bytes.NewReader(encoded.Bytes()))
+	if err != nil || !decoded.IsAnimated() {
+		t.Fatalf("decode gif: animated=%t err=%v", decoded != nil && decoded.IsAnimated(), err)
+	}
+	return decoded
 }
 
 func TestImageCacheReplaceUpdatesByteCounter(t *testing.T) {

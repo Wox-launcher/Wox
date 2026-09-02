@@ -80,6 +80,25 @@ func (s *previewImageState) Build(context woxwidget.StateContext, widget any) wo
 	if s.zoom <= 0 {
 		s.zoom = previewImageMinZoom
 	}
+	if props.Image != nil && props.Image.IsAnimated() {
+		key := props.ID
+		if key == "" {
+			key = "preview-image"
+		}
+		return woxwidget.FrameAnimation{
+			Key:    woxwidget.Key(key + "-gif"),
+			Delays: props.Image.FrameDelays(),
+			Builder: func(index int) woxwidget.Widget {
+				frameProps := props
+				frameProps.Image = props.Image.Frame(index)
+				return s.previewImageGesture(context, frameProps)
+			},
+		}
+	}
+	return s.previewImageGesture(context, props)
+}
+
+func (s *previewImageState) previewImageGesture(context woxwidget.StateContext, props PreviewImageProps) woxwidget.Widget {
 	frame := s.frame(props)
 	gesture := woxwidget.Gesture{
 		ID: previewImageOverlayGestureID,

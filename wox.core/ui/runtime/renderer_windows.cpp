@@ -43,6 +43,7 @@ struct WoxRenderer {
   ID2D1Bitmap1 *cached_large_image_bitmap = nullptr;
   uint64_t cached_large_image_id = 0;
   std::vector<CachedImageBitmap> cached_image_bitmaps;
+  std::vector<ID2D1Bitmap1 *> retired_image_bitmaps;
   uint64_t cached_image_bitmap_bytes = 0;
   uint64_t cached_image_use_serial = 0;
   ID2D1SolidColorBrush *brush = nullptr;
@@ -193,6 +194,15 @@ static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
   renderer->cached_image_bitmap_bytes = 0;
 }
 
+// release_retired_image_bitmaps keeps evicted resources alive until EndDraw has
+// consumed every bitmap referenced by the current frame.
+static void release_retired_image_bitmaps(WoxRenderer *renderer) {
+  for (ID2D1Bitmap1 *bitmap : renderer->retired_image_bitmaps) {
+    release_com(&bitmap);
+  }
+  renderer->retired_image_bitmaps.clear();
+}
+
 static ID2D1Bitmap1 *find_cached_image_bitmap(WoxRenderer *renderer, uint64_t image_id) {
   for (CachedImageBitmap &entry : renderer->cached_image_bitmaps) {
     if (entry.image_id == image_id) {
@@ -222,7 +232,8 @@ static bool cache_image_bitmap(WoxRenderer *renderer, uint64_t image_id, uint64_
           return left.last_used < right.last_used;
         });
     renderer->cached_image_bitmap_bytes -= oldest->byte_size;
-    release_com(&oldest->bitmap);
+    renderer->retired_image_bitmaps.push_back(oldest->bitmap);
+    oldest->bitmap = nullptr;
     renderer->cached_image_bitmaps.erase(oldest);
   }
 
@@ -449,6 +460,7 @@ static void destroy_renderer(WoxRenderer *renderer) {
     }
     renderer->d2d_context->EndDraw();
   }
+  release_retired_image_bitmaps(renderer);
   if (renderer->d2d_context != nullptr) {
     renderer->d2d_context->SetTarget(nullptr);
   }
@@ -1116,6 +1128,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     renderer->d2d_context->Clear(&transparent);
     result = renderer->d2d_context->EndDraw();
   }
+  release_retired_image_bitmaps(renderer);
   renderer->last_end_draw_result = result;
   renderer->frame_open = false;
   if (renderer->simulate_device_removed) {

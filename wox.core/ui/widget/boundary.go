@@ -30,6 +30,7 @@ type animationDependencyKind uint8
 const (
 	animationDependencyFloat animationDependencyKind = iota
 	animationDependencyLoop
+	animationDependencyFrame
 )
 
 type animationDependency struct {

@@ -511,8 +511,87 @@ func (w *WoxImage) OverlayFullPercentage(overlay WoxImage, percentage float64) W
 	return overlayWoxImg
 }
 
+// IsGif reports GIF paths, URLs, and data URIs so conversion keeps the original
+// file and UI can decode every playback frame instead of a resized PNG.
 func (w *WoxImage) IsGif() bool {
-	return strings.HasSuffix(w.ImageData, ".gif")
+	data := strings.ToLower(strings.TrimSpace(w.ImageData))
+	if data == "" {
+		return false
+	}
+	if strings.HasPrefix(data, "data:image/gif") {
+		return true
+	}
+	if cut := strings.IndexAny(data, "?#"); cut >= 0 {
+		data = data[:cut]
+	}
+	return strings.HasSuffix(data, ".gif")
+}
+
+// IsAnimatedGif reports sources that must stay as the original GIF file, including
+// cached remote downloads whose filename extension is not .gif.
+func (w *WoxImage) IsAnimatedGif() bool {
+	if w.IsGif() {
+		return true
+	}
+	if w.ImageType != WoxImageTypeAbsolutePath || w.ImageData == "" {
+		return false
+	}
+	return isGIFFile(w.ImageData)
+}
+
+// materializeURLImage downloads a remote image into the local cache and returns an absolute-path image.
+func (w *WoxImage) materializeURLImage(ctx context.Context) (WoxImage, error) {
+	if w.ImageType != WoxImageTypeUrl {
+		return *w, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	cachePath, err := w.urlImageCachePath(w.ImageData)
+	if err != nil {
+		return WoxImage{}, err
+	}
+	if info, err := os.Stat(cachePath); err == nil && !info.IsDir() && info.Size() > 0 {
+		imagecache.Touch(ctx, cachePath, info)
+		return NewWoxImageAbsolutePath(cachePath), nil
+	}
+	if err := w.warmURLImageCache(ctx, w.ImageData, cachePath); err != nil {
+		return WoxImage{}, err
+	}
+	if info, err := os.Stat(cachePath); err != nil || info.IsDir() || info.Size() == 0 {
+		return WoxImage{}, fmt.Errorf("url image cache miss after download: %s", w.ImageData)
+	}
+	return NewWoxImageAbsolutePath(cachePath), nil
+}
+
+func isGIFFile(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	var header [6]byte
+	if _, err := io.ReadFull(file, header[:]); err != nil {
+		return false
+	}
+	return string(header[:]) == "GIF87a" || string(header[:]) == "GIF89a"
+}
+
+// localizeRemoteIconSource downloads GIF URLs only on the synchronous convert
+// path. Query polish keeps them lazy so a grid of Tenor/Giphy results does not
+// block on network I/O before the first paint. Non-GIF URLs stay typed as url
+// so their resize cache key remains the original remote source.
+func localizeRemoteIconSource(ctx context.Context, image WoxImage, allowLazy bool) WoxImage {
+	if allowLazy || image.ImageType != WoxImageTypeUrl || !image.IsGif() {
+		return image
+	}
+	localized, err := image.materializeURLImage(ctx)
+	if err != nil {
+		return image
+	}
+	return localized
 }
 
 func NewWoxImageSvg(svg string) WoxImage {
@@ -819,6 +898,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 	relativeStart := util.GetSystemTimestamp()
 	relativeTimingStart := time.Now()
 	newImage = ConvertRelativePathToAbsolutePath(ctx, newImage, pluginDirectory)
+	newImage = localizeRemoteIconSource(ctx, newImage, allowLazy)
 	timing.RelativeCost = util.GetSystemTimestamp() - relativeStart
 	timing.RelativeCostUs = time.Since(relativeTimingStart).Microseconds()
 	timing.NormalizedType = newImage.ImageType
@@ -926,6 +1006,7 @@ func convertIconWithSizeFast(ctx context.Context, image WoxImage, pluginDirector
 
 	newImage = ConvertFileIconToAbsolutePathWithSize(ctx, image, size)
 	newImage = ConvertRelativePathToAbsolutePath(ctx, newImage, pluginDirectory)
+	newImage = localizeRemoteIconSource(ctx, newImage, allowLazy)
 	if newImage.ImageType == WoxImageTypeSvg || (newImage.ImageType == WoxImageTypeAbsolutePath && isSvgFilePath(newImage.ImageData)) {
 		return newImage
 	}
@@ -956,7 +1037,7 @@ func shouldLazyLoadImageIconDetailed(ctx context.Context, woxImage WoxImage, siz
 	if woxImage.ImageType == WoxImageTypeUrl {
 		return true, "remote_url", 0, 0
 	}
-	if woxImage.ImageType != WoxImageTypeAbsolutePath || woxImage.IsGif() || isSvgFilePath(woxImage.ImageData) {
+	if woxImage.ImageType != WoxImageTypeAbsolutePath || woxImage.IsAnimatedGif() || isSvgFilePath(woxImage.ImageData) {
 		return false, "not_absolute_raster", 0, 0
 	}
 
@@ -1026,7 +1107,7 @@ func cachedResizeImageDetailed(ctx context.Context, image WoxImage, size int) (W
 // have both derived files already, so this avoids repeated DecodeConfig and stat
 // work on the query polish path.
 func cachedCroppedResizeImageDetailed(ctx context.Context, image WoxImage, size int) (WoxImage, bool, string) {
-	if image.ImageType == WoxImageTypeEmoji || image.IsGif() {
+	if image.ImageType == WoxImageTypeEmoji || image.IsAnimatedGif() {
 		return WoxImage{}, false, "skipped"
 	}
 
@@ -1065,7 +1146,7 @@ func resizeImageWithTiming(ctx context.Context, image WoxImage, size int) (newIm
 		timing.Result = "skipped_emoji"
 		return image, timing
 	}
-	if image.IsGif() {
+	if image.IsAnimatedGif() {
 		timing.Result = "skipped_gif"
 		return image, timing
 	}
@@ -1139,7 +1220,7 @@ func cropPngTransparentPaddingsWithTiming(ctx context.Context, woxImage WoxImage
 		timing.Result = "skipped_emoji"
 		return woxImage, timing
 	}
-	if woxImage.IsGif() {
+	if woxImage.IsAnimatedGif() {
 		timing.Result = "skipped_gif"
 		return woxImage, timing
 	}

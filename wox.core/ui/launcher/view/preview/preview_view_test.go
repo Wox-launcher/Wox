@@ -1,6 +1,10 @@
 package preview
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/gif"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -41,6 +45,41 @@ func TestPreviewImageWrapsOverlayGestureWithOnTap(t *testing.T) {
 	if !tapped {
 		t.Fatal("preview image tap did not fire")
 	}
+}
+
+func TestPreviewImageWrapsAnimatedGIF(t *testing.T) {
+	animated := decodePreviewTestGIF(t)
+	view := PreviewImage(PreviewImageProps{Width: 200, Height: 100, Image: animated}).(woxwidget.Stateful)
+	child := view.CreateState().Build(woxwidget.StateContext{}, PreviewImageProps{Width: 200, Height: 100, Image: animated})
+	if _, ok := child.(woxwidget.FrameAnimation); !ok {
+		t.Fatalf("preview image child = %T, want FrameAnimation", child)
+	}
+}
+
+func decodePreviewTestGIF(t *testing.T) *woxui.Image {
+	t.Helper()
+	red := image.NewPaletted(image.Rect(0, 0, 8, 8), color.Palette{color.RGBA{}, color.RGBA{R: 255, A: 255}})
+	blue := image.NewPaletted(image.Rect(0, 0, 8, 8), color.Palette{color.RGBA{}, color.RGBA{B: 255, A: 255}})
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			red.Set(x, y, color.RGBA{R: 255, A: 255})
+			blue.Set(x, y, color.RGBA{B: 255, A: 255})
+		}
+	}
+	var encoded bytes.Buffer
+	if err := gif.EncodeAll(&encoded, &gif.GIF{
+		Image:     []*image.Paletted{red, blue},
+		Delay:     []int{10, 10},
+		LoopCount: 0,
+		Config:    image.Config{ColorModel: red.Palette, Width: 8, Height: 8},
+	}); err != nil {
+		t.Fatalf("encode gif: %v", err)
+	}
+	decoded, err := woxui.DecodeImage(bytes.NewReader(encoded.Bytes()))
+	if err != nil || !decoded.IsAnimated() {
+		t.Fatalf("decode gif: animated=%t err=%v", decoded != nil && decoded.IsAnimated(), err)
+	}
+	return decoded
 }
 
 func builtPreviewImage(props PreviewImageProps) woxwidget.Gesture {

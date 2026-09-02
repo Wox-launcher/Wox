@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"net/http"
@@ -38,6 +39,38 @@ func TestConvertIconWithSizeMaybeLazyDefersLargeRasterIcon(t *testing.T) {
 	}
 	if payload.Token != "" {
 		t.Fatalf("common lazy marker should not allocate token, got %q", payload.Token)
+	}
+}
+
+func TestWoxImageIsGifDetectsPathAndBase64(t *testing.T) {
+	tests := []struct {
+		name  string
+		image WoxImage
+		want  bool
+	}{
+		{name: "absolute gif", image: NewWoxImageAbsolutePath(`C:\icons\loading.gif`), want: true},
+		{name: "url with query", image: NewWoxImageUrl("https://example.com/icon.gif?size=32"), want: true},
+		{name: "base64 gif", image: NewWoxImageBase64("data:image/gif;base64,R0lGODlh"), want: true},
+		{name: "png path", image: NewWoxImageAbsolutePath(`C:\icons\app.png`), want: false},
+		{name: "empty", image: WoxImage{}, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.image.IsGif(); got != test.want {
+				t.Fatalf("IsGif() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestConvertIconPreservesGifAbsolutePath(t *testing.T) {
+	initConvertIconTestLocation(t)
+	sourcePath := writeTestGIF(t)
+
+	converted := ConvertIconWithSize(context.Background(), NewWoxImageAbsolutePath(sourcePath), "", ResultListIconSize)
+
+	if converted.ImageType != WoxImageTypeAbsolutePath || converted.ImageData != sourcePath {
+		t.Fatalf("expected original GIF path, got %+v", converted)
 	}
 }
 
@@ -74,6 +107,50 @@ func TestConvertIconWithSizeMaybeLazyUsesWarmResizeCacheForLargeRaster(t *testin
 	}
 	if converted.ImageData != warmConverted.ImageData {
 		t.Fatalf("expected warm resize cache path %q, got %q", warmConverted.ImageData, converted.ImageData)
+	}
+}
+
+func TestConvertIconWithSizeMaterializesRemoteGIF(t *testing.T) {
+	initConvertIconTestLocation(t)
+	requestCount := 0
+	gifBytes := encodedTestGIF(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		response.Header().Set("Content-Type", "image/gif")
+		if _, err := response.Write(gifBytes); err != nil {
+			t.Errorf("write remote gif: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	converted := ConvertIconWithSize(context.Background(), NewWoxImageUrl(server.URL+"/doge.gif"), "", ResultListIconSize)
+
+	if requestCount != 1 {
+		t.Fatalf("remote GIF conversion made %d requests, want 1", requestCount)
+	}
+	if converted.ImageType != WoxImageTypeAbsolutePath || !converted.IsAnimatedGif() {
+		t.Fatalf("expected cached GIF file, got %+v", converted)
+	}
+	if _, err := os.Stat(converted.ImageData); err != nil {
+		t.Fatalf("cached GIF file missing: %v", err)
+	}
+}
+
+func TestConvertIconWithSizeMaybeLazyDefersRemoteGIFWithoutRequest(t *testing.T) {
+	initConvertIconTestLocation(t)
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount++
+	}))
+	defer server.Close()
+
+	converted := ConvertIconWithSizeMaybeLazy(context.Background(), NewWoxImageUrl(server.URL+"/doge.gif"), "", ResultListIconSize)
+
+	if requestCount != 0 {
+		t.Fatalf("remote GIF polish made %d synchronous requests", requestCount)
+	}
+	if converted.ImageType != WoxImageTypeLazyLoad {
+		t.Fatalf("expected remote GIF lazy marker, got %+v", converted)
 	}
 }
 
@@ -268,4 +345,39 @@ func writeTestImage(t *testing.T, width int, height int) string {
 		t.Fatalf("write test image: %v", err)
 	}
 	return filePath
+}
+
+func writeTestGIF(t *testing.T) string {
+	t.Helper()
+
+	frame := image.NewPaletted(image.Rect(0, 0, 8, 8), color.Palette{color.RGBA{R: 255, A: 255}})
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			frame.SetColorIndex(x, y, 0)
+		}
+	}
+	filePath := filepath.Join(t.TempDir(), "icon.gif")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("create gif: %v", err)
+	}
+	defer file.Close()
+	if err := gif.EncodeAll(file, &gif.GIF{
+		Image:     []*image.Paletted{frame, frame},
+		Delay:     []int{10, 10},
+		LoopCount: 0,
+		Config:    image.Config{ColorModel: frame.Palette, Width: 8, Height: 8},
+	}); err != nil {
+		t.Fatalf("encode gif: %v", err)
+	}
+	return filePath
+}
+
+func encodedTestGIF(t *testing.T) []byte {
+	t.Helper()
+	data, err := os.ReadFile(writeTestGIF(t))
+	if err != nil {
+		t.Fatalf("read test gif: %v", err)
+	}
+	return data
 }

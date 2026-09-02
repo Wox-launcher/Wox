@@ -87,6 +87,14 @@ func (s *CoreServices) ResolveImage(ctx context.Context, sessionID string, sourc
 	if source.ImageType != common.WoxImageTypeUrl && source.ImageType != common.WoxImageTypeEmoji {
 		return common.WoxImage{}, fmt.Errorf("image type %s does not require core resolution", source.ImageType)
 	}
+	if source.ImageType == common.WoxImageTypeUrl {
+		// Keep remote GIFs as cached files so UI can play every frame. Rasterizing
+		// here would collapse them to a PNG of the first frame.
+		converted := common.ConvertIconWithSize(ctx, source, "", size)
+		if converted.IsAnimatedGif() && converted.ImageType == common.WoxImageTypeAbsolutePath && !converted.IsEmpty() {
+			return converted, nil
+		}
+	}
 	var decoded image.Image
 	var err error
 	if source.ImageType == common.WoxImageTypeEmoji {

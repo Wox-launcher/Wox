@@ -96,12 +96,9 @@ const (
 	hiddenImageCacheMaxBytes   = 8 << 20
 )
 
-// imageCacheBytes accounts for one decoded RGBA buffer in the dual-budget LRU.
+// imageCacheBytes accounts for every decoded RGBA frame in the dual-budget LRU.
 func imageCacheBytes(image *woxui.Image) int {
-	if image == nil {
-		return 0
-	}
-	return image.Width * image.Height * 4
+	return image.PixelBytes()
 }
 
 func (a *App) imageFor(source woxImage) *woxui.Image {
