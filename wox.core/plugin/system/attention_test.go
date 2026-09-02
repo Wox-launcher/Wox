@@ -84,6 +84,9 @@ func (a *attentionActionTestAPI) Copy(ctx context.Context, params plugin.CopyPar
 func (a *attentionActionTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }
+func (a *attentionActionTestAPI) GetCacheFolder(ctx context.Context) string {
+	return ""
+}
 
 func newSystemAttentionTestManager(t *testing.T) *plugin.AttentionManager {
 	t.Helper()

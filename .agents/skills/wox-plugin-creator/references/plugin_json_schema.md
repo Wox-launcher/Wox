@@ -6,7 +6,7 @@ This document defines the schema for `plugin.json`, the manifest file required f
 
 The `plugin.json` file must be a valid JSON object located in the root of your plugin directory.
 
-> **Note**: Script plugins do **not** use `plugin.json`. They embed a JSON metadata block inside the script file comments.
+> **Note**: Script plugins and single-file SDK plugins do **not** use `plugin.json`. They embed a JSON metadata block inside the file header comments. Single-file SDK plugins must set `MinWoxVersion` to `"2.4.2"`.
 
 ## Fields Specification
 
@@ -20,7 +20,7 @@ The `plugin.json` file must be a valid JSON object located in the root of your p
 | `Author`          | `string`   | Name of the author.                                                                                | `"Wox-Launcher"`                           |
 | `Website`         | `string`   | URL to the plugin's website or repository.                                                         | `"http://www.github.com/Wox-launcher/Wox"` |
 | `Version`         | `string`   | Semantic version string.                                                                           | `"1.0.0"`                                  |
-| `MinWoxVersion`   | `string`   | Minimum Wox version required (SemVer).                                                             | `"2.0.0"`                                  |
+| `MinWoxVersion`   | `string`   | Minimum Wox version required (SemVer). Single-file SDK plugins must use `"2.4.2"`.                  | `"2.0.0"` / `"2.4.2"`                      |
 | `Runtime`         | `string`   | Runtime environment. Enum: `PYTHON`, `NODEJS`. Wox requires Python 3.10+ or Node.js 20+.           | `"PYTHON"`                                 |
 | `Entry`           | `string`   | Main entry file path relative to plugin root.                                                      | `"main.py"` or `"dist/index.js"`           |
 | `Icon`            | `Icon`     | Plugin icon. See [Icon Formats](#icon-formats) below.                                              | `"emoji:🧮"`                               |
@@ -123,6 +123,10 @@ Use this reference as the source of truth when authoring `SettingDefinitions` in
 | `IsPlatformSpecific`  | `boolean`  | Optional. If `true`, Wox stores different values per platform. Normal plugin settings are eligible for cloud sync, so use this for values that should not be shared across Windows, macOS, and Linux. |
 
 #### Cloud Sync And Platform-Specific Settings
+
+SDK and single-file SDK plugins should persist settings through the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). Those APIs are what Wox can sync across machines. Do not store ordinary plugin settings in local files or a custom store.
+
+Machine-local cache is different. If the plugin downloads files, stores thumbnails, or caches search results, put those files under `GetCacheFolder` / `get_cache_folder` (`~/.wox/cache/plugins/<plugin-id>/`) first. Script plugins use `WOX_DIRECTORY_PLUGIN_CACHE`. Do not create a custom `cache/` directory beside the plugin or under user data.
 
 Before adding a setting, decide whether cloud sync should share one value across all devices or keep a separate value per platform.
 

@@ -65,6 +65,7 @@ Methods for interacting with Wox:
 - **Commands**: `register_query_commands()`
 - **Clipboard**: `copy()`
 - **Screenshot**: `screenshot()`
+- **Cache**: `get_cache_folder()`
 
 ### Models
 

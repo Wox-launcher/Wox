@@ -126,6 +126,10 @@ func (e emptyAPIImpl) Screenshot(ctx context.Context, option plugin.ScreenshotOp
 	return plugin.ScreenshotResult{}
 }
 
+func (e emptyAPIImpl) GetCacheFolder(ctx context.Context) string {
+	return ""
+}
+
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
 		util.GetLocation().Init()

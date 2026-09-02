@@ -2017,6 +2017,7 @@
   "plugin_uninstall_progress_preparing": "准备卸载...",
   "plugin_uninstall_progress_removing": "正在移除插件文件...",
   "plugin_uninstall_progress_cleaning_settings": "正在清理插件设置...",
+  "plugin_uninstall_progress_cleaning_cache": "正在清理插件缓存...",
   "plugin_uninstall_progress_unloading": "正在停止插件...",
   "plugin_uninstall_progress_stopping_host": "正在停止运行时 Host...",
   "plugin_uninstall_progress_retrying_removal": "正在于 Host 停止后重试删除文件...",

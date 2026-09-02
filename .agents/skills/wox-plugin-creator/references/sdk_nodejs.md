@@ -94,7 +94,18 @@ The `ctx` object is required for all API calls.
 - `Copy(ctx, params: CopyParams)`: Copy text or image to clipboard.
 - `IsVisible(ctx)`: Check if Wox window is visible.
 
+### Cache
+
+If the plugin needs on-disk cache, prefer `GetCacheFolder` over any custom directory.
+
+- `GetCacheFolder(ctx)`: Return `~/.wox/cache/plugins/<plugin-id>/`. Wox creates it if needed and deletes it on uninstall.
+- Call it once in `init()`, keep the path, and write downloads, thumbnails, and search-result files under it.
+- Do not invent `cache/`, `tmp/`, or `downloads/` next to the plugin file, under user data, or under a hardcoded folder name.
+- User preferences and favorites are settings, not cache. Use `GetSetting` / `SetSetting` for those.
+
 ### Settings
+
+Prefer these APIs for all plugin settings. Values stored here can sync across machines through Wox cloud sync. Do not persist ordinary settings in local files or a custom store.
 
 - `GetSetting(ctx, key)`: Retrieve a stored setting.
 - `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting. Normal plugin settings are eligible for cloud sync, so pass `true` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
@@ -119,6 +130,8 @@ The `ctx` object is required for all API calls.
 
 ## Settings Authoring Notes
 
+- Prefer `GetSetting`, `SaveSetting`, and `OnSettingChanged` for plugin settings. These APIs participate in Wox cloud sync across machines. Avoid local files or custom persistence for values the user would expect to follow them to another device.
+- If the plugin caches files, put them under `GetCacheFolder(ctx)` first. Do not invent a cache directory under the plugin folder or user-data tree.
 - Read `references/plugin_json_schema.md` before writing `plugin.json` settings.
 - For ready-to-copy settings examples and advanced patterns, read `references/settings_patterns.md`.
 - `OnGetDynamicSetting` is used together with a `dynamic` entry in `SettingDefinitions`.

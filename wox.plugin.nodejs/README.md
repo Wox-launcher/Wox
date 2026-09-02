@@ -130,6 +130,7 @@ Methods for interacting with Wox:
 - **Callbacks**: `onUnload()`, `onDeepLink()`
 - **Commands**: `registerQueryCommands()`
 - **Clipboard**: `copy()`
+- **Cache**: `GetCacheFolder()`
 
 ## Actions
 

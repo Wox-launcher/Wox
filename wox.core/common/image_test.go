@@ -63,6 +63,20 @@ func TestWoxImageIsGifDetectsPathAndBase64(t *testing.T) {
 	}
 }
 
+func TestResolveAnimatedGIFPathAbsoluteFile(t *testing.T) {
+	sourcePath := writeTestGIF(t)
+	image := NewWoxImageAbsolutePath(sourcePath)
+
+	path, cleanup, err := image.ResolveAnimatedGIFPath(context.Background())
+	if err != nil {
+		t.Fatalf("ResolveAnimatedGIFPath() error = %v", err)
+	}
+	defer cleanup()
+	if path != sourcePath {
+		t.Fatalf("expected %q, got %q", sourcePath, path)
+	}
+}
+
 func TestConvertIconPreservesGifAbsolutePath(t *testing.T) {
 	initConvertIconTestLocation(t)
 	sourcePath := writeTestGIF(t)

@@ -89,6 +89,7 @@ Available environment variables:
 - WOX_DIRECTORY_WOX_DATA: Wox application data directory
 - WOX_DIRECTORY_PLUGINS: Plugin directory
 - WOX_DIRECTORY_THEMES: Theme directory
+- WOX_DIRECTORY_PLUGIN_CACHE: Dedicated cache folder (~/.wox/cache/plugins/<plugin-id>/), deleted on uninstall
 - WOX_SETTING_<KEY>: Plugin settings (e.g., WOX_SETTING_API_KEY for setting key "api_key")
 """
 

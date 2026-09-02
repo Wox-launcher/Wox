@@ -1659,6 +1659,19 @@ export interface PublicAPI {
    * @param option Screenshot options
    */
   Screenshot: (ctx: Context, option: ScreenshotOption) => Promise<ScreenshotResult>
+
+  /**
+   * Get this plugin's dedicated cache directory.
+   *
+   * The folder is `~/.wox/cache/plugins/<plugin-id>/`. Wox creates it if needed
+   * and deletes it when the plugin is uninstalled. Use it for machine-local
+   * files such as downloads and search caches. Persist user preferences with
+   * GetSetting / SetSetting instead.
+   *
+   * @param ctx Context
+   * @returns Absolute cache directory path, or an empty string on failure
+   */
+  GetCacheFolder: (ctx: Context) => Promise<string>
 }
 
 /**

@@ -5,6 +5,8 @@ Use it when `plugin.json` needs `SettingDefinitions`, validators, dynamic settin
 
 ## Choose The Right Pattern
 
+- SDK and single-file SDK plugins should store settings with the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). Those APIs can sync values across machines. Do not invent a local file or custom store for ordinary plugin settings.
+- Cache files are not settings. If the plugin needs downloads, thumbnails, or search-result files, put them under `GetCacheFolder` / `get_cache_folder` first. Script plugins use `WOX_DIRECTORY_PLUGIN_CACHE`.
 - Use a `textbox` for free-form string input.
 - Add validators when empty or non-numeric values should be rejected.
 - Use a `select` for a fixed option list.

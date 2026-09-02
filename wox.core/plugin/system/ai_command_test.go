@@ -154,6 +154,9 @@ func (a *aiCommandTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
 func (a *aiCommandTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }
+func (a *aiCommandTestAPI) GetCacheFolder(ctx context.Context) string {
+	return ""
+}
 
 func aiCommandTestCommand(defaultAction string) map[string]any {
 	command := map[string]any{

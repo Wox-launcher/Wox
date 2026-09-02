@@ -28,6 +28,8 @@ int clipboardWriteText(const wchar_t *text, int textLen);
 int clipboardWriteFilePaths(const wchar_t *paths, int totalLen);
 int clipboardWriteImage(const unsigned char *pngData, int pngLen,
                         const unsigned char *dibData, int dibLen);
+int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
+                              const unsigned char *gifData, int gifLen);
 DWORD clipboardGetSequenceNumber();
 int clipboardGetDiagnosticInfo(char *buf, int bufLen);
 

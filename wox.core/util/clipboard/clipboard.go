@@ -215,6 +215,26 @@ func WriteImageBytes(pngData []byte, dibData []byte) error {
 	return nil
 }
 
+// WriteAnimatedGIF copies a local GIF file to the clipboard while preserving
+// animation. Static CopyTypeImage writes decode to PNG/DIB and drop frames.
+func WriteAnimatedGIF(filePath string) error {
+	beginSelfWrite()
+	if err := writeAnimatedGIFFile(filePath); err != nil {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write animated gif failed: %v", err))
+		return err
+	}
+	endSelfWrite()
+	return nil
+}
+
+func isGIFBytes(data []byte) bool {
+	if len(data) < 6 {
+		return false
+	}
+	header := string(data[:6])
+	return header == "GIF87a" || header == "GIF89a"
+}
+
 // Watch subscribes to clipboard changes and returns a function that waits for any active callback before unsubscribing.
 func Watch(cb func(Data)) func() {
 	watchMutex.Lock()

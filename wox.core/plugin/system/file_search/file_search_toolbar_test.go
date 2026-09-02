@@ -90,6 +90,7 @@ func (a fileSearchToolbarTestAPI) Copy(ctx context.Context, params plugin.CopyPa
 func (a fileSearchToolbarTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }
+func (a fileSearchToolbarTestAPI) GetCacheFolder(ctx context.Context) string { return "" }
 
 func TestIncrementalToolbarMessageWaitsForMinimumVisibleDuration(t *testing.T) {
 	plugin := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}

@@ -143,6 +143,28 @@ void WriteClipboardFiles(const char **filePaths, int count) {
     }
 }
 
+void WriteClipboardAnimatedGIF(const char *filePath, const unsigned char *gifData, int gifLen) {
+    if (filePath == NULL) {
+        return;
+    }
+
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+
+    NSString *path = [NSString stringWithUTF8String:filePath];
+    if (path != nil && [path length] > 0) {
+        NSURL *url = [NSURL fileURLWithPath:path];
+        if (url != nil) {
+            [pasteboard writeObjects:@[url]];
+        }
+    }
+
+    if (gifData != NULL && gifLen > 0) {
+        NSData *data = [NSData dataWithBytes:gifData length:gifLen];
+        [pasteboard setData:data forType:@"com.compuserve.gif"];
+    }
+}
+
 void WriteClipboardImage(const char *imageData, int length) {
     NSData *data = [NSData dataWithBytes:imageData length:length];
     NSImage *image = [[NSImage alloc] initWithData:data];

@@ -1837,6 +1837,7 @@
   "plugin_uninstall_progress_preparing": "Подготовка к удалению...",
   "plugin_uninstall_progress_removing": "Удаление файлов плагина...",
   "plugin_uninstall_progress_cleaning_settings": "Очистка настроек плагина...",
+  "plugin_uninstall_progress_cleaning_cache": "Очистка кэша плагина...",
   "plugin_uninstall_progress_unloading": "Остановка плагина...",
   "plugin_uninstall_progress_stopping_host": "Остановка хоста рантайма...",
   "plugin_uninstall_progress_retrying_removal": "Повторное удаление файлов при остановленном хосте...",

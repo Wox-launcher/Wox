@@ -327,4 +327,8 @@ export class PluginAPI implements PublicAPI {
       option: JSON.stringify(option)
     })) as ScreenshotResult
   }
+
+  async GetCacheFolder(ctx: Context): Promise<string> {
+    return (await this.invokeMethod(ctx, "GetCacheFolder", {})) as string
+  }
 }

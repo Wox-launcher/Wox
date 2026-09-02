@@ -1112,7 +1112,7 @@
     "MinWoxVersion": "2.4.2",
     "Runtime": "python",
     "Description": "i18n:plugin_description",
-    "IconUrl": "https://gist.github.com/user-attachments/assets/b3fb4389-3d9f-4f3d-b87d-a508434b44e0",
+    "IconEmoji": "🚀",
     "Website": "https://gist.github.com/qianlifeng/dd2735f0aedb12b99c0aa0e226771a8f",
     "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/dd2735f0aedb12b99c0aa0e226771a8f/raw/Wox.Plugin.Speedtest.py",
     "ScreenshotUrls": [
@@ -1133,6 +1133,38 @@
       "zh_CN": {
         "plugin_name": "Speedtest",
         "plugin_description": "通过 HTTP 下载、上传和延迟测试网速"
+      }
+    }
+  },
+  {
+    "Id": "a7f3b2c1-9d4e-4f6a-8b2c-1e5d9a3f7b24",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.4",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "i18n:plugin_description",
+    "IconEmoji": "🔊",
+    "Website": "https://gist.github.com/qianlifeng/bb270f4d9d36053d6750244445e5bfc9",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/bb270f4d9d36053d6750244445e5bfc9/raw/Wox.Plugin.Script.SoundSwitch.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/dd7da06f-e99a-4fb4-8e00-0d9155b490a8",
+      "https://gist.github.com/user-attachments/assets/ddabbaed-2bb1-4153-8b7f-7f7e35123a48"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin"
+    ],
+    "DateCreated": "2026-09-02 22:40:00",
+    "DateUpdated": "2026-09-02 22:40:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Sound Switch",
+        "plugin_description": "Switch audio input and output devices quickly"
+      },
+      "zh_CN": {
+        "plugin_name": "声音切换",
+        "plugin_description": "快速切换音频输入和输出设备"
       }
     }
   }

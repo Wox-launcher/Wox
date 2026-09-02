@@ -139,6 +139,9 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetCacheDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetPluginCacheRootDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetImageCacheDirectory()); directoryErr != nil {
 		return directoryErr
 	}
@@ -285,6 +288,59 @@ func (l *Location) GetSingleFilePluginTemplatesDirectory() string {
 
 func (l *Location) GetCacheDirectory() string {
 	return path.Join(l.woxDataDirectory, "cache")
+}
+
+// GetPluginCacheRootDirectory is the shared parent for plugin-owned cache folders.
+func (l *Location) GetPluginCacheRootDirectory() string {
+	return path.Join(l.GetCacheDirectory(), "plugins")
+}
+
+// GetPluginCacheDirectory returns ~/.wox/cache/plugins/<plugin-id> for a loaded plugin.
+func (l *Location) GetPluginCacheDirectory(pluginID string) (string, error) {
+	safeID, err := sanitizePluginCacheID(pluginID)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(l.GetPluginCacheRootDirectory(), safeID), nil
+}
+
+// EnsurePluginCacheDirectory creates the plugin cache folder if needed and returns it.
+func (l *Location) EnsurePluginCacheDirectory(pluginID string) (string, error) {
+	directory, err := l.GetPluginCacheDirectory(pluginID)
+	if err != nil {
+		return "", err
+	}
+	if err := l.EnsureDirectoryExist(directory); err != nil {
+		return "", err
+	}
+	return directory, nil
+}
+
+// RemovePluginCacheDirectory deletes a plugin's cache folder. Missing folders are not an error.
+func (l *Location) RemovePluginCacheDirectory(pluginID string) error {
+	directory, err := l.GetPluginCacheDirectory(pluginID)
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(directory); os.IsNotExist(statErr) {
+		return nil
+	}
+	if removeErr := os.RemoveAll(directory); removeErr != nil {
+		return fmt.Errorf("failed to remove plugin cache directory [%s]: %w", directory, removeErr)
+	}
+	return nil
+}
+
+func sanitizePluginCacheID(pluginID string) (string, error) {
+	id := strings.TrimSpace(pluginID)
+	if id == "" {
+		return "", fmt.Errorf("plugin id is empty")
+	}
+	// Keep cache folders under cache/plugins and reject path traversal from a hostile plugin id.
+	if strings.ContainsAny(id, `/\`) || strings.Contains(id, "..") || path.Base(id) != id {
+		return "", fmt.Errorf("plugin id is not a safe cache folder name: %s", pluginID)
+	}
+	return id, nil
 }
 
 func (l *Location) GetImageCacheDirectory() string {

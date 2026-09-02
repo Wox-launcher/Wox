@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -334,6 +335,44 @@ func writeFilePaths(filePaths []string) error {
 	ret := C.clipboardWriteFilePaths((*C.wchar_t)(unsafe.Pointer(&buffer[0])), C.int(len(buffer)))
 	if ret != 0 {
 		return fmt.Errorf("clipboard: writeFilePaths failed (code=%d)", int(ret))
+	}
+
+	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
+	return nil
+}
+
+func writeAnimatedGIFFile(filePath string) error {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return fmt.Errorf("clipboard: gif file path is empty")
+	}
+
+	gifData, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("clipboard: read gif file: %w", err)
+	}
+	if !isGIFBytes(gifData) {
+		return fmt.Errorf("clipboard: file is not a GIF")
+	}
+
+	buffer := utf16Encode(filePath)
+	buffer = append(buffer, 0)
+
+	var cGIF *C.uchar
+	cGIFLen := C.int(0)
+	if len(gifData) > 0 {
+		cGIF = (*C.uchar)(unsafe.Pointer(&gifData[0]))
+		cGIFLen = C.int(len(gifData))
+	}
+
+	ret := C.clipboardWriteAnimatedGIF(
+		(*C.wchar_t)(unsafe.Pointer(&buffer[0])),
+		C.int(len(buffer)),
+		cGIF,
+		cGIFLen,
+	)
+	if ret != 0 {
+		return fmt.Errorf("clipboard: writeAnimatedGIF failed (code=%d)", int(ret))
 	}
 
 	lastSeqNum = uint32(C.clipboardGetSequenceNumber())

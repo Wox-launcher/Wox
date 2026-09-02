@@ -144,3 +144,7 @@ func (m *mockAPI) Copy(ctx context.Context, params plugin.CopyParams) {
 func (m *mockAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }
+
+func (m *mockAPI) GetCacheFolder(ctx context.Context) string {
+	return ""
+}

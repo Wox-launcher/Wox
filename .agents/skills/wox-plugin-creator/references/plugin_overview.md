@@ -34,6 +34,7 @@ One `.py` or CommonJS `.js` file that loads into the existing Python or Node.js 
 - Full Public API, same as a packaged SDK plugin.
 - Query/action do not start a new process.
 - Metadata lives in a comment JSON header.
+- Requires Wox 2.4.2 or later. Header `MinWoxVersion` must be `"2.4.2"`.
 - Saving the file reloads the plugin.
 - Python can `import wox_plugin`. Node.js first version must use `module.exports.plugin` and `params.API`; it cannot import `@wox-launcher/wox-plugin`.
 - No pip/npm dependencies, relative images, or extra files.
@@ -58,22 +59,24 @@ Script plugins are not deprecated. Use them when a one-shot command wrapper is e
    - **Script plugins**: Use the script templates under `assets/script_plugin_templates/`.
 2. **Configure**:
    - SDK plugins: edit `plugin.json` to define metadata, trigger keywords, supported OS, features, i18n, and `SettingDefinitions`.
-   - Single-file SDK plugins and script plugins: edit the JSON metadata block in the file header comments.
+   - Single-file SDK plugins and script plugins: edit the JSON metadata block in the file header comments. Single-file SDK plugins must keep `MinWoxVersion` as `"2.4.2"`.
 3. **Implement**:
-   - `init()`: Initialize API clients and load settings. Called on every load/reload for SDK and single-file SDK plugins.
+   - `init()`: Initialize API clients and load settings. Called on every load/reload for SDK and single-file SDK plugins. Read and write settings through the Public API setting methods so values can sync across machines. If the plugin will cache files, resolve `get_cache_folder` / `GetCacheFolder` here and write later files under that path.
    - `query()`: Handle user input and return `Result[]`.
    - Register unload callbacks if you create timers, watchers, or sockets.
 4. **Internationalize**: Use the `I18n` field in `plugin.json` or the file header (recommended) or `lang/` files for packaged plugins. Single-file plugins only support inline `I18n`. See `plugin_i18n`.
 5. **Validate settings-related work**:
+   - Prefer the Public API setting methods over custom files or local storage. Those APIs are what Wox cloud-syncs between machines.
+   - If the plugin caches downloads, thumbnails, or search results, put them under `get_cache_folder` / `GetCacheFolder` first (`~/.wox/cache/plugins/<plugin-id>/`). Do not create a sibling `cache/` directory. Script plugins use `WOX_DIRECTORY_PLUGIN_CACHE`. Wox deletes this folder on uninstall.
    - Read `references/plugin_json_schema.md` before authoring `SettingDefinitions`.
    - For validator syntax and advanced controls, read `references/settings_patterns.md`.
 
 ## Minimal Single-file SDK Plugin (Quick Start)
 
-Single-file SDK plugins are the fastest way to get a Python or Node.js plugin that can call the full Wox API.
+Single-file SDK plugins are the fastest way to get a Python or Node.js plugin that can call the full Wox API. They require Wox 2.4.2 or later.
 
 1. **Create**: `wpm create <name>` and choose Python or Node.js single-file, or start from `assets/single_file_plugin_templates/`.
-2. **Edit**: Open the generated `.py` or `.js` file and update the JSON metadata block in comments.
+2. **Edit**: Open the generated `.py` or `.js` file and update the JSON metadata block in comments. Keep `MinWoxVersion` as `"2.4.2"`.
 3. **Implement**: Modify `query` in the same file. Saving reloads the plugin.
 4. **Run**: Trigger the plugin by typing its `TriggerKeywords` in Wox.
 

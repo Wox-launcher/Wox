@@ -398,3 +398,8 @@ class PluginAPI(PublicAPI):
             screenshot_path=str(response.get("ScreenshotPath", "") or ""),
             errmsg=str(response.get("ErrMsg", "") or ""),
         )
+
+    async def get_cache_folder(self, ctx: Context) -> str:
+        """Get this plugin's dedicated cache directory."""
+        result = await self.invoke_method(ctx, "GetCacheFolder", {})
+        return str(result) if result is not None else ""

@@ -69,7 +69,18 @@ All methods are async and require `ctx`.
 - `copy(ctx, params: CopyParams)`: Copy text/image.
 - `is_visible(ctx)`: Check visibility.
 
+### Cache
+
+If the plugin needs on-disk cache, prefer `get_cache_folder` over any custom directory.
+
+- `get_cache_folder(ctx)`: Return `~/.wox/cache/plugins/<plugin-id>/`. Wox creates it if needed and deletes it on uninstall.
+- Call it once in `init()`, keep the path, and write downloads, thumbnails, and search-result files under it.
+- Do not invent `cache/`, `tmp/`, or `downloads/` next to the plugin file, under user data, or under a hardcoded folder name.
+- User preferences and favorites are settings, not cache. Use `get_setting` / `set_setting` for those.
+
 ### Settings
+
+Prefer these APIs for all plugin settings. Values stored here can sync across machines through Wox cloud sync. Do not persist ordinary settings in local files or a custom store.
 
 - `get_setting(ctx, key)`: Get setting.
 - `save_setting(ctx, key, value, is_platform_specific)`: Save setting. Normal plugin settings are eligible for cloud sync, so pass `True` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
@@ -94,6 +105,8 @@ All methods are async and require `ctx`.
 
 ## Settings Authoring Notes
 
+- Prefer `get_setting`, `save_setting`, and `on_setting_changed` for plugin settings. These APIs participate in Wox cloud sync across machines. Avoid local files or custom persistence for values the user would expect to follow them to another device.
+- If the plugin caches files, put them under `get_cache_folder(ctx)` first. Do not invent a cache directory under the plugin folder or user-data tree.
 - The Python SDK exports helper builders for:
   - `create_textbox_setting()`
   - `create_checkbox_setting()`

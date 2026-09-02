@@ -449,6 +449,9 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		result := pluginInstance.API.Screenshot(ctx, option)
 		w.sendResponseToHost(ctx, request, result)
+	case "GetCacheFolder":
+		result := pluginInstance.API.GetCacheFolder(ctx)
+		w.sendResponseToHost(ctx, request, result)
 	case "Notify":
 		message, exist := request.Params["message"]
 		if !exist {

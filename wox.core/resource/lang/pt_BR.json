@@ -1836,6 +1836,7 @@
   "plugin_uninstall_progress_preparing": "Preparando desinstalação...",
   "plugin_uninstall_progress_removing": "Removendo arquivos do plugin...",
   "plugin_uninstall_progress_cleaning_settings": "Limpando configurações do plugin...",
+  "plugin_uninstall_progress_cleaning_cache": "Limpando cache do plugin...",
   "plugin_uninstall_progress_unloading": "Parando plugin...",
   "plugin_uninstall_progress_stopping_host": "Parando o host do runtime...",
   "plugin_uninstall_progress_retrying_removal": "Tentando remover os arquivos novamente com o host parado...",

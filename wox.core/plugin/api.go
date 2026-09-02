@@ -206,6 +206,13 @@ type API interface {
 
 	// Screenshot captures a user-selected screen area and returns the saved image path.
 	Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult
+
+	// GetCacheFolder returns this plugin's dedicated cache directory under
+	// ~/.wox/cache/plugins/<plugin-id>/. The folder is created if it does not exist.
+	// Use it for machine-local files such as downloads and search caches. Do not store
+	// user settings here; those belong in GetSetting/SetSetting so they can sync.
+	// Wox deletes the folder when the plugin is uninstalled.
+	GetCacheFolder(ctx context.Context) string
 }
 
 type CopyParams struct {
@@ -998,6 +1005,19 @@ func (a *APIImpl) Copy(ctx context.Context, params CopyParams) {
 	}
 
 	if params.Type == CopyTypeImage {
+		if params.WoxImage.IsAnimatedGif() {
+			path, cleanup, err := params.WoxImage.ResolveAnimatedGIFPath(ctx)
+			if err != nil {
+				a.Log(ctx, LogLevelError, fmt.Sprintf("failed to resolve animated gif for clipboard: %v", err))
+				return
+			}
+			defer cleanup()
+			if err := clipboard.WriteAnimatedGIF(path); err != nil {
+				a.Log(ctx, LogLevelError, fmt.Sprintf("failed to copy animated gif to clipboard: %v", err))
+			}
+			return
+		}
+
 		img, err := params.WoxImage.ToImage()
 		if err != nil {
 			a.Log(ctx, LogLevelError, fmt.Sprintf("failed to convert woximage to image: %v", err))
@@ -1071,6 +1091,20 @@ func (a *APIImpl) Screenshot(ctx context.Context, option ScreenshotOption) Scree
 			ErrMsg:  fmt.Sprintf("unexpected screenshot status: %s", result.Status),
 		}
 	}
+}
+
+// GetCacheFolder returns this plugin's cache directory, creating it if needed.
+func (a *APIImpl) GetCacheFolder(ctx context.Context) string {
+	if a.pluginInstance == nil {
+		return ""
+	}
+
+	folder, err := util.GetLocation().EnsurePluginCacheDirectory(a.pluginInstance.Metadata.Id)
+	if err != nil {
+		a.Log(ctx, LogLevelError, fmt.Sprintf("failed to create plugin cache folder: %v", err))
+		return ""
+	}
+	return folder
 }
 
 func NewAPI(instance *Instance) API {

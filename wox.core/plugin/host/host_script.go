@@ -373,6 +373,13 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s", s.scriptPath))
 	}
 
+	pluginCacheDirectory := ""
+	if cacheDir, cacheErr := util.GetLocation().EnsurePluginCacheDirectory(s.metadata.Id); cacheErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to create script plugin cache folder: %s", cacheErr.Error()))
+	} else {
+		pluginCacheDirectory = cacheDir
+	}
+
 	// Set up environment variables for script plugins
 	envVars := []string{
 		"WOX_DIRECTORY_USER_SCRIPT_PLUGINS=" + util.GetLocation().GetUserScriptPluginsDirectory(),
@@ -380,6 +387,7 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		"WOX_DIRECTORY_WOX_DATA=" + util.GetLocation().GetWoxDataDirectory(),
 		"WOX_DIRECTORY_PLUGINS=" + util.GetLocation().GetPluginDirectory(),
 		"WOX_DIRECTORY_THEMES=" + util.GetLocation().GetThemeDirectory(),
+		"WOX_DIRECTORY_PLUGIN_CACHE=" + pluginCacheDirectory,
 		"WOX_PLUGIN_ID=" + s.metadata.Id,
 		"WOX_PLUGIN_NAME=" + s.metadata.GetName(ctx),
 		"WOX_LANG=" + string(i18n.GetI18nManager().GetCurrentLangCode()),

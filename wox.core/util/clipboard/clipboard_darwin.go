@@ -11,6 +11,7 @@ unsigned char *GetClipboardImage(size_t *length);
 void WriteClipboardText(const char *text);
 void WriteClipboardFiles(const char **filePaths, int count);
 void WriteClipboardImage(const char *imageData, int length);
+void WriteClipboardAnimatedGIF(const char *filePath, const unsigned char *gifData, int gifLen);
 _Bool hasClipboardChanged();
 int GetClipboardContentType();
 */
@@ -21,6 +22,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"os"
 	"strings"
 	"unsafe"
 
@@ -109,6 +111,33 @@ func writeFilePaths(filePaths []string) error {
 	}
 
 	C.WriteClipboardFiles((**C.char)(unsafe.Pointer(&cFilePaths[0])), C.int(len(cFilePaths)))
+	return nil
+}
+
+func writeAnimatedGIFFile(filePath string) error {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return errors.New("clipboard: gif file path is empty")
+	}
+
+	gifData, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("clipboard: read gif file: %w", err)
+	}
+	if !isGIFBytes(gifData) {
+		return errors.New("clipboard: file is not a GIF")
+	}
+
+	var cGIF *C.uchar
+	cGIFLen := C.int(0)
+	if len(gifData) > 0 {
+		cGIF = (*C.uchar)(unsafe.Pointer(&gifData[0]))
+		cGIFLen = C.int(len(gifData))
+	}
+
+	cPath := C.CString(filePath)
+	defer C.free(unsafe.Pointer(cPath))
+	C.WriteClipboardAnimatedGIF(cPath, cGIF, cGIFLen)
 	return nil
 }
 

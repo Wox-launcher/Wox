@@ -389,6 +389,74 @@ int clipboardWriteFilePaths(const wchar_t *paths, int totalLen) {
     return 0;
 }
 
+// clipboardWriteAnimatedGIF writes CF_HDROP and registered GIF bytes in one clipboard
+// transaction so animated GIFs stay intact for apps that read either format.
+int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
+                              const unsigned char *gifData, int gifLen) {
+    if (paths == NULL || totalLen <= 1) {
+        return -1;
+    }
+
+    if (!openClipboardRetry()) {
+        return -2;
+    }
+
+    if (!EmptyClipboard()) {
+        CloseClipboard();
+        return -3;
+    }
+
+    SIZE_T dataSize = sizeof(DROPFILES) + ((SIZE_T)totalLen * sizeof(wchar_t));
+    HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, dataSize);
+    if (hDrop == NULL) {
+        CloseClipboard();
+        return -4;
+    }
+
+    DROPFILES *dropFiles = (DROPFILES *)GlobalLock(hDrop);
+    if (dropFiles == NULL) {
+        GlobalFree(hDrop);
+        CloseClipboard();
+        return -5;
+    }
+
+    dropFiles->pFiles = sizeof(DROPFILES);
+    dropFiles->pt.x = 0;
+    dropFiles->pt.y = 0;
+    dropFiles->fNC = FALSE;
+    dropFiles->fWide = TRUE;
+    memcpy(((BYTE *)dropFiles) + sizeof(DROPFILES), paths, ((SIZE_T)totalLen * sizeof(wchar_t)));
+    GlobalUnlock(hDrop);
+
+    if (SetClipboardData(CF_HDROP, hDrop) == NULL) {
+        GlobalFree(hDrop);
+        CloseClipboard();
+        return -6;
+    }
+
+    if (gifData != NULL && gifLen > 0) {
+        UINT gifFmt = RegisterClipboardFormatW(L"GIF");
+        if (gifFmt != 0) {
+            HGLOBAL hGif = GlobalAlloc(GMEM_MOVEABLE, gifLen);
+            if (hGif != NULL) {
+                void *pGif = GlobalLock(hGif);
+                if (pGif != NULL) {
+                    memcpy(pGif, gifData, gifLen);
+                    GlobalUnlock(hGif);
+                    if (SetClipboardData(gifFmt, hGif) == NULL) {
+                        GlobalFree(hGif);
+                    }
+                } else {
+                    GlobalFree(hGif);
+                }
+            }
+        }
+    }
+
+    CloseClipboard();
+    return 0;
+}
+
 // clipboardWriteImage writes image data to the clipboard in both PNG (registered format) and CF_DIB formats.
 // Returns 0 on success, negative on error.
 int clipboardWriteImage(const unsigned char *pngData, int pngLen,

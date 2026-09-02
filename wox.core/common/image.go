@@ -539,6 +539,74 @@ func (w *WoxImage) IsAnimatedGif() bool {
 	return isGIFFile(w.ImageData)
 }
 
+// ResolveAnimatedGIFPath returns a local GIF file path for clipboard copy.
+// cleanup removes temporary files created for URL or base64 sources.
+func (w *WoxImage) ResolveAnimatedGIFPath(ctx context.Context) (path string, cleanup func(), err error) {
+	cleanup = func() {}
+	if !w.IsAnimatedGif() {
+		return "", cleanup, fmt.Errorf("woximage: not an animated gif")
+	}
+
+	switch w.ImageType {
+	case WoxImageTypeAbsolutePath:
+		path = strings.TrimSpace(w.ImageData)
+		if path == "" || !isGIFFile(path) {
+			return "", cleanup, fmt.Errorf("woximage: gif file not found")
+		}
+		return path, cleanup, nil
+	case WoxImageTypeUrl:
+		localized, materializeErr := w.materializeURLImage(ctx)
+		if materializeErr != nil {
+			return "", cleanup, materializeErr
+		}
+		return localized.ResolveAnimatedGIFPath(ctx)
+	case WoxImageTypeBase64:
+		gifBytes, decodeErr := w.base64ImageBytes()
+		if decodeErr != nil {
+			return "", cleanup, decodeErr
+		}
+		if !isGIFBytes(gifBytes) {
+			return "", cleanup, fmt.Errorf("woximage: base64 data is not gif")
+		}
+		tmp, createErr := os.CreateTemp("", "wox-clipboard-*.gif")
+		if createErr != nil {
+			return "", cleanup, createErr
+		}
+		tmpPath := tmp.Name()
+		if _, writeErr := tmp.Write(gifBytes); writeErr != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			return "", cleanup, writeErr
+		}
+		if closeErr := tmp.Close(); closeErr != nil {
+			_ = os.Remove(tmpPath)
+			return "", cleanup, closeErr
+		}
+		cleanup = func() {
+			_ = os.Remove(tmpPath)
+		}
+		return tmpPath, cleanup, nil
+	default:
+		return "", cleanup, fmt.Errorf("woximage: unsupported animated gif type %s", w.ImageType)
+	}
+}
+
+func (w *WoxImage) base64ImageBytes() ([]byte, error) {
+	parts := strings.SplitN(w.ImageData, ",", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid base64 image data")
+	}
+	return base64.StdEncoding.DecodeString(parts[1])
+}
+
+func isGIFBytes(data []byte) bool {
+	if len(data) < 6 {
+		return false
+	}
+	header := string(data[:6])
+	return header == "GIF87a" || header == "GIF89a"
+}
+
 // materializeURLImage downloads a remote image into the local cache and returns an absolute-path image.
 func (w *WoxImage) materializeURLImage(ctx context.Context) (WoxImage, error) {
 	if w.ImageType != WoxImageTypeUrl {

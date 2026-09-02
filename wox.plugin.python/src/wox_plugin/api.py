@@ -108,6 +108,7 @@ class PublicAPI(Protocol):
         - Commands: register_query_commands
         - Clipboard: copy
         - Screenshot: screenshot
+        - Cache: get_cache_folder
 
     Example:
         class MyPlugin:
@@ -747,5 +748,26 @@ class PublicAPI(Protocol):
 
         Returns:
             ScreenshotResult: success state, saved image path, and error message
+        """
+        ...
+
+    async def get_cache_folder(self, ctx: Context) -> str:
+        """
+        Get this plugin's dedicated cache directory.
+
+        The folder is ``~/.wox/cache/plugins/<plugin-id>/``. Wox creates it if
+        needed and deletes it when the plugin is uninstalled. Use it for
+        machine-local files such as downloads and search caches. Persist user
+        preferences with ``get_setting`` / ``set_setting`` instead.
+
+        Args:
+            ctx: Context
+
+        Returns:
+            str: Absolute cache directory path, or empty string on failure
+
+        Example:
+            cache_dir = await api.get_cache_folder(ctx)
+            gif_path = os.path.join(cache_dir, "downloads", "item.gif")
         """
         ...

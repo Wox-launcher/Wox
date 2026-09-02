@@ -2016,6 +2016,7 @@
   "plugin_uninstall_progress_preparing": "Preparing uninstall...",
   "plugin_uninstall_progress_removing": "Removing plugin files...",
   "plugin_uninstall_progress_cleaning_settings": "Cleaning plugin settings...",
+  "plugin_uninstall_progress_cleaning_cache": "Cleaning plugin cache...",
   "plugin_uninstall_progress_unloading": "Stopping plugin...",
   "plugin_uninstall_progress_stopping_host": "Stopping runtime host...",
   "plugin_uninstall_progress_retrying_removal": "Retrying file removal with host stopped...",

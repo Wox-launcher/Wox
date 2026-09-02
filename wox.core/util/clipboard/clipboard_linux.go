@@ -11,6 +11,8 @@ import (
 	"image"
 	"image/png"
 	"net/url"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -130,6 +132,38 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 		return errors.New("clipboard: PNG data is empty")
 	}
 	return linuxClipboardBackend().writeImageBytes(pngData)
+}
+
+func writeAnimatedGIFFile(filePath string) error {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return errors.New("clipboard: gif file path is empty")
+	}
+
+	gifData, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("clipboard: read gif file: %w", err)
+	}
+	if !isGIFBytes(gifData) {
+		return errors.New("clipboard: file is not a GIF")
+	}
+
+	if bin, lookErr := exec.LookPath("wl-copy"); lookErr == nil {
+		cmd := exec.Command(bin, "--type", "image/gif", "--")
+		cmd.Stdin = bytes.NewReader(gifData)
+		if runErr := cmd.Run(); runErr == nil {
+			return nil
+		}
+	}
+
+	if bin, lookErr := exec.LookPath("xclip"); lookErr == nil {
+		cmd := exec.Command(bin, "-selection", "clipboard", "-t", "image/gif", "-i", filePath)
+		if runErr := cmd.Run(); runErr == nil {
+			return nil
+		}
+	}
+
+	return writeFilePaths([]string{filePath})
 }
 
 func isClipboardChanged() bool {

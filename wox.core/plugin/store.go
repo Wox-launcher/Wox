@@ -1067,6 +1067,11 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 		}
 	}
 
+	reportProgress("plugin_uninstall_progress_cleaning_cache")
+	if cacheErr := util.GetLocation().RemovePluginCacheDirectory(plugin.Metadata.Id); cacheErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to delete plugin cache %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, cacheErr.Error()))
+	}
+
 	if !pluginAlreadyUnloaded {
 		reportProgress("plugin_uninstall_progress_unloading")
 		GetPluginManager().UnloadPlugin(ctx, plugin)
