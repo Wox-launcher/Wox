@@ -1103,5 +1103,37 @@
         "plugin_description": "浏览 Hacker News 首页、话题和讨论"
       }
     }
+  },
+  {
+    "Id": "e6c4a8b1-2f7d-4c19-9a5e-8d3b1f0e6a24",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.2.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "python",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/b3fb4389-3d9f-4f3d-b87d-a508434b44e0",
+    "Website": "https://gist.github.com/qianlifeng/dd2735f0aedb12b99c0aa0e226771a8f",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/dd2735f0aedb12b99c0aa0e226771a8f/raw/Wox.Plugin.Speedtest.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/b3fb4389-3d9f-4f3d-b87d-a508434b44e0"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-02 22:29:00",
+    "DateUpdated": "2026-09-02 22:29:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Speedtest",
+        "plugin_description": "Test internet speed over HTTP download, upload, and ping"
+      },
+      "zh_CN": {
+        "plugin_name": "Speedtest",
+        "plugin_description": "通过 HTTP 下载、上传和延迟测试网速"
+      }
+    }
   }
 ]
