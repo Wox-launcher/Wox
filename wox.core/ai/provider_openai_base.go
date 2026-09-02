@@ -606,6 +606,7 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 // convertConversations converts the conversations to OpenAI format
 func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) []openai.ChatCompletionMessageParamUnion {
 	var chatMessages []openai.ChatCompletionMessageParamUnion
+	pendingToolContent := ""
 	pendingToolReasoning := ""
 	for i := 0; i < len(conversations); i++ {
 		conversation := conversations[i]
@@ -616,11 +617,12 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			chatMessages = append(chatMessages, openai.UserMessage(conversation.Text))
 		}
 		if conversation.Role == common.ConversationRoleAssistant {
-			if o.shouldFoldReasoningIntoNextToolCall(conversations, i) {
+			if o.shouldFoldAssistantIntoNextToolCall(conversations, i) {
+				pendingToolContent = conversation.Text
 				pendingToolReasoning = conversation.Reasoning
 				continue
 			}
-			chatMessages = append(chatMessages, openai.AssistantMessage(conversation.Text))
+			chatMessages = append(chatMessages, o.convertAssistantMessage(conversation.Text, conversation.Reasoning))
 		}
 		if conversation.Role == common.ConversationRoleTool {
 			toolConversations := []common.Conversation{conversation}
@@ -635,7 +637,8 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			}
 			pendingToolReasoning = ""
 
-			chatMessages = append(chatMessages, o.convertToolCallAssistantMessage(toolConversations, reasoning))
+			chatMessages = append(chatMessages, o.convertToolCallAssistantMessage(toolConversations, pendingToolContent, reasoning))
+			pendingToolContent = ""
 			for _, toolConversation := range toolConversations {
 				chatMessages = append(chatMessages, openai.ToolMessage(toolConversation.ToolCallInfo.Response, toolConversation.ToolCallInfo.Id))
 			}
@@ -645,15 +648,24 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 	return chatMessages
 }
 
-func (o *OpenAIBaseProvider) shouldFoldReasoningIntoNextToolCall(conversations []common.Conversation, index int) bool {
+// shouldFoldAssistantIntoNextToolCall keeps DeepSeek's content, reasoning, and tool calls in one assistant message.
+func (o *OpenAIBaseProvider) shouldFoldAssistantIntoNextToolCall(conversations []common.Conversation, index int) bool {
 	if !o.shouldReplayToolReasoningContent() {
 		return false
 	}
-	conversation := conversations[index]
-	return conversation.Text == "" && conversation.Reasoning != "" && index+1 < len(conversations) && conversations[index+1].Role == common.ConversationRoleTool
+	return index+1 < len(conversations) && conversations[index+1].Role == common.ConversationRoleTool
 }
 
-func (o *OpenAIBaseProvider) convertToolCallAssistantMessage(toolConversations []common.Conversation, reasoning string) openai.ChatCompletionMessageParamUnion {
+// convertAssistantMessage preserves provider-specific reasoning fields in chat history.
+func (o *OpenAIBaseProvider) convertAssistantMessage(content string, reasoning string) openai.ChatCompletionMessageParamUnion {
+	assistant := openai.AssistantMessage(content)
+	if o.shouldReplayToolReasoningContent() {
+		assistant.OfAssistant.SetExtraFields(map[string]any{"reasoning_content": reasoning})
+	}
+	return assistant
+}
+
+func (o *OpenAIBaseProvider) convertToolCallAssistantMessage(toolConversations []common.Conversation, content string, reasoning string) openai.ChatCompletionMessageParamUnion {
 	toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(toolConversations))
 	for _, toolConversation := range toolConversations {
 		toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
@@ -672,6 +684,7 @@ func (o *OpenAIBaseProvider) convertToolCallAssistantMessage(toolConversations [
 		// DeepSeek V4 thinking mode requires reasoning_content to be replayed
 		// on assistant messages that contain tool_calls. The OpenAI-compatible
 		// SDK has no typed field for this provider extension, so use extras.
+		assistant.Content.OfString = param.NewOpt(content)
 		assistant.SetExtraFields(map[string]any{"reasoning_content": reasoning})
 	}
 

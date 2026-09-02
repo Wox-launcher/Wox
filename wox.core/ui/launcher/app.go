@@ -1979,6 +1979,14 @@ type formTableColumn struct {
 	AllowedHotkeyKinds []string        `json:"AllowedHotkeyKinds"`
 	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
 	EmptyAsZero bool `json:"EmptyAsZero"`
+	// VisibleWhen hides the column in the add/edit dialog unless another field matches.
+	VisibleWhen formTableColumnVisibleWhen `json:"VisibleWhen"`
+}
+
+// formTableColumnVisibleWhen shows a row-editor field only when another field has one of Values.
+type formTableColumnVisibleWhen struct {
+	Key    string   `json:"Key"`
+	Values []string `json:"Values"`
 }
 
 type formOption struct {

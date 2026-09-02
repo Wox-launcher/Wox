@@ -30,6 +30,23 @@ func TestReadonlyFormTableRowDisablesOperationActions(t *testing.T) {
 	}
 }
 
+func TestReadonlyFormTableGivesLeftoverWidthToFlexibleColumn(t *testing.T) {
+	columns := []FormTableColumn{{Label: "Name", Width: 140}, {Label: "Description"}, {Label: "Enabled", Width: 50}}
+	widths := formTableColumnWidthsWithOperation(columns, 800, false)
+	if widths[2] > 70 {
+		t.Fatalf("enabled column width = %.0f, want a compact switch column", widths[2])
+	}
+	if widths[1] < 500 {
+		t.Fatalf("description column width = %.0f, want leftover space", widths[1])
+	}
+
+	beforeEnabled := widths[2]
+	formTableExpandFlexibleColumn(columns, widths, 120)
+	if widths[2] != beforeEnabled {
+		t.Fatalf("enabled column grew to %.0f after leftover expansion", widths[2])
+	}
+}
+
 func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	columns := []FormTableColumn{{Label: "Item"}, {Label: "Mode", Width: 220}}
 	widths := formTableColumnWidthsWithOperation(columns, 800, false)

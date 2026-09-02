@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -39,11 +40,24 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
 	for index, definition := range aiForm.definitions {
 		field := a.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
-		field.OnAdd = func() { a.addAISettingsTableRow(index) }
-		if definition.Value.Key == "AISkills" {
+		switch definition.Value.Key {
+		case "AIBuiltinTools":
+			field.ReadOnly = true
+			field.OnAdd = nil
+			a.addAIBuiltinToolSwitches(&field, definition, aiForm.values[definition.Value.Key], snapshot.palette)
+		case "AIMCPServers":
+			field.OnAdd = func() { a.addAISettingsTableRow(index) }
+			field.SecondaryLabel = a.translate("i18n:ui_ai_mcp_import_json")
+			mcpIconColor := snapshot.palette.componentTheme().ResultTitle
+			field.SecondaryIcon = a.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
+			field.OnSecondary = a.openAIMCPJSONImport
+		case "AISkills":
+			field.OnAdd = func() { a.addAISettingsTableRow(index) }
 			field.HideEditAction = true
 			field.HideCloneAction = true
 			a.addAISkillTableActions(&field, aiForm.values[definition.Value.Key], imageScale)
+		default:
+			field.OnAdd = func() { a.addAISettingsTableRow(index) }
 		}
 		props.Tables = append(props.Tables, launcherview.AISettingsTable{
 			Index: index, Field: field, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key,
@@ -53,6 +67,94 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 		props.Error = snapshot.ai.ProvidersError
 	}
 	return launcherview.AISettingsView(props)
+}
+
+// addAIBuiltinToolSwitches replaces the Enabled column with an inline switch.
+func (a *App) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, definition formDefinition, value string, palette uiPalette) {
+	rows, err := decodeFormTableRows(value)
+	if err != nil {
+		return
+	}
+	enabledColumn := -1
+	visible := 0
+	for _, column := range definition.Value.Columns {
+		if column.HideInTable {
+			continue
+		}
+		if column.Key == "Enabled" {
+			enabledColumn = visible
+			break
+		}
+		visible++
+	}
+	if enabledColumn < 0 {
+		return
+	}
+	theme := palette.componentTheme()
+	for viewIndex := range field.Rows {
+		sourceIndex := field.Rows[viewIndex].Index
+		if sourceIndex < 0 || sourceIndex >= len(rows) || enabledColumn >= len(field.Rows[viewIndex].Cells) {
+			continue
+		}
+		name := strings.TrimSpace(fmt.Sprint(rows[sourceIndex]["Name"]))
+		if name == "" {
+			continue
+		}
+		enabled, _ := rows[sourceIndex]["Enabled"].(bool)
+		toolName := name
+		field.Rows[viewIndex].Cells[enabledColumn] = launcherview.FormTableCell{Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+			ID: fmt.Sprintf("ai-builtin-tool-%s", toolName), Label: toolName, Value: enabled, Theme: theme,
+			OnChange: func(next bool) { a.setAIBuiltinToolEnabled(toolName, next) },
+		})}
+	}
+}
+
+// setAIBuiltinToolEnabled persists the disable list without opening the table editor.
+func (a *App) setAIBuiltinToolEnabled(name string, enabled bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	disabled := append([]string(nil), a.generalSettings.Snapshot().Data.AIDisabledBuiltinTools...)
+	next := make([]string, 0, len(disabled)+1)
+	seen := map[string]bool{}
+	for _, current := range disabled {
+		current = strings.TrimSpace(current)
+		if current == "" || current == name || seen[current] {
+			continue
+		}
+		seen[current] = true
+		next = append(next, current)
+	}
+	if !enabled && !seen[name] {
+		next = append(next, name)
+	}
+	encoded, err := json.Marshal(next)
+	if err != nil {
+		return
+	}
+	catalog := a.generalSettings.Snapshot().Data.AIConfigurableBuiltinTools
+	previousDisabled := append([]string(nil), a.generalSettings.Snapshot().Data.AIDisabledBuiltinTools...)
+	if form := a.aiSettings.Form(); form != nil {
+		form.values["AIBuiltinTools"] = builtinToolRowsJSON(catalog, next)
+	}
+	a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = next })
+	a.invalidateSettingsWindow()
+	util.Go(a.lifecycleCtx, "save AI builtin tool enabled", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "AIDisabledBuiltinTools", string(encoded))
+		cancel()
+		if err == nil {
+			return
+		}
+		_ = a.runOnUI("restore AI builtin tool enabled", func() {
+			a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = previousDisabled })
+			if form := a.aiSettings.Form(); form != nil {
+				form.values["AIBuiltinTools"] = builtinToolRowsJSON(catalog, previousDisabled)
+			}
+			a.invalidateSettingsWindow()
+		})
+	})
 }
 
 // addAISkillTableActions adds Flutter's folder action after the standard delete action.
@@ -114,15 +216,27 @@ func newAISettingsForm(data settingsData) formFieldsState {
 		{
 			Type: "table",
 			Value: formDefinitionValue{
+				Key: "AIBuiltinTools", Title: "i18n:ui_ai_builtin_tools", Tooltip: "i18n:ui_ai_builtin_tools_tooltip", SortColumnKey: "Name", InlineTable: true,
+				Columns: []formTableColumn{
+					{Key: "Name", Label: "i18n:ui_ai_builtin_tool_name", Width: 140, Type: "text", HideInUpdate: true},
+					{Key: "Description", Label: "i18n:ui_ai_builtin_tool_description", Type: "text", HideInUpdate: true},
+					{Key: "Enabled", Label: "i18n:ui_ai_builtin_tool_enabled", Width: 80, Type: "aiBuiltinToolEnabled", HideInUpdate: true},
+				},
+			},
+		},
+		{
+			Type: "table",
+			Value: formDefinitionValue{
 				Key: "AIMCPServers", Title: "i18n:ui_ai_mcp_servers", Tooltip: "i18n:ui_ai_mcp_servers_tooltip", SortColumnKey: "Name", InlineTable: true,
 				Columns: []formTableColumn{
 					{Key: "Name", Label: "i18n:plugin_ai_chat_mcp_server_name", Tooltip: "i18n:plugin_ai_chat_mcp_server_name_tooltip", Width: 100, Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Tools", Label: "i18n:plugin_ai_chat_mcp_server_tools", Tooltip: "i18n:plugin_ai_chat_mcp_server_tools_tooltip", Width: 50, Type: "aiMCPServerTools", HideInUpdate: true},
+					{Key: "Tools", Label: "i18n:plugin_ai_chat_mcp_server_tools", Tooltip: "i18n:plugin_ai_chat_mcp_server_tools_tooltip", Type: "aiMCPServerTools", HideInUpdate: true},
 					{Key: "Disabled", Label: "i18n:plugin_ai_chat_mcp_server_disabled", Width: 80, Type: "checkbox"},
-					{Key: "Type", Label: "i18n:plugin_ai_chat_mcp_server_type", Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip", Width: 80, Type: "select", SelectOptions: []formOption{{Label: "STDIO", Value: "stdio"}, {Label: "Streamable HTTP", Value: "streamable-http"}}, Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Command", Label: "i18n:plugin_ai_chat_mcp_server_command", Tooltip: "i18n:plugin_ai_chat_mcp_server_command_tooltip", Width: 100, Type: "text"},
-					{Key: "EnvironmentVariables", Label: "i18n:plugin_ai_chat_mcp_server_environment_variables", Tooltip: "i18n:plugin_ai_chat_mcp_server_environment_variables_tooltip", Width: 160, Type: "textList", TextMaxLines: 6},
-					{Key: "Url", Label: "i18n:plugin_ai_chat_mcp_server_url", Tooltip: "i18n:plugin_ai_chat_mcp_server_url_tooltip", Width: 120, Type: "text", TextMaxLines: 10},
+					{Key: "Type", Label: "i18n:plugin_ai_chat_mcp_server_type", HideInTable: true, Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip", Width: 80, Type: "select", SelectOptions: []formOption{{Label: "STDIO", Value: "stdio"}, {Label: "Streamable HTTP", Value: "streamable-http"}}, Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Command", Label: "i18n:plugin_ai_chat_mcp_server_command", HideInTable: true, Tooltip: "i18n:plugin_ai_chat_mcp_server_command_tooltip", Width: 100, Type: "text", VisibleWhen: formTableColumnVisibleWhen{Key: "Type", Values: []string{"stdio"}}},
+					{Key: "Args", Label: "i18n:plugin_ai_chat_mcp_server_args", HideInTable: true, Tooltip: "i18n:plugin_ai_chat_mcp_server_args_tooltip", Width: 160, Type: "textList", TextMaxLines: 6, VisibleWhen: formTableColumnVisibleWhen{Key: "Type", Values: []string{"stdio"}}},
+					{Key: "EnvironmentVariables", Label: "i18n:plugin_ai_chat_mcp_server_environment_variables", HideInTable: true, Tooltip: "i18n:plugin_ai_chat_mcp_server_environment_variables_tooltip", Width: 160, Type: "textList", TextMaxLines: 6, VisibleWhen: formTableColumnVisibleWhen{Key: "Type", Values: []string{"stdio"}}},
+					{Key: "Url", Label: "i18n:plugin_ai_chat_mcp_server_url", HideInTable: true, Tooltip: "i18n:plugin_ai_chat_mcp_server_url_tooltip", Width: 120, Type: "text", TextMaxLines: 1, VisibleWhen: formTableColumnVisibleWhen{Key: "Type", Values: []string{"streamable-http"}}},
 				},
 			},
 		},
@@ -145,11 +259,32 @@ func newAISettingsForm(data settingsData) formFieldsState {
 		},
 	}
 	values := map[string]string{
-		"AIProviders":  settingsJSONArray(data.AIProviders),
-		"AIMCPServers": settingsJSONArray(data.AIMCPServers),
-		"AISkills":     settingsJSONArray(data.AISkills),
+		"AIProviders":    settingsJSONArray(data.AIProviders),
+		"AIBuiltinTools": builtinToolRowsJSON(data.AIConfigurableBuiltinTools, data.AIDisabledBuiltinTools),
+		"AIMCPServers":   attachMCPServerToolNames(settingsJSONArray(data.AIMCPServers)),
+		"AISkills":       settingsJSONArray(data.AISkills),
 	}
 	return newFormFieldsState(definitions, values, true)
+}
+
+func builtinToolRowsJSON(catalog []aiBuiltinToolInfo, disabled []string) string {
+	disabledSet := map[string]bool{}
+	for _, name := range disabled {
+		disabledSet[name] = true
+	}
+	rows := make([]map[string]any, 0, len(catalog))
+	for _, tool := range catalog {
+		rows = append(rows, map[string]any{
+			"Name":        tool.Name,
+			"Description": tool.Description,
+			"Enabled":     !disabledSet[tool.Name],
+		})
+	}
+	encoded, err := json.Marshal(rows)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
 }
 
 func settingsJSONArray(value json.RawMessage) string {
@@ -270,7 +405,7 @@ func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-// selectAISettingsTable moves keyboard focus between the three table cards.
+// selectAISettingsTable moves keyboard focus between the AI table cards.
 func (a *App) selectAISettingsTable(index int) {
 	if form := a.aiSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) {
 		a.settingRow = index
@@ -306,12 +441,20 @@ func (a *App) openAISettingsTable(index int) {
 // addAISettingsTableRow opens the shared editor directly at its create flow. The
 // skills table uses Flutter's tabbed add dialog instead of the generic row editor.
 func (a *App) addAISettingsTableRow(index int) {
-	a.openAISettingsTable(index)
-	if index < 2 {
-		a.beginAddFormTableRowDirect()
+	form := a.aiSettings.Form()
+	if form == nil || index < 0 || index >= len(form.definitions) {
 		return
 	}
-	a.openFormTableSkillAdd()
+	key := form.definitions[index].Value.Key
+	if key == "AIBuiltinTools" {
+		return
+	}
+	a.openAISettingsTable(index)
+	if key == "AISkills" {
+		a.openFormTableSkillAdd()
+		return
+	}
+	a.beginAddFormTableRowDirect()
 }
 
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
@@ -325,7 +468,10 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 		}
 	}
 	a.finishOpeningFormTable()
-	if tableIndex < 2 {
+	if tableIndex < 0 || form == nil || tableIndex >= len(form.definitions) {
+		return
+	}
+	if key := form.definitions[tableIndex].Value.Key; key != "AISkills" && key != "AIBuiltinTools" {
 		a.beginEditFormTableRowDirect()
 	}
 }
@@ -402,6 +548,22 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 	})
 }
 
+// refreshAIMCPServerToolsLocked copies discovered MCP tool names onto the settings table.
+func (a *App) refreshAIMCPServerToolsLocked() {
+	form := a.aiSettings.Form()
+	if form == nil {
+		return
+	}
+	form.values["AIMCPServers"] = attachMCPServerToolNames(form.values["AIMCPServers"])
+	if state := a.settingsTableEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
+		if rows, err := decodeFormTableRows(form.values["AIMCPServers"]); err == nil {
+			overlayMCPServerToolNames(rows)
+			state.rows = rows
+		}
+	}
+	a.invalidateSettingsWindow()
+}
+
 // applyAISettingsRawLocked keeps the settings snapshot and dependent chat catalogs coherent after a save.
 func (a *App) applyAISettingsRawLocked(key, value string) {
 	raw := json.RawMessage(append([]byte(nil), value...))
@@ -411,6 +573,17 @@ func (a *App) applyAISettingsRawLocked(key, value string) {
 		a.aiSettings.ResetModels()
 	case "AIMCPServers":
 		a.generalSettings.Update(func(d *settingsData) { d.AIMCPServers = raw })
+		if form := a.aiSettings.Form(); form != nil {
+			form.values["AIMCPServers"] = attachMCPServerToolNames(value)
+		}
+	case "AIDisabledBuiltinTools":
+		var names []string
+		if json.Unmarshal([]byte(value), &names) == nil {
+			a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = names })
+			if form := a.aiSettings.Form(); form != nil {
+				form.values["AIBuiltinTools"] = builtinToolRowsJSON(a.generalSettings.Snapshot().Data.AIConfigurableBuiltinTools, names)
+			}
+		}
 	case "AISkills":
 		a.generalSettings.Update(func(d *settingsData) { d.AISkills = raw })
 		a.aiSettings.ResetSkills()

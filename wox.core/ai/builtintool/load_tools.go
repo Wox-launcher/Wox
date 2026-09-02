@@ -49,7 +49,7 @@ func loadToolsCallback(ctx context.Context, args map[string]any) (common.ToolRes
 	missing := []string{}
 	for _, name := range names {
 		tool, ok := ai.GetToolRegistry().Get(name)
-		if !ok || ai.IsRuntimeOnlyTool(name) {
+		if !ok || ai.IsRuntimeOnlyTool(name) || ai.IsBuiltinToolDisabled(name, ai.DisabledBuiltinTools()) {
 			missing = append(missing, name)
 			continue
 		}

@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 	"wox/account"
+	"wox/ai"
 	"wox/analytics"
 	"wox/common"
 	"wox/diagnostic"
@@ -1384,9 +1385,15 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			chater.EnsureDefaultModelValid(ctx)
 		}
 	case "AIMCPServers":
+		// Connecting stdio servers (npx/uvx) can download packages and must not block Save.
 		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
-			chater.ReloadMCPServers(ctx, true)
+			util.Go(ctx, "reload MCP servers after setting change", func() {
+				chater.ReloadMCPServers(util.NewTraceContext(), true)
+			})
 		}
+	case "AIDisabledBuiltinTools":
+		ai.SetDisabledBuiltinTools(setting.GetSettingManager().GetWoxSetting(ctx).AIDisabledBuiltinTools.Get())
+		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
 	case "AISkills":
 		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
 			if err := chater.ReloadSkills(ctx); err != nil {

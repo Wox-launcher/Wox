@@ -44,6 +44,8 @@ var builtInSettingSearchAliases = map[string][]string{
 	"AppFontFamily":             {"font"},
 	"EnableGlance":              {"glance"},
 	"AIProviders":               {"ai provider", "api key", "model"},
+	"AIBuiltinTools":            {"builtin", "tool", "enable", "disable"},
+	"AIDisabledBuiltinTools":    {"builtin", "tool", "enable", "disable"},
 	"AIMCPServers":              {"mcp", "tool", "server"},
 	"AISkills":                  {"skill", "repo", "path"},
 	"HttpProxyEnabled":          {"proxy"},

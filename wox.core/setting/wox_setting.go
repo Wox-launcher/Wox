@@ -22,24 +22,25 @@ type WoxSetting struct {
 	// OnboardingFinished records whether this user data directory has already
 	// seen the first-run guide. This is independent of account age because old
 	// users who never saw the guide should still get one skippable pass.
-	OnboardingFinished *WoxSettingValue[bool]
-	HideOnLostFocus    *WoxSettingValue[bool]
-	ShowTray           *WoxSettingValue[bool]
-	LangCode           *WoxSettingValue[i18n.LangCode]
-	QueryHotkeys       *PlatformValue[[]QueryHotkey]
-	QueryShortcuts     *WoxSettingValue[[]QueryShortcut]
-	TrayQueries        *WoxSettingValue[[]TrayQuery]
-	LaunchMode         *WoxSettingValue[LaunchMode]
-	StartPage          *WoxSettingValue[StartPage]
-	ShowPosition       *WoxSettingValue[PositionType]
-	AIProviders        *WoxSettingValue[[]AIProvider]
-	AIMCPServers       *WoxSettingValue[[]common.AIChatMCPServerConfig]
-	AISkills           *WoxSettingValue[[]common.Skill]
-	EnableAutoBackup   *WoxSettingValue[bool]
-	EnableAutoUpdate   *WoxSettingValue[bool]
-	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
-	CustomPythonPath   *PlatformValue[string]
-	CustomNodejsPath   *PlatformValue[string]
+	OnboardingFinished     *WoxSettingValue[bool]
+	HideOnLostFocus        *WoxSettingValue[bool]
+	ShowTray               *WoxSettingValue[bool]
+	LangCode               *WoxSettingValue[i18n.LangCode]
+	QueryHotkeys           *PlatformValue[[]QueryHotkey]
+	QueryShortcuts         *WoxSettingValue[[]QueryShortcut]
+	TrayQueries            *WoxSettingValue[[]TrayQuery]
+	LaunchMode             *WoxSettingValue[LaunchMode]
+	StartPage              *WoxSettingValue[StartPage]
+	ShowPosition           *WoxSettingValue[PositionType]
+	AIProviders            *WoxSettingValue[[]AIProvider]
+	AIMCPServers           *WoxSettingValue[[]common.AIChatMCPServerConfig]
+	AISkills               *WoxSettingValue[[]common.Skill]
+	AIDisabledBuiltinTools *WoxSettingValue[[]string]
+	EnableAutoBackup       *WoxSettingValue[bool]
+	EnableAutoUpdate       *WoxSettingValue[bool]
+	ReleaseChannel         *WoxSettingValue[ReleaseChannel]
+	CustomPythonPath       *PlatformValue[string]
+	CustomNodejsPath       *PlatformValue[string]
 
 	// CloudSyncServerUrl is a local-only development override. It must not be
 	// synced because each device may target a different test server.
@@ -369,6 +370,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		AIMCPServers:                       NewWoxSettingValue(store, "AIMCPServers", []common.AIChatMCPServerConfig{}),
 		AISkills:                           NewWoxSettingValue(store, "AISkills", []common.Skill{}),
+		AIDisabledBuiltinTools:             NewWoxSettingValue(store, "AIDisabledBuiltinTools", []string{}),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
 		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),

@@ -147,6 +147,8 @@ type GeneralSettings struct {
 	AIProviders                        []setting.AIProvider
 	AIMCPServers                       []common.AIChatMCPServerConfig
 	AISkills                           []common.Skill
+	AIDisabledBuiltinTools             []string
+	AIConfigurableBuiltinTools         []common.AIConfigurableBuiltinTool
 	HTTPProxyEnabled                   bool
 	HTTPProxyURL                       string
 	ShowPosition                       setting.PositionType

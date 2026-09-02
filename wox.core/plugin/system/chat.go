@@ -138,6 +138,7 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 	// Configure hooks that let builtin tools call back into the plugin manager.
 	r.configurePluginBuiltinToolHooks()
+	r.reloadDisabledBuiltinTools(ctx)
 
 	chats, err := r.loadChats(ctx)
 	if err != nil {
@@ -159,8 +160,7 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	})
 
 	util.Go(ctx, "reload MCP servers", func() {
-		// Startup only warms the core MCP tool cache; UI loads chat resources lazily after it is ready.
-		r.ReloadMCPServers(util.NewTraceContext(), false)
+		r.ReloadMCPServers(util.NewTraceContext(), true)
 	})
 }
 
@@ -293,6 +293,7 @@ func isAIModelProviderConfigured(ctx context.Context, model common.Model) bool {
 // ReloadMCPServers reloads global MCP server settings into the active tool registry.
 func (r *AIChatPlugin) ReloadMCPServers(ctx context.Context, notifyUI bool) {
 	r.api.Log(ctx, plugin.LogLevelInfo, "AI: Reloading MCP servers")
+	ai.ResetMCPClients()
 
 	mcpServers, err := r.loadMCPServers(ctx)
 	if err != nil {
@@ -304,17 +305,20 @@ func (r *AIChatPlugin) ReloadMCPServers(ctx context.Context, notifyUI bool) {
 
 	var mcpTools []common.MCPTool
 	for _, mcpServer := range r.mcpServers {
-		if mcpServer.Disabled {
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: MCP server %s is disabled", mcpServer.Name))
-			continue
-		}
-
 		tools, err := ai.MCPListTools(ctx, mcpServer)
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to list tool: %s", err.Error()))
+			continue
 		}
-
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Found %d tools for MCP server %s", len(tools), mcpServer.Name))
+		if notifyUI {
+			plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
+		}
+		if mcpServer.Disabled {
+			// Still list tools so the settings table can show them; do not expose to the model.
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: MCP server %s is disabled", mcpServer.Name))
+			continue
+		}
 		for _, tool := range tools {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: %s tool %s", mcpServer.Name, tool.Name))
 			mcpTools = append(mcpTools, tool)
@@ -336,6 +340,11 @@ func (r *AIChatPlugin) ReloadMCPServers(ctx context.Context, notifyUI bool) {
 
 func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]common.AIChatMCPServerConfig, error) {
 	return setting.GetSettingManager().GetWoxSetting(ctx).AIMCPServers.Get(), nil
+}
+
+// reloadDisabledBuiltinTools applies the user disable list without unregistering tools.
+func (r *AIChatPlugin) reloadDisabledBuiltinTools(ctx context.Context) {
+	ai.SetDisabledBuiltinTools(setting.GetSettingManager().GetWoxSetting(ctx).AIDisabledBuiltinTools.Get())
 }
 
 func (r *AIChatPlugin) loadChats(ctx context.Context) ([]common.AIChatData, error) {
@@ -643,17 +652,19 @@ func formatRuntimeTimePrompt(now time.Time) string {
 	)
 }
 
-// initialToolsForRuntime returns all builtin tools on the first model step so
+// initialToolsForRuntime returns enabled builtin tools on the first model step so
 // common actions like reading files, running commands, or editing code do not
 // require an extra load_tools round trip. MCP tools remain in the catalog and
 // are loaded on demand via load_tools.
 func (r *AIChatPlugin) initialToolsForRuntime(ctx context.Context) []common.Tool {
-	return ai.GetToolRegistry().ListBySource(common.ToolSourceBuiltin)
+	r.reloadDisabledBuiltinTools(ctx)
+	return ai.FilterDisabledBuiltinTools(ai.GetToolRegistry().ListBySource(common.ToolSourceBuiltin), ai.DisabledBuiltinTools())
 }
 
-// availableToolsForRuntime exposes all registered tools to the model because web access is enabled by default.
+// availableToolsForRuntime exposes registered tools except user-disabled builtins.
 func (r *AIChatPlugin) availableToolsForRuntime(ctx context.Context) []common.Tool {
-	return ai.GetToolRegistry().List()
+	r.reloadDisabledBuiltinTools(ctx)
+	return ai.FilterDisabledBuiltinTools(ai.GetToolRegistry().List(), ai.DisabledBuiltinTools())
 }
 
 func (r *AIChatPlugin) recentConversationsForRuntime(ctx context.Context, conversations []common.Conversation, compactionEntry *common.AIChatCompactionEntry) []common.Conversation {
@@ -874,6 +885,8 @@ func estimateConversationTokens(conversations []common.Conversation) int {
 			total += 16
 			total += estimateTextTokens(conversation.ToolCallInfo.Id)
 			total += estimateTextTokens(conversation.ToolCallInfo.Name)
+			total += estimateTextTokens(string(conversation.ToolCallInfo.Source))
+			total += estimateTextTokens(conversation.ToolCallInfo.Server)
 			total += estimateTextTokens(fmt.Sprintf("%v", conversation.ToolCallInfo.Arguments))
 			total += estimateTextTokens(conversation.ToolCallInfo.Delta)
 			total += estimateTextTokens(conversation.ToolCallInfo.Response)
@@ -1287,6 +1300,10 @@ func formatConversationsForCompactionSummary(conversations []common.Conversation
 			builder.WriteString("tool_call:\n")
 			builder.WriteString("name: ")
 			builder.WriteString(conversation.ToolCallInfo.Name)
+			if origin := conversation.ToolCallInfo.OriginLabel(); origin != "" && origin != conversation.ToolCallInfo.Name {
+				builder.WriteString("\norigin: ")
+				builder.WriteString(origin)
+			}
 			builder.WriteString("\narguments: ")
 			builder.WriteString(fmt.Sprintf("%v", conversation.ToolCallInfo.Arguments))
 			builder.WriteString("\nresponse:\n")

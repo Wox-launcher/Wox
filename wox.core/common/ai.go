@@ -104,6 +104,8 @@ func (c *ChatStreamData) ToMarkdown() string {
 type ToolCallInfo struct {
 	Id        string
 	Name      string
+	Source    ToolSource
+	Server    string
 	Arguments map[string]any
 	Status    ToolCallStatus
 
@@ -111,6 +113,31 @@ type ToolCallInfo struct {
 	Response       string
 	StartTimestamp int64
 	EndTimestamp   int64
+}
+
+// OriginLabel returns a source-qualified tool name for UI and logs.
+// MCP tools use "server/name"; builtin tools use "builtin/name".
+func (t ToolCallInfo) OriginLabel() string {
+	return FormatToolOrigin(t.Source, t.Server, t.Name)
+}
+
+// FormatToolOrigin qualifies a tool name with builtin or MCP server identity.
+func FormatToolOrigin(source ToolSource, server, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	switch source {
+	case ToolSourceMCP:
+		if server = strings.TrimSpace(server); server != "" {
+			return server + "/" + name
+		}
+		return string(ToolSourceMCP) + "/" + name
+	case ToolSourceBuiltin:
+		return string(ToolSourceBuiltin) + "/" + name
+	default:
+		return name
+	}
 }
 
 type ToolCallStatus string
@@ -479,15 +506,44 @@ type Skill struct {
 	Icon         WoxImage
 }
 
+// AIConfigurableBuiltinTool is one built-in tool the settings page can toggle.
+type AIConfigurableBuiltinTool struct {
+	Name        string
+	Description string
+}
+
+// AIChatMCPServerAuth is the Cursor-style static OAuth client for a remote MCP server.
+type AIChatMCPServerAuth struct {
+	ClientID     string   `json:"CLIENT_ID,omitempty"`
+	ClientSecret string   `json:"CLIENT_SECRET,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
+}
+
+// AIChatMCPServerConfig is the settings projection of one mcpServers JSON entry.
 type AIChatMCPServerConfig struct {
 	Name     string
 	Type     AIChatMCPServerType
 	Disabled bool
 
-	// for stdio server
+	// STDIO process
 	Command              string
-	EnvironmentVariables []string //key=value
+	Args                 []string `json:",omitempty"`
+	WorkingDirectory     string   `json:",omitempty"`
+	EnvironmentVariables []string // key=value
+	EnvFile              string   `json:",omitempty"`
+	EnvVars              []string `json:",omitempty"`
 
-	// for streamable http server
-	Url string
+	// Streamable HTTP
+	Url               string               `json:",omitempty"`
+	Headers           map[string]string    `json:",omitempty"`
+	HeadersHelper     string               `json:",omitempty"`
+	BearerTokenEnvVar string               `json:",omitempty"`
+	Auth              *AIChatMCPServerAuth `json:",omitempty"`
+
+	// Optional tool filter applied after the server advertises its tools.
+	EnabledTools  []string `json:",omitempty"`
+	DisabledTools []string `json:",omitempty"`
+
+	StartupTimeoutSec float64 `json:",omitempty"`
+	ToolTimeoutSec    float64 `json:",omitempty"`
 }

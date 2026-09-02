@@ -154,7 +154,7 @@ func appendToolsByName(current []common.Tool, names []string) []common.Tool {
 	}
 
 	for _, name := range names {
-		if seen[name] || IsRuntimeOnlyTool(name) {
+		if seen[name] || IsRuntimeOnlyTool(name) || IsBuiltinToolDisabled(name, DisabledBuiltinTools()) {
 			continue
 		}
 		tool, ok := GetToolRegistry().Get(name)
@@ -194,6 +194,45 @@ func toolServerName(tool common.Tool) string {
 		return ""
 	}
 	return tool.ServerConfig.Name
+}
+
+// AnnotateToolCalls fills source and MCP server metadata on streamed tool calls.
+func AnnotateToolCalls(toolCalls []common.ToolCallInfo, tools []common.Tool) {
+	for i := range toolCalls {
+		AnnotateToolCall(&toolCalls[i], tools)
+	}
+}
+
+// AnnotateToolCall fills source and MCP server metadata for one tool call.
+func AnnotateToolCall(toolCall *common.ToolCallInfo, tools []common.Tool) {
+	if toolCall == nil || strings.TrimSpace(toolCall.Name) == "" {
+		return
+	}
+	if tool, ok := findToolByName(tools, toolCall.Name); ok {
+		ApplyToolOrigin(toolCall, tool)
+		return
+	}
+	if tool, ok := GetToolRegistry().Get(toolCall.Name); ok {
+		ApplyToolOrigin(toolCall, tool)
+	}
+}
+
+// ApplyToolOrigin copies the registered tool's source identity onto a call.
+func ApplyToolOrigin(toolCall *common.ToolCallInfo, tool common.Tool) {
+	if toolCall == nil {
+		return
+	}
+	toolCall.Source = tool.Source
+	toolCall.Server = toolServerName(tool)
+}
+
+func findToolByName(tools []common.Tool, name string) (common.Tool, bool) {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return tool, true
+		}
+	}
+	return common.Tool{}, false
 }
 
 func compactDescription(value string, maxLen int) string {

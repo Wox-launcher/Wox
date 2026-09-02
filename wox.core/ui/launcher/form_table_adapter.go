@@ -94,6 +94,9 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 			return app.Identity
 		}
 	}
+	if strings.HasPrefix(value, "i18n:") {
+		return a.translate(value)
+	}
 	return value
 }
 
@@ -239,6 +242,15 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 }
 
+func hasMCPServerToolsColumn(columns []formTableColumn) bool {
+	for _, column := range columns {
+		if column.Type == "aiMCPServerTools" {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) formTableViewRows(definition formDefinition, columns []formTableColumn, rows []map[string]any, theme woxcomponent.Theme, imageScale float32) []launcherview.FormTableRow {
 	type indexedRow struct {
 		index int
@@ -247,6 +259,9 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 	ordered := make([]indexedRow, len(rows))
 	for index, row := range rows {
 		ordered[index] = indexedRow{index: index, row: row}
+	}
+	if hasMCPServerToolsColumn(columns) {
+		overlayMCPServerToolNames(rows)
 	}
 	if definition.Value.SortColumnKey != "" {
 		sort.SliceStable(ordered, func(left, right int) bool {
@@ -324,6 +339,9 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot.skillAdd != nil {
 		return a.buildFormTableSkillAddDialog(snapshot.skillAdd, palette, width, height, imageScale)
+	}
+	if snapshot.mcpJSONImport != nil {
+		return a.buildFormTableMCPJSONImportDialog(snapshot.mcpJSONImport, palette, width, height, imageScale)
 	}
 	if snapshot.deletePending >= 0 && snapshot.deleteDirect {
 		return a.buildFormTableDeleteDialog(palette, width, height)

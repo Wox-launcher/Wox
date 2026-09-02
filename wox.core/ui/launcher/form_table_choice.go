@@ -93,6 +93,9 @@ func (a *App) chooseFormTableChoice(index int) {
 	if definition.Value.Key == "Name" {
 		applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
 	}
+	if formTableRowDependsOnField(state.definition, definition.Value.Key) {
+		applyFormTableRowVisibleFieldsLocked(state)
+	}
 	state.choicePicker = nil
 	clearFormTableRowValidationLocked(state)
 	a.updateFormTableTextInput(false)

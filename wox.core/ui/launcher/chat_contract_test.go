@@ -3,6 +3,7 @@ package launcher
 import (
 	"testing"
 
+	"wox/ai"
 	"wox/common"
 )
 
@@ -74,5 +75,40 @@ func TestChatRenderItemsGroupsConsecutiveToolCalls(t *testing.T) {
 	tools[0].ToolCallInfo.Status = "failed"
 	if status := chatToolActivityStatus(tools); status != "failed" {
 		t.Fatalf("failed tool activity status = %q", status)
+	}
+}
+
+func TestChatToolOriginLabel(t *testing.T) {
+	if got := chatToolOriginLabel(chatToolCallInfo{Name: "search", Source: "mcp", Server: "ddg-search"}); got != "ddg-search/search" {
+		t.Fatalf("mcp origin = %q", got)
+	}
+	if got := chatToolOriginLabel(chatToolCallInfo{Name: "web_search", Source: "builtin"}); got != "builtin/web_search" {
+		t.Fatalf("builtin origin = %q", got)
+	}
+	if got := chatToolOriginLabel(chatToolCallInfo{Name: "search"}); got != "search" {
+		t.Fatalf("unknown origin = %q", got)
+	}
+}
+
+func TestChatToolCallFromContractFillsOriginFromRegistry(t *testing.T) {
+	ai.GetToolRegistry().Register(common.Tool{
+		Name:         "origin_contract_search",
+		Source:       common.ToolSourceMCP,
+		ServerConfig: &common.AIChatMCPServerConfig{Name: "ddg-search"},
+	})
+	t.Cleanup(func() {
+		ai.GetToolRegistry().Unregister("origin_contract_search")
+	})
+
+	got := chatToolCallFromContract(common.ToolCallInfo{Id: "call-1", Name: "origin_contract_search"})
+	if got.Source != string(common.ToolSourceMCP) || got.Server != "ddg-search" {
+		t.Fatalf("contract origin = %+v", got)
+	}
+
+	persisted := chatToolCallFromContract(common.ToolCallInfo{
+		Id: "call-2", Name: "search", Source: common.ToolSourceBuiltin,
+	})
+	if persisted.Source != string(common.ToolSourceBuiltin) || persisted.Server != "" {
+		t.Fatalf("persisted origin should not be overwritten = %+v", persisted)
 	}
 }

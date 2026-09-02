@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
@@ -513,7 +514,7 @@ func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]boo
 	seen := make(map[string]bool)
 	leading := "tool"
 	for _, conversation := range item.tools {
-		action := a.chatToolActionLabel(conversation.ToolCallInfo.Name)
+		action := a.chatToolActionLabel(conversation.ToolCallInfo)
 		if !seen[action] {
 			seen[action] = true
 			actions = append(actions, action)
@@ -576,7 +577,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 	if metrics, err := a.window.MeasureText(duration, woxui.TextStyle{Size: 11}); err == nil {
 		durationWidth = metrics.Size.Width
 	}
-	name := tool.Name
+	name := chatToolOriginLabel(tool)
 	if name == "" {
 		name = a.translate("i18n:ui_ai_chat_tools")
 	}
@@ -601,9 +602,17 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 	}
 	details := [][2]string{
 		{a.translate("i18n:ui_ai_chat_tool_detail_id"), tool.ID},
-		{a.translate("i18n:ui_ai_chat_tool_detail_name"), tool.Name},
-		{a.translate("i18n:ui_ai_chat_tool_detail_params"), params},
 	}
+	if source := a.chatToolSourceLabel(tool.Source); source != "" {
+		details = append(details, [2]string{a.translate("i18n:ui_ai_chat_tool_detail_source"), source})
+	}
+	if strings.TrimSpace(tool.Server) != "" {
+		details = append(details, [2]string{a.translate("i18n:ui_ai_chat_tool_detail_server"), tool.Server})
+	}
+	details = append(details,
+		[2]string{a.translate("i18n:ui_ai_chat_tool_detail_name"), tool.Name},
+		[2]string{a.translate("i18n:ui_ai_chat_tool_detail_params"), params},
+	)
 	if tool.Response != "" {
 		details = append(details, [2]string{a.translate("i18n:ui_ai_chat_tool_detail_response"), tool.Response})
 	}
@@ -655,9 +664,14 @@ func chatToolStatusColor(status string, theme woxcomponent.Theme) woxui.Color {
 }
 
 // chatToolActionLabel localizes the known tool activity verbs.
-func (a *App) chatToolActionLabel(name string) string {
+func (a *App) chatToolActionLabel(tool chatToolCallInfo) string {
+	if tool.Source != "" {
+		if label := chatToolOriginLabel(tool); label != "" {
+			return label
+		}
+	}
 	key := ""
-	switch name {
+	switch tool.Name {
 	case "web_search":
 		key = "ui_ai_chat_tool_action_web_search"
 	case "web_fetch":
@@ -668,12 +682,28 @@ func (a *App) chatToolActionLabel(name string) string {
 		key = "ui_ai_chat_tool_action_load_tools"
 	}
 	if key == "" {
-		if name != "" {
-			return name
+		if tool.Name != "" {
+			return tool.Name
 		}
 		return a.translate("i18n:ui_ai_chat_tools")
 	}
 	return a.translate("i18n:" + key)
+}
+
+func (a *App) chatToolSourceLabel(source string) string {
+	switch source {
+	case string(common.ToolSourceBuiltin):
+		return a.translate("i18n:ui_ai_chat_tool_source_builtin")
+	case string(common.ToolSourceMCP):
+		return a.translate("i18n:ui_ai_chat_tool_source_mcp")
+	default:
+		return source
+	}
+}
+
+// chatToolOriginLabel qualifies a chat tool name with builtin or MCP server identity.
+func chatToolOriginLabel(tool chatToolCallInfo) string {
+	return common.FormatToolOrigin(common.ToolSource(tool.Source), tool.Server, tool.Name)
 }
 
 func (a *App) chatToolActivityStatusLabel(status string) string {
@@ -777,7 +807,7 @@ func chatConversationClipboardText(conversation chatConversation) string {
 // formatChatToolCall keeps tool name, state, arguments, and response visible in the first vertical slice.
 func formatChatToolCall(conversation chatConversation) string {
 	tool := conversation.ToolCallInfo
-	name := tool.Name
+	name := chatToolOriginLabel(tool)
 	if name == "" {
 		name = "Tool"
 	}

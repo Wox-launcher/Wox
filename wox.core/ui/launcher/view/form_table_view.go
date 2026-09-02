@@ -318,10 +318,11 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	for index := range props.Columns {
 		leftContentWidth += widths[index]
 	}
-	// Flutter expands the last data column when the declared columns are narrower
-	// than the viewport, keeping the pinned operation column directly adjacent.
-	if len(props.Columns) > 0 && leftContentWidth < leftViewportWidth {
-		widths[len(props.Columns)-1] += leftViewportWidth - leftContentWidth
+	// Extra viewport space goes to the flexible (zero-width) column when one
+	// exists, otherwise the last data column. That keeps trailing switch or
+	// action columns from absorbing leftover space.
+	if leftover := leftViewportWidth - leftContentWidth; leftover > 0 {
+		formTableExpandFlexibleColumn(props.Columns, widths, leftover)
 		leftContentWidth = leftViewportWidth
 	}
 	headerCells := make([]woxwidget.Widget, 0, len(props.Columns))
@@ -437,6 +438,22 @@ func formTableColumnWidthsWithOperation(columns []FormTableColumn, tableWidth fl
 		widths[index] = columnWidth + formTableColumnSpacing
 	}
 	return widths
+}
+
+// formTableExpandFlexibleColumn gives leftover viewport space to the first
+// undeclared-width column, or the last data column when every width is fixed.
+func formTableExpandFlexibleColumn(columns []FormTableColumn, widths []float32, leftover float32) {
+	if leftover <= 0 || len(columns) == 0 {
+		return
+	}
+	expandIndex := len(columns) - 1
+	for index, column := range columns {
+		if column.Width == 0 {
+			expandIndex = index
+			break
+		}
+	}
+	widths[expandIndex] += leftover
 }
 
 func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, width float32, index int) woxwidget.Widget {

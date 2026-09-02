@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"wox/ai"
 	"wox/cloudsync"
 	"wox/common"
 	"wox/plugin"
@@ -530,12 +531,8 @@ func fromCoreChatData(chat common.AIChatData) chatData {
 		conversations[index] = chatConversation{
 			ID: conversation.Id, Role: string(conversation.Role), Text: conversation.Text, Reasoning: conversation.Reasoning,
 			Images: images, SkillRefs: skillRefs,
-			ToolCallInfo: chatToolCallInfo{
-				ID: conversation.ToolCallInfo.Id, Name: conversation.ToolCallInfo.Name, Arguments: cloneAnyMap(conversation.ToolCallInfo.Arguments),
-				Status: string(conversation.ToolCallInfo.Status), Delta: conversation.ToolCallInfo.Delta, Response: conversation.ToolCallInfo.Response,
-				StartTimestamp: conversation.ToolCallInfo.StartTimestamp, EndTimestamp: conversation.ToolCallInfo.EndTimestamp,
-			},
-			Timestamp: conversation.Timestamp,
+			ToolCallInfo: chatToolCallFromContract(conversation.ToolCallInfo),
+			Timestamp:    conversation.Timestamp,
 		}
 	}
 	compactions := make([]json.RawMessage, len(chat.CompactionEntries))
@@ -551,6 +548,26 @@ func fromCoreChatData(chat common.AIChatData) chatData {
 		ID: chat.Id, Title: chat.Title, Conversations: conversations, CompactionEntries: compactions,
 		Model: aiModel{Name: chat.Model.Name, Provider: string(chat.Model.Provider), ProviderAlias: chat.Model.ProviderAlias}, DebugTrace: debugTrace,
 		CreatedAt: chat.CreatedAt, UpdatedAt: chat.UpdatedAt, IsStreaming: chat.IsStreaming, IsSummary: chat.IsSummary,
+	}
+}
+
+// chatToolCallFromContract copies persisted tool metadata and fills origin from
+// the live registry when older chats predate Source/Server fields.
+func chatToolCallFromContract(info common.ToolCallInfo) chatToolCallInfo {
+	source := string(info.Source)
+	server := info.Server
+	if source == "" && strings.TrimSpace(info.Name) != "" {
+		if tool, ok := ai.GetToolRegistry().Get(info.Name); ok {
+			source = string(tool.Source)
+			if tool.ServerConfig != nil {
+				server = tool.ServerConfig.Name
+			}
+		}
+	}
+	return chatToolCallInfo{
+		ID: info.Id, Name: info.Name, Source: source, Server: server, Arguments: cloneAnyMap(info.Arguments),
+		Status: string(info.Status), Delta: info.Delta, Response: info.Response,
+		StartTimestamp: info.StartTimestamp, EndTimestamp: info.EndTimestamp,
 	}
 }
 

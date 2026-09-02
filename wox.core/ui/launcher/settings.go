@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -80,6 +81,8 @@ type settingsData struct {
 	AIProviders                        json.RawMessage
 	AIMCPServers                       json.RawMessage
 	AISkills                           json.RawMessage
+	AIDisabledBuiltinTools             []string
+	AIConfigurableBuiltinTools         []aiBuiltinToolInfo
 	CloudSyncDisabledPlugins           []string
 	ShowScoreTail                      bool
 	ShowPerformanceTail                bool
@@ -106,6 +109,11 @@ type queryShortcutSetting struct {
 	Shortcut string
 	Query    string
 	Disabled bool
+}
+
+type aiBuiltinToolInfo struct {
+	Name        string
+	Description string
 }
 
 type settingChoice struct {
@@ -617,6 +625,8 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		AIProviders:                        aiProviders,
 		AIMCPServers:                       mcpServers,
 		AISkills:                           aiSkills,
+		AIDisabledBuiltinTools:             append([]string(nil), loaded.AIDisabledBuiltinTools...),
+		AIConfigurableBuiltinTools:         aiBuiltinToolInfosFromContract(loaded.AIConfigurableBuiltinTools),
 		CloudSyncDisabledPlugins:           append([]string(nil), loaded.CloudSyncDisabledPlugins...),
 		ShowScoreTail:                      loaded.ShowScoreTail,
 		ShowPerformanceTail:                loaded.ShowPerformanceTail,
@@ -625,6 +635,14 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		ShowPerformanceTailBackendPrepared: loaded.ShowPerformanceTailBackendPrepared,
 		ShowPerformanceTailUIReceived:      loaded.ShowPerformanceTailUIReceived,
 	}, nil
+}
+
+func aiBuiltinToolInfosFromContract(tools []common.AIConfigurableBuiltinTool) []aiBuiltinToolInfo {
+	out := make([]aiBuiltinToolInfo, 0, len(tools))
+	for _, tool := range tools {
+		out = append(out, aiBuiltinToolInfo{Name: tool.Name, Description: tool.Description})
+	}
+	return out
 }
 
 func (a *App) closeSettings() error {

@@ -44,6 +44,7 @@ type formTableEditorState struct {
 	queryVariable     *formTableQueryVariablePickerState
 	emojiPicker       *formTableEmojiPickerState
 	skillAdd          *formTableSkillAddState
+	mcpJSONImport     *formTableMCPJSONImportState
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorState
 }
@@ -65,6 +66,7 @@ type formTableEditorSnapshot struct {
 	queryVariable     *formTableQueryVariablePickerSnapshot
 	emojiPicker       *formTableEmojiPickerSnapshot
 	skillAdd          *formTableSkillAddSnapshot
+	mcpJSONImport     *formTableMCPJSONImportSnapshot
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorSnapshot
 }
@@ -281,6 +283,11 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		fields := snapshotFormFieldsLocked(state.skillAdd.fields)
 		skillAdd = &formTableSkillAddSnapshot{tab: state.skillAdd.tab, fields: &fields, error: state.skillAdd.error, cloning: state.skillAdd.cloning}
 	}
+	var mcpJSONImport *formTableMCPJSONImportSnapshot
+	if state.mcpJSONImport != nil {
+		fields := snapshotFormFieldsLocked(state.mcpJSONImport.fields)
+		mcpJSONImport = &formTableMCPJSONImportSnapshot{fields: &fields, error: state.mcpJSONImport.error}
+	}
 	return &formTableEditorSnapshot{
 		definition:        state.definition,
 		rows:              cloneFormTableRows(state.rows),
@@ -298,6 +305,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		queryVariable:     queryVariable,
 		emojiPicker:       emojiPicker,
 		skillAdd:          skillAdd,
+		mcpJSONImport:     mcpJSONImport,
 		queryPreset:       state.queryPreset,
 		windowGroupEditor: snapshotWindowGroupEditorLocked(state.windowGroupEditor),
 	}
@@ -497,15 +505,13 @@ func formTableColumnDefinition(column formTableColumn, row map[string]any) (form
 }
 
 func formTableRowFields(definition formDefinition, row map[string]any) (formFieldsState, map[string]bool) {
-	definitions := make([]formDefinition, 0, len(definition.Value.Columns))
 	values := make(map[string]string, len(definition.Value.Columns))
 	textLists := make(map[string]bool)
 	for _, column := range definition.Value.Columns {
 		if column.HideInUpdate {
 			continue
 		}
-		field, editable := formTableColumnDefinition(column, row)
-		definitions = append(definitions, field)
+		_, editable := formTableColumnDefinition(column, row)
 		if !editable {
 			continue
 		}
@@ -533,7 +539,81 @@ func formTableRowFields(definition formDefinition, row map[string]any) (formFiel
 			textLists[column.Key] = true
 		}
 	}
-	return newFormFieldsState(definitions, values, true), textLists
+	definitions := formTableVisibleRowDefinitions(definition, values)
+	fields := newFormFieldsState(definitions, values, true)
+	for key, value := range values {
+		if _, exists := fields.values[key]; !exists {
+			fields.values[key] = value
+		}
+	}
+	return fields, textLists
+}
+
+func formTableColumnVisible(column formTableColumn, values map[string]string) bool {
+	if column.VisibleWhen.Key == "" {
+		return true
+	}
+	current := values[column.VisibleWhen.Key]
+	for _, want := range column.VisibleWhen.Values {
+		if current == want {
+			return true
+		}
+	}
+	return false
+}
+
+func formTableRowDependsOnField(definition formDefinition, key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, column := range definition.Value.Columns {
+		if column.VisibleWhen.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// formTableVisibleRowDefinitions keeps only the add/edit fields that match the current row values.
+func formTableVisibleRowDefinitions(definition formDefinition, values map[string]string) []formDefinition {
+	fields := make([]formDefinition, 0, len(definition.Value.Columns))
+	for _, column := range definition.Value.Columns {
+		if column.HideInUpdate || !formTableColumnVisible(column, values) {
+			continue
+		}
+		field, _ := formTableColumnDefinition(column, nil)
+		fields = append(fields, field)
+	}
+	return fields
+}
+
+// applyFormTableRowVisibleFieldsLocked rebuilds the row editor after a field that other columns depend on changes.
+func applyFormTableRowVisibleFieldsLocked(state *formTableEditorState) {
+	if state == nil || state.rowForm == nil {
+		return
+	}
+	syncFormFieldsEditorLocked(state.rowForm)
+	focusedKey := ""
+	if state.rowForm.focused >= 0 && state.rowForm.focused < len(state.rowForm.definitions) {
+		focusedKey = state.rowForm.definitions[state.rowForm.focused].Value.Key
+	}
+	state.rowForm.definitions = formTableVisibleRowDefinitions(state.definition, state.rowForm.values)
+	focused := -1
+	for index, field := range state.rowForm.definitions {
+		if focused < 0 && formDefinitionFocusable(field) {
+			focused = index
+		}
+		if field.Value.Key == focusedKey {
+			focused = index
+			break
+		}
+	}
+	if focused >= 0 {
+		setFormFieldsFocusLocked(state.rowForm, focused)
+	} else {
+		state.rowForm.focused = -1
+		state.rowForm.editor = nil
+	}
 }
 
 // normalizeEmptyAsZeroFormValue maps blank and zero to an empty editor value for EmptyAsZero columns.
@@ -1181,8 +1261,14 @@ func (a *App) moveFormTableRowFocus(delta int) {
 func (a *App) changeFormTableRowChoice(index, delta int) {
 	if state := a.activeFormTableEditor(); state != nil && state.rowForm != nil {
 		changeFormFieldsChoiceLocked(state.rowForm, index, delta)
-		if index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Name" {
-			applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
+		if index >= 0 && index < len(state.rowForm.definitions) {
+			key := state.rowForm.definitions[index].Value.Key
+			if key == "Name" {
+				applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
+			}
+			if formTableRowDependsOnField(state.definition, key) {
+				applyFormTableRowVisibleFieldsLocked(state)
+			}
 		}
 		clearFormTableRowValidationLocked(state)
 	}
@@ -1476,6 +1562,13 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 				a.addFormTableSkill()
 				return true
 			}
+		}
+		return false
+	}
+	if state.mcpJSONImport != nil {
+		if event.Down && event.Key == woxui.KeyEscape {
+			a.cancelFormTableMCPJSONImport()
+			return true
 		}
 		return false
 	}

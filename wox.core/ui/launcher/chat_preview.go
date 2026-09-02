@@ -81,6 +81,8 @@ type chatSkill struct {
 type chatToolCallInfo struct {
 	ID             string         `json:"Id"`
 	Name           string         `json:"Name"`
+	Source         string         `json:"Source"`
+	Server         string         `json:"Server"`
 	Arguments      map[string]any `json:"Arguments"`
 	Status         string         `json:"Status"`
 	Delta          string         `json:"Delta"`
@@ -475,7 +477,7 @@ func (a *App) loadChatPreview(key, chatID string, revision uint64) {
 	loaded, err := a.services.ChatByID(ctx, a.sessionID, chatID)
 	chat := chatData{}
 	if err == nil {
-		chat, err = chatDataFromContract(loaded)
+		chat = fromCoreChatData(loaded)
 	}
 	if dispatchErr := a.runOnUI("apply chat preview", func() {
 		if state := a.chatPreview; state != nil && state.key == key && state.revision == revision {
@@ -600,6 +602,9 @@ func (a *App) toggleChatPanel(panel string) {
 
 // reloadChatResource invalidates only catalogs affected by a core resource notification.
 func (a *App) reloadChatResourceName(resource string) {
+	if resource == "tools" || resource == "all" {
+		a.refreshAIMCPServerToolsLocked()
+	}
 	if resource != "models" && resource != "skills" && resource != "all" {
 		return
 	}

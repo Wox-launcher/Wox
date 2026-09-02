@@ -16,6 +16,7 @@ import (
 
 var mcpSessions = util.NewHashMap[string, *mcp.ClientSession]()
 var mcpTools = util.NewHashMap[string, []common.MCPTool]()
+var mcpToolNames = util.NewHashMap[string, []string]()
 
 func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*mcp.ClientSession, error) {
 	if session, ok := mcpSessions.Load(config.Name); ok {
@@ -29,14 +30,20 @@ func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*m
 
 	var transport mcp.Transport
 	if config.Type == common.AIChatMCPServerTypeSTDIO {
-		command, args := parseCommandArgs(config.Command)
+		command, args := resolveMCPCommand(config)
 		cmd := shell.BuildCommand(command, nil, args...)
-		// Set environment variables (each entry is already in "key=value" format)
-		cmd.Env = append(cmd.Env, config.EnvironmentVariables...)
+		cmd.Env = append(cmd.Env, resolveMCPProcessEnv(config)...)
+		if cwd := mcpWorkingDirectory(config); cwd != "" {
+			cmd.Dir = cwd
+		}
 		transport = &mcp.CommandTransport{Command: cmd}
 	}
 	if config.Type == common.AIChatMCPServerTypeStreamableHTTP {
-		transport = &mcp.StreamableClientTransport{Endpoint: config.Url}
+		endpoint := interpolateMCPValue(strings.TrimSpace(config.Url))
+		transport = &mcp.StreamableClientTransport{
+			Endpoint:   endpoint,
+			HTTPClient: newMCPHTTPClient(ctx, config),
+		}
 	}
 	if transport == nil {
 		return nil, fmt.Errorf("unsupported MCP server type: %s", config.Type)
@@ -50,6 +57,50 @@ func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*m
 
 	mcpSessions.Store(config.Name, session)
 	return session, nil
+}
+
+// ResetMCPClients drops cached sessions and tool lists so the next connect uses current settings.
+func ResetMCPClients() {
+	mcpSessions.Range(func(_ string, session *mcp.ClientSession) bool {
+		if session != nil {
+			_ = session.Close()
+		}
+		return true
+	})
+	mcpSessions.Clear()
+	mcpTools.Clear()
+	mcpOAuthTokens.Clear()
+}
+
+func rememberMCPToolNames(serverName string, tools []common.MCPTool) {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if name := strings.TrimSpace(tool.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	mcpToolNames.Store(serverName, names)
+}
+
+// SetCachedMCPToolsForTest stores discovered tools so settings-table tests can overlay names.
+func SetCachedMCPToolsForTest(serverName string, tools []common.MCPTool) {
+	mcpTools.Store(serverName, tools)
+	rememberMCPToolNames(serverName, tools)
+}
+
+// CachedMCPToolNames returns the last discovered tool names for a server.
+// Names survive session reset so the settings table can keep showing them
+// while a server is reconnecting.
+func CachedMCPToolNames(serverName string) ([]string, bool) {
+	if names, ok := mcpToolNames.Load(serverName); ok {
+		return append([]string(nil), names...), true
+	}
+	tools, ok := mcpTools.Load(serverName)
+	if !ok {
+		return nil, false
+	}
+	rememberMCPToolNames(serverName, tools)
+	return CachedMCPToolNames(serverName)
 }
 
 // MCPListTools lists the tools for a given MCP server config with timeout protection
@@ -81,8 +132,8 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 			}
 		}()
 
-		// Create timeout context for this operation (30 seconds)
-		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		startupTimeout := mcpStartupTimeout(config)
+		timeoutCtx, cancel := context.WithTimeout(ctx, startupTimeout)
 		defer cancel()
 
 		session, err := getMCPSession(timeoutCtx, config)
@@ -96,7 +147,7 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 		resultChan <- listToolsResult{tools: processedTools, err: processErr}
 	}()
 
-	// Wait for result or timeout
+	startupTimeout := mcpStartupTimeout(config)
 	select {
 	case result := <-resultChan:
 		if result.err != nil {
@@ -105,11 +156,12 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d tools", len(result.tools)))
 		mcpTools.Store(config.Name, result.tools)
+		rememberMCPToolNames(config.Name, result.tools)
 		return result.tools, nil
 
-	case <-time.After(35 * time.Second): // Slightly longer than the context timeout
+	case <-time.After(startupTimeout + 5*time.Second):
 		util.GetLogger().Error(ctx, fmt.Sprintf("Timeout listing tools for MCP server: %s", config.Name))
-		return nil, fmt.Errorf("timeout after 35 seconds listing tools for server: %s", config.Name)
+		return nil, fmt.Errorf("timeout listing tools for server: %s", config.Name)
 	}
 }
 
@@ -217,7 +269,13 @@ func processToolsFromSession(ctx context.Context, session *mcp.ClientSession, co
 			Callback: func(ctx context.Context, args map[string]any) (common.Conversation, error) {
 				util.GetLogger().Debug(ctx, fmt.Sprintf("MCP: Tool call: %s, args: %v", toolName, args))
 
-				result, err := session.CallTool(ctx, &mcp.CallToolParams{
+				callCtx := ctx
+				var cancel context.CancelFunc
+				if timeout := mcpToolTimeout(config); timeout > 0 {
+					callCtx, cancel = context.WithTimeout(ctx, timeout)
+					defer cancel()
+				}
+				result, err := session.CallTool(callCtx, &mcp.CallToolParams{
 					Name:      toolName,
 					Arguments: args,
 				})
@@ -252,8 +310,10 @@ func processToolsFromSession(ctx context.Context, session *mcp.ClientSession, co
 		})
 	}
 
+	toolsList = FilterMCPServerTools(toolsList, config)
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d tools", len(toolsList)))
 	mcpTools.Store(config.Name, toolsList)
+	rememberMCPToolNames(config.Name, toolsList)
 
 	return toolsList, nil
 }

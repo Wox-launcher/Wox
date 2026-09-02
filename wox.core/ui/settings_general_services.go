@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"wox/ai"
 	"wox/common"
 	corehotkey "wox/hotkey"
 	"wox/i18n"
@@ -52,6 +53,8 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		AIProviders:                        append([]setting.AIProvider(nil), woxSetting.AIProviders.Get()...),
 		AIMCPServers:                       append([]common.AIChatMCPServerConfig(nil), woxSetting.AIMCPServers.Get()...),
 		AISkills:                           append([]common.Skill(nil), skills...),
+		AIDisabledBuiltinTools:             append([]string(nil), woxSetting.AIDisabledBuiltinTools.Get()...),
+		AIConfigurableBuiltinTools:         ai.ConfigurableBuiltinToolInfos(),
 		HTTPProxyEnabled:                   woxSetting.HttpProxyEnabled.Get(),
 		HTTPProxyURL:                       woxSetting.HttpProxyUrl.Get(),
 		ShowPosition:                       woxSetting.ShowPosition.Get(),
@@ -245,6 +248,12 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			return err
 		}
 		woxSetting.AISkills.Set(skills)
+	case "AIDisabledBuiltinTools":
+		var names []string
+		if err := json.Unmarshal([]byte(value), &names); err != nil {
+			return err
+		}
+		woxSetting.AIDisabledBuiltinTools.Set(ai.SanitizeDisabledBuiltinTools(names))
 	case "EnableAutoBackup":
 		woxSetting.EnableAutoBackup.Set(boolValue)
 	case "EnableAutoUpdate":

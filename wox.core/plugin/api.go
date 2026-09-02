@@ -572,7 +572,7 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 			return
 		}
 
-		streamedResult, drainErr := a.drainStream(loopCtx, stream, callback)
+		streamedResult, drainErr := a.drainStream(loopCtx, stream, callback, opts.Tools)
 		if drainErr != nil {
 			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
 				Type:      common.AIChatDebugEventModelCallError,
@@ -677,7 +677,7 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 // drainStream consumes a provider stream until it either reaches the Streamed
 // status (returning the aggregated result) or hits a terminal error. Streaming
 // chunks are forwarded to the callback as they arrive.
-func (a *APIImpl) drainStream(ctx context.Context, stream ai.ChatStream, callback common.ChatStreamFunc) (*common.ChatStreamData, error) {
+func (a *APIImpl) drainStream(ctx context.Context, stream ai.ChatStream, callback common.ChatStreamFunc, tools []common.Tool) (*common.ChatStreamData, error) {
 	noContentCount := 0
 	for {
 		streamResult, streamErr := stream.Receive(ctx)
@@ -694,6 +694,7 @@ func (a *APIImpl) drainStream(ctx context.Context, stream ai.ChatStream, callbac
 		}
 
 		a.applyStartTimeIfAbsent(&streamResult)
+		ai.AnnotateToolCalls(streamResult.ToolCalls, tools)
 
 		if streamResult.Status == common.ChatStreamStatusStreaming {
 			callback(streamResult)
@@ -711,6 +712,7 @@ func (a *APIImpl) drainStream(ctx context.Context, stream ai.ChatStream, callbac
 // succeeded. Honors LoopPolicy.MaxRetries for repeated same-name failures.
 func (a *APIImpl) executeToolCalls(ctx context.Context, streamedResult *common.ChatStreamData, options common.ChatOptions, callback common.ChatStreamFunc, iteration int, parentCallId string) bool {
 	streamedResult.Status = common.ChatStreamStatusRunningToolCall
+	ai.AnnotateToolCalls(streamedResult.ToolCalls, options.Tools)
 
 	var sw sync.WaitGroup
 	retryCounts := make(map[string]int)
@@ -789,6 +791,7 @@ func findVisibleTool(tools []common.Tool, name string) (common.Tool, bool) {
 // recorded as the tool-call response so the model can see them when
 // RetryOnFailure is on.
 func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, streamedResult *common.ChatStreamData, toolCallIndex int, options common.ChatOptions, callback common.ChatStreamFunc, retryCounts map[string]int, iteration int, parentCallId string) {
+	ai.ApplyToolOrigin(&streamedResult.ToolCalls[toolCallIndex], tool)
 	toolCall := streamedResult.ToolCalls[toolCallIndex]
 	util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s", tool.Name, toolCall.Arguments, toolCall.Id))
 
