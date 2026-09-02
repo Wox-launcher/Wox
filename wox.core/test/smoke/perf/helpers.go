@@ -37,6 +37,11 @@ const (
 	// and the sampler used to fire exactly once and then wait out its entire budget, so
 	// one lost request failed the case indistinguishably from a stalled renderer.
 	quietFrameRequestInterval = 500 * time.Millisecond
+
+	// frameSampleBudget bounds one sampling wait. It is deliberately shorter than
+	// CaseTimeout so exhausting it reports the renderer counters rather than letting
+	// the case deadline surface somewhere less informative.
+	frameSampleBudget = 12 * time.Second
 )
 
 func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
@@ -48,26 +53,42 @@ func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automati
 	}
 	lastFrameID := uint64(0)
 	observed := make([]woxui.FrameMetricsSample, 0, want)
-	waitCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, frameSampleBudget)
 	defer cancel()
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	var metrics woxui.FrameMetricsSnapshot
 	requestFrame := true
 	requestedAt := time.Now()
+	startedAt := time.Now()
+	frameRequests := 0
 	for waitCtx.Err() == nil && len(observed) < want {
 		if requestFrame {
 			if requestErr := client.RequestFrame(waitCtx); requestErr != nil {
+				if waitCtx.Err() != nil {
+					break
+				}
 				t.Fatalf("request performance sample frame: %v", requestErr)
 			}
+			frameRequests++
 			requestFrame = false
 			requestedAt = time.Now()
 		}
 		observedBeforePoll := len(observed)
-		var metricsErr error
-		if metrics, metricsErr = client.FrameMetrics(waitCtx); metricsErr != nil {
+		// The poll result goes to a local first: a failed call reports a zero
+		// snapshot, and overwriting the counters with it would leave the failure
+		// message describing a renderer that never ran.
+		polled, metricsErr := client.FrameMetrics(waitCtx)
+		if metricsErr != nil {
+			// Running out of the sampling budget is the outcome this wait exists to
+			// report. Treating the expired call as a transport failure replaced that
+			// report with a bare deadline error and hid every renderer counter.
+			if waitCtx.Err() != nil {
+				break
+			}
 			t.Fatalf("read frame metrics: %v", metricsErr)
 		}
+		metrics = polled
 		for _, sample := range metrics.Recent {
 			if sample.FrameID <= lastFrameID || !sample.HostCompleted || !sample.Presented {
 				continue
@@ -91,8 +112,23 @@ func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automati
 		case <-ticker.C:
 		}
 	}
-	t.Fatalf("collected %d presented frames, want %d: %s; samples %+v", len(observed), want, describeFrameMetrics(metrics), observed)
+	metrics = finalFrameMetrics(ctx, client, metrics)
+	t.Fatalf("collected %d presented frames, want %d after %d frame requests over %s: %s; samples %+v",
+		len(observed), want, frameRequests, time.Since(startedAt).Truncate(time.Millisecond), describeFrameMetrics(metrics), observed)
 	return nil
+}
+
+// finalFrameMetrics re-reads the counters once the sampling budget is gone. The
+// budget context is already expired by then, so reusing it would only produce
+// another deadline error in place of the numbers that explain the failure.
+func finalFrameMetrics(ctx context.Context, client *automationdriver.Client, last woxui.FrameMetricsSnapshot) woxui.FrameMetricsSnapshot {
+	readCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	metrics, err := client.FrameMetrics(readCtx)
+	if err != nil {
+		return last
+	}
+	return metrics
 }
 
 // describeFrameMetrics reports what the renderer did with the requested frames. A
