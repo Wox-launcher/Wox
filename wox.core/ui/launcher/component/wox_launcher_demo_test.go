@@ -144,6 +144,48 @@ func TestWoxLauncherDemoUsesProductionLauncherGeometry(t *testing.T) {
 	}
 }
 
+func TestWoxLauncherDemoResultTailUsesTailColor(t *testing.T) {
+	subtitle := woxui.Color{R: 10, G: 20, B: 30, A: 255}
+	tail := woxui.Color{R: 200, G: 80, B: 40, A: 255}
+	selectedTail := woxui.Color{R: 40, G: 180, B: 90, A: 255}
+	theme := Theme{ResultSubtitle: subtitle, ResultTail: tail, SelectedTail: selectedTail}
+
+	normal := demoResultRow(LauncherDemoProps{Theme: theme}, LauncherDemoResult{Title: "Result", Subtitle: "Subtitle", Tail: "P1"}, 400, 56, 255).(woxwidget.Container)
+	if got := launcherDemoResultTailText(t, normal); got != tail {
+		t.Fatalf("unselected result tail color = %#v, want %#v", got, tail)
+	}
+	if got := launcherDemoResultSubtitleText(t, normal); got != subtitle {
+		t.Fatalf("result subtitle color = %#v, want %#v", got, subtitle)
+	}
+
+	selected := demoResultRow(LauncherDemoProps{Theme: theme}, LauncherDemoResult{Title: "Result", Subtitle: "Subtitle", Tail: "P1", Selected: true}, 400, 56, 255).(woxwidget.Container)
+	if got := launcherDemoResultTailText(t, selected); got != selectedTail {
+		t.Fatalf("selected result tail color = %#v, want %#v", got, selectedTail)
+	}
+}
+
+func launcherDemoResultTailText(t *testing.T, row woxwidget.Container) woxui.Color {
+	t.Helper()
+	tail := row.Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Container)
+	return tail.Child.(woxwidget.Align).Child.(woxwidget.Text).Color
+}
+
+func launcherDemoResultSubtitleText(t *testing.T, row woxwidget.Container) woxui.Color {
+	t.Helper()
+	labels := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Clip).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	return labels.Children[1].(woxwidget.Text).Color
+}
+
+func TestWoxLauncherDemoHighlightsSelectedResultTail(t *testing.T) {
+	row := demoResultRow(LauncherDemoProps{
+		Theme: Theme{}, HighlightTarget: LauncherDemoHighlightSelectedTail, HighlightColor: woxui.Color{A: 255},
+	}, LauncherDemoResult{Title: "Result", Tail: "Live", Selected: true}, 400, 56, 255).(woxwidget.Container)
+	tail := row.Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Stack)
+	if overlay := tail.Children[1].Child.(woxwidget.Container); overlay.BorderWidth != 2 {
+		t.Fatalf("selected result tail highlight = %#v, want a local 2px highlight", overlay)
+	}
+}
+
 func TestWoxLauncherDemoHighlightsOnlyResultSubtitle(t *testing.T) {
 	row := demoResultRow(LauncherDemoProps{
 		Theme: Theme{}, HighlightTarget: LauncherDemoHighlightResultSubtitle, HighlightColor: woxui.Color{A: 255},

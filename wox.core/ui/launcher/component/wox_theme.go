@@ -12,10 +12,12 @@ type Theme struct {
 	SelectionText          woxui.Color
 	ResultTitle            woxui.Color
 	ResultSubtitle         woxui.Color
+	ResultTail             woxui.Color
 	ErrorText              woxui.Color
 	SelectedBackground     woxui.Color
 	SelectedTitle          woxui.Color
 	SelectedSubtitle       woxui.Color
+	SelectedTail           woxui.Color
 	ActionBackground       woxui.Color
 	ActionHeader           woxui.Color
 	ActionText             woxui.Color

@@ -396,6 +396,7 @@
   "ui_theme_editor_token_result_tail": "Cauda do resultado",
   "ui_theme_editor_token_result_active_background": "Fundo do resultado ativo",
   "ui_theme_editor_token_result_active_title": "Título do resultado ativo",
+  "ui_theme_editor_token_result_active_tail": "Cauda do resultado ativo",
   "ui_theme_editor_token_preview_text": "Texto da prévia",
   "ui_theme_editor_token_preview_tag_border": "Borda da tag da prévia",
   "ui_theme_editor_token_preview_tag_text": "Texto da tag da prévia",

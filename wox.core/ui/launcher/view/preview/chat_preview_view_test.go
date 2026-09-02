@@ -176,7 +176,7 @@ func TestChatMessagesScrollMetricsHashesEveryItemHeight(t *testing.T) {
 }
 
 func TestChatMessagesUsesSharedScrollView(t *testing.T) {
-	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
+	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
 	maxOffset := float32(0)
 	view := ChatMessages(ChatMessagesProps{
 		Width: 500, Height: 300, Key: "test", ContentHeight: 600,
@@ -193,8 +193,8 @@ func TestChatMessagesUsesSharedScrollView(t *testing.T) {
 	if props.Height != 286 || props.ContentHeight != 600 {
 		t.Fatalf("scroll geometry = height %.0f content %.0f, want 286/600", props.Height, props.ContentHeight)
 	}
-	if props.ThumbColor != theme.ResultSubtitle {
-		t.Fatalf("scrollbar thumb color = %#v, want theme subtitle", props.ThumbColor)
+	if props.ThumbColor != theme.ResultTitle {
+		t.Fatalf("scrollbar thumb color = %#v, want ResultTitle so ResultSubtitle cannot restyle it", props.ThumbColor)
 	}
 	if props.OnScroll != nil {
 		props.OnScroll(20)

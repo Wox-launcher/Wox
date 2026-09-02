@@ -134,7 +134,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		rows = nil
 	}
 	theme := palette.componentTheme()
-	foreground := theme.ResultSubtitle
+	foreground := theme.ResultTitle
 	disabledForeground := foreground
 	disabledForeground.A = woxcomponent.DisabledContentAlpha
 	infoIconRasterSize := physicalImageSize(14, callbacks.imageScale)

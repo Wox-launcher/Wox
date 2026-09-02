@@ -77,7 +77,6 @@ func SettingChoiceAnchorKey(id string) woxwidget.Key {
 // SettingRow builds a text, switch, or choice setting row.
 func SettingRow(props SettingRowProps) woxwidget.Widget {
 	fieldTheme := props.Theme
-	subtitle := props.Theme.ResultSubtitle
 	valueColor := props.Theme.ResultTitle
 	if props.Disabled {
 		fieldTheme.ResultTitle = props.Theme.ResultSubtitle
@@ -134,8 +133,8 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 		}
 		valueField = woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 			ID: "setting-choice-" + props.ID, Label: props.Title, Value: props.Value, Trailing: props.ValueTrailing, Leading: props.ValueLeading,
-			Width: valueWidth, Height: woxcomponent.SettingsControlHeight, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
-			Foreground: valueColor, Secondary: subtitle, Theme: props.Theme, OnTap: onTap, OnTapBounds: onTapBounds,
+			Width: valueWidth, Height: woxcomponent.SettingsControlHeight,
+			Foreground: valueColor, Secondary: valueColor, Theme: props.Theme, OnTap: onTap, OnTapBounds: onTapBounds,
 		})}
 	}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{

@@ -167,16 +167,35 @@ func TestPluginFilterPanelMatchesFlutterLayout(t *testing.T) {
 	}
 }
 
+func TestPluginListSearchUsesValueText(t *testing.T) {
+	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
+	list := PluginList(PluginListProps{
+		Width: 260, Height: 660, Placeholder: "Search 67 plugins",
+		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+	})
+	search := list.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	wantBorder := title
+	wantBorder.A = 170
+	if search.BorderColor != wantBorder {
+		t.Fatalf("plugin search border = %#v, want ResultTitle %#v", search.BorderColor, wantBorder)
+	}
+	input := search.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if input.Theme.ResultSubtitle != title {
+		t.Fatalf("plugin search hint token = %#v, want ResultTitle so ResultSubtitle cannot restyle it", input.Theme.ResultSubtitle)
+	}
+}
+
 func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	activeColor := woxui.Color{R: 90, G: 100, B: 110, A: 255}
 	inactiveColor := woxui.Color{R: 120, G: 130, B: 140, A: 255}
+	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660,
 		Items: []PluginListItem{
 			{ID: "clipboard", Name: "Clipboard", Status: "1.0.0", Badge: "System", Selected: true},
 			{ID: "shell", Name: "Shell", Status: "1.0.0", Badge: "System"},
 		},
-		Theme: woxcomponent.Theme{ActionSelectedText: activeColor, ResultSubtitle: inactiveColor},
+		Theme: woxcomponent.Theme{ActionSelectedText: activeColor, ResultSubtitle: inactiveColor, ResultTitle: title},
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -212,6 +231,10 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	label := badge.Child.(woxwidget.Text)
 	if label.Style.Size != 11 {
 		t.Fatalf("badge font size = %v, want 11", label.Style.Size)
+	}
+	inactiveBadge := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Container)
+	if inactiveBadge.BorderColor != title || inactiveBadge.Child.(woxwidget.Text).Color != title {
+		t.Fatalf("unselected System badge = border %#v text %#v, want ResultTitle", inactiveBadge.BorderColor, inactiveBadge.Child.(woxwidget.Text).Color)
 	}
 }
 
@@ -264,7 +287,7 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	for index := range items {
 		items[index] = PluginListItem{ID: fmt.Sprint(index), Name: fmt.Sprint(index)}
 	}
-	list := PluginList(PluginListProps{Width: 260, Height: 300, Items: items, Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}}})
+	list := PluginList(PluginListProps{Width: 260, Height: 300, Items: items, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}}})
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	scrollbar := column.Children[1].(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
@@ -871,7 +894,7 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 	icon := &woxui.Image{}
 	props := FormTableFieldProps{
 		ID: "commands", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
-		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}},
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
 	}
 	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130, false).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)

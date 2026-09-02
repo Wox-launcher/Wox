@@ -34,7 +34,7 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 	normalIcon := app.images[cacheKey(selectedSource, palette.toolbarText, 18)]
 	app.imageRequested[cacheKey(selectedSource, palette.selectedTitle, 18)] = selectedSource.ImageData
 	searchSource := settingControlIconSource("search")
-	app.images[cacheKey(searchSource, palette.resultSubtitle, 18)] = &woxui.Image{}
+	app.images[cacheKey(searchSource, palette.toolbarText, 18)] = &woxui.Image{}
 
 	rail := app.buildSettingsRail(settingsSnapshot{tab: "appearance", palette: palette}, 260, 600, 1).(woxwidget.Stack)
 	railContainer := rail.Children[0].Child.(woxwidget.Container)

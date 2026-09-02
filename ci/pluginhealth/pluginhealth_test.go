@@ -174,3 +174,51 @@ func TestProbePluginQueryFailsOnHostQueryError(t *testing.T) {
 
 	require.EqualError(t, err, "rpc timeout")
 }
+
+func TestIsTransientHealthQueryError(t *testing.T) {
+	assert.True(t, isTransientHealthQueryError(errors.New("ip: script execution failed: signal: killed, stderr: ")))
+	assert.True(t, isTransientHealthQueryError(context.DeadlineExceeded))
+	assert.False(t, isTransientHealthQueryError(errors.New("plugin returned error: invalid setting")))
+	assert.False(t, isTransientHealthQueryError(nil))
+}
+
+type flakyProbePlugin struct {
+	failsLeft int
+	err       error
+	calls     int
+}
+
+func (f *flakyProbePlugin) Init(context.Context, plugin.InitParams) {}
+
+func (f *flakyProbePlugin) Query(context.Context, plugin.Query) plugin.QueryResponse {
+	return plugin.QueryResponse{}
+}
+
+func (f *flakyProbePlugin) QueryWithError(context.Context, plugin.Query) (plugin.QueryResponse, error) {
+	f.calls++
+	if f.failsLeft > 0 {
+		f.failsLeft--
+		return plugin.QueryResponse{}, f.err
+	}
+	return plugin.QueryResponse{}, nil
+}
+
+func TestProbePluginQueryWithRetryRecoversFromTransientError(t *testing.T) {
+	flaky := &flakyProbePlugin{failsLeft: 1, err: errors.New("script execution failed: signal: killed, stderr: ")}
+	instance := &plugin.Instance{Plugin: flaky}
+
+	err := probePluginQueryWithRetry(context.Background(), instance, plugin.Query{RawQuery: "ip"})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, flaky.calls)
+}
+
+func TestProbePluginQueryWithRetryDoesNotRetryPermanentError(t *testing.T) {
+	flaky := &flakyProbePlugin{failsLeft: 2, err: errors.New("invalid plugin response")}
+	instance := &plugin.Instance{Plugin: flaky}
+
+	err := probePluginQueryWithRetry(context.Background(), instance, plugin.Query{RawQuery: "ip"})
+
+	require.EqualError(t, err, "invalid plugin response")
+	assert.Equal(t, 1, flaky.calls)
+}

@@ -2,6 +2,7 @@ package host
 
 import (
 	"testing"
+	"time"
 	"wox/plugin"
 )
 
@@ -36,6 +37,18 @@ func TestScriptActionDefaultAndHotkeyFromActionParam(t *testing.T) {
 	}
 	if got := getFirstStringFromMap(map[string]interface{}{"hotkey": "ctrl+enter"}, hotkeyKeys); got != "ctrl+enter" {
 		t.Fatalf("hotkey on the action should be copied, got %q", got)
+	}
+}
+
+func TestScriptExecutionTimeoutUsesEnvOverride(t *testing.T) {
+	t.Setenv(scriptExecutionTimeoutEnv, "30s")
+	if got := scriptExecutionTimeout(); got != 30*time.Second {
+		t.Fatalf("expected 30s override, got %s", got)
+	}
+
+	t.Setenv(scriptExecutionTimeoutEnv, "bogus")
+	if got := scriptExecutionTimeout(); got != defaultScriptExecutionTimeout {
+		t.Fatalf("expected default timeout for invalid override, got %s", got)
 	}
 }
 

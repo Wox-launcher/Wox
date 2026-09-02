@@ -414,6 +414,7 @@
   "ui_theme_editor_token_result_tail": "结果尾部",
   "ui_theme_editor_token_result_active_background": "选中结果背景",
   "ui_theme_editor_token_result_active_title": "选中结果标题",
+  "ui_theme_editor_token_result_active_tail": "选中结果尾部",
   "ui_theme_editor_token_preview_text": "预览文字",
   "ui_theme_editor_token_preview_tag_border": "预览标签边框",
   "ui_theme_editor_token_preview_tag_text": "预览标签文字",

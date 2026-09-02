@@ -1140,6 +1140,55 @@ func TestHostMultiTapRequiresNearbyClicks(t *testing.T) {
 	}
 }
 
+func TestHostCoverHoverSurvivesDescendantHit(t *testing.T) {
+	var parent []bool
+	var first []bool
+	var second []bool
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "parent", CoverHover: true, OnHover: func(inside bool) { parent = append(parent, inside) },
+			Child: Flex{Axis: Horizontal, Children: []Widget{
+				Gesture{ID: "first", OnHover: func(inside bool) { first = append(first, inside) }, Child: Container{Width: 50, Height: 20}},
+				Gesture{ID: "second", OnHover: func(inside bool) { second = append(second, inside) }, Child: Container{Width: 50, Height: 20}},
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 10, Y: 5}})
+	if len(parent) != 1 || !parent[0] || len(first) != 1 || !first[0] || len(second) != 0 {
+		t.Fatalf("enter cover hover = parent %v first %v second %v, want parent and first entered", parent, first, second)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 70, Y: 5}})
+	if len(parent) != 1 || len(first) != 2 || first[1] || len(second) != 1 || !second[0] {
+		t.Fatalf("move across children = parent %v first %v second %v, want parent to stay hovered", parent, first, second)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave, Position: woxui.Point{X: 70, Y: 40}})
+	if len(parent) != 2 || parent[1] || len(second) != 2 || second[1] {
+		t.Fatalf("leave cover hover = parent %v second %v, want both left", parent, second)
+	}
+}
+
+func TestHostHoverDoesNotNotifyAncestorWithoutCoverHover(t *testing.T) {
+	var parent []bool
+	var child []bool
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "parent", OnHover: func(inside bool) { parent = append(parent, inside) },
+			Child: Gesture{ID: "child", OnHover: func(inside bool) { child = append(child, inside) }, Child: Container{Width: 100, Height: 20}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 5, Y: 5}})
+	if len(parent) != 0 || len(child) != 1 || !child[0] {
+		t.Fatalf("nested hover without CoverHover = parent %v child %v, want only the child", parent, child)
+	}
+}
+
 func TestHostPointerEnterTriggersHover(t *testing.T) {
 	var hoverStates []bool
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

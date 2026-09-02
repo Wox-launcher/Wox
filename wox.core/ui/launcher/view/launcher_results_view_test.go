@@ -55,6 +55,19 @@ func TestLauncherResultGroupUsesCompactHeaderHeight(t *testing.T) {
 	}
 }
 
+func TestLauncherResultsScrollbarUsesValueText(t *testing.T) {
+	title := woxui.Color{R: 240, G: 242, B: 244, A: 255}
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 50, ContentHeight: 150, RowHeight: 50,
+		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Items: []LauncherResultItem{{Title: "Result"}},
+	}).(woxwidget.Semantics)
+	scroll := result.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if scroll.ThumbColor != title {
+		t.Fatalf("launcher scrollbar = %#v, want ResultTitle so ResultSubtitle cannot restyle it", scroll.ThumbColor)
+	}
+}
+
 func TestLauncherResultsExposeCompletionState(t *testing.T) {
 	result := LauncherResultsView(LauncherResultsProps{Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50, Complete: true}).(woxwidget.Semantics)
 	if result.Value != "complete" || !result.ReadOnly {

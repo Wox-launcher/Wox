@@ -130,7 +130,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("theme-list-" + items[index].ID) },
 				ItemBuilder: func(index int) woxwidget.Widget { return themeListRow(props, items[index], width) },
 			}, Width: width, Height: viewportHeight,
-			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
+			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 
@@ -138,9 +138,13 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 	if props.Mode != "store" {
 		actions = append(actions, woxcomponent.SearchFieldAction{ID: "theme-locate-current", Label: props.LocateLabel, Icon: props.LocateIcon, Width: 32, IconSize: 18, OnTap: props.OnLocateCurrent})
 	}
+	searchTheme := props.Theme
+	// Catalog search chrome sits with theme titles. Keep the placeholder and field
+	// outline on ResultTitle so ResultSubtitle cannot restyle this box.
+	searchTheme.ResultSubtitle = props.Theme.ResultTitle
 	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 		ID: "theme-search", Label: props.SearchPlaceholder, Width: width, Value: props.Search.Text, Focused: props.SearchFocused, Autofocus: true,
-		Actions: actions, Window: props.Window, Theme: props.Theme, OnClear: props.OnClear,
+		Actions: actions, Window: props.Window, Theme: searchTheme, OnClear: props.OnClear,
 		OnKey: props.OnSearchKey, OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: []woxwidget.Widget{searchField, list}}
@@ -344,7 +348,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: theme.QueryText,
 	}}}}
-	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultSubtitle})
+	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultTitle})
 	toolbar := themeCatalogToolbar(props, theme, width, true)
 	window := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
@@ -405,7 +409,7 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: light.QueryText,
 	}}}}
-	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultSubtitle})
+	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultTitle})
 	toolbar := themeCatalogToolbar(props, dark, width, false)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},

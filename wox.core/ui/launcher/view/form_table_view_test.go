@@ -476,4 +476,26 @@ func TestFormTableUsesCollapsedGridLines(t *testing.T) {
 	if empty.BorderWidth != 0 || empty.RightBorderWidth != 0 || empty.BottomBorderWidth != 0 {
 		t.Fatalf("empty state = %#v, want fill only so it does not double the header or frame", empty)
 	}
+	emptyLabel := empty.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
+	if emptyLabel.Color != newTableSurfaceStyle(theme).headerText {
+		t.Fatalf("empty label = %#v, want table header text so ResultSubtitle cannot restyle it", emptyLabel.Color)
+	}
+}
+
+func TestFormTableScrollbarUsesValueText(t *testing.T) {
+	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
+	props := FormTableFieldProps{
+		ID: "hotkeys", Width: 400, Height: tableSurfaceHeaderHeight + tableSurfaceRowHeight,
+		Columns: []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Hotkey", Width: 120}},
+		Rows: []FormTableRow{
+			{Index: 0, Cells: []FormTableCell{{Text: "one"}, {Text: "ctrl"}}},
+			{Index: 1, Cells: []FormTableCell{{Text: "two"}, {Text: "alt"}}},
+		},
+		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+	}
+	body := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState())).Children[1]
+	scroll := body.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if scroll.ThumbColor != title {
+		t.Fatalf("table scrollbar = %#v, want ResultTitle so ResultSubtitle cannot restyle it", scroll.ThumbColor)
+	}
 }

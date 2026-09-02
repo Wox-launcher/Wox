@@ -85,6 +85,25 @@ func TestSettingsRailUsesRegularLabelWeight(t *testing.T) {
 	}
 }
 
+func TestSettingsSearchBoxUsesRailItemColor(t *testing.T) {
+	toolbar := woxui.Color{R: 166, G: 176, B: 190, A: 255}
+	subtitle := woxui.Color{R: 255, A: 255}
+	box := SettingsSearchBox(SettingsSearchBoxProps{
+		Width: 232, Placeholder: "Search settings",
+		Theme: woxcomponent.Theme{ToolbarText: toolbar, ResultSubtitle: subtitle, ResultTitle: woxui.Color{A: 255}},
+	}).(woxwidget.Container)
+	field := box.Child.(woxwidget.Container)
+	wantBorder := toolbar
+	wantBorder.A = 170
+	if field.BorderColor != wantBorder {
+		t.Fatalf("settings search border = %#v, want rail ToolbarText %#v", field.BorderColor, wantBorder)
+	}
+	input := field.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if input.Theme.ResultSubtitle != toolbar {
+		t.Fatalf("settings search hint token = %#v, want ToolbarText so it matches unselected rail items", input.Theme.ResultSubtitle)
+	}
+}
+
 func TestSettingsRailHoversDestinationsButNotGroupHeaders(t *testing.T) {
 	text := woxui.Color{R: 180, G: 190, B: 200, A: 255}
 	clicked := 0

@@ -21,6 +21,32 @@ func TestThemeColorHSVRoundTripAndCSSEncoding(t *testing.T) {
 	}
 }
 
+func TestThemeEditorExposesActiveResultTail(t *testing.T) {
+	for _, token := range themeEditorTokens() {
+		if token.key == "ResultItemActiveTailTextColor" {
+			return
+		}
+	}
+	t.Fatal("theme editor is missing ResultItemActiveTailTextColor")
+}
+
+func TestPaletteMapsResultTailIndependentlyFromSubtitle(t *testing.T) {
+	theme := paletteForTheme(themeData{
+		ResultItemSubTitleColor:       "#0A141E",
+		ResultItemTailTextColor:       "#C85028",
+		ResultItemActiveTailTextColor: "#28B45A",
+	}).componentTheme()
+	if theme.ResultTail != (woxui.Color{R: 0xC8, G: 0x50, B: 0x28, A: 255}) {
+		t.Fatalf("result tail = %#v, want the dedicated tail token", theme.ResultTail)
+	}
+	if theme.SelectedTail != (woxui.Color{R: 0x28, G: 0xB4, B: 0x5A, A: 255}) {
+		t.Fatalf("selected tail = %#v, want the dedicated active tail token", theme.SelectedTail)
+	}
+	if theme.ResultSubtitle == theme.ResultTail {
+		t.Fatalf("result tail reused subtitle color %#v", theme.ResultSubtitle)
+	}
+}
+
 func TestSettingsThemeEditorAppliesAndCancelsLiveColor(t *testing.T) {
 	raw := map[string]any{"ThemeName": "Test"}
 	for _, token := range themeEditorTokens() {

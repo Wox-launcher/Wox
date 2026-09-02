@@ -244,7 +244,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			rowChildren = append(rowChildren,
 				woxwidget.Container{Width: 12, Height: settingsChoiceRowHeight},
 				woxwidget.Align{Width: trailingWidth, Height: settingsChoiceRowHeight, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
-					Value: choice.Trailing, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
+					Value: choice.Trailing, Style: woxui.TextStyle{Size: 12}, Color: foreground,
 				}},
 			)
 		}
@@ -315,7 +315,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 	if len(rows) > 0 {
 		children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key(props.ID + "-scroll"), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: width, Height: listHeight,
-			Controller: state.scrollController, ThumbColor: props.Theme.ResultSubtitle,
+			Controller: state.scrollController, ThumbColor: props.Theme.ResultTitle,
 		}))
 	}
 	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Color: props.Theme.ActionBackground,

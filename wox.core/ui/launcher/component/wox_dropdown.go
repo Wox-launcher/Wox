@@ -85,12 +85,17 @@ func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, 
 		)
 	}
 	children = append(children, WoxDropdownIndicator(indicatorWidth, props.Height, props.Foreground))
+	outline := props.Outline
+	if outline.A == 0 {
+		// Keep the outline on the value text token so ResultSubtitle cannot restyle Settings chrome.
+		outline = withAlpha(props.Foreground, 140)
+	}
 	background := woxui.Color{}
 	if hovered {
 		background = controlHoverColor(background, props.Foreground)
 	}
 	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, OnHoverAt: onHoverAt, Child: woxwidget.Container{
-		Width: props.Width, Height: props.Height, Radius: 4, Color: background, BorderColor: props.Outline, BorderWidth: 1,
+		Width: props.Width, Height: props.Height, Radius: 4, Color: background, BorderColor: outline, BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
 	}}

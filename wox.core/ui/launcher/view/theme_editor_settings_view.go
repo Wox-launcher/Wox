@@ -339,6 +339,8 @@ func themeEditorDemoHighlightTarget(token string) woxcomponent.LauncherDemoHighl
 		return woxcomponent.LauncherDemoHighlightSelectedBackground
 	case "ResultItemActiveTitleColor":
 		return woxcomponent.LauncherDemoHighlightSelectedTitle
+	case "ResultItemActiveTailTextColor":
+		return woxcomponent.LauncherDemoHighlightSelectedTail
 	case "ActionContainerBackgroundColor":
 		return woxcomponent.LauncherDemoHighlightActionBackground
 	case "ActionContainerHeaderFontColor":
@@ -453,10 +455,11 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 	if len(chips) > 1 {
 		contentWidth += float32(len(chips)-1) * 8
 	}
-	return woxwidget.ScrollView{
-		Key: "theme-editor-group-scroll", Width: width, Height: height, ContentWidth: max(width, contentWidth), Horizontal: true,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips},
-	}
+	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "theme-editor-group-scroll", Width: width, Height: height, ContentWidth: max(width, contentWidth),
+		Horizontal: true, ThumbColor: props.Theme.ResultTitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips},
+	})
 }
 
 // themeEditorGroupChipProps contains one theme editor group tab and its hover colors.
@@ -533,10 +536,11 @@ func themeEditorTokens(props ThemeEditorSettingsProps, width, height float32) wo
 		cards = append(cards, themeEditorTokenCard(props, token, 190, min(float32(44), height)))
 	}
 	contentWidth := max(width, float32(len(cards))*190+float32(max(0, len(cards)-1))*12)
-	return woxwidget.ScrollView{
-		Key: woxwidget.Key("theme-editor-token-scroll-" + strconv.Itoa(props.ActiveGroup)), Width: width, Height: height, ContentWidth: contentWidth, Horizontal: true,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: cards},
-	}
+	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: woxwidget.Key("theme-editor-token-scroll-" + strconv.Itoa(props.ActiveGroup)), Width: width, Height: height, ContentWidth: contentWidth,
+		Horizontal: true, ThumbColor: props.Theme.ResultTitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: cards},
+	})
 }
 
 func themeEditorTokenCard(props ThemeEditorSettingsProps, token ThemeEditorColorToken, width, height float32) woxwidget.Widget {

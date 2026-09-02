@@ -728,7 +728,7 @@ func formFieldOutline(focused bool, theme woxcomponent.Theme) woxui.Color {
 	if focused {
 		return settingsColorAlpha(theme.ActionText, 220)
 	}
-	return settingsColorAlpha(theme.ResultSubtitle, 190)
+	return settingsColorAlpha(theme.ActionText, 190)
 }
 
 func formFieldBackground(focused bool, theme woxcomponent.Theme) woxui.Color {

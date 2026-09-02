@@ -38,6 +38,7 @@ var themeEditorColorGroups = []themeColorGroup{
 		{key: "ResultItemTailTextColor", label: "i18n:ui_theme_editor_token_result_tail"},
 		{key: "ResultItemActiveBackgroundColor", label: "i18n:ui_theme_editor_token_result_active_background"},
 		{key: "ResultItemActiveTitleColor", label: "i18n:ui_theme_editor_token_result_active_title"},
+		{key: "ResultItemActiveTailTextColor", label: "i18n:ui_theme_editor_token_result_active_tail"},
 	}},
 	{label: "i18n:ui_theme_editor_group_preview", tokens: []themeColorToken{
 		{key: "PreviewFontColor", label: "i18n:ui_theme_editor_token_preview_text"},

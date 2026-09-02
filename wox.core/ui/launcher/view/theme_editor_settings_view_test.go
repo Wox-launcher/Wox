@@ -13,19 +13,18 @@ func TestThemeEditorTokensUseHorizontalScroll(t *testing.T) {
 	for index := range tokens {
 		tokens[index] = ThemeEditorColorToken{Key: string(rune('a' + index))}
 	}
-	view := themeEditorTokens(ThemeEditorSettingsProps{
+	props, content := themeEditorScroll(t, themeEditorTokens(ThemeEditorSettingsProps{
 		ActiveGroup: 0,
 		Groups:      []ThemeEditorColorGroup{{Tokens: tokens}},
-	}, 500, 58)
+	}, 500, 58))
 
-	scroll, ok := view.(woxwidget.ScrollView)
-	if !ok || !scroll.Horizontal {
-		t.Fatalf("theme token view = %T, want horizontal ScrollView", view)
+	if !props.Horizontal || props.AlwaysShowScrollbar {
+		t.Fatalf("theme token scroll = %#v, want a hover-revealed horizontal strip", props)
 	}
-	if scroll.ContentWidth <= scroll.Width {
-		t.Fatalf("theme token content width = %v, want greater than viewport %v", scroll.ContentWidth, scroll.Width)
+	if props.ContentWidth <= props.Width {
+		t.Fatalf("theme token content width = %v, want greater than viewport %v", props.ContentWidth, props.Width)
 	}
-	card := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	card := content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if card.Height != 44 {
 		t.Fatalf("theme token height = %v, want Flutter height 44", card.Height)
 	}
@@ -35,12 +34,27 @@ func TestThemeEditorTokensUseHorizontalScroll(t *testing.T) {
 	}
 }
 
+func themeEditorScroll(t *testing.T, view woxwidget.Widget) (woxcomponent.ScrollViewProps, woxwidget.Widget) {
+	t.Helper()
+	switch typed := view.(type) {
+	case woxwidget.Stateful:
+		props := typed.Widget.(woxcomponent.ScrollViewProps)
+		return props, props.Content
+	case woxwidget.Gesture:
+		scroll := typed.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+		return woxcomponent.ScrollViewProps{Width: scroll.Width, ContentWidth: scroll.ContentWidth, Horizontal: scroll.Horizontal}, scroll.Child
+	default:
+		t.Fatalf("theme editor scroll = %T, want WoxScrollView", view)
+		return woxcomponent.ScrollViewProps{}, nil
+	}
+}
+
 func TestThemeEditorGroupUsesMeasuredFlutterWidth(t *testing.T) {
-	selector := themeEditorGroupSelector(ThemeEditorSettingsProps{
+	_, content := themeEditorScroll(t, themeEditorGroupSelector(ThemeEditorSettingsProps{
 		ActiveGroup: 0,
 		Groups:      []ThemeEditorColorGroup{{Label: "操作面板", LabelWidth: 48}},
-	}, 500, 40).(woxwidget.ScrollView)
-	semantic := selector.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	}, 500, 40))
+	semantic := content.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	stateful := semantic.Child.(woxwidget.Stateful)
 	chip := (&themeEditorGroupChipState{}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture).Child.(woxwidget.Container)
 	if chip.Width != 72 {
@@ -52,10 +66,10 @@ func TestThemeEditorGroupUsesMeasuredFlutterWidth(t *testing.T) {
 }
 
 func TestThemeEditorGroupAddsHoverSurface(t *testing.T) {
-	selector := themeEditorGroupSelector(ThemeEditorSettingsProps{
+	_, content := themeEditorScroll(t, themeEditorGroupSelector(ThemeEditorSettingsProps{
 		Groups: []ThemeEditorColorGroup{{Label: "Window"}, {Label: "Query box"}},
-	}, 500, 40).(woxwidget.ScrollView)
-	semantic := selector.Child.(woxwidget.Flex).Children[1].(woxwidget.Semantics)
+	}, 500, 40))
+	semantic := content.(woxwidget.Flex).Children[1].(woxwidget.Semantics)
 	stateful := semantic.Child.(woxwidget.Stateful)
 	normal := (&themeEditorGroupChipState{}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
 	hovered := (&themeEditorGroupChipState{hovered: true}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
@@ -73,9 +87,9 @@ func TestThemeEditorGroupSelectorScrollsNarrowViewport(t *testing.T) {
 	for index := range groups {
 		groups[index] = ThemeEditorColorGroup{Label: "Group", LabelWidth: 54}
 	}
-	selector := themeEditorGroupSelector(ThemeEditorSettingsProps{Groups: groups}, 300, 40).(woxwidget.ScrollView)
-	if !selector.Horizontal || selector.ContentWidth <= selector.Width {
-		t.Fatalf("theme group selector = %#v, want horizontal overflow", selector)
+	props, _ := themeEditorScroll(t, themeEditorGroupSelector(ThemeEditorSettingsProps{Groups: groups}, 300, 40))
+	if !props.Horizontal || props.AlwaysShowScrollbar || props.ContentWidth <= props.Width {
+		t.Fatalf("theme group selector = %#v, want hover-revealed horizontal overflow", props)
 	}
 }
 
@@ -122,7 +136,9 @@ func TestThemeEditorMapsTokensToSemanticDemoHighlights(t *testing.T) {
 	tests := map[string]woxcomponent.LauncherDemoHighlightTarget{
 		"QueryBoxFontColor":               woxcomponent.LauncherDemoHighlightQueryText,
 		"ResultItemSubTitleColor":         woxcomponent.LauncherDemoHighlightResultSubtitle,
+		"ResultItemTailTextColor":         woxcomponent.LauncherDemoHighlightResultTail,
 		"ResultItemActiveBackgroundColor": woxcomponent.LauncherDemoHighlightSelectedBackground,
+		"ResultItemActiveTailTextColor":   woxcomponent.LauncherDemoHighlightSelectedTail,
 		"ActionItemActiveFontColor":       woxcomponent.LauncherDemoHighlightActionSelectedText,
 		"ToolbarFontColor":                woxcomponent.LauncherDemoHighlightToolbarText,
 	}

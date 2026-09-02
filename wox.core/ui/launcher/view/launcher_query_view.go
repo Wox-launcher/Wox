@@ -371,7 +371,7 @@ func launcherQueryScrollSurface(props LauncherQueryProps, editor woxwidget.Widge
 	keepVisible := &woxwidget.ScrollRange{Start: float32(props.CaretLine) * lineHeight, End: float32(props.CaretLine)*lineHeight + props.CaretHeight}
 	editor = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-query-scroll", Content: editor, Width: props.Width, Height: props.Height, ContentHeight: contentHeight,
-		KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle, AlwaysShowScrollbar: true,
+		KeepVisible: keepVisible, ThumbColor: props.Theme.ResultTitle, AlwaysShowScrollbar: true,
 		AutomationID: "launcher.query.scroll", Label: "Query scroll position",
 	})
 	dragLeft := min(props.Width, launcherQueryMinimumEditableWidth+props.TextWidth)

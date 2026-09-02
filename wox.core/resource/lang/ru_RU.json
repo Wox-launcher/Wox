@@ -396,6 +396,7 @@
   "ui_theme_editor_token_result_tail": "Хвост результата",
   "ui_theme_editor_token_result_active_background": "Фон активного результата",
   "ui_theme_editor_token_result_active_title": "Заголовок активного результата",
+  "ui_theme_editor_token_result_active_tail": "Хвост активного результата",
   "ui_theme_editor_token_preview_text": "Текст предпросмотра",
   "ui_theme_editor_token_preview_tag_border": "Рамка тега предпросмотра",
   "ui_theme_editor_token_preview_tag_text": "Текст тега предпросмотра",

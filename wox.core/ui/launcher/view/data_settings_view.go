@@ -210,7 +210,7 @@ func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget 
 	controlWidth := min(float32(280), width*0.34)
 	choice := woxwidget.Keyed{Key: SettingChoiceAnchorKey("LogLevel"), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: "data-log-level", Label: props.Labels.LogLevelTitle, Value: level, Width: controlWidth, Height: woxcomponent.SettingsControlHeight,
-		Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140), Foreground: props.Theme.ResultTitle, Theme: props.Theme, OnTapBounds: props.OnOpenLogLevel,
+		Foreground: props.Theme.ResultTitle, Theme: props.Theme, OnTapBounds: props.OnOpenLogLevel,
 	})}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogLevelTitle, Description: props.Labels.LogLevelDescription,

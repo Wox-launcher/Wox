@@ -31,7 +31,7 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, 
 // pluginListProps resolves localized catalog labels, images, selection, and callbacks.
 func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginListProps {
 	plugins := snapshot.plugins
-	iconTint := snapshot.palette.resultSubtitle
+	iconTint := snapshot.palette.resultTitle
 	selectedIconTint := snapshot.palette.selectedTitle
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
 	props := launcherview.PluginListProps{
@@ -114,7 +114,7 @@ func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.
 func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginDetailProps {
 	plugins := snapshot.plugins
-	emptyIconTint := snapshot.palette.resultSubtitle
+	emptyIconTint := snapshot.palette.resultTitle
 	emptyIconTint.A = 160
 	props := launcherview.PluginDetailProps{
 		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"),

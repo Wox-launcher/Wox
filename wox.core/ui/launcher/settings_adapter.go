@@ -227,7 +227,7 @@ func (a *App) activeSettingsNavLabel(snapshot settingsSnapshot) string {
 // buildSettingsSearchBox owns the settings window's default text-input focus and native IME cursor.
 func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScale float32) woxwidget.Widget {
 	placeholder := a.translate("i18n:ui_setting_search_placeholder")
-	iconTint := snapshot.palette.resultSubtitle
+	iconTint := snapshot.palette.toolbarText
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused, Controller: a.settingsSearch.Editor(),
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),

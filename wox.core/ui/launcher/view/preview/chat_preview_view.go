@@ -219,7 +219,7 @@ func ChatCatalog(props ChatCatalogProps) woxwidget.Widget {
 	border.A = uint8(float32(border.A) * 0.14)
 	children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-catalog-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
-		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
+		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 }
@@ -245,7 +245,7 @@ func chatHistoryCatalog(props ChatCatalogProps) woxwidget.Widget {
 	}
 	scroll := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-catalog-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
-		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
+		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	})
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 10, Top: 12, Right: 10, Bottom: 12}, Child: scroll}},
@@ -470,7 +470,7 @@ func ChatDebug(props ChatDebugProps) woxwidget.Widget {
 	}}
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), FillWidth: true, FillHeight: true,
-		Offset: props.Scroll, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
+		Offset: props.Scroll, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
 		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
 			Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
 			Child: woxwidget.TextBlock{Value: props.Value, Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: 10}, LineHeight: 16, Color: props.Theme.PreviewText, Layout: &props.Layout},
@@ -602,7 +602,7 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 			ItemKey:        func(index int) woxwidget.Key { return woxwidget.Key(messages[index].Key) },
 			ItemBuilder:    func(index int) woxwidget.Widget { return ChatMessage(messages[index], innerWidth) },
 		},
-		ThumbColor: props.Theme.ResultSubtitle, OnScroll: func(delta float32) {
+		ThumbColor: props.Theme.ResultTitle, OnScroll: func(delta float32) {
 			if props.OnScroll != nil {
 				props.OnScroll(delta, maxOffset)
 			}

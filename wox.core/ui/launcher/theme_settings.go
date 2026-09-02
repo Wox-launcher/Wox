@@ -45,7 +45,7 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		detail = &item
 	}
 	iconTint := snapshot.palette.resultTitle
-	searchActionTint := snapshot.palette.resultSubtitle
+	searchActionTint := snapshot.palette.resultTitle
 	selectedIconTint := snapshot.palette.selectedTitle
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
 	autoHintAccent := woxui.Color{R: 33, G: 150, B: 243, A: 255}

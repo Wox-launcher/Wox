@@ -180,7 +180,7 @@ func formAppPickerList(context woxwidget.StateContext, props FormAppPickerProps,
 		}
 		body = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "form-table-app-scroll", Width: width, Height: height, Controller: state.scrollController,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 	border := woxwidget.Container{Width: width, Height: height, Radius: 12, BorderColor: formAppPickerAlpha(props.Theme.PreviewSplit, 230), BorderWidth: 1}

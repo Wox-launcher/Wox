@@ -180,7 +180,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 	}
 	children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "model-manager-list", Width: menuWidth, Height: listHeight,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
 	}))
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: menuWidth, Height: errorHeight, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12}, Child: woxwidget.TextBlock{
@@ -278,7 +278,7 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "model-manager-list", Width: innerWidth, Height: viewportHeight,
 			KeepVisible: keepVisible,
-			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 	status := props.Error

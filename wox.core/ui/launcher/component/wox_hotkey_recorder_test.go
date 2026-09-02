@@ -43,9 +43,8 @@ func TestWoxHotkeyRecorderUsesKeyboardOnlyFocusRing(t *testing.T) {
 }
 
 func TestWoxHotkeyRecorderAddsHoverSurface(t *testing.T) {
-	subtitle := woxui.Color{R: 80, G: 90, B: 100, A: 255}
 	foreground := woxui.Color{R: 210, G: 220, B: 230, A: 255}
-	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Theme: Theme{ResultSubtitle: subtitle, ResultTitle: foreground}})
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Theme: Theme{ResultTitle: foreground}})
 	stateful := recorder.(woxwidget.Stateful)
 	state := &hotkeyRecorderFocusState{hovered: true}
 	state.InitState(woxwidget.StateContext{}, stateful.Widget)
@@ -55,8 +54,24 @@ func TestWoxHotkeyRecorderAddsHoverSurface(t *testing.T) {
 	if gesture.OnHoverAt == nil {
 		t.Fatal("hotkey recorder does not retain hover input")
 	}
-	if container.Color != controlHoverColor(woxui.Color{}, foreground) || container.BorderColor != withAlpha(subtitle, 200) {
+	if container.Color != controlHoverColor(woxui.Color{}, foreground) || container.BorderColor != withAlpha(foreground, 200) {
 		t.Fatalf("hotkey recorder hover = background %#v border %#v", container.Color, container.BorderColor)
+	}
+}
+
+func TestWoxHotkeyRecorderOutlineFollowsValueText(t *testing.T) {
+	subtitle := woxui.Color{R: 255, A: 255}
+	foreground := woxui.Color{R: 210, G: 220, B: 230, A: 255}
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Placeholder: "Record", Theme: Theme{ResultSubtitle: subtitle, ResultTitle: foreground}})
+	container := buildHotkeyRecorderForTest(recorder).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	want := foreground
+	want.A = 140
+	if container.BorderColor != want {
+		t.Fatalf("hotkey recorder border = %#v, want ResultTitle %#v", container.BorderColor, want)
+	}
+	placeholder := container.Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if placeholder.Color != foreground {
+		t.Fatalf("hotkey recorder placeholder = %#v, want ResultTitle", placeholder.Color)
 	}
 }
 

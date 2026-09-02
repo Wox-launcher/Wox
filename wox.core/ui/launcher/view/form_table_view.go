@@ -387,7 +387,7 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	bodyContent := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: bodyChildren}
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key(props.ID + "-rows"), Width: width, Height: bodyHeight,
-		ContentHeight: contentHeight, Controller: state.verticalBody, Content: bodyContent, ThumbColor: props.Theme.ResultSubtitle,
+		ContentHeight: contentHeight, Controller: state.verticalBody, Content: bodyContent, ThumbColor: props.Theme.ResultTitle,
 	})
 	return formTableGridChrome(props, width, height, woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}})
 }
@@ -480,7 +480,7 @@ func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwi
 	contentWidth := float32(110)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 		woxwidget.Align{Width: contentWidth, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-		woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: woxcomponent.TableEmptyFontSize}, Color: props.Theme.ResultSubtitle}},
+		woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: woxcomponent.TableEmptyFontSize}, Color: style.headerText}},
 	}}
 	return woxwidget.Container{Width: width, Height: height, Color: style.bodyBackground, Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: content}}
 }
@@ -549,7 +549,7 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 		onTap = nil
 	}
 	if icon != nil {
-		hoverBackground := props.Theme.ResultSubtitle
+		hoverBackground := props.Theme.ResultTitle
 		hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
 		if disabled {
 			hoverBackground = woxui.Color{}
@@ -762,7 +762,7 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "form-table-list-scroll", Width: props.Width, Height: viewportHeight,
 			KeepVisible: keepVisible,
-			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 	status := props.Status
@@ -1268,7 +1268,7 @@ func formTableRowOutline(theme woxcomponent.Theme, focused bool) woxui.Color {
 	if focused {
 		return formTableAlpha(theme.ActionText, 220)
 	}
-	return formTableAlpha(theme.ResultSubtitle, 190)
+	return formTableAlpha(theme.ActionText, 190)
 }
 
 // FormTableRowEditorProps contains a prepared table row form.
@@ -1309,7 +1309,7 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 		Key: "form-table-row-scroll", Width: props.Width, Height: bodyHeight,
 		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
 		// Flutter's table update dialog pads each field with bottom: 10.
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formTableRowFieldGap, Children: props.Rows}, ThumbColor: props.Theme.ResultSubtitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formTableRowFieldGap, Children: props.Rows}, ThumbColor: props.Theme.ResultTitle,
 	})
 	children := make([]woxwidget.Widget, 0, 4)
 	if props.Header != nil {

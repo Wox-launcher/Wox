@@ -89,7 +89,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			nav := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 				Key: "settings-rail-scroll", KeepVisible: props.KeepVisible, Width: size.Width, Height: viewportHeight,
 				Content:    woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
-				ThumbColor: props.Theme.ResultSubtitle, HideScrollbar: true,
+				ThumbColor: props.Theme.ResultTitle, HideScrollbar: true,
 			})
 			stackChildren := []woxwidget.StackChild{{Child: nav}}
 			if props.ShowSearch {
@@ -124,9 +124,13 @@ type SettingsSearchBoxProps struct {
 
 // SettingsSearchBox builds the rail search field.
 func SettingsSearchBox(props SettingsSearchBoxProps) woxwidget.Widget {
+	theme := props.Theme
+	// Unselected rail items use ToolbarText. Keep the placeholder and field chrome
+	// on that token so the search box does not pick up ResultSubtitle.
+	theme.ResultSubtitle = props.Theme.ToolbarText
 	search := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, Value: props.State.Text, Focused: props.Focused, Autofocus: props.Focused, Controller: props.Controller,
-		SearchIcon: props.SearchIcon, Window: props.Window, Theme: props.Theme, OnFocus: props.OnFocus, OnClear: props.OnClear,
+		SearchIcon: props.SearchIcon, Window: props.Window, Theme: theme, OnFocus: props.OnFocus, OnClear: props.OnClear,
 		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
 	return woxwidget.Container{Width: props.Width, Height: 50, Child: search}
@@ -203,7 +207,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "settings-search-results", Width: size.Width, Height: size.Height,
 			KeepVisible: &woxwidget.ScrollRange{Start: start, End: start + rowHeight},
-			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
 		})
 	}}}
 }

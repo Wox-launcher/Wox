@@ -81,7 +81,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	case ButtonOutline:
 		background = woxui.Color{}
 		foreground = props.Theme.ResultTitle
-		border = props.Theme.ResultSubtitle
+		border = props.Theme.ResultTitle
 	case ButtonMuted:
 		background = withAlpha(props.Theme.ResultSubtitle, 72)
 		foreground = props.Theme.ResultTitle
@@ -97,7 +97,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	case ButtonOutlinedSurface:
 		background = props.Theme.QueryBackground
 		foreground = props.Theme.ResultTitle
-		border = props.Theme.ResultSubtitle
+		border = props.Theme.ResultTitle
 	}
 
 	onTap := props.OnTap

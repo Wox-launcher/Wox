@@ -59,6 +59,7 @@ type Host struct {
 
 	hovered          woxui.AccessibilityNodeID
 	hoveredGestureID string
+	coverHovered     map[string]woxui.AccessibilityNodeID
 	// pointerInside/pointerAt remember the last in-window pointer so hover can
 	// be recomputed after layout when content moves under a stationary cursor.
 	pointerInside bool
@@ -638,6 +639,7 @@ func (h *Host) refreshHoverFromPointer() {
 }
 
 func (h *Host) reconcileTransientState(oldHovered *node, oldHoveredBounds woxui.Rect) {
+	h.remapCoverHover()
 	if h.hovered != 0 && h.nodes[h.hovered] == nil {
 		// Rebuilds replace node IDs. Keep the same gesture hovered without
 		// leave/enter so a pending tooltip dwell is not cancelled.
@@ -1524,14 +1526,9 @@ func (h *Host) resetCaretBlink() {
 func (h *Host) setHovered(target *node, position woxui.Point) {
 	old := h.nodes[h.hovered]
 	damage := woxui.Rect{}
-	if old != nil && old.gesture != nil {
+	if old != nil && old.gesture != nil && !old.gesture.coverHover {
 		damage = unionDamageRects(damage, globalRect(old))
-		if old.gesture.onHover != nil {
-			old.gesture.onHover(false)
-		}
-		if old.gesture.onHoverAt != nil {
-			old.gesture.onHoverAt(false, globalRect(old))
-		}
+		fireNodeHover(old, false)
 	}
 	h.hovered = nodeID(target)
 	if target != nil && target.gesture != nil {
@@ -1540,18 +1537,87 @@ func (h *Host) setHovered(target *node, position woxui.Point) {
 		h.hoveredGestureID = ""
 	}
 	h.updatePointerCursor(target, position)
-	if target != nil && target.gesture != nil {
+	if target != nil && target.gesture != nil && !target.gesture.coverHover {
 		damage = unionDamageRects(damage, globalRect(target))
-		if target.gesture.onHover != nil {
-			target.gesture.onHover(true)
-		}
-		if target.gesture.onHoverAt != nil {
-			target.gesture.onHoverAt(true, globalRect(target))
-		}
+		fireNodeHover(target, true)
 	}
-	// Hover callbacks may change both visuals, so redraw only their combined bounds.
+	damage = unionDamageRects(damage, h.syncCoverHover(target))
 	if damage.Width > 0 && damage.Height > 0 {
 		h.invalidateRect(damage)
+	}
+}
+
+func fireNodeHover(target *node, inside bool) {
+	if target == nil || target.gesture == nil {
+		return
+	}
+	if target.gesture.onHover != nil {
+		target.gesture.onHover(inside)
+	}
+	if target.gesture.onHoverAt != nil {
+		target.gesture.onHoverAt(inside, globalRect(target))
+	}
+}
+
+func (h *Host) syncCoverHover(target *node) woxui.Rect {
+	next := map[string]woxui.AccessibilityNodeID{}
+	for current := target; current != nil; current = current.parent {
+		if current.gesture == nil || !current.gesture.coverHover || current.gesture.id == "" {
+			continue
+		}
+		if current.gesture.onHover == nil && current.gesture.onHoverAt == nil {
+			continue
+		}
+		next[current.gesture.id] = current.id
+	}
+	if h.coverHovered == nil {
+		h.coverHovered = map[string]woxui.AccessibilityNodeID{}
+	}
+	damage := woxui.Rect{}
+	for id, nodeID := range h.coverHovered {
+		if _, stay := next[id]; stay {
+			continue
+		}
+		if old := h.coverHoverNode(id, nodeID); old != nil {
+			damage = unionDamageRects(damage, globalRect(old))
+			fireNodeHover(old, false)
+		}
+		delete(h.coverHovered, id)
+	}
+	for id, nodeID := range next {
+		if _, already := h.coverHovered[id]; already {
+			h.coverHovered[id] = nodeID
+			continue
+		}
+		if current := h.nodes[nodeID]; current != nil {
+			damage = unionDamageRects(damage, globalRect(current))
+			fireNodeHover(current, true)
+		}
+		h.coverHovered[id] = nodeID
+	}
+	return damage
+}
+
+func (h *Host) coverHoverNode(id string, nodeID woxui.AccessibilityNodeID) *node {
+	if current := h.nodes[nodeID]; current != nil {
+		return current
+	}
+	return h.gestureNodeByID(id)
+}
+
+func (h *Host) remapCoverHover() {
+	if len(h.coverHovered) == 0 {
+		return
+	}
+	for id, nodeID := range h.coverHovered {
+		if h.nodes[nodeID] != nil {
+			continue
+		}
+		if replacement := h.gestureNodeByID(id); replacement != nil {
+			h.coverHovered[id] = replacement.id
+			continue
+		}
+		delete(h.coverHovered, id)
 	}
 }
 

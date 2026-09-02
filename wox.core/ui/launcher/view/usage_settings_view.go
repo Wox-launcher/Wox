@@ -99,7 +99,7 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageHorizontalInset, Bottom: usagePageBottomInset},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "usage-page-scroll", FillWidth: true, FillHeight: true,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultSubtitle,
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultTitle,
 		}),
 	}
 }

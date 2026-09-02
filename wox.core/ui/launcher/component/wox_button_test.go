@@ -98,6 +98,22 @@ func TestWoxButtonUsesContentWidthWhenWidthOmitted(t *testing.T) {
 	}
 }
 
+func TestWoxButtonOutlineFollowsValueText(t *testing.T) {
+	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
+	button := WoxButton(ButtonProps{
+		ID: "add", Label: "Add", Variant: ButtonOutline,
+		Theme: Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+	})
+	container := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
+	label := container.Child.(woxwidget.TextBlock)
+	if label.Color != title {
+		t.Fatalf("outline button label = %#v, want ResultTitle", label.Color)
+	}
+	if container.BorderColor != title {
+		t.Fatalf("outline button border = %#v, want the same ResultTitle as the label", container.BorderColor)
+	}
+}
+
 func TestWoxButtonUsesVariantAwareHoverOverlay(t *testing.T) {
 	base := woxui.Color{R: 20, G: 40, B: 60, A: 255}
 	foreground := woxui.Color{R: 220, G: 230, B: 240, A: 255}

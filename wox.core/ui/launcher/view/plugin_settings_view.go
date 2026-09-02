@@ -133,17 +133,21 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("plugin-list-" + items[index].ID) },
 				ItemBuilder: func(index int) woxwidget.Widget { return pluginListRow(items[index], props, rowHeight) },
 			}, Width: props.Width, Height: viewportHeight,
-			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
+			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 	searchFieldWidth := max(float32(80), props.Width)
+	searchTheme := props.Theme
+	// Catalog search chrome sits with plugin titles. Keep the placeholder and field
+	// outline on ResultTitle so ResultSubtitle cannot restyle this box.
+	searchTheme.ResultSubtitle = props.Theme.ResultTitle
 	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, Value: props.Search.Text, Focused: props.Focused, Autofocus: props.Focused,
 		Actions: []woxcomponent.SearchFieldAction{
 			{ID: "plugin-filter", Label: props.FilterLabel, Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
 			{ID: "plugin-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, Disabled: props.Refreshing, OnTap: props.OnRefresh},
 		},
-		Window: props.Window, Theme: props.Theme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
+		Window: props.Window, Theme: searchTheme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
 		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 20, Children: []woxwidget.Widget{searchField, list}}}
@@ -185,7 +189,7 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 		woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
 	}}})
 	if item.Badge != "" {
-		badgeColor := props.Theme.ResultSubtitle
+		badgeColor := props.Theme.ResultTitle
 		if item.Selected {
 			badgeColor = props.Theme.ActionSelectedText
 		}
@@ -621,7 +625,7 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollI
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 18}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key(scrollID), FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultTitle,
 	})}
 }
 
@@ -706,7 +710,7 @@ func pluginStoreDescription(props PluginStoreDetailProps, width, height float32,
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "plugin-store-description-scroll", FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, ThumbColor: theme.ResultSubtitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, ThumbColor: theme.ResultTitle,
 	})}
 }
 
@@ -742,7 +746,7 @@ func pluginStoreChip(label string, icon *woxui.Image, onTap func(), theme woxcom
 	}
 	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle})
 	return woxwidget.Gesture{ID: "plugin-store-chip-" + label, OnTap: onTap, Child: woxwidget.Container{
-		Width: width, Height: 28, Radius: 7, Color: theme.ActionBackground, BorderColor: theme.ResultSubtitle, BorderWidth: 1,
+		Width: width, Height: 28, Radius: 7, Color: theme.ActionBackground, BorderColor: theme.ResultTitle, BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: 10, Right: 8}, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
 	}}
 }

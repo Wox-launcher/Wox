@@ -19,9 +19,28 @@ import (
 	"wox/util/shell"
 )
 
+const (
+	defaultScriptExecutionTimeout = 10 * time.Second
+	scriptExecutionTimeoutEnv     = "WOX_SCRIPT_EXECUTION_TIMEOUT"
+)
+
 func init() {
 	host := &ScriptHost{}
 	plugin.AllHosts = append(plugin.AllHosts, host)
+}
+
+// scriptExecutionTimeout is the interactive 10s cap, or WOX_SCRIPT_EXECUTION_TIMEOUT
+// when health checks need enough time for slow network fallbacks.
+func scriptExecutionTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(scriptExecutionTimeoutEnv))
+	if raw == "" {
+		return defaultScriptExecutionTimeout
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil || timeout <= 0 {
+		return defaultScriptExecutionTimeout
+	}
+	return timeout
 }
 
 type ScriptHost struct {
@@ -341,8 +360,7 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Using interpreter: '%s' for script: %s", interpreter, s.scriptPath))
 
-	// Set timeout for script execution
-	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, scriptExecutionTimeout())
 	defer cancel()
 
 	// Prepare command

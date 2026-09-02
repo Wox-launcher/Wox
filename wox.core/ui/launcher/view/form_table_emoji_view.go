@@ -214,7 +214,7 @@ func (s *formTableEmojiPickerState) buildSidebar(context woxwidget.StateContext,
 	}
 	return woxwidget.Container{Width: width, Height: height, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "form-table-emoji-groups-scroll", Width: width, Height: height, Controller: s.sidebarScroll,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: rows}, ThumbColor: props.Theme.ResultTitle,
 	})}
 }
 
@@ -239,7 +239,7 @@ func (s *formTableEmojiPickerState) buildEmojiGrid(context woxwidget.StateContex
 		cells = append(cells, s.buildEmojiCell(context, props, index, emoji))
 	}
 	grid := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "form-table-emoji-scroll", Width: width, Height: gridHeight, Controller: s.gridScroll, ThumbColor: props.Theme.ResultSubtitle,
+		Key: "form-table-emoji-scroll", Width: width, Height: gridHeight, Controller: s.gridScroll, ThumbColor: props.Theme.ResultTitle,
 		Content: woxwidget.Grid{Width: width, Columns: columns, CellWidth: formTableEmojiCellSize, CellHeight: formTableEmojiCellSize,
 			ColumnGap: formTableEmojiCellGap, RowGap: formTableEmojiCellGap, Children: cells},
 	})

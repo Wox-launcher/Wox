@@ -1462,6 +1462,7 @@ type gesture struct {
 	id                 string
 	onHover            func(bool)
 	onHoverAt          func(bool, woxui.Rect)
+	coverHover         bool
 	onPressChange      func(bool)
 	onTap              func()
 	onSecondaryTapDown func(position woxui.Point)
@@ -1495,6 +1496,9 @@ type Gesture struct {
 	Child     Widget
 	OnHover   func(bool)
 	OnHoverAt func(inside bool, bounds woxui.Rect)
+	// CoverHover also reports OnHover while a descendant owns hit-testing, so a
+	// scroll surface can reveal its thumb when the pointer is over child cards.
+	CoverHover bool
 	// OnPressChange reports primary-button press and release without changing tap activation.
 	OnPressChange func(pressed bool)
 	OnTap         func()
@@ -1540,7 +1544,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	}
 	target.kind = "gesture"
 	target.gesture = &gesture{
-		id: w.ID, cursor: w.Cursor, cursorAt: w.CursorAt, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
+		id: w.ID, cursor: w.Cursor, cursorAt: w.CursorAt, onHover: w.OnHover, onHoverAt: w.OnHoverAt, coverHover: w.CoverHover, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
 		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
 		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer,

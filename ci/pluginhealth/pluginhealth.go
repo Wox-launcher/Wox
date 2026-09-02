@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -37,8 +38,12 @@ const (
 	defaultHealthTimeout = 3 * time.Minute
 	healthCleanupTimeout = time.Minute
 	// Matches the Node/Python host RPC wait in WebsocketHost.invokeMethod.
-	// Script plugins still use the 10s host execution cap inside ScriptPlugin.
-	healthQueryTimeout = 30 * time.Second
+	// Script plugins default to a 10s interactive cap; health checks raise that
+	// via WOX_SCRIPT_EXECUTION_TIMEOUT so slow network fallbacks can finish.
+	healthQueryTimeout        = 30 * time.Second
+	healthQueryAttempts       = 3
+	healthQueryRetryDelay     = time.Second
+	scriptExecutionTimeoutEnv = "WOX_SCRIPT_EXECUTION_TIMEOUT"
 )
 
 type healthOptions struct {
@@ -221,6 +226,9 @@ func bootstrapPluginHealth(ctx context.Context, dataDir string) (string, error) 
 	if err := os.Setenv(util.TestDisableTelemetryEnv, "true"); err != nil {
 		return "", err
 	}
+	if err := os.Setenv(scriptExecutionTimeoutEnv, healthQueryTimeout.String()); err != nil {
+		return "", err
+	}
 
 	if err := util.GetLocation().Init(); err != nil {
 		return "", fmt.Errorf("initialize location: %w", err)
@@ -289,11 +297,9 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 
 	for _, query := range buildHealthProbeQueries(instance) {
 		result.Queries = append(result.Queries, query.RawQuery)
-		queryCtx, queryCancel := context.WithTimeout(ctx, healthQueryTimeout)
 		queryStarted := time.Now()
-		err := probePluginQuery(queryCtx, instance, query)
+		err := probePluginQueryWithRetry(ctx, instance, query)
 		recordQueryDuration(&result, time.Since(queryStarted))
-		queryCancel()
 		if err != nil {
 			result.Status = healthStatusFailed
 			result.Stage = healthStageQuery
@@ -310,6 +316,58 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 
 type fallibleQuery interface {
 	QueryWithError(ctx context.Context, query plugin.Query) (plugin.QueryResponse, error)
+}
+
+// probePluginQueryWithRetry re-runs a query when CI network jitter kills the first attempt.
+func probePluginQueryWithRetry(ctx context.Context, instance *plugin.Instance, query plugin.Query) error {
+	var lastErr error
+	for attempt := 1; attempt <= healthQueryAttempts; attempt++ {
+		queryCtx, queryCancel := context.WithTimeout(ctx, healthQueryTimeout)
+		lastErr = probePluginQuery(queryCtx, instance, query)
+		queryCancel()
+		if lastErr == nil || !isTransientHealthQueryError(lastErr) {
+			return lastErr
+		}
+		if attempt == healthQueryAttempts {
+			break
+		}
+		fmt.Printf("retrying query %q after transient error (%d/%d): %s\n", query.RawQuery, attempt, healthQueryAttempts-1, lastErr)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(healthQueryRetryDelay):
+		}
+	}
+	return lastErr
+}
+
+// isTransientHealthQueryError matches CI network/timeout kills that are worth retrying.
+func isTransientHealthQueryError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"signal: killed",
+		"context deadline exceeded",
+		"i/o timeout",
+		"tls handshake timeout",
+		"connection reset",
+		"connection refused",
+		"temporary failure",
+		"no such host",
+		"network is unreachable",
+		"wsarecv",
+		"forcibly closed",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // probePluginQuery treats empty results as success and reports execution failures.

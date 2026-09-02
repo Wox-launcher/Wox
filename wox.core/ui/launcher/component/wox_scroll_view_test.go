@@ -7,6 +7,28 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxScrollViewShowsHorizontalThumbAndMapsVerticalWheel(t *testing.T) {
+	props := ScrollViewProps{
+		Key: "horizontal-scroll", Width: 100, Height: 40, ContentWidth: 200, Horizontal: true,
+		ThumbColor: woxui.Color{A: 255},
+	}
+	state := &scrollViewState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	view := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture)
+	stack := view.Child.(woxwidget.Stack)
+	scrollbar := stack.Children[1]
+	if !scrollbar.AnchorBottom || scrollbar.Bottom != 2 {
+		t.Fatalf("horizontal scrollbar anchor = %v bottom %.0f, want true/2", scrollbar.AnchorBottom, scrollbar.Bottom)
+	}
+	if !view.OnScrollHandled(woxui.Point{Y: -20}) {
+		t.Fatal("mapped vertical wheel should scroll a standalone horizontal strip")
+	}
+	if state.controller.Offset() != 20 {
+		t.Fatalf("horizontal offset = %.0f, want 20", state.controller.Offset())
+	}
+	state.Dispose()
+}
+
 func TestWoxScrollViewCanFillResolvedParentSize(t *testing.T) {
 	view := WoxScrollView(ScrollViewProps{Key: "fill-size", FillWidth: true, FillHeight: true, Content: woxwidget.Container{Height: 160}})
 	builder, ok := view.(woxwidget.LayoutBuilder)
@@ -19,6 +41,25 @@ func TestWoxScrollViewCanFillResolvedParentSize(t *testing.T) {
 	if props.Width != 188 || props.Height != 68 || props.FillWidth || props.FillHeight {
 		t.Fatalf("resolved scroll size = %.0fx%.0f fill %v/%v, want 188x68/false/false", props.Width, props.Height, props.FillWidth, props.FillHeight)
 	}
+}
+
+func TestWoxScrollViewRevealsThumbOnHover(t *testing.T) {
+	props := ScrollViewProps{Key: "hover-scroll", Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}}
+	state := &scrollViewState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	view := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture)
+	if view.OnHover == nil || !view.CoverHover {
+		t.Fatal("scroll view does not reveal the thumb when the pointer is over child content")
+	}
+	view.OnHover(true)
+	if !state.visible || !state.hovered {
+		t.Fatalf("hovered scroll = visible %v hovered %v, want the shared overlay thumb", state.visible, state.hovered)
+	}
+	view.OnHover(false)
+	if state.hovered || state.hideTimer == nil {
+		t.Fatalf("left scroll = hovered %v timer %v, want a fade-out after leave", state.hovered, state.hideTimer)
+	}
+	state.Dispose()
 }
 
 func TestWoxScrollViewOpacityFollowsScrollActivity(t *testing.T) {

@@ -40,6 +40,7 @@ const (
 	LauncherDemoHighlightResultTail
 	LauncherDemoHighlightSelectedBackground
 	LauncherDemoHighlightSelectedTitle
+	LauncherDemoHighlightSelectedTail
 	LauncherDemoHighlightToolbarBackground
 	LauncherDemoHighlightToolbarText
 	LauncherDemoHighlightActionBackground
@@ -248,13 +249,21 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 		woxwidget.Clip{Width: textWidth, Height: baseHeight, Child: woxwidget.Align{Width: textWidth, Height: baseHeight, Vertical: .5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: labels}}},
 	}
 	if tailWidth > 0 {
+		// Result tails have their own theme tokens. Reusing ResultSubtitle made the
+		// theme editor look like subtitle edits also restyled the tail chips.
 		textSlot := max(float32(0), tailWidth-tailPadding*2)
-		tail := woxwidget.Container{
-			Width: tailWidth, Height: tailHeight, Radius: tailHeight / 2, BorderColor: withAlpha(props.Theme.ResultSubtitle, demoScaledAlpha(float32(alpha)/255, 90)), BorderWidth: 1,
-			Padding: woxwidget.Insets{Left: tailPadding, Right: tailPadding},
-			Child:   woxwidget.Align{Width: textSlot, Height: tailHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: result.Tail, Style: woxui.TextStyle{Size: TailFontSize}, Color: withAlpha(props.Theme.ResultSubtitle, alpha)}},
+		tailColor := demoResultColor(result.Selected, props.Theme.SelectedTail, props.Theme.ResultTail)
+		borderAlpha := uint8(51)
+		if result.Selected {
+			borderAlpha = 87
 		}
-		children = append(children, woxwidget.Align{Width: tailWidth, Height: baseHeight, Vertical: .5, Child: demoHighlight(tail, tailWidth, tailHeight, tailHeight/2, props.HighlightTarget == LauncherDemoHighlightResultTail && !result.Selected, props.HighlightColor)})
+		tail := woxwidget.Container{
+			Width: tailWidth, Height: tailHeight, Radius: tailHeight / 2, BorderColor: withAlpha(tailColor, demoScaledAlpha(float32(alpha)/255, borderAlpha)), BorderWidth: 1,
+			Padding: woxwidget.Insets{Left: tailPadding, Right: tailPadding},
+			Child:   woxwidget.Align{Width: textSlot, Height: tailHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: result.Tail, Style: woxui.TextStyle{Size: TailFontSize}, Color: withAlpha(tailColor, alpha)}},
+		}
+		highlightTail := props.HighlightTarget == LauncherDemoHighlightResultTail && !result.Selected || props.HighlightTarget == LauncherDemoHighlightSelectedTail && result.Selected
+		children = append(children, woxwidget.Align{Width: tailWidth, Height: baseHeight, Vertical: .5, Child: demoHighlight(tail, tailWidth, tailHeight, tailHeight/2, highlightTail, props.HighlightColor)})
 	}
 	row := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: 13, Top: 3, Right: 13, Bottom: 3}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: iconGap, Children: children,

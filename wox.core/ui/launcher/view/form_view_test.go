@@ -48,6 +48,21 @@ func TestFormSwitchFieldUsesAccessibleSwitch(t *testing.T) {
 	}
 }
 
+func TestFormSelectFieldOutlineUsesValueText(t *testing.T) {
+	text := woxui.Color{R: 230, G: 234, B: 240, A: 255}
+	field := FormSelectField(FormSelectFieldProps{
+		ID: "model", Label: "Default Model", Value: "deepseek-v4-flash", Width: 400, Height: 44, LabelWidth: 100,
+		Theme: woxcomponent.Theme{ActionText: text, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+	})
+	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
+	control := focusedControlGesture(row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
+	want := text
+	want.A = 190
+	if control.BorderColor != want {
+		t.Fatalf("form dropdown outline = %#v, want ActionText %#v", control.BorderColor, want)
+	}
+}
+
 func TestFormSelectFieldUsesOutlinedDropdown(t *testing.T) {
 	field := FormSelectField(FormSelectFieldProps{ID: "action", Label: "Action", Value: "Paste", Width: 400, Height: 44, LabelWidth: 100, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -401,7 +416,7 @@ func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
 	field := FormServiceField(FormServiceFieldProps{
 		Width: 420, LabelWidth: 80, Title: "Fast indexing", Description: "Install the optional Windows service.", Status: "Running", Detail: "2.8.0",
 		Actions: []FormServiceAction{{ID: "install", Label: "Install service", Primary: true, Enabled: true}},
-		Theme:   woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 160, G: 160, B: 164, A: 255}},
+		Theme:   woxcomponent.Theme{ResultTitle: woxui.Color{R: 160, G: 160, B: 164, A: 255}},
 	})
 	semantics := field.(woxwidget.Semantics)
 	if semantics.Role != woxui.AccessibilityRoleGroup || semantics.Label != "Fast indexing" {

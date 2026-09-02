@@ -72,6 +72,29 @@ func TestFilterableSettingsChoiceShowsSearchIcon(t *testing.T) {
 	}
 }
 
+func TestSettingsChoiceTrailingUsesRowTextColor(t *testing.T) {
+	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
+	props := SettingsChoiceProps{
+		ID: "glance", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
+		CurrentValue: "time", Theme: woxcomponent.Theme{ActionText: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Choices: []SettingsChoice{
+			{Value: "battery", Label: "Battery", Trailing: "AC"},
+			{Value: "time", Label: "Time", Trailing: "14:35"},
+		},
+	}
+	state := &settingsChoiceState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
+	menuScope := stack.Children[1].Child.(woxwidget.FocusScope)
+	menuContent := menuScope.Child.(woxwidget.Semantics).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	scroll := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	trailing := row.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Text)
+	if trailing.Value != "AC" || trailing.Color != title {
+		t.Fatalf("choice trailing = %q %#v, want row ActionText so ResultSubtitle cannot restyle Glance values", trailing.Value, trailing.Color)
+	}
+}
+
 func TestSettingsChoiceSelectedItemUsesThemeHighlight(t *testing.T) {
 	highlight := woxui.Color{R: 54, G: 123, B: 220, A: 255}
 	props := SettingsChoiceProps{
