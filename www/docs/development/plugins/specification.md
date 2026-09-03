@@ -331,6 +331,7 @@ Wox looks up translations in this order:
 | `zh_CN` | Chinese (Simplified) |
 | `pt_BR` | Portuguese (Brazil)  |
 | `ru_RU` | Russian              |
+| `ko_KR` | Korean               |
 
 > Tip: Always provide `en_US` translations as the fallback language.
 
