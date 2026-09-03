@@ -30,7 +30,11 @@ func getProcessMemoryBytes(pid int) (uint64, error) {
 		return 0, fmt.Errorf("failed to read process footprint for pid %d: errno %d", pid, int(errCode))
 	}
 
-	// Feature change: macOS debug memory should be comparable with Activity
-	// Monitor's Memory column, so use physical footprint instead of RSS/Real Mem.
+	// Activity Monitor's Memory column uses the task physical footprint rather
+	// than RSS, so keep diagnostics on the same platform-native metric.
 	return uint64(footprint), nil
+}
+
+func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) {
+	return PrivateWorkingSetBreakdown{}, nil
 }

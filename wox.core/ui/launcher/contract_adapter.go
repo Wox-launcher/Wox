@@ -24,6 +24,16 @@ func (a *App) SessionID() string {
 	return a.sessionID
 }
 
+// MemoryDiagnostics reports caches owned by this launcher instance without forcing allocation or cleanup.
+func (a *App) MemoryDiagnostics() (decodedImageBytes, rendererBytes uint64) {
+	a.imageMu.RLock()
+	if a.imageCacheSize > 0 {
+		decodedImageBytes = uint64(a.imageCacheSize)
+	}
+	a.imageMu.RUnlock()
+	return decodedImageBytes, a.windows.RendererResidentBytes()
+}
+
 // Show presents the launcher without changing any independent management window.
 func (a *App) Show(_ context.Context, options contract.ShowOptions) error {
 	return a.showWindow(fromCoreShowOptions(options))

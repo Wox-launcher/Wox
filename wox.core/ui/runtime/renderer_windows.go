@@ -184,6 +184,13 @@ func (r *nativeRenderer) clearImageCache() error {
 	return nil
 }
 
+func (r *nativeRenderer) residentBytes() int64 {
+	if r == nil || r.handle == nil {
+		return 0
+	}
+	return int64(C.wox_renderer_resident_bytes(r.handle))
+}
+
 // measureText uses DirectWrite without opening a draw transaction.
 func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics, error) {
 	nativeText := C.CString(text)

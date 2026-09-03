@@ -140,7 +140,7 @@ Go may retain heap arenas after objects become unreachable, so a high or non-dec
 
 Only profile after the repeated-query or settings-lifecycle run shows a possible or strong leak signal.
 
-1. Trigger the dev-only memory profiling action through the automation driver after warm-up:
+1. Trigger the Wox Memory plugin's `woxmemory profile ` command through the automation driver after warm-up:
 
 ```bash
 go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /tmp/wox-memory-automation.json -mode profile

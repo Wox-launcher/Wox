@@ -14,10 +14,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
 	"wox/util"
+	"wox/util/processmemory"
 	"wox/util/speech"
 
 	paddleocr "github.com/multippt/gopaddleocr/pkg/ocr"
@@ -111,6 +113,14 @@ type PaddleModelManager struct {
 	engineMu sync.Mutex
 	workflow *paddleocr.Workflow
 	runMu    sync.Mutex
+	// Consumers prevent one OCR feature from releasing sessions still selected by another.
+	consumerMu        sync.Mutex
+	workflowConsumers map[string]struct{}
+
+	workflowMemoryBaseline      uint64
+	workflowMemoryBaselineValid bool
+	workflowMemoryEstimate      uint64
+	workflowMemoryMeasured      bool
 }
 
 var paddleModelManagerOnce sync.Once
@@ -167,6 +177,26 @@ func GetPaddleEngineStatus() (PaddleEngineStatus, error) {
 		return PaddleEngineStatus{}, err
 	}
 	return manager.GetEngineStatus(), nil
+}
+
+// GetPaddleWorkflowMemoryDiagnostics reports loaded state and the measured non-Go resident increase.
+func GetPaddleWorkflowMemoryDiagnostics() (bool, uint64) {
+	manager, err := GetPaddleModelManager()
+	if err != nil {
+		return false, 0
+	}
+	manager.engineMu.Lock()
+	defer manager.engineMu.Unlock()
+	return manager.workflow != nil, manager.workflowMemoryEstimate
+}
+
+// SetPaddleWorkflowConsumer releases the shared workflow after its last configured consumer leaves.
+func SetPaddleWorkflowConsumer(ctx context.Context, consumer string, needed bool) {
+	manager, err := GetPaddleModelManager()
+	if err != nil {
+		return
+	}
+	manager.setWorkflowConsumer(ctx, consumer, needed)
 }
 
 // DownloadPaddleEngine installs the shared ONNX Runtime needed by PaddleOCR.
@@ -477,6 +507,12 @@ func writePaddleCharacterDictionary(configPath string, dictionaryPath string) er
 // Recognize runs the selected PP-OCRv6 small model and returns line-level
 // text with the quadrilateral bounds supplied by the detector.
 func (m *PaddleModelManager) Recognize(ctx context.Context, imagePath string) (Result, error) {
+	m.runMu.Lock()
+	defer func() {
+		m.runMu.Unlock()
+		m.releaseWorkflowIfUnused(ctx)
+	}()
+
 	if err := m.ensureWorkflow(ctx); err != nil {
 		return Result{}, err
 	}
@@ -491,9 +527,8 @@ func (m *PaddleModelManager) Recognize(ctx context.Context, imagePath string) (R
 		return Result{}, fmt.Errorf("decode OCR image: %w", err)
 	}
 
-	m.runMu.Lock()
 	results, err := m.workflow.RunOCR(convertRGBToBGR(decoded))
-	m.runMu.Unlock()
+	m.finishWorkflowMemoryMeasurement()
 	if err != nil {
 		return Result{}, fmt.Errorf("PaddleOCR recognition: %w", err)
 	}
@@ -516,6 +551,56 @@ func (m *PaddleModelManager) Recognize(ctx context.Context, imagePath string) (R
 	return ocrResult, nil
 }
 
+// setWorkflowConsumer updates one configured owner and closes the workflow when none remain.
+func (m *PaddleModelManager) setWorkflowConsumer(ctx context.Context, consumer string, needed bool) {
+	m.consumerMu.Lock()
+	defer m.consumerMu.Unlock()
+	if m.workflowConsumers == nil {
+		m.workflowConsumers = map[string]struct{}{}
+	}
+	if needed {
+		m.workflowConsumers[consumer] = struct{}{}
+		return
+	}
+	delete(m.workflowConsumers, consumer)
+	if len(m.workflowConsumers) == 0 {
+		m.closeWorkflow(ctx)
+	}
+}
+
+// releaseWorkflowIfUnused handles a queued recognition that outlives its setting change.
+func (m *PaddleModelManager) releaseWorkflowIfUnused(ctx context.Context) {
+	m.consumerMu.Lock()
+	defer m.consumerMu.Unlock()
+	if len(m.workflowConsumers) == 0 {
+		m.closeWorkflow(ctx)
+	}
+}
+
+// closeWorkflow waits for active inference before releasing both ONNX sessions.
+func (m *PaddleModelManager) closeWorkflow(ctx context.Context) {
+	m.runMu.Lock()
+	defer m.runMu.Unlock()
+	m.engineMu.Lock()
+	defer m.engineMu.Unlock()
+	if m.workflow == nil {
+		return
+	}
+	closeErr := m.workflow.Close()
+	if closeErr != nil {
+		util.GetLogger().Warn(ctx, "failed to close PaddleOCR workflow: "+closeErr.Error())
+	} else if ort.IsInitialized() {
+		if err := ort.DestroyEnvironment(); err != nil {
+			util.GetLogger().Warn(ctx, "failed to release PaddleOCR ONNX Runtime: "+err.Error())
+		}
+	}
+	m.workflow = nil
+	m.workflowMemoryBaseline = 0
+	m.workflowMemoryBaselineValid = false
+	m.workflowMemoryEstimate = 0
+	m.workflowMemoryMeasured = false
+}
+
 // ensureWorkflow initializes the process-wide PaddleOCR workflow on first use.
 func (m *PaddleModelManager) ensureWorkflow(ctx context.Context) error {
 	m.engineMu.Lock()
@@ -523,6 +608,7 @@ func (m *PaddleModelManager) ensureWorkflow(ctx context.Context) error {
 	if m.workflow != nil {
 		return nil
 	}
+	m.workflowMemoryBaseline, m.workflowMemoryBaselineValid = currentNonGoResidentBytes()
 	if err := verifyPaddleModelFiles(m.modelDir); err != nil {
 		return fmt.Errorf("PaddleOCR model is not ready: %w", err)
 	}
@@ -558,6 +644,38 @@ func (m *PaddleModelManager) ensureWorkflow(ctx context.Context) error {
 	}
 	m.workflow = workflow
 	return nil
+}
+
+// finishWorkflowMemoryMeasurement records one complete initialization-and-inference delta.
+func (m *PaddleModelManager) finishWorkflowMemoryMeasurement() {
+	m.engineMu.Lock()
+	defer m.engineMu.Unlock()
+	if m.workflowMemoryMeasured || !m.workflowMemoryBaselineValid {
+		return
+	}
+	current, ok := currentNonGoResidentBytes()
+	if !ok {
+		return
+	}
+	m.workflowMemoryMeasured = true
+	if current > m.workflowMemoryBaseline {
+		m.workflowMemoryEstimate = current - m.workflowMemoryBaseline
+	}
+}
+
+// currentNonGoResidentBytes removes Go's retained estimate from the platform process metric.
+func currentNonGoResidentBytes() (uint64, bool) {
+	processBytes, err := processmemory.GetProcessMemoryBytes(os.Getpid())
+	if err != nil {
+		return 0, false
+	}
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	goRetained := stats.Sys - stats.HeapReleased
+	if goRetained >= processBytes {
+		return 0, false
+	}
+	return processBytes - goRetained, true
 }
 
 type paddleConfigSource struct {

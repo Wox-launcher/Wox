@@ -137,6 +137,12 @@ func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		}
 		return BuildOCRModelSetting(ctx, screenshotOCRModelSettingKey, "i18n:plugin_screenshot_ocr_model", "i18n:plugin_screenshot_ocr_model_tooltip")
 	})
+	p.syncPaddleWorkflowConsumer(ctx)
+	p.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
+		if key == screenshotOCREnabledSettingKey || key == screenshotOCRModelSettingKey {
+			p.syncPaddleWorkflowConsumer(callbackCtx)
+		}
+	})
 
 	// Remove expired captures before warming thumbnails so startup never generates caches for files
 	// that the retention policy is about to delete.
@@ -151,7 +157,13 @@ func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	})
 	p.api.OnUnload(ctx, func(ctx context.Context) {
 		p.stopScreenshotBackgroundTasks()
+		ocr.SetPaddleWorkflowConsumer(ctx, p.GetMetadata().Id, false)
 	})
+}
+
+func (p *ScreenshotPlugin) syncPaddleWorkflowConsumer(ctx context.Context) {
+	needed := p.isScreenshotOCREnabled(ctx) && p.screenshotOCRModel(ctx) == ocr.ModelPaddlePPOCRv6Small
+	ocr.SetPaddleWorkflowConsumer(ctx, p.GetMetadata().Id, needed)
 }
 
 // runScreenshotBackgroundTask starts work only while the current plugin lifecycle accepts new tasks.

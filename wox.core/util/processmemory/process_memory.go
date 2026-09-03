@@ -7,6 +7,13 @@ import (
 	"github.com/struCoder/pidusage"
 )
 
+type PrivateWorkingSetBreakdown struct {
+	PrivateBytes uint64
+	MappedBytes  uint64
+	ImageBytes   uint64
+	Available    bool
+}
+
 func GetProcessRSSBytes(pid int) (uint64, error) {
 	return getProcessRSSBytes(pid)
 }
@@ -16,10 +23,17 @@ func GetProcessMemoryBytes(pid int) (uint64, error) {
 		return 0, fmt.Errorf("invalid pid: %d", pid)
 	}
 
-	// Feature change: Wox's debug memory Glance should track the process memory
-	// number users compare in platform tools. Platform-specific implementations
-	// can use the closest native signal instead of forcing every OS through RSS.
+	// Keep Wox diagnostics on the native metric shown by the platform monitor:
+	// private working set on Windows and physical footprint on macOS.
 	return getProcessMemoryBytes(pid)
+}
+
+// GetPrivateWorkingSetBreakdown classifies Windows private resident pages by allocation type.
+func GetPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) {
+	if pid <= 0 {
+		return PrivateWorkingSetBreakdown{}, fmt.Errorf("invalid pid: %d", pid)
+	}
+	return getPrivateWorkingSetBreakdown(pid)
 }
 
 func getProcessRSSBytes(pid int) (uint64, error) {

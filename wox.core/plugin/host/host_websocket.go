@@ -75,7 +75,9 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 		return startErr
 	}
 
+	w.statusLock.Lock()
 	w.hostProcess = cmd.Process
+	w.statusLock.Unlock()
 	w.setStartState(executablePath, "")
 	return nil
 }
@@ -87,14 +89,27 @@ func (w *WebsocketHost) StopHost(ctx context.Context) {
 	if w.ws != nil {
 		w.ws.Close(ctx)
 	}
-	if w.hostProcess != nil {
-		w.terminateHostProcess(ctx, w.hostProcess)
+	w.statusLock.Lock()
+	hostProcess := w.hostProcess
+	w.hostProcess = nil
+	w.statusLock.Unlock()
+	if hostProcess != nil {
+		w.terminateHostProcess(ctx, hostProcess)
 	}
 	// Bug fix: StopHost used to leave the websocket client object in place, so
 	// status checks could briefly report a killed host as still connected. Clear
 	// local process state immediately; a fresh StartHost creates a new client.
-	w.hostProcess = nil
 	w.ws = nil
+}
+
+// ProcessID returns the active shared runtime host PID for release diagnostics.
+func (w *WebsocketHost) ProcessID() int {
+	w.statusLock.RLock()
+	defer w.statusLock.RUnlock()
+	if w.hostProcess == nil {
+		return 0
+	}
+	return w.hostProcess.Pid
 }
 
 // terminateHostProcess kills a host and waits for Windows to release its file handles.

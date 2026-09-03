@@ -602,29 +602,6 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 				})
 			},
 		},
-
-		{
-			ID:    "memory_profiling",
-			Title: "i18n:plugin_sys_performance_memory_profiling",
-			Icon:  common.CPUProfileIcon,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				memoryProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "memory.prof")
-				f, err := os.Create(memoryProfPath)
-				if err != nil {
-					util.GetLogger().Info(ctx, "failed to create memory profile file: "+err.Error())
-					return
-				}
-
-				util.GetLogger().Info(ctx, "start memory profile")
-				profileErr := pprof.WriteHeapProfile(f)
-				if profileErr != nil {
-					util.GetLogger().Info(ctx, "failed to start memory profile: "+profileErr.Error())
-					return
-				}
-
-				util.GetLogger().Info(ctx, "memory profile saved to "+memoryProfPath)
-			},
-		},
 	}
 }
 

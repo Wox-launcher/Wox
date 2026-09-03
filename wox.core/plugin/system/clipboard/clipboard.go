@@ -282,7 +282,6 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		}
 		return system.BuildOCRModelSetting(ctx, clipboardOCRModelSettingKey, "i18n:plugin_clipboard_ocr_model", "i18n:plugin_clipboard_ocr_model_tooltip")
 	})
-
 	// Initialize database
 	db, err := NewClipboardDB(ctx, c.GetMetadata().Id)
 	if err != nil {
@@ -290,6 +289,12 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		return
 	}
 	c.db = db
+	c.syncPaddleWorkflowConsumer(ctx)
+	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
+		if key == clipboardImageTextRecognitionSettingKey || key == clipboardOCRModelSettingKey {
+			c.syncPaddleWorkflowConsumer(callbackCtx)
+		}
+	})
 	runtimeCtx, cancelRuntime := context.WithCancel(util.NewTraceContext())
 
 	// Migration is now handled by the central migrator during app startup
@@ -342,7 +347,13 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			}
 			c.db = nil
 		}
+		ocr.SetPaddleWorkflowConsumer(callbackCtx, c.GetMetadata().Id, false)
 	})
+}
+
+func (c *ClipboardPlugin) syncPaddleWorkflowConsumer(ctx context.Context) {
+	needed := c.isImageTextRecognitionEnabled(ctx) && c.ocrModel(ctx) == ocr.ModelPaddlePPOCRv6Small
+	ocr.SetPaddleWorkflowConsumer(ctx, c.GetMetadata().Id, needed)
 }
 
 // shouldIgnoreClipboardChange blocks capture before any clipboard data is persisted or processed.

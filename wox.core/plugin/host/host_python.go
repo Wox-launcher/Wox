@@ -34,6 +34,10 @@ type PythonHost struct {
 	websocketHost *WebsocketHost
 }
 
+func (n *PythonHost) ProcessID() int {
+	return n.websocketHost.ProcessID()
+}
+
 func (n *PythonHost) GetRuntime(ctx context.Context) plugin.Runtime {
 	return plugin.PLUGIN_RUNTIME_PYTHON
 }

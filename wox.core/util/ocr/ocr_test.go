@@ -1,6 +1,7 @@
 package ocr
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -38,5 +39,19 @@ func TestPaddleEngineStatusReportsMissingRuntime(t *testing.T) {
 	status := (&PaddleModelManager{runtimeManager: runtimeManager}).GetEngineStatus()
 	if status.Ready {
 		t.Fatal("expected a new OCR engine directory to be reported as unavailable")
+	}
+}
+
+func TestPaddleWorkflowConsumerTracking(t *testing.T) {
+	manager := &PaddleModelManager{}
+	manager.setWorkflowConsumer(context.Background(), "screenshot", true)
+	manager.setWorkflowConsumer(context.Background(), "clipboard", true)
+	manager.setWorkflowConsumer(context.Background(), "screenshot", false)
+	if _, ok := manager.workflowConsumers["clipboard"]; !ok || len(manager.workflowConsumers) != 1 {
+		t.Fatalf("unexpected consumers after first release: %#v", manager.workflowConsumers)
+	}
+	manager.setWorkflowConsumer(context.Background(), "clipboard", false)
+	if len(manager.workflowConsumers) != 0 {
+		t.Fatalf("consumers were not released: %#v", manager.workflowConsumers)
 	}
 }

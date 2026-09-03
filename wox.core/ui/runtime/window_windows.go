@@ -2546,7 +2546,9 @@ func (w *platformWindow) renderWindowsDisplayList(displayList *DisplayList, scal
 	nativeStart := time.Now()
 	err := w.renderer.render(displayList, scale)
 	if w.options.frameMetrics != nil {
-		w.options.frameMetrics.recordEncodedResources(displayList)
+		resources := displayList.EncodedRendererResources()
+		resources.ResidentBytes = w.renderer.residentBytes()
+		w.options.frameMetrics.recordRendererResources(displayList.frameID, resources)
 		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, err == nil)
 	}
 	return err

@@ -75,6 +75,8 @@ import (
 	_ "wox/plugin/system/window_manager"
 
 	_ "wox/plugin/system/dictation"
+
+	_ "wox/plugin/system/wox_memory"
 )
 
 var embeddedGoUIApp *golauncher.App

@@ -146,6 +146,29 @@ func (m *Manager) getView() contract.View {
 	return m.primaryView
 }
 
+// MemoryDiagnostics sums memory explicitly owned by the active UI views.
+func (m *Manager) MemoryDiagnostics() (decodedImageBytes, rendererBytes uint64) {
+	m.viewMu.RLock()
+	views := make([]contract.View, 0, len(m.views)+1)
+	if len(m.views) > 0 {
+		for _, view := range m.views {
+			views = append(views, view)
+		}
+	} else if m.primaryView != nil {
+		views = append(views, m.primaryView)
+	}
+	m.viewMu.RUnlock()
+
+	for _, view := range views {
+		if reporter, ok := view.(interface{ MemoryDiagnostics() (uint64, uint64) }); ok {
+			images, renderer := reporter.MemoryDiagnostics()
+			decodedImageBytes += images
+			rendererBytes += renderer
+		}
+	}
+	return decodedImageBytes, rendererBytes
+}
+
 // RegisterView adds one secondary launcher without changing the primary command target.
 func (m *Manager) RegisterView(view contract.View) {
 	if view == nil || view.SessionID() == "" {

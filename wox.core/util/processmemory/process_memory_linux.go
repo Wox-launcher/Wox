@@ -8,3 +8,7 @@ func getProcessMemoryBytes(pid int) (uint64, error) {
 	// pidusage already reads it directly from /proc without spawning tools.
 	return getProcessRSSBytes(pid)
 }
+
+func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) {
+	return PrivateWorkingSetBreakdown{}, nil
+}

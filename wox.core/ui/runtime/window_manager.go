@@ -128,6 +128,36 @@ func (m *WindowManager) Get(id WindowID) (*ManagedWindow, bool) {
 	return window, window != nil && window.Lifecycle() != WindowLifecycleClosed
 }
 
+// RendererResidentBytes returns the latest tracked native renderer cache size for every live window.
+func (m *WindowManager) RendererResidentBytes() uint64 {
+	if m == nil {
+		return 0
+	}
+	m.mu.RLock()
+	windows := make([]*ManagedWindow, 0, len(m.windows))
+	for _, window := range m.windows {
+		windows = append(windows, window)
+	}
+	m.mu.RUnlock()
+
+	var total uint64
+	for _, managed := range windows {
+		if managed == nil || managed.window == nil {
+			continue
+		}
+		metrics := managed.window.FrameMetrics()
+		for index := len(metrics.Recent) - 1; index >= 0; index-- {
+			if metrics.Recent[index].NativeEncodingCompleted {
+				if bytes := metrics.Recent[index].RendererResources.ResidentBytes; bytes > 0 {
+					total += uint64(bytes)
+				}
+				break
+			}
+		}
+	}
+	return total
+}
+
 // CloseAll releases every currently registered native window.
 func (m *WindowManager) CloseAll() error {
 	return m.CloseAllExcept("")

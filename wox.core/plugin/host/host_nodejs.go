@@ -34,6 +34,10 @@ type NodejsHost struct {
 	websocketHost *WebsocketHost
 }
 
+func (n *NodejsHost) ProcessID() int {
+	return n.websocketHost.ProcessID()
+}
+
 func (n *NodejsHost) GetRuntime(ctx context.Context) plugin.Runtime {
 	return plugin.PLUGIN_RUNTIME_NODEJS
 }

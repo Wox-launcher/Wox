@@ -42,6 +42,7 @@ struct WoxRenderer {
   ID2D1Bitmap1 *overlay_target_bitmap = nullptr;
   ID2D1Bitmap1 *cached_large_image_bitmap = nullptr;
   uint64_t cached_large_image_id = 0;
+  uint64_t cached_large_image_bytes = 0;
   std::vector<CachedImageBitmap> cached_image_bitmaps;
   std::vector<ID2D1Bitmap1 *> retired_image_bitmaps;
   uint64_t cached_image_bitmap_bytes = 0;
@@ -659,6 +660,7 @@ extern "C" int32_t wox_renderer_trim(WoxRenderer *renderer) {
   }
   release_com(&renderer->cached_large_image_bitmap);
   renderer->cached_large_image_id = 0;
+  renderer->cached_large_image_bytes = 0;
   clear_cached_image_bitmaps(renderer);
 
   IDXGIDevice3 *dxgi_device = nullptr;
@@ -841,6 +843,7 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
       release_com(&renderer->cached_large_image_bitmap);
       renderer->cached_large_image_bitmap = bitmap;
       renderer->cached_large_image_id = image_id;
+      renderer->cached_large_image_bytes = image_bytes;
       release_bitmap = false;
     } else if (cache_image_bitmap(renderer, image_id, image_bytes, bitmap)) {
       release_bitmap = false;
@@ -1154,6 +1157,13 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     return result;
   }
   return S_OK;
+}
+
+extern "C" int64_t wox_renderer_resident_bytes(WoxRenderer *renderer) {
+  if (renderer == nullptr) {
+    return 0;
+  }
+  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->cached_large_image_bytes);
 }
 
 extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {
