@@ -1,33 +1,49 @@
 # Changelog
 
-## v2.4.2 - 
+## v2.4.2 - 2026-09-03
 
 This release speeds up File Search on Windows with optional Fast Indexing through an NTFS service, so large volumes stay current without a full crawl.
 
-![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/fast_file_index.png)
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/fast_file_index.jpg)
 
 - Improve
   - [`File Search`] Support optional Fast Indexing on Windows by installing a service that indexes NTFS volumes through MFT and USN, let content-search directories be configured independently of filename-search roots, group file results in global queries, and filter results to content matches
   - [`Confetti`] Show a fullscreen confetti overlay from the Confetti command, try `confetti` query
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/confetti.png)
-  - [`Clipboard`] Support searching clipboard images by their OCR text [#4525](https://github.com/Wox-launcher/Wox/issues/4525)
+  - [`AI Chat`] Support configuring MCP servers from settings with a server table, JSON import for full mcpServers documents, OAuth, and per-server tools [#4529](https://github.com/Wox-launcher/Wox/issues/4529)
+  - [`Wox Memory`] Add built-in memory diagnostics to inspect Wox process composition with Go heap, native, and per-process breakdowns plus a live Glance
+  - [`Clipboard`] Support searching clipboard images by their OCR text [#4525](https://github.com/Wox-launcher/Wox/issues/4525), and improve macOS handling for remote file URLs [#4532](https://github.com/Wox-launcher/Wox/issues/4532)
   - [`Folder`] Support fuzzy matching for child names and complete parent-directory paths while typing
   - [`Shell`] Show a running indicator on active commands in history
   - [`Launcher`] Improve action-panel search with aliases so localized actions stay findable by English names and extra terms
+  - [`Explorer`] Prioritize matches in the current directory during type-to-search [#4527](https://github.com/Wox-launcher/Wox/issues/4527)
   - [`Indicator`] Support matching plugins by description as well as name
   - [`Settings`] Support opening links from plugin setting help text
   - [`Screenshot`] Lower the default screenshot history retention from 30 to 15 days
+  - [`UI`] Support animated GIF images in results and previews without flattening animation
+  - [`App`] Support Korean (ko_KR) language and reconcile Windows app directories when indexed paths are missing
+  - [`Plugin`] Surface plugin initialization failures, add store plugin health checks, and let users refresh Python and Node.js runtimes from settings
 
 - Fix
   - [`Notes`] Fix new notes not being pinned by default
   - [`Explorer`] Fix the type-to-search dialog hint closing too early during focus handoff
+  - [`Launcher`] Constrain launcher height to the display work area [#4527](https://github.com/Wox-launcher/Wox/issues/4527)
+  - [`Clipboard`] Fix Wox's own clipboard writes being recorded as new history entries
   - [`Linux`] Fix X11 clipboard reads hanging by timing out clipboard commands
+  - [`App`] Release GPU and database caches after Wox hides and improve native memory accounting in diagnostics
+  - [`UI`] Fix scrollbar overlay visibility in scroll views and incorrect list updates when result lists shrink
 
 - Store
   - Plugin
     - [need](https://github.com/zzedbot/wox-plugin-need) Store and quickly retrieve local key-value notes [@zzedbot](https://github.com/zzedbot)
     - [Nextcloud Passwords](https://github.com/zzedbot/wox-plugin-nextcloud-password) Search, inspect, copy, and update passwords stored in Nextcloud Passwords [@zzedbot](https://github.com/zzedbot)
     - [Timestamp](https://gist.github.com/qianlifeng/31363d95905325e9969d93d999e94b07) Convert between Unix timestamps and datetime strings [@qianlifeng](https://github.com/qianlifeng)
+    - [Scoop](https://gist.github.com/qianlifeng/75ee2660ab0bd347623a752b0f2d4cd9) Search and manage Windows apps with Scoop [@qianlifeng](https://github.com/qianlifeng)
+    - [Video Downloader](https://gist.github.com/qianlifeng/c6b0e26b0db6efa9e9e9cd6a9252e08b) Download videos and audio from 1000+ sites with yt-dlp [@qianlifeng](https://github.com/qianlifeng)
+    - [Hacker News](https://gist.github.com/qianlifeng/5505503cf2ab741e2073e8bc120fba77) Browse Hacker News stories and discussions [@qianlifeng](https://github.com/qianlifeng)
+    - [Speedtest](https://gist.github.com/qianlifeng/dd2735f0aedb12b99c0aa0e226771a8f) Test internet speed over HTTP download, upload, and ping [@qianlifeng](https://github.com/qianlifeng)
+    - [Sound Switch](https://gist.github.com/qianlifeng/bb270f4d9d36053d6750244445e5bfc9) Switch audio input and output devices quickly [@qianlifeng](https://github.com/qianlifeng)
+    - [Gif Search](https://gist.github.com/qianlifeng/ab5524eecdf36a9484265cd94b22f359) Search animated GIFs from GIPHY and The Finer Gifs Club [@qianlifeng](https://github.com/qianlifeng)
 
 ## v2.4.1 - 2026-08-28
 
