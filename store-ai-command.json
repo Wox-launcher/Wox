@@ -15,6 +15,9 @@
         },
         "ru_RU": {
           "category_reading": "Чтение"
+        },
+        "ko_KR": {
+          "category_reading": "읽기"
         }
       }
     },
@@ -33,6 +36,9 @@
         },
         "ru_RU": {
           "category_writing": "Письмо"
+        },
+        "ko_KR": {
+          "category_writing": "쓰기"
         }
       }
     },
@@ -51,6 +57,9 @@
         },
         "ru_RU": {
           "category_productivity": "Продуктивность"
+        },
+        "ko_KR": {
+          "category_productivity": "생산성"
         }
       }
     }
@@ -94,6 +103,11 @@
           "name_translate_chinese_english": "Перевод китайский / английский",
           "desc_translate_chinese_english": "Переводит выделенный текст между китайским и английским.",
           "prompt_translate_chinese_english": "Переведи следующий текст между китайским и английским. Если текст на китайском, переведи его на английский. В остальных случаях переведи его на китайский. Верни только перевод:\n{wox:input_text}"
+        },
+        "ko_KR": {
+          "name_translate_chinese_english": "중국어 / 영어 번역",
+          "desc_translate_chinese_english": "선택한 텍스트를 중국어와 영어 사이에서 번역합니다.",
+          "prompt_translate_chinese_english": "다음 텍스트를 중국어와 영어 사이에서 번역하세요. 텍스트가 중국어이면 영어로, 그렇지 않으면 중국어로 번역하세요. 번역문만 반환하세요:\n{wox:input_text}"
         }
       }
     },
@@ -135,6 +149,11 @@
           "name_summarize_selection": "Кратко изложить выделенное",
           "desc_summarize_selection": "Сводит выделенный текст к кратким пунктам.",
           "prompt_summarize_selection": "Извлеки важные факты из следующего текста. Верни до семи пунктов и краткое резюме в одну строку:\n{wox:input_text}"
+        },
+        "ko_KR": {
+          "name_summarize_selection": "선택 영역 요약",
+          "desc_summarize_selection": "선택한 텍스트를 간결한 요점으로 요약합니다.",
+          "prompt_summarize_selection": "다음 텍스트에서 중요한 사실을 추출하세요. 최대 7개의 요점과 한 줄 요약을 반환하세요:\n{wox:input_text}"
         }
       }
     },
@@ -176,6 +195,11 @@
           "name_rewrite_selection": "Переписать выделенное",
           "desc_rewrite_selection": "Переписывает выделенный текст, делая его яснее и естественнее.",
           "prompt_rewrite_selection": "Перепиши следующий текст, чтобы он стал яснее, естественнее и легче читался. Сохрани исходный смысл. Верни только переписанный текст:\n{wox:input_text}"
+        },
+        "ko_KR": {
+          "name_rewrite_selection": "선택 영역 다시 쓰기",
+          "desc_rewrite_selection": "선택한 텍스트를 더 명확하고 자연스럽게 다시 씁니다.",
+          "prompt_rewrite_selection": "다음 텍스트를 더 명확하고 자연스럽고 읽기 쉽게 다시 쓰세요. 원래 의미를 유지하세요. 다시 쓴 텍스트만 반환하세요:\n{wox:input_text}"
         }
       }
     },
@@ -210,6 +234,11 @@
           "name_fix_writing": "Исправить текст",
           "desc_fix_writing": "Исправляет грамматику, орфографию, пунктуацию и формулировки в выделенном тексте.",
           "prompt_fix_writing": "Исправь грамматику, орфографию, пунктуацию и формулировки в следующем тексте. Сохрани исходный смысл и тон. Верни только исправленный текст:\n{wox:input_text}"
+        },
+        "ko_KR": {
+          "name_fix_writing": "문장 교정",
+          "desc_fix_writing": "선택한 텍스트의 문법, 맞춤법, 문장 부호, 표현을 교정합니다.",
+          "prompt_fix_writing": "다음 텍스트의 문법, 맞춤법, 문장 부호, 표현을 교정하세요. 원래 의미와 어조를 유지하세요. 교정된 텍스트만 반환하세요:\n{wox:input_text}"
         }
       }
     },
@@ -244,6 +273,11 @@
           "name_make_professional": "Сделать профессиональным",
           "desc_make_professional": "Переписывает выделенный текст в профессиональном деловом тоне.",
           "prompt_make_professional": "Перепиши следующий текст в профессиональном, вежливом и кратком деловом тоне. Сохрани исходный смысл. Верни только переписанный текст:\n{wox:input_text}"
+        },
+        "ko_KR": {
+          "name_make_professional": "업무용 어조로 바꾸기",
+          "desc_make_professional": "선택한 텍스트를 전문적인 업무 어조로 다시 씁니다.",
+          "prompt_make_professional": "다음 텍스트를 전문적이고 정중하며 간결한 업무 어조로 다시 쓰세요. 원래 의미를 유지하세요. 다시 쓴 텍스트만 반환하세요:\n{wox:input_text}"
         }
       }
     },
@@ -278,6 +312,11 @@
           "name_extract_action_items": "Извлечь задачи",
           "desc_extract_action_items": "Извлекает задачи, ответственных и сроки из выделенного текста.",
           "prompt_extract_action_items": "Извлеки задачи из следующего текста. Укажи задачу, ответственного и срок, если они доступны. Если данных нет, напиши \"Не указано\". Верни краткий маркированный список:\n{wox:input_text}"
+        },
+        "ko_KR": {
+          "name_extract_action_items": "할 일 추출",
+          "desc_extract_action_items": "선택한 텍스트에서 작업, 담당자, 마감일을 추출합니다.",
+          "prompt_extract_action_items": "다음 텍스트에서 할 일 항목을 추출하세요. 가능하면 작업, 담당자, 마감일을 포함하세요. 정보가 없으면 \"미지정\"이라고 쓰세요. 간결한 글머리 기호 목록으로 반환하세요:\n{wox:input_text}"
         }
       }
     }
