@@ -37,7 +37,11 @@ type ScrollViewProps struct {
 }
 
 type scrollViewState struct {
-	visible        bool
+	visible bool
+	// pointerInside keeps the thin overlay visible while the pointer is over the
+	// scroll surface. hovered widens the thumb only when the pointer is on the
+	// scrollbar hit target, so entering the view does not jump to the drag width.
+	pointerInside  bool
 	hovered        bool
 	dragging       bool
 	dragOrigin     float32
@@ -95,6 +99,7 @@ func (s *scrollViewState) DidUpdateWidget(context woxwidget.StateContext, oldWid
 	}
 	if newProps.HideScrollbar {
 		s.visible = false
+		s.pointerInside = false
 		s.hideAt = time.Time{}
 		if s.hideTimer != nil {
 			s.hideTimer.Stop()
@@ -116,7 +121,7 @@ func (s *scrollViewState) Build(context woxwidget.StateContext, widget any) woxw
 		}
 		props.Controller = s.controller
 	}
-	if s.visible && !s.hovered && !s.dragging && !s.hideAt.IsZero() && !time.Now().Before(s.hideAt) {
+	if s.visible && !s.pointerInside && !s.hovered && !s.dragging && !s.hideAt.IsZero() && !time.Now().Before(s.hideAt) {
 		s.visible = false
 		s.hideAt = time.Time{}
 		s.hideTimer = nil
@@ -144,11 +149,21 @@ func (s *scrollViewState) scheduleHide(context woxwidget.StateContext) {
 		s.hideTimer = nil
 	}
 	s.hideAt = time.Time{}
-	if s.hovered || s.dragging {
+	if s.pointerInside || s.hovered || s.dragging {
 		return
 	}
 	s.hideAt = time.Now().Add(2 * time.Second)
 	s.hideTimer = time.AfterFunc(2*time.Second, context.Invalidate)
+}
+
+// setPointerInside keeps the overlay visible without widening it for view-level hover.
+func (s *scrollViewState) setPointerInside(context woxwidget.StateContext, inside bool) {
+	if s.pointerInside == inside {
+		return
+	}
+	s.pointerInside = inside
+	s.scheduleHide(context)
+	context.Invalidate()
 }
 
 func (s *scrollViewState) setHovered(context woxwidget.StateContext, hovered bool) {
@@ -282,7 +297,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		if inside {
 			state.show(context)
 		}
-		state.setHovered(context, inside)
+		state.setPointerInside(context, inside)
 	}, OnScrollHandled: func(delta woxui.Point) bool {
 		scrollDelta := woxScrollWheelDelta(props, delta)
 		if scrollDelta == 0 || scrollOffset(props, scrollDelta) == scrollCurrentOffset(props) {

@@ -52,12 +52,33 @@ func TestWoxScrollViewRevealsThumbOnHover(t *testing.T) {
 		t.Fatal("scroll view does not reveal the thumb when the pointer is over child content")
 	}
 	view.OnHover(true)
-	if !state.visible || !state.hovered {
-		t.Fatalf("hovered scroll = visible %v hovered %v, want the shared overlay thumb", state.visible, state.hovered)
+	if !state.visible || !state.pointerInside || state.hovered {
+		t.Fatalf("hovered scroll = visible %v inside %v hovered %v, want a thin overlay thumb", state.visible, state.pointerInside, state.hovered)
 	}
+	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
+	thumb := stack.Children[1].Child.(woxwidget.Gesture)
+	animation := thumb.Child.(woxwidget.AnimatedFloat)
+	widthAnimation := animation.Builder(1).(woxwidget.AnimatedFloat)
+	if animation.Target != 1 || widthAnimation.Target != 3 {
+		t.Fatalf("view hover scrollbar = opacity %.0f width %.0f, want 1/3", animation.Target, widthAnimation.Target)
+	}
+
+	thumb.OnHover(true)
+	stack = state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
+	thumb = stack.Children[1].Child.(woxwidget.Gesture)
+	widthAnimation = thumb.Child.(woxwidget.AnimatedFloat).Builder(1).(woxwidget.AnimatedFloat)
+	if !state.hovered || widthAnimation.Target != 7 {
+		t.Fatalf("scrollbar hover = hovered %v width %.0f, want true/7", state.hovered, widthAnimation.Target)
+	}
+
+	thumb.OnHover(false)
+	if state.hovered || state.hideTimer != nil || !state.pointerInside {
+		t.Fatalf("left scrollbar = hovered %v timer %v inside %v, want a thin visible thumb", state.hovered, state.hideTimer, state.pointerInside)
+	}
+
 	view.OnHover(false)
-	if state.hovered || state.hideTimer == nil {
-		t.Fatalf("left scroll = hovered %v timer %v, want a fade-out after leave", state.hovered, state.hideTimer)
+	if state.pointerInside || state.hideTimer == nil {
+		t.Fatalf("left scroll = inside %v timer %v, want a fade-out after leave", state.pointerInside, state.hideTimer)
 	}
 	state.Dispose()
 }
@@ -76,10 +97,17 @@ func TestWoxScrollViewOpacityFollowsScrollActivity(t *testing.T) {
 	}
 
 	state.visible = true
-	state.hovered = true
 	stack = state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
 	animation = stack.Children[1].Child.(woxwidget.Gesture).Child.(woxwidget.AnimatedFloat)
 	widthAnimation := animation.Builder(0.5).(woxwidget.AnimatedFloat)
+	if animation.Target != 1 || widthAnimation.Target != 3 {
+		t.Fatalf("visible scrollbar = opacity %.0f width %.0f, want 1/3", animation.Target, widthAnimation.Target)
+	}
+
+	state.hovered = true
+	stack = state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
+	animation = stack.Children[1].Child.(woxwidget.Gesture).Child.(woxwidget.AnimatedFloat)
+	widthAnimation = animation.Builder(0.5).(woxwidget.AnimatedFloat)
 	thumb := widthAnimation.Builder(3).(woxwidget.Align).Child.(woxwidget.Container)
 	if animation.Target != 1 || widthAnimation.Target != 7 || thumb.Color.A != 75 {
 		t.Fatalf("active scrollbar = opacity %.0f width %.0f alpha %d, want 1/7/75", animation.Target, widthAnimation.Target, thumb.Color.A)
