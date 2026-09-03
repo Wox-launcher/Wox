@@ -1,11 +1,12 @@
 package woxui
 
 // ProcessGPUMemory reports the graphics memory a driver attributes to this process, split by
-// where it lives. SystemBytes is system memory the driver holds on the GPU's behalf, so it is
-// part of the process footprint. DedicatedBytes lives on the adapter and is not, and it is always
-// zero on a unified memory adapter because such an adapter has no dedicated video memory.
-// Budgets come from the driver and describe how much the process may use before it is asked to
-// release resources.
+// where it lives. SystemBytes is the driver's VidMm / shared-system total. On Windows those
+// pages are kernel-managed and are not part of the process private working set, so callers
+// must list them separately rather than subtracting them from native private memory.
+// DedicatedBytes lives on a discrete adapter and is never part of the process footprint; it
+// is always zero on a unified memory adapter. Budgets come from the driver and describe how
+// much the process may use before it is asked to release resources.
 type ProcessGPUMemory struct {
 	SystemBytes          uint64
 	SystemBudgetBytes    uint64

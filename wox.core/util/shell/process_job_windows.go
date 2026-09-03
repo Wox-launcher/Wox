@@ -82,3 +82,11 @@ func adoptLifetimeBoundCmd(ctx context.Context, cmd *exec.Cmd) error {
 	}
 	return nil
 }
+
+func closeLifetimeBoundJob() {
+	if lifetimeJobHandle == 0 {
+		return
+	}
+	_ = windows.CloseHandle(lifetimeJobHandle)
+	lifetimeJobHandle = 0
+}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 	"wox/util"
+	"wox/util/sqlitememory"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -28,10 +29,13 @@ func NewContentSearchDB(ctx context.Context) (*ContentSearchDB, error) {
 	}
 
 	dbPath := contentSearchDBPath()
+	// Content search is queried much less often than the filename index, so a
+	// smaller page cache keeps hide-path resident memory down without a visible
+	// lookup cost.
 	dsn := dbPath + "?" +
 		"_journal_mode=WAL&" +
 		"_synchronous=NORMAL&" +
-		"_cache_size=-4000&" +
+		"_cache_size=-1000&" +
 		"_foreign_keys=true&" +
 		"_busy_timeout=5000"
 
@@ -48,6 +52,7 @@ func NewContentSearchDB(ctx context.Context) (*ContentSearchDB, error) {
 		db.Close()
 		return nil, err
 	}
+	sqlitememory.Register(db, "contentsearch")
 	return contentDB, nil
 }
 
@@ -75,6 +80,7 @@ func (d *ContentSearchDB) Close() error {
 	if d == nil || d.db == nil {
 		return nil
 	}
+	sqlitememory.Unregister(d.db)
 	return d.db.Close()
 }
 

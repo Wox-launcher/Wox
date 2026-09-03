@@ -24,3 +24,10 @@ func PrepareLifetimeBoundCmd(cmd *exec.Cmd) {
 func AdoptLifetimeBoundCmd(ctx context.Context, cmd *exec.Cmd) error {
 	return adoptLifetimeBoundCmd(ctx, cmd)
 }
+
+// CloseLifetimeBoundJob drops the kill-on-close job handle. On an orderly exit this is what
+// actually asks Windows to terminate every still-bound helper, including ones that ignored a
+// parent kill or a closed stdin pipe.
+func CloseLifetimeBoundJob() {
+	closeLifetimeBoundJob()
+}

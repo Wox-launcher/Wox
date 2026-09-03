@@ -330,21 +330,32 @@ func TestNativeOwnerResultsExplainTheNativeComponent(t *testing.T) {
 	}
 	results := nativeOwnerResults(context.Background(), diagnostics)
 	nativeGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
-	wantNative := []string{"memory.native.gpu", "memory.native.sqlite", "memory.native.unnamed", "memory.native.renderer"}
+	wantNative := []string{"memory.native.unnamed", "memory.native.sqlite", "memory.native.renderer"}
 	if got := resultIDsByGroup(results)[nativeGroup]; !slices.Equal(got, wantNative) {
 		t.Fatalf("native owners = %#v, want %#v sorted by size", got, wantNative)
 	}
-	// Dedicated video memory lives on the adapter, so it must never inflate the driver entry's
-	// share of the native component that the default page reports.
+	gpuGroup := translateMemory(context.Background(), "plugin_wox_memory_gpu_group")
+	if got := resultIDsByGroup(results)[gpuGroup]; !slices.Equal(got, []string{gpuOwnerResultID}) {
+		t.Fatalf("gpu owners = %#v, want the driver listed outside the native bucket", got)
+	}
+	// Dedicated video memory lives on the adapter, so it must never inflate the driver entry.
+	// SystemBytes is also excluded from the native remainder: VidMm pages are kernel-owned.
+	wantUnnamed := nativeComponentBytes(diagnostics) - diagnostics.sqliteBytes - diagnostics.rendererBytes
 	for _, result := range results {
-		if result.Id == "memory.native.gpu" && result.Score != int64(diagnostics.gpu.SystemBytes) {
+		if result.Id == gpuOwnerResultID && result.Score != int64(diagnostics.gpu.SystemBytes) {
 			t.Fatalf("driver entry = %d bytes, want only the %d bytes of system memory", result.Score, diagnostics.gpu.SystemBytes)
 		}
+		if result.Id == "memory.native.unnamed" && result.Score != int64(wantUnnamed) {
+			t.Fatalf("unnamed = %d, want native minus SQLite and renderer (%d) without subtracting GPU", result.Score, wantUnnamed)
+		}
 	}
-	// The breakdown page must account for the whole native component, otherwise the missing part
-	// reads as a measurement error instead of allocation nobody reports.
+	// Native owners plus unnamed must still partition the native component. GPU is informational
+	// and must not be required for that sum to close.
 	var breakdownTotal int64
 	for _, result := range results {
+		if result.Id == gpuOwnerResultID {
+			continue
+		}
 		breakdownTotal += result.Score
 	}
 	if breakdownTotal != int64(nativeComponentBytes(diagnostics)) {

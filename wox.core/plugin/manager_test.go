@@ -381,3 +381,47 @@ func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing
 		t.Fatalf("third result = %#v, want file result under group", results[2])
 	}
 }
+
+func TestTrimHiddenSessionQueryCacheKeepsNewest(t *testing.T) {
+	initPluginImageTestLocation(t)
+	manager := &Manager{
+		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+		lazyResultIcons:         util.NewHashMap[string, *lazyResultIconEntry](),
+	}
+	sessionID := "session-hide"
+	oldSet := newQueryResultSet(Query{Id: "q1", SessionId: sessionID})
+	oldSet.StartedAt = 100
+	oldSet.Results.Store("r1", &QueryResultCache{Result: QueryResult{Id: "r1"}})
+	newSet := newQueryResultSet(Query{Id: "q2", SessionId: sessionID})
+	newSet.StartedAt = 200
+	newSet.Results.Store("r2", &QueryResultCache{Result: QueryResult{Id: "r2"}})
+	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
+	sessionQueries.Store("q1", oldSet)
+	sessionQueries.Store("q2", newSet)
+	manager.sessionQueryResultCache.Store(sessionID, sessionQueries)
+	manager.lazyResultIcons.Store("old-token", &lazyResultIconEntry{SessionId: sessionID, QueryId: "q1"})
+	manager.lazyResultIcons.Store("new-token", &lazyResultIconEntry{SessionId: sessionID, QueryId: "q2"})
+
+	manager.TrimHiddenSessionQueryCache(context.Background(), sessionID)
+
+	if sessionQueries.Len() != 1 {
+		t.Fatalf("cached queries after hide = %d, want 1", sessionQueries.Len())
+	}
+	if _, ok := sessionQueries.Load("q2"); !ok {
+		t.Fatal("newest query must remain after hide")
+	}
+	if _, ok := sessionQueries.Load("q1"); ok {
+		t.Fatal("older query caches must be dropped on hide")
+	}
+	if _, ok := manager.lazyResultIcons.Load("old-token"); ok {
+		t.Fatal("stale lazy icons must be dropped with the old query")
+	}
+	if _, ok := manager.lazyResultIcons.Load("new-token"); !ok {
+		t.Fatal("newest query lazy icons must remain")
+	}
+
+	manager.TrimHiddenSessionQueryCache(context.Background(), sessionID)
+	if sessionQueries.Len() != 1 {
+		t.Fatalf("second hide trim changed the kept query set, len=%d", sessionQueries.Len())
+	}
+}

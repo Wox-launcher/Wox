@@ -13,3 +13,5 @@ import (
 func prepareLifetimeBoundCmd(cmd *exec.Cmd) {}
 
 func adoptLifetimeBoundCmd(ctx context.Context, cmd *exec.Cmd) error { return nil }
+
+func closeLifetimeBoundJob() {}

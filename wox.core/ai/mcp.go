@@ -60,7 +60,13 @@ func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*m
 }
 
 // ResetMCPClients drops cached sessions and tool lists so the next connect uses current settings.
+// The stdio tree is killed first: closing a session only closes stdin of the first process, and
+// a uvx trampoline can leave uv.exe running after that process has already gone.
 func ResetMCPClients() {
+	mcpServerProcesses.Range(func(_ string, pid int) bool {
+		shell.TerminateProcessTree(pid)
+		return true
+	})
 	mcpSessions.Range(func(_ string, session *mcp.ClientSession) bool {
 		if session != nil {
 			_ = session.Close()

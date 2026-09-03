@@ -10,6 +10,7 @@ import (
 	"time"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/sqlitememory"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -81,6 +82,7 @@ func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) 
 		db.Close()
 		return nil, fmt.Errorf("failed to initialize tables: %w", err)
 	}
+	sqlitememory.Register(db, "clipboard")
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("clipboard database initialized at %s with DELETE journal mode enabled", dbPath))
 	return clipboardDB, nil
@@ -445,6 +447,7 @@ func (c *ClipboardDB) GetStats(ctx context.Context) (map[string]int, error) {
 // Close closes the database connection
 func (c *ClipboardDB) Close() error {
 	if c.db != nil {
+		sqlitememory.Unregister(c.db)
 		return c.db.Close()
 	}
 	return nil

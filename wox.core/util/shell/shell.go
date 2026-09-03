@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"wox/util"
 )
 
 // ErrElevationCancelled is returned when the user dismisses the Windows UAC prompt.
@@ -31,6 +32,23 @@ func BuildCommandContext(ctx context.Context, name string, envs []string, arg ..
 	cmd := exec.CommandContext(ctx, name, arg...)
 	applyCommandDefaults(cmd, envs)
 	return cmd
+}
+
+// RunWithEnvLifetimeBound starts a command the same way RunWithEnv does, then binds its process
+// tree to Wox's lifetime so helpers it later spawns cannot outlive the app.
+func RunWithEnvLifetimeBound(ctx context.Context, name string, envs []string, arg ...string) (*exec.Cmd, error) {
+	cmd := BuildCommand(name, envs, arg...)
+	cmd.Stdout = util.GetLogger().GetWriter()
+	cmd.Stderr = util.GetLogger().GetWriter()
+	cmd.Dir = getWorkingDirectory(name)
+	PrepareLifetimeBoundCmd(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	if err := AdoptLifetimeBoundCmd(ctx, cmd); err != nil {
+		return nil, err
+	}
+	return cmd, nil
 }
 
 func applyCommandDefaults(cmd *exec.Cmd, envs []string) {

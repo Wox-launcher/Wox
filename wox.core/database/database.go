@@ -14,6 +14,7 @@ import (
 	"wox/analytics"
 	"wox/util"
 	"wox/util/shell"
+	"wox/util/sqlitememory"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -203,6 +204,7 @@ func Init(ctx context.Context) error {
 		}
 	}
 
+	sqlitememory.Register(sqlDB, "wox")
 	runIntegrityChecks(ctx, sqlDB)
 
 	err = db.AutoMigrate(

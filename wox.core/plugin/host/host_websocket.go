@@ -59,7 +59,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	args = append(args, executableArgs...)
 	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory(), fmt.Sprintf("%d", os.Getpid()))
 
-	cmd, err := shell.RunWithEnv(executablePath, envs, args...)
+	cmd, err := shell.RunWithEnvLifetimeBound(ctx, executablePath, envs, args...)
 	if err != nil {
 		startErr := fmt.Errorf("failed to start host process with %s: %w", executablePath, err)
 		w.setStartState(executablePath, startErr.Error())
@@ -119,12 +119,10 @@ func (w *WebsocketHost) terminateHostProcess(ctx context.Context, process *os.Pr
 	}
 
 	pid := process.Pid
-	killErr := process.Kill()
-	if killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
-		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to kill host process(%d): %s", w.getHostName(ctx), pid, killErr))
-		return
-	}
-	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process(%d)", w.getHostName(ctx), pid))
+	// Kill the host tree, not only the host. A Python plugin that shells out to uv leaves
+	// uv.exe behind if we only TerminateProcess the interpreter.
+	shell.TerminateProcessTree(pid)
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process tree(%d)", w.getHostName(ctx), pid))
 
 	if _, waitErr := process.Wait(); waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
 		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed waiting for host process(%d) to exit: %s", w.getHostName(ctx), pid, waitErr))

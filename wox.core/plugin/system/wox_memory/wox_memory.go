@@ -85,9 +85,10 @@ func migrateLegacyGlanceRef(glance setting.GlanceRef) (setting.GlanceRef, bool) 
 
 // memoryDiagnostics separates three kinds of numbers. The private-page fields are a measured
 // partition of the process private working set. The Go runtime fields describe how the Go part is
-// used internally. The named native owners are measured components of nativeAnonBytes rather than
-// additional memory, which is what lets the plugin explain the native bucket instead of only
-// reporting its size.
+// used internally. SQLite, renderer and OCR counters are measured components of the native
+// bucket rather than additional memory. GPU driver totals are listed separately: Windows reports
+// them as system memory, but those VidMm pages are kernel-owned and must not be subtracted from
+// the native remainder.
 type memoryDiagnostics struct {
 	processBytes uint64
 
@@ -284,9 +285,11 @@ const (
 	processGroupScore     = 1000
 	goComponentGroupScore = 960
 	nativeOwnerGroupScore = 950
+	gpuOwnerGroupScore    = 940
 	externalGroupScore    = 900
 	// Child processes below this size add noise without changing any conclusion.
 	minimumReportedChildBytes = 1 << 20
+	gpuOwnerResultID          = "memory.native.gpu"
 )
 
 // buildMemoryDiagnosticResults reports the default page: a measured partition of the private
@@ -505,16 +508,14 @@ func (p *WoxMemoryPlugin) nativeBreakdownAction(query plugin.Query) plugin.Query
 	}
 }
 
-// nativeOwnerResults names the measured owners inside the anonymous private bucket. Every entry
-// here is already counted in the default page's native component, so this list answers which
-// native component holds the memory rather than adding another total.
+// nativeOwnerResults names the measured owners inside the anonymous private bucket. SQLite,
+// renderer and OCR entries are already counted in the default page's native component. GPU
+// driver totals are listed in their own group and must not shrink the unnamed remainder:
+// Windows VidMm pages are kernel-managed and are not part of the process private working set.
 func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []plugin.QueryResult {
 	group := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
 	var results []plugin.QueryResult
 	if diagnostics.gpu.Available && diagnostics.gpu.SystemBytes+diagnostics.gpu.DedicatedBytes > 0 {
-		// Only the driver's system memory competes for the process footprint, so it is what the
-		// entry is scored and sorted by. Dedicated video memory is called out separately to make
-		// clear it is not part of the native total above.
 		detail := fmt.Sprintf(
 			translateMemory(ctx, "plugin_wox_memory_gpu_detail_unified"),
 			formatMemoryBytes(diagnostics.gpu.SystemBytes),
@@ -530,12 +531,12 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 			)
 		}
 		results = append(results, memoryDiagnosticResult(
-			"memory.native.gpu",
+			gpuOwnerResultID,
 			translateMemory(ctx, "plugin_wox_memory_gpu"),
 			detail,
 			diagnostics.gpu.SystemBytes,
-			group,
-			nativeOwnerGroupScore,
+			translateMemory(ctx, "plugin_wox_memory_gpu_group"),
+			gpuOwnerGroupScore,
 		))
 	}
 	if diagnostics.sqliteBytes > 0 {
@@ -596,10 +597,14 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 }
 
 // unnamedNativeBytes reports the part of the native component that no component counter claims.
-// The claims come from the entries themselves so the entry list always sums to the group total.
+// GPU entries are excluded because driver-attributed system memory is not a subset of the
+// private native bucket.
 func unnamedNativeBytes(named []plugin.QueryResult, diagnostics memoryDiagnostics) uint64 {
 	var claimed uint64
 	for _, result := range named {
+		if result.Id == gpuOwnerResultID {
+			continue
+		}
 		claimed += uint64(result.Score)
 	}
 	return subtractFloor(nativeComponentBytes(diagnostics), claimed)

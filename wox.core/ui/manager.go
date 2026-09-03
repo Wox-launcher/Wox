@@ -43,6 +43,8 @@ import (
 	"wox/util/osvariant"
 	"wox/util/screen"
 	"wox/util/selection"
+	"wox/util/shell"
+	"wox/util/sqlitememory"
 	"wox/util/tray"
 	"wox/util/window"
 
@@ -182,8 +184,8 @@ type GPUMemoryUsage struct {
 }
 
 // GPUMemoryDiagnostics reports what the graphics driver currently attributes to this process.
-// System usage is memory the driver holds for us out of RAM, so it is the part that shows up in
-// the process private working set.
+// System usage is the driver's VidMm / shared-system total. On Windows those pages are
+// kernel-managed and must not be treated as a subset of the process private working set.
 func (m *Manager) GPUMemoryDiagnostics() GPUMemoryUsage {
 	return GPUMemoryUsage(woxui.ProcessGPUMemoryUsage())
 }
@@ -1198,9 +1200,9 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 }
 
 func (m *Manager) PostOnHide(ctx context.Context) {
+	sessionID := util.GetContextSessionId(ctx)
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		sessionID := util.GetContextSessionId(ctx)
 		impl.sessionMu.Lock()
 		if impl.sessionVisible == nil {
 			impl.sessionVisible = map[string]bool{}
@@ -1214,6 +1216,7 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 			impl.isRecordingHotkey = false
 		}
 	}
+	plugin.GetPluginManager().TrimHiddenSessionQueryCache(ctx, sessionID)
 	m.releaseHiddenCoreMemory(ctx)
 }
 
@@ -1226,10 +1229,11 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 			return
 		}
 
-		// Drop process-wide memoization caches before returning heap pages so their
-		// backing memory is included in the release. Both rebuild lazily after show.
+		// Drop process-wide memoization caches and unused SQLite page cache before
+		// returning heap pages so their backing memory is included in the release.
 		fuzzymatch.ReleaseIdleCaches()
 		woxui.ReleaseIdleTextMetricsCache()
+		sqlitememory.ReleaseIdleMemory(ctx)
 		debug.FreeOSMemory()
 	})
 }
@@ -1905,6 +1909,8 @@ func (m *Manager) ExitApp(ctx context.Context) {
 	m.exitOnce.Do(func() {
 		util.GetLogger().Info(ctx, "start quitting")
 		plugin.GetPluginManager().Stop(ctx)
+		ai.ResetMCPClients()
+		shell.CloseLifetimeBoundJob()
 		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
 		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {

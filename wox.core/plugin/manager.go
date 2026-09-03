@@ -2208,6 +2208,54 @@ func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
 	logger.Info(ctx, fmt.Sprintf("cleared plugin session state: %s", sessionId))
 }
 
+// TrimHiddenSessionQueryCache keeps only the newest query result set after hide.
+// Each typed character starts a new query id, so a 32-entry cap would otherwise
+// retain many complete result snapshots (including action closures and icon
+// strings) until the next query starts.
+func (m *Manager) TrimHiddenSessionQueryCache(ctx context.Context, sessionId string) {
+	sessionQueries, ok := m.sessionQueryResultCache.Load(sessionId)
+	if !ok || sessionQueries.Len() <= 1 {
+		return
+	}
+
+	keepQueryId := newestCachedQueryID(sessionQueries)
+	if keepQueryId == "" {
+		return
+	}
+
+	var dropped []string
+	sessionQueries.Range(func(queryId string, _ *QueryResultSet) bool {
+		if queryId != keepQueryId {
+			dropped = append(dropped, queryId)
+		}
+		return true
+	})
+	for _, queryId := range dropped {
+		sessionQueries.Delete(queryId)
+	}
+	m.clearLazyResultIconsForSessionExcept(sessionId, keepQueryId)
+	if len(dropped) > 0 {
+		util.GetLogger().Info(ctx, fmt.Sprintf("trimmed hidden session query cache: session=%s kept=%s dropped=%d", sessionId, keepQueryId, len(dropped)))
+	}
+}
+
+// newestCachedQueryID returns the query id with the latest StartedAt in a session.
+func newestCachedQueryID(sessionQueries *util.HashMap[string, *QueryResultSet]) string {
+	var newestID string
+	var newestAt int64
+	sessionQueries.Range(func(queryId string, set *QueryResultSet) bool {
+		if set == nil {
+			return true
+		}
+		if newestID == "" || set.StartedAt >= newestAt {
+			newestID = queryId
+			newestAt = set.StartedAt
+		}
+		return true
+	})
+	return newestID
+}
+
 func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage) common.WoxImage {
 	return m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, resultId, resultTitle, icon, nil)
 }

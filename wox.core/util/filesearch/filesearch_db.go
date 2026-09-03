@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"wox/util"
+	"wox/util/sqlitememory"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -81,6 +82,7 @@ func NewFileSearchDB(ctx context.Context) (*FileSearchDB, error) {
 		db.Close()
 		return nil, err
 	}
+	sqlitememory.Register(db, "filesearch")
 
 	return fileSearchDB, nil
 }
@@ -89,6 +91,7 @@ func (d *FileSearchDB) Close() error {
 	if d == nil || d.db == nil {
 		return nil
 	}
+	sqlitememory.Unregister(d.db)
 	return d.db.Close()
 }
 

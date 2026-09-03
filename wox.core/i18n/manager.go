@@ -2,35 +2,34 @@ package i18n
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"wox/resource"
 	"wox/util"
-
-	"github.com/tidwall/gjson"
 )
 
 var managerInstance *Manager
 var managerOnce sync.Once
 
 type Manager struct {
-	currentLangCode  LangCode
-	enUsLangJson     string
-	currentLangJson  string
-	currentLangCache *util.HashMap[string, string]
-	enUsCache        *util.HashMap[string, string]
+	mu              sync.RWMutex
+	currentLangCode LangCode
+	// Parsed language tables. The raw JSON is discarded after Unmarshal so the
+	// process does not keep both the source bytes and the lookup map.
+	enUsLang    map[string]string
+	currentLang map[string]string
 }
 
 func GetI18nManager() *Manager {
 	managerOnce.Do(func() {
+		enUsLang, _ := loadLangMap(util.NewTraceContext(), LangCodeEnUs)
 		managerInstance = &Manager{
-			currentLangCode:  LangCodeEnUs,
-			currentLangCache: util.NewHashMap[string, string](),
-			enUsCache:        util.NewHashMap[string, string](),
+			currentLangCode: LangCodeEnUs,
+			enUsLang:        enUsLang,
+			currentLang:     enUsLang,
 		}
-		json, _ := resource.GetLangJson(util.NewTraceContext(), string(LangCodeEnUs))
-		managerInstance.enUsLangJson = string(json)
 	})
 	return managerInstance
 }
@@ -40,74 +39,71 @@ func (m *Manager) UpdateLang(ctx context.Context, langCode LangCode) error {
 		return fmt.Errorf("unsupported lang code: %s", langCode)
 	}
 
-	json, err := m.GetLangJson(ctx, langCode)
+	if langCode == LangCodeEnUs {
+		m.mu.Lock()
+		m.currentLangCode = langCode
+		m.currentLang = m.enUsLang
+		m.mu.Unlock()
+		return nil
+	}
+
+	lang, err := loadLangMap(ctx, langCode)
 	if err != nil {
 		return err
 	}
 
+	m.mu.Lock()
 	m.currentLangCode = langCode
-	m.currentLangJson = json
-	m.currentLangCache.Clear()
+	m.currentLang = lang
+	m.mu.Unlock()
 	return nil
 }
 
 func (m *Manager) GetCurrentLangCode() LangCode {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.currentLangCode
 }
 
 func (m *Manager) GetLangJson(ctx context.Context, langCode LangCode) (string, error) {
-	json, err := resource.GetLangJson(ctx, string(langCode))
+	jsonBytes, err := resource.GetLangJson(ctx, string(langCode))
 	if err != nil {
 		return "", err
 	}
 
-	return string(json), nil
+	return string(jsonBytes), nil
 }
 
-// TranslateWox translates a key using the current language json file.
-// Because this function is hot path, we use cache to improve performance
+// TranslateWox translates a key using the current language table.
 func (m *Manager) TranslateWox(ctx context.Context, key string) string {
 	originKey := key
-
 	key = strings.TrimPrefix(key, "i18n:")
-	if value, ok := m.currentLangCache.Load(key); ok {
-		return value
-	}
-	result := gjson.Get(m.currentLangJson, key)
-	if result.Exists() {
-		value := result.String()
-		m.currentLangCache.Store(key, value)
-		return value
-	}
 
-	// fallback to en_US
-	if value, ok := m.enUsCache.Load(key); ok {
-		return value
-	}
-	enUsResult := gjson.Get(m.enUsLangJson, key)
-	if enUsResult.Exists() {
-		value := enUsResult.String()
-		m.enUsCache.Store(key, value)
-		return value
-	}
+	m.mu.RLock()
+	currentLang := m.currentLang
+	enUsLang := m.enUsLang
+	m.mu.RUnlock()
 
+	if value, ok := currentLang[key]; ok {
+		return value
+	}
+	if value, ok := enUsLang[key]; ok {
+		return value
+	}
 	return originKey
 }
 
 func (m *Manager) TranslateWoxEnUs(ctx context.Context, key string) string {
 	originKey := key
-
 	key = strings.TrimPrefix(key, "i18n:")
-	if value, ok := m.enUsCache.Load(key); ok {
-		return value
-	}
-	enUsResult := gjson.Get(m.enUsLangJson, key)
-	if enUsResult.Exists() {
-		value := enUsResult.String()
-		m.enUsCache.Store(key, value)
-		return value
-	}
 
+	m.mu.RLock()
+	enUsLang := m.enUsLang
+	m.mu.RUnlock()
+
+	if value, ok := enUsLang[key]; ok {
+		return value
+	}
 	return originKey
 }
 
@@ -122,12 +118,12 @@ func (m *Manager) TranslateI18nMap(_ context.Context, key string, pluginI18n map
 	key = strings.TrimPrefix(key, "i18n:")
 
 	// 1. Try current language
-	if translated := m.translateFromInlineI18n(key, string(m.currentLangCode), pluginI18n); translated != "" {
+	if translated := m.translateFromInlineI18n(key, string(m.GetCurrentLangCode()), pluginI18n); translated != "" {
 		return translated
 	}
 
 	// 2. Try en_US fallback
-	if m.currentLangCode != LangCodeEnUs {
+	if m.GetCurrentLangCode() != LangCodeEnUs {
 		if translated := m.translateFromInlineI18n(key, string(LangCodeEnUs), pluginI18n); translated != "" {
 			return translated
 		}
@@ -147,4 +143,20 @@ func (m *Manager) translateFromInlineI18n(key string, langCode string, inlineI18
 		}
 	}
 	return ""
+}
+
+// loadLangMap parses one embedded language file and drops the source JSON.
+func loadLangMap(ctx context.Context, langCode LangCode) (map[string]string, error) {
+	data, err := resource.GetLangJson(ctx, string(langCode))
+	if err != nil {
+		return map[string]string{}, err
+	}
+	var translations map[string]string
+	if err := json.Unmarshal(data, &translations); err != nil {
+		return map[string]string{}, err
+	}
+	if translations == nil {
+		return map[string]string{}, nil
+	}
+	return translations, nil
 }
