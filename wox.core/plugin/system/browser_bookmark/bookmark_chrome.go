@@ -109,6 +109,10 @@ func (c *BrowserBookmarkPlugin) loadBookmarkFromFile(ctx context.Context, bookma
 					icon = cachedIcon
 				}
 
+				// Regex captures share the complete bookmark JSON string unless copied.
+				// Keep only the small fields after this file has been parsed.
+				name = strings.Clone(name)
+				url = strings.Clone(url)
 				results = append(results, Bookmark{
 					Name: name,
 					Url:  url,

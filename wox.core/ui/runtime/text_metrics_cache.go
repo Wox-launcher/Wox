@@ -115,7 +115,7 @@ func ReleaseIdleTextMetricsCache() {
 func (c *textMetricsCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries = make(map[textMetricsCacheKey]*textMetricsCacheEntry, c.capacity)
+	c.entries = make(map[textMetricsCacheKey]*textMetricsCacheEntry)
 	c.head = nil
 	c.tail = nil
 	c.bytes = 0

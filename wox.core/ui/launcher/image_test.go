@@ -44,8 +44,8 @@ func TestEmbeddedAppIconUsesHighResolutionPNG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode embedded app icon: %v", err)
 	}
-	if image.Width < 200 || image.Height < 200 {
-		t.Fatalf("embedded app icon size = %dx%d, want at least 200x200", image.Width, image.Height)
+	if image.Width < 200 || image.Height < 200 || image.Width > 256 || image.Height > 256 {
+		t.Fatalf("embedded app icon size = %dx%d, want both dimensions between 200 and 256", image.Width, image.Height)
 	}
 }
 

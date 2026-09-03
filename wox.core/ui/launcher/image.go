@@ -454,7 +454,7 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 	case "theme":
 		return decodeThemeImage(source.ImageData)
 	case "appicon":
-		return woxui.DecodeImage(bytes.NewReader(resource.GetAppIconPNG()))
+		return woxui.DecodeImageMax(bytes.NewReader(resource.GetAppIconPNG()), max(svgWidth, svgHeight))
 	default:
 		return nil, fmt.Errorf("unsupported Wox image type %q", source.ImageType)
 	}
