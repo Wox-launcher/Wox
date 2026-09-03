@@ -480,7 +480,14 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 	var previousEntries []boundaryIdentityEntry
 	if cache != nil {
 		previousEntries = append([]boundaryIdentityEntry(nil), cache.identityEntries...)
+		// Zero the old entries before truncating. Reslicing alone leaves the removed
+		// tail in the backing array, so a Boundary that shrinks (for example from 50
+		// GIF result rows to a few MRU rows) would keep those rows' nodes, paint
+		// closures, and decoded image frames reachable until a later, larger build
+		// happened to overwrite the slots.
+		clear(cache.identityEntries)
 		cache.identityEntries = cache.identityEntries[:0]
+		clear(cache.nestedOwners)
 		cache.nestedOwners = cache.nestedOwners[:0]
 		collectors = append(collectors, cache)
 	}
