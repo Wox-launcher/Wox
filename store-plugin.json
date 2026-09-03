@@ -936,7 +936,7 @@
     "Id": "d30c9661-fa55-4ea6-b6f1-bc61e7aa8586",
     "Name": "need",
     "Author": "zed",
-    "Version": "0.2.0",
+    "Version": "0.2.1",
     "MinWoxVersion": "2.0.4",
     "Runtime": "nodejs",
     "Description": "Store and quickly retrieve local key-value notes",
@@ -953,7 +953,7 @@
       "Linux"
     ],
     "DateCreated": "2026-08-28 21:27:52",
-    "DateUpdated": "2026-08-29 10:51:00"
+    "DateUpdated": "2026-09-03 09:06:44"
   },
   {
     "Id": "5e693e9d-4683-4982-8929-d4ea5e364c5b",
