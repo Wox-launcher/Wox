@@ -255,6 +255,14 @@ func NewResultHash(pluginId, title, subTitle string) ResultHash {
 	return ResultHash(util.Md5([]byte(fmt.Sprintf("%s%s%s", pluginId, title, subTitle))))
 }
 
+// NewResultHashFromParts resolves the stable result identity used by ranking and favorites.
+func NewResultHashFromParts(pluginId, title, subTitle, scoreKey string) ResultHash {
+	if strings.TrimSpace(scoreKey) != "" {
+		return NewResultHash(pluginId, scoreKey, "")
+	}
+	return NewResultHash(pluginId, title, subTitle)
+}
+
 // NormalizeUiDensity converts missing or stale stored values to normal. The
 // density setting is user-editable, so normalization keeps old config files and
 // manual edits from pushing unsupported sizing states into the launcher.

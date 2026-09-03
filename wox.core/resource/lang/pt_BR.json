@@ -2160,6 +2160,8 @@
   "plugin_manager_pin_in_query": "Fixar na consulta atual",
   "plugin_manager_pin_in_query_success": "Fixado, será priorizado na consulta atual",
   "plugin_manager_unpin_in_query_success": "Desafixado",
+  "plugin_manager_reset_ranking": "Redefinir classificação",
+  "plugin_manager_reset_ranking_success": "Histórico de uso da classificação limpo",
   "plugin_manager_invalid_query_type": "Tipo de consulta inválido",
   "plugin_query_requirement_settings_title": "%s precisa de configuração",
   "plugin_query_requirement_settings_message": "Complete as configurações obrigatórias antes de pesquisar.",

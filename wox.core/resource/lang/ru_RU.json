@@ -2161,6 +2161,8 @@
   "plugin_manager_pin_in_query": "Закрепить в текущем запросе",
   "plugin_manager_pin_in_query_success": "Закреплено, будет приоритетным в текущем запросе",
   "plugin_manager_unpin_in_query_success": "Откреплено",
+  "plugin_manager_reset_ranking": "Сбросить ранжирование",
+  "plugin_manager_reset_ranking_success": "Бонус ранжирования по истории использования сброшен",
   "plugin_manager_invalid_query_type": "Недопустимый тип запроса",
   "plugin_query_requirement_settings_title": "%s требует настройки",
   "plugin_query_requirement_settings_message": "Заполните обязательные настройки перед поиском.",

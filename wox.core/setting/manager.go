@@ -130,6 +130,24 @@ func (m *Manager) AddActionedResultByHash(ctx context.Context, resultHash Result
 	m.woxSetting.ActionedResults.Set(actionedResults)
 }
 
+// HasActionedResults reports whether usage history exists for a result identity.
+func (m *Manager) HasActionedResults(resultHash ResultHash) bool {
+	actionedResults, ok := m.woxSetting.ActionedResults.Get().Load(resultHash)
+	return ok && len(actionedResults) > 0
+}
+
+// ClearActionedResults removes usage history for a result identity.
+func (m *Manager) ClearActionedResults(ctx context.Context, resultHash ResultHash) bool {
+	actionedResults := m.woxSetting.ActionedResults.Get()
+	if _, ok := actionedResults.Load(resultHash); !ok {
+		return false
+	}
+	actionedResults.Delete(resultHash)
+	m.woxSetting.ActionedResults.Set(actionedResults)
+	util.GetLogger().Info(ctx, fmt.Sprintf("clear actioned results: %s", resultHash))
+	return true
+}
+
 func (m *Manager) PinResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
 	util.GetLogger().Info(ctx, fmt.Sprintf("pin result: %s, %s", resultTitle, resultSubTitle))
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)

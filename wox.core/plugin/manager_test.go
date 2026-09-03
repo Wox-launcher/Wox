@@ -425,3 +425,11 @@ func TestTrimHiddenSessionQueryCacheKeepsNewest(t *testing.T) {
 		t.Fatalf("second hide trim changed the kept query set, len=%d", sessionQueries.Len())
 	}
 }
+
+func TestNewResultHashFromPartsPrefersScoreKey(t *testing.T) {
+	byScoreKey := setting.NewResultHashFromParts("plugin-id", "title", "subtitle", "score-key")
+	assert.Equal(t, setting.NewResultHash("plugin-id", "score-key", ""), byScoreKey)
+
+	byTitle := setting.NewResultHashFromParts("plugin-id", "title", "subtitle", "")
+	assert.Equal(t, setting.NewResultHash("plugin-id", "title", "subtitle"), byTitle)
+}

@@ -2396,6 +2396,8 @@
   "plugin_manager_pin_in_query": "현재 쿼리에 고정",
   "plugin_manager_pin_in_query_success": "고정되었습니다. 현재 쿼리에서 우선 표시됩니다",
   "plugin_manager_unpin_in_query_success": "고정 해제됨",
+  "plugin_manager_reset_ranking": "순위 초기화",
+  "plugin_manager_reset_ranking_success": "사용 기록 기반 순위 가산점이 초기화되었습니다",
   "plugin_manager_invalid_query_type": "잘못된 쿼리 유형",
   "plugin_query_requirement_settings_title": "%s에 구성이 필요합니다",
   "plugin_query_requirement_settings_message": "검색하기 전에 필수 설정을 완료하세요.",

@@ -213,6 +213,7 @@ type Manager struct {
 const (
 	systemActionPinInQueryID        = "__system_pin_in_query__"
 	systemActionUnpinInQueryID      = "__system_unpin_in_query__"
+	systemActionResetRankingID      = "__system_reset_ranking__"
 	systemActionOpenPluginSettingID = "__system_open_plugin_setting__"
 )
 
@@ -1646,7 +1647,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		resultTimingStart := time.Now()
 		defaultActionsStart := util.GetSystemTimestamp()
 		defaultActionsTimingStart := time.Now()
-		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle, openPluginSettingAction)
+		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle, response.Results[i].ScoreKey, openPluginSettingAction)
 		defaultActionsCost := util.GetSystemTimestamp() - defaultActionsStart
 		defaultActionsCostUs := time.Since(defaultActionsTimingStart).Microseconds()
 		totalDefaultActionsCost += defaultActionsCost
@@ -1769,18 +1770,20 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	}
 }
 
-func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
-	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, title, subTitle, m.newOpenPluginSettingAction(ctx, pluginInstance))
+func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle, scoreKey string) (defaultActions []QueryResultAction) {
+	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, title, subTitle, scoreKey, m.newOpenPluginSettingAction(ctx, pluginInstance))
 }
 
-func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
+func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle, scoreKey string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
+	resultHash := setting.NewResultHashFromParts(pluginInstance.Metadata.Id, title, subTitle, scoreKey)
+	settingManager := setting.GetSettingManager()
 	// Declare both actions first
 	var addToFavoriteAction func(context.Context, ActionContext)
 	var removeFromFavoriteAction func(context.Context, ActionContext)
 
 	// Define add to favorite action
 	addToFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
-		setting.GetSettingManager().PinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+		settingManager.PinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
 		// Get API instance
 		api := NewAPI(pluginInstance)
@@ -1802,7 +1805,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 
 	// Define remove from favorite action
 	removeFromFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
-		setting.GetSettingManager().UnpinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+		settingManager.UnpinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
 		// Get API instance
 		api := NewAPI(pluginInstance)
@@ -1822,7 +1825,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		api.UpdateResult(ctx, *updatableResult)
 	}
 
-	if setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
+	if settingManager.IsPinedResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
 			Id:                     systemActionUnpinInQueryID,
 			Name:                   "i18n:plugin_manager_unpin_in_query",
@@ -1841,6 +1844,22 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 			Action:                 addToFavoriteAction,
 		})
 	}
+
+	resetRankingAction := func(ctx context.Context, actionContext ActionContext) {
+		settingManager.ClearActionedResults(ctx, resultHash)
+
+		api := NewAPI(pluginInstance)
+		api.Notify(ctx, "i18n:plugin_manager_reset_ranking_success")
+		api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
+	}
+	defaultActions = append(defaultActions, QueryResultAction{
+		Id:                     systemActionResetRankingID,
+		Name:                   "i18n:plugin_manager_reset_ranking",
+		Icon:                   common.RevertRankingIcon,
+		IsSystemAction:         true,
+		PreventHideAfterAction: true,
+		Action:                 resetRankingAction,
+	})
 
 	defaultActions = append(defaultActions, openPluginSettingAction)
 
@@ -2037,11 +2056,7 @@ func limitGlobalQueryPluginScore(query Query, score int64) int64 {
 }
 
 func resultScoreHash(pluginId string, result QueryResult) setting.ResultHash {
-	scoreKey := strings.TrimSpace(result.ScoreKey)
-	if scoreKey != "" {
-		return setting.NewResultHash(pluginId, scoreKey, "")
-	}
-	return setting.NewResultHash(pluginId, result.Title, result.SubTitle)
+	return setting.NewResultHashFromParts(pluginId, result.Title, result.SubTitle, result.ScoreKey)
 }
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, result QueryResult, currentQuery string) int64 {
@@ -3438,7 +3453,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 		// Add system actions (like pin/unpin)
 		// System actions are added after user actions
-		systemActions := m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle)
+		systemActions := m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Result.ScoreKey)
 		actions = append(actions, systemActions...)
 
 		// Translate action names
@@ -4429,7 +4444,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, sessionId string, queryId s
 	})
 
 	util.Go(actionCtx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(actionCtx)), func() {
-		m.postExecuteAction(actionCtx, resultCache, actionCache.ContextData)
+		m.postExecuteAction(actionCtx, resultCache, actionId, actionCache.ContextData)
 	})
 
 	return nil
@@ -4470,17 +4485,19 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 	})
 
 	util.Go(actionCtx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(actionCtx)), func() {
-		m.postExecuteAction(actionCtx, resultCache, actionCache.ContextData)
+		m.postExecuteAction(actionCtx, resultCache, actionId, actionCache.ContextData)
 	})
 
 	return nil
 }
 
-func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, contextData map[string]string) {
-	// Add actioned result for statistics
+func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, actionId string, contextData map[string]string) {
 	meta := resultCache.PluginInstance.Metadata
-	scoreHash := resultScoreHash(meta.Id, resultCache.Result)
-	setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
+	if actionId != systemActionResetRankingID {
+		// Add actioned result for statistics
+		scoreHash := resultScoreHash(meta.Id, resultCache.Result)
+		setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
+	}
 
 	// Add to MRU if plugin supports it
 	if meta.IsSupportFeature(MetadataFeatureMRU) {

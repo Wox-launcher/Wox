@@ -2397,6 +2397,8 @@
   "plugin_manager_pin_in_query": "Pin in current query",
   "plugin_manager_pin_in_query_success": "Pinned, will be prioritized in current query",
   "plugin_manager_unpin_in_query_success": "Unpinned",
+  "plugin_manager_reset_ranking": "Reset ranking",
+  "plugin_manager_reset_ranking_success": "Usage-based ranking boost cleared",
   "plugin_manager_invalid_query_type": "Invalid query type",
   "plugin_query_requirement_settings_title": "%s needs configuration",
   "plugin_query_requirement_settings_message": "Complete the required settings before searching.",
