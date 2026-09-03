@@ -114,6 +114,98 @@ func TestDecodeImageSamplesLongGIFWithoutShorteningPlayback(t *testing.T) {
 	}
 }
 
+func TestGIFRetainedFrameCountBudgetsLargeCanvases(t *testing.T) {
+	cases := []struct {
+		name                  string
+		available             int
+		width, height, expect int
+	}{
+		{name: "icon keeps every sampled frame", available: 64, width: 40, height: 40, expect: gifMaxRetainedFrames},
+		{name: "short animation keeps its own frames", available: 5, width: 40, height: 40, expect: 5},
+		{name: "preview canvas trades frames for bytes", available: 64, width: 1024, height: 1024, expect: 2},
+		{name: "single oversized frame falls back to one", available: 64, width: 4096, height: 4096, expect: 1},
+		{name: "degenerate size keeps the frame cap", available: 64, width: 0, height: 0, expect: gifMaxRetainedFrames},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := gifRetainedFrameCount(testCase.available, testCase.width, testCase.height)
+			if got != testCase.expect {
+				t.Fatalf("retained frames = %d, want %d", got, testCase.expect)
+			}
+		})
+	}
+}
+
+func TestDecodeImageBudgetsLargeGIFWithoutShorteningPlayback(t *testing.T) {
+	frames := make([]*image.Paletted, 4)
+	delays := make([]int, len(frames))
+	for index := range frames {
+		frames[index] = solidPaletted(1024, 1024, color.RGBA{R: uint8(index + 1), A: 255})
+		delays[index] = index%3 + 2
+	}
+	decoded, err := DecodeImage(bytes.NewReader(encodeTestGIF(t, frames, delays)))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// The frame cap would have kept all four frames for 16 MB; the byte budget keeps two.
+	if decoded.FrameCount() != 2 {
+		t.Fatalf("retained frames = %d, want 2", decoded.FrameCount())
+	}
+	if decoded.PixelBytes() > gifMaxRetainedFrameBytes {
+		t.Fatalf("retained bytes = %d, want at most %d", decoded.PixelBytes(), gifMaxRetainedFrameBytes)
+	}
+	var got time.Duration
+	for _, delay := range decoded.FrameDelays() {
+		got += delay
+	}
+	var want time.Duration
+	for _, delay := range delays {
+		want += gifFrameDelay(delay)
+	}
+	if got != want {
+		t.Fatalf("budgeted duration = %v, want %v", got, want)
+	}
+}
+
+func TestDecodeImageKeepsGIFStaticWhenOneFrameExceedsTheBudget(t *testing.T) {
+	encoded := encodeTestGIF(t, []*image.Paletted{
+		solidPaletted(1600, 1600, color.RGBA{R: 255, A: 255}),
+		solidPaletted(1600, 1600, color.RGBA{B: 255, A: 255}),
+	}, []int{10, 10})
+	decoded, err := DecodeImage(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if decoded.IsAnimated() || decoded.FrameCount() != 1 {
+		t.Fatalf("oversized gif animated = %t count = %d, want a static frame", decoded.IsAnimated(), decoded.FrameCount())
+	}
+	if decoded.PixelBytes() != 1600*1600*4 {
+		t.Fatalf("retained bytes = %d, want one frame", decoded.PixelBytes())
+	}
+}
+
+func TestDecodeImageMaxBudgetsFramesAtTheStoredSize(t *testing.T) {
+	frames := make([]*image.Paletted, 8)
+	delays := make([]int, len(frames))
+	for index := range frames {
+		frames[index] = solidPaletted(1024, 1024, color.RGBA{R: uint8(index + 1), A: 255})
+		delays[index] = 5
+	}
+	encoded := encodeTestGIF(t, frames, delays)
+	// Downscaling shrinks the retained frame, so the same source keeps more frames than it would
+	// at full size. This is what makes the budget depend on the requested size, not the file.
+	decoded, err := DecodeImageMax(bytes.NewReader(encoded), 256)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if decoded.Width != 256 || decoded.Height != 256 {
+		t.Fatalf("stored size = %dx%d, want 256x256", decoded.Width, decoded.Height)
+	}
+	if decoded.FrameCount() != len(frames) {
+		t.Fatalf("retained frames = %d, want %d", decoded.FrameCount(), len(frames))
+	}
+}
+
 func encodeTestGIF(t *testing.T, frames []*image.Paletted, delays []int) []byte {
 	t.Helper()
 	if len(frames) == 0 {

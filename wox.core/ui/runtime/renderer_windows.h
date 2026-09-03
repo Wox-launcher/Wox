@@ -9,6 +9,19 @@ extern "C" {
 
 typedef struct WoxRenderer WoxRenderer;
 
+// WoxRendererGpuMemory carries what the graphics driver attributes to this process, already split
+// by where the memory physically lives. System memory the driver holds on our behalf shows up in
+// the process private working set; dedicated video memory does not. A unified memory adapter has
+// no dedicated video memory at all, so its whole footprint counts against the process.
+typedef struct WoxRendererGpuMemory {
+  int64_t system_bytes;
+  int64_t system_budget_bytes;
+  int64_t dedicated_bytes;
+  int64_t dedicated_budget_bytes;
+  int32_t unified_memory;
+} WoxRendererGpuMemory;
+
+int32_t wox_renderer_process_gpu_memory(WoxRendererGpuMemory *memory);
 int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, uint32_t height, int32_t enable_embedded_surface_overlay, int32_t force_warp, WoxRenderer **renderer);
 int32_t wox_renderer_get_diagnostics(WoxRenderer *renderer, char *buffer, uint32_t buffer_size);
 int64_t wox_renderer_resident_bytes(WoxRenderer *renderer);

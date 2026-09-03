@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -19,7 +20,9 @@ import (
 const themeEditorControlPaneHeight = float32(140)
 const themeEditorColorWheelSize = float32(220)
 
-var themeEditorColorWheelImage = buildThemeEditorColorWheelImage()
+// Only the token dialog shows the wheel, but building it at package init kept its 440x440 raster
+// on the Go heap for every session, including the ones that never open the theme editor.
+var themeEditorColorWheelImage = sync.OnceValue(buildThemeEditorColorWheelImage)
 
 // ThemeEditorColorPickerProps contains the live color controls shown in the token dialog.
 type ThemeEditorColorPickerProps struct {
@@ -82,7 +85,7 @@ func themeEditorColorWheel(props ThemeEditorColorPickerProps) woxwidget.Widget {
 		Child: woxwidget.Gesture{
 			ID: "theme-editor-color-wheel-pointer", OnPanStart: setPosition, OnPanUpdate: setPosition,
 			Child: woxwidget.Stack{Width: themeEditorColorWheelSize, Height: themeEditorColorWheelSize, Children: []woxwidget.StackChild{
-				{Child: woxwidget.Image{Source: themeEditorColorWheelImage, Width: themeEditorColorWheelSize, Height: themeEditorColorWheelSize}},
+				{Child: woxwidget.Image{Source: themeEditorColorWheelImage(), Width: themeEditorColorWheelSize, Height: themeEditorColorWheelSize}},
 				{Left: thumbX - 10, Top: thumbY - 10, Child: thumb},
 			}},
 		},

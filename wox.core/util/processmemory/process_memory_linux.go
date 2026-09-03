@@ -12,3 +12,9 @@ func getProcessMemoryBytes(pid int) (uint64, error) {
 func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) {
 	return PrivateWorkingSetBreakdown{}, nil
 }
+
+// Linux hosts WebKitGTK helper processes outside Wox's own subtree, so there is nothing to
+// attribute per child here.
+func listDescendantProcesses(pid int) ([]DescendantProcess, error) {
+	return nil, nil
+}

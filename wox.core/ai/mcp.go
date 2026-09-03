@@ -36,7 +36,7 @@ func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*m
 		if cwd := mcpWorkingDirectory(config); cwd != "" {
 			cmd.Dir = cwd
 		}
-		transport = &mcp.CommandTransport{Command: cmd}
+		transport = &lifetimeBoundCommandTransport{serverName: config.Name, command: cmd}
 	}
 	if config.Type == common.AIChatMCPServerTypeStreamableHTTP {
 		endpoint := interpolateMCPValue(strings.TrimSpace(config.Url))
@@ -70,6 +70,7 @@ func ResetMCPClients() {
 	mcpSessions.Clear()
 	mcpTools.Clear()
 	mcpOAuthTokens.Clear()
+	mcpServerProcesses.Clear()
 }
 
 func rememberMCPToolNames(serverName string, tools []common.MCPTool) {

@@ -8,6 +8,7 @@
 #include <dwrite.h>
 #include <dxgi1_2.h>
 #include <dxgi1_3.h>
+#include <dxgi1_4.h>
 
 #include <algorithm>
 #include <cmath>
@@ -153,6 +154,79 @@ static void release_com(T **value) {
     (*value)->Release();
     *value = nullptr;
   }
+}
+
+// wox_renderer_process_gpu_memory asks the driver what it currently attributes to this process
+// instead of reconstructing a total from the caches we happen to track. DXGI's per-process usage
+// already covers swap chain back buffers, uploaded bitmaps, shader and command buffers, and
+// driver-internal state, which is what the shared Direct3D device retains while any window lives.
+// It reports S_FALSE with zeroed counters when no renderer holds the shared device, so a trimmed
+// hidden process is distinguishable from a query failure.
+extern "C" int32_t wox_renderer_process_gpu_memory(WoxRendererGpuMemory *memory) {
+  if (memory == nullptr) {
+    return E_INVALIDARG;
+  }
+  *memory = {};
+
+  ID3D11Device *device = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(shared_d3d_device_mutex);
+    if (shared_d3d_device == nullptr) {
+      return S_FALSE;
+    }
+    device = shared_d3d_device;
+    device->AddRef();
+  }
+
+  IDXGIDevice *dxgi_device = nullptr;
+  IDXGIAdapter *adapter = nullptr;
+  IDXGIAdapter3 *memory_adapter = nullptr;
+  HRESULT result = device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&dxgi_device));
+  if (SUCCEEDED(result)) {
+    result = dxgi_device->GetAdapter(&adapter);
+  }
+  if (SUCCEEDED(result)) {
+    result = adapter->QueryInterface(__uuidof(IDXGIAdapter3), reinterpret_cast<void **>(&memory_adapter));
+  }
+  if (SUCCEEDED(result)) {
+    // DXGI reports an adapter-local and a non-local segment, but which one is system memory
+    // depends on the adapter. A discrete GPU keeps the local segment in dedicated video memory
+    // and uses the non-local segment for system memory. An integrated GPU carves its local
+    // segment out of system RAM and leaves the non-local segment unused, so reporting its local
+    // usage as video memory would hide it from the process footprint it actually belongs to.
+    D3D11_FEATURE_DATA_D3D11_OPTIONS2 options = {};
+    const bool unified_memory =
+        SUCCEEDED(device->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS2, &options, sizeof(options))) &&
+        options.UnifiedMemoryArchitecture;
+    memory->unified_memory = unified_memory ? 1 : 0;
+
+    DXGI_QUERY_VIDEO_MEMORY_INFO local = {};
+    const bool has_local = SUCCEEDED(memory_adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &local));
+    DXGI_QUERY_VIDEO_MEMORY_INFO non_local = {};
+    const bool has_non_local = SUCCEEDED(memory_adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &non_local));
+
+    if (unified_memory) {
+      if (has_local) {
+        memory->system_bytes = static_cast<int64_t>(local.CurrentUsage);
+        memory->system_budget_bytes = static_cast<int64_t>(local.Budget);
+      }
+    } else {
+      if (has_non_local) {
+        memory->system_bytes = static_cast<int64_t>(non_local.CurrentUsage);
+        memory->system_budget_bytes = static_cast<int64_t>(non_local.Budget);
+      }
+      if (has_local) {
+        memory->dedicated_bytes = static_cast<int64_t>(local.CurrentUsage);
+        memory->dedicated_budget_bytes = static_cast<int64_t>(local.Budget);
+      }
+    }
+  }
+
+  release_com(&memory_adapter);
+  release_com(&adapter);
+  release_com(&dxgi_device);
+  device->Release();
+  return result;
 }
 
 static D2D1_COLOR_F make_color(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {

@@ -38,3 +38,9 @@ func getProcessMemoryBytes(pid int) (uint64, error) {
 func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) {
 	return PrivateWorkingSetBreakdown{}, nil
 }
+
+// macOS embeds WebKit through WKWebView, whose helper processes are owned by the system rather
+// than parented to Wox, so there is no subtree to attribute here.
+func listDescendantProcesses(pid int) ([]DescendantProcess, error) {
+	return nil, nil
+}

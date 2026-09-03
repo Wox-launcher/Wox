@@ -24,6 +24,11 @@ const (
 	gifDefaultDelayCentiseconds = 10
 	// Keep animated search-result grids within the launcher image-cache budget.
 	gifMaxRetainedFrames = 32
+	// Every retained frame is a full uncompressed RGBA raster, so a frame count alone scales with
+	// the square of the requested size: at the 512px preview floor 32 frames cost ~33 MB, which
+	// measured as the single largest consumer of the Go heap. Budget the retained bytes instead so
+	// small icons still keep every frame while large canvases keep proportionally fewer.
+	gifMaxRetainedFrameBytes = 8 << 20
 )
 
 // Image stores immutable packed pixels ready for native GPU upload.
@@ -101,7 +106,8 @@ func decodeAnimatedGIF(reader io.Reader, maxDimension int) (*Image, error) {
 		canvasWidth, canvasHeight = bounds.Dx(), bounds.Dy()
 	}
 	canvas := image.NewRGBA(image.Rect(0, 0, canvasWidth, canvasHeight))
-	frameCount := min(len(decoded.Image), gifMaxRetainedFrames)
+	retainedWidth, retainedHeight := constrainedImageSize(canvasWidth, canvasHeight, maxDimension)
+	frameCount := gifRetainedFrameCount(len(decoded.Image), retainedWidth, retainedHeight)
 	frames := make([]*Image, 0, frameCount)
 	delays := make([]time.Duration, 0, frameCount)
 	var previous *image.RGBA
@@ -163,6 +169,20 @@ func gifFrameDelay(centiseconds int) time.Duration {
 	return time.Duration(centiseconds) * 10 * time.Millisecond
 }
 
+// gifRetainedFrameCount budgets retained frames by the byte cost of the size they are stored at.
+// Dropping frames costs smoothness but not playback length, because retained frames are sampled
+// across the animation and the skipped frames' delays merge into the frame that precedes them. A
+// canvas whose single frame already exceeds the budget keeps one frame and plays back as a static
+// image, so one animation can never retain more than the budget plus a frame.
+func gifRetainedFrameCount(available, width, height int) int {
+	count := min(available, gifMaxRetainedFrames)
+	frameBytes := width * height * 4
+	if frameBytes <= 0 {
+		return count
+	}
+	return max(1, min(count, gifMaxRetainedFrameBytes/frameBytes))
+}
+
 func cloneRGBA(source *image.RGBA) *image.RGBA {
 	if source == nil {
 		return nil
@@ -178,15 +198,23 @@ func constrainDecodedImage(source image.Image, maxDimension int) image.Image {
 		return source
 	}
 	width, height := source.Bounds().Dx(), source.Bounds().Dy()
-	if maxDimension <= 0 || width <= maxDimension && height <= maxDimension {
+	nextWidth, nextHeight := constrainedImageSize(width, height, maxDimension)
+	if nextWidth == width && nextHeight == height {
 		return source
 	}
-	scale := float64(maxDimension) / float64(max(width, height))
-	nextWidth := max(1, int(math.Round(float64(width)*scale)))
-	nextHeight := max(1, int(math.Round(float64(height)*scale)))
 	dst := image.NewRGBA(image.Rect(0, 0, nextWidth, nextHeight))
 	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), source, source.Bounds(), xdraw.Src, nil)
 	return dst
+}
+
+// constrainedImageSize reports the size constrainDecodedImage stores a raster at, so frame budgets
+// can be computed from the retained size before any frame is decoded.
+func constrainedImageSize(width, height, maxDimension int) (int, int) {
+	if maxDimension <= 0 || width <= maxDimension && height <= maxDimension {
+		return width, height
+	}
+	scale := float64(maxDimension) / float64(max(width, height))
+	return max(1, int(math.Round(float64(width)*scale))), max(1, int(math.Round(float64(height)*scale)))
 }
 
 // NewImage copies a Go image into tightly packed, top-down premultiplied RGBA pixels.

@@ -169,6 +169,25 @@ func (m *Manager) MemoryDiagnostics() (decodedImageBytes, rendererBytes uint64) 
 	return decodedImageBytes, rendererBytes
 }
 
+// GPUMemoryUsage describes graphics memory the driver attributes to the Wox process. It mirrors
+// the runtime layer's type so plugins can read renderer diagnostics without depending on the
+// native UI runtime package.
+type GPUMemoryUsage struct {
+	SystemBytes          uint64
+	SystemBudgetBytes    uint64
+	DedicatedBytes       uint64
+	DedicatedBudgetBytes uint64
+	UnifiedMemory        bool
+	Available            bool
+}
+
+// GPUMemoryDiagnostics reports what the graphics driver currently attributes to this process.
+// System usage is memory the driver holds for us out of RAM, so it is the part that shows up in
+// the process private working set.
+func (m *Manager) GPUMemoryDiagnostics() GPUMemoryUsage {
+	return GPUMemoryUsage(woxui.ProcessGPUMemoryUsage())
+}
+
 // RegisterView adds one secondary launcher without changing the primary command target.
 func (m *Manager) RegisterView(view contract.View) {
 	if view == nil || view.SessionID() == "" {
