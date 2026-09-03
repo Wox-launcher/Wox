@@ -13,6 +13,10 @@ on:
       - "wox.core/test/automationdriver/**"
       - "wox.core/test/smoke/**"
       - "wox.core/test/smokerunner/**"
+      - "wox.plugin.host.nodejs/**"
+      - "wox.plugin.host.python/**"
+      - "wox.plugin.nodejs/**"
+      - "wox.plugin.python/**"
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:
@@ -103,6 +107,26 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: false
+      # Host binaries are gitignored and embedded into the smoke build, so CI
+      # must produce python-host.pyz and node-host.js before make smoke.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: false
+      - name: Build plugin hosts
+        run: make host
       - name: Run native smoke
         env:
           GO_UI_SMOKE_RUNNER: xvfb-run -a
@@ -173,6 +197,27 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: false
+      # Host binaries are gitignored and embedded into the smoke build, so CI
+      # must produce python-host.pyz and node-host.js before make smoke.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: false
+      - name: Build plugin hosts
+        shell: bash
+        run: make host
       - name: Run native smoke
         shell: bash
         env:
