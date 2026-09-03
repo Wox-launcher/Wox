@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-import importlib.util
 from types import ModuleType
 from typing import Dict
 
@@ -39,13 +38,16 @@ def assert_entry_within_directory(entry_path: str, directory: str) -> str:
 def load_single_file_module(plugin_id: str, plugin_directory: str, entry: str) -> tuple[ModuleType, str]:
     module_path = assert_entry_within_directory(os.path.join(plugin_directory, entry), plugin_directory)
     module_name = next_single_file_module_name(plugin_id)
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"failed to create module spec for {module_path}")
-    module = importlib.util.module_from_spec(spec)
+    # Exec the current source instead of importlib's file loader. A same-size
+    # overwrite can keep the previous mtime on Windows (1s resolution), and
+    # SourceFileLoader would then reuse stale __pycache__ bytecode.
+    with open(module_path, encoding="utf-8") as source_file:
+        source = source_file.read()
+    module = ModuleType(module_name)
+    module.__file__ = module_path
     sys.modules[module_name] = module
     try:
-        spec.loader.exec_module(module)
+        exec(compile(source, module_path, "exec"), module.__dict__)
         if not hasattr(module, "plugin") or getattr(module, "plugin") is None:
             raise AttributeError("Plugin module does not have a 'plugin' attribute")
     except Exception:

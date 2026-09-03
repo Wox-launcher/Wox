@@ -50,6 +50,21 @@ class SingleFileLoaderTests(unittest.TestCase):
             self.assertIn(module_name, sys.modules)
             sys.modules.pop(module_name, None)
 
+    def test_reload_same_size_same_mtime_reads_new_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "plugin.py"
+            path.write_text('title = "v1"\n\nclass P:\n    pass\n\nplugin = P()\nplugin.title = title\n', encoding="utf-8")
+            first, first_name = self.helpers.load_single_file_module("reload", directory, "plugin.py")
+            self.assertEqual(first.plugin.title, "v1")
+
+            mtime = path.stat().st_mtime
+            path.write_text('title = "v2"\n\nclass P:\n    pass\n\nplugin = P()\nplugin.title = title\n', encoding="utf-8")
+            os.utime(path, (mtime, mtime))
+            second, second_name = self.helpers.load_single_file_module("reload", directory, "plugin.py")
+            self.assertEqual(second.plugin.title, "v2")
+            sys.modules.pop(first_name, None)
+            sys.modules.pop(second_name, None)
+
 
 if __name__ == "__main__":
     unittest.main()
