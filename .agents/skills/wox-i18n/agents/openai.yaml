@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox I18n"
+  short_description: "Add or complete Wox language translations"
+  default_prompt: "Use $wox-i18n to add a new Wox language or complete an existing translation."
