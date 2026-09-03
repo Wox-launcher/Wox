@@ -19,9 +19,9 @@ _Bool hasClipboardChanged() {
 int GetClipboardContentType() {
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
 
-    // Check for file URLs first (highest priority)
-    NSArray *fileClasses = [NSArray arrayWithObject:[NSURL class]];
-    if ([pasteboard canReadObjectForClasses:fileClasses options:nil]) {
+    // Remote URLs such as Safari address-bar copies are also readable as NSURL.
+    // Restrict this branch to file URLs so their accompanying text stays text.
+    if ([pasteboard availableTypeFromArray:@[NSPasteboardTypeFileURL]] != nil) {
         return 3;
     }
 
@@ -60,9 +60,9 @@ char* GetAllClipboardFilePaths() {
     @try {
         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
         NSArray *classArray = [NSArray arrayWithObject:[NSURL class]];
-        NSDictionary *options = [NSDictionary dictionary];
+        NSDictionary *options = @{NSPasteboardURLReadingFileURLsOnlyKey: @YES};
 
-        if (![pasteboard canReadObjectForClasses:classArray options:options]) {
+        if ([pasteboard availableTypeFromArray:@[NSPasteboardTypeFileURL]] == nil) {
             return NULL; // No file in clipboard
         }
 
