@@ -586,9 +586,9 @@ func TestFormTableDeleteRequiresDialogConfirmation(t *testing.T) {
 	}
 }
 
-func TestDirectFormTableDeleteMarksDialogWithoutMutatingRows(t *testing.T) {
+func TestDirectFormTableDeleteRemovesRowImmediately(t *testing.T) {
 	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "Commands"}}
-	target := newFormFieldsState([]formDefinition{definition}, map[string]string{"Commands": `[{"Name":"First"}]`}, true)
+	target := newFormFieldsState([]formDefinition{definition}, map[string]string{"Commands": `[{"Name":"First"},{"Name":"Second"}]`}, true)
 	deps := CommonDeps{}
 	hotkeys := newHotkeySettingsController(deps)
 	hotkeys.SetForm(&target)
@@ -598,27 +598,21 @@ func TestDirectFormTableDeleteMarksDialogWithoutMutatingRows(t *testing.T) {
 		aiSettings:     newAISettingsController(deps),
 		pluginSettings: newPluginSettingsController(deps),
 		hotkeySettings: hotkeys,
+		services:       &skillAddTestServices{},
+		lifecycleCtx:   context.Background(),
 		settingsTableEditor: &formTableEditorState{
 			target: &target, definition: definition,
-			rows: []map[string]any{{"Name": "First"}}, selected: 0, rowIndex: -1, deletePending: -1,
+			rows: []map[string]any{{"Name": "First"}, {"Name": "Second"}}, selected: 0, rowIndex: -1, deletePending: -1,
 		},
 	}
 
 	app.beginDeleteFormTableRowDirect()
 
-	if app.settingsTableEditor.deletePending != 0 || !app.settingsTableEditor.deleteDirect {
-		t.Fatalf("direct delete state = pending %d, direct %v", app.settingsTableEditor.deletePending, app.settingsTableEditor.deleteDirect)
-	}
-	if len(app.settingsTableEditor.rows) != 1 {
-		t.Fatal("direct delete must wait for confirmation")
-	}
-
-	app.cancelFormTableRowDelete()
 	if app.settingsTableEditor != nil {
-		t.Fatal("canceling a direct delete should return to the settings page")
+		t.Fatal("direct delete should close the overlay after removing the row")
 	}
-	if value := target.values["Commands"]; value != `[{"Name":"First"}]` {
-		t.Fatalf("canceling direct delete changed the table to %s", value)
+	if value := target.values["Commands"]; value != `[{"Name":"Second"}]` {
+		t.Fatalf("direct delete persisted %s, want only Second", value)
 	}
 }
 
@@ -671,19 +665,19 @@ func TestAISkillsDirectDeleteAllowsReadOnlyDiscoveredSkill(t *testing.T) {
 		aiSettings:     ai,
 		pluginSettings: newPluginSettingsController(deps),
 		hotkeySettings: newHotkeySettingsController(deps),
+		services:       &skillAddTestServices{},
+		lifecycleCtx:   context.Background(),
 	}
 
 	app.openFormTableLocked(&aiForm, 0)
 	app.selectFormTableRow(0)
 	app.beginDeleteFormTableRowDirect()
 
-	if app.settingsTableEditor == nil {
-		t.Fatal("expected the table editor to be open")
+	if app.settingsTableEditor != nil {
+		t.Fatal("discovered skill delete should close the overlay after removal")
 	}
-	// A discovered skill marked ReadOnly but not Builtin is removable, matching the
-	// Flutter skills table. The direct delete opens only the confirmation dialog.
-	if app.settingsTableEditor.deletePending != 0 || !app.settingsTableEditor.deleteDirect {
-		t.Fatalf("read-only discovered skill direct delete = pending %d, direct %v, want pending 0 direct true", app.settingsTableEditor.deletePending, app.settingsTableEditor.deleteDirect)
+	if value := aiForm.values["AISkills"]; value != `[]` {
+		t.Fatalf("discovered skill table = %s, want an empty table after delete", value)
 	}
 }
 
@@ -710,18 +704,20 @@ func TestAISkillsDirectDeleteBlocksBuiltinRow(t *testing.T) {
 	app.selectFormTableRow(0)
 	app.beginDeleteFormTableRowDirect()
 
-	// A built-in skill must not start a delete. With no deletePending the editor
-	// would render as a row list, so the inline delete path guards read-only rows
-	// before opening the table at all.
+	// A built-in skill must not start a delete. The inline path guards these
+	// rows before mutating the table.
 	if app.settingsTableEditor == nil {
 		t.Fatal("expected the table editor to be open")
 	}
 	if app.settingsTableEditor.deletePending >= 0 || app.settingsTableEditor.deleteDirect {
 		t.Fatalf("built-in skill direct delete = pending %d, direct %v, want no delete started", app.settingsTableEditor.deletePending, app.settingsTableEditor.deleteDirect)
 	}
+	if value := aiForm.values["AISkills"]; value != `[{"Name":"BuiltinSkill","Source":"local","ReadOnly":true,"Builtin":true}]` {
+		t.Fatalf("built-in skill table = %s, want the row preserved", value)
+	}
 }
 
-func TestAISkillsDirectDeleteRendersConfirmationNotList(t *testing.T) {
+func TestAISkillsDirectDeleteDoesNotRenderOverlay(t *testing.T) {
 	definition := formDefinition{Type: "table", Value: formDefinitionValue{
 		Key: "AISkills", SortColumnKey: "Name", InlineTable: true,
 		Columns: []formTableColumn{{Key: "Name", Label: "Name", Width: 200, Type: "text"}, {Key: "Source", Label: "Source", Width: 100, Type: "aiSkillSource"}},
@@ -735,6 +731,7 @@ func TestAISkillsDirectDeleteRendersConfirmationNotList(t *testing.T) {
 	app := &App{
 		settingsOpen: true, settingTab: "ai", aiSettings: ai,
 		pluginSettings: newPluginSettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+		services: &skillAddTestServices{}, lifecycleCtx: context.Background(),
 		images: map[string]*woxui.Image{}, imageRequested: map[string]string{}, imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
 	}
 
@@ -742,18 +739,10 @@ func TestAISkillsDirectDeleteRendersConfirmationNotList(t *testing.T) {
 	app.selectFormTableRow(0)
 	app.beginDeleteFormTableRowDirect()
 
-	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), uiPalette{}, 900, 700, 1)
-	})
-	host.AttachServices(formTableHostServices{})
-	displayList := woxui.DisplayList{}
-	frame := woxui.FrameInfo{Size: woxui.Size{Width: 900, Height: 700}, PixelSize: woxui.PixelSize{Width: 900, Height: 700}, Scale: 1}
-	host.Frame(&displayList, frame)
-
-	if _, ok := host.BoundsForKey("form-table-delete-confirm"); !ok {
-		t.Fatal("direct delete must render the delete confirmation, not the row list")
+	if app.settingsTableEditor != nil {
+		t.Fatal("direct delete must close the overlay instead of showing a confirmation dialog")
 	}
-	if _, ok := host.BoundsForKey("form-table-row-0"); ok {
-		t.Fatal("direct delete must not render the row list behind the confirmation")
+	if value := aiForm.values["AISkills"]; value != `[]` {
+		t.Fatalf("discovered skill table = %s, want an empty table after delete", value)
 	}
 }

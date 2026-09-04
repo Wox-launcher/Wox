@@ -189,13 +189,23 @@ func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	return woxIcon, nil
 }
 
+// GetPasteToActiveWindowAction builds a paste action for the captured foreground
+// window. A PID is enough when the window title has not been resolved yet.
 func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowName string, windowPid int, windowIcon common.WoxImage, actionCallback func(context.Context) error) (plugin.QueryResultAction, error) {
 	if windowName == "" {
+		windowName = window.GetWindowNameByPid(windowPid)
+	}
+	if windowName == "" && windowPid <= 0 {
 		return plugin.QueryResultAction{}, fmt.Errorf("no active window")
 	}
 
+	actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_paste")
+	if windowName != "" {
+		actionName = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), windowName)
+	}
+
 	action := plugin.QueryResultAction{
-		Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), windowName),
+		Name:      actionName,
 		IsDefault: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if actionCallback != nil {

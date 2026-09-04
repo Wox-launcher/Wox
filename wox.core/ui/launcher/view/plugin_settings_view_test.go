@@ -863,8 +863,8 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 	if len(actions.Children) != 2 {
 		t.Fatalf("skills operation count = %d, want delete and open-folder", len(actions.Children))
 	}
-	deleteButton := actions.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-	openButton := actions.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	deleteButton := formTableOperationIconButton(actions.Children[0])
+	openButton := formTableOperationIconButton(actions.Children[1])
 	if !deleteButton.Disabled || deleteButton.OnTap != nil {
 		t.Fatal("read-only skill delete action should be disabled")
 	}
@@ -903,7 +903,7 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 	icon := &woxui.Image{}
 	props := FormTableFieldProps{
 		ID: "commands", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
-		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}, ErrorText: woxui.Color{R: 210, A: 255}},
 	}
 	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130, false).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
@@ -911,11 +911,11 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 		t.Fatalf("operation action count = %d, want edit, clone, and delete", len(actions.Children))
 	}
 	for index, action := range actions.Children {
-		button := action.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-		if button.Width != 26 || button.Height != 24 || button.HoverBackground.A == 0 {
-			t.Fatalf("operation action %d = %+v, want hoverable 26x24 icon button", index, button)
+		button := formTableOperationIconButton(action)
+		if button.Width != woxcomponent.SettingsCompactControlHeight || button.Height != woxcomponent.SettingsCompactControlHeight || button.HoverBackground.A == 0 {
+			t.Fatalf("operation action %d = %+v, want hoverable compact icon button", index, button)
 		}
-		if button.OnHoverAt != nil {
+		if index < 2 && button.OnHoverAt != nil {
 			t.Fatalf("operation action %d unexpectedly exposes a tooltip hover callback", index)
 		}
 	}

@@ -22,7 +22,7 @@ func TestReadonlyFormTableRowDisablesOperationActions(t *testing.T) {
 		t.Fatalf("readonly operation count = %d, want the same edit, clone, and delete buttons", len(actions.Children))
 	}
 	for index, action := range actions.Children {
-		button := action.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		button := formTableOperationIconButton(action)
 		glyph, _ := button.Icon.(woxwidget.Image)
 		if !button.Disabled || button.OnTap != nil || button.HoverBackground.A != 0 || glyph.Source != disabledIcon {
 			t.Fatalf("readonly action %d = %+v, want a visible faded disabled icon button", index, button)

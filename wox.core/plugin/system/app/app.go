@@ -217,6 +217,7 @@ type ApplicationPlugin struct {
 	queryEntriesGeneration uint64
 	querySessionCache      *util.HashMap[string, appQuerySessionCache]
 	ignoreMatchers         []appIgnoreMatcher
+	ignoredApps            []ignoredApp
 
 	// Track results that need periodic refresh (running apps with CPU/memory stats)
 	trackedResults *util.HashMap[string, appInfo] // resultId -> appInfo
@@ -285,21 +286,38 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
-					Key:     "IgnoreRules",
-					Title:   "i18n:plugin_app_ignore_rules",
-					Tooltip: "i18n:plugin_app_ignore_rules_tooltip",
+					Key:             ignoreRulesSettingKey,
+					Title:           "i18n:plugin_app_ignore_rules",
+					Tooltip:         "i18n:plugin_app_ignore_rules_tooltip",
+					EnableSearch:    true,
+					SearchColumnKey: "Pattern",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
-							Key:     "Pattern",
-							Label:   "i18n:plugin_app_ignore_rule_pattern",
-							Tooltip: "i18n:plugin_app_ignore_rule_pattern_tooltip",
-							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Key:                "Pattern",
+							Label:              "i18n:plugin_app_ignore_rule_pattern",
+							Tooltip:            "i18n:plugin_app_ignore_rule_pattern_tooltip",
+							Type:               definition.PluginSettingValueTableColumnTypeText,
+							Width:              160,
+							PreviewMatchedApps: true,
 							Validators: []validator.PluginSettingValidator{
 								{
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
 							},
+						},
+						{
+							Key:         "IncludeFuture",
+							Label:       "i18n:plugin_app_ignore_rule_include_future",
+							Tooltip:     "i18n:plugin_app_ignore_rule_include_future_tooltip",
+							Type:        definition.PluginSettingValueTableColumnTypeCheckbox,
+							HideInTable: true,
+						},
+						{
+							Key:          "Apps",
+							Label:        "i18n:plugin_app_ignore_rule_apps",
+							Type:         definition.PluginSettingValueTableColumnTypeIgnoredApps,
+							HideInUpdate: true,
 						},
 					},
 				},
@@ -355,9 +373,10 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 			})
 			return
 		}
-		if key == "IgnoreRules" {
+		if key == ignoreRulesSettingKey {
 			a.rebuildIgnoreRuleMatchers(callbackCtx)
 			a.rebuildQueryEntries(callbackCtx)
+			return
 		}
 	})
 
@@ -880,6 +899,15 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error copying app path: %s", err.Error()))
 				a.api.Notify(ctx, err.Error())
 			}
+		},
+	})
+
+	actions = append(actions, plugin.QueryResultAction{
+		Name:        "i18n:plugin_app_hide",
+		Icon:        common.HideAppIcon,
+		ContextData: contextData,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			a.hideAppFromSearch(ctx, info, displayName)
 		},
 	})
 
@@ -1781,9 +1809,13 @@ func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
 	// search text, so filter them once here instead of on every query.
 	entries := make([]appQueryEntry, 0, len(a.apps))
 	ignoreMatchers := a.getIgnoreRuleMatchersSnapshot()
+	ignoredApps := a.getIgnoredAppsSnapshot()
 	for _, info := range a.apps {
 		entry := a.buildQueryEntry(ctx, info)
 		if _, ignored := a.matchIgnoreRuleCandidates(entry.ignoreCandidates, ignoreMatchers); ignored {
+			continue
+		}
+		if isIgnoredApp(info, ignoredApps) {
 			continue
 		}
 		entries = append(entries, entry)
@@ -2129,6 +2161,9 @@ func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin
 	if appInfo == nil {
 		return nil, fmt.Errorf("app not found: %s", contextData.Name)
 	}
+	if isIgnoredApp(*appInfo, a.getIgnoredAppsSnapshot()) {
+		return nil, fmt.Errorf("app is hidden: %s", contextData.Name)
+	}
 
 	displayName := appInfo.Name
 	if strings.HasPrefix(displayName, "i18n:") {
@@ -2311,6 +2346,26 @@ func GetHotkeyAppCandidates(ctx context.Context) []setting.IgnoredHotkeyApp {
 	return []setting.IgnoredHotkeyApp{}
 }
 
+// GetIndexedApps returns indexed apps matching the ignore pattern, including
+// distinct shortcuts that launch the same executable.
+func GetIndexedApps(ctx context.Context, pattern string) []setting.IgnoredHotkeyApp {
+	manager := plugin.GetPluginManager()
+	if manager == nil {
+		return []setting.IgnoredHotkeyApp{}
+	}
+
+	for _, instance := range manager.GetPluginInstances() {
+		appPlugin, ok := instance.Plugin.(*ApplicationPlugin)
+		if !ok {
+			continue
+		}
+
+		return appPlugin.indexedAppsForPreview(ctx, pattern)
+	}
+
+	return []setting.IgnoredHotkeyApp{}
+}
+
 func GetUsageAppIcons(ctx context.Context, usageSubjectIds []string) map[string]common.WoxImage {
 	manager := plugin.GetPluginManager()
 	if manager == nil || len(usageSubjectIds) == 0 {
@@ -2440,4 +2495,63 @@ func (a *ApplicationPlugin) toIgnoredHotkeyApp(info appInfo) (setting.IgnoredHot
 		Path:     info.Path,
 		Icon:     icon,
 	}, true
+}
+
+// indexedAppsForPreview uses the same candidates as filtering and retains distinct paths.
+func (a *ApplicationPlugin) indexedAppsForPreview(ctx context.Context, pattern string) []setting.IgnoredHotkeyApp {
+	compiled, err := compileAppIgnorePattern(pattern)
+	if err != nil {
+		return nil
+	}
+	apps := make([]setting.IgnoredHotkeyApp, 0, len(a.apps))
+	seen := make(map[string]bool, len(a.apps))
+	for _, info := range a.apps {
+		key := ignoredAppMatchKey(info.Path, info.Identity)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		name := strings.TrimSpace(info.Name)
+		if strings.HasPrefix(name, "i18n:") && a.api != nil {
+			name = strings.TrimSpace(a.api.GetTranslation(ctx, name))
+		}
+		if name == "" {
+			name = strings.TrimSpace(info.Path)
+		}
+		if name == "" {
+			name = strings.TrimSpace(info.Identity)
+		}
+
+		matched := false
+		for _, candidate := range buildIgnoreRuleCandidates(info, name) {
+			if compiled.MatchString(candidate) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		icon := info.Icon
+		if icon.IsEmpty() {
+			icon = common.PluginAppIcon
+		}
+		apps = append(apps, setting.IgnoredHotkeyApp{
+			Name:     name,
+			Identity: strings.TrimSpace(info.Identity),
+			Path:     strings.TrimSpace(info.Path),
+			Icon:     icon,
+		})
+	}
+
+	sort.Slice(apps, func(i, j int) bool {
+		leftName := strings.ToLower(apps[i].Name)
+		rightName := strings.ToLower(apps[j].Name)
+		if leftName == rightName {
+			return strings.ToLower(apps[i].Path) < strings.ToLower(apps[j].Path)
+		}
+		return leftName < rightName
+	})
+	return apps
 }

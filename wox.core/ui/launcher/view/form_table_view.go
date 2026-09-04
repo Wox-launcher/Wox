@@ -31,13 +31,23 @@ var formTableMarkdownLinkPattern = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
 
 // FormTableColumn describes one visible inline table column.
 type FormTableColumn struct {
+	Key     string
 	Label   string
 	Tooltip string
 	Width   float32
 }
 
+// FormTableCellIcon describes one image and its hover text in an icon collection.
+type FormTableCellIcon struct {
+	Source  *woxui.Image
+	Tooltip string
+}
+
 // FormTableCell contains one prepared inline table value.
 type FormTableCell struct {
+	Icons          []FormTableCellIcon
+	IconOverflow   int
+	SearchText     string
 	Text           string
 	Tooltip        string
 	Icon           *woxui.Image
@@ -64,26 +74,32 @@ type FormTableRow struct {
 
 // FormTableFieldProps contains the full inline table presentation and actions.
 type FormTableFieldProps struct {
-	ID                 string
-	Title              string
-	Description        string
-	Width              float32
-	Height             float32
-	LabelWidth         float32
-	MaxHeight          int
-	InlineTitle        bool
-	ReadOnly           bool
-	Invalid            bool
-	Disabled           bool
-	Columns            []FormTableColumn
-	Rows               []FormTableRow
-	SecondaryLabel     string
-	HideEditAction     bool
-	HideCloneAction    bool
-	AddLabel           string
-	EditLabel          string
-	CloneLabel         string
-	DeleteLabel        string
+	StateKey        string
+	SearchColumnKey string
+	UsePinYin       bool
+	NoMatchesLabel  string
+	ID              string
+	Title           string
+	Description     string
+	Width           float32
+	Height          float32
+	LabelWidth      float32
+	MaxHeight       int
+	InlineTitle     bool
+	ReadOnly        bool
+	Invalid         bool
+	Disabled        bool
+	Columns         []FormTableColumn
+	Rows            []FormTableRow
+	SecondaryLabel  string
+	HideEditAction  bool
+	HideCloneAction bool
+	AddLabel        string
+	EditLabel       string
+	CloneLabel      string
+	DeleteLabel     string
+	// ConfirmDeleteLabel describes the destructive second activation for assistive technology.
+	ConfirmDeleteLabel string
 	OperationLabel     string
 	EmptyLabel         string
 	InfoIcon           *woxui.Image
@@ -101,15 +117,29 @@ type FormTableFieldProps struct {
 	// HeaderWeight styles the field title above the table. Column titles stay
 	// regular. Zero keeps regular body weight for plugin tables; Wox-owned
 	// Settings tables pass FontWeightSemibold.
-	HeaderWeight woxui.FontWeight
-	Theme        woxcomponent.Theme
-	OnSecondary  func()
-	OnAdd        func()
-	OnOpenRow    func(int)
-	OnCloneRow   func(int)
-	OnDeleteRow  func(int)
-	OnTooltip    func(bool, string, woxui.Rect)
-	OnDemoHover  func(string, bool, woxui.Rect)
+	HeaderWeight        woxui.FontWeight
+	Theme               woxcomponent.Theme
+	OnSecondary         func()
+	OnAdd               func()
+	OnOpenRow           func(int)
+	OnCloneRow          func(int)
+	OnDeleteRow         func(int)
+	OnTooltip           func(bool, string, woxui.Rect)
+	OnDemoHover         func(string, bool, woxui.Rect)
+	EnableSearch        bool
+	SearchOpen          bool
+	SearchQuery         string
+	SearchFocused       bool
+	SearchLabel         string
+	SearchPlaceholder   string
+	SearchIcon          *woxui.Image
+	SearchWindow        *woxui.Window
+	OnToggleSearch      func()
+	OnSearchChanged     func(string)
+	OnSearchSetValue    func(string) error
+	OnSearchClear       func()
+	OnSearchFocusChange func(bool)
+	OnSearchKey         func(woxui.KeyEvent) bool
 }
 
 // FormTableFieldHeight returns the content height used by form scrolling and rendering.
@@ -143,12 +173,15 @@ func formTableGridHeight(rowCount, maximumHeight int) float32 {
 }
 
 // FormTableField builds the Flutter-parity title, action, grid, and empty state.
-func FormTableField(props FormTableFieldProps) woxwidget.Widget {
+func formTableField(props FormTableFieldProps) woxwidget.Widget {
 	gridHeight := formTableGridHeight(len(props.Rows), props.MaxHeight)
 	if props.InlineTitle {
-		children := make([]woxwidget.Widget, 0, 2)
-		if props.Title != "" || props.Description != "" || props.SecondaryLabel != "" || !props.ReadOnly {
+		children := make([]woxwidget.Widget, 0, 3)
+		if props.Title != "" || props.Description != "" || props.SecondaryLabel != "" || !props.ReadOnly || props.EnableSearch {
 			children = append(children, formTableInlineHeader(props, props.Width))
+		}
+		if props.EnableSearch && props.SearchOpen {
+			children = append(children, formTableSearchField(props, props.Width))
 		}
 		children = append(children, formTableGrid(props, props.Width, gridHeight))
 		padding := woxwidget.Insets{Top: 6}
@@ -166,7 +199,11 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	}
 	const labelGap = float32(12)
 	fieldWidth := max(float32(0), props.Width-labelWidth-labelGap)
-	tableChildren := []woxwidget.Widget{formTableGrid(props, fieldWidth, gridHeight)}
+	tableChildren := []woxwidget.Widget{}
+	if props.EnableSearch && props.SearchOpen {
+		tableChildren = append(tableChildren, formTableSearchField(props, fieldWidth))
+	}
+	tableChildren = append(tableChildren, formTableGrid(props, fieldWidth, gridHeight))
 	if props.Description != "" {
 		tableChildren = append(tableChildren, woxwidget.TextBlock{
 			Value: props.Description, Width: min(fieldWidth, float32(620)), MaxLines: 3, LineHeight: 16,
@@ -180,9 +217,9 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	label := formFieldLabel(props.Title, labelWidth, labelHeight, 6, props.Theme, props.HeaderWeight)
 	table := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: tableChildren}
 	fieldChildren := []woxwidget.Widget{table}
-	if !props.ReadOnly {
+	if !props.ReadOnly || props.EnableSearch {
 		actions := woxwidget.Container{Width: fieldWidth, Height: 36, Child: woxwidget.Align{
-			Width: fieldWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: formTableAddButton(props),
+			Width: fieldWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: formTableToolbarActions(props),
 		}}
 		fieldChildren = append([]woxwidget.Widget{actions}, fieldChildren...)
 	}
@@ -195,7 +232,7 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 }
 
 func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.Widget {
-	hasActions := props.SecondaryLabel != "" || !props.ReadOnly
+	hasActions := props.SecondaryLabel != "" || !props.ReadOnly || props.EnableSearch
 	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: props.HeaderWeight}, Color: props.Theme.ActionText}
 	if props.DemoKind != "" && props.DemoIcon != nil {
 		title = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -241,7 +278,10 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 // formTableHeaderActions keeps specialized secondary actions aligned with the
 // table's standard Add control.
 func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
-	actions := make([]woxwidget.Widget, 0, 2)
+	actions := make([]woxwidget.Widget, 0, 3)
+	if props.EnableSearch {
+		actions = append(actions, formTableSearchButton(props))
+	}
 	if props.SecondaryLabel != "" {
 		actions = append(actions, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5,
@@ -253,6 +293,44 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 		actions = append(actions, formTableAddButton(props))
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: actions}
+}
+
+func formTableToolbarActions(props FormTableFieldProps) woxwidget.Widget {
+	actions := make([]woxwidget.Widget, 0, 2)
+	if props.EnableSearch {
+		actions = append(actions, formTableSearchButton(props))
+	}
+	if !props.ReadOnly {
+		actions = append(actions, formTableAddButton(props))
+	}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: actions}
+}
+
+func formTableSearchButton(props FormTableFieldProps) woxwidget.Widget {
+	hoverBackground := props.Theme.ResultTitle
+	hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
+	label := props.SearchLabel
+	return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		ID: props.ID + "-search", Label: label,
+		Icon:  woxwidget.Image{Source: props.SearchIcon, Width: 16, Height: 16},
+		Width: woxcomponent.SettingsControlHeight, Height: woxcomponent.SettingsControlHeight, Radius: 4,
+		HoverBackground: hoverBackground, Selected: props.SearchOpen, SelectedBackground: hoverBackground,
+		FocusRingColor: props.Theme.Cursor, Disabled: props.Invalid || props.Disabled, OnTap: props.OnToggleSearch,
+	})
+}
+
+func formTableSearchField(props FormTableFieldProps, width float32) woxwidget.Widget {
+	placeholder := props.SearchPlaceholder
+	if placeholder == "" {
+		placeholder = props.SearchLabel
+	}
+	return woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
+		ID: props.ID + "-search-field", Label: placeholder, Width: width, Value: props.SearchQuery,
+		Focused: props.SearchFocused, Autofocus: props.SearchOpen && props.SearchFocused,
+		SearchIcon: props.SearchIcon, Window: props.SearchWindow, Theme: props.Theme,
+		OnClear: props.OnSearchClear, OnKey: props.OnSearchKey,
+		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSearchSetValue,
+	})
 }
 
 func formTableAddButton(props FormTableFieldProps) woxwidget.Widget {
@@ -535,7 +613,7 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		}))
 	}
 	actions = append(actions,
-		formTableIconButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, disabled), disabled, func() {
+		formTableDeleteButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, props.ConfirmDeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, disabled), disabled, func() {
 			if props.OnDeleteRow != nil {
 				props.OnDeleteRow(row.Index)
 			}
@@ -561,6 +639,17 @@ func formTableActionIcon(icon, disabledIcon *woxui.Image, disabled bool) *woxui.
 	return icon
 }
 
+// formTableDeleteButton delegates the shared confirmation interaction to the component.
+func formTableDeleteButton(props FormTableFieldProps, id, label, confirmLabel string, icon *woxui.Image, disabled bool, onDelete func()) woxwidget.Widget {
+	if disabled {
+		return formTableIconButton(props, id, label, icon, true, onDelete)
+	}
+	if confirmLabel == "" {
+		confirmLabel = label
+	}
+	return woxcomponent.WoxConfirmIconButton(woxcomponent.ConfirmIconButtonProps{ID: id, Label: label, ConfirmLabel: confirmLabel, Icon: icon, Theme: props.Theme, OnDelete: onDelete})
+}
+
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, disabled bool, onTap func()) woxwidget.Widget {
 	if disabled {
 		onTap = nil
@@ -572,7 +661,7 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 			hoverBackground = woxui.Color{}
 		}
 		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, Width: 26, Height: 24, Radius: 4,
+			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
 			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, Disabled: disabled, OnTap: onTap,
 		})
 	}
@@ -601,6 +690,8 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 	}
 	if cell.Child != nil {
 		content = cell.Child
+	} else if len(cell.Icons) > 0 {
+		content = formTableCellIcons(props, rowIndex, columnIndex, cell)
 	} else if cell.IndicatorColor != nil {
 		content = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: *cell.IndicatorColor}
 	} else if cell.Icon != nil {
@@ -1347,6 +1438,120 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 		settingsDialogAction{ID: "form-table-row-save", Label: props.SaveLabel, OnTap: props.OnSave},
 	))
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
+}
+
+const (
+	formTablePatternPreviewCountHeight = float32(18)
+	formTablePatternPreviewListHeight  = float32(220)
+	formTablePatternPreviewRowHeight   = float32(40)
+	// FormTablePatternPreviewHeight is the extra row-editor content reserved for the live match list.
+	FormTablePatternPreviewHeight = formTablePatternPreviewCountHeight + 4 + formTablePatternPreviewListHeight
+)
+
+// FormTablePatternPreviewApp is one indexed app that the current pattern would hide.
+type FormTablePatternPreviewApp struct {
+	Key     string
+	Name    string
+	Path    string
+	Icon    *woxui.Image
+	Checked bool
+}
+
+// FormTablePatternPreviewProps describes the live ignore-rule match list.
+type FormTablePatternPreviewProps struct {
+	Width      float32
+	LabelWidth float32
+	Height     float32
+	Title      string
+	CountLabel string
+	EmptyLabel string
+	Apps       []FormTablePatternPreviewApp
+	Theme      woxcomponent.Theme
+	OnToggle   func(string, bool)
+}
+
+// FormTablePatternPreview lists indexed apps matching the current pattern.
+func FormTablePatternPreview(props FormTablePatternPreviewProps) woxwidget.Widget {
+	height := props.Height
+	if height <= 0 {
+		height = FormTablePatternPreviewHeight
+	}
+	labelWidth := min(max(float32(60), props.LabelWidth), max(float32(60), props.Width-120))
+	controlWidth := max(float32(0), props.Width-labelWidth-10)
+	listHeight := max(float32(0), height-formTablePatternPreviewCountHeight-4)
+	label := woxwidget.Container{Width: labelWidth, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
+		Value: props.Title, Width: labelWidth, Height: 22, MaxLines: 1,
+		Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: formTableAlpha(props.Theme.ActionText, 235),
+	}}
+	border := props.Theme.ResultSubtitle
+	border.A = 170
+	var list woxwidget.Widget
+	if len(props.Apps) == 0 {
+		list = woxwidget.Container{
+			Width: controlWidth, Height: listHeight, Radius: 4,
+			BorderColor: border, BorderWidth: 1,
+			Child: woxwidget.Align{Width: controlWidth, Height: listHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
+				Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
+			}},
+		}
+	} else {
+		rows := make([]woxwidget.Widget, 0, len(props.Apps))
+		for _, app := range props.Apps {
+			rows = append(rows, formTablePatternPreviewRow(props, app, controlWidth))
+		}
+		list = woxwidget.Container{
+			Width: controlWidth, Height: listHeight, Radius: 4,
+			BorderColor: border, BorderWidth: 1,
+			Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+				Key: woxwidget.Key("form-table-pattern-preview"), Width: controlWidth, Height: listHeight,
+				ContentHeight: float32(len(rows)) * formTablePatternPreviewRowHeight,
+				Content:       woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+				ThumbColor:    props.Theme.ResultTitle,
+			}),
+		}
+	}
+	return woxwidget.Container{Width: props.Width, Height: height, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+			label,
+			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
+				woxwidget.TextBlock{
+					Value: props.CountLabel, Width: controlWidth, Height: formTablePatternPreviewCountHeight, MaxLines: 1,
+					Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
+				},
+				list,
+			}},
+		},
+	}}
+}
+
+func formTablePatternPreviewRow(props FormTablePatternPreviewProps, app FormTablePatternPreviewApp, width float32) woxwidget.Widget {
+	key := app.Key
+	checked := app.Checked
+	checkbox := woxwidget.Align{
+		Width: woxcomponent.SettingsControlHeight, Height: formTablePatternPreviewRowHeight,
+		Horizontal: 0.5, Vertical: 0.5,
+		Child: woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{
+			ID: "form-table-pattern-preview-" + key, Label: app.Name, Value: checked, Theme: props.Theme,
+			OnChange: func(value bool) {
+				if props.OnToggle != nil {
+					props.OnToggle(key, value)
+				}
+			},
+		}),
+	}
+	var icon woxwidget.Widget = woxwidget.Container{Width: 20, Height: 20}
+	if app.Icon != nil {
+		icon = woxwidget.Image{Source: app.Icon, Width: 20, Height: 20}
+	}
+	details := []woxwidget.Widget{woxwidget.Text{Value: app.Name, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultTitle}}
+	if strings.TrimSpace(app.Path) != "" {
+		details = append(details, woxwidget.Text{Value: app.Path, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle})
+	}
+	return woxwidget.Container{Width: width, Height: formTablePatternPreviewRowHeight, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			checkbox, icon, woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: details}},
+		},
+	}}
 }
 
 // QueryHotkeyEditorHeaderProps contains the preset-first header used by Flutter's dedicated query hotkey dialog.

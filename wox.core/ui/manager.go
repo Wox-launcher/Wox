@@ -1937,9 +1937,8 @@ func (m *Manager) SeedActiveWindowSnapshotForQuery(snapshot common.ActiveWindowS
 
 // RefreshActiveWindowSnapshot updates the cached active window snapshot without
 // blocking launcher activation on expensive per-process details. The hotkey path
-// only needs a stable foreground PID before Wox appears; name/icon/dialog state
-// is filled later from that PID so macOS Accessibility calls cannot delay the
-// first launcher frame.
+// captures PID, window id, and name before Wox appears; icon and dialog state
+// are filled later so macOS Accessibility probes cannot delay the first frame.
 func (m *Manager) RefreshActiveWindowSnapshot(ctx context.Context) {
 	m.refreshActiveWindowSnapshot(ctx, false)
 }
@@ -1968,14 +1967,22 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 		return
 	}
 
+	// Name is cheap on every platform (GetWindowText / NSWorkspace). Capture it
+	// with the PID so plugin actions such as "Paste to %s" do not wait for the
+	// async icon/dialog refresh, which can finish after the first clipboard query.
+	activeWindowName := window.GetActiveWindowName()
+
 	m.activeWindowSnapshotMu.Lock()
 	m.activeWindowSnapshotSeq++
 	snapshotSeq := m.activeWindowSnapshotSeq
-	// Optimization: clear detail fields while keeping the PID immediately
-	// available. Keeping old details with a new PID created mixed snapshots, and
-	// blocking here made every launcher activation wait for icon and AX dialog
-	// probes even when the UI only needed to become visible.
-	m.activeWindowSnapshot = common.ActiveWindowSnapshot{Pid: activeWindowPid, WindowId: activeWindowId}
+	// Keep icon/dialog empty until the background refresh. Mixing a new PID with
+	// a previous window's details produced stale paste targets, and blocking here
+	// made every launcher activation wait for icon and AX dialog probes.
+	m.activeWindowSnapshot = common.ActiveWindowSnapshot{
+		Pid:      activeWindowPid,
+		WindowId: activeWindowId,
+		Name:     activeWindowName,
+	}
 	m.activeWindowSnapshotMu.Unlock()
 
 	if waitForDetails {
@@ -1990,6 +1997,13 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 
 func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapshotSeq uint64) {
 	activeWindowName := window.GetWindowNameByPid(activeWindowPid)
+	if activeWindowName != "" {
+		m.activeWindowSnapshotMu.Lock()
+		if m.activeWindowSnapshotSeq == snapshotSeq && m.activeWindowSnapshot.Pid == activeWindowPid {
+			m.activeWindowSnapshot.Name = activeWindowName
+		}
+		m.activeWindowSnapshotMu.Unlock()
+	}
 
 	activeWindowIcon := common.WoxImage{}
 	if icon, err := window.GetWindowIconByPid(activeWindowPid); err == nil {
@@ -2015,7 +2029,11 @@ func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapsh
 		m.activeWindowSnapshotMu.Unlock()
 		return
 	}
-	m.activeWindowSnapshot.Name = activeWindowName
+	// GetWindowNameByPid can return empty after Wox takes focus. Keep the name
+	// captured at activation time instead of wiping "Paste to %s" labels.
+	if activeWindowName != "" {
+		m.activeWindowSnapshot.Name = activeWindowName
+	}
 	m.activeWindowSnapshot.Icon = activeWindowIcon
 	m.activeWindowSnapshot.IsOpenSaveDialog = activeWindowIsOpenSaveDialog
 	m.activeWindowSnapshot.IsOpenSaveDialogSelectFolder = activeWindowIsOpenSaveDialogSelectFolder

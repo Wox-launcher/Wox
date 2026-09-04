@@ -312,9 +312,14 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type,
 				Validators: fromCoreValidators(column.Validators), SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
 				HideInTable: column.HideInTable, HideInUpdate: column.HideInUpdate, AllowedHotkeyKinds: append([]string(nil), column.AllowedHotkeyKinds...),
+				PreviewMatchedApps: column.PreviewMatchedApps,
 			}
 		}
-		converted.Value = formDefinitionValue{Key: value.Key, DefaultValue: value.DefaultValue, Title: value.Title, Tooltip: value.Tooltip, Columns: columns, SortColumnKey: value.SortColumnKey, SortOrder: value.SortOrder, MaxHeight: value.MaxHeight}
+		converted.Value = formDefinitionValue{
+			Key: value.Key, DefaultValue: value.DefaultValue, Title: value.Title, Tooltip: value.Tooltip, Columns: columns,
+			SortColumnKey: value.SortColumnKey, SortOrder: value.SortOrder, SearchColumnKey: value.SearchColumnKey,
+			MaxHeight: value.MaxHeight, InlineTable: value.InlineTable, EnableSearch: value.EnableSearch,
+		}
 	case *definition.PluginSettingValueDictationHotkey:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue}
 	case *definition.PluginSettingValueDictationModel:

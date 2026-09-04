@@ -62,7 +62,7 @@ func TestWindowGroupExtensionStatusVerticallyCentersContent(t *testing.T) {
 }
 
 func TestWindowGroupURLDialogUsesCompactScrollableHeight(t *testing.T) {
-	state := &windowGroupURLState{rowEditor: -2, deletePending: -1}
+	state := &windowGroupURLState{rowEditor: -2}
 	dialog := state.buildDialog(woxwidget.StateContext{}, WindowGroupUrlEditorProps{Width: 1200, Height: 800, Theme: woxcomponent.Theme{}}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
 	if props.Height != 344 {

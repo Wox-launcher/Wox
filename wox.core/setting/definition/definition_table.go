@@ -31,16 +31,21 @@ const (
 	PluginSettingValueTableSortOrderDesc = "desc"
 )
 
+// PluginSettingValueTableColumnTypeIgnoredApps is the read-only app selection of an ignore rule.
+const PluginSettingValueTableColumnTypeIgnoredApps = "ignoredApps"
+
 type PluginSettingValueTable struct {
-	Key           string
-	DefaultValue  string
-	Title         string
-	Tooltip       string
-	Columns       []PluginSettingValueTableColumn
-	SortColumnKey string // The key of the column that should be used for sorting
-	SortOrder     string // asc or desc
-	MaxHeight     int    // Max table height in px, <= 0 means use UI default
-	InlineTable   bool   // Render the table directly in settings instead of behind a separate editor row.
+	Key             string
+	DefaultValue    string
+	Title           string
+	Tooltip         string
+	Columns         []PluginSettingValueTableColumn
+	SortColumnKey   string // The key of the column that should be used for sorting
+	SortOrder       string // asc or desc
+	SearchColumnKey string // Optional column to search and pin when table search is open
+	MaxHeight       int    // Max table height in px, <= 0 means use UI default
+	InlineTable     bool   // Render the table directly in settings instead of behind a separate editor row.
+	EnableSearch    bool   // Show a search icon before Add that expands a row filter
 
 	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
@@ -57,6 +62,7 @@ type PluginSettingValueTableColumn struct {
 	HideInTable        bool                               // Hide this column in the table, but still show it in the setting dialog
 	HideInUpdate       bool                               // Hide this column in the update/add dialog, but still show it in the table
 	AllowedHotkeyKinds []string                           // Only used when Type is PluginSettingValueTableColumnTypeHotkey
+	PreviewMatchedApps bool                               // Show a live indexed-app preview under this text column
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {

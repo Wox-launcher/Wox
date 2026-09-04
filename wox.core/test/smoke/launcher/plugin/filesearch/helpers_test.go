@@ -169,21 +169,13 @@ func removeFileSearchRoot(t *testing.T, client *automationdriver.Client, root st
 		t.Errorf("delete File Search root row %d: %v", rowIndex, err)
 		return
 	}
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "form-table-delete-confirm")
-		return found
-	}); err != nil {
-		t.Errorf("wait for File Search root delete confirmation: %v", err)
-		return
-	}
-	if err := client.Perform(ctx, "form-table-delete-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
+	if err := client.Perform(ctx, deleteID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Errorf("confirm File Search root deletion: %v", err)
 		return
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		_, rowFound := automationdriver.Find(snapshot, deleteID)
-		_, dialogFound := automationdriver.Find(snapshot, "form-table-delete-dialog")
-		return !rowFound && !dialogFound
+		return !rowFound
 	}); err != nil {
 		t.Errorf("wait for File Search root row removal: %v", err)
 		return
@@ -389,21 +381,13 @@ func removeFileSearchIgnorePattern(t *testing.T, client *automationdriver.Client
 		t.Errorf("delete File Search ignore pattern row %d: %v", rowIndex, err)
 		return
 	}
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "form-table-delete-confirm")
-		return found
-	}); err != nil {
-		t.Errorf("wait for File Search ignore pattern delete confirmation: %v", err)
-		return
-	}
-	if err := client.Perform(ctx, "form-table-delete-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
+	if err := client.Perform(ctx, deleteID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Errorf("confirm File Search ignore pattern deletion: %v", err)
 		return
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		_, rowFound := automationdriver.Find(snapshot, deleteID)
-		_, dialogFound := automationdriver.Find(snapshot, "form-table-delete-dialog")
-		return !rowFound && !dialogFound
+		return !rowFound
 	}); err != nil {
 		t.Errorf("wait for File Search ignore pattern row removal: %v", err)
 		return

@@ -7,128 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 	"unicode/utf16"
-	"wox/common"
-	"wox/plugin"
-	"wox/setting/definition"
 	"wox/util"
 	"wox/util/fileicon"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type emptyAPIImpl struct {
-}
-
-func (e emptyAPIImpl) OnGetDynamicSetting(
-	context.Context,
-	func(context.Context, string) definition.PluginSettingDefinitionItem,
-) {
-}
-
-func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
-}
-
-func (e emptyAPIImpl) HideApp(ctx context.Context) {
-}
-
-func (e emptyAPIImpl) ShowApp(ctx context.Context) {
-}
-
-func (e emptyAPIImpl) Notify(ctx context.Context, message string) {
-}
-
-func (e emptyAPIImpl) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {
-}
-
-func (e emptyAPIImpl) Log(ctx context.Context, level plugin.LogLevel, msg string) {
-}
-
-func (e emptyAPIImpl) GetTranslation(ctx context.Context, key string) string {
-	return ""
-}
-
-func (e emptyAPIImpl) GetSetting(ctx context.Context, key string) string {
-	return ""
-}
-
-func (e emptyAPIImpl) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
-}
-
-func (e emptyAPIImpl) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
-	return plugin.SetSettingResult{Success: true}
-}
-
-func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(context.Context, string, string)) {
-}
-
-func (e emptyAPIImpl) OnDeepLink(ctx context.Context, callback func(context.Context, map[string]string)) {
-}
-
-func (e emptyAPIImpl) OnUnload(ctx context.Context, callback func(context.Context)) {
-}
-
-func (e emptyAPIImpl) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {
-}
-
-func (e emptyAPIImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
-}
-
-func (e emptyAPIImpl) OnEnterPluginQuery(ctx context.Context, callback func(context.Context)) {
-}
-
-func (e emptyAPIImpl) OnLeavePluginQuery(ctx context.Context, callback func(context.Context)) {
-}
-
-func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
-}
-
-func (e emptyAPIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
-	return nil
-}
-
-func (e emptyAPIImpl) OnMRURestore(ctx context.Context, callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error)) {
-}
-
-func (e emptyAPIImpl) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
-}
-
-func (e emptyAPIImpl) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
-}
-
-func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
-	return false
-}
-
-func (e emptyAPIImpl) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
-	return false
-}
-
-func (e emptyAPIImpl) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
-	return nil
-}
-
-func (e emptyAPIImpl) IsVisible(ctx context.Context) bool {
-	return false
-}
-
-func (e emptyAPIImpl) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
-}
-
-func (e emptyAPIImpl) RefreshGlance(ctx context.Context, ids []string) {
-}
-
-func (e emptyAPIImpl) Copy(ctx context.Context, params plugin.CopyParams) {
-}
-
-func (e emptyAPIImpl) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
-	return plugin.ScreenshotResult{}
-}
-
-func (e emptyAPIImpl) GetCacheFolder(ctx context.Context) string {
-	return ""
-}
 
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {

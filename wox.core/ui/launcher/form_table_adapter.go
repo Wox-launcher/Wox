@@ -43,6 +43,12 @@ func compactFormTableText(value string, maxRunes int) string {
 }
 
 func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) string {
+	if column.Type == "ignoredApps" {
+		if formTableIgnoreRuleIncludeFuture(row) {
+			return a.translate("i18n:plugin_app_ignore_rule_all_matches")
+		}
+		return ""
+	}
 	if column.Key == "Name" || column.Key == "AppCount" || column.Key == "DisplayCount" {
 		if _, ok := row["Screens"]; ok {
 			return windowManagerGroupDisplayValue(column, row)
@@ -155,7 +161,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	columns := make([]launcherview.FormTableColumn, len(visibleColumns))
 	for columnIndex, column := range visibleColumns {
-		columns[columnIndex] = launcherview.FormTableColumn{Label: a.translate(column.Label), Tooltip: a.translate(column.Tooltip), Width: float32(column.Width)}
+		columns[columnIndex] = launcherview.FormTableColumn{Key: column.Key, Label: a.translate(column.Label), Tooltip: a.translate(column.Tooltip), Width: float32(column.Width)}
 	}
 	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
 	if isFileSearchRootsTable(callbacks.idPrefix, definition, a.selectedPluginID()) {
@@ -207,7 +213,11 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil, Disabled: callbacks.serviceBusy,
 		HeaderWeight: formTableHeaderWeight(callbacks.idPrefix),
-		Columns:      columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
+		EnableSearch: definition.Value.EnableSearch, SearchColumnKey: definition.Value.SearchColumnKey, UsePinYin: a.usePinYin(),
+		StateKey:    callbacks.idPrefix + ":" + a.selectedPluginID() + ":" + definition.Value.Key,
+		SearchLabel: a.translate("i18n:ui_table_search"), SearchPlaceholder: a.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
+		SearchIcon: a.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: a.settingsNativeWindow(),
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.translate("i18n:ui_delete_row_confirm"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
 		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
@@ -288,7 +298,11 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 }
 
 func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.Theme, imageScale float32) launcherview.FormTableCell {
-	cell := launcherview.FormTableCell{Text: compactFormTableText(a.formTableDisplayValue(column, row), 80)}
+	text := a.formTableDisplayValue(column, row)
+	cell := launcherview.FormTableCell{Text: compactFormTableText(text, 80), SearchText: text}
+	if column.Type == "ignoredApps" {
+		return a.formTableIgnoreRuleAppsCell(row, imageScale)
+	}
 	if column.Type == "aiModelStatus" {
 		statusColor := woxui.Color{R: 69, G: 184, B: 88, A: 255}
 		cell.Text = ""
@@ -338,6 +352,31 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 	return cell
 }
 
+// formTableIgnoreRuleAppsCell shows All matches for dynamic rules, or up to six app icons.
+func (a *App) formTableIgnoreRuleAppsCell(row map[string]any, imageScale float32) launcherview.FormTableCell {
+	if formTableIgnoreRuleIncludeFuture(row) {
+		return launcherview.FormTableCell{Text: a.translate("i18n:plugin_app_ignore_rule_all_matches")}
+	}
+	apps := formTableIgnoreRuleApps(row)
+	if len(apps) == 0 {
+		return launcherview.FormTableCell{}
+	}
+	visible := apps
+	overflow := formTableIgnoreRuleAppIconOverflow(len(apps), formTableIgnoreRuleAppIconLimit)
+	if overflow > 0 {
+		visible = apps[:formTableIgnoreRuleAppIconLimit]
+	}
+	icons := make([]launcherview.FormTableCellIcon, 0, len(visible))
+	for _, app := range visible {
+		item := launcherview.FormTableCellIcon{Tooltip: formTableIgnoreRuleAppPathTooltip(app)}
+		if app.Icon.ImageType != "" {
+			item.Source = a.imageForSize(app.Icon, physicalImageSize(18, imageScale))
+		}
+		icons = append(icons, item)
+	}
+	return launcherview.FormTableCell{Icons: icons, IconOverflow: overflow}
+}
+
 // buildFormTableOverlay maps table editor state into the shared modal view.
 func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot.skillAdd != nil {
@@ -345,9 +384,6 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 	}
 	if snapshot.mcpJSONImport != nil {
 		return a.buildFormTableMCPJSONImportDialog(snapshot.mcpJSONImport, palette, width, height, imageScale)
-	}
-	if snapshot.deletePending >= 0 && snapshot.deleteDirect {
-		return a.buildFormTableDeleteDialog(palette, width, height)
 	}
 	if snapshot.windowGroupEditor != nil {
 		return a.buildWindowManagerGroupEditor(snapshot.windowGroupEditor, palette, width, height, imageScale)
@@ -366,6 +402,12 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		panelWidth = max(float32(0), min(contentWidth+48, width-64))
 		innerWidth = max(float32(0), panelWidth-48)
 		contentHeight := a.formTableRowContentHeightForWidth(snapshot.rowForm.definitions, snapshot.fieldErrors, max(float32(0), innerWidth-20), labelWidth)
+		if snapshot.patternPreview != nil {
+			contentWidth = max(contentWidth, 640)
+			panelWidth = max(float32(0), min(contentWidth+48, width-64))
+			innerWidth = max(float32(0), panelWidth-48)
+			contentHeight += 10 + launcherview.FormTablePatternPreviewHeight
+		}
 		statusHeight := float32(0)
 		if snapshot.status != "" {
 			statusHeight = 28
@@ -549,6 +591,35 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 		}
 		contentHeight += fieldHeight
 		rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
+	}
+	if snapshot.patternPreview != nil {
+		if len(rows) > 0 {
+			contentHeight += 10
+		}
+		contentHeight += launcherview.FormTablePatternPreviewHeight
+		previewApps := make([]launcherview.FormTablePatternPreviewApp, 0, len(snapshot.patternPreview.Apps))
+		for _, app := range snapshot.patternPreview.Apps {
+			previewApp := launcherview.FormTablePatternPreviewApp{Key: app.Key, Name: app.Name, Path: app.Path, Checked: app.Checked}
+			if app.Icon.ImageType != "" {
+				previewApp.Icon = a.imageFor(app.Icon)
+			}
+			previewApps = append(previewApps, previewApp)
+		}
+		emptyLabel := a.translate("i18n:plugin_app_ignore_rule_preview_empty")
+		if snapshot.patternPreview.Loading {
+			emptyLabel = a.translate("i18n:ui_hotkey_ignore_apps_loading")
+		}
+		if snapshot.patternPreview.ErrorText != "" {
+			emptyLabel = snapshot.patternPreview.ErrorText
+		}
+		rows = append(rows, launcherview.FormTablePatternPreview(launcherview.FormTablePatternPreviewProps{
+			Width: fieldWidth, LabelWidth: labelWidth, Height: launcherview.FormTablePatternPreviewHeight,
+			Title:      a.translate("i18n:plugin_app_ignore_rule_apps"),
+			CountLabel: fmt.Sprintf(a.translate("i18n:plugin_app_ignore_rule_preview_count"), len(previewApps)),
+			EmptyLabel: emptyLabel,
+			Apps:       previewApps, Theme: palette.componentTheme(),
+			OnToggle: a.toggleFormTablePatternPreviewApp,
+		}))
 	}
 	title := ""
 	if snapshot.definition.Value.Key == "QueryHotkeys" {

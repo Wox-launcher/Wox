@@ -47,6 +47,7 @@ type formTableEditorState struct {
 	mcpJSONImport     *formTableMCPJSONImportState
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorState
+	patternPreview    *formTablePatternPreviewState
 }
 
 type formTableEditorSnapshot struct {
@@ -69,6 +70,7 @@ type formTableEditorSnapshot struct {
 	mcpJSONImport     *formTableMCPJSONImportSnapshot
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorSnapshot
+	patternPreview    *formTablePatternPreviewSnapshot
 }
 
 type queryHotkeyPreset string
@@ -308,6 +310,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		mcpJSONImport:     mcpJSONImport,
 		queryPreset:       state.queryPreset,
 		windowGroupEditor: snapshotWindowGroupEditorLocked(state.windowGroupEditor),
+		patternPreview:    snapshotFormTablePatternPreviewLocked(state.patternPreview),
 	}
 }
 
@@ -702,6 +705,10 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 	state.rowIndex = index
 	state.rowBase = base
 	state.rowEditorOnly = rowEditorOnly
+	state.patternPreview = nil
+	if formTableHasPatternPreview(state.definition) {
+		a.initFormTablePatternPreview(state)
+	}
 	clearFormTableRowValidationLocked(state)
 	state.deletePending = -1
 	state.deleteDirect = false
@@ -802,6 +809,7 @@ func (a *App) cancelFormTableRowEdit() {
 		state.rowEditorOnly = false
 		state.appPicker = nil
 		state.queryVariable = nil
+		state.patternPreview = nil
 		state.status = ""
 	}
 	a.updateFormTableTextInput(false)
@@ -1032,13 +1040,8 @@ func (a *App) saveFormTableRowEdit() {
 		return
 	}
 	previousValue := state.target.values[state.definition.Value.Key]
-	row := formTableRowFromFields(state.definition, state.rowForm, state.rowBase)
-	if state.rowIndex >= 0 && state.rowIndex < len(state.rows) {
-		state.rows[state.rowIndex] = row
-		state.selected = state.rowIndex
-	} else {
-		state.rows = append(state.rows, row)
-		state.selected = len(state.rows) - 1
+	if !a.applyFormTableIgnoreRuleSave(state) {
+		return
 	}
 	if err := a.commitFormTableRowsLocked(state); err != nil {
 		state.status = err.Error()
@@ -1055,6 +1058,7 @@ func (a *App) saveFormTableRowEdit() {
 	state.rowIndex = -1
 	state.rowBase = nil
 	state.rowEditorOnly = false
+	state.patternPreview = nil
 	clearFormTableRowValidationLocked(state)
 	if persist {
 		state.saving = true
@@ -1079,9 +1083,19 @@ func (a *App) deleteFormTableRow() {
 	a.beginFormTableRowDelete(false)
 }
 
-// beginDeleteFormTableRowDirect opens Flutter's confirmation dialog directly over the settings page.
+// beginDeleteFormTableRowDirect removes the selected row after the inline two-click confirmation.
 func (a *App) beginDeleteFormTableRowDirect() {
-	a.beginFormTableRowDelete(true)
+	state := a.activeFormTableEditor()
+	if state == nil || state.invalid || state.saving || state.rowForm != nil || state.selected < 0 || state.selected >= len(state.rows) || !a.formTableTargetCurrentLocked(state.target) || formTableSkillRowReadOnly(state.definition, state.rows[state.selected]) {
+		return
+	}
+	if len(state.rows) <= state.definition.Value.MinimumRowCount {
+		a.closeFormTableEditor()
+		return
+	}
+	state.deletePending = state.selected
+	state.deleteDirect = true
+	a.confirmFormTableRowDelete()
 }
 
 func (a *App) beginFormTableRowDelete(direct bool) {
@@ -1269,6 +1283,11 @@ func (a *App) changeFormTableRowChoice(index, delta int) {
 			if formTableRowDependsOnField(state.definition, key) {
 				applyFormTableRowVisibleFieldsLocked(state)
 			}
+			if key == "IncludeFuture" && state.patternPreview != nil {
+				state.patternPreview.unchecked = map[string]bool{}
+				state.patternPreview.seedFromSaved = false
+				a.refreshFormTablePatternPreview(state)
+			}
 		}
 		clearFormTableRowValidationLocked(state)
 	}
@@ -1295,6 +1314,9 @@ func (a *App) setFormTableRowText(index int, value string) {
 		clearFormTableRowValidationLocked(state)
 		if state.definition.Value.Key == "QueryHotkeys" && index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Query" {
 			a.updateFormTableQueryVariableTrigger(index)
+		}
+		if state.patternPreview != nil && index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Pattern" {
+			a.refreshFormTablePatternPreview(state)
 		}
 	}
 	if changed {

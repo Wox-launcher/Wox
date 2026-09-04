@@ -24,6 +24,16 @@ func (s *CoreServices) HotkeyAppCandidates(ctx context.Context, sessionID string
 	return converted, nil
 }
 
+// IndexedApps returns applications matching the core ignore rule, including distinct shortcuts.
+func (s *CoreServices) IndexedApps(ctx context.Context, sessionID string, pattern string) ([]contract.HotkeyApp, error) {
+	apps := appplugin.GetIndexedApps(uiServiceContext(ctx, sessionID), pattern)
+	converted := make([]contract.HotkeyApp, len(apps))
+	for index, app := range apps {
+		converted[index] = contract.HotkeyApp{Name: app.Name, Identity: app.Identity, Path: app.Path, Icon: app.Icon}
+	}
+	return converted, nil
+}
+
 // StartHotkeyRecording activates the strongest recorder supported by the current platform.
 func (s *CoreServices) StartHotkeyRecording(ctx context.Context, sessionID string, purpose string, allowedKinds []string) (contract.HotkeyRecordingCapability, error) {
 	purpose = strings.TrimSpace(purpose)

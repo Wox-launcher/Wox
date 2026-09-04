@@ -213,6 +213,11 @@ type HotkeySettingsServices interface {
 	HotkeyAppCandidates(ctx context.Context, sessionID string) ([]HotkeyApp, error)
 }
 
+// AppSettingsServices exposes the application plugin's ignore-rule preview.
+type AppSettingsServices interface {
+	IndexedApps(ctx context.Context, sessionID string, pattern string) ([]HotkeyApp, error)
+}
+
 // HotkeyRecordingCapability describes raw-recorder and local fallback support.
 type HotkeyRecordingCapability struct {
 	RawRecorderAvailable bool
@@ -506,6 +511,7 @@ type SettingsServices interface {
 	GeneralSettingsServices
 	OnboardingSettingsServices
 	HotkeySettingsServices
+	AppSettingsServices
 	HotkeyInteractionSettingsServices
 	WindowManagerSettingsServices
 	AICatalogSettingsServices

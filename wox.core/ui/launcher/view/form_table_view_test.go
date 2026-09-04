@@ -89,6 +89,14 @@ func TestFormTableInlineHeaderKeepsTranslatedActionLabelsVisible(t *testing.T) {
 	}
 }
 
+func formTableOperationIconButton(action woxwidget.Widget) woxcomponent.IconButtonProps {
+	stateful := action.(woxwidget.Stateful)
+	if props, ok := stateful.Widget.(woxcomponent.IconButtonProps); ok {
+		return props
+	}
+	return stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+}
+
 func TestFormTableDisabledBlocksMutatingActions(t *testing.T) {
 	props := FormTableFieldProps{ID: "commands", AddLabel: "Add", Disabled: true, Theme: woxcomponent.Theme{}}
 	add := formTableAddButton(props).(woxwidget.Semantics)

@@ -1130,6 +1130,8 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
+	} else {
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
 	}
 
 	if len(filePaths) == 1 {
@@ -1398,6 +1400,8 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
+	} else {
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
 	}
 
 	if normalizedLink != "" {

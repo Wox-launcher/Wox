@@ -488,11 +488,10 @@ func WindowGroupUrlEditor(props WindowGroupUrlEditorProps) woxwidget.Widget {
 
 // windowGroupURLState owns dialog-local rows so cancel never mutates the workspace assignment.
 type windowGroupURLState struct {
-	urls          []string
-	rowEditor     int
-	draft         string
-	draftError    string
-	deletePending int
+	urls       []string
+	rowEditor  int
+	draft      string
+	draftError string
 }
 
 func (s *windowGroupURLState) InitState(_ woxwidget.StateContext, widget any) {
@@ -504,7 +503,6 @@ func (s *windowGroupURLState) InitState(_ woxwidget.StateContext, widget any) {
 		}
 	}
 	s.rowEditor = -2
-	s.deletePending = -1
 }
 
 func (s *windowGroupURLState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
@@ -517,20 +515,6 @@ func (s *windowGroupURLState) Build(context woxwidget.StateContext, widget any) 
 	layers := []woxwidget.StackChild{{Child: main}}
 	if s.rowEditor >= -1 {
 		layers = append(layers, woxwidget.StackChild{Child: s.buildRowEditor(context, props)})
-	}
-	if s.deletePending >= 0 {
-		layers = append(layers, woxwidget.StackChild{Child: FormTableDeleteDialog(FormTableDeleteDialogProps{
-			Width: props.Width, Height: props.Height, Message: props.DeleteConfirmation, CancelLabel: props.CancelLabel, DeleteLabel: props.DeleteLabel, Theme: props.Theme,
-			OnCancel: func() { context.SetState(func() { s.deletePending = -1 }) },
-			OnDelete: func() {
-				context.SetState(func() {
-					if s.deletePending >= 0 && s.deletePending < len(s.urls) {
-						s.urls = append(s.urls[:s.deletePending], s.urls[s.deletePending+1:]...)
-					}
-					s.deletePending = -1
-				})
-			},
-		})})
 	}
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: layers}
 }
@@ -549,7 +533,7 @@ func (s *windowGroupURLState) buildDialog(context woxwidget.StateContext, props 
 	table := FormTableField(FormTableFieldProps{
 		ID: "window-group-url-table", Width: innerWidth, Height: tableHeight, MaxHeight: 120, InlineTitle: true, HideCloneAction: true,
 		Columns: []FormTableColumn{{Label: "URL", Width: 360}}, Rows: rows,
-		AddLabel: props.AddLabel, EditLabel: props.EditLabel, DeleteLabel: props.DeleteLabel, OperationLabel: props.OperationLabel, EmptyLabel: props.EmptyLabel,
+		AddLabel: props.AddLabel, EditLabel: props.EditLabel, DeleteLabel: props.DeleteLabel, ConfirmDeleteLabel: props.DeleteConfirmation, OperationLabel: props.OperationLabel, EmptyLabel: props.EmptyLabel,
 		AddIcon: props.AddIcon, EditIcon: props.EditIcon, DeleteIcon: props.DeleteIcon, EmptyIcon: props.EmptyIcon, Theme: props.Theme,
 		OnAdd: func() {
 			context.SetState(func() {
@@ -570,7 +554,7 @@ func (s *windowGroupURLState) buildDialog(context woxwidget.StateContext, props 
 		},
 		OnDeleteRow: func(index int) {
 			if index >= 0 && index < len(s.urls) {
-				context.SetState(func() { s.deletePending = index })
+				context.SetState(func() { s.urls = append(s.urls[:index], s.urls[index+1:]...) })
 			}
 		},
 	})

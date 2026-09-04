@@ -873,7 +873,7 @@ func (a *App) shouldPreserveQueryOnShowLocked() bool {
 }
 
 // usePinYin is a cross-domain reader for the general-domain UsePinYin setting.
-// Query, action filter, settings search, and plugin catalog search all use pinyin matching when this is on.
+// Query, action filter, settings search, plugin catalog search, and table search all use pinyin matching when this is on.
 func (a *App) usePinYin() bool {
 	return a.generalSettings.Data().UsePinYin
 }
@@ -1945,6 +1945,8 @@ type formDefinitionValue struct {
 	MinimumRowCount   int                 `json:"MinimumRowCount"`
 	MinimumRowMessage string              `json:"MinimumRowMessage"`
 	UpdateDialogWidth int                 `json:"UpdateDialogWidth"`
+	EnableSearch      bool                `json:"EnableSearch"`
+	SearchColumnKey   string              `json:"SearchColumnKey"`
 	Rows              []formStatsRow      `json:"Rows"`
 	Description       string              `json:"Description"`
 	Status            string              `json:"Status"`
@@ -1981,6 +1983,8 @@ type formTableColumn struct {
 	EmptyAsZero bool `json:"EmptyAsZero"`
 	// VisibleWhen hides the column in the add/edit dialog unless another field matches.
 	VisibleWhen formTableColumnVisibleWhen `json:"VisibleWhen"`
+	// PreviewMatchedApps shows a live indexed-app list under this text column.
+	PreviewMatchedApps bool `json:"PreviewMatchedApps"`
 }
 
 // formTableColumnVisibleWhen shows a row-editor field only when another field has one of Values.

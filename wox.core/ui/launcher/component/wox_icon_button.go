@@ -19,6 +19,8 @@ type IconButtonProps struct {
 	SelectedBackground woxui.Color
 	FocusRingColor     woxui.Color
 	Disabled           bool
+	OnFocusChange      func(bool)
+	OnKey              func(woxui.KeyEvent) bool
 	OnTap              func()
 	OnHoverAt          func(bool, woxui.Rect)
 }
@@ -70,7 +72,10 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 	}}
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnFocusChange: props.OnFocusChange, OnKey: func(event woxui.KeyEvent) bool {
+			if props.OnKey != nil && props.OnKey(event) {
+				return true
+			}
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

@@ -473,7 +473,7 @@ func RemoveApplicationTableRow(t *testing.T, ctx context.Context, client *automa
 	if err := client.Perform(ctx, rowDeleteID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("delete application row %d from %q: %v", rowIndex, fieldID, err)
 	}
-	if err := client.Perform(ctx, "form-table-delete-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
+	if err := client.Perform(ctx, rowDeleteID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("confirm application row %d deletion: %v", rowIndex, err)
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {

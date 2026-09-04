@@ -73,19 +73,12 @@ func Test007LauncherQueryShellCommandSettings(t *testing.T) {
 		if err := client.Perform(ctx, "plugin-settings-field-3-row-0-delete", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("delete Shell command row: %v", err)
 		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, found := automationdriver.Find(snapshot, "form-table-delete-confirm")
-			return found
-		}); err != nil {
-			t.Fatalf("wait for Shell command delete confirmation: %v", err)
-		}
-		if err := client.Perform(ctx, "form-table-delete-confirm", woxui.AccessibilityActionActivate, ""); err != nil {
+		if err := client.Perform(ctx, "plugin-settings-field-3-row-0-delete", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("confirm Shell command deletion: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			_, rowFound := automationdriver.Find(snapshot, "plugin-settings-field-3-row-0-edit")
-			_, dialogFound := automationdriver.Find(snapshot, "form-table-delete-dialog")
-			return !rowFound && !dialogFound
+			return !rowFound
 		}); err != nil {
 			t.Fatalf("wait for Shell command row deletion: %v", err)
 		}

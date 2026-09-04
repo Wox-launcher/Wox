@@ -176,6 +176,33 @@ func TestPluginControllerPreservesDirPathSettingDefinition(t *testing.T) {
 	}
 }
 
+func TestPluginControllerPreservesIgnoreRuleTableSearchAndPreview(t *testing.T) {
+	items := []contract.PluginCatalogItem{{
+		ID: "app",
+		SettingDefinitions: definition.PluginSettingDefinitions{{
+			Type: definition.PluginSettingDefinitionTypeTable,
+			Value: &definition.PluginSettingValueTable{
+				Key: "IgnoreRules", EnableSearch: true, SearchColumnKey: "Pattern",
+				Columns: []definition.PluginSettingValueTableColumn{{
+					Key: "Pattern", Type: definition.PluginSettingValueTableColumnTypeText, PreviewMatchedApps: true,
+				}},
+			},
+		}},
+	}}
+
+	plugins, err := pluginSettingsPluginsFromContract(items)
+	if err != nil {
+		t.Fatalf("adapt plugin settings: %v", err)
+	}
+	value := plugins[0].SettingDefinitions[0].Value
+	if !value.EnableSearch || value.SearchColumnKey != "Pattern" {
+		t.Fatalf("ignore rules search = %+v", value)
+	}
+	if len(value.Columns) != 1 || !value.Columns[0].PreviewMatchedApps {
+		t.Fatalf("ignore rules columns = %+v", value.Columns)
+	}
+}
+
 func TestPluginControllerPreservesInlineApplicationTableDefinition(t *testing.T) {
 	items := []contract.PluginCatalogItem{{
 		ID: "clipboard",
