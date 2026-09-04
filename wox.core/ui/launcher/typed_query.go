@@ -240,6 +240,7 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 		PreventHideAfterAction: action.PreventHideAfterAction,
 		Hotkey:                 action.Hotkey,
 		Form:                   definitions,
+		IsSystemAction:         action.IsSystemAction,
 	}
 }
 

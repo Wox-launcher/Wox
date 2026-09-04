@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"testing"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 )
 
@@ -103,6 +104,75 @@ func TestOnActionKeyIgnoresKeyUp(t *testing.T) {
 	app := &App{actionPanel: true}
 	if app.onActionKey(woxui.KeyEvent{Key: woxui.KeyArrowDown}) {
 		t.Fatal("action panel handled key-up")
+	}
+}
+
+func TestUnifiedActionPanelEntriesOrdersPluginThenSystem(t *testing.T) {
+	results := []queryResult{{
+		ID: "emoji",
+		Actions: []resultAction{
+			{ID: "__system_pin_in_query__", Name: "Pin", IsSystemAction: true},
+			{ID: "copy", Name: "Copy"},
+			{ID: "__system_reset_ranking__", Name: "Reset", IsSystemAction: true},
+			{ID: "keyword", Name: "Add keyword"},
+		},
+	}}
+	entries := unifiedActionPanelEntries(results, 0, nil)
+	if len(entries) != 4 {
+		t.Fatalf("unified entries = %d, want 4", len(entries))
+	}
+	got := make([]string, len(entries))
+	for index, entry := range entries {
+		got[index] = entry.ID
+		if (entry.ID == "result-copy-1" || entry.ID == "result-keyword-3") && entry.IsSystemAction {
+			t.Fatalf("plugin entry %s marked as system", entry.ID)
+		}
+		if (entry.ID == "result-__system_pin_in_query__-0" || entry.ID == "result-__system_reset_ranking__-2") && !entry.IsSystemAction {
+			t.Fatalf("system entry %s missing system flag", entry.ID)
+		}
+	}
+	want := []string{"result-copy-1", "result-keyword-3", "result-__system_pin_in_query__-0", "result-__system_reset_ranking__-2"}
+	for index, id := range want {
+		if got[index] != id {
+			t.Fatalf("unified order = %v, want %v", got, want)
+		}
+	}
+	if entries[0].ActionIndex != 1 || entries[2].ActionIndex != 0 {
+		t.Fatalf("action indices = %+v, want original result.Actions positions", entries)
+	}
+}
+
+func TestActionPanelDisplayItemsInsertsSeparatorWhenBothGroupsVisible(t *testing.T) {
+	entries := []actionPanelEntry{
+		{ID: "copy", IsSystemAction: false},
+		{ID: "keyword", IsSystemAction: false},
+		{ID: "pin", IsSystemAction: true},
+	}
+	items := actionPanelDisplayItems(entries, []int{0, 1, 2}, nil)
+	if len(items) != 4 || items[2].Kind != launcherview.ActionItemKindSeparator {
+		t.Fatalf("grouped items = %+v, want two plugin rows, a separator, then system", items)
+	}
+	if items[0].ID != "copy" || items[1].ID != "keyword" || items[3].ID != "pin" {
+		t.Fatalf("grouped item ids = %+v", items)
+	}
+}
+
+func TestActionPanelDisplayItemsOmitsSeparatorWhenOnlyOneGroup(t *testing.T) {
+	pluginOnly := actionPanelDisplayItems([]actionPanelEntry{{ID: "copy"}, {ID: "keyword"}}, []int{0, 1}, nil)
+	if len(pluginOnly) != 2 || pluginOnly[0].Kind != launcherview.ActionItemKindAction || pluginOnly[1].Kind != launcherview.ActionItemKindAction {
+		t.Fatalf("plugin-only items = %+v, want a flat list", pluginOnly)
+	}
+	systemOnly := actionPanelDisplayItems([]actionPanelEntry{{ID: "pin", IsSystemAction: true}}, []int{0}, nil)
+	if len(systemOnly) != 1 || systemOnly[0].Kind != launcherview.ActionItemKindAction {
+		t.Fatalf("system-only items = %+v, want a flat list", systemOnly)
+	}
+}
+
+func TestActionPanelDisplayItemsOmitsSeparatorWhenFilterLeavesOneGroup(t *testing.T) {
+	entries := []actionPanelEntry{{ID: "copy"}, {ID: "pin", IsSystemAction: true}}
+	items := actionPanelDisplayItems(entries, []int{1}, nil)
+	if len(items) != 1 || items[0].ID != "pin" || items[0].Kind != launcherview.ActionItemKindAction {
+		t.Fatalf("filtered system items = %+v, want no separator", items)
 	}
 }
 

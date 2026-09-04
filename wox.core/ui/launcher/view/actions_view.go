@@ -13,12 +13,23 @@ const (
 	// A 16px Text slot clips the native ascent of 13px Chinese titles such as 操作.
 	ActionHeaderHeight  = 18
 	ActionDividerHeight = 16
-	ActionSearchHeight  = 46
-	MaxVisibleActions   = 8
+	// ActionGroupDividerHeight matches the title divider so plugin and system groups share one hairline slot.
+	ActionGroupDividerHeight = ActionDividerHeight
+	ActionSearchHeight       = 46
+	MaxVisibleActions        = 8
 )
 
-// ActionItem contains resolved presentation data for one result action.
+// ActionItemKind distinguishes selectable actions from non-interactive group chrome.
+type ActionItemKind uint8
+
+const (
+	ActionItemKindAction ActionItemKind = iota
+	ActionItemKindSeparator
+)
+
+// ActionItem contains resolved presentation data for one result action or group chrome.
 type ActionItem struct {
+	Kind         ActionItemKind
 	Index        int
 	ID           string
 	Label        string
@@ -28,7 +39,7 @@ type ActionItem struct {
 
 // Equal compares every prepared visual field for one action item.
 func (i ActionItem) Equal(other ActionItem) bool {
-	if i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
+	if i.Kind != other.Kind || i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
 		return false
 	}
 	for index := range i.HotkeyLabels {
@@ -37,6 +48,40 @@ func (i ActionItem) Equal(other ActionItem) bool {
 		}
 	}
 	return true
+}
+
+// ActionItemHeight returns the list-slot height for one action or group divider.
+func ActionItemHeight(item ActionItem) float32 {
+	if item.Kind == ActionItemKindSeparator {
+		return ActionGroupDividerHeight
+	}
+	return ActionRowHeight
+}
+
+// ActionPanelListHeight sizes the visible action list, counting at most MaxVisibleActions rows.
+func ActionPanelListHeight(items []ActionItem) float32 {
+	if len(items) == 0 {
+		return ActionRowHeight
+	}
+	visibleActions := 0
+	height := float32(0)
+	for _, item := range items {
+		if item.Kind == ActionItemKindSeparator {
+			if visibleActions > 0 && visibleActions < MaxVisibleActions {
+				height += ActionGroupDividerHeight
+			}
+			continue
+		}
+		if visibleActions >= MaxVisibleActions {
+			break
+		}
+		height += ActionRowHeight
+		visibleActions++
+	}
+	if visibleActions == 0 {
+		return ActionRowHeight
+	}
+	return height
 }
 
 // ActionsProps contains the action panel state and callbacks.
@@ -130,18 +175,18 @@ func (s *actionsViewState) Build(context woxwidget.StateContext, widget any) wox
 func (s *actionsViewState) Dispose() {}
 
 // actionPanelGeometry calculates the stable panel and list extents used by both the adapter and retained State.
-func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeight float32, visibleRows int) {
+func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeight, listHeight float32) {
 	panelWidth = ActionPanelWidth(props.ActionPadding, props.WindowWidth)
 	innerWidth = max(float32(0), panelWidth-props.ActionPadding.Left-props.ActionPadding.Right)
-	visibleRows = max(1, min(len(props.Items), MaxVisibleActions))
-	panelHeight = ActionPanelBaseHeight(props.ActionPadding) + float32(visibleRows*ActionRowHeight)
+	listHeight = ActionPanelListHeight(props.Items)
+	panelHeight = ActionPanelBaseHeight(props.ActionPadding) + listHeight
 	panelHeight = min(panelHeight, max(float32(100), props.WindowHeight-props.QueryHeight-props.ToolbarHeight-20))
-	return panelWidth, innerWidth, panelHeight, visibleRows
+	return panelWidth, innerWidth, panelHeight, listHeight
 }
 
 // buildActionsView composes the current immutable action rows around the retained scroll controller.
 func buildActionsView(context woxwidget.StateContext, props ActionsProps, scrollController *woxwidget.ScrollController) woxwidget.Widget {
-	panelWidth, innerWidth, panelHeight, visibleRows := actionPanelGeometry(props)
+	panelWidth, innerWidth, panelHeight, listHeight := actionPanelGeometry(props)
 	actionTitleFontSize := scaledLauncherSize(woxcomponent.ActionTitleFontSize, props.DensityScale)
 	actionHeaderFontSize := scaledLauncherSize(woxcomponent.ActionHeaderFontSize, props.DensityScale)
 	actionFilterFontSize := scaledLauncherSize(woxcomponent.ActionFilterFontSize, props.DensityScale)
@@ -149,6 +194,10 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	headerLineHeight := scaledLauncherSize(ActionHeaderHeight, props.DensityScale)
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
+		if item.Kind == ActionItemKindSeparator {
+			rows = append(rows, actionPanelDivider(innerWidth, props.Theme.PreviewSplit))
+			continue
+		}
 		selected := item.Index == props.Selected
 		background := woxui.Color{}
 		foreground := props.Theme.ActionText
@@ -230,14 +279,15 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			},
 		}})
 	}
-	listHeight := float32(visibleRows * ActionRowHeight)
 	var keepVisible *woxwidget.ScrollRange
-	for position, item := range props.Items {
-		if item.Index == props.Selected {
-			start := float32(position * ActionRowHeight)
-			keepVisible = &woxwidget.ScrollRange{Start: start, End: start + ActionRowHeight}
+	offset := float32(0)
+	for _, item := range props.Items {
+		height := ActionItemHeight(item)
+		if item.Kind == ActionItemKindAction && item.Index == props.Selected {
+			keepVisible = &woxwidget.ScrollRange{Start: offset, End: offset + height}
 			break
 		}
+		offset += height
 	}
 	actionList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight,
@@ -257,13 +307,21 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				Value: props.HeaderLabel, Width: innerWidth, Height: headerLineHeight, LineHeight: headerLineHeight, MaxLines: 1, AlignmentY: 0.5,
 				Style: woxui.TextStyle{Size: actionHeaderFontSize}, Color: props.ActionHeader,
 			}},
-			woxwidget.Container{Width: innerWidth, Height: ActionDividerHeight, Padding: woxwidget.Insets{Top: 7, Bottom: 8}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
+			actionPanelDivider(innerWidth, props.Theme.PreviewSplit),
 			actionList,
 			woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},
 		}},
 	}
 	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.
 	return woxwidget.Gesture{ID: "action-panel-surface", OnTap: func() {}, Child: panel}
+}
+
+// actionPanelDivider shares the centered hairline used below the title and between action groups.
+func actionPanelDivider(width float32, color woxui.Color) woxwidget.Widget {
+	return woxwidget.Align{
+		Width: width, Height: ActionDividerHeight, Vertical: 0.5,
+		Child: woxwidget.Container{Width: width, Height: 1, Color: color},
+	}
 }
 
 type actionSearchProps struct {

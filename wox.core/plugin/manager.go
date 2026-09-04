@@ -3451,10 +3451,18 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			return actions[i].IsDefault
 		})
 
-		// Add system actions (like pin/unpin)
-		// System actions are added after user actions
-		systemActions := m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Result.ScoreKey)
-		actions = append(actions, systemActions...)
+		if resultCache.Query.Env.IsMRU {
+			// MRU restore owns its system actions, including the removal callback's
+			// captured item hash. Reuse them after GetUpdatableResult filters them out.
+			for _, action := range resultCache.Result.Actions {
+				if action.IsSystemAction {
+					actions = append(actions, action)
+				}
+			}
+		} else {
+			// Regular queries regenerate system actions to reflect pin/unpin changes.
+			actions = append(actions, m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Result.ScoreKey)...)
+		}
 
 		// Translate action names
 		for actionIndex := range actions {
@@ -4817,9 +4825,10 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 			// Add "Remove from MRU" action to each MRU result
 			removeMRUAction := QueryResultAction{
-				Id:   uuid.NewString(),
-				Name: i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
-				Icon: common.TrashIcon,
+				Id:             uuid.NewString(),
+				Name:           i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
+				Icon:           common.TrashIcon,
+				IsSystemAction: true,
 				Action: func(ctx context.Context, actionContext ActionContext) {
 					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.Hash)
 					if err != nil {

@@ -69,6 +69,7 @@ Preserve the current special contracts unless a task explicitly targets them:
 | Action Panel header | 18 optically centered line; do not use a 16 Text slot |
 | Action Panel filter | 40 input inside a 46-high slot |
 | Action Panel row | 40 |
+| Action Panel group divider | 16-high slot with a 1px `PreviewSplit` hairline; same treatment as the title divider |
 
 If a shared primitive serves both an ordinary page and a special surface, provide an explicit context-specific composition or semantic size instead of changing one default and relying on call-site overrides.
 

@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	actionRowHeight   = launcherview.ActionRowHeight
-	maxVisibleActions = launcherview.MaxVisibleActions
+	actionRowHeight = launcherview.ActionRowHeight
 )
 
 type actionPanelSource uint8
@@ -46,6 +45,7 @@ type actionPanelEntry struct {
 	ActionIndex          int
 	ToolbarMessageID     string
 	ToolbarMessageAction toolbarMessageAction
+	IsSystemAction       bool
 }
 
 func actionPanelBaseHeightForPalette(palette uiPalette) float32 {
@@ -134,7 +134,16 @@ func unifiedActionPanelEntries(results []queryResult, selected int, message *too
 		return entries
 	}
 	result := results[selected]
+	var pluginActions, systemActions []int
 	for index, action := range result.Actions {
+		if action.IsSystemAction {
+			systemActions = append(systemActions, index)
+		} else {
+			pluginActions = append(pluginActions, index)
+		}
+	}
+	appendResultAction := func(index int) {
+		action := result.Actions[index]
 		hotkey := action.Hotkey
 		if _, conflicted := reservedHotkeys[normalizeToolbarHotkey(hotkey)]; conflicted && strings.TrimSpace(hotkey) != "" {
 			hotkey = ""
@@ -142,10 +151,55 @@ func unifiedActionPanelEntries(results []queryResult, selected int, message *too
 		entries = append(entries, actionPanelEntry{
 			Key: fmt.Sprintf("result:%s:%s:%d", result.ID, action.ID, index), ID: fmt.Sprintf("result-%s-%d", action.ID, index),
 			Name: action.Name, SearchAliases: action.SearchAliases, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
-			ResultIndex: selected, ActionIndex: index,
+			ResultIndex: selected, ActionIndex: index, IsSystemAction: action.IsSystemAction,
 		})
 	}
+	for _, index := range pluginActions {
+		appendResultAction(index)
+	}
+	for _, index := range systemActions {
+		appendResultAction(index)
+	}
 	return entries
+}
+
+// actionPanelDisplayItems keeps plugin and local/toolbar actions above system actions
+// and inserts a separator only when both groups are visible after filtering.
+func actionPanelDisplayItems(entries []actionPanelEntry, indices []int, makeItem func(int, actionPanelEntry) launcherview.ActionItem) []launcherview.ActionItem {
+	hasPrimary, hasSystem := false, false
+	for _, index := range indices {
+		if index < 0 || index >= len(entries) {
+			continue
+		}
+		if entries[index].IsSystemAction {
+			hasSystem = true
+		} else {
+			hasPrimary = true
+		}
+	}
+	items := make([]launcherview.ActionItem, 0, len(indices)+1)
+	insertedDivider := false
+	for _, index := range indices {
+		if index < 0 || index >= len(entries) {
+			continue
+		}
+		entry := entries[index]
+		if hasPrimary && hasSystem && entry.IsSystemAction && !insertedDivider {
+			items = append(items, launcherview.ActionItem{Kind: launcherview.ActionItemKindSeparator})
+			insertedDivider = true
+		}
+		if makeItem != nil {
+			items = append(items, makeItem(index, entry))
+			continue
+		}
+		items = append(items, launcherview.ActionItem{Kind: launcherview.ActionItemKindAction, Index: index, ID: entry.ID})
+	}
+	return items
+}
+
+// actionPanelVisibleListHeight sizes the scroll list from filtered entries, including a visible group divider.
+func actionPanelVisibleListHeight(entries []actionPanelEntry, indices []int) float32 {
+	return launcherview.ActionPanelListHeight(actionPanelDisplayItems(entries, indices, nil))
 }
 
 // buildActionPanel resolves action labels and icons before delegating to the pure panel view.
@@ -153,21 +207,16 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 	if len(snapshot.actionEntries) == 0 {
 		return nil, 0, 0
 	}
-	items := make([]launcherview.ActionItem, 0, len(snapshot.actionIndices))
-	for _, index := range snapshot.actionIndices {
-		if index < 0 || index >= len(snapshot.actionEntries) {
-			continue
-		}
-		action := snapshot.actionEntries[index]
+	items := actionPanelDisplayItems(snapshot.actionEntries, snapshot.actionIndices, func(index int, action actionPanelEntry) launcherview.ActionItem {
 		iconSize := physicalImageSize(22, imageScale)
 		icon := a.imageForSize(action.Icon, iconSize)
 		if action.Source == actionPanelSourceLocal {
 			icon = a.imageForTint(action.Icon, &snapshot.palette.actionText, iconSize)
 		}
-		items = append(items, launcherview.ActionItem{
-			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, HotkeyLabels: formatHotkeyLabels(action.Hotkey),
-		})
-	}
+		return launcherview.ActionItem{
+			Kind: launcherview.ActionItemKindAction, Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, HotkeyLabels: formatHotkeyLabels(action.Hotkey),
+		}
+	})
 	return launcherview.ActionsBoundary(launcherview.ActionsProps{
 		Revision: snapshot.actionsRevision,
 		Window:   a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight, DensityScale: snapshot.densityMetrics.scale,

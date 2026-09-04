@@ -1030,7 +1030,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	var palette uiPalette
 	var densityMetrics launcherDensityMetrics
 	var resultCount int
-	var actionCount int
+	var actionListHeight int
 	var formHeight int
 	var refinementVisible bool
 	var actionPanel bool
@@ -1057,7 +1057,9 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		chatFullscreen = a.chatFullscreen
 		previewFullscreen = chatFullscreen || a.terminalFullscreen
 		if actionPanel && a.actionFilter != nil {
-			actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin()))
+			entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+			indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
+			actionListHeight = int(actionPanelVisibleListHeight(entries, indices))
 		}
 		if a.selected >= 0 && a.selected < len(a.results) {
 			requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"
@@ -1134,7 +1136,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		height = max(height, minimumHeight)
 	}
 	if actionPanel {
-		actionHeight := int(actionPanelBaseHeightForPalette(palette)) + max(1, min(actionCount, maxVisibleActions))*actionRowHeight
+		actionHeight := int(actionPanelBaseHeightForPalette(palette)) + max(actionRowHeight, actionListHeight)
 		if !params.HideQueryBox {
 			actionHeight += queryAreaHeight
 		} else {
@@ -1931,6 +1933,7 @@ type resultAction struct {
 	PreventHideAfterAction bool             `json:"PreventHideAfterAction"`
 	Hotkey                 string           `json:"Hotkey"`
 	Form                   []formDefinition `json:"Form"`
+	IsSystemAction         bool             `json:"IsSystemAction"`
 }
 
 type formDefinition struct {

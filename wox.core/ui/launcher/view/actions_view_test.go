@@ -1,6 +1,7 @@
 package view
 
 import (
+	"reflect"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -105,6 +106,91 @@ func TestActionFilterUsesReadableTypeWithoutChangingGeometry(t *testing.T) {
 	}
 	if search.Style.Size != 13 {
 		t.Fatalf("action filter font size = %v, want readable 13px type", search.Style.Size)
+	}
+}
+
+func TestActionPanelListHeightIncludesVisibleGroupDivider(t *testing.T) {
+	items := []ActionItem{
+		{ID: "copy"}, {ID: "keyword"}, {Kind: ActionItemKindSeparator}, {ID: "pin"}, {ID: "reset"},
+	}
+	got := ActionPanelListHeight(items)
+	want := float32(4*ActionRowHeight + ActionGroupDividerHeight)
+	if got != want {
+		t.Fatalf("grouped list height = %v, want %v", got, want)
+	}
+}
+
+func TestActionPanelListHeightOmitsDividerBelowFold(t *testing.T) {
+	items := make([]ActionItem, 0, MaxVisibleActions+2)
+	for index := 0; index < MaxVisibleActions; index++ {
+		items = append(items, ActionItem{ID: "plugin"})
+	}
+	items = append(items, ActionItem{Kind: ActionItemKindSeparator}, ActionItem{ID: "pin"})
+	if got := ActionPanelListHeight(items); got != float32(MaxVisibleActions*ActionRowHeight) {
+		t.Fatalf("below-fold divider height = %v, want %v action rows", got, MaxVisibleActions)
+	}
+}
+
+func TestActionGroupDividerGeometry(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{PreviewSplit: woxui.Color{A: 255}},
+		Items: []ActionItem{{ID: "copy", Label: "Copy"}, {Kind: ActionItemKindSeparator}, {ID: "pin", Label: "Pin"}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	panel := view.Child.(woxwidget.Container)
+	actionList := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if actionList.Height != float32(2*ActionRowHeight+ActionGroupDividerHeight) {
+		t.Fatalf("grouped list slot = %v, want two rows plus a %v divider", actionList.Height, ActionGroupDividerHeight)
+	}
+	rows := actionList.Content.(woxwidget.Flex).Children
+	if len(rows) != 3 {
+		t.Fatalf("grouped row count = %d, want action, divider, action", len(rows))
+	}
+	divider, ok := rows[1].(woxwidget.Align)
+	if !ok || divider.Height != ActionGroupDividerHeight || divider.Vertical != 0.5 {
+		t.Fatalf("group divider = %#v, want a %v-high title-divider slot", rows[1], ActionGroupDividerHeight)
+	}
+	line, ok := divider.Child.(woxwidget.Container)
+	if !ok || line.Height != 1 || line.Color.A != 255 {
+		t.Fatalf("group divider line = %#v, want a 1px PreviewSplit hairline", divider.Child)
+	}
+	titleDivider := panel.Child.(woxwidget.Flex).Children[1]
+	if !reflect.DeepEqual(titleDivider, divider) {
+		t.Fatalf("title divider = %#v, want the same geometry and color as the group divider %#v", titleDivider, divider)
+	}
+}
+
+func TestActionGroupDividerIsNotInteractive(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{},
+		Items: []ActionItem{{ID: "copy", Label: "Copy"}, {Kind: ActionItemKindSeparator}, {ID: "pin", Label: "Pin"}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	rows := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	if _, ok := rows[1].(woxwidget.Gesture); ok {
+		t.Fatal("group divider used a gesture")
+	}
+	if semantics, ok := rows[1].(woxwidget.Semantics); ok {
+		t.Fatalf("group divider semantics = %#v, want no action automation node", semantics)
+	}
+	if _, ok := rows[0].(woxwidget.Semantics); !ok {
+		t.Fatalf("plugin action = %T, want a menu item", rows[0])
+	}
+}
+
+func TestActionKeepVisibleAccountsForGroupDivider(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, Selected: 1,
+		Items: []ActionItem{{Index: 0, ID: "copy", Label: "Copy"}, {Kind: ActionItemKindSeparator}, {Index: 1, ID: "pin", Label: "Pin"}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	actionList := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if actionList.KeepVisible == nil {
+		t.Fatal("grouped selection did not request KeepVisible")
+	}
+	start := float32(ActionRowHeight + ActionGroupDividerHeight)
+	if actionList.KeepVisible.Start != start || actionList.KeepVisible.End != start+ActionRowHeight {
+		t.Fatalf("KeepVisible = %+v, want [%v, %v] after the group divider", actionList.KeepVisible, start, start+ActionRowHeight)
 	}
 }
 

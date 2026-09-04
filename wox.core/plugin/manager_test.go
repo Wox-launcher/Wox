@@ -117,6 +117,58 @@ func TestPolishUpdatableResultKeepsPreviewForTriggeredQuery(t *testing.T) {
 	assert.Equal(t, "base64:cover", result.Preview.PreviewData)
 }
 
+// TestMRUResultUpdatesPreserveSystemActions covers both a read-modify-write update
+// and replacing plugin actions while keeping the restore-owned removal callback.
+func TestMRUResultUpdatesPreserveSystemActions(t *testing.T) {
+	ctx := context.Background()
+	removed := 0
+	manager, pluginInstance := newTestManagerWithCachedResult(Query{
+		Id: "query-mru", SessionId: "session", Type: QueryTypeInput, Env: QueryEnv{IsMRU: true},
+	}, QueryResult{
+		Id: "result-mru", Title: "Original",
+		Actions: []QueryResultAction{
+			{Id: "open", Name: "Open", IsDefault: true},
+			{Id: systemActionOpenPluginSettingID, Name: "Settings", IsSystemAction: true},
+			{Id: "remove-mru", Name: "Remove", IsSystemAction: true, Action: func(context.Context, ActionContext) { removed++ }},
+		},
+	})
+	for _, replaceActions := range []bool{false, true, false} {
+		update := manager.GetUpdatableResult(ctx, "result-mru")
+		if update == nil || update.Actions == nil {
+			t.Fatal("cached MRU result missing")
+		}
+		for _, action := range *update.Actions {
+			if action.IsSystemAction {
+				t.Fatal("system action exposed in plugin update")
+			}
+		}
+		title := "Updated"
+		update.Title = &title
+		// Tail updates require the settings database; this test only updates title and actions.
+		update.Tails = nil
+		if replaceActions {
+			actions := []QueryResultAction{{Id: "copy", Name: "Copy"}}
+			update.Actions = &actions
+		}
+		result := manager.PolishUpdatableResult(ctx, pluginInstance, *update)
+		if result.Actions == nil || len(*result.Actions) != 3 {
+			t.Fatalf("updated actions = %+v, want one plugin action and two MRU system actions", result.Actions)
+		}
+		actions := *result.Actions
+		if actions[1].Id != systemActionOpenPluginSettingID || actions[2].Id != "remove-mru" || !actions[2].IsSystemAction || actions[2].Action == nil {
+			t.Fatalf("MRU system actions changed: %+v", actions)
+		}
+		actions[2].Action(ctx, ActionContext{})
+		cached, found := manager.findResultCacheById("result-mru")
+		if !found || cached.Result.Title != title || len(cached.Result.Actions) != 3 {
+			t.Fatal("updated MRU result was not retained in cache")
+		}
+	}
+	if removed != 3 {
+		t.Fatalf("removal callback calls = %d, want 3", removed)
+	}
+}
+
 func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 	manager := &Manager{}
 	pluginIcon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>`)
