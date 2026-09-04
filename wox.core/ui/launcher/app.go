@@ -228,6 +228,9 @@ type App struct {
 	nativeFilePreviewReportedBoundsPath       string
 	nativeFilePreviewReportedBoundsGeneration uint64
 	nativeFilePreviewHasReportedBounds        bool
+	nativeFilePreviewOcclusionTimer           *time.Timer
+	nativeFilePreviewOcclusion                woxui.Rect
+	nativeFilePreviewReportedOcclusion        woxui.Rect
 	mdDocs                                    map[string]woxcomponent.MarkdownDocument
 	previewLayouts                            map[string]woxwidget.TextBlockLayout
 	dictationAudio                            *dictationPreviewAudioState

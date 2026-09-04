@@ -37,6 +37,7 @@ typedef struct WoxWindowsFilePreview WoxWindowsFilePreview;
 int32_t wox_windows_file_preview_create(uintptr_t owner, const char *path, int32_t x, int32_t y, int32_t width, int32_t height, WoxWindowsFilePreview **preview);
 int32_t wox_windows_file_preview_show(WoxWindowsFilePreview *preview, int32_t x, int32_t y, int32_t width, int32_t height);
 int32_t wox_windows_file_preview_hide(WoxWindowsFilePreview *preview);
+int32_t wox_windows_file_preview_set_clip(WoxWindowsFilePreview *preview, int32_t left, int32_t top, int32_t right, int32_t bottom, int32_t corner_diameter);
 void wox_windows_file_preview_destroy(WoxWindowsFilePreview *preview);
 
 #ifdef __cplusplus

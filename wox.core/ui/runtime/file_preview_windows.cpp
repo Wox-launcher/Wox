@@ -224,6 +224,42 @@ extern "C" int32_t wox_windows_file_preview_hide(WoxWindowsFilePreview *preview)
   return static_cast<int32_t>(S_OK);
 }
 
+// Keep corner clipping and overlay exclusion in one region; SetWindowRgn replaces the previous region.
+extern "C" int32_t wox_windows_file_preview_set_clip(WoxWindowsFilePreview *preview, int32_t left, int32_t top, int32_t right, int32_t bottom, int32_t corner_diameter) {
+  if (preview == nullptr || preview->host == nullptr) {
+    return static_cast<int32_t>(E_INVALIDARG);
+  }
+  if ((right <= left || bottom <= top) && corner_diameter <= 0) {
+    return static_cast<int32_t>(SetWindowRgn(preview->host, nullptr, TRUE) != 0 ? S_OK : E_FAIL);
+  }
+  RECT host_bounds{};
+  if (!GetWindowRect(preview->host, &host_bounds)) {
+    return static_cast<int32_t>(HRESULT_FROM_WIN32(GetLastError()));
+  }
+  // Convert physical desktop coordinates to the owner's client space, including negative monitor origins.
+  SetLastError(ERROR_SUCCESS);
+  if (MapWindowPoints(nullptr, preview->parent, reinterpret_cast<POINT *>(&host_bounds), 2) == 0 && GetLastError() != ERROR_SUCCESS) {
+    return static_cast<int32_t>(HRESULT_FROM_WIN32(GetLastError()));
+  }
+  const int width = host_bounds.right - host_bounds.left;
+  const int height = host_bounds.bottom - host_bounds.top;
+  const int diameter = std::clamp<int>(corner_diameter, 0, std::min(width, height));
+  HRGN visible = diameter > 0 ? CreateRoundRectRgn(0, 0, width, height, diameter, diameter) : CreateRectRgn(0, 0, width, height);
+  HRGN excluded = CreateRectRgn(left - host_bounds.left, top - host_bounds.top, right - host_bounds.left, bottom - host_bounds.top);
+  HRESULT result = E_FAIL;
+  if (visible != nullptr && excluded != nullptr && CombineRgn(visible, visible, excluded, RGN_DIFF) != ERROR && SetWindowRgn(preview->host, visible, TRUE) != 0) {
+    visible = nullptr;  // SetWindowRgn transfers ownership to the window system on success.
+    result = S_OK;
+  }
+  if (visible != nullptr) {
+    DeleteObject(visible);
+  }
+  if (excluded != nullptr) {
+    DeleteObject(excluded);
+  }
+  return static_cast<int32_t>(result);
+}
+
 extern "C" void wox_windows_file_preview_destroy(WoxWindowsFilePreview *preview) {
   delete preview;
 }

@@ -244,6 +244,11 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		footer = a.buildFooter(snapshot, width, toolbarHeight, frame.Scale)
 	}
 	var floating *launcherview.LauncherFloatingView
+	// Overlays drawn by Wox sit above the native file preview child window, which the compositor
+	// cannot blend into. Report their rectangles so the handler is clipped out from underneath.
+	// The bottom-anchored form panel is left out on purpose: buildFormPanel reports its maximum
+	// height rather than the shrink-wrapped one, so its exact rectangle is unknown during build.
+	nativePreviewOcclusion := woxui.Rect{}
 	if snapshot.form != nil {
 		panel, panelWidth, _ := a.buildFormPanel(snapshot, width)
 		panel = launcherPreparedSection("launcher-form-section", "form", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.form, snapshot.palette, snapshot.densityMetrics, panelWidth), Width: panelWidth, Height: height, Child: panel})
@@ -255,13 +260,16 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 			rightOffset := snapshot.palette.appPadding.Right + 10
 			bottomOffset := snapshot.palette.appPadding.Bottom + 10
 			floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(rightOffset, width-panelWidth-rightOffset), Top: max(queryChromeHeight+8, height-toolbarHeight-panelHeight-bottomOffset)}
+			nativePreviewOcclusion = woxui.Rect{X: floating.Left, Y: floating.Top, Width: panelWidth, Height: panelHeight}
 		}
 	}
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
+		nativePreviewOcclusion = woxui.Rect{Width: width, Height: height}
 	}
+	a.requestNativeFilePreviewOcclusion(nativePreviewOcclusion)
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
 		Width: width, Height: height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),

@@ -126,7 +126,7 @@ func (a *App) flushNativeFilePreviewBounds() {
 	if a.nativeFilePreviewHasReportedBounds && a.nativeFilePreviewReportedBoundsPath == path && a.nativeFilePreviewReportedBoundsGeneration == generation && a.nativeFilePreviewReportedBounds == bounds {
 		return
 	}
-	if err := a.window.ShowNativeFilePreview(path, bounds, generation); err != nil {
+	if err := a.window.ShowNativeFilePreview(path, bounds, previewview.WebViewPreviewCornerRadius, generation); err != nil {
 		a.setNativeFilePreviewError(generation, err)
 		return
 	}
@@ -134,6 +134,39 @@ func (a *App) flushNativeFilePreviewBounds() {
 	a.nativeFilePreviewReportedBoundsPath = path
 	a.nativeFilePreviewReportedBoundsGeneration = generation
 	a.nativeFilePreviewHasReportedBounds = true
+}
+
+// requestNativeFilePreviewOcclusion records the Wox-drawn overlay that must stay above the handler.
+// The native region call is deferred for the same reason as the placement above: it repaints the
+// child window and must not run inside the build pass that produced the geometry.
+func (a *App) requestNativeFilePreviewOcclusion(bounds woxui.Rect) {
+	if a.nativeFilePreviewOcclusion == bounds {
+		return
+	}
+	a.nativeFilePreviewOcclusion = bounds
+	if a.nativeFilePreviewOcclusionTimer != nil {
+		return
+	}
+	a.nativeFilePreviewOcclusionTimer = time.AfterFunc(time.Millisecond, func() {
+		if err := a.runOnUI("update native file preview occlusion", a.flushNativeFilePreviewOcclusion); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, "update native file preview occlusion: "+err.Error())
+		}
+	})
+}
+
+// flushNativeFilePreviewOcclusion applies only the latest overlay outside the build pass.
+func (a *App) flushNativeFilePreviewOcclusion() {
+	a.nativeFilePreviewOcclusionTimer = nil
+	if a.window == nil || a.nativeFilePreviewReportedOcclusion == a.nativeFilePreviewOcclusion {
+		return
+	}
+	// Record the attempt even when it fails. An overlay is transient chrome, so a stale region is
+	// corrected by the next open or close instead of by retrying on every following build.
+	bounds := a.nativeFilePreviewOcclusion
+	a.nativeFilePreviewReportedOcclusion = bounds
+	if err := a.window.SetNativeFilePreviewOcclusion(bounds); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, "update native file preview occlusion: "+err.Error())
+	}
 }
 
 // activateNativeFilePreview makes one native handler the owner of the preview rectangle.

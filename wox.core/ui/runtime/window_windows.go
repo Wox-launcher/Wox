@@ -145,6 +145,7 @@ const (
 	windowCommandWebViewNavigationState
 	windowCommandShowNativeFilePreview
 	windowCommandHideNativeFilePreview
+	windowCommandSetNativeFilePreviewOcclusion
 	windowCommandTrimRenderer
 	windowCommandRestoreForeground
 	windowCommandConfirmActivation
@@ -169,6 +170,7 @@ type windowCommand struct {
 	webViewBounds               Rect
 	nativeFilePath              string
 	nativeFileBounds            Rect
+	nativeFileCornerRadius      float32
 	nativeFilePreviewGeneration uint64
 	restoreForeground           win.HWND
 	reply                       chan windowCommandResult
@@ -203,14 +205,21 @@ type platformWindow struct {
 	pending    []windowCommand
 	done       chan struct{}
 
-	renderer                    *nativeRenderer
-	rendererTrimTimer           *time.Timer
-	foregroundRestoreTimers     [2]*time.Timer
-	activationConfirmTimers     [2]*time.Timer
-	webView                     *webviewruntime.Controller
-	nativeFilePreview           *windowsFilePreview
-	nativeFilePreviewGeneration uint64
-	focus                       focusRuntime
+	renderer                *nativeRenderer
+	rendererTrimTimer       *time.Timer
+	foregroundRestoreTimers [2]*time.Timer
+	activationConfirmTimers [2]*time.Timer
+	webView                 *webviewruntime.Controller
+	nativeFilePreview       *windowsFilePreview
+	// The preview's clip region is retained here because the overlay and the preview have
+	// independent lifetimes: an overlay can be reported before any preview exists, and a preview
+	// created or moved later must be able to reapply the last overlay without another call.
+	// The scale is kept alongside so a display transition reapplies the same logical rectangle.
+	nativeFilePreviewOcclusion      Rect
+	nativeFilePreviewCornerRadius   float32
+	nativeFilePreviewOcclusionScale float32
+	nativeFilePreviewGeneration     uint64
+	focus                           focusRuntime
 	// nativeDialogActive keeps hide-on-blur from treating a Wox-owned file
 	// picker as a real focus loss. IFileDialog is modal but not a child or
 	// owned HWND, so isWithinFocusDomain cannot see it.
@@ -588,8 +597,8 @@ func (w *platformWindow) openExternalURL(rawURL string) error {
 	return w.call(windowCommand{kind: windowCommandOpenExternalURL, externalURL: rawURL}).err
 }
 
-func (w *platformWindow) showNativeFilePreview(path string, bounds Rect, generation uint64) error {
-	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds, nativeFilePreviewGeneration: generation}).err
+func (w *platformWindow) showNativeFilePreview(path string, bounds Rect, cornerRadius float32, generation uint64) error {
+	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds, nativeFileCornerRadius: cornerRadius, nativeFilePreviewGeneration: generation}).err
 }
 
 func (w *platformWindow) hideNativeFilePreview(generation uint64) error {
@@ -1928,7 +1937,26 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			}
 			w.nativeFilePreview = preview
 		}
-		return windowCommandResult{err: w.nativeFilePreview.show(command.nativeFileBounds, w.scale)}
+		w.nativeFilePreviewCornerRadius = command.nativeFileCornerRadius
+		if err := w.nativeFilePreview.show(command.nativeFileBounds, w.scale); err != nil {
+			return windowCommandResult{err: err}
+		}
+		// The region is window-relative, so any move or resize invalidates both the corner rounding
+		// and the overlay cut-out. Reapply after every placement, including delayed creation.
+		w.nativeFilePreviewOcclusionScale = w.scale
+		return windowCommandResult{err: w.nativeFilePreview.setClip(w.nativeFilePreviewOcclusion, w.nativeFilePreviewCornerRadius, w.scale)}
+	case windowCommandSetNativeFilePreviewOcclusion:
+		if w.nativeFilePreviewOcclusion == command.nativeFileBounds && w.nativeFilePreviewOcclusionScale == w.scale {
+			return windowCommandResult{}
+		}
+		if w.nativeFilePreview != nil {
+			if err := w.nativeFilePreview.setClip(command.nativeFileBounds, w.nativeFilePreviewCornerRadius, w.scale); err != nil {
+				return windowCommandResult{err: err}
+			}
+		}
+		w.nativeFilePreviewOcclusion = command.nativeFileBounds
+		w.nativeFilePreviewOcclusionScale = w.scale
+		return windowCommandResult{}
 	case windowCommandHideNativeFilePreview:
 		if command.nativeFilePreviewGeneration < w.nativeFilePreviewGeneration {
 			return windowCommandResult{}
