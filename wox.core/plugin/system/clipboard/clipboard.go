@@ -48,6 +48,33 @@ var clipboardOCRModelSettingKey = "ocr_model"
 var primaryActionSettingKey = "primary_action"
 var primaryActionValueCopy = "copy"
 var primaryActionValuePaste = "paste"
+
+// primaryActionCode returns the configured Enter action, defaulting to paste.
+func (c *ClipboardPlugin) primaryActionCode(ctx context.Context) string {
+	code := strings.TrimSpace(c.api.GetSetting(ctx, primaryActionSettingKey))
+	if code == "" {
+		return primaryActionValuePaste
+	}
+	return code
+}
+
+// applyCopyPastePrimaryAction puts Enter on the configured primary action and
+// ctrl/cmd+enter on the other when paste to the active window is available.
+func applyCopyPastePrimaryAction(copyAction *plugin.QueryResultAction, pasteAction *plugin.QueryResultAction, primaryActionCode string) {
+	copyIsDefault := primaryActionCode == primaryActionValueCopy
+	copyAction.IsDefault = copyIsDefault
+	if pasteAction == nil {
+		return
+	}
+	pasteAction.IsDefault = !copyIsDefault
+	alternate := util.PrimaryHotkey("enter")
+	if copyIsDefault {
+		pasteAction.Hotkey = alternate
+	} else {
+		copyAction.Hotkey = alternate
+	}
+}
+
 var favoritesSettingKey = "favorites"
 var ignoredApplicationsSettingKey = "ignored_applications"
 
@@ -1092,7 +1119,7 @@ func clipboardFavoriteFilePaths(item FavoriteClipboardItem) []string {
 // convertFileRecord converts a file list record to a query result.
 func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	filePaths := clipboardRecordFilePaths(record)
-	primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
+	primaryActionCode := c.primaryActionCode(ctx)
 	group, groupScore := c.getResultGroup(ctx, record)
 
 	title := record.Content
@@ -1108,9 +1135,8 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 
 	actions := []plugin.QueryResultAction{
 		{
-			Name:      "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
-			Icon:      common.CopyIcon,
-			IsDefault: primaryActionValueCopy == primaryActionCode,
+			Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
+			Icon: common.CopyIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
@@ -1129,8 +1155,10 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		return nil
 	})
 	if pasteToActiveWindowErr == nil {
+		applyCopyPastePrimaryAction(&actions[0], &pasteToActiveWindowAction, primaryActionCode)
 		actions = append(actions, pasteToActiveWindowAction)
 	} else {
+		applyCopyPastePrimaryAction(&actions[0], nil, primaryActionCode)
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
 	}
 
@@ -1367,7 +1395,7 @@ func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePat
 
 // convertTextRecord converts a text record to a query result
 func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
-	primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
+	primaryActionCode := c.primaryActionCode(ctx)
 	openDirectoryPath := resolveClipboardDirectoryPath(record.Content)
 	filesystemPath, filesystemIsDir := resolveClipboardFilesystemPath(record.Content)
 	normalizedLink := ""
@@ -1377,9 +1405,8 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	actions := []plugin.QueryResultAction{
 		{
-			Name:      "i18n:plugin_clipboard_copy",
-			Icon:      common.CopyIcon,
-			IsDefault: primaryActionValueCopy == primaryActionCode,
+			Name: "i18n:plugin_clipboard_copy",
+			Icon: common.CopyIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := clipboard.WriteText(record.Content); err != nil {
@@ -1399,8 +1426,10 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		return nil
 	})
 	if pasteToActiveWindowErr == nil {
+		applyCopyPastePrimaryAction(&actions[0], &pasteToActiveWindowAction, primaryActionCode)
 		actions = append(actions, pasteToActiveWindowAction)
 	} else {
+		applyCopyPastePrimaryAction(&actions[0], nil, primaryActionCode)
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
 	}
 
@@ -1701,90 +1730,49 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
+				Icon: common.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.moveRecordToTop(ctx, record.ID)
-					// Load image from disk and copy to clipboard
-					if record.FilePath != "" && util.IsFileExists(record.FilePath) {
-
-						// On Windows, also load DIB data from cache for better performance in pasting to apps
-						if util.IsWindows() {
-							dibPath := c.getDibCachePath(record.ID)
-							if util.IsFileExists(dibPath) {
-								pngData, pngErr := os.ReadFile(record.FilePath)
-								if pngErr != nil {
-									c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read PNG cache: id=%s path=%s err=%s", record.ID, record.FilePath, pngErr.Error()))
-								} else {
-									dibData, readErr := os.ReadFile(dibPath)
-									if readErr != nil {
-										c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read DIB cache: id=%s path=%s err=%s", record.ID, dibPath, readErr.Error()))
-									} else {
-										c.api.Log(
-											ctx,
-											plugin.LogLevelInfo,
-											fmt.Sprintf(
-												"restoring image from cache: id=%s png={len=%d sha256=%s} dib={len=%d sha256=%s}",
-												record.ID,
-												len(pngData),
-												c.shortHashBytes(pngData),
-												len(dibData),
-												c.shortHashBytes(dibData),
-											),
-										)
-
-										if writeErr := clipboard.WriteImageBytes(pngData, dibData); writeErr == nil {
-											c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("restored image from cache to clipboard: id=%s", record.ID))
-											return
-										} else {
-											c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from PNG+DIB cache: id=%s err=%s", record.ID, writeErr.Error()))
-										}
-									}
-								}
-							} else {
-								c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("DIB cache not found, fallback to image decode: id=%s path=%s", record.ID, dibPath))
-							}
-						}
-
-						if img := c.loadImageFromFile(ctx, record.FilePath); img != nil {
-							c.api.Log(
-								ctx,
-								plugin.LogLevelInfo,
-								fmt.Sprintf(
-									"restoring image from file decode: id=%s path=%s width=%d height=%d",
-									record.ID,
-									record.FilePath,
-									img.Bounds().Dx(),
-									img.Bounds().Dy(),
-								),
-							)
-							if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
-								c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from file: id=%s path=%s err=%s", record.ID, record.FilePath, err.Error()))
-							} else {
-								c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("restored image from file decode to clipboard: id=%s", record.ID))
-							}
-						} else {
-							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to decode image file for clipboard restore: id=%s path=%s", record.ID, record.FilePath))
-						}
-					} else {
-						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("clipboard restore skipped, file missing: id=%s path=%s", record.ID, record.FilePath))
+					if err := c.restoreImageRecordToClipboard(ctx, record); err != nil {
+						c.api.Log(ctx, plugin.LogLevelError, err.Error())
 					}
-				},
-			},
-			{
-				Name:                   "i18n:plugin_clipboard_delete",
-				Icon:                   common.TrashIcon,
-				PreventHideAfterAction: true,
-				Hotkey:                 util.PrimaryHotkey("d"),
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					if err := c.deleteRecord(ctx, record); err != nil {
-						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
-						return
-					}
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
-					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 				},
 			},
 		},
 	}
+
+	primaryActionCode := c.primaryActionCode(ctx)
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+		if err := c.restoreImageRecordToClipboard(actionCtx, record); err != nil {
+			c.api.Log(actionCtx, plugin.LogLevelError, err.Error())
+			return errors.New(c.api.GetTranslation(actionCtx, "plugin_clipboard_image_restore_failed"))
+		}
+		c.moveRecordToTop(actionCtx, record.ID)
+		return nil
+	})
+	if pasteToActiveWindowErr == nil {
+		applyCopyPastePrimaryAction(&result.Actions[0], &pasteToActiveWindowAction, primaryActionCode)
+		result.Actions = append(result.Actions, pasteToActiveWindowAction)
+	} else {
+		applyCopyPastePrimaryAction(&result.Actions[0], nil, primaryActionCode)
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
+	}
+
+	result.Actions = append(result.Actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_delete",
+		Icon:                   common.TrashIcon,
+		PreventHideAfterAction: true,
+		Hotkey:                 util.PrimaryHotkey("d"),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if err := c.deleteRecord(ctx, record); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
+				return
+			}
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
+			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	})
 	if record.OCRText != nil {
 		if ocrText := strings.TrimSpace(*record.OCRText); ocrText != "" {
 			actions := []plugin.QueryResultAction{result.Actions[0], system.NewCopyOCRTextAction(c.api, ocrText)}
@@ -1793,6 +1781,71 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 	}
 	result.Actions = append(result.Actions, notesplugin.CreateNoteAction(c.api, "", "", record.FilePath))
 	return result
+}
+
+// restoreImageRecordToClipboard writes a cached image record back to the system clipboard.
+func (c *ClipboardPlugin) restoreImageRecordToClipboard(ctx context.Context, record ClipboardRecord) error {
+	if record.FilePath == "" || !util.IsFileExists(record.FilePath) {
+		return fmt.Errorf("clipboard restore skipped, file missing: id=%s path=%s", record.ID, record.FilePath)
+	}
+
+	// On Windows, also load DIB data from cache for better performance in pasting to apps
+	if util.IsWindows() {
+		dibPath := c.getDibCachePath(record.ID)
+		if util.IsFileExists(dibPath) {
+			pngData, pngErr := os.ReadFile(record.FilePath)
+			if pngErr != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read PNG cache: id=%s path=%s err=%s", record.ID, record.FilePath, pngErr.Error()))
+			} else {
+				dibData, readErr := os.ReadFile(dibPath)
+				if readErr != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read DIB cache: id=%s path=%s err=%s", record.ID, dibPath, readErr.Error()))
+				} else {
+					c.api.Log(
+						ctx,
+						plugin.LogLevelInfo,
+						fmt.Sprintf(
+							"restoring image from cache: id=%s png={len=%d sha256=%s} dib={len=%d sha256=%s}",
+							record.ID,
+							len(pngData),
+							c.shortHashBytes(pngData),
+							len(dibData),
+							c.shortHashBytes(dibData),
+						),
+					)
+
+					if writeErr := clipboard.WriteImageBytes(pngData, dibData); writeErr == nil {
+						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("restored image from cache to clipboard: id=%s", record.ID))
+						return nil
+					} else {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from PNG+DIB cache: id=%s err=%s", record.ID, writeErr.Error()))
+					}
+				}
+			}
+		} else {
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("DIB cache not found, fallback to image decode: id=%s path=%s", record.ID, dibPath))
+		}
+	}
+
+	if img := c.loadImageFromFile(ctx, record.FilePath); img != nil {
+		c.api.Log(
+			ctx,
+			plugin.LogLevelInfo,
+			fmt.Sprintf(
+				"restoring image from file decode: id=%s path=%s width=%d height=%d",
+				record.ID,
+				record.FilePath,
+				img.Bounds().Dx(),
+				img.Bounds().Dy(),
+			),
+		)
+		if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
+			return fmt.Errorf("failed to restore image from file: id=%s path=%s err=%s", record.ID, record.FilePath, err.Error())
+		}
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("restored image from file decode to clipboard: id=%s", record.ID))
+		return nil
+	}
+	return fmt.Errorf("failed to decode image file for clipboard restore: id=%s path=%s", record.ID, record.FilePath)
 }
 
 // deleteRecord removes a clipboard record from its storage (DB or favorites) and cleans up related assets

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/system"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/util"
@@ -22,6 +23,12 @@ import (
 )
 
 var emojiIcon = common.PluginEmojiIcon
+
+var (
+	primaryActionSettingKey = "primary_action"
+	primaryActionValueCopy  = "copy"
+	primaryActionValuePaste = "paste"
+)
 
 //go:embed emoji-data.json
 var emojiFS embed.FS
@@ -138,6 +145,19 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 		Commands: []plugin.MetadataCommand{},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          primaryActionSettingKey,
+					Label:        "i18n:plugin_emoji_primary_action",
+					Tooltip:      "i18n:plugin_emoji_primary_action_tooltip",
+					DefaultValue: primaryActionValuePaste,
+					Options: []definition.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_emoji_primary_action_copy_to_clipboard", Value: primaryActionValueCopy},
+						{Label: "i18n:plugin_emoji_primary_action_paste_to_active_app", Value: primaryActionValuePaste},
+					},
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          "aiMatchEnabled",
@@ -163,6 +183,14 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureAI,
+			},
+			{
+				Name: plugin.MetadataFeatureQueryEnv,
+				Params: map[string]any{
+					"requireActiveWindowName": true,
+					"requireActiveWindowPid":  true,
+					"requireActiveWindowIcon": true,
+				},
 			},
 		},
 	}
@@ -224,7 +252,6 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	}
 
 	// Add frequently used emojis first (as a group)
-	frequentlyUsedCount := 0
 	for _, usage := range frequentlyUsed {
 		entry := e.findEmoji(usage.Emoji)
 		if entry == nil {
@@ -234,38 +261,52 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			continue
 		}
 
-		result := e.createEmojiResult(ctx, *entry, true)
+		result := e.createEmojiResult(ctx, query, *entry, true)
 		result.Group = "i18n:plugin_emoji_frequently_used"
 		result.GroupScore = 100
 		results = append(results, result)
-		frequentlyUsedCount++
 	}
 
-	// Add other emojis
-	// If there are frequently used emojis in results, group other emojis under "Emojis"
-	count := 0
 	existingEmojiSet := make(map[string]bool)
 	for _, r := range results {
 		if r.Icon.ImageType == common.WoxImageTypeEmoji {
 			existingEmojiSet[r.Icon.ImageData] = true
 		}
 	}
-	for _, entry := range e.emojis {
-		if frequentlyUsedSet[entry.Emoji] {
-			continue // Already added in frequently used group
-		}
 
-		if e.matchEmoji(entry, search) {
-			result := e.createEmojiResult(ctx, entry, false)
-			result.Group = e.getCategoryName(ctx, entry)
+	if search == "" {
+		// Empty query: sample every category so browsing is not stuck in Smileys.
+		browseItems := selectBrowseEmojis(e.emojis, usageCountMap(e.loadUsages(ctx)), frequentlyUsedSet, func(entry EmojiData) string {
+			return e.getCategoryName(ctx, entry)
+		}, browsePerCategory)
+		for index, item := range browseItems {
+			result := e.createEmojiResult(ctx, query, item.Entry, false)
+			result.Group = item.Category
 			result.GroupScore = 50
+			// The manager sorts by score, so slice order alone cannot preserve the browse ranking.
+			result.Score = int64(len(browseItems) - index)
 			results = append(results, result)
-			existingEmojiSet[entry.Emoji] = true
-			count++
+			existingEmojiSet[item.Entry.Emoji] = true
 		}
+	} else {
+		count := 0
+		for _, entry := range e.emojis {
+			if frequentlyUsedSet[entry.Emoji] {
+				continue
+			}
 
-		if count >= 100 {
-			break
+			if e.matchEmoji(entry, search) {
+				result := e.createEmojiResult(ctx, query, entry, false)
+				result.Group = e.getCategoryName(ctx, entry)
+				result.GroupScore = 50
+				results = append(results, result)
+				existingEmojiSet[entry.Emoji] = true
+				count++
+			}
+
+			if count >= 100 {
+				break
+			}
 		}
 	}
 
@@ -347,7 +388,7 @@ func (e *EmojiPlugin) handleAIMatchResult(ctx context.Context, query plugin.Quer
 		if existingEmojiSet[entry.Emoji] {
 			continue
 		}
-		result := e.createEmojiResult(ctx, entry, false)
+		result := e.createEmojiResult(ctx, query, entry, false)
 		result.Group = "i18n:plugin_emoji_ai_group"
 		result.GroupScore = 90
 		result.Score = 90
@@ -467,51 +508,76 @@ func (e *EmojiPlugin) isAIMatchEnabled(ctx context.Context) bool {
 	return strings.EqualFold(strings.TrimSpace(e.api.GetSetting(ctx, "aiMatchEnabled")), "true")
 }
 
-func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, isFrequentlyUsed bool) plugin.QueryResult {
+func (e *EmojiPlugin) createEmojiResult(ctx context.Context, query plugin.Query, entry EmojiData, isFrequentlyUsed bool) plugin.QueryResult {
 	emoji := entry.Emoji
 	title := e.getDisplayName(ctx, entry)
 	subTitle := e.getSecondaryName(title, entry)
 
-	result := plugin.QueryResult{
+	return plugin.QueryResult{
 		Title:    title,
 		SubTitle: subTitle,
 		Icon:     common.NewWoxImageEmoji(emoji),
-		Actions: []plugin.QueryResultAction{
-			{
-				Name:      "i18n:plugin_emoji_copy",
-				Icon:      common.CopyIcon,
-				IsDefault: true,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					clipboard.WriteText(emoji)
-					e.recordUsage(ctx, emoji)
-				},
-			},
-			{
-				Name:   "i18n:plugin_emoji_copy_large",
-				Icon:   common.NewWoxImageEmoji("🖼️"),
-				Hotkey: util.PrimaryHotkey("enter"),
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					img, err := emojiimage.Render(emoji, 200)
-					if err != nil {
-						e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to build emoji image: %v", err))
-						e.api.Notify(ctx, fmt.Sprintf("Failed to build emoji image: %v", err))
-						return
-					}
+		Actions:  e.buildEmojiActions(ctx, query, emoji, isFrequentlyUsed),
+	}
+}
 
-					if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
-						e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy emoji image: %v", err))
-						return
-					}
-
-					e.recordUsage(ctx, emoji)
-				},
+// buildEmojiActions wires copy/paste defaults from the primary action setting.
+func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query, emoji string, isFrequentlyUsed bool) []plugin.QueryResultAction {
+	primaryActionCode := e.primaryActionCode(ctx)
+	copyIsDefault := primaryActionCode == primaryActionValueCopy
+	alternateHotkey := util.PrimaryHotkey("enter")
+	actions := []plugin.QueryResultAction{
+		{
+			Name:      "i18n:plugin_emoji_copy",
+			Icon:      common.CopyIcon,
+			IsDefault: copyIsDefault,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				clipboard.WriteText(emoji)
+				e.recordUsage(ctx, emoji)
 			},
 		},
 	}
 
-	existingDescriptions := strings.Join(e.customDescriptions[emoji], ", ")
+	pasteAction, pasteErr := system.GetPasteToActiveWindowAction(ctx, e.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+		if err := clipboard.WriteText(emoji); err != nil {
+			return fmt.Errorf("failed to copy emoji before paste: %w", err)
+		}
+		e.recordUsage(actionCtx, emoji)
+		return nil
+	})
+	if pasteErr == nil {
+		// The helper always marks paste as default; honor the plugin setting instead.
+		pasteAction.IsDefault = !copyIsDefault
+		if copyIsDefault {
+			pasteAction.Hotkey = alternateHotkey
+		} else {
+			actions[0].Hotkey = alternateHotkey
+		}
+		actions = append(actions, pasteAction)
+	}
 
-	result.Actions = append(result.Actions, plugin.QueryResultAction{
+	actions = append(actions, plugin.QueryResultAction{
+		Name: "i18n:plugin_emoji_copy_large",
+		Icon: common.NewWoxImageEmoji("🖼️"),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			img, err := emojiimage.Render(emoji, 200)
+			if err != nil {
+				e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to build emoji image: %v", err))
+				e.api.Notify(ctx, fmt.Sprintf("Failed to build emoji image: %v", err))
+				return
+			}
+
+			if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
+				e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy emoji image: %v", err))
+				return
+			}
+
+			e.recordUsage(ctx, emoji)
+		},
+	})
+
+	existingDescriptions := strings.Join(e.customDescriptions[emoji], ", ")
+	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_emoji_add_keyword",
 		Icon:                   common.AirdropIcon,
 		Type:                   plugin.QueryResultActionTypeForm,
@@ -548,7 +614,7 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 	})
 
 	if isFrequentlyUsed {
-		result.Actions = append(result.Actions, plugin.QueryResultAction{
+		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_emoji_remove_frequently_used",
 			Icon:                   common.TrashIcon,
 			PreventHideAfterAction: true,
@@ -559,7 +625,16 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 		})
 	}
 
-	return result
+	return actions
+}
+
+// primaryActionCode returns the configured Enter action, defaulting to paste.
+func (e *EmojiPlugin) primaryActionCode(ctx context.Context) string {
+	code := strings.TrimSpace(e.api.GetSetting(ctx, primaryActionSettingKey))
+	if code == "" {
+		return primaryActionValuePaste
+	}
+	return code
 }
 
 func (e *EmojiPlugin) findEmoji(emoji string) *EmojiData {
@@ -571,7 +646,8 @@ func (e *EmojiPlugin) findEmoji(emoji string) *EmojiData {
 	return nil
 }
 
-func (e *EmojiPlugin) getFrequentlyUsed(ctx context.Context) []emojiUsage {
+// loadUsages returns the full persisted usage list without the display cap.
+func (e *EmojiPlugin) loadUsages(ctx context.Context) []emojiUsage {
 	data := e.api.GetSetting(ctx, "frequentlyUsed")
 	if data == "" {
 		return nil
@@ -582,22 +658,25 @@ func (e *EmojiPlugin) getFrequentlyUsed(ctx context.Context) []emojiUsage {
 		e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse frequently used data: %v", err))
 		return nil
 	}
+	return usages
+}
 
-	// Sort by use count descending
+func (e *EmojiPlugin) getFrequentlyUsed(ctx context.Context) []emojiUsage {
+	usages := e.loadUsages(ctx)
 	sort.Slice(usages, func(i, j int) bool {
 		return usages[i].UseCount > usages[j].UseCount
 	})
 
 	// Limit to top 16 (2 rows in grid)
-	if len(usages) > 16 {
-		usages = usages[:16]
+	if len(usages) > frequentlyUsedLimit {
+		usages = usages[:frequentlyUsedLimit]
 	}
 
 	return usages
 }
 
 func (e *EmojiPlugin) recordUsage(ctx context.Context, emoji string) {
-	usages := e.getFrequentlyUsed(ctx)
+	usages := e.loadUsages(ctx)
 	if usages == nil {
 		usages = []emojiUsage{}
 	}
@@ -619,8 +698,8 @@ func (e *EmojiPlugin) recordUsage(ctx context.Context, emoji string) {
 	sort.Slice(usages, func(i, j int) bool {
 		return usages[i].UseCount > usages[j].UseCount
 	})
-	if len(usages) > 50 {
-		usages = usages[:50]
+	if len(usages) > frequentlyUsedStoreCap {
+		usages = usages[:frequentlyUsedStoreCap]
 	}
 
 	data, err := json.Marshal(usages)
@@ -632,7 +711,7 @@ func (e *EmojiPlugin) recordUsage(ctx context.Context, emoji string) {
 }
 
 func (e *EmojiPlugin) removeUsage(ctx context.Context, emoji string) {
-	usages := e.getFrequentlyUsed(ctx)
+	usages := e.loadUsages(ctx)
 	if len(usages) == 0 {
 		return
 	}

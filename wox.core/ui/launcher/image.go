@@ -34,6 +34,11 @@ type woxImage struct {
 
 var appIconImageSource = woxImage{ImageType: "appicon", ImageData: "embedded"}
 
+// isLoadingIcon reports whether a result still shows the shared static loading SVG.
+func isLoadingIcon(icon woxImage) bool {
+	return icon.ImageType == common.LoadingIcon.ImageType && icon.ImageData == common.LoadingIcon.ImageData
+}
+
 // UnmarshalJSON accepts both the structured image DTO and legacy type:data strings.
 func (w *woxImage) UnmarshalJSON(data []byte) error {
 	if len(data) > 0 && data[0] == '"' {

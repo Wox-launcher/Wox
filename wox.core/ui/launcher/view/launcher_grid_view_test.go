@@ -92,6 +92,18 @@ func TestLauncherGridShowsQuickSelectBadge(t *testing.T) {
 	}
 }
 
+func TestLauncherGridLoadingResultAnimatesSpinner(t *testing.T) {
+	result := launcherGridResultView(LauncherGridResult{ID: "ai-match", Loading: true}, LauncherGridProps{
+		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 100, Theme: woxcomponent.Theme{Cursor: woxui.Color{R: 10, G: 20, B: 30, A: 255}},
+	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	iconBoundary := visual.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
+	aligned := iconBoundary.Build(iconBoundary.Props).(woxwidget.Align)
+	if _, ok := aligned.Child.(woxwidget.LoopAnimation); !ok {
+		t.Fatal("loading grid result does not animate the shared loading indicator")
+	}
+}
+
 func TestLauncherGridBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, launcherGridFrameProps{})
 	woxwidget.AssertEqualCoversAllFields(t, launcherGridIconProps{})

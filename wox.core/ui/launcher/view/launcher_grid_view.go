@@ -17,6 +17,7 @@ type LauncherGridResult struct {
 	Selected           bool
 	Hovered            bool
 	Icon               *woxui.Image
+	Loading            bool
 	QuickSelectNumber  string
 	OnHover            func(bool) `boundary:"stable"`
 	OnSelect           func()     `boundary:"stable"`
@@ -63,10 +64,12 @@ func (p launcherGridFrameProps) Equal(other launcherGridFrameProps) bool {
 }
 
 type launcherGridIconProps struct {
-	Image  *woxui.Image
-	Width  float32
-	Height float32
-	Fit    woxwidget.ImageFit
+	Image   *woxui.Image
+	Width   float32
+	Height  float32
+	Fit     woxwidget.ImageFit
+	Loading bool
+	Color   woxui.Color
 }
 
 func (p launcherGridIconProps) Equal(other launcherGridIconProps) bool {
@@ -164,10 +167,14 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	if math.Abs(float64(props.VisualWidth/props.VisualHeight-1)) < 0.01 {
 		fit = woxwidget.ImageFitContain
 	}
-	iconProps := launcherGridIconProps{Image: result.Icon, Width: props.VisualWidth, Height: props.VisualHeight, Fit: fit}
+	iconProps := launcherGridIconProps{Image: result.Icon, Width: props.VisualWidth, Height: props.VisualHeight, Fit: fit, Loading: result.Loading, Color: props.Theme.Cursor}
 	icon := woxwidget.Boundary[launcherGridIconProps]{
 		Key: LauncherResultIconBoundaryKey(result.ID), Label: "grid-icon:" + result.ID, Props: iconProps,
 		Build: func(props launcherGridIconProps) woxwidget.Widget {
+			if props.Loading {
+				spinner := min(props.Width, props.Height) * 0.55
+				return woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxLoadingIndicator(spinner, props.Color)}
+			}
 			if props.Image == nil {
 				return woxwidget.Painter{Width: props.Width, Height: props.Height}
 			}

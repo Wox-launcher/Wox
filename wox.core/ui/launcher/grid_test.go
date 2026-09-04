@@ -1,6 +1,37 @@
 package launcher
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
+
+func TestFullGridWindowMatchesFullListWindow(t *testing.T) {
+	palette := defaultPalette()
+	density := launcherDensityMetricsFor("")
+	rowHeight := int(density.resultRowHeight(palette))
+	padding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
+	maxResults := defaultMaxResult
+	width := float32(defaultWidth)
+	fullBudget := padding + maxResults*rowHeight
+
+	listResults := make([]queryResult, maxResults)
+	for index := range listResults {
+		listResults[index] = queryResult{ID: fmt.Sprintf("list-%d", index), Title: "item"}
+	}
+	gridResults := []queryResult{{ID: "group", Title: "Frequently Used", IsGroup: true}}
+	for index := 0; index < maxResults*8; index++ {
+		gridResults = append(gridResults, queryResult{ID: fmt.Sprintf("grid-%d", index), Title: "emoji"})
+	}
+
+	listHeight := launcherResultAreaHeight(listResults, queryLayout{}, width, maxResults, rowHeight, padding, density.groupHeaderHeight())
+	gridHeight := launcherResultAreaHeight(gridResults, queryLayout{GridLayout: &gridLayout{Columns: 8, AspectRatio: 1}}, width, maxResults, rowHeight, padding, density.groupHeaderHeight())
+	if listHeight != fullBudget {
+		t.Fatalf("full list height = %d, want %d", listHeight, fullBudget)
+	}
+	if gridHeight != fullBudget {
+		t.Fatalf("full grid height = %d, want %d", gridHeight, fullBudget)
+	}
+}
 
 func TestGridSelectionIndexFollowsVisualRows(t *testing.T) {
 	results := []queryResult{{IsGroup: true}}

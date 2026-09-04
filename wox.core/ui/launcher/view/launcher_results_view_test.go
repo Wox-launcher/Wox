@@ -193,6 +193,20 @@ func TestLauncherResultTailsAlignToTheRightWhenTheyFit(t *testing.T) {
 	}
 }
 
+func TestLauncherResultLoadingIconAnimatesSpinner(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Theme: woxcomponent.Theme{Cursor: woxui.Color{R: 10, G: 20, B: 30, A: 255}},
+		Items: []LauncherResultItem{{ID: "ai-match", Title: "AI matching...", Loading: true}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	icon := launcherResultRowContent(row).Children[0].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultIconProps])
+	if _, ok := icon.Build(icon.Props).(woxwidget.LoopAnimation); !ok {
+		t.Fatal("loading list result does not animate the shared loading indicator")
+	}
+}
+
 func TestLauncherResultBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, launcherResultBackgroundProps{})
 	woxwidget.AssertEqualCoversAllFields(t, launcherResultIconProps{})

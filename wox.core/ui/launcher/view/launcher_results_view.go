@@ -58,6 +58,7 @@ type LauncherResultItem struct {
 	Selected           bool
 	Hovered            bool
 	Icon               *woxui.Image
+	Loading            bool
 	Tails              []LauncherResultTail
 	TailWidth          float32
 	TailHeight         float32
@@ -125,8 +126,10 @@ func (p launcherResultBackgroundProps) Equal(other launcherResultBackgroundProps
 }
 
 type launcherResultIconProps struct {
-	Image *woxui.Image
-	Size  float32
+	Image   *woxui.Image
+	Size    float32
+	Loading bool
+	Color   woxui.Color
 }
 
 func (p launcherResultIconProps) Equal(other launcherResultIconProps) bool {
@@ -284,10 +287,13 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 			Child: woxwidget.Align{Height: groupHeight, Vertical: 0.5, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)},
 		}
 	}
-	iconProps := launcherResultIconProps{Image: item.Icon, Size: props.IconSize}
+	iconProps := launcherResultIconProps{Image: item.Icon, Size: props.IconSize, Loading: item.Loading, Color: props.Theme.Cursor}
 	icon := woxwidget.Boundary[launcherResultIconProps]{
 		Key: LauncherResultIconBoundaryKey(item.ID), Label: "result-icon:" + item.ID, Props: iconProps,
 		Build: func(props launcherResultIconProps) woxwidget.Widget {
+			if props.Loading {
+				return woxcomponent.WoxLoadingIndicator(props.Size, props.Color)
+			}
 			if props.Image == nil {
 				return woxwidget.Painter{Width: props.Size, Height: props.Size}
 			}

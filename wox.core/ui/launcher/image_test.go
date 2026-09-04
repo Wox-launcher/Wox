@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"wox/common"
 	woxui "wox/ui/runtime"
 )
 
@@ -258,6 +259,15 @@ func decodeLauncherTestGIF(t *testing.T) *woxui.Image {
 		t.Fatalf("decode gif: animated=%t err=%v", decoded != nil && decoded.IsAnimated(), err)
 	}
 	return decoded
+}
+
+func TestIsLoadingIconMatchesSharedLoadingSVG(t *testing.T) {
+	if !isLoadingIcon(fromCoreImage(common.LoadingIcon)) {
+		t.Fatal("shared LoadingIcon should be recognized as a loading placeholder")
+	}
+	if isLoadingIcon(fromCoreImage(common.SearchIcon)) {
+		t.Fatal("a regular result icon should not be treated as loading")
+	}
 }
 
 func TestImageCacheReplaceUpdatesByteCounter(t *testing.T) {

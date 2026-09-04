@@ -89,7 +89,9 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
 		}
 		if !result.IsGroup {
-			if visible[index] {
+			if isLoadingIcon(result.Icon) {
+				item.Loading = true
+			} else if visible[index] {
 				item.Icon = a.imageForSize(result.Icon, physicalImageSize(int(math.Ceil(float64(max(visualWidth, visualHeight)))), imageScale))
 			}
 			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }

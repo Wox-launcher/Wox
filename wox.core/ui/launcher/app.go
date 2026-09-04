@@ -997,6 +997,24 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	}
 }
 
+// launcherResultAreaHeight sizes the result viewport for list and grid.
+// The full-height budget is the list contract: container padding plus
+// MaxResultCount list rows. Grid content is capped to that same row budget so a
+// full grid window matches a full list window.
+func launcherResultAreaHeight(results []queryResult, layout queryLayout, width float32, maxResults, resultRowHeight, resultVerticalPadding int, groupHeaderHeight float32) int {
+	if len(results) == 0 || maxResults <= 0 {
+		return 0
+	}
+	visibleResults := min(len(results), maxResults)
+	contentHeight := 0
+	if layout.GridLayout != nil {
+		contentHeight = min(gridResultsHeight(results, width, layout.GridLayout), maxResults*resultRowHeight)
+	} else {
+		contentHeight = int(listVisibleResultsHeight(results, visibleResults, float32(resultRowHeight), groupHeaderHeight, float32(resultRowGap)))
+	}
+	return resultVerticalPadding + contentHeight
+}
+
 func (a *App) applyWindowBounds() error {
 	return a.applyWindowBoundsWithPlacement(false)
 }
@@ -1080,11 +1098,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		height += int(densityMetrics.refinementBarHeight)
 	}
 	if visibleResults > 0 {
-		if layout.GridLayout != nil {
-			height += min(gridResultsHeight(results, float32(width), layout.GridLayout), maxResults*resultRowHeight)
-		} else {
-			height += resultVerticalPadding + int(listVisibleResultsHeight(results, visibleResults, float32(resultRowHeight), densityMetrics.groupHeaderHeight(), float32(resultRowGap)))
-		}
+		height += launcherResultAreaHeight(results, layout, float32(width), maxResults, resultRowHeight, resultVerticalPadding, densityMetrics.groupHeaderHeight())
 	}
 	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)

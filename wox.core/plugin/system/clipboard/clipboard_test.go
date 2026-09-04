@@ -1,14 +1,106 @@
 package system
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
 )
+
+type imagePasteFailureAPI struct {
+	plugin.API
+	notification string
+	logs         []string
+}
+
+func (a *imagePasteFailureAPI) GetSetting(context.Context, string) string { return "" }
+
+func (a *imagePasteFailureAPI) GetTranslation(_ context.Context, key string) string {
+	return "translated:" + key
+}
+
+func (a *imagePasteFailureAPI) Log(_ context.Context, _ plugin.LogLevel, message string) {
+	a.logs = append(a.logs, message)
+}
+
+func (a *imagePasteFailureAPI) Notify(_ context.Context, message string) {
+	a.notification = message
+}
+
+// TestImagePasteFailureUsesTranslatedNotification exercises the shared paste action's error display.
+func TestImagePasteFailureUsesTranslatedNotification(t *testing.T) {
+	api := &imagePasteFailureAPI{}
+	c := &ClipboardPlugin{api: api, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	c.imageCache.Store("missing-image", &ImageCacheEntry{})
+	result := c.convertImageRecord(context.Background(), ClipboardRecord{ID: "missing-image"}, plugin.Query{
+		Env: plugin.QueryEnv{ActiveWindowTitle: "Test window", ActiveWindowPid: 1234},
+	})
+	for _, action := range result.Actions {
+		if !action.IsDefault {
+			continue
+		}
+		action.Action(context.Background(), plugin.ActionContext{})
+		if api.notification != "translated:plugin_clipboard_image_restore_failed" {
+			t.Fatalf("notification = %q, want translated restore error", api.notification)
+		}
+		if !strings.Contains(strings.Join(api.logs, "\n"), "file missing: id=missing-image") {
+			t.Fatal("detailed restore error missing from logs")
+		}
+		return
+	}
+	t.Fatal("default paste action missing")
+}
+
+func TestApplyCopyPastePrimaryActionHotkeys(t *testing.T) {
+	alternate := util.PrimaryHotkey("enter")
+
+	copyPrimaryCopy := plugin.QueryResultAction{Name: "copy"}
+	copyPrimaryPaste := plugin.QueryResultAction{Name: "paste"}
+	applyCopyPastePrimaryAction(&copyPrimaryCopy, &copyPrimaryPaste, primaryActionValueCopy)
+	if !copyPrimaryCopy.IsDefault || copyPrimaryPaste.IsDefault {
+		t.Fatalf("copy primary: copy default=%v paste default=%v, want copy=true paste=false", copyPrimaryCopy.IsDefault, copyPrimaryPaste.IsDefault)
+	}
+	if copyPrimaryCopy.Hotkey != "" {
+		t.Fatalf("copy primary: copy hotkey = %q, want empty", copyPrimaryCopy.Hotkey)
+	}
+	if copyPrimaryPaste.Hotkey != alternate {
+		t.Fatalf("copy primary: paste hotkey = %q, want %q", copyPrimaryPaste.Hotkey, alternate)
+	}
+
+	pastePrimaryCopy := plugin.QueryResultAction{Name: "copy"}
+	pastePrimaryPaste := plugin.QueryResultAction{Name: "paste"}
+	applyCopyPastePrimaryAction(&pastePrimaryCopy, &pastePrimaryPaste, primaryActionValuePaste)
+	if pastePrimaryCopy.IsDefault || !pastePrimaryPaste.IsDefault {
+		t.Fatalf("paste primary: copy default=%v paste default=%v, want copy=false paste=true", pastePrimaryCopy.IsDefault, pastePrimaryPaste.IsDefault)
+	}
+	if pastePrimaryCopy.Hotkey != alternate {
+		t.Fatalf("paste primary: copy hotkey = %q, want %q", pastePrimaryCopy.Hotkey, alternate)
+	}
+	if pastePrimaryPaste.Hotkey != "" {
+		t.Fatalf("paste primary: paste hotkey = %q, want empty", pastePrimaryPaste.Hotkey)
+	}
+
+	copyOnly := plugin.QueryResultAction{Name: "copy"}
+	applyCopyPastePrimaryAction(&copyOnly, nil, primaryActionValueCopy)
+	if !copyOnly.IsDefault {
+		t.Fatal("copy-only with copy primary must keep copy as default")
+	}
+	if copyOnly.Hotkey != "" {
+		t.Fatalf("copy-only hotkey = %q, want empty", copyOnly.Hotkey)
+	}
+
+	pasteOnlyCopy := plugin.QueryResultAction{Name: "copy"}
+	applyCopyPastePrimaryAction(&pasteOnlyCopy, nil, primaryActionValuePaste)
+	if pasteOnlyCopy.IsDefault {
+		t.Fatal("copy-only with paste primary must leave copy unmarked so the manager can promote it")
+	}
+}
 
 func TestClipboardIgnoredApplicationsSettingUsesSharedAppPicker(t *testing.T) {
 	settings := (&ClipboardPlugin{}).GetMetadata().SettingDefinitions
