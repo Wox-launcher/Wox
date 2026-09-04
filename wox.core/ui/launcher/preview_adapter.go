@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,14 +99,16 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		case "loading":
 			return previewview.PreviewLoading(width, height, palette.componentTheme().PreviewText)
 		case "markdown":
-			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
+			return a.buildMarkdownPreview(scrollKey, a.filePreviewDisplayText(file), filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
 		case "webview":
 			return a.buildWebViewPreview(file.WebViewData, palette, width, height)
 		case "native_file":
 			return a.buildNativeFilePreview(file.NativeFilePath, file.NativeFileAutoLoad, palette, width, height)
+		case "large", "too_large":
+			return a.buildLargeFilePreview(file, palette, width, height)
 		default:
 			// File contents are structured reader data, so keep them top-left aligned instead of using the centered quote treatment for standalone text previews.
-			return content(file.Text, previewColorWithOpacity(palette.previewText, 0.86))
+			return content(a.filePreviewDisplayText(file), previewColorWithOpacity(palette.previewText, 0.86))
 		}
 	case "list":
 		data, err := decodePreviewList(preview.PreviewData)
@@ -224,6 +227,51 @@ func (a *App) markdownDocument(value string) woxcomponent.MarkdownDocument {
 	}
 	a.mdDocs[key] = document
 	return document
+}
+
+// filePreviewDisplayText appends the Flutter-era limited-preview note after a bounded read.
+func (a *App) filePreviewDisplayText(file filePreviewContent) string {
+	text := file.Text
+	if !file.Limited {
+		return text
+	}
+	note := strings.ReplaceAll(a.translate("i18n:ui_file_preview_code_preview_limited"), "{lines}", strconv.Itoa(max(file.DisplayLines, 1)))
+	if strings.TrimSpace(text) == "" {
+		return note
+	}
+	return text + "\n\n" + note
+}
+
+// buildLargeFilePreview restores Flutter's details-first gate for expensive file previews.
+func (a *App) buildLargeFilePreview(file filePreviewContent, palette uiPalette, width, height float32) woxwidget.Widget {
+	sizeLabel := formatFileSize(file.Size)
+	title := a.translate("i18n:ui_file_preview_large_file_title")
+	message := strings.ReplaceAll(a.translate("i18n:ui_file_preview_large_file_message"), "{size}", sizeLabel)
+	action := a.translate("i18n:ui_file_preview_load_full_preview")
+	if hotkey := strings.Join(formatHotkeyLabels(primaryHotkey("l")), "+"); hotkey != "" {
+		action = fmt.Sprintf("%s (%s)", action, hotkey)
+	}
+	onLoad := func() { a.requestManualFilePreview(file.Path) }
+	if file.Kind == "too_large" {
+		title = strings.ReplaceAll(a.translate("i18n:ui_file_preview_too_large"), "{size}", formatFileSizeMegabytes(file.Size))
+		message = ""
+		action = ""
+		onLoad = nil
+	}
+	properties := []previewview.LargeFilePreviewProperty{
+		{Label: a.translate("i18n:ui_file_preview_property_type"), Value: file.TypeLabel},
+		{Label: a.translate("i18n:ui_file_preview_property_size"), Value: sizeLabel},
+	}
+	if !file.Modified.IsZero() {
+		properties = append(properties, previewview.LargeFilePreviewProperty{Label: a.translate("i18n:ui_file_preview_property_modified"), Value: file.Modified.Format(time.DateTime)})
+	}
+	if location := filepath.Dir(file.Path); location != "" && location != "." {
+		properties = append(properties, previewview.LargeFilePreviewProperty{Label: a.translate("i18n:ui_file_preview_property_location"), Value: location})
+	}
+	return previewview.LargeFilePreviewView(previewview.LargeFilePreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Title: title, Message: message, Properties: properties,
+		Action: action, OnLoad: onLoad,
+	})
 }
 
 // previewBodyTags resolves metadata before the body is built at its final tagged height.

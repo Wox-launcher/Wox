@@ -1443,6 +1443,12 @@ func fittingRunePrefix(window textMeasurer, runes []rune, style woxui.TextStyle,
 	if width <= 0 {
 		return 1
 	}
+	const cheapFitLimit = 256
+	if len(runes) <= cheapFitLimit {
+		if metrics, _ := window.MeasureText(string(runes), style); metrics.Size.Width <= width {
+			return len(runes)
+		}
+	}
 	low, high := 1, len(runes)
 	for low < high {
 		mid := low + (high-low+1)/2

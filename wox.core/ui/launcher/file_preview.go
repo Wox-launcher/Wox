@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,12 +15,21 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	woxui "wox/ui/runtime"
 	"wox/util"
 )
 
+// Automatic file previews stay cheap: text layout and Office/PDF handlers are deferred
+// above these sizes, matching the Flutter-era details-first gate. After an explicit load,
+// text is still bounded so minified one-line files cannot stall DirectWrite wrapping.
 const (
-	maxPreviewFileBytes          = 512 * 1024
+	autoPreviewTextBytes         = 64 * 1024
+	maxFilePreviewDisplayBytes   = 16 * 1024
+	maxFilePreviewDisplayLines   = 200
+	maxFilePreviewLineRunes      = 240
 	officePreviewManualLoadBytes = 5 * 1024 * 1024
+	tooLargePreviewBytes         = 50 * 1024 * 1024
+	filePreviewAutoLoadDelay     = 180 * time.Millisecond
 )
 
 type filePreviewContent struct {
@@ -32,6 +40,12 @@ type filePreviewContent struct {
 	NativeFilePath     string
 	NativeFileAutoLoad bool
 	Tags               []previewTag
+	Path               string
+	Size               int64
+	Modified           time.Time
+	TypeLabel          string
+	Limited            bool
+	DisplayLines       int
 }
 
 // filePreviewFor returns cached file content without starting I/O from the frame builder.
@@ -53,35 +67,126 @@ func (a *App) filePreviewFor(path string) filePreviewContent {
 	return filePreviewContent{Kind: "loading"}
 }
 
-// prepareFilePreview starts local file inspection once before the next render.
+// prepareFilePreview inspects the selected file without starting obsolete I/O during rapid selection.
 func (a *App) prepareFilePreview(path string) {
 	path = strings.TrimSpace(path)
 	if path == "" || strings.HasPrefix(strings.ToLower(path), "http://") || strings.HasPrefix(strings.ToLower(path), "https://") {
+		a.cancelScheduledFilePreview()
 		return
 	}
 	extension := strings.ToLower(filepath.Ext(path))
 	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
+		a.cancelScheduledFilePreview()
 		return
 	}
-	_, loaded := a.filePreviews[path]
-	requested := a.fileRequests[path]
-	if !loaded && !requested {
-		a.fileRequests[path] = true
+	if _, loaded := a.filePreviews[path]; loaded {
+		if a.filePreviewPendingPath != path {
+			a.cancelScheduledFilePreview()
+		}
+		return
 	}
-	if !loaded && !requested {
-		util.Go(a.lifecycleCtx, "load file preview", func() {
-			a.loadFilePreview(path, extension)
-		})
+	if a.fileRequests[path] {
+		return
+	}
+	if a.filePreviewManualPaths[path] {
+		a.cancelScheduledFilePreview()
+		a.startFilePreviewLoad(path, extension, true)
+		return
+	}
+	a.scheduleFilePreviewLoad(path, extension)
+}
+
+// scheduleFilePreviewLoad waits for selection to settle, matching Flutter's delayed file preview.
+func (a *App) scheduleFilePreviewLoad(path, extension string) {
+	if path == "" || a.filePreviewPendingPath == path {
+		return
+	}
+	a.cancelScheduledFilePreview()
+	a.filePreviewPendingPath = path
+	a.filePreviewLoadGeneration++
+	generation := a.filePreviewLoadGeneration
+	a.filePreviewTimer = time.AfterFunc(filePreviewAutoLoadDelay, func() {
+		if err := a.runOnUI("start delayed file preview", func() {
+			a.startScheduledFilePreview(path, extension, generation)
+		}); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, "dispatch delayed file preview: "+err.Error())
+		}
+	})
+}
+
+// startScheduledFilePreview starts a delayed read only when that selection is still current.
+func (a *App) startScheduledFilePreview(path, extension string, generation uint64) {
+	if a.destroyed.Load() || a.filePreviewLoadGeneration != generation || a.filePreviewPendingPath != path {
+		return
+	}
+	a.filePreviewTimer = nil
+	a.filePreviewPendingPath = ""
+	_, preview, visible := a.selectedPreviewForLifecycle()
+	preview = a.resolvePreview(preview)
+	if !visible || preview.PreviewType != "file" || strings.TrimSpace(preview.PreviewData) != path {
+		return
+	}
+	if _, loaded := a.filePreviews[path]; loaded || a.fileRequests[path] {
+		return
+	}
+	a.startFilePreviewLoad(path, extension, false)
+}
+
+// startFilePreviewLoad keeps both metadata inspection and content reads off the UI thread.
+func (a *App) startFilePreviewLoad(path, extension string, forceLoad bool) {
+	if a.fileRequests[path] {
+		return
+	}
+	a.fileRequests[path] = true
+	util.Go(a.lifecycleCtx, "load file preview", func() {
+		a.loadFilePreview(path, extension, forceLoad)
+	})
+}
+
+// cancelScheduledFilePreview drops a pending automatic load when the user has already moved on.
+func (a *App) cancelScheduledFilePreview() {
+	if a.filePreviewTimer != nil {
+		a.filePreviewTimer.Stop()
+		a.filePreviewTimer = nil
+	}
+	if a.filePreviewPendingPath == "" {
+		return
+	}
+	a.filePreviewLoadGeneration++
+	a.filePreviewPendingPath = ""
+}
+
+// requestManualFilePreview loads a deferred preview after the user asks for the full contents.
+func (a *App) requestManualFilePreview(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+	if a.filePreviewManualPaths == nil {
+		a.filePreviewManualPaths = map[string]bool{}
+	}
+	a.filePreviewManualPaths[path] = true
+	delete(a.filePreviews, path)
+	delete(a.fileRequests, path)
+	a.prepareFilePreview(path)
+	if a.window != nil {
+		_ = a.window.Invalidate()
 	}
 }
 
-func (a *App) loadFilePreview(path, extension string) {
-	content := inspectPreviewFile(path, extension)
+// loadFilePreview applies every inspection result through the same bounded cache.
+func (a *App) loadFilePreview(path, extension string, forceLoad bool) {
+	content := inspectPreviewFile(path, extension, forceLoad)
 	if err := a.runOnUI("apply file preview", func() {
 		if len(a.filePreviews) >= 128 {
 			// File previews are immutable during one query session; reset keeps ownership obvious.
 			a.filePreviews = map[string]filePreviewContent{}
 			a.fileRequests = map[string]bool{path: true}
+			if a.filePreviewManualPaths[path] {
+				a.filePreviewManualPaths = map[string]bool{path: true}
+			} else {
+				a.filePreviewManualPaths = map[string]bool{}
+			}
 		}
 		a.filePreviews[path] = content
 		a.reconcileSelectedPreviewOnUI()
@@ -89,72 +194,210 @@ func (a *App) loadFilePreview(path, extension string) {
 			_ = a.window.Invalidate()
 		}
 	}); err != nil {
-		log.Printf("dispatch file preview result: %v", err)
+		util.GetLogger().Error(a.lifecycleCtx, "dispatch file preview result: "+err.Error())
 	}
 }
 
-func inspectPreviewFile(path, extension string) filePreviewContent {
+// inspectPreviewFile reads metadata first and only opens content within the preview budget.
+func inspectPreviewFile(path, extension string, forceLoad bool) filePreviewContent {
 	info, err := os.Stat(path)
 	if err != nil {
 		return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to inspect file:\n%s\n\n%v", path, err)}
 	}
-	typeLabel := strings.TrimPrefix(strings.ToUpper(extension), ".")
-	if typeLabel == "" {
-		typeLabel = "FILE"
-	}
-	tags := []previewTag{{Label: typeLabel}, {Label: formatFileSize(info.Size())}}
+	typeLabel, tags := previewFileTypeAndTags(extension, info.Size())
+	base := filePreviewMetadata(path, typeLabel, info, tags)
 	if info.IsDir() {
-		return filePreviewContent{Kind: "info", Text: fmt.Sprintf("Folder\n\n%s\n\nModified %s", path, info.ModTime().Format(time.RFC1123)), Tags: tags}
+		base.Kind = "info"
+		base.Text = fmt.Sprintf("Folder\n\n%s\n\nModified %s", path, info.ModTime().Format(time.RFC1123))
+		return base
+	}
+	if !forceLoad {
+		if deferred, ok := deferredFilePreview(base, extension, info.Size()); ok {
+			return deferred
+		}
 	}
 	if isPDFPreviewExtension(extension) {
+		if isTooLargeFilePreview(extension, info.Size()) {
+			base.Kind = "too_large"
+			return base
+		}
 		webViewData, err := buildPDFPreviewData(path)
 		if err != nil {
-			return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to build PDF preview:\n%s\n\n%v", path, err), Tags: tags}
+			base.Kind = "error"
+			base.Text = fmt.Sprintf("Unable to build PDF preview:\n%s\n\n%v", path, err)
+			return base
 		}
-		return filePreviewContent{Kind: "webview", WebViewData: webViewData, Tags: tags}
+		base.Kind = "webview"
+		base.WebViewData = webViewData
+		return base
 	}
 	if isVideoPreviewExtension(extension) {
 		webViewData, err := buildVideoPreviewData(path)
 		if err != nil {
-			return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to build video preview:\n%s\n\n%v", path, err), Tags: tags}
+			base.Kind = "error"
+			base.Text = fmt.Sprintf("Unable to build video preview:\n%s\n\n%v", path, err)
+			return base
 		}
-		return filePreviewContent{Kind: "webview", WebViewData: webViewData, Tags: tags}
+		base.Kind = "webview"
+		base.WebViewData = webViewData
+		return base
 	}
 	if isAudioPreviewExtension(extension) {
 		webViewData, err := buildAudioPreviewData(path)
 		if err != nil {
-			return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to build audio preview:\n%s\n\n%v", path, err), Tags: tags}
+			base.Kind = "error"
+			base.Text = fmt.Sprintf("Unable to build audio preview:\n%s\n\n%v", path, err)
+			return base
 		}
-		return filePreviewContent{Kind: "webview", WebViewData: webViewData, Tags: tags}
+		base.Kind = "webview"
+		base.WebViewData = webViewData
+		return base
 	}
 	if isOfficePreviewExtension(extension) {
-		return filePreviewContent{Kind: "native_file", NativeFilePath: path, NativeFileAutoLoad: info.Size() <= officePreviewManualLoadBytes, Tags: tags}
+		if isTooLargeFilePreview(extension, info.Size()) {
+			base.Kind = "too_large"
+			return base
+		}
+		base.Kind = "native_file"
+		base.NativeFilePath = path
+		base.NativeFileAutoLoad = true
+		return base
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to open file:\n%s\n\n%v", path, err), Tags: tags}
+		base.Kind = "error"
+		base.Text = fmt.Sprintf("Unable to open file:\n%s\n\n%v", path, err)
+		return base
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxPreviewFileBytes+1))
+	data, err := io.ReadAll(io.LimitReader(file, maxFilePreviewDisplayBytes+1))
 	if err != nil {
-		return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to read file:\n%s\n\n%v", path, err), Tags: tags}
+		base.Kind = "error"
+		base.Text = fmt.Sprintf("Unable to read file:\n%s\n\n%v", path, err)
+		return base
 	}
-	truncated := len(data) > maxPreviewFileBytes
+	truncated := len(data) > maxFilePreviewDisplayBytes
 	if truncated {
-		data = data[:maxPreviewFileBytes]
+		data = data[:maxFilePreviewDisplayBytes]
+		// Drop only an incomplete final rune; malformed bytes elsewhere still fail validation.
+		start := len(data) - 1
+		for start > 0 && !utf8.RuneStart(data[start]) {
+			start--
+		}
+		if !utf8.FullRune(data[start:]) {
+			data = data[:start]
+		}
 	}
 	if bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data) {
-		return filePreviewContent{Kind: "info", Text: fmt.Sprintf("%s preview is not available yet.\n\n%s", typeLabel, path), Tags: tags}
+		base.Kind = "info"
+		base.Text = fmt.Sprintf("%s preview is not available yet.\n\n%s", typeLabel, path)
+		return base
 	}
-	text := string(data)
-	if truncated {
-		text += "\n\n… file preview truncated at 512 KB"
-	}
-	kind := "text"
 	if extension == ".md" || extension == ".markdown" {
-		kind = "markdown"
+		// Preserve Markdown syntax; visual wrapping belongs to its renderer.
+		lines := strings.SplitAfterN(string(data), "\n", maxFilePreviewDisplayLines+1)
+		base.Kind = "markdown"
+		base.Text = strings.Join(lines[:min(len(lines), maxFilePreviewDisplayLines)], "")
+		base.DisplayLines = min(len(lines), maxFilePreviewDisplayLines)
+		base.Limited = truncated || len(lines) > maxFilePreviewDisplayLines
+		return base
 	}
-	return filePreviewContent{Kind: kind, Text: text, Tags: tags}
+	text, lines, limited := boundFilePreviewText(string(data))
+	base.Kind = "text"
+	base.Text = text
+	base.DisplayLines = lines
+	base.Limited = truncated || limited
+	return base
+}
+
+// boundFilePreviewText hard-wraps minified lines before the preview measurer sees them.
+func boundFilePreviewText(text string) (string, int, bool) {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+	if text == "" {
+		return "", 0, false
+	}
+	var builder strings.Builder
+	builder.Grow(min(len(text), maxFilePreviewDisplayBytes))
+	lines := 0
+	limited := false
+	for index, paragraph := range strings.Split(text, "\n") {
+		remaining := []rune(paragraph)
+		if len(remaining) == 0 {
+			if lines >= maxFilePreviewDisplayLines {
+				limited = true
+				break
+			}
+			if lines > 0 || index > 0 {
+				builder.WriteByte('\n')
+			}
+			lines++
+			continue
+		}
+		for len(remaining) > 0 {
+			if lines >= maxFilePreviewDisplayLines {
+				limited = true
+				break
+			}
+			chunk := remaining
+			if len(chunk) > maxFilePreviewLineRunes {
+				chunk = remaining[:maxFilePreviewLineRunes]
+				remaining = remaining[maxFilePreviewLineRunes:]
+			} else {
+				remaining = nil
+			}
+			if lines > 0 {
+				builder.WriteByte('\n')
+			}
+			builder.WriteString(string(chunk))
+			lines++
+		}
+		if limited {
+			break
+		}
+	}
+	return builder.String(), lines, limited
+}
+
+// deferredFilePreview keeps expensive text layout and native handlers off the automatic selection path.
+func deferredFilePreview(base filePreviewContent, extension string, size int64) (filePreviewContent, bool) {
+	if isTooLargeFilePreview(extension, size) {
+		base.Kind = "too_large"
+		return base, true
+	}
+	if shouldDeferFilePreview(extension, size) {
+		base.Kind = "large"
+		return base, true
+	}
+	return filePreviewContent{}, false
+}
+
+func shouldDeferFilePreview(extension string, size int64) bool {
+	if isVideoPreviewExtension(extension) || isAudioPreviewExtension(extension) {
+		return false
+	}
+	if isOfficePreviewExtension(extension) || isPDFPreviewExtension(extension) {
+		return size > officePreviewManualLoadBytes
+	}
+	return size > autoPreviewTextBytes
+}
+
+func isTooLargeFilePreview(extension string, size int64) bool {
+	if !isOfficePreviewExtension(extension) && !isPDFPreviewExtension(extension) {
+		return false
+	}
+	return size > tooLargePreviewBytes
+}
+
+func previewFileTypeAndTags(extension string, size int64) (string, []previewTag) {
+	typeLabel := strings.TrimPrefix(strings.ToUpper(extension), ".")
+	if typeLabel == "" {
+		typeLabel = "FILE"
+	}
+	return typeLabel, []previewTag{{Label: typeLabel}, {Label: formatFileSize(size)}}
+}
+
+func filePreviewMetadata(path, typeLabel string, info os.FileInfo, tags []previewTag) filePreviewContent {
+	return filePreviewContent{Path: path, Size: info.Size(), Modified: info.ModTime(), TypeLabel: typeLabel, Tags: tags}
 }
 
 // isVideoPreviewExtension identifies the formats rendered by the Flutter file-preview contract.
@@ -319,4 +562,36 @@ func formatFileSize(size int64) string {
 		return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
 	}
 	return fmt.Sprintf("%.1f GB", float64(size)/(1024*1024*1024))
+}
+
+func formatFileSizeMegabytes(size int64) string {
+	return fmt.Sprintf("%.1f", float64(size)/(1024*1024))
+}
+
+// onFilePreviewKey loads a deferred file preview when the documented preview hotkey is pressed.
+func (a *App) onFilePreviewKey(event woxui.KeyEvent) bool {
+	if !hotkeyMatches(primaryHotkey("l"), event) {
+		return false
+	}
+	_, preview, visible := a.selectedPreviewForLifecycle()
+	preview = a.resolvePreview(preview)
+	if !visible || preview.PreviewType != "file" {
+		return false
+	}
+	content := a.filePreviewFor(preview.PreviewData)
+	switch content.Kind {
+	case "large":
+		a.requestManualFilePreview(preview.PreviewData)
+		return true
+	case "too_large":
+		return true
+	case "native_file":
+		if content.NativeFileAutoLoad || a.nativeFilePreviewManualPath == content.NativeFilePath {
+			return false
+		}
+		a.requestManualNativeFilePreview(content.NativeFilePath)
+		return true
+	default:
+		return false
+	}
 }

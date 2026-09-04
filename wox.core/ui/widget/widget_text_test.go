@@ -7,6 +7,27 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+func TestFittingRunePrefixSkipsBinarySearchWhenShortLineFits(t *testing.T) {
+	measurer := &countingMeasurer{}
+	style := woxui.TextStyle{Size: 2}
+	if got := fittingRunePrefix(measurer, []rune("alpha"), style, 20); got != 5 {
+		t.Fatalf("fit = %d, want 5", got)
+	}
+	if measurer.calls != 1 {
+		t.Fatalf("MeasureText calls = %d, want one cheap full-line check", measurer.calls)
+	}
+}
+
+type countingMeasurer struct {
+	fakeHostServices
+	calls int
+}
+
+func (m *countingMeasurer) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	m.calls++
+	return m.fakeHostServices.MeasureText(text, style)
+}
+
 func TestWrapTextLinesUsesAvailableWidthForMixedCJKText(t *testing.T) {
 	measurer := &fakeHostServices{}
 	style := woxui.TextStyle{Size: 2}

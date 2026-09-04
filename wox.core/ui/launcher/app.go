@@ -218,6 +218,10 @@ type App struct {
 	previewRequests                           map[string]bool
 	filePreviews                              map[string]filePreviewContent
 	fileRequests                              map[string]bool
+	filePreviewManualPaths                    map[string]bool
+	filePreviewTimer                          *time.Timer
+	filePreviewPendingPath                    string
+	filePreviewLoadGeneration                 uint64
 	nativeFilePreviewGeneration               uint64
 	nativeFilePreviewTimer                    *time.Timer
 	nativeFilePreviewBoundsTimer              *time.Timer
@@ -265,40 +269,41 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	}
 	appIcon, _ := decodeWoxImageWithTint(appIconImageSource, nil, 256)
 	app := &App{
-		isDev:            isDev,
-		isPrimary:        isPrimary,
-		instanceName:     instanceName,
-		sessionID:        sessionID,
-		windowID:         windowID,
-		services:         services,
-		uiCall:           woxui.Call,
-		windows:          windows,
-		instances:        instances,
-		primary:          primary,
-		lifecycleCtx:     lifecycleCtx,
-		cancel:           cancel,
-		appIcon:          appIcon,
-		query:            newInputQuery(""),
-		editor:           woxui.NewTextEditor(""),
-		selected:         -1,
-		hoveredResult:    -1,
-		settingTab:       "general",
-		palette:          defaultPalette(),
-		densityMetrics:   launcherDensityMetricsFor(""),
-		translations:     map[string]string{},
-		images:           map[string]*woxui.Image{},
-		imageRequested:   map[string]string{},
-		imageVariants:    map[string]string{},
-		imageVariantKeys: map[string]string{},
-		imageLastUsed:    map[string]uint64{},
-		imageErrors:      map[string]string{},
-		remotePreviews:   map[string]queryPreview{},
-		previewRequests:  map[string]bool{},
-		filePreviews:     map[string]filePreviewContent{},
-		fileRequests:     map[string]bool{},
-		mdDocs:           map[string]woxcomponent.MarkdownDocument{},
-		previewLayouts:   map[string]woxwidget.TextBlockLayout{},
-		noteWindows:      map[string]*notesWindowController{},
+		isDev:                  isDev,
+		isPrimary:              isPrimary,
+		instanceName:           instanceName,
+		sessionID:              sessionID,
+		windowID:               windowID,
+		services:               services,
+		uiCall:                 woxui.Call,
+		windows:                windows,
+		instances:              instances,
+		primary:                primary,
+		lifecycleCtx:           lifecycleCtx,
+		cancel:                 cancel,
+		appIcon:                appIcon,
+		query:                  newInputQuery(""),
+		editor:                 woxui.NewTextEditor(""),
+		selected:               -1,
+		hoveredResult:          -1,
+		settingTab:             "general",
+		palette:                defaultPalette(),
+		densityMetrics:         launcherDensityMetricsFor(""),
+		translations:           map[string]string{},
+		images:                 map[string]*woxui.Image{},
+		imageRequested:         map[string]string{},
+		imageVariants:          map[string]string{},
+		imageVariantKeys:       map[string]string{},
+		imageLastUsed:          map[string]uint64{},
+		imageErrors:            map[string]string{},
+		remotePreviews:         map[string]queryPreview{},
+		previewRequests:        map[string]bool{},
+		filePreviews:           map[string]filePreviewContent{},
+		fileRequests:           map[string]bool{},
+		filePreviewManualPaths: map[string]bool{},
+		mdDocs:                 map[string]woxcomponent.MarkdownDocument{},
+		previewLayouts:         map[string]woxwidget.TextBlockLayout{},
+		noteWindows:            map[string]*notesWindowController{},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,
 			MaxResultCount: defaultMaxResult,
@@ -1362,6 +1367,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if a.onTerminalPreviewKey(event) {
+		return true
+	}
+	if a.onFilePreviewKey(event) {
 		return true
 	}
 	if a.onToolbarKey(event) {

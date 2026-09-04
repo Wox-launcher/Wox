@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"time"
 
-	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -25,7 +24,7 @@ func (a *App) buildNativeFilePreview(path string, autoLoad bool, palette uiPalet
 		return previewview.WebViewPreviewMessage(a.nativeFilePreviewError, theme.ErrorText, theme, width, height)
 	}
 	if !autoLoad && !active && a.nativeFilePreviewPendingPath != path && a.nativeFilePreviewManualPath != path {
-		return a.buildManualNativeFilePreview(path, theme, width, height)
+		return a.buildManualNativeFilePreview(path, palette, width, height)
 	}
 	if !active {
 		return previewview.WebViewPreviewLoading(theme, width, height)
@@ -40,15 +39,15 @@ func (a *App) buildNativeFilePreview(path string, autoLoad bool, palette uiPalet
 }
 
 // buildManualNativeFilePreview keeps large Office documents from starting a shell handler until requested.
-func (a *App) buildManualNativeFilePreview(path string, theme woxcomponent.Theme, width, height float32) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.QueryBackground, Child: woxwidget.Align{
-		Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: "Large Office files are loaded on demand.", Style: woxui.TextStyle{Size: 13}, Color: theme.PreviewText},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "native-file-preview-load", Label: "Load full preview", Variant: woxcomponent.ButtonSecondary, Theme: theme, OnTap: func() {
-				a.requestManualNativeFilePreview(path)
-			}}),
-		}},
-	}}
+func (a *App) buildManualNativeFilePreview(path string, palette uiPalette, width, height float32) woxwidget.Widget {
+	file := a.filePreviewFor(path)
+	if file.Path == "" {
+		file.Path = path
+	}
+	if file.Kind == "" {
+		file.Kind = "large"
+	}
+	return a.buildLargeFilePreview(file, palette, width, height)
 }
 
 // requestManualNativeFilePreview records an explicit large-file request before scheduling the handler.

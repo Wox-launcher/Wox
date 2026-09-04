@@ -15,6 +15,7 @@ func (a *App) reconcileSelectedPreview() {
 func (a *App) reconcileSelectedPreviewOnUI() {
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if !visible {
+		a.cancelScheduledFilePreview()
 		hideWebView := a.deactivatePreviewTypes("")
 		if hideWebView {
 			a.hideWebView()
@@ -36,6 +37,8 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 			nativeFilePath = filePreview.NativeFilePath
 			nativeFileAutoLoad = filePreview.NativeFileAutoLoad
 		}
+	} else {
+		a.cancelScheduledFilePreview()
 	}
 
 	previewType := preview.PreviewType
