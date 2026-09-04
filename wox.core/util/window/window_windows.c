@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <wchar.h>
+#include "file_dialog_detect_windows.h"
 
 typedef struct
 {
@@ -43,7 +44,7 @@ typedef struct
 // FileDialogNavigationDiagnosticC captures the attempted native route without changing navigation behavior.
 typedef struct
 {
-    int route; // 0=none, 1=direct edit, 2=CDM, 3=UIA, 4=keyboard fallback
+    int route; // 0=none, 1=direct edit, 2=CDM, 3=UIA, 4=keyboard fallback, 5=browse-for-folder
     int directControlFound;
     int directSetResult;
     int cdmSetResult;
@@ -766,53 +767,9 @@ int minimizeWindowForManagement(const char *windowId, int pid)
     return 1;
 }
 
-typedef struct
-{
-    BOOL found;
-} FindChildClassData;
-
-BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
-{
-    FindChildClassData *data = (FindChildClassData *)lParam;
-    WCHAR className[256];
-    if (GetClassNameW(hwnd, className, 256) == 0)
-    {
-        return TRUE;
-    }
-
-    // Generic TaskDialogs can contain DirectUIHWND too. SHELLDLL_DefView is
-    // the actual file view that distinguishes open/save dialogs.
-    if (wcscmp(className, L"SHELLDLL_DefView") == 0)
-    {
-        data->found = TRUE;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 static int isOpenSaveDialogWindow(HWND hwnd)
 {
-    if (!hwnd)
-    {
-        return 0;
-    }
-
-    WCHAR className[256];
-    if (GetClassNameW(hwnd, className, 256) == 0)
-    {
-        return 0;
-    }
-
-    if (wcscmp(className, L"#32770") != 0)
-    {
-        return 0;
-    }
-
-    FindChildClassData data;
-    data.found = FALSE;
-    EnumChildWindows(hwnd, EnumChildClassProc, (LPARAM)&data);
-    return data.found ? 1 : 0;
+    return woxIsOpenSaveDialogWindow(hwnd);
 }
 
 typedef struct
@@ -860,80 +817,6 @@ int isOpenSaveDialogByPid(int pid)
     return data.found;
 }
 
-// wideContainsInsensitive reports whether haystack contains needle ignoring case.
-static int wideContainsInsensitive(const WCHAR *haystack, const WCHAR *needle)
-{
-    if (!haystack || !needle || needle[0] == L'\0')
-    {
-        return 0;
-    }
-
-    size_t hayLen = wcslen(haystack);
-    size_t needleLen = wcslen(needle);
-    if (needleLen > hayLen)
-    {
-        return 0;
-    }
-
-    for (size_t i = 0; i + needleLen <= hayLen; i++)
-    {
-        if (_wcsnicmp(haystack + i, needle, needleLen) == 0)
-        {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-// dialogLooksLikeSelectFolder uses title/default-button heuristics when no filename edit exists.
-// Uncertain dialogs return false so ordinary Open/Save keep showing files.
-static int dialogLooksLikeSelectFolder(HWND hwnd)
-{
-    if (!hwnd)
-    {
-        return 0;
-    }
-
-    WCHAR title[512];
-    ZeroMemory(title, sizeof(title));
-    GetWindowTextW(hwnd, title, sizeof(title) / sizeof(title[0]));
-
-    WCHAR buttonText[256];
-    ZeroMemory(buttonText, sizeof(buttonText));
-    HWND hOk = GetDlgItem(hwnd, IDOK);
-    if (hOk)
-    {
-        GetWindowTextW(hOk, buttonText, sizeof(buttonText) / sizeof(buttonText[0]));
-    }
-
-    // Match localized and English folder-picker chrome without treating "Open File" as folder-only.
-    // Require stronger phrases than a bare "Open" so uncertain dialogs stay false.
-    static const WCHAR *folderHints[] = {
-        L"open folder",
-        L"open directory",
-        L"select folder",
-        L"choose folder",
-        L"browse for folder",
-        L"select directory",
-        L"choose directory",
-        L"\x6253\x5f00\x6587\x4ef6\x5939", // Simplified Chinese: Open Folder
-        L"\x6253\x5f00\x76ee\x5f55", // Simplified Chinese: Open Directory
-        L"\x9009\x62e9\x6587\x4ef6\x5939", // Simplified Chinese: Select Folder
-        L"\x9009\x62e9\x76ee\x5f55", // Simplified Chinese: Select Directory
-        L"\x30d5\x30a9\x30eb\x30c0\x3092\x9078\x629e", // Japanese: Select Folder
-        L"\x30d5\x30a9\x30eb\x30c0\x3092\x958b\x304f", // Japanese: Open Folder
-    };
-
-    for (size_t i = 0; i < sizeof(folderHints) / sizeof(folderHints[0]); i++)
-    {
-        if (wideContainsInsensitive(title, folderHints[i]) || wideContainsInsensitive(buttonText, folderHints[i]))
-        {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 // isOpenSaveDialogSelectFolderWindow is true only for confirmed folder-only dialogs.
 static int isOpenSaveDialogSelectFolderWindow(HWND hwnd)
 {
@@ -941,10 +824,7 @@ static int isOpenSaveDialogSelectFolderWindow(HWND hwnd)
     {
         return 0;
     }
-
-    // Folder-picker chrome takes precedence because Windows folder dialogs can
-    // expose the selected folder path through the same edit control as filenames.
-    return dialogLooksLikeSelectFolder(hwnd);
+    return woxDialogLooksLikeSelectFolder(hwnd);
 }
 
 typedef struct
@@ -992,13 +872,35 @@ int isOpenSaveDialogSelectFolderByPid(int pid)
     return data.found;
 }
 
+static HWND fileDialogWindowById(const char *windowId, int pid);
+
+int isBrowseForFolderDialogByWindowId(const char *windowId, int pid)
+{
+    HWND hwnd = fileDialogWindowById(windowId, pid);
+    if (!hwnd)
+    {
+        return 0;
+    }
+    return woxIsBrowseForFolderWindow(hwnd);
+}
+
 static int activateWindowForManagementHwnd(HWND hwnd);
 
 // Resolves the captured dialog HWND and rejects stale or cross-process handles.
 static HWND fileDialogWindowById(const char *windowId, int pid)
 {
     HWND hwnd = parseWindowIdForManagement(windowId);
-    if (!hwnd || !IsWindow(hwnd) || !isOpenSaveDialogWindow(hwnd))
+    if (!hwnd || !IsWindow(hwnd))
+    {
+        return NULL;
+    }
+
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (root)
+    {
+        hwnd = root;
+    }
+    if (!isOpenSaveDialogWindow(hwnd))
     {
         return NULL;
     }
@@ -1980,10 +1882,176 @@ static int copyDialogDirectoryPathFromChildren(HWND hwnd, WCHAR *out, size_t out
     return 1;
 }
 
+// findBrowseForFolderTree locates the SHBrowseForFolder tree without walking ShellNameSpace internals.
+static HWND findBrowseForFolderTree(HWND hwnd)
+{
+    HWND tree = GetDlgItem(hwnd, WOX_BROWSE_FOLDER_TREE_ID);
+    if (woxChildHasClass(tree, L"SysTreeView32"))
+    {
+        return tree;
+    }
+    return FindWindowExW(hwnd, NULL, L"SysTreeView32", NULL);
+}
+
+// findBrowseForFolderEdit locates the folder name edit shown as "Folder:" in Move Items.
+static HWND findBrowseForFolderEdit(HWND hwnd)
+{
+    HWND edit = GetDlgItem(hwnd, WOX_BROWSE_FOLDER_EDIT_ID);
+    if (woxChildHasClass(edit, L"Edit"))
+    {
+        return edit;
+    }
+    return FindWindowExW(hwnd, NULL, L"Edit", NULL);
+}
+
+// copyBrowseForFolderPath reads the Folder edit. WM_GETTEXT is marshalled; TVM_GETITEM
+// with a local TVITEM pointer is not and crashes explorer.exe when sent cross-process.
+static int copyBrowseForFolderPath(HWND hwnd, WCHAR *out, size_t outLen)
+{
+    if (!hwnd || !out || outLen == 0)
+    {
+        return 0;
+    }
+
+    HWND edit = findBrowseForFolderEdit(hwnd);
+    if (!edit)
+    {
+        return 0;
+    }
+
+    WCHAR text[32768];
+    ZeroMemory(text, sizeof(text));
+    LRESULT n = SendMessageW(edit, WM_GETTEXT, (WPARAM)(sizeof(text) / sizeof(text[0])), (LPARAM)text);
+    if (n <= 0)
+    {
+        return 0;
+    }
+    return copyExistingDirectoryPathCandidate(text, out, outLen);
+}
+
+static HANDLE gBrowseRemoteProcess = NULL;
+static LPVOID gBrowseRemotePath = NULL;
+
+static void freeBrowseRemotePath()
+{
+    if (gBrowseRemoteProcess && gBrowseRemotePath)
+    {
+        VirtualFreeEx(gBrowseRemoteProcess, gBrowseRemotePath, 0, MEM_RELEASE);
+    }
+    if (gBrowseRemoteProcess)
+    {
+        CloseHandle(gBrowseRemoteProcess);
+        gBrowseRemoteProcess = NULL;
+    }
+    gBrowseRemotePath = NULL;
+}
+
+// copyPathIntoTargetProcess writes a UTF-16 path into the dialog process so WM_USER
+// BFFM_SETSELECTION can dereference it. Local pointers are not marshalled.
+static int copyPathIntoTargetProcess(DWORD pid, const WCHAR *wpath)
+{
+    if (pid == 0 || !wpath || wpath[0] == L'\0')
+    {
+        return 0;
+    }
+
+    freeBrowseRemotePath();
+
+    HANDLE process = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION, FALSE, pid);
+    if (!process)
+    {
+        return 0;
+    }
+
+    SIZE_T bytes = (wcslen(wpath) + 1) * sizeof(WCHAR);
+    LPVOID remote = VirtualAllocEx(process, NULL, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!remote)
+    {
+        CloseHandle(process);
+        return 0;
+    }
+
+    SIZE_T written = 0;
+    if (!WriteProcessMemory(process, remote, wpath, bytes, &written) || written != bytes)
+    {
+        VirtualFreeEx(process, remote, 0, MEM_RELEASE);
+        CloseHandle(process);
+        return 0;
+    }
+
+    gBrowseRemoteProcess = process;
+    gBrowseRemotePath = remote;
+    return 1;
+}
+
+// navigateBrowseForFolderWindow selects a folder in SHBrowseForFolder without confirming the dialog.
+// Pressing IDOK here would immediately Move/Copy the original items. BFFM_SETSELECTION is WM_USER
+// and must point at memory in the target process; a local path/PIDL pointer crashes explorer.exe.
+static int navigateBrowseForFolderWindow(HWND hwnd, const WCHAR *wpath, FileDialogNavigationDiagnosticC *diagnostic)
+{
+    if (!hwnd || !wpath || wpath[0] == L'\0')
+    {
+        return 0;
+    }
+
+    if (diagnostic)
+    {
+        diagnostic->route = 5;
+        diagnostic->directControlFound = findBrowseForFolderTree(hwnd) != NULL || findBrowseForFolderEdit(hwnd) != NULL;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    int remote = copyPathIntoTargetProcess(pid, wpath);
+    HWND edit = findBrowseForFolderEdit(hwnd);
+    if (diagnostic)
+    {
+        diagnostic->directControlFound = edit != NULL || diagnostic->directControlFound;
+        diagnostic->directSetResult = remote;
+    }
+
+    // The browse dialog may still be initializing on first focus. Retry selection
+    // without clicking Move/OK. Enter is sent to the Folder edit only.
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        if (attempt > 0)
+        {
+            Sleep(80);
+        }
+        if (remote)
+        {
+            SendMessageW(hwnd, BFFM_SETEXPANDED, TRUE, (LPARAM)gBrowseRemotePath);
+            SendMessageW(hwnd, BFFM_SETSELECTIONW, TRUE, (LPARAM)gBrowseRemotePath);
+        }
+        if (edit)
+        {
+            SendMessageW(edit, WM_SETTEXT, 0, (LPARAM)wpath);
+            SendMessageW(edit, WM_CHAR, VK_RETURN, 0);
+        }
+    }
+
+    int ok = remote || edit != NULL;
+    freeBrowseRemotePath();
+    return ok;
+}
+
 static char *getDialogDirectoryPathByWindow(HWND hwnd)
 {
     if (!isOpenSaveDialogWindow(hwnd))
     {
+        return dupEmptyString();
+    }
+
+    if (woxIsBrowseForFolderWindow(hwnd))
+    {
+        WCHAR browsePath[32768];
+        ZeroMemory(browsePath, sizeof(browsePath));
+        if (copyBrowseForFolderPath(hwnd, browsePath, sizeof(browsePath) / sizeof(browsePath[0])))
+        {
+            return copyUtf8FromWide(browsePath);
+        }
+        // Never EnumChildWindows or UIA-walk SHBrowseForFolder. Those recurse into
+        // ShellNameSpace and crash explorer.exe.
         return dupEmptyString();
     }
 
@@ -2030,6 +2098,12 @@ char *getFileDialogPathByWindowId(const char *windowId, int pid)
 	if (!hwnd || !IsWindow(hwnd))
 	{
 		return dupEmptyString();
+	}
+
+	HWND root = GetAncestor(hwnd, GA_ROOT);
+	if (root)
+	{
+		hwnd = root;
 	}
 
 	DWORD hwndPid = 0;
@@ -2222,13 +2296,6 @@ static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavig
         return 0;
     }
 
-    if (!activateWindowForManagementHwnd(hwnd))
-    {
-        if (diagnostic)
-            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
-        return 0;
-    }
-
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
     if (wlen <= 1)
     {
@@ -2244,6 +2311,29 @@ static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavig
         return 0;
     }
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
+
+    // Browse-for-folder navigation uses SendMessage (BFFM_SETSELECTION) and must
+    // not depend on winning the foreground; clicking IDOK would confirm Move/Copy.
+    if (woxIsBrowseForFolderWindow(hwnd))
+    {
+        ULONGLONG browseStartedAt = GetTickCount64();
+        int ok = navigateBrowseForFolderWindow(hwnd, wpath, diagnostic);
+        if (diagnostic)
+        {
+            diagnostic->directElapsedMs = GetTickCount64() - browseStartedAt;
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
+        }
+        free(wpath);
+        return ok;
+    }
+
+    if (!activateWindowForManagementHwnd(hwnd))
+    {
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
+        free(wpath);
+        return 0;
+    }
 
     ULONGLONG directStartedAt = GetTickCount64();
     HWND hEdit = findFileNameEdit(hwnd);

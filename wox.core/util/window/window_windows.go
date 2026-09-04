@@ -34,7 +34,7 @@ typedef struct {
 
 // FileDialogNavigationDiagnosticC captures the attempted native route without changing navigation behavior.
 typedef struct {
-	int route;
+	int route; // 0=none, 1=direct edit, 2=CDM, 3=UIA, 4=keyboard fallback, 5=browse-for-folder
 	int directControlFound;
 	int directSetResult;
 	int cdmSetResult;
@@ -76,6 +76,7 @@ int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
 int isOpenSaveDialogSelectFolder();
 int isOpenSaveDialogSelectFolderByPid(int pid);
+int isBrowseForFolderDialogByWindowId(const char* windowId, int pid);
 int navigateActiveFileDialog(const char* path);
 int navigateFileDialogByWindowId(const char* windowId, int pid, const char* path, FileDialogNavigationDiagnosticC* diagnostic);
 int selectInActiveFileDialog(const char* path);
@@ -92,7 +93,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -436,6 +436,18 @@ func IsOpenSaveDialogSelectFolderByPid(pid int) (bool, error) {
 	return int(result) == 1, nil
 }
 
+// IsBrowseForFolderDialog reports whether the captured window is SHBrowseForFolder,
+// including Explorer's Move Items / Copy Items chooser.
+func IsBrowseForFolderDialog(windowId string, pid int) bool {
+	windowId = strings.TrimSpace(windowId)
+	if windowId == "" || pid <= 0 {
+		return false
+	}
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+	return int(C.isBrowseForFolderDialogByWindowId(cWindowId, C.int(pid))) == 1
+}
+
 func NavigateActiveFileDialog(targetPath string) bool {
 	if targetPath == "" {
 		return false
@@ -458,10 +470,10 @@ func NavigateFileDialog(windowId string, pid int, targetPath string) bool {
 	defer C.free(unsafe.Pointer(cPath))
 	var diagnostic C.FileDialogNavigationDiagnosticC
 	succeeded := int(C.navigateFileDialogByWindowId(cWindowId, C.int(pid), cPath, &diagnostic)) == 1
-	log.Printf("[file-dialog-navigation] succeeded=%t route=%d directControl=%d directSet=%d cdmSet=%d cdmGetSpecChars=%d cdmMatched=%d uiaStage=%d uiaHr=0x%08X uiaElements=%d uiaEditOrCombo=%d uiaPathCandidates=%d uiaValuePatterns=%d uiaWritable=%d uiaSetValue=%d uiaSetFocus=%d elapsedMs={direct:%d,uia:%d,fallback:%d,total:%d}",
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("file-dialog-navigation succeeded=%t route=%d directControl=%d directSet=%d cdmSet=%d cdmGetSpecChars=%d cdmMatched=%d uiaStage=%d uiaHr=0x%08X uiaElements=%d uiaEditOrCombo=%d uiaPathCandidates=%d uiaValuePatterns=%d uiaWritable=%d uiaSetValue=%d uiaSetFocus=%d elapsedMs={direct:%d,uia:%d,fallback:%d,total:%d}",
 		succeeded, int(diagnostic.route), int(diagnostic.directControlFound), int(diagnostic.directSetResult), int(diagnostic.cdmSetResult), int(diagnostic.cdmGetSpecChars), int(diagnostic.cdmMatched),
 		int(diagnostic.uiaStage), uint32(diagnostic.uiaLastHr), int(diagnostic.uiaElementCount), int(diagnostic.uiaEditOrComboCount), int(diagnostic.uiaPathCandidateCount), int(diagnostic.uiaValuePatternCount),
-		int(diagnostic.uiaWritableCount), int(diagnostic.uiaSetValueSucceeded), int(diagnostic.uiaSetFocusSucceeded), uint64(diagnostic.directElapsedMs), uint64(diagnostic.uiaElapsedMs), uint64(diagnostic.fallbackElapsedMs), uint64(diagnostic.totalElapsedMs))
+		int(diagnostic.uiaWritableCount), int(diagnostic.uiaSetValueSucceeded), int(diagnostic.uiaSetFocusSucceeded), uint64(diagnostic.directElapsedMs), uint64(diagnostic.uiaElapsedMs), uint64(diagnostic.fallbackElapsedMs), uint64(diagnostic.totalElapsedMs)))
 	return succeeded
 }
 
@@ -671,6 +683,10 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, wind
 		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
 		if int(wndPid) != pid {
 			pidMismatches++
+			itemVar.Clear()
+			continue
+		}
+		if !isExplorerCabinetHwnd(wnd) {
 			itemVar.Clear()
 			continue
 		}
@@ -970,6 +986,10 @@ func GetActiveFileExplorerPath() string {
 			itemVar.Clear()
 			continue
 		}
+		if !isExplorerCabinetHwnd(wnd) {
+			itemVar.Clear()
+			continue
+		}
 
 		p := getShellWindowPath(wDisp)
 		if p != "" {
@@ -1014,6 +1034,8 @@ func GetActiveFileExplorerPath() string {
 // GetFileExplorerPathByWindow returns the current folder of a specific Explorer window.
 // The HWND must still belong to Explorer; the latest title of that HWND is used to pick
 // the active Windows 11 tab among ShellWindows entries that share the handle.
+// Sibling explorer.exe cabinets are not queried, because one of them may own a
+// modal SHBrowseForFolder dialog and Document on that window crashes explorer.
 func GetFileExplorerPathByWindow(pid int, windowID string) string {
 	hwnd := parseWindowID(windowID)
 	if !isExplorerWindowOwnedByPid(pid, hwnd) {
@@ -1066,6 +1088,22 @@ func getWindowTitleByHwnd(hwnd uintptr) string {
 		return ""
 	}
 	return strings.TrimSpace(syscall.UTF16ToString(buf[:n]))
+}
+
+func explorerWindowClassName(hwnd uintptr) string {
+	if hwnd == 0 || !isWin32Window(hwnd) {
+		return ""
+	}
+	var buf [256]uint16
+	n, err := win.GetClassName(win.HWND(hwnd), &buf[0], len(buf))
+	if err != nil || n <= 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(buf[:n])
+}
+
+func isExplorerCabinetHwnd(hwnd uintptr) bool {
+	return isExplorerCabinetWindowClass(explorerWindowClassName(hwnd))
 }
 
 func getFileExplorerPathByPidHwndAndTitle(pid int, preferredHwnd uintptr, windowTitle string) string {
@@ -1137,6 +1175,14 @@ func getFileExplorerPathByPidHwndAndTitle(pid int, preferredHwnd uintptr, window
 	}
 
 	getShellWindowPath := func(wDisp *ole.IDispatch) string {
+		if urlVar, urlErr := oleutil.GetProperty(wDisp, "LocationURL"); urlErr == nil {
+			locationURL := strings.TrimSpace(urlVar.ToString())
+			urlVar.Clear()
+			if p := filesystemPathFromShellLocationURL(locationURL); p != "" {
+				return p
+			}
+		}
+
 		docVar, err := oleutil.GetProperty(wDisp, "Document")
 		if err != nil {
 			return ""
@@ -1213,6 +1259,14 @@ func getFileExplorerPathByPidHwndAndTitle(pid int, preferredHwnd uintptr, window
 		var wndPid uint32
 		win.GetWindowThreadProcessId(win.HWND(hwnd), &wndPid)
 		if int(wndPid) != pid {
+			itemVar.Clear()
+			continue
+		}
+		if !isExplorerCabinetHwnd(hwnd) {
+			itemVar.Clear()
+			continue
+		}
+		if !shouldQueryExplorerShellWindowPath(hwnd, preferredHwnd) {
 			itemVar.Clear()
 			continue
 		}
@@ -1567,6 +1621,10 @@ func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId
 		var wndPid uint32
 		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
 		if int(wndPid) != pid {
+			itemVar.Clear()
+			continue
+		}
+		if !isExplorerCabinetHwnd(wnd) {
 			itemVar.Clear()
 			continue
 		}

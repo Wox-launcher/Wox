@@ -103,6 +103,11 @@ func IsOpenSaveDialogSelectFolderByPid(pid int) (bool, error) {
 	return false, nil
 }
 
+// IsBrowseForFolderDialog is not implemented on Linux yet.
+func IsBrowseForFolderDialog(windowId string, pid int) bool {
+	return false
+}
+
 func NavigateActiveFileDialog(targetPath string) bool {
 	return false
 }

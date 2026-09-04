@@ -1,6 +1,9 @@
 package explorer
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestExplorerTransitionExplorerToDialogProducesSource(t *testing.T) {
 	var state explorerTransitionState
@@ -64,7 +67,10 @@ func TestExplorerTransitionWoxHideRestoreDoesNotRetrigger(t *testing.T) {
 func TestExplorerTransitionActivateExplorerReplacesSource(t *testing.T) {
 	var state explorerTransitionState
 	state.ActivateExplorer(ExplorerWindowRef{Pid: 11, WindowID: "100"})
+	state.lastExplorerAt = state.lastExplorerAt.Add(-time.Second)
+
 	state.ActivateExplorer(ExplorerWindowRef{Pid: 12, WindowID: "120"})
+	state.lastExplorerAt = state.lastExplorerAt.Add(-time.Second)
 
 	event := state.ActivateDialog(22, "200")
 	if event.PreviousExplorer == nil {
@@ -72,6 +78,20 @@ func TestExplorerTransitionActivateExplorerReplacesSource(t *testing.T) {
 	}
 	if event.PreviousExplorer.Pid != 12 || event.PreviousExplorer.WindowID != "120" {
 		t.Fatalf("PreviousExplorer = %+v", *event.PreviousExplorer)
+	}
+}
+
+func TestExplorerTransitionIgnoresOwnerFocusSteal(t *testing.T) {
+	var state explorerTransitionState
+	state.ActivateExplorer(ExplorerWindowRef{Pid: 11, WindowID: "100"})
+	state.ActivateExplorer(ExplorerWindowRef{Pid: 11, WindowID: "200"})
+
+	event := state.ActivateDialog(11, "300")
+	if event.PreviousExplorer == nil {
+		t.Fatal("expected the Explorer the user was actually in")
+	}
+	if event.PreviousExplorer.WindowID != "100" {
+		t.Fatalf("owner steal used %+v, want window 100", *event.PreviousExplorer)
 	}
 }
 
