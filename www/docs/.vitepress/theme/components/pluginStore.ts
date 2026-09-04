@@ -35,6 +35,7 @@ export function getCurrentLangCode(lang: string) {
   if (normalizedLang.startsWith("pt")) return "pt_BR";
   if (normalizedLang.startsWith("ru")) return "ru_RU";
   if (normalizedLang.startsWith("ko")) return "ko_KR";
+  if (normalizedLang.startsWith("ja")) return "ja_JP";
 
   return "en_US";
 }

@@ -65,6 +65,7 @@ func TestFormTableInlineHeaderKeepsTranslatedActionLabelsVisible(t *testing.T) {
 		{language: "ru_RU", add: "Добавить", template: "Из шаблонов"},
 		{language: "pt_BR", add: "Adicionar", template: "A partir de modelos"},
 		{language: "ko_KR", add: "추가", template: "템플릿에서"},
+		{language: "ja_JP", add: "追加", template: "テンプレートから"},
 	} {
 		t.Run(label.language, func(t *testing.T) {
 			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {

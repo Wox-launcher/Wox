@@ -332,6 +332,7 @@ Wox looks up translations in this order:
 | `pt_BR` | Portuguese (Brazil)  |
 | `ru_RU` | Russian              |
 | `ko_KR` | Korean               |
+| `ja_JP` | Japanese             |
 
 > Tip: Always provide `en_US` translations as the fallback language.
 

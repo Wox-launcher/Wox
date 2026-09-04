@@ -18,6 +18,9 @@
         },
         "ko_KR": {
           "category_reading": "읽기"
+        },
+        "ja_JP": {
+          "category_reading": "読書"
         }
       }
     },
@@ -39,6 +42,9 @@
         },
         "ko_KR": {
           "category_writing": "쓰기"
+        },
+        "ja_JP": {
+          "category_writing": "執筆"
         }
       }
     },
@@ -60,6 +66,9 @@
         },
         "ko_KR": {
           "category_productivity": "생산성"
+        },
+        "ja_JP": {
+          "category_productivity": "生産性"
         }
       }
     }
@@ -108,6 +117,11 @@
           "name_translate_chinese_english": "중국어 / 영어 번역",
           "desc_translate_chinese_english": "선택한 텍스트를 중국어와 영어 사이에서 번역합니다.",
           "prompt_translate_chinese_english": "다음 텍스트를 중국어와 영어 사이에서 번역하세요. 텍스트가 중국어이면 영어로, 그렇지 않으면 중국어로 번역하세요. 번역문만 반환하세요:\n{wox:input_text}"
+        },
+        "ja_JP": {
+          "name_translate_chinese_english": "中国語 / 英語翻訳",
+          "desc_translate_chinese_english": "選択したテキストを中国語と英語の間で翻訳します。",
+          "prompt_translate_chinese_english": "次のテキストを中国語と英語の間で翻訳してください。テキストが中国語の場合は英語に、それ以外は中国語に翻訳してください。翻訳文のみを返してください:\n{wox:input_text}"
         }
       }
     },
@@ -154,6 +168,11 @@
           "name_summarize_selection": "선택 영역 요약",
           "desc_summarize_selection": "선택한 텍스트를 간결한 요점으로 요약합니다.",
           "prompt_summarize_selection": "다음 텍스트에서 중요한 사실을 추출하세요. 최대 7개의 요점과 한 줄 요약을 반환하세요:\n{wox:input_text}"
+        },
+        "ja_JP": {
+          "name_summarize_selection": "選択範囲を要約",
+          "desc_summarize_selection": "選択したテキストを簡潔な箇条書きに要約します。",
+          "prompt_summarize_selection": "次のテキストから重要な事実を抽出してください。最大 7 つの箇条書きと 1 行の要約を返してください:\n{wox:input_text}"
         }
       }
     },
@@ -200,6 +219,11 @@
           "name_rewrite_selection": "선택 영역 다시 쓰기",
           "desc_rewrite_selection": "선택한 텍스트를 더 명확하고 자연스럽게 다시 씁니다.",
           "prompt_rewrite_selection": "다음 텍스트를 더 명확하고 자연스럽고 읽기 쉽게 다시 쓰세요. 원래 의미를 유지하세요. 다시 쓴 텍스트만 반환하세요:\n{wox:input_text}"
+        },
+        "ja_JP": {
+          "name_rewrite_selection": "選択範囲を書き直す",
+          "desc_rewrite_selection": "選択したテキストをより明確で自然な表現に書き直します。",
+          "prompt_rewrite_selection": "次のテキストをより明確で自然、読みやすく書き直してください。元の意味は保持してください。書き直したテキストのみを返してください:\n{wox:input_text}"
         }
       }
     },
@@ -239,6 +263,11 @@
           "name_fix_writing": "문장 교정",
           "desc_fix_writing": "선택한 텍스트의 문법, 맞춤법, 문장 부호, 표현을 교정합니다.",
           "prompt_fix_writing": "다음 텍스트의 문법, 맞춤법, 문장 부호, 표현을 교정하세요. 원래 의미와 어조를 유지하세요. 교정된 텍스트만 반환하세요:\n{wox:input_text}"
+        },
+        "ja_JP": {
+          "name_fix_writing": "文章を校正",
+          "desc_fix_writing": "選択したテキストの文法、スペル、句読点、表現を修正します。",
+          "prompt_fix_writing": "次のテキストの文法、スペル、句読点、表現を修正してください。元の意味とトーンは保持してください。修正後のテキストのみを返してください:\n{wox:input_text}"
         }
       }
     },
@@ -278,6 +307,11 @@
           "name_make_professional": "업무용 어조로 바꾸기",
           "desc_make_professional": "선택한 텍스트를 전문적인 업무 어조로 다시 씁니다.",
           "prompt_make_professional": "다음 텍스트를 전문적이고 정중하며 간결한 업무 어조로 다시 쓰세요. 원래 의미를 유지하세요. 다시 쓴 텍스트만 반환하세요:\n{wox:input_text}"
+        },
+        "ja_JP": {
+          "name_make_professional": "ビジネス向けに書き直す",
+          "desc_make_professional": "選択したテキストをビジネス向けの丁寧な口調に書き直します。",
+          "prompt_make_professional": "次のテキストを専門的で丁寧、簡潔なビジネス口調に書き直してください。元の意味は保持してください。書き直したテキストのみを返してください:\n{wox:input_text}"
         }
       }
     },
@@ -317,6 +351,11 @@
           "name_extract_action_items": "할 일 추출",
           "desc_extract_action_items": "선택한 텍스트에서 작업, 담당자, 마감일을 추출합니다.",
           "prompt_extract_action_items": "다음 텍스트에서 할 일 항목을 추출하세요. 가능하면 작업, 담당자, 마감일을 포함하세요. 정보가 없으면 \"미지정\"이라고 쓰세요. 간결한 글머리 기호 목록으로 반환하세요:\n{wox:input_text}"
+        },
+        "ja_JP": {
+          "name_extract_action_items": "ToDo を抽出",
+          "desc_extract_action_items": "選択したテキストからタスク、担当者、期限を抽出します。",
+          "prompt_extract_action_items": "次のテキストからアクションアイテムを抽出してください。可能な場合はタスク、担当者、期限を含めてください。情報がない場合は \"未指定\" と書いてください。簡潔な箇条書きで返してください:\n{wox:input_text}"
         }
       }
     }
