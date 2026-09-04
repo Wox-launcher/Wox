@@ -77,10 +77,10 @@ func (c *quickSwitchCoordinator) Request(ctx context.Context, source ExplorerWin
 func (c *quickSwitchCoordinator) execute(ctx context.Context, generation uint64, source ExplorerWindowRef, targetPid int, targetWindowID string) {
 	startedAt := time.Now()
 	logSkip := func(stage string) {
-		c.deps.logInfo(ctx, fmt.Sprintf("Explorer Quick Switch skipped: stage=%s platform=%s pid=%d windowId=%q elapsedMs=%d", stage, c.deps.platform, targetPid, targetWindowID, time.Since(startedAt).Milliseconds()))
+		c.deps.logInfo(ctx, fmt.Sprintf("Explorer Quick Switch skipped: stage=%s platform=%s sourcePid=%d sourceWindowId=%q pid=%d windowId=%q elapsedMs=%d", stage, c.deps.platform, source.Pid, source.WindowID, targetPid, targetWindowID, time.Since(startedAt).Milliseconds()))
 	}
 	logFail := func(stage string) {
-		c.deps.logWarn(ctx, fmt.Sprintf("Explorer Quick Switch failed: stage=%s platform=%s pid=%d windowId=%q elapsedMs=%d", stage, c.deps.platform, targetPid, targetWindowID, time.Since(startedAt).Milliseconds()))
+		c.deps.logWarn(ctx, fmt.Sprintf("Explorer Quick Switch failed: stage=%s platform=%s sourcePid=%d sourceWindowId=%q pid=%d windowId=%q elapsedMs=%d", stage, c.deps.platform, source.Pid, source.WindowID, targetPid, targetWindowID, time.Since(startedAt).Milliseconds()))
 	}
 
 	if !c.isCurrent(generation) {
@@ -151,7 +151,7 @@ func (c *quickSwitchCoordinator) finishSuccess(ctx context.Context, startedAt ti
 	if c.deps.updateCache != nil {
 		c.deps.updateCache(targetPid, targetWindowID, path)
 	}
-	c.deps.logInfo(ctx, fmt.Sprintf("Explorer Quick Switch succeeded: platform=%s pid=%d windowId=%q elapsedMs=%d", c.deps.platform, targetPid, targetWindowID, time.Since(startedAt).Milliseconds()))
+	c.deps.logInfo(ctx, fmt.Sprintf("Explorer Quick Switch succeeded: platform=%s pid=%d windowId=%q path=%q elapsedMs=%d", c.deps.platform, targetPid, targetWindowID, path, time.Since(startedAt).Milliseconds()))
 }
 
 func (c *quickSwitchCoordinator) isCurrent(generation uint64) bool {
@@ -186,6 +186,12 @@ func (c *ExplorerPlugin) newQuickSwitchDeps() quickSwitchDeps {
 	return quickSwitchDeps{
 		getExplorerPath: window.GetFileExplorerPathByWindow,
 		getDialogPath: func(windowID string, pid int) string {
+			if window.IsBrowseForFolderDialog(windowID, pid) {
+				return ""
+			}
+			if ok, _ := window.IsFileExplorer(pid); ok {
+				return ""
+			}
 			if strings.TrimSpace(windowID) != "" {
 				if dialogPath := strings.TrimSpace(window.GetFileDialogPathByWindowId(windowID, pid)); dialogPath != "" {
 					return dialogPath
@@ -237,8 +243,14 @@ func (c *ExplorerPlugin) isQuickSwitchTargetCurrent(pid int, windowID string) bo
 func (c *ExplorerPlugin) performFileDialogNavigation(ctx context.Context, windowID string, pid int, folderPath string) bool {
 	c.dialogNavigateMu.Lock()
 	defer c.dialogNavigateMu.Unlock()
-	if navigateFileDialogWithHook(ctx, windowID, pid, folderPath) {
-		return true
+	browse := window.IsBrowseForFolderDialog(windowID, pid)
+	explorerHost, _ := window.IsFileExplorer(pid)
+	// Never inject the Shell-view hook into explorer.exe. Move Items lives there and
+	// SHBrowseForFolder has no IShellBrowser; the hook crashes explorer.
+	if !browse && !explorerHost {
+		if navigateFileDialogWithHook(ctx, windowID, pid, folderPath) {
+			return true
+		}
 	}
 	return window.NavigateFileDialog(windowID, pid, folderPath)
 }

@@ -73,3 +73,29 @@ func selectBestExplorerShellWindowCandidate(candidates []explorerShellWindowCand
 
 	return bestIdx
 }
+
+// isExplorerCabinetWindowClass is true for real Explorer/Cabinet windows only.
+// SHBrowseForFolder (Move Items) can appear in Shell.Application.Windows; querying
+// Document on those entries crashes explorer.exe.
+func isExplorerCabinetWindowClass(className string) bool {
+	switch strings.ToLower(strings.TrimSpace(className)) {
+	case "cabinetwclass", "explorewclass":
+		return true
+	default:
+		return false
+	}
+}
+
+// shouldQueryExplorerShellWindowPath is true when this ShellWindows entry is the
+// captured Explorer HWND. Other cabinet windows in the same explorer.exe process
+// must not be queried: one of them may own a modal SHBrowseForFolder dialog, and
+// Document on that window crashes explorer.exe.
+func shouldQueryExplorerShellWindowPath(hwnd, preferredHwnd uintptr) bool {
+	if hwnd == 0 {
+		return false
+	}
+	if preferredHwnd == 0 {
+		return true
+	}
+	return hwnd == preferredHwnd
+}

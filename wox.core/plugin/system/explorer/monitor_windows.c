@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include "../../../util/window/file_dialog_detect_windows.h"
 
 static UINT getDpiForWindowMonitor(HWND hwnd)
 {
@@ -109,27 +110,6 @@ typedef struct
     BOOL found;
 } FindChildClassData;
 
-static BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
-{
-    FindChildClassData *data = (FindChildClassData *)lParam;
-    WCHAR className[256];
-    if (GetClassNameW(hwnd, className, 256) == 0)
-    {
-        logMessage("EnumChildClassProc: GetClassNameW failed err=%lu", GetLastError());
-        return TRUE;
-    }
-
-    // Generic TaskDialogs can contain DirectUIHWND too. SHELLDLL_DefView is
-    // the actual file view that distinguishes open/save dialogs.
-    if (_wcsicmp(className, L"SHELLDLL_DefView") == 0)
-    {
-        data->found = TRUE;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 static BOOL CALLBACK EnumDesktopViewProc(HWND hwnd, LPARAM lParam)
 {
     FindChildClassData *data = (FindChildClassData *)lParam;
@@ -188,15 +168,7 @@ static int isOpenSaveDialog(HWND hwnd)
         return 0;
     }
 
-    if (_wcsicmp(className, L"#32770") != 0)
-    {
-        return 0;
-    }
-
-    FindChildClassData data;
-    data.found = FALSE;
-    EnumChildWindows(hwnd, EnumChildClassProc, (LPARAM)&data);
-    return data.found ? 1 : 0;
+    return woxIsOpenSaveDialogWindow(hwnd);
 }
 
 typedef struct
@@ -652,7 +624,15 @@ static void CALLBACK foregroundChangedProc(
         char processName[256];
         getWindowClassNameUtf8(hwnd, className, sizeof(className));
         getProcessImageBaseNameUtf8(pid, processName, sizeof(processName));
-        logMessage("foregroundChangedProc: invalid window hwnd=0x%p pid=%lu classResult=%d class=%s proc=%s", hwnd, pid, classResult, className[0] ? className : "?", processName[0] ? processName : "?");
+        int isExplorerChrome = pid != 0 && isExplorerProcess(pid) && classResult == 0;
+        logMessage("foregroundChangedProc: invalid window hwnd=0x%p pid=%lu classResult=%d class=%s proc=%s chrome=%d", hwnd, pid, classResult, className[0] ? className : "?", processName[0] ? processName : "?", isExplorerChrome);
+        // Ribbon / Net UI tool windows sit in explorer.exe and fire between the
+        // user's Explorer and an owned Move Items dialog. Treating them as a
+        // real deactivation clears PreviousExplorer and Quick Switch misses.
+        if (isExplorerChrome)
+        {
+            return;
+        }
         if (gLastExplorerPid != 0)
         {
             gLastExplorerPid = 0;

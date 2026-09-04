@@ -391,6 +391,11 @@ func IsOpenSaveDialogSelectFolderByPid(pid int) (bool, error) {
 	return int(C.isOpenSaveDialogSelectFolderByPid(C.int(pid))) == 1, nil
 }
 
+// IsBrowseForFolderDialog is Windows-only; macOS folder pickers use the regular open panel.
+func IsBrowseForFolderDialog(windowId string, pid int) bool {
+	return false
+}
+
 func NavigateActiveFileDialog(targetPath string) bool {
 	if targetPath == "" {
 		return false
