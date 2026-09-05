@@ -1211,6 +1211,9 @@
     "IconUrl": "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/images/app.svg",
     "Website": "https://github.com/Myraxion/Wox.Plugin.Linkding",
     "DownloadUrl": "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/Wox.Plugin.Linkding.py",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/images/screenshot.png"
+    ],
     "SupportedOS": [
       "Windows",
       "Darwin",
