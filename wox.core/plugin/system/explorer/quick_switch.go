@@ -88,18 +88,28 @@ func (c *quickSwitchCoordinator) execute(ctx context.Context, generation uint64,
 		return
 	}
 
+	// Phase timings: navigation itself is fast, so anything slow here is what the
+	// user actually feels between the dialog appearing and the folder changing.
+	phaseStart := time.Now()
 	sourcePath := strings.TrimSpace(c.deps.getExplorerPath(source.Pid, source.WindowID))
+	sourcePathMs := time.Since(phaseStart).Milliseconds()
 	if sourcePath == "" {
 		logSkip("source-path")
 		return
 	}
 
-	if !c.isCurrent(generation) || !c.deps.isTargetCurrent(targetPid, targetWindowID) {
+	phaseStart = time.Now()
+	targetCurrent := c.isCurrent(generation) && c.deps.isTargetCurrent(targetPid, targetWindowID)
+	targetIdentityMs := time.Since(phaseStart).Milliseconds()
+	if !targetCurrent {
 		logSkip("target-identity")
 		return
 	}
 
+	phaseStart = time.Now()
 	dialogPath := strings.TrimSpace(c.deps.getDialogPath(targetWindowID, targetPid))
+	dialogPathMs := time.Since(phaseStart).Milliseconds()
+	c.deps.logInfo(ctx, fmt.Sprintf("Explorer Quick Switch phases: sourcePathMs=%d targetIdentityMs=%d dialogPathMs=%d pid=%d windowId=%q", sourcePathMs, targetIdentityMs, dialogPathMs, targetPid, targetWindowID))
 	if dialogPath != "" && c.deps.normalizePath(dialogPath) == c.deps.normalizePath(sourcePath) {
 		if c.deps.updateCache != nil {
 			c.deps.updateCache(targetPid, targetWindowID, dialogPath)

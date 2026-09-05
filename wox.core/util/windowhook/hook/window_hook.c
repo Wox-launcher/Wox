@@ -13,6 +13,13 @@
 #define WOX_WINDOW_PATH_CAPACITY 32768
 #define WOX_WINDOW_HOOK_TIMEOUT_MS 1000
 #define WOX_WM_GETISHELLBROWSER (WM_USER + 7)
+// Wox publishes the overlay's physical pixel offset from the target's outer frame
+// through these window properties. The subclass then translates the overlay inside
+// the target's own WM_WINDOWPOSCHANGED instead of waiting for a cross-process round
+// trip, which is what makes a dragged overlay track without lag.
+#define WOX_STICKY_OFFSET_ACTIVE_PROP L"Wox.WindowHook.StickyOffset.Active.v1"
+#define WOX_STICKY_OFFSET_X_PROP L"Wox.WindowHook.StickyOffset.X.v1"
+#define WOX_STICKY_OFFSET_Y_PROP L"Wox.WindowHook.StickyOffset.Y.v1"
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0
 #endif
@@ -334,7 +341,35 @@ static HRESULT selectShellViewItem(HWND dialog, const WCHAR *targetPath, WoxWind
     return result;
 }
 
-// stickySubclassProc emits a lightweight signal and leaves all positioning to the overlay process.
+// clearStickyOffset drops the published offset so a reattached overlay cannot inherit it.
+static void clearStickyOffset(HWND target)
+{
+    RemovePropW(target, WOX_STICKY_OFFSET_ACTIVE_PROP);
+    RemovePropW(target, WOX_STICKY_OFFSET_X_PROP);
+    RemovePropW(target, WOX_STICKY_OFFSET_Y_PROP);
+}
+
+// translateStickyOverlay moves the overlay by the offset Wox published for the
+// current layout. Only a translation is applied: the target keeps its size while it
+// is dragged, so the offset stays valid and Wox's DPI and work-area policy does not
+// have to be duplicated here. Wox still recomputes authoritatively on the posted
+// notification and republishes a corrected offset when clamping or DPI changes it.
+static void translateStickyOverlay(HWND target, HWND overlay)
+{
+    RECT targetRect;
+    if (!GetPropW(target, WOX_STICKY_OFFSET_ACTIVE_PROP) || !GetWindowRect(target, &targetRect))
+    {
+        return;
+    }
+
+    LONG offsetX = (LONG)(LONG_PTR)GetPropW(target, WOX_STICKY_OFFSET_X_PROP);
+    LONG offsetY = (LONG)(LONG_PTR)GetPropW(target, WOX_STICKY_OFFSET_Y_PROP);
+    SetWindowPos(overlay, NULL, targetRect.left + offsetX, targetRect.top + offsetY, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+}
+
+// stickySubclassProc keeps the overlay glued by translating it from inside the target's own
+// move message, and wakes Wox for a full relayout only when a translation cannot be correct.
 static LRESULT CALLBACK stickySubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR subclassId, DWORD_PTR refData)
 {
     HWND overlay = (HWND)refData;
@@ -348,14 +383,35 @@ static LRESULT CALLBACK stickySubclassProc(HWND hwnd, UINT message, WPARAM wPara
     {
     case WM_WINDOWPOSCHANGED:
     {
-        // Notify Wox only after the target has committed its new position so the
-        // overlay reads the same authoritative geometry seen by the compositor.
+        // Translate after the target has committed its new position so the overlay
+        // moves against the same geometry the compositor just used.
         LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
-        PostMessageW(overlay, getStickyChangedMessage(), (WPARAM)hwnd, 0);
+        translateStickyOverlay(hwnd, overlay);
+        // A pure move is already fully handled by that translation. Notifying Wox here
+        // too would queue one full relayout per mouse-move message, and Wox cannot drain
+        // them at drag rate: the backlog replays the entire drag from stale coordinates
+        // after the user lets go, and each stale relayout republishes a corrupted offset.
+        // Only a resize invalidates the published offset, so only that needs Wox.
+        const WINDOWPOS *position = (const WINDOWPOS *)lParam;
+        if (!position || !(position->flags & SWP_NOSIZE))
+        {
+            PostMessageW(overlay, getStickyChangedMessage(), (WPARAM)hwnd, 0);
+        }
         return result;
     }
+    case WM_EXITSIZEMOVE:
+        // One authoritative recompute once the drag settles. This is what re-clamps the
+        // overlay after the target crosses onto a display with a different work area or
+        // scale, which a plain translation cannot account for, and it costs a single
+        // relayout instead of one per drag step.
+        PostMessageW(overlay, getStickyChangedMessage(), (WPARAM)hwnd, 0);
+        break;
+    case WM_DPICHANGED:
+        PostMessageW(overlay, getStickyChangedMessage(), (WPARAM)hwnd, 0);
+        break;
     case WM_NCDESTROY:
         PostMessageW(overlay, getStickyChangedMessage(), (WPARAM)hwnd, 0);
+        clearStickyOffset(hwnd);
         RemoveWindowSubclass(hwnd, stickySubclassProc, subclassId);
         break;
     }
@@ -417,6 +473,7 @@ static void executeCommand(DWORD ownerPid)
         {
             // An already-absent subclass is also detached; avoid GetWindowSubclass because older comctl32 hosts do not export it by name.
             RemoveWindowSubclass(command->target, stickySubclassProc, (UINT_PTR)command->overlay);
+            clearStickyOffset(command->target);
             succeeded = TRUE;
         }
 
@@ -593,27 +650,42 @@ __declspec(dllexport) BOOL WINAPI WoxWindowHookSelectDialogItem(HWND dialog, DWO
 }
 
 // WoxWindowHookAttachSticky keeps the injected hook alive until the overlay explicitly detaches it.
-__declspec(dllexport) void *WINAPI WoxWindowHookAttachSticky(HWND target, DWORD expectedPid, HWND overlay)
+__declspec(dllexport) void *WINAPI WoxWindowHookAttachSticky(HWND target, DWORD expectedPid, HWND overlay, WoxWindowHookDiagnostic *diagnostic)
 {
+    WoxWindowHookDiagnostic localDiagnostic;
+    if (!diagnostic)
+        diagnostic = &localDiagnostic;
+    ZeroMemory(diagnostic, sizeof(*diagnostic));
+
     DWORD targetPid = 0;
     DWORD targetThread = GetWindowThreadProcessId(target, &targetPid);
+    diagnostic->targetPid = targetPid;
+    diagnostic->targetThread = targetThread;
+    diagnostic->stage = woxWindowHookStageValidateInput;
     if (!gModule || !getCommandMessage() || !targetThread || targetPid != expectedPid || !IsWindow(overlay))
+    {
+        diagnostic->win32Error = ERROR_INVALID_PARAMETER;
         return NULL;
+    }
 
     AcquireSRWLockExclusive(&gCommandLock);
+    diagnostic->stage = woxWindowHookStageInstallHook;
     HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, getMessageHookProc, gModule, targetThread);
+    diagnostic->hookInstalled = hook != NULL;
     WoxStickyHook *sticky = NULL;
+    if (!hook)
+    {
+        diagnostic->win32Error = GetLastError();
+    }
     if (hook)
     {
         WoxWindowHookCommand command;
-        WoxWindowHookDiagnostic diagnostic;
         ZeroMemory(&command, sizeof(command));
-        ZeroMemory(&diagnostic, sizeof(diagnostic));
         command.version = WOX_WINDOW_HOOK_VERSION;
         command.type = woxWindowHookCommandAttachSticky;
         command.target = target;
         command.overlay = overlay;
-        if (sendCommand(hook, targetThread, &command, &diagnostic))
+        if (sendCommand(hook, targetThread, &command, diagnostic))
         {
             sticky = (WoxStickyHook *)calloc(1, sizeof(WoxStickyHook));
             if (sticky)
@@ -628,7 +700,7 @@ __declspec(dllexport) void *WINAPI WoxWindowHookAttachSticky(HWND target, DWORD 
             else
             {
                 command.type = woxWindowHookCommandDetachSticky;
-                sendCommand(hook, targetThread, &command, &diagnostic);
+                sendCommand(hook, targetThread, &command, diagnostic);
             }
         }
         if (hook)

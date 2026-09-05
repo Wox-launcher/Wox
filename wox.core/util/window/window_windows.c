@@ -44,12 +44,9 @@ typedef struct
 // FileDialogNavigationDiagnosticC captures the attempted native route without changing navigation behavior.
 typedef struct
 {
-    int route; // 0=none, 1=direct edit, 2=CDM, 3=UIA, 4=keyboard fallback, 5=browse-for-folder
+    int route; // 0=none, 1=direct edit, 3=UIA, 4=keyboard fallback, 5=browse-for-folder
     int directControlFound;
     int directSetResult;
-    int cdmSetResult;
-    int cdmGetSpecChars;
-    int cdmMatched;
     int uiaStage; // 1=COM, 2=automation, 3=root, 4=condition, 5=find, 6=enumerate, 7=pattern, 8=write check, 9=set value, 10=focus
     long uiaLastHr;
     int uiaElementCount;
@@ -895,21 +892,31 @@ static HWND fileDialogWindowById(const char *windowId, int pid)
         return NULL;
     }
 
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    if (root)
+    // Keep the captured hwnd when it is already the file dialog. Office 2016
+    // Save As is often a child #32770 whose GA_ROOT is WINWORD's OpusApp.
+    HWND candidate = NULL;
+    if (isOpenSaveDialogWindow(hwnd))
     {
-        hwnd = root;
+        candidate = hwnd;
     }
-    if (!isOpenSaveDialogWindow(hwnd))
+    else
+    {
+        HWND root = GetAncestor(hwnd, GA_ROOT);
+        if (root && root != hwnd && isOpenSaveDialogWindow(root))
+        {
+            candidate = root;
+        }
+    }
+    if (!candidate)
     {
         return NULL;
     }
 
-    if (pid > 0 && getWindowPidForManagement(hwnd) != (DWORD)pid)
+    if (pid > 0 && getWindowPidForManagement(candidate) != (DWORD)pid)
     {
         return NULL;
     }
-    return hwnd;
+    return candidate;
 }
 
 static char *dupEmptyString()
@@ -1786,37 +1793,6 @@ static int copyParentDirectoryPath(const WCHAR *fullPath, WCHAR *out, size_t out
     return out[0] != L'\0';
 }
 
-static int copyDialogDirectoryPathFromCdm(HWND hwnd, WCHAR *out, size_t outLen)
-{
-    if (!hwnd || !out || outLen == 0)
-    {
-        return 0;
-    }
-
-    WCHAR folderPath[32768];
-    ZeroMemory(folderPath, sizeof(folderPath));
-    LRESULT folderLen = SendMessageW(hwnd, CDM_GETFOLDERPATH, (WPARAM)(sizeof(folderPath) / sizeof(folderPath[0])), (LPARAM)folderPath);
-    if (folderLen > 0 && copyExistingDirectoryPathCandidate(folderPath, out, outLen))
-    {
-        return 1;
-    }
-
-    WCHAR selectedPath[32768];
-    ZeroMemory(selectedPath, sizeof(selectedPath));
-    LRESULT selectedLen = SendMessageW(hwnd, CDM_GETFILEPATH, (WPARAM)(sizeof(selectedPath) / sizeof(selectedPath[0])), (LPARAM)selectedPath);
-    if (selectedLen > 0 && selectedPath[0] != L'\0')
-    {
-        WCHAR parentPath[32768];
-        ZeroMemory(parentPath, sizeof(parentPath));
-        if (copyParentDirectoryPath(selectedPath, parentPath, sizeof(parentPath) / sizeof(parentPath[0])) && copyExistingDirectoryPathCandidate(parentPath, out, outLen))
-        {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 typedef struct
 {
     WCHAR path[32768];
@@ -1835,15 +1811,6 @@ static BOOL CALLBACK EnumDialogPathChildProc(HWND child, LPARAM lParam)
     WCHAR className[256];
     className[0] = L'\0';
     GetClassNameW(child, className, sizeof(className) / sizeof(className[0]));
-
-    // Some hosted dialogs wrap the real common dialog in a child #32770; CDM
-    // messages must be sent to that child instead of the top-level wrapper.
-    if (wcscmp(className, L"#32770") == 0 && copyDialogDirectoryPathFromCdm(child, data->path, sizeof(data->path) / sizeof(data->path[0])))
-    {
-        data->found = 1;
-        snprintf(data->source, sizeof(data->source), "child_cdm hwnd=0x%p", child);
-        return FALSE;
-    }
 
     WCHAR text[32768];
     ZeroMemory(text, sizeof(text));
@@ -2055,13 +2022,6 @@ static char *getDialogDirectoryPathByWindow(HWND hwnd)
         return dupEmptyString();
     }
 
-    WCHAR cdmPath[32768];
-    ZeroMemory(cdmPath, sizeof(cdmPath));
-    if (copyDialogDirectoryPathFromCdm(hwnd, cdmPath, sizeof(cdmPath) / sizeof(cdmPath[0])))
-    {
-        return copyUtf8FromWide(cdmPath);
-    }
-
     WCHAR childPath[32768];
     ZeroMemory(childPath, sizeof(childPath));
     if (copyDialogDirectoryPathFromChildren(hwnd, childPath, sizeof(childPath) / sizeof(childPath[0]), NULL, 0))
@@ -2069,8 +2029,8 @@ static char *getDialogDirectoryPathByWindow(HWND hwnd)
         return copyUtf8FromWide(childPath);
     }
 
-    // Modern Common Item Dialogs do not always respond to CDM_GETFOLDERPATH.
-    // UI Automation can still expose the address edit value without changing focus.
+    // UI Automation can expose the address edit value without changing focus. It is
+    // the last resort because it is by far the slowest probe here.
     WCHAR uiaPath[32768];
     ZeroMemory(uiaPath, sizeof(uiaPath));
     if (copyUiaDialogDirectoryPath(hwnd, uiaPath, sizeof(uiaPath) / sizeof(uiaPath[0])))
@@ -2253,28 +2213,6 @@ static HWND findFileNameEdit(HWND hDialog)
     return NULL;
 }
 
-// setCommonDialogFileName asks the dialog manager to update edt1 and records its observable response.
-static int setCommonDialogFileName(HWND hwnd, const WCHAR *value, FileDialogNavigationDiagnosticC *diagnostic)
-{
-    if (!hwnd || !value || value[0] == L'\0')
-    {
-        return 0;
-    }
-
-    LRESULT setResult = SendMessageW(hwnd, CDM_SETCONTROLTEXT, 0x0480, (LPARAM)value);
-    WCHAR current[32768];
-    ZeroMemory(current, sizeof(current));
-    LRESULT currentChars = SendMessageW(hwnd, CDM_GETSPEC, (WPARAM)(sizeof(current) / sizeof(current[0])), (LPARAM)current);
-    int matched = _wcsicmp(current, value) == 0;
-    if (diagnostic)
-    {
-        diagnostic->cdmSetResult = (int)setResult;
-        diagnostic->cdmGetSpecChars = (int)currentChars;
-        diagnostic->cdmMatched = matched;
-    }
-    return matched;
-}
-
 static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavigationDiagnosticC *diagnostic)
 {
     ULONGLONG startedAt = GetTickCount64();
@@ -2340,6 +2278,10 @@ static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavig
     int directFileNameSet = 0;
     if (diagnostic)
         diagnostic->directControlFound = hEdit != NULL;
+    // WM_SETTEXT is a system message, so the kernel marshals the string across the
+    // process boundary. The CDM_* route that used to run when edt1 is missing cannot
+    // be used here: those are WM_USER-range messages whose pointer arguments are not
+    // marshalled, so they hand the dialog's host a pointer from Wox's address space.
     if (hEdit)
     {
         LRESULT setResult = SendMessageW(hEdit, WM_SETTEXT, 0, (LPARAM)wpath);
@@ -2347,17 +2289,13 @@ static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavig
             diagnostic->directSetResult = (int)setResult;
         directFileNameSet = 1;
     }
-    else
-    {
-        directFileNameSet = setCommonDialogFileName(hwnd, wpath, diagnostic);
-    }
     if (diagnostic)
         diagnostic->directElapsedMs = GetTickCount64() - directStartedAt;
 
     if (directFileNameSet)
     {
         if (diagnostic)
-            diagnostic->route = hEdit ? 1 : 2;
+            diagnostic->route = 1;
         // Trigger command
         HWND hButton = GetDlgItem(hwnd, IDOK);
         if (hButton)

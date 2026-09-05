@@ -1211,6 +1211,14 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		Width:  float32(width),
 		Height: targetHeight,
 	}
+	// TEMPORARY launcher-bounds diagnostic (remove once the Ctrl+G expand-direction
+	// flicker is pinned down): records every layout pass so the visible one can be told
+	// apart from the hidden pre-Show passes.
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("launcher-bounds showPos=%t atBottom=%t visible=%t results=%d posY=%d posH=%d anchorIn=%.1f anchorOut=%.1f current=(%.1f,%.1f %.1fx%.1f) target=(%.1f,%.1f %.1fx%.1f)",
+		useShowPosition, params.QueryBoxAtBottom, a.visible, resultCount, params.Position.Y, params.PositionHeight,
+		bottomAnchor, nextAnchor,
+		current.X, current.Y, current.Width, current.Height,
+		target.X, target.Y, target.Width, target.Height))
 	if launcherBoundsEffectivelyEqual(current, target) {
 		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
 			_ = a.runOnUI("store launcher bottom anchor", func() { a.bottomAnchorY = nextAnchor })

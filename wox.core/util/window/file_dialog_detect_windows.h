@@ -139,17 +139,24 @@ static int woxIsBrowseForFolderWindow(HWND hwnd)
     return woxDialogLooksLikeSelectFolder(hwnd);
 }
 
-// woxHasDefViewShallow looks for SHELLDLL_DefView without entering
-// SHBrowseForFolder ShellNameSpace Control. EnumChildWindows into that host
-// crashes explorer.exe.
-static int woxHasDefViewShallow(HWND hwnd)
+// Explorer's own dialogs put SHELLDLL_DefView two or three levels down, but Office
+// wraps it in its own DirectUI host and pushes it to four:
+//   #32770 > DUIViewWndClassName > DirectUIHWND > CtrlNotifySink > SHELLDLL_DefView
+// The limit stays bounded so detection cannot turn into an unbounded walk of a
+// deeply nested tree.
+#define WOX_DEF_VIEW_MAX_DEPTH 5
+
+// woxFindDefViewWithin searches for SHELLDLL_DefView without ever entering
+// SHBrowseForFolder ShellNameSpace Control. Walking into that host crashes explorer.exe.
+static int woxFindDefViewWithin(HWND parent, int depth)
 {
-    HWND child = NULL;
-    if (FindWindowExW(hwnd, NULL, L"SHELLDLL_DefView", NULL))
+    if (!parent || depth > WOX_DEF_VIEW_MAX_DEPTH)
     {
-        return 1;
+        return 0;
     }
-    while ((child = FindWindowExW(hwnd, child, NULL, NULL)) != NULL)
+
+    HWND child = NULL;
+    while ((child = FindWindowExW(parent, child, NULL, NULL)) != NULL)
     {
         WCHAR childClass[256];
         if (GetClassNameW(child, childClass, 256) == 0)
@@ -160,29 +167,21 @@ static int woxHasDefViewShallow(HWND hwnd)
         {
             continue;
         }
-        if (FindWindowExW(child, NULL, L"SHELLDLL_DefView", NULL))
+        if (_wcsicmp(childClass, L"SHELLDLL_DefView") == 0)
         {
             return 1;
         }
-        HWND grand = NULL;
-        while ((grand = FindWindowExW(child, grand, NULL, NULL)) != NULL)
+        if (woxFindDefViewWithin(child, depth + 1))
         {
-            WCHAR grandClass[256];
-            if (GetClassNameW(grand, grandClass, 256) == 0)
-            {
-                continue;
-            }
-            if (_wcsicmp(grandClass, WOX_BROWSE_FOLDER_NAMESPACE_CLASS) == 0)
-            {
-                continue;
-            }
-            if (FindWindowExW(grand, NULL, L"SHELLDLL_DefView", NULL))
-            {
-                return 1;
-            }
+            return 1;
         }
     }
     return 0;
+}
+
+static int woxHasDefViewShallow(HWND hwnd)
+{
+    return woxFindDefViewWithin(hwnd, 1);
 }
 
 // woxIsOpenSaveDialogWindow is true for common item Open/Save dialogs and for

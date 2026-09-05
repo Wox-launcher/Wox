@@ -113,6 +113,12 @@ func (a *App) prepareInstanceShow(options contract.ShowOptions) {
 	}
 	_ = a.runOnUI("prepare launcher instance show", func() {
 		a.show = params
+		// Seed the bottom edge as well. Results can arrive before Show runs, and without
+		// this the first layout takes the nextAnchor == 0 branch and anchors the launcher
+		// to the bounds it happened to be created with rather than the caller's position.
+		if params.QueryBoxAtBottom && params.PositionHeight > 0 {
+			a.bottomAnchorY = float32(params.Position.Y + params.PositionHeight)
+		}
 	})
 }
 

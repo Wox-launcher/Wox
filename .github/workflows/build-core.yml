@@ -392,6 +392,17 @@ jobs:
         shell: pwsh
         run: choco install -y make
 
+      # The sticky window hook needs a second DLL built for i686: SetWindowsHookEx cannot
+      # inject across bitness, so 32-bit hosts such as Foxmail and 32-bit Office can only
+      # be hooked by a 32-bit DLL. The runner ships MSYS2 at C:\msys64 but keeps it off
+      # PATH, which is what we want here: adding mingw32\bin would shadow the 64-bit gcc
+      # that CGO uses. Install the compiler and reference it by absolute path instead.
+      - name: Install i686 toolchain for the 32-bit window hook (Windows)
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\pacman.exe -Sy --noconfirm --needed --disable-download-timeout mingw-w64-i686-gcc
+          & "C:\msys64\mingw32\bin\i686-w64-mingw32-gcc.exe" --version
+
       - name: Validate SignPath secrets
         if: ${{ inputs.require_windows_signpath }}
         env:
@@ -460,9 +471,13 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: ./wox.core/resource/others/file_index_service
 
+      # Both variables are command-line assignments, so make forwards them to the wox.core
+      # sub-make that builds the hook. REQUIRE_32 turns a missing i686 compiler into a hard
+      # failure: locally it only warns, but a release must never silently ship without the
+      # 32-bit DLL, because the only symptom would be a laggy overlay on 32-bit apps.
       - name: Build
         shell: bash
-        run: make build FILE_INDEX_SERVICE_PREBUILT=${{ inputs.require_windows_signpath && '1' || '0' }}
+        run: make build FILE_INDEX_SERVICE_PREBUILT=${{ inputs.require_windows_signpath && '1' || '0' }} WINDOW_HOOK_CC32="C:/msys64/mingw32/bin/i686-w64-mingw32-gcc.exe" WINDOW_HOOK_REQUIRE_32=1
 
       - name: Upload unsigned artifact (Windows)
         id: upload-unsigned-artifact

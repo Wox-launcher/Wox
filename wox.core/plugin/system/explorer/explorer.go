@@ -1204,6 +1204,9 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 
 			title := window.GetWindowNameByPid(pid)
 			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
+			// An empty id means the overlay cannot anchor to the dialog and will neither
+			// inject the sticky subclass nor position itself against the right window.
+			util.GetLogger().Info(localCtx, fmt.Sprintf("Explorer dialog hint: pid=%d title=%q dialogWindowId=%q", pid, title, dialogWindowId))
 			c.prefetchOpenSaveDialogPath(localCtx, pid, title, dialogWindowId)
 			textoverlay.Show(textoverlay.Options{
 				Window: overlay.WindowOptions{

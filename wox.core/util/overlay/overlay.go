@@ -81,8 +81,10 @@ type runtimeOverlay struct {
 	window  *woxui.Window
 	host    *woxwidget.Host
 
-	stickyStop   chan struct{}
-	stickyDetach func()
+	stickyStop chan struct{}
+	// stickyDetach and stickyPublish are set only by the platform sticky implementation.
+	stickyDetach  func()
+	stickyPublish func()
 }
 
 var runtimeOverlays = struct {
@@ -485,6 +487,11 @@ func (instance *runtimeOverlay) applyLayout(preserveOrigin bool) {
 	if !sameBounds(current, target) {
 		_ = instance.window.SetBounds(target)
 	}
+	// Republish the sticky offset so an injected tracker keeps translating from the
+	// layout Wox just committed rather than a stale base.
+	if instance.stickyPublish != nil {
+		instance.stickyPublish()
+	}
 	_ = instance.window.Invalidate()
 }
 
@@ -494,6 +501,12 @@ func (instance *runtimeOverlay) restartStickyTracking() {
 		return
 	}
 	if instance.startNativeStickyTracking() {
+		// Publish immediately: the tracker attaches after applyLayout has already run,
+		// so without this the first offset would only land on a later relayout and the
+		// injected side would stay idle.
+		if instance.stickyPublish != nil {
+			instance.stickyPublish()
+		}
 		return
 	}
 	stop := make(chan struct{})
@@ -523,6 +536,7 @@ func (instance *runtimeOverlay) stopStickyTracking() {
 		close(instance.stickyStop)
 		instance.stickyStop = nil
 	}
+	instance.stickyPublish = nil
 	if instance.stickyDetach != nil {
 		instance.stickyDetach()
 		instance.stickyDetach = nil
@@ -571,6 +585,12 @@ func Bounds(options WindowOptions, current, workArea woxui.Rect, size woxui.Size
 	target := workArea
 	if sticky, ok := stickyBounds(options, nil); ok {
 		target = sticky
+	} else if options.StickyWindowPid > 0 && current.Width > 0 {
+		// The window this overlay follows can no longer be resolved, which normally means
+		// the dialog has just been dismissed and the overlay is about to hide. Falling
+		// through to the work-area anchor would fling it across the screen for the frames
+		// it is still visible, so hold the last known position instead.
+		return clampBounds(woxui.Rect{X: current.X, Y: current.Y, Width: size.Width, Height: size.Height}, workArea)
 	} else if options.AbsolutePosition {
 		target = woxui.Rect{}
 	}

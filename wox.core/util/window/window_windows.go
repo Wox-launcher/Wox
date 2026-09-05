@@ -34,12 +34,9 @@ typedef struct {
 
 // FileDialogNavigationDiagnosticC captures the attempted native route without changing navigation behavior.
 typedef struct {
-	int route; // 0=none, 1=direct edit, 2=CDM, 3=UIA, 4=keyboard fallback, 5=browse-for-folder
+	int route; // 0=none, 1=direct edit, 3=UIA, 4=keyboard fallback, 5=browse-for-folder
 	int directControlFound;
 	int directSetResult;
-	int cdmSetResult;
-	int cdmGetSpecChars;
-	int cdmMatched;
 	int uiaStage;
 	long uiaLastHr;
 	int uiaElementCount;
@@ -470,8 +467,8 @@ func NavigateFileDialog(windowId string, pid int, targetPath string) bool {
 	defer C.free(unsafe.Pointer(cPath))
 	var diagnostic C.FileDialogNavigationDiagnosticC
 	succeeded := int(C.navigateFileDialogByWindowId(cWindowId, C.int(pid), cPath, &diagnostic)) == 1
-	util.GetLogger().Info(context.Background(), fmt.Sprintf("file-dialog-navigation succeeded=%t route=%d directControl=%d directSet=%d cdmSet=%d cdmGetSpecChars=%d cdmMatched=%d uiaStage=%d uiaHr=0x%08X uiaElements=%d uiaEditOrCombo=%d uiaPathCandidates=%d uiaValuePatterns=%d uiaWritable=%d uiaSetValue=%d uiaSetFocus=%d elapsedMs={direct:%d,uia:%d,fallback:%d,total:%d}",
-		succeeded, int(diagnostic.route), int(diagnostic.directControlFound), int(diagnostic.directSetResult), int(diagnostic.cdmSetResult), int(diagnostic.cdmGetSpecChars), int(diagnostic.cdmMatched),
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("file-dialog-navigation succeeded=%t route=%d directControl=%d directSet=%d uiaStage=%d uiaHr=0x%08X uiaElements=%d uiaEditOrCombo=%d uiaPathCandidates=%d uiaValuePatterns=%d uiaWritable=%d uiaSetValue=%d uiaSetFocus=%d elapsedMs={direct:%d,uia:%d,fallback:%d,total:%d}",
+		succeeded, int(diagnostic.route), int(diagnostic.directControlFound), int(diagnostic.directSetResult),
 		int(diagnostic.uiaStage), uint32(diagnostic.uiaLastHr), int(diagnostic.uiaElementCount), int(diagnostic.uiaEditOrComboCount), int(diagnostic.uiaPathCandidateCount), int(diagnostic.uiaValuePatternCount),
 		int(diagnostic.uiaWritableCount), int(diagnostic.uiaSetValueSucceeded), int(diagnostic.uiaSetFocusSucceeded), uint64(diagnostic.directElapsedMs), uint64(diagnostic.uiaElapsedMs), uint64(diagnostic.fallbackElapsedMs), uint64(diagnostic.totalElapsedMs)))
 	return succeeded
