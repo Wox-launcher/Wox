@@ -33,6 +33,7 @@ const (
 	launcherWindowID   woxui.WindowID = "wox.launcher"
 	settingsWindowID   woxui.WindowID = "wox.settings"
 	onboardingWindowID woxui.WindowID = "wox.onboarding"
+	chatWindowID       woxui.WindowID = "wox.chat"
 )
 
 // App owns one launcher window and its typed core service boundary.
@@ -66,12 +67,14 @@ type App struct {
 	launcher       *woxui.ManagedWindow
 	settingsView   *woxui.ManagedWindow
 	onboardingView *woxui.ManagedWindow
+	chatView       *woxui.ManagedWindow
 	noteWindows    map[string]*notesWindowController
 	activeNote     *notesWindowController
 	window         *woxui.Window
 	host           *woxwidget.Host
 	settingsHost   *woxwidget.Host
 	onboardingHost *woxwidget.Host
+	chatHost       *woxwidget.Host
 
 	query             plainQuery
 	queryContext      queryContext
@@ -128,6 +131,9 @@ type App struct {
 	nativeFilePreviewManualPath  string
 	nativeFilePreviewError       string
 	chatFullscreen               bool
+	chatWindowFocused            bool
+	chatWindowMaximized          bool
+	chatWindowRestoreFrame       woxui.Rect
 	terminalFullscreen           bool
 	actionPanel                  bool
 	actionSelected               int
@@ -460,6 +466,9 @@ func (a *App) start() error {
 // Close releases the protocol connection after the final native window closes.
 func (a *App) Close() error {
 	if !a.isPrimary {
+		if err := a.closeChatWindow(); err != nil {
+			return err
+		}
 		var launcher *woxui.ManagedWindow
 		if err := a.runOnUI("resolve secondary launcher for close", func() {
 			launcher = a.launcher
@@ -712,7 +721,8 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	}
 	hideOnBlur := a.show.HideOnBlur
 	launcher := a.launcher
-	retainSecondary := a.isPrimary || a.hasCacheableWebViewPreviewLocked()
+	// A pop-out still uses this session's services after the launcher loses focus.
+	retainSecondary := a.isPrimary || a.chatWindowOpen() || a.hasCacheableWebViewPreviewLocked()
 	if hideOnBlur {
 		a.visible = false
 		a.bottomAnchorY = 0
@@ -1042,7 +1052,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	var formHeight int
 	var refinementVisible bool
 	var actionPanel bool
-	var requirementPreview bool
+	var guidanceFormPreview bool
 	var previewVisible bool
 	var toolbarMessageVisible bool
 	var previewFullscreen bool
@@ -1070,7 +1080,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			actionListHeight = int(actionPanelVisibleListHeight(entries, indices))
 		}
 		if a.selected >= 0 && a.selected < len(a.results) {
-			requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"
+			previewType := a.results[a.selected].Preview.PreviewType
+			guidanceFormPreview = previewType == "query_requirement_settings" || previewType == "trigger_keyword_conflict"
 			previewVisible = a.results[a.selected].Preview.PreviewData != ""
 		}
 	}); err != nil {
@@ -1128,7 +1139,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if launcherReservesFullPreviewHeight(params, previewVisible) {
 		height = max(height, maximumResultWindowHeight)
 	}
-	if requirementPreview {
+	if guidanceFormPreview {
 		minimumHeight := 360
 		if !params.HideQueryBox {
 			minimumHeight += queryAreaHeight

@@ -25,7 +25,16 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	if err != nil {
 		return previewview.PreviewError(fmt.Sprintf("Invalid chat preview: %v", err), width, height, palette.componentTheme())
 	}
+	return a.buildChatPreviewFromSnapshot(snapshot, palette, width, height, imageScale, showHeader, true)
+}
 
+// buildChatPreviewFromSnapshot mounts one conversation snapshot into the shared chat panes.
+func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palette uiPalette, width, height, imageScale float32, showHeader, showOpenWindow bool) woxwidget.Widget {
+	// Each host mounts its own editor and IME target while sharing committed chat data.
+	window, onKey := a.window, a.onChatPreviewKey
+	if !showOpenWindow {
+		window, onKey = a.chatNativeWindow(), a.onDedicatedChatKey
+	}
 	headerHeight := float32(0)
 	if showHeader {
 		headerHeight = 52
@@ -33,7 +42,8 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	inputHeight := previewview.ChatComposerHeight(len(snapshot.attachments))
 	contentWidth := width
 	catalogWidth := float32(0)
-	if snapshot.panel == "history" {
+	historyOpen := chatHistoryVisible(snapshot.panel, snapshot.sidebarOpen)
+	if historyOpen {
 		catalogWidth = min(chatHistorySidebarWidth, width/2)
 		contentWidth = max(float32(0), width-catalogWidth)
 	}
@@ -53,14 +63,16 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	}
 	var question *previewview.ChatQuestionProps
 	if questionHeight > 0 {
-		props := a.chatQuestionProps(snapshot, palette, innerWidth, questionHeight)
+		props := a.chatQuestionProps(snapshot, palette, innerWidth, questionHeight, window, onKey)
 		question = &props
 	}
+	var history *previewview.ChatCatalogProps
+	if historyOpen {
+		props := a.chatHistoryCatalogProps(snapshot, palette, catalogWidth, height)
+		history = &props
+	}
 	var catalog *previewview.ChatCatalogProps
-	if snapshot.panel == "history" {
-		props := a.chatCatalogProps(snapshot, palette, catalogWidth, height)
-		catalog = &props
-	} else if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
+	if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
 		catalogHeight := chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
 		props := a.chatCatalogProps(snapshot, palette, innerWidth, catalogHeight)
 		catalog = &props
@@ -68,7 +80,7 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	panel := snapshot.panel
 	var header *previewview.ChatHeaderProps
 	if showHeader {
-		props := a.chatHeaderProps(snapshot, palette, innerWidth, headerHeight, true)
+		props := a.chatHeaderProps(snapshot, palette, innerWidth, headerHeight, true, showOpenWindow)
 		header = &props
 	}
 	return previewview.ChatPreview(previewview.ChatPreviewProps{
@@ -76,13 +88,13 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 		Header:   header,
 		Messages: a.chatMessagesProps(snapshot, palette, innerWidth, messagesHeight, imageScale),
 		Debug:    debug, Question: question,
-		Input:   a.chatInputProps(snapshot, palette, innerWidth, inputHeight),
-		Catalog: catalog, OnDismiss: func() { a.toggleChatPanel(panel) },
+		Input:   a.chatInputProps(snapshot, palette, innerWidth, inputHeight, window, onKey),
+		History: history, Catalog: catalog, OnDismiss: func() { a.toggleChatPanel(panel) },
 	})
 }
 
 // chatHeaderProps resolves the current title and available controller actions.
-func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, showExit bool) previewview.ChatHeaderProps {
+func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, showExit, showOpenWindow bool) previewview.ChatHeaderProps {
 	title := strings.TrimSpace(snapshot.chat.Title)
 	if title == "" {
 		title = a.translate("i18n:ui_ai_chat_new_chat")
@@ -96,19 +108,25 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 		exitLabel = "Close"
 	}
 	exitLabel += " (Esc)"
+	openWindowLabel := a.translate("i18n:ui_ai_chat_open_window")
+	if strings.TrimSpace(openWindowLabel) == "" || openWindowLabel == "i18n:ui_ai_chat_open_window" {
+		openWindowLabel = "Open in dedicated window"
+	}
 	historyLabel := a.translate("i18n:ui_action_toggle_sidebar")
 	// The sidebar toggle advertises the same Ctrl/Cmd+B shortcut Flutter binds to preview fullscreen.
 	historyTooltip := historyLabel + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")"
 	return previewview.ChatHeaderProps{
 		Width: width, Height: height, Key: snapshot.key, Title: title,
-		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", ShowExit: showExit && launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
+		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug",
+		ShowExit: showExit && launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
+		ShowOpenWindow: showOpenWindow, OpenWindowLabel: openWindowLabel,
 		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, Theme: palette.componentTheme(),
 		OnHistory: func() { a.toggleChatPanel("history") }, OnHistoryHover: a.setPreviewTooltip, OnDebug: func() { a.toggleChatPanel("debug") },
-		OnExit: a.closePreviewWindow, OnDrag: func() {
+		OnExit: a.closePreviewWindow, OnOpenWindow: a.requestOpenDedicatedChatWindow, OnDrag: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start chat preview window drag: %v", err)
 			}
-		}, OnExitHover: a.setPreviewTooltip,
+		}, OnExitHover: a.setPreviewTooltip, OnOpenWindowHover: a.setPreviewTooltip,
 	}
 }
 
@@ -220,6 +238,10 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			emptyMessage = "Loading…"
 		} else if snapshot.modelsError != "" && snapshot.skillsError != "" {
 			emptyMessage = snapshot.modelsError + "; " + snapshot.skillsError
+		} else if snapshot.modelsError != "" {
+			emptyMessage = snapshot.modelsError
+		} else if snapshot.skillsError != "" {
+			emptyMessage = snapshot.skillsError
 		}
 	}
 	return previewview.ChatCatalogProps{
@@ -275,12 +297,20 @@ func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 	}
 	contentHeight = max(viewportHeight, contentHeight)
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
-	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
-	a.setChatPanelViewport(viewportHeight)
+	scroll := snapshot.panelScroll
+	if snapshot.panel != "history" {
+		scroll = snapshot.sidebarScroll
+	}
+	offset := min(max(float32(0), scroll), maxOffset)
+	if snapshot.panel == "history" {
+		a.setChatPanelViewport(viewportHeight)
+	} else {
+		a.setChatSidebarViewport(viewportHeight)
+	}
 	return previewview.ChatCatalogProps{
 		Width: width, Height: height, Key: snapshot.key, Items: items, EmptyMessage: a.translate("i18n:ui_no_data"),
 		Scroll: offset, ContentHeight: contentHeight, ShowNew: true, NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
-		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
+		OnScroll: a.scrollChatHistoryDrawer, OnNew: a.startNewChat,
 	}
 }
 
@@ -308,7 +338,7 @@ func chatHistoryContentHeight(chats []chatData, now time.Time) float32 {
 	height := float32(46)
 	for _, group := range []string{"today", "yesterday", "history"} {
 		if grouped[group] > 0 {
-			height += 32 + float32(grouped[group])*46
+			height += 32 + float32(grouped[group])*previewview.ChatHistoryRowHeight
 		}
 	}
 	return height
@@ -846,7 +876,7 @@ func formatChatToolCall(conversation chatConversation) string {
 }
 
 // chatInputProps prepares the controlled editor and toolbar actions.
-func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatInputProps {
+func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, window *woxui.Window, onKey func(woxui.KeyEvent) bool) previewview.ChatInputProps {
 	hintKey := "i18n:ui_ai_chat_input_hint"
 	hintFallback := "Type a message. Use / to switch models or insert skills"
 	if len(snapshot.attachments) > 0 {
@@ -893,12 +923,21 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	if strings.TrimSpace(quoteDismiss) == "" || quoteDismiss == "i18n:plugin_ai_chat_attachment_dismiss" {
 		quoteDismiss = "Remove attachment"
 	}
+	theme := palette.componentTheme()
+	skillTags := chatSkillTagRanges(snapshot.editing.Text)
+	richRuns := make([]woxcomponent.TextFieldRichRun, 0, len(skillTags))
+	atomicTokens := make([]woxcomponent.TextFieldTokenRange, 0, len(skillTags))
+	for _, tag := range skillTags {
+		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme))
+		atomicTokens = append(atomicTokens, woxcomponent.TextFieldTokenRange{Start: tag.start, End: tag.end})
+	}
 	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
-		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: a.window,
-		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, ActionLabel: actionLabel, Sending: streaming, Theme: palette.componentTheme(),
+		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: window,
+		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, ActionLabel: actionLabel, Sending: streaming, Theme: theme,
 		Attachments: a.chatAttachmentProps(snapshot.attachments, quoteLabel), QuoteDismissLabel: quoteDismiss,
-		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: a.onChatPreviewKey,
+		RichRuns: richRuns, AtomicTokens: atomicTokens,
+		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: onKey,
 		OnModels: func() { a.toggleChatPanel("models") }, OnSend: action, OnDismissAttachment: a.dismissChatAttachment,
 	}
 }
@@ -919,7 +958,7 @@ func chatQuestionPanelHeight(snapshot *chatPreviewSnapshot, available float32) f
 }
 
 // chatQuestionProps prepares ask-user options and keeps selection and submission in the controller.
-func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatQuestionProps {
+func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, window *woxui.Window, onKey func(woxui.KeyEvent) bool) previewview.ChatQuestionProps {
 	question := snapshot.question
 	props := previewview.ChatQuestionProps{
 		Width: width, Height: height, Question: question.Question, Theme: palette.componentTheme(),
@@ -948,7 +987,7 @@ func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	if inputHeight > 0 {
 		props.Input = &previewview.ChatQuestionInputProps{
 			ID: "chat-question-input-" + question.QuestionID, Height: inputHeight, Editing: snapshot.questionEditing,
-			Focused: snapshot.active, Window: a.window, OnFocus: a.focusAIQuestionInput, OnChanged: a.setAIQuestionText, OnKey: a.onChatPreviewKey,
+			Focused: snapshot.active, Window: window, OnFocus: a.focusAIQuestionInput, OnChanged: a.setAIQuestionText, OnKey: onKey,
 		}
 	}
 	return props

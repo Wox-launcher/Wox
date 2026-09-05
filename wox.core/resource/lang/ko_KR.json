@@ -2662,6 +2662,8 @@
   "ui_ai_chat_show_sidebar": "사이드바 표시",
   "ui_ai_chat_hide_sidebar": "사이드바 숨기기",
   "ui_ai_chat_new_chat": "새 채팅",
+  "ui_ai_chat_open_window": "전용 창에서 열기",
+  "ui_ai_chat_window_title": "Wox 채팅",
   "ui_ai_chat_empty_prompt": "오늘 Wox에 무엇을 물어보시겠습니까?",
   "ui_ai_chat_start_chat": "채팅 시작",
   "ui_ai_chat_create_new_chat": "새 채팅 만들기",

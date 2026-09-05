@@ -217,6 +217,10 @@ func TestPluginTriggerKeywordConflict(t *testing.T) {
 	if conflictErr.Conflict.Keyword != "color" {
 		t.Fatalf("conflict error should carry keyword color, got %#v", conflictErr.Conflict)
 	}
+	conflictResponse := plugin.GetPluginManager().BuildTriggerKeywordConflictResponse(ctx, query, conflictErr.Conflict)
+	if conflictResponse.Layout.ResultPreviewWidthRatio == nil || *conflictResponse.Layout.ResultPreviewWidthRatio != 0 {
+		t.Fatalf("conflict response should be preview-only, got %#v", conflictResponse.Layout.ResultPreviewWidthRatio)
+	}
 
 	results, err := runQuery(ctx, "color ")
 	if err != nil {

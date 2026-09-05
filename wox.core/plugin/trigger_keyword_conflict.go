@@ -159,7 +159,10 @@ func (m *Manager) buildTriggerKeywordConflictResponse(ctx context.Context, query
 	// Query-time blocking prevents two plugins from handling the same concrete trigger.
 	// Returning a core-owned warning row is clearer than letting whichever plugin responds
 	// first define the visible state while the other plugin also runs in the background.
-	result := m.PolishResult(ctx, ownerPlugin, query, QueryLayout{}, QueryResult{
+	// A zero preview ratio hides that warning row so the resolver form can use the
+	// full result area, matching Flutter's preview-only conflict surface.
+	layout := previewOnlyQueryLayout(nil)
+	result := m.PolishResult(ctx, ownerPlugin, query, layout, QueryResult{
 		Title:    title,
 		SubTitle: subtitle,
 		Icon:     common.NewWoxImageEmoji("⚠️"),
@@ -173,6 +176,7 @@ func (m *Manager) buildTriggerKeywordConflictResponse(ctx context.Context, query
 
 	response := QueryResponse{
 		Results: []QueryResult{result},
+		Layout:  layout,
 		Context: BuildQueryContext(query, nil),
 	}
 	responseUI := response.ToUI()

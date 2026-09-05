@@ -2464,6 +2464,8 @@
   "ui_ai_chat_show_sidebar": "Show Sidebar",
   "ui_ai_chat_hide_sidebar": "Скрыть боковую панель",
   "ui_ai_chat_new_chat": "Новый чат",
+  "ui_ai_chat_open_window": "Открыть в отдельном окне",
+  "ui_ai_chat_window_title": "Wox Чат",
   "ui_ai_chat_start_chat": "Начать чат",
   "ui_ai_chat_create_new_chat": "Создать новый чат",
   "ui_ai_chat_continue_chat": "Продолжить чат",

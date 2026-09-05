@@ -209,6 +209,12 @@ type Manager struct {
 	hostWatchdogDone      chan struct{}
 	hostWatchdogLifecycle sync.Mutex
 	hostWatchdogStarted   bool
+
+	// pluginLoadLocks serializes load/reload of one plugin ID. Startup
+	// loadHostPlugin can overlap a store install or file-watcher ReloadPlugin
+	// of the same ID; without this lock both paths finish host.LoadPlugin and
+	// append a second installed-plugins row.
+	pluginLoadLocks sync.Map
 }
 
 const (
@@ -307,10 +313,35 @@ func (m *Manager) pluginInstancesSnapshot() []*Instance {
 	return append([]*Instance(nil), m.instances...)
 }
 
-func (m *Manager) appendPluginInstance(instance *Instance) {
+// appendPluginInstance adds instance when its plugin ID is new.
+// Empty IDs are allowed so tests can register anonymous host instances.
+func (m *Manager) appendPluginInstance(instance *Instance) bool {
 	m.instancesMu.Lock()
 	defer m.instancesMu.Unlock()
+	if instance != nil {
+		id := strings.TrimSpace(instance.Metadata.Id)
+		if id != "" {
+			for _, existing := range m.instances {
+				if existing != nil && strings.EqualFold(existing.Metadata.Id, id) {
+					return false
+				}
+			}
+		}
+	}
 	m.instances = append(m.instances, instance)
+	return true
+}
+
+// lockPluginLoad serializes load and reload for one plugin ID.
+func (m *Manager) lockPluginLoad(pluginID string) func() {
+	key := strings.ToLower(strings.TrimSpace(pluginID))
+	if key == "" {
+		return func() {}
+	}
+	actual, _ := m.pluginLoadLocks.LoadOrStore(key, &sync.Mutex{})
+	mu := actual.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 // removePluginInstances updates the shared instance list without racing readers.
@@ -482,6 +513,9 @@ func (m *Manager) loadScriptPlugins(ctx context.Context) ([]Metadata, error) {
 
 func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.GetName(ctx)))
+	unlock := m.lockPluginLoad(metadata.Id)
+	defer unlock()
+
 	if IsSingleFilePlugin(metadata) {
 		if err := m.ensureSingleFilePluginIDAvailable(metadata); err != nil {
 			return err
@@ -512,20 +546,28 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 		logger.Info(ctx, fmt.Sprintf("plugin(%s) is not loaded, skip unload", metadata.GetName(ctx)))
 	}
 
-	loadErr := m.loadHostPlugin(ctx, pluginHost, metadata)
-	if loadErr != nil {
-		return loadErr
-	}
-
-	return nil
+	return m.loadHostPluginLocked(ctx, pluginHost, metadata)
 }
 
 func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metadata) error {
+	unlock := m.lockPluginLoad(metadata.Id)
+	defer unlock()
+	return m.loadHostPluginLocked(ctx, host, metadata)
+}
+
+func (m *Manager) loadHostPluginLocked(ctx context.Context, host Host, metadata Metadata) error {
 	// Plugin loading is the final shared gate for startup, local installs, and dev
 	// reloads. Install-time checks can be bypassed by existing files on disk, so
 	// keep this guard here to prevent incompatible plugins from entering runtime hosts.
 	if err := ensureWoxVersionSupported(metadata.GetName(ctx), metadata.MinWoxVersion); err != nil {
 		return err
+	}
+
+	if strings.TrimSpace(metadata.Id) != "" && m.GetPluginInstanceById(metadata.Id) != nil {
+		// Startup and store install can both try to load the same on-disk plugin.
+		// Treat the second call as success so install does not roll back the file.
+		logger.Info(ctx, fmt.Sprintf("[%s HOST] plugin %s (%s) is already loaded, skip duplicate load", host.GetRuntime(ctx), metadata.GetName(ctx), metadata.Id))
+		return nil
 	}
 
 	loadStartTimestamp := util.GetSystemTimestamp()
@@ -557,7 +599,11 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	}
 	instance.Setting = pluginSetting
 
-	m.appendPluginInstance(instance)
+	if !m.appendPluginInstance(instance) {
+		logger.Info(ctx, fmt.Sprintf("[%s HOST] skip duplicate plugin instance %s (%s): ID is already loaded", host.GetRuntime(ctx), metadata.GetName(ctx), metadata.Id))
+		instance.finishInit(false, nil)
+		return nil
+	}
 
 	if pluginSetting.Disabled.Get() {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.GetName(ctx)).Error())
@@ -1504,9 +1550,10 @@ func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Ins
 	requirementStart := util.GetSystemTimestamp()
 	if requirementResult, blocked := m.buildQueryRequirementSettingsResult(ctx, pluginInstance, query); blocked {
 		input.blocked = true
+		layout := previewOnlyQueryLayout(input.metadataLayout.Icon)
 		input.blockedResponse = QueryResponse{
-			Results: []QueryResult{m.PolishResult(ctx, pluginInstance, query, input.metadataLayout, requirementResult)},
-			Layout:  input.metadataLayout,
+			Results: []QueryResult{m.PolishResult(ctx, pluginInstance, query, layout, requirementResult)},
+			Layout:  layout,
 			Context: input.queryContext,
 		}
 		if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {

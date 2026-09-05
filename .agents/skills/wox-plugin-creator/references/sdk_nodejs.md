@@ -137,7 +137,7 @@ Prefer these APIs for all plugin settings. Values stored here can sync across ma
 - `OnGetDynamicSetting` is used together with a `dynamic` entry in `SettingDefinitions`.
 - Match runtime `SaveSetting(ctx, key, value, isPlatformSpecific)` calls to the setting metadata. Do not hardcode `false` for dynamically saved settings if their `SettingDefinitions` entry uses `IsPlatformSpecific: true`.
 - `DisabledInPlatforms` only controls where the setting is disabled; it does not isolate cloud-synced values.
-- Use static `QueryRequirements` in `plugin.json` when a query requires settings such as API keys. Wox blocks the query before calling `query()` and shows the built-in `query_requirement_settings` setup preview.
+- Use static `QueryRequirements` in `plugin.json` when a query requires settings such as API keys. Wox blocks the query before calling `query()` and shows only the built-in `query_requirement_settings` setup preview.
 - There is no runtime `register_query_requirements` API. Declare query requirements in metadata.
 
 ### QueryRequirements Types

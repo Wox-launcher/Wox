@@ -22,6 +22,76 @@ func TestChatHistoryGroupUsesLocalDayBoundaries(t *testing.T) {
 	}
 }
 
+func TestSetChatTextKeepsHistorySidebarOpen(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetModels([]aiModel{{Name: "deepseek-v4-flash", Provider: "deepseek"}})
+	ai.SetSkills(nil)
+	app := &App{
+		aiSettings: ai,
+		chatPreview: &chatPreviewState{
+			panel:  "history",
+			editor: woxui.NewTextEditor(""),
+			chat:   chatData{ID: "1", Title: "Suzhou"},
+		},
+	}
+
+	app.setChatText("/")
+	if !app.chatPreview.sidebarOpen {
+		t.Fatal("typing / hid the conversation sidebar")
+	}
+	if app.chatPreview.panel != chatCommandPanel {
+		t.Fatalf("panel = %q, want %q", app.chatPreview.panel, chatCommandPanel)
+	}
+
+	app.setChatText("hello")
+	if app.chatPreview.panel != "history" || !app.chatPreview.sidebarOpen {
+		t.Fatalf("clearing / did not restore the sidebar: panel=%q open=%v", app.chatPreview.panel, app.chatPreview.sidebarOpen)
+	}
+}
+
+func TestDedicatedChatSnapshotAttachesModelCatalog(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetModels([]aiModel{{Name: "deepseek-v4-flash", Provider: "deepseek"}})
+	app := &App{
+		aiSettings: ai,
+		chatPreview: &chatPreviewState{
+			panel: chatCommandPanel,
+			chat:  chatData{Model: aiModel{Name: "deepseek-v4-flash", Provider: "deepseek"}},
+		},
+	}
+
+	snapshot := snapshotChatPreviewLocked(app.chatPreview)
+	if len(snapshot.models) != 0 {
+		t.Fatal("raw snapshot unexpectedly included models before attach")
+	}
+	app.attachChatPreviewCatalogs(snapshot)
+	items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
+	if len(items) != 1 || items[0].title != "deepseek-v4-flash" {
+		t.Fatalf("attached command palette = %+v, want the loaded model", items)
+	}
+
+	props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 120)
+	if len(props.Items) != 1 || props.Items[0].Title != "deepseek-v4-flash" {
+		t.Fatalf("command catalog items = %+v empty=%q, want the loaded model", props.Items, props.EmptyMessage)
+	}
+}
+
+func TestChatSkillTagRangesUsesRuneOffsets(t *testing.T) {
+	text := "前 {skill:wox-plugin-creator} 后"
+	ranges := chatSkillTagRanges(text)
+	if len(ranges) != 1 || ranges[0].name != "wox-plugin-creator" {
+		t.Fatalf("skill ranges = %+v", ranges)
+	}
+	runes := []rune(text)
+	tag := "{skill:wox-plugin-creator}"
+	if ranges[0].start != 2 || ranges[0].end != 2+len([]rune(tag)) || string(runes[ranges[0].start:ranges[0].end]) != tag {
+		t.Fatalf("skill range = %+v, want rune span around the complete tag", ranges[0])
+	}
+	if got := chatSkillTagRanges("incomplete {skill:wox-plugin-creator"); len(got) != 0 {
+		t.Fatalf("incomplete tag ranges = %+v, want none", got)
+	}
+}
+
 func TestFindChatSlashTokenUsesTokenAtCaret(t *testing.T) {
 	text := "hello /wri"
 	token, ok := findChatSlashToken(woxui.TextEditingState{Text: text, Selection: woxui.TextSelection{Anchor: len([]rune(text)), Focus: len([]rune(text))}})
@@ -117,6 +187,28 @@ func TestPrimaryChatShortcutTogglesHistorySidebar(t *testing.T) {
 	}
 }
 
+func TestHistoryDrawerLeavesComposerKeysToTheEditor(t *testing.T) {
+	app := &App{chatPreview: &chatPreviewState{active: true, panel: "history", sidebarOpen: true, editor: woxui.NewTextEditor("")}}
+	for _, event := range []woxui.KeyEvent{
+		{Key: woxui.KeyEnter, Down: true, Modifiers: woxui.KeyModifierShift},
+		{Key: woxui.KeyDelete, Down: true},
+		{Key: woxui.KeyArrowUp, Down: true},
+		{Key: woxui.KeyArrowDown, Down: true},
+		{Key: woxui.KeyTab, Down: true},
+	} {
+		if app.onChatPreviewKey(event) {
+			t.Fatalf("history drawer intercepted composer key %+v", event)
+		}
+	}
+	// Empty-submit validation proves Enter reached send rather than history activation.
+	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.chatPreview.error == "" {
+		t.Fatal("Enter did not reach composer submission")
+	}
+	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.chatPreview.panel != "" || !app.chatPreview.active {
+		t.Fatal("Escape should dismiss the drawer while keeping the composer active")
+	}
+}
+
 func TestChatHistoryContentHeightIncludesGroupsAndRows(t *testing.T) {
 	location := time.FixedZone("test", 8*60*60)
 	now := time.Date(2026, 8, 5, 12, 0, 0, 0, location)
@@ -128,8 +220,8 @@ func TestChatHistoryContentHeightIncludesGroupsAndRows(t *testing.T) {
 		chat("today-2", now.UnixMilli()),
 		chat("old", now.AddDate(0, 0, -5).UnixMilli()),
 	}
-	if got := chatHistoryContentHeight(chats, now); got != 46+2*32+3*46 {
-		t.Fatalf("history content height = %.0f, want %d", got, 46+2*32+3*46)
+	if got := chatHistoryContentHeight(chats, now); got != 46+2*32+3*38 {
+		t.Fatalf("history content height = %.0f, want %d", got, 46+2*32+3*38)
 	}
 	if got := chatHistoryContentHeight(nil, now); got != 46 {
 		t.Fatalf("empty history content height = %.0f, want 46", got)
@@ -138,7 +230,7 @@ func TestChatHistoryContentHeightIncludesGroupsAndRows(t *testing.T) {
 
 func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
 	now := time.Now()
-	chats := make([]chatData, 12)
+	chats := make([]chatData, 14)
 	for i := range chats {
 		chats[i] = chatData{ID: string(rune('a' + i)), UpdatedAt: now.UnixMilli(), Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
 	}
@@ -169,7 +261,7 @@ func TestChatDebugGeometryClampsControlledScroll(t *testing.T) {
 
 func TestChatHistoryViewportUpdateKeepsWheelScroll(t *testing.T) {
 	now := time.Now()
-	chats := make([]chatData, 12)
+	chats := make([]chatData, 14)
 	for i := range chats {
 		chats[i] = chatData{ID: string(rune('a' + i)), UpdatedAt: now.UnixMilli(), Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
 	}

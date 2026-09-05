@@ -324,6 +324,9 @@ func (a *App) submitFormAction() {
 }
 
 func (a *App) onFormKey(event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
 	active := a.form != nil
 	focused := -1
 	fieldType := ""

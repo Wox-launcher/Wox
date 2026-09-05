@@ -93,6 +93,11 @@ func RestoreGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.window-restore", size, color)
 }
 
+// OpenWindowGlyph returns the overlapping rectangles used to open a dedicated window.
+func OpenWindowGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return RestoreGlyph(size, color)
+}
+
 // SearchGlyph returns the shared SVG search icon.
 func SearchGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

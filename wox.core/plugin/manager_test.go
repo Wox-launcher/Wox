@@ -11,14 +11,94 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"wox/common"
+	"wox/database"
 	"wox/setting"
 	"wox/util"
 )
+
+func TestAppendPluginInstanceRejectsDuplicateID(t *testing.T) {
+	manager := &Manager{}
+	first := &Instance{Metadata: Metadata{Id: "9d7b4e96-a81d-44a3-a75a-bc828cf5668e", Name: "Linkding"}}
+	second := &Instance{Metadata: Metadata{Id: "9d7b4e96-a81d-44a3-a75a-bc828cf5668e", Name: "Linkding"}}
+
+	require.True(t, manager.appendPluginInstance(first))
+	require.False(t, manager.appendPluginInstance(second))
+	require.True(t, manager.appendPluginInstance(&Instance{Metadata: Metadata{Id: "other-plugin", Name: "Other"}}))
+	require.True(t, manager.appendPluginInstance(&Instance{Host: &fakeHost{}, RuntimeLoaded: true}))
+	require.True(t, manager.appendPluginInstance(&Instance{Host: &fakeHost{}, RuntimeLoaded: true}))
+
+	instances := manager.GetPluginInstances()
+	require.Len(t, instances, 4)
+	assert.Equal(t, first.Metadata.Id, instances[0].Metadata.Id)
+	assert.Equal(t, "other-plugin", instances[1].Metadata.Id)
+}
+
+func TestConcurrentLoadHostPluginKeepsOneInstance(t *testing.T) {
+	initPluginManagerLoadTest(t)
+	host := &countingLoadHost{}
+	manager := &Manager{}
+	metadata := Metadata{
+		Id:      "9d7b4e96-a81d-44a3-a75a-bc828cf5668e",
+		Name:    "Linkding",
+		Runtime: string(PLUGIN_RUNTIME_PYTHON),
+	}
+
+	var workers sync.WaitGroup
+	workers.Add(2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			defer workers.Done()
+			require.NoError(t, manager.loadHostPlugin(context.Background(), host, metadata))
+		}()
+	}
+	workers.Wait()
+
+	assert.Equal(t, int32(1), host.loadCalls.Load())
+	require.Len(t, manager.GetPluginInstances(), 1)
+	assert.Equal(t, metadata.Id, manager.GetPluginInstances()[0].Metadata.Id)
+}
+
+type countingLoadHost struct {
+	fakeHost
+	loadCalls atomic.Int32
+}
+
+func (h *countingLoadHost) LoadPlugin(ctx context.Context, metadata Metadata, pluginDirectory string) (Plugin, error) {
+	h.loadCalls.Add(1)
+	return &fakeLifecyclePlugin{}, nil
+}
+
+func initPluginManagerLoadTest(t *testing.T) {
+	t.Helper()
+	logger = util.GetLogger()
+	dataDir := t.TempDir()
+	t.Setenv(util.TestWoxDataDirEnv, dataDir)
+	t.Setenv(util.TestUserDataDirEnv, filepath.Join(dataDir, "user"))
+	if err := util.GetLocation().Init(); err != nil {
+		t.Fatalf("init test location: %v", err)
+	}
+	if err := database.Init(context.Background()); err != nil {
+		t.Fatalf("init test database: %v", err)
+	}
+	t.Cleanup(func() {
+		db := database.GetDB()
+		if db == nil {
+			return
+		}
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+}
 
 func TestLargeMediaPreviewBypassesRemoteWrapping(t *testing.T) {
 	previewData := strings.Repeat("x", previewDataMaxSize+1)

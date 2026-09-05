@@ -184,7 +184,7 @@ func (a *App) loadAIModels() {
 	a.aiSettings.LoadAIModels(context.Background(), a.services, a.sessionID, func(models []aiModel) {
 		if models == nil {
 			log.Printf("load AI models for requirement form: see controller error")
-			_ = a.window.Invalidate()
+			a.invalidateChatSurfaces()
 			return
 		}
 		if a.requirementForm != nil {
@@ -211,7 +211,7 @@ func (a *App) loadAIModels() {
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
 		}
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 	})
 }
 
@@ -261,6 +261,9 @@ func aiModelLabel(model aiModel) string {
 
 // onRequirementFormKey keeps navigation and editing inside the inline form while it owns focus.
 func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
 	state := a.requirementForm
 	active := state != nil && state.active
 	focused := -1

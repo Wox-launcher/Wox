@@ -10,6 +10,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPreviewOnlyQueryLayoutHidesResultList(t *testing.T) {
+	icon := common.NewWoxImageEmoji("🔗")
+	layout := previewOnlyQueryLayout(&icon)
+
+	assert.Equal(t, &icon, layout.Icon)
+	if assert.NotNil(t, layout.ResultPreviewWidthRatio) {
+		assert.Equal(t, 0.0, *layout.ResultPreviewWidthRatio)
+	}
+	assert.Nil(t, layout.GridLayout)
+	assert.False(t, layout.ChatMode)
+}
+
 func TestQueryResponseAutoRecordQueryHistoryStaysInsideCore(t *testing.T) {
 	data, err := json.Marshal(QueryResponse{AutoRecordQueryHistory: true})
 	assert.NoError(t, err)

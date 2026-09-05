@@ -217,12 +217,54 @@ func TestTerminalHighlightSegmentsFollowWrappedLines(t *testing.T) {
 	}
 }
 
+func TestChatHeaderOpenWindowUsesOverlappingRectangles(t *testing.T) {
+	opened := false
+	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
+	header := ChatHeader(ChatHeaderProps{
+		Width: 500, Height: 48, Key: "test", ShowExit: true, ShowOpenWindow: true,
+		ExitLabel: "Close", OpenWindowLabel: "Open in dedicated window", Theme: theme,
+		OnExit: func() {}, OnOpenWindow: func() { opened = true }, OnDrag: func() {},
+	}).(woxwidget.Container)
+	stack := header.Child.(woxwidget.Stack)
+	title := stack.Children[2]
+	if title.Right != 84 || !title.StretchWidth {
+		t.Fatalf("chat title right = %.0f, want 84 with pop-out and exit reserved", title.Right)
+	}
+	openChild := stack.Children[len(stack.Children)-2]
+	openAlign := openChild.Child.(woxwidget.Align)
+	if openChild.Right != 46 || !openChild.AnchorRight || openAlign.Height != 48 {
+		t.Fatalf("chat open-window layout = right %.0f anchor %v height %.0f", openChild.Right, openChild.AnchorRight, openAlign.Height)
+	}
+	open := openAlign.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if open.ID != "chat-open-window-test" || open.OnTap == nil || open.OnHoverAt == nil || open.Width != 28 || open.Height != 28 {
+		t.Fatalf("chat open-window props = %+v", open)
+	}
+	if glyph := open.Icon.(woxwidget.Image); glyph.Source == nil || glyph.Width != 16 || glyph.Height != 16 {
+		t.Fatalf("chat open-window glyph = %vx%v, want centered 16x16 overlapping rectangles", glyph.Width, glyph.Height)
+	}
+	if open.HoverBackground.A == 0 {
+		t.Fatal("chat open-window hover background remained transparent")
+	}
+	open.OnTap()
+	if !opened {
+		t.Fatal("chat open-window tap did not request the dedicated window")
+	}
+}
+
 func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 	dragged := false
 	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
 	header := ChatHeader(ChatHeaderProps{Width: 500, Height: 48, Key: "test", ShowExit: true, ExitLabel: "Close", Theme: theme, OnExit: func() {}, OnDrag: func() { dragged = true }}).(woxwidget.Container)
 	stack := header.Child.(woxwidget.Stack)
-	title := stack.Children[1]
+	backgroundDrag := stack.Children[0].Child.(woxwidget.Gesture)
+	if backgroundDrag.ID != "chat-titlebar-drag-test" || backgroundDrag.OnDragStart == nil {
+		t.Fatal("chat header is missing a full-width title-bar drag layer")
+	}
+	backgroundDrag.OnDragStart()
+	if !dragged {
+		t.Fatal("chat header empty space did not start window dragging")
+	}
+	title := stack.Children[2]
 	titleAlign := title.Child.(woxwidget.Align)
 	if title.Top != 0 || title.Right != 44 || !title.StretchWidth || titleAlign.Height != 48 || titleAlign.Vertical != 0.5 {
 		t.Fatalf("chat title layout = top/right %.0f/%.0f stretch %v alignment %#v", title.Top, title.Right, title.StretchWidth, titleAlign)
@@ -232,7 +274,7 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 	if !dragged {
 		t.Fatal("chat title drag did not start window dragging")
 	}
-	menu := stack.Children[0].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	menu := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if menu.Width != 36 || menu.Height != 36 || menu.Background.A != 0 || menu.HoverBackground.A == 0 {
 		t.Fatalf("chat sidebar props = %+v, want transparent hoverable 36x36 icon button", menu)
 	}

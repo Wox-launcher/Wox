@@ -180,6 +180,17 @@ type QueryLayout struct {
 	ChatMode bool `json:"ChatMode,omitempty"`
 }
 
+// previewOnlyQueryLayout hides the result list so a core-owned guidance form
+// can use the full result area. Flutter used this for QueryRequirements and
+// trigger-keyword conflicts.
+func previewOnlyQueryLayout(icon *common.WoxImage) QueryLayout {
+	previewOnly := 0.0
+	return QueryLayout{
+		Icon:                    icon,
+		ResultPreviewWidthRatio: &previewOnly,
+	}
+}
+
 // QueryContext carries the backend's canonical classification for a query.
 // The UI can make a quick local guess for immediate rendering, but only core
 // has the final parser state after shortcuts and trigger-keyword matching.

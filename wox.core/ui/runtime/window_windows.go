@@ -1279,6 +1279,7 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			window.damageHistory.reset()
 			width := int(win.LOWORD(uint32(lParam)))
 			height := int(win.HIWORD(uint32(lParam)))
+			prepared := window.renderer.width == width && window.renderer.height == height
 			err := window.renderer.resize(width, height)
 			if isRecoverableRendererError(err) {
 				err = window.recoverWindowsRenderer(err)
@@ -1289,6 +1290,10 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			if err != nil {
 				window.setRunError(err)
 				win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
+			} else if window.focus.visible && width > 0 && height > 0 && !prepared {
+				// Shrinks and mixed-axis resizes cannot be prepared while the old HWND
+				// still clips the surface. Paint them now instead of waiting for WM_PAINT.
+				finishWindowResize(hwnd, false)
 			}
 		}
 		return 0
@@ -1361,6 +1366,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			if minWidth > 0 || minHeight > 0 {
 				constrainWindowsMinSize(wParam, rect, minWidth, minHeight)
 			}
+			// Interactive sizing bypasses setBoundsNative. Present the constrained
+			// physical size before Windows exposes the newly enlarged client area.
+			window.prepareWindowForResize(int(rect.Right-rect.Left), int(rect.Bottom-rect.Top))
 			if window.options.AspectRatio > 0 || minWidth > 0 || minHeight > 0 {
 				return 1
 			}

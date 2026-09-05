@@ -535,6 +535,12 @@ func (a *App) reloadSettings() error {
 				applyErr = fmt.Errorf("apply Wox onboarding UI font: %w", err)
 			}
 		}
+		if window := a.chatNativeWindow(); window != nil {
+			if err := window.SetFontFamily(data.AppFontFamily); err != nil {
+				applyErr = fmt.Errorf("apply Wox chat UI font: %w", err)
+			}
+			_ = window.Invalidate()
+		}
 	}); err != nil {
 		return err
 	}

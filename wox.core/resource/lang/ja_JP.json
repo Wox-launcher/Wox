@@ -2663,6 +2663,8 @@
   "ui_ai_chat_show_sidebar": "サイドバーを表示",
   "ui_ai_chat_hide_sidebar": "サイドバーを非表示",
   "ui_ai_chat_new_chat": "新しいチャット",
+  "ui_ai_chat_open_window": "専用ウィンドウで開く",
+  "ui_ai_chat_window_title": "Wox チャット",
   "ui_ai_chat_empty_prompt": "今日は Wox に何を尋ねますか？",
   "ui_ai_chat_start_chat": "チャットを開始",
   "ui_ai_chat_create_new_chat": "新しいチャットを作成",

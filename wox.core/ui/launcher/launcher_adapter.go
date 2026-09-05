@@ -338,7 +338,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 	if preview.PreviewType == "chat" {
 		if chatSnapshot, err := a.chatPreviewSnapshotFor(snapshot.results[snapshot.selected], preview); err == nil {
 			_, contentWidth := launcherview.TitleBarContentFrame(runtime.GOOS, true, width)
-			header := previewview.ChatHeader(a.chatHeaderProps(chatSnapshot, snapshot.palette, contentWidth, launcherview.SettingsTitleBarHeight, false))
+			header := previewview.ChatHeader(a.chatHeaderProps(chatSnapshot, snapshot.palette, contentWidth, launcherview.SettingsTitleBarHeight, false, true))
 			return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
 				Width: width, CloseOnly: true, Content: header, Platform: runtime.GOOS, Theme: snapshot.palette.componentTheme(), Active: windowFocused,
 				OnDrag: func() {

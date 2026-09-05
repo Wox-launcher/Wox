@@ -429,9 +429,17 @@ func (a *App) previewTags(tags []previewTag) []previewview.PreviewTag {
 	return resolved
 }
 
-// setPreviewTooltip anchors preview controls and metadata help to the launcher window.
+// setPreviewTooltip anchors preview and chat chrome help to the window that owns the hover.
 func (a *App) setPreviewTooltip(inside bool, text string, anchor woxui.Rect) {
-	a.setNativeHoverTooltip(&a.previewTooltipRevision, "go-ui-preview-tag", "update preview tag tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
+	a.setNativeHoverTooltip(&a.previewTooltipRevision, "go-ui-preview-tag", "update preview tag tooltip", inside, text, anchor, "top", a.previewTooltipWindow)
+}
+
+// previewTooltipWindow keeps dedicated-chat hover anchors on that window instead of the hidden launcher.
+func (a *App) previewTooltipWindow() *woxui.Window {
+	if window := a.chatNativeWindow(); window != nil && (a.chatWindowFocused || !a.visible) {
+		return window
+	}
+	return a.window
 }
 
 func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {

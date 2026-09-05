@@ -438,9 +438,11 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
-	// AIChatStream schedules the loop asynchronously, so keep the cancel entry
-	// registered until a terminal stream callback cleans up this exact entry.
-	chatCtx, cancelChat := context.WithCancel(ctx)
+	// Detach from the caller deadline so hiding the launcher or finishing the
+	// start-chat RPC cannot cancel a background conversation. Only StopChat
+	// cancels this context. AIChatStream is asynchronous, so keep the cancel
+	// entry registered until a terminal stream callback cleans up this exact entry.
+	chatCtx, cancelChat := context.WithCancel(context.WithoutCancel(ctx))
 	activeCancel := &activeAIChatCancel{cancel: cancelChat}
 	r.activeChatCancels.Store(aiChatData.Id, activeCancel)
 	cleanupActiveCancel := func() {

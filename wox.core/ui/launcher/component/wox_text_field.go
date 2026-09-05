@@ -83,8 +83,10 @@ type TextFieldProps struct {
 	FocusRingOutsets woxwidget.Insets
 	Style            woxui.TextStyle
 	RichRuns         []TextFieldRichRun
-	LineHeight       float32
-	TextColor        woxui.Color
+	// AtomicTokens are complete placeholders that move and delete as one caret unit.
+	AtomicTokens []TextFieldTokenRange
+	LineHeight   float32
+	TextColor    woxui.Color
 	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
 	TextAlignmentY float32
 	Value          string
@@ -166,6 +168,7 @@ type textFieldState struct {
 	innerWidth       float32
 	style            woxui.TextStyle
 	richRuns         []TextFieldRichRun
+	atomicTokens     []TextFieldTokenRange
 	lineHeight       float32
 	maxLines         int
 	overlayOwner     woxwidget.Key
@@ -238,6 +241,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	}
 	s.style = style
 	s.richRuns = props.RichRuns
+	s.atomicTokens = props.AtomicTokens
 	s.lineHeight = props.LineHeight
 	if s.lineHeight <= 0 {
 		s.lineHeight = textFieldLineHeight
@@ -400,14 +404,31 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	props.onCaret = func(offset int) {
 		s.focusNode.RequestFocus()
 		closeContextMenu()
-		s.controller.SetCaret(mapHitOffset(offset))
+		offset = mapHitOffset(offset)
+		if snapped, ok := snapTextFieldAtomicCaret(s.atomicTokens, offset); ok {
+			offset = snapped
+		}
+		s.controller.SetCaret(offset)
 		notifySelection()
 		invalidate()
 	}
 	props.onWordSelection = func(offset int) {
 		s.focusNode.RequestFocus()
 		closeContextMenu()
-		s.controller.SelectWordAt(mapHitOffset(offset))
+		offset = mapHitOffset(offset)
+		if token, ok := textFieldAtomicTokenContaining(s.atomicTokens, offset); ok {
+			s.controller.SetSelection(token.Start, token.End)
+			notifySelection()
+			invalidate()
+			return
+		}
+		if token, ok := textFieldAtomicTokenAfter(s.atomicTokens, offset); ok {
+			s.controller.SetSelection(token.Start, token.End)
+			notifySelection()
+			invalidate()
+			return
+		}
+		s.controller.SelectWordAt(offset)
 		notifySelection()
 		invalidate()
 	}
@@ -422,9 +443,13 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		s.focusNode.RequestFocus()
 		closeContextMenu()
 		offset = mapHitOffset(offset)
+		if snapped, ok := snapTextFieldAtomicCaret(s.atomicTokens, offset); ok {
+			offset = snapped
+		}
 		if modifiers&woxui.KeyModifierShift != 0 {
 			s.selectionAnchor = s.controller.State().Selection.Anchor
 			s.controller.SetSelection(s.selectionAnchor, offset)
+			applyExpandedTextFieldAtomicSelection(s.controller, s.atomicTokens, s.selectionAnchor, offset)
 		} else {
 			s.selectionAnchor = offset
 			s.controller.SetCaret(offset)
@@ -588,6 +613,14 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		if original.OnKey != nil && original.OnKey(event) {
 			return true
 		}
+		if handled, changed := handleTextFieldAtomicTokenKey(s.controller, s.atomicTokens, event); handled {
+			if changed {
+				notifyChanged()
+			}
+			notifySelection()
+			invalidate()
+			return true
+		}
 		handled, changed := handleTextFieldControllerKey(s.controller, s.maxLines, lines, s.innerHeight, original.Window, s.style, s.innerWidth, s.maxLines > 1, event)
 		if handled {
 			if changed {
@@ -723,6 +756,7 @@ func (s *textFieldState) applyDragSelectionAt(local woxui.Point) {
 		offset = woxui.MapProtectedDisplayOffsetToRune(s.controller.Text(), offset)
 	}
 	s.controller.SetSelection(s.selectionAnchor, offset)
+	applyExpandedTextFieldAtomicSelection(s.controller, s.atomicTokens, s.selectionAnchor, offset)
 	if s.dragNotifySelect != nil {
 		s.dragNotifySelect()
 	}

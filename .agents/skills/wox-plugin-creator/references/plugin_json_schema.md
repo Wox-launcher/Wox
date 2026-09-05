@@ -39,7 +39,7 @@ The `plugin.json` file must be a valid JSON object located in the root of your p
 
 ### QueryRequirements
 
-Use `QueryRequirements` when a plugin query cannot run until one or more settings are configured. Wox checks these requirements before calling the plugin `query()` method. If a requirement fails, Wox returns a system setup result with the `query_requirement_settings` preview and shows a focused settings form for only the missing fields.
+Use `QueryRequirements` when a plugin query cannot run until one or more settings are configured. Wox checks these requirements before calling the plugin `query()` method. If a requirement fails, Wox returns a system setup result with the `query_requirement_settings` preview and a zero preview-width ratio so plugin-scoped queries show only that focused settings form.
 
 Do not return a custom "please configure this plugin" result from `query()` for these cases. Static metadata gives grid results and normal list results the same setup flow.
 

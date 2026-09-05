@@ -216,6 +216,7 @@ func (a *App) invalidateAllWindows() {
 	if onboardingWindow := a.onboardingNativeWindow(); onboardingWindow != nil && onboardingWindow != a.window {
 		_ = onboardingWindow.Invalidate()
 	}
+	a.invalidateChatWindow()
 	for _, controller := range a.noteWindows {
 		if controller.managed != nil {
 			_ = controller.managed.Window().Invalidate()

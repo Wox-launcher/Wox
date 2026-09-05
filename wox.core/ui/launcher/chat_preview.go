@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"wox/common"
 	woxui "wox/ui/runtime"
@@ -26,6 +27,43 @@ const (
 	chatCatalogRowHeight         = float32(38)
 	chatCatalogGroupHeaderHeight = float32(28)
 )
+
+// chatOverlayPanel reports floating catalogs that must not replace the history drawer.
+func chatOverlayPanel(panel string) bool {
+	return panel == "models" || panel == "skills" || panel == chatCommandPanel || panel == "debug"
+}
+
+// chatHistoryVisible reports whether the conversation sidebar should stay in layout.
+func chatHistoryVisible(panel string, sidebarOpen bool) bool {
+	return sidebarOpen || panel == "history"
+}
+
+// rememberChatHistorySidebarLocked stores drawer scroll so a slash overlay can reopen it later.
+func rememberChatHistorySidebarLocked(state *chatPreviewState) {
+	if state == nil {
+		return
+	}
+	state.sidebarOpen = true
+	state.sidebarSelected = state.panelSelected
+	state.sidebarScroll = state.panelScroll
+	state.sidebarViewport = state.panelViewport
+}
+
+// restoreChatHistoryPanelLocked closes an overlay without hiding an already-open sidebar.
+func restoreChatHistoryPanelLocked(state *chatPreviewState) {
+	if state == nil {
+		return
+	}
+	state.panelQuery = ""
+	if !state.sidebarOpen {
+		state.panel = ""
+		return
+	}
+	state.panel = "history"
+	state.panelSelected = state.sidebarSelected
+	state.panelScroll = state.sidebarScroll
+	state.panelViewport = state.sidebarViewport
+}
 
 var chatSkillTagPattern = regexp.MustCompile(`\{skill:([^}]+)\}`)
 
@@ -132,26 +170,33 @@ type aiQuestion struct {
 }
 
 type chatPreviewState struct {
-	key              string
-	queryID          string
-	resultID         string
-	chat             chatData
-	chats            []chatData
-	editor           *woxui.TextEditor
-	active           bool
-	scroll           float32
-	autoFollow       bool
-	loading          bool
-	sending          bool
-	error            string
-	revision         uint64
-	remoteVersion    uint64
-	panel            string
-	panelQuery       string
-	panelSelected    int
-	panelScroll      float32
-	panelViewport    float32
-	panelMaxScroll   float32
+	key      string
+	queryID  string
+	resultID string
+	chat     chatData
+	// nextModel survives snapshots from the current stream until the next request starts.
+	nextModel      *aiModel
+	chats          []chatData
+	editor         *woxui.TextEditor
+	active         bool
+	scroll         float32
+	autoFollow     bool
+	loading        bool
+	sending        bool
+	error          string
+	revision       uint64
+	remoteVersion  uint64
+	panel          string
+	panelQuery     string
+	panelSelected  int
+	panelScroll    float32
+	panelViewport  float32
+	panelMaxScroll float32
+	// sidebarOpen keeps the conversation drawer visible while a slash/model overlay is open.
+	sidebarOpen      bool
+	sidebarSelected  int
+	sidebarScroll    float32
+	sidebarViewport  float32
 	question         *aiQuestion
 	questionEditor   *woxui.TextEditor
 	questionSelected int
@@ -182,6 +227,10 @@ type chatPreviewSnapshot struct {
 	panelSelected    int
 	panelScroll      float32
 	panelViewport    float32
+	sidebarOpen      bool
+	sidebarSelected  int
+	sidebarScroll    float32
+	sidebarViewport  float32
 	question         *aiQuestion
 	questionEditing  woxui.TextEditingState
 	questionSelected int
@@ -202,6 +251,32 @@ type chatSlashToken struct {
 	start int
 	end   int
 	query string
+}
+
+type chatSkillTagRange struct {
+	start int
+	end   int
+	name  string
+}
+
+// chatSkillTagRanges returns complete {skill:name} placeholders in rune offsets.
+func chatSkillTagRanges(text string) []chatSkillTagRange {
+	matches := chatSkillTagPattern.FindAllStringSubmatchIndex(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	ranges := make([]chatSkillTagRange, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 4 || match[0] < 0 || match[1] < 0 || match[2] < 0 || match[3] < 0 {
+			continue
+		}
+		ranges = append(ranges, chatSkillTagRange{
+			start: utf8.RuneCountInString(text[:match[0]]),
+			end:   utf8.RuneCountInString(text[:match[1]]),
+			name:  text[match[2]:match[3]],
+		})
+	}
+	return ranges
 }
 
 // findChatSlashToken returns the whitespace-delimited slash token surrounding the caret.
@@ -379,6 +454,10 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		panelSelected:    state.panelSelected,
 		panelScroll:      state.panelScroll,
 		panelViewport:    state.panelViewport,
+		sidebarOpen:      state.sidebarOpen,
+		sidebarSelected:  state.sidebarSelected,
+		sidebarScroll:    state.sidebarScroll,
+		sidebarViewport:  state.sidebarViewport,
 		question:         cloneChatQuestion(state.question),
 		questionSelected: state.questionSelected,
 		expandedRounds:   make(map[string]bool, len(state.expandedRounds)),
@@ -411,6 +490,11 @@ func chatPreviewDataAndKey(result queryResult, preview queryPreview) (chatPrevie
 
 // activateChatPreview bootstraps shared chat state without overwriting newer streamed snapshots.
 func (a *App) activateChatPreview(result queryResult, preview queryPreview) error {
+	// Both chat entrances share the live conversation. Query lifecycle resets
+	// fullscreen when leaving chat, so ordinary searches still get fresh previews.
+	if (a.chatWindowOpen() || a.chatFullscreen) && a.chatPreview != nil {
+		return nil
+	}
 	data, key, err := chatPreviewDataAndKey(result, preview)
 	if err != nil {
 		return err
@@ -464,17 +548,25 @@ func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (
 	if err != nil {
 		return nil, err
 	}
-	if a.chatPreview == nil || a.chatPreview.key != key {
+	if a.chatPreview == nil || (!a.chatWindowOpen() && !a.chatFullscreen && a.chatPreview.key != key) {
 		return nil, fmt.Errorf("chat preview is not ready")
 	}
 	snapshot := snapshotChatPreviewLocked(a.chatPreview)
+	a.attachChatPreviewCatalogs(snapshot)
+	return snapshot, nil
+}
+
+// attachChatPreviewCatalogs copies the shared model and skill catalogs onto a render snapshot.
+func (a *App) attachChatPreviewCatalogs(snapshot *chatPreviewSnapshot) {
+	if snapshot == nil || a.aiSettings == nil {
+		return
+	}
 	snapshot.models = a.aiSettings.Models()
 	snapshot.modelsLoading = a.aiSettings.ModelsLoading()
 	snapshot.modelsError = a.aiSettings.ModelsError()
 	snapshot.skills = a.aiSettings.Skills()
 	snapshot.skillsLoading = a.aiSettings.SkillsLoading()
 	snapshot.skillsError = a.aiSettings.SkillsError()
-	return snapshot, nil
 }
 
 // loadChatPreview resolves one lightweight history entry through the chat service.
@@ -494,6 +586,9 @@ func (a *App) loadChatPreview(key, chatID string, revision uint64) {
 					state.error = err.Error()
 				} else {
 					state.chat = cloneChatData(chat)
+					if state.nextModel != nil {
+						state.chat.Model = *state.nextModel
+					}
 					state.error = ""
 					if state.autoFollow {
 						state.scroll = float32(math.MaxFloat32)
@@ -501,7 +596,7 @@ func (a *App) loadChatPreview(key, chatID string, revision uint64) {
 				}
 			}
 		}
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 	}); dispatchErr != nil {
 		log.Printf("dispatch chat preview result: %v", dispatchErr)
 	}
@@ -522,6 +617,9 @@ func (a *App) applyChatResponse(chat chatData) {
 	upsertChatSummaryLocked(state, chat)
 	if state.chat.ID == chat.ID {
 		state.chat = cloneChatData(chat)
+		if state.nextModel != nil {
+			state.chat.Model = *state.nextModel
+		}
 		state.remoteVersion++
 		state.loading = false
 		state.sending = false
@@ -530,7 +628,7 @@ func (a *App) applyChatResponse(chat chatData) {
 			state.scroll = float32(math.MaxFloat32)
 		}
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // toggleChatDisclosure expands or collapses a round, tool group, or tool detail.
@@ -543,7 +641,7 @@ func (a *App) toggleChatDisclosure(disclosureID string) {
 		state.expandedRounds = make(map[string]bool)
 	}
 	state.expandedRounds[disclosureID] = !state.expandedRounds[disclosureID]
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // toggleChatPanel opens the history or model catalog and loads shared resources on demand.
@@ -558,10 +656,28 @@ func (a *App) toggleChatPanel(panel string) {
 	if state.question != nil {
 		return
 	}
-	if state.panel == panel {
-		state.panel = ""
-		state.panelQuery = ""
+	if panel == "history" && chatOverlayPanel(state.panel) {
+		state.sidebarOpen = !state.sidebarOpen
+		if state.sidebarOpen {
+			for index, chat := range state.chats {
+				if chat.ID == state.chat.ID {
+					state.sidebarSelected = index
+					break
+				}
+			}
+		}
+	} else if state.panel == panel {
+		if chatOverlayPanel(panel) {
+			restoreChatHistoryPanelLocked(state)
+		} else {
+			state.panel = ""
+			state.panelQuery = ""
+			state.sidebarOpen = false
+		}
 	} else {
+		if state.panel == "history" {
+			rememberChatHistorySidebarLocked(state)
+		}
 		state.panel = panel
 		state.panelQuery = ""
 		state.panelScroll = 0
@@ -569,9 +685,11 @@ func (a *App) toggleChatPanel(panel string) {
 		state.panelMaxScroll = 0
 		state.panelSelected = 0
 		if panel == "history" {
+			state.sidebarOpen = true
 			for index, chat := range state.chats {
 				if chat.ID == state.chat.ID {
 					state.panelSelected = index
+					state.sidebarSelected = index
 					break
 				}
 			}
@@ -596,7 +714,7 @@ func (a *App) toggleChatPanel(panel string) {
 		}
 	}
 	state.active = true
-	editorActive = state.panel == ""
+	editorActive = state.panel == "" || state.panel == "history" || state.panel == chatCommandPanel
 	if requestModels {
 		util.Go(a.lifecycleCtx, "load AI models for chat", a.loadAIModels)
 	}
@@ -604,7 +722,7 @@ func (a *App) toggleChatPanel(panel string) {
 		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
 	}
 	a.updateChatTextInput(editorActive)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // reloadChatResource invalidates only catalogs affected by a core resource notification.
@@ -644,7 +762,7 @@ func (a *App) loadAISkills() {
 	a.aiSettings.LoadAISkills(context.Background(), a.services, a.sessionID, func(skills []chatSkill) {
 		if skills == nil {
 			log.Printf("load AI skills: see controller error")
-			_ = a.window.Invalidate()
+			a.invalidateChatSurfaces()
 			return
 		}
 		if a.chatPreview != nil && (a.chatPreview.panel == "skills" || a.chatPreview.panel == chatCommandPanel) {
@@ -652,11 +770,12 @@ func (a *App) loadAISkills() {
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
 		}
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 	})
 }
 
 // startNewChat resets the active draft while retaining the user's current model choice.
+// An in-flight response keeps running in the background until the user stops that chat.
 func (a *App) startNewChat() {
 	questionID := ""
 	requestDefault := false
@@ -664,24 +783,25 @@ func (a *App) startNewChat() {
 	if state == nil {
 		return
 	}
-	if state.chat.IsStreaming || state.sending {
-		state.error = "Stop the active response before starting another chat."
-		_ = a.window.Invalidate()
-		return
-	}
 	if state.question != nil {
 		questionID = state.question.QuestionID
 	}
+	upsertChatSummaryLocked(state, state.chat)
 	now := time.Now().UnixMilli()
 	model := state.chat.Model
 	state.chat = chatData{ID: newID(), Model: model, CreatedAt: now, UpdatedAt: now}
+	state.nextModel = nil
 	state.editor.SetText("", false)
 	state.attachments = nil
 	state.loading = false
 	state.sending = false
 	state.error = ""
 	state.remoteVersion = 0
-	state.panel = ""
+	if chatOverlayPanel(state.panel) {
+		restoreChatHistoryPanelLocked(state)
+	} else if state.panel != "history" {
+		state.panel = ""
+	}
 	state.question = nil
 	state.questionEditor = nil
 	clear(state.expandedRounds)
@@ -702,11 +822,14 @@ func (a *App) startNewChat() {
 		})
 	}
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // loadDefaultChatModel fills a new draft without overwriting a model selected in the meantime.
 func (a *App) loadDefaultChatModel(key string, revision uint64) {
+	if a.services == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	loaded, err := a.services.DefaultChatModel(ctx, a.sessionID)
@@ -719,7 +842,7 @@ func (a *App) loadDefaultChatModel(key string, revision uint64) {
 				state.chat.Model = model
 			}
 		}
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 	}); dispatchErr != nil {
 		log.Printf("dispatch default chat model: %v", dispatchErr)
 	}
@@ -728,7 +851,24 @@ func (a *App) loadDefaultChatModel(key string, revision uint64) {
 	}
 }
 
+// keepChatHistoryPanelLocked leaves the conversation sidebar open on row activation.
+func keepChatHistoryPanelLocked(state *chatPreviewState, chatID string) {
+	if state == nil {
+		return
+	}
+	state.panel = "history"
+	state.sidebarOpen = true
+	for index, chat := range state.chats {
+		if chat.ID == chatID {
+			state.panelSelected = index
+			state.sidebarSelected = index
+			return
+		}
+	}
+}
+
 // selectChatHistory loads a summary only when it is not already the active full conversation.
+// The previous chat keeps streaming in the background; only its Stop button cancels it.
 func (a *App) selectChatHistory(chatID string) {
 	if chatID == "" {
 		return
@@ -738,16 +878,11 @@ func (a *App) selectChatHistory(chatID string) {
 	if state == nil {
 		return
 	}
-	if state.chat.ID != chatID && (state.chat.IsStreaming || state.sending) {
-		state.error = "Stop the active response before switching conversations."
-		_ = a.window.Invalidate()
-		return
-	}
 	if state.chat.ID == chatID && !state.chat.IsSummary && len(state.chat.Conversations) > 0 {
-		state.panel = ""
+		keepChatHistoryPanelLocked(state, chatID)
 		state.active = true
 		a.updateChatTextInput(true)
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	var selected *chatData
@@ -764,7 +899,11 @@ func (a *App) selectChatHistory(chatID string) {
 	if state.question != nil {
 		questionID = state.question.QuestionID
 	}
+	if state.chat.ID != chatID {
+		upsertChatSummaryLocked(state, state.chat)
+	}
 	state.chat = *selected
+	state.nextModel = nil
 	clear(state.expandedRounds)
 	state.editor.SetText("", false)
 	state.attachments = nil
@@ -772,7 +911,7 @@ func (a *App) selectChatHistory(chatID string) {
 	state.sending = false
 	state.error = ""
 	state.remoteVersion = 0
-	state.panel = ""
+	keepChatHistoryPanelLocked(state, chatID)
 	state.question = nil
 	state.questionEditor = nil
 	state.autoFollow = true
@@ -789,7 +928,7 @@ func (a *App) selectChatHistory(chatID string) {
 		a.loadChatPreview(key, chatID, revision)
 	})
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // deleteChatHistory removes persisted history through core and starts a draft if it was active.
@@ -799,7 +938,7 @@ func (a *App) deleteChatHistory(chatID string) {
 	}
 	if state := a.chatPreview; state != nil && state.chat.ID == chatID && (state.chat.IsStreaming || state.sending) {
 		state.error = "Stop the active response before deleting this chat."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	util.Go(a.lifecycleCtx, "delete chat history", func() {
@@ -820,7 +959,7 @@ func (a *App) deleteChatHistory(chatID string) {
 			if activeDeleted {
 				a.startNewChat()
 			}
-			_ = a.window.Invalidate()
+			a.invalidateChatSurfaces()
 		}); dispatchErr != nil {
 			log.Printf("dispatch deleted chat history: %v", dispatchErr)
 		}
@@ -830,7 +969,7 @@ func (a *App) deleteChatHistory(chatID string) {
 	})
 }
 
-// selectChatModel applies one catalog entry to the draft and closes the catalog.
+// selectChatModel applies one catalog entry to the next send and closes the catalog.
 func (a *App) selectChatModel(index int) {
 	state := a.chatPreview
 	if state == nil {
@@ -840,25 +979,17 @@ func (a *App) selectChatModel(index int) {
 	if !ok {
 		return
 	}
-	if state.chat.IsStreaming || state.sending {
-		state.error = "Stop the active response before changing models."
-		state.panel = ""
-		state.active = true
-		a.updateChatTextInput(true)
-		_ = a.window.Invalidate()
-		return
-	}
 	if state.panel == chatCommandPanel {
 		replaceChatSlashToken(state.editor, "")
 	}
 	state.chat.Model = model
+	state.nextModel = &model
 	state.panelSelected = index
-	state.panel = ""
-	state.panelQuery = ""
+	restoreChatHistoryPanelLocked(state)
 	state.error = ""
 	state.active = true
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 	// Persist outside the draft so the next chat reopen keeps this selection.
 	persisted := common.Model{Name: model.Name, Provider: common.ProviderName(model.Provider), ProviderAlias: model.ProviderAlias}
 	util.Go(a.lifecycleCtx, "persist selected chat model", func() {
@@ -882,17 +1013,16 @@ func (a *App) insertChatSkill(index int) {
 	}
 	tag := "{skill:" + skill.Name + "}"
 	if state.panel == chatCommandPanel {
-		replaceChatSlashToken(state.editor, tag)
+		replaceChatSlashToken(state.editor, tag+" ")
 	} else {
 		state.editor.InsertText(tag + " ")
 	}
 	state.panelSelected = index
-	state.panel = ""
-	state.panelQuery = ""
+	restoreChatHistoryPanelLocked(state)
 	state.error = ""
 	state.active = true
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // replaceChatSlashToken replaces the active token while preserving surrounding message text.
@@ -969,12 +1099,17 @@ func unresolvedChatSkillTag(text string, skills []chatSkill) string {
 // closeChatPanel returns keyboard and IME ownership to the chat composer.
 func (a *App) closeChatPanel() {
 	if state := a.chatPreview; state != nil {
-		state.panel = ""
-		state.panelQuery = ""
+		if chatOverlayPanel(state.panel) {
+			restoreChatHistoryPanelLocked(state)
+		} else {
+			state.panel = ""
+			state.panelQuery = ""
+			state.sidebarOpen = false
+		}
 		state.active = true
 	}
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // moveChatPanelSelection follows Flutter's clamped command-palette navigation.
@@ -997,7 +1132,7 @@ func (a *App) moveChatPanelSelection(delta int) {
 			ensureChatCommandSelectionVisibleLocked(state, commands)
 		}
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // activateChatPanelSelection applies the selected history or model row.
@@ -1025,6 +1160,30 @@ func (a *App) activateChatPanelSelection() {
 			a.insertChatSkill(items[selected].sourceIndex)
 		}
 	}
+}
+
+// setChatSidebarViewport records the history drawer extent while a slash overlay owns panelViewport.
+func (a *App) setChatSidebarViewport(height float32) {
+	if state := a.chatPreview; state != nil {
+		state.sidebarViewport = max(float32(1), height)
+		maxOffset := max(float32(0), chatHistoryContentHeight(state.chats, time.Now())-state.sidebarViewport)
+		state.sidebarScroll = min(max(float32(0), state.sidebarScroll), maxOffset)
+	}
+}
+
+// scrollChatHistoryDrawer moves the conversation list even when a slash overlay is open.
+func (a *App) scrollChatHistoryDrawer(delta float32) {
+	state := a.chatPreview
+	if state == nil || !chatHistoryVisible(state.panel, state.sidebarOpen) {
+		return
+	}
+	if state.panel == "history" {
+		a.scrollChatPanel(delta)
+		return
+	}
+	maxOffset := max(float32(0), chatHistoryContentHeight(state.chats, time.Now())-state.sidebarViewport)
+	state.sidebarScroll = min(max(float32(0), state.sidebarScroll+delta), maxOffset)
+	a.invalidateChatSurfaces()
 }
 
 // setChatPanelViewport records the current catalog extent for scrolling and keyboard reveal.
@@ -1102,7 +1261,7 @@ func (a *App) scrollChatPanel(delta float32) {
 	}
 	maxOffset := max(float32(0), contentHeight-state.panelViewport)
 	state.panelScroll = min(max(float32(0), state.panelScroll+delta), maxOffset)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // setChatDebugGeometry records the measured JSON inspector extent for controlled scrolling.
@@ -1118,7 +1277,7 @@ func (a *App) scrollChatDebugPanel(delta float32) {
 	if state := a.chatPreview; state != nil && state.panel == "debug" {
 		state.panelScroll = min(max(float32(0), state.panelScroll+delta), state.panelMaxScroll)
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // applyTypedAIQuestion routes ask_user into the visible shared chat surface and cancels if no chat can answer it.
@@ -1145,7 +1304,7 @@ func (a *App) applyTypedAIQuestion(question aiQuestion) error {
 	if state != nil {
 		selectedChatVisible = a.selected >= 0 && a.selected < len(a.results) && a.results[a.selected].Preview.PreviewType == "chat" && a.results[a.selected].ID == state.resultID
 	}
-	if state == nil || !a.visible || !selectedChatVisible {
+	if state == nil || !a.chatSurfaceVisible() || !(a.chatWindowOpen() || selectedChatVisible) {
 		util.Go(a.lifecycleCtx, "cancel hidden AI question", func() {
 			a.answerAIQuestion(question.QuestionID, "User cancelled")
 		})
@@ -1170,7 +1329,7 @@ func (a *App) applyTypedAIQuestion(question aiQuestion) error {
 	state.active = true
 	state.error = ""
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 	return nil
 }
 
@@ -1201,7 +1360,7 @@ func (a *App) submitAIQuestionAnswer(answer string) {
 		a.answerAIQuestion(questionID, answer)
 	})
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // submitSelectedAIQuestionAnswer maps the selected choice or free text to the stable option value.
@@ -1234,11 +1393,12 @@ func (a *App) selectAIQuestionOption(index int) {
 	if state := a.chatPreview; state != nil && state.question != nil && index >= 0 && index < len(state.question.Options) {
 		state.questionSelected = index
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // beginChatRequestLocked moves a prepared chat into its shared UI-owned streaming state.
 func beginChatRequestLocked(state *chatPreviewState) (string, uint64, chatData) {
+	state.nextModel = nil
 	state.chat.IsStreaming = true
 	upsertChatSummaryLocked(state, state.chat)
 	state.sending = true
@@ -1261,14 +1421,23 @@ func (a *App) postChatRequest(key string, revision uint64, chat chatData) {
 			err = a.services.Chat(ctx, a.sessionID, payload)
 		}
 		if dispatchErr := a.runOnUI("apply chat request result", func() {
-			if current := a.chatPreview; current != nil && current.key == key && current.revision == revision {
-				current.sending = false
-				if err != nil {
-					current.chat.IsStreaming = false
-					current.error = err.Error()
+			if current := a.chatPreview; current != nil && current.key == key {
+				if current.revision == revision {
+					current.sending = false
+					if err != nil {
+						current.chat.IsStreaming = false
+						current.error = err.Error()
+					}
+				} else if err != nil {
+					for index := range current.chats {
+						if current.chats[index].ID == chat.ID {
+							current.chats[index].IsStreaming = false
+							break
+						}
+					}
 				}
 			}
-			_ = a.window.Invalidate()
+			a.invalidateChatSurfaces()
 		}); dispatchErr != nil {
 			log.Printf("dispatch chat request result: %v", dispatchErr)
 		}
@@ -1287,12 +1456,12 @@ func (a *App) sendChatMessage() {
 	text := strings.TrimSpace(state.editor.State().Text)
 	if text == "" {
 		state.error = "Enter a message first."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	if strings.TrimSpace(state.chat.Model.Name) == "" {
 		state.error = "Select an AI model in Wox settings first."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	hasSkillTags := chatSkillTagPattern.MatchString(text)
@@ -1305,7 +1474,7 @@ func (a *App) sendChatMessage() {
 		if requestSkills {
 			util.Go(a.lifecycleCtx, "load AI skills before chat send", a.loadAISkills)
 		}
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	now := time.Now().UnixMilli()
@@ -1313,7 +1482,7 @@ func (a *App) sendChatMessage() {
 	skillRefs := chatSkillRefsFromText(text, skills)
 	if unresolved := unresolvedChatSkillTag(text, skills); unresolved != "" {
 		state.error = fmt.Sprintf("Unknown or disabled skill: %s", unresolved)
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, Attachments: slices.Clone(state.attachments), SkillRefs: skillRefs, Timestamp: now})
@@ -1321,7 +1490,7 @@ func (a *App) sendChatMessage() {
 	state.editor.SetText("", false)
 	state.attachments = nil
 	key, revision, chat := beginChatRequestLocked(state)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 	a.postChatRequest(key, revision, chat)
 }
 
@@ -1348,7 +1517,7 @@ func (a *App) stopChatMessage() {
 					}
 				}
 			}
-			_ = a.window.Invalidate()
+			a.invalidateChatSurfaces()
 		}); dispatchErr != nil {
 			log.Printf("dispatch stopped chat: %v", dispatchErr)
 		}
@@ -1367,7 +1536,7 @@ func (a *App) copyChatText(text string) bool {
 		if state := a.chatPreview; state != nil {
 			state.error = fmt.Sprintf("Copy failed: %v", err)
 		}
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return false
 	}
 	return true
@@ -1381,7 +1550,7 @@ func (a *App) editChatConversation(messageID string) {
 	}
 	if state.chat.IsStreaming || state.sending || state.question != nil {
 		state.error = "Stop the active response before editing a message."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	messageIndex := slices.IndexFunc(state.chat.Conversations, func(message chatConversation) bool {
@@ -1389,7 +1558,7 @@ func (a *App) editChatConversation(messageID string) {
 	})
 	if messageIndex < 0 {
 		state.error = "The user message is no longer available."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	text := state.chat.Conversations[messageIndex].Text
@@ -1405,7 +1574,7 @@ func (a *App) editChatConversation(messageID string) {
 	state.scroll = float32(math.MaxFloat32)
 	state.error = ""
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // regenerateChatConversation resends the user turn preceding an assistant response through the normal chat channel.
@@ -1416,7 +1585,7 @@ func (a *App) regenerateChatConversation(messageID string) {
 	}
 	if state.chat.IsStreaming || state.sending || state.question != nil {
 		state.error = "Stop the active response before retrying it."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	assistantIndex := slices.IndexFunc(state.chat.Conversations, func(message chatConversation) bool {
@@ -1431,7 +1600,7 @@ func (a *App) regenerateChatConversation(messageID string) {
 	}
 	if assistantIndex < 0 || userIndex < 0 {
 		state.error = "No user message is available for this response."
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 		return
 	}
 	state.chat.Conversations = slices.Clone(state.chat.Conversations[:userIndex+1])
@@ -1439,12 +1608,33 @@ func (a *App) regenerateChatConversation(messageID string) {
 	state.chat.DebugTrace = nil
 	state.chat.UpdatedAt = time.Now().UnixMilli()
 	key, revision, chat := beginChatRequestLocked(state)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 	a.postChatRequest(key, revision, chat)
 }
 
-// onChatPreviewKey keeps chat editing and ask_user behavior identical on every platform.
+// launcherChatInputActive excludes ordinary searches when a separate chat stays active.
+func (a *App) launcherChatInputActive() bool {
+	if !a.chatWindowOpen() || a.chatFullscreen {
+		return true
+	}
+	_, preview, visible := a.selectedPreviewForLifecycle()
+	return visible && preview.PreviewType == "chat"
+}
+
+// onChatPreviewKey routes only the launcher's visible chat surface.
 func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
+	if !a.launcherChatInputActive() {
+		return false
+	}
+	return a.handleChatKey(event, false)
+}
+
+func (a *App) onDedicatedChatKey(event woxui.KeyEvent) bool {
+	return a.handleChatKey(event, true)
+}
+
+// handleChatKey shares conversation actions while keeping window dismissal local.
+func (a *App) handleChatKey(event woxui.KeyEvent, dedicated bool) bool {
 	// Key releases must not repeat palette navigation, and composing keys belong to native text input.
 	if !event.Down || event.Composing {
 		return false
@@ -1453,14 +1643,8 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 	active := state != nil && state.active
 	hasQuestion := active && state.question != nil
 	panel := ""
-	panelSelected := 0
-	panelChatID := ""
 	if active {
 		panel = state.panel
-		panelSelected = state.panelSelected
-		if panel == "history" && panelSelected >= 0 && panelSelected < len(state.chats) {
-			panelChatID = state.chats[panelSelected].ID
-		}
 	}
 	questionOptions := 0
 	questionSelected := 0
@@ -1488,7 +1672,9 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		}
 		return true
 	}
-	if panel != "" {
+	// A persistent history drawer does not own composer keys. Its rows and
+	// delete buttons handle activation through their own retained focus nodes.
+	if panel != "" && panel != "history" {
 		switch event.Key {
 		case woxui.KeyEscape:
 			a.closeChatPanel()
@@ -1506,11 +1692,6 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		case woxui.KeyEnter:
 			a.activateChatPanelSelection()
 			return true
-		case woxui.KeyDelete:
-			if panel == "history" {
-				a.deleteChatHistory(panelChatID)
-				return true
-			}
 		}
 		return false
 	}
@@ -1553,7 +1734,12 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	if event.Key == woxui.KeyEscape {
-		if a.isPrimary {
+		if panel == "history" {
+			a.closeChatPanel()
+		} else if dedicated {
+			// The dedicated composer keeps its window and draft when Escape bubbles up.
+			return true
+		} else if a.isPrimary {
 			a.exitChatMode()
 		} else {
 			a.closePreviewWindow()
@@ -1577,6 +1763,9 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 
 // onChatPreviewTextInput routes committed and composing text to the currently visible chat editor.
 func (a *App) onChatPreviewTextInput(_ woxui.TextInputEvent) bool {
+	if !a.launcherChatInputActive() {
+		return false
+	}
 	state := a.chatPreview
 	if state == nil || !state.active {
 		return false
@@ -1592,7 +1781,7 @@ func (a *App) editChatKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 func (a *App) editAIQuestionKey(event woxui.KeyEvent) {
@@ -1603,14 +1792,14 @@ func (a *App) editAIQuestionKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 func (a *App) moveAIQuestionSelection(delta int) {
 	if state := a.chatPreview; state != nil && state.question != nil && len(state.question.Options) > 0 {
 		state.questionSelected = (state.questionSelected + delta + len(state.question.Options)) % len(state.question.Options)
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 func (a *App) focusChatInput() {
@@ -1618,7 +1807,7 @@ func (a *App) focusChatInput() {
 		state.active = true
 	}
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 func (a *App) focusAIQuestionInput() {
@@ -1626,7 +1815,7 @@ func (a *App) focusAIQuestionInput() {
 		state.active = true
 	}
 	a.updateChatTextInput(true)
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 func (a *App) setChatText(value string) {
@@ -1638,6 +1827,9 @@ func (a *App) setChatText(value string) {
 		token, hasToken := findChatSlashToken(state.editor.State())
 		if hasToken {
 			queryChanged := state.panel != chatCommandPanel || state.panelQuery != token.query
+			if state.panel == "history" {
+				rememberChatHistorySidebarLocked(state)
+			}
 			state.panel = chatCommandPanel
 			state.panelQuery = token.query
 			state.active = true
@@ -1646,17 +1838,18 @@ func (a *App) setChatText(value string) {
 				state.panelScroll = 0
 				state.panelViewport = 0
 			}
-			requestModels = !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
-			requestSkills = !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
-			if requestModels {
-				a.aiSettings.SetModelsLoading(true)
-			}
-			if requestSkills {
-				a.aiSettings.SetSkillsLoading(true)
+			if a.aiSettings != nil {
+				requestModels = !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+				requestSkills = !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
+				if requestModels {
+					a.aiSettings.SetModelsLoading(true)
+				}
+				if requestSkills {
+					a.aiSettings.SetSkillsLoading(true)
+				}
 			}
 		} else if state.panel == chatCommandPanel {
-			state.panel = ""
-			state.panelQuery = ""
+			restoreChatHistoryPanelLocked(state)
 		}
 	}
 	if requestModels {
@@ -1665,7 +1858,7 @@ func (a *App) setChatText(value string) {
 	if requestSkills {
 		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 func (a *App) setAIQuestionText(value string) {
@@ -1673,7 +1866,7 @@ func (a *App) setAIQuestionText(value string) {
 		state.questionEditor.SetText(value, false)
 		state.error = ""
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // enterChatMode hides launcher chrome while retaining the same native window and shared preview state.
@@ -1684,24 +1877,28 @@ func (a *App) enterChatMode() {
 	}
 	a.updateChatTextInput(true)
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // exitChatMode restores query ownership without destroying the in-progress conversation.
 func (a *App) exitChatMode() {
 	a.chatFullscreen = false
 	if state := a.chatPreview; state != nil {
-		state.active = false
+		state.active = a.chatWindowOpen()
 	}
 	a.restoreQueryTextInput()
 	// Returning from chat selects the whole query so a new search starts with a clean slate.
 	a.editor.SelectAll()
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // deactivateChatPreview releases input ownership and cancels an ask_user request that is no longer visible.
 func (a *App) deactivateChatPreview() {
+	if a.chatWindowOpen() {
+		a.chatFullscreen = false
+		return
+	}
 	state := a.chatPreview
 	wasActive := state != nil && state.active
 	wasFullscreen := a.chatFullscreen
@@ -1722,12 +1919,16 @@ func (a *App) deactivateChatPreview() {
 	}
 	if wasActive || wasFullscreen {
 		a.restoreQueryTextInput()
-		_ = a.window.Invalidate()
+		a.invalidateChatSurfaces()
 	}
 }
 
 // resetChatPreview discards state at launcher lifecycle boundaries and unblocks any pending ask_user call.
 func (a *App) resetChatPreview() {
+	if a.chatWindowOpen() {
+		a.chatFullscreen = false
+		return
+	}
 	questionID := ""
 	if a.chatPreview != nil && a.chatPreview.question != nil {
 		questionID = a.chatPreview.question.QuestionID
@@ -1746,7 +1947,10 @@ func (a *App) updateChatTextInput(enabled bool) {
 	if enabled {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 32, Y: 420, Width: 1, Height: 22}}
 	}
-	_ = a.window.SetTextInputState(state)
+	target := a.chatTextInputWindow()
+	if target != nil {
+		_ = target.SetTextInputState(state)
+	}
 }
 
 // clampChatPreviewScroll records whether future stream updates should keep following the bottom.
@@ -1766,7 +1970,7 @@ func (a *App) scrollChatPreview(delta, maxOffset float32) {
 		state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
 		state.autoFollow = maxOffset-state.scroll <= 36
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }
 
 // dismissChatAttachment removes one pending reference without sending it.
@@ -1774,5 +1978,5 @@ func (a *App) dismissChatAttachment(id string) {
 	if state := a.chatPreview; state != nil {
 		state.attachments = slices.DeleteFunc(state.attachments, func(attachment common.AIChatAttachment) bool { return attachment.ID == id })
 	}
-	_ = a.window.Invalidate()
+	a.invalidateChatSurfaces()
 }

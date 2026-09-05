@@ -225,6 +225,10 @@ func (a *App) applyTheme(theme themeData) {
 		}
 		_ = onboardingView.Window().SetAppearance(onboardingDark)
 	}
+	if chatWindow := a.chatNativeWindow(); chatWindow != nil {
+		_ = chatWindow.SetAppearance(isDark)
+		_ = chatWindow.Invalidate()
+	}
 	for _, controller := range a.noteWindows {
 		if controller.managed != nil {
 			_ = controller.managed.Window().SetAppearance(isDark)

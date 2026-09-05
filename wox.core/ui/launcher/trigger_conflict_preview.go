@@ -183,6 +183,9 @@ func parseTriggerKeywords(value string) []string {
 
 // onTriggerConflictPreviewKey keeps editing portable and leaves query focus on Escape.
 func (a *App) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
 	state := a.triggerConflict
 	active := state != nil && state.active
 	if !active {

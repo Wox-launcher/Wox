@@ -2463,6 +2463,8 @@
   "ui_ai_chat_show_sidebar": "Show Sidebar",
   "ui_ai_chat_hide_sidebar": "Ocultar Barra Lateral",
   "ui_ai_chat_new_chat": "Nova Conversa",
+  "ui_ai_chat_open_window": "Abrir em janela dedicada",
+  "ui_ai_chat_window_title": "Wox Chat",
   "ui_ai_chat_start_chat": "Iniciar Conversa",
   "ui_ai_chat_create_new_chat": "Criar uma nova conversa",
   "ui_ai_chat_continue_chat": "Continuar Conversa",
