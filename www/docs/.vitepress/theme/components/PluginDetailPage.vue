@@ -526,7 +526,7 @@ onUnmounted(() => {
 
 .primary-action {
   background: var(--vp-c-brand-1);
-  color: white;
+  color: var(--vp-c-bg);
 }
 
 .secondary-action {
@@ -541,7 +541,7 @@ onUnmounted(() => {
 }
 
 .primary-action:hover {
-  color: white;
+  color: var(--vp-c-bg);
 }
 
 .secondary-action:hover {

@@ -64,13 +64,7 @@ function installHref(pluginName: string) {
     </div>
 
     <div v-if="filteredPlugins.length" class="grid">
-      <article
-        v-for="plugin in filteredPlugins"
-        :key="plugin.Id"
-        class="card"
-        tabindex="0"
-        @keydown.enter="() => (window.location.href = pluginDetailHref(plugin.Id))"
-      >
+      <article v-for="plugin in filteredPlugins" :key="plugin.Id" class="card" tabindex="0" @keydown.enter="() => (window.location.href = pluginDetailHref(plugin.Id))">
         <a :href="pluginDetailHref(plugin.Id)" class="card-link" :aria-label="plugin.LocalizedName"></a>
 
         <div class="card-header">
@@ -294,12 +288,12 @@ function installHref(pluginName: string) {
 
 .primary-btn {
   background: var(--vp-c-brand-1);
-  color: white;
+  color: var(--vp-c-bg);
 }
 
 .primary-btn:hover {
   background: var(--vp-c-brand-2);
-  color: white;
+  color: var(--vp-c-bg);
 }
 
 .secondary-btn {

@@ -4,6 +4,7 @@ export default defineConfig({
   // Custom domain https://www.woxlauncher.com/ serves this project site at the
   // domain root, so assets must not keep the old /Wox/ GitHub Pages prefix.
   base: "/",
+  appearance: { initialValue: "light" },
   title: "Wox",
   description: "A cross-platform quick launcher",
 

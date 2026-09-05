@@ -1,51 +1,43 @@
 ---
 layout: home
 title: Wox
-description: "A fast, open, plugin-driven launcher for Windows, macOS, and Linux."
+description: "A native, open-source launcher for Windows, macOS, and Linux."
 ---
 
-<!-- The homepage uses custom sections instead of the default VitePress hero because the default template made Wox look generic; plain HTML keeps the page easy to edit while giving the product a more grounded first impression. -->
 <main class="wox-home">
   <section class="wox-hero">
     <div class="wox-hero-copy">
-      <p class="wox-home-label"><span class="wox-logo-mark">W</span><span>Open source launcher</span></p>
-      <h1><span>Launch. Extend.</span><span class="wox-nowrap">Make it yours.</span></h1>
-      <p class="wox-hero-lede">Wox is a fast desktop launcher for opening apps, finding files, running system actions, and building workflows with plugins.</p>
+      <h1><span>Your desktop,</span><span>a few keystrokes away.</span></h1>
+      <p class="wox-hero-lede">Open apps, find files, and run commands with Wox.<br /> A native, open-source launcher for Windows, macOS, and Linux.</p>
       <div class="wox-hero-actions">
-        <a class="wox-button wox-button-primary" href="./guide/introduction"><span class="wox-button-icon" aria-hidden="true">→</span><span>Get Started</span></a>
-        <a class="wox-button" href="./store/plugins"><span class="wox-button-icon" aria-hidden="true">⌘</span><span>Plugins</span></a>
-        <a class="wox-button wox-button-subtle" href="https://github.com/Wox-launcher/Wox"><svg class="wox-button-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.63 2.29 6.7 5.47 7.79.4.08.55-.18.55-.4 0-.19-.01-.84-.01-1.52-2.01.38-2.53-.5-2.69-.96-.09-.24-.48-.96-.82-1.16-.28-.15-.68-.52-.01-.53.63-.01 1.08.6 1.23.84.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.09-1.78-.21-3.64-.91-3.64-4.05 0-.89.31-1.63.82-2.2-.08-.21-.36-1.05.08-2.17 0 0 .67-.22 2.2.84A7.43 7.43 0 0 1 8 3.99c.68 0 1.36.09 2 .28 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.96.08 2.17.51.57.82 1.3.82 2.2 0 3.15-1.87 3.84-3.65 4.05.29.26.54.75.54 1.52 0 1.09-.01 1.98-.01 2.25 0 .22.15.48.55.4A8.14 8.14 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg><span>GitHub</span></a>
-        <!-- Keep community destinations together so visitors can choose between source code and discussion without scanning elsewhere on the page. -->
-        <a class="wox-button wox-button-subtle" href="https://github.com/Wox-launcher/Wox/discussions"><svg class="wox-button-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 1h8.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 10.25 10H7.061l-2.574 2.573A1.458 1.458 0 0 1 2 11.543V10h-.25A1.75 1.75 0 0 1 0 8.25v-5.5C0 1.784.784 1 1.75 1ZM1.5 2.75v5.5c0 .138.112.25.25.25H2.5a.75.75 0 0 1 .75.75v2.128l2.166-2.166a.75.75 0 0 1 .53-.22h3.274c.138 0 .25-.112.25-.25v-5.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25Zm13 2a.25.25 0 0 0-.25-.25h-.5a.75.75 0 0 1-.021-1.495l.021-.005h.5A1.75 1.75 0 0 1 16 4.25v5.5A1.75 1.75 0 0 1 14.25 11.5h-.5a.75.75 0 0 1 0-1.5h.5c.138 0 .25-.112.25-.25v-5.5Z"/></svg><span>Discussions</span></a>
-        <a class="wox-button wox-button-subtle" href="https://www.reddit.com/r/WoxLauncher/"><span class="wox-button-icon" aria-hidden="true">r/</span><span>Reddit</span></a>
-        <a class="wox-button wox-button-subtle" href="https://discord.gg/NnahFAwm3"><svg class="wox-button-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059q-.325-.247-.625-.532a.03.03 0 0 1 0-.041l.208-.165a.05.05 0 0 1 .052-.007 10 10 0 0 0 8.63 0 .05.05 0 0 1 .053.007q.104.09.207.165a.03.03 0 0 1 .001.041q-.3.285-.624.532a.05.05 0 0 0-.01.059q.36.698.819 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/></svg><span>Discord</span></a>
+        <a class="wox-button wox-button-primary" href="https://github.com/Wox-launcher/Wox/releases">Download Wox</a>
+        <a class="wox-button" href="https://www.reddit.com/r/WoxLauncher/"><span class="wox-button-icon wox-reddit-icon" aria-hidden="true"></span><span>Reddit</span></a>
+        <a class="wox-button" href="https://github.com/Wox-launcher/Wox"><svg class="wox-button-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.63 2.29 6.7 5.47 7.79.4.08.55-.18.55-.4 0-.19-.01-.84-.01-1.52-2.01.38-2.53-.5-2.69-.96-.09-.24-.48-.96-.82-1.16-.28-.15-.68-.52-.01-.53.63-.01 1.08.6 1.23.84.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.09-1.78-.21-3.64-.91-3.64-4.05 0-.89.31-1.63.82-2.2-.08-.21-.36-1.05.08-2.17 0 0 .67-.22 2.2.84A7.43 7.43 0 0 1 8 3.99c.68 0 1.36.09 2 .28 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.96.08 2.17.51.57.82 1.3.82 2.2 0 3.15-1.87 3.84-3.65 4.05.29.26.54.75.54 1.52 0 1.09-.01 1.98-.01 2.25 0 .22.15.48.55.4A8.14 8.14 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg><span>GitHub</span></a>
+        <a class="wox-button" href="https://discord.gg/NnahFAwm3"><svg class="wox-button-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059q-.325-.247-.625-.532a.03.03 0 0 1 0-.041l.208-.165a.05.05 0 0 1 .052-.007 10 10 0 0 0 8.63 0 .05.05 0 0 1 .053.007q.104.09.207.165a.03.03 0 0 1 .001.041q-.3.285-.624.532a.05.05 0 0 0-.01.059q.36.698.819 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/></svg><span>Discord</span></a>
       </div>
+      <p class="wox-hero-note">Free and open source</p>
     </div>
     <figure class="wox-hero-poster">
-      <img src="/images/poster.png" alt="Wox launcher showing project, app, plugin, and action results" />
+      <img src="/images/hero-glass-dark.png" alt="Wox in its dark glass theme, showing project search and keyboard actions" fetchpriority="high" />
     </figure>
   </section>
 
   <section class="wox-section wox-section-compact">
     <div class="wox-section-heading">
-      <h2>Built for everyday flow</h2>
-      <p>Wox stays close to the keyboard and keeps the important actions one command away.</p>
+      <h2>One place for the things you do every day.</h2>
     </div>
     <div class="wox-feature-grid">
       <article class="wox-feature-card">
-        <span class="wox-feature-index">01</span>
-        <h3>Find and launch quickly</h3>
-        <p>Start apps, open folders, jump to recent projects, and search local files without switching context.</p>
+        <h3>Find and open</h3>
+        <p>Type a name to open an app, a file, or a recent project.</p>
       </article>
       <article class="wox-feature-card">
-        <span class="wox-feature-index">02</span>
-        <h3>Act on every result</h3>
-        <p>Use result actions for opening, copying, revealing, running shortcuts, and sending work to the right tool.</p>
+        <h3>Keep your hands on the keyboard</h3>
+        <p>Copy a result, reveal a file, or choose another command from the action panel.</p>
       </article>
       <article class="wox-feature-card">
-        <span class="wox-feature-index">03</span>
-        <h3>Grow with plugins</h3>
-        <p>Install community plugins or build your own with Node.js, Python, script plugins, and the Wox API.</p>
+        <h3>Add the tools you need</h3>
+        <p>Install community plugins, or write your own with Python and Node.js.</p>
       </article>
     </div>
   </section>
@@ -56,45 +48,25 @@ description: "A fast, open, plugin-driven launcher for Windows, macOS, and Linux
 
   <section class="wox-section wox-split-section">
     <div>
-      <p class="wox-home-label">Core experience</p>
-      <h2>Search results that stay useful after you find them</h2>
-      <p>Wox is not just a text box. Results can carry icons, subtitles, action panels, hotkeys, context, and plugin-provided workflows so common tasks finish inside the launcher.</p>
-      <ul class="wox-check-list">
-        <li>Application, file, bookmark, web search, clipboard, calculator, and converter workflows.</li>
-        <li>Action panel for secondary commands without leaving the keyboard.</li>
-        <li>Theme support for matching the launcher with your desktop.</li>
-      </ul>
+      <p class="wox-home-label">For developers</p>
+      <h2>Bring your own tools.</h2>
+      <p>Write a plugin in Python, Node.js, or a script. Search your projects, call a service, or run a command you use every day.</p>
+      <a class="wox-button" href="./development/plugins/overview">Build a plugin</a>
     </div>
-    <figure class="wox-feature-shot">
-      <img src="/images/search_result_and_action_panel.png" alt="Wox screenshot plugin results with the action panel open" />
-      <figcaption>Search results and action panel</figcaption>
-    </figure>
-  </section>
-
-  <section class="wox-section wox-split-section wox-split-section-reverse">
-    <div>
-      <p class="wox-home-label">Plugin platform</p>
-      <h2>Use the built-ins, then shape the rest around your own workflow</h2>
-      <p>Wox keeps the launcher small and lets plugins add the parts that are specific to your work: project shortcuts, system commands, web tools, AI helpers, internal dashboards, or anything reachable from a script.</p>
-      <div class="wox-mini-grid">
-        <span><span class="wox-mini-icon wox-mini-icon-node" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2 21 7v10l-9 5-9-5V7l9-5Z" /><path d="M8.2 15.4V8.8h1.7l2.5 3.8V8.8h1.7v6.6h-1.7l-2.5-3.8v3.8H8.2Z" /></svg></span>Node.js SDK</span>
-        <span><span class="wox-mini-icon wox-mini-icon-python" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12.1 3.2c-3.7 0-4.4 1.6-4.4 3.3v1.4h4.5v.9H5.9c-1.7 0-3.2 1-3.2 4s1.3 4 3 4h1.2v-1.7c0-1.9 1.6-3.5 3.5-3.5h4.4c1.2 0 2.2-1 2.2-2.2V6.5c0-1.7-1.4-3.3-4.9-3.3Zm-2.5 2a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" /><path d="M11.9 20.8c3.7 0 4.4-1.6 4.4-3.3v-1.4h-4.5v-.9h6.3c1.7 0 3.2-1 3.2-4s-1.3-4-3-4h-1.2v1.7c0 1.9-1.6 3.5-3.5 3.5H9.2c-1.2 0-2.2 1-2.2 2.2v2.9c0 1.7 1.4 3.3 4.9 3.3Zm2.5-2a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8Z" /></svg></span>Python SDK</span>
-        <span><span class="wox-mini-icon wox-mini-icon-script" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v13H4v-13Z" /><path d="m8 9 2.4 2.5L8 14" /><path d="M12.4 14h4" /></svg></span>Script plugins</span>
-        <span><span class="wox-mini-icon wox-mini-icon-store" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9h12l-1 11H7L6 9Z" /><path d="M9 9V7a3 3 0 0 1 6 0v2" /><path d="M9.2 14.2h5.6" /><path d="M12 11.4v5.6" /></svg></span>Plugin Store</span>
-      </div>
-    </div>
-    <figure class="wox-feature-shot">
-      <img src="/images/plugin_setting.png" alt="Wox plugin settings showing an installed plugin detail page" />
-      <figcaption>Plugin settings and store-ready details</figcaption>
+    <figure class="wox-feature-shot wox-feature-shot-plugin">
+      <img src="/images/plugin_setting.png" alt="Plugin settings in Wox" loading="lazy" />
     </figure>
   </section>
 
   <section class="wox-section wox-closing">
-    <h2>Ready to make Wox your command center?</h2>
-    <p>Install Wox, connect the plugins you need, and keep your launcher tuned to the way you work.</p>
+    <h2>Try Wox on your desktop.</h2>
+    <p>Windows · macOS · Linux</p>
     <div class="wox-hero-actions">
-      <a class="wox-button wox-button-primary" href="./guide/installation"><span class="wox-button-icon" aria-hidden="true">→</span><span>Install Wox</span></a>
-      <a class="wox-button" href="./store/plugins"><span>Find a Plugin</span></a>
+      <a class="wox-button wox-button-primary" href="https://github.com/Wox-launcher/Wox/releases">Download Wox</a>
+      <a class="wox-button" href="./guide/installation">Installation guide</a>
     </div>
+    <figure class="wox-feature-shot wox-closing-shot">
+      <img src="/images/confetti.png" alt="Wox is ready: setup complete with celebratory confetti" width="4186" height="2450" loading="lazy" />
+    </figure>
   </section>
 </main>
