@@ -1109,17 +1109,25 @@ func (h *Host) PerformAutomationAction(automationID string, action woxui.Accessi
 	if automationID == "" {
 		return fmt.Errorf("automation id is required")
 	}
-	var targetID woxui.AccessibilityNodeID
-	for _, current := range h.Snapshot().Tree.Nodes {
-		if current.AutomationID == automationID {
-			targetID = current.ID
-			break
+	var actionErr error
+	// A queued frame can replace numeric node IDs. Resolve the stable ID and
+	// execute together on the UI thread so no redraw can invalidate the target.
+	if err := woxui.Call(func() {
+		actionErr = h.performAutomationAction(automationID, action, value)
+	}); err != nil {
+		return err
+	}
+	return actionErr
+}
+
+// performAutomationAction resolves the live node while the caller owns the UI thread.
+func (h *Host) performAutomationAction(automationID string, action woxui.AccessibilityAction, value string) error {
+	for _, current := range h.nodes {
+		if current.semantic != nil && !current.semantic.hidden && current.semantic.automationID == automationID {
+			return h.performAccessibilityAction(current.id, action, value)
 		}
 	}
-	if targetID == 0 {
-		return fmt.Errorf("automation element %q was not found", automationID)
-	}
-	return h.dispatchAccessibilityAction(targetID, action, value)
+	return fmt.Errorf("automation element %q was not found", automationID)
 }
 
 // Key routes one semantic key event through capture, target, and bubble phases.

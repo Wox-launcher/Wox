@@ -143,6 +143,42 @@ func renderTestFrame(host *Host) {
 	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
 }
 
+// TestAutomationActionResolvesReplacementNode reproduces a redraw replacing a queued action's numeric target.
+func TestAutomationActionResolvesReplacementNode(t *testing.T) {
+	key := Key("before-resize")
+	var received string
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Semantics{
+			Key: key, AutomationID: "launcher.query.input", Role: woxui.AccessibilityRoleTextField,
+			OnAction: func(action woxui.AccessibilityAction, value string) error {
+				received = value
+				return nil
+			},
+			Child: Container{Width: 100, Height: 30},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	stale := host.Snapshot()
+	oldID := stale.Tree.Nodes[0].ID
+	key = "after-resize"
+	renderTestFrame(host)
+	if err := host.performAccessibilityAction(oldID, woxui.AccessibilityActionSetValue, "stale"); err == nil {
+		t.Fatal("old numeric node ID unexpectedly survived replacement")
+	}
+	// A retained snapshot must not decide which live node receives the action.
+	host.snapshot.Store(stale)
+	if err := host.performAutomationAction("launcher.query.input", woxui.AccessibilityActionSetValue, "new query"); err != nil {
+		t.Fatal(err)
+	}
+	if received != "new query" {
+		t.Fatalf("received %q, want action on replacement node", received)
+	}
+	if err := host.performAutomationAction("missing", woxui.AccessibilityActionSetValue, ""); err == nil {
+		t.Fatal("missing automation target did not return an error")
+	}
+}
+
 func findAutomationNode(t *testing.T, tree woxui.AccessibilityTree, automationID string) woxui.AccessibilityNode {
 	t.Helper()
 	for _, current := range tree.Nodes {
