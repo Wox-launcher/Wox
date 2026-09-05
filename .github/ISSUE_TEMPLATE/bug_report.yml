@@ -78,6 +78,6 @@ body:
         Attach the log file in the **Description** editor area where GitHub shows:
         `Paste, drop, or click to add files`
 
-        Log path:
-        - `~/.wox/log/wox.log` if you use macOS or Linux
-        - `C:\Users\<yourname>\.wox\log\wox.log` if you use Windows
+        In Wox, type `feedback` to export diagnostics or open the current log.
+        For a clean reproduction, choose **Clear logs** first, reproduce the issue, then **Export diagnostics**.
+        Crash reports are listed under `feedback crash`.
