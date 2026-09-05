@@ -37,9 +37,13 @@ type WindowOptions struct {
 	PreservePosition bool
 	StickyWindowPid  int
 	StickyWindowId   string
-	Anchor           int
-	OffsetX          float64
-	OffsetY          float64
+	// CloseWhenStickyLost hides an already-shown overlay when its tracked
+	// window disappears. Used by dialog hints so a PID fallback cannot leave
+	// the hint stranded on Settings after the picker closes.
+	CloseWhenStickyLost bool
+	Anchor              int
+	OffsetX             float64
+	OffsetY             float64
 	// WorkArea overrides display discovery when a platform tracker already resolved
 	// the target window and visible frame in one coordinate space.
 	WorkArea  *woxui.Rect
@@ -84,8 +88,9 @@ type runtimeOverlay struct {
 
 	stickyStop chan struct{}
 	// stickyDetach and stickyPublish are set only by the platform sticky implementation.
-	stickyDetach  func()
-	stickyPublish func()
+	stickyDetach     func()
+	stickyPublish    func()
+	stickyLostMisses int
 }
 
 var runtimeOverlays = struct {
@@ -456,8 +461,18 @@ func (instance *runtimeOverlay) applyLayout(preserveOrigin bool) {
 	if instance.options.StickyWindowPid > 0 {
 		var ok bool
 		if sticky, ok = stickyBounds(instance.options, nil); !ok {
+			// IFileDialog can miss one poll while its HWND is replaced. Require
+			// a few consecutive misses so the hint is not closed on open.
+			if instance.options.CloseWhenStickyLost && instance.shown {
+				instance.stickyLostMisses++
+				if instance.stickyLostMisses >= 3 {
+					instance.stopStickyTracking()
+					_ = instance.managed.Close()
+				}
+			}
 			return
 		}
+		instance.stickyLostMisses = 0
 	}
 	current, _ := instance.window.Bounds()
 	workArea := WorkArea(instance.options, current)

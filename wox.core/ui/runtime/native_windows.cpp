@@ -61,6 +61,90 @@ static std::string wide_to_utf8(const wchar_t *value) {
   return result;
 }
 
+extern "C" void woxGoNativeFileDialogChanged(uintptr_t window, int32_t opened);
+
+// Accessed only on the UI thread; Show keeps each registered COM object alive.
+static std::unordered_map<HWND, IFileDialog *> active_file_dialogs;
+
+// Report the initialized picker HWND instead of inferring it from foreground windows.
+class WoxFileDialogEvents final : public IFileDialogEvents {
+ public:
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) override {
+    if (object == nullptr) return E_POINTER;
+    *object = nullptr;
+    if (iid != IID_IUnknown && iid != IID_IFileDialogEvents) return E_NOINTERFACE;
+    *object = static_cast<IFileDialogEvents *>(this);
+    AddRef();
+    return S_OK;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG remaining = --references_;
+    if (remaining == 0) delete this;
+    return remaining;
+  }
+  HRESULT STDMETHODCALLTYPE OnFolderChange(IFileDialog *dialog) override {
+    if (window_ != nullptr) return S_OK;
+    IOleWindow *native = nullptr;
+    if (SUCCEEDED(dialog->QueryInterface(IID_PPV_ARGS(&native)))) {
+      native->GetWindow(&window_);
+      native->Release();
+      if (window_ != nullptr) {
+        active_file_dialogs[window_] = dialog;
+        woxGoNativeFileDialogChanged(reinterpret_cast<uintptr_t>(window_), 1);
+      }
+    }
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE OnFileOk(IFileDialog *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnFolderChanging(IFileDialog *, IShellItem *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnSelectionChange(IFileDialog *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnTypeChange(IFileDialog *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnShareViolation(IFileDialog *, IShellItem *, FDE_SHAREVIOLATION_RESPONSE *response) override {
+    *response = FDESVR_DEFAULT;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE OnOverwrite(IFileDialog *, IShellItem *, FDE_OVERWRITE_RESPONSE *response) override {
+    *response = FDEOR_DEFAULT;
+    return S_OK;
+  }
+  void Closed() {
+    if (window_ != nullptr) {
+      active_file_dialogs.erase(window_);
+      woxGoNativeFileDialogChanged(reinterpret_cast<uintptr_t>(window_), 0);
+    }
+  }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  HWND window_ = nullptr;
+};
+
+// All pickers share open/close notifications, including cancellation and Show failures.
+static HRESULT show_file_dialog(IFileDialog *dialog, HWND owner) {
+  auto *events = new WoxFileDialogEvents();
+  DWORD cookie = 0;
+  const HRESULT advised = dialog->Advise(events, &cookie);
+  const HRESULT result = dialog->Show(owner);
+  events->Closed();
+  if (SUCCEEDED(advised)) dialog->Unadvise(cookie);
+  events->Release();
+  return result;
+}
+
+// SetFolder navigates without invoking the picker's confirmation action.
+extern "C" int32_t wox_windows_navigate_file_dialog(uintptr_t window, const wchar_t *path) {
+  auto found = active_file_dialogs.find(reinterpret_cast<HWND>(window));
+  if (found == active_file_dialogs.end()) return E_INVALIDARG;
+  IShellItem *folder = nullptr;
+  HRESULT result = SHCreateItemFromParsingName(path, nullptr, IID_PPV_ARGS(&folder));
+  if (SUCCEEDED(result)) {
+    result = found->second->SetFolder(folder);
+    folder->Release();
+  }
+  return result;
+}
+
 extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, char **path) {
   if (owner == 0 || path == nullptr) {
     return E_INVALIDARG;
@@ -83,7 +167,7 @@ extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, cha
     result = dialog->SetOptions(options);
   }
   if (SUCCEEDED(result)) {
-    result = dialog->Show(reinterpret_cast<HWND>(owner));
+    result = show_file_dialog(dialog, reinterpret_cast<HWND>(owner));
   }
   if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
     dialog->Release();
@@ -1635,7 +1719,7 @@ extern "C" int32_t wox_windows_save_file(uintptr_t owner, const char *title, con
     }
   }
   if (SUCCEEDED(result)) {
-    result = dialog->Show(reinterpret_cast<HWND>(owner));
+    result = show_file_dialog(dialog, reinterpret_cast<HWND>(owner));
   }
   if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
     dialog->Release();

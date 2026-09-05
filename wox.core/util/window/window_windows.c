@@ -2273,47 +2273,8 @@ static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavig
         return 0;
     }
 
-    ULONGLONG directStartedAt = GetTickCount64();
-    HWND hEdit = findFileNameEdit(hwnd);
-    int directFileNameSet = 0;
-    if (diagnostic)
-        diagnostic->directControlFound = hEdit != NULL;
-    // WM_SETTEXT is a system message, so the kernel marshals the string across the
-    // process boundary. The CDM_* route that used to run when edt1 is missing cannot
-    // be used here: those are WM_USER-range messages whose pointer arguments are not
-    // marshalled, so they hand the dialog's host a pointer from Wox's address space.
-    if (hEdit)
-    {
-        LRESULT setResult = SendMessageW(hEdit, WM_SETTEXT, 0, (LPARAM)wpath);
-        if (diagnostic)
-            diagnostic->directSetResult = (int)setResult;
-        directFileNameSet = 1;
-    }
-    if (diagnostic)
-        diagnostic->directElapsedMs = GetTickCount64() - directStartedAt;
-
-    if (directFileNameSet)
-    {
-        if (diagnostic)
-            diagnostic->route = 1;
-        // Trigger command
-        HWND hButton = GetDlgItem(hwnd, IDOK);
-        if (hButton)
-        {
-            SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), (LPARAM)hButton);
-        }
-        else
-        {
-            PostMessage(hEdit, WM_KEYDOWN, VK_RETURN, 0);
-            PostMessage(hEdit, WM_KEYUP, VK_RETURN, 0);
-        }
-
-        free(wpath);
-        if (diagnostic)
-            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
-        return 1;
-    }
-
+    // Submitting the filename/folder field can accept and close a folder
+    // picker. Navigation must use the address bar, never IDOK.
     if (setUiaDialogAddress(hwnd, wpath, diagnostic))
     {
         if (diagnostic)

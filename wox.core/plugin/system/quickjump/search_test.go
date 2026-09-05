@@ -105,3 +105,37 @@ func assertCurrentDirectoryTail(t *testing.T, result plugin.QueryResult, want bo
 		t.Fatalf("%q current-folder tail = %v, want %v", result.SubTitle, hasTail, want)
 	}
 }
+
+// Saved folders must outrank even boosted local hits without duplicating their
+// indexed result or losing an existing current-folder tail.
+func TestPrioritizeSavedQuickJumpPaths(t *testing.T) {
+	c := &QuickJumpPlugin{}
+	saved := filepath.Join(t.TempDir(), "saved")
+	other := filepath.Join(filepath.Dir(saved), "other")
+	results := []plugin.QueryResult{
+		{SubTitle: other, Score: currentDirectoryScoreBoost + 9000},
+		{SubTitle: saved, Score: 10, Tails: []plugin.QueryResultTail{newCurrentDirectoryTail()}},
+		{SubTitle: saved, Score: 300},
+	}
+	ranked := prioritizeSavedQuickJumpPaths(results, []string{saved}, c.normalizePathKey)
+	if len(ranked) != 2 {
+		t.Fatalf("duplicate saved path: %#v", ranked)
+	}
+	if ranked[1].Score <= ranked[0].Score {
+		t.Fatal("saved folder must outrank current-folder hits")
+	}
+	if len(ranked[0].Tails) != 0 || ranked[1].Tails[0].Text != "i18n:plugin_quickjump_result_tail_saved_path" {
+		t.Fatal("saved-path tag missing or applied to ordinary result")
+	}
+	assertCurrentDirectoryTail(t, ranked[1], true)
+	unchanged := prioritizeSavedQuickJumpPaths(results, nil, c.normalizePathKey)
+	if len(unchanged) != len(results) || unchanged[1].Score != 10 {
+		t.Fatal("no saved paths must preserve ranking")
+	}
+	if util.IsWindows() {
+		ranked = prioritizeSavedQuickJumpPaths([]plugin.QueryResult{{SubTitle: `C:\DEV`, Score: 5}, {SubTitle: `C:\dev`, Score: 10}}, []string{`c:\dev`}, c.normalizePathKey)
+		if len(ranked) != 1 || len(ranked[0].Tails) != 1 {
+			t.Fatal("saved Windows paths must match without case sensitivity")
+		}
+	}
+}

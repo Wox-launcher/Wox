@@ -7,13 +7,31 @@ package woxui
 #cgo LDFLAGS: -lole32 -luuid -lstdc++
 #include <stdlib.h>
 #include "native_windows.h"
+int32_t wox_windows_navigate_file_dialog(uintptr_t window, const wchar_t *path);
 */
 import "C"
 
 import (
 	"fmt"
+	"sync/atomic"
+	"syscall"
 	"unsafe"
 )
+
+var nativeFileDialogListener atomic.Value // func(uintptr, bool)
+
+// SetNativeFileDialogListener observes Windows picker lifetime. The listener must
+// return promptly: notifications run inside the native modal UI callback.
+func SetNativeFileDialogListener(listener func(windowID uintptr, opened bool)) {
+	nativeFileDialogListener.Store(listener)
+}
+
+//export woxGoNativeFileDialogChanged
+func woxGoNativeFileDialogChanged(windowID C.uintptr_t, opened C.int32_t) {
+	if listener, ok := nativeFileDialogListener.Load().(func(uintptr, bool)); ok && listener != nil {
+		listener(uintptr(windowID), opened != 0)
+	}
+}
 
 func pickFileNative(owner uintptr, options FileDialogOptions) (string, error) {
 	directory := C.int32_t(0)
@@ -55,4 +73,23 @@ func saveFileNative(owner uintptr, options SaveFileOptions) (string, error) {
 	}
 	defer C.wox_windows_free_string(path)
 	return C.GoString((*C.char)(unsafe.Pointer(path))), nil
+}
+
+// NavigateNativeFileDialog changes the folder on the owning COM/UI thread.
+// A stale HWND fails without falling back to a confirmation keystroke.
+func NavigateNativeFileDialog(windowID uintptr, path string) error {
+	nativePath, err := syscall.UTF16FromString(path)
+	if err != nil {
+		return err
+	}
+	var result C.int32_t
+	if err := Call(func() {
+		result = C.wox_windows_navigate_file_dialog(C.uintptr_t(windowID), (*C.wchar_t)(unsafe.Pointer(&nativePath[0])))
+	}); err != nil {
+		return err
+	}
+	if result < 0 {
+		return hresultError("navigate file dialog", result)
+	}
+	return nil
 }

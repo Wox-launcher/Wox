@@ -1645,6 +1645,8 @@
   "plugin_quickjump_open": "開く",
   "plugin_quickjump_reveal_in_explorer": "ファイルエクスプローラーで表示",
   "plugin_quickjump_jump_to": "ジャンプ先",
+  "plugin_quickjump_result_tail_saved_path": "クイックジャンプのパス",
+  "plugin_quickjump_result_tail_saved_path_tooltip": "Quick Jump に追加したフォルダー",
   "plugin_quickjump_result_tail_current_folder": "現在のフォルダー",
   "plugin_quickjump_result_tail_current_folder_tooltip": "この項目は、現在表示しているフォルダー内にあります",
   "plugin_quickjump_command_add": "現在のパスをクイックジャンプパスに追加",

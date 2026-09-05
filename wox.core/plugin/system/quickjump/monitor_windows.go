@@ -11,6 +11,7 @@ int refreshFileExplorerMonitorStateForRawKey(int allowDesktop);
 int isForegroundExplorerFileListFocused();
 int getOpenSaveDialogRectByPid(int pid, int *x, int *y, int *w, int *h);
 uintptr_t getOpenSaveDialogHwndByPid(int pid);
+void notifyOwnFileDialogChanged(uintptr_t hwnd, int opened);
 void startFileExplorerMonitor();
 void stopFileExplorerMonitor();
 */
@@ -20,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	woxui "wox/ui/runtime"
 	"wox/util/keyboard"
 )
 
@@ -180,7 +182,15 @@ func checkUpdateMonitorState() error {
 
 	if needMonitor {
 		C.startFileExplorerMonitor()
+		woxui.SetNativeFileDialogListener(func(windowID uintptr, opened bool) {
+			active := C.int(0)
+			if opened {
+				active = 1
+			}
+			C.notifyOwnFileDialogChanged(C.uintptr_t(windowID), active)
+		})
 	} else {
+		woxui.SetNativeFileDialogListener(nil)
 		C.stopFileExplorerMonitor()
 		stateMu.Lock()
 		currentState = stateNone

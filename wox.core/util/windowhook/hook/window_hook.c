@@ -683,6 +683,31 @@ __declspec(dllexport) void *WINAPI WoxWindowHookAttachSticky(HWND target, DWORD 
         return NULL;
     }
 
+    // Wox owns both HWNDs on its UI thread. Posting an injection command and
+    // waiting here would block that very thread; install the same subclass directly.
+    if (targetPid == GetCurrentProcessId())
+    {
+        if (targetThread != GetCurrentThreadId())
+        {
+            diagnostic->win32Error = ERROR_INVALID_THREAD_ID;
+            return NULL;
+        }
+        WoxStickyHook *sticky = (WoxStickyHook *)calloc(1, sizeof(WoxStickyHook));
+        if (!sticky)
+            return NULL;
+        if (!SetWindowSubclass(target, stickySubclassProc, (UINT_PTR)overlay, (DWORD_PTR)overlay))
+        {
+            diagnostic->win32Error = GetLastError();
+            free(sticky);
+            return NULL;
+        }
+        sticky->target = target;
+        sticky->overlay = overlay;
+        sticky->targetPid = targetPid;
+        sticky->targetThread = targetThread;
+        return sticky;
+    }
+
     AcquireSRWLockExclusive(&gCommandLock);
     diagnostic->stage = woxWindowHookStageInstallHook;
     HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, getMessageHookProc, gModule, targetThread);
@@ -731,6 +756,21 @@ __declspec(dllexport) BOOL WINAPI WoxWindowHookDetachSticky(void *handle)
     WoxStickyHook *sticky = (WoxStickyHook *)handle;
     if (!sticky)
         return TRUE;
+
+    // A null hook marks a directly installed same-thread subclass. The DLL
+    // stays loaded until removal succeeds, just as for an injected attachment.
+    if (!sticky->hook)
+    {
+        if (GetCurrentThreadId() != sticky->targetThread)
+            return FALSE;
+        if (IsWindow(sticky->target))
+        {
+            RemoveWindowSubclass(sticky->target, stickySubclassProc, (UINT_PTR)sticky->overlay);
+            clearStickyOffset(sticky->target);
+        }
+        free(sticky);
+        return TRUE;
+    }
 
     AcquireSRWLockExclusive(&gCommandLock);
     DWORD targetPid = 0;

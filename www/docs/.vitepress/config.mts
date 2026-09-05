@@ -249,7 +249,18 @@ export default defineConfig({
     },
   },
 
+  // Google Search only shows a site icon when the homepage exposes a crawlable
+  // square favicon that is a multiple of 48px. The docs site previously shipped
+  // none, so results fell back to the generic globe.
+  head: [
+    ["link", { rel: "icon", type: "image/png", sizes: "48x48", href: "/favicon-48x48.png" }],
+    ["link", { rel: "icon", type: "image/png", sizes: "192x192", href: "/favicon-192x192.png" }],
+    ["link", { rel: "icon", href: "/favicon.ico", sizes: "32x32" }],
+    ["link", { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" }],
+  ],
+
   themeConfig: {
+    logo: "/logo.png",
     socialLinks: [{ icon: "github", link: "https://github.com/Wox-launcher/Wox" }],
     search: {
       provider: "local",

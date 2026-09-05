@@ -5,6 +5,7 @@ package overlay
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -22,12 +23,12 @@ type stickyAttachment interface {
 
 // startNativeStickyTracking glues the overlay to its target window.
 //
-// Only injection is used. An in-process subclass moves the overlay inside the target's
+// A native subclass moves the overlay inside the target's
 // own move message, which is the one way to stay exactly in step with a drag. Windows
 // refuses to inject across bitness, so a 32-bit target is hooked through a helper process
 // built for it. Anything that merely observes the target from outside, including
 // out-of-context WinEvents, trails the drag badly enough to feel worse than the polling
-// fallback, so there is no middle tier: injection or polling.
+// fallback. Own-process windows install the same subclass directly on the UI thread.
 func (instance *runtimeOverlay) startNativeStickyTracking() bool {
 	pid := instance.options.StickyWindowPid
 	windowID := instance.options.StickyWindowId
@@ -37,6 +38,18 @@ func (instance *runtimeOverlay) startNativeStickyTracking() bool {
 	if err != nil || target == 0 {
 		util.GetLogger().Info(context.Background(), fmt.Sprintf("overlay sticky has no usable window id, using polling: pid=%d windowId=%q", pid, windowID))
 		return false
+	}
+	if pid == os.Getpid() {
+		// Layout runs on the UI thread, so our picker can reuse the native subclass
+		// directly without injection, IPC waits, or the 100ms polling delay.
+		attachment := windowhook.AttachSticky(windowID, pid, overlayHWND)
+		if attachment == nil {
+			return false
+		}
+		instance.stickyPublish = func() { attachment.PublishStickyOffset(instance.window.WindowsHandle()) }
+		instance.stickyDetach = func() { attachment.Detach() }
+		util.GetLogger().Info(context.Background(), fmt.Sprintf("overlay sticky attached via direct subclass: pid=%d windowId=%q", pid, windowID))
+		return true
 	}
 
 	attachment, route := instance.attachStickyInjection(uintptr(target), pid, overlayHWND)

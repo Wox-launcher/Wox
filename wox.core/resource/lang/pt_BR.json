@@ -1536,6 +1536,8 @@
   "plugin_quickjump_open": "Abrir",
   "plugin_quickjump_reveal_in_explorer": "Revelar no explorador de arquivos",
   "plugin_quickjump_jump_to": "Ir para",
+  "plugin_quickjump_result_tail_saved_path": "Atalho de pasta",
+  "plugin_quickjump_result_tail_saved_path_tooltip": "Uma pasta que você adicionou ao Quick Jump",
   "plugin_quickjump_result_tail_current_folder": "Pasta atual",
   "plugin_quickjump_result_tail_current_folder_tooltip": "Este item está na pasta que você está visualizando",
   "plugin_quickjump_command_add": "Adicionar caminho atual aos caminhos de salto rápido",

@@ -43,10 +43,13 @@ extern void fileExplorerLogCallbackCGO(char *msg);
 
 static HWINEVENTHOOK gForegroundHook = NULL;
 static HWINEVENTHOOK gObjectShowHook = NULL;
+static HWINEVENTHOOK gObjectDestroyHook = NULL;
 static HANDLE gMonitorThread = NULL;
 static DWORD gMonitorThreadId = 0;
 static DWORD gLastExplorerPid = 0;
 static HWND gLastExplorerHwnd = NULL;
+static PVOID volatile gOwnDialogHwnd = NULL;
+#define WOX_FILE_DIALOG_CHANGED (WM_APP + 1)
 
 // State tracking for the current foreground window type.
 enum ForegroundState
@@ -171,10 +174,36 @@ static int isOpenSaveDialog(HWND hwnd)
     return woxIsOpenSaveDialogWindow(hwnd);
 }
 
+// resolveOpenSaveDialogWindow maps a focused child back to the #32770 dialog.
+static HWND resolveOpenSaveDialogWindow(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return NULL;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == GetCurrentProcessId())
+    {
+        HWND own = (HWND)InterlockedCompareExchangePointer(&gOwnDialogHwnd, NULL, NULL);
+        return own && (hwnd == own || GetAncestor(hwnd, GA_ROOT) == own) ? own : NULL;
+    }
+    if (isOpenSaveDialog(hwnd))
+    {
+        return hwnd;
+    }
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (root && root != hwnd && isOpenSaveDialog(root))
+    {
+        return root;
+    }
+    return NULL;
+}
+
 typedef struct
 {
     DWORD pid;
-    HWND hwnd;
+    HWND confirmed;
 } FindOpenSaveDialogByPidData;
 
 // EnumOpenSaveDialogByPidProc finds the visible file dialog owned by a process so click handlers do not depend on cached foreground state.
@@ -188,13 +217,17 @@ static BOOL CALLBACK EnumOpenSaveDialogByPidProc(HWND hwnd, LPARAM lParam)
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != data->pid || !isOpenSaveDialog(hwnd))
+    if (pid != data->pid)
     {
         return TRUE;
     }
 
-	data->hwnd = hwnd;
-	return FALSE;
+    if (isOpenSaveDialog(hwnd))
+    {
+        data->confirmed = hwnd;
+        return FALSE;
+    }
+    return TRUE;
 }
 
 // findOpenSaveDialogByPid returns the visible dialog HWND for a process, preferring the foreground dialog when available.
@@ -205,15 +238,19 @@ static HWND findOpenSaveDialogByPid(int pid)
 		return NULL;
 	}
 
-	HWND target = NULL;
+    if (pid == (int)GetCurrentProcessId())
+    {
+        return (HWND)InterlockedCompareExchangePointer(&gOwnDialogHwnd, NULL, NULL);
+    }
+    HWND target = NULL;
     HWND foreground = GetForegroundWindow();
     if (foreground && IsWindowVisible(foreground))
     {
         DWORD foregroundPid = 0;
         GetWindowThreadProcessId(foreground, &foregroundPid);
-        if ((int)foregroundPid == pid && isOpenSaveDialog(foreground))
+        if ((int)foregroundPid == pid)
         {
-            target = foreground;
+            target = resolveOpenSaveDialogWindow(foreground);
         }
     }
 
@@ -221,9 +258,9 @@ static HWND findOpenSaveDialogByPid(int pid)
     {
         FindOpenSaveDialogByPidData data;
         data.pid = (DWORD)pid;
-        data.hwnd = NULL;
+        data.confirmed = NULL;
         EnumWindows(EnumOpenSaveDialogByPidProc, (LPARAM)&data);
-        target = data.hwnd;
+        target = data.confirmed;
 	}
 
 	return target;
@@ -428,6 +465,20 @@ static void updateHooksForExplorer(int isExplorerActive)
     (void)isExplorerActive;
 }
 
+static void deactivateTrackedWindow(const char *reason)
+{
+    if (gLastExplorerPid == 0 && currentState == stateNone)
+    {
+        return;
+    }
+    logMessage("deactivateTrackedWindow: %s hwnd=0x%p", reason ? reason : "?", gLastExplorerHwnd);
+    gLastExplorerPid = 0;
+    gLastExplorerHwnd = NULL;
+    currentState = stateNone;
+    updateHooksForExplorer(0);
+    fileExplorerDeactivatedCallbackCGO();
+}
+
 // Keep the keyboard-hook focus check side-effect free. WinEvent callbacks own
 // Explorer/dialog activation state transitions on Windows.
 static int isForegroundExplorerOrDialogWindow(HWND hwnd)
@@ -452,7 +503,7 @@ static int isForegroundExplorerOrDialogWindow(HWND hwnd)
     }
 
     int isExplorer = isExplorerProcess(pid);
-    int isDialog = isOpenSaveDialog(hwnd);
+    int isDialog = resolveOpenSaveDialogWindow(hwnd) != NULL;
     if (isExplorer && (classResult == 1 || isDesktop))
     {
         return 1;
@@ -497,7 +548,12 @@ int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
     }
 
     int isExplorer = isExplorerProcess(pid);
-    isDialog = isOpenSaveDialog(hwnd);
+    HWND dialog = resolveOpenSaveDialogWindow(hwnd);
+    isDialog = dialog != NULL;
+    if (isDialog)
+    {
+        hwnd = dialog;
+    }
     if (!((isExplorer && (classResult == 1 || isDesktop)) || isDialog))
     {
         return 0;
@@ -582,12 +638,7 @@ static void CALLBACK foregroundChangedProc(
     {
         if (gLastExplorerPid != 0)
         {
-            logMessage("foregroundChangedProc: deactivated (shell class)");
-            gLastExplorerPid = 0;
-            gLastExplorerHwnd = NULL;
-            currentState = stateNone;
-            updateHooksForExplorer(0);
-            fileExplorerDeactivatedCallbackCGO();
+            deactivateTrackedWindow("shell class");
         }
         return;
     }
@@ -599,19 +650,20 @@ static void CALLBACK foregroundChangedProc(
         logMessage("foregroundChangedProc: GetWindowThreadProcessId returned pid=0 hwnd=0x%p", hwnd);
     }
 
-    // Wox is intentionally transparent to the type-to-search handoff, but it
-    // still breaks a direct Explorer -> dialog transition for Quick Switch.
-    if (pid == GetCurrentProcessId())
+    // Picker lifetime comes from the runtime. Wox chrome taking focus must
+    // not close the picker or enumerate unrelated windows in our process.
+    if (pid == GetCurrentProcessId() && !resolveOpenSaveDialogWindow(hwnd))
     {
         fileExplorerTransitionInvalidatedCallbackCGO();
         return;
     }
 
     int isValid = 0;
+    int isDialog = 0;
     if (pid != 0)
     {
         int isExplorer = isExplorerProcess(pid);
-        int isDialog = isOpenSaveDialog(hwnd);
+        isDialog = resolveOpenSaveDialogWindow(hwnd) != NULL;
         if ((isExplorer && classResult == 1) || isDialog)
         {
             isValid = 1;
@@ -635,11 +687,7 @@ static void CALLBACK foregroundChangedProc(
         }
         if (gLastExplorerPid != 0)
         {
-            gLastExplorerPid = 0;
-            gLastExplorerHwnd = NULL;
-            currentState = stateNone;
-            updateHooksForExplorer(0);
-            fileExplorerDeactivatedCallbackCGO();
+            deactivateTrackedWindow("invalid window");
         }
         return;
     }
@@ -651,13 +699,13 @@ static void CALLBACK foregroundChangedProc(
         // Wox foreground events only invalidate Quick Switch so type-to-search
         // can keep its handoff state; republish the same HWND after Wox closes.
         logMessage("foregroundChangedProc: same hwnd, reactivate");
-        triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
+        triggerActivation(hwnd, pid, isDialog ? 1 : 0);
         return;
     }
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
+    triggerActivation(hwnd, pid, isDialog ? 1 : 0);
 }
 
 static void CALLBACK objectShowProc(
@@ -737,6 +785,37 @@ static void CALLBACK objectShowProc(
     triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
 }
 
+static void CALLBACK objectDestroyProc(
+    HWINEVENTHOOK hook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD eventThread,
+    DWORD eventTime)
+{
+    (void)hook;
+    (void)eventThread;
+    (void)eventTime;
+    if (event != EVENT_OBJECT_DESTROY)
+    {
+        return;
+    }
+    if (idObject != OBJID_WINDOW || idChild != 0)
+    {
+        return;
+    }
+    if (hwnd != gLastExplorerHwnd || currentState != stateDialog)
+    {
+        return;
+    }
+    // Own pickers close through Show's completion, including cancel/error paths.
+    if (gLastExplorerPid != GetCurrentProcessId())
+    {
+        deactivateTrackedWindow("external dialog destroyed");
+    }
+}
+
 static DWORD WINAPI monitorThreadProc(LPVOID param)
 {
     MSG msg;
@@ -780,6 +859,25 @@ static DWORD WINAPI monitorThreadProc(LPVOID param)
         logMessage("ObjectShow WinEvent hook installed");
     }
 
+    // External dialogs do not have runtime lifetime notifications.
+    gObjectDestroyHook = SetWinEventHook(
+        EVENT_OBJECT_DESTROY,
+        EVENT_OBJECT_DESTROY,
+        NULL,
+        objectDestroyProc,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT);
+
+    if (!gObjectDestroyHook)
+    {
+        logMessage("SetWinEventHook(EVENT_OBJECT_DESTROY) failed err=%lu", GetLastError());
+    }
+    else
+    {
+        logMessage("ObjectDestroy WinEvent hook installed");
+    }
+
     HWND hwnd = GetForegroundWindow();
     int initialValid = 0;
     if (hwnd && classifyExplorerWindow(hwnd) != -1)
@@ -816,6 +914,32 @@ static DWORD WINAPI monitorThreadProc(LPVOID param)
 
     while (GetMessageW(&msg, NULL, 0, 0) > 0)
     {
+        if (msg.message == WOX_FILE_DIALOG_CHANGED)
+        {
+            HWND dialog = (HWND)msg.wParam;
+            if (msg.lParam)
+            {
+                InterlockedExchangePointer(&gOwnDialogHwnd, dialog);
+                HWND foreground = GetForegroundWindow();
+                DWORD pid = 0;
+                GetWindowThreadProcessId(foreground, &pid);
+                if (pid == GetCurrentProcessId() && IsWindow(dialog))
+                {
+                    gLastExplorerPid = pid;
+                    gLastExplorerHwnd = dialog;
+                    triggerActivation(dialog, pid, 1);
+                }
+            }
+            else
+            {
+                InterlockedCompareExchangePointer(&gOwnDialogHwnd, NULL, dialog);
+                if (gLastExplorerHwnd == dialog && gLastExplorerPid == GetCurrentProcessId())
+                {
+                    deactivateTrackedWindow("own dialog closed");
+                }
+            }
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -836,9 +960,26 @@ static DWORD WINAPI monitorThreadProc(LPVOID param)
         logMessage("ObjectShow WinEvent hook removed");
     }
 
+    if (gObjectDestroyHook)
+    {
+        UnhookWinEvent(gObjectDestroyHook);
+        gObjectDestroyHook = NULL;
+        logMessage("ObjectDestroy WinEvent hook removed");
+    }
+
+    InterlockedExchangePointer(&gOwnDialogHwnd, NULL);
     gLastExplorerPid = 0;
     gLastExplorerHwnd = NULL;
     return 0;
+}
+
+// Marshal runtime callbacks to the monitor thread without blocking the modal UI.
+void notifyOwnFileDialogChanged(uintptr_t hwnd, int opened)
+{
+    if (gMonitorThreadId && !PostThreadMessageW(gMonitorThreadId, WOX_FILE_DIALOG_CHANGED, (WPARAM)hwnd, opened))
+    {
+        logMessage("own dialog notification failed err=%lu", GetLastError());
+    }
 }
 
 int isForegroundExplorerFileListFocused()

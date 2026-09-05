@@ -3,6 +3,7 @@ package quickjump
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -247,6 +248,11 @@ func (c *QuickJumpPlugin) isQuickSwitchTargetCurrent(pid int, windowID string) b
 func (c *QuickJumpPlugin) performFileDialogNavigation(ctx context.Context, windowID string, pid int, folderPath string) bool {
 	c.dialogNavigateMu.Lock()
 	defer c.dialogNavigateMu.Unlock()
+	// Own pickers expose SetFolder directly. Never fall back to simulated
+	// confirmation when their HWND has expired or navigation fails.
+	if util.IsWindows() && pid == os.Getpid() {
+		return navigateFileDialogWithHook(ctx, windowID, pid, folderPath)
+	}
 	browse := window.IsBrowseForFolderDialog(windowID, pid)
 	explorerHost, _ := window.IsFileExplorer(pid)
 	// Never inject the Shell-view hook into explorer.exe. Move Items lives there and

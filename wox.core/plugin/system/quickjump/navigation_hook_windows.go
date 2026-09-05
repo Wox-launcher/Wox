@@ -4,9 +4,13 @@ package quickjump
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+	woxui "wox/ui/runtime"
+	"wox/util"
 	"wox/util/windowhook"
 )
 
@@ -19,6 +23,16 @@ func setExplorerDialogHookEnabled(enabled bool) {
 func navigateFileDialogWithHook(ctx context.Context, windowID string, pid int, targetPath string) bool {
 	if pid <= 0 || strings.TrimSpace(targetPath) == "" {
 		return false
+	}
+	if pid == os.Getpid() {
+		hwnd, err := strconv.ParseUint(windowID, 10, 64)
+		if err == nil {
+			err = woxui.NavigateNativeFileDialog(uintptr(hwnd), targetPath)
+		}
+		if err != nil {
+			util.GetLogger().Error(ctx, "navigate own file dialog: "+err.Error())
+		}
+		return err == nil
 	}
 	return windowhook.NavigateDialog(ctx, windowID, pid, targetPath)
 }

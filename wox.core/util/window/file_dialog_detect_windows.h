@@ -64,6 +64,7 @@ static int woxDialogLooksLikeSelectFolder(HWND hwnd)
         L"open folder",
         L"open directory",
         L"select folder",
+        L"select project root",
         L"choose folder",
         L"browse for folder",
         L"browse folder",
@@ -127,16 +128,61 @@ static int woxDialogLooksLikeSelectFolder(HWND hwnd)
     return 0;
 }
 
+// woxDialogLooksLikeBrowseForFolder is true for Explorer Move/Copy Items only.
+// IFileDialog folder pickers such as Open Folder share select-folder chrome but
+// are not SHBrowseForFolder and must keep using the common-item path readers.
+static int woxDialogLooksLikeBrowseForFolder(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    WCHAR title[512];
+    ZeroMemory(title, sizeof(title));
+    GetWindowTextW(hwnd, title, sizeof(title) / sizeof(title[0]));
+
+    static const WCHAR *browseHints[] = {
+        L"move items",
+        L"copy items",
+        L"\x79fb\x52a8\x9879\x76ee", // Simplified Chinese: Move Items
+        L"\x590d\x5236\x9879\x76ee", // Simplified Chinese: Copy Items
+        L"\x79fb\x52d5\x9805\x76ee", // Traditional Chinese: Move Items
+        L"\x8907\x88fd\x9805\x76ee", // Traditional Chinese: Copy Items
+        L"\x043f\x0435\x0440\x0435\x043c\x0435\x0449\x0435\x043d\x0438\x0435 \x044d\x043b\x0435\x043c\x0435\x043d\x0442\x043e\x0432", // Russian: Move Items
+        L"\x043a\x043e\x043f\x0438\x0440\x043e\x0432\x0430\x043d\x0438\x0435 \x044d\x043b\x0435\x043c\x0435\x043d\x0442\x043e\x0432", // Russian: Copy Items
+        L"mover itens",
+        L"copiar itens",
+        L"\xd56d\xbaa9 \xc774\xb3d9", // Korean: Move Items
+        L"\xd56d\xbaa9 \xbcf5\xc0ac", // Korean: Copy Items
+    };
+
+    for (size_t i = 0; i < sizeof(browseHints) / sizeof(browseHints[0]); i++)
+    {
+        if (woxWideContainsInsensitive(title, browseHints[i]))
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // woxIsBrowseForFolderWindow detects SHBrowseForFolder dialogs such as Explorer's
 // Move Items / Copy Items chooser. Do not EnumChildWindows or FindWindowEx into
 // SHBrowseForFolder ShellNameSpace Control; that crashes explorer.exe.
+// Finding the namespace class on the dialog itself is safe: it does not walk
+// into the host. IFileDialog Open Folder must not take this path.
 static int woxIsBrowseForFolderWindow(HWND hwnd)
 {
     if (!woxChildHasClass(hwnd, L"#32770"))
     {
         return 0;
     }
-    return woxDialogLooksLikeSelectFolder(hwnd);
+    if (FindWindowExW(hwnd, NULL, WOX_BROWSE_FOLDER_NAMESPACE_CLASS, NULL))
+    {
+        return 1;
+    }
+    return woxDialogLooksLikeBrowseForFolder(hwnd);
 }
 
 // Explorer's own dialogs put SHELLDLL_DefView two or three levels down, but Office

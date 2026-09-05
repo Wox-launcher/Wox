@@ -1645,6 +1645,8 @@
   "plugin_quickjump_open": "열기",
   "plugin_quickjump_reveal_in_explorer": "파일 탐색기에서 보기",
   "plugin_quickjump_jump_to": "이동",
+  "plugin_quickjump_result_tail_saved_path": "빠른 이동 경로",
+  "plugin_quickjump_result_tail_saved_path_tooltip": "Quick Jump에 직접 추가한 폴더",
   "plugin_quickjump_result_tail_current_folder": "현재 폴더",
   "plugin_quickjump_result_tail_current_folder_tooltip": "이 항목은 현재 보고 있는 폴더에 있습니다",
   "plugin_quickjump_command_add": "현재 경로를 빠른 이동 경로에 추가",

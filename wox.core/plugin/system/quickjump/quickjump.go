@@ -250,7 +250,40 @@ func (c *QuickJumpPlugin) queryExplorerResults(ctx context.Context, query plugin
 	results := make([]plugin.QueryResult, 0, len(directoryResults)+len(jumpResults))
 	results = append(results, directoryResults...)
 	results = append(results, jumpResults...)
-	return results
+	return prioritizeSavedQuickJumpPaths(results, c.loadQuickJumpPaths(ctx), c.normalizePathKey)
+}
+
+// prioritizeSavedQuickJumpPaths ranks saved folders above every other matching
+// result, including current-folder hits, and collapses their indexed duplicates.
+func prioritizeSavedQuickJumpPaths(results []plugin.QueryResult, paths []string, normalize func(string) string) []plugin.QueryResult {
+	saved := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		saved[normalize(path)] = true
+	}
+	if len(saved) == 0 {
+		return results
+	}
+	highest := int64(0)
+	for _, result := range results {
+		highest = max(highest, result.Score)
+	}
+	seen := make(map[string]bool)
+	ranked := make([]plugin.QueryResult, 0, len(results))
+	for _, result := range results {
+		key := normalize(result.SubTitle)
+		if saved[key] {
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			result.Score = highest + 1 + max(int64(0), result.Score)
+			tail := plugin.NewQueryResultTailText("i18n:plugin_quickjump_result_tail_saved_path")
+			tail.Tooltip = "i18n:plugin_quickjump_result_tail_saved_path_tooltip"
+			result.Tails = append([]plugin.QueryResultTail{tail}, result.Tails...)
+		}
+		ranked = append(ranked, result)
+	}
+	return ranked
 }
 
 // prioritizeCurrentDirectoryHits boosts and backfills matches that live in the
@@ -694,7 +727,6 @@ func (c *QuickJumpPlugin) resolveOpenSaveDialogPath(ctx context.Context, env plu
 				c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, dialogPath)
 				return dialogPath, nil
 			}
-			return "", nil
 		}
 
 		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
@@ -768,6 +800,17 @@ func (c *QuickJumpPlugin) getCurrentFileExplorerPath(ctx context.Context, env pl
 	}
 
 	if util.IsWindows() {
+		// After Quick Jump takes focus, GetForegroundWindow() is Wox. The
+		// captured Explorer HWND is the only safe window to query: probing
+		// sibling explorer.exe cabinets can crash Explorer if one owns a
+		// modal folder dialog.
+		if env.ActiveWindowPid > 0 && strings.TrimSpace(env.ActiveWindowId) != "" {
+			if capturedPath := strings.TrimSpace(window.GetFileExplorerPathByWindow(env.ActiveWindowPid, env.ActiveWindowId)); capturedPath != "" {
+				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from captured window: pid=%d windowId=%q path=%q", env.ActiveWindowPid, env.ActiveWindowId, capturedPath))
+				return capturedPath
+			}
+		}
+
 		// Prefer the actual foreground tab path on Windows 11 (tabs may share the same HWND).
 		if activePath := strings.TrimSpace(window.GetActiveFileExplorerPath()); activePath != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file explorer: path=%q", activePath))
@@ -789,7 +832,7 @@ func (c *QuickJumpPlugin) getCurrentFileExplorerPath(ctx context.Context, env pl
 		}
 	}
 
-	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, isOpenSaveDialog))
+	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q windowId=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, isOpenSaveDialog))
 	return ""
 }
 
@@ -853,7 +896,7 @@ func (c *QuickJumpPlugin) addQuickJumpPath(ctx context.Context, path string) boo
 
 func (c *QuickJumpPlugin) loadQuickJumpPaths(ctx context.Context) []string {
 	raw := c.api.GetSetting(ctx, quickJumpPathsSettingKey)
-	if raw == "" {
+	if strings.TrimSpace(raw) == "" {
 		return []string{}
 	}
 
@@ -867,7 +910,7 @@ func (c *QuickJumpPlugin) loadQuickJumpPaths(ctx context.Context) []string {
 	seen := map[string]bool{}
 	for _, entry := range entries {
 		path := strings.TrimSpace(entry.Path)
-		if path == "" {
+		if path == "" || !isCurrentPlatformQuickJumpPath(path) {
 			continue
 		}
 		path = filepath.Clean(path)
@@ -915,6 +958,37 @@ func (c *QuickJumpPlugin) normalizePathKey(path string) string {
 		return strings.ToLower(path)
 	}
 	return path
+}
+
+// isCurrentPlatformQuickJumpPath reports whether path uses this OS's path shape
+// so cloud-synced entries from another platform stay out of the current list.
+func isCurrentPlatformQuickJumpPath(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	if util.IsWindows() {
+		return isWindowsQuickJumpPath(path)
+	}
+	return isUnixQuickJumpPath(path)
+}
+
+func isWindowsQuickJumpPath(path string) bool {
+	if filepath.VolumeName(path) != "" {
+		return true
+	}
+	return strings.HasPrefix(path, `\\`) || strings.HasPrefix(filepath.ToSlash(path), "//")
+}
+
+func isUnixQuickJumpPath(path string) bool {
+	if filepath.VolumeName(path) != "" {
+		return false
+	}
+	normalized := filepath.ToSlash(path)
+	if strings.HasPrefix(normalized, "//") {
+		return false
+	}
+	return strings.HasPrefix(path, "/")
 }
 
 // mergeCurrentDirectoryResults ranks direct children of currentDir above global
@@ -1170,7 +1244,7 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 				selectFolder = isSelectFolder
 			}
 			sourceWindow := common.ActiveWindowSnapshot{
-				Name:                         window.GetWindowNameByPid(pid),
+				Name:                         dialogWindowTitle(pid, dialogWindowId),
 				Pid:                          pid,
 				WindowId:                     dialogWindowId,
 				IsOpenSaveDialog:             true,
@@ -1204,20 +1278,18 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 				fontSize = 12
 			}
 
-			title := window.GetWindowNameByPid(pid)
-			// Use the HWND/window ID captured by activation. Re-enumerating by PID
-			// during dialog initialization can return no window or a different one,
-			// preventing sticky injection even though the event identified the dialog.
+			title := dialogWindowTitle(pid, dialogWindowId)
 			util.GetLogger().Info(localCtx, fmt.Sprintf("Explorer dialog hint: pid=%d title=%q dialogWindowId=%q", pid, title, dialogWindowId))
 			c.prefetchOpenSaveDialogPath(localCtx, pid, title, dialogWindowId)
 			textoverlay.Show(textoverlay.Options{
 				Window: overlay.WindowOptions{
-					ID:              quickJumpDialogHintOverlayName,
-					StickyWindowPid: pid,
-					Anchor:          overlay.AnchorBelowCenter,
-					Topmost:         true,
-					StickyWindowId:  dialogWindowId,
-					MaxWidth:        500,
+					ID:                  quickJumpDialogHintOverlayName,
+					StickyWindowPid:     pid,
+					Anchor:              overlay.AnchorBelowCenter,
+					Topmost:             true,
+					StickyWindowId:      dialogWindowId,
+					CloseWhenStickyLost: true,
+					MaxWidth:            500,
 				},
 				Message:  c.api.GetTranslation(localCtx, messageKey),
 				FontSize: fontSize,
@@ -1240,6 +1312,12 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 				Name:     window.GetActiveWindowName(),
 				Pid:      activePid,
 				WindowId: window.GetActiveWindowId(),
+			}
+			if isDialog, err := window.IsOpenSaveDialogByPid(activePid); err == nil && isDialog {
+				sourceWindow.IsOpenSaveDialog = true
+				if selectFolder, err := window.IsOpenSaveDialogSelectFolderByPid(activePid); err == nil {
+					sourceWindow.IsOpenSaveDialogSelectFolder = selectFolder
+				}
 			}
 			x, y, w, h, ok := GetActiveExplorerRect()
 			if !ok {
@@ -1427,6 +1505,20 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 	runtime.onDialogKey = onDialogKey
 	setExplorerDialogHookEnabled(true)
 	c.registerIntegrationMonitors()
+}
+
+// dialogWindowTitle prefers the captured HWND. Own-process pickers share
+// Wox's PID with Settings and Overlay, so a PID title walk can pick the wrong window.
+func dialogWindowTitle(pid int, dialogWindowId string) string {
+	title := window.GetWindowNameByPid(pid)
+	if dialogWindowId == "" {
+		return title
+	}
+	managed, err := window.GetManagedWindow(dialogWindowId, pid, "")
+	if err != nil || strings.TrimSpace(managed.Title) == "" {
+		return title
+	}
+	return managed.Title
 }
 
 func getExplorerInitialWindowHeight(ctx context.Context) int {

@@ -22,6 +22,23 @@ func TestExplorerSettingsOmitTypeToSearchToggle(t *testing.T) {
 	}
 }
 
+func TestQuickJumpPathsSettingIsPlatformSpecific(t *testing.T) {
+	var found bool
+	for _, item := range (&QuickJumpPlugin{}).GetMetadata().SettingDefinitions {
+		value, ok := item.Value.(*definition.PluginSettingValueTable)
+		if !ok || value.Key != quickJumpPathsSettingKey {
+			continue
+		}
+		found = true
+		if !item.IsPlatformSpecific {
+			t.Fatal("quick jump paths must be platform specific")
+		}
+	}
+	if !found {
+		t.Fatal("quick jump paths setting is missing")
+	}
+}
+
 func TestExplorerIgnoredApplicationsSettingUsesSharedAppPicker(t *testing.T) {
 	settings := (&QuickJumpPlugin{}).GetMetadata().SettingDefinitions
 	var ignoredAppsFound bool
