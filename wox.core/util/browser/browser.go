@@ -34,6 +34,7 @@ type TabInfo struct {
 	WindowId int
 	TabIndex int
 	Url      string
+	Browser  string
 }
 
 var SupportedBrowsers = []BrowserOption{
@@ -48,6 +49,70 @@ var SupportedBrowsers = []BrowserOption{
 
 func NormalizeBrowserID(browserID string) string {
 	return strings.ToLower(strings.TrimSpace(browserID))
+}
+
+// IsBrowserWindowName reports whether a window/process display name belongs to a
+// known browser. Active-window names may be an app title ("Google Chrome"),
+// a localized product name ("Mozilla Firefox"), or a process name ("firefox").
+func IsBrowserWindowName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return false
+	}
+	if BrowserIDForIdentity(n, "") != "" {
+		return true
+	}
+
+	known := []string{
+		"google chrome",
+		"chrome",
+		"mozilla firefox",
+		"firefox",
+		"microsoft edge",
+		"msedge",
+		"brave",
+		"opera",
+		"chromium",
+		"safari",
+	}
+	for _, browserName := range known {
+		if n == browserName || strings.HasSuffix(n, " - "+browserName) || strings.HasSuffix(n, " — "+browserName) {
+			return true
+		}
+	}
+	return false
+}
+
+// BrowserIDFromExtensionRequest maps a browser-extension WebSocket handshake
+// to a canonical browser ID. Firefox uses moz-extension:// origins; Chromium
+// family uses chrome-extension:// plus a product token in the User-Agent.
+func BrowserIDFromExtensionRequest(origin, userAgent string) string {
+	o := strings.ToLower(strings.TrimSpace(origin))
+	ua := strings.ToLower(userAgent)
+	switch {
+	case strings.HasPrefix(o, "moz-extension://") || strings.Contains(ua, "firefox"):
+		return BrowserIDFirefox
+	case strings.Contains(ua, "edg/"):
+		return BrowserIDEdge
+	case strings.Contains(ua, "opr/") || strings.Contains(ua, "opera"):
+		return BrowserIDOpera
+	case strings.Contains(ua, "brave"):
+		return BrowserIDBrave
+	default:
+		return BrowserIDChrome
+	}
+}
+
+// IconForBrowserID returns the branded icon for a browser ID.
+// Unknown IDs fall back to Chrome so existing callers keep a recognizable mark.
+func IconForBrowserID(browserID string) common.WoxImage {
+	id := NormalizeBrowserID(browserID)
+	for _, option := range SupportedBrowsers {
+		if option.ID == id {
+			return option.Icon
+		}
+	}
+	return common.ChromeIcon
 }
 
 func GetInstalledBrowsers() []BrowserOption {

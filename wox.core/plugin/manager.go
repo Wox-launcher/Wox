@@ -24,6 +24,7 @@ import (
 	"wox/setting"
 
 	"wox/util"
+	"wox/util/browser"
 	"wox/util/notifier"
 	"wox/util/selection"
 	"wox/util/timetracking"
@@ -4353,8 +4354,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 
 func (m *Manager) getActiveBrowserUrl(ctx context.Context) string {
 	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
-	isGoogleChrome := strings.ToLower(activeWindowSnapshot.Name) == "google chrome"
-	if !isGoogleChrome {
+	if !browser.IsBrowserWindowName(activeWindowSnapshot.Name) {
 		return ""
 	}
 
