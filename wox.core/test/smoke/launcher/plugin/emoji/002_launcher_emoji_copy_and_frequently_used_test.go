@@ -25,7 +25,14 @@ func Test002LauncherEmojiCopyAndFrequentlyUsed(t *testing.T) {
 		if len(results) != 1 {
 			t.Fatalf("robot results = %+v, want one result", results)
 		}
-		if err := client.Perform(ctx, results[0].AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
+		// The default action is Paste, whose delayed keystroke can land in the
+		// reopened launcher. This case needs Copy without an external paste.
+		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
+		copyAction, found := emojiActionByLabel(snapshot, "Copy emoji", "复制表情", "Copiar emoji", "Копировать эмодзи")
+		if !found {
+			t.Fatalf("Copy emoji action was not exposed: %+v", emojiActions(snapshot))
+		}
+		if err := client.Perform(ctx, copyAction.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("copy robot emoji: %v", err)
 		}
 		waitForClipboardText(t, ctx, "🤖")

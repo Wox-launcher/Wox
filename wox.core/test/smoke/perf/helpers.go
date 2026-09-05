@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -187,26 +188,32 @@ func steadySamples(t *testing.T, samples []woxui.FrameMetricsSample) []woxui.Fra
 // waitForSnapshotQuiet waits until streaming updates stop changing the retained semantics tree.
 func waitForSnapshotQuiet(t *testing.T, ctx context.Context, client *automationdriver.Client, quiet time.Duration) {
 	t.Helper()
-	snapshot, err := client.Snapshot(ctx)
+	// Bound the pre-sampling wait too, leaving time to report renderer counters.
+	waitCtx, cancel := context.WithTimeout(ctx, automationdriver.ActionTimeout)
+	defer cancel()
+	snapshot, err := client.Snapshot(waitCtx)
 	if err != nil {
 		t.Fatalf("read snapshot before quiet wait: %v", err)
 	}
-	generation := snapshot.Tree.Generation
+	// Generation advances on every draw, even when the content is unchanged.
+	// Repaints must not keep a completed stream in the quiet wait forever.
+	snapshot.Tree.Generation = 0
 	quietSince := time.Now()
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
-	for {
+	for waitCtx.Err() == nil {
 		select {
-		case <-ctx.Done():
-			t.Fatalf("wait for snapshot quiet period: %v", ctx.Err())
+		case <-waitCtx.Done():
 		case <-ticker.C:
 		}
-		current, snapshotErr := client.Snapshot(ctx)
-		if snapshotErr != nil {
-			t.Fatalf("read snapshot during quiet wait: %v", snapshotErr)
+		var current woxwidget.AutomationSnapshot
+		current, err = client.Snapshot(waitCtx)
+		if err != nil {
+			break
 		}
-		if current.Tree.Generation != generation {
-			generation = current.Tree.Generation
+		current.Tree.Generation = 0
+		if !reflect.DeepEqual(current.Tree, snapshot.Tree) {
+			snapshot = current
 			quietSince = time.Now()
 			continue
 		}
@@ -214,6 +221,9 @@ func waitForSnapshotQuiet(t *testing.T, ctx context.Context, client *automationd
 			return
 		}
 	}
+	metrics := finalFrameMetrics(ctx, client, woxui.FrameMetricsSnapshot{})
+	t.Fatalf("wait for snapshot content quiet for %s: %v (context: %v); %s; %s",
+		quiet, err, waitCtx.Err(), automationdriver.DescribeSnapshot(snapshot), describeFrameMetrics(metrics))
 }
 
 // phaseBudget caps one frame phase at its steady-state maximum, in microseconds.

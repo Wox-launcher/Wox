@@ -73,21 +73,11 @@ func waitForClipboardResult(t *testing.T, ctx context.Context, client *automatio
 	queries := []string{"cb " + marker, "cb " + marker + " "}
 	for attempt := 0; ; attempt++ {
 		query := queries[attempt%len(queries)]
-		if err := client.Perform(waitCtx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
-			t.Fatalf("enter Clipboard query %q: %v", query, err)
-		}
-		snapshot, err := client.WaitFor(waitCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
-			return inputFound && input.Value == query
-		})
-		if err != nil {
-			t.Fatalf("wait for Clipboard query %q: %v", query, err)
-		}
-		results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
-		if resultsFound && results.Value == "complete" {
-			if _, found := smoke.FindLauncherResult(snapshot, marker); found {
-				return snapshot
-			}
+		// Input text updates before results arrive. Finish this query before
+		// retrying, otherwise every retry discards the result we meant to inspect.
+		snapshot := smoke.SetLauncherQueryAndWaitComplete(t, waitCtx, client, query)
+		if _, found := smoke.FindLauncherResult(snapshot, marker); found {
+			return snapshot
 		}
 		timer := time.NewTimer(100 * time.Millisecond)
 		select {
