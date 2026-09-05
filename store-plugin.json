@@ -1199,5 +1199,34 @@
         "plugin_description": "从 GIPHY 和 The Finer Gifs Club 搜索 GIF 动图"
       }
     }
+  },
+  {
+    "Id": "9d7b4e96-a81d-44a3-a75a-bc828cf5668e",
+    "Name": "i18n:plugin_name",
+    "Author": "Myraxion",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "python",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/images/app.svg",
+    "Website": "https://github.com/Myraxion/Wox.Plugin.Linkding",
+    "DownloadUrl": "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/Wox.Plugin.Linkding.py",
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-05 22:20:00",
+    "DateUpdated": "2026-09-05 22:20:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Linkding",
+        "plugin_description": "Search, save, and manage bookmarks from your Linkding instance"
+      },
+      "zh_CN": {
+        "plugin_name": "Linkding",
+        "plugin_description": "在 Linkding 中搜索、保存和管理书签"
+      }
+    }
   }
 ]
