@@ -7,8 +7,8 @@ import (
 	"time"
 	"wox/common"
 	"wox/plugin"
-	"wox/plugin/system/explorer"
 	notesplugin "wox/plugin/system/notes"
+	"wox/plugin/system/quickjump"
 	shellplugin "wox/plugin/system/shell"
 	"wox/setting/definition"
 	"wox/util"
@@ -51,8 +51,8 @@ type SelectionPlugin struct {
 // small key-state machine needed to avoid repeated or accidental Space previews.
 type selectionSpaceQuickLookState struct {
 	plugin        *SelectionPlugin
-	explorerSub   explorer.ExplorerRawKeySubscription
-	dialogSub     explorer.ExplorerRawKeySubscription
+	explorerSub   quickjump.ExplorerRawKeySubscription
+	dialogSub     quickjump.ExplorerRawKeySubscription
 	mu            sync.Mutex
 	spaceDown     bool
 	spaceConsumed bool
@@ -146,14 +146,14 @@ func (i *SelectionPlugin) updateSpaceQuickLookListener(ctx context.Context, enab
 	}
 
 	state := &selectionSpaceQuickLookState{plugin: i}
-	explorerSub, explorerErr := explorer.AddExplorerRawKeyListener(state.handleRawKey)
+	explorerSub, explorerErr := quickjump.AddExplorerRawKeyListener(state.handleRawKey)
 	if explorerErr != nil {
 		i.quickLookMu.Unlock()
 		i.api.Log(ctx, plugin.LogLevelWarning, "Failed to enable Space Quick Look explorer listener: "+explorerErr.Error())
 		return
 	}
 
-	dialogSub, dialogErr := explorer.AddExplorerOpenSaveRawKeyListener(state.handleRawKey)
+	dialogSub, dialogErr := quickjump.AddExplorerOpenSaveRawKeyListener(state.handleRawKey)
 	if dialogErr != nil {
 		if explorerSub != nil {
 			_ = explorerSub.Close()

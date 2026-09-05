@@ -863,12 +863,12 @@ func (a *App) applyLaunchModeOnShowLocked() bool {
 }
 
 // shouldPreserveQueryOnShowLocked mirrors Flutter's incoming-query preservation:
-// selection/query-hotkey/tray/explorer shows inject a new query payload on show, and
+// selection/query-hotkey/tray/quickjump shows inject a new query payload on show, and
 // continue mode keeps an existing input or selection query. Both must survive the
 // MRU/blank start-page handling that otherwise replaces an empty input query.
 func (a *App) shouldPreserveQueryOnShowLocked() bool {
 	switch a.show.ShowSource {
-	case "query_hotkey", "selection", "tray_query", "explorer":
+	case "query_hotkey", "selection", "tray_query", "quickjump":
 		return true
 	}
 	if a.show.LaunchMode == "continue" {

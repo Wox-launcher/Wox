@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 import (
 	"context"
@@ -186,13 +186,7 @@ func quickSwitchPlatformName() string {
 	return "linux"
 }
 
-// explorerIntegrationCapabilities reports which integration features follow the type-to-search setting.
-// Quick Switch always runs; raw keys and the dialog hint stay tied to type-to-search.
-func explorerIntegrationCapabilities(typeToSearch bool) (quickSwitch bool, rawKeys bool, dialogHint bool) {
-	return true, typeToSearch, typeToSearch
-}
-
-func (c *ExplorerPlugin) newQuickSwitchDeps() quickSwitchDeps {
+func (c *QuickJumpPlugin) newQuickSwitchDeps() quickSwitchDeps {
 	return quickSwitchDeps{
 		getExplorerPath: window.GetFileExplorerPathByWindow,
 		getDialogPath: func(windowID string, pid int) string {
@@ -220,7 +214,7 @@ func (c *ExplorerPlugin) newQuickSwitchDeps() quickSwitchDeps {
 }
 
 // isQuickSwitchTargetCurrent verifies the captured dialog is still the foreground native file dialog.
-func (c *ExplorerPlugin) isQuickSwitchTargetCurrent(pid int, windowID string) bool {
+func (c *QuickJumpPlugin) isQuickSwitchTargetCurrent(pid int, windowID string) bool {
 	if pid <= 0 {
 		return false
 	}
@@ -250,7 +244,7 @@ func (c *ExplorerPlugin) isQuickSwitchTargetCurrent(pid int, windowID string) bo
 }
 
 // performFileDialogNavigation serializes Shell-hook and automation navigation so Quick Switch and user jumps cannot overlap.
-func (c *ExplorerPlugin) performFileDialogNavigation(ctx context.Context, windowID string, pid int, folderPath string) bool {
+func (c *QuickJumpPlugin) performFileDialogNavigation(ctx context.Context, windowID string, pid int, folderPath string) bool {
 	c.dialogNavigateMu.Lock()
 	defer c.dialogNavigateMu.Unlock()
 	browse := window.IsBrowseForFolderDialog(windowID, pid)
@@ -266,8 +260,11 @@ func (c *ExplorerPlugin) performFileDialogNavigation(ctx context.Context, window
 }
 
 // requestQuickSwitch starts background navigation only for a direct Explorer/Finder → dialog transition.
-func (c *ExplorerPlugin) requestQuickSwitch(ctx context.Context, event OpenSaveDialogActivatedEvent) {
+func (c *QuickJumpPlugin) requestQuickSwitch(ctx context.Context, event OpenSaveDialogActivatedEvent) {
 	if event.PreviousExplorer == nil {
+		return
+	}
+	if c.isIgnoredApplicationPid(event.Pid) {
 		return
 	}
 	c.quickSwitch.Request(ctx, *event.PreviousExplorer, event.Pid, event.WindowID)

@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 func StartExplorerMonitor(activated func(pid int), deactivated func(), _ func(string)) {
 	// Stub implementation for Linux

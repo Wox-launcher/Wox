@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 import (
 	"path/filepath"
@@ -8,30 +8,30 @@ import (
 )
 
 func TestIsDirectChildPath(t *testing.T) {
-	explorerPlugin := &ExplorerPlugin{}
+	quickJumpPlugin := &QuickJumpPlugin{}
 	root := t.TempDir()
 	child := filepath.Join(root, "readme.md")
 	nested := filepath.Join(root, "docs", "readme.md")
 
-	if !isDirectChildPath(child, root, explorerPlugin.normalizePathKey) {
+	if !isDirectChildPath(child, root, quickJumpPlugin.normalizePathKey) {
 		t.Fatalf("expected %q to be a direct child of %q", child, root)
 	}
-	if isDirectChildPath(nested, root, explorerPlugin.normalizePathKey) {
+	if isDirectChildPath(nested, root, quickJumpPlugin.normalizePathKey) {
 		t.Fatalf("nested path %q should not count as a current-folder hit", nested)
 	}
-	if isDirectChildPath(root, root, explorerPlugin.normalizePathKey) {
+	if isDirectChildPath(root, root, quickJumpPlugin.normalizePathKey) {
 		t.Fatal("a folder is not a child of itself")
 	}
-	if isDirectChildPath(child, "", explorerPlugin.normalizePathKey) {
+	if isDirectChildPath(child, "", quickJumpPlugin.normalizePathKey) {
 		t.Fatal("empty current folder should not match")
 	}
-	if util.IsWindows() && !isDirectChildPath(`C:\Docs\readme.md`, `C:\docs`, explorerPlugin.normalizePathKey) {
+	if util.IsWindows() && !isDirectChildPath(`C:\Docs\readme.md`, `C:\docs`, quickJumpPlugin.normalizePathKey) {
 		t.Fatal("windows current-folder matching should ignore case")
 	}
 }
 
 func TestMergeCurrentDirectoryResultsBoostsAndBackfills(t *testing.T) {
-	explorerPlugin := &ExplorerPlugin{}
+	quickJumpPlugin := &QuickJumpPlugin{}
 	root := t.TempDir()
 	localFile := filepath.Join(root, "notes.txt")
 	localOnly := filepath.Join(root, "local-only.txt")
@@ -48,7 +48,7 @@ func TestMergeCurrentDirectoryResultsBoostsAndBackfills(t *testing.T) {
 		{Title: "local-only.txt", SubTitle: localOnly, Score: 90},
 	}
 
-	merged := mergeCurrentDirectoryResults(indexed, local, root, explorerPlugin.normalizePathKey)
+	merged := mergeCurrentDirectoryResults(indexed, local, root, quickJumpPlugin.normalizePathKey)
 	if len(merged) != 4 {
 		t.Fatalf("merged count = %d, want 4", len(merged))
 	}
@@ -80,12 +80,12 @@ func TestMergeCurrentDirectoryResultsBoostsAndBackfills(t *testing.T) {
 }
 
 func TestMergeCurrentDirectoryResultsLeavesIndexedUntouchedWithoutCurrentDir(t *testing.T) {
-	explorerPlugin := &ExplorerPlugin{}
+	quickJumpPlugin := &QuickJumpPlugin{}
 	indexed := []plugin.QueryResult{
 		{Title: "notes.txt", SubTitle: filepath.Join("C:", "docs", "notes.txt"), Score: 5000},
 	}
 
-	merged := mergeCurrentDirectoryResults(indexed, nil, "", explorerPlugin.normalizePathKey)
+	merged := mergeCurrentDirectoryResults(indexed, nil, "", quickJumpPlugin.normalizePathKey)
 	if len(merged) != 1 || merged[0].Score != 5000 {
 		t.Fatalf("empty current dir should keep indexed results: %#v", merged)
 	}
@@ -96,7 +96,7 @@ func assertCurrentDirectoryTail(t *testing.T, result plugin.QueryResult, want bo
 	t.Helper()
 	hasTail := false
 	for _, tail := range result.Tails {
-		if tail.Type == plugin.QueryResultTailTypeText && tail.Text == "i18n:plugin_explorer_result_tail_current_folder" {
+		if tail.Type == plugin.QueryResultTailTypeText && tail.Text == "i18n:plugin_quickjump_result_tail_current_folder" {
 			hasTail = true
 			break
 		}

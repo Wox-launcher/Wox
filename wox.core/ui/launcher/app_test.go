@@ -891,7 +891,7 @@ func TestShouldPreserveQueryOnShowLocked(t *testing.T) {
 		{name: "selection show source", query: selectionQuery, show: showAppParams{ShowSource: "selection"}, want: true},
 		{name: "query hotkey show source", query: selectionQuery, show: showAppParams{ShowSource: "query_hotkey"}, want: true},
 		{name: "tray query show source", query: selectionQuery, show: showAppParams{ShowSource: "tray_query"}, want: true},
-		{name: "explorer show source", query: selectionQuery, show: showAppParams{ShowSource: "explorer"}, want: true},
+		{name: "quick jump show source", query: selectionQuery, show: showAppParams{ShowSource: "quickjump"}, want: true},
 		{name: "continue selection query", query: selectionQuery, show: showAppParams{LaunchMode: "continue"}, want: true},
 		{name: "continue input query with text", query: newInputQuery("abc"), show: showAppParams{LaunchMode: "continue"}, want: true},
 		{name: "continue empty input query", query: newInputQuery(""), show: showAppParams{LaunchMode: "continue"}, want: false},

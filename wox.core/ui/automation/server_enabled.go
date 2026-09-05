@@ -250,14 +250,14 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(errors.New("selection text is required"))
 		}
 		return resultOrError(true, controller.OpenAutomationSelectionQuery(params.Text))
-	case "window.open_explorer_query":
+	case "window.open_quickjump_query":
 		var params struct {
 			Query string `json:"query"`
 		}
 		if err := decodeParams(rawParams, &params); err != nil {
 			return nil, invalidParams(err)
 		}
-		return resultOrError(true, controller.OpenAutomationExplorerQuery(params.Query))
+		return resultOrError(true, controller.OpenAutomationQuickJumpQuery(params.Query))
 	case "window.focus_instance":
 		var params struct {
 			InstanceName string `json:"instanceName"`

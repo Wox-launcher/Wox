@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 /*
 #cgo CFLAGS: -x objective-c
@@ -298,12 +298,13 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	dialogListener := dialogKeyListener
 	stateMu.RUnlock()
 
-	if state == stateExplorer && explorerListener != nil {
+	ignoredApp := isMonitoredAppIgnored()
+	if state == stateExplorer && explorerListener != nil && !ignoredApp {
 		if shouldDispatchTypeToSearch(event) {
 			explorerListener(key)
 		}
 	}
-	if state == stateDialog && dialogListener != nil {
+	if state == stateDialog && dialogListener != nil && !ignoredApp {
 		if isExplorerOpenSearchShortcut(event) {
 			dialogListener(explorerOpenSearchEventKey)
 			return true

@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 import (
 	"context"
@@ -48,15 +48,15 @@ type quickJumpPathEntry struct {
 }
 
 const (
-	openSaveHistorySettingKey    = "openSaveHistory"
-	enableTypeToSearchSettingKey = "enableTypeToSearch"
-	quickJumpPathsSettingKey     = "quickJumpPaths"
+	openSaveHistorySettingKey     = "openSaveHistory"
+	quickJumpPathsSettingKey      = "quickJumpPaths"
+	ignoredApplicationsSettingKey = "ignoredApplications"
 
-	explorerPluginID                = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
-	explorerCommandAdd              = "add"
-	explorerDialogHintOverlayName   = "explorer_dialog_hint"
-	explorerDialogHintCloseDelay    = 250 * time.Millisecond
-	explorerDialogPathCacheDuration = 30 * time.Second
+	quickJumpPluginID                = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
+	quickJumpCommandAdd              = "add"
+	quickJumpDialogHintOverlayName   = "quickjump_dialog_hint"
+	quickJumpDialogHintCloseDelay    = 250 * time.Millisecond
+	quickJumpDialogPathCacheDuration = 30 * time.Second
 
 	// Current-folder hits keep a higher tier than global indexed scores
 	// (typically a few thousand). Type-to-search still searches beyond the
@@ -65,12 +65,11 @@ const (
 )
 
 func init() {
-	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ExplorerPlugin{})
+	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &QuickJumpPlugin{})
 }
 
 type integrationRuntime struct {
 	stopCh              chan struct{}
-	typeToSearchEnabled atomic.Bool
 	onExplorerActivated func(pid int)
 	onDialogActivated   func(OpenSaveDialogActivatedEvent)
 	onDeactivated       func()
@@ -86,7 +85,7 @@ type openSaveDialogPathCache struct {
 	expiresAt time.Time
 }
 
-type ExplorerPlugin struct {
+type QuickJumpPlugin struct {
 	api                    plugin.API
 	integrationRuntime     atomic.Pointer[integrationRuntime]
 	dialogPathCacheMu      sync.Mutex
@@ -94,25 +93,26 @@ type ExplorerPlugin struct {
 	dialogPathResolveGroup singleflight.Group
 	dialogNavigateMu       sync.Mutex
 	quickSwitch            *quickSwitchCoordinator
+	ignoredApps            ignoredApplicationState
 }
 
-func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
+func (c *QuickJumpPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e",
-		Name:          "i18n:plugin_explorer_plugin_name",
+		Name:          "i18n:plugin_quickjump_plugin_name",
 		Author:        "Wox Launcher",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "i18n:plugin_explorer_plugin_description",
-		Icon:          "emoji:📂",
+		Description:   "i18n:plugin_quickjump_plugin_description",
+		Icon:          common.PluginQuickJumpIcon.String(),
 		TriggerKeywords: []string{
-			"explorer",
+			"jump",
 		},
 		Commands: []plugin.MetadataCommand{
 			{
-				Command:     explorerCommandAdd,
-				Description: "i18n:plugin_explorer_command_add",
+				Command:     quickJumpCommandAdd,
+				Description: "i18n:plugin_quickjump_command_add",
 			},
 		},
 		SupportedOS: []string{
@@ -121,32 +121,47 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type:               definition.PluginSettingDefinitionTypeCheckBox,
-				IsPlatformSpecific: true,
-				Value: &definition.PluginSettingValueCheckBox{
-					Key:          enableTypeToSearchSettingKey,
-					Label:        "i18n:plugin_explorer_setting_enable_type_to_search",
-					Tooltip:      "i18n:plugin_explorer_setting_enable_type_to_search_tips",
-					DefaultValue: "false",
-				},
-			},
-			{
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     quickJumpPathsSettingKey,
-					Title:   "i18n:plugin_explorer_setting_quick_jump_paths",
-					Tooltip: "i18n:plugin_explorer_setting_quick_jump_paths_tips",
+					Title:   "i18n:plugin_quickjump_setting_quick_jump_paths",
+					Tooltip: "i18n:plugin_quickjump_setting_quick_jump_paths_tips",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:   "Path",
-							Label: "i18n:plugin_explorer_setting_quick_jump_path",
+							Label: "i18n:plugin_quickjump_setting_quick_jump_path",
 							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
 							Validators: []validator.PluginSettingValidator{
 								{
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
+				Value: &definition.PluginSettingValueTable{
+					Key:          ignoredApplicationsSettingKey,
+					Title:        "i18n:plugin_quickjump_setting_ignored_applications",
+					Tooltip:      "i18n:plugin_quickjump_setting_ignored_applications_tooltip",
+					DefaultValue: "[]",
+					MaxHeight:    220,
+					InlineTable:  true,
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:     "App",
+							Label:   "i18n:plugin_quickjump_setting_ignored_applications_app",
+							Tooltip: "i18n:plugin_quickjump_setting_ignored_applications_tooltip",
+							Width:   420,
+							Type:    definition.PluginSettingValueTableColumnTypeApp,
+							Validators: []validator.PluginSettingValidator{
+								{Type: validator.PluginSettingValidatorTypeNotEmpty, Value: &validator.PluginSettingValidatorNotEmpty{}},
+								{Type: validator.PluginSettingValidatorTypeUnique, Value: &validator.PluginSettingValidatorUnique{}},
 							},
 						},
 					},
@@ -168,18 +183,18 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 	}
 }
 
-func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
+func (c *QuickJumpPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 	c.quickSwitch = newQuickSwitchCoordinator(c.newQuickSwitchDeps())
+	c.reloadIgnoredApplications(ctx)
 
-	// Quick Switch always listens for Explorer/Finder → dialog transitions.
-	// Type-to-search only adds raw keys and the dialog hint on top of that.
+	// Type-to-search, dialog hints, and Quick Switch all follow the plugin
+	// enable state. Users who do not want them disable the plugin.
 	c.startIntegrationRuntime(ctx)
-	c.applyTypeToSearchSetting(ctx, c.api.GetSetting(ctx, enableTypeToSearchSettingKey) == "true")
 
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
-		if key == enableTypeToSearchSettingKey {
-			c.applyTypeToSearchSetting(callbackCtx, value == "true")
+		if key == ignoredApplicationsSettingKey {
+			c.reloadIgnoredApplications(callbackCtx)
 		}
 	})
 	c.api.OnUnload(ctx, func(context.Context) {
@@ -187,21 +202,25 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 	})
 }
 
-func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+func (c *QuickJumpPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if !c.shouldHandleQuery(ctx, query) {
 		return plugin.QueryResponse{}
 	}
 
-	if strings.EqualFold(query.Command, explorerCommandAdd) {
+	if strings.EqualFold(query.Command, quickJumpCommandAdd) {
 		return plugin.NewQueryResponse(c.queryAddQuickJumpPath(ctx, query))
 	}
 
 	return plugin.NewQueryResponse(c.queryExplorerResults(ctx, query))
 }
 
-func (c *ExplorerPlugin) shouldHandleQuery(ctx context.Context, query plugin.Query) bool {
+func (c *QuickJumpPlugin) shouldHandleQuery(ctx context.Context, query plugin.Query) bool {
 	if !query.IsGlobalQuery() {
 		return true
+	}
+
+	if c.isIgnoredApplicationPid(query.Env.ActiveWindowPid) {
+		return false
 	}
 
 	if query.Env.ActiveWindowIsOpenSaveDialog {
@@ -216,7 +235,7 @@ func (c *ExplorerPlugin) shouldHandleQuery(ctx context.Context, query plugin.Que
 	return isFileExplorer
 }
 
-func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *QuickJumpPlugin) queryExplorerResults(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	search := strings.TrimSpace(query.Search)
 	var directoryResults []plugin.QueryResult
 	if search == "" {
@@ -236,7 +255,7 @@ func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.
 
 // prioritizeCurrentDirectoryHits boosts and backfills matches that live in the
 // active Explorer/Finder folder so they outrank otherwise-equal global hits.
-func (c *ExplorerPlugin) prioritizeCurrentDirectoryHits(ctx context.Context, query plugin.Query, indexedResults []plugin.QueryResult) []plugin.QueryResult {
+func (c *QuickJumpPlugin) prioritizeCurrentDirectoryHits(ctx context.Context, query plugin.Query, indexedResults []plugin.QueryResult) []plugin.QueryResult {
 	currentPath := c.getCurrentFileExplorerPath(ctx, query.Env)
 	var localResults []plugin.QueryResult
 	if currentPath != "" {
@@ -246,7 +265,7 @@ func (c *ExplorerPlugin) prioritizeCurrentDirectoryHits(ctx context.Context, que
 }
 
 // queryFileSearchResults converts global indexed results into Explorer-specific actions.
-func (c *ExplorerPlugin) queryFileSearchResults(ctx context.Context, query plugin.Query, search string) ([]plugin.QueryResult, bool) {
+func (c *QuickJumpPlugin) queryFileSearchResults(ctx context.Context, query plugin.Query, search string) ([]plugin.QueryResult, bool) {
 	folderOnly := query.Env.ActiveWindowIsOpenSaveDialogSelectFolder
 	commandData := common.ContextData{
 		filesearchplugin.PluginCommandDataQuery: search,
@@ -295,7 +314,7 @@ func (c *ExplorerPlugin) queryFileSearchResults(ctx context.Context, query plugi
 	return results, true
 }
 
-func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *QuickJumpPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	path := c.resolveAddPath(ctx, query)
 	if path == "" {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer add skipped: no resolvable path (pid=%d, title=%q, isOpenSaveDialog=%v, isOpenSaveDialogSelectFolder=%v)", query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog, query.Env.ActiveWindowIsOpenSaveDialogSelectFolder))
@@ -309,9 +328,9 @@ func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin
 
 	return []plugin.QueryResult{
 		{
-			Title:    "i18n:plugin_explorer_add_quick_jump_title",
+			Title:    "i18n:plugin_quickjump_add_quick_jump_title",
 			SubTitle: path,
-			Icon:     common.FolderIcon,
+			Icon:     common.PluginQuickJumpIcon,
 			Score:    200,
 			Actions: []plugin.QueryResultAction{
 				{
@@ -328,7 +347,7 @@ func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin
 	}
 }
 
-func (c *ExplorerPlugin) resolveAddPath(ctx context.Context, query plugin.Query) string {
+func (c *QuickJumpPlugin) resolveAddPath(ctx context.Context, query plugin.Query) string {
 	if query.Command != "" {
 		if commandPath := strings.TrimSpace(query.Search); commandPath != "" {
 			return commandPath
@@ -338,7 +357,7 @@ func (c *ExplorerPlugin) resolveAddPath(ctx context.Context, query plugin.Query)
 	return c.getCurrentFileExplorerPath(ctx, query.Env)
 }
 
-func (c *ExplorerPlugin) queryCurrentDirectoryEntries(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *QuickJumpPlugin) queryCurrentDirectoryEntries(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	currentPath := c.getCurrentFileExplorerPath(ctx, query.Env)
 	if currentPath == "" {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory query skipped: path not found (search=%q, pid=%d, title=%q, isOpenSaveDialog=%v, isOpenSaveDialogSelectFolder=%v)", query.Search, query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog, query.Env.ActiveWindowIsOpenSaveDialogSelectFolder))
@@ -347,7 +366,7 @@ func (c *ExplorerPlugin) queryCurrentDirectoryEntries(ctx context.Context, query
 	return c.queryDirectoryEntriesAtPath(ctx, query, currentPath, strings.TrimSpace(query.Search))
 }
 
-func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query plugin.Query, dirPath string, search string) []plugin.QueryResult {
+func (c *QuickJumpPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query plugin.Query, dirPath string, search string) []plugin.QueryResult {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read directory: path=%q err=%s", dirPath, err.Error()))
@@ -393,9 +412,9 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 	return results
 }
 
-func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64, isGlobalResult bool) plugin.QueryResult {
+func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64, isGlobalResult bool) plugin.QueryResult {
 	defaultAction := plugin.QueryResultAction{
-		Name:                   "i18n:plugin_explorer_reveal_in_explorer",
+		Name:                   "i18n:plugin_quickjump_reveal_in_explorer",
 		IsDefault:              true,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -403,7 +422,7 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 		},
 	}
 	if isDir {
-		defaultAction.Name = "i18n:plugin_explorer_jump_to"
+		defaultAction.Name = "i18n:plugin_quickjump_jump_to"
 		defaultAction.Action = func(ctx context.Context, actionContext plugin.ActionContext) {
 			c.jumpToFolder(ctx, query.Env, fullPath)
 		}
@@ -416,7 +435,7 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 		Score:    score,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "i18n:plugin_explorer_open",
+				Name: "i18n:plugin_quickjump_open",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.Open(fullPath)
 				},
@@ -429,11 +448,11 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 }
 
 // buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
-func (c *ExplorerPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
+func (c *QuickJumpPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
 	return shellplugin.PrepareCommandAtDirectoryAction(c.api, path, isDir)
 }
 
-func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool, isGlobalResult bool) {
+func (c *QuickJumpPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool, isGlobalResult bool) {
 	if env.ActiveWindowIsOpenSaveDialog {
 		entryPath := strings.TrimSpace(fullPath)
 		if entryPath == "" {
@@ -489,7 +508,7 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 	}
 }
 
-func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *QuickJumpPlugin) queryJumpFolders(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	folders := c.getJumpFolderCandidates(ctx)
 	if len(folders) == 0 {
 		return []plugin.QueryResult{}
@@ -520,15 +539,15 @@ func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Quer
 	return results
 }
 
-func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string, folderPath string, score int64) plugin.QueryResult {
+func (c *QuickJumpPlugin) buildJumpFolderResult(query plugin.Query, title string, folderPath string, score int64) plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:    title,
 		SubTitle: folderPath,
-		Icon:     common.FolderIcon,
+		Icon:     common.PluginQuickJumpIcon,
 		Score:    score,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:                   "i18n:plugin_explorer_jump_to",
+				Name:                   "i18n:plugin_quickjump_jump_to",
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.jumpToFolder(ctx, query.Env, folderPath)
@@ -540,7 +559,7 @@ func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string,
 	}
 }
 
-func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context) []openSaveFolder {
+func (c *QuickJumpPlugin) getJumpFolderCandidates(ctx context.Context) []openSaveFolder {
 	candidateIndex := make(map[string]int)
 	candidates := make([]openSaveFolder, 0)
 
@@ -585,13 +604,13 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context) []openSave
 			titleKey string
 			path     string
 		}{
-			{titleKey: "i18n:plugin_explorer_common_folder_home", path: homeDir},
-			{titleKey: "i18n:plugin_explorer_common_folder_desktop", path: filepath.Join(homeDir, "Desktop")},
-			{titleKey: "i18n:plugin_explorer_common_folder_documents", path: filepath.Join(homeDir, "Documents")},
-			{titleKey: "i18n:plugin_explorer_common_folder_downloads", path: filepath.Join(homeDir, "Downloads")},
-			{titleKey: "i18n:plugin_explorer_common_folder_pictures", path: filepath.Join(homeDir, "Pictures")},
-			{titleKey: "i18n:plugin_explorer_common_folder_music", path: filepath.Join(homeDir, "Music")},
-			{titleKey: "i18n:plugin_explorer_common_folder_videos", path: filepath.Join(homeDir, "Videos")},
+			{titleKey: "i18n:plugin_quickjump_common_folder_home", path: homeDir},
+			{titleKey: "i18n:plugin_quickjump_common_folder_desktop", path: filepath.Join(homeDir, "Desktop")},
+			{titleKey: "i18n:plugin_quickjump_common_folder_documents", path: filepath.Join(homeDir, "Documents")},
+			{titleKey: "i18n:plugin_quickjump_common_folder_downloads", path: filepath.Join(homeDir, "Downloads")},
+			{titleKey: "i18n:plugin_quickjump_common_folder_pictures", path: filepath.Join(homeDir, "Pictures")},
+			{titleKey: "i18n:plugin_quickjump_common_folder_music", path: filepath.Join(homeDir, "Music")},
+			{titleKey: "i18n:plugin_quickjump_common_folder_videos", path: filepath.Join(homeDir, "Videos")},
 		}
 		for _, folder := range systemFolders {
 			addCandidate(openSaveFolder{
@@ -605,7 +624,7 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context) []openSave
 }
 
 // getCachedOpenSaveDialogPath returns a recently resolved dialog folder for fast typing in the same dialog query session.
-func (c *ExplorerPlugin) getCachedOpenSaveDialogPath(pid int, title string, windowId string) (string, bool) {
+func (c *QuickJumpPlugin) getCachedOpenSaveDialogPath(pid int, title string, windowId string) (string, bool) {
 	now := time.Now()
 	c.dialogPathCacheMu.Lock()
 	defer c.dialogPathCacheMu.Unlock()
@@ -628,12 +647,12 @@ func (c *ExplorerPlugin) getCachedOpenSaveDialogPath(pid int, title string, wind
 		return "", false
 	}
 
-	c.dialogPathCache.expiresAt = now.Add(explorerDialogPathCacheDuration)
+	c.dialogPathCache.expiresAt = now.Add(quickJumpDialogPathCacheDuration)
 	return c.dialogPathCache.path, true
 }
 
 // setCachedOpenSaveDialogPath stores the slow UIA fallback result so subsequent query changes avoid re-reading the dialog tree.
-func (c *ExplorerPlugin) setCachedOpenSaveDialogPath(pid int, title string, windowId string, path string) {
+func (c *QuickJumpPlugin) setCachedOpenSaveDialogPath(pid int, title string, windowId string, path string) {
 	path = strings.TrimSpace(path)
 	if pid <= 0 || path == "" {
 		return
@@ -646,12 +665,12 @@ func (c *ExplorerPlugin) setCachedOpenSaveDialogPath(pid int, title string, wind
 		title:     title,
 		windowId:  windowId,
 		path:      path,
-		expiresAt: time.Now().Add(explorerDialogPathCacheDuration),
+		expiresAt: time.Now().Add(quickJumpDialogPathCacheDuration),
 	}
 }
 
 // clearOpenSaveDialogPathCache drops stale dialog paths when a new hint-driven query session starts.
-func (c *ExplorerPlugin) clearOpenSaveDialogPathCache(pid int) {
+func (c *QuickJumpPlugin) clearOpenSaveDialogPathCache(pid int) {
 	c.dialogPathCacheMu.Lock()
 	defer c.dialogPathCacheMu.Unlock()
 	if pid <= 0 || c.dialogPathCache.pid == pid {
@@ -659,7 +678,7 @@ func (c *ExplorerPlugin) clearOpenSaveDialogPathCache(pid int) {
 	}
 }
 
-func (c *ExplorerPlugin) resolveOpenSaveDialogPath(ctx context.Context, env plugin.QueryEnv) string {
+func (c *QuickJumpPlugin) resolveOpenSaveDialogPath(ctx context.Context, env plugin.QueryEnv) string {
 	if cachedPath, ok := c.getCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId); ok {
 		return cachedPath
 	}
@@ -696,7 +715,7 @@ func (c *ExplorerPlugin) resolveOpenSaveDialogPath(ctx context.Context, env plug
 }
 
 // prefetchOpenSaveDialogPath resolves the dialog folder while the hint is visible, hiding the slow fallback from the first typed query.
-func (c *ExplorerPlugin) prefetchOpenSaveDialogPath(ctx context.Context, pid int, title string, windowId string) {
+func (c *QuickJumpPlugin) prefetchOpenSaveDialogPath(ctx context.Context, pid int, title string, windowId string) {
 	if pid <= 0 {
 		return
 	}
@@ -711,7 +730,7 @@ func (c *ExplorerPlugin) prefetchOpenSaveDialogPath(ctx context.Context, pid int
 	})
 }
 
-func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plugin.QueryEnv) string {
+func (c *QuickJumpPlugin) getCurrentFileExplorerPath(ctx context.Context, env plugin.QueryEnv) string {
 	isFileExplorerPid := false
 	if env.ActiveWindowPid > 0 {
 		if ok, err := window.IsFileExplorer(env.ActiveWindowPid); err != nil {
@@ -774,7 +793,7 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 	return ""
 }
 
-func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, folderPath string) {
+func (c *QuickJumpPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, folderPath string) {
 	startedAt := time.Now()
 	if env.ActiveWindowIsOpenSaveDialog {
 		if !c.navigateFileDialog(ctx, env, folderPath) {
@@ -805,12 +824,12 @@ func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, 
 }
 
 // navigateFileDialog prefers the in-process Shell browser route and keeps the existing automation path as a compatibility fallback.
-func (c *ExplorerPlugin) navigateFileDialog(ctx context.Context, env plugin.QueryEnv, folderPath string) bool {
+func (c *QuickJumpPlugin) navigateFileDialog(ctx context.Context, env plugin.QueryEnv, folderPath string) bool {
 	c.quickSwitch.Invalidate()
 	return c.performFileDialogNavigation(ctx, env.ActiveWindowId, env.ActiveWindowPid, folderPath)
 }
 
-func (c *ExplorerPlugin) addQuickJumpPath(ctx context.Context, path string) bool {
+func (c *QuickJumpPlugin) addQuickJumpPath(ctx context.Context, path string) bool {
 	path = filepath.Clean(strings.TrimSpace(path))
 	if path == "" || !c.isDirPath(path) {
 		return false
@@ -832,7 +851,7 @@ func (c *ExplorerPlugin) addQuickJumpPath(ctx context.Context, path string) bool
 	return true
 }
 
-func (c *ExplorerPlugin) loadQuickJumpPaths(ctx context.Context) []string {
+func (c *QuickJumpPlugin) loadQuickJumpPaths(ctx context.Context) []string {
 	raw := c.api.GetSetting(ctx, quickJumpPathsSettingKey)
 	if raw == "" {
 		return []string{}
@@ -863,7 +882,7 @@ func (c *ExplorerPlugin) loadQuickJumpPaths(ctx context.Context) []string {
 	return result
 }
 
-func (c *ExplorerPlugin) saveQuickJumpPaths(ctx context.Context, paths []string) bool {
+func (c *QuickJumpPlugin) saveQuickJumpPaths(ctx context.Context, paths []string) bool {
 	entries := make([]quickJumpPathEntry, 0, len(paths))
 	for _, path := range paths {
 		path = strings.TrimSpace(path)
@@ -885,12 +904,12 @@ func (c *ExplorerPlugin) saveQuickJumpPaths(ctx context.Context, paths []string)
 	return true
 }
 
-func (c *ExplorerPlugin) isDirPath(path string) bool {
+func (c *QuickJumpPlugin) isDirPath(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
 }
 
-func (c *ExplorerPlugin) normalizePathKey(path string) string {
+func (c *QuickJumpPlugin) normalizePathKey(path string) string {
 	path = filepath.Clean(path)
 	if util.IsWindows() {
 		return strings.ToLower(path)
@@ -950,8 +969,8 @@ func markCurrentDirectoryResult(result plugin.QueryResult) plugin.QueryResult {
 }
 
 func newCurrentDirectoryTail() plugin.QueryResultTail {
-	tail := plugin.NewQueryResultTailText("i18n:plugin_explorer_result_tail_current_folder")
-	tail.Tooltip = "i18n:plugin_explorer_result_tail_current_folder_tooltip"
+	tail := plugin.NewQueryResultTailText("i18n:plugin_quickjump_result_tail_current_folder")
+	tail.Tooltip = "i18n:plugin_quickjump_result_tail_current_folder_tooltip"
 	return tail
 }
 
@@ -963,45 +982,23 @@ func isDirectChildPath(path string, dir string, normalize func(string) string) b
 	return normalize(parent) == normalize(filepath.Clean(dir))
 }
 
-func (c *ExplorerPlugin) typeToSearchDebugLog(ctx context.Context, format string, args ...any) {
+func (c *QuickJumpPlugin) typeToSearchDebugLog(ctx context.Context, format string, args ...any) {
 	// c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: "+fmt.Sprintf(format, args...))
 }
 
-// applyTypeToSearchSetting reconfigures keyboard and hint features without stopping Quick Switch.
-func (c *ExplorerPlugin) applyTypeToSearchSetting(ctx context.Context, enabled bool) {
-	runtime := c.integrationRuntime.Load()
-	if runtime != nil {
-		runtime.typeToSearchEnabled.Store(enabled)
-	}
-	// File selection still uses the Shell hook only while type-to-search can drive it.
-	// Dialog folder navigation no longer depends on this flag.
-	setExplorerDialogHookEnabled(enabled)
-	c.registerIntegrationMonitors()
-	if !enabled {
-		overlay.Close(explorerDialogHintOverlayName)
-		overlay.Close("explorer_hint")
-	}
-}
-
-// registerIntegrationMonitors keeps foreground listeners on and attaches raw keys only for type-to-search.
-func (c *ExplorerPlugin) registerIntegrationMonitors() {
+// registerIntegrationMonitors keeps Explorer/Finder and dialog listeners on while the plugin is enabled.
+func (c *QuickJumpPlugin) registerIntegrationMonitors() {
 	runtime := c.integrationRuntime.Load()
 	if runtime == nil {
 		return
 	}
 
-	var explorerKey func(string)
-	var dialogKey func(string)
-	if runtime.typeToSearchEnabled.Load() {
-		explorerKey = runtime.onExplorerKey
-		dialogKey = runtime.onDialogKey
-	}
-	StartExplorerMonitor(runtime.onExplorerActivated, runtime.onDeactivated, explorerKey)
-	StartExplorerOpenSaveMonitor(runtime.onDialogActivated, runtime.onDeactivated, dialogKey)
+	StartExplorerMonitor(runtime.onExplorerActivated, runtime.onDeactivated, runtime.onExplorerKey)
+	StartExplorerOpenSaveMonitor(runtime.onDialogActivated, runtime.onDeactivated, runtime.onDialogKey)
 }
 
 // stopIntegrationRuntime releases listeners and cancels pending work when the plugin is disabled.
-func (c *ExplorerPlugin) stopIntegrationRuntime() {
+func (c *QuickJumpPlugin) stopIntegrationRuntime() {
 	runtime := c.integrationRuntime.Swap(nil)
 	if runtime == nil {
 		return
@@ -1010,29 +1007,37 @@ func (c *ExplorerPlugin) stopIntegrationRuntime() {
 	if c.quickSwitch != nil {
 		c.quickSwitch.Invalidate()
 	}
+	setIgnoreMonitoredApp(nil)
 	StopExplorerMonitor()
 	StopExplorerOpenSaveMonitor()
 	setExplorerDialogHookEnabled(false)
 	setExplorerMonitorLogger(nil)
-	overlay.Close(explorerDialogHintOverlayName)
-	overlay.Close("explorer_hint")
+	overlay.Close(quickJumpDialogHintOverlayName)
+	overlay.Close("quickjump_hint")
 	c.clearOpenSaveDialogPathCache(0)
 	close(runtime.stopCh)
 }
 
 // startIntegrationRuntime starts Explorer/Finder and dialog foreground listeners once.
-func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
+func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 	if c.integrationRuntime.Load() != nil {
 		return
 	}
 
 	setExplorerMonitorLogger(func(msg string) {
+		// Keep window identity transitions visible when diagnosing transient dialogs,
+		// without enabling raw-key and per-move monitor logging.
+		if strings.HasPrefix(msg, "go activate:") || strings.HasPrefix(msg, "go deactivate:") {
+			util.GetLogger().Info(ctx, "Quick Jump monitor: "+msg)
+			return
+		}
 		c.typeToSearchDebugLog(ctx, "%s", msg)
 	})
 	c.typeToSearchDebugLog(ctx, "start integration runtime")
 
 	runtime := &integrationRuntime{stopCh: make(chan struct{})}
 	c.integrationRuntime.Store(runtime)
+	setIgnoreMonitoredApp(c.isIgnoredApplicationPid)
 
 	type overlayEventType int
 	const (
@@ -1116,13 +1121,13 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 			c.typeToSearchDebugLog(localCtx, "openExplorerInstance %q", pending)
 			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
 				Role:         common.WoxInstanceRoleSecondary,
-				InstanceName: string(common.ShowSourceExplorer),
+				InstanceName: string(common.ShowSourceQuickJump),
 				Query: common.PlainQuery{
 					QueryId:   uuid.NewString(),
 					QueryType: plugin.QueryTypeInput,
 					QueryText: pending,
 					QueryScope: common.QueryScope{
-						Plugins: []common.QueryScopePlugin{{PluginID: explorerPluginID}},
+						Plugins: []common.QueryScopePlugin{{PluginID: quickJumpPluginID}},
 					},
 				},
 				ShowApp: *explorerShow,
@@ -1145,7 +1150,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 				return
 			}
 
-			overlay.Close(explorerDialogHintOverlayName)
+			overlay.Close(quickJumpDialogHintOverlayName)
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
@@ -1153,7 +1158,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 				HideToolbar:          true,
 				QueryBoxAtBottom:     true,
 				HideOnBlur:           true,
-				ShowSource:           common.ShowSourceExplorer,
+				ShowSource:           common.ShowSourceQuickJump,
 				WindowPosition:       &position,
 				WindowPositionHeight: initialWindowHeight,
 				WindowWidth:          woxSetting.AppWidth.Get() / 2,
@@ -1175,42 +1180,39 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 			showContext.RestoreWindow = &sourceWindow
 			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
 				Role:         common.WoxInstanceRoleSecondary,
-				InstanceName: string(common.ShowSourceExplorer),
+				InstanceName: string(common.ShowSourceQuickJump),
 				Query: common.PlainQuery{
 					QueryId:   uuid.NewString(),
 					QueryType: plugin.QueryTypeInput,
 					QueryScope: common.QueryScope{
-						Plugins: []common.QueryScopePlugin{{PluginID: explorerPluginID}},
+						Plugins: []common.QueryScopePlugin{{PluginID: quickJumpPluginID}},
 					},
 				},
 				ShowApp: showContext,
 			})
 		}
 
-		showDialogHint := func(localCtx context.Context, pid int) {
-			if !runtime.typeToSearchEnabled.Load() {
+		showDialogHint := func(localCtx context.Context, pid int, dialogWindowId string) {
+			if pid <= 0 || c.isIgnoredApplicationPid(pid) {
 				return
 			}
-			if pid <= 0 {
-				return
-			}
-			messageKey := "plugin_explorer_hint_message_dialog"
+			messageKey := "plugin_quickjump_hint_message_dialog"
 			// The old Windows renderer accepted points; DirectWrite uses DIPs.
 			fontSize := float32(10.0 * 96.0 / 72.0)
 			if util.IsMacOS() {
-				messageKey = "plugin_explorer_hint_message_dialog_macos"
+				messageKey = "plugin_quickjump_hint_message_dialog_macos"
 				fontSize = 12
 			}
 
 			title := window.GetWindowNameByPid(pid)
-			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
-			// An empty id means the overlay cannot anchor to the dialog and will neither
-			// inject the sticky subclass nor position itself against the right window.
+			// Use the HWND/window ID captured by activation. Re-enumerating by PID
+			// during dialog initialization can return no window or a different one,
+			// preventing sticky injection even though the event identified the dialog.
 			util.GetLogger().Info(localCtx, fmt.Sprintf("Explorer dialog hint: pid=%d title=%q dialogWindowId=%q", pid, title, dialogWindowId))
 			c.prefetchOpenSaveDialogPath(localCtx, pid, title, dialogWindowId)
 			textoverlay.Show(textoverlay.Options{
 				Window: overlay.WindowOptions{
-					ID:              explorerDialogHintOverlayName,
+					ID:              quickJumpDialogHintOverlayName,
 					StickyWindowPid: pid,
 					Anchor:          overlay.AnchorBelowCenter,
 					Topmost:         true,
@@ -1229,7 +1231,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 		}
 
 		showOverlay := func(localCtx context.Context) bool {
-			overlay.Close(explorerDialogHintOverlayName)
+			overlay.Close(quickJumpDialogHintOverlayName)
 			if activePid <= 0 || window.GetActiveWindowPid() != activePid {
 				c.typeToSearchDebugLog(localCtx, "showOverlay skipped (foreground pid no longer matches explorer pid=%d)", activePid)
 				return false
@@ -1259,7 +1261,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 				HideToolbar:          true,
 				QueryBoxAtBottom:     true,
 				HideOnBlur:           true,
-				ShowSource:           common.ShowSourceExplorer,
+				ShowSource:           common.ShowSourceQuickJump,
 				WindowPosition:       &position,
 				WindowPositionHeight: initialWindowHeight,
 				WindowWidth:          woxSetting.AppWidth.Get() / 2,
@@ -1291,7 +1293,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 		}
 		scheduleDialogHintClose := func() {
 			stopDialogHintCloseTimer()
-			dialogHintCloseTimer = time.NewTimer(explorerDialogHintCloseDelay)
+			dialogHintCloseTimer = time.NewTimer(quickJumpDialogHintCloseDelay)
 			dialogHintCloseC = dialogHintCloseTimer.C
 		}
 
@@ -1332,18 +1334,19 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 					active = true
 					activePid = ev.pid
 					if ev.isDialog {
-						c.requestQuickSwitch(ctx, OpenSaveDialogActivatedEvent{
-							Pid:              ev.pid,
-							WindowID:         ev.windowID,
-							PreviousExplorer: ev.previousExplorer,
-						})
-						if runtime.typeToSearchEnabled.Load() {
-							showDialogHint(ctx, ev.pid)
+						if c.isIgnoredApplicationPid(ev.pid) {
+							overlay.Close(quickJumpDialogHintOverlayName)
+							util.GetLogger().Info(ctx, fmt.Sprintf("Explorer ignored dialog from app pid=%d identity=%s", ev.pid, window.GetProcessIdentity(ev.pid)))
 						} else {
-							overlay.Close(explorerDialogHintOverlayName)
+							c.requestQuickSwitch(ctx, OpenSaveDialogActivatedEvent{
+								Pid:              ev.pid,
+								WindowID:         ev.windowID,
+								PreviousExplorer: ev.previousExplorer,
+							})
+							showDialogHint(ctx, ev.pid, ev.windowID)
 						}
 					} else {
-						overlay.Close(explorerDialogHintOverlayName)
+						overlay.Close(quickJumpDialogHintOverlayName)
 					}
 					// Keep pending keys during focus handoff; ShowApp can churn
 					// activation before fast-typed keys are pushed to the UI.
@@ -1361,7 +1364,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 						// through that handoff so it does not close and recreate visibly.
 						scheduleDialogHintClose()
 					} else {
-						overlay.Close(explorerDialogHintOverlayName)
+						overlay.Close(quickJumpDialogHintOverlayName)
 					}
 					if !inHandoff() {
 						resetState()
@@ -1371,13 +1374,17 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 					if localCtx == nil {
 						localCtx = ctx
 					}
-					if active && activePid > 0 {
+					if active && activePid > 0 && !c.isIgnoredApplicationPid(activePid) {
 						openDialogQuery(localCtx, activePid)
 					}
 				case overlayEventKey:
 					localCtx := ev.ctx
 					if localCtx == nil {
 						localCtx = ctx
+					}
+					if c.isIgnoredApplicationPid(activePid) {
+						c.typeToSearchDebugLog(localCtx, "ignore key=%q from ignored app pid=%d", ev.key, activePid)
+						continue
 					}
 					handoff := inHandoff()
 					c.typeToSearchDebugLog(localCtx, "event key=%q active=%v handoff=%v pending=%q", ev.key, active, handoff, pending)
@@ -1408,7 +1415,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 			case <-dialogHintCloseC:
 				dialogHintCloseTimer = nil
 				dialogHintCloseC = nil
-				overlay.Close(explorerDialogHintOverlayName)
+				overlay.Close(quickJumpDialogHintOverlayName)
 			}
 		}
 	}()
@@ -1418,6 +1425,7 @@ func (c *ExplorerPlugin) startIntegrationRuntime(ctx context.Context) {
 	runtime.onDeactivated = onDeactivated
 	runtime.onExplorerKey = onKey
 	runtime.onDialogKey = onDialogKey
+	setExplorerDialogHookEnabled(true)
 	c.registerIntegrationMonitors()
 }
 

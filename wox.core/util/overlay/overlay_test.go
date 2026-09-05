@@ -7,7 +7,51 @@ import (
 	"wox/common"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/screen"
+	"wox/util/window"
 )
+
+// TestStickyWindowIdentityAndDismissal covers PID fallback and retaining the last
+// position when the dialog disappears on a secondary display.
+func TestStickyWindowIdentityAndDismissal(t *testing.T) {
+	options := WindowOptions{StickyWindowPid: 2147483647, StickyWindowId: "123", Anchor: AnchorBelowCenter}
+	target := window.ManagedWindow{Id: "456", Pid: options.StickyWindowPid, Bounds: window.WindowRect{X: -1800, Y: -150, Width: 900, Height: 600}}
+	displays := []screen.Display{{PixelBounds: screen.Rect{X: -1920, Y: -300, Width: 1920, Height: 1080}, Scale: 1.5}}
+	if _, ok := stickyWindowBounds(options, target, displays); ok {
+		t.Fatal("overlay followed a different window in the same process")
+	}
+	target.Id = options.StickyWindowId
+	want := woxui.Rect{X: -1800, Y: -150, Width: 900, Height: 600}
+	if runtime.GOOS == "windows" {
+		want = woxui.Rect{X: -1200, Y: -100, Width: 600, Height: 400}
+	}
+	if got, ok := stickyWindowBounds(options, target, displays); !ok || got != want {
+		t.Fatalf("tracked window bounds = %+v, %v, want %+v", got, ok, want)
+	}
+	options.StickyWindowId = ""
+	if _, ok := stickyWindowBounds(options, target, displays); !ok {
+		t.Fatal("PID-only tracking should still accept the resolved window")
+	}
+	options.StickyWindowId = "0"
+	current := woxui.Rect{X: -1100, Y: 350, Width: 400, Height: 48}
+	primaryWorkArea := woxui.Rect{Width: 1920, Height: 1080}
+	got := Bounds(options, current, primaryWorkArea, woxui.Size{Width: current.Width, Height: current.Height})
+	if got != current {
+		t.Fatalf("dismissed dialog moved overlay to %+v, want %+v", got, current)
+	}
+}
+
+// A missing/hidden dialog must not reach window layout, Show, or offset publication.
+func TestInitialStickyLayoutWaitsForTarget(t *testing.T) {
+	instance := &runtimeOverlay{
+		options:       WindowOptions{StickyWindowPid: 2147483647, StickyWindowId: "0"},
+		stickyPublish: func() { t.Fatal("published an offset before the target was ready") },
+	}
+	instance.applyLayout(false)
+	if instance.shown {
+		t.Fatal("overlay became visible before its target")
+	}
+}
 
 func TestBoundsMovesUpWhenGrowthReachesWorkAreaBottom(t *testing.T) {
 	workArea := woxui.Rect{Width: 1200, Height: 900}

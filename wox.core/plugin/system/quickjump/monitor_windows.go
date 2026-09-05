@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 /*
 #include <stdint.h>
@@ -391,7 +391,9 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	shortcutState := currentState
 	shortcutListener := dialogKeyListener
 	stateMu.RUnlock()
-	if shortcutState == stateDialog && isExplorerOpenSearchShortcut(event) && shortcutListener != nil {
+	// Ignored apps must keep native typing; do not consume Ctrl+G or type-to-search.
+	ignoredApp := isMonitoredAppIgnored()
+	if shortcutState == stateDialog && isExplorerOpenSearchShortcut(event) && shortcutListener != nil && !ignoredApp {
 		markTypeToSearchConsumedKey(event)
 		shortcutListener(explorerOpenSearchEventKey)
 		return true
@@ -420,7 +422,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 
 	if state == stateExplorer {
 		consume = dispatchRawKeyListeners(event, explorerRawListeners) || consume
-		if shouldDispatchTypeToSearch(event) && explorerListener != nil {
+		if shouldDispatchTypeToSearch(event) && explorerListener != nil && !ignoredApp {
 			markTypeToSearchConsumedKey(event)
 			explorerListener(key)
 			consume = true
@@ -429,7 +431,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 
 	if state == stateDialog {
 		consume = dispatchRawKeyListeners(event, dialogRawListeners) || consume
-		if shouldDispatchTypeToSearch(event) && dialogListener != nil {
+		if shouldDispatchTypeToSearch(event) && dialogListener != nil && !ignoredApp {
 			markTypeToSearchConsumedKey(event)
 			dialogListener(key)
 			consume = true

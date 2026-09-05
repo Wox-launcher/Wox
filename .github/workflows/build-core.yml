@@ -471,13 +471,40 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: ./wox.core/resource/others/file_index_service
 
-      # Both variables are command-line assignments, so make forwards them to the wox.core
+      - name: Build unsigned window hook helper
+        if: ${{ inputs.require_windows_signpath }}
+        shell: bash
+        run: make -C wox.core window-hook-build WINDOW_HOOK_CC32="C:/msys64/mingw32/bin/i686-w64-mingw32-gcc.exe" WINDOW_HOOK_REQUIRE_32=1
+
+      - name: Upload unsigned window hook helper
+        id: upload-unsigned-window-hook-helper
+        if: ${{ inputs.require_windows_signpath }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-wox-window-hook-helper32.exe
+          path: ./wox.core/resource/others/window_hook/wox-window-hook-helper32.exe
+          retention-days: 1
+
+      - name: Sign window hook helper with SignPath
+        if: ${{ inputs.require_windows_signpath }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: Wox
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: window-hook-helper32
+          github-artifact-id: ${{ steps.upload-unsigned-window-hook-helper.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ./wox.core/resource/others/window_hook
+
+      # These variables are command-line assignments, so make forwards them to the wox.core
       # sub-make that builds the hook. REQUIRE_32 turns a missing i686 compiler into a hard
       # failure: locally it only warns, but a release must never silently ship without the
       # 32-bit DLL, because the only symptom would be a laggy overlay on 32-bit apps.
       - name: Build
         shell: bash
-        run: make build FILE_INDEX_SERVICE_PREBUILT=${{ inputs.require_windows_signpath && '1' || '0' }} WINDOW_HOOK_CC32="C:/msys64/mingw32/bin/i686-w64-mingw32-gcc.exe" WINDOW_HOOK_REQUIRE_32=1
+        run: make build FILE_INDEX_SERVICE_PREBUILT=${{ inputs.require_windows_signpath && '1' || '0' }} WINDOW_HOOK_PREBUILT=${{ inputs.require_windows_signpath && '1' || '0' }} WINDOW_HOOK_CC32="C:/msys64/mingw32/bin/i686-w64-mingw32-gcc.exe" WINDOW_HOOK_REQUIRE_32=1
 
       - name: Upload unsigned artifact (Windows)
         id: upload-unsigned-artifact
@@ -530,6 +557,14 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 artifact_id: helper.id,
+              });
+            }
+            const windowHookHelper = artifacts.find(artifact => artifact.name === 'unsigned-wox-window-hook-helper32.exe');
+            if (windowHookHelper) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: windowHookHelper.id,
               });
             }
 

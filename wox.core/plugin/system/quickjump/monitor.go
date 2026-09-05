@@ -1,10 +1,11 @@
-package explorer
+package quickjump
 
 import (
 	"strings"
 	"sync/atomic"
 	"wox/util"
 	"wox/util/keyboard"
+	"wox/util/window"
 )
 
 const explorerOpenSearchEventKey = "open-search"
@@ -35,7 +36,34 @@ type ExplorerRawKeySubscription interface {
 	Close() error
 }
 
-var monitorLogger atomic.Value // func(msg string)
+var monitorLogger atomic.Value      // func(msg string)
+var ignoreMonitoredApp atomic.Value // func(int) bool
+
+// setIgnoreMonitoredApp installs the Quick Jump ignore check used by raw-key dispatch.
+func setIgnoreMonitoredApp(fn func(int) bool) {
+	if fn == nil {
+		ignoreMonitoredApp.Store((func(int) bool)(nil))
+		return
+	}
+	ignoreMonitoredApp.Store(fn)
+}
+
+// isMonitoredAppIgnored reports whether the current foreground process is on the ignore list.
+func isMonitoredAppIgnored() bool {
+	v := ignoreMonitoredApp.Load()
+	if v == nil {
+		return false
+	}
+	fn, ok := v.(func(int) bool)
+	if !ok || fn == nil {
+		return false
+	}
+	pid := window.GetActiveWindowPid()
+	if pid <= 0 {
+		return false
+	}
+	return fn(pid)
+}
 
 func setExplorerMonitorLogger(logger func(msg string)) {
 	if logger == nil {

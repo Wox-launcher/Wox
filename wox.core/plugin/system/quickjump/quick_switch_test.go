@@ -1,4 +1,4 @@
-package explorer
+package quickjump
 
 import (
 	"context"
@@ -146,22 +146,5 @@ func TestQuickSwitchSkipsEmptyAndVirtualSource(t *testing.T) {
 	coordinator.execute(context.Background(), 1, ExplorerWindowRef{Pid: 11, WindowID: "100"}, 22, "200")
 	if navigated.Load() != 0 {
 		t.Fatal("empty or virtual source path should skip navigation")
-	}
-}
-
-func TestTypeToSearchOffKeepsQuickSwitchWithoutRawKeys(t *testing.T) {
-	quickSwitch, rawKeys, dialogHint := explorerIntegrationCapabilities(false)
-	if !quickSwitch {
-		t.Fatal("Quick Switch must stay enabled when type-to-search is off")
-	}
-	if rawKeys || dialogHint {
-		t.Fatal("type-to-search off should not register raw keys or show the dialog hint")
-	}
-}
-
-func TestTypeToSearchOnKeepsHintAndShortcuts(t *testing.T) {
-	quickSwitch, rawKeys, dialogHint := explorerIntegrationCapabilities(true)
-	if !quickSwitch || !rawKeys || !dialogHint {
-		t.Fatal("type-to-search on should keep Quick Switch, raw keys, and the dialog hint")
 	}
 }

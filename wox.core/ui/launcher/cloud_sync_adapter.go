@@ -523,7 +523,7 @@ func (a *App) cloudConfigNotesViewProps(snapshot settingsSnapshot, imageScale fl
 		{"clipboard", "partial", "clipboard"}, {"notes", "partial", "notes"}, {"query_hotkeys", "platform", "query_hotkeys"}, {"launch_hotkeys", "platform", "launch_hotkeys"},
 		{"ignored_hotkey_apps", "platform", "ignored_hotkey_apps"}, {"autostart", "platform", "autostart"}, {"http_proxy", "platform", "http_proxy"},
 		{"runtime_paths", "platform", "runtime_paths"}, {"app_font", "platform", "app_font"}, {"app_indexing", "platform", "app_indexing"},
-		{"file_search", "platform", "file_search"}, {"explorer_quick_jump", "platform", "explorer_quick_jump"}, {"local_plugin_directories", "platform", "local_plugin_directories"},
+		{"file_search", "platform", "file_search"}, {"quickjump", "platform", "quickjump"}, {"local_plugin_directories", "platform", "local_plugin_directories"},
 		{"folder_favorites", "platform", "folder_favorites"}, {"shell", "platform", "shell"}, {"browser_bookmarks", "platform", "browser_bookmarks"},
 		{"space_quick_look", "platform", "space_quick_look"}, {"plugin_install_state", "reproducible", "plugin_install_state"}, {"custom_themes", "synced", "custom_themes"},
 	}

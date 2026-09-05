@@ -80,6 +80,7 @@ type runtimeOverlay struct {
 	managed *woxui.ManagedWindow
 	window  *woxui.Window
 	host    *woxwidget.Host
+	shown   bool
 
 	stickyStop chan struct{}
 	// stickyDetach and stickyPublish are set only by the platform sticky implementation.
@@ -214,11 +215,8 @@ func showWindowOnUI(options WindowOptions, view View) bool {
 		_ = instance.window.SetAppearance(!options.LightAppearance)
 	}
 	instance.applyLayout(false)
-	if created {
-		if _, err := instance.managed.Show(); err != nil {
-			_ = instance.managed.Close()
-			return false
-		}
+	if runtimeOverlayByID(instance.id) != instance {
+		return false
 	}
 	if stickyChanged || created {
 		instance.restartStickyTracking()
@@ -452,6 +450,15 @@ func windowCreationOptionsChanged(current, next WindowOptions) bool {
 
 // applyLayout resolves content size and clamps the native window to its logical work area.
 func (instance *runtimeOverlay) applyLayout(preserveOrigin bool) {
+	// Activation can arrive before the dialog is visible. Do not display a
+	// screen-anchored fallback or publish its offset as the dialog's sticky offset.
+	var sticky woxui.Rect
+	if instance.options.StickyWindowPid > 0 {
+		var ok bool
+		if sticky, ok = stickyBounds(instance.options, nil); !ok {
+			return
+		}
+	}
 	current, _ := instance.window.Bounds()
 	workArea := WorkArea(instance.options, current)
 	size := woxui.Size{Width: float32(instance.options.Width), Height: float32(instance.options.Height)}
@@ -483,9 +490,22 @@ func (instance *runtimeOverlay) applyLayout(preserveOrigin bool) {
 	size.Height = min(size.Height, workArea.Height)
 	options := instance.options
 	options.PreservePosition = options.PreservePosition || preserveOrigin
-	target := Bounds(options, current, workArea, size)
+	var target woxui.Rect
+	if options.StickyWindowPid > 0 && !options.PreservePosition {
+		// Use the same validated snapshot for the first frame and its offset.
+		target = boundsForTarget(options, sticky, workArea, size)
+	} else {
+		target = Bounds(options, current, workArea, size)
+	}
 	if !sameBounds(current, target) {
 		_ = instance.window.SetBounds(target)
+	}
+	if !instance.shown {
+		instance.shown = true
+		if _, err := instance.managed.Show(); err != nil {
+			_ = instance.managed.Close()
+			return
+		}
 	}
 	// Republish the sticky offset so an injected tracker keeps translating from the
 	// layout Wox just committed rather than a stale base.
@@ -500,18 +520,20 @@ func (instance *runtimeOverlay) restartStickyTracking() {
 	if instance.options.StickyWindowPid <= 0 {
 		return
 	}
-	if instance.startNativeStickyTracking() {
-		// Publish immediately: the tracker attaches after applyLayout has already run,
-		// so without this the first offset would only land on a later relayout and the
-		// injected side would stay idle.
-		if instance.stickyPublish != nil {
-			instance.stickyPublish()
-		}
-		return
-	}
 	stop := make(chan struct{})
 	instance.stickyStop = stop
-	// Polling is the cross-platform fallback when the native Windows hook is unavailable.
+	if instance.startNativeStickyTracking() {
+		// The target can finish initializing while attachment waits. Re-anchor
+		// before publishing so the hook does not preserve a provisional position.
+		instance.applyLayout(false)
+		if instance.shown {
+			close(stop)
+			instance.stickyStop = nil
+			return
+		}
+	}
+	// Poll until the target becomes visible, even if injection succeeded before
+	// its show event. Afterwards polling is only needed without a native hook.
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
@@ -519,8 +541,12 @@ func (instance *runtimeOverlay) restartStickyTracking() {
 			select {
 			case <-ticker.C:
 				_ = woxui.Call(func() {
-					if runtimeOverlayByID(instance.id) == instance {
+					if runtimeOverlayByID(instance.id) == instance && instance.stickyStop == stop {
 						instance.applyLayout(false)
+						if instance.shown && instance.stickyDetach != nil {
+							close(stop)
+							instance.stickyStop = nil
+						}
 					}
 				})
 			case <-stop:
@@ -559,6 +585,8 @@ func WorkArea(options WindowOptions, current woxui.Rect) woxui.Rect {
 	}
 	if sticky, ok := stickyBounds(options, displays); ok {
 		pointX, pointY = sticky.X+sticky.Width/2, sticky.Y+sticky.Height/2
+	} else if options.StickyWindowPid > 0 && current.Width > 0 {
+		pointX, pointY = current.X+current.Width/2, current.Y+current.Height/2
 	}
 	if !options.AbsolutePosition && options.StickyWindowPid <= 0 && !(options.PreservePosition && current.Width > 0) {
 		for _, display := range displays {
@@ -590,7 +618,7 @@ func Bounds(options WindowOptions, current, workArea woxui.Rect, size woxui.Size
 		// the dialog has just been dismissed and the overlay is about to hide. Falling
 		// through to the work-area anchor would fling it across the screen for the frames
 		// it is still visible, so hold the last known position instead.
-		return clampBounds(woxui.Rect{X: current.X, Y: current.Y, Width: size.Width, Height: size.Height}, workArea)
+		return woxui.Rect{X: current.X, Y: current.Y, Width: size.Width, Height: size.Height}
 	} else if options.AbsolutePosition {
 		target = woxui.Rect{}
 	}
@@ -630,7 +658,20 @@ func stickyBounds(options WindowOptions, displays []screen.Display) (woxui.Rect,
 		return woxui.Rect{}, false
 	}
 	target, err := window.GetManagedWindow(options.StickyWindowId, options.StickyWindowPid, "")
-	if err != nil || target.Bounds.Width <= 0 || target.Bounds.Height <= 0 {
+	if err != nil {
+		return woxui.Rect{}, false
+	}
+	return stickyWindowBounds(options, target, displays)
+}
+
+// stickyWindowBounds validates the tracked identity before converting native coordinates.
+func stickyWindowBounds(options WindowOptions, target window.ManagedWindow, displays []screen.Display) (woxui.Rect, bool) {
+	// Window management can fall back to another window in the same process after
+	// a dialog closes. An attached overlay must never follow that replacement.
+	if options.StickyWindowId != "" && target.Id != options.StickyWindowId {
+		return woxui.Rect{}, false
+	}
+	if target.Bounds.Width <= 0 || target.Bounds.Height <= 0 {
 		return woxui.Rect{}, false
 	}
 	bounds := woxui.Rect{X: float32(target.Bounds.X), Y: float32(target.Bounds.Y), Width: float32(target.Bounds.Width), Height: float32(target.Bounds.Height)}

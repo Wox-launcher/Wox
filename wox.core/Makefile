@@ -174,11 +174,18 @@ WINDOW_HOOK_CFLAGS32 := $(WINDOW_HOOK_CFLAGS) -Wl,--kill-at
 #
 # On Debian/Ubuntu the equivalent package is gcc-mingw-w64-i686.
 WINDOW_HOOK_CC32 ?= i686-w64-mingw32-gcc
+WINDOW_HOOK_PREBUILT ?= 0
 
 # Build the native window hook only for Windows so other platform binaries never embed it.
 window-hook-build:
-	rm -rf $(WINDOW_HOOK_DIR)
 ifeq ($(PLATFORM),windows)
+ifeq ($(WINDOW_HOOK_PREBUILT),1)
+	# Preserve the helper signed by CI before embedding the hook resources.
+	test -f $(WINDOW_HOOK_DLL)
+	test -f $(WINDOW_HOOK_DLL32)
+	test -f $(WINDOW_HOOK_HELPER32)
+else
+	rm -rf $(WINDOW_HOOK_DIR)
 	mkdir -p $(WINDOW_HOOK_DIR)
 	gcc $(WINDOW_HOOK_CFLAGS) -o $(WINDOW_HOOK_DLL) $(WINDOW_HOOK_SOURCE) $(WINDOW_HOOK_LIBS)
 	rm -f $(WINDOW_HOOK_HELPER32_VERSIONINFO)
@@ -203,7 +210,9 @@ ifeq ($(PLATFORM),windows)
 		echo "WARNING: overlays on 32-bit apps will fall back to polling and visibly lag." >&2; \
 		echo "WARNING: see the install notes above WINDOW_HOOK_CC32 in wox.core/Makefile." >&2; \
 	fi
+endif
 else
+	rm -rf $(WINDOW_HOOK_DIR)
 	@echo "Window hook is only supported on Windows"
 endif
 

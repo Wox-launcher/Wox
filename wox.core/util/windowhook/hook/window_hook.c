@@ -360,7 +360,8 @@ static void clearStickyOffset(HWND target)
 static void translateStickyOverlay(HWND target, HWND overlay)
 {
     RECT targetRect;
-    if (!GetPropW(target, WOX_STICKY_OFFSET_ACTIVE_PROP) || !GetWindowRect(target, &targetRect))
+    if (!IsWindowVisible(target) || IsIconic(target) ||
+        !GetPropW(target, WOX_STICKY_OFFSET_ACTIVE_PROP) || !GetWindowRect(target, &targetRect))
     {
         return;
     }
@@ -382,6 +383,16 @@ static LRESULT CALLBACK stickySubclassProc(HWND hwnd, UINT message, WPARAM wPara
         return DefSubclassProc(hwnd, message, wParam, lParam);
     }
 
+    // Hide at the target's visibility transition, without waiting for Wox's
+    // focus-handoff grace period. Async dispatch avoids blocking the target on
+    // Wox's UI thread while Wox may be waiting for this injected thread.
+    if ((message == WM_SHOWWINDOW && !wParam) ||
+        (message == WM_WINDOWPOSCHANGING && lParam && (((const WINDOWPOS *)lParam)->flags & SWP_HIDEWINDOW)) ||
+        message == WM_DESTROY || message == WM_NCDESTROY)
+    {
+        ShowWindowAsync(overlay, SW_HIDE);
+    }
+
     switch (message)
     {
     case WM_WINDOWPOSCHANGED:
@@ -394,9 +405,10 @@ static LRESULT CALLBACK stickySubclassProc(HWND hwnd, UINT message, WPARAM wPara
         // too would queue one full relayout per mouse-move message, and Wox cannot drain
         // them at drag rate: the backlog replays the entire drag from stale coordinates
         // after the user lets go, and each stale relayout republishes a corrupted offset.
-        // Only a resize invalidates the published offset, so only that needs Wox.
+        // Showing also needs a full layout: the initial overlay may have been
+        // positioned before the target became visible to window management.
         const WINDOWPOS *position = (const WINDOWPOS *)lParam;
-        if (!position || !(position->flags & SWP_NOSIZE))
+        if (!position || !(position->flags & SWP_NOSIZE) || (position->flags & SWP_SHOWWINDOW))
         {
             PostMessageW(overlay, getStickyChangedMessage(), (WPARAM)hwnd, 0);
         }

@@ -64,7 +64,7 @@ import (
 
 	_ "wox/plugin/system/emoji"
 
-	_ "wox/plugin/system/explorer"
+	_ "wox/plugin/system/quickjump"
 
 	_ "wox/plugin/system/browser_bookmark"
 

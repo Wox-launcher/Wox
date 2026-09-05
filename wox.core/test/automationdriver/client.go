@@ -406,9 +406,9 @@ func (c *Client) OpenSelectionQuery(ctx context.Context, text string) error {
 	return c.pauseAfterStep(ctx, err)
 }
 
-// OpenExplorerQuery opens the File Explorer Search secondary with bottom-anchored chrome.
-func (c *Client) OpenExplorerQuery(ctx context.Context, query string) error {
-	_, err := call[bool](ctx, c, "window.open_explorer_query", map[string]string{"query": query})
+// OpenQuickJumpQuery opens the Quick Jump secondary with bottom-anchored chrome.
+func (c *Client) OpenQuickJumpQuery(ctx context.Context, query string) error {
+	_, err := call[bool](ctx, c, "window.open_quickjump_query", map[string]string{"query": query})
 	return c.pauseAfterStep(ctx, err)
 }
 

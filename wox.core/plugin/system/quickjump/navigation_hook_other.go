@@ -1,6 +1,6 @@
 //go:build !windows
 
-package explorer
+package quickjump
 
 import "context"
 

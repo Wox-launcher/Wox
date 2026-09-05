@@ -1,6 +1,6 @@
 //go:build wox_ui_smoke
 
-package fileexplorersearch
+package quickjump
 
 import (
 	"context"
@@ -13,23 +13,23 @@ import (
 )
 
 // Test002LauncherQueryScopeRoutesWithoutVisibleKeyword verifies that an unprefixed
-// Explorer secondary query remains isolated from globally triggered plugins.
-// Flow: open the scoped Explorer directly with a calculator expression.
-// Evidence: the visible input has no Explorer keyword, the scope accessory is present,
-// and the Calculator result does not leak into the Explorer-only result set.
+// Quick Jump secondary query remains isolated from globally triggered plugins.
+// Flow: open the scoped Quick Jump directly with a calculator expression.
+// Evidence: the visible input has no Quick Jump keyword, the scope accessory is present,
+// and the Calculator result does not leak into the Quick Jump-only result set.
 func Test002LauncherQueryScopeRoutesWithoutVisibleKeyword(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		const expression = "1+1"
-		if err := client.OpenExplorerQuery(ctx, expression); err != nil {
-			t.Fatalf("open scoped explorer query: %v", err)
+		if err := client.OpenQuickJumpQuery(ctx, expression); err != nil {
+			t.Fatalf("open scoped quick jump query: %v", err)
 		}
-		if _, err := client.WaitForWindowState(ctx, explorerInstance, func(state automationdriver.WindowState) bool {
+		if _, err := client.WaitForWindowState(ctx, quickJumpInstance, func(state automationdriver.WindowState) bool {
 			return state.Exists && state.Visible
 		}); err != nil {
-			t.Fatalf("wait for explorer window: %v", err)
+			t.Fatalf("wait for quick jump window: %v", err)
 		}
-		if err := client.FocusInstance(ctx, explorerInstance); err != nil {
-			t.Fatalf("focus explorer instance: %v", err)
+		if err := client.FocusInstance(ctx, quickJumpInstance); err != nil {
+			t.Fatalf("focus quick jump instance: %v", err)
 		}
 
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
@@ -37,17 +37,17 @@ func Test002LauncherQueryScopeRoutesWithoutVisibleKeyword(t *testing.T) {
 			scopeIcons, scopeFound := automationdriver.Find(snapshot, "launcher.query.scope-icons")
 			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
 			_, loadingFound := automationdriver.Find(snapshot, "launcher.query.loading")
-			return inputFound && input.Value == expression && !strings.HasPrefix(input.Value, "explorer ") &&
+			return inputFound && input.Value == expression && !strings.HasPrefix(input.Value, "jump ") &&
 				scopeFound && scopeIcons.Value == "1" && !loadingFound && (!resultsFound || results.Value == "complete")
 		})
 		if err != nil {
-			t.Fatalf("wait for Explorer-only scoped query: %v", err)
+			t.Fatalf("wait for Quick Jump-only scoped query: %v", err)
 		}
 		if len(snapshot.Diagnostics) > 0 {
-			t.Fatalf("explorer semantics diagnostics: %v", snapshot.Diagnostics)
+			t.Fatalf("quick jump semantics diagnostics: %v", snapshot.Diagnostics)
 		}
 		if hasLauncherResultTitle(snapshot, "2") {
-			t.Fatal("calculator result leaked into the Explorer-scoped query")
+			t.Fatal("calculator result leaked into the Quick Jump-scoped query")
 		}
 	})
 }

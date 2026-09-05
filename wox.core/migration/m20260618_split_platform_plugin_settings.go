@@ -13,7 +13,7 @@ import (
 
 const (
 	appPluginID             = "ea2b6859-14bc-4c89-9c88-627da7379141"
-	explorerPluginID        = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
+	quickJumpPluginID       = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
 	wpmPluginID             = "e2c5f005-6c73-43c8-bc53-ab04def265b2"
 	folderPluginID          = "527ba64f-c8f5-4fc7-bb98-306f79d27f32"
 	shellPluginID           = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
@@ -45,7 +45,7 @@ func (m *splitPlatformPluginSettingsMigration) Up(ctx context.Context, tx *gorm.
 	for _, target := range []pluginSettingTarget{
 		{pluginID: appPluginID, keys: []string{"AppDirectories", "IgnoreRules"}},
 		{pluginID: fileSearchPluginID, keys: []string{"roots", "ignorePatterns"}},
-		{pluginID: explorerPluginID, keys: []string{"enableTypeToSearch", "quickJumpPaths"}},
+		{pluginID: quickJumpPluginID, keys: []string{"enableTypeToSearch", "quickJumpPaths"}},
 		{pluginID: wpmPluginID, keys: []string{"localPluginDirectories"}},
 		{pluginID: folderPluginID, keys: []string{"favorites"}},
 		{pluginID: shellPluginID, keys: []string{"shellCommands"}},

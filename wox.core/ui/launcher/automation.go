@@ -386,20 +386,20 @@ func (a *App) OpenAutomationSelectionQuery(text string) error {
 	return provider.AutomationOpenSelectionQuery(ctx, a.sessionID, text)
 }
 
-// OpenAutomationExplorerQuery opens the File Explorer Search secondary with bottom-anchored chrome.
-func (a *App) OpenAutomationExplorerQuery(query string) error {
+// OpenAutomationQuickJumpQuery opens the Quick Jump secondary with bottom-anchored chrome.
+func (a *App) OpenAutomationQuickJumpQuery(query string) error {
 	provider, ok := a.services.(interface {
-		AutomationOpenExplorerQuery(context.Context, string, string) error
+		AutomationOpenQuickJumpQuery(context.Context, string, string) error
 	})
 	if !ok {
-		return errors.New("explorer query automation is unavailable")
+		return errors.New("quick jump query automation is unavailable")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := provider.AutomationOpenExplorerQuery(ctx, a.sessionID, query); err != nil {
+	if err := provider.AutomationOpenQuickJumpQuery(ctx, a.sessionID, query); err != nil {
 		return err
 	}
-	return a.SetAutomationFocusInstance(string(common.ShowSourceExplorer))
+	return a.SetAutomationFocusInstance(string(common.ShowSourceQuickJump))
 }
 
 // SetAutomationFocusInstance routes later smoke Snapshot/Bounds/Perform calls to one launcher instance.
