@@ -11,7 +11,10 @@
 
 #define WOX_WINDOW_HOOK_VERSION 1
 #define WOX_WINDOW_PATH_CAPACITY 32768
-#define WOX_WINDOW_HOOK_TIMEOUT_MS 1000
+// Only reached when the target thread never runs the posted command: a healthy dialog
+// answers in single-digit milliseconds. Every caller has a slower fallback route, so this
+// bound is what the user waits through before that route even starts.
+#define WOX_WINDOW_HOOK_TIMEOUT_MS 80
 #define WOX_WM_GETISHELLBROWSER (WM_USER + 7)
 // Wox publishes the overlay's physical pixel offset from the target's outer frame
 // through these window properties. The subclass then translates the overlay inside
