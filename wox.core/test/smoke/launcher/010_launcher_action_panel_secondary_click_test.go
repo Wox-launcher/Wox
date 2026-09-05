@@ -23,23 +23,33 @@ func Test010LauncherActionPanelSecondaryClick(t *testing.T) {
 		if !found {
 			t.Fatalf("Shell result %q was not found", actionPanelShellCommand)
 		}
-		result, found := automationdriver.Find(snapshot, resultID)
-		if !found {
-			t.Fatalf("result node %q was not found before secondary click", resultID)
-		}
 		// The wait below is satisfied by any open panel, so an Action Panel left open by
 		// an earlier case would pass it without the secondary click doing anything.
 		if _, alreadyOpen := automationdriver.Find(snapshot, "action-search"); alreadyOpen {
 			t.Fatal("Action Panel was already open before the secondary click, so this case cannot prove the secondary-click path")
 		}
 
-		// Result semantics expose activation but not the secondary-click gesture, so resolve the pointer target from the current semantic bounds.
+		// Query completion can precede the native resize. The result already has
+		// semantics then, but its center is outside the clipped results viewport.
+		snapshot, err := client.WaitFor(ctx, func(current woxwidget.AutomationSnapshot) bool {
+			result, resultFound := automationdriver.Find(current, resultID)
+			viewport, viewportFound := automationdriver.Find(current, "launcher.results")
+			return resultFound && viewportFound && result.Bounds.Width > 0 && result.Bounds.Height > 0 &&
+				result.Bounds.X >= viewport.Bounds.X && result.Bounds.Y >= viewport.Bounds.Y &&
+				result.Bounds.X+result.Bounds.Width <= viewport.Bounds.X+viewport.Bounds.Width &&
+				result.Bounds.Y+result.Bounds.Height <= viewport.Bounds.Y+viewport.Bounds.Height
+		})
+		if err != nil {
+			t.Fatalf("wait for clickable result after resize: %v", err)
+		}
+		result, _ := automationdriver.Find(snapshot, resultID)
+		// Both semantic bounds and injected pointer positions are logical client coordinates.
 		position := woxui.Point{X: result.Bounds.X + result.Bounds.Width/2, Y: result.Bounds.Y + result.Bounds.Height/2}
 		if err := client.Pointer(ctx, woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonSecondary, Position: position}); err != nil {
 			t.Fatalf("secondary-click Shell result: %v", err)
 		}
 
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			search, searchFound := automationdriver.Find(snapshot, "action-search")
 			execute, executeFound := automationdriver.Find(snapshot, "action-result-execute-0")
 			return searchFound && search.Focused && executeFound && execute.Selected

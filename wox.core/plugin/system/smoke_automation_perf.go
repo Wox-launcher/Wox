@@ -61,19 +61,25 @@ func queryGridFixture() plugin.QueryResponse {
 	}
 }
 
+// queryChatFixture publishes an observable streaming state and completes it after the last update.
 func (p *smokeAutomationPlugin) queryChatFixture() plugin.QueryResponse {
 	resultID := "perf-chat-result"
-	preview := chatFixturePreview(0)
+	preview := chatFixturePreview(true)
 	api := p.api
-	for step := 1; step <= smokeAutomationChatStreamCount; step++ {
-		streamStep := step
-		time.AfterFunc(time.Duration(streamStep)*20*time.Millisecond, func() {
-			title := fmt.Sprintf("Perf chat stream %d", streamStep)
+	go func() {
+		for step := 1; step <= smokeAutomationChatStreamCount; step++ {
+			time.Sleep(20 * time.Millisecond)
+			title := fmt.Sprintf("Perf chat stream %d", step)
 			// Title-only updates keep the 200-message preview retained; replacing
 			// PreviewData on every tick rebuilds the whole conversation on the UI thread.
 			api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Title: &title})
-		})
-	}
+		}
+		// Hidden result titles are not a completion signal in fullscreen chat.
+		// Publish the final preview once so the Stop control returns to Send;
+		// serial updates ensure no older timer can arrive after completion.
+		completed := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: chatFixturePreview(false), ScrollPosition: plugin.WoxPreviewScrollPositionBottom}
+		api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Preview: &completed})
+	}()
 	ratio := 0.0
 	return plugin.QueryResponse{
 		Results: []plugin.QueryResult{{
@@ -99,7 +105,8 @@ func queryWarmCacheFixture() plugin.QueryResponse {
 	return plugin.NewQueryResponse(results)
 }
 
-func chatFixturePreview(streamStep int) string {
+// chatFixturePreview keeps message content fixed across the streaming completion transition.
+func chatFixturePreview(streaming bool) string {
 	conversations := make([]common.Conversation, 0, smokeAutomationChatCount)
 	for index := range smokeAutomationChatCount {
 		role := common.ConversationRoleUser
@@ -114,16 +121,13 @@ func chatFixturePreview(streamStep int) string {
 			default:
 				text = strings.Repeat("Longer streaming-style paragraph for variable height. ", 8)
 			}
-			if index == smokeAutomationChatCount-1 && streamStep > 0 {
-				text += strings.Repeat(" +", streamStep)
-			}
 		}
 		conversations = append(conversations, common.Conversation{
 			Id: fmt.Sprintf("perf-msg-%d", index), Role: role, Text: text, Timestamp: int64(index),
 		})
 	}
 	raw, err := json.Marshal(common.AIChatPreviewData{
-		ActiveChat: common.AIChatData{Id: "perf-chat", Title: "Perf chat", Conversations: conversations},
+		ActiveChat: common.AIChatData{Id: "perf-chat", Title: "Perf chat", Conversations: conversations, IsStreaming: streaming},
 	})
 	if err != nil {
 		return "{}"

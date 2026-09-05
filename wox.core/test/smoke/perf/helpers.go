@@ -47,8 +47,14 @@ const (
 
 func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
 	t.Helper()
-	want := perfSampleCount
 	waitForSnapshotQuiet(t, ctx, client, 150*time.Millisecond)
+	return collectPresentedSamples(t, ctx, client)
+}
+
+// collectPresentedSamples also serves active streams, which must not wait for quiet first.
+func collectPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
+	t.Helper()
+	want := perfSampleCount
 	if err := client.ResetFrameMetrics(ctx); err != nil {
 		t.Fatalf("reset frame metrics: %v", err)
 	}
@@ -142,14 +148,15 @@ func describeFrameMetrics(metrics woxui.FrameMetricsSnapshot) string {
 		metrics.DroppedFrameCount, metrics.CoalescedFrameCount, metrics.BackpressuredFrameCount, len(metrics.Recent))
 }
 
-func assertSettledWork(t *testing.T, samples []woxui.FrameMetricsSample) {
+// assertFrameWork checks bounded rendering work during both active and settled updates.
+func assertFrameWork(t *testing.T, samples []woxui.FrameMetricsSample) {
 	t.Helper()
 	if len(samples) == 0 {
 		t.Fatal("no presented frames to assert")
 	}
 	for _, sample := range samples {
 		if sample.Dropped {
-			t.Fatalf("settled frame %d was dropped: %+v", sample.FrameID, sample)
+			t.Fatalf("sampled frame %d was dropped: %+v", sample.FrameID, sample)
 		}
 		if sample.Work.LayoutVisits <= 0 || sample.Work.PaintVisits <= 0 || sample.Work.IdentityVisits <= 0 {
 			t.Fatalf("frame %d missing work counters: %+v", sample.FrameID, sample.Work)
@@ -164,6 +171,12 @@ func assertSettledWork(t *testing.T, samples []woxui.FrameMetricsSample) {
 			t.Fatalf("frame %d recorded no text draws: %+v", sample.FrameID, sample.Work)
 		}
 	}
+}
+
+// assertSettledWork applies phase timing budgets only after updates have finished.
+func assertSettledWork(t *testing.T, samples []woxui.FrameMetricsSample) {
+	t.Helper()
+	assertFrameWork(t, samples)
 	steady := steadySamples(t, samples)
 	layoutMax := maxInt(workValues(steady, func(sample woxui.FrameMetricsSample) int { return sample.Work.LayoutVisits }))
 	commandMax := maxInt(workValues(steady, func(sample woxui.FrameMetricsSample) int { return sample.DisplayCommandCount }))

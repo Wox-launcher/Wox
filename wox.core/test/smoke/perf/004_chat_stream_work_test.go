@@ -9,6 +9,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	woxwidget "wox/ui/widget"
 )
 
 // Test004ChatStreamWork verifies active streaming can coalesce obsolete frames and then settle cleanly.
@@ -22,10 +23,22 @@ func Test004ChatStreamWork(t *testing.T) {
 		if !chatVisible && !resultVisible {
 			t.Fatal("expected chat messages or streamed chat result")
 		}
-		streamSamples := waitForPresentedSamples(t, ctx, client)
-		assertSettledWork(t, streamSamples)
+		streamAction, found := automationdriver.FindByAutomationIDPrefix(snapshot, "chat-send-")
+		if !found {
+			t.Fatal("streaming chat control was not exposed")
+		}
+		streamSamples := collectPresentedSamples(t, ctx, client)
+		assertFrameWork(t, streamSamples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 
+		// Title-only updates are hidden in chat mode. Wait for the fixture's final
+		// preview to change Stop back to Send before applying steady timing budgets.
+		if _, err := client.WaitFor(ctx, func(current woxwidget.AutomationSnapshot) bool {
+			action, found := automationdriver.FindByAutomationIDPrefix(current, "chat-send-")
+			return found && action.Label != streamAction.Label
+		}); err != nil {
+			t.Fatalf("wait for chat stream completion: %v", err)
+		}
 		waitForSnapshotQuiet(t, ctx, client, 350*time.Millisecond)
 		steadySamples := waitForPresentedSamples(t, ctx, client)
 		assertSettledWork(t, steadySamples)
