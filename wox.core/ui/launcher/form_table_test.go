@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -231,6 +232,182 @@ func TestQueryHotkeyVariablePickerTriggersAndReplacesText(t *testing.T) {
 	app.chooseFormTableQueryVariable(1)
 	if got := fields.values["Query"]; got != "{wox:selected_file} {wox:selected_text}" {
 		t.Fatalf("button variable replacement = %q", got)
+	}
+}
+
+func TestAICommandPromptVariablePickerTriggersAndReplacesText(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "prompt", Tooltip: "i18n:plugin_ai_command_prompt_tooltip"},
+	}}, map[string]string{"prompt": ""}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "commands"}}, rowForm: &fields,
+	}}
+
+	app.setFormTableRowText(0, "Summarize {inp")
+	if app.launcherTableEditor.queryVariable == nil || app.launcherTableEditor.queryVariable.triggerStart != 10 {
+		t.Fatal("typing an unfinished AI command variable should open the picker at its trigger")
+	}
+	app.chooseFormTableQueryVariable(0)
+	if got := fields.values["prompt"]; got != "Summarize {wox:input_text}" {
+		t.Fatalf("typed AI command variable replacement = %q", got)
+	}
+
+	fields.editor.SetText("Extract facts:\n", false)
+	fields.editor.SetCaret(len([]rune("Extract facts:\n")))
+	app.openFormTableQueryVariablePicker(0, woxui.Rect{})
+	app.chooseFormTableQueryVariable(0)
+	if got := fields.values["prompt"]; got != "Extract facts:\n{wox:input_text}" {
+		t.Fatalf("button AI command variable replacement = %q", got)
+	}
+}
+
+func TestDictationPromptVariablePickerInsertsDictationText(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "prompt", Tooltip: "i18n:plugin_dictation_action_prompt_tooltip"},
+	}}, map[string]string{"prompt": "Rewrite "}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "actions"}}, rowForm: &fields,
+	}}
+
+	fields.editor.SetCaret(len([]rune(fields.values["prompt"])))
+	app.openFormTableQueryVariablePicker(0, woxui.Rect{})
+	app.chooseFormTableQueryVariable(0)
+	if got := fields.values["prompt"]; got != "Rewrite {wox:dictation_text}" {
+		t.Fatalf("dictation variable replacement = %q", got)
+	}
+}
+
+func TestQueryVariableTokensIgnoreIncompletePlaceholders(t *testing.T) {
+	value := "open {wox:selected_ and {wox:selected_text} done"
+	tokens := queryVariableTokens(value)
+	closed := strings.Index(value, "{wox:selected_text}")
+	if len(tokens) != 1 || tokens[0].start != closed || tokens[0].end != closed+len("{wox:selected_text}") {
+		t.Fatalf("tokens = %#v, want only the closed selected_text placeholder at %d", tokens, closed)
+	}
+}
+
+func TestQueryVariableBackspaceDeletesWholePlaceholder(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip"},
+	}}, map[string]string{"Query": "ai translate {wox:selected_text} now"}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(len([]rune("ai translate {wox:selected_text}")))
+	if !app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}) {
+		t.Fatal("backspace after a complete placeholder should be handled")
+	}
+	if got := fields.values["Query"]; got != "ai translate  now" {
+		t.Fatalf("backspace text = %q, want the whole placeholder removed", got)
+	}
+}
+
+func TestQueryVariableDeleteRemovesWholePlaceholder(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "prompt", Tooltip: "i18n:plugin_ai_command_prompt_tooltip"},
+	}}, map[string]string{"prompt": "Summarize {wox:input_text} please"}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "commands"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(len([]rune("Summarize ")))
+	if !app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyDelete, Down: true}) {
+		t.Fatal("delete before a complete placeholder should be handled")
+	}
+	if got := fields.values["prompt"]; got != "Summarize  please" {
+		t.Fatalf("delete text = %q, want the whole placeholder removed", got)
+	}
+}
+
+func TestQueryVariableArrowsJumpPlaceholder(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip"},
+	}}, map[string]string{"Query": "{wox:selected_file}"}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(len([]rune("{wox:selected_file}")))
+	if !app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyArrowLeft, Down: true}) {
+		t.Fatal("left arrow should jump to the start of the placeholder")
+	}
+	if got := fields.editor.State().Selection.Focus; got != 0 {
+		t.Fatalf("caret after left = %d, want 0", got)
+	}
+	if !app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyArrowRight, Down: true}) {
+		t.Fatal("right arrow should jump to the end of the placeholder")
+	}
+	if got := fields.editor.State().Selection.Focus; got != len([]rune("{wox:selected_file}")) {
+		t.Fatalf("caret after right = %d, want placeholder end", got)
+	}
+}
+
+func TestQueryVariableCaretSnapsOutOfPlaceholder(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip"},
+	}}, map[string]string{"Query": "x{wox:selected_text}y"}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(3)
+	app.snapFormTableQueryVariableSelection()
+	if got := fields.editor.State().Selection.Focus; got != 1 {
+		t.Fatalf("snapped caret = %d, want placeholder start", got)
+	}
+}
+
+func TestQueryVariablePartialSelectionDeletesWholePlaceholder(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip"},
+	}}, map[string]string{"Query": "keep {wox:selected_text} tail"}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys"}}, rowForm: &fields,
+	}}
+	start := strings.Index(fields.values["Query"], "selected")
+	fields.editor.SetSelection(start, start+8)
+	if !app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}) {
+		t.Fatal("deleting a partial placeholder should be handled")
+	}
+	if got := fields.values["Query"]; got != "keep  tail" {
+		t.Fatalf("partial delete text = %q, want the whole placeholder removed", got)
+	}
+}
+
+func TestQueryVariableIncompletePlaceholderStillDeletesByCharacter(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip"},
+	}}, map[string]string{"Query": "open {wox:selected_"}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(len([]rune("open {wox:selected_")))
+	if app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}) {
+		t.Fatal("incomplete placeholder should keep character-by-character editing")
+	}
+}
+
+func TestFormTableColumnDefinitionKeepsAICommandPromptType(t *testing.T) {
+	field, editable := formTableColumnDefinition(formTableColumn{
+		Key: "prompt", Type: "aiCommandPrompt", Tooltip: "translated prompt tip", TextMaxLines: 10,
+	}, nil)
+	if !editable || field.Type != "textbox" || field.Value.ColumnType != "aiCommandPrompt" {
+		t.Fatalf("ai command prompt field = type %q column %q editable %v", field.Type, field.Value.ColumnType, editable)
+	}
+	if formTableQueryVariableKind(field) != formTableQueryVariableKindAICommand {
+		t.Fatal("translated AI command prompt tooltip should still offer input_text variables")
+	}
+}
+
+func TestFormTableQueryVariableKindMatchesFieldTooltips(t *testing.T) {
+	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{ColumnType: "aiCommandPrompt", Tooltip: "translated prompt tip"}}); got != formTableQueryVariableKindAICommand {
+		t.Fatalf("ai command column type = %q", got)
+	}
+	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{Tooltip: "i18n:plugin_ai_command_prompt_tooltip"}}); got != formTableQueryVariableKindAICommand {
+		t.Fatalf("ai command kind = %q", got)
+	}
+	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{Tooltip: "i18n:ui_query_hotkeys_query_tooltip"}}); got != formTableQueryVariableKindQueryHotkey {
+		t.Fatalf("query hotkey kind = %q", got)
+	}
+	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{Tooltip: "i18n:plugin_ai_command_name_tooltip"}}); got != "" {
+		t.Fatalf("unrelated field should not offer variables, got %q", got)
 	}
 }
 

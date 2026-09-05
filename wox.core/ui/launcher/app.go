@@ -1962,12 +1962,14 @@ type formDefinition struct {
 }
 
 type formDefinitionValue struct {
-	Key               string              `json:"Key"`
-	Label             string              `json:"Label"`
-	Title             string              `json:"Title"`
-	Suffix            string              `json:"Suffix"`
-	DefaultValue      string              `json:"DefaultValue"`
-	Tooltip           string              `json:"Tooltip"`
+	Key          string `json:"Key"`
+	Label        string `json:"Label"`
+	Title        string `json:"Title"`
+	Suffix       string `json:"Suffix"`
+	DefaultValue string `json:"DefaultValue"`
+	Tooltip      string `json:"Tooltip"`
+	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
+	ColumnType        string              `json:"ColumnType"`
 	Content           string              `json:"Content"`
 	MaxLines          int                 `json:"MaxLines"`
 	IsMulti           bool                `json:"IsMulti"`

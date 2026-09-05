@@ -30,9 +30,10 @@ const (
 var chatSkillTagPattern = regexp.MustCompile(`\{skill:([^}]+)\}`)
 
 type chatPreviewData struct {
-	ActiveChat   chatData   `json:"ActiveChat"`
-	ActiveChatID string     `json:"ActiveChatId"`
-	Chats        []chatData `json:"Chats"`
+	ActiveChat         chatData                  `json:"ActiveChat"`
+	ActiveChatID       string                    `json:"ActiveChatId"`
+	Chats              []chatData                `json:"Chats"`
+	InitialAttachments []common.AIChatAttachment `json:"InitialAttachments,omitempty"`
 }
 
 type chatData struct {
@@ -49,14 +50,15 @@ type chatData struct {
 }
 
 type chatConversation struct {
-	ID           string           `json:"Id"`
-	Role         string           `json:"Role"`
-	Text         string           `json:"Text"`
-	Reasoning    string           `json:"Reasoning"`
-	Images       []woxImage       `json:"Images"`
-	SkillRefs    []chatSkillRef   `json:"SkillRefs"`
-	ToolCallInfo chatToolCallInfo `json:"ToolCallInfo"`
-	Timestamp    int64            `json:"Timestamp"`
+	ID           string                    `json:"Id"`
+	Role         string                    `json:"Role"`
+	Text         string                    `json:"Text"`
+	Reasoning    string                    `json:"Reasoning"`
+	Attachments  []common.AIChatAttachment `json:"Attachments,omitempty"`
+	Images       []woxImage                `json:"Images"`
+	SkillRefs    []chatSkillRef            `json:"SkillRefs"`
+	ToolCallInfo chatToolCallInfo          `json:"ToolCallInfo"`
+	Timestamp    int64                     `json:"Timestamp"`
 }
 
 type chatSkillRef struct {
@@ -154,6 +156,7 @@ type chatPreviewState struct {
 	questionEditor   *woxui.TextEditor
 	questionSelected int
 	expandedRounds   map[string]bool
+	attachments      []common.AIChatAttachment
 }
 
 type chatPreviewSnapshot struct {
@@ -183,6 +186,7 @@ type chatPreviewSnapshot struct {
 	questionEditing  woxui.TextEditingState
 	questionSelected int
 	expandedRounds   map[string]bool
+	attachments      []common.AIChatAttachment
 }
 
 type chatCommandPaletteItem struct {
@@ -287,6 +291,7 @@ func cloneChatData(source chatData) chatData {
 	cloned.Conversations = make([]chatConversation, len(source.Conversations))
 	for index, conversation := range source.Conversations {
 		cloned.Conversations[index] = conversation
+		cloned.Conversations[index].Attachments = slices.Clone(conversation.Attachments)
 		cloned.Conversations[index].Images = append([]woxImage(nil), conversation.Images...)
 		cloned.Conversations[index].SkillRefs = append([]chatSkillRef(nil), conversation.SkillRefs...)
 		if conversation.ToolCallInfo.Arguments != nil {
@@ -377,6 +382,7 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		question:         cloneChatQuestion(state.question),
 		questionSelected: state.questionSelected,
 		expandedRounds:   make(map[string]bool, len(state.expandedRounds)),
+		attachments:      slices.Clone(state.attachments),
 	}
 	for roundID, expanded := range state.expandedRounds {
 		snapshot.expandedRounds[roundID] = expanded
@@ -432,6 +438,7 @@ func (a *App) activateChatPreview(result queryResult, preview queryPreview) erro
 			autoFollow:     true,
 			scroll:         float32(math.MaxFloat32),
 			expandedRounds: make(map[string]bool),
+			attachments:    slices.Clone(data.InitialAttachments),
 		}
 		if data.ActiveChatID != "" {
 			a.chatPreview.loading = true
@@ -669,6 +676,7 @@ func (a *App) startNewChat() {
 	model := state.chat.Model
 	state.chat = chatData{ID: newID(), Model: model, CreatedAt: now, UpdatedAt: now}
 	state.editor.SetText("", false)
+	state.attachments = nil
 	state.loading = false
 	state.sending = false
 	state.error = ""
@@ -759,6 +767,7 @@ func (a *App) selectChatHistory(chatID string) {
 	state.chat = *selected
 	clear(state.expandedRounds)
 	state.editor.SetText("", false)
+	state.attachments = nil
 	state.loading = true
 	state.sending = false
 	state.error = ""
@@ -1307,9 +1316,10 @@ func (a *App) sendChatMessage() {
 		_ = a.window.Invalidate()
 		return
 	}
-	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, SkillRefs: skillRefs, Timestamp: now})
+	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, Attachments: slices.Clone(state.attachments), SkillRefs: skillRefs, Timestamp: now})
 	state.chat.UpdatedAt = now
 	state.editor.SetText("", false)
+	state.attachments = nil
 	key, revision, chat := beginChatRequestLocked(state)
 	_ = a.window.Invalidate()
 	a.postChatRequest(key, revision, chat)
@@ -1383,6 +1393,7 @@ func (a *App) editChatConversation(messageID string) {
 		return
 	}
 	text := state.chat.Conversations[messageIndex].Text
+	state.attachments = slices.Clone(state.chat.Conversations[messageIndex].Attachments)
 	state.chat.Conversations = slices.Clone(state.chat.Conversations[:messageIndex])
 	state.chat.CompactionEntries = nil
 	state.chat.DebugTrace = nil
@@ -1754,6 +1765,14 @@ func (a *App) scrollChatPreview(delta, maxOffset float32) {
 	if state := a.chatPreview; state != nil {
 		state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
 		state.autoFollow = maxOffset-state.scroll <= 36
+	}
+	_ = a.window.Invalidate()
+}
+
+// dismissChatAttachment removes one pending reference without sending it.
+func (a *App) dismissChatAttachment(id string) {
+	if state := a.chatPreview; state != nil {
+		state.attachments = slices.DeleteFunc(state.attachments, func(attachment common.AIChatAttachment) bool { return attachment.ID == id })
 	}
 	_ = a.window.Invalidate()
 }

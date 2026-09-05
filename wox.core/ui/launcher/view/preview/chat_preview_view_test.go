@@ -389,3 +389,98 @@ func TestChatCatalogItemOnlyShowsCheckForCurrentModel(t *testing.T) {
 		t.Fatalf("current model check slot = width %.0f, child %#v; want check glyph", currentCheck.Width, currentCheck.Child)
 	}
 }
+
+func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
+	theme := woxcomponent.Theme{
+		PreviewText:     woxui.Color{R: 220, G: 225, B: 230, A: 255},
+		ResultSubtitle:  woxui.Color{R: 180, G: 180, B: 180, A: 200},
+		QueryBackground: woxui.Color{R: 30, G: 30, B: 30, A: 255},
+	}
+	if ChatComposerHeight(0) != 98 || ChatComposerHeight(1) != 154 {
+		t.Fatalf("composer height = %.0f/%.0f", ChatComposerHeight(0), ChatComposerHeight(1))
+	}
+
+	plain := ChatInput(ChatInputProps{Width: 400, Height: 98, Key: "plain", Theme: theme}).(woxwidget.Container)
+	plainCard := plain.Child.(woxwidget.Container)
+	if len(plainCard.Child.(woxwidget.Flex).Children) != 3 {
+		t.Fatalf("plain composer children = %d, want editor, divider, toolbar", len(plainCard.Child.(woxwidget.Flex).Children))
+	}
+
+	quoted := ChatInput(ChatInputProps{
+		Width: 400, Height: ChatComposerHeight(1), Key: "quoted", Attachments: []ChatAttachmentProps{{ID: "quoted", Label: "Quote", Text: "selected text"}},
+		QuoteDismissLabel: "Remove quote", Theme: theme, OnDismissAttachment: func(string) {},
+	}).(woxwidget.Container)
+	quotedCard := quoted.Child.(woxwidget.Container)
+	children := quotedCard.Child.(woxwidget.Flex).Children
+	if len(children) != 4 {
+		t.Fatalf("quoted composer children = %d, want quote, editor, divider, toolbar", len(children))
+	}
+	quote := children[0].(woxwidget.Semantics)
+	if quote.AutomationID != "chat-quote-quoted" || quote.Role != woxui.AccessibilityRoleGroup {
+		t.Fatalf("quote card = %#v", quote)
+	}
+}
+
+func TestSentChatQuotePreservesLinesAndMessageHeight(t *testing.T) {
+	attachment := ChatAttachmentProps{ID: "quote", Label: "Quote", Text: "  first line\nsecond line", Layout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 36}}}
+	for _, width := range []float32{180, 600} {
+		quote := chatQuoteCard(attachment, width, woxcomponent.Theme{}, "", nil, true).(woxwidget.Semantics)
+		card := quote.Child.(woxwidget.Container)
+		row := card.Child.(woxwidget.Flex)
+		if len(row.Children) != 2 {
+			t.Fatal("sent quote must not have a dismiss action")
+		}
+		text := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[1].(woxwidget.TextBlock)
+		if text.Value != attachment.Text || text.MaxLines != 0 || text.Layout == nil {
+			t.Fatalf("sent reference was flattened or truncated: %#v", text)
+		}
+		if text.Width > width-32 || card.Height != 72 {
+			t.Fatalf("quote geometry = %#v", card)
+		}
+	}
+	plain := ChatMessageProps{Role: "user", Text: "Explain", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}}}
+	quoted := plain
+	quoted.Attachments = []ChatAttachmentProps{attachment}
+	if chatMessageHeight(quoted)-chatMessageHeight(plain) != 75 {
+		t.Fatal("message scroll extent does not include the quote and gap")
+	}
+	if ChatComposerHeight(2) != 210 {
+		t.Fatal("composer must reserve space for every attachment")
+	}
+}
+
+func TestChatFileAndImageAttachmentsUseCompactCards(t *testing.T) {
+	for _, kind := range []string{"file", "image"} {
+		attachment := ChatAttachmentProps{ID: "a", Kind: kind, Label: "a very long attachment name", Text: "/original/path", Image: &woxui.Image{Width: 400, Height: 100}}
+		for _, sent := range []bool{false, true} {
+			for _, width := range []float32{180, 600} {
+				view := chatAttachmentCard(attachment, width, woxcomponent.Theme{}, "Remove", nil, sent).(woxwidget.Semantics)
+				container := view.Child.(woxwidget.Container)
+				row := container.Child.(woxwidget.Flex)
+				thumbnail := row.Children[0].(woxwidget.Image)
+				if thumbnail.Fit != woxwidget.ImageFitContain {
+					t.Fatal("image aspect ratio must be preserved")
+				}
+				expected := chatQuoteCardHeight
+				if sent {
+					expected = chatAttachmentHeight(attachment)
+				}
+				if container.Height != expected || view.Label != attachment.Label+": "+attachment.Text {
+					t.Fatalf("attachment card = %#v", view)
+				}
+			}
+		}
+	}
+	if ChatComposerHeight(100) != ChatComposerHeight(3) {
+		t.Fatal("large selections must leave the editor visible")
+	}
+	attachments := make([]ChatAttachmentProps, 5)
+	input := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(5), Attachments: attachments}).(woxwidget.Container)
+	card := input.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(card.Children) != 4 {
+		t.Fatal("many attachments should use one scroll pane above the editor")
+	}
+	if _, ok := card.Children[0].(woxwidget.Stateful); !ok {
+		t.Fatal("attachment pane must own retained scroll state")
+	}
+}

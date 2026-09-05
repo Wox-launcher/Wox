@@ -30,7 +30,7 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	if showHeader {
 		headerHeight = 52
 	}
-	const inputHeight = float32(98)
+	inputHeight := previewview.ChatComposerHeight(len(snapshot.attachments))
 	contentWidth := width
 	catalogWidth := float32(0)
 	if snapshot.panel == "history" {
@@ -715,7 +715,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 	cardWidth := width
 	innerWidth := max(float32(40), cardWidth-4)
 	if conversation.Role == "user" {
-		cardWidth = width * 0.82
+		cardWidth = max(float32(0), width-4) * 0.82
 		innerWidth = max(float32(40), cardWidth-24)
 	}
 	props := previewview.ChatMessageProps{
@@ -759,6 +759,14 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		}
 		props.Skills = strings.Join(names, "  ")
 	}
+	props.Attachments = a.chatAttachmentProps(conversation.Attachments, a.translate("i18n:ui_ai_chat_quote_label"))
+	for i := range props.Attachments {
+		attachment := &props.Attachments[i]
+		if attachment.Kind != common.AIChatAttachmentQuote {
+			continue
+		}
+		attachment.Layout = a.previewTextLayout(fmt.Sprintf("chat-attachment\x00%s\x00%d\x00%d", key, index, i), attachment.Text, woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, max(float32(0), innerWidth-32), 18)
+	}
 	if len(conversation.Images) > 0 {
 		props.Images = make([]*woxui.Image, 0, min(3, len(conversation.Images)))
 		for _, source := range conversation.Images[:min(3, len(conversation.Images))] {
@@ -778,6 +786,9 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		}
 		if len(props.Images) > 0 {
 			props.ContentWidth = max(props.ContentWidth, float32(len(props.Images))*82+float32(len(props.Images)-1)*8)
+		}
+		if len(props.Attachments) > 0 {
+			props.ContentWidth = innerWidth
 		}
 		props.ContentWidth = min(innerWidth, props.ContentWidth)
 	}
@@ -801,7 +812,7 @@ func chatConversationClipboardText(conversation chatConversation) string {
 	if conversation.Role == "tool" || conversation.ToolCallInfo.Name != "" {
 		return strings.TrimSpace(formatChatToolCall(conversation))
 	}
-	return strings.TrimSpace(conversation.Text)
+	return common.ChatMessageText(conversation.Text, conversation.Attachments)
 }
 
 // formatChatToolCall keeps tool name, state, arguments, and response visible in the first vertical slice.
@@ -836,9 +847,19 @@ func formatChatToolCall(conversation chatConversation) string {
 
 // chatInputProps prepares the controlled editor and toolbar actions.
 func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatInputProps {
-	hint := a.translate("i18n:ui_ai_chat_input_hint")
-	if strings.TrimSpace(hint) == "" || hint == "i18n:ui_ai_chat_input_hint" {
-		hint = "Type a message. Use / to switch models or insert skills"
+	hintKey := "i18n:ui_ai_chat_input_hint"
+	hintFallback := "Type a message. Use / to switch models or insert skills"
+	if len(snapshot.attachments) > 0 {
+		hintKey = "i18n:plugin_ai_chat_input_hint_with_attachments"
+		hintFallback = "Ask about the attached files or images"
+		if snapshot.attachments[0].Kind == common.AIChatAttachmentQuote {
+			hintKey = "i18n:ui_ai_chat_input_hint_with_quote"
+			hintFallback = "Ask a follow-up about the quoted text"
+		}
+	}
+	hint := a.translate(hintKey)
+	if strings.TrimSpace(hint) == "" || hint == hintKey {
+		hint = hintFallback
 	}
 	model := strings.TrimSpace(snapshot.chat.Model.Name)
 	if model == "" {
@@ -864,12 +885,21 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	} else if snapshot.loading {
 		status = "Loading…"
 	}
+	quoteLabel := a.translate("i18n:ui_ai_chat_quote_label")
+	if strings.TrimSpace(quoteLabel) == "" || quoteLabel == "i18n:ui_ai_chat_quote_label" {
+		quoteLabel = "Quote"
+	}
+	quoteDismiss := a.translate("i18n:plugin_ai_chat_attachment_dismiss")
+	if strings.TrimSpace(quoteDismiss) == "" || quoteDismiss == "i18n:plugin_ai_chat_attachment_dismiss" {
+		quoteDismiss = "Remove attachment"
+	}
 	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
 		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: a.window,
 		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, ActionLabel: actionLabel, Sending: streaming, Theme: palette.componentTheme(),
+		Attachments: a.chatAttachmentProps(snapshot.attachments, quoteLabel), QuoteDismissLabel: quoteDismiss,
 		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: a.onChatPreviewKey,
-		OnModels: func() { a.toggleChatPanel("models") }, OnSend: action,
+		OnModels: func() { a.toggleChatPanel("models") }, OnSend: action, OnDismissAttachment: a.dismissChatAttachment,
 	}
 }
 
@@ -920,6 +950,30 @@ func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette
 			ID: "chat-question-input-" + question.QuestionID, Height: inputHeight, Editing: snapshot.questionEditing,
 			Focused: snapshot.active, Window: a.window, OnFocus: a.focusAIQuestionInput, OnChanged: a.setAIQuestionText, OnKey: a.onChatPreviewKey,
 		}
+	}
+	return props
+}
+
+// chatAttachmentProps keeps attachment identity while translating presentation labels.
+func (a *App) chatAttachmentProps(attachments []common.AIChatAttachment, quoteLabel string) []previewview.ChatAttachmentProps {
+	props := make([]previewview.ChatAttachmentProps, 0, len(attachments))
+	for _, attachment := range attachments {
+		label := attachment.Name
+		if attachment.Kind == common.AIChatAttachmentQuote {
+			label = quoteLabel
+		}
+		item := previewview.ChatAttachmentProps{ID: attachment.ID, Kind: attachment.Kind, Label: label, Text: attachment.Text}
+		switch attachment.Kind {
+		case common.AIChatAttachmentFile:
+			item.Text = attachment.URL
+			item.Image = a.imageFor(fromCoreImage(common.PluginFileIcon))
+		case common.AIChatAttachmentImage:
+			item.Text = a.translate("i18n:plugin_ai_chat_image_label")
+			if path := common.ChatAttachmentPath(attachment); path != "" {
+				item.Image = a.imageFor(fromCoreImage(common.NewWoxImageAbsolutePath(path)))
+			}
+		}
+		props = append(props, item)
 	}
 	return props
 }

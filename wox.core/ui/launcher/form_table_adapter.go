@@ -449,7 +449,7 @@ func (a *App) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariable
 	if themeColorIsDark(palette.background) {
 		surface = woxui.Color{R: 36, G: 36, B: 36, A: 255}
 	}
-	options := a.filteredQueryHotkeyVariables(snapshot.query)
+	options := a.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query)
 	choices := make([]launcherview.QueryVariableChoice, 0, len(options))
 	for _, option := range options {
 		choices = append(choices, launcherview.QueryVariableChoice{
@@ -691,16 +691,20 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		OnSelectionChanged: func(selection woxui.TextSelection) {
 			if state := a.activeFormTableEditor(); state != nil && state.rowForm != nil && state.rowForm.focused == index && state.rowForm.editor != nil {
 				state.rowForm.editor.SetSelection(selection.Anchor, selection.Focus)
-				if state.definition.Value.Key == "QueryHotkeys" && state.rowForm.definitions[index].Value.Key == "Query" {
+				if formTableQueryVariableKindForField(state, index) != "" {
+					a.snapFormTableQueryVariableSelection()
 					a.updateFormTableQueryVariableTrigger(index)
 				}
 			}
 		},
 		OnKey: callbacks.onKey,
 	}
-	if markdown {
+	if formTableQueryVariableKind(definition) != "" {
 		props.TrailingLabel = "{}"
+		props.TrailingActionLabel = a.translate("i18n:ui_query_variable_picker_insert")
 		props.OnTrailingTap = func(anchor woxui.Rect) { a.openFormTableQueryVariablePicker(index, anchor) }
+	}
+	if markdown {
 		props.OnOpenLink = a.openAboutLink
 		actionTint := palette.componentTheme().ResultSubtitle
 		props.ActionIcon = a.imageForTint(settingControlIconSource("bolt"), &actionTint, physicalImageSize(18, callbacks.imageScale))

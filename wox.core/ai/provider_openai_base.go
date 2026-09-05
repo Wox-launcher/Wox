@@ -2,8 +2,10 @@ package ai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"unicode"
 	"wox/common"
@@ -94,11 +96,15 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 		}
 	}
 
+	messages, err := o.convertConversations(conversations)
+	if err != nil {
+		return nil, err
+	}
 	var createdStream *ssestream.Stream[openai.ChatCompletionChunk]
 	if len(options.Tools) > 0 {
 		chatParams := openai.ChatCompletionNewParams{
 			Model:    model.Name,
-			Messages: o.convertConversations(conversations),
+			Messages: messages,
 			Tools:    convertedTools,
 			ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
 				OfAuto: param.Opt[string]{},
@@ -108,7 +114,7 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 	} else {
 		createdStream = client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 			Model:    model.Name,
-			Messages: o.convertConversations(conversations),
+			Messages: messages,
 		}, requestOptions...)
 	}
 
@@ -604,7 +610,7 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 }
 
 // convertConversations converts the conversations to OpenAI format
-func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) []openai.ChatCompletionMessageParamUnion {
+func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) ([]openai.ChatCompletionMessageParamUnion, error) {
 	var chatMessages []openai.ChatCompletionMessageParamUnion
 	pendingToolContent := ""
 	pendingToolReasoning := ""
@@ -614,7 +620,30 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			chatMessages = append(chatMessages, openai.SystemMessage(conversation.Text))
 		}
 		if conversation.Role == common.ConversationRoleUser {
-			chatMessages = append(chatMessages, openai.UserMessage(conversation.Text))
+			images := append([]common.WoxImage(nil), conversation.Images...)
+			for _, attachment := range conversation.Attachments {
+				if attachment.Kind != common.AIChatAttachmentImage {
+					continue
+				}
+				path := common.ChatAttachmentPath(attachment)
+				if path == "" {
+					return nil, fmt.Errorf("invalid image attachment: %s", attachment.Name)
+				}
+				images = append(images, common.NewWoxImageAbsolutePath(path))
+			}
+			if len(images) == 0 {
+				chatMessages = append(chatMessages, openai.UserMessage(conversation.Text))
+			} else {
+				parts := []openai.ChatCompletionContentPartUnionParam{openai.TextContentPart(conversation.Text)}
+				for _, image := range images {
+					imageURL, err := chatImageURL(image)
+					if err != nil {
+						return nil, fmt.Errorf("read chat image: %w", err)
+					}
+					parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: imageURL}))
+				}
+				chatMessages = append(chatMessages, openai.UserMessage(parts))
+			}
 		}
 		if conversation.Role == common.ConversationRoleAssistant {
 			if o.shouldFoldAssistantIntoNextToolCall(conversations, i) {
@@ -645,7 +674,7 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 		}
 	}
 
-	return chatMessages
+	return chatMessages, nil
 }
 
 // shouldFoldAssistantIntoNextToolCall keeps DeepSeek's content, reasoning, and tool calls in one assistant message.
@@ -732,4 +761,41 @@ func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
 	}
 
 	return openai.NewClient(requestOption...)
+}
+
+// chatImageURL preserves supported encoded images and converts other local raster formats to PNG.
+func chatImageURL(source common.WoxImage) (string, error) {
+	switch source.ImageType {
+	case common.WoxImageTypeUrl:
+		if !strings.HasPrefix(source.ImageData, "https://") && !strings.HasPrefix(source.ImageData, "http://") {
+			return "", fmt.Errorf("invalid image URL")
+		}
+		return source.ImageData, nil
+	case common.WoxImageTypeBase64:
+		if !strings.HasPrefix(source.ImageData, "data:image/") {
+			return "", fmt.Errorf("invalid image data URL")
+		}
+		return source.ImageData, nil
+	case common.WoxImageTypeAbsolutePath:
+		data, err := common.ReadChatImage(source.ImageData)
+		if err != nil {
+			return "", err
+		}
+		mimeType := http.DetectContentType(data)
+		switch mimeType {
+		case "image/png", "image/jpeg", "image/gif", "image/webp":
+			return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+		}
+		decoded, err := source.ToImageWithoutRemoteFetch()
+		if err != nil {
+			return "", err
+		}
+		encoded, err := common.NewWoxImage(decoded)
+		if err != nil {
+			return "", err
+		}
+		return encoded.ImageData, nil
+	default:
+		return "", fmt.Errorf("unsupported chat image type: %s", source.ImageType)
+	}
 }

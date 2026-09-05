@@ -150,11 +150,29 @@ type AISkillRef struct {
 	Source string
 }
 
+// AIChatAttachment preserves user-provided material separately from instructions.
+// URL holds a managed image reference or an original file path; quotes keep their Text.
+type AIChatAttachment struct {
+	ID       string
+	Kind     string
+	Name     string `json:",omitempty"`
+	Text     string `json:",omitempty"`
+	MimeType string `json:",omitempty"`
+	URL      string `json:",omitempty"`
+}
+
+const (
+	AIChatAttachmentQuote = "quote"
+	AIChatAttachmentImage = "image"
+	AIChatAttachmentFile  = "file"
+)
+
 type Conversation struct {
 	Id           string
 	Role         ConversationRole
 	Text         string
-	Reasoning    string // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
+	Reasoning    string             // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
+	Attachments  []AIChatAttachment `json:",omitempty"`
 	Images       []WoxImage
 	SkillRefs    []AISkillRef
 	ToolCallInfo ToolCallInfo
@@ -350,6 +368,7 @@ func cloneDebugConversations(conversations []Conversation) []Conversation {
 	cloned := make([]Conversation, len(conversations))
 	for i, conversation := range conversations {
 		cloned[i] = conversation
+		cloned[i].Attachments = append([]AIChatAttachment(nil), conversation.Attachments...)
 		cloned[i].Images = append([]WoxImage(nil), conversation.Images...)
 		cloned[i].SkillRefs = append([]AISkillRef(nil), conversation.SkillRefs...)
 		cloned[i].ToolCallInfo = cloneDebugToolCallInfo(conversation.ToolCallInfo)
@@ -374,6 +393,8 @@ type AIChatPreviewData struct {
 	ActiveChat   AIChatData
 	ActiveChatId string
 	Chats        []AIChatData
+	// InitialAttachments seeds the composer without adding a conversation.
+	InitialAttachments []AIChatAttachment `json:",omitempty"`
 }
 
 type AIChater interface {
@@ -546,4 +567,31 @@ type AIChatMCPServerConfig struct {
 
 	StartupTimeoutSec float64 `json:",omitempty"`
 	ToolTimeoutSec    float64 `json:",omitempty"`
+}
+
+// ChatMessageText exports references as plain text while leaving stored user instructions intact.
+func ChatMessageText(text string, attachments []AIChatAttachment) string {
+	var builder strings.Builder
+	for _, attachment := range attachments {
+		if attachment.Kind == AIChatAttachmentFile {
+			fmt.Fprintf(&builder, "Attached file: %s\nPath: %s\n\n", attachment.Name, attachment.URL)
+			continue
+		}
+		if attachment.Kind == AIChatAttachmentImage {
+			fmt.Fprintf(&builder, "Attached image: %s\n\n", attachment.Name)
+			continue
+		}
+		if attachment.Kind != AIChatAttachmentQuote {
+			continue
+		}
+		builder.WriteString("Quoted reference:\n")
+		for _, line := range strings.Split(attachment.Text, "\n") {
+			builder.WriteString("> ")
+			builder.WriteString(line)
+			builder.WriteByte('\n')
+		}
+		builder.WriteByte('\n')
+	}
+	builder.WriteString(text)
+	return strings.TrimSpace(builder.String())
 }

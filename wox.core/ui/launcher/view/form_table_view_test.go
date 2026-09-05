@@ -156,25 +156,68 @@ func TestFormTableRowTextControlLeavesCaretFocusToHost(t *testing.T) {
 	}
 }
 
+func TestFormTableRowTextControlPlacesVariableTriggerInsideInput(t *testing.T) {
+	tapped := false
+	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 200, G: 210, B: 220, A: 255}, Cursor: woxui.Color{R: 1, G: 2, B: 3, A: 255}}
+	control := formTableRowTextControl(FormTableRowFieldProps{
+		ID: "prompt", State: woxui.TextEditingState{Text: "Summarize {wox:input_text}"}, Theme: theme,
+		TrailingLabel: "{}", TrailingActionLabel: "Insert dynamic placeholder", OnTrailingTap: func(woxui.Rect) { tapped = true },
+	}, 420, woxcomponent.SettingsControlHeight)
+	stack, ok := control.(woxwidget.Stack)
+	if !ok || len(stack.Children) != 2 {
+		t.Fatalf("variable trigger layout = %T children, want input plus inside {} icon", control)
+	}
+	trailingAlign, ok := stack.Children[1].Child.(woxwidget.Align)
+	if !ok {
+		t.Fatalf("trailing slot = %T, want centered compact icon button", stack.Children[1].Child)
+	}
+	trailing := formTableOperationIconButton(trailingAlign.Child)
+	if trailing.ID != "prompt-trailing" || trailing.Label != "Insert dynamic placeholder" {
+		t.Fatalf("trailing button = id %q label %q", trailing.ID, trailing.Label)
+	}
+	if trailing.Width != woxcomponent.SettingsCompactControlHeight || trailing.Height != woxcomponent.SettingsCompactControlHeight || trailing.HoverBackground != formTableRowIconHoverBackground(theme) {
+		t.Fatalf("trailing geometry/hover = %.0fx%.0f %#v, want compact icon-button hover", trailing.Width, trailing.Height, trailing.HoverBackground)
+	}
+	if trailing.OnTap == nil {
+		t.Fatal("trailing {} icon should open the variable picker")
+	}
+	trailing.OnTap()
+	if !tapped {
+		t.Fatal("trailing {} icon should open the variable picker")
+	}
+	input := stack.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if input.Padding.Right != 38 {
+		t.Fatalf("input trailing padding = %.0f, want room for the {} icon", input.Padding.Right)
+	}
+}
+
 func TestFormTableRowTextControlPlacesActionBesideInput(t *testing.T) {
 	tapped := false
+	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 200, G: 210, B: 220, A: 255}, Cursor: woxui.Color{R: 1, G: 2, B: 3, A: 255}}
 	control := formTableRowTextControl(FormTableRowFieldProps{
-		ID: "query", State: woxui.TextEditingState{Text: "ai translate {wox:selected_text}"}, Theme: woxcomponent.Theme{},
+		ID: "query", State: woxui.TextEditingState{Text: "ai translate {wox:selected_text}"}, Theme: theme,
 		ActionIcon: &woxui.Image{}, ActionLabel: "Test this query", OnActionTap: func() { tapped = true },
 	}, 420, woxcomponent.SettingsControlHeight).(woxwidget.Flex)
 	if control.Gap != 8 || len(control.Children) != 2 {
 		t.Fatalf("query action layout = children %d gap %.0f, want input plus outside action icon", len(control.Children), control.Gap)
 	}
 	input := control.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
-	if input.Width != 378 {
+	if input.Width != 380 {
 		t.Fatalf("input width = %.0f, want room reserved for the outside action icon", input.Width)
 	}
-	action := control.Children[1].(woxwidget.Semantics)
-	if action.AutomationID != "query-action" || action.Label != "Test this query" || action.Role != woxui.AccessibilityRoleButton {
-		t.Fatalf("action semantics = %#v", action)
+	action := formTableOperationIconButton(control.Children[1])
+	if action.ID != "query-action" || action.Label != "Test this query" {
+		t.Fatalf("action button = id %q label %q", action.ID, action.Label)
 	}
-	if err := action.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !tapped {
-		t.Fatalf("action activate err = %v tapped = %v", err, tapped)
+	if action.Width != woxcomponent.SettingsControlHeight || action.Height != woxcomponent.SettingsControlHeight || action.HoverBackground != formTableRowIconHoverBackground(theme) {
+		t.Fatalf("action geometry/hover = %.0fx%.0f %#v, want standard icon-button hover", action.Width, action.Height, action.HoverBackground)
+	}
+	if action.OnTap == nil {
+		t.Fatal("action icon should keep the query test tap")
+	}
+	action.OnTap()
+	if !tapped {
+		t.Fatal("action icon should keep the query test tap")
 	}
 }
 

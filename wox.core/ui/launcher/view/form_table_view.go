@@ -937,6 +937,7 @@ type FormTableRowFieldProps struct {
 	ActionIcon          *woxui.Image
 	ActionLabel         string
 	TrailingLabel       string
+	TrailingActionLabel string
 	Window              *woxui.Window
 	Theme               woxcomponent.Theme
 	OnTap               func()
@@ -1186,33 +1187,21 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 func formTableRowTextControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	inputWidth := width
 	sideActions := make([]woxwidget.Widget, 0, 2)
+	hoverBackground := formTableRowIconHoverBackground(props.Theme)
 	if props.OnBrowse != nil {
 		inputWidth = max(float32(100), inputWidth-90)
 		sideActions = append(sideActions, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Radius: 4, Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme}))
 	}
 	if props.ActionIcon != nil && props.OnActionTap != nil {
-		inputWidth = max(float32(100), inputWidth-42)
-		action := woxwidget.Semantics{
-			AutomationID: props.ID + "-action", Role: woxui.AccessibilityRoleButton, Label: props.ActionLabel,
-			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-			OnAction: func(action woxui.AccessibilityAction, _ string) error {
-				if action != woxui.AccessibilityActionActivate {
-					return fmt.Errorf("unsupported action %q", action)
-				}
-				props.OnActionTap()
-				return nil
-			},
-			Child: woxwidget.Gesture{
-				ID: props.ID + "-action", OnTap: props.OnActionTap,
-				OnHoverAt: func(inside bool, bounds woxui.Rect) {
-					if props.OnActionHover != nil {
-						props.OnActionHover(inside, bounds)
-					}
-				},
-				Child: woxwidget.Align{Width: 34, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.ActionIcon, Width: 18, Height: 18}},
-			},
-		}
-		sideActions = append(sideActions, action)
+		actionSize := woxcomponent.SettingsControlHeight
+		inputWidth = max(float32(100), inputWidth-actionSize-8)
+		sideActions = append(sideActions, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: props.ID + "-action", Label: props.ActionLabel,
+			Icon:  woxwidget.Image{Source: props.ActionIcon, Width: 18, Height: 18},
+			Width: actionSize, Height: actionSize, Radius: 4,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor,
+			OnTap: props.OnActionTap, OnHoverAt: props.OnActionHover,
+		}))
 	}
 	padding := woxwidget.Insets{Left: 10, Top: 6, Right: 9, Bottom: 6}
 	if props.TrailingLabel != "" {
@@ -1235,9 +1224,23 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		},
 	})
 	if props.TrailingLabel != "" {
-		trailing := woxwidget.Gesture{ID: props.ID + "-trailing", OnTapBounds: props.OnTrailingTap, Child: woxwidget.Align{Width: 34, Height: height, Vertical: 0.5, Child: woxwidget.Text{
-			Value: props.TrailingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
-		}}}
+		label := props.TrailingActionLabel
+		if label == "" {
+			label = props.TrailingLabel
+		}
+		trailing := woxwidget.Align{Width: 34, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: props.ID + "-trailing", Label: label,
+			Icon: woxwidget.Text{
+				Value: props.TrailingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
+			},
+			Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor,
+			OnTap: func() {
+				if props.OnTrailingTap != nil {
+					props.OnTrailingTap(woxui.Rect{})
+				}
+			},
+		})}
 		input = woxwidget.Stack{Width: inputWidth, Height: height, Children: []woxwidget.StackChild{
 			{Child: input},
 			{Left: max(float32(0), inputWidth-34), Child: trailing},
@@ -1247,6 +1250,13 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		return input
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: append([]woxwidget.Widget{input}, sideActions...)}
+}
+
+// formTableRowIconHoverBackground uses the same quiet ResultTitle wash as other Settings icon buttons.
+func formTableRowIconHoverBackground(theme woxcomponent.Theme) woxui.Color {
+	hover := theme.ResultTitle
+	hover.A = uint8(float32(hover.A) * 0.1)
+	return hover
 }
 
 func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget {

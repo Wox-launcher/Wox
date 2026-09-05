@@ -540,7 +540,7 @@ func fromCoreChatData(chat common.AIChatData) chatData {
 		}
 		conversations[index] = chatConversation{
 			ID: conversation.Id, Role: string(conversation.Role), Text: conversation.Text, Reasoning: conversation.Reasoning,
-			Images: images, SkillRefs: skillRefs,
+			Images: images, SkillRefs: skillRefs, Attachments: append([]common.AIChatAttachment(nil), conversation.Attachments...),
 			ToolCallInfo: chatToolCallFromContract(conversation.ToolCallInfo),
 			Timestamp:    conversation.Timestamp,
 		}

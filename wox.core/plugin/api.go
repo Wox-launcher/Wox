@@ -917,6 +917,7 @@ func cloneDebugConversations(conversations []common.Conversation) []common.Conve
 	cloned := make([]common.Conversation, len(conversations))
 	for i, conversation := range conversations {
 		cloned[i] = conversation
+		cloned[i].Attachments = append([]common.AIChatAttachment(nil), conversation.Attachments...)
 		cloned[i].Images = append([]common.WoxImage(nil), conversation.Images...)
 		cloned[i].SkillRefs = append([]common.AISkillRef(nil), conversation.SkillRefs...)
 		if conversation.ToolCallInfo.Arguments != nil {

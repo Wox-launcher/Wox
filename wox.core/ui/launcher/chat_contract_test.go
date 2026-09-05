@@ -1,7 +1,10 @@
 package launcher
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
+	woxui "wox/ui/runtime"
 
 	"wox/ai"
 	"wox/common"
@@ -110,5 +113,67 @@ func TestChatToolCallFromContractFillsOriginFromRegistry(t *testing.T) {
 	})
 	if persisted.Source != string(common.ToolSourceBuiltin) || persisted.Server != "" {
 		t.Fatalf("persisted origin should not be overwritten = %+v", persisted)
+	}
+}
+
+func TestFormatChatQuoteMessageKeepsReferenceAboveFollowUp(t *testing.T) {
+	got := common.ChatMessageText("What does this mean?", []common.AIChatAttachment{{Kind: common.AIChatAttachmentQuote, Text: "line 1\nline 2"}})
+	want := "Quoted reference:\n> line 1\n> line 2\n\nWhat does this mean?"
+	if got != want {
+		t.Fatalf("quote message = %q, want %q", got, want)
+	}
+}
+
+func TestChatPreviewDataDecodesInitialAttachments(t *testing.T) {
+	var data chatPreviewData
+	if err := json.Unmarshal([]byte(`{"ActiveChat":{"Id":"chat-1"},"InitialAttachments":[{"ID":"quote-1","Kind":"quote","Text":"selected text"}]}`), &data); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if data.ActiveChat.ID != "chat-1" || len(data.InitialAttachments) != 1 || data.InitialAttachments[0].Text != "selected text" {
+		t.Fatalf("preview data = %+v", data)
+	}
+}
+
+func TestChatAttachmentsRoundTripAndRestoreForEditing(t *testing.T) {
+	attachments := []common.AIChatAttachment{{ID: "quote-1", Kind: common.AIChatAttachmentQuote, Text: "literal {skill:Example}\nline 2"}, {ID: "quote-2", Kind: common.AIChatAttachmentQuote, Text: "second quote"}}
+	source := chatData{ID: "chat", Conversations: []chatConversation{{ID: "message", Role: "user", Text: "Explain", Attachments: attachments}}}
+	contract, err := chatDataToContract(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := chatDataFromContract(contract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, restored := range []chatData{decoded, fromCoreChatData(contract), cloneChatData(source)} {
+		if !reflect.DeepEqual(restored.Conversations[0].Attachments, attachments) {
+			t.Fatalf("lost attachments: %+v", restored)
+		}
+	}
+	app := &App{chatPreview: &chatPreviewState{chat: decoded, editor: woxui.NewTextEditor("")}}
+	app.editChatConversation("message")
+	if app.chatPreview.editor.State().Text != "Explain" || !reflect.DeepEqual(app.chatPreview.attachments, attachments) {
+		t.Fatal("editing failed to restore separate instructions and attachments")
+	}
+	if unresolvedChatSkillTag(app.chatPreview.editor.State().Text, nil) != "" {
+		t.Fatal("quoted skill tag entered the editor")
+	}
+	app.dismissChatAttachment("quote-1")
+	if len(app.chatPreview.attachments) != 1 || app.chatPreview.attachments[0].ID != "quote-2" {
+		t.Fatal("dismiss should remove only the selected attachment")
+	}
+	if !reflect.DeepEqual(contract.Conversations[0].Attachments, attachments) {
+		t.Fatal("draft mutation changed history")
+	}
+	if got := chatConversationClipboardText(source.Conversations[0]); got != common.ChatMessageText("Explain", attachments) {
+		t.Fatalf("copy text = %q", got)
+	}
+}
+
+func TestNewChatClearsDraftAttachments(t *testing.T) {
+	app := &App{chatPreview: &chatPreviewState{chat: chatData{Model: aiModel{Name: "model"}}, editor: woxui.NewTextEditor("old question"), attachments: []common.AIChatAttachment{{ID: "old", Kind: common.AIChatAttachmentQuote, Text: "old reference"}}}}
+	app.startNewChat()
+	if len(app.chatPreview.attachments) != 0 || app.chatPreview.editor.State().Text != "" {
+		t.Fatal("new chat retained the previous draft")
 	}
 }
