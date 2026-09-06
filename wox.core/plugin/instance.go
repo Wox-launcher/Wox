@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"wox/common"
 	"wox/setting"
@@ -22,6 +23,9 @@ type Instance struct {
 	Host                 Host                   // plugin host to run this plugin
 	Setting              *setting.PluginSetting // setting for this plugin
 	RuntimeQueryCommands []MetadataCommand      // query commands registered at runtime
+
+	runtimeTriggerKeywords   []string
+	runtimeTriggerKeywordsMu sync.RWMutex
 
 	DynamicSettingCallbacks   []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
 	SettingChangeCallbacks    []func(ctx context.Context, key string, value string)
@@ -148,14 +152,34 @@ func (i *Instance) GetDescription(ctx context.Context) string {
 
 // trigger keywords to trigger this plugin. Maybe user defined or pre-defined in plugin.json
 func (i *Instance) GetTriggerKeywords() []string {
+	keywords := i.Metadata.TriggerKeywords
 	if i.Setting != nil && i.Setting.TriggerKeywords != nil {
 		userDefinedKeywords := i.Setting.TriggerKeywords.Get()
 		if len(userDefinedKeywords) > 0 {
-			return userDefinedKeywords
+			keywords = userDefinedKeywords
 		}
 	}
 
-	return i.Metadata.TriggerKeywords
+	i.runtimeTriggerKeywordsMu.RLock()
+	defer i.runtimeTriggerKeywordsMu.RUnlock()
+	if len(i.runtimeTriggerKeywords) == 0 {
+		return keywords
+	}
+	return append(append([]string(nil), keywords...), i.runtimeTriggerKeywords...)
+}
+
+// setRuntimeTriggerKeywords replaces runtime registrations without persisting them as user overrides.
+func (i *Instance) setRuntimeTriggerKeywords(keywords []string) {
+	i.runtimeTriggerKeywordsMu.Lock()
+	defer i.runtimeTriggerKeywordsMu.Unlock()
+	i.runtimeTriggerKeywords = append([]string(nil), keywords...)
+}
+
+// unregisterTriggerKeyword leaves metadata and user-configured keywords untouched.
+func (i *Instance) unregisterTriggerKeyword(keyword string) {
+	i.runtimeTriggerKeywordsMu.Lock()
+	defer i.runtimeTriggerKeywordsMu.Unlock()
+	i.runtimeTriggerKeywords = slices.DeleteFunc(i.runtimeTriggerKeywords, func(value string) bool { return value == keyword })
 }
 
 // PrimaryTriggerKeyword returns the first non-global ("*") trigger keyword.

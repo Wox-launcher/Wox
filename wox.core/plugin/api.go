@@ -79,6 +79,11 @@ type API interface {
 	// this plugin's query context.
 	OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context))
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
+	// RegisterTriggerKeyword returns false for invalid keywords or keywords owned by another enabled plugin.
+	// Re-registering this plugin's own keyword succeeds without adding a duplicate.
+	RegisterTriggerKeyword(ctx context.Context, keyword string) bool
+	// UnregisterTriggerKeyword releases only this plugin's runtime registration.
+	UnregisterTriggerKeyword(ctx context.Context, keyword string)
 	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
 
 	// GetUpdatableResult retrieves the current state of a result from the result cache.
@@ -496,6 +501,14 @@ func (a *APIImpl) OnLeavePluginQuery(ctx context.Context, callback func(ctx cont
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {
 	a.pluginInstance.RuntimeQueryCommands = append([]MetadataCommand(nil), commands...)
+}
+
+func (a *APIImpl) RegisterTriggerKeyword(ctx context.Context, keyword string) bool {
+	return GetPluginManager().registerTriggerKeyword(a.pluginInstance, keyword)
+}
+
+func (a *APIImpl) UnregisterTriggerKeyword(ctx context.Context, keyword string) {
+	a.pluginInstance.unregisterTriggerKeyword(keyword)
 }
 
 func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {

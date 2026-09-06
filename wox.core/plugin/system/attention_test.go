@@ -148,3 +148,6 @@ func TestAttentionActionMarksItemRead(t *testing.T) {
 		t.Fatalf("expected action to change query, got %q", api.changedQuery)
 	}
 }
+
+func (a *attentionActionTestAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (a *attentionActionTestAPI) UnregisterTriggerKeyword(context.Context, string)    {}

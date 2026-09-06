@@ -241,3 +241,6 @@ func TestAIChatSelectionForMultipleFilesUsesPathsOnly(t *testing.T) {
 		t.Fatalf("runtime message = %+v", message)
 	}
 }
+
+func (emptyChatAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (emptyChatAPI) UnregisterTriggerKeyword(context.Context, string)    {}

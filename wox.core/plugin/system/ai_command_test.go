@@ -310,3 +310,6 @@ func TestAICommandSelectionUsesExplicitActionsAndSkipsPasteForVision(t *testing.
 		require.Equal(t, 0, api.streamCallCount())
 	})
 }
+
+func (a *aiCommandTestAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (a *aiCommandTestAPI) UnregisterTriggerKeyword(context.Context, string)    {}

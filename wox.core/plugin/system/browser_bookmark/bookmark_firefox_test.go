@@ -148,3 +148,6 @@ func (m *mockAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption
 func (m *mockAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
+
+func (m *mockAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (m *mockAPI) UnregisterTriggerKeyword(context.Context, string)    {}

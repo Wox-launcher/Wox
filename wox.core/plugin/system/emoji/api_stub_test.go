@@ -111,3 +111,6 @@ func (s *stubAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption
 func (s *stubAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
+
+func (s *stubAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (s *stubAPI) UnregisterTriggerKeyword(context.Context, string)    {}

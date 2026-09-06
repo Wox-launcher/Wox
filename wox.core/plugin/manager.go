@@ -155,10 +155,11 @@ func newQueryResultSet(query Query) *QueryResultSet {
 }
 
 type Manager struct {
-	instances          []*Instance
-	instancesMu        sync.RWMutex
-	systemPluginsReady chan struct{}
-	ui                 common.UI
+	runtimeTriggerRegistrationMu sync.Mutex
+	instances                    []*Instance
+	instancesMu                  sync.RWMutex
+	systemPluginsReady           chan struct{}
+	ui                           common.UI
 
 	// Query pipelines are concurrent in core even though UI displays only
 	// one active query. Key by session and query id so a late pipeline cannot
@@ -764,6 +765,7 @@ func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
 	pluginInstance.EnterPluginQueryCallbacks = nil
 	pluginInstance.LeavePluginQueryCallbacks = nil
 	pluginInstance.RuntimeQueryCommands = nil
+	pluginInstance.setRuntimeTriggerKeywords(nil)
 }
 
 func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {

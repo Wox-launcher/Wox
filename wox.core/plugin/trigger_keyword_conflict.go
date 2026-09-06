@@ -5,11 +5,36 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
+	"unicode"
 	"wox/common"
 	"wox/i18n"
 )
+
+// registerTriggerKeyword serializes ownership checks and registration so concurrent plugins cannot both claim a keyword.
+func (m *Manager) registerTriggerKeyword(instance *Instance, keyword string) bool {
+	if keyword == "" || keyword == "*" || strings.ContainsFunc(keyword, unicode.IsSpace) {
+		return false
+	}
+	m.runtimeTriggerRegistrationMu.Lock()
+	defer m.runtimeTriggerRegistrationMu.Unlock()
+	for _, other := range m.pluginInstancesSnapshot() {
+		if other == nil || other == instance || (other.Setting != nil && other.Setting.Disabled.Get()) {
+			continue
+		}
+		if slices.Contains(other.GetTriggerKeywords(), keyword) {
+			return false
+		}
+	}
+	instance.runtimeTriggerKeywordsMu.Lock()
+	defer instance.runtimeTriggerKeywordsMu.Unlock()
+	if !slices.Contains(instance.runtimeTriggerKeywords, keyword) {
+		instance.runtimeTriggerKeywords = append(instance.runtimeTriggerKeywords, keyword)
+	}
+	return true
+}
 
 // TriggerKeywordConflict describes one non-global trigger keyword used by more than one enabled plugin.
 // The conflict is kept in core because both Doctor and query dispatch need the same ownership rule.

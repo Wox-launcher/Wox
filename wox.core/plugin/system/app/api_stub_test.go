@@ -119,3 +119,6 @@ func (e emptyAPIImpl) Screenshot(ctx context.Context, option plugin.ScreenshotOp
 func (e emptyAPIImpl) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
+
+func (e emptyAPIImpl) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (e emptyAPIImpl) UnregisterTriggerKeyword(context.Context, string)    {}

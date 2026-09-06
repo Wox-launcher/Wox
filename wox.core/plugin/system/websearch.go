@@ -35,18 +35,20 @@ func init() {
 }
 
 type webSearch struct {
-	Urls       []string
-	Title      string
-	Keyword    string
-	Browser    string
-	IsFallback bool //if true, this search will be used when no other search is matched
-	Icon       common.WoxImage
-	Enabled    bool
+	Urls              []string
+	Title             string
+	Keyword           string
+	Browser           string
+	IsFallback        bool //if true, this search will be used when no other search is matched
+	Icon              common.WoxImage
+	Enabled           bool
+	triggerRegistered bool
 }
 
 type WebSearchPlugin struct {
-	api         plugin.API
-	webSearches []webSearch
+	api                plugin.API
+	webSearches        []webSearch
+	registeredKeywords []string
 }
 
 func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
@@ -171,18 +173,43 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.webSearches = r.loadWebSearches(ctx)
+	r.registerTriggerKeywords(ctx)
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
 
 	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == webSearchesSettingKey {
 			r.indexIcons(callbackCtx)
 			r.webSearches = r.loadWebSearches(callbackCtx)
+			r.registerTriggerKeywords(callbackCtx)
 		}
 	})
 
 	util.Go(ctx, "parse websearch icons", func() {
 		r.indexIcons(ctx)
 	})
+}
+
+// registerTriggerKeywords makes enabled searches participate in core scoped routing.
+func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
+	var keywords []string
+	for i := range r.webSearches {
+		search := &r.webSearches[i]
+		search.triggerRegistered = false
+		if search.Enabled {
+			search.triggerRegistered = r.api.RegisterTriggerKeyword(ctx, search.Keyword)
+			if search.triggerRegistered {
+				keywords = append(keywords, search.Keyword)
+			} else {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to register web search trigger keyword %q: invalid or already occupied", search.Keyword))
+			}
+		}
+	}
+	for _, keyword := range r.registeredKeywords {
+		if !slices.Contains(keywords, keyword) {
+			r.api.UnregisterTriggerKeyword(ctx, keyword)
+		}
+	}
+	r.registeredKeywords = keywords
 }
 
 func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
@@ -292,7 +319,8 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		if !search.Enabled {
 			continue
 		}
-		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
+		// Failed registrations must not bypass ownership through global literal matching.
+		if search.triggerRegistered && query.TriggerKeyword != "" && strings.EqualFold(search.Keyword, triggerKeyword) {
 			results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, search.Title, otherQuery),
 				Score: 100,
 				Icon:  search.Icon,

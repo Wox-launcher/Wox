@@ -140,3 +140,6 @@ func TestFileSearchResultActionsIncludeNotesAndShell(t *testing.T) {
 		}
 	}
 }
+
+func (a fileSearchToolbarTestAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
+func (a fileSearchToolbarTestAPI) UnregisterTriggerKeyword(context.Context, string)    {}
