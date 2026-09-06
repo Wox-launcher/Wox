@@ -149,5 +149,9 @@ func TestAttentionActionMarksItemRead(t *testing.T) {
 	}
 }
 
-func (a *attentionActionTestAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
-func (a *attentionActionTestAPI) UnregisterTriggerKeyword(context.Context, string)    {}
+func (a *attentionActionTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+func (a *attentionActionTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
+}

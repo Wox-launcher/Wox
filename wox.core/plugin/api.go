@@ -17,6 +17,22 @@ import (
 
 type LogLevel = string
 
+type RegisterTriggerKeywordOption struct {
+	Keyword string
+}
+
+type RegisterTriggerKeywordResult struct {
+	Success bool
+}
+
+type UnregisterTriggerKeywordOption struct {
+	Keyword string
+}
+
+type UnregisterTriggerKeywordResult struct {
+	Success bool
+}
+
 const (
 	LogLevelInfo    LogLevel = "Info"
 	LogLevelError   LogLevel = "Error"
@@ -79,11 +95,12 @@ type API interface {
 	// this plugin's query context.
 	OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context))
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	// RegisterTriggerKeyword returns false for invalid keywords or keywords owned by another enabled plugin.
+	// RegisterTriggerKeyword returns Success=false for invalid keywords or keywords owned by another enabled plugin.
 	// Re-registering this plugin's own keyword succeeds without adding a duplicate.
-	RegisterTriggerKeyword(ctx context.Context, keyword string) bool
+	RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult
 	// UnregisterTriggerKeyword releases only this plugin's runtime registration.
-	UnregisterTriggerKeyword(ctx context.Context, keyword string)
+	// An already absent registration is also considered successful.
+	UnregisterTriggerKeyword(ctx context.Context, option UnregisterTriggerKeywordOption) UnregisterTriggerKeywordResult
 	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
 
 	// GetUpdatableResult retrieves the current state of a result from the result cache.
@@ -503,12 +520,13 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.RuntimeQueryCommands = append([]MetadataCommand(nil), commands...)
 }
 
-func (a *APIImpl) RegisterTriggerKeyword(ctx context.Context, keyword string) bool {
-	return GetPluginManager().registerTriggerKeyword(a.pluginInstance, keyword)
+func (a *APIImpl) RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult {
+	return RegisterTriggerKeywordResult{Success: GetPluginManager().registerTriggerKeyword(a.pluginInstance, option.Keyword)}
 }
 
-func (a *APIImpl) UnregisterTriggerKeyword(ctx context.Context, keyword string) {
-	a.pluginInstance.unregisterTriggerKeyword(keyword)
+func (a *APIImpl) UnregisterTriggerKeyword(ctx context.Context, option UnregisterTriggerKeywordOption) UnregisterTriggerKeywordResult {
+	a.pluginInstance.unregisterTriggerKeyword(option.Keyword)
+	return UnregisterTriggerKeywordResult{Success: true}
 }
 
 func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {

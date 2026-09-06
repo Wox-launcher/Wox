@@ -242,5 +242,9 @@ func TestAIChatSelectionForMultipleFilesUsesPathsOnly(t *testing.T) {
 	}
 }
 
-func (emptyChatAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
-func (emptyChatAPI) UnregisterTriggerKeyword(context.Context, string)    {}
+func (emptyChatAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+func (emptyChatAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
+}

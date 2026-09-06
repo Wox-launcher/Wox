@@ -311,5 +311,9 @@ func TestAICommandSelectionUsesExplicitActionsAndSkipsPasteForVision(t *testing.
 	})
 }
 
-func (a *aiCommandTestAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
-func (a *aiCommandTestAPI) UnregisterTriggerKeyword(context.Context, string)    {}
+func (a *aiCommandTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+func (a *aiCommandTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
+}

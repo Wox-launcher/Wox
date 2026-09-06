@@ -12,18 +12,20 @@ type webSearchTriggerTestAPI struct {
 	keywords []string
 }
 
-func (a *webSearchTriggerTestAPI) RegisterTriggerKeyword(_ context.Context, keyword string) bool {
+func (a *webSearchTriggerTestAPI) RegisterTriggerKeyword(_ context.Context, option plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	keyword := option.Keyword
 	if keyword == "occupied" {
-		return false
+		return plugin.RegisterTriggerKeywordResult{Success: false}
 	}
 	if !slices.Contains(a.keywords, keyword) {
 		a.keywords = append(a.keywords, keyword)
 	}
-	return true
+	return plugin.RegisterTriggerKeywordResult{Success: true}
 }
 
-func (a *webSearchTriggerTestAPI) UnregisterTriggerKeyword(_ context.Context, keyword string) {
-	a.keywords = slices.DeleteFunc(a.keywords, func(value string) bool { return value == keyword })
+func (a *webSearchTriggerTestAPI) UnregisterTriggerKeyword(_ context.Context, option plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	a.keywords = slices.DeleteFunc(a.keywords, func(value string) bool { return value == option.Keyword })
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
 }
 
 // TestWebSearchTriggerKeywords ensures disabling and removing searches release their routing keywords.

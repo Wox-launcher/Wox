@@ -141,5 +141,9 @@ func TestFileSearchResultActionsIncludeNotesAndShell(t *testing.T) {
 	}
 }
 
-func (a fileSearchToolbarTestAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
-func (a fileSearchToolbarTestAPI) UnregisterTriggerKeyword(context.Context, string)    {}
+func (a fileSearchToolbarTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+func (a fileSearchToolbarTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
+}

@@ -6,6 +6,7 @@
 
 ## Rules
 
+- **API Compatibility**: Define new Wox APIs, especially public plugin/SDK APIs, with a context, one named option struct, and one named result struct: `Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult`. Apply this convention to both registration and unregistration APIs as well. Put all operation inputs in the option struct and outputs (including success status when needed) in the result struct instead of adding positional parameters or returning a bare scalar. Evolve APIs by adding backward-compatible fields with defaults that preserve existing behavior, and keep the corresponding SDK contracts consistent. Do not break already published signatures merely to retrofit this convention; preserve a compatible entry point when migrating them.
 - **Comments**: English only. Add intent-level comments only where they are necessary, such as complex logic, counterintuitive behavior, important state transitions, or code whose purpose is not obvious from the implementation.
 - **Logging**: Use `util.GetLogger()` for new runtime and diagnostic logs so entries use Wox's configured output and formatting. Do not add `fmt.Print*`, standard-library `log.Print*`, or native stderr logging for application diagnostics.
 - **Icons**: When adding or using UI icons, prefer an existing categorized SVG from `wox.core/common/icons.go` over font glyphs. Add reusable icons there before introducing local assets.

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"slices"
 	"sync"
 	"testing"
@@ -29,7 +30,12 @@ func TestRuntimeTriggerKeywords(t *testing.T) {
 	if owner != instance || query.TriggerKeyword != "g" || query.Search != "hello world" || query.IsGlobalQuery() {
 		t.Fatalf("query was not scoped: %+v", query)
 	}
-	instance.unregisterTriggerKeyword("g")
+	api := &APIImpl{pluginInstance: instance}
+	for range 2 {
+		if !api.UnregisterTriggerKeyword(context.Background(), UnregisterTriggerKeywordOption{Keyword: "g"}).Success {
+			t.Fatal("unregistration or repeated unregistration failed")
+		}
+	}
 	if !manager.registerTriggerKeyword(instance, "b") || !manager.registerTriggerKeyword(other, "g") {
 		t.Fatal("released or new keyword could not be registered")
 	}

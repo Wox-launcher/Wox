@@ -112,5 +112,9 @@ func (s *stubAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
-func (s *stubAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
-func (s *stubAPI) UnregisterTriggerKeyword(context.Context, string)    {}
+func (s *stubAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+func (s *stubAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
+}

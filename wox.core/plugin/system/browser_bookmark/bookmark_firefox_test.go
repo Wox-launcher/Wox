@@ -149,5 +149,9 @@ func (m *mockAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
-func (m *mockAPI) RegisterTriggerKeyword(context.Context, string) bool { return true }
-func (m *mockAPI) UnregisterTriggerKeyword(context.Context, string)    {}
+func (m *mockAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
+	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+func (m *mockAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
+	return plugin.UnregisterTriggerKeywordResult{Success: true}
+}

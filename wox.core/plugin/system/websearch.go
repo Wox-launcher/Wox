@@ -196,7 +196,7 @@ func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 		search := &r.webSearches[i]
 		search.triggerRegistered = false
 		if search.Enabled {
-			search.triggerRegistered = r.api.RegisterTriggerKeyword(ctx, search.Keyword)
+			search.triggerRegistered = r.api.RegisterTriggerKeyword(ctx, plugin.RegisterTriggerKeywordOption{Keyword: search.Keyword}).Success
 			if search.triggerRegistered {
 				keywords = append(keywords, search.Keyword)
 			} else {
@@ -206,7 +206,7 @@ func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 	}
 	for _, keyword := range r.registeredKeywords {
 		if !slices.Contains(keywords, keyword) {
-			r.api.UnregisterTriggerKeyword(ctx, keyword)
+			r.api.UnregisterTriggerKeyword(ctx, plugin.UnregisterTriggerKeywordOption{Keyword: keyword})
 		}
 	}
 	r.registeredKeywords = keywords
