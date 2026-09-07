@@ -2,14 +2,52 @@ package launcher
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"wox/common"
+	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-// Arguments retain empty hints, while only atomic blocks receive decoration.
+type queryHintResolverTestServices struct {
+	contract.Services
+	hint *common.QueryHint
+}
+
+func (s queryHintResolverTestServices) ResolveQueryHint(_ context.Context, text string) *common.QueryHint {
+	if text == "g " {
+		return s.hint.Clone()
+	}
+	return nil
+}
+
+// Word deletion crossing a separator must restore hints when only the context prefix remains.
+func TestQueryHintWordDeletionRestoresTemplate(t *testing.T) {
+	template := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g "}, {Id: "query", Kind: "argument", Placeholder: "query"},
+		{Id: "separator", Kind: "text", Text: " "}, {Id: "time", Kind: "argument", Placeholder: "time"},
+	}}
+	a := &App{editor: woxui.NewTextEditor(""), query: newInputQuery("g "), services: queryHintResolverTestServices{hint: template}}
+	filled := template.Clone()
+	filled.Elements[1].Value, filled.Elements[3].Value = "sdf", "sdlkfj"
+	a.installQueryHint(filled)
+	a.editor.SetCaret(len([]rune(filled.PlainText())))
+	modifier := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		modifier = woxui.KeyModifierAlt
+	}
+	for i := 0; i < 2; i++ {
+		a.editor.HandleKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Modifiers: modifier, Down: true})
+		a.query.QueryText = a.updateQueryHintText(a.editor.State().Text)
+	}
+	if a.query.QueryText != "g " || a.query.QueryHint == nil || a.query.QueryHint.PlainText() != "g " {
+		t.Fatalf("word deletion lost empty template: text=%q hint=%+v", a.query.QueryText, a.query.QueryHint)
+	}
+}
+
+// A single argument stays undecorated; only atomic blocks receive a mark by themselves.
 func TestQueryHintBackgroundOnlyForBlocks(t *testing.T) {
 	for _, tc := range []struct {
 		kind, value, placeholder string
@@ -27,8 +65,87 @@ func TestQueryHintBackgroundOnlyForBlocks(t *testing.T) {
 		widget := a.queryHintView(viewSnapshot{hint: hint, editing: woxui.TextEditingState{Text: hint.PlainText()}}, 200, 40, 34)
 		scroll := widget.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 		props := scroll.Child.(woxwidget.Boundary[launcherview.LauncherQueryProps]).Props
-		if len(props.Marks) != tc.marks || props.CompletionSuffix != tc.placeholder {
-			t.Fatalf("kind %s value %q: marks=%d placeholder=%q", tc.kind, tc.value, len(props.Marks), props.CompletionSuffix)
+		if len(props.Marks) != tc.marks || props.CompletionSuffix != tc.placeholder || len(props.CompletionChips) != 0 {
+			t.Fatalf("kind %s value %q: marks=%d placeholder=%q chips=%d", tc.kind, tc.value, len(props.Marks), props.CompletionSuffix, len(props.CompletionChips))
+		}
+	}
+}
+
+// Deferred separators remain visible in ghost text without extending the editable document.
+func TestQueryHintDeferredSeparatorSpacing(t *testing.T) {
+	for _, tc := range []struct {
+		value, separator, suffix string
+	}{
+		{"", "", "query time"},
+		{"se", "", " time"},
+		{"se", " ", "time"},
+	} {
+		a := &App{}
+		hint := &common.QueryHint{Elements: []common.QueryElement{
+			{Id: "command", Kind: "text", Text: "g "},
+			{Id: "query", Kind: "argument", Value: tc.value, Placeholder: "query"},
+			{Id: "separator", Kind: "text", Text: tc.separator},
+			{Id: "time", Kind: "argument", Placeholder: "time"},
+		}}
+		text := hint.PlainText()
+		widget := a.queryHintView(viewSnapshot{hint: hint, editing: woxui.TextEditingState{Text: text}}, 200, 40, 34)
+		scroll := widget.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+		props := scroll.Child.(woxwidget.Boundary[launcherview.LauncherQueryProps]).Props
+		if props.CompletionSuffix != tc.suffix || props.State.Text != text || hint.PlainText() != text {
+			t.Fatalf("value=%q separator=%q: suffix=%q text=%q", tc.value, tc.separator, props.CompletionSuffix, props.State.Text)
+		}
+		if tc.value == "" {
+			if len(props.CompletionChips) != 2 || props.CompletionChips[0].Text != "query" || props.CompletionChips[1].Text != "time" {
+				t.Fatalf("empty placeholders = %#v, want separate query and time chips", props.CompletionChips)
+			}
+		} else if len(props.CompletionChips) != 0 {
+			t.Fatalf("single remaining placeholder = %#v, want plain ghost text", props.CompletionChips)
+		}
+	}
+}
+
+// Multiple arguments need their own surfaces so values or names that contain spaces stay distinct.
+func TestQueryHintMultipleArgumentsUseDecoration(t *testing.T) {
+	a := &App{}
+	hint := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g "},
+		{Id: "query", Kind: "argument", Value: "hello world", Placeholder: "search query"},
+		{Id: "separator", Kind: "text", Text: " "},
+		{Id: "time", Kind: "argument", Placeholder: "time range"},
+	}}
+	widget := a.queryHintView(viewSnapshot{hint: hint, editing: woxui.TextEditingState{Text: hint.PlainText()}}, 200, 40, 34)
+	scroll := widget.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	props := scroll.Child.(woxwidget.Boundary[launcherview.LauncherQueryProps]).Props
+	if len(props.Marks) != 1 || props.CompletionSuffix != "time range" || len(props.CompletionChips) != 0 {
+		t.Fatalf("mixed slots = marks=%d suffix=%q chips=%#v", len(props.Marks), props.CompletionSuffix, props.CompletionChips)
+	}
+}
+
+// Required arguments must be filled before Tab advances; optional arguments remain skippable.
+func TestQueryHintTabRequiresCurrentValue(t *testing.T) {
+	for _, tc := range []struct {
+		value    string
+		required bool
+		advance  bool
+	}{{"", true, false}, {" ", true, false}, {"hello", true, true}, {"", false, true}} {
+		a := &App{editor: woxui.NewTextEditor("")}
+		a.installQueryHint(&common.QueryHint{Elements: []common.QueryElement{
+			{Id: "command", Kind: "text", Text: "g "},
+			{Id: "query", Kind: "argument", Value: tc.value, Required: tc.required},
+			{Id: "separator", Kind: "text", Text: " "}, {Id: "time", Kind: "argument", Required: true},
+		}})
+		before := a.editor.State()
+		a.onQueryHintKey(woxui.KeyEvent{Key: woxui.KeyTab, Down: true})
+		if (a.queryHintEditorState.active == 3) != tc.advance || (!tc.advance && a.editor.State() != before) || a.editor.State().Text != before.Text {
+			t.Fatalf("unexpected Tab navigation for value %q required=%t", tc.value, tc.required)
+		}
+		if tc.advance {
+			a.onQueryHintKey(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierShift, Down: true})
+			if a.queryHintEditorState.active != 1 {
+				t.Fatal("empty required argument blocked backward navigation")
+			}
+		} else if a.queryTabFeedback != 1 {
+			t.Fatal("blocked Tab did not provide caret feedback")
 		}
 	}
 }
@@ -139,6 +256,57 @@ func TestQueryHintEditing(t *testing.T) {
 	key(woxui.Key("z"), mods)
 	if a.query.QueryHint.Argument("issue") != "6" {
 		t.Fatal("undo lost argument value")
+	}
+}
+
+// Empty template slots must not add selectable text; Tab materializes only the next separator.
+func TestQueryHintTemplateDefersSeparators(t *testing.T) {
+	a := &App{editor: woxui.NewTextEditor(""), query: newInputQuery("g ")}
+	template := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g "}, {Id: "query", Kind: "argument", Required: true},
+		{Id: "separator", Kind: "text", Text: " "}, {Id: "time", Kind: "argument", Required: true},
+	}}
+	a.installQueryHintTemplate(template)
+	if a.editor.State().Text != "g " || a.query.QueryText != "g " || a.query.QueryHint.PlainText() != "g " {
+		t.Fatal("template added text beyond the user's input")
+	}
+	a.editor.SetCaret(100)
+	if a.editor.State().Selection.Focus != 2 {
+		t.Fatal("caret can move beyond the actual input")
+	}
+	a.editor.InsertText("hello world")
+	a.query.QueryText = a.updateQueryHintText(a.editor.State().Text)
+	a.onQueryHintKey(woxui.KeyEvent{Key: woxui.KeyTab, Down: true})
+	if a.editor.State().Text != "g hello world " || a.queryHintEditorState.active != 3 {
+		t.Fatal("Tab did not insert the next argument separator")
+	}
+	a.editor.InsertText("today")
+	a.query.QueryText = a.updateQueryHintText(a.editor.State().Text)
+	if a.query.QueryHint.Argument("query") != "hello world" || a.query.QueryHint.Argument("time") != "today" {
+		t.Fatal("deferred separators lost argument identities")
+	}
+	if template.Elements[2].Text != " " {
+		t.Fatal("activation mutated the registered template")
+	}
+}
+
+// Backspacing out of a multi-argument template must not leave invisible separators behind.
+func TestQueryHintBackspaceThenRetypeTrigger(t *testing.T) {
+	a := &App{editor: woxui.NewTextEditor(""), query: newInputQuery("g ")}
+	a.installQueryHintTemplate(&common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g "}, {Id: "query", Kind: "argument"},
+		{Id: "separator", Kind: "text", Text: " "}, {Id: "time", Kind: "argument"},
+	}})
+	for _, want := range []string{"g", ""} {
+		a.editor.HandleKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true})
+		a.query.QueryText = a.updateQueryHintText(a.editor.State().Text)
+		if a.query.QueryText != want || a.editor.State().Text != want || a.query.QueryHint != nil {
+			t.Fatalf("backspace left template text: query=%q editor=%q", a.query.QueryText, a.editor.State().Text)
+		}
+	}
+	a.editor.InsertText("g")
+	if got := a.updateQueryHintText(a.editor.State().Text); got != "g" {
+		t.Fatalf("retyping trigger acquired whitespace: %q", got)
 	}
 }
 

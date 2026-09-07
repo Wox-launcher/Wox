@@ -18,6 +18,7 @@ type queryHintEditor struct {
 	active      int
 	prefix      string
 	candidate   *common.QueryHint
+	template    *common.QueryHint
 	suppressed  string
 	allSelected bool
 	undo        []queryHintSnapshot
@@ -25,10 +26,11 @@ type queryHintEditor struct {
 }
 
 type queryHintSnapshot struct {
-	hint   *common.QueryHint
-	text   string
-	active int
-	prefix string
+	template *common.QueryHint
+	hint     *common.QueryHint
+	text     string
+	active   int
+	prefix   string
 }
 
 // rememberQueryHint snapshots content before an element edit or a structural transition.
@@ -41,7 +43,7 @@ func (a *App) rememberQueryHint() {
 			return
 		}
 	}
-	s.undo = append(s.undo, queryHintSnapshot{a.query.QueryHint.Clone(), a.query.QueryText, s.active, s.prefix})
+	s.undo = append(s.undo, queryHintSnapshot{s.template.Clone(), a.query.QueryHint.Clone(), a.query.QueryText, s.active, s.prefix})
 	if len(s.undo) > 100 {
 		s.undo = s.undo[len(s.undo)-100:]
 	}
@@ -50,6 +52,7 @@ func (a *App) rememberQueryHint() {
 
 // installQueryHint installs semantic content without splitting the native text editor.
 func (a *App) installQueryHint(hint *common.QueryHint) {
+	a.queryHintEditorState.template = nil
 	a.query.QueryHint = hint.Clone()
 	a.query.QueryText = hint.PlainText()
 	a.queryHintEditorState.active = 0
@@ -68,6 +71,25 @@ func (a *App) installQueryHint(hint *common.QueryHint) {
 	// Installing a hint must leave a visible caret, not preselect the block.
 	_, end := queryElementRange(hint, a.queryHintEditorState.active)
 	a.editor.SetCaret(end)
+}
+
+// installQueryHintTemplate defers unused whitespace separators until navigation needs them.
+func (a *App) installQueryHintTemplate(template *common.QueryHint) {
+	hint := template.Clone()
+	lastValue := 0
+	for i, element := range hint.Elements {
+		if element.Kind != common.QueryElementText && element.Content() != "" {
+			lastValue = i
+		}
+	}
+	for i := lastValue + 1; i < len(hint.Elements); i++ {
+		element := &hint.Elements[i]
+		if element.Kind == common.QueryElementText && strings.Trim(element.Text, " ") == "" {
+			element.Text = ""
+		}
+	}
+	a.installQueryHint(hint)
+	a.queryHintEditorState.template = template.Clone()
 }
 
 // updateQueryHintText maps continuous edits back to semantic values, or offers a command template.
@@ -107,10 +129,16 @@ func (a *App) updateQueryHintText(text string) string {
 			s.active = owner
 		} else {
 			a.query.QueryHint = nil
-			s.suppressed = text
+			// Word deletion can cross argument separators and return exactly to the
+			// context prefix. Resolve its empty template again instead of suppressing it.
+			if text != s.prefix {
+				s.suppressed = text
+			}
 		}
 		s.allSelected = false
-		return text
+		if a.query.QueryHint != nil || text != s.prefix {
+			return text
+		}
 	}
 	s.candidate = nil
 	if len(s.undo)+len(s.redo) > 0 && text != a.query.QueryText {
@@ -133,8 +161,8 @@ func (a *App) updateQueryHintText(text string) string {
 		return text
 	}
 	a.rememberQueryHint()
-	a.installQueryHint(hint)
-	return hint.PlainText()
+	a.installQueryHintTemplate(hint)
+	return a.query.QueryText
 }
 
 // queryHintChanged shares normal query invalidation without treating full text as a slot edit.
@@ -172,6 +200,28 @@ func (a *App) focusQueryElement(index int) bool {
 	if next < 0 || next >= len(hint.Elements) {
 		return false
 	}
+	if template := a.queryHintEditorState.template; direction > 0 && template != nil {
+		updated := hint.Clone()
+		for i := 1; i < next; i++ {
+			if updated.Elements[i].Kind != common.QueryElementText || updated.Elements[i].Text != "" {
+				continue
+			}
+			for _, original := range template.Elements {
+				if original.Id == updated.Elements[i].Id {
+					updated.Elements[i].Text = original.Text
+					break
+				}
+			}
+		}
+		if updated.PlainText() != hint.PlainText() {
+			a.rememberQueryHint()
+			hint = updated
+			a.query.QueryHint = hint
+			a.query.QueryText = hint.PlainText()
+			a.editor.SetText(a.query.QueryText, false)
+			a.queryHintChanged()
+		}
+	}
 	a.queryHintEditorState.active = next
 	a.queryHintEditorState.allSelected = false
 	start, end := queryElementRange(hint, next)
@@ -204,9 +254,10 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 		if len(*from) == 0 {
 			return true
 		}
-		*to = append(*to, queryHintSnapshot{a.query.QueryHint.Clone(), a.query.QueryText, s.active, s.prefix})
+		*to = append(*to, queryHintSnapshot{s.template.Clone(), a.query.QueryHint.Clone(), a.query.QueryText, s.active, s.prefix})
 		snapshot := (*from)[len(*from)-1]
 		*from = (*from)[:len(*from)-1]
+		s.template = snapshot.template.Clone()
 		a.query.QueryHint = snapshot.hint.Clone()
 		a.query.QueryText = snapshot.text
 		s.active, s.prefix, s.allSelected, s.candidate = snapshot.active, snapshot.prefix, false, nil
@@ -220,7 +271,7 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 	if hint == nil {
 		if s.candidate != nil && event.Key == woxui.KeyTab && event.Modifiers == 0 {
 			a.rememberQueryHint()
-			a.installQueryHint(s.candidate)
+			a.installQueryHintTemplate(s.candidate)
 			a.queryHintChanged()
 			return true
 		}
@@ -245,6 +296,14 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 		delta := 1
 		if event.Modifiers != 0 {
 			delta = -1
+		}
+		// Do not advance past an empty required argument into invisible separators.
+		if delta > 0 && s.active >= 0 && s.active < len(hint.Elements) {
+			element := hint.Elements[s.active]
+			if element.Required && strings.TrimSpace(element.Value) == "" {
+				a.rejectQueryTab()
+				return true
+			}
 		}
 		if !a.focusQueryElement(s.active+delta) && event.Modifiers == 0 {
 			a.rejectQueryTab()

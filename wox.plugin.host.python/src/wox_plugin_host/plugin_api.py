@@ -22,6 +22,10 @@ from wox_plugin import (
     ResultActionType,
     ScreenshotOption,
     ScreenshotResult,
+    RegisterTriggerKeywordOption,
+    RegisterTriggerKeywordResult,
+    UnregisterTriggerKeywordOption,
+    UnregisterTriggerKeywordResult,
     SetSettingOption,
     SetSettingResult,
     ToolbarMsg,
@@ -228,6 +232,16 @@ class PluginAPI(PublicAPI):
             "RegisterQueryCommands",
             {"commands": json.dumps([command.__dict__ for command in commands])},
         )
+
+    async def register_trigger_keyword(self, ctx: Context, option: RegisterTriggerKeywordOption) -> RegisterTriggerKeywordResult:
+        """Forward a typed trigger declaration and decode registration success."""
+        result = await self.invoke_method(ctx, "RegisterTriggerKeyword", {"option": json.dumps(option.to_dict())})
+        return RegisterTriggerKeywordResult(success=isinstance(result, dict) and result.get("Success") is True)
+
+    async def unregister_trigger_keyword(self, ctx: Context, option: UnregisterTriggerKeywordOption) -> UnregisterTriggerKeywordResult:
+        """Release this plugin's runtime trigger and its hint."""
+        result = await self.invoke_method(ctx, "UnregisterTriggerKeyword", {"option": json.dumps(option.to_dict())})
+        return UnregisterTriggerKeywordResult(success=isinstance(result, dict) and result.get("Success") is True)
 
     async def ai_chat_stream(
         self,

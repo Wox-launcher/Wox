@@ -26,6 +26,7 @@ import (
 	_ "wox/plugin/system/file_search"
 	_ "wox/plugin/system/notes"
 	_ "wox/plugin/system/sys"
+	_ "wox/plugin/system/websearch"
 )
 
 var (

@@ -324,6 +324,8 @@ Supported table column types include:
 
 - `text`
 - `textList`
+- `queryVariable`
+- `queryVariableList`
 - `checkbox`
 - `dirPath`
 - `select`
@@ -337,7 +339,8 @@ Table column notes:
 
 - `Validators` are supported on columns.
 - `SelectOptions` are only used when column type is `select`.
-- `TextMaxLines` is only used when column type is `text`.
+- `TextMaxLines` is only used when column type is `text`, `textList`, `queryVariable`, or `queryVariableList`.
+- `QueryVariableKind` selects the `{wox:...}` picker set for `queryVariable` and `queryVariableList` (`queryHotkey`, `aiCommand`, `dictation`, `webSearch`). Those fields show variable chips and open the picker when the user types `{`.
 - `HideInTable` hides the column in the list but keeps it in the edit dialog.
 - `HideInUpdate` hides the column in the edit dialog but keeps it in the list.
 

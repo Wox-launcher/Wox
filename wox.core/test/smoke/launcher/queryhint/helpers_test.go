@@ -22,17 +22,23 @@ func enterVolumeHint(t *testing.T, ctx context.Context, client *automationdriver
 	}
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		input, found := automationdriver.Find(snapshot, "launcher.query.input")
-		hint, shown := automationdriver.Find(snapshot, "launcher.query.completion")
-		return found && input.Value == "set volume" && shown && strings.Contains(hint.Value, "100")
+		_, shown := automationdriver.Find(snapshot, "launcher.query.completion")
+		return found && input.Value == "set volume" && !shown
 	})
 	if err != nil {
-		t.Fatalf("wait for empty volume hint: %v", err)
+		t.Fatalf("bare command must not show a parameter hint: %v", err)
 	}
 	smoke.AssertNoDiagnostics(t, snapshot)
 	if err := client.EnterText(ctx, " "); err != nil {
 		t.Fatal(err)
 	}
 	waitInput(t, ctx, client, "set volume ", 11, 11)
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		hint, shown := automationdriver.Find(snapshot, "launcher.query.completion")
+		return shown && strings.Contains(hint.Value, "100")
+	}); err != nil {
+		t.Fatalf("wait for volume hint after context separator: %v", err)
+	}
 }
 
 // waitInput verifies the continuous document and its native selection range.

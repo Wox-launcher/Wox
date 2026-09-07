@@ -18,7 +18,10 @@ import (
 type LogLevel = string
 
 type RegisterTriggerKeywordOption struct {
-	Keyword string
+	Keyword   string
+	QueryHint *common.QueryHint
+	// QueryVariables is core-only context requested by built-in searches before launcher activation.
+	QueryVariables []QueryVariable `json:"-"`
 }
 
 type RegisterTriggerKeywordResult struct {
@@ -521,7 +524,7 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 }
 
 func (a *APIImpl) RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult {
-	return RegisterTriggerKeywordResult{Success: GetPluginManager().registerTriggerKeyword(a.pluginInstance, option.Keyword)}
+	return RegisterTriggerKeywordResult{Success: GetPluginManager().registerTriggerKeyword(a.pluginInstance, option)}
 }
 
 func (a *APIImpl) UnregisterTriggerKeyword(ctx context.Context, option UnregisterTriggerKeywordOption) UnregisterTriggerKeywordResult {

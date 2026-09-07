@@ -11,6 +11,10 @@ import {
   ResultAction,
   ScreenshotOption,
   ScreenshotResult,
+  RegisterTriggerKeywordOption,
+  RegisterTriggerKeywordResult,
+  UnregisterTriggerKeywordOption,
+  UnregisterTriggerKeywordResult,
   SetSettingOption,
   SetSettingResult,
   UpdatableResult
@@ -193,6 +197,14 @@ export class PluginAPI implements PublicAPI {
 
   async RegisterQueryCommands(ctx: Context, commands: MetadataCommand[]): Promise<void> {
     await this.invokeMethod(ctx, "RegisterQueryCommands", { commands: JSON.stringify(commands) })
+  }
+
+  async RegisterTriggerKeyword(ctx: Context, option: RegisterTriggerKeywordOption): Promise<RegisterTriggerKeywordResult> {
+    return (await this.invokeMethod(ctx, "RegisterTriggerKeyword", { option: JSON.stringify(option) })) as RegisterTriggerKeywordResult
+  }
+
+  async UnregisterTriggerKeyword(ctx: Context, option: UnregisterTriggerKeywordOption): Promise<UnregisterTriggerKeywordResult> {
+    return (await this.invokeMethod(ctx, "UnregisterTriggerKeyword", { option: JSON.stringify(option) })) as UnregisterTriggerKeywordResult
   }
 
   async LLMStream(ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc): Promise<void> {

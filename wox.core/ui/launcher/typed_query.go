@@ -314,7 +314,7 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type,
 				Validators: fromCoreValidators(column.Validators), SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
 				HideInTable: column.HideInTable, HideInUpdate: column.HideInUpdate, AllowedHotkeyKinds: append([]string(nil), column.AllowedHotkeyKinds...),
-				PreviewMatchedApps: column.PreviewMatchedApps,
+				PreviewMatchedApps: column.PreviewMatchedApps, QueryVariableKind: column.QueryVariableKind,
 			}
 		}
 		converted.Value = formDefinitionValue{

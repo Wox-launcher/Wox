@@ -14,9 +14,25 @@ import (
 )
 
 // registerTriggerKeyword serializes ownership checks and registration so concurrent plugins cannot both claim a keyword.
-func (m *Manager) registerTriggerKeyword(instance *Instance, keyword string) bool {
+func (m *Manager) registerTriggerKeyword(instance *Instance, option RegisterTriggerKeywordOption) bool {
+	keyword := option.Keyword
 	if keyword == "" || keyword == "*" || strings.ContainsFunc(keyword, unicode.IsSpace) {
 		return false
+	}
+	if option.QueryHint != nil {
+		if option.QueryHint.Validate() != nil {
+			return false
+		}
+		hint := option.QueryHint.Clone()
+		hint.Elements = append([]common.QueryElement{{Id: "command", Kind: common.QueryElementText, Text: keyword + " "}}, hint.Elements...)
+		if hint.Validate() != nil {
+			return false
+		}
+	}
+	for _, variable := range option.QueryVariables {
+		if variable != QueryVariableSelectedText && variable != QueryVariableClipboardText {
+			return false
+		}
 	}
 	m.runtimeTriggerRegistrationMu.Lock()
 	defer m.runtimeTriggerRegistrationMu.Unlock()
@@ -33,6 +49,12 @@ func (m *Manager) registerTriggerKeyword(instance *Instance, keyword string) boo
 	if !slices.Contains(instance.runtimeTriggerKeywords, keyword) {
 		instance.runtimeTriggerKeywords = append(instance.runtimeTriggerKeywords, keyword)
 	}
+	if instance.runtimeTriggerOptions == nil {
+		instance.runtimeTriggerOptions = make(map[string]RegisterTriggerKeywordOption)
+	}
+	option.QueryHint = option.QueryHint.Clone()
+	option.QueryVariables = slices.Clone(option.QueryVariables)
+	instance.runtimeTriggerOptions[keyword] = option
 	return true
 }
 

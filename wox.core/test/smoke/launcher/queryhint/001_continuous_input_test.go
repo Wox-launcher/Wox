@@ -12,7 +12,7 @@ import (
 )
 
 // Test001ContinuousInput verifies QueryHint supports continuous command and argument typing.
-// Flow: type command -> see hint -> type space and 30 -> delete one character.
+// Flow: type command -> type space to reveal hint -> type 30 -> delete one character.
 // Evidence: the full query stays in one editor and completed results change from 30% to 3% without execution.
 func Test001ContinuousInput(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {

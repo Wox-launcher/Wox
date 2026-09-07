@@ -13,14 +13,14 @@ func TestRuntimeTriggerKeywords(t *testing.T) {
 	other := &Instance{Metadata: Metadata{TriggerKeywords: []string{"occupied"}}}
 	manager := &Manager{instances: []*Instance{instance, other}}
 	for _, keyword := range []string{"", "*", "two words", "tab\tword", "occupied"} {
-		if manager.registerTriggerKeyword(instance, keyword) {
+		if manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: keyword}) {
 			t.Fatalf("invalid or occupied keyword %q succeeded", keyword)
 		}
 	}
-	if !manager.registerTriggerKeyword(instance, "g") || !manager.registerTriggerKeyword(instance, "g") {
+	if !manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "g"}) || !manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "g"}) {
 		t.Fatal("registration or repeat registration failed")
 	}
-	if manager.registerTriggerKeyword(other, "g") {
+	if manager.registerTriggerKeyword(other, RegisterTriggerKeywordOption{Keyword: "g"}) {
 		t.Fatal("another plugin claimed an occupied runtime keyword")
 	}
 	if got := instance.GetTriggerKeywords(); !slices.Equal(got, []string{"*", "g"}) {
@@ -36,7 +36,7 @@ func TestRuntimeTriggerKeywords(t *testing.T) {
 			t.Fatal("unregistration or repeated unregistration failed")
 		}
 	}
-	if !manager.registerTriggerKeyword(instance, "b") || !manager.registerTriggerKeyword(other, "g") {
+	if !manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "b"}) || !manager.registerTriggerKeyword(other, RegisterTriggerKeywordOption{Keyword: "g"}) {
 		t.Fatal("released or new keyword could not be registered")
 	}
 	if _, owner := newQueryInputWithPlugins("g test", []*Instance{instance}); owner != nil {
@@ -62,7 +62,7 @@ func TestConcurrentTriggerRegistration(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			results <- manager.registerTriggerKeyword(instance, "same")
+			results <- manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "same"})
 		}()
 	}
 	group.Wait()

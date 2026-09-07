@@ -186,8 +186,39 @@ func TestFormTableRowTextControlPlacesVariableTriggerInsideInput(t *testing.T) {
 		t.Fatal("trailing {} icon should open the variable picker")
 	}
 	input := stack.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if len(input.RichRuns) != 0 || len(input.AtomicTokens) != 0 {
+		t.Fatalf("text control without decorations should not invent chips, got %#v %#v", input.RichRuns, input.AtomicTokens)
+	}
 	if input.Padding.Right != 38 {
 		t.Fatalf("input trailing padding = %.0f, want room for the {} icon", input.Padding.Right)
+	}
+}
+
+func TestFormTableRowTextControlForwardsQueryVariableChips(t *testing.T) {
+	run := woxcomponent.NewTokenChipRun(10, 35, "query", nil, woxcomponent.Theme{}).WithDismissible().WithChipEdit()
+	dismissed := false
+	edited := false
+	control := formTableRowTextControl(FormTableRowFieldProps{
+		ID: "urls", State: woxui.TextEditingState{Text: "q={wox:parameter?name=query}"},
+		RichRuns: []woxcomponent.TextFieldRichRun{run}, AtomicTokens: []woxcomponent.TextFieldTokenRange{{Start: 10, End: 35}},
+		OnDismissRun: func(start, end int) bool {
+			dismissed = start == 10 && end == 35
+			return true
+		},
+		OnEditRun: func(start, end int) bool {
+			edited = start == 10 && end == 35
+			return true
+		},
+	}, 420, 80)
+	input := control.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if len(input.RichRuns) != 1 || !input.RichRuns[0].HideText || !input.RichRuns[0].Dismissible || !input.RichRuns[0].ChipEditable || len(input.AtomicTokens) != 1 {
+		t.Fatalf("query variable decorations = runs %#v tokens %#v", input.RichRuns, input.AtomicTokens)
+	}
+	if input.OnDismissRun == nil || !input.OnDismissRun(10, 35) || !dismissed {
+		t.Fatal("query variable close should reach the table editor")
+	}
+	if input.OnEditRun == nil || !input.OnEditRun(10, 35) || !edited {
+		t.Fatal("query variable edit should reach the table editor")
 	}
 }
 
@@ -551,4 +582,32 @@ func TestFormTableScrollbarUsesValueText(t *testing.T) {
 	if scroll.ThumbColor != title {
 		t.Fatalf("table scrollbar = %#v, want ResultTitle so ResultSubtitle cannot restyle it", scroll.ThumbColor)
 	}
+}
+
+func TestQueryVariablePickerWrapsLongDescription(t *testing.T) {
+	description := "A long picker description that should wrap onto more than one line when the menu is not wide enough for the full sentence."
+	picker := QueryVariablePicker(QueryVariablePickerProps{
+		Width: 400, Height: 600, Anchor: woxui.Rect{X: 20, Y: 40, Width: 180, Height: 32},
+		Choices: []QueryVariableChoice{{Label: "Input Parameter", Description: description}},
+		Theme:   woxcomponent.Theme{},
+	})
+	desc := queryVariablePickerDescription(t, picker)
+	if desc.Value != description || desc.MaxLines < 2 || desc.Width < 200 {
+		t.Fatalf("description = %q lines %d width %.0f, want a wrapped TextBlock", desc.Value, desc.MaxLines, desc.Width)
+	}
+	if desc.Height < float32(desc.MaxLines)*queryVariablePickerDescriptionLine {
+		t.Fatalf("description height = %.0f, want room for %d wrapped lines", desc.Height, desc.MaxLines)
+	}
+}
+
+func queryVariablePickerDescription(t *testing.T, picker woxwidget.Widget) woxwidget.TextBlock {
+	t.Helper()
+	menu := picker.(woxwidget.Stack).Children[1].Child.(woxwidget.Semantics).Child.(woxwidget.Container)
+	row := menu.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	column := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	desc, ok := column.Children[1].(woxwidget.TextBlock)
+	if !ok {
+		t.Fatalf("picker description = %T, want wrapping TextBlock", column.Children[1])
+	}
+	return desc
 }

@@ -248,6 +248,12 @@ from .models.query import (
     SelectionType,
 )
 from .models.query_hint import QueryElement, QueryHint
+from .models.trigger_keyword import (
+    RegisterTriggerKeywordOption,
+    RegisterTriggerKeywordResult,
+    UnregisterTriggerKeywordOption,
+    UnregisterTriggerKeywordResult,
+)
 from .models.query_response import (
     QueryGridLayout,
     QueryLayout,
@@ -309,6 +315,10 @@ __all__: List[str] = [
     "Query",
     "QueryElement",
     "QueryHint",
+    "RegisterTriggerKeywordOption",
+    "RegisterTriggerKeywordResult",
+    "UnregisterTriggerKeywordOption",
+    "UnregisterTriggerKeywordResult",
     "QueryResponse",
     "QueryRefinement",
     "QueryRefinementOption",

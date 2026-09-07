@@ -26,6 +26,12 @@ type LauncherQueryMark struct {
 	Active   bool
 }
 
+// LauncherQueryCompletionChip is one empty-argument ghost hint measured independently of spaces.
+type LauncherQueryCompletionChip struct {
+	Text     string
+	X, Width float32
+}
+
 type LauncherQueryProps struct {
 	TabFeedback      uint64
 	CaretShake       float32
@@ -39,6 +45,8 @@ type LauncherQueryProps struct {
 	State            woxui.TextEditingState
 	Lines            []LauncherQueryLine
 	CompletionSuffix string
+	CompletionChips  []LauncherQueryCompletionChip
+	CompletionOffset float32 // Logical offset from the last line's end for structured argument hints.
 	CaretWidth       float32
 	CaretLine        int
 	CompositionWidth float32
@@ -76,11 +84,19 @@ func (p LauncherQueryProps) Equal(other LauncherQueryProps) bool {
 	if p.TabFeedback != other.TabFeedback || p.CaretShake != other.CaretShake || p.CaretShaking != other.CaretShaking {
 		return false
 	}
-	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) {
+	if p.CompletionOffset != other.CompletionOffset {
+		return false
+	}
+	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) || len(p.CompletionChips) != len(other.CompletionChips) {
 		return false
 	}
 	for index := range p.Marks {
 		if p.Marks[index] != other.Marks[index] {
+			return false
+		}
+	}
+	for index := range p.CompletionChips {
+		if p.CompletionChips[index] != other.CompletionChips[index] {
 			return false
 		}
 	}
@@ -408,7 +424,19 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 		if focused && props.State.Composition == "" && props.CompletionSuffix != "" {
 			hintColor := props.Theme.QueryText
 			hintColor.A = 96
-			displayList.DrawText(props.CompletionSuffix, woxui.Rect{X: bounds.X + lastLine.TextWidth, Y: textTop + float32(len(lines)-1)*lineHeight, Width: max(float32(0), bounds.Width-lastLine.TextWidth), Height: lineHeight}, props.Style, hintColor)
+			hintX := lastLine.TextWidth + props.CompletionOffset
+			hintY := textTop + float32(len(lines)-1)*lineHeight
+			if len(props.CompletionChips) > 0 {
+				chipColor := props.Theme.QueryText
+				chipColor.A = 18
+				for _, chip := range props.CompletionChips {
+					left, right := max(float32(0), hintX+chip.X-3), min(bounds.Width, hintX+chip.X+chip.Width+3)
+					displayList.FillRoundedRect(woxui.Rect{X: bounds.X + left, Y: hintY, Width: max(float32(0), right-left), Height: props.CaretHeight}, 4, chipColor)
+					displayList.DrawText(chip.Text, woxui.Rect{X: bounds.X + hintX + chip.X, Y: hintY, Width: max(float32(0), bounds.Width-hintX-chip.X), Height: lineHeight}, props.Style, hintColor)
+				}
+			} else {
+				displayList.DrawText(props.CompletionSuffix, woxui.Rect{X: bounds.X + hintX, Y: hintY, Width: max(float32(0), bounds.Width-hintX), Height: lineHeight}, props.Style, hintColor)
+			}
 		}
 		for index, line := range lines {
 			lineY := textTop + float32(index)*lineHeight

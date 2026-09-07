@@ -18,6 +18,12 @@ from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, 
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 from .models.toolbar_msg import ToolbarMsg
+from .models.trigger_keyword import (
+    RegisterTriggerKeywordOption,
+    RegisterTriggerKeywordResult,
+    UnregisterTriggerKeywordOption,
+    UnregisterTriggerKeywordResult,
+)
 
 
 @dataclass
@@ -514,6 +520,14 @@ class PublicAPI(Protocol):
                 ),
             ])
         """
+        ...
+
+    async def register_trigger_keyword(self, ctx: Context, option: RegisterTriggerKeywordOption) -> RegisterTriggerKeywordResult:
+        """Register or update this plugin's trigger; invalid or occupied keywords fail."""
+        ...
+
+    async def unregister_trigger_keyword(self, ctx: Context, option: UnregisterTriggerKeywordOption) -> UnregisterTriggerKeywordResult:
+        """Release this plugin's runtime trigger and hint; repeating the operation succeeds."""
         ...
 
     async def ai_chat_stream(

@@ -4318,6 +4318,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 	attachEnv := func(query *Query) {
 		query.QueryHint = plainQuery.QueryHint.Clone()
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
+		query.QueryVariables = activeWindowSnapshot.QueryVariables
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
 		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
@@ -4629,18 +4630,7 @@ func (m *Manager) ReplaceQueryVariable(ctx context.Context, queryText string) co
 	// not raw file paths embedded in a text query.
 	var resolvedFileSelection *selection.Selection
 
-	if strings.Contains(queryText, QueryVariableSelectedText) {
-		selected, selectedErr := selection.GetSelected(ctx)
-		if selectedErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
-		} else {
-			if selected.Type == selection.SelectionTypeText {
-				queryText = strings.ReplaceAll(queryText, QueryVariableSelectedText, selected.Text)
-			} else {
-				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", selected.Type))
-			}
-		}
-	}
+	values := ResolveTextQueryVariables(ctx, queryText)
 
 	// Replace selected file variable. When resolved, capture the selection so the caller
 	// can promote the query to QueryTypeSelection instead of embedding paths as plain text.
@@ -4653,7 +4643,7 @@ func (m *Manager) ReplaceQueryVariable(ctx context.Context, queryText string) co
 		} else {
 			if selected.Type == selection.SelectionTypeFile {
 				resolvedFileSelection = &selected
-				queryText = strings.ReplaceAll(queryText, QueryVariableSelectedFile, "")
+				values[QueryVariableSelectedFile] = ""
 			} else {
 				logger.Error(ctx, fmt.Sprintf("selected data is not file, type: %s", selected.Type))
 			}
@@ -4662,16 +4652,23 @@ func (m *Manager) ReplaceQueryVariable(ctx context.Context, queryText string) co
 
 	if strings.Contains(queryText, QueryVariableActiveBrowserUrl) {
 		activeBrowserUrl := m.activeBrowserUrl
-		queryText = strings.ReplaceAll(queryText, QueryVariableActiveBrowserUrl, activeBrowserUrl)
+		values[QueryVariableActiveBrowserUrl] = activeBrowserUrl
 	}
 
 	// Replace file explorer path variable if present
 	if strings.Contains(queryText, QueryVariableFileExplorerPath) {
 		startTime := time.Now()
 		explorerPath := m.getActiveFileExplorerPath(ctx)
-		queryText = strings.ReplaceAll(queryText, QueryVariableFileExplorerPath, explorerPath)
+		values[QueryVariableFileExplorerPath] = explorerPath
 		logger.Debug(ctx, fmt.Sprintf("replaced file explorer path variable in %d ms", time.Since(startTime).Milliseconds()))
 	}
+
+	// Substitute the original template once so captured text cannot introduce new variables.
+	var replacements []string
+	for token, value := range values {
+		replacements = append(replacements, token, value)
+	}
+	queryText = strings.NewReplacer(replacements...).Replace(queryText)
 
 	// If {wox:selected_file} was successfully resolved, promote to QueryTypeSelection
 	// so that selection-aware plugins receive a proper file selection context rather

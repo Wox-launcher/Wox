@@ -25,6 +25,7 @@ type Instance struct {
 	RuntimeQueryCommands []MetadataCommand      // query commands registered at runtime
 
 	runtimeTriggerKeywords   []string
+	runtimeTriggerOptions    map[string]RegisterTriggerKeywordOption
 	runtimeTriggerKeywordsMu sync.RWMutex
 
 	DynamicSettingCallbacks   []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
@@ -173,6 +174,7 @@ func (i *Instance) setRuntimeTriggerKeywords(keywords []string) {
 	i.runtimeTriggerKeywordsMu.Lock()
 	defer i.runtimeTriggerKeywordsMu.Unlock()
 	i.runtimeTriggerKeywords = append([]string(nil), keywords...)
+	i.runtimeTriggerOptions = nil
 }
 
 // unregisterTriggerKeyword leaves metadata and user-configured keywords untouched.
@@ -180,6 +182,17 @@ func (i *Instance) unregisterTriggerKeyword(keyword string) {
 	i.runtimeTriggerKeywordsMu.Lock()
 	defer i.runtimeTriggerKeywordsMu.Unlock()
 	i.runtimeTriggerKeywords = slices.DeleteFunc(i.runtimeTriggerKeywords, func(value string) bool { return value == keyword })
+	delete(i.runtimeTriggerOptions, keyword)
+}
+
+// triggerQueryHint returns an isolated runtime override or the static keyword template.
+func (i *Instance) triggerQueryHint(keyword string) *common.QueryHint {
+	i.runtimeTriggerKeywordsMu.RLock()
+	defer i.runtimeTriggerKeywordsMu.RUnlock()
+	if option, exists := i.runtimeTriggerOptions[keyword]; exists {
+		return option.QueryHint.Clone()
+	}
+	return i.Metadata.TriggerQueryHints[keyword].Clone()
 }
 
 // PrimaryTriggerKeyword returns the first non-global ("*") trigger keyword.

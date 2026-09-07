@@ -27,10 +27,11 @@ import (
 
 var windowIconCache = util.NewHashMap[string, common.WoxImage]()
 
-func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.WoxImage, error) {
+// GetWebsiteIconWithCache fetches a favicon or reuses the shared on-disk cache.
+func GetWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.WoxImage, error) {
 	parseUrl, err := url.Parse(websiteUrl)
 	if err != nil {
-		return webSearchIcon, fmt.Errorf("failed to parse url for %s: %s", websiteUrl, err.Error())
+		return common.PluginWebsearchIcon, fmt.Errorf("failed to parse url for %s: %s", websiteUrl, err.Error())
 	}
 	hostUrl := parseUrl.Scheme + "://" + parseUrl.Host
 
@@ -57,21 +58,21 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 	iconFinder := besticon.New(option).NewIconFinder()
 	icons, fetchErr := iconFinder.FetchIcons(hostUrl)
 	if fetchErr != nil {
-		return webSearchIcon, fmt.Errorf("failed to fetch icons for %s: %s", hostUrl, fetchErr.Error())
+		return common.PluginWebsearchIcon, fmt.Errorf("failed to fetch icons for %s: %s", hostUrl, fetchErr.Error())
 	}
 
 	if len(icons) == 0 {
-		return webSearchIcon, fmt.Errorf("no icons found for %s", hostUrl)
+		return common.PluginWebsearchIcon, fmt.Errorf("no icons found for %s", hostUrl)
 	}
 
 	image, imageEr := icons[0].Image()
 	if imageEr != nil {
-		return webSearchIcon, fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
+		return common.PluginWebsearchIcon, fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
 	}
 
 	woxImage, woxImageErr := common.NewWoxImage(*image)
 	if woxImageErr != nil {
-		return webSearchIcon, fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
+		return common.PluginWebsearchIcon, fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
 	}
 
 	// save to cache

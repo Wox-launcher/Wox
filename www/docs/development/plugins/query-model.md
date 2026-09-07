@@ -63,6 +63,30 @@ behavior take priority. Tab is optional. If editing invalidates a semantic bound
 keep the user's text and discard unreliable metadata rather than blocking input.
 Only explicit `block` elements are atomic; a highlighted argument stays editable.
 
+### Trigger-level templates
+
+Hints can belong to a trigger keyword as well as a command. Static plugin metadata
+can declare `"TriggerQueryHints": {"g": {"Elements": [...]}}` alongside
+`"TriggerKeywords": ["g"]`. Templates contain only suffix elements; Wox supplies
+the keyword and trailing space. The element ID `command` is reserved for that prefix.
+
+At runtime, use `RegisterTriggerKeyword(ctx, {Keyword: "g", QueryHint: hint})`
+in Node.js, or `register_trigger_keyword(ctx, RegisterTriggerKeywordOption("g", hint))`
+in Python. Read `Success` / `success`: invalid declarations or keywords occupied
+by another enabled plugin fail without changing the current registration.
+Registering the same keyword again updates its hint; omitting the hint clears the
+runtime template. Existing input instances retain their values.
+
+`UnregisterTriggerKeyword(ctx, {Keyword: "g"})` and Python's
+`unregister_trigger_keyword(ctx, UnregisterTriggerKeywordOption("g"))` remove
+the runtime keyword and hint. Both return a result with a success flag; repeating
+unregistration succeeds. Static or user-configured keywords remain unchanged.
+Unloading the plugin clears all runtime registrations.
+
+Complete command matches take precedence over trigger templates. Ambiguous
+keyword ownership never supplies a hint. These APIs are development-build
+capabilities; verify release support before distributing a plugin.
+
 ### Declare a suffix template
 
 Each `Commands` entry can have `Aliases` and `QueryHint`. The template contains
@@ -184,8 +208,11 @@ plugin `change-query` action supports the same structured payload.
 
 - Matching a complete, unambiguous command previews hints; space or Tab activates
   the template. Tab / Shift+Tab select element ranges, skipping text separators.
-- Command and arguments share one continuous editor. Arguments have subtle backgrounds;
-  placeholders are decorative and never appear in copied text or argument values.
+- Command and arguments share one continuous editor. A single argument stays
+  undecorated. Multiple arguments use quiet backgrounds, and empty placeholders
+  become separate ghost chips, so values or names that contain spaces stay
+  distinct. Placeholders are decorative and never appear in copied text or
+  argument values.
 - Character and word deletion retain ordinary text behavior. Cross-element selection
   is allowed. Edits across boundaries keep the text and discard unreliable metadata.
 - Reopening with select-all selects the entire query; typing replaces the command

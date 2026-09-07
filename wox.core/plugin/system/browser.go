@@ -156,7 +156,7 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 
 		browserIcon := browser.IconForBrowserID(tab.Browser)
 		icon := browserIcon
-		if tabIcon, err := getWebsiteIconWithCache(ctx, tab.Url); err == nil {
+		if tabIcon, err := GetWebsiteIconWithCache(ctx, tab.Url); err == nil {
 			icon = browserIcon.Overlay(tabIcon, 0.4, 0.6, 0.6)
 		}
 
@@ -332,7 +332,7 @@ func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, s *melody.Session, dat
 
 	util.Go(ctx, "index browser icons", func() {
 		for _, tab := range filtered {
-			getWebsiteIconWithCache(ctx, tab.Url)
+			GetWebsiteIconWithCache(ctx, tab.Url)
 		}
 	})
 }

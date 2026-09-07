@@ -1971,6 +1971,7 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 	// with the PID so plugin actions such as "Paste to %s" do not wait for the
 	// async icon/dialog refresh, which can finish after the first clipboard query.
 	activeWindowName := window.GetActiveWindowName()
+	queryVariables := plugin.GetPluginManager().CaptureQueryVariables(ctx)
 
 	m.activeWindowSnapshotMu.Lock()
 	m.activeWindowSnapshotSeq++
@@ -1979,9 +1980,10 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 	// a previous window's details produced stale paste targets, and blocking here
 	// made every launcher activation wait for icon and AX dialog probes.
 	m.activeWindowSnapshot = common.ActiveWindowSnapshot{
-		Pid:      activeWindowPid,
-		WindowId: activeWindowId,
-		Name:     activeWindowName,
+		QueryVariables: queryVariables,
+		Pid:            activeWindowPid,
+		WindowId:       activeWindowId,
+		Name:           activeWindowName,
 	}
 	m.activeWindowSnapshotMu.Unlock()
 

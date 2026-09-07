@@ -703,6 +703,19 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		props.TrailingLabel = "{}"
 		props.TrailingActionLabel = a.translate("i18n:ui_query_variable_picker_insert")
 		props.OnTrailingTap = func(anchor woxui.Rect) { a.openFormTableQueryVariablePicker(index, anchor) }
+		var editing queryVariableToken
+		if focused {
+			if editor := a.activeFormTableEditor(); editor != nil {
+				editing = editor.queryVariableEdit
+			}
+		}
+		props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, a.formTableNativeWindow(), palette.componentTheme(), a.translate)
+		props.OnDismissRun = func(start, end int) bool {
+			return a.dismissFormTableQueryVariable(index, start, end)
+		}
+		props.OnEditRun = func(start, end int) bool {
+			return a.editFormTableQueryVariable(index, start, end)
+		}
 	}
 	if markdown {
 		props.OnOpenLink = a.openAboutLink

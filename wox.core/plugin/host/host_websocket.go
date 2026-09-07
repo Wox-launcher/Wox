@@ -754,6 +754,20 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		pluginInstance.API.RegisterQueryCommands(ctx, commands)
 		w.sendResponseToHost(ctx, request, "")
+	case "RegisterTriggerKeyword":
+		var option plugin.RegisterTriggerKeywordOption
+		if err := json.Unmarshal([]byte(request.Params["option"]), &option); err != nil {
+			w.sendResponseToHost(ctx, request, plugin.RegisterTriggerKeywordResult{Success: false})
+			return
+		}
+		w.sendResponseToHost(ctx, request, pluginInstance.API.RegisterTriggerKeyword(ctx, option))
+	case "UnregisterTriggerKeyword":
+		var option plugin.UnregisterTriggerKeywordOption
+		if err := json.Unmarshal([]byte(request.Params["option"]), &option); err != nil {
+			w.sendResponseToHost(ctx, request, plugin.UnregisterTriggerKeywordResult{Success: false})
+			return
+		}
+		w.sendResponseToHost(ctx, request, pluginInstance.API.UnregisterTriggerKeyword(ctx, option))
 	case "GetUpdatableResult":
 		resultId, exist := request.Params["resultId"]
 		if !exist {

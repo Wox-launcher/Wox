@@ -1,15 +1,15 @@
-package system
+package websearch
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/system"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
@@ -117,10 +117,11 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Width: 60,
 						},
 						{
-							Key:     "Title",
-							Label:   "i18n:plugin_websearch_title",
-							Tooltip: "i18n:plugin_websearch_title_tooltip",
-							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Key:               "Title",
+							Label:             "i18n:plugin_websearch_title",
+							Tooltip:           "i18n:plugin_websearch_title_tooltip",
+							Type:              definition.PluginSettingValueTableColumnTypeQueryVariable,
+							QueryVariableKind: definition.PluginSettingQueryVariableKindWebSearch,
 							Validators: []validator.PluginSettingValidator{
 								{
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
@@ -129,11 +130,12 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 						{
-							Key:         "Urls",
-							Label:       "i18n:plugin_websearch_urls",
-							Tooltip:     "i18n:plugin_websearch_urls_tooltip",
-							HideInTable: true,
-							Type:        definition.PluginSettingValueTableColumnTypeTextList,
+							Key:               "Urls",
+							Label:             "i18n:plugin_websearch_urls",
+							Tooltip:           "i18n:plugin_websearch_urls_tooltip",
+							HideInTable:       true,
+							Type:              definition.PluginSettingValueTableColumnTypeQueryVariableList,
+							QueryVariableKind: definition.PluginSettingQueryVariableKindWebSearch,
 							Validators: []validator.PluginSettingValidator{
 								{
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
@@ -178,9 +180,9 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == webSearchesSettingKey {
-			r.indexIcons(callbackCtx)
 			r.webSearches = r.loadWebSearches(callbackCtx)
 			r.registerTriggerKeywords(callbackCtx)
+			r.indexIcons(callbackCtx)
 		}
 	})
 
@@ -192,11 +194,31 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 // registerTriggerKeywords makes enabled searches participate in core scoped routing.
 func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 	var keywords []string
+	parameterSets := make(map[string][]string)
+	variableSets := make(map[string][]plugin.QueryVariable)
 	for i := range r.webSearches {
 		search := &r.webSearches[i]
 		search.triggerRegistered = false
 		if search.Enabled {
-			search.triggerRegistered = r.api.RegisterTriggerKeyword(ctx, plugin.RegisterTriggerKeywordOption{Keyword: search.Keyword}).Success
+			names, err := search.parameters()
+			if err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("invalid web search %q: %v", search.Keyword, err))
+				continue
+			}
+			// A keyword has one hint. Entries sharing it must agree on input names and order.
+			if previous, exists := parameterSets[search.Keyword]; exists && !slices.Equal(previous, names) {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("web searches sharing keyword %q have different parameters", search.Keyword))
+				continue
+			}
+			parameterSets[search.Keyword] = names
+			for _, variable := range search.queryVariables() {
+				if !slices.Contains(variableSets[search.Keyword], variable) {
+					variableSets[search.Keyword] = append(variableSets[search.Keyword], variable)
+				}
+			}
+			search.triggerRegistered = r.api.RegisterTriggerKeyword(ctx, plugin.RegisterTriggerKeywordOption{
+				Keyword: search.Keyword, QueryHint: search.queryHint(names), QueryVariables: variableSets[search.Keyword],
+			}).Success
 			if search.triggerRegistered {
 				keywords = append(keywords, search.Keyword)
 			} else {
@@ -230,15 +252,19 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 }
 
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) common.WoxImage {
+	if len(search.Urls) == 0 {
+		return webSearchIcon
+	}
 	// if search url is google, return google icon
 	if strings.Contains(search.Urls[0], "google.com") {
 		return common.GoogleIcon
 	}
 
-	//sort urls, so that we can get the same icon between different runs
-	slices.Sort(search.Urls)
+	// Preserve URL order because it defines parameter order.
+	urls := slices.Clone(search.Urls)
+	slices.Sort(urls)
 
-	img, err := getWebsiteIconWithCache(ctx, search.Urls[0])
+	img, err := system.GetWebsiteIconWithCache(ctx, urls[0])
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get icon for %s: %s", search.Urls[0], err.Error()))
 		return webSearchIcon
@@ -254,8 +280,8 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 		if defaultAdded == "" {
 			webSearches = []webSearch{
 				{
-					Urls:       []string{"https://www.google.com/search?q={query}"},
-					Title:      "Search Google for {query}",
+					Urls:       []string{"https://www.google.com/search?q={wox:parameter?name=query}"},
+					Title:      "Search Google for {wox:parameter?name=query}",
 					Keyword:    "g",
 					Browser:    webSearchBrowserSystem,
 					IsFallback: true,
@@ -277,150 +303,117 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 		return
 	}
 
-	needSave := false
-	for i := range webSearches {
-		normalizedBrowser := browser.NormalizeBrowserID(webSearches[i].Browser)
-		if normalizedBrowser == "" {
-			normalizedBrowser = webSearchBrowserSystem
-		}
-		if normalizedBrowser == webSearchBrowserSystem {
-			normalizedBrowser = webSearchBrowserUseDefault
-		}
-		if webSearches[i].Browser != normalizedBrowser {
-			webSearches[i].Browser = normalizedBrowser
-			needSave = true
-		}
-	}
-
-	if needSave {
-		if marshal, err := json.Marshal(webSearches); err == nil {
-			r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
-		}
-	}
-
 	return
 }
 
+// Query reads named slots without splitting their text values into words.
 func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	var results []plugin.QueryResult
 	if query.Type == plugin.QueryTypeSelection {
 		return plugin.NewQueryResponse(r.querySelection(ctx, query))
 	}
-
-	queries := strings.Split(query.RawQuery, " ")
-	if len(queries) <= 1 {
-		return plugin.NewQueryResponse(results)
-	}
-
-	triggerKeyword := queries[0]
-	otherQuery := strings.Join(queries[1:], " ")
-
+	var results []plugin.QueryResult
 	for _, search := range r.webSearches {
-		if !search.Enabled {
+		if !search.Enabled || !search.triggerRegistered || query.TriggerKeyword != search.Keyword {
 			continue
 		}
-		// Failed registrations must not bypass ownership through global literal matching.
-		if search.triggerRegistered && query.TriggerKeyword != "" && strings.EqualFold(search.Keyword, triggerKeyword) {
-			results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, search.Title, otherQuery),
-				Score: 100,
-				Icon:  search.Icon,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name: "Search",
-						Icon: common.SearchIcon,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							util.Go(ctx, "open urls", func() {
-								r.openSearchUrls(ctx, search, otherQuery)
-							})
-						},
-					},
-				},
-			})
+		names, err := search.parameters()
+		if err != nil {
+			continue
 		}
+		values, complete := search.parameterValues(query, names)
+		if !complete {
+			results = append(results, plugin.QueryResult{
+				Title: "i18n:plugin_websearch_fill_parameters", SubTitle: strings.Join(names, " · "), Icon: search.Icon,
+				Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_fill_parameters", PreventHideAfterAction: true,
+					Action: func(ctx context.Context, _ plugin.ActionContext) {
+						hint := search.queryHint(names)
+						for i := range hint.Elements {
+							if hint.Elements[i].Kind == common.QueryElementArgument && query.QueryHint != nil {
+								hint.Elements[i].Value = query.QueryHint.Argument(hint.Elements[i].Id)
+							}
+						}
+						// A pasted plain query is kept whole in the first slot; its boundaries are unknown.
+						if query.QueryHint == nil {
+							_, hint.Elements[0].Value, _ = strings.Cut(query.RawQuery, " ")
+						}
+						hint.Elements = append([]common.QueryElement{{Id: "command", Kind: common.QueryElementText, Text: search.Keyword + " "}}, hint.Elements...)
+						r.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: hint.PlainText(), QueryHint: hint})
+					},
+				}},
+			})
+			continue
+		}
+		results = append(results, r.searchResult(ctx, search, values, query.QueryVariables, nil))
 	}
-
 	return plugin.NewQueryResponse(results)
 }
 
-func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
-	for _, search := range r.webSearches {
-		if !search.Enabled {
-			continue
-		}
-		if !search.IsFallback {
-			continue
-		}
+// QueryFallback only maps a complete raw query to an unambiguous single input.
+func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	return r.singleParameterResults(ctx, query.RawQuery, query.QueryVariables, nil)
+}
 
-		results = append(results, plugin.QueryResult{
-			Title: r.replaceVariables(ctx, search.Title, query.RawQuery),
-			Score: 100,
-			Icon:  search.Icon,
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "Search",
-					Icon: common.SearchIcon,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						r.openSearchUrls(ctx, search, query.RawQuery)
-					},
-				},
-			},
-		})
+func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	if query.Selection.Type != selection.SelectionTypeText {
+		return nil
 	}
+	return r.singleParameterResults(ctx, query.Selection.Text, query.QueryVariables, &query.Selection.Text)
+}
 
+// singleParameterResults applies the same eligibility rule to fallback and text selection.
+func (r *WebSearchPlugin) singleParameterResults(ctx context.Context, text string, environment map[string]string, selectedText *string) []plugin.QueryResult {
+	var results []plugin.QueryResult
+	for _, search := range r.webSearches {
+		if !search.Enabled || !search.IsFallback {
+			continue
+		}
+		names, err := search.parameters()
+		if err != nil || len(names) != 1 {
+			continue
+		}
+		values := map[string]string{plugin.ParameterQueryVariable(names[0]): text}
+		results = append(results, r.searchResult(ctx, search, values, environment, selectedText))
+	}
 	return results
 }
 
-func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
-	//only support text selection
-	if query.Selection.Type == selection.SelectionTypeFile {
-		return []plugin.QueryResult{}
-	}
-
-	for _, search := range r.webSearches {
-		// only show fallback searches
-		if !search.IsFallback || !search.Enabled {
-			continue
+// searchResult binds preview and execution to the same immutable environment values.
+func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, values, environment map[string]string, selectedText *string) plugin.QueryResult {
+	variables := search.queryVariables()
+	if len(variables) > 0 {
+		for _, variable := range variables {
+			value, exists := environment[variable]
+			if variable == plugin.QueryVariableSelectedText && selectedText != nil {
+				value, exists = *selectedText, true
+			}
+			if !exists || value == "" {
+				return plugin.QueryResult{Title: "i18n:plugin_websearch_missing_context", SubTitle: variable, Icon: search.Icon}
+			}
+			values[variable] = value
 		}
-
-		results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, search.Title, query.Selection.Text),
-			Icon: search.Icon,
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "Search",
-					Icon: common.SearchIcon,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						r.openSearchUrls(ctx, search, query.Selection.Text)
-					},
-				},
-			},
-		})
 	}
-
-	return
+	return plugin.QueryResult{
+		Title: renderWebSearchTemplate(search.Title, values, false), Score: 100, Icon: search.Icon,
+		Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_search", Icon: common.SearchIcon,
+			Action: func(ctx context.Context, _ plugin.ActionContext) {
+				util.Go(ctx, "open web search urls", func() { r.openSearchUrls(ctx, search, values) })
+			},
+		}},
+	}
 }
 
-func (r *WebSearchPlugin) replaceVariables(ctx context.Context, text string, query string) string {
-	result := strings.ReplaceAll(text, "{query}", query)
-	result = strings.ReplaceAll(result, "{lower_query}", strings.ToLower(query))
-	result = strings.ReplaceAll(result, "{upper_query}", strings.ToUpper(query))
-	return result
-}
-
-func (r *WebSearchPlugin) openSearchUrls(ctx context.Context, search webSearch, queryText string) {
-	escapedQueryText := url.QueryEscape(queryText)
+// openSearchUrls encodes substituted values for their URL component, never the template itself.
+func (r *WebSearchPlugin) openSearchUrls(ctx context.Context, search webSearch, values map[string]string) {
 	configuredDefaultBrowser := r.api.GetSetting(ctx, webSearchDefaultBrowserSettingKey)
 	browser := r.resolveWebSearchBrowser(search.Browser, configuredDefaultBrowser)
-
-	for _, url := range search.Urls {
-		resolvedURL := r.replaceVariables(ctx, url, escapedQueryText)
-		openErr := r.openURLInWebSearchBrowser(resolvedURL, browser)
-		if openErr != nil {
-			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open url %s: %s", resolvedURL, openErr.Error()))
+	for _, template := range search.Urls {
+		resolvedURL := renderWebSearchTemplate(template, values, true)
+		if err := r.openURLInWebSearchBrowser(resolvedURL, browser); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to open web search URL: %v", err))
 		}
 		time.Sleep(time.Millisecond * 100)
 	}
 }
-
 func (r *WebSearchPlugin) resolveWebSearchBrowser(itemBrowser string, defaultBrowser string) string {
 	normalizedItemBrowser := browser.NormalizeBrowserID(itemBrowser)
 	normalizedDefaultBrowser := browser.NormalizeBrowserID(defaultBrowser)

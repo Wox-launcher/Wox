@@ -3,6 +3,7 @@ package component
 import (
 	"slices"
 	"strings"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -45,6 +46,12 @@ type TextFieldRichRun struct {
 	HideText bool
 	// Paint draws this range. Bounds width is the remaining line when Advance is 0.
 	Paint func(displayList *woxui.DisplayList, bounds woxui.Rect)
+	// Dismissible shows a trailing close affordance while this painted run is hovered.
+	Dismissible bool
+	// ChipEditable shows a trailing edit affordance before close while hovered.
+	ChipEditable bool
+	// ChipLabel is the painted token text used when a dismissible chip is hovered.
+	ChipLabel string
 	// LineGutter paints a leading decoration on every soft-wrapped line that intersects this run.
 	LineGutter      bool
 	LineGutterWidth float32
@@ -113,14 +120,21 @@ type TextFieldProps struct {
 	OnChanged          func(string)
 	OnSelectionChanged func(woxui.TextSelection)
 	OnTapOffset        func(int) bool
+	// OnDismissRun removes a dismissible rich run. Returning true consumes the tap.
+	OnDismissRun func(start, end int) bool
+	// OnEditRun expands a dismissible rich run for in-place editing. Returning true consumes the tap.
+	OnEditRun func(start, end int) bool
 	// OnTapBelowText optionally handles a click beneath the final rendered line of a multiline field.
-	OnTapBelowText  func() bool
-	CursorAtOffset  func(int) woxui.PointerCursor
-	OnSetValue      func(string) error
-	editingState    woxui.TextEditingState
-	onCaret         func(int)
-	onWordSelection func(int)
-	onLineSelection func(int)
+	OnTapBelowText       func() bool
+	CursorAtOffset       func(int) woxui.PointerCursor
+	onDismissHover       func(start, end int, ok bool)
+	dismissHoverStart    int
+	dismissHoverProgress float32
+	OnSetValue           func(string) error
+	editingState         woxui.TextEditingState
+	onCaret              func(int)
+	onWordSelection      func(int)
+	onLineSelection      func(int)
 	// onSelectionStart begins a drag selection anchored at the given rune offset.
 	onSelectionStart func(int, woxui.KeyModifiers)
 	// onSelectionExtendAt updates selection from a local pointer point, including edge auto-scroll.
@@ -153,12 +167,14 @@ func WoxTextField(props TextFieldProps) woxwidget.Widget {
 }
 
 type textFieldState struct {
-	hovered            bool
-	controller         *woxwidget.TextEditingController
-	internalController *woxwidget.TextEditingController
-	focusNode          *woxwidget.FocusNode
-	internalFocusNode  *woxwidget.FocusNode
-	focusAttachment    *woxwidget.FocusAttachment
+	hovered             bool
+	hasHoveredDismiss   bool
+	hoveredDismissStart int
+	controller          *woxwidget.TextEditingController
+	internalController  *woxwidget.TextEditingController
+	focusNode           *woxwidget.FocusNode
+	internalFocusNode   *woxwidget.FocusNode
+	focusAttachment     *woxwidget.FocusAttachment
 	// selectionAnchor holds the rune offset captured at drag-selection start so extend updates only the focus.
 	selectionAnchor  int
 	verticalOffset   float32
@@ -680,18 +696,55 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	hoverEnabled := !props.Disabled && !props.DisableHover
 	props.hovered = s.hovered && hoverEnabled && !props.Focused
 	reportHover := widget.(TextFieldProps).OnHoverAt
-	if hoverEnabled || reportHover != nil {
+	if hoverEnabled || reportHover != nil || props.OnDismissRun != nil {
 		props.onHoverAt = func(inside bool, bounds woxui.Rect) {
 			if hoverEnabled && inside != s.hovered {
 				context.SetState(func() { s.hovered = inside })
+			}
+			if !inside && s.hasHoveredDismiss {
+				context.SetState(func() { s.hasHoveredDismiss = false })
 			}
 			if reportHover != nil {
 				reportHover(inside, bounds)
 			}
 		}
 	}
-	field := buildWoxTextField(props, realState, copySelection, cutSelection, pasteClipboard, runContextAction)
-	return field
+	if props.OnDismissRun != nil {
+		props.dismissHoverStart = s.hoveredDismissStart
+		props.onDismissHover = func(start, _ int, ok bool) {
+			if !ok {
+				if s.hasHoveredDismiss {
+					context.SetState(func() { s.hasHoveredDismiss = false })
+				}
+				return
+			}
+			if s.hasHoveredDismiss && start == s.hoveredDismissStart {
+				return
+			}
+			context.SetState(func() {
+				s.hasHoveredDismiss = true
+				s.hoveredDismissStart = start
+			})
+		}
+	}
+	if props.OnDismissRun == nil {
+		return buildWoxTextField(props, realState, copySelection, cutSelection, pasteClipboard, runContextAction)
+	}
+	target := float32(0)
+	if s.hasHoveredDismiss {
+		target = 1
+	}
+	baseRuns := widget.(TextFieldProps).RichRuns
+	return woxwidget.AnimatedFloat{
+		Key: woxwidget.Key(props.ID + "-token-dismiss"), Target: target,
+		Duration: tokenChipDismissMs * time.Millisecond, Curve: woxwidget.AnimationEaseInOutCubic,
+		Builder: func(progress float32) woxwidget.Widget {
+			animated := props
+			animated.RichRuns = withDismissibleChipHover(baseRuns, s.hoveredDismissStart, animated.Theme, progress)
+			animated.dismissHoverProgress = progress
+			return buildWoxTextField(animated, realState, copySelection, cutSelection, pasteClipboard, runContextAction)
+		},
+	}
 }
 
 // Dispose detaches the state-owned focus binding from its window Host.
@@ -968,7 +1021,20 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	glyphHitAt := func(position woxui.Point) (int, bool) {
 		return textFieldGlyphHitAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, contentPoint(position))
 	}
+	dismissHit := func(position woxui.Point) (int, int, tokenChipAction, bool) {
+		if (props.OnDismissRun == nil && props.OnEditRun == nil) || props.Disabled || props.ReadOnly {
+			return 0, 0, tokenChipActionNone, false
+		}
+		return textFieldDismissibleHit(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, contentPoint(position), props.dismissHoverProgress, props.dismissHoverStart)
+	}
 	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, CursorAt: func(position woxui.Point) woxui.PointerCursor {
+		start, end, action, ok := dismissHit(position)
+		if props.onDismissHover != nil {
+			props.onDismissHover(start, end, ok)
+		}
+		if ok && action.isButton() {
+			return woxui.PointerCursorHand
+		}
 		if offset, hit := glyphHitAt(position); hit && props.CursorAtOffset != nil {
 			return props.CursorAtOffset(offset)
 		}
@@ -976,6 +1042,15 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	}, OnHoverAt: props.onHoverAt, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
+		}
+		if start, end, action, ok := dismissHit(position); ok && action.isButton() {
+			if action == tokenChipActionClose && props.OnDismissRun != nil && props.OnDismissRun(start, end) {
+				props.onCaret(start)
+				return
+			}
+			if action == tokenChipActionEdit && props.OnEditRun != nil && props.OnEditRun(start, end) {
+				return
+			}
 		}
 		if !props.ReadOnly && maxLines > 1 && props.OnTapBelowText != nil {
 			lines := textFieldRichLines(state.Text, props.Window, style, innerWidth, softWrap, props.RichRuns)
@@ -991,6 +1066,9 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		if props.Disabled || props.Window == nil || props.onWordSelection == nil {
 			return
 		}
+		if _, _, action, ok := dismissHit(position); ok && action.isButton() {
+			return
+		}
 		if offset, hit := glyphHitAt(position); hit && props.OnTapOffset != nil && props.OnTapOffset(offset) {
 			return
 		}
@@ -999,12 +1077,18 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		if props.Disabled || props.Window == nil || props.onLineSelection == nil {
 			return
 		}
+		if _, _, action, ok := dismissHit(position); ok && action.isButton() {
+			return
+		}
 		if offset, hit := glyphHitAt(position); hit && props.OnTapOffset != nil && props.OnTapOffset(offset) {
 			return
 		}
 		props.onLineSelection(offsetAt(position))
 	}, OnSelectionStart: func(position woxui.Point, modifiers woxui.KeyModifiers) {
 		if props.Disabled || props.Window == nil || props.onSelectionStart == nil {
+			return
+		}
+		if _, _, action, ok := dismissHit(position); ok && action.isButton() {
 			return
 		}
 		if offset, hit := glyphHitAt(position); hit && props.CursorAtOffset != nil && props.CursorAtOffset(offset) != woxui.PointerCursorText {
@@ -1584,6 +1668,55 @@ func lineGutterWidth(run TextFieldRichRun) float32 {
 		return run.LineGutterWidth
 	}
 	return documentQuoteWidth(run.Style.Size)
+}
+
+// textFieldDismissibleHit reports a painted token chip under a content-local point.
+func textFieldDismissibleHit(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap, focused bool, point woxui.Point, progress float32, hoveredStart int) (int, int, tokenChipAction, bool) {
+	if lineHeight <= 0 {
+		return 0, 0, tokenChipActionNone, false
+	}
+	lines := textFieldRichLines(state.Text, window, style, width, softWrap, richRuns)
+	if len(lines) == 0 {
+		return 0, 0, tokenChipActionNone, false
+	}
+	y := point.Y + verticalOffset
+	if y < 0 || y >= float32(len(lines))*lineHeight {
+		return 0, 0, tokenChipActionNone, false
+	}
+	if maxLines == 1 {
+		point.X += textFieldHorizontalOffset(focused, []rune(state.Text), state.Selection.Focus, style, width, window)
+	}
+	if point.X < 0 {
+		return 0, 0, tokenChipActionNone, false
+	}
+	line := lines[min(len(lines)-1, int(y/lineHeight))]
+	x := float32(0)
+	runes := []rune(state.Text)
+	for _, segment := range textFieldRichSegments(line.start, line.end, style, richRuns) {
+		segmentWidth := textFieldMeasureRange(window, runes, segment.Start, segment.End, style, []TextFieldRichRun{segment})
+		if point.X < x || point.X >= x+segmentWidth {
+			x += segmentWidth
+			continue
+		}
+		if !segment.Dismissible {
+			return 0, 0, tokenChipActionNone, false
+		}
+		action := tokenChipActionBody
+		if progress >= tokenChipCloseHitMin && segment.Start == hoveredStart {
+			closeWidth := tokenChipCloseSlot * progress
+			editWidth := float32(0)
+			if segment.ChipEditable {
+				editWidth = tokenChipEditSlot * progress
+			}
+			if closeWidth > 0 && point.X >= x+segmentWidth-closeWidth {
+				action = tokenChipActionClose
+			} else if editWidth > 0 && point.X >= x+segmentWidth-closeWidth-editWidth {
+				action = tokenChipActionEdit
+			}
+		}
+		return segment.Start, segment.End, action, true
+	}
+	return 0, 0, tokenChipActionNone, false
 }
 
 func textFieldScrolledOffset(offset, maximumOffset, deltaY float32) (float32, bool) {

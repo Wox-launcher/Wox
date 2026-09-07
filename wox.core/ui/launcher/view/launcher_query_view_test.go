@@ -174,6 +174,56 @@ func TestLauncherQueryLeavesSharedScrollbarGutterOutsideDragOverlay(t *testing.T
 	}
 }
 
+// Multi-argument hints start before unused separators without moving the editor text.
+func TestQueryHintCompletionOffset(t *testing.T) {
+	for _, scale := range []float32{1, 1.25, 2} {
+		props := LauncherQueryProps{Width: 400 * scale, Height: 34 * scale, LineHeight: 34 * scale,
+			State: woxui.TextEditingState{Text: "g  "}, Lines: []LauncherQueryLine{{Text: "g  ", TextWidth: 30 * scale}},
+			CompletionSuffix: "query time", CompletionOffset: -8 * scale}
+		bounds := woxui.Rect{X: -100 * scale, Width: props.Width, Height: props.Height}
+		var actual, expected woxui.DisplayList
+		launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
+		color := props.Theme.QueryText
+		color.A = 96
+		expected.DrawText(props.CompletionSuffix, woxui.Rect{X: bounds.X + 22*scale, Width: props.Width - 22*scale, Height: props.LineHeight}, props.Style, color)
+		expected.DrawText("g  ", bounds, props.Style, props.Theme.QueryText)
+		if !reflect.DeepEqual(actual, expected) {
+			t.Fatalf("hint did not start at the first empty argument at scale %v", scale)
+		}
+		original := props
+		original.CompletionOffset = 0
+		if props.Equal(original) {
+			t.Fatal("hint offset missing from boundary dependencies")
+		}
+	}
+}
+
+func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
+	props := LauncherQueryProps{Width: 400, Height: 34, LineHeight: 34, CaretHeight: 30,
+		State: woxui.TextEditingState{Text: "g "}, Lines: []LauncherQueryLine{{Text: "g ", TextWidth: 20}},
+		CompletionSuffix: "search query time range",
+		CompletionChips: []LauncherQueryCompletionChip{
+			{Text: "search query", X: 0, Width: 80},
+			{Text: "time range", X: 92, Width: 70},
+		},
+		Theme: woxcomponent.Theme{QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}}}
+	bounds := woxui.Rect{Width: props.Width, Height: props.Height}
+	var actual, expected woxui.DisplayList
+	chip := props.Theme.QueryText
+	chip.A = 18
+	hint := props.Theme.QueryText
+	hint.A = 96
+	expected.FillRoundedRect(woxui.Rect{X: 17, Width: 86, Height: props.CaretHeight}, 4, chip)
+	expected.DrawText("search query", woxui.Rect{X: 20, Width: 380, Height: props.LineHeight}, props.Style, hint)
+	expected.FillRoundedRect(woxui.Rect{X: 109, Width: 76, Height: props.CaretHeight}, 4, chip)
+	expected.DrawText("time range", woxui.Rect{X: 112, Width: 288, Height: props.LineHeight}, props.Style, hint)
+	expected.DrawText("g ", bounds, props.Style, props.Theme.QueryText)
+	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("multi-hint chips = %#v", actual)
+	}
+}
+
 func TestLauncherQueryExposesInlineCompletionSuffix(t *testing.T) {
 	query := LauncherQueryView(LauncherQueryProps{Width: 500, Height: 40, CompletionSuffix: "pleted", Enabled: true}).(woxwidget.Stack)
 	scrollSemantic := query.Children[0].Child.(woxwidget.Semantics)

@@ -66,7 +66,7 @@ Preserve the current special contracts unless a task explicitly targets them:
 | Surface | Contract |
 | --- | --- |
 | Launcher query | 50 compact, 55 normal, 61 comfortable; add measured line height for each extra line |
-| Launcher structured argument | One continuous query editor; same font and baseline as command text, no border, layout padding, or argument background; ghost hint for empty arguments |
+| Launcher structured argument | One continuous query editor; same font and baseline as command text, no border or layout padding. A single empty argument uses plain ghost text. Multiple arguments use the same quiet mark as blocks on filled values, and separate ghost chips on empty placeholders so space-containing names stay distinct |
 | Launcher structured block | Semantic text-color background with alpha 10/255 (18/255 when active), extending 3 logical units horizontally without moving text, clipped to the editor and shared gaps between adjacent blocks |
 | Action Panel header | 18 optically centered line; do not use a 16 Text slot |
 | Action Panel filter | 40 input inside a 46-high slot |

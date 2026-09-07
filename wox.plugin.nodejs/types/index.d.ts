@@ -4,6 +4,23 @@ import { AI } from "./ai.js"
 export * from "./setting.js"
 export * from "./ai.js"
 
+export interface RegisterTriggerKeywordOption {
+  Keyword: string
+  QueryHint?: QueryHint
+}
+
+export interface RegisterTriggerKeywordResult {
+  Success: boolean
+}
+
+export interface UnregisterTriggerKeywordOption {
+  Keyword: string
+}
+
+export interface UnregisterTriggerKeywordResult {
+  Success: boolean
+}
+
 /**
  * A dictionary type for string key-value pairs.
  *
@@ -1274,10 +1291,7 @@ export interface PluginInitParams {
 /** The complete query is required; QueryHint only decorates input text; invalid or mismatching hints are ignored. */
 export type ChangeQueryParam = {
   ContextData?: MapString
-} & (
-  | { QueryType: "input"; QueryText: string; QueryHint?: QueryHint; QuerySelection?: never }
-  | { QueryType: "selection"; QuerySelection: Selection; QueryText?: string; QueryHint?: never }
-)
+} & ({ QueryType: "input"; QueryText: string; QueryHint?: QueryHint; QuerySelection?: never } | { QueryType: "selection"; QuerySelection: Selection; QueryText?: string; QueryHint?: never })
 
 export interface RefreshQueryParam {
   /**
@@ -1518,6 +1532,9 @@ export interface PublicAPI {
    * Register query commands
    */
   RegisterQueryCommands: (ctx: Context, commands: MetadataCommand[]) => Promise<void>
+
+  RegisterTriggerKeyword: (ctx: Context, option: RegisterTriggerKeywordOption) => Promise<RegisterTriggerKeywordResult>
+  UnregisterTriggerKeyword: (ctx: Context, option: UnregisterTriggerKeywordOption) => Promise<UnregisterTriggerKeywordResult>
 
   /**
    * Chat using LLM

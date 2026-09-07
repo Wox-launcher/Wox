@@ -18,6 +18,8 @@ const (
 	PluginSettingValueTableColumnTypeQueryHotkeyQuery       PluginSettingValueTableColumnType = "queryHotkeyQuery"
 	PluginSettingValueTableColumnTypeAICommandPrompt        PluginSettingValueTableColumnType = "aiCommandPrompt"
 	PluginSettingValueTableColumnTypeDictationPrompt        PluginSettingValueTableColumnType = "dictationPrompt"
+	PluginSettingValueTableColumnTypeQueryVariable          PluginSettingValueTableColumnType = "queryVariable"
+	PluginSettingValueTableColumnTypeQueryVariableList      PluginSettingValueTableColumnType = "queryVariableList"
 	PluginSettingValueTableColumnTypeAIModelStatus          PluginSettingValueTableColumnType = "aiModelStatus"
 	PluginSettingValueTableColumnTypeAIMCPServerTools       PluginSettingValueTableColumnType = "aiMCPServerTools"
 	PluginSettingValueTableColumnTypeAISelectMCPServerTools PluginSettingValueTableColumnType = "aiSelectMCPServerTools"
@@ -33,6 +35,13 @@ const (
 
 // PluginSettingValueTableColumnTypeIgnoredApps is the read-only app selection of an ignore rule.
 const PluginSettingValueTableColumnTypeIgnoredApps = "ignoredApps"
+
+const (
+	PluginSettingQueryVariableKindQueryHotkey = "queryHotkey"
+	PluginSettingQueryVariableKindAICommand   = "aiCommand"
+	PluginSettingQueryVariableKindDictation   = "dictation"
+	PluginSettingQueryVariableKindWebSearch   = "webSearch"
+)
 
 type PluginSettingValueTable struct {
 	Key             string
@@ -63,6 +72,8 @@ type PluginSettingValueTableColumn struct {
 	HideInUpdate       bool                               // Hide this column in the update/add dialog, but still show it in the table
 	AllowedHotkeyKinds []string                           // Only used when Type is PluginSettingValueTableColumnTypeHotkey
 	PreviewMatchedApps bool                               // Show a live indexed-app preview under this text column
+	// QueryVariableKind selects the {wox:...} picker set for queryVariable columns.
+	QueryVariableKind string
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {

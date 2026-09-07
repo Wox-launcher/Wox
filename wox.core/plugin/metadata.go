@@ -74,7 +74,8 @@ type Metadata struct {
 	Icon               string            // should be WoxImage.String()
 	Website            string
 	Entry              string
-	TriggerKeywords    []string //User can add/update/delete trigger keywords
+	TriggerKeywords    []string                     //User can add/update/delete trigger keywords
+	TriggerQueryHints  map[string]*common.QueryHint `json:",omitempty"`
 	Commands           []MetadataCommand
 	SupportedOS        []string
 	Features           []MetadataFeature

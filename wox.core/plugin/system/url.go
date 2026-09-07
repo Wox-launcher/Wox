@@ -184,7 +184,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 }
 
 func (r *UrlPlugin) saveRecentUrl(ctx context.Context, url string) {
-	icon, err := getWebsiteIconWithCache(ctx, url)
+	icon, err := GetWebsiteIconWithCache(ctx, url)
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get url icon error: %s", err.Error()))
 		icon = urlIcon
@@ -262,7 +262,7 @@ func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 
 	// user may have cleared icon cache, so we need to get icon again
 	if !mruData.Icon.IsValid() {
-		icon, err := getWebsiteIconWithCache(ctx, url)
+		icon, err := GetWebsiteIconWithCache(ctx, url)
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get url icon error: %s", err.Error()))
 			icon = urlIcon

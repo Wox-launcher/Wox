@@ -3,6 +3,7 @@ package component
 import (
 	"strings"
 	"testing"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -29,6 +30,25 @@ func TestSingleLineTextFieldDefaultsToVerticalCenter(t *testing.T) {
 	multiline := WoxTextField(TextFieldProps{ID: "multi", MaxLines: 2}).(woxwidget.Stateful).Widget.(TextFieldProps)
 	if multiline.TextAlignmentY != 0 {
 		t.Fatalf("multiline vertical alignment = %v, want 0", multiline.TextAlignmentY)
+	}
+}
+
+func TestTextFieldDismissibleChipAnimatesHover(t *testing.T) {
+	field := WoxTextField(TextFieldProps{
+		ID: "urls", Width: 200, Height: 40,
+		OnDismissRun: func(int, int) bool { return true },
+		Theme:        Theme{ErrorText: woxui.Color{R: 200, A: 255}},
+	}).(woxwidget.Stateful)
+	state := field.CreateState().(*textFieldState)
+	state.InitState(woxwidget.StateContext{}, field.Widget)
+	idle := state.Build(woxwidget.StateContext{}, field.Widget).(woxwidget.AnimatedFloat)
+	if idle.Target != 0 || idle.Duration != tokenChipDismissMs*time.Millisecond || idle.Curve != woxwidget.AnimationEaseInOutCubic {
+		t.Fatalf("idle dismiss animation = target %.0f duration %s curve %d", idle.Target, idle.Duration, idle.Curve)
+	}
+	state.hasHoveredDismiss = true
+	hovered := state.Build(woxwidget.StateContext{}, field.Widget).(woxwidget.AnimatedFloat)
+	if hovered.Target != 1 {
+		t.Fatalf("hovered dismiss animation target = %.0f, want 1 so the close control eases in", hovered.Target)
 	}
 }
 

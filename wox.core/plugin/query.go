@@ -12,7 +12,6 @@ import (
 
 type QueryResultActionType = string
 type QueryType = string
-type QueryVariable = string
 type QueryResultTailType = string
 type QueryResultTailTextCategory = string
 type QueryRefinementType = string
@@ -25,13 +24,6 @@ const (
 const (
 	QueryResultActionTypeExecute QueryResultActionType = "execute"
 	QueryResultActionTypeForm    QueryResultActionType = "form"
-)
-
-const (
-	QueryVariableSelectedText     QueryVariable = "{wox:selected_text}"
-	QueryVariableSelectedFile     QueryVariable = "{wox:selected_file}"
-	QueryVariableActiveBrowserUrl QueryVariable = "{wox:active_browser_url}"
-	QueryVariableFileExplorerPath QueryVariable = "{wox:file_explorer_path}"
 )
 
 const (
@@ -105,6 +97,8 @@ type Query struct {
 	// not rendered by the UI and is intended for plugin handoffs such as a shell
 	// working directory.
 	QueryHint *common.QueryHint `json:",omitempty"`
+	// QueryVariables is immutable source context for built-in plugins, never sent to runtime hosts.
+	QueryVariables map[string]string `json:"-"`
 
 	ContextData common.ContextData
 

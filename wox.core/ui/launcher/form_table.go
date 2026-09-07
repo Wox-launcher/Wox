@@ -48,6 +48,8 @@ type formTableEditorState struct {
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorState
 	patternPreview    *formTablePatternPreviewState
+	// queryVariableEdit is the parameter placeholder currently expanded for renaming.
+	queryVariableEdit queryVariableToken
 }
 
 type formTableEditorSnapshot struct {
@@ -138,6 +140,7 @@ const (
 	formTableQueryVariableKindQueryHotkey = "queryHotkey"
 	formTableQueryVariableKindAICommand   = "aiCommand"
 	formTableQueryVariableKindDictation   = "dictation"
+	formTableQueryVariableKindWebSearch   = "webSearch"
 )
 
 var queryHotkeyVariables = []queryHotkeyVariable{
@@ -145,6 +148,7 @@ var queryHotkeyVariables = []queryHotkeyVariable{
 	{"{wox:selected_file}", "i18n:ui_query_variable_selected_file", "i18n:ui_query_variable_selected_file_tooltip", "document"},
 	{"{wox:active_browser_url}", "i18n:ui_query_variable_active_browser_url", "i18n:ui_query_variable_active_browser_url_tooltip", "external"},
 	{"{wox:file_explorer_path}", "i18n:ui_query_variable_file_explorer_path", "i18n:ui_query_variable_file_explorer_path_tooltip", "folder-open"},
+	{"{wox:clipboard_text}", "i18n:ui_query_variable_clipboard_text", "i18n:ui_query_variable_clipboard_text_tooltip", "copy"},
 }
 
 var aiCommandPromptVariables = []queryHotkeyVariable{
@@ -154,6 +158,12 @@ var aiCommandPromptVariables = []queryHotkeyVariable{
 var dictationPromptVariables = []queryHotkeyVariable{
 	{"{wox:dictation_text}", "i18n:ui_query_variable_dictation_text", "i18n:ui_query_variable_dictation_text_tooltip", "waveform"},
 	{"{wox:selected_text}", "i18n:ui_query_variable_selected_text", "i18n:ui_query_variable_selected_text_tooltip", "copy"},
+}
+
+var webSearchQueryVariables = []queryHotkeyVariable{
+	{plugin.ParameterQueryVariable("query"), "i18n:ui_query_variable_parameter", "i18n:ui_query_variable_parameter_tooltip", "edit"},
+	{"{wox:selected_text}", "i18n:ui_query_variable_selected_text", "i18n:ui_query_variable_selected_text_tooltip", "copy"},
+	{"{wox:clipboard_text}", "i18n:ui_query_variable_clipboard_text", "i18n:ui_query_variable_clipboard_text_tooltip", "copy"},
 }
 
 const (
@@ -166,6 +176,7 @@ const (
 // replaceQueryHotkeyVariablesForTest swaps runtime placeholders for stable sample values so the query can be previewed.
 func replaceQueryHotkeyVariablesForTest(query string) string {
 	replaced := query
+	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableClipboardText, "clipboard text")
 	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableSelectedText, queryHotkeyTestSelectedText)
 	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableSelectedFile, queryHotkeyTestSelectedFile)
 	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableActiveBrowserUrl, queryHotkeyTestBrowserURL)
@@ -465,7 +476,7 @@ func formTableColumnValue(column formTableColumn, row map[string]any) string {
 	if column.Type == "app" {
 		return formTableAppValue(value)
 	}
-	if column.Type == "textList" {
+	if formTableColumnIsTextList(column.Type) {
 		switch list := value.(type) {
 		case []any:
 			items := make([]string, 0, len(list))
@@ -489,15 +500,15 @@ func formTableColumnValue(column formTableColumn, row map[string]any) string {
 }
 
 func formTableColumnDefinition(column formTableColumn, row map[string]any) (formDefinition, bool) {
-	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type}
+	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind}
 	switch column.Type {
-	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt":
+	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable":
 		value.MaxLines = max(1, column.TextMaxLines)
 		return formDefinition{Type: "textbox", Value: value}, true
 	case "dirPath":
 		value.MaxLines = 1
 		return formDefinition{Type: "dirPath", Value: value}, true
-	case "textList":
+	case "textList", "queryVariableList":
 		value.MaxLines = max(4, column.TextMaxLines)
 		return formDefinition{Type: "textbox", Value: value}, true
 	case "checkbox":
@@ -557,7 +568,7 @@ func formTableRowFields(definition formDefinition, row map[string]any) (formFiel
 		if column.EmptyAsZero {
 			values[column.Key] = normalizeEmptyAsZeroFormValue(values[column.Key])
 		}
-		if column.Type == "textList" {
+		if formTableColumnIsTextList(column.Type) {
 			textLists[column.Key] = true
 		}
 	}
@@ -854,7 +865,7 @@ func formTableRowFromFields(definition formDefinition, fields *formFieldsState, 
 		switch column.Type {
 		case "checkbox":
 			row[column.Key] = value == "true"
-		case "textList":
+		case "textList", "queryVariableList":
 			lines := strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")
 			items := make([]string, 0, len(lines))
 			for _, line := range lines {
@@ -863,7 +874,7 @@ func formTableRowFromFields(definition formDefinition, fields *formFieldsState, 
 				}
 			}
 			row[column.Key] = items
-		case "text", "dirPath", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "select", "selectAIModel", "hotkey":
+		case "text", "dirPath", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable", "select", "selectAIModel", "hotkey":
 			row[column.Key] = value
 		case "woxImage":
 			image, _ := parseFormTableWoxImage(value)
@@ -1054,6 +1065,11 @@ func (a *App) saveFormTableRowEdit() {
 		return
 	}
 	if fieldErrors := validateAISettingsTableRow(state.definition, state.rowForm); len(fieldErrors) > 0 {
+		state.fieldErrors = fieldErrors
+		a.invalidateFormTableWindow()
+		return
+	}
+	if fieldErrors := a.validateWebSearchTableRow(state.definition, state.rowForm); len(fieldErrors) > 0 {
 		state.fieldErrors = fieldErrors
 		a.invalidateFormTableWindow()
 		return
@@ -1314,7 +1330,7 @@ func (a *App) changeFormTableRowChoice(index, delta int) {
 	a.invalidateFormTableWindow()
 }
 
-// snapFormTableQueryVariableSelection keeps the live editor caret and selection outside placeholder interiors.
+// snapFormTableQueryVariableSelection keeps the live editor caret and selection outside collapsed placeholder interiors.
 func (a *App) snapFormTableQueryVariableSelection() {
 	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.rowForm.editor == nil || formTableQueryVariableKindForField(state, state.rowForm.focused) == "" {
@@ -1322,13 +1338,26 @@ func (a *App) snapFormTableQueryVariableSelection() {
 	}
 	editor := state.rowForm.editor
 	current := editor.State()
+	editing := state.queryVariableEdit
 	if current.Selection.Collapsed() {
-		if caret, ok := snapQueryVariableCaret(current.Text, current.Selection.Focus); ok {
+		if caret, ok := snapQueryVariableCaret(current.Text, current.Selection.Focus, editing); ok {
 			editor.SetCaret(caret)
+			state.queryVariableEdit = queryVariableToken{}
+			return
 		}
+		if token, ok := queryVariableParameterTokenContaining(current.Text, current.Selection.Focus); ok && queryVariableTokenMatchesEdit(token, editing) {
+			state.queryVariableEdit = token
+			return
+		}
+		state.queryVariableEdit = queryVariableToken{}
 		return
 	}
-	start, end, changed := expandQueryVariableSelection(current.Text, current.Selection.Start(), current.Selection.End())
+	if token, ok := queryVariableParameterTokenContaining(current.Text, current.Selection.Focus); ok && queryVariableTokenMatchesEdit(token, editing) {
+		state.queryVariableEdit = token
+	} else {
+		state.queryVariableEdit = queryVariableToken{}
+	}
+	start, end, changed := expandQueryVariableSelection(current.Text, current.Selection.Start(), current.Selection.End(), editing)
 	if !changed {
 		return
 	}
@@ -1352,8 +1381,19 @@ func (a *App) handleFormTableQueryVariableEditorKey(event woxui.KeyEvent) bool {
 	current := editor.State()
 	text := current.Text
 	selection := current.Selection
+	editing := state.queryVariableEdit
 	extend := event.Modifiers&woxui.KeyModifierShift != 0
 	switch event.Key {
+	case woxui.KeyEnter:
+		if event.Modifiers != 0 {
+			return false
+		}
+		if token, ok := queryVariableCompleteTokenContaining(text, selection.Focus); ok {
+			editor.SetCaret(token.end)
+			state.queryVariableEdit = queryVariableToken{}
+			a.finishFormTableQueryVariableEditorMove()
+			return true
+		}
 	case woxui.KeyBackspace:
 		if !selection.Collapsed() {
 			a.snapFormTableQueryVariableSelection()
@@ -1363,13 +1403,13 @@ func (a *App) handleFormTableQueryVariableEditorKey(event woxui.KeyEvent) bool {
 			a.finishFormTableQueryVariableEditorChange()
 			return true
 		}
-		if token, ok := queryVariableTokenBefore(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenBefore(text, selection.Focus, editing); ok {
 			applyQueryVariableSelection(editor, token.start, token.end)
 			editor.DeleteSelection()
 			a.finishFormTableQueryVariableEditorChange()
 			return true
 		}
-		if token, ok := queryVariableTokenContaining(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenContaining(text, selection.Focus, editing); ok {
 			applyQueryVariableSelection(editor, token.start, token.end)
 			editor.DeleteSelection()
 			a.finishFormTableQueryVariableEditorChange()
@@ -1384,20 +1424,20 @@ func (a *App) handleFormTableQueryVariableEditorKey(event woxui.KeyEvent) bool {
 			a.finishFormTableQueryVariableEditorChange()
 			return true
 		}
-		if token, ok := queryVariableTokenAfter(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenAfter(text, selection.Focus, editing); ok {
 			applyQueryVariableSelection(editor, token.start, token.end)
 			editor.DeleteSelection()
 			a.finishFormTableQueryVariableEditorChange()
 			return true
 		}
-		if token, ok := queryVariableTokenContaining(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenContaining(text, selection.Focus, editing); ok {
 			applyQueryVariableSelection(editor, token.start, token.end)
 			editor.DeleteSelection()
 			a.finishFormTableQueryVariableEditorChange()
 			return true
 		}
 	case woxui.KeyArrowLeft:
-		if token, ok := queryVariableTokenBefore(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenBefore(text, selection.Focus, editing); ok {
 			if extend {
 				applyQueryVariableSelection(editor, selection.Anchor, token.start)
 			} else {
@@ -1406,7 +1446,7 @@ func (a *App) handleFormTableQueryVariableEditorKey(event woxui.KeyEvent) bool {
 			a.finishFormTableQueryVariableEditorMove()
 			return true
 		}
-		if token, ok := queryVariableTokenContaining(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenContaining(text, selection.Focus, editing); ok {
 			if extend {
 				applyQueryVariableSelection(editor, selection.Anchor, token.start)
 			} else {
@@ -1416,7 +1456,7 @@ func (a *App) handleFormTableQueryVariableEditorKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	case woxui.KeyArrowRight:
-		if token, ok := queryVariableTokenAfter(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenAfter(text, selection.Focus, editing); ok {
 			if extend {
 				applyQueryVariableSelection(editor, selection.Anchor, token.end)
 			} else {
@@ -1425,7 +1465,7 @@ func (a *App) handleFormTableQueryVariableEditorKey(event woxui.KeyEvent) bool {
 			a.finishFormTableQueryVariableEditorMove()
 			return true
 		}
-		if token, ok := queryVariableTokenContaining(text, selection.Focus); ok {
+		if token, ok := queryVariableTokenContaining(text, selection.Focus, editing); ok {
 			if extend {
 				applyQueryVariableSelection(editor, selection.Anchor, token.end)
 			} else {
@@ -1512,7 +1552,7 @@ func queryVariableTokens(value string) []queryVariableToken {
 				end = cursor + 1
 				break
 			}
-			if runes[cursor] == '{' || unicode.IsSpace(runes[cursor]) {
+			if runes[cursor] == '{' {
 				break
 			}
 		}
@@ -1536,8 +1576,8 @@ func queryVariableHasPrefix(runes []rune, start int, prefix []rune) bool {
 	return true
 }
 
-func queryVariableTokenBefore(value string, caret int) (queryVariableToken, bool) {
-	for _, token := range queryVariableTokens(value) {
+func queryVariableTokenBefore(value string, caret int, editing queryVariableToken) (queryVariableToken, bool) {
+	for _, token := range queryVariableAtomicTokens(value, editing) {
 		if token.end == caret {
 			return token, true
 		}
@@ -1545,8 +1585,8 @@ func queryVariableTokenBefore(value string, caret int) (queryVariableToken, bool
 	return queryVariableToken{}, false
 }
 
-func queryVariableTokenAfter(value string, caret int) (queryVariableToken, bool) {
-	for _, token := range queryVariableTokens(value) {
+func queryVariableTokenAfter(value string, caret int, editing queryVariableToken) (queryVariableToken, bool) {
+	for _, token := range queryVariableAtomicTokens(value, editing) {
 		if token.start == caret {
 			return token, true
 		}
@@ -1554,8 +1594,8 @@ func queryVariableTokenAfter(value string, caret int) (queryVariableToken, bool)
 	return queryVariableToken{}, false
 }
 
-func queryVariableTokenContaining(value string, caret int) (queryVariableToken, bool) {
-	for _, token := range queryVariableTokens(value) {
+func queryVariableTokenContaining(value string, caret int, editing queryVariableToken) (queryVariableToken, bool) {
+	for _, token := range queryVariableAtomicTokens(value, editing) {
 		if token.start < caret && caret < token.end {
 			return token, true
 		}
@@ -1563,14 +1603,24 @@ func queryVariableTokenContaining(value string, caret int) (queryVariableToken, 
 	return queryVariableToken{}, false
 }
 
+// queryVariableParameterTokenContaining finds the editable parameter placeholder under the caret.
+func queryVariableParameterTokenContaining(value string, caret int) (queryVariableToken, bool) {
+	for _, token := range queryVariableTokens(value) {
+		if token.start < caret && caret < token.end && queryVariableIsEditableParameter(queryVariableTokenText(value, token)) {
+			return token, true
+		}
+	}
+	return queryVariableToken{}, false
+}
+
 // expandQueryVariableSelection grows a range so it never splits a complete {wox:...} placeholder.
-func expandQueryVariableSelection(value string, start, end int) (int, int, bool) {
+func expandQueryVariableSelection(value string, start, end int, editing queryVariableToken) (int, int, bool) {
 	if start > end {
 		start, end = end, start
 	}
 	nextStart, nextEnd := start, end
 	changed := false
-	for _, token := range queryVariableTokens(value) {
+	for _, token := range queryVariableAtomicTokens(value, editing) {
 		if start < token.end && end > token.start {
 			if token.start < nextStart {
 				nextStart = token.start
@@ -1586,8 +1636,8 @@ func expandQueryVariableSelection(value string, start, end int) (int, int, bool)
 }
 
 // snapQueryVariableCaret moves a caret that landed inside a placeholder to the nearer edge.
-func snapQueryVariableCaret(value string, caret int) (int, bool) {
-	token, ok := queryVariableTokenContaining(value, caret)
+func snapQueryVariableCaret(value string, caret int, editing queryVariableToken) (int, bool) {
+	token, ok := queryVariableTokenContaining(value, caret, editing)
 	if !ok {
 		return caret, false
 	}
@@ -1608,7 +1658,11 @@ func applyQueryVariableSelection(editor *woxwidget.TextEditingController, anchor
 	editor.SetSelection(anchor, focus)
 }
 
+// queryVariableTriggerStart finds an unfinished { insert. Editing inside a closed placeholder is not an insert.
 func queryVariableTriggerStart(value string, caret int) int {
+	if _, inside := queryVariableCompleteTokenContaining(value, caret); inside {
+		return -1
+	}
 	runes := []rune(value)
 	caret = max(0, min(caret, len(runes)))
 	runes = runes[:caret]
@@ -1626,8 +1680,26 @@ func queryVariableTriggerStart(value string, caret int) int {
 	return -1
 }
 
+// queryVariableCompleteTokenContaining reports a closed {wox:...} placeholder under the caret.
+func queryVariableCompleteTokenContaining(value string, caret int) (queryVariableToken, bool) {
+	for _, token := range queryVariableTokens(value) {
+		if token.start < caret && caret < token.end {
+			return token, true
+		}
+	}
+	return queryVariableToken{}, false
+}
+
+// formTableColumnIsTextList reports newline-separated list columns, including query-variable lists.
+func formTableColumnIsTextList(columnType string) bool {
+	return columnType == "textList" || columnType == "queryVariableList"
+}
+
 // formTableQueryVariableKind maps a field onto the placeholder set it can insert.
 func formTableQueryVariableKind(definition formDefinition) string {
+	if definition.Value.QueryVariableKind != "" {
+		return definition.Value.QueryVariableKind
+	}
 	if kind := formTableQueryVariableKindFromColumnType(definition.Value.ColumnType); kind != "" {
 		return kind
 	}
@@ -1638,6 +1710,8 @@ func formTableQueryVariableKind(definition formDefinition) string {
 		return formTableQueryVariableKindAICommand
 	case "i18n:plugin_dictation_action_prompt_tooltip":
 		return formTableQueryVariableKindDictation
+	case "i18n:plugin_websearch_title_tooltip", "i18n:plugin_websearch_urls_tooltip":
+		return formTableQueryVariableKindWebSearch
 	}
 	return ""
 }
@@ -1666,6 +1740,9 @@ func formTableQueryVariableKindForField(state *formTableEditorState, index int) 
 	}
 	for _, column := range state.definition.Value.Columns {
 		if column.Key == definition.Value.Key {
+			if column.QueryVariableKind != "" {
+				return column.QueryVariableKind
+			}
 			if kind := formTableQueryVariableKindFromColumnType(column.Type); kind != "" {
 				return kind
 			}
@@ -1685,6 +1762,8 @@ func formTableQueryVariables(kind string) []queryHotkeyVariable {
 		return aiCommandPromptVariables
 	case formTableQueryVariableKindDictation:
 		return dictationPromptVariables
+	case formTableQueryVariableKindWebSearch:
+		return webSearchQueryVariables
 	default:
 		return queryHotkeyVariables
 	}
@@ -1796,7 +1875,14 @@ func (a *App) chooseFormTableQueryVariable(index int) {
 	inserted := []rune(options[index].value)
 	next := append(append(append([]rune{}, runes[:start]...), inserted...), runes[end:]...)
 	editor.SetText(string(next), false)
-	editor.SetCaret(start + len(inserted))
+	token := queryVariableToken{start: start, end: start + len(inserted)}
+	if nameStart, nameEnd, ok := queryVariableParameterNameRange(string(next), token); ok {
+		state.queryVariableEdit = token
+		editor.SetSelection(nameStart, nameEnd)
+	} else {
+		state.queryVariableEdit = queryVariableToken{}
+		editor.SetCaret(start + len(inserted))
+	}
 	syncFormFieldsEditorLocked(state.rowForm)
 	state.queryVariable = nil
 	state.status = ""
@@ -2044,6 +2130,9 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if textEditable {
+		if formTableQueryVariableKindForField(state, focused) != "" && a.handleFormTableQueryVariableEditorKey(event) {
+			return true
+		}
 		switch event.Key {
 		case woxui.KeyArrowDown:
 			if !multiline {
@@ -2057,9 +2146,6 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 			}
 		case woxui.KeyEnter:
 			return !multiline
-		}
-		if formTableQueryVariableKindForField(state, focused) != "" && a.handleFormTableQueryVariableEditorKey(event) {
-			return true
 		}
 		return false
 	}

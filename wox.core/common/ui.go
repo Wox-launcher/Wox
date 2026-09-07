@@ -141,8 +141,10 @@ type UI interface {
 }
 
 type ActiveWindowSnapshot struct {
-	Name string // active window name before wox is activated
-	Pid  int    // active window pid before wox is activated
+	// QueryVariables is an immutable snapshot captured before the launcher takes focus.
+	QueryVariables map[string]string `json:"-"`
+	Name           string            // active window name before wox is activated
+	Pid            int               // active window pid before wox is activated
 	// WindowId identifies the exact top-level window captured before Wox is activated.
 	// Pid is process-scoped, so it cannot distinguish multiple windows owned by the same app.
 	// Windows stores the top-level HWND as a decimal string; macOS stores the CGWindowID from the focused AX window.

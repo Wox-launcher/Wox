@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"wox/plugin"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -209,6 +210,25 @@ func TestQueryHotkeyPresetVisibilityMatchesFlutter(t *testing.T) {
 	}
 }
 
+func TestQueryVariableTriggerIgnoresEditInsidePlaceholder(t *testing.T) {
+	value := "Search Google for {wox:parameter?name=d}"
+	caret := strings.Index(value, "name=d") + len("name=d")
+	if got := queryVariableTriggerStart(value, caret); got != -1 {
+		t.Fatalf("editing inside a complete parameter should not open the picker, got %d", got)
+	}
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Title", QueryVariableKind: formTableQueryVariableKindWebSearch},
+	}}, map[string]string{"Title": value}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(caret)
+	app.updateFormTableQueryVariableTrigger(0)
+	if app.launcherTableEditor.queryVariable != nil {
+		t.Fatal("renaming a parameter should not keep the insert picker open")
+	}
+}
+
 func TestQueryHotkeyVariablePickerTriggersAndReplacesText(t *testing.T) {
 	if got := queryVariableTriggerStart("x {sel tail", 6); got != 2 {
 		t.Fatalf("middle-caret trigger = %d", got)
@@ -283,6 +303,16 @@ func TestQueryVariableTokensIgnoreIncompletePlaceholders(t *testing.T) {
 	closed := strings.Index(value, "{wox:selected_text}")
 	if len(tokens) != 1 || tokens[0].start != closed || tokens[0].end != closed+len("{wox:selected_text}") {
 		t.Fatalf("tokens = %#v, want only the closed selected_text placeholder at %d", tokens, closed)
+	}
+}
+
+func TestQueryVariableTokensKeepParameterizedPlaceholders(t *testing.T) {
+	value := "q={wox:parameter?name=query 123}&t={wox:parameter?name=time}"
+	tokens := queryVariableTokens(value)
+	first := "{wox:parameter?name=query 123}"
+	second := "{wox:parameter?name=time}"
+	if len(tokens) != 2 || tokens[0].start != 2 || tokens[0].end != 2+len(first) || tokens[1].end-tokens[1].start != len(second) {
+		t.Fatalf("parameterized tokens = %#v", tokens)
 	}
 }
 
@@ -408,6 +438,262 @@ func TestFormTableQueryVariableKindMatchesFieldTooltips(t *testing.T) {
 	}
 	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{Tooltip: "i18n:plugin_ai_command_name_tooltip"}}); got != "" {
 		t.Fatalf("unrelated field should not offer variables, got %q", got)
+	}
+	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{QueryVariableKind: formTableQueryVariableKindWebSearch, Tooltip: "translated tip"}}); got != formTableQueryVariableKindWebSearch {
+		t.Fatalf("explicit web search kind = %q", got)
+	}
+	if got := formTableQueryVariableKind(formDefinition{Value: formDefinitionValue{Tooltip: "i18n:plugin_websearch_urls_tooltip"}}); got != formTableQueryVariableKindWebSearch {
+		t.Fatalf("web search url tooltip = %q", got)
+	}
+}
+
+func TestFormTableColumnDefinitionKeepsQueryVariableListType(t *testing.T) {
+	field, editable := formTableColumnDefinition(formTableColumn{
+		Key: "Urls", Type: "queryVariableList", QueryVariableKind: formTableQueryVariableKindWebSearch, Tooltip: "translated url tip", TextMaxLines: 6,
+	}, nil)
+	if !editable || field.Type != "textbox" || field.Value.ColumnType != "queryVariableList" || field.Value.QueryVariableKind != formTableQueryVariableKindWebSearch {
+		t.Fatalf("query variable list field = %#v editable %v", field.Value, editable)
+	}
+	if formTableQueryVariableKind(field) != formTableQueryVariableKindWebSearch {
+		t.Fatal("web search URL column should offer web search variables")
+	}
+	if field.Value.MaxLines != 6 {
+		t.Fatalf("query variable list max lines = %d", field.Value.MaxLines)
+	}
+}
+
+func TestWebSearchVariablePickerInsertsParameter(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch},
+	}}, map[string]string{"Urls": "https://www.google.com/search?q="}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+
+	app.setFormTableRowText(0, "https://www.google.com/search?q={par")
+	if app.launcherTableEditor.queryVariable == nil || app.launcherTableEditor.queryVariable.triggerStart < 0 {
+		t.Fatal("typing { in a web search URL should open the variable picker")
+	}
+	app.chooseFormTableQueryVariable(0)
+	want := "https://www.google.com/search?q=" + plugin.ParameterQueryVariable("query")
+	if got := fields.values["Urls"]; got != want {
+		t.Fatalf("typed web search variable replacement = %q", got)
+	}
+	nameStart := strings.Index(want, "query")
+	selection := fields.editor.State().Selection
+	if selection.Start() != nameStart || selection.End() != nameStart+len("query") {
+		t.Fatalf("inserted parameter should select the name, got %d-%d", selection.Start(), selection.End())
+	}
+}
+
+func TestQueryVariableEnterExitsParameterEdit(t *testing.T) {
+	value := "https://www.google.com/search?q={wox:parameter?name=query}&t={wox:parameter?name=time}"
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch, MaxLines: 6},
+	}}, map[string]string{"Urls": value}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+	nameStart := strings.Index(value, "query")
+	fields.editor.SetCaret(nameStart + len("query"))
+	app.launcherTableEditor.queryVariableEdit = queryVariableToken{start: strings.Index(value, "{wox:parameter?name=query}"), end: strings.Index(value, "&t=")}
+	if !app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("Enter inside a parameter should finish renaming")
+	}
+	if got := fields.editor.State().Text; got != value {
+		t.Fatalf("Enter should not change the URL text, got %q", got)
+	}
+	if got := fields.editor.State().Selection.Focus; got != strings.Index(value, "&t=") {
+		t.Fatalf("caret after Enter = %d, want after the parameter", got)
+	}
+	if app.launcherTableEditor.queryVariableEdit != (queryVariableToken{}) {
+		t.Fatal("Enter should leave parameter edit mode")
+	}
+	runs, _ := formTableQueryVariableFieldDecorations(value, queryVariableToken{}, nil, woxcomponent.Theme{}, nil)
+	if len(runs) != 2 || !runs[0].HideText || !runs[1].HideText {
+		t.Fatalf("leaving a parameter should collapse it back to a chip, runs=%#v", runs)
+	}
+}
+
+func TestQueryVariableEnterOutsidePlaceholderAllowsNewline(t *testing.T) {
+	value := "https://www.google.com/search?q={wox:parameter?name=query}"
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch, MaxLines: 6},
+	}}, map[string]string{"Urls": value}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+	fields.editor.SetCaret(len([]rune(value)))
+	if app.handleFormTableQueryVariableEditorKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("Enter after a parameter should stay available for a new list line")
+	}
+}
+
+func TestQueryVariableEnterOnMultilineFieldDoesNotInsertNewline(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "webSearches"}}
+	form := &formState{formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"webSearches": "[]"}, true)}
+	value := "https://www.google.com/search?q={wox:parameter?name=query}"
+	rowForm := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch, MaxLines: 6, ColumnType: "queryVariableList"},
+	}}, map[string]string{"Urls": value}, true)
+	deps := CommonDeps{}
+	app := &App{
+		form: form, aiSettings: newAISettingsController(deps), pluginSettings: newPluginSettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+		launcherTableEditor: &formTableEditorState{target: &form.formFieldsState, definition: definition, rowForm: &rowForm, deletePending: -1},
+	}
+	rowForm.editor.SetCaret(strings.Index(value, "query") + len("query"))
+	if !app.onFormTableKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("Enter inside a parameter on a URL list should be consumed")
+	}
+	if got := rowForm.editor.State().Text; got != value {
+		t.Fatalf("Enter should not insert a newline, got %q", got)
+	}
+	if got := rowForm.editor.State().Selection.Focus; got != len([]rune(value)) {
+		t.Fatalf("caret after Enter = %d, want the end of the parameter", got)
+	}
+}
+
+func TestQueryVariableParameterChipClickSnapsToEdge(t *testing.T) {
+	value := "q=" + plugin.ParameterQueryVariable("query123")
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch},
+	}}, map[string]string{"Urls": value}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+	nameStart := strings.Index(value, "query123")
+	tokenStart := strings.Index(value, "{wox:")
+	tokenEnd := tokenStart + len(plugin.ParameterQueryVariable("query123"))
+	fields.editor.SetCaret(nameStart + 2)
+	app.snapFormTableQueryVariableSelection()
+	selection := fields.editor.State().Selection
+	if !selection.Collapsed() || (selection.Focus != tokenStart && selection.Focus != tokenEnd) {
+		t.Fatalf("click inside a collapsed parameter should snap to an edge, got %+v", selection)
+	}
+	if app.launcherTableEditor.queryVariableEdit != (queryVariableToken{}) {
+		t.Fatal("clicking a collapsed parameter should not enter edit mode")
+	}
+}
+
+func TestDismissFormTableQueryVariableRemovesPlaceholder(t *testing.T) {
+	value := "https://www.google.com/search?q={wox:parameter?name=query}&t={wox:parameter?name=time}"
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch, MaxLines: 6},
+	}}, map[string]string{"Urls": value}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+	start := strings.Index(value, "{wox:parameter?name=query}")
+	end := start + len("{wox:parameter?name=query}")
+	if !app.dismissFormTableQueryVariable(0, start, end) {
+		t.Fatal("clicking a query variable close icon should remove that placeholder")
+	}
+	want := "https://www.google.com/search?q=&t={wox:parameter?name=time}"
+	if got := fields.editor.State().Text; got != want {
+		t.Fatalf("urls after dismiss = %q, want %q", got, want)
+	}
+	if got := fields.editor.State().Selection.Focus; got != start {
+		t.Fatalf("caret after dismiss = %d, want %d", got, start)
+	}
+}
+
+func TestEditFormTableQueryVariableSelectsParameterName(t *testing.T) {
+	value := "q={wox:parameter?name=query123}"
+	fields := newFormFieldsState([]formDefinition{{
+		Type: "textbox", Value: formDefinitionValue{Key: "Urls", QueryVariableKind: formTableQueryVariableKindWebSearch},
+	}}, map[string]string{"Urls": value}, true)
+	app := &App{launcherTableEditor: &formTableEditorState{
+		definition: formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, rowForm: &fields,
+	}}
+	start := strings.Index(value, "{wox:parameter?name=query123}")
+	end := start + len("{wox:parameter?name=query123}")
+	if !app.editFormTableQueryVariable(0, start, end) {
+		t.Fatal("clicking a query variable edit icon should expand that parameter")
+	}
+	nameStart := strings.Index(value, "query123")
+	selection := fields.editor.State().Selection
+	if selection.Start() != nameStart || selection.End() != nameStart+len("query123") {
+		t.Fatalf("edit selection = %d-%d, want the parameter name", selection.Start(), selection.End())
+	}
+	if app.launcherTableEditor.queryVariableEdit.start != start {
+		t.Fatal("edit should enter parameter edit mode")
+	}
+	fields.editor.SetCaret(nameStart + 3)
+	app.snapFormTableQueryVariableSelection()
+	if got := fields.editor.State().Selection.Focus; got != nameStart+3 || !fields.editor.State().Selection.Collapsed() {
+		t.Fatalf("caret inside an expanded parameter should stay, got %+v", fields.editor.State().Selection)
+	}
+	if app.launcherTableEditor.queryVariableEdit.start != start {
+		t.Fatal("caret moves inside the same parameter should keep edit mode")
+	}
+}
+
+func TestQueryVariableCollapsedParameterTokensAreAtomic(t *testing.T) {
+	value := "q={wox:parameter?name=query} {wox:selected_text}"
+	if tokens := queryVariableAtomicTokens(value, queryVariableToken{}); len(tokens) != 2 {
+		t.Fatalf("collapsed tokens should all be atomic, got %#v", tokens)
+	}
+	start := strings.Index(value, "{wox:parameter?name=query}")
+	end := start + len("{wox:parameter?name=query}")
+	editing := queryVariableToken{start: start, end: end}
+	if tokens := queryVariableAtomicTokens(value, editing); len(tokens) != 1 || tokens[0].start != strings.Index(value, "{wox:selected_text}") {
+		t.Fatalf("only the edited parameter should leave atomic tokens, got %#v", tokens)
+	}
+	runs, atomic := formTableQueryVariableFieldDecorations(value, queryVariableToken{}, nil, woxcomponent.Theme{}, nil)
+	if len(atomic) != 2 || len(runs) != 2 || !runs[0].HideText || !runs[1].HideText {
+		t.Fatalf("collapsed parameters should stay chips, runs=%#v atomic=%#v", runs, atomic)
+	}
+	if !runs[0].ChipEditable || runs[1].ChipEditable {
+		t.Fatalf("only parameter chips should offer edit, runs=%#v", runs)
+	}
+	runs, atomic = formTableQueryVariableFieldDecorations(value, editing, nil, woxcomponent.Theme{}, nil)
+	if len(atomic) != 1 || len(runs) != 2 || runs[0].HideText || !runs[1].HideText {
+		t.Fatalf("editing a parameter should expand it and keep environment chips, runs=%#v atomic=%#v", runs, atomic)
+	}
+	if runs[0].Dismissible || !runs[1].Dismissible {
+		t.Fatalf("only collapsed chips should offer dismiss, runs=%#v", runs)
+	}
+	if runs[0].ChipEditable || runs[1].ChipEditable {
+		t.Fatalf("environment chips should not offer edit, runs=%#v", runs)
+	}
+	collapsed := "q={wox:parameter?name=query}"
+	parameterRuns, parameterAtomic := formTableQueryVariableFieldDecorations(collapsed, queryVariableToken{}, nil, woxcomponent.Theme{}, nil)
+	if len(parameterRuns) != 1 || !parameterRuns[0].ChipEditable || len(parameterAtomic) != 1 {
+		t.Fatalf("collapsed parameter chips should offer edit, runs=%#v atomic=%#v", parameterRuns, parameterAtomic)
+	}
+}
+
+func TestQueryVariableChipLabelUsesParameterName(t *testing.T) {
+	if got := queryVariableChipLabel(plugin.ParameterQueryVariable("query 123"), nil); got != "query 123" {
+		t.Fatalf("parameter chip = %q", got)
+	}
+	if got := queryVariableChipLabel("{wox:parameter?name=query&case=lower}", nil); got != "query lower" {
+		t.Fatalf("cased parameter chip = %q", got)
+	}
+	if got := queryVariableChipLabel("{wox:selected_text}", func(key string) string {
+		if key == "i18n:ui_query_variable_selected_text" {
+			return "Selected Text"
+		}
+		return key
+	}); got != "Selected Text" {
+		t.Fatalf("selected text chip = %q", got)
+	}
+}
+
+func TestValidateWebSearchTableRowRejectsUndeclaredTitleParameter(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{
+		{Type: "textbox", Value: formDefinitionValue{Key: "Title"}},
+		{Type: "textbox", Value: formDefinitionValue{Key: "Urls"}},
+	}, map[string]string{
+		"Title": "Search Google for {wox:parameter?name=query}",
+		"Urls":  "https://www.google.com/search?q={wox:parameter?name=query123}&t={wox:parameter?name=time}",
+	}, true)
+	app := &App{translations: map[string]string{
+		"plugin_websearch_error_unknown_title_variable": "Title can only reference parameters declared in the URLs.",
+	}}
+	errors := app.validateWebSearchTableRow(formDefinition{Value: formDefinitionValue{Key: "webSearches"}}, &fields)
+	if got := errors["Title"]; got != "Title can only reference parameters declared in the URLs." {
+		t.Fatalf("title error = %#v", errors)
 	}
 }
 
