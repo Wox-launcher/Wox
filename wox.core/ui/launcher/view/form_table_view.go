@@ -1109,10 +1109,18 @@ func FormTableRowField(props FormTableRowFieldProps) woxwidget.Widget {
 		rightChildren = append(rightChildren, description)
 	}
 	if props.Error != "" {
-		rightChildren = append(rightChildren, woxwidget.TextBlock{
+		errorText := woxwidget.TextBlock{
 			Value: props.Error, Width: controlWidth, Height: 16, MaxLines: 1, LineHeight: 16,
 			Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText,
-		})
+		}
+		if props.ID != "" {
+			rightChildren = append(rightChildren, woxwidget.Semantics{
+				AutomationID: props.ID + "-error", Role: woxui.AccessibilityRoleText, Label: props.Error, Value: props.Error,
+				LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: errorText,
+			})
+		} else {
+			rightChildren = append(rightChildren, errorText)
+		}
 	}
 	labelTop := float32(8)
 	if props.Kind == "checkbox" {

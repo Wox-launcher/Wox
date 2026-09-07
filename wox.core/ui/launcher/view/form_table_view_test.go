@@ -465,16 +465,20 @@ func TestFormTableRowFieldRendersInlineValidationError(t *testing.T) {
 		t.Fatalf("error height = %.0f, want more than %.0f without error", height, withoutError)
 	}
 	row := FormTableRowField(FormTableRowFieldProps{
-		Kind: "textbox", Label: "Keyword", Description: "Website keyword.", Error: errorMessage,
+		ID: "form-table-row-field-0", Kind: "textbox", Label: "Keyword", Description: "Website keyword.", Error: errorMessage,
 		Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.Theme{ErrorText: woxui.Color{R: 255, A: 255}},
 	}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	if len(right.Children) != 3 {
 		t.Fatalf("right children = %d, want control, description, and error", len(right.Children))
 	}
-	errorText := right.Children[2].(woxwidget.TextBlock)
+	errorNode, ok := right.Children[2].(woxwidget.Semantics)
+	if !ok || errorNode.AutomationID != "form-table-row-field-0-error" || errorNode.Value != errorMessage {
+		t.Fatalf("inline error = %#v", right.Children[2])
+	}
+	errorText := errorNode.Child.(woxwidget.TextBlock)
 	if errorText.Value != errorMessage || errorText.Color.R != 255 {
-		t.Fatalf("inline error = %#v", errorText)
+		t.Fatalf("inline error text = %#v", errorText)
 	}
 }
 
