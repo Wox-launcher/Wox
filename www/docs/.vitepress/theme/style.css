@@ -133,6 +133,12 @@
   mask: url("/images/reddit.svg") center / contain no-repeat;
 }
 
+/* Simple Icons' Discord mark follows the button color in both appearance modes. */
+.wox-discord-icon {
+  background: currentColor;
+  mask: url("/images/discord.svg") center / contain no-repeat;
+}
+
 .wox-home a.wox-button:hover {
   border-color: var(--vp-c-text-2);
   background: var(--wox-home-panel-soft);
