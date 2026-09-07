@@ -47,15 +47,15 @@ func TestQueryHintWordDeletionRestoresTemplate(t *testing.T) {
 	}
 }
 
-// A single argument stays undecorated; only atomic blocks receive a mark by themselves.
+// Empty arguments are chips; only atomic blocks receive a mark by themselves.
 func TestQueryHintBackgroundOnlyForBlocks(t *testing.T) {
 	for _, tc := range []struct {
 		kind, value, placeholder string
-		marks                    int
+		marks, chips             int
 	}{
-		{common.QueryElementArgument, "", "Volume (0–100)", 0},
-		{common.QueryElementArgument, "23", "", 0},
-		{common.QueryElementBlock, "23", "", 1},
+		{common.QueryElementArgument, "", "Volume (0–100)", 0, 1},
+		{common.QueryElementArgument, "23", "", 0, 0},
+		{common.QueryElementBlock, "23", "", 1, 0},
 	} {
 		a := &App{}
 		hint := &common.QueryHint{Elements: []common.QueryElement{
@@ -65,8 +65,11 @@ func TestQueryHintBackgroundOnlyForBlocks(t *testing.T) {
 		widget := a.queryHintView(viewSnapshot{hint: hint, editing: woxui.TextEditingState{Text: hint.PlainText()}}, 200, 40, 34)
 		scroll := widget.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 		props := scroll.Child.(woxwidget.Boundary[launcherview.LauncherQueryProps]).Props
-		if len(props.Marks) != tc.marks || props.CompletionSuffix != tc.placeholder || len(props.CompletionChips) != 0 {
+		if len(props.Marks) != tc.marks || props.CompletionSuffix != tc.placeholder || len(props.CompletionChips) != tc.chips {
 			t.Fatalf("kind %s value %q: marks=%d placeholder=%q chips=%d", tc.kind, tc.value, len(props.Marks), props.CompletionSuffix, len(props.CompletionChips))
+		}
+		if tc.chips == 1 && props.CompletionChips[0].Text != tc.placeholder {
+			t.Fatalf("empty argument chip = %#v, want a hole for %q", props.CompletionChips, tc.placeholder)
 		}
 	}
 }
@@ -98,8 +101,8 @@ func TestQueryHintDeferredSeparatorSpacing(t *testing.T) {
 			if len(props.CompletionChips) != 2 || props.CompletionChips[0].Text != "query" || props.CompletionChips[1].Text != "time" {
 				t.Fatalf("empty placeholders = %#v, want separate query and time chips", props.CompletionChips)
 			}
-		} else if len(props.CompletionChips) != 0 {
-			t.Fatalf("single remaining placeholder = %#v, want plain ghost text", props.CompletionChips)
+		} else if len(props.CompletionChips) != 1 || props.CompletionChips[0].Text != "time" {
+			t.Fatalf("remaining placeholder = %#v, want a time chip", props.CompletionChips)
 		}
 	}
 }
@@ -116,8 +119,100 @@ func TestQueryHintMultipleArgumentsUseDecoration(t *testing.T) {
 	widget := a.queryHintView(viewSnapshot{hint: hint, editing: woxui.TextEditingState{Text: hint.PlainText()}}, 200, 40, 34)
 	scroll := widget.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	props := scroll.Child.(woxwidget.Boundary[launcherview.LauncherQueryProps]).Props
-	if len(props.Marks) != 1 || props.CompletionSuffix != "time range" || len(props.CompletionChips) != 0 {
+	if len(props.Marks) != 1 || props.CompletionSuffix != "time range" || len(props.CompletionChips) != 1 || props.CompletionChips[0].Text != "time range" {
 		t.Fatalf("mixed slots = marks=%d suffix=%q chips=%#v", len(props.Marks), props.CompletionSuffix, props.CompletionChips)
+	}
+}
+
+func queryHintViewProps(a *App, snapshot viewSnapshot) launcherview.LauncherQueryProps {
+	widget := a.queryHintView(snapshot, 200, 40, 34)
+	if stack, ok := widget.(woxwidget.Stack); ok {
+		widget = stack.Children[0].Child
+	}
+	scroll := widget.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	return scroll.Child.(woxwidget.Boundary[launcherview.LauncherQueryProps]).Props
+}
+
+func queryHintCaretAt(hint *common.QueryHint, index int) woxui.TextEditingState {
+	_, end := queryElementRange(hint, index)
+	return woxui.TextEditingState{Text: hint.PlainText(), Selection: woxui.TextSelection{Anchor: end, Focus: end}}
+}
+
+func TestQueryHintForwardTabTarget(t *testing.T) {
+	hint := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g "},
+		{Id: "query", Kind: "argument", Required: true},
+		{Id: "separator", Kind: "text", Text: " "},
+		{Id: "time", Kind: "argument", Required: true},
+	}}
+	if _, ok := queryHintForwardTabTarget(hint, 1); ok {
+		t.Fatal("empty required argument must not advance")
+	}
+	hint.Elements[1].Value = "hello"
+	if next, ok := queryHintForwardTabTarget(hint, 1); !ok || next != 3 {
+		t.Fatalf("filled argument next = %d ok=%t, want 3", next, ok)
+	}
+	if _, ok := queryHintForwardTabTarget(hint, 3); ok {
+		t.Fatal("last argument must not advance")
+	}
+}
+
+// Tab is advertised only after the destination that a successful Tab would reach.
+func TestQueryHintTabHintOnlyWhenTabSucceeds(t *testing.T) {
+	a := &App{}
+	single := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "set volume "},
+		{Id: "volume", Kind: "argument", Placeholder: "Volume (0–100)"},
+	}}
+	props := queryHintViewProps(a, viewSnapshot{hint: single, queryHintActive: 1, queryFocused: true, editing: queryHintCaretAt(single, 1)})
+	if props.TabHint.Visible || len(props.CompletionChips) != 1 || props.CompletionChips[0].Text != "Volume (0–100)" {
+		t.Fatalf("single current argument = tab %#v chips %#v, want a hole and no Tab mark", props.TabHint, props.CompletionChips)
+	}
+
+	empty := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g "},
+		{Id: "query", Kind: "argument", Required: true, Placeholder: "query"},
+		{Id: "separator", Kind: "text", Text: " "},
+		{Id: "time", Kind: "argument", Required: true, Placeholder: "time"},
+	}}
+	props = queryHintViewProps(a, viewSnapshot{hint: empty, queryHintActive: 1, queryFocused: true, editing: queryHintCaretAt(empty, 1)})
+	if props.TabHint.Visible {
+		t.Fatal("empty required argument must not show a Tab mark")
+	}
+
+	filled := empty.Clone()
+	filled.Elements[1].Value = "hello"
+	props = queryHintViewProps(a, viewSnapshot{hint: filled, queryHintActive: 1, queryFocused: true, editing: queryHintCaretAt(filled, 1)})
+	if !props.TabHint.Visible || props.TabHint.Label != "Tab" {
+		t.Fatalf("next empty argument Tab hint = %#v", props.TabHint)
+	}
+
+	props = queryHintViewProps(a, viewSnapshot{hint: filled, queryHintActive: 3, queryFocused: true, editing: queryHintCaretAt(filled, 3)})
+	if props.TabHint.Visible {
+		t.Fatal("last argument must not show a Tab mark")
+	}
+
+	candidate := &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "g"},
+		{Id: "query", Kind: "argument", Placeholder: "query"},
+		{Id: "separator", Kind: "text", Text: " "},
+		{Id: "time", Kind: "argument", Placeholder: "time"},
+	}}
+	props = queryHintViewProps(a, viewSnapshot{hint: candidate, queryHintCandidate: true, queryFocused: true, editing: woxui.TextEditingState{Text: "g", Selection: woxui.TextSelection{Anchor: 1, Focus: 1}}})
+	if props.CompletionSuffix == "" || !props.TabHint.Visible {
+		t.Fatalf("candidate ghost Tab hint = suffix %q hint %#v", props.CompletionSuffix, props.TabHint)
+	}
+}
+
+func TestQueryCompletionTabHintFollowsSuffix(t *testing.T) {
+	a := &App{}
+	props := a.queryViewProps(viewSnapshot{
+		queryFocused:   true,
+		editing:        woxui.TextEditingState{Text: "sett", Selection: woxui.TextSelection{Anchor: 4, Focus: 4}},
+		completionHint: &queryCompletionHint{InputPrefix: "sett", CompletionText: "setting", Suffix: "ing"},
+	}, 400, 40, 34)
+	if props.CompletionSuffix != "ing" || !props.TabHint.Visible || props.TabHint.Label != "Tab" {
+		t.Fatalf("completion Tab hint = suffix %q hint %#v", props.CompletionSuffix, props.TabHint)
 	}
 }
 

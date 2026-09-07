@@ -174,6 +174,7 @@ var uiIcons = map[string]WoxImage{
 	"control.email":              newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>`),
 	"control.key":                newMonochromeUIIcon(`<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l3 3"/>`),
 	"control.keyboard":           newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6M8 16h8"/>`),
+	"control.keyboard-tab":       newMonochromeUIIcon(`<path d="M4 12h10M10 8l4 4-4 4"/><path d="M18 7v10"/>`),
 	"control.demo":               newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
 	"control.bolt":               newMonochromeUIIcon(`<path d="M13 2 4.5 13.5h5.5L9 22l10-13h-6z"/>`),
 	"control.onboarding":         newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m16.2 7.8-2.1 6.4-6.4 2.1 2.1-6.4z"/>`),

@@ -233,6 +233,14 @@ func KeyboardGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.keyboard", size, color)
 }
 
+// KeyboardTabGlyph returns the quiet Tab affordance used after query targets.
+func KeyboardTabGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return svgIcon("control.keyboard-tab", size, color)
+}
+
 // EditGlyph returns the shared SVG edit icon.
 func EditGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

@@ -232,6 +232,58 @@ func (a *App) focusQueryElement(index int) bool {
 	return true
 }
 
+// queryHintResolveActive mirrors Tab's live slot: keep the last target until the
+// caret leaves it, including the shared caret point after a command prefix.
+func queryHintResolveActive(hint *common.QueryHint, active int, selection woxui.TextSelection) int {
+	if hint == nil || len(hint.Elements) == 0 {
+		return active
+	}
+	if active < 0 || active >= len(hint.Elements) {
+		active = queryHintFirstValueIndex(hint)
+	}
+	left, right := queryElementRange(hint, active)
+	if selection.Start() < left || selection.End() > right {
+		for i := range hint.Elements {
+			start, end := queryElementRange(hint, i)
+			if selection.Start() >= start && selection.End() <= end {
+				return i
+			}
+		}
+	}
+	return active
+}
+
+func queryHintFirstValueIndex(hint *common.QueryHint) int {
+	if hint == nil {
+		return 0
+	}
+	for i, element := range hint.Elements {
+		if element.Kind != common.QueryElementText {
+			return i
+		}
+	}
+	return 0
+}
+
+// queryHintForwardTabTarget is the next semantic value forward Tab would focus.
+func queryHintForwardTabTarget(hint *common.QueryHint, active int) (int, bool) {
+	if hint == nil || active < 0 || active >= len(hint.Elements) {
+		return -1, false
+	}
+	element := hint.Elements[active]
+	if element.Required && strings.TrimSpace(element.Value) == "" {
+		return -1, false
+	}
+	next := active + 1
+	for next < len(hint.Elements) && hint.Elements[next].Kind == common.QueryElementText {
+		next++
+	}
+	if next >= len(hint.Elements) {
+		return -1, false
+	}
+	return next, true
+}
+
 // rejectQueryTab signals an unavailable action without changing the editor or IME anchor.
 func (a *App) rejectQueryTab() {
 	if a.editor.State().Composition != "" {
@@ -281,33 +333,15 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 		a.selectTouchedQueryBlocks()
 	}
 	if event.Key == woxui.KeyTab && (event.Modifiers == 0 || event.Modifiers == woxui.KeyModifierShift) {
-		state := a.editor.State()
-		// Pointer and arrow navigation may have moved away from the last Tab target.
-		left, right := queryElementRange(hint, s.active)
-		if state.Selection.Start() < left || state.Selection.End() > right {
-			for i := range hint.Elements {
-				start, end := queryElementRange(hint, i)
-				if state.Selection.Start() >= start && state.Selection.End() <= end {
-					s.active = i
-					break
-				}
-			}
-		}
-		delta := 1
-		if event.Modifiers != 0 {
-			delta = -1
-		}
-		// Do not advance past an empty required argument into invisible separators.
-		if delta > 0 && s.active >= 0 && s.active < len(hint.Elements) {
-			element := hint.Elements[s.active]
-			if element.Required && strings.TrimSpace(element.Value) == "" {
+		s.active = queryHintResolveActive(hint, s.active, a.editor.State().Selection)
+		if event.Modifiers == 0 {
+			next, ok := queryHintForwardTabTarget(hint, s.active)
+			if !ok || !a.focusQueryElement(next) {
 				a.rejectQueryTab()
-				return true
 			}
+			return true
 		}
-		if !a.focusQueryElement(s.active+delta) && event.Modifiers == 0 {
-			a.rejectQueryTab()
-		}
+		a.focusQueryElement(s.active - 1)
 		return true
 	}
 	state := a.editor.State()

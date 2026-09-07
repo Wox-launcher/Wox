@@ -208,11 +208,12 @@ plugin `change-query` action supports the same structured payload.
 
 - Matching a complete, unambiguous command previews hints; space or Tab activates
   the template. Tab / Shift+Tab select element ranges, skipping text separators.
-- Command and arguments share one continuous editor. A single argument stays
-  undecorated. Multiple arguments use quiet backgrounds, and empty placeholders
-  become separate ghost chips, so values or names that contain spaces stay
-  distinct. Placeholders are decorative and never appear in copied text or
-  argument values.
+- Command and arguments share one continuous editor. Empty placeholders always
+  become ghost chips, including a single variable, so the slot reads as a hole
+  to fill. A single filled argument stays unmarked. Multiple filled arguments
+  use the same quiet backgrounds as blocks, and chips stay separate so values
+  or names that contain spaces remain distinct. Placeholders are decorative and
+  never appear in copied text or argument values.
 - Character and word deletion retain ordinary text behavior. Cross-element selection
   is allowed. Edits across boundaries keep the text and discard unreliable metadata.
 - Reopening with select-all selects the entire query; typing replaces the command

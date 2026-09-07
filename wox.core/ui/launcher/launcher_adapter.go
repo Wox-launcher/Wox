@@ -55,6 +55,7 @@ type viewSnapshot struct {
 	queryTabFeedback      uint64
 	hint                  *common.QueryHint
 	queryHintCandidate    bool
+	queryHintActive       int
 	editing               woxui.TextEditingState
 	results               []queryResult
 	resultsRevision       uint64
@@ -150,6 +151,7 @@ func (a *App) snapshot() viewSnapshot {
 	return viewSnapshot{
 		queryTabFeedback:      a.queryTabFeedback,
 		hint:                  a.query.QueryHint.Clone(),
+		queryHintActive:       a.queryHintEditorState.active,
 		editing:               a.editor.State(),
 		results:               a.results,
 		resultsRevision:       a.resultsSectionRevision,
@@ -563,11 +565,15 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 		}
 		_ = a.window.Invalidate()
 	}
-	return launcherview.LauncherQueryProps{
+	textBaseline := float32(0)
+	if metrics, err := a.window.MeasureText("Ag", style); err == nil {
+		textBaseline = metrics.Baseline
+	}
+	props := launcherview.LauncherQueryProps{
 		TabFeedback: snapshot.queryTabFeedback,
 		Width:       width, Height: height, LineHeight: lineHeight, Style: style, State: state, Lines: lines,
 		CompletionSuffix: completionSuffix, CaretWidth: caretWidth, CaretLine: caretLine,
-		CompositionWidth: compositionWidth, CompositionX: compositionX, CompositionLine: compositionLine, TextWidth: textWidth, CaretHeight: caretHeight,
+		CompositionWidth: compositionWidth, CompositionX: compositionX, CompositionLine: compositionLine, TextWidth: textWidth, CaretHeight: caretHeight, TextBaseline: textBaseline,
 		Focused: queryFocused, Enabled: snapshot.queryEnabled, Theme: snapshot.palette.componentTheme(), OnTapAt: func(point woxui.Point) { a.placeQueryCaret(point, style, lineHeight) },
 		OnDoubleTapAt: func(point woxui.Point) { selectQueryAt(point, false) }, OnTripleTapAt: func(point woxui.Point) { selectQueryAt(point, true) },
 		OnTapEnd: focusQuery, OnDragStart: func() {
@@ -626,6 +632,27 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 		OnCut:   a.queryViewClipboardCut,
 		OnPaste: a.queryViewClipboardPaste,
 	}
+	if completionSuffix != "" {
+		a.applyCompletionTabHint(&props, snapshot.densityMetrics, measure)
+	}
+	return props
+}
+
+// applyCompletionTabHint marks the ghost suffix that Tab will insert.
+func (a *App) applyCompletionTabHint(props *launcherview.LauncherQueryProps, density launcherDensityMetrics, measure func(string) float32) {
+	if props == nil || !props.Focused || props.CompletionSuffix == "" || len(props.Lines) == 0 {
+		return
+	}
+	size, gap := a.queryTabHintChrome(density)
+	if size <= 0 {
+		return
+	}
+	last := props.Lines[len(props.Lines)-1]
+	attachQueryTabHint(props, launcherview.LauncherQueryTabHint{
+		Visible: true, Label: formatHotkeyLabels("tab")[0],
+		X: last.TextWidth + measure(props.CompletionSuffix) + gap, Width: size, Height: size,
+		Line: len(props.Lines) - 1,
+	})
 }
 
 // queryMenuEnablement is the Cut/Copy/Paste/Select All snapshot for the launcher query menu.

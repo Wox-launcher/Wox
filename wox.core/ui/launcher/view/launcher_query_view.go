@@ -32,6 +32,27 @@ type LauncherQueryCompletionChip struct {
 	X, Width float32
 }
 
+const (
+	launcherQueryTabHintSize = float32(14)
+	launcherQueryTabHintGap  = float32(4)
+)
+
+// LauncherQueryTabHint is the quiet Tab glyph shown after the next successful Tab target.
+type LauncherQueryTabHint struct {
+	Visible bool
+	Label   string
+	X       float32
+	Width   float32
+	Height  float32
+	Line    int
+}
+
+// LauncherQueryTabHintChrome sizes the inline Tab glyph for the active launcher density.
+func LauncherQueryTabHintChrome(densityScale float32) (size, gap float32) {
+	return scaledLauncherSize(launcherQueryTabHintSize, densityScale), scaledLauncherSize(launcherQueryTabHintGap, densityScale)
+}
+
+// LauncherQueryProps contains the prepared text and callbacks for the launcher query editor.
 type LauncherQueryProps struct {
 	TabFeedback      uint64
 	CaretShake       float32
@@ -47,6 +68,7 @@ type LauncherQueryProps struct {
 	CompletionSuffix string
 	CompletionChips  []LauncherQueryCompletionChip
 	CompletionOffset float32 // Logical offset from the last line's end for structured argument hints.
+	TabHint          LauncherQueryTabHint
 	CaretWidth       float32
 	CaretLine        int
 	CompositionWidth float32
@@ -54,6 +76,7 @@ type LauncherQueryProps struct {
 	CompositionLine  int
 	TextWidth        float32
 	CaretHeight      float32
+	TextBaseline     float32
 	Focused          bool
 	Enabled          bool
 	Theme            woxcomponent.Theme
@@ -84,10 +107,10 @@ func (p LauncherQueryProps) Equal(other LauncherQueryProps) bool {
 	if p.TabFeedback != other.TabFeedback || p.CaretShake != other.CaretShake || p.CaretShaking != other.CaretShaking {
 		return false
 	}
-	if p.CompletionOffset != other.CompletionOffset {
+	if p.CompletionOffset != other.CompletionOffset || p.TabHint != other.TabHint {
 		return false
 	}
-	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) || len(p.CompletionChips) != len(other.CompletionChips) {
+	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.TextBaseline != other.TextBaseline || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) || len(p.CompletionChips) != len(other.CompletionChips) {
 		return false
 	}
 	for index := range p.Marks {
@@ -364,15 +387,23 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 		},
 		Child: editor,
 	}
+	children := []woxwidget.StackChild{{Child: editor}}
 	if props.CompletionSuffix != "" {
-		editor = woxwidget.Stack{Width: props.Width, Height: contentHeight, Children: []woxwidget.StackChild{
-			{Child: editor},
-			{Child: woxwidget.Semantics{
-				Key: "launcher-query-completion-key", AutomationID: "launcher.query.completion", Role: woxui.AccessibilityRoleText,
-				Label: "Query completion", Value: props.CompletionSuffix, ReadOnly: true, LiveRegion: woxui.AccessibilityLiveRegionPolite,
-				Child: woxwidget.Container{},
-			}},
-		}}
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Semantics{
+			Key: "launcher-query-completion-key", AutomationID: "launcher.query.completion", Role: woxui.AccessibilityRoleText,
+			Label: "Query completion", Value: props.CompletionSuffix, ReadOnly: true, LiveRegion: woxui.AccessibilityLiveRegionPolite,
+			Child: woxwidget.Container{},
+		}})
+	}
+	if launcherQueryTabHintVisible(props) {
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Semantics{
+			Key: "launcher-query-tab-hint-key", AutomationID: "launcher.query.tab-hint", Role: woxui.AccessibilityRoleText,
+			Label: props.TabHint.Label, Value: props.TabHint.Label, ReadOnly: true,
+			Child: woxwidget.Container{},
+		}})
+	}
+	if len(children) > 1 {
+		return woxwidget.Stack{Width: props.Width, Height: contentHeight, Children: children}
 	}
 	return editor
 }
@@ -392,8 +423,46 @@ func launcherQueryFeedback(props LauncherQueryProps) woxwidget.Widget {
 			props.CaretShaking = remaining > 0
 			props.CaretShake = 3 * remaining * float32(math.Sin(float64(remaining)*4*math.Pi))
 		}
-		return launcherQueryPainter(props)
+		painter := launcherQueryPainter(props)
+		if !launcherQueryTabHintVisible(props) {
+			return painter
+		}
+		lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
+		textTop := max(float32(0), contentHeight-float32(len(lines))*lineHeight) / 2
+		return woxwidget.Stack{Width: props.Width, Height: contentHeight, Children: []woxwidget.StackChild{
+			{Child: painter},
+			{Left: props.TabHint.X, Top: launcherQueryTabHintTop(props, lineHeight, textTop), Child: launcherQueryTabGlyph(props.TabHint, props.Theme)},
+		}}
 	}}
+}
+
+func launcherQueryTabHintVisible(props LauncherQueryProps) bool {
+	return props.Focused && props.State.Composition == "" && props.TabHint.Visible && props.TabHint.Label != "" && props.TabHint.Width > 0
+}
+
+// launcherQueryLetterCenter is the visual midpoint of lowercase query ink.
+// DrawText is top-aligned; letters sit on the baseline, so the center is
+// about a quarter em above it rather than the input box or line box.
+func launcherQueryLetterCenter(props LauncherQueryProps, lineTop float32) float32 {
+	baseline := props.TextBaseline
+	if baseline <= 0 {
+		baseline = props.Style.Size * 4 / 5
+	}
+	return lineTop + baseline - props.Style.Size/4
+}
+
+// launcherQueryTabHintTop places the glyph on the query letter ink, not the
+// input box or the font line box.
+func launcherQueryTabHintTop(props LauncherQueryProps, lineHeight, textTop float32) float32 {
+	line := min(max(props.TabHint.Line, 0), max(len(props.Lines)-1, 0))
+	return launcherQueryLetterCenter(props, textTop+float32(line)*lineHeight) - props.TabHint.Height/2
+}
+
+// launcherQueryTabGlyph paints the keyboard-tab mark at the same quiet weight as ghost text.
+func launcherQueryTabGlyph(hint LauncherQueryTabHint, theme woxcomponent.Theme) woxwidget.Widget {
+	ink := theme.QueryText
+	ink.A = 96
+	return woxcomponent.KeyboardTabGlyph(hint.Width, ink)
 }
 
 // launcherQueryPainter keeps text, selection and caret geometry identical across focus transitions.

@@ -198,6 +198,27 @@ func TestQueryHintCompletionOffset(t *testing.T) {
 	}
 }
 
+func TestQueryHintSingleEmptyArgumentPaintsChip(t *testing.T) {
+	props := LauncherQueryProps{Width: 400, Height: 34, LineHeight: 34, CaretHeight: 30,
+		State: woxui.TextEditingState{Text: "set volume "}, Lines: []LauncherQueryLine{{Text: "set volume ", TextWidth: 90}},
+		CompletionSuffix: "Volume (0–100)",
+		CompletionChips:  []LauncherQueryCompletionChip{{Text: "Volume (0–100)", X: 0, Width: 120}},
+		Theme:            woxcomponent.Theme{QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}}}
+	bounds := woxui.Rect{Width: props.Width, Height: props.Height}
+	var actual, expected woxui.DisplayList
+	chip := props.Theme.QueryText
+	chip.A = 18
+	hint := props.Theme.QueryText
+	hint.A = 96
+	expected.FillRoundedRect(woxui.Rect{X: 87, Width: 126, Height: props.CaretHeight}, 4, chip)
+	expected.DrawText("Volume (0–100)", woxui.Rect{X: 90, Width: 310, Height: props.LineHeight}, props.Style, hint)
+	expected.DrawText("set volume ", bounds, props.Style, props.Theme.QueryText)
+	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("single empty argument chip = %#v", actual)
+	}
+}
+
 func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
 	props := LauncherQueryProps{Width: 400, Height: 34, LineHeight: 34, CaretHeight: 30,
 		State: woxui.TextEditingState{Text: "g "}, Lines: []LauncherQueryLine{{Text: "g ", TextWidth: 20}},
@@ -224,6 +245,47 @@ func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryTabHintCentersOnLetterInk(t *testing.T) {
+	props := LauncherQueryProps{
+		LineHeight: 38, Style: woxui.TextStyle{Size: 28}, TextBaseline: 30,
+		Lines:   []LauncherQueryLine{{Text: "ing"}},
+		TabHint: LauncherQueryTabHint{Height: 14},
+	}
+	lineBoxCenterTop := float32(2) + (38-14)/2
+	top := launcherQueryTabHintTop(props, 38, 2)
+	if top != 18 || top <= lineBoxCenterTop {
+		t.Fatalf("tab hint top = %v, want 18 below the line-box center %v so it sits on the lowercase ink", top, lineBoxCenterTop)
+	}
+}
+
+func TestLauncherQueryPlacesTabHintAfterTarget(t *testing.T) {
+	theme := woxcomponent.Theme{QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}}
+	hint := LauncherQueryTabHint{Visible: true, Label: "Tab", X: 80, Width: 14, Height: 14}
+	props := LauncherQueryProps{Width: 400, Height: 42, LineHeight: 38, CaretHeight: 34, Focused: true,
+		Style: woxui.TextStyle{Size: 28}, TextBaseline: 30,
+		State: woxui.TextEditingState{Text: "sett"}, Lines: []LauncherQueryLine{{Text: "sett", TextWidth: 40}},
+		CompletionSuffix: "ing", TabHint: hint, Theme: theme}
+	feedback := launcherQueryFeedback(props).(woxwidget.AnimatedFloat)
+	stack := feedback.Builder(feedback.Target).(woxwidget.Stack)
+	if stack.Children[1].Left != 80 || stack.Children[1].Top != 18 {
+		t.Fatalf("tab hint origin = %v,%v, want 80,18 on the lowercase text center", stack.Children[1].Left, stack.Children[1].Top)
+	}
+	glyph := stack.Children[1].Child.(woxwidget.Image)
+	if glyph.Width != 14 || glyph.Height != 14 || glyph.Source == nil {
+		t.Fatalf("tab hint glyph = %#v, want a 14x14 keyboard-tab image", glyph)
+	}
+
+	hidden := props
+	hidden.TabHint.Visible = false
+	if props.Equal(hidden) {
+		t.Fatal("tab hint missing from boundary dependencies")
+	}
+	idle := launcherQueryFeedback(hidden).(woxwidget.AnimatedFloat).Builder(0)
+	if _, ok := idle.(woxwidget.CaretPainter); !ok {
+		t.Fatalf("hidden tab hint = %T, want the bare caret painter", idle)
+	}
+}
+
 func TestLauncherQueryExposesInlineCompletionSuffix(t *testing.T) {
 	query := LauncherQueryView(LauncherQueryProps{Width: 500, Height: 40, CompletionSuffix: "pleted", Enabled: true}).(woxwidget.Stack)
 	scrollSemantic := query.Children[0].Child.(woxwidget.Semantics)
@@ -233,6 +295,21 @@ func TestLauncherQueryExposesInlineCompletionSuffix(t *testing.T) {
 	completion := content.Children[1].Child.(woxwidget.Semantics)
 	if completion.AutomationID != "launcher.query.completion" || completion.Role != woxui.AccessibilityRoleText || completion.Value != "pleted" || !completion.ReadOnly || completion.LiveRegion != woxui.AccessibilityLiveRegionPolite {
 		t.Fatalf("query completion semantics = %#v", completion)
+	}
+}
+
+func TestLauncherQueryExposesTabHintSemantics(t *testing.T) {
+	query := LauncherQueryView(LauncherQueryProps{
+		Width: 500, Height: 40, Focused: true, Enabled: true,
+		TabHint: LauncherQueryTabHint{Visible: true, Label: "Tab", Width: 14, Height: 14},
+	}).(woxwidget.Stack)
+	scrollSemantic := query.Children[0].Child.(woxwidget.Semantics)
+	scrollStack := scrollSemantic.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	scroll := scrollStack.Children[0].Child.(woxwidget.ScrollView)
+	content := scroll.Child.(woxwidget.Stack)
+	hint := content.Children[1].Child.(woxwidget.Semantics)
+	if hint.AutomationID != "launcher.query.tab-hint" || hint.Role != woxui.AccessibilityRoleText || hint.Value != "Tab" || !hint.ReadOnly {
+		t.Fatalf("query tab hint semantics = %#v", hint)
 	}
 }
 
