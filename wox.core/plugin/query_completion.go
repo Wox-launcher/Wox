@@ -37,6 +37,8 @@ type QueryCompletionHint struct {
 	Suffix         string
 	Source         QueryCompletionSource
 	Score          int
+	// Zero disables deletion reuse when plugin command eligibility needs reevaluation.
+	DeletionReuseMinLength int
 }
 
 // BuildQueryCompletionHint selects the best inline completion from command metadata and query history.
@@ -126,6 +128,10 @@ func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories [
 	}
 
 	feedbackByCompletionText := queryCompletionFeedbackByText(feedbacks)
+	deletionReuseMinLength := 0
+	if query.TriggerKeyword == "" {
+		deletionReuseMinLength = queryCompletionGlobalHistoryMinLen
+	}
 	var hints []QueryCompletionHint
 	for index, history := range latestQueryCompletionHistories(histories) {
 		if history.Query.QueryType != QueryTypeInput {
@@ -138,11 +144,12 @@ func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories [
 		}
 
 		hints = append(hints, QueryCompletionHint{
-			InputPrefix:    inputPrefix,
-			CompletionText: completionText,
-			Suffix:         completionText[len(inputPrefix):],
-			Source:         QueryCompletionSourceHistory,
-			Score:          queryCompletionHistoryScoreBase + queryCompletionFeedbackBonus(completionText, feedbackByCompletionText) + historyInputBonus(query) + rankBonus(index),
+			InputPrefix:            inputPrefix,
+			CompletionText:         completionText,
+			Suffix:                 completionText[len(inputPrefix):],
+			Source:                 QueryCompletionSourceHistory,
+			DeletionReuseMinLength: deletionReuseMinLength,
+			Score:                  queryCompletionHistoryScoreBase + queryCompletionFeedbackBonus(completionText, feedbackByCompletionText) + historyInputBonus(query) + rankBonus(index),
 		})
 	}
 	return hints

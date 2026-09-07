@@ -4,14 +4,16 @@ import (
 	"context"
 	"log"
 	"strings"
+	"unicode/utf8"
 )
 
 type queryCompletionHint struct {
-	InputPrefix    string `json:"InputPrefix"`
-	CompletionText string `json:"CompletionText"`
-	Suffix         string `json:"Suffix"`
-	Source         string `json:"Source"`
-	Score          int    `json:"Score"`
+	InputPrefix            string `json:"InputPrefix"`
+	CompletionText         string `json:"CompletionText"`
+	Suffix                 string `json:"Suffix"`
+	Source                 string `json:"Source"`
+	Score                  int    `json:"Score"`
+	DeletionReuseMinLength int    `json:"DeletionReuseMinLength"`
 }
 
 func (a *App) completionHintValidLocked(hint *queryCompletionHint) bool {
@@ -22,8 +24,17 @@ func (a *App) completionHintValidLocked(hint *queryCompletionHint) bool {
 	return state.Composition == "" && state.Selection.Collapsed() && state.Selection.Focus == len([]rune(state.Text)) && strings.HasPrefix(hint.CompletionText, state.Text)
 }
 
+// reuseCompletionHintLocked avoids blank frames while the next candidate is computed.
 func (a *App) reuseCompletionHintLocked(text string) {
-	if a.completionHint == nil || len([]rune(text)) <= len([]rune(a.completionHint.InputPrefix)) || !strings.HasPrefix(text, a.completionHint.InputPrefix) || !strings.HasPrefix(a.completionHint.CompletionText, text) {
+	if a.completionHint == nil {
+		return
+	}
+	hint := a.completionHint
+	appending := len(text) > len(hint.InputPrefix) && strings.HasPrefix(text, hint.InputPrefix)
+	// Only backend-approved histories can survive deletion; plugin command prefixes
+	// may become ambiguous and must wait for a fresh candidate.
+	deleting := len(text) < len(hint.InputPrefix) && strings.HasPrefix(hint.InputPrefix, text) && hint.DeletionReuseMinLength > 0 && utf8.RuneCountInString(strings.TrimSpace(text)) >= hint.DeletionReuseMinLength
+	if (!appending && !deleting) || !strings.HasPrefix(hint.CompletionText, text) {
 		a.completionHint = nil
 		return
 	}

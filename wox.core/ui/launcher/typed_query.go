@@ -110,11 +110,12 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 	var converted *queryCompletionHint
 	if hint != nil {
 		converted = &queryCompletionHint{
-			InputPrefix:    hint.InputPrefix,
-			CompletionText: hint.CompletionText,
-			Suffix:         hint.Suffix,
-			Source:         hint.Source,
-			Score:          hint.Score,
+			InputPrefix:            hint.InputPrefix,
+			CompletionText:         hint.CompletionText,
+			Suffix:                 hint.Suffix,
+			Source:                 hint.Source,
+			Score:                  hint.Score,
+			DeletionReuseMinLength: hint.DeletionReuseMinLength,
 		}
 	}
 	if err := a.runOnUI("apply query completion hint", func() {
@@ -124,6 +125,7 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 		if queryID != a.query.QueryID || !a.completionHintValidLocked(converted) {
 			if queryID == a.query.QueryID {
 				a.completionHint = nil
+				_ = a.window.Invalidate()
 			}
 			return
 		}

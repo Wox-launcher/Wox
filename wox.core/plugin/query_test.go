@@ -222,6 +222,7 @@ func Test_BuildQueryCompletionHint_GlobalHistoryAfterMinimumInput(t *testing.T) 
 	assert.Equal(t, "git status", hint.CompletionText)
 	assert.Equal(t, " status", hint.Suffix)
 	assert.Equal(t, QueryCompletionSourceHistory, hint.Source)
+	assert.Equal(t, queryCompletionGlobalHistoryMinLen, hint.DeletionReuseMinLength)
 }
 
 func Test_BuildQueryCompletionHint_CommandPrefixBeatsLongerHistory(t *testing.T) {
@@ -242,6 +243,7 @@ func Test_BuildQueryCompletionHint_CommandPrefixBeatsLongerHistory(t *testing.T)
 	assert.Equal(t, "wpm install ", hint.CompletionText)
 	assert.Equal(t, "tall ", hint.Suffix)
 	assert.Equal(t, QueryCompletionSourceCommand, hint.Source)
+	assert.Zero(t, hint.DeletionReuseMinLength)
 }
 
 func Test_BuildQueryCompletionHint_CommandArgumentHistory(t *testing.T) {
@@ -262,6 +264,7 @@ func Test_BuildQueryCompletionHint_CommandArgumentHistory(t *testing.T) {
 	assert.Equal(t, "wpm install github", hint.CompletionText)
 	assert.Equal(t, "thub", hint.Suffix)
 	assert.Equal(t, QueryCompletionSourceHistory, hint.Source)
+	assert.Zero(t, hint.DeletionReuseMinLength)
 }
 
 func Test_BuildQueryCompletionHint_NoHintWhenOriginalInputPrefixDoesNotMatchCompletion(t *testing.T) {
