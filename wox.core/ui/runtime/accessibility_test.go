@@ -44,6 +44,9 @@ func TestAccessibilityTreeContentHashCoversEveryNodeField(t *testing.T) {
 		{name: "protected", change: func(tree *AccessibilityTree) { tree.Nodes[0].Protected = true }},
 		{name: "hidden", change: func(tree *AccessibilityTree) { tree.Nodes[0].Hidden = true }},
 		{name: "native boundary", change: func(tree *AccessibilityTree) { tree.Nodes[0].NativeBoundary = true }},
+		{name: "text lines", change: func(tree *AccessibilityTree) {
+			tree.Nodes[0].TextLines = []AccessibilityTextLine{{Text: "☐ 顺序", Indent: 16}}
+		}},
 	}
 	baseHash := accessibilityTreeContentHash(base)
 	for _, test := range cases {

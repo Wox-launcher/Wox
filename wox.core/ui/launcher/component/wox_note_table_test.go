@@ -11,7 +11,7 @@ import (
 func TestNoteTextRunFieldRunUsesGenericDecorations(t *testing.T) {
 	run := NoteTextRun{Start: 0, End: 1, Style: woxui.TextStyle{Size: 14}, Color: DocumentListMarkerColor, Checkbox: true, Checked: true}
 	field := run.FieldRun()
-	if field.Advance <= 0 || !field.HideText || field.Paint == nil {
+	if field.Advance <= 0 || !field.HideText || !field.HangingIndent || field.Paint == nil {
 		t.Fatalf("checkbox run was not converted to a generic paint hook: %#v", field)
 	}
 	quote := NoteTextRun{Start: 0, End: 4, Style: woxui.TextStyle{Size: 14}, Color: DocumentListMarkerColor, LeadingBar: true}.FieldRun()

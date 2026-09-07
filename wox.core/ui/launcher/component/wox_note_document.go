@@ -37,6 +37,7 @@ type NoteTextRun struct {
 	Checked        bool
 	LeadingBar     bool
 	HorizontalRule bool
+	HangingIndent  bool
 }
 
 type noteInlineStyle struct {
@@ -80,9 +81,13 @@ func (run NoteTextRun) FieldRun() TextFieldRichRun {
 		size, color, checked := run.Style.Size, run.Color, run.Checked
 		field.Advance = documentCheckboxWidth(size)
 		field.HideText = true
+		field.HangingIndent = true
 		field.Paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			paintDocumentCheckbox(displayList, bounds, size, color, checked)
 		}
+	}
+	if run.HangingIndent {
+		field.HangingIndent = true
 	}
 	if run.LeadingBar {
 		size, color := run.Style.Size, run.Color
@@ -160,7 +165,7 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 		if block.Type == common.NoteBlockTask {
 			runs = append(runs, NoteTextRun{Start: marker, End: marker + 1, Style: base, Color: DocumentListMarkerColor, Checkbox: true, Checked: block.Checked})
 		} else if block.Type == common.NoteBlockBullet || block.Type == common.NoteBlockOrdered {
-			runs = append(runs, NoteTextRun{Start: marker, End: textStart, Style: base, Color: DocumentListMarkerColor})
+			runs = append(runs, NoteTextRun{Start: marker, End: textStart, Style: base, Color: DocumentListMarkerColor, HangingIndent: true})
 		}
 		if block.Type == common.NoteBlockQuote {
 			runs = append(runs, NoteTextRun{Start: start, End: textEnd, Style: base, Color: DocumentListMarkerColor, LeadingBar: true})

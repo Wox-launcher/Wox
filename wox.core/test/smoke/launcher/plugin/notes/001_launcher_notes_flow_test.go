@@ -4,7 +4,6 @@ package notes
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -23,30 +22,8 @@ func Test001LauncherNotesFlow(t *testing.T) {
 	const projected = title + "\n☐ ship"
 
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		smoke.ShowLauncher(t, ctx, client)
-		snapshot := smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, "note new ")
-		resultID := selectedResultID(t, snapshot)
-		if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("create note from Launcher: %v", err)
-		}
-		if _, err := client.WaitForWindowState(ctx, "notes", func(state automationdriver.WindowState) bool {
-			return state.Exists && state.Visible && state.Lifecycle == "visible"
-		}); err != nil {
-			t.Fatalf("wait for Notes utility window: %v", err)
-		}
-		if err := client.FocusInstance(ctx, "notes"); err != nil {
-			t.Fatalf("focus Notes utility window: %v", err)
-		}
-		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			editor, found := automationdriver.Find(snapshot, "notes.editor")
-			return found && editor.Focused
-		}); err != nil {
-			t.Fatalf("wait for Notes editor: %v", err)
-		}
-		if err := client.Perform(ctx, "notes.editor", woxui.AccessibilityActionSetValue, markdown); err != nil {
-			t.Fatalf("enter rich Notes content: %v", err)
-		}
-		snapshot = waitForEditorValue(t, ctx, client, projected)
+		openNewNoteEditor(t, ctx, client)
+		snapshot := enterNoteMarkdown(t, ctx, client, markdown, projected)
 		smoke.AssertNoDiagnostics(t, snapshot)
 		selectionStart, selectionEnd := clickTaskCheckbox(t, ctx, client, snapshot)
 		snapshot = waitForEditorValue(t, ctx, client, title+"\n☑ ship")
@@ -121,87 +98,4 @@ func assertEditorSelection(t *testing.T, snapshot woxwidget.AutomationSnapshot, 
 	if !found || editor.SelectionStart != start || editor.SelectionEnd != end {
 		t.Fatalf("checkbox click moved Notes selection to %d:%d, want %d:%d", editor.SelectionStart, editor.SelectionEnd, start, end)
 	}
-}
-
-func selectedResultID(t *testing.T, snapshot woxwidget.AutomationSnapshot) string {
-	t.Helper()
-	const notesNewID = "launcher.result.notes:new"
-	for _, node := range snapshot.Tree.Nodes {
-		if node.AutomationID == notesNewID && node.Selected {
-			return node.AutomationID
-		}
-	}
-	t.Fatal("Notes new result is not selected")
-	return ""
-}
-
-func waitForEditorValue(t *testing.T, ctx context.Context, client *automationdriver.Client, value string) woxwidget.AutomationSnapshot {
-	t.Helper()
-	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		editor, found := automationdriver.Find(snapshot, "notes.editor")
-		return found && editor.Value == value
-	})
-	if err != nil {
-		t.Fatalf("wait for Notes editor value %q: %v", value, err)
-	}
-	return snapshot
-}
-
-// openMoreMenu activates the Notes overflow control. The overlay is published on the next frame.
-func openMoreMenu(t *testing.T, ctx context.Context, client *automationdriver.Client) {
-	t.Helper()
-	if err := client.Perform(ctx, "notes.toolbar.more", woxui.AccessibilityActionActivate, ""); err != nil {
-		t.Fatalf("open Notes menu: %v", err)
-	}
-}
-
-func openSearch(t *testing.T, ctx context.Context, client *automationdriver.Client, query string) {
-	t.Helper()
-	if err := client.Perform(ctx, "notes.toolbar.search", woxui.AccessibilityActionActivate, ""); err != nil {
-		t.Fatalf("open Notes search: %v", err)
-	}
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		search, found := automationdriver.Find(snapshot, "notes.search")
-		return found && search.Focused
-	}); err != nil {
-		t.Fatalf("wait for Notes search: %v", err)
-	}
-	if err := client.Perform(ctx, "notes.search", woxui.AccessibilityActionSetValue, query); err != nil {
-		t.Fatalf("set Notes search query: %v", err)
-	}
-}
-
-func waitForSearchRow(t *testing.T, ctx context.Context, client *automationdriver.Client, title string, deleted bool) string {
-	t.Helper()
-	var rowID string
-	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		for _, node := range snapshot.Tree.Nodes {
-			if strings.HasPrefix(node.AutomationID, "notes.search.") && node.Role == woxui.AccessibilityRoleListItem && strings.Contains(node.Label, title) {
-				isDeleted := strings.Contains(node.Label, "Restore") || strings.Contains(node.Label, "恢复")
-				if isDeleted == deleted {
-					rowID = node.AutomationID
-					return true
-				}
-			}
-		}
-		return false
-	})
-	if err != nil {
-		t.Fatalf("wait for Notes search result %q (deleted=%v): %v; %s", title, deleted, err, formatNotesSearchNodes(snapshot))
-	}
-	return rowID
-}
-
-// formatNotesSearchNodes reports the live search field and rows after a wait miss.
-func formatNotesSearchNodes(snapshot woxwidget.AutomationSnapshot) string {
-	rows := make([]string, 0, 8)
-	for _, node := range snapshot.Tree.Nodes {
-		if node.AutomationID == "notes.search" || strings.HasPrefix(node.AutomationID, "notes.search.") {
-			rows = append(rows, fmt.Sprintf("%s role=%s label=%q value=%q", node.AutomationID, node.Role, node.Label, node.Value))
-		}
-	}
-	if len(rows) == 0 {
-		return "search nodes=[]"
-	}
-	return "search nodes=[" + strings.Join(rows, "; ") + "]"
 }

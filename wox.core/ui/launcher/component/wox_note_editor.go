@@ -204,7 +204,7 @@ func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id 
 		Transparent: true, DisableHover: true, Style: props.Style, RichRuns: NoteFieldRuns(runs),
 		LineHeight: props.LineHeight, TextAlignmentY: 0.5, TextColor: props.TextColor, Value: value,
 		Controller: controller, FocusNode: focus, Focused: focused, Autofocus: autofocus,
-		ReadOnly: props.ReadOnly, MaxLines: 10000, Window: props.Window, Theme: props.Theme,
+		ReadOnly: props.ReadOnly, MaxLines: 10000, ExposeVisualLines: true, Window: props.Window, Theme: props.Theme,
 		OnChanged: func(text string) {
 			if props.OnChanged != nil {
 				props.OnChanged(start, text)

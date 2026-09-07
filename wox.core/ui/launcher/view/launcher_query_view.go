@@ -323,33 +323,37 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 		pointerCursor = woxui.PointerCursorDefault
 	}
 	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
+	contentPoint := func(position woxui.Point) woxui.Point {
+		position.X += launcherQueryHorizontalOffset(props)
+		return position
+	}
 
 	var editor woxwidget.Widget = woxwidget.Gesture{
 		ID:     "query-editor",
 		Cursor: pointerCursor,
 		OnTapAt: func(position woxui.Point) {
 			if props.OnTapAt != nil {
-				props.OnTapAt(position)
+				props.OnTapAt(contentPoint(position))
 			}
 		},
 		OnDoubleTapAt: func(position woxui.Point) {
 			if props.OnDoubleTapAt != nil {
-				props.OnDoubleTapAt(position)
+				props.OnDoubleTapAt(contentPoint(position))
 			}
 		},
 		OnTripleTapAt: func(position woxui.Point) {
 			if props.OnTripleTapAt != nil {
-				props.OnTripleTapAt(position)
+				props.OnTripleTapAt(contentPoint(position))
 			}
 		},
 		OnSelectionStart: func(position woxui.Point, modifiers woxui.KeyModifiers) {
 			if props.OnSelectionStart != nil {
-				props.OnSelectionStart(position, modifiers)
+				props.OnSelectionStart(contentPoint(position), modifiers)
 			}
 		},
 		OnSelectionExtend: func(position woxui.Point) {
 			if props.OnSelectionExtend != nil {
-				props.OnSelectionExtend(position)
+				props.OnSelectionExtend(contentPoint(position))
 			}
 		},
 		OnSecondaryTapDown: func(position woxui.Point) {
@@ -383,7 +387,7 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 		OnPaste:          props.OnPaste,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
 			textTop := max(float32(0), bounds.Height-float32(len(lines))*lineHeight) / 2
-			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.CaretWidth, Y: bounds.Y + textTop + float32(props.CaretLine)*lineHeight, Width: cursorWidth, Height: props.CaretHeight}}
+			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.CaretWidth - launcherQueryHorizontalOffset(props), Y: bounds.Y + textTop + float32(props.CaretLine)*lineHeight, Width: cursorWidth, Height: props.CaretHeight}}
 		},
 		Child: editor,
 	}
@@ -431,7 +435,7 @@ func launcherQueryFeedback(props LauncherQueryProps) woxwidget.Widget {
 		textTop := max(float32(0), contentHeight-float32(len(lines))*lineHeight) / 2
 		return woxwidget.Stack{Width: props.Width, Height: contentHeight, Children: []woxwidget.StackChild{
 			{Child: painter},
-			{Left: props.TabHint.X, Top: launcherQueryTabHintTop(props, lineHeight, textTop), Child: launcherQueryTabGlyph(props.TabHint, props.Theme)},
+			{Left: props.TabHint.X - launcherQueryHorizontalOffset(props), Top: launcherQueryTabHintTop(props, lineHeight, textTop), Child: launcherQueryTabGlyph(props.TabHint, props.Theme)},
 		}}
 	}}
 }
@@ -469,6 +473,7 @@ func launcherQueryTabGlyph(hint LauncherQueryTabHint, theme woxcomponent.Theme) 
 func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 	const cursorWidth = float32(2)
 	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
+	offset := launcherQueryHorizontalOffset(props)
 	return woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 		textTop := bounds.Y + max(float32(0), bounds.Height-float32(len(lines))*lineHeight)/2
 		for index, mark := range props.Marks {
@@ -479,13 +484,13 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			}
 			// Expand only the paint in logical units; keep editor geometry intact and
 			// share tight gaps between neighboring marks instead of overlapping them.
-			left, right := max(float32(0), mark.X-3), min(bounds.Width, mark.X+mark.Width+3)
+			left, right := max(float32(0), mark.X-offset-3), min(bounds.Width, mark.X-offset+mark.Width+3)
 			if index > 0 && props.Marks[index-1].Line == mark.Line {
 				previous := props.Marks[index-1]
-				left = max(left, (previous.X+previous.Width+mark.X)/2)
+				left = max(left, (previous.X+previous.Width+mark.X)/2-offset)
 			}
 			if index+1 < len(props.Marks) && props.Marks[index+1].Line == mark.Line {
-				right = min(right, (mark.X+mark.Width+props.Marks[index+1].X)/2)
+				right = min(right, (mark.X+mark.Width+props.Marks[index+1].X)/2-offset)
 			}
 			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + left, Y: textTop + float32(mark.Line)*lineHeight, Width: max(float32(0), right-left), Height: props.CaretHeight}, 4, color)
 		}
@@ -493,7 +498,7 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 		if focused && props.State.Composition == "" && props.CompletionSuffix != "" {
 			hintColor := props.Theme.QueryText
 			hintColor.A = 96
-			hintX := lastLine.TextWidth + props.CompletionOffset
+			hintX := lastLine.TextWidth + props.CompletionOffset - offset
 			hintY := textTop + float32(len(lines)-1)*lineHeight
 			if len(props.CompletionChips) > 0 {
 				chipColor := props.Theme.QueryText
@@ -510,18 +515,18 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 		for index, line := range lines {
 			lineY := textTop + float32(index)*lineHeight
 			if focused && props.State.Composition == "" && line.Selected != "" {
-				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + line.PrefixWidth, Y: lineY, Width: line.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
+				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + line.PrefixWidth - offset, Y: lineY, Width: line.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
 			}
-			displayList.DrawText(line.Text, woxui.Rect{X: bounds.X, Y: lineY, Width: bounds.Width, Height: lineHeight}, props.Style, props.Theme.QueryText)
+			displayList.DrawText(line.Text, woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}, props.Style, props.Theme.QueryText)
 			if focused && props.State.Composition == "" && line.Selected != "" {
-				displayList.DrawText(line.Selected, woxui.Rect{X: bounds.X + line.PrefixWidth, Y: lineY, Width: line.SelectedWidth, Height: lineHeight}, props.Style, props.Theme.SelectionText)
+				displayList.DrawText(line.Selected, woxui.Rect{X: bounds.X + line.PrefixWidth - offset, Y: lineY, Width: line.SelectedWidth, Height: lineHeight}, props.Style, props.Theme.SelectionText)
 			}
 		}
 		if !focused {
 			return
 		}
 
-		cursorX := bounds.X + props.CaretWidth
+		cursorX := bounds.X + props.CaretWidth - offset
 		caretY := textTop + float32(props.CaretLine)*lineHeight
 		// Native text fields hide the blinking caret once a range is selected.
 		if (caretVisible || props.CaretShaking) && props.State.Selection.Collapsed() {
@@ -536,9 +541,19 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 		}
 		if props.State.Composition != "" {
 			compositionY := textTop + float32(props.CompositionLine)*lineHeight
-			displayList.FillRect(woxui.Rect{X: bounds.X + props.CompositionX, Y: compositionY + props.CaretHeight - 1, Width: props.CompositionWidth, Height: 1}, props.Theme.Cursor)
+			displayList.FillRect(woxui.Rect{X: bounds.X + props.CompositionX - offset, Y: compositionY + props.CaretHeight - 1, Width: props.CompositionWidth, Height: 1}, props.Theme.Cursor)
 		}
 	}}
+}
+
+// launcherQueryHorizontalOffset follows the caret while focused so long query
+// text cannot push the insertion point past the visible editor edge.
+func launcherQueryHorizontalOffset(props LauncherQueryProps) float32 {
+	if !props.Focused {
+		return 0
+	}
+	const caretInset = float32(4)
+	return max(float32(0), props.CaretWidth-max(float32(0), props.Width-caretInset))
 }
 
 // launcherQueryScrollSurface clips overflowing query lines and reserves the trailing window-drag region.

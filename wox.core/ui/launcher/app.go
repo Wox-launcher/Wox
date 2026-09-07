@@ -1493,6 +1493,18 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
+	// Intercept before the query editor so macOS Cmd+Up/Down cannot move the caret.
+	if event.Modifiers == queryPrimaryModifier() {
+		switch event.Key {
+		case woxui.KeyArrowUp:
+			a.moveSelectionByGroup(-1)
+			return true
+		case woxui.KeyArrowDown:
+			a.canRecallHistory = false
+			a.moveSelectionByGroup(1)
+			return true
+		}
+	}
 	previousText := a.editor.State().Text
 	if event.Down && !event.Composing && event.Key == woxui.KeyBackspace && event.Modifiers == 0 &&
 		a.isPrimary && !a.show.HideQueryBox && previousText == "" && len(a.query.QueryScope.Plugins) > 0 {
@@ -1699,6 +1711,29 @@ func (a *App) moveSelection(delta int) {
 	_ = a.window.Invalidate()
 }
 
+// moveSelectionByGroup jumps by result group. Down goes to the next group's
+// first item, or the current group's last item when no later group exists. Up
+// first returns to the current group's first item, then to the previous group's
+// first item. Lists without group headers still treat the whole list as one group.
+func (a *App) moveSelectionByGroup(direction int) {
+	if len(a.results) == 0 {
+		return
+	}
+	target := groupSelectionIndex(a.results, a.selected, direction)
+	if target != a.selected {
+		a.selected = target
+		a.resultScrollDetached = false
+		a.actionPanel = false
+		a.actionSelected = 0
+		a.actionSelectionKey = ""
+		a.actionFilter = nil
+		a.chatFullscreen = false
+		a.reconcileSelectedPreview()
+		a.restoreQueryTextInput()
+	}
+	_ = a.window.Invalidate()
+}
+
 func (a *App) selectResult(index int) {
 	closedPanel := false
 	closedForm := false
@@ -1775,6 +1810,81 @@ func selectableIndex(results []queryResult) int {
 		}
 	}
 	return -1
+}
+
+// groupSelectionIndex returns the selectable index for primary-modifier group jumps.
+func groupSelectionIndex(results []queryResult, current, direction int) int {
+	if len(results) == 0 {
+		return current
+	}
+	starts := selectableGroupStarts(results)
+	if len(starts) == 0 {
+		return current
+	}
+	if current < 0 {
+		current = 0
+	} else if current >= len(results) {
+		current = len(results) - 1
+	}
+	group := 0
+	for index, start := range starts {
+		if start <= current {
+			group = index
+			continue
+		}
+		break
+	}
+	if direction > 0 {
+		if group+1 < len(starts) {
+			return starts[group+1]
+		}
+		return lastSelectableBefore(results, groupEndExclusive(starts, group, len(results)))
+	}
+	start := starts[group]
+	if current > start {
+		return start
+	}
+	if group > 0 {
+		return starts[group-1]
+	}
+	return start
+}
+
+func selectableGroupStarts(results []queryResult) []int {
+	starts := make([]int, 0)
+	start := -1
+	for index, result := range results {
+		if result.IsGroup {
+			if start >= 0 {
+				starts = append(starts, start)
+				start = -1
+			}
+			continue
+		}
+		if start < 0 {
+			start = index
+		}
+	}
+	if start >= 0 {
+		starts = append(starts, start)
+	}
+	return starts
+}
+
+func groupEndExclusive(starts []int, group, resultCount int) int {
+	if group+1 < len(starts) {
+		return starts[group+1]
+	}
+	return resultCount
+}
+
+func lastSelectableBefore(results []queryResult, exclusiveEnd int) int {
+	for index := min(exclusiveEnd, len(results)) - 1; index >= 0; index-- {
+		if !results[index].IsGroup {
+			return index
+		}
+	}
+	return 0
 }
 
 // selectableIndexFrom restores an explicitly preserved refresh index while skipping group rows.

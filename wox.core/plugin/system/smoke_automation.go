@@ -24,6 +24,7 @@ const (
 	smokeAutomationAttentionCommand   = "attention"
 	smokeAutomationQuickSelectCommand = "quick-select"
 	smokeAutomationPinRankingCommand  = "pin-ranking"
+	smokeAutomationGroupJumpCommand   = "group-jump"
 	smokeAutomationTooltipCommand     = "tooltip"
 	smokeAutomationToolbarMessageID   = "wox-smoke-toolbar-message"
 	smokeAutomationKeepOpenAction     = "keep-open"
@@ -59,6 +60,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
+			{Command: smokeAutomationGroupJumpCommand, Description: "Two named groups for primary-arrow group jumps"},
 			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
@@ -90,6 +92,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryQuickSelect()
 	case smokeAutomationPinRankingCommand:
 		return queryPinRanking()
+	case smokeAutomationGroupJumpCommand:
+		return queryGroupJump()
 	case smokeAutomationTooltipCommand:
 		return queryTooltipPreview()
 	case smokeAutomationListCommand:
@@ -102,6 +106,28 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return queryWarmCacheFixture()
 	default:
 		return plugin.QueryResponse{}
+	}
+}
+
+// queryGroupJump returns leading ungrouped rows plus two named groups, matching
+// queries that show links above a Files-style group.
+func queryGroupJump() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{
+		groupJumpResult("group-jump-url", "Group jump URL", "", 30, 300),
+		groupJumpResult("group-jump-open", "Group jump open", "", 20, 300),
+		groupJumpResult("group-jump-a-first", "Group jump A first", "Group jump A", 20, 200),
+		groupJumpResult("group-jump-a-last", "Group jump A last", "Group jump A", 10, 200),
+		groupJumpResult("group-jump-b-first", "Group jump B first", "Group jump B", 20, 100),
+		groupJumpResult("group-jump-b-last", "Group jump B last", "Group jump B", 10, 100),
+	})
+}
+
+func groupJumpResult(id, title, group string, score, groupScore int64) plugin.QueryResult {
+	return plugin.QueryResult{
+		Id: id, Title: title, Icon: common.PluginAppIcon, Score: score, Group: group, GroupScore: groupScore,
+		Actions: []plugin.QueryResultAction{{
+			Id: smokeAutomationKeepOpenAction, Name: "Keep open", IsDefault: true, PreventHideAfterAction: true,
+		}},
 	}
 }
 

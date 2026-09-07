@@ -86,6 +86,16 @@ type AccessibilityNode struct {
 	SelectionEnd   int
 	// HasTextSelection marks that SelectionStart/SelectionEnd are meaningful for this node.
 	HasTextSelection bool
+	// CursorRect is the IME caret in the same client space as Bounds. Zero means unset.
+	CursorRect Rect
+	// TextLines are soft-wrapped visual lines for automation. Native bridges do not announce them.
+	TextLines []AccessibilityTextLine
+}
+
+// AccessibilityTextLine is one painted wrap line, including hanging indent in logical units.
+type AccessibilityTextLine struct {
+	Text   string
+	Indent float32
 }
 
 // AccessibilityTree is the versioned snapshot consumed by native bridges and test automation.
@@ -138,6 +148,7 @@ func cloneAccessibilityNode(node AccessibilityNode) AccessibilityNode {
 	clone := node
 	clone.Children = append([]AccessibilityNodeID(nil), node.Children...)
 	clone.Actions = append([]AccessibilityAction(nil), node.Actions...)
+	clone.TextLines = append([]AccessibilityTextLine(nil), node.TextLines...)
 	return clone
 }
 
@@ -213,6 +224,15 @@ func accessibilityTreeContentHash(tree AccessibilityTree) uint64 {
 		} else {
 			hash = accessibilityHashByte(hash, 0)
 		}
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.X)))
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.Y)))
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.Width)))
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.Height)))
+		hash = accessibilityHashUint64(hash, uint64(len(node.TextLines)))
+		for _, line := range node.TextLines {
+			hash = accessibilityHashString(hash, line.Text)
+			hash = accessibilityHashUint64(hash, uint64(math.Float32bits(line.Indent)))
+		}
 	}
 	return hash
 }
@@ -273,6 +293,7 @@ func cloneAccessibilityTree(tree AccessibilityTree) AccessibilityTree {
 	for index := range clone.Nodes {
 		clone.Nodes[index].Children = append([]AccessibilityNodeID(nil), tree.Nodes[index].Children...)
 		clone.Nodes[index].Actions = append([]AccessibilityAction(nil), tree.Nodes[index].Actions...)
+		clone.Nodes[index].TextLines = append([]AccessibilityTextLine(nil), tree.Nodes[index].TextLines...)
 	}
 	return clone
 }

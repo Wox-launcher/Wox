@@ -615,6 +615,96 @@ func TestMoveSelectionWrapsPastLeadingGroup(t *testing.T) {
 	}
 }
 
+func TestGroupSelectionIndexJumpsByGroup(t *testing.T) {
+	grouped := []queryResult{
+		{ID: "group-a", IsGroup: true},
+		{ID: "a1"},
+		{ID: "a2"},
+		{ID: "group-b", IsGroup: true},
+		{ID: "b1"},
+		{ID: "b2"},
+		{ID: "group-c", IsGroup: true},
+		{ID: "c1"},
+	}
+	leadingUngrouped := []queryResult{
+		{ID: "x1"},
+		{ID: "x2"},
+		{ID: "group-a", IsGroup: true},
+		{ID: "a1"},
+		{ID: "a2"},
+	}
+	plain := []queryResult{{ID: "r1"}, {ID: "r2"}, {ID: "r3"}}
+
+	tests := []struct {
+		name      string
+		results   []queryResult
+		current   int
+		direction int
+		want      int
+	}{
+		{name: "down from first group to next first", results: grouped, current: 1, direction: 1, want: 4},
+		{name: "down from middle of first group to next first", results: grouped, current: 2, direction: 1, want: 4},
+		{name: "down from middle group to next first", results: grouped, current: 5, direction: 1, want: 7},
+		{name: "down from last group to last item", results: grouped, current: 7, direction: 1, want: 7},
+		{name: "up from only item of last group to previous first", results: grouped, current: 7, direction: -1, want: 4},
+		{name: "up from last of middle group to that group first", results: grouped, current: 5, direction: -1, want: 4},
+		{name: "up from first of middle group to previous first", results: grouped, current: 4, direction: -1, want: 1},
+		{name: "up from first group last to first item", results: grouped, current: 2, direction: -1, want: 1},
+		{name: "up from first item stays", results: grouped, current: 1, direction: -1, want: 1},
+		{name: "down from leading items to first named group", results: leadingUngrouped, current: 0, direction: 1, want: 3},
+		{name: "up from last of named group to that group first", results: leadingUngrouped, current: 4, direction: -1, want: 3},
+		{name: "up from first of named group to leading first", results: leadingUngrouped, current: 3, direction: -1, want: 0},
+		{name: "down without groups goes to last", results: plain, current: 0, direction: 1, want: 2},
+		{name: "up without groups goes to first", results: plain, current: 2, direction: -1, want: 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := groupSelectionIndex(test.results, test.current, test.direction); got != test.want {
+				t.Fatalf("groupSelectionIndex() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestMoveSelectionByGroupJumpsAdjacentGroups(t *testing.T) {
+	app := &App{
+		selected: 1,
+		results: []queryResult{
+			{ID: "group-a", IsGroup: true},
+			{ID: "a1"},
+			{ID: "a2"},
+			{ID: "group-b", IsGroup: true},
+			{ID: "b1"},
+			{ID: "b2"},
+		},
+		uiCall: func(fn func()) error {
+			fn()
+			return nil
+		},
+	}
+
+	app.moveSelectionByGroup(1)
+	if app.selected != 4 {
+		t.Fatalf("down to next group selected = %d, want 4", app.selected)
+	}
+
+	app.moveSelectionByGroup(1)
+	if app.selected != 5 {
+		t.Fatalf("down without next group selected = %d, want 5", app.selected)
+	}
+
+	app.moveSelectionByGroup(-1)
+	if app.selected != 4 {
+		t.Fatalf("up from last of current group selected = %d, want 4", app.selected)
+	}
+
+	app.moveSelectionByGroup(-1)
+	if app.selected != 1 {
+		t.Fatalf("up from first of current group selected = %d, want 1", app.selected)
+	}
+}
+
 func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
 	if hotkeyMatches("", woxui.KeyEvent{Key: woxui.KeyUnknown, Down: true}) {
 		t.Fatal("unknown key unexpectedly matched an empty hotkey")

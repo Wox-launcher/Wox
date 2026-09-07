@@ -24,6 +24,7 @@ type semanticBehavior struct {
 	hasTextSelection bool
 	selectionStart   int
 	selectionEnd     int
+	textLines        []woxui.AccessibilityTextLine
 	onAction         func(action woxui.AccessibilityAction, value string) error
 }
 
@@ -198,6 +199,7 @@ type EditableText struct {
 	SelectionStart   int
 	SelectionEnd     int
 	HasTextSelection bool
+	TextLines        []woxui.AccessibilityTextLine
 	FocusRingColor   woxui.Color
 	FocusRingRadius  float32
 	FocusRingOutsets Insets
@@ -286,6 +288,9 @@ func (w EditableText) layout(ctx context, available constraints) *node {
 		child.semantic.hasTextSelection = true
 		child.semantic.selectionStart = w.SelectionStart
 		child.semantic.selectionEnd = w.SelectionEnd
+	}
+	if len(w.TextLines) > 0 {
+		child.semantic.textLines = append([]woxui.AccessibilityTextLine(nil), w.TextLines...)
 	}
 	return child
 }

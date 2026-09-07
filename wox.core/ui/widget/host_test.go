@@ -628,6 +628,24 @@ func TestHostRawPointerTransfersFocusWithoutJoiningTabOrder(t *testing.T) {
 	}
 }
 
+func TestHostSemanticsExposesEnabledCursorRect(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return EditableText{
+			Key: "caret-field", AutomationID: "caret-field", Value: "hello", Autofocus: true,
+			TextInput: func(bounds woxui.Rect) woxui.TextInputState {
+				return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + 40, Y: bounds.Y + 4, Width: 2, Height: 20}}
+			},
+			Child: Container{Width: 80, Height: 30},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	node := findAutomationNode(t, host.Snapshot().Tree, "caret-field")
+	if node.CursorRect != (woxui.Rect{X: 40, Y: 4, Width: 2, Height: 20}) {
+		t.Fatalf("cursor rect = %#v, want the enabled IME caret in client space", node.CursorRect)
+	}
+}
+
 func TestHostSemanticsProtectsValuesAndReportsDuplicateAutomationIDs(t *testing.T) {
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Flex{Children: []Widget{

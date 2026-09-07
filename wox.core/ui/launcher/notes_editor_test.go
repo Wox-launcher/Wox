@@ -190,6 +190,9 @@ func TestNotesListMarkersUseFixedAccent(t *testing.T) {
 		for _, run := range runs {
 			if run.Start == item.start && run.Color == woxcomponent.DocumentListMarkerColor && run.Checkbox == item.checkbox {
 				found = true
+				if !run.FieldRun().HangingIndent {
+					t.Fatalf("list marker at %d is missing hanging indent", item.start)
+				}
 				break
 			}
 		}

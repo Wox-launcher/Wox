@@ -66,6 +66,9 @@ func verifySemanticsEqual(left, right *semanticBehavior) error {
 	if callbackPresent(left.onAction) != callbackPresent(right.onAction) {
 		return fmt.Errorf("semantics action callback presence differs")
 	}
+	if !reflect.DeepEqual(left.textLines, right.textLines) {
+		return fmt.Errorf("semantics differ")
+	}
 	return nil
 }
 

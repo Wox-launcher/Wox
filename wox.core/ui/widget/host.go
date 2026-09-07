@@ -1769,6 +1769,8 @@ func (h *Host) buildAccessibilityTree(diagnostics []string, work *frameWorkCount
 				}
 				nativeNode.Bounds.X += deltaX
 				nativeNode.Bounds.Y += deltaY
+				nativeNode.CursorRect.X += deltaX
+				nativeNode.CursorRect.Y += deltaY
 				currentNode := h.nodes[nativeNode.ID]
 				nativeNode.Focusable = currentNode != nil && h.isFocusable(currentNode)
 				nativeNode.Focused = nativeNode.ID == h.focused
@@ -1815,6 +1817,12 @@ func (h *Host) buildAccessibilityTree(diagnostics []string, work *frameWorkCount
 				HasTextSelection: semantic.hasTextSelection,
 				SelectionStart:   semantic.selectionStart,
 				SelectionEnd:     semantic.selectionEnd,
+				TextLines:        append([]woxui.AccessibilityTextLine(nil), semantic.textLines...),
+			}
+			if current.focus != nil && current.focus.textInput != nil {
+				if state := current.focus.textInput(bounds); state.Enabled {
+					nativeNode.CursorRect = state.CursorRect
+				}
 			}
 			appendNode(nativeNode)
 			nextParent = nativeNode.ID

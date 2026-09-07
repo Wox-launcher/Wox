@@ -296,6 +296,38 @@ func TestTextFieldLinesSoftWrapUsesGraphemeClusters(t *testing.T) {
 	if len(narrow) != 2 || narrow[0].text != "a" || narrow[1].text != "b" {
 		t.Fatalf("narrow wrap = %#v", narrow)
 	}
+
+	// The space after a list marker must not steal the first line from following CJK.
+	markerCJK := textFieldLines("☐ 顺序复制，进入顺序复制模式", measurer, style, 50, true)
+	if len(markerCJK) < 2 || markerCJK[0].text == "☐ " {
+		t.Fatalf("CJK after a list marker must stay on the first line, got %#v", markerCJK)
+	}
+}
+
+func TestTextFieldRichLinesKeepsCJKBesideCheckbox(t *testing.T) {
+	measurer := &fakeTextMeasurer{charWidth: 10}
+	style := woxui.TextStyle{Size: 12}
+	value := "☐ 顺序复制，进入顺序复制模式，标记为1, 2, 3, 4, 5的将按照这个顺序复制"
+	runs := []TextFieldRichRun{{Start: 0, End: 1, Advance: 16, HideText: true, HangingIndent: true}}
+	lines := textFieldRichLines(value, measurer, style, 80, true, runs)
+	if len(lines) < 2 {
+		t.Fatalf("long task should wrap, got %#v", lines)
+	}
+	if lines[0].text == "☐ " || !strings.Contains(lines[0].text, "顺") {
+		t.Fatalf("first line = %q, want checkbox plus CJK", lines[0].text)
+	}
+	hang := float32(26)
+	for index, line := range lines {
+		if index == 0 {
+			if line.indent != 0 {
+				t.Fatalf("first line indent = %v, want 0", line.indent)
+			}
+			continue
+		}
+		if line.indent != hang {
+			t.Fatalf("wrapped line %d indent = %v, want %v so text stays under the first glyph", index, line.indent, hang)
+		}
+	}
 }
 
 func (m *fakeTextMeasurer) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
@@ -304,6 +336,39 @@ func (m *fakeTextMeasurer) MeasureText(text string, style woxui.TextStyle) (woxu
 		width = 10
 	}
 	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * width, Height: style.Size}}, nil
+}
+
+func TestTextFieldExposesVisualLineSemantics(t *testing.T) {
+	controller := woxwidget.NewTextEditingController("☐ 第一行\n第二行")
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return WoxTextField(TextFieldProps{ID: "notes.editor", Width: 200, Height: 80, MaxLines: 8, Controller: controller, ExposeVisualLines: true})
+	})
+	host.AttachServices(&hotkeyRecorderHostServices{})
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 80}, PixelSize: woxui.PixelSize{Width: 200, Height: 80}, Scale: 1})
+	var found woxui.AccessibilityNode
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "notes.editor" {
+			found = node
+			break
+		}
+	}
+	if len(found.TextLines) != 2 || found.TextLines[0].Text != "☐ 第一行" || found.TextLines[1].Text != "第二行" {
+		t.Fatalf("visual lines = %#v, want two hard-wrapped editor lines", found.TextLines)
+	}
+}
+
+func TestAccessibilityLinesFromTextFieldKeepHangingIndent(t *testing.T) {
+	got := accessibilityLinesFromTextField([]textFieldLine{
+		{text: "☐ 顺序复制，进入顺序复制模式", indent: 0},
+		{text: "标记为1, 2, 3, 4, 5的将按照这个顺序复制", indent: 26},
+	})
+	if len(got) != 2 || got[0].Text == "☐ " || !strings.Contains(got[0].Text, "顺") || got[0].Indent != 0 {
+		t.Fatalf("first visual line = %#v, want checkbox plus CJK", got)
+	}
+	if got[1].Indent != 26 || strings.HasPrefix(got[1].Text, "☐") {
+		t.Fatalf("wrapped visual line = %#v, want hanging indent under the first glyph", got[1])
+	}
 }
 
 func TestEditableTextExposesSelectionSemantics(t *testing.T) {

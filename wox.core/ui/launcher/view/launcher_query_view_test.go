@@ -118,6 +118,86 @@ func TestLauncherQueryForwardsMultiClickSelection(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryHorizontalOffsetFollowsFocusedCaret(t *testing.T) {
+	props := LauncherQueryProps{Width: 100, CaretWidth: 240, Focused: true}
+	if got := launcherQueryHorizontalOffset(props); got != 144 {
+		t.Fatalf("focused overflow offset = %v, want 144 so the caret stays 4px from the right edge", got)
+	}
+	props.Focused = false
+	if got := launcherQueryHorizontalOffset(props); got != 0 {
+		t.Fatalf("unfocused overflow offset = %v, want 0 so the start stays visible", got)
+	}
+	props.Focused = true
+	props.CaretWidth = 40
+	if got := launcherQueryHorizontalOffset(props); got != 0 {
+		t.Fatalf("short query offset = %v, want 0", got)
+	}
+}
+
+func TestLauncherQueryOverflowKeepsCaretVisible(t *testing.T) {
+	theme := woxcomponent.Theme{QueryText: woxui.Color{A: 255}, Cursor: woxui.Color{R: 255, A: 255}}
+	props := LauncherQueryProps{
+		Width: 100, Height: 34, LineHeight: 34, CaretHeight: 34, CaretWidth: 240, Focused: true,
+		State: woxui.TextEditingState{Text: "long query text that overflows", Selection: woxui.TextSelection{Anchor: 30, Focus: 30}},
+		Lines: []LauncherQueryLine{{Text: "long query text that overflows", TextWidth: 240}},
+		Theme: theme,
+	}
+	bounds := woxui.Rect{X: 20, Width: 100, Height: 34}
+	var actual, expected woxui.DisplayList
+	expected.DrawText(props.Lines[0].Text, woxui.Rect{X: -124, Y: bounds.Y, Width: 244, Height: 34}, props.Style, theme.QueryText)
+	expected.FillRect(woxui.Rect{X: 116, Y: bounds.Y, Width: 2, Height: 34}, theme.Cursor)
+	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, true)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("overflow caret paint = %#v, want the caret at the visible right edge", actual)
+	}
+
+	var ime woxui.TextInputState
+	props.OnTextInputState = func(state woxui.TextInputState) { ime = state }
+	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&woxui.DisplayList{}, bounds, true, true)
+	if ime.CursorRect.X != 116 || ime.CursorRect.X < bounds.X || ime.CursorRect.X >= bounds.X+bounds.Width {
+		t.Fatalf("IME caret = %#v, want a visible anchor at 116", ime.CursorRect)
+	}
+}
+
+func TestLauncherQueryOverflowExposesVisibleCursorRect(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return LauncherQueryView(LauncherQueryProps{
+			Width: 100, Height: 34, LineHeight: 34, CaretHeight: 34, CaretWidth: 240, Focused: true, Enabled: true,
+			State: woxui.TextEditingState{Text: "long query text that overflows", Selection: woxui.TextSelection{Anchor: 30, Focus: 30}},
+			Lines: []LauncherQueryLine{{Text: "long query text that overflows", TextWidth: 240}},
+		})
+	})
+	host.AttachServices(&queryPointerHostServices{})
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 34}, PixelSize: woxui.PixelSize{Width: 100, Height: 34}, Scale: 1})
+	host.RequestFocus(LauncherQueryInputKey)
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 34}, PixelSize: woxui.PixelSize{Width: 100, Height: 34}, Scale: 1})
+	var input woxui.AccessibilityNode
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "launcher.query.input" {
+			input = node
+			break
+		}
+	}
+	if input.AutomationID == "" || input.CursorRect.Width <= 0 {
+		t.Fatalf("query input cursor = %#v, want an exposed IME caret", input.CursorRect)
+	}
+	if input.CursorRect.X < input.Bounds.X || input.CursorRect.X+input.CursorRect.Width > input.Bounds.X+input.Bounds.Width {
+		t.Fatalf("overflow caret %#v left the query bounds %#v", input.CursorRect, input.Bounds)
+	}
+}
+
+func TestLauncherQueryOverflowRemapsPointerToContent(t *testing.T) {
+	var tapped woxui.Point
+	props := LauncherQueryProps{
+		Width: 100, Height: 34, CaretWidth: 240, Focused: true, Enabled: true,
+		OnTapAt: func(point woxui.Point) { tapped = point },
+	}
+	launcherQueryEditor(props).(woxwidget.EditableText).Child.(woxwidget.Gesture).OnTapAt(woxui.Point{X: 10, Y: 8})
+	if tapped.X != 154 || tapped.Y != 8 {
+		t.Fatalf("overflow tap = %#v, want content point 154,8", tapped)
+	}
+}
+
 func TestLauncherQueryHidesCaretWhenTextIsSelected(t *testing.T) {
 	theme := woxcomponent.Theme{
 		QueryText:           woxui.Color{A: 255},
