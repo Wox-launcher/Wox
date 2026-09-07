@@ -1,4 +1,10 @@
 {
+  "plugin_wpm_create_with_ai": "使用 AI 提示词创建",
+  "plugin_wpm_create_with_ai_description": "复制提示词，粘贴给任意 AI 编程 Agent",
+  "plugin_wpm_copy_ai_prompt": "复制 AI 提示词",
+  "plugin_wpm_ai_prompt_copied": "提示词已复制，请粘贴给你的 AI Agent。",
+  "plugin_wpm_copy_ai_prompt_failed": "复制 AI 提示词失败",
+  "plugin_wpm_ai_prompt": "请创建一个名为“%s”的 Wox 插件。如果缺少功能需求，请先询问我。请完成实现和测试，不要只给出计划。\n\n如果尚未安装以下 skill，请先安装完整目录（包括引用的脚本、资源和文档），然后阅读并遵循。如果当前 Agent 不支持安装 skill，请下载完整目录并遵循其中的 SKILL.md。\n\n使用 wox-plugin-creator 创建插件：\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator\n\n优先选择 single-file SDK 插件（Python 或 Node.js）：它保留完整 Wox API，并可在 Wox 中即时加载、调试实际运行效果。它不同于每次查询启动进程的 script 插件。优先使用标准库和 Wox SDK API；若必须依赖外部 pip/npm 包，请说明改用普通插件的原因。\n\n遵循 skill 完成元数据、最低 Wox 版本、设置和本地安装。在运行中的 Wox 中加载插件，验证典型查询和操作；明确说明未能实际验证的部分。\n\n提交 Wox 插件商店时，安装并使用 wox-plugin-submit2store。通过本地验证后，询问我是否提交，再按 skill 完成元数据、发布资源、重复检查和 PR 流程：\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-submit2store\n\n最后说明插件文件位置、使用方法、测试结果和剩余配置。",
   "plugin_websearch_search": "搜索",
   "plugin_websearch_missing_context": "选中文本或剪贴板文本不可用",
   "plugin_websearch_fill_parameters": "填写搜索参数",

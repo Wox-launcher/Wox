@@ -1,4 +1,10 @@
 {
+  "plugin_wpm_create_with_ai": "AI 프롬프트로 만들기",
+  "plugin_wpm_create_with_ai_description": "프롬프트를 복사하여 원하는 AI 코딩 에이전트에 붙여넣기",
+  "plugin_wpm_copy_ai_prompt": "AI 프롬프트 복사",
+  "plugin_wpm_ai_prompt_copied": "프롬프트를 복사했습니다. AI 에이전트에 붙여넣으세요.",
+  "plugin_wpm_copy_ai_prompt_failed": "AI 프롬프트 복사 실패",
+  "plugin_wpm_ai_prompt": "이름이 \"%s\"인 Wox 플러그인을 만들어 주세요. 기능 요구 사항이 없으면 질문해 주세요. 계획뿐 아니라 구현과 테스트를 완료해 주세요.\n\n아래 skill이 없으면 참조 스크립트, 리소스, 문서를 포함한 전체 디렉터리를 설치하고 읽고 따라 주세요. 설치 기능이 없으면 전체 디렉터리를 내려받아 SKILL.md를 따라 주세요.\n\n플러그인 생성에는 wox-plugin-creator를 사용하세요:\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator\n\nsingle-file SDK 플러그인(Python 또는 Node.js)을 우선하세요. 전체 Wox API를 지원하며 Wox에서 즉시 로드하고 실제 동작을 디버깅할 수 있습니다. 쿼리마다 프로세스를 실행하는 script 플러그인과 다릅니다. 표준 라이브러리와 Wox SDK를 우선하고 외부 pip/npm 패키지가 필수라면 일반 플러그인이 필요한 이유를 설명하세요.\n\nskill에 따라 메타데이터, 최소 Wox 버전, 설정 및 로컬 설치를 완료하세요. 실행 중인 Wox에 로드하고 대표 쿼리와 동작을 검증하세요. 검증하지 못한 부분을 명시하세요.\n\n스토어 제출에는 wox-plugin-submit2store를 설치하고 사용하세요. 로컬 검증 후 제출 여부를 물어보고 메타데이터, 릴리스 파일, 중복 확인 및 PR 절차를 따르세요:\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-submit2store\n\n마지막으로 파일 위치, 사용법, 테스트 결과 및 남은 설정을 알려 주세요.",
   "plugin_websearch_search": "검색",
   "plugin_websearch_missing_context": "선택한 텍스트 또는 클립보드 텍스트를 사용할 수 없습니다",
   "plugin_websearch_fill_parameters": "검색 매개변수 입력",

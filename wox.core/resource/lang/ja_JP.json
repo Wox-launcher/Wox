@@ -1,4 +1,10 @@
 {
+  "plugin_wpm_create_with_ai": "AI プロンプトで作成",
+  "plugin_wpm_create_with_ai_description": "プロンプトをコピーして任意の AI コーディングエージェントに貼り付けます",
+  "plugin_wpm_copy_ai_prompt": "AI プロンプトをコピー",
+  "plugin_wpm_ai_prompt_copied": "プロンプトをコピーしました。AI エージェントに貼り付けてください。",
+  "plugin_wpm_copy_ai_prompt_failed": "AI プロンプトのコピーに失敗しました",
+  "plugin_wpm_ai_prompt": "「%s」という Wox プラグインを作成してください。機能要件が不明なら質問してください。計画だけでなく実装とテストを完了してください。\n\n以下の skill が未導入なら、参照スクリプト・アセット・文書を含む完全なディレクトリをインストールし、読んで従ってください。インストール機能がなければディレクトリをダウンロードし SKILL.md に従ってください。\n\n作成には wox-plugin-creator を使用してください：\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator\n\nsingle-file SDK（Python または Node.js）を優先してください。完全な Wox API を利用でき、Wox で即時ロードして実際の動作をデバッグできます。クエリごとにプロセスを起動する script 形式とは異なります。標準ライブラリと Wox SDK を優先し、外部 pip/npm 依存が必須なら通常形式が必要な理由を説明してください。\n\nskill に従いメタデータ、最低 Wox バージョン、設定、ローカル導入を完成してください。実行中の Wox にロードし代表的な検索と操作を確認し、未検証の部分を明示してください。\n\nストアへの提出には wox-plugin-submit2store をインストールして使用してください。ローカル検証後に提出するか私に確認し、メタデータ、公開アセット、重複確認、PR の手順に従ってください：\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-submit2store\n\n最後にファイルの場所、使い方、テスト結果、残りの設定を説明してください。",
   "plugin_websearch_search": "検索",
   "plugin_websearch_missing_context": "選択テキストまたはクリップボードのテキストを取得できません",
   "plugin_websearch_fill_parameters": "検索パラメーターを入力",

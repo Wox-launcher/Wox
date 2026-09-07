@@ -18,6 +18,7 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
+	"wox/util/clipboard"
 	"wox/util/shell"
 	"wox/util/trash"
 
@@ -39,6 +40,11 @@ const (
 )
 
 var pluginTemplates = []pluginTemplate{
+	{
+		Runtime: plugin.PLUGIN_RUNTIME_PYTHON,
+		Name:    "Wox.Plugin.Template.Python",
+		Url:     "https://codeload.github.com/Wox-launcher/Wox.Plugin.Template.Python/zip/refs/heads/main",
+	},
 	{
 		Runtime: plugin.PLUGIN_RUNTIME_NODEJS,
 		Name:    "Wox.Plugin.Template.Nodejs",
@@ -313,6 +319,35 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		return plugin.NewQueryResponse(w.globalQueryCommand(ctx, query))
 	}
 
+	if query.Command == "" {
+		// Plugin-scoped queries do not receive fallback command suggestions from the UI.
+		var results []plugin.QueryResult
+		search := strings.ToLower(strings.TrimSpace(query.Search))
+		for _, command := range w.GetMetadata().Commands {
+			// Developer commands remain callable but are hidden from command discovery.
+			if strings.HasPrefix(command.Command, "dev.") || !strings.Contains(command.Command, search) {
+				continue
+			}
+			results = append(results, plugin.QueryResult{
+				Title:    command.Command,
+				SubTitle: string(command.Description),
+				Icon:     wpmIcon,
+				Actions: []plugin.QueryResultAction{{
+					Name:                   command.Command,
+					IsDefault:              true,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						w.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, command.Command),
+						})
+					},
+				}},
+			})
+		}
+		return plugin.NewQueryResponse(results)
+	}
+
 	if query.Command == "create" {
 		return plugin.NewQueryResponse(w.createCommand(ctx, query))
 	}
@@ -488,7 +523,26 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 		}
 	}
 
-	var results []plugin.QueryResult
+	prompt := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_ai_prompt"), "Wox.Plugin."+strings.TrimPrefix(pluginName, "Wox.Plugin."))
+	results := []plugin.QueryResult{{
+		Id:       uuid.NewString(),
+		Title:    "i18n:plugin_wpm_create_with_ai",
+		SubTitle: "i18n:plugin_wpm_create_with_ai_description",
+		Icon:     wpmIcon,
+		Actions: []plugin.QueryResultAction{{
+			Name:      "i18n:plugin_wpm_copy_ai_prompt",
+			Icon:      common.CopyIcon,
+			IsDefault: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := clipboard.WriteText(prompt); err != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("Failed to copy plugin creation prompt: %s", err))
+					w.api.Notify(ctx, "i18n:plugin_wpm_copy_ai_prompt_failed")
+					return
+				}
+				w.api.Notify(ctx, "i18n:plugin_wpm_ai_prompt_copied")
+			},
+		}},
+	}}
 
 	// Add regular plugin templates with group
 	for _, template := range pluginTemplates {
@@ -1261,11 +1315,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		return
 	}
 
-	pluginJsonString := string(pluginJson)
-	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Id]", uuid.NewString())
-	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Name]", pluginName)
-	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Runtime]", strings.ToLower(string(template.Runtime)))
-	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Trigger Keyword]", "np")
+	pluginJsonString := renderPluginTemplateManifest(string(pluginJson), pluginName, template.Runtime)
 
 	writeErr := os.WriteFile(pluginJsonPath, []byte(pluginJsonString), 0644)
 	if writeErr != nil {
@@ -1535,6 +1585,22 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 			QueryText: fmt.Sprintf("%s ", triggerKeyword),
 		})
 	})
+}
+
+// renderPluginTemplateManifest supports both legacy and current official template placeholders.
+func renderPluginTemplateManifest(manifest string, name string, runtime plugin.Runtime) string {
+	for key, value := range map[string]string{
+		"Id": uuid.NewString(), "Name": name, "Runtime": strings.ToLower(string(runtime)),
+		"TriggerKeyword": "np", "Description": name, "Author": "Wox User", "Website": "",
+	} {
+		encoded, _ := json.Marshal(value)
+		manifest = strings.ReplaceAll(manifest, `"{{.`+key+`}}"`, string(encoded))
+		if key == "TriggerKeyword" {
+			key = "Trigger Keyword"
+		}
+		manifest = strings.ReplaceAll(manifest, `"[`+key+`]"`, string(encoded))
+	}
+	return manifest
 }
 
 func singleFilePluginFileName(pluginName string, templateFile string) string {

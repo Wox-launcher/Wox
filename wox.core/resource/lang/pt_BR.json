@@ -1,4 +1,10 @@
 {
+  "plugin_wpm_create_with_ai": "Criar com prompt de IA",
+  "plugin_wpm_create_with_ai_description": "Copie um prompt e cole em qualquer agente de programação com IA",
+  "plugin_wpm_copy_ai_prompt": "Copiar prompt de IA",
+  "plugin_wpm_ai_prompt_copied": "Prompt copiado. Cole no seu agente de IA.",
+  "plugin_wpm_copy_ai_prompt_failed": "Falha ao copiar o prompt de IA",
+  "plugin_wpm_ai_prompt": "Crie um plugin Wox chamado \"%s\". Pergunte o que ele deve fazer se faltarem requisitos. Implemente e teste, não entregue apenas um plano.\n\nInstale as skills abaixo se estiverem ausentes, incluindo scripts, recursos e documentação referenciados. Leia e siga as instruções. Se o agente não puder instalar skills, baixe os diretórios completos e siga o SKILL.md.\n\nUse wox-plugin-creator para criar o plugin:\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator\n\nPrefira plugins single-file SDK (Python ou Node.js): preservam toda a API do Wox e permitem carregamento imediato e depuração no Wox. São diferentes dos plugins script que iniciam um processo por consulta. Prefira a biblioteca padrão e o SDK do Wox; se dependências externas pip/npm forem essenciais, explique por que usar um plugin regular.\n\nSiga a skill para metadados, versão mínima do Wox, configurações e instalação local. Carregue no Wox em execução e valide consultas e ações representativas. Informe o que não pôde testar.\n\nPara enviar à loja, instale e use wox-plugin-submit2store. Após validar localmente, pergunte se quero enviar e siga o fluxo de metadados, arquivos de lançamento, verificação de duplicatas e pull request:\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-submit2store\n\nAo concluir, informe a localização do arquivo, uso, testes e configurações pendentes.",
   "plugin_websearch_search": "Pesquisar",
   "plugin_websearch_missing_context": "O texto selecionado ou da área de transferência está indisponível",
   "plugin_websearch_fill_parameters": "Preencher parâmetros de pesquisa",

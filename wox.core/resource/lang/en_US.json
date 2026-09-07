@@ -1,4 +1,10 @@
 {
+  "plugin_wpm_create_with_ai": "Create with AI prompt",
+  "plugin_wpm_create_with_ai_description": "Copy a prompt and paste it into any AI coding agent",
+  "plugin_wpm_copy_ai_prompt": "Copy AI prompt",
+  "plugin_wpm_ai_prompt_copied": "Prompt copied. Paste it into your AI agent.",
+  "plugin_wpm_copy_ai_prompt_failed": "Failed to copy AI prompt",
+  "plugin_wpm_ai_prompt": "Create a Wox plugin named \"%s\". Ask me what it should do if requirements are missing. Implement and test the plugin, not just a plan.\n\nInstall the following skills if missing (include their referenced scripts, assets and documentation), then read and follow them. If your agent cannot install skills, download the complete skill directories and follow SKILL.md.\n\nUse wox-plugin-creator to create the plugin:\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator\n\nPrefer single-file SDK plugins (Python or Node.js): they retain the full Wox API and support immediate loading and debugging in Wox. They are different from process-per-query script plugins. Use standard library and Wox SDK APIs; if external pip/npm dependencies are essential, explain why a regular plugin is needed.\n\nFollow the skill for metadata, minimum Wox version, settings and local installation. Load the plugin in a running Wox instance and verify representative queries and actions; clearly report anything you could not test.\n\nFor submission to the Wox plugin store, install and use wox-plugin-submit2store. After local validation, ask whether I want to submit, then follow its metadata, release asset, duplicate-check and pull-request workflow:\nhttps://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-submit2store\n\nFinish with the plugin file location, usage, test results and any remaining setup.",
   "plugin_websearch_search": "Search",
   "plugin_websearch_missing_context": "Selected text or clipboard text is unavailable",
   "plugin_websearch_fill_parameters": "Fill search parameters",
