@@ -1204,13 +1204,13 @@
     "Id": "9d7b4e96-a81d-44a3-a75a-bc828cf5668e",
     "Name": "i18n:plugin_name",
     "Author": "Myraxion",
-    "Version": "1.0.0",
+    "Version": "1.1.0",
     "MinWoxVersion": "2.4.2",
     "Runtime": "python",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/images/app.svg",
     "Website": "https://github.com/Myraxion/Wox.Plugin.Linkding",
-    "DownloadUrl": "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/Wox.Plugin.Linkding.py",
+    "DownloadUrl": "https://github.com/Myraxion/Wox.Plugin.Linkding/releases/latest/download/Wox.Plugin.Linkding.py",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Myraxion/Wox.Plugin.Linkding/main/images/screenshot.png"
     ],
@@ -1220,7 +1220,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-05 22:20:00",
-    "DateUpdated": "2026-09-05 22:20:00",
+    "DateUpdated": "2026-09-07 17:12:53",
     "I18n": {
       "en_US": {
         "plugin_name": "Linkding",
