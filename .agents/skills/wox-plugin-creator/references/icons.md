@@ -10,6 +10,19 @@ Use this reference when a plugin needs polished `result` and `action` icons.
 - Prefer simple shapes that remain legible at 16-32 px after downscaling.
 - Check `assets/iconify/` first. If a bundled generic icon already matches the requested behavior, reuse it instead of searching for a new one.
 
+## SVG Theme Colors
+
+- For paints that should adapt to Wox appearance, explicitly use `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"`. Wox resolves this variable to white (`#ffffff`) in dark themes and black (`#000000`) in light themes.
+- Apply the variable only to theme-adaptive parts. Preserve fixed brand colors, gradients, and SVG mask colors; do not infer theme behavior from authored black/white paints or recolor an entire mixed-color SVG.
+- Standard SVG `currentColor` is not the Wox theme variable and retains its normal semantics. When adapting an Iconify SVG, replace only the intended theme-adaptive `currentColor` paints with the Wox variable.
+- The variable is resolved by Wox's shared launcher image pipeline, not by a browser or arbitrary SVG renderer. Do not assume it is automatically defined inside a plugin's HTML preview. Existing Wox controls that intentionally tint entire icons retain that behavior.
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="2" d="M5 12h14m-6-6 6 6-6 6"/>
+</svg>
+```
+
 ## Bundled Generic Icons
 
 - `assets/iconify/open.svg`: prefer for open, launch, open-in-browser, and go-to style actions.

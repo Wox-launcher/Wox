@@ -64,6 +64,7 @@ If a plugin needs to cache anything on disk, put it under the Wox plugin cache f
 ### 2) Author result and action icons
 
 - Read `references/icons.md` for icon selection, inline SVG patterns, and placement rules.
+- Use `var(--wox-theme-icon-color)` for theme-adaptive SVG paints; see [SVG Theme Colors](references/icons.md#svg-theme-colors) for the black/white mapping and brand-color preservation rules.
 - When the requested icon semantics already match a bundled generic icon under `assets/iconify/`, prefer reusing that local reference before searching for a new one.
 - Use `scripts/search_iconify.py` to search Iconify collections and fetch ready-to-inline SVG constants for `icons.ts` or `icons.py`.
 - Single-file SDK plugins cannot use relative image paths. Use emoji, URL, SVG, base64, or an absolute path.
