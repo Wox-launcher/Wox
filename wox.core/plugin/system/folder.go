@@ -176,9 +176,14 @@ func resolveFolderBrowsePath(path string) (string, error) {
 		return "", errors.New("path is required")
 	}
 
-	cleaned, cleanErr := filepath.Abs(path)
+	expandedPath, expandErr := expandFolderQueryPath(path)
+	if expandErr != nil {
+		return "", expandErr
+	}
+
+	cleaned, cleanErr := filepath.Abs(expandedPath)
 	if cleanErr != nil {
-		cleaned = filepath.Clean(path)
+		cleaned = filepath.Clean(expandedPath)
 	}
 	info, statErr := os.Stat(cleaned)
 	if statErr != nil {
@@ -743,7 +748,7 @@ func normalizeFolderFavoritePath(path string) (string, error) {
 		return "", errors.New("path is empty")
 	}
 
-	expandedPath, expandErr := expandFolderQueryHome(path)
+	expandedPath, expandErr := expandFolderQueryPath(path)
 	if expandErr != nil {
 		return "", expandErr
 	}
@@ -822,7 +827,7 @@ func parseFolderQueryPath(input string) (path string, shouldListChildren bool, o
 
 	shouldListChildren = hasFolderQueryTrailingSeparator(trimmedInput)
 	lookupPath := trimFolderQueryTrailingSeparators(trimmedInput)
-	expandedPath, expandErr := expandFolderQueryHome(lookupPath)
+	expandedPath, expandErr := expandFolderQueryPath(lookupPath)
 	if expandErr != nil {
 		return "", false, false
 	}
@@ -834,6 +839,9 @@ func parseFolderQueryPath(input string) (path string, shouldListChildren bool, o
 func isFolderQueryPathLike(input string) bool {
 	if input == "~" || strings.HasPrefix(input, "~/") || strings.HasPrefix(input, `~\`) {
 		return true
+	}
+	if _, rest, ok := splitWindowsEnvPrefix(input); ok {
+		return rest == "" || strings.HasPrefix(rest, `\`) || strings.HasPrefix(rest, "/")
 	}
 	return filepath.IsAbs(input)
 }
@@ -859,6 +867,76 @@ func trimFolderQueryTrailingSeparators(input string) string {
 func isWindowsVolumeRoot(path string) bool {
 	volumeName := filepath.VolumeName(path)
 	return volumeName != "" && strings.EqualFold(volumeName, path)
+}
+
+// expandFolderQueryPath resolves Windows %VAR% values and ~ before filesystem checks.
+func expandFolderQueryPath(path string) (string, error) {
+	expandedEnv, expandErr := expandFolderQueryEnvVars(path)
+	if expandErr != nil {
+		return "", expandErr
+	}
+	return expandFolderQueryHome(expandedEnv)
+}
+
+// expandFolderQueryEnvVars expands %LOCALAPPDATA% and other Windows-style env vars.
+func expandFolderQueryEnvVars(path string) (string, error) {
+	if !strings.Contains(path, "%") {
+		return path, nil
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(path))
+	for i := 0; i < len(path); {
+		name, _, ok := splitWindowsEnvPrefix(path[i:])
+		if !ok {
+			builder.WriteByte(path[i])
+			i++
+			continue
+		}
+
+		value, found := os.LookupEnv(name)
+		if !found || strings.TrimSpace(value) == "" {
+			return "", fmt.Errorf("environment variable %%%s%% is not set", name)
+		}
+		builder.WriteString(value)
+		i += len(name) + 2
+	}
+	return builder.String(), nil
+}
+
+// splitWindowsEnvPrefix reports a leading %VAR% token used by Windows path input.
+func splitWindowsEnvPrefix(input string) (name string, rest string, ok bool) {
+	if !strings.HasPrefix(input, "%") {
+		return "", "", false
+	}
+
+	end := strings.IndexByte(input[1:], '%')
+	if end <= 0 {
+		return "", "", false
+	}
+
+	name = input[1 : 1+end]
+	if !isFolderEnvVarName(name) {
+		return "", "", false
+	}
+	return name, input[end+2:], true
+}
+
+// isFolderEnvVarName accepts Windows env names such as LOCALAPPDATA and ProgramFiles(x86).
+func isFolderEnvVarName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for _, r := range name {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '(', r == ')':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // expandFolderQueryHome resolves ~ paths before filesystem checks.

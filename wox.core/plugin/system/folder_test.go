@@ -3,6 +3,7 @@ package system
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"wox/plugin"
@@ -61,6 +62,12 @@ func TestResolveFolderBrowsePathUsesDirectoryOrParent(t *testing.T) {
 	if _, err := resolveFolderBrowsePath(filepath.Join(root, "missing")); err == nil {
 		t.Fatal("missing path should fail")
 	}
+
+	t.Setenv("WOX_FOLDER_BROWSE_ROOT", root)
+	envFolder, err := resolveFolderBrowsePath(`%WOX_FOLDER_BROWSE_ROOT%`)
+	if err != nil || envFolder != root {
+		t.Fatalf("env folder path = %q, err=%v, want %q", envFolder, err, root)
+	}
 }
 
 func TestFolderBrowseCommandRejectsUnknownCommand(t *testing.T) {
@@ -100,6 +107,95 @@ func TestFolderQueryCompletesHomePathPrefix(t *testing.T) {
 	}
 	if response.Results[0].Score != folderResultScore {
 		t.Fatalf("result score = %d, want %d", response.Results[0].Score, folderResultScore)
+	}
+}
+
+func TestParseFolderQueryPathExpandsWindowsEnv(t *testing.T) {
+	root := t.TempDir()
+	cursorPath := filepath.Join(root, "Programs", "cursor")
+	if err := os.MkdirAll(cursorPath, 0o755); err != nil {
+		t.Fatalf("create cursor folder: %v", err)
+	}
+	t.Setenv("LOCALAPPDATA", root)
+
+	inputs := []string{`%LOCALAPPDATA%/Programs/cursor/`}
+	if runtime.GOOS == "windows" {
+		inputs = append(inputs, `%LOCALAPPDATA%\Programs\cursor\`)
+	}
+
+	for _, input := range inputs {
+		path, shouldListChildren, ok := parseFolderQueryPath(input)
+		if !ok || !shouldListChildren {
+			t.Fatalf("parse %q: ok=%v shouldListChildren=%v", input, ok, shouldListChildren)
+		}
+		if path != filepath.Clean(cursorPath) {
+			t.Fatalf("parse %q = %q, want %q", input, path, cursorPath)
+		}
+	}
+}
+
+func TestParseFolderQueryPathExpandsEnvInsideAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "tester", "docs")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("create docs folder: %v", err)
+	}
+	t.Setenv("WOX_FOLDER_TEST_USER", "tester")
+
+	path, shouldListChildren, ok := parseFolderQueryPath(filepath.Join(root, "%WOX_FOLDER_TEST_USER%", "docs"))
+	if !ok || shouldListChildren {
+		t.Fatalf("ok=%v shouldListChildren=%v", ok, shouldListChildren)
+	}
+	if path != filepath.Clean(target) {
+		t.Fatalf("path = %q, want %q", path, target)
+	}
+}
+
+func TestParseFolderQueryPathRejectsUnsetEnv(t *testing.T) {
+	_ = os.Unsetenv("WOX_FOLDER_MISSING_ENV")
+
+	if _, _, ok := parseFolderQueryPath(`%WOX_FOLDER_MISSING_ENV%/foo`); ok {
+		t.Fatal("unset environment variable should not parse as a folder path")
+	}
+}
+
+func TestParseFolderQueryPathAcceptsProgramFilesX86(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ProgramFiles(x86)", root)
+
+	path, shouldListChildren, ok := parseFolderQueryPath(`%ProgramFiles(x86)%`)
+	if !ok || shouldListChildren {
+		t.Fatalf("ok=%v shouldListChildren=%v", ok, shouldListChildren)
+	}
+	if path != filepath.Clean(root) {
+		t.Fatalf("path = %q, want %q", path, root)
+	}
+}
+
+func TestParseFolderQueryPathRejectsPartialPercentToken(t *testing.T) {
+	if _, _, ok := parseFolderQueryPath(`%LOCALAPPDATA`); ok {
+		t.Fatal("unclosed environment variable should not parse as a folder path")
+	}
+	if _, _, ok := parseFolderQueryPath(`50% complete`); ok {
+		t.Fatal("percent text should not parse as a folder path")
+	}
+}
+
+func TestFolderQueryListsWindowsEnvPathChildren(t *testing.T) {
+	root := t.TempDir()
+	resourcesPath := filepath.Join(root, "Programs", "cursor", "resources")
+	if err := os.MkdirAll(resourcesPath, 0o755); err != nil {
+		t.Fatalf("create resources folder: %v", err)
+	}
+	t.Setenv("LOCALAPPDATA", root)
+
+	response := (&FolderPlugin{}).Query(t.Context(), plugin.Query{
+		Type:   plugin.QueryTypeInput,
+		Search: `%LOCALAPPDATA%/Programs/cursor/`,
+	})
+
+	if len(response.Results) != 1 || response.Results[0].Title != "resources" || response.Results[0].SubTitle != resourcesPath {
+		t.Fatalf("results = %#v, want resources at %q", response.Results, resourcesPath)
 	}
 }
 
