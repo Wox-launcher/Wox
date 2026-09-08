@@ -373,9 +373,11 @@ func linuxDesktopIconSearchRoots() []string {
 	for _, dataRoot := range dataRoots {
 		paths = append(paths, filepath.Join(dataRoot, "pixmaps"))
 	}
-	if homeDir != "" {
-		paths = append(paths, filepath.Join(homeDir, ".icons"))
-	}
+	// Theme roots above only walk <icons>/<theme>/.... AppImage tools such as
+	// AppManager drop unthemed icons as loose files at
+	// $XDG_DATA_HOME/icons/<name>.png, so include the icon directories
+	// themselves as a fallback. themeParentRoots already covers ~/.icons.
+	paths = append(paths, themeParentRoots...)
 
 	return util.UniqueStrings(paths)
 }
