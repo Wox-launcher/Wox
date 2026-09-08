@@ -1263,5 +1263,28 @@
         "plugin_description": "管理 GitHub 的 issues 和通知"
       }
     }
+  },
+  {
+    "Id": "73c73b8b-ef35-4d50-a2ca-e53484cd9561",
+    "Name": "Notion",
+    "Author": "lmgarret",
+    "Version": "1.0.1",
+    "MinWoxVersion": "2.0.4",
+    "Runtime": "nodejs",
+    "Description": "Search Notion pages and databases, jump to recent pages, and quick-capture notes from the launcher",
+    "IconUrl": "https://raw.githubusercontent.com/lmgarret/wox-notion-plugin/main/images/app.svg",
+    "Website": "https://github.com/lmgarret/wox-notion-plugin",
+    "DownloadUrl": "https://github.com/lmgarret/wox-notion-plugin/releases/latest/download/wox-notion-plugin.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/lmgarret/wox-notion-plugin/main/docs/screenshots/search.png",
+      "https://raw.githubusercontent.com/lmgarret/wox-notion-plugin/main/docs/screenshots/quick-capture.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-08 12:57:47",
+    "DateUpdated": "2026-09-08 12:57:47"
   }
 ]
