@@ -39,7 +39,6 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 	if showHeader {
 		headerHeight = 52
 	}
-	inputHeight := previewview.ChatComposerHeight(len(snapshot.attachments))
 	contentWidth := width
 	catalogWidth := float32(0)
 	historyOpen := chatHistoryVisible(snapshot.panel, snapshot.sidebarOpen)
@@ -49,6 +48,7 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 	}
 	innerWidth := max(float32(0), contentWidth-20)
 	innerHeight := max(float32(0), height-14)
+	inputHeight := a.chatComposerInputHeight(snapshot, innerWidth, window, palette)
 	questionHeight := chatQuestionPanelHeight(snapshot, innerHeight)
 	debugHeight := float32(0)
 	if snapshot.panel == "debug" {
@@ -143,6 +143,7 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 		} else if len(items) > 0 {
 			contentHeight += chatCatalogGroupHeaderHeight
 		}
+		contentHeight += chatCommandPaletteLoadingHeight(items, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
 		contentHeight = max(float32(40), contentHeight)
 		return min(contentHeight+14, min(float32(310), max(float32(96), available-104)))
 	}
@@ -173,10 +174,14 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	} else if grouped {
 		label = ""
 	}
+	showModelLoading := chatCommandPaletteShowsGroup(snapshot.panel, "models") && chatCommandPaletteShowsLoading(commands, "models", snapshot.modelsLoading)
+	showSkillLoading := chatCommandPaletteShowsGroup(snapshot.panel, "skills") && chatCommandPaletteShowsLoading(commands, "skills", snapshot.skillsLoading)
+	loadingHeight := chatCommandPaletteLoadingHeight(commands, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
 	contentHeight := float32(count) * chatCatalogRowHeight
 	if grouped {
 		contentHeight = chatCommandContentHeight(commands)
 	}
+	contentHeight += loadingHeight
 	contentHeight = max(viewportHeight, contentHeight)
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
 	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
@@ -185,6 +190,9 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		rowTop := float32(selected) * chatCatalogRowHeight
 		if grouped {
 			rowTop = chatCommandItemOffset(commands, selected)
+		}
+		if showModelLoading {
+			rowTop += chatCatalogGroupHeaderHeight + chatCatalogRowHeight
 		}
 		rowBottom := rowTop + chatCatalogRowHeight
 		if rowTop < offset {
@@ -195,7 +203,10 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	}
 	a.setChatPanelViewport(viewportHeight)
 
-	items := make([]previewview.ChatCatalogItemProps, 0, count)
+	items := make([]previewview.ChatCatalogItemProps, 0, count+2)
+	if showModelLoading {
+		items = append(items, a.chatCatalogLoadingItem(snapshot, "models", grouped))
+	}
 	for index, command := range commands {
 		groupLabel := ""
 		if grouped {
@@ -217,25 +228,28 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			},
 		})
 	}
+	if showSkillLoading {
+		items = append(items, a.chatCatalogLoadingItem(snapshot, "skills", grouped))
+	}
 	emptyMessage := "No saved conversations"
 	if snapshot.panel == "models" {
 		emptyMessage = "No AI models configured"
 		if snapshot.modelsLoading {
-			emptyMessage = "Loading models…"
+			emptyMessage = a.translate("i18n:ui_ai_chat_loading_models")
 		} else if snapshot.modelsError != "" {
 			emptyMessage = snapshot.modelsError
 		}
 	} else if snapshot.panel == "skills" {
 		emptyMessage = "No enabled skills"
 		if snapshot.skillsLoading {
-			emptyMessage = "Loading skills…"
+			emptyMessage = a.translate("i18n:ui_ai_chat_loading_skills")
 		} else if snapshot.skillsError != "" {
 			emptyMessage = snapshot.skillsError
 		}
 	} else if grouped {
 		emptyMessage = a.translate("i18n:ui_no_data")
 		if snapshot.modelsLoading || snapshot.skillsLoading {
-			emptyMessage = "Loading…"
+			emptyMessage = a.translate("i18n:ui_ai_chat_loading_models")
 		} else if snapshot.modelsError != "" && snapshot.skillsError != "" {
 			emptyMessage = snapshot.modelsError + "; " + snapshot.skillsError
 		} else if snapshot.modelsError != "" {
@@ -248,6 +262,24 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		Width: width, Height: height, Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
 		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
+	}
+}
+
+// chatCatalogLoadingItem keeps a Models or Skills group visible while its catalog is still loading.
+func (a *App) chatCatalogLoadingItem(snapshot *chatPreviewSnapshot, group string, grouped bool) previewview.ChatCatalogItemProps {
+	title := a.translate("i18n:ui_ai_chat_loading_models")
+	groupLabel := ""
+	if group == "skills" {
+		title = a.translate("i18n:ui_ai_chat_loading_skills")
+		if grouped {
+			groupLabel = a.translate("i18n:ui_ai_skills")
+		}
+	} else if grouped {
+		groupLabel = a.translate("i18n:ui_ai_chat_select_model_title")
+	}
+	return previewview.ChatCatalogItemProps{
+		SelectID: fmt.Sprintf("chat-%s-loading-%s", group, snapshot.key), GroupLabel: groupLabel,
+		Kind: group, Title: title, Placeholder: true,
 	}
 }
 
@@ -879,6 +911,17 @@ func formatChatToolCall(conversation chatConversation) string {
 		lines = append(lines, response)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// chatComposerInputHeight reserves the 1-5 line composer pane for the current draft.
+func (a *App) chatComposerInputHeight(snapshot *chatPreviewSnapshot, width float32, window *woxui.Window, palette uiPalette) float32 {
+	theme := palette.componentTheme()
+	skillTags := chatSkillTagRanges(snapshot.editing.Text)
+	richRuns := make([]woxcomponent.TextFieldRichRun, 0, len(skillTags))
+	for _, tag := range skillTags {
+		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme))
+	}
+	return previewview.ChatComposerHeightForLines(len(snapshot.attachments), previewview.ChatComposerVisibleLines(snapshot.editing.Text, width, window, richRuns))
 }
 
 // chatInputProps prepares the controlled editor and toolbar actions.

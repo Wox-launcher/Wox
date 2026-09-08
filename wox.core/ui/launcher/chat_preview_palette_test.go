@@ -114,6 +114,71 @@ func TestChatCommandPaletteFiltersModelsAndSkills(t *testing.T) {
 	}
 }
 
+func TestChatPreviewSectionSignatureIncludesCatalogs(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetModelsLoading(true)
+	ai.SetSkillsLoading(true)
+	app := &App{
+		aiSettings:  ai,
+		chatPreview: &chatPreviewState{panel: chatCommandPanel, key: "chat-1"},
+	}
+
+	loading := launcherSectionSignature(app.chatPreviewSectionState())
+	ai.SetSkills([]chatSkill{{Name: "wox-plugin-creator"}})
+	skillsReady := launcherSectionSignature(app.chatPreviewSectionState())
+	if loading == skillsReady {
+		t.Fatal("skill catalog apply kept the preview-section signature; slash palette would skip rebuild")
+	}
+
+	ai.SetModels([]aiModel{{Name: "grok-4.6", Provider: "grok"}})
+	modelsReady := launcherSectionSignature(app.chatPreviewSectionState())
+	if skillsReady == modelsReady {
+		t.Fatal("model catalog apply kept the preview-section signature")
+	}
+}
+
+func TestChatCommandCatalogShowsModelLoadingWhileSkillsReady(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetSkills([]chatSkill{{Name: "wox-plugin-creator", Description: "Create plugins"}})
+	ai.SetModelsLoading(true)
+	app := &App{
+		aiSettings:  ai,
+		chatPreview: &chatPreviewState{panel: chatCommandPanel, key: "chat-1"},
+	}
+
+	snapshot := snapshotChatPreviewLocked(app.chatPreview)
+	app.attachChatPreviewCatalogs(snapshot)
+	props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
+	if len(props.Items) != 2 {
+		t.Fatalf("catalog items = %+v, want loading model + ready skill", props.Items)
+	}
+	if !props.Items[0].Placeholder || props.Items[0].Kind != "models" || props.Items[0].Title != "ui ai chat loading models" {
+		t.Fatalf("model placeholder = %+v", props.Items[0])
+	}
+	if props.Items[1].Title != "wox-plugin-creator" || props.Items[1].Placeholder || props.Items[1].OnSelect == nil {
+		t.Fatalf("skill item = %+v", props.Items[1])
+	}
+
+	ai.SetModels([]aiModel{{Name: "grok-4.6", Provider: "grok"}})
+	snapshot = snapshotChatPreviewLocked(app.chatPreview)
+	app.attachChatPreviewCatalogs(snapshot)
+	props = app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
+	if len(props.Items) != 2 || props.Items[0].Placeholder || props.Items[0].Title != "grok-4.6" || props.Items[1].Title != "wox-plugin-creator" {
+		t.Fatalf("after models loaded = %+v", props.Items)
+	}
+}
+
+func TestChatCommandPaletteHeightIncludesModelLoadingRow(t *testing.T) {
+	snapshot := &chatPreviewSnapshot{
+		panel:         chatCommandPanel,
+		skills:        []chatSkill{{Name: "wox-plugin-creator"}},
+		modelsLoading: true,
+	}
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 146 {
+		t.Fatalf("loading palette height = %.0f, want 146", height)
+	}
+}
+
 func TestChatModelPaletteHeightShrinksToContentAndCaps(t *testing.T) {
 	snapshot := &chatPreviewSnapshot{panel: "models", models: []aiModel{{Name: "flash"}, {Name: "pro"}}}
 	if height := chatCatalogPanelHeight(snapshot, 600); height != 118 {

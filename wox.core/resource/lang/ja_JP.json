@@ -1023,6 +1023,8 @@
   "ui_ai_chat_stop": "停止",
   "ui_ai_chat_options": "チャットオプション",
   "ui_ai_chat_select_model_title": "モデルを選択",
+  "ui_ai_chat_loading_models": "モデルを読み込み中…",
+  "ui_ai_chat_loading_skills": "スキルを読み込み中…",
   "ui_ai_chat_configure_tools_title": "ツールを設定",
   "ui_ai_chat_tool_status_streaming": "ストリーミング中",
   "ui_ai_chat_tool_status_pending": "保留中",

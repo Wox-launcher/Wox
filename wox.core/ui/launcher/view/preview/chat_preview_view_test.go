@@ -208,7 +208,7 @@ func TestChatPreviewCanHostHeaderOutsideContent(t *testing.T) {
 	view := ChatPreview(ChatPreviewProps{
 		Width: 500, Height: 400, Key: "external-header",
 		Messages: ChatMessagesProps{Width: 480, Height: 288},
-		Input:    ChatInputProps{Width: 480, Height: 98},
+		Input:    ChatInputProps{Width: 480, Height: ChatComposerHeight(0)},
 	}).(woxwidget.Stack)
 
 	body := view.Children[0].Child.(woxwidget.Flex)
@@ -221,7 +221,7 @@ func TestChatPreviewHistorySidebarPushesContent(t *testing.T) {
 	view := ChatPreview(ChatPreviewProps{
 		Width: 800, Height: 600, Key: "history", Panel: "history",
 		Messages: ChatMessagesProps{Width: 520, Height: 488},
-		Input:    ChatInputProps{Width: 520, Height: 98},
+		Input:    ChatInputProps{Width: 520, Height: ChatComposerHeight(0)},
 		Catalog:  &ChatCatalogProps{Width: 260, Height: 600, Key: "history", ShowNew: true},
 	}).(woxwidget.Flex)
 
@@ -241,7 +241,7 @@ func TestChatPreviewKeepsHistoryWhileCommandOverlayIsOpen(t *testing.T) {
 	view := ChatPreview(ChatPreviewProps{
 		Width: 800, Height: 600, Key: "both", Panel: "commands",
 		Messages: ChatMessagesProps{Width: 520, Height: 488},
-		Input:    ChatInputProps{Width: 520, Height: 98},
+		Input:    ChatInputProps{Width: 520, Height: ChatComposerHeight(0)},
 		History:  &ChatCatalogProps{Width: 260, Height: 600, Key: "history", ShowNew: true},
 		Catalog:  &ChatCatalogProps{Width: 400, Height: 80, Key: "commands", EmptyMessage: "No data"},
 	}).(woxwidget.Flex)
@@ -457,7 +457,7 @@ func TestChatInputRendersSkillTagsAsAtomicChips(t *testing.T) {
 	end := len([]rune(tag))
 	run := woxcomponent.NewTokenChipRun(0, end, "wox-plugin-creator", nil, theme)
 	input := ChatInput(ChatInputProps{
-		Width: 400, Height: 98, Key: "skills", Editing: woxui.TextEditingState{Text: tag + " 士大夫"},
+		Width: 400, Height: ChatComposerHeight(0), Key: "skills", Editing: woxui.TextEditingState{Text: tag + " 士大夫"},
 		RichRuns: []woxcomponent.TextFieldRichRun{run}, AtomicTokens: []woxcomponent.TextFieldTokenRange{{Start: 0, End: end}},
 		Theme: theme,
 	}).(woxwidget.Container)
@@ -476,11 +476,15 @@ func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
 		ResultSubtitle:  woxui.Color{R: 180, G: 180, B: 180, A: 200},
 		QueryBackground: woxui.Color{R: 30, G: 30, B: 30, A: 255},
 	}
-	if ChatComposerHeight(0) != 98 || ChatComposerHeight(1) != 154 {
+	if ChatComposerHeight(0) != 92 || ChatComposerHeight(1) != 148 {
 		t.Fatalf("composer height = %.0f/%.0f", ChatComposerHeight(0), ChatComposerHeight(1))
 	}
 
-	plain := ChatInput(ChatInputProps{Width: 400, Height: 98, Key: "plain", Theme: theme}).(woxwidget.Container)
+	plain := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(0), Key: "plain", Theme: theme}).(woxwidget.Container)
+	plainField := plain.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if plainField.MaxLines != 5 || plainField.Height != 35 || plainField.LineHeight != 20 {
+		t.Fatalf("composer editor = lines %d height %.0f line height %.0f, want a 1-line 35-unit field that can scroll at 5", plainField.MaxLines, plainField.Height, plainField.LineHeight)
+	}
 	plainCard := plain.Child.(woxwidget.Container)
 	if len(plainCard.Child.(woxwidget.Flex).Children) != 3 {
 		t.Fatalf("plain composer children = %d, want editor, divider, toolbar", len(plainCard.Child.(woxwidget.Flex).Children))
@@ -502,6 +506,41 @@ func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
 	dismiss := quote.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if dismiss.ID != "chat-quote-dismiss-quoted" || dismiss.HoverBackground != chatIconHoverBackground(theme) || dismiss.HoverBackground.A == 0 {
 		t.Fatalf("quote dismiss = %#v, want shared icon-button hover", dismiss)
+	}
+}
+
+func TestChatComposerGrowsFromOneToFiveLinesThenScrolls(t *testing.T) {
+	if ChatComposerVisibleLines("", 400, nil, nil) != 1 || ChatComposerVisibleLines("a\nb", 400, nil, nil) != 2 {
+		t.Fatal("composer should start at one visible line and grow with hard breaks")
+	}
+	if ChatComposerVisibleLines("1\n2\n3\n4\n5\n6", 400, nil, nil) != 5 {
+		t.Fatal("composer should stop growing after five visible lines")
+	}
+	if ChatComposerHeightForLines(0, 1) != 92 || ChatComposerHeightForLines(0, 2) != 112 || ChatComposerHeightForLines(0, 5) != 172 {
+		t.Fatalf("composer heights = %.0f/%.0f/%.0f, want 92/112/172", ChatComposerHeightForLines(0, 1), ChatComposerHeightForLines(0, 2), ChatComposerHeightForLines(0, 5))
+	}
+
+	two := ChatInput(ChatInputProps{Width: 400, Editing: woxui.TextEditingState{Text: "a\nb"}}).(woxwidget.Container)
+	twoField := two.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if two.Height != 112 || twoField.Height != 55 || twoField.MaxLines != 5 {
+		t.Fatalf("two-line composer = pane %.0f editor %.0f max %d", two.Height, twoField.Height, twoField.MaxLines)
+	}
+
+	six := ChatInput(ChatInputProps{
+		Width: 400, Editing: woxui.TextEditingState{Text: "1\n2\n3\n4\n5\n6"},
+		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{R: 220, G: 225, B: 230, A: 255}},
+	}).(woxwidget.Container)
+	scroll, ok := six.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful)
+	if !ok {
+		t.Fatal("overflowing composer should use the shared WoxScrollView")
+	}
+	scrollProps := scroll.Widget.(woxcomponent.ScrollViewProps)
+	sixField := scrollProps.Content.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if six.Height != 172 || scrollProps.Height != 115 || scrollProps.ContentHeight != 135 || !scrollProps.AlwaysShowScrollbar {
+		t.Fatalf("overflow scroll = pane %.0f viewport %.0f content %.0f always %v", six.Height, scrollProps.Height, scrollProps.ContentHeight, scrollProps.AlwaysShowScrollbar)
+	}
+	if sixField.Height != 135 || sixField.MaxLines != 6 || scrollProps.ThumbColor.A == 0 || scrollProps.KeepVisible == nil {
+		t.Fatalf("overflow field = height %.0f max %d thumb %#v keep %#v", sixField.Height, sixField.MaxLines, scrollProps.ThumbColor, scrollProps.KeepVisible)
 	}
 }
 
@@ -528,7 +567,7 @@ func TestSentChatQuotePreservesLinesAndMessageHeight(t *testing.T) {
 	if chatMessageHeight(quoted)-chatMessageHeight(plain) != 75 {
 		t.Fatal("message scroll extent does not include the quote and gap")
 	}
-	if ChatComposerHeight(2) != 210 {
+	if ChatComposerHeight(2) != 204 {
 		t.Fatal("composer must reserve space for every attachment")
 	}
 }

@@ -2806,7 +2806,7 @@ func shouldWrapRemotePreview(preview WoxPreview) bool {
 		return false
 	}
 	switch preview.PreviewType {
-	case WoxPreviewTypeRemote, WoxPreviewTypeQueryRequirementSettings, WoxPreviewTypeTriggerKeywordConflict, WoxPreviewTypeMedia:
+	case WoxPreviewTypeRemote, WoxPreviewTypeQueryRequirementSettings, WoxPreviewTypeTriggerKeywordConflict, WoxPreviewTypeMedia, WoxPreviewTypeChat, WoxPreviewTypeTerminal:
 		return false
 	default:
 		return true

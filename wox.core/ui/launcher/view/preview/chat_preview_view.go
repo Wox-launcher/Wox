@@ -16,13 +16,47 @@ const ChatHistoryRowHeight = float32(38)
 const chatCopyFeedbackDuration = 1200 * time.Millisecond
 
 const (
-	chatComposerHeight  = float32(98)
-	chatQuoteCardHeight = float32(56)
+	// The composer starts at one line and grows with typed or wrapped lines.
+	chatComposerMinLines            = 1
+	chatComposerMaxLines            = 5
+	chatComposerLineHeight          = float32(20)
+	chatComposerEditorPaddingTop    = float32(8)
+	chatComposerEditorPaddingBottom = float32(7)
+	chatComposerEditorPaddingX      = float32(14)
+	chatComposerToolbarHeight       = float32(42)
+	chatComposerDividerHeight       = float32(1)
+	chatComposerOuterPaddingY       = float32(14)
+	chatQuoteCardHeight             = float32(56)
 )
 
-// ChatComposerHeight returns the chat input pane height, including a quote card when present.
+func chatComposerClampLines(lineCount int) int {
+	return max(chatComposerMinLines, min(chatComposerMaxLines, lineCount))
+}
+
+// chatComposerEditorHeight is the field needed to show the given visible line count.
+func chatComposerEditorHeight(lineCount int) float32 {
+	return chatComposerContentHeight(chatComposerClampLines(lineCount))
+}
+
+// chatComposerContentHeight is the unclamped editor height for a measured line count.
+func chatComposerContentHeight(lineCount int) float32 {
+	return float32(max(1, lineCount))*chatComposerLineHeight + chatComposerEditorPaddingTop + chatComposerEditorPaddingBottom
+}
+
+// ChatComposerVisibleLines counts wrapped composer lines, capped at the scroll threshold.
+func ChatComposerVisibleLines(text string, width float32, window *woxui.Window, richRuns []woxcomponent.TextFieldRichRun) int {
+	innerWidth := max(float32(0), width-chatComposerEditorPaddingX*2)
+	return chatComposerClampLines(woxcomponent.TextFieldVisualLineCount(text, window, woxui.TextStyle{Size: 13}, innerWidth, richRuns))
+}
+
+// ChatComposerHeight returns the one-line chat input pane height, including quote cards.
 func ChatComposerHeight(attachmentCount int) float32 {
-	return chatComposerHeight + float32(min(attachmentCount, 3))*chatQuoteCardHeight
+	return ChatComposerHeightForLines(attachmentCount, chatComposerMinLines)
+}
+
+// ChatComposerHeightForLines returns the pane height for a 1-5 line composer.
+func ChatComposerHeightForLines(attachmentCount, lineCount int) float32 {
+	return chatComposerOuterPaddingY + chatComposerEditorHeight(lineCount) + chatComposerToolbarHeight + chatComposerDividerHeight + float32(min(attachmentCount, 3))*chatQuoteCardHeight
 }
 
 // ChatPreviewProps contains the typed chat panes and optional catalog drawer.
@@ -46,7 +80,7 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 	headerHeight := float32(52)
 	inputHeight := props.Input.Height
 	if inputHeight <= 0 {
-		inputHeight = ChatComposerHeight(len(props.Input.Attachments))
+		inputHeight = ChatComposerHeightForLines(len(props.Input.Attachments), ChatComposerVisibleLines(props.Input.Editing.Text, props.Input.Width, props.Input.Window, props.Input.RichRuns))
 	}
 	innerWidth := max(float32(0), props.Width-20)
 	innerHeight := max(float32(0), props.Height-14)
@@ -215,10 +249,12 @@ type ChatCatalogItemProps struct {
 	Subtitle    string
 	DeleteLabel string
 	// ConfirmDeleteLabel describes the destructive second activation for assistive technology.
-	ConfirmDeleteLabel  string
-	GroupLabel          string
-	Selected            bool
-	Current             bool
+	ConfirmDeleteLabel string
+	GroupLabel         string
+	Selected           bool
+	Current            bool
+	// Placeholder is a non-interactive loading row and must not take keyboard selection.
+	Placeholder         bool
 	OnSelect            func()
 	OnDelete            func()
 	deleteFocused       bool
@@ -397,9 +433,25 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 	return chatCatalogItemWithDeleteState(item, width, height, theme, hovered, false, false, onHover, nil, item.OnDelete)
 }
 
+// chatCatalogLoadingItem renders a quiet, non-interactive catalog row while a group is still fetching.
+func chatCatalogLoadingItem(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+	icon := woxcomponent.ModelTrainingGlyph(18, theme.ResultSubtitle)
+	if item.Kind == "skills" {
+		icon = woxcomponent.ExtensionGlyph(18, theme.ResultSubtitle)
+	}
+	titleWidth := min(float32(220), max(float32(100), width*0.42))
+	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Left: 14, Top: 10, Child: icon},
+		{Left: 42, Top: 11, Child: woxwidget.Container{Width: titleWidth, Height: 18, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle}}},
+	}}}
+}
+
 func chatCatalogItemWithDeleteState(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme, hovered, deleteHovered, deleteConfirm bool, onHover, onDeleteHover func(bool), onDelete func()) woxwidget.Widget {
 	if item.Kind == "history" || item.Kind == "history-new" {
 		return chatHistoryItemWithDeleteState(item, width, height, theme, hovered, deleteHovered, deleteConfirm, onHover, onDeleteHover, onDelete)
+	}
+	if item.Placeholder {
+		return chatCatalogLoadingItem(item, width, height, theme)
 	}
 	background := woxui.Color{}
 	if item.Selected {
@@ -1266,14 +1318,24 @@ func (s *chatModelSelectorState) Dispose() {}
 
 // ChatInput builds the multiline editor card and send toolbar.
 func ChatInput(props ChatInputProps) woxwidget.Widget {
-	const toolbarHeight = float32(42)
 	quoteHeight := float32(min(len(props.Attachments), 3)) * chatQuoteCardHeight
-	cardHeight := max(float32(78), props.Height-14)
-	editorHeight := max(float32(36), cardHeight-toolbarHeight-quoteHeight-1)
+	style := woxui.TextStyle{Size: 13}
+	innerWidth := max(float32(0), props.Width-chatComposerEditorPaddingX*2)
+	contentLines := max(1, woxcomponent.TextFieldVisualLineCount(props.Editing.Text, props.Window, style, innerWidth, props.RichRuns))
+	lineCount := chatComposerClampLines(contentLines)
+	editorHeight := chatComposerEditorHeight(lineCount)
+	cardHeight := editorHeight + chatComposerToolbarHeight + quoteHeight + chatComposerDividerHeight
+	fieldHeight := editorHeight
+	maxLines := chatComposerMaxLines
+	if contentLines > chatComposerMaxLines {
+		// The shared scroller owns overflow. The field stays tall enough to paint every line.
+		fieldHeight = chatComposerContentHeight(contentLines)
+		maxLines = max(contentLines, chatComposerMaxLines)
+	}
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-		ID: "chat-input-" + props.Key, Label: props.Hint, Hint: props.Hint, Width: props.Width, Height: editorHeight,
-		Padding: woxwidget.Insets{Left: 14, Top: 8, Right: 14, Bottom: 7}, Background: props.Theme.QueryBackground,
-		Style: woxui.TextStyle{Size: 13}, Value: props.Editing.Text, Focused: props.Focused, MaxLines: 5, Window: props.Window, Theme: props.Theme,
+		ID: "chat-input-" + props.Key, Label: props.Hint, Hint: props.Hint, Width: props.Width, Height: fieldHeight,
+		Padding: woxwidget.Insets{Left: chatComposerEditorPaddingX, Top: chatComposerEditorPaddingTop, Right: chatComposerEditorPaddingX, Bottom: chatComposerEditorPaddingBottom}, Background: props.Theme.QueryBackground,
+		Style: style, LineHeight: chatComposerLineHeight, Value: props.Editing.Text, Focused: props.Focused, MaxLines: maxLines, Window: props.Window, Theme: props.Theme,
 		RichRuns: props.RichRuns, AtomicTokens: props.AtomicTokens,
 		OnChanged: props.OnChanged, OnKey: props.OnKey, OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {
@@ -1281,6 +1343,16 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 			}
 		},
 	})
+	if contentLines > chatComposerMaxLines {
+		caretLine := woxcomponent.TextFieldVisualLineIndex(props.Editing.Text, props.Editing.Selection.Focus, props.Window, style, innerWidth, props.RichRuns)
+		caretTop := chatComposerEditorPaddingTop + float32(caretLine)*chatComposerLineHeight
+		input = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: woxwidget.Key("chat-input-scroll-" + props.Key), Width: props.Width, Height: editorHeight,
+			ContentHeight: fieldHeight, Content: input, AlwaysShowScrollbar: true,
+			KeepVisible: &woxwidget.ScrollRange{Start: caretTop, End: caretTop + chatComposerLineHeight},
+			ThumbColor:  props.Theme.ResultTitle, AutomationID: "chat-input-scroll-" + props.Key, Label: props.Hint,
+		})
+	}
 	divider := props.Theme.ResultSubtitle
 	divider.A = uint8(float32(divider.A) * 0.14)
 	modelButton := ChatModelSelector(props)
@@ -1291,11 +1363,11 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	statusLeft := props.ModelWidth + 18
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
-		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: toolbarHeight, Vertical: 0.5, Child: modelButton}},
-		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: toolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})}},
+		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: modelButton}},
+		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})}},
 	}
 	if props.Status != "" && statusWidth > 30 {
-		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: toolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
+		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
 	}
 	cardChildren := make([]woxwidget.Widget, 0, 4)
 	attachmentCards := make([]woxwidget.Widget, 0, len(props.Attachments))
@@ -1319,10 +1391,10 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	cardChildren = append(cardChildren,
 		input,
 		woxwidget.Container{Width: props.Width, Height: 1, Color: divider},
-		woxwidget.Stack{Width: props.Width, Height: toolbarHeight, Children: toolbarChildren},
+		woxwidget.Stack{Width: props.Width, Height: chatComposerToolbarHeight, Children: toolbarChildren},
 	)
 	card := woxwidget.Container{Width: props.Width, Height: cardHeight, Radius: 9, Color: props.Theme.QueryBackground, BorderColor: divider, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: cardChildren}}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
+	return woxwidget.Container{Width: props.Width, Height: ChatComposerHeightForLines(len(props.Attachments), lineCount), Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
 }
 
 // chatAttachmentHeight matches the sent-card geometry used by the message scroll list.

@@ -231,6 +231,18 @@ func TestTextFieldGlyphHitIgnoresEmptySpaceAroundText(t *testing.T) {
 	}
 }
 
+func TestTextFieldVisualLineCountUsesHardBreaksWithoutWindow(t *testing.T) {
+	if got := TextFieldVisualLineCount("", nil, woxui.TextStyle{Size: 13}, 200, nil); got != 1 {
+		t.Fatalf("empty line count = %d, want 1", got)
+	}
+	if got := TextFieldVisualLineCount("a\nb\nc", nil, woxui.TextStyle{Size: 13}, 200, nil); got != 3 {
+		t.Fatalf("hard-break line count = %d, want 3", got)
+	}
+	if got := TextFieldVisualLineIndex("a\nb\nc", 4, nil, woxui.TextStyle{Size: 13}, 200, nil); got != 2 {
+		t.Fatalf("caret line = %d, want 2", got)
+	}
+}
+
 func TestTextFieldLinesSoftWrapPreservesOffsets(t *testing.T) {
 	lines := textFieldLines("hello world", nil, woxui.TextStyle{Size: 12}, 0, true)
 	if len(lines) != 1 || lines[0].text != "hello world" {

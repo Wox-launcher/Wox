@@ -360,6 +360,41 @@ func chatCommandContentHeight(items []chatCommandPaletteItem) float32 {
 	return chatCommandItemOffset(items, len(items)-1) + chatCatalogRowHeight
 }
 
+// chatCommandPaletteShowsLoading keeps a group visible while its catalog is still in flight.
+func chatCommandPaletteShowsLoading(items []chatCommandPaletteItem, group string, loading bool) bool {
+	if !loading {
+		return false
+	}
+	for _, item := range items {
+		if item.group == group {
+			return false
+		}
+	}
+	return true
+}
+
+func chatCommandPaletteShowsGroup(filterGroup, group string) bool {
+	return filterGroup == "" || filterGroup == chatCommandPanel || filterGroup == group
+}
+
+// chatCommandPaletteLoadingHeight reserves the Models/Skills header and row shown while a catalog loads.
+func chatCommandPaletteLoadingHeight(items []chatCommandPaletteItem, filterGroup string, modelsLoading, skillsLoading bool) float32 {
+	height := float32(0)
+	if chatCommandPaletteShowsGroup(filterGroup, "models") && chatCommandPaletteShowsLoading(items, "models", modelsLoading) {
+		if filterGroup == "" || filterGroup == chatCommandPanel {
+			height += chatCatalogGroupHeaderHeight
+		}
+		height += chatCatalogRowHeight
+	}
+	if chatCommandPaletteShowsGroup(filterGroup, "skills") && chatCommandPaletteShowsLoading(items, "skills", skillsLoading) {
+		if filterGroup == "" || filterGroup == chatCommandPanel {
+			height += chatCatalogGroupHeaderHeight
+		}
+		height += chatCatalogRowHeight
+	}
+	return height
+}
+
 // cloneChatData isolates nested message slices before transport and render state diverge.
 func cloneChatData(source chatData) chatData {
 	cloned := source
@@ -574,6 +609,14 @@ func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (
 	snapshot := snapshotChatPreviewLocked(a.chatPreview)
 	a.attachChatPreviewCatalogs(snapshot)
 	return snapshot, nil
+}
+
+// chatPreviewSectionState is the preview-section cache key, including catalogs that
+// arrive after the slash palette opens so skills can paint before models finish.
+func (a *App) chatPreviewSectionState() *chatPreviewSnapshot {
+	snapshot := snapshotChatPreviewLocked(a.chatPreview)
+	a.attachChatPreviewCatalogs(snapshot)
+	return snapshot
 }
 
 // attachChatPreviewCatalogs copies the shared model and skill catalogs onto a render snapshot.

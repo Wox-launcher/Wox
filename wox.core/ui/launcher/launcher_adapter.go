@@ -967,7 +967,9 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 		}
 	case "chat":
 		if a.chatPreview != nil {
-			state = append(state, snapshotChatPreviewLocked(a.chatPreview))
+			// Catalogs live on aiSettings, not chatPreview. Omit them and a skill
+			// callback that only flips skillsLoading keeps this signature and skips Build.
+			state = append(state, a.chatPreviewSectionState())
 		}
 	case "terminal":
 		state = append(state, snapshotTerminalPreview(a.terminalPreview))

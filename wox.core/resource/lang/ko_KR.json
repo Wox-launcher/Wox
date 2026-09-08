@@ -1023,6 +1023,8 @@
   "ui_ai_chat_stop": "중지",
   "ui_ai_chat_options": "채팅 옵션",
   "ui_ai_chat_select_model_title": "모델 선택",
+  "ui_ai_chat_loading_models": "모델 불러오는 중…",
+  "ui_ai_chat_loading_skills": "스킬 불러오는 중…",
   "ui_ai_chat_configure_tools_title": "도구 구성",
   "ui_ai_chat_tool_status_streaming": "스트리밍 중",
   "ui_ai_chat_tool_status_pending": "대기 중",

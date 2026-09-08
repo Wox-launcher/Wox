@@ -976,6 +976,8 @@
   "ui_ai_chat_stop": "Остановить",
   "ui_ai_chat_options": "Опции чата",
   "ui_ai_chat_select_model_title": "Выбрать модель",
+  "ui_ai_chat_loading_models": "Загрузка моделей…",
+  "ui_ai_chat_loading_skills": "Загрузка навыков…",
   "ui_ai_chat_configure_tools_title": "Настроить инструменты",
   "ui_ai_chat_tool_status_streaming": "Потоковая передача",
   "ui_ai_chat_tool_status_pending": "В ожидании",

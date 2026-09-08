@@ -560,7 +560,7 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	}
 	result := a.results[resultIndex]
 	action := result.Actions[actionIndex]
-	if action.ID == enterChatModeActionID && result.Preview.PreviewType == "chat" {
+	if action.ID == enterChatModeActionID {
 		a.hideActionPanel()
 		a.enterChatMode()
 		return

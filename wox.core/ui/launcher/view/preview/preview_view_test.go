@@ -320,7 +320,7 @@ func TestChatModelSelectorUsesFlutterIconsAndHoverSurface(t *testing.T) {
 	if modelIcon.Source == nil || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
 		t.Fatalf("model chip icons = model %.0f arrow %.0f; want Flutter 16px and 14px SVGs", modelIcon.Width, arrowIcon.Width)
 	}
-	input := ChatInput(ChatInputProps{Width: 400, Height: 98, Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme}).(woxwidget.Container)
+	input := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(0), Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme}).(woxwidget.Container)
 	card := input.Child.(woxwidget.Container)
 	toolbar := card.Child.(woxwidget.Flex).Children[2].(woxwidget.Stack)
 	modelAlign := toolbar.Children[0].Child.(woxwidget.Align)

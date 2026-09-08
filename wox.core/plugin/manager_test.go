@@ -115,6 +115,22 @@ func TestLargeMediaPreviewBypassesRemoteWrapping(t *testing.T) {
 	assert.Equal(t, previewData, result.Preview.PreviewData)
 }
 
+func TestLargeChatAndTerminalPreviewsBypassRemoteWrapping(t *testing.T) {
+	previewData := strings.Repeat("x", previewDataMaxSize+1)
+	for _, previewType := range []string{WoxPreviewTypeChat, WoxPreviewTypeTerminal} {
+		preview := WoxPreview{PreviewType: previewType, PreviewData: previewData}
+		assert.False(t, shouldWrapRemotePreview(preview), previewType)
+
+		result := (&Manager{}).buildResultUI(&QueryResultCache{
+			Result: QueryResult{Id: previewType + "-result", Preview: preview},
+			Query:  Query{SessionId: "session"},
+		}, "query")
+
+		assert.Equal(t, previewType, result.Preview.PreviewType)
+		assert.Equal(t, previewData, result.Preview.PreviewData)
+	}
+}
+
 func Test_QueryShortcut(t *testing.T) {
 	shortcuts := []setting.QueryShortcut{
 		{

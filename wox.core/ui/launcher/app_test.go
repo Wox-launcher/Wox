@@ -127,6 +127,62 @@ func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
 	}
 }
 
+func TestApplyResultsKeepsChatModeWhenPreviewIsStillRemote(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	app.visible = true
+	app.query = newInputQuery("chat ")
+	defer app.cancel()
+
+	path := "/preview?sessionId=s&queryId=q&id=chat"
+	app.previewRequests[path] = true
+	app.applyResults(app.query.QueryID, []queryResult{{
+		ID: "chat",
+		Preview: queryPreview{
+			PreviewType: "remote",
+			PreviewData: path,
+		},
+		Actions: []resultAction{{
+			ID:        enterChatModeActionID,
+			IsDefault: true,
+		}},
+	}}, &queryLayout{ChatMode: true}, nil, nil, 0, true)
+
+	if !app.chatFullscreen {
+		t.Fatal("chat mode should stay fullscreen while the chat preview is still remote-wrapped")
+	}
+	app.reconcileSelectedPreviewOnUI()
+	if !app.chatFullscreen {
+		t.Fatal("unresolved remote preview should not tear down chat fullscreen")
+	}
+}
+
+func TestActivateEnterChatActionIgnoresRemotePreviewType(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	app.visible = true
+	app.query = newInputQuery("chat ")
+	app.layout.ChatMode = true
+	defer app.cancel()
+
+	app.results = []queryResult{{
+		ID: "chat",
+		Preview: queryPreview{
+			PreviewType: "remote",
+			PreviewData: "/preview?sessionId=s&queryId=q&id=chat",
+		},
+		Actions: []resultAction{{
+			ID:        enterChatModeActionID,
+			IsDefault: true,
+		}},
+	}}
+	app.selected = 0
+	app.activateAction(0, 0)
+	if !app.chatFullscreen {
+		t.Fatal("Start Chat should enter fullscreen even when the preview is still remote-wrapped")
+	}
+}
+
 // TestChatPreviewUpdatesPreserveLocalState covers embedded and fullscreen stream updates.
 func TestChatPreviewUpdatesPreserveLocalState(t *testing.T) {
 	for _, fullscreen := range []bool{false, true} {

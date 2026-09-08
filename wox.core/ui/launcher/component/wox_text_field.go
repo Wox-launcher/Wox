@@ -158,6 +158,27 @@ type TextFieldProps struct {
 	caretActive bool
 }
 
+func textFieldVisualLines(value string, window *woxui.Window, style woxui.TextStyle, width float32, richRuns []TextFieldRichRun) []textFieldLine {
+	if style.Size <= 0 {
+		style = woxui.TextStyle{Size: SettingsControlFontSize}
+	}
+	var measurer textFieldMeasurer
+	if window != nil {
+		measurer = window
+	}
+	return textFieldRichLines(value, measurer, style, width, true, richRuns)
+}
+
+// TextFieldVisualLineCount returns wrapped lines using the same rules as WoxTextField.
+func TextFieldVisualLineCount(value string, window *woxui.Window, style woxui.TextStyle, width float32, richRuns []TextFieldRichRun) int {
+	return max(1, len(textFieldVisualLines(value, window, style, width, richRuns)))
+}
+
+// TextFieldVisualLineIndex returns the wrapped line that contains caret.
+func TextFieldVisualLineIndex(value string, caret int, window *woxui.Window, style woxui.TextStyle, width float32, richRuns []TextFieldRichRun) int {
+	return textFieldLineIndex(textFieldVisualLines(value, window, style, width, richRuns), caret)
+}
+
 // WoxTextField builds a retained text field with shared IME, selection, and accessibility behavior.
 func WoxTextField(props TextFieldProps) woxwidget.Widget {
 	if props.MaxLines <= 1 && props.TextAlignmentY == 0 {

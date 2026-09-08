@@ -120,7 +120,7 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 	if keep != "trigger_keyword_conflict" {
 		a.deactivateTriggerConflictPreview()
 	}
-	if keep != "chat" {
+	if !a.keepChatPreview(keep) {
 		a.deactivateChatPreview()
 	}
 	if keep != "terminal" {
@@ -140,4 +140,14 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 		a.deactivateNativeFilePreview()
 	}
 	return false
+}
+
+// keepChatPreview retains the chat surface when the selected preview is still an
+// unresolved remote wrapper. Chat JSON is often large enough to be deferred, and
+// tearing the surface down would drop fullscreen before the payload loads.
+func (a *App) keepChatPreview(keep string) bool {
+	if keep == "chat" {
+		return true
+	}
+	return keep == "remote" && (a.layout.ChatMode || a.chatFullscreen)
 }

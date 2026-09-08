@@ -1021,6 +1021,8 @@
   "ui_ai_chat_stop": "停止",
   "ui_ai_chat_options": "聊天选项",
   "ui_ai_chat_select_model_title": "选择模型",
+  "ui_ai_chat_loading_models": "正在加载模型…",
+  "ui_ai_chat_loading_skills": "正在加载技能…",
   "ui_ai_chat_configure_tools_title": "配置工具",
   "ui_ai_chat_tool_status_streaming": "正在调用",
   "ui_ai_chat_tool_status_pending": "等待执行",

@@ -316,10 +316,7 @@ func (c *aiSettingsController) LoadAIModels(ctx context.Context, service contrac
 	})
 }
 
-// LoadAISkills fetches the enabled skill catalog from core, filters out disabled/empty
-// skills, sorts by source/name, and stores it through SetSkills. onLoaded is invoked on
-// success so the App can reset the chat-preview skill panel selection.
-func (c *aiSettingsController) LoadAISkills(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string, onLoaded func(skills []chatSkill)) {
+func readAISkills(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string) ([]chatSkill, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	loaded, err := service.AISkills(timeoutCtx, sessionID)
 	cancel()
@@ -330,27 +327,39 @@ func (c *aiSettingsController) LoadAISkills(ctx context.Context, service contrac
 			Source: skill.Source, SourceName: skill.SourceName, Error: skill.Error, Enabled: skill.Enabled,
 		}
 	}
-	if err == nil {
-		filtered := make([]chatSkill, 0, len(skills))
-		for _, skill := range skills {
-			if !skill.Enabled || strings.TrimSpace(skill.Name) == "" {
-				continue
-			}
-			filtered = append(filtered, skill)
-		}
-		sort.SliceStable(filtered, func(i, j int) bool {
-			left := filtered[i].SourceName + "\x00" + filtered[i].Source + "\x00" + filtered[i].Name
-			right := filtered[j].SourceName + "\x00" + filtered[j].Source + "\x00" + filtered[j].Name
-			return left < right
-		})
-		skills = filtered
+	if err != nil {
+		return skills, err
 	}
-	c.deps.OnUI("apply AI skill catalog", func() {
-		if err == nil {
-			c.SetSkills(skills)
-		} else {
-			c.SetSkillsError(err.Error())
+	filtered := make([]chatSkill, 0, len(skills))
+	for _, skill := range skills {
+		if !skill.Enabled || strings.TrimSpace(skill.Name) == "" {
+			continue
 		}
+		filtered = append(filtered, skill)
+	}
+	sort.SliceStable(filtered, func(i, j int) bool {
+		left := filtered[i].SourceName + "\x00" + filtered[i].Source + "\x00" + filtered[i].Name
+		right := filtered[j].SourceName + "\x00" + filtered[j].Source + "\x00" + filtered[j].Name
+		return left < right
+	})
+	return filtered, nil
+}
+
+func (c *aiSettingsController) applyAISkills(skills []chatSkill, err error) {
+	if err == nil {
+		c.SetSkills(skills)
+	} else {
+		c.SetSkillsError(err.Error())
+	}
+}
+
+// LoadAISkills fetches the enabled skill catalog from core, filters out disabled/empty
+// skills, sorts by source/name, and stores it through SetSkills. onLoaded is invoked on
+// success so the App can reset the chat-preview skill panel selection.
+func (c *aiSettingsController) LoadAISkills(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string, onLoaded func(skills []chatSkill)) {
+	skills, err := readAISkills(ctx, service, sessionID)
+	c.deps.OnUI("apply AI skill catalog", func() {
+		c.applyAISkills(skills, err)
 		if onLoaded != nil {
 			if err != nil {
 				onLoaded(nil)
