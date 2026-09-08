@@ -8,6 +8,89 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestFilteredSettingsChoicesInsertsGroupHeaders(t *testing.T) {
+	choices := []SettingsChoice{
+		{Value: "groq", Label: "groq", Group: "API"},
+		{Value: "openai", Label: "openai", Group: "API"},
+		{Value: "codex-cli", Label: "codex-cli", Group: "Installed CLI"},
+	}
+
+	visible := filteredSettingsChoices(choices, "")
+	if len(visible) != 5 || !visible[0].header || visible[0].choice.Label != "API" {
+		t.Fatalf("unfiltered list = %#v, want API header first", visible)
+	}
+	if visible[1].choice.Value != "groq" || visible[2].choice.Value != "openai" || visible[3].choice.Label != "Installed CLI" || !visible[3].header || visible[4].originalIndex != 2 {
+		t.Fatalf("grouped list = %#v", visible)
+	}
+
+	visible = filteredSettingsChoices(choices, "codex")
+	if len(visible) != 2 || !visible[0].header || visible[0].choice.Label != "Installed CLI" || visible[1].originalIndex != 2 {
+		t.Fatalf("codex filter = %#v, want Installed CLI header and original index 2", visible)
+	}
+
+	visible = filteredSettingsChoices(choices, "api")
+	if len(visible) != 3 || visible[1].choice.Value != "groq" || visible[2].choice.Value != "openai" {
+		t.Fatalf("group-name filter = %#v, want both API providers", visible)
+	}
+}
+
+func TestSettingsChoiceKeyboardSkipsGroupHeaders(t *testing.T) {
+	choices := []SettingsChoice{
+		{Value: "openai", Label: "openai", Group: "API"},
+		{Value: "codex-cli", Label: "codex-cli", Group: "Installed CLI"},
+	}
+	visible := filteredSettingsChoices(choices, "")
+	if got := settingsChoiceVisibleIndex(visible, "codex-cli"); got != 3 {
+		t.Fatalf("visible index for codex-cli = %d, want 3", got)
+	}
+	if got := settingsChoiceNearestSelectable(visible, 0, 1); got != 1 {
+		t.Fatalf("down from API header = %d, want first API option", got)
+	}
+	if got := settingsChoiceNearestSelectable(visible, 1, 1); got != 3 {
+		t.Fatalf("down from openai = %d, want first CLI option", got)
+	}
+	single := filteredSettingsChoices([]SettingsChoice{{Value: "openai", Label: "openai", Group: "API"}}, "")
+	if got := settingsChoiceNearestSelectable(single, 1, 1); got != 1 {
+		t.Fatalf("wrap from the only option = %d, want the same option", got)
+	}
+	if settingsChoiceContentHeight(visible) != 2*settingsChoiceGroupHeight+2*settingsChoiceRowHeight {
+		t.Fatalf("grouped content height = %.0f", settingsChoiceContentHeight(visible))
+	}
+}
+
+func TestGroupedSettingsChoiceRendersSectionLabel(t *testing.T) {
+	props := SettingsChoiceProps{
+		ID: "providers", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
+		CurrentValue: "openai", Theme: woxcomponent.Theme{ActionHeader: woxui.Color{R: 160, A: 255}},
+		Choices: []SettingsChoice{
+			{Value: "openai", Label: "openai", Group: "API"},
+			{Value: "codex-cli", Label: "codex-cli", Group: "Installed CLI"},
+		},
+	}
+	state := &settingsChoiceState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	if state.selected != 1 {
+		t.Fatalf("initial selected = %d, want first option after the API header", state.selected)
+	}
+
+	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
+	menuScope := stack.Children[1].Child.(woxwidget.FocusScope)
+	menuContent := menuScope.Child.(woxwidget.Semantics).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	scroll := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := scroll.Content.(woxwidget.Flex).Children
+	if len(rows) != 4 {
+		t.Fatalf("row count = %d, want two headers and two options", len(rows))
+	}
+	header := rows[0].(woxwidget.Semantics)
+	if header.Role != woxui.AccessibilityRoleGroup || header.Label != "API" {
+		t.Fatalf("first row = %#v, want a group header", header)
+	}
+	title := header.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Text)
+	if title.Value != "API" || title.Style.Size != woxcomponent.SettingsSectionTitleFontSize || title.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("group label = %#v", title)
+	}
+}
+
 func TestFilteredSettingsChoicesDoesNotSearchInternalJSONValue(t *testing.T) {
 	choices := []SettingsChoice{
 		{Value: `{"Name":"deepseek-v4-flash","Provider":"deepseek"}`, Label: "deepseek-v4-flash"},
@@ -172,5 +255,44 @@ func TestFilterableSettingsChoiceUsesSharedScrollbarAndRoundedEnds(t *testing.T)
 	lastRow := scrollProps.Content.(woxwidget.Flex).Children[len(choices)-1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	if _, ok := lastRow.Children[0].Child.(woxwidget.Painter); !ok {
 		t.Fatalf("last row background type = %T, want rounded-end painter", lastRow.Children[0].Child)
+	}
+}
+
+// TestSettingsChoiceGroupTooltip survives filtering and uses the icon bounds as its anchor.
+func TestSettingsChoiceGroupTooltip(t *testing.T) {
+	const explanation = "Use installed CLIs with their account quota."
+	choices := []SettingsChoice{{Value: "codex-cli", Label: "Codex", Group: "Installed CLI", GroupTooltip: explanation}}
+	visible := filteredSettingsChoices(choices, "codex")
+	if len(visible) != 2 || visible[0].choice.GroupTooltip != explanation {
+		t.Fatalf("filtered group lost tooltip: %+v", visible)
+	}
+	var gotInside bool
+	var gotText string
+	var gotAnchor woxui.Rect
+	props := SettingsChoiceProps{InfoIcon: &woxui.Image{}, OnTooltip: func(inside bool, text string, anchor woxui.Rect) {
+		gotInside, gotText, gotAnchor = inside, text, anchor
+	}}
+	header := settingsChoiceGroupHeader(320, visible[0].choice, 0, props).(woxwidget.Semantics)
+	if header.Description != explanation {
+		t.Fatal("group explanation is missing from accessibility semantics")
+	}
+	children := header.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	if len(children) != 2 {
+		t.Fatalf("group children = %d, want label and info icon", len(children))
+	}
+	hover := children[1].(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	anchor := woxui.Rect{X: 150, Y: 80, Width: 28, Height: 28}
+	hover.OnHoverAt(true, anchor)
+	if !gotInside || gotText != explanation || gotAnchor != anchor {
+		t.Fatal("hover did not forward the group tooltip and icon bounds")
+	}
+	hover.OnHoverAt(false, anchor)
+	if gotInside {
+		t.Fatal("hover exit did not dismiss the tooltip")
+	}
+	visible[0].choice.GroupTooltip = ""
+	header = settingsChoiceGroupHeader(320, visible[0].choice, 0, props).(woxwidget.Semantics)
+	if len(header.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children) != 1 {
+		t.Fatal("group without explanation should not show an icon")
 	}
 }

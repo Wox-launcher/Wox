@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
+	"wox/common"
 
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
@@ -199,6 +201,13 @@ func (a *App) openAISkillPath(path string) {
 
 // newAISettingsForm maps the core settings arrays onto the shared portable table editor.
 func newAISettingsForm(data settingsData) formFieldsState {
+	installed := formTableColumnVisibleWhen{Key: "Name", Values: []string{"claude-cli", "codex-cli", "opencode-cli", "grok-cli"}}
+	api := installed
+	api.Not = true
+	efforts := []formOption{{Label: "i18n:ui_ai_cli_effort_default", Value: ""}}
+	for _, value := range []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"} {
+		efforts = append(efforts, formOption{Label: value, Value: value})
+	}
 	definitions := []formDefinition{
 		{
 			Type: "table",
@@ -206,10 +215,12 @@ func newAISettingsForm(data settingsData) formFieldsState {
 				Key: "AIProviders", Title: "i18n:ui_ai_model", SortColumnKey: "Name", InlineTable: true,
 				Columns: []formTableColumn{
 					{Key: "Status", Label: "i18n:ui_ai_providers_status", Width: 40, Type: "aiModelStatus", HideInUpdate: true},
-					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 100, Type: "select", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 100, Type: "select", Filterable: true, Validators: []formValidator{{Type: "not_empty"}}},
 					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Tooltip: "i18n:ui_ai_providers_alias_tooltip", Width: 120, Type: "text"},
-					{Key: "Host", Label: "i18n:ui_ai_providers_host", Tooltip: "i18n:ui_ai_providers_host_tooltip", Width: 160, Type: "text"},
-					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "text"},
+					{Key: "Host", Label: "i18n:ui_ai_providers_host", Tooltip: "i18n:ui_ai_providers_host_tooltip", Width: 160, Type: "text", VisibleWhen: api},
+					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "text", VisibleWhen: api},
+					{Key: "Executable", Label: "i18n:ui_ai_cli_executable", Tooltip: "i18n:ui_ai_cli_executable_tooltip", Type: "text", HideInTable: true, VisibleWhen: installed},
+					{Key: "ReasoningEffort", Label: "i18n:ui_ai_cli_effort", Tooltip: "i18n:ui_ai_cli_effort_tooltip", Type: "select", SelectOptions: efforts, HideInTable: true, VisibleWhen: installed},
 				},
 			},
 		},
@@ -325,17 +336,23 @@ func applyAIProviderCatalogLocked(fields *formFieldsState, providers []aiProvide
 			continue
 		}
 		seen[name] = true
-		options = append(options, formOption{Label: name, Value: name, Icon: provider.Icon})
+		options = append(options, formOption{Label: name, Value: name, Icon: provider.Icon, Group: aiProviderOptionGroup(name)})
 	}
 	if rows, err := decodeFormTableRows(fields.values["AIProviders"]); err == nil {
 		for _, row := range rows {
 			name := strings.TrimSpace(fmt.Sprint(row["Name"]))
 			if name != "" && !seen[name] {
 				seen[name] = true
-				options = append(options, formOption{Label: name, Value: name})
+				options = append(options, formOption{Label: name, Value: name, Group: aiProviderOptionGroup(name)})
 			}
 		}
 	}
+	for index := range options {
+		if common.ProviderName(options[index].Value).IsInstalledCLI() {
+			options[index].GroupTooltip = "i18n:ui_ai_providers_group_cli_tooltip"
+		}
+	}
+	sortAIProviderOptions(options)
 	for definitionIndex := range fields.definitions {
 		definition := &fields.definitions[definitionIndex]
 		if definition.Type != "table" || definition.Value.Key != "AIProviders" {
@@ -348,6 +365,26 @@ func applyAIProviderCatalogLocked(fields *formFieldsState, providers []aiProvide
 			}
 		}
 	}
+}
+
+// aiProviderOptionGroup classifies a provider as an API host or a locally installed CLI.
+func aiProviderOptionGroup(name string) string {
+	if common.ProviderName(name).IsInstalledCLI() {
+		return "i18n:ui_ai_providers_group_cli"
+	}
+	return "i18n:ui_ai_providers_group_api"
+}
+
+// sortAIProviderOptions keeps API providers first, then installed CLIs, each group alphabetical.
+func sortAIProviderOptions(options []formOption) {
+	sort.SliceStable(options, func(i, j int) bool {
+		iCLI := common.ProviderName(options[i].Value).IsInstalledCLI()
+		jCLI := common.ProviderName(options[j].Value).IsInstalledCLI()
+		if iCLI != jCLI {
+			return !iCLI
+		}
+		return strings.ToLower(options[i].Label) < strings.ToLower(options[j].Label)
+	})
 }
 
 // applyAIProviderOptionsToRowFormLocked refreshes a row editor that opened before the provider request completed.
@@ -372,6 +409,11 @@ func applyAIProviderOptionsToRowFormLocked(fields *formFieldsState, definition f
 // applyAIProviderDefaultHostLocked mirrors the provider-to-default-host mapping used by the UI settings form.
 func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite bool, providers []aiProviderInfo) {
 	if state == nil || state.definition.Value.Key != "AIProviders" || state.rowForm == nil {
+		return
+	}
+	if common.ProviderName(state.rowForm.values["Name"]).IsInstalledCLI() {
+		state.rowForm.values["Host"] = ""
+		state.rowForm.values["ApiKey"] = ""
 		return
 	}
 	if !overwrite && strings.TrimSpace(state.rowForm.values["Host"]) != "" {
@@ -480,7 +522,7 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 func validateAISettingsTableRow(definition formDefinition, fields *formFieldsState) map[string]string {
 	switch definition.Value.Key {
 	case "AIProviders":
-		if fields.values["Name"] != "ollama" && strings.TrimSpace(fields.values["ApiKey"]) == "" {
+		if !common.ProviderName(fields.values["Name"]).IsInstalledCLI() && fields.values["Name"] != "ollama" && strings.TrimSpace(fields.values["ApiKey"]) == "" {
 			return map[string]string{"ApiKey": "API key is required for this provider."}
 		}
 	case "AIMCPServers":

@@ -610,6 +610,24 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 			VisibleTools: debugToolSummaries(opts.Tools),
 		})
 
+		if model.Provider.IsInstalledCLI() {
+			opts.ExecuteTool = func(toolCtx context.Context, option common.AgentToolExecutionOption) (result common.AgentToolExecutionResult) {
+				state := common.ChatStreamData{ToolCalls: []common.ToolCallInfo{option.Call}}
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						util.GetLogger().Error(toolCtx, fmt.Sprintf("AI: installed tool execution panicked: %v", recovered))
+						state.ToolCalls[0].Status = common.ToolCallStatusFailed
+						state.ToolCalls[0].Response = "tool execution failed"
+						option.OnUpdate(state.ToolCalls[0])
+					}
+					result.Call = state.ToolCalls[0]
+				}()
+				result.Result = a.runSingleToolCall(toolCtx, option.Tool, &state, 0, opts, func(update common.ChatStreamData) {
+					option.OnUpdate(update.ToolCalls[0])
+				}, map[string]int{}, iterationNumber, modelCallId)
+				return result
+			}
+		}
 		stream, err := provider.ChatStream(loopCtx, model, conversations, opts)
 		if err != nil {
 			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
@@ -654,7 +672,7 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 		}
 
 		// No tool calls means the model is done.
-		if len(streamedResult.ToolCalls) == 0 {
+		if len(streamedResult.ToolCalls) == 0 || (model.Provider.IsInstalledCLI() && !hasPendingToolCalls(streamedResult.ToolCalls)) {
 			finalResult := *streamedResult
 			finalResult.Status = common.ChatStreamStatusFinished
 			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
@@ -843,7 +861,7 @@ func findVisibleTool(tools []common.Tool, name string) (common.Tool, bool) {
 // runSingleToolCall invokes one tool and records its result. Failures are
 // recorded as the tool-call response so the model can see them when
 // RetryOnFailure is on.
-func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, streamedResult *common.ChatStreamData, toolCallIndex int, options common.ChatOptions, callback common.ChatStreamFunc, retryCounts map[string]int, iteration int, parentCallId string) {
+func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, streamedResult *common.ChatStreamData, toolCallIndex int, options common.ChatOptions, callback common.ChatStreamFunc, retryCounts map[string]int, iteration int, parentCallId string) common.ToolResult {
 	ai.ApplyToolOrigin(&streamedResult.ToolCalls[toolCallIndex], tool)
 	toolCall := streamedResult.ToolCalls[toolCallIndex]
 	util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s", tool.Name, toolCall.Arguments, toolCall.Id))
@@ -893,6 +911,17 @@ func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, strea
 		ToolCallInfo: &finishedToolCall,
 	})
 	callback(*streamedResult)
+	return toolResponse
+}
+
+// hasPendingToolCalls prevents an installed agent's completed tool calls from executing twice.
+func hasPendingToolCalls(calls []common.ToolCallInfo) bool {
+	for _, call := range calls {
+		if call.Status != common.ToolCallStatusSucceeded && call.Status != common.ToolCallStatusFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // buildToolConversations turns a streamed result's tool calls into tool-role
@@ -944,6 +973,9 @@ func debugToolSummaries(tools []common.Tool) []common.AIChatDebugTool {
 
 // buildDebugResponseConversations converts a streamed response into trace-friendly messages.
 func buildDebugResponseConversations(parentCallId string, streamedResult *common.ChatStreamData) []common.Conversation {
+	if len(streamedResult.Conversations) > 0 {
+		return cloneDebugConversations(streamedResult.Conversations)
+	}
 	conversations := []common.Conversation{}
 	if streamedResult.Data != "" || streamedResult.Reasoning != "" {
 		conversations = append(conversations, common.Conversation{

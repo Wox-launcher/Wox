@@ -21,6 +21,7 @@ type ListItemProps struct {
 	Disabled        bool
 	SkipFocus       bool
 	OnTap           func()
+	OnHover         func(bool)
 	Child           woxwidget.Widget
 	Theme           Theme
 }
@@ -54,6 +55,16 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 				rowBackground = *props.HoverBackground
 			} else {
 				rowBackground = controlHoverColor(background, props.Theme.ResultTitle)
+			}
+		}
+		if props.OnHover != nil && !props.Disabled {
+			updateHover := onHoverAt
+			// Forward from the hit-tested row; an enclosing Gesture does not own its hover.
+			onHoverAt = func(inside bool, bounds woxui.Rect) {
+				if updateHover != nil {
+					updateHover(inside, bounds)
+				}
+				props.OnHover(inside)
 			}
 		}
 		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{

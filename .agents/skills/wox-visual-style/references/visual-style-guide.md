@@ -120,6 +120,7 @@ Do not use size to distinguish primary and secondary actions. Keep adjacent acti
 | Checkbox | 18 by 18 visible mark inside at least a 32 by 32 interaction frame |
 | Switch | Preserve approximately 36 by 24 visible geometry inside a 32-high alignment slot |
 | Settings row | 64 high for a label plus one description line and one ordinary control |
+| Settings choice group label | 28 high; 11 semibold uppercase secondary text; not selectable |
 
 Visible checkbox and switch shapes do not stretch to the frame height. Align their interaction frames and visual centers with neighboring fields.
 
@@ -242,9 +243,11 @@ If the widget runtime lacks a reusable pressed-state capability, improve the sha
 Use shared `Wox*` components before primitive widgets. A page may use a primitive `Gesture` for a page-specific region, drag target, or tooltip, but not to recreate a common control.
 
 - Prefer categorized SVG icons from `wox.core/common/icons.go`.
+- For SVG paints that should adapt to Wox appearance, write `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"`. The shared launcher image pipeline resolves this explicit variable to white (`#ffffff`) in dark themes and black (`#000000`) in light themes, including inline, file, and Base64 SVGs. Preserve fixed brand colors and gradients; do not classify authored black/white paints to infer theme behavior or tint an entire mixed-color SVG. Standard SVG `currentColor` keeps its normal semantics and is not this Wox variable. Existing controls that intentionally tint an entire icon retain that behavior.
 - Place Settings help tooltips above their trigger, including table header/cell info icons and choice-picker options. If the top side overflows, flip below the trigger.
 - Use 16-unit icons in ordinary controls, 18 in navigation, and 24 where an item needs stronger identity.
 - Pair unfamiliar icons with text. Give icon-only controls an accessible label and visible hover/focus treatment.
+- Settings choice menus may group long catalogs with 28-high section labels. Labels are chrome, not options.
 - Preserve image aspect ratio and use physical-pixel snapping only in the renderer or platform boundary.
 - Treat emoji and text glyphs as fallbacks, not substitutes for an existing product icon.
 - Keep translated labels visible. Size text buttons to content, constrain fields by expected input length, and truncate secondary content before primary values.

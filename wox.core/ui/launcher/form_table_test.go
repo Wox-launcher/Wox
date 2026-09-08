@@ -159,6 +159,31 @@ func TestFormTableAppPickerLeavesSearchInputToHost(t *testing.T) {
 	}
 }
 
+func TestFormTableFilterableChoicePickerLeavesSearchInputToHost(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "AIProviders"}}
+	form := &formState{formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"AIProviders": "[]"}, true)}
+	rowForm := newFormFieldsState([]formDefinition{
+		{Type: "select", Value: formDefinitionValue{Key: "Name", Filterable: true, Options: []formOption{{Label: "openai", Value: "openai"}}}},
+	}, map[string]string{"Name": "openai"}, true)
+	deps := CommonDeps{}
+	app := &App{
+		form: form, aiSettings: newAISettingsController(deps), pluginSettings: newPluginSettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+		launcherTableEditor: &formTableEditorState{
+			target: &form.formFieldsState, rowForm: &rowForm, choicePicker: &formTableChoicePickerState{fieldIndex: 0}, deletePending: -1,
+		},
+	}
+	key := woxui.KeyEvent{Key: "g", Down: true}
+	if app.onFormTableKey(key) {
+		t.Fatal("printable keys should reach the provider dropdown search field")
+	}
+	if app.onFormTableTextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "groq"}) {
+		t.Fatal("committed text should reach the provider dropdown search field")
+	}
+	if !app.onFormTableKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.launcherTableEditor.choicePicker != nil {
+		t.Fatal("Escape should close the provider dropdown")
+	}
+}
+
 func TestFormTableEmojiPickerLeavesSearchInputToHost(t *testing.T) {
 	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "TrayQueries"}}
 	form := &formState{formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"TrayQueries": "[]"}, true)}

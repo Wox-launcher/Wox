@@ -321,6 +321,7 @@ func newPreviewImageTestApp(show showAppParams, source woxImage, width, height f
 	key := imageKey(source) + fmt.Sprintf("-svg-%d", size)
 	image := &woxui.Image{Width: 16, Height: 16}
 	return &App{
+		palette:          uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
 		show:             show,
 		images:           map[string]*woxui.Image{key: image},
 		imageRequested:   map[string]string{},

@@ -455,6 +455,9 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	var lastChatResponseAt int64
 	var responseId = uuid.NewString()
 	var prevStatus common.ChatStreamDataStatus
+	streamStarted := time.Now()
+	var lastStreamLog time.Time
+	var streamUpdates int
 
 	snapshotChatData := func(force bool) (common.AIChatData, bool) {
 		now := util.GetSystemTimestamp()
@@ -472,20 +475,49 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 
 	// Plain chat exposes runtime discovery tools plus high-frequency web tools.
 	// Other catalog tools become callable after the model requests them with load_tools.
+	if strings.TrimSpace(aiChatData.Title) == "" {
+		titleChat := cloneAIChatDataForUI(aiChatData)
+		util.Go(ctx, "summarize chat", func() {
+			r.summarizeChat(context.WithoutCancel(ctx), titleChat, func(title string) {
+				chatDataMu.Lock()
+				active, running := r.activeChatCancels.Load(aiChatData.Id)
+				storedChat, exists := r.GetChat(ctx, aiChatData.Id)
+				if !exists || storedChat.Title != "" || (running && active != activeCancel) {
+					chatDataMu.Unlock()
+					return
+				}
+				// Update the active stream's state too, so subsequent chunks retain the title.
+				aiChatData.Title = title
+				titleSnapshot, _ := snapshotChatData(true)
+				if !running {
+					titleSnapshot = storedChat
+					titleSnapshot.Title = title
+				}
+				titleSnapshot.IsStreaming = running && active == activeCancel
+				r.appendOrUpdateChatData(titleSnapshot)
+				r.saveChats(ctx)
+				plugin.GetPluginManager().GetUI().SendChatResponse(ctx, titleSnapshot)
+				chatDataMu.Unlock()
+			})
+		})
+	}
 	chatErr := r.api.AIChatStream(chatCtx, aiChatData.Model, runtimeContext.Conversations, common.ChatOptions{
 		Tools:          r.initialToolsForRuntime(ctx),
 		LoopPolicy:     common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
 		DebugTrace:     runtimeContext.DebugTrace,
 		DebugTraceName: "chat",
 	}, func(streamResult common.ChatStreamData) {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream receiving data, status: %s, data: %s", streamResult.Status, streamResult.Data))
-
 		var snapshot common.AIChatData
 		var shouldSendSnapshot bool
-		var finishedSnapshot common.AIChatData
 		var isFinished bool
 
 		chatDataMu.Lock()
+		streamUpdates++
+		// Log bounded progress, not the growing response again for every token.
+		if streamResult.Status != prevStatus || time.Since(lastStreamLog) >= 5*time.Second {
+			util.GetLogger().Info(ctx, fmt.Sprintf("AI: chat stream status=%s elapsedMs=%d updates=%d textBytes=%d reasoningBytes=%d tools=%d", streamResult.Status, time.Since(streamStarted).Milliseconds(), streamUpdates, len(streamResult.Data), len(streamResult.Reasoning), len(streamResult.ToolCalls)))
+			lastStreamLog = time.Now()
+		}
 
 		// Detect the start of a new model call iteration (streaming after a
 		// non-streaming status like running_tool_call). Generate a fresh
@@ -497,7 +529,14 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		prevStatus = streamResult.Status
 
 		// Update conversations and sync to UI.
-		if streamResult.Data != "" || streamResult.Reasoning != "" {
+		if len(streamResult.Conversations) > 0 {
+			for _, conversation := range streamResult.Conversations {
+				if conversation.Role == common.ConversationRoleTool && isInternalChatToolCall(conversation.ToolCallInfo) {
+					continue
+				}
+				r.appendOrUpdateConversation(&aiChatData, conversation)
+			}
+		} else if streamResult.Data != "" || streamResult.Reasoning != "" {
 			r.appendOrUpdateConversationAtEnd(&aiChatData, common.Conversation{
 				Id:        responseId,
 				Role:      common.ConversationRoleAssistant,
@@ -506,7 +545,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				Timestamp: util.GetSystemTimestamp(),
 			})
 		}
-		if len(streamResult.ToolCalls) > 0 {
+		if len(streamResult.Conversations) == 0 && len(streamResult.ToolCalls) > 0 {
 			for _, toolCall := range streamResult.ToolCalls {
 				if isInternalChatToolCall(toolCall) {
 					continue
@@ -531,35 +570,28 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 
 		if streamResult.Status == common.ChatStreamStatusFinished {
 			isFinished = true
-			finishedSnapshot = snapshot
 		}
 		// When the loop ends with an error (e.g. max iterations exceeded),
 		// still persist the chat data so the user can see the conversation
 		// when they reopen the chat later.
 		isTerminalError := streamResult.Status == common.ChatStreamStatusError
-		chatDataMu.Unlock()
-
+		if isFinished || isTerminalError {
+			// Serialize terminal persistence with the asynchronous title result.
+			r.appendOrUpdateChatData(snapshot)
+			r.saveChats(ctx)
+		}
 		if shouldSendSnapshot {
 			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, snapshot)
 		}
+		chatDataMu.Unlock()
 
 		if isFinished {
 			cleanupActiveCancel()
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream finished: %s", streamResult.Data))
-			r.appendOrUpdateChatData(finishedSnapshot)
-			r.saveChats(ctx)
 
-			// Only summarize the chat title if there is no tool call. If any
-			// tool calls are present, the loop has more context to add.
-			if len(streamResult.ToolCalls) == 0 {
-				r.summaryTitleIfNecessary(ctx, finishedSnapshot)
-			}
 			// The loop now continues inside AIChatStream; Chat() is only invoked once.
 		} else if isTerminalError {
 			cleanupActiveCancel()
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream ended with error, saving chat data: %s", streamResult.Data))
-			r.appendOrUpdateChatData(snapshot)
-			r.saveChats(ctx)
+			util.GetLogger().Error(ctx, fmt.Sprintf("AI: chat stream ended with error, saving chat data: %.512s", streamResult.Data))
 		}
 	})
 
@@ -1001,20 +1033,6 @@ func cloneAIConversation(conversation common.Conversation) common.Conversation {
 	return cloned
 }
 
-func (r *AIChatPlugin) summaryTitleIfNecessary(ctx context.Context, aiChatData common.AIChatData) {
-	summarizeIndex := []int{2, 3, 4, 10}
-	for _, index := range summarizeIndex {
-		nonToolConversationCount := lo.CountBy(aiChatData.Conversations, func(conversation common.Conversation) bool {
-			return conversation.Role != common.ConversationRoleTool
-		})
-		if nonToolConversationCount == index {
-			r.summarizeChat(ctx, aiChatData)
-			break
-		}
-	}
-
-}
-
 func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData, conversation common.Conversation) {
 	for i := range aiChatData.Conversations {
 		if aiChatData.Conversations[i].Id == conversation.Id {
@@ -1106,7 +1124,7 @@ func (r *AIChatPlugin) SummarizeChat(ctx context.Context, chatId string) bool {
 		if r.chats[i].Id == chatId {
 			chat := r.chats[i]
 			util.Go(ctx, "summarize chat", func() {
-				r.summarizeChat(ctx, chat)
+				r.summarizeChat(ctx, chat, nil)
 			})
 			return true
 		}
@@ -1255,7 +1273,8 @@ func (r *AIChatPlugin) querySelection(ctx context.Context, query plugin.Query) p
 	}})
 }
 
-func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData) {
+// summarizeChat generates a title; active streams merge it through onTitle to retain live content.
+func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData, onTitle func(string)) {
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Summarizing chat: %s", chat.Id))
 
 	var conversations []common.Conversation
@@ -1274,6 +1293,7 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 		2. The language of the title should be the same as the language of the conversation.
 		3. The title should be a single sentence.
 		4. The response should be only the title, no other text.
+		5. Name the topic; do not answer the question, use tools, or describe your process.
 `,
 		Images:    []common.WoxImage{},
 		Timestamp: util.GetSystemTimestamp(),
@@ -1287,13 +1307,21 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 	}
 
 	r.api.AIChatStream(ctx, chat.Model, conversations, chatOptions, func(streamResult common.ChatStreamData) {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat summarize stream data: %s", streamResult.Data))
 		if streamResult.Status == common.ChatStreamStatusFinished {
 			// Use Data directly since Reasoning is now separated
 			title := streamResult.Data
 			title = strings.ReplaceAll(title, "\n", "")
+			title = strings.TrimSpace(title)
+			if title == "" || len([]rune(title)) > 10 {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("AI: rejected invalid chat title: characters=%d", len([]rune(title))))
+				return
+			}
 
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Summarized chat title: %s", title))
+			if onTitle != nil {
+				onTitle(title)
+				return
+			}
 
 			// update the chat title
 			updatedChat := chat

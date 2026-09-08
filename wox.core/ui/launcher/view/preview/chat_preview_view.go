@@ -476,8 +476,9 @@ func chatHistoryItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 			iconColor = theme.SelectedSubtitle
 			titleColor = theme.SelectedTitle
 		}
-		return woxwidget.Gesture{OnHover: onHover, Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-			ID: item.SelectID, Label: item.Title, OnTap: item.OnSelect, Width: width, Height: height,
+		return woxwidget.Gesture{Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+			OnHover: onHover,
+			ID:      item.SelectID, Label: item.Title, OnTap: item.OnSelect, Width: width, Height: height,
 			Background: &background, HoverBackground: &theme.SelectedBackground, Radius: &radius, Theme: theme,
 			Padding: woxwidget.Insets{Left: 12, Right: 12},
 			Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -524,8 +525,9 @@ func chatHistoryItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 			}
 		},
 	})
-	row := woxwidget.Gesture{OnHover: onHover, Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-		ID: item.SelectID, Label: item.Title, OnTap: item.OnSelect, Selected: item.Selected,
+	row := woxwidget.Gesture{Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+		OnHover: onHover,
+		ID:      item.SelectID, Label: item.Title, OnTap: item.OnSelect, Selected: item.Selected,
 		Width: width, Height: rowHeight, Background: &background, HoverBackground: &theme.SelectedBackground, Radius: &radius, Theme: theme,
 		Padding: woxwidget.Insets{Left: 12, Right: deleteWidth + 16},
 		Child:   woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13}, Color: titleColor}},

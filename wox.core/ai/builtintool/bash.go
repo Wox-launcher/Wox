@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"wox/ai"
 	"wox/common"
+	"wox/util/shell"
 
 	"github.com/tmc/langchaingo/jsonschema"
 )
@@ -29,7 +31,7 @@ func init() {
 func BashTool() common.Tool {
 	return common.Tool{
 		Name:        "bash",
-		Description: "Execute a bash/shell command and return stdout and stderr. Output is truncated to the last 256KB. Optionally provide a timeout in seconds (max 600).",
+		Description: fmt.Sprintf("Execute a command using %s on %s and return stdout and stderr. Use this shell's syntax; cmd uses Windows commands, not Bash or PowerShell syntax. Output is truncated to the last 256KB. Optionally provide a timeout in seconds (max 600).", getShell(), runtime.GOOS),
 		Parameters: jsonschema.Definition{
 			Type: jsonschema.Object,
 			Properties: map[string]jsonschema.Definition{
@@ -57,14 +59,15 @@ func bashCallback(ctx context.Context, args map[string]any) (common.ToolResult, 
 		}
 	}
 
-	var cmd *exec.Cmd
-	shell := getShell()
 	if timeoutSec > 0 {
-		cmdCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 		defer cancel()
-		cmd = exec.CommandContext(cmdCtx, shell, "-c", command)
-	} else {
-		cmd = exec.CommandContext(ctx, shell, "-c", command)
+	}
+	shellPath := getShell()
+	cmd := shell.BuildCommandContext(ctx, shellPath, nil, "-c", command)
+	if runtime.GOOS == "windows" && strings.TrimSuffix(strings.ToLower(filepath.Base(shellPath)), ".exe") == "cmd" {
+		configureBashCMD(cmd, command)
 	}
 
 	var stdout, stderr bytes.Buffer

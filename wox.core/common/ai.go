@@ -12,6 +12,16 @@ import (
 
 type ConversationRole string
 type ProviderName string
+
+// IsInstalledCLI identifies providers that reuse a locally authenticated command.
+func (p ProviderName) IsInstalledCLI() bool {
+	switch p {
+	case "claude-cli", "codex-cli", "opencode-cli", "grok-cli":
+		return true
+	}
+	return false
+}
+
 type ChatStreamDataStatus string
 type ChatThinkingMode string
 
@@ -60,6 +70,9 @@ type ChatStreamData struct {
 	// Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1). Separate from Data for clean processing.
 	Reasoning string
 	ToolCalls []ToolCallInfo
+	// Conversations preserves interleaved assistant/tool output from agent providers.
+	// When absent, consumers use the legacy aggregated fields above.
+	Conversations []Conversation
 }
 
 func (c *ChatStreamData) IsNotFinished() bool {
@@ -421,6 +434,20 @@ type ChatOptions struct {
 	LoopPolicy     LoopPolicy
 	DebugTrace     *AIChatDebugTrace
 	DebugTraceName string
+	// ExecuteTool is installed by the core chat loop for agent transports. It never crosses the SDK wire.
+	ExecuteTool func(context.Context, AgentToolExecutionOption) AgentToolExecutionResult `json:"-"`
+}
+
+// AgentToolExecutionOption routes an installed agent's tool call through Wox's normal executor.
+type AgentToolExecutionOption struct {
+	Tool     Tool
+	Call     ToolCallInfo
+	OnUpdate func(ToolCallInfo)
+}
+
+type AgentToolExecutionResult struct {
+	Result ToolResult
+	Call   ToolCallInfo
 }
 
 type MCPTool struct {

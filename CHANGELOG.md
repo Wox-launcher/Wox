@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.4.3 - 2026-09-08
+
+This release adds structured query hints so Web Search and other commands can collect multiple named inputs with Tab instead of a single free-text box.
+
+- Add
+  - [`Query`] Add structured query hints for command templates so users can fill multi-part commands with argument chips, ghost placeholders, and Tab completion. Web Search templates can collect multiple named inputs, including selected text and clipboard text captured before the launcher takes focus.
+  - [`Feedback`] Add a built-in Feedback plugin to export diagnostics, review crash reports, clear logs before a reproduction, and open GitHub issues or feature requests.
+
+- Improve
+  - [`AI`] Group the provider dropdown into API and Installed CLI, use brand icons for local CLI providers, and allow searching the list
+  - [`AI Chat`] Support popping a conversation into a dedicated window that keeps the unsent draft after the launcher hides, attach selected text, files, and images without mixing them into instructions, and edit `{wox:...}` placeholders as tokens [#4543](https://github.com/Wox-launcher/Wox/issues/4543)
+  - [`File Search`] Show OS recent files for an empty File Search query, using Windows Jump Lists, macOS Spotlight last-used dates, and Linux recently-used.xbel
+  - [`Quick Jump`] Rename File Explorer Search to Quick Jump (`jump`), keep saved paths per OS, skip ignored applications, navigate Wox's own Windows pickers, and inject 32-bit window hooks so 32-bit hosts such as Foxmail and Office work [#4511](https://github.com/Wox-launcher/Wox/issues/4511)
+  - [`App`] Support hide-from-search with live wildcard or selected-app ignore rules and a match preview [#4537](https://github.com/Wox-launcher/Wox/issues/4537), and support Japanese (ja_JP)
+  - [`Clipboard`] Support pasting clipboard images and emoji into the active window [#4538](https://github.com/Wox-launcher/Wox/issues/4538)
+  - [`Plugin`] Support query refinements and static HTML previews, runtime trigger-keyword registration, and a WPM action that copies an AI prompt for creating a plugin
+  - [`Launcher`] Support resetting a result's usage-based ranking from the action panel, group system actions, and validate required fields in query-requirement forms
+  - [`Hotkey`] Improve macOS hotkey recording with an Accessibility permission prompt and a local fallback when global recording is unavailable [#4548](https://github.com/Wox-launcher/Wox/issues/4548)
+  - [`Preview`] Defer large text, Office, and PDF previews behind a details-first gate so rapid selection does not start heavy reads
+  - [`Browser`] Improve browser window identification so tab results stay scoped to the active browser [#4542](https://github.com/Wox-launcher/Wox/issues/4542)
+
+- Fix
+  - [`App`] Fix Linux apps whose icons sit directly in XDG data icon dirs showing the default icon
+  - [`Quick Jump`] Fix Windows Move Items folder choosers and cut hung window-hook waits that delayed dialog navigation [#4511](https://github.com/Wox-launcher/Wox/issues/4511)
+  - [`UI`] Fix hidden WebView renderers being destroyed on Windows memory trim, and clip native file previews under overlays so they match rounded corners
+  - [`Launcher`] Fix caret placement on long query text
+
+- Store
+  - Plugin
+    - [Linkding](https://github.com/Myraxion/Wox.Plugin.Linkding) Search, save, and manage bookmarks from your Linkding instance [@Myraxion](https://github.com/Myraxion)
+    - [GitHub](https://github.com/Wox-launcher/Wox.Plugin.Github) Manage GitHub issues and notifications [@Wox-launcher](https://github.com/Wox-launcher)
+
 ## v2.4.2 - 2026-09-03
 
 This release speeds up File Search on Windows with optional Fast Indexing through an NTFS service, so large volumes stay current without a full crawl.

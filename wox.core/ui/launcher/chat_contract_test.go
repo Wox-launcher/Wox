@@ -48,6 +48,12 @@ func TestChatRenderItemsCollapseCompletedReasoningRound(t *testing.T) {
 	if len(collapsed) != 3 || collapsed[1].kind != "round" || collapsed[1].roundExpanded || !collapsed[2].hideReasoning || !collapsed[2].showMeta {
 		t.Fatalf("collapsed render items = %+v", collapsed)
 	}
+	if collapsed[1].roundStart != 1_000 || collapsed[1].roundEnd != 2_400 {
+		t.Fatalf("round span = %d-%d, want user-to-assistant timestamps", collapsed[1].roundStart, collapsed[1].roundEnd)
+	}
+	if duration := formatChatRoundDuration(collapsed[1].roundStart, collapsed[1].roundEnd); duration != "1s" {
+		t.Fatalf("single-assistant round duration = %q, want 1s", duration)
+	}
 	expanded := chatRenderItems(conversations, false, map[string]bool{collapsed[1].roundID: true})
 	if len(expanded) != 4 || !expanded[1].roundExpanded || expanded[2].conversation.Reasoning != "process" || expanded[2].conversation.Text != "" {
 		t.Fatalf("expanded render items = %+v", expanded)

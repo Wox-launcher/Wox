@@ -297,6 +297,24 @@ func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
 	}
 }
 
+// TestChatHistoryHoverRevealsDelete follows the row's actual pointer handler.
+func TestChatHistoryHoverRevealsDelete(t *testing.T) {
+	item := ChatCatalogItemProps{SelectID: "row", Kind: "history", Title: "Chat", DeleteID: "delete", OnSelect: func() {}, OnDelete: func() {}}
+	var hovered bool
+	view := chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, false, func(inside bool) { hovered = inside }).(woxwidget.Container)
+	row := view.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Stateful)
+	gesture := row.CreateState().Build(woxwidget.StateContext{}, row.Widget).(woxwidget.Gesture)
+	gesture.OnHoverAt(true, woxui.Rect{})
+	if !hovered {
+		t.Fatal("row hover did not reach history state")
+	}
+	view = chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, hovered, nil).(woxwidget.Container)
+	button := view.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if button.Icon == nil {
+		t.Fatal("hovered history row hides delete icon")
+	}
+}
+
 func TestChatHistoryItemOmitsBubbleIcon(t *testing.T) {
 	item := ChatCatalogItemProps{SelectID: "row", Kind: "history", Title: "Suzhou", DeleteID: "delete", OnSelect: func() {}, OnDelete: func() {}}
 	view := chatHistoryItem(item, 260, 46, woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}, false, func(bool) {}).(woxwidget.Container)

@@ -190,6 +190,17 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 	}
 	svgWidth = max(1, svgWidth)
 	svgHeight = max(1, svgHeight)
+	// Capture appearance before asynchronous decoding; keep both cache lookups theme-specific.
+	dark := tint == nil && themeColorIsDark(a.palette.background)
+	// Raster-only sources do not depend on SVG theme variables.
+	switch source.ImageType {
+	case "emoji", "fileicon", "appicon", "theme":
+		dark = false
+	case "absolute":
+		dark = dark && strings.EqualFold(filepath.Ext(source.ImageData), ".svg")
+	case "base64":
+		dark = dark && strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml")
+	}
 	variantKey := imageVariantKey(source, tint)
 	key := imageKey(source)
 	if svgWidth == svgHeight {
@@ -199,6 +210,10 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 	}
 	if tint != nil {
 		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
+	}
+	if dark {
+		key += "-dark"
+		variantKey += "-dark"
 	}
 	a.imageMu.Lock()
 	if a.imageVariants == nil {
@@ -224,12 +239,12 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 	delete(a.imageErrors, key)
 	a.imageMu.Unlock()
 	util.Go(a.lifecycleCtx, "load launcher image", func() {
-		a.loadImage(key, source, tint, svgWidth, svgHeight)
+		a.loadImage(key, source, tint, svgWidth, svgHeight, dark)
 	})
 	return nil
 }
 
-func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth, svgHeight int) {
+func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool) {
 	if source.ImageType == "lazyloadimage" {
 		var payload lazyImagePayload
 		if err := json.Unmarshal([]byte(source.ImageData), &payload); err != nil {
@@ -237,7 +252,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 			a.storeImageError(key, err)
 			return
 		}
-		if placeholder, err := decodeWoxImageWithTintDimensions(payload.Placeholder, tint, svgWidth, svgHeight); err == nil {
+		if placeholder, err := decodeWoxImageWithTintDimensions(payload.Placeholder, tint, svgWidth, svgHeight, dark); err == nil {
 			a.storeImage(key, placeholder)
 		}
 		if payload.Token == "" {
@@ -252,7 +267,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 			return
 		}
 		resolved := woxImage{ImageType: loaded.ImageType, ImageData: loaded.ImageData}
-		image, err := decodeWoxImageWithTintDimensions(resolved, tint, svgWidth, svgHeight)
+		image, err := decodeWoxImageWithTintDimensions(resolved, tint, svgWidth, svgHeight, dark)
 		if err != nil {
 			log.Printf("decode resolved lazy result image: %v", err)
 			a.storeImageError(key, err)
@@ -271,7 +286,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 			return
 		}
 		resolved := woxImage{ImageType: loaded.ImageType, ImageData: loaded.ImageData}
-		image, err := decodeWoxImageWithTintDimensions(resolved, tint, svgWidth, svgHeight)
+		image, err := decodeWoxImageWithTintDimensions(resolved, tint, svgWidth, svgHeight, dark)
 		if err != nil {
 			log.Printf("decode resolved %s result image: %v", source.ImageType, err)
 			a.storeImageError(key, err)
@@ -281,7 +296,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 		return
 	}
 
-	image, err := decodeWoxImageWithTintDimensions(source, tint, svgWidth, svgHeight)
+	image, err := decodeWoxImageWithTintDimensions(source, tint, svgWidth, svgHeight, dark)
 	if err != nil {
 		log.Printf("decode %s result image: %v", source.ImageType, err)
 		a.storeImageError(key, err)
@@ -421,11 +436,11 @@ func decodeWoxImage(source woxImage) (*woxui.Image, error) {
 }
 
 func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*woxui.Image, error) {
-	return decodeWoxImageWithTintDimensions(source, tint, svgSize, svgSize)
+	return decodeWoxImageWithTintDimensions(source, tint, svgSize, svgSize, false)
 }
 
 // decodeWoxImageWithTintDimensions decodes vector sources at their requested width and height.
-func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int) (*woxui.Image, error) {
+func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool) (*woxui.Image, error) {
 	switch source.ImageType {
 	case "absolute":
 		if strings.EqualFold(filepath.Ext(source.ImageData), ".svg") {
@@ -433,7 +448,7 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 			if err != nil {
 				return nil, err
 			}
-			return decodeSVGImage(string(data), svgWidth, svgHeight, tint)
+			return decodeSVGImage(string(data), svgWidth, svgHeight, tint, dark)
 		}
 		file, err := os.Open(source.ImageData)
 		if err != nil {
@@ -451,11 +466,11 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 			return nil, err
 		}
 		if strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml") {
-			return decodeSVGImage(string(pixels), svgWidth, svgHeight, tint)
+			return decodeSVGImage(string(pixels), svgWidth, svgHeight, tint, dark)
 		}
 		return woxui.DecodeImageMax(bytes.NewReader(pixels), max(svgWidth, svgHeight))
 	case "svg":
-		return decodeSVGImage(source.ImageData, svgWidth, svgHeight, tint)
+		return decodeSVGImage(source.ImageData, svgWidth, svgHeight, tint, dark)
 	case "theme":
 		return decodeThemeImage(source.ImageData)
 	case "appicon":
@@ -465,8 +480,13 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 	}
 }
 
-func decodeSVGImage(data string, width, height int, tint *woxui.Color) (*woxui.Image, error) {
-	// Match Flutter/CSS: currentColor defaults to black unless the caller tints the icon.
+func decodeSVGImage(data string, width, height int, tint *woxui.Color, dark bool) (*woxui.Image, error) {
+	// Resolve Wox's opt-in icon color without changing standard SVG currentColor semantics.
+	iconColor := "#000000"
+	if dark {
+		iconColor = "#ffffff"
+	}
+	data = strings.ReplaceAll(data, "var(--wox-theme-icon-color)", iconColor)
 	var currentColor color.Color
 	if tint != nil {
 		currentColor = color.NRGBA{R: tint.R, G: tint.G, B: tint.B, A: tint.A}

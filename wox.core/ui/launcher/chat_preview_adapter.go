@@ -395,6 +395,7 @@ type chatRenderItem struct {
 func chatRenderItems(conversations []chatConversation, streaming bool, expandedRounds map[string]bool) []chatRenderItem {
 	items := make([]chatRenderItem, 0, len(conversations))
 	round := make([]chatConversation, 0)
+	var lastUserTimestamp int64
 	appendVisible := func(messages []chatConversation, showLastMeta bool) {
 		for index := 0; index < len(messages); {
 			if messages[index].Role != "tool" {
@@ -435,11 +436,15 @@ func chatRenderItems(conversations []chatConversation, streaming bool, expandedR
 			firstID := round[0].ID
 			lastID := round[finalIndex].ID
 			roundID := "round:" + firstID + ":" + lastID
-			start := int64(0)
-			for _, message := range round {
-				if message.Role == "assistant" {
-					start = message.Timestamp
-					break
+			// A typical reply is one assistant message, so first==last timestamp.
+			// Measure from the user turn that started this round instead.
+			start := lastUserTimestamp
+			if start <= 0 {
+				for _, message := range round {
+					if message.Timestamp > 0 {
+						start = message.Timestamp
+						break
+					}
 				}
 			}
 			expanded := expandedRounds[roundID]
@@ -461,6 +466,7 @@ func chatRenderItems(conversations []chatConversation, streaming bool, expandedR
 		}
 		if conversation.Role == "user" {
 			closeRound(true)
+			lastUserTimestamp = conversation.Timestamp
 			items = append(items, chatRenderItem{conversation: conversation, showMeta: true})
 			continue
 		}

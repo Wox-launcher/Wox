@@ -59,3 +59,9 @@ The memory reduction depends on four decisions:
 Do not replace the idle trim with a hard two-surface allocation cap. Both existing surfaces can still be owned by Core Animation while the next frame is encoded; refusing a third surface can drop the final frame. Trimming to one visible surface also saves only about 7 MB at the cost of allocating another full-size surface on the next refresh, which turns a stable footprint into allocation churn and input-visible stalls.
 
 For later comparisons, stop every other Wox instance and sample the same release-process PID throughout the run. Use real Wox data, warm up application and image caches, replay deterministic query blocks, wait for the same visible or hidden lifecycle checkpoint, and record at least three samples. `PhysicalFootprintMB` or `footprint --pid <PID> --noCategories` is the primary macOS process metric; pair it with `vmmap <PID> -summary`, `heap -s -H <PID>`, and Go heap profiles when attribution is needed. The retained [workload and sampler](../../.agents/skills/wox-memory-debug/scripts/) should be reused. Do not compare an Activity Monitor spike, a debug build, an isolated layer demo, or a different PID directly with this release baseline.
+
+## SVG theme colors
+
+SVG icons can use `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"` to follow Wox appearance: white in dark themes and black in light themes. Fixed colors remain unchanged, including in SVGs that mix brand colors with this variable. This applies to inline, file, and Base64 SVGs in the shared launcher image pipeline. Controls that explicitly tint an entire icon retain that behavior.
+
+Standard SVG `currentColor` keeps its normal meaning and defaults to black; it is not the Wox theme variable.

@@ -163,10 +163,12 @@ func (q *QueryShortcut) PlaceholderCount() int {
 }
 
 type AIProvider struct {
-	Name   common.ProviderName // see ai.ProviderName
-	Alias  string              // optional, used to distinguish multiple configs for the same provider
-	ApiKey string
-	Host   string
+	Name            common.ProviderName // see ai.ProviderName
+	Alias           string              // optional, used to distinguish multiple configs for the same provider
+	ApiKey          string
+	Host            string
+	Executable      string `json:",omitempty"` // Optional installed CLI path; empty uses executable discovery.
+	ReasoningEffort string `json:",omitempty"` // Empty preserves the installed provider's model default.
 }
 
 const (

@@ -17,14 +17,24 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 			label = option.Value
 		}
 		choice := launcherview.SettingsChoice{Value: option.Value, Label: label}
+		if option.Group != "" {
+			choice.Group = a.translate(option.Group)
+			choice.GroupTooltip = a.translate(option.GroupTooltip)
+		}
 		if option.Icon.ImageType != "" {
 			choice.Leading = a.imageForSize(option.Icon, physicalImageSize(18, imageScale))
 		}
 		choices[index] = choice
 	}
+	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.resultSubtitle, physicalImageSize(16, imageScale))
+	infoIcon := a.imageForTint(settingNavIconSource("about"), &palette.actionHeader, physicalImageSize(14, imageScale))
+	var onTooltip func(bool, string, woxui.Rect)
+	if a.settingsTableEditor != nil {
+		onTooltip = a.setSettingChoiceTooltip
+	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
-		CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
+		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
+		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, InfoIcon: infoIcon, OnTooltip: onTooltip, CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
 	})
 }
 
@@ -61,8 +71,21 @@ func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
 	a.invalidateFormTableWindow()
 }
 
+// formTableChoicePickerFilterable reports whether the open select menu owns a search field.
+func formTableChoicePickerFilterable(state *formTableEditorState) bool {
+	if state == nil || state.choicePicker == nil || state.rowForm == nil {
+		return false
+	}
+	index := state.choicePicker.fieldIndex
+	if index < 0 || index >= len(state.rowForm.definitions) {
+		return false
+	}
+	return state.rowForm.definitions[index].Value.Filterable
+}
+
 // closeFormTableChoicePicker dismisses the menu and restores the row editor's input ownership.
 func (a *App) closeFormTableChoicePicker() {
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	state := a.activeFormTableEditor()
 	textInput := false
 	if state != nil && state.choicePicker != nil {
@@ -88,6 +111,7 @@ func (a *App) chooseFormTableChoice(index int) {
 	if index >= len(definition.Value.Options) {
 		return
 	}
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	state.rowForm.values[definition.Value.Key] = definition.Value.Options[index].Value
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	if definition.Value.Key == "Name" {

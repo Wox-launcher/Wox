@@ -11,6 +11,7 @@ import (
 
 const (
 	settingsChoiceRowHeight    = float32(48)
+	settingsChoiceGroupHeight  = float32(28)
 	settingsChoiceSearchHeight = float32(48)
 	settingsChoiceMenuPadding  = float32(8)
 	settingsChoiceMenuMargin   = float32(12)
@@ -19,11 +20,13 @@ const (
 
 // SettingsChoice is one value displayed by the settings dropdown.
 type SettingsChoice struct {
-	Value    string
-	Label    string
-	Leading  *woxui.Image
-	Trailing string
-	Tooltip  string
+	Value        string
+	Label        string
+	GroupTooltip string
+	Group        string
+	Leading      *woxui.Image
+	Trailing     string
+	Tooltip      string
 }
 
 // SettingsChoiceProps contains the immutable state and actions rendered by the settings dropdown.
@@ -38,6 +41,7 @@ type SettingsChoiceProps struct {
 	Title        string
 	FilterHint   string
 	SearchIcon   *woxui.Image
+	InfoIcon     *woxui.Image
 	CurrentValue string
 	Choices      []SettingsChoice
 	OnChoose     func(int)
@@ -72,9 +76,11 @@ func (s *settingsChoiceState) InitState(_ woxwidget.StateContext, widget any) {
 	props := widget.(SettingsChoiceProps)
 	s.queryController = woxwidget.NewTextEditingController("")
 	s.queryFocusNode = woxwidget.NewFocusNode()
-	s.selected = settingsChoiceCurrentIndex(props.Choices, props.CurrentValue)
+	visible := filteredSettingsChoices(props.Choices, "")
+	s.selected = settingsChoiceVisibleIndex(visible, props.CurrentValue)
 	s.hovered = -1
-	s.scrollController = woxwidget.NewScrollController(max(float32(0), float32(s.selected-4)*settingsChoiceRowHeight))
+	offset := settingsChoiceOffset(visible, s.selected)
+	s.scrollController = woxwidget.NewScrollController(max(float32(0), offset-4*settingsChoiceRowHeight))
 }
 
 // DidUpdateWidget keeps the highlight aligned when the committed business value changes.
@@ -82,10 +88,12 @@ func (s *settingsChoiceState) DidUpdateWidget(_ woxwidget.StateContext, oldWidge
 	oldProps := oldWidget.(SettingsChoiceProps)
 	props := newWidget.(SettingsChoiceProps)
 	if oldProps.CurrentValue != props.CurrentValue {
-		s.selected = settingsChoiceCurrentIndex(props.Choices, props.CurrentValue)
+		visible := filteredSettingsChoices(props.Choices, s.queryController.Text())
+		s.selected = settingsChoiceVisibleIndex(visible, props.CurrentValue)
 		s.hovered = -1
 		s.keyboardSelected = false
-		s.scrollController.JumpTo(max(float32(0), float32(s.selected-4)*settingsChoiceRowHeight))
+		offset := settingsChoiceOffset(visible, s.selected)
+		s.scrollController.JumpTo(max(float32(0), offset-4*settingsChoiceRowHeight))
 	}
 }
 
@@ -98,7 +106,10 @@ func (s *settingsChoiceState) Build(context woxwidget.StateContext, widget any) 
 		s.hovered = -1
 	} else {
 		s.selected = min(max(0, s.selected), len(visible)-1)
-		if s.hovered >= len(visible) {
+		if s.selected >= 0 && visible[s.selected].header {
+			s.selected = settingsChoiceNearestSelectable(visible, s.selected, 1)
+		}
+		if s.hovered >= len(visible) || (s.hovered >= 0 && visible[s.hovered].header) {
 			s.hovered = -1
 		}
 	}
@@ -111,6 +122,7 @@ func (s *settingsChoiceState) Dispose() {}
 type visibleSettingsChoice struct {
 	choice        SettingsChoice
 	originalIndex int
+	header        bool
 }
 
 // buildSettingsChoiceView lays out the anchored surface while State owns all transient interaction data.
@@ -132,7 +144,7 @@ func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoic
 	}
 	maximumMenuHeight := min(settingsChoiceMaxHeight, max(searchHeight+menuPadding*2, props.Height-settingsChoiceMenuMargin*2))
 	maximumListHeight := max(float32(0), maximumMenuHeight-menuPadding*2-searchHeight)
-	listHeight := min(float32(len(visible))*settingsChoiceRowHeight, maximumListHeight)
+	listHeight := min(settingsChoiceContentHeight(visible), maximumListHeight)
 	menuHeight := menuPadding*2 + searchHeight + listHeight
 	menuTop := settingsChoiceMenuTop(props, anchor, menuHeight, listHeight)
 	menu := settingsChoiceMenu(context, props, state, visible, menuWidth, menuHeight, listHeight, menuPadding)
@@ -142,26 +154,89 @@ func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoic
 	}}
 }
 
-// settingsChoiceCurrentIndex resolves the committed value without moving that value into component State.
-func settingsChoiceCurrentIndex(choices []SettingsChoice, value string) int {
-	for index, choice := range choices {
-		if choice.Value == value {
+// settingsChoiceVisibleIndex finds the committed value in the rendered list, skipping group headers.
+func settingsChoiceVisibleIndex(visible []visibleSettingsChoice, value string) int {
+	for index, item := range visible {
+		if !item.header && item.choice.Value == value {
 			return index
 		}
 	}
-	return 0
+	return settingsChoiceFirstSelectable(visible)
 }
 
-// filteredSettingsChoices retains original option indexes for business-value callbacks.
-func filteredSettingsChoices(choices []SettingsChoice, query string) []visibleSettingsChoice {
-	query = strings.ToLower(query)
-	visible := make([]visibleSettingsChoice, 0, len(choices))
-	for index, choice := range choices {
-		if query == "" || strings.Contains(strings.ToLower(choice.Label), query) || strings.Contains(strings.ToLower(choice.Trailing), query) || strings.Contains(strings.ToLower(choice.Tooltip), query) {
-			visible = append(visible, visibleSettingsChoice{choice: choice, originalIndex: index})
+// settingsChoiceFirstSelectable returns the first option row, or -1 when the list is empty.
+func settingsChoiceFirstSelectable(visible []visibleSettingsChoice) int {
+	return settingsChoiceNearestSelectable(visible, -1, 1)
+}
+
+// settingsChoiceNearestSelectable walks from start in direction until it finds an option row.
+func settingsChoiceNearestSelectable(visible []visibleSettingsChoice, start, delta int) int {
+	if len(visible) == 0 || delta == 0 {
+		return -1
+	}
+	index := start
+	for range visible {
+		index += delta
+		if index < 0 {
+			index = len(visible) - 1
+		} else if index >= len(visible) {
+			index = 0
+		}
+		if !visible[index].header {
+			return index
 		}
 	}
+	if start >= 0 && start < len(visible) && !visible[start].header {
+		return start
+	}
+	return -1
+}
+
+func settingsChoiceItemHeight(item visibleSettingsChoice) float32 {
+	if item.header {
+		return settingsChoiceGroupHeight
+	}
+	return settingsChoiceRowHeight
+}
+
+func settingsChoiceOffset(visible []visibleSettingsChoice, index int) float32 {
+	offset := float32(0)
+	for i := 0; i < index && i < len(visible); i++ {
+		offset += settingsChoiceItemHeight(visible[i])
+	}
+	return offset
+}
+
+func settingsChoiceContentHeight(visible []visibleSettingsChoice) float32 {
+	return settingsChoiceOffset(visible, len(visible))
+}
+
+// filteredSettingsChoices retains original option indexes and inserts group headers.
+func filteredSettingsChoices(choices []SettingsChoice, query string) []visibleSettingsChoice {
+	query = strings.ToLower(strings.TrimSpace(query))
+	visible := make([]visibleSettingsChoice, 0, len(choices))
+	lastGroup := ""
+	for index, choice := range choices {
+		if query != "" && !settingsChoiceMatches(choice, query) {
+			continue
+		}
+		if choice.Group != "" && choice.Group != lastGroup {
+			visible = append(visible, visibleSettingsChoice{
+				choice: SettingsChoice{Label: choice.Group, Group: choice.Group, GroupTooltip: choice.GroupTooltip},
+				header: true,
+			})
+			lastGroup = choice.Group
+		}
+		visible = append(visible, visibleSettingsChoice{choice: choice, originalIndex: index})
+	}
 	return visible
+}
+
+func settingsChoiceMatches(choice SettingsChoice, query string) bool {
+	return strings.Contains(strings.ToLower(choice.Label), query) ||
+		strings.Contains(strings.ToLower(choice.Trailing), query) ||
+		strings.Contains(strings.ToLower(choice.Tooltip), query) ||
+		strings.Contains(strings.ToLower(choice.Group), query)
 }
 
 func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHeight, listHeight float32) float32 {
@@ -172,16 +247,13 @@ func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHei
 		}
 		return min(max(settingsChoiceMenuMargin, top), max(settingsChoiceMenuMargin, props.Height-menuHeight-settingsChoiceMenuMargin))
 	}
-	currentIndex := 0
-	for index, choice := range props.Choices {
-		if choice.Value == props.CurrentValue {
-			currentIndex = index
-			break
-		}
-	}
-	initialScroll := max(float32(0), float32(currentIndex-4)*settingsChoiceRowHeight)
-	initialScroll = min(initialScroll, max(float32(0), float32(len(props.Choices))*settingsChoiceRowHeight-listHeight))
-	selectedCenter := settingsChoiceMenuPadding + float32(currentIndex)*settingsChoiceRowHeight - initialScroll + settingsChoiceRowHeight/2
+	visible := filteredSettingsChoices(props.Choices, "")
+	currentIndex := settingsChoiceVisibleIndex(visible, props.CurrentValue)
+	contentHeight := settingsChoiceContentHeight(visible)
+	currentOffset := settingsChoiceOffset(visible, currentIndex)
+	initialScroll := max(float32(0), currentOffset-4*settingsChoiceRowHeight)
+	initialScroll = min(initialScroll, max(float32(0), contentHeight-listHeight))
+	selectedCenter := settingsChoiceMenuPadding + currentOffset - initialScroll + settingsChoiceRowHeight/2
 	top := anchor.Y + anchor.Height/2 - selectedCenter
 	return min(max(settingsChoiceMenuMargin, top), max(settingsChoiceMenuMargin, props.Height-menuHeight-settingsChoiceMenuMargin))
 }
@@ -190,6 +262,10 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 	rows := make([]woxwidget.Widget, 0, max(1, len(visible)))
 	for index, visibleChoice := range visible {
 		choice := visibleChoice.choice
+		if visibleChoice.header {
+			rows = append(rows, settingsChoiceGroupHeader(width, choice, index, props))
+			continue
+		}
 		selected := choice.Value == props.CurrentValue
 		background := props.Theme.ActionBackground
 		foreground := props.Theme.ActionText
@@ -263,7 +339,8 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 					state.hovered = index
 					state.selected = index
 					state.keyboardSelected = false
-					state.scrollController.EnsureVisible(float32(index)*settingsChoiceRowHeight, float32(index+1)*settingsChoiceRowHeight)
+					start := settingsChoiceOffset(visible, index)
+					state.scrollController.EnsureVisible(start, start+settingsChoiceRowHeight)
 				})
 			} else if !inside && state.hovered == index {
 				context.SetState(func() { state.hovered = -1 })
@@ -299,7 +376,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			OnKey: func(event woxui.KeyEvent) bool { return state.handleKey(context, props, visible, event) },
 			OnChanged: func(string) {
 				context.SetState(func() {
-					state.selected = 0
+					state.selected = settingsChoiceFirstSelectable(filteredSettingsChoices(props.Choices, state.queryController.Text()))
 					state.hovered = -1
 					state.keyboardSelected = false
 					state.scrollController.JumpTo(0)
@@ -335,6 +412,33 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 	return woxwidget.FocusScope{Key: "setting-choice-scope", Modal: true, Child: surface}
 }
 
+// settingsChoiceGroupHeader paints a non-selectable category label above option rows.
+func settingsChoiceGroupHeader(width float32, choice SettingsChoice, index int, props SettingsChoiceProps) woxwidget.Widget {
+	key := woxwidget.Key(fmt.Sprintf("setting-choice-group-%d", index))
+	children := []woxwidget.Widget{woxwidget.Text{
+		Value: strings.ToUpper(choice.Label), Style: woxui.TextStyle{Size: woxcomponent.SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionHeader,
+	}}
+	if choice.GroupTooltip != "" && props.InfoIcon != nil && props.OnTooltip != nil {
+		children = append(children, woxwidget.Semantics{
+			AutomationID: string(key) + "-tooltip", Role: woxui.AccessibilityRoleGroup, Label: choice.GroupTooltip,
+			Child: woxwidget.Gesture{ID: string(key) + "-tooltip", OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				props.OnTooltip(inside, choice.GroupTooltip, bounds)
+			}, Child: woxwidget.Align{Width: 28, Height: settingsChoiceGroupHeight, Horizontal: 0.5, Vertical: 0.5,
+				Child: woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14},
+			}},
+		})
+	}
+	return woxwidget.Semantics{
+		Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleGroup, Label: choice.Label, Description: choice.GroupTooltip,
+		Child: woxwidget.Container{
+			Width: width, Height: settingsChoiceGroupHeight, Padding: woxwidget.Insets{Left: 16, Right: 16},
+			Child: woxwidget.Align{Height: settingsChoiceGroupHeight, Vertical: 0.5, Child: woxwidget.Flex{
+				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
+			}},
+		},
+	}
+}
+
 // settingsChoiceRoundedEndBackground keeps menu corner pixels transparent without requiring rounded subtree clipping.
 func settingsChoiceRoundedEndBackground(width, height float32, color woxui.Color, top bool) woxwidget.Widget {
 	const radius = float32(4)
@@ -367,17 +471,18 @@ func (s *settingsChoiceState) handleKey(context woxwidget.StateContext, props Se
 		context.SetState(func() {
 			s.hovered = -1
 			s.keyboardSelected = true
-			s.selected = (s.selected + delta + len(visible)) % len(visible)
-			s.scrollController.EnsureVisible(float32(s.selected)*settingsChoiceRowHeight, float32(s.selected+1)*settingsChoiceRowHeight)
+			s.selected = settingsChoiceNearestSelectable(visible, s.selected, delta)
+			start := settingsChoiceOffset(visible, s.selected)
+			s.scrollController.EnsureVisible(start, start+settingsChoiceRowHeight)
 		})
 		return true
 	case woxui.KeyEnter:
-		if s.selected >= 0 && s.selected < len(visible) && props.OnChoose != nil {
+		if s.selected >= 0 && s.selected < len(visible) && !visible[s.selected].header && props.OnChoose != nil {
 			props.OnChoose(visible[s.selected].originalIndex)
 		}
 		return true
 	case woxui.KeySpace:
-		if !props.Filterable && s.selected >= 0 && s.selected < len(visible) && props.OnChoose != nil {
+		if !props.Filterable && s.selected >= 0 && s.selected < len(visible) && !visible[s.selected].header && props.OnChoose != nil {
 			props.OnChoose(visible[s.selected].originalIndex)
 			return true
 		}

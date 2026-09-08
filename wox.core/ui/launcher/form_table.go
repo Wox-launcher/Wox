@@ -105,6 +105,7 @@ type formTableChoicePickerSnapshot struct {
 	title        string
 	currentValue string
 	options      []formOption
+	filterable   bool
 }
 
 type formTableQueryVariablePickerState struct {
@@ -286,6 +287,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		choicePicker = &formTableChoicePickerSnapshot{
 			fieldIndex: state.choicePicker.fieldIndex, anchor: state.choicePicker.anchor, title: definition.Value.Label,
 			currentValue: state.rowForm.values[definition.Value.Key], options: append([]formOption(nil), definition.Value.Options...),
+			filterable: definition.Value.Filterable,
 		}
 	}
 	var queryVariable *formTableQueryVariablePickerSnapshot
@@ -515,6 +517,7 @@ func formTableColumnDefinition(column formTableColumn, row map[string]any) (form
 		return formDefinition{Type: "checkbox", Value: value}, true
 	case "select":
 		value.Options = append([]formOption(nil), column.SelectOptions...)
+		value.Filterable = column.Filterable
 		return formDefinition{Type: "select", Value: value}, true
 	case "selectAIModel":
 		return formDefinition{Type: "selectAIModel", Value: value}, true
@@ -589,10 +592,10 @@ func formTableColumnVisible(column formTableColumn, values map[string]string) bo
 	current := values[column.VisibleWhen.Key]
 	for _, want := range column.VisibleWhen.Values {
 		if current == want {
-			return true
+			return !column.VisibleWhen.Not
 		}
 	}
-	return false
+	return column.VisibleWhen.Not
 }
 
 func formTableRowDependsOnField(definition formDefinition, key string) bool {
@@ -2073,8 +2076,10 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	if choicePicker != nil {
 		if event.Key == woxui.KeyEscape {
 			a.closeFormTableChoicePicker()
+			return true
 		}
-		return true
+		// Printable keys must reach the native search field while a filterable dropdown is open.
+		return !formTableChoicePickerFilterable(state)
 	}
 	if state.emojiPicker != nil {
 		if event.Key == woxui.KeyEscape {
@@ -2200,5 +2205,5 @@ func (a *App) onFormTableTextInput(_ woxui.TextInputEvent) bool {
 	if state == nil || !a.formTableTargetCurrentLocked(state.target) {
 		return false
 	}
-	return state.appPicker == nil && state.emojiPicker == nil
+	return state.appPicker == nil && state.emojiPicker == nil && !formTableChoicePickerFilterable(state)
 }

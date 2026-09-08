@@ -20,6 +20,38 @@ type chatTestAPI struct {
 	changed      common.PlainQuery
 }
 
+type chatTitleTestAPI struct {
+	emptyChatAPI
+	request  []common.Conversation
+	callback common.ChatStreamFunc
+}
+
+func (a *chatTitleTestAPI) AIChatStream(_ context.Context, _ common.Model, conversations []common.Conversation, _ common.ChatOptions, callback common.ChatStreamFunc) error {
+	a.request, a.callback = conversations, callback
+	return nil
+}
+
+// TestChatTitleFromFirstQuestion needs no assistant response and ignores partial or empty titles.
+func TestChatTitleFromFirstQuestion(t *testing.T) {
+	api := &chatTitleTestAPI{}
+	chat := &AIChatPlugin{api: api}
+	var title string
+	chat.summarizeChat(context.Background(), common.AIChatData{Conversations: []common.Conversation{{Role: common.ConversationRoleUser, Text: "如何编写 Wox 插件？"}}}, func(value string) { title = value })
+	if len(api.request) != 2 || api.request[0].Text != "如何编写 Wox 插件？" {
+		t.Fatalf("unexpected title request: %+v", api.request)
+	}
+	api.callback(common.ChatStreamData{Status: common.ChatStreamStatusStreaming, Data: "partial"})
+	api.callback(common.ChatStreamData{Status: common.ChatStreamStatusFinished, Data: " \n "})
+	api.callback(common.ChatStreamData{Status: common.ChatStreamStatusFinished, Data: "I'll discover the Wox wrapper tools first, then produce only the title.伦敦今日天气如何？"})
+	if title != "" {
+		t.Fatalf("incomplete title applied: %q", title)
+	}
+	api.callback(common.ChatStreamData{Status: common.ChatStreamStatusFinished, Data: " Wox 插件开发\n"})
+	if title != "Wox 插件开发" {
+		t.Fatalf("title = %q", title)
+	}
+}
+
 func (a *chatTestAPI) GetTranslation(ctx context.Context, key string) string {
 	if value := a.translations[key]; value != "" {
 		return value

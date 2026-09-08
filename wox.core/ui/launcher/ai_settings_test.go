@@ -1,9 +1,13 @@
 package launcher
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"wox/ai"
 	"wox/common"
+	"wox/setting"
 	"wox/setting/definition"
 	woxcomponent "wox/ui/launcher/component"
 )
@@ -18,9 +22,12 @@ func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 	if !providers.InlineTable || providers.SortColumnKey != "Name" {
 		t.Fatalf("provider table options = inline %v, sort %q; want inline and Name", providers.InlineTable, providers.SortColumnKey)
 	}
-	assertFormTableColumnWidths(t, providers.Columns, []int{40, 100, 120, 160, 0})
+	assertFormTableColumnWidths(t, providers.Columns[:5], []int{40, 100, 120, 160, 0})
 	if providers.Columns[0].Type != "aiModelStatus" || !providers.Columns[0].HideInUpdate {
 		t.Fatalf("provider status column = type %q, hide in update %v", providers.Columns[0].Type, providers.Columns[0].HideInUpdate)
+	}
+	if providers.Columns[1].Key != "Name" || !providers.Columns[1].Filterable {
+		t.Fatalf("provider name column should be a filterable select, got %+v", providers.Columns[1])
 	}
 
 	builtin := form.definitions[1].Value
@@ -55,6 +62,29 @@ func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 		t.Fatalf("skills table options = inline %v, sort %q, max height %d; want inline, Name, 360", skills.InlineTable, skills.SortColumnKey, skills.MaxHeight)
 	}
 	assertFormTableColumnWidths(t, skills.Columns[:3], []int{200, 100, 400})
+}
+
+// TestInstalledAIProviderFields checks transport switching, credential validation, and persistence.
+func TestInstalledAIProviderFields(t *testing.T) {
+	definition := newAISettingsForm(settingsData{}).definitions[0]
+	for _, name := range []string{"claude-cli", "codex-cli", "opencode-cli", "grok-cli"} {
+		fields, _ := formTableRowFields(definition, map[string]any{"Name": name, "Executable": "C:/tools/agent.exe", "ReasoningEffort": "high"})
+		assertFormFieldKeys(t, fields, []string{"Name", "Alias", "Executable", "ReasoningEffort"})
+		if errors := validateAISettingsTableRow(definition, &fields); len(errors) != 0 {
+			t.Fatalf("%s requires API credentials: %v", name, errors)
+		}
+		row := formTableRowFromFields(definition, &fields, nil)
+		if row["Executable"] != "C:/tools/agent.exe" || row["ReasoningEffort"] != "high" {
+			t.Fatalf("CLI fields lost: %+v", row)
+		}
+		fields.values["Name"] = "openai"
+		state := &formTableEditorState{definition: definition, rowForm: &fields}
+		applyFormTableRowVisibleFieldsLocked(state)
+		assertFormFieldKeys(t, *state.rowForm, []string{"Name", "Alias", "Host", "ApiKey"})
+		if len(validateAISettingsTableRow(definition, state.rowForm)) == 0 {
+			t.Fatal("OpenAI must still require an API key")
+		}
+	}
 }
 
 func TestBuiltinSkillViewRowIsReadOnly(t *testing.T) {
@@ -190,11 +220,60 @@ func TestApplyAIProviderCatalogLockedCarriesIcons(t *testing.T) {
 	if len(options) != 2 {
 		t.Fatalf("provider options = %d, want 2", len(options))
 	}
-	if options[0].Value != "openai" || options[0].Icon.ImageType != "url" || options[0].Icon.ImageData != "https://example.com/openai.svg" {
-		t.Fatalf("openai option icon not carried: %+v", options[0])
+	byValue := map[string]formOption{}
+	for _, option := range options {
+		byValue[option.Value] = option
 	}
-	if options[1].Value != "ollama" || options[1].Icon.ImageType != "" {
-		t.Fatalf("ollama option should have an empty icon: %+v", options[1])
+	openai := byValue["openai"]
+	if openai.Icon.ImageType != "url" || openai.Icon.ImageData != "https://example.com/openai.svg" {
+		t.Fatalf("openai option icon not carried: %+v", openai)
+	}
+	if openai.Group != "i18n:ui_ai_providers_group_api" {
+		t.Fatalf("openai group = %q, want API", openai.Group)
+	}
+	if options[1].Value != "openai" || options[0].Value != "ollama" {
+		t.Fatalf("API providers should sort alphabetically, got %q then %q", options[0].Value, options[1].Value)
+	}
+	if byValue["ollama"].Icon.ImageType != "" {
+		t.Fatalf("ollama option should have an empty icon: %+v", byValue["ollama"])
+	}
+}
+
+func TestApplyAIProviderCatalogLockedGroupsCLIAfterAPI(t *testing.T) {
+	form := newAISettingsForm(settingsData{})
+	applyAIProviderCatalogLocked(&form, []aiProviderInfo{
+		{Name: "codex-cli"},
+		{Name: "openai"},
+		{Name: "claude-cli"},
+		{Name: "groq"},
+	})
+	var options []formOption
+	for _, column := range form.definitions[0].Value.Columns {
+		if column.Key == "Name" {
+			options = column.SelectOptions
+		}
+	}
+	got := make([]string, len(options))
+	for index, option := range options {
+		got[index] = option.Value
+		if common.ProviderName(option.Value).IsInstalledCLI() && option.GroupTooltip != "i18n:ui_ai_providers_group_cli_tooltip" {
+			t.Fatalf("CLI option %s missing group explanation", option.Value)
+		}
+		if option.Group == "" {
+			t.Fatalf("option %s missing group", option.Value)
+		}
+	}
+	want := []string{"groq", "openai", "claude-cli", "codex-cli"}
+	if len(got) != len(want) {
+		t.Fatalf("provider options = %v, want %v", got, want)
+	}
+	for index, name := range want {
+		if got[index] != name {
+			t.Fatalf("provider options = %v, want %v", got, want)
+		}
+	}
+	if options[0].Group != "i18n:ui_ai_providers_group_api" || options[2].Group != "i18n:ui_ai_providers_group_cli" {
+		t.Fatalf("groups = %q / %q, want API then Installed CLI", options[0].Group, options[2].Group)
 	}
 }
 
@@ -213,5 +292,42 @@ func TestFromCoreSelectOptionsCarriesIcons(t *testing.T) {
 	}
 	if converted[1].Icon.ImageType != "" {
 		t.Fatalf("second option should have an empty icon: %+v", converted[1])
+	}
+}
+
+func TestAIProviderIconsDeclareWoxThemeIconColor(t *testing.T) {
+	ctx := context.Background()
+	themeFollowers := []struct {
+		name string
+		icon common.WoxImage
+	}{
+		{"openai", ai.NewOpenAIClient(ctx, setting.AIProvider{Name: "openai"}).GetIcon()},
+		{"claude-cli", ai.NewClaudeCodeCLIClient(ctx, setting.AIProvider{Name: "claude-cli"}).GetIcon()},
+		{"codex-cli", ai.NewCodexCLIClient(ctx, setting.AIProvider{Name: "codex-cli"}).GetIcon()},
+		{"grok-cli", ai.NewGrokCLIClient(ctx, setting.AIProvider{Name: "grok-cli"}).GetIcon()},
+		{"opencode-cli", ai.NewOpenCodeCLIClient(ctx, setting.AIProvider{Name: "opencode-cli"}).GetIcon()},
+		{"groq", ai.NewGroqProvider(ctx, setting.AIProvider{Name: "groq"}).GetIcon()},
+		{"ollama", ai.NewOllamaProvider(ctx, setting.AIProvider{Name: "ollama"}).GetIcon()},
+		{"openrouter", ai.NewOpenRouterProvider(ctx, setting.AIProvider{Name: "openrouter"}).GetIcon()},
+	}
+	for _, provider := range themeFollowers {
+		if !strings.Contains(provider.icon.ImageData, `fill="var(--wox-theme-icon-color)"`) {
+			t.Fatalf("%s should declare var(--wox-theme-icon-color)", provider.name)
+		}
+	}
+
+	brandIcons := []struct {
+		name string
+		icon common.WoxImage
+	}{
+		{"google", ai.NewGoogleProvider(ctx, setting.AIProvider{Name: "google"}).GetIcon()},
+		{"deepseek", ai.NewDeepSeekProvider(ctx, setting.AIProvider{Name: "deepseek"}).GetIcon()},
+		{"minimax", ai.NewMiniMaxProvider(ctx, setting.AIProvider{Name: "minimax"}).GetIcon()},
+		{"siliconflow", ai.NewSiliconFlowProvider(ctx, setting.AIProvider{Name: "siliconflow"}).GetIcon()},
+	}
+	for _, provider := range brandIcons {
+		if strings.Contains(provider.icon.ImageData, "var(--wox-theme-icon-color)") {
+			t.Fatalf("%s should keep its authored fill", provider.name)
+		}
 	}
 }

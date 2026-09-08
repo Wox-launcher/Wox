@@ -54,7 +54,7 @@ func TestDecodeWoxImagePreservesRectangularSVGDimensions(t *testing.T) {
 	image, err := decodeWoxImageWithTintDimensions(woxImage{
 		ImageType: "svg",
 		ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="18" viewBox="0 0 96 18"><rect width="96" height="18" fill="#ffffff"/></svg>`,
-	}, nil, 192, 36)
+	}, nil, 192, 36, false)
 	if err != nil {
 		t.Fatalf("decode rectangular SVG: %v", err)
 	}
@@ -125,6 +125,7 @@ func TestImageForSizeKeepsPreviousResolutionWhileLoadingNewOne(t *testing.T) {
 	newKey := variantKey + "-svg-48"
 	oldImage := &woxui.Image{Width: 32, Height: 32}
 	app := &App{
+		palette:          uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
 		images:           map[string]*woxui.Image{oldKey: oldImage},
 		imageRequested:   map[string]string{newKey: source.ImageData},
 		imageVariants:    map[string]string{variantKey: oldKey},
@@ -261,6 +262,28 @@ func decodeLauncherTestGIF(t *testing.T) *woxui.Image {
 	return decoded
 }
 
+func TestDecodeSVGImageCurrentColorDefaultsToBlack(t *testing.T) {
+	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="currentColor"/></svg>`}
+	image, err := decodeWoxImageWithTintDimensions(source, nil, 10, 10, true)
+	if err != nil {
+		t.Fatalf("decode currentColor SVG: %v", err)
+	}
+	pixel := image.RGBAAt(5, 5)
+	if pixel.R != 0 || pixel.G != 0 || pixel.B != 0 || pixel.A != 255 {
+		t.Fatalf("untinted currentColor pixel = %+v, want black", pixel)
+	}
+
+	tint := woxui.Color{R: 244, G: 247, B: 250, A: 255}
+	tinted, err := decodeWoxImageWithTint(source, &tint, 10)
+	if err != nil {
+		t.Fatalf("decode tinted currentColor SVG: %v", err)
+	}
+	pixel = tinted.RGBAAt(5, 5)
+	if pixel.R != tint.R || pixel.G != tint.G || pixel.B != tint.B || pixel.A != tint.A {
+		t.Fatalf("tinted currentColor pixel = %+v, want %+v", pixel, tint)
+	}
+}
+
 func TestIsLoadingIconMatchesSharedLoadingSVG(t *testing.T) {
 	if !isLoadingIcon(fromCoreImage(common.LoadingIcon)) {
 		t.Fatal("shared LoadingIcon should be recognized as a loading placeholder")
@@ -279,5 +302,44 @@ func TestImageCacheReplaceUpdatesByteCounter(t *testing.T) {
 	app.insertImageLocked("photo", &woxui.Image{Width: 20, Height: 20})
 	if got := app.imageCacheByteSizeLocked(); got != 1600 {
 		t.Fatalf("replaced cache bytes = %d, want 1600", got)
+	}
+}
+
+// TestSVGWoxThemeIconColorFollowsAppearance verifies opt-in paints without recoloring the brand fill.
+func TestSVGWoxThemeIconColorFollowsAppearance(t *testing.T) {
+	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><path fill="var(--wox-theme-icon-color)" d="M0 0h10v10H0z"/><path fill="#4D6BFE" d="M10 0h10v10H10z"/></svg>`}
+	for _, dark := range []bool{false, true} {
+		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 20, 10, dark)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := uint8(0)
+		if dark {
+			want = 255
+		}
+		if got := decoded.RGBAAt(5, 5); got.R != want || got.G != want || got.B != want || got.A != 255 {
+			t.Fatalf("dark=%v: var(--wox-theme-icon-color) = %+v", dark, got)
+		}
+		if got := decoded.RGBAAt(15, 5); got.R != 0x4d || got.G != 0x6b || got.B != 0xfe || got.A != 255 {
+			t.Fatalf("dark=%v: brand color = %+v", dark, got)
+		}
+	}
+}
+
+func TestImageCacheSeparatesAppearance(t *testing.T) {
+	source := woxImage{ImageType: "svg", ImageData: `<svg fill="var(--wox-theme-icon-color)"/>`}
+	key := imageKey(source) + "-svg-18"
+	light, dark := &woxui.Image{}, &woxui.Image{}
+	app := &App{images: map[string]*woxui.Image{key: light, key + "-dark": dark}, imageLastUsed: map[string]uint64{}}
+	for _, isDark := range []bool{false, true, false} {
+		app.palette.background = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+		want := light
+		if isDark {
+			app.palette.background = woxui.Color{A: 255}
+			want = dark
+		}
+		if got := app.imageForSize(source, 18); got != want {
+			t.Fatalf("dark=%v: reused the wrong appearance", isDark)
+		}
 	}
 }

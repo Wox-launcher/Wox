@@ -225,6 +225,9 @@ func (a *App) dismissLauncherHoverTooltipsOnUI() {
 
 // hideNativeHoverTooltip closes one named overlay and forgets its last shown trigger.
 func (a *App) hideNativeHoverTooltip(name, job string) {
+	if a.services == nil {
+		return
+	}
 	util.Go(a.lifecycleCtx, job, func() {
 		// Service calls can synchronously enter the native UI thread and emit
 		// another hover callback. Serialize them separately from tooltip state so

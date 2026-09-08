@@ -489,7 +489,11 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	}
 	var valueLeading *woxui.Image
 	if source := item.icons[item.value]; source.ImageData != "" {
-		valueLeading = a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, imageScale))
+		if item.preserveIconColor {
+			valueLeading = a.imageForSize(source, physicalImageSize(18, imageScale))
+		} else {
+			valueLeading = a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, imageScale))
+		}
 	}
 	return launcherview.SettingRow(launcherview.SettingRowProps{
 		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,

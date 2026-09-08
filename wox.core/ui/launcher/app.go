@@ -2123,6 +2123,8 @@ type formDefinitionValue struct {
 	Suffix       string `json:"Suffix"`
 	DefaultValue string `json:"DefaultValue"`
 	Tooltip      string `json:"Tooltip"`
+	// Filterable shows a search field in a select dropdown.
+	Filterable bool `json:"Filterable,omitempty"`
 	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
 	ColumnType string `json:"ColumnType"`
 	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
@@ -2163,17 +2165,19 @@ type formStatsRow struct {
 }
 
 type formTableColumn struct {
-	Key                string          `json:"Key"`
-	Label              string          `json:"Label"`
-	Tooltip            string          `json:"Tooltip"`
-	Width              int             `json:"Width"`
-	Type               string          `json:"Type"`
-	Validators         []formValidator `json:"Validators"`
-	SelectOptions      []formOption    `json:"SelectOptions"`
-	TextMaxLines       int             `json:"TextMaxLines"`
-	HideInTable        bool            `json:"HideInTable"`
-	HideInUpdate       bool            `json:"HideInUpdate"`
-	AllowedHotkeyKinds []string        `json:"AllowedHotkeyKinds"`
+	Key           string          `json:"Key"`
+	Label         string          `json:"Label"`
+	Tooltip       string          `json:"Tooltip"`
+	Width         int             `json:"Width"`
+	Type          string          `json:"Type"`
+	Validators    []formValidator `json:"Validators"`
+	SelectOptions []formOption    `json:"SelectOptions"`
+	// Filterable shows a search field in this column's select dropdown.
+	Filterable         bool     `json:"Filterable,omitempty"`
+	TextMaxLines       int      `json:"TextMaxLines"`
+	HideInTable        bool     `json:"HideInTable"`
+	HideInUpdate       bool     `json:"HideInUpdate"`
+	AllowedHotkeyKinds []string `json:"AllowedHotkeyKinds"`
 	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
 	EmptyAsZero bool `json:"EmptyAsZero"`
 	// VisibleWhen hides the column in the add/edit dialog unless another field matches.
@@ -2188,22 +2192,26 @@ type formTableColumn struct {
 type formTableColumnVisibleWhen struct {
 	Key    string   `json:"Key"`
 	Values []string `json:"Values"`
+	Not    bool     `json:"Not,omitempty"`
 }
 
 type formOption struct {
-	Label            string   `json:"Label"`
-	Value            string   `json:"Value"`
-	Icon             woxImage `json:"Icon"`
-	ID               string   `json:"ID"`
-	DisplayName      string   `json:"DisplayName"`
-	Description      string   `json:"Description"`
-	Languages        string   `json:"Languages"`
-	Recommended      bool     `json:"Recommended"`
-	Available        bool     `json:"Available"`
-	Status           string   `json:"Status"`
-	DownloadProgress int      `json:"DownloadProgress"`
-	SizeMB           int      `json:"SizeMB"`
-	Error            string   `json:"Error"`
+	Label string   `json:"Label"`
+	Value string   `json:"Value"`
+	Icon  woxImage `json:"Icon"`
+	// Group is a translated or i18n section label shown above this option.
+	Group            string `json:"Group,omitempty"`
+	GroupTooltip     string `json:"GroupTooltip,omitempty"`
+	ID               string `json:"ID"`
+	DisplayName      string `json:"DisplayName"`
+	Description      string `json:"Description"`
+	Languages        string `json:"Languages"`
+	Recommended      bool   `json:"Recommended"`
+	Available        bool   `json:"Available"`
+	Status           string `json:"Status"`
+	DownloadProgress int    `json:"DownloadProgress"`
+	SizeMB           int    `json:"SizeMB"`
+	Error            string `json:"Error"`
 }
 
 type formValidator struct {
