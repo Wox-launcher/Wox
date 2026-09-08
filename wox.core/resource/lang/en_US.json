@@ -3026,6 +3026,7 @@
   "notes_format_bullet": "Bulleted list",
   "notes_format_ordered": "Numbered list",
   "notes_format_task": "Task list",
+  "notes_reorder_task": "Reorder task",
   "notes_format_quote": "Quote",
   "notes_format_divider": "Divider",
   "notes_format_table": "Table",

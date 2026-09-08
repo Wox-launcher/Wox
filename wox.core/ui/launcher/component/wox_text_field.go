@@ -126,6 +126,10 @@ type TextFieldProps struct {
 	OnChanged          func(string)
 	OnSelectionChanged func(woxui.TextSelection)
 	OnTapOffset        func(int) bool
+	// TrailingHandle shows a drag affordance in the left gutter of the Start-End block.
+	TrailingHandle *TextFieldTrailingHandle
+	// OnHoverOffset reports the rune under the pointer so a block handle can follow hover.
+	OnHoverOffset func(offset int, inside bool)
 	// OnDismissRun removes a dismissible rich run. Returning true consumes the tap.
 	OnDismissRun func(start, end int) bool
 	// OnEditRun expands a dismissible rich run for in-place editing. Returning true consumes the tap.
@@ -156,6 +160,26 @@ type TextFieldProps struct {
 	// caretActive is the declared Focused value. CaretPainter uses it so Boundary
 	// verify shadows (a fresh unfocused FocusNode) match the live tree.
 	caretActive bool
+	// handleDragging and handleDragLocalY keep the reorder icon under the pointer
+	// without moving the gesture target, so pan coordinates stay stable.
+	handleDragging       bool
+	handleDragLocalY     float32
+	onTrailingHandleDrag func(localY float32, ended bool)
+}
+
+// TextFieldTrailingHandle is a left-gutter drag control owned by one rune range.
+type TextFieldTrailingHandle struct {
+	Start        int
+	End          int
+	Size         float32
+	Label        string
+	Preview      string
+	Active       bool
+	ShowDropLine bool
+	DropLineY    float32
+	OnPanStart   func()
+	OnPanUpdate  func(contentY float32)
+	OnPanEnd     func()
 }
 
 func textFieldVisualLines(value string, window *woxui.Window, style woxui.TextStyle, width float32, richRuns []TextFieldRichRun) []textFieldLine {
@@ -230,6 +254,8 @@ type textFieldState struct {
 	dragNotifySelect    func()
 	dragScrollScheduled bool
 	dragPostFrame       func(func())
+	handleDragging      bool
+	handleDragLocalY    float32
 }
 
 // InitState creates fallback controller and focus objects when the caller does not supply them.
@@ -754,6 +780,18 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			})
 		}
 	}
+	props.handleDragging = s.handleDragging
+	props.handleDragLocalY = s.handleDragLocalY
+	props.onTrailingHandleDrag = func(localY float32, ended bool) {
+		context.SetState(func() {
+			s.handleDragging = !ended
+			if ended {
+				s.handleDragLocalY = 0
+			} else {
+				s.handleDragLocalY = localY
+			}
+		})
+	}
 	if props.OnDismissRun == nil {
 		return buildWoxTextField(props, realState, copySelection, cutSelection, pasteClipboard, runContextAction)
 	}
@@ -1058,7 +1096,22 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		}
 		return textFieldDismissibleHit(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, contentPoint(position), props.dismissHoverProgress, props.dismissHoverStart)
 	}
-	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, CursorAt: func(position woxui.Point) woxui.PointerCursor {
+	onHoverAt := props.onHoverAt
+	if props.OnHoverOffset != nil {
+		reportHover := props.onHoverAt
+		onHoverAt = func(inside bool, bounds woxui.Rect) {
+			if !inside {
+				props.OnHoverOffset(0, false)
+			}
+			if reportHover != nil {
+				reportHover(inside, bounds)
+			}
+		}
+	}
+	content := woxwidget.Gesture{ID: props.ID, CoverHover: props.OnHoverOffset != nil, Cursor: pointerCursor, CursorAt: func(position woxui.Point) woxui.PointerCursor {
+		if props.OnHoverOffset != nil {
+			props.OnHoverOffset(offsetAt(position), true)
+		}
 		start, end, action, ok := dismissHit(position)
 		if props.onDismissHover != nil {
 			props.onDismissHover(start, end, ok)
@@ -1070,7 +1123,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 			return props.CursorAtOffset(offset)
 		}
 		return pointerCursor
-	}, OnHoverAt: props.onHoverAt, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
+	}, OnHoverAt: onHoverAt, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
 		}
@@ -1140,17 +1193,8 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 			return
 		}
 		props.onSecondaryTap(windowPos)
-	}, Child: woxwidget.Container{
-		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
-		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.caretActive, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
-			if state.Text == "" && state.Composition == "" && props.Hint != "" {
-				displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
-			}
-			if props.Window != nil {
-				drawTextField(displayList, bounds, state, style, props.RichRuns, textColor, props.Theme, focused, caretVisible, maxLines, props.LineHeight, props.verticalOffset, props.TextAlignmentY, softWrap, props.Window)
-			}
-		}},
-		}}}
+	}, Child: textFieldInnerContent(props, state, style, textColor, padding, radius, background, innerWidth, innerHeight, height, maxLines, softWrap),
+	}
 	key := woxwidget.Key(props.ID)
 	focusRingColor := props.FocusRingColor
 	if focusRingColor.A == 0 && props.BorderWidth > 0 {
@@ -1197,6 +1241,224 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		Child: content,
 	}
 	return field
+}
+
+// textFieldInnerContent stacks an optional left-gutter handle over the padded field.
+func textFieldInnerContent(props TextFieldProps, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, padding woxwidget.Insets, radius float32, background woxui.Color, innerWidth, innerHeight, height float32, maxLines int, softWrap bool) woxwidget.Widget {
+	painter := woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.caretActive, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
+		if state.Text == "" && state.Composition == "" && props.Hint != "" {
+			displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
+		}
+		if props.Window != nil {
+			drawTextFieldTrailingHandleHighlight(displayList, bounds, state, style, props, softWrap)
+			drawTextField(displayList, bounds, state, style, props.RichRuns, textColor, props.Theme, focused, caretVisible, maxLines, props.LineHeight, props.verticalOffset, props.TextAlignmentY, softWrap, props.Window)
+			drawTextFieldTrailingHandleDropLine(displayList, bounds, props)
+		}
+	}}
+	content := woxwidget.Container{
+		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
+		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: painter},
+	}
+	handle := textFieldTrailingHandleWidget(props, state, style, innerWidth, innerHeight, padding.Left, maxLines, softWrap)
+	if handle == nil {
+		return content
+	}
+	handleLeft := padding.Left + handle.bounds.X
+	handleTop := padding.Top + handle.bounds.Y
+	fieldHandle := handle.bounds
+	fieldHandle.X, fieldHandle.Y = handleLeft, handleTop
+	children := []woxwidget.StackChild{
+		{Child: content},
+		{Left: handleLeft, Top: handleTop, Child: handle.widget},
+	}
+	if ghost, left, top, ok := textFieldReorderGhost(props, fieldHandle, props.Width, height, textColor, style); ok {
+		children = append(children, woxwidget.StackChild{Left: left, Top: top, Child: ghost})
+	}
+	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
+}
+
+type textFieldHandleOverlay struct {
+	bounds woxui.Rect
+	widget woxwidget.Widget
+}
+
+// textFieldTrailingHandleWidget places the drag handle in the left gutter of the first line.
+func textFieldTrailingHandleWidget(props TextFieldProps, state woxui.TextEditingState, style woxui.TextStyle, innerWidth, innerHeight, leadingPad float32, maxLines int, softWrap bool) *textFieldHandleOverlay {
+	spec := props.TrailingHandle
+	if spec == nil || props.ReadOnly || props.Disabled || props.Window == nil || spec.Start > spec.End {
+		return nil
+	}
+	size := spec.Size
+	if size <= 0 {
+		size = 16
+	}
+	bounds, ok := textFieldTrailingHandleBounds(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, innerHeight, leadingPad, spec.Start, spec.End, size, softWrap)
+	if !ok {
+		return nil
+	}
+	color := props.Theme.ResultSubtitle
+	if color.A == 0 {
+		color = props.Theme.PreviewText
+	}
+	id := props.ID + ".reorder"
+	label := spec.Label
+	if label == "" {
+		label = "Reorder"
+	}
+	onPanStart, onPanUpdate, onPanEnd := spec.OnPanStart, spec.OnPanUpdate, spec.OnPanEnd
+	onHandleDrag := props.onTrailingHandleDrag
+	handleTop := bounds.Y
+	verticalOffset := props.verticalOffset
+	contentYAt := func(position woxui.Point) float32 {
+		return handleTop + position.Y + verticalOffset
+	}
+	icon := woxwidget.Widget(woxwidget.Align{Width: size, Height: size})
+	if !props.handleDragging {
+		icon = woxwidget.Align{Width: size, Height: size, Horizontal: 0.5, Vertical: 0.5, Child: GripDotsGlyph(16, color)}
+	}
+	return &textFieldHandleOverlay{bounds: bounds, widget: woxwidget.Semantics{
+		Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: label,
+		Child: woxwidget.Gesture{ID: id, Cursor: woxui.PointerCursorMove, OnPanStart: func(position woxui.Point) {
+			if onPanStart != nil {
+				onPanStart()
+			}
+			if onHandleDrag != nil {
+				onHandleDrag(position.Y, false)
+			}
+			if onPanUpdate != nil {
+				onPanUpdate(contentYAt(position))
+			}
+		}, OnPanUpdate: func(position woxui.Point) {
+			if onHandleDrag != nil {
+				onHandleDrag(position.Y, false)
+			}
+			if onPanUpdate != nil {
+				onPanUpdate(contentYAt(position))
+			}
+		}, OnPanEnd: func() {
+			if onHandleDrag != nil {
+				onHandleDrag(0, true)
+			}
+			if onPanEnd != nil {
+				onPanEnd()
+			}
+		}, Child: icon},
+	}}
+}
+
+// textFieldTrailingHandleBounds returns the inner-content box for a left-gutter handle.
+func textFieldTrailingHandleBounds(state woxui.TextEditingState, window textFieldMeasurer, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, innerWidth, innerHeight, leadingPad float32, start, end int, size float32, softWrap bool) (woxui.Rect, bool) {
+	_ = maxLines
+	if lineHeight <= 0 || size <= 0 {
+		return woxui.Rect{}, false
+	}
+	lines := textFieldRichLines(state.Text, window, style, innerWidth, softWrap, richRuns)
+	if len(lines) == 0 {
+		return woxui.Rect{}, false
+	}
+	lineIndex := -1
+	for index, line := range lines {
+		if line.end < start || line.start > end {
+			continue
+		}
+		lineIndex = index
+		break
+	}
+	if lineIndex < 0 {
+		return woxui.Rect{}, false
+	}
+	x := -leadingPad + max(float32(0), (leadingPad-size)*0.5)
+	y := float32(lineIndex)*lineHeight + max(float32(0), (lineHeight-size)*0.5) - verticalOffset
+	if y+size <= 0 || y >= innerHeight {
+		return woxui.Rect{}, false
+	}
+	return woxui.Rect{X: x, Y: y, Width: size, Height: size}, true
+}
+
+// drawTextFieldTrailingHandleHighlight washes the dragged item before its text is painted.
+func drawTextFieldTrailingHandleHighlight(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, props TextFieldProps, softWrap bool) {
+	spec := props.TrailingHandle
+	if spec == nil || !spec.Active || props.Window == nil || props.LineHeight <= 0 {
+		return
+	}
+	wash := props.Theme.SelectionBackground
+	if wash.A == 0 {
+		wash = withAlpha(props.Theme.Cursor, 36)
+	} else {
+		wash.A = min(wash.A, 48)
+	}
+	for index, line := range textFieldRichLines(state.Text, props.Window, style, bounds.Width, softWrap, props.RichRuns) {
+		if line.end < spec.Start || line.start > spec.End {
+			continue
+		}
+		y := bounds.Y + float32(index)*props.LineHeight - props.verticalOffset
+		if y+props.LineHeight <= bounds.Y || y >= bounds.Y+bounds.Height {
+			continue
+		}
+		displayList.FillRoundedRect(woxui.Rect{X: bounds.X, Y: y, Width: bounds.Width, Height: props.LineHeight}, 4, wash)
+	}
+}
+
+// drawTextFieldTrailingHandleDropLine paints the insert gap on top of the document.
+func drawTextFieldTrailingHandleDropLine(displayList *woxui.DisplayList, bounds woxui.Rect, props TextFieldProps) {
+	spec := props.TrailingHandle
+	if spec == nil || !spec.ShowDropLine {
+		return
+	}
+	y := bounds.Y + spec.DropLineY - props.verticalOffset
+	if y < bounds.Y-2 || y > bounds.Y+bounds.Height+2 {
+		return
+	}
+	color := props.Theme.Cursor
+	if color.A == 0 {
+		color = props.Theme.PreviewSplit
+	}
+	displayList.FillRoundedRect(woxui.Rect{X: bounds.X, Y: y - 1, Width: bounds.Width, Height: 2}, 1, color)
+}
+
+// textFieldReorderGhost is the floating preview that follows the pointer during a task drag.
+func textFieldReorderGhost(props TextFieldProps, handle woxui.Rect, innerWidth, innerHeight float32, textColor woxui.Color, style woxui.TextStyle) (woxwidget.Widget, float32, float32, bool) {
+	spec := props.TrailingHandle
+	if spec == nil || !props.handleDragging || handle.Width <= 0 {
+		return nil, 0, 0, false
+	}
+	size := handle.Width
+	y := handle.Y + props.handleDragLocalY - size/2
+	if y < 0 {
+		y = 0
+	}
+	if y+size > innerHeight {
+		y = max(float32(0), innerHeight-size)
+	}
+	color := props.Theme.ResultSubtitle
+	if color.A == 0 {
+		color = props.Theme.PreviewText
+	}
+	icon := woxwidget.Align{Width: size, Height: size, Horizontal: 0.5, Vertical: 0.5, Child: GripDotsGlyph(16, color)}
+	preview := spec.Preview
+	if preview == "" || props.Window == nil {
+		return icon, handle.X, y, true
+	}
+	metrics, _ := props.Window.MeasureText(preview, style)
+	pad, gap := float32(8), float32(6)
+	width := min(innerWidth*0.75, pad+metrics.Size.Width+gap+size+4)
+	if width < size {
+		width = size
+	}
+	x := max(float32(0), handle.X)
+	background := props.Theme.QueryBackground
+	if background.A == 0 {
+		background = props.Theme.Background
+	}
+	background.A = 230
+	return woxwidget.Container{
+		Width: width, Height: size + 4, Radius: 6, Color: background,
+		Padding: woxwidget.Insets{Left: 4, Right: pad, Top: 2, Bottom: 2},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			icon,
+			woxwidget.Text{Value: preview, Style: style, Color: textColor},
+		}},
+	}, x, max(float32(0), y-2), true
 }
 
 // openTextFieldContextMenu places Cut/Copy/Paste/Select All in a Host overlay so it is not clipped by the field.

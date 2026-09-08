@@ -393,6 +393,22 @@ func PauseGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.pause", size, color)
 }
 
+// MoveVerticalGlyph returns the up-down affordance used to reorder a list item.
+func MoveVerticalGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.move-vertical", size, color)
+}
+
+// GripDotsGlyph is the six-dot block handle used on the left of a Notes task.
+func GripDotsGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.grip-dots", size, color)
+}
+
 // PinGlyph returns the shared thumbtack used to keep a window above others.
 func PinGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

@@ -102,6 +102,8 @@ type MarkdownProps struct {
 	OnOpenLink   func(target string)
 	// InlineTrailing appends a control to the final top-level inline paragraph.
 	InlineTrailing woxwidget.Widget
+	// strikeText paints every inline run as completed checklist text.
+	strikeText bool
 }
 
 // ParseMarkdown parses CommonMark with the GitHub-flavored extensions used by Wox previews.
@@ -595,7 +597,7 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 			for _, token := range markdownTokens(run.text) {
 				children = append(children, woxwidget.Container{
 					Padding: woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}, Radius: 3, Color: withAlpha(props.Theme.PreviewText, 18),
-					Child: woxwidget.Text{Value: token, Style: woxui.TextStyle{Size: max(float32(10), fontSize-1)}, Color: color},
+					Child: woxwidget.Text{Value: token, Style: woxui.TextStyle{Size: max(float32(10), fontSize-1)}, Color: color, Strike: run.style.strike || props.strikeText},
 				})
 			}
 			continue
@@ -609,7 +611,7 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 				continue
 			}
 			// The caret color can match body text; use the document accent to keep links recognizable.
-			link := woxwidget.Gesture{ID: id, Cursor: woxui.PointerCursorHand, OnTap: func() { props.OnOpenLink(target) }, Child: woxwidget.Text{Value: label, Style: style, Color: DocumentListMarkerColor, Underline: true}}
+			link := woxwidget.Gesture{ID: id, Cursor: woxui.PointerCursorHand, OnTap: func() { props.OnOpenLink(target) }, Child: woxwidget.Text{Value: label, Style: style, Color: DocumentListMarkerColor, Underline: true, Strike: run.style.strike || props.strikeText}}
 			semantics := woxwidget.Semantics{
 				Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleLink, Label: label, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 				OnAction: func(action woxui.AccessibilityAction, _ string) error {
@@ -635,7 +637,7 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 			continue
 		}
 		for _, token := range markdownTokens(run.text) {
-			children = append(children, woxwidget.Text{Value: token, Style: style, Color: color})
+			children = append(children, woxwidget.Text{Value: token, Style: style, Color: color, Strike: run.style.strike || props.strikeText})
 		}
 	}
 	return woxwidget.Wrap{Gap: 0, RunGap: max(float32(3), fontSize*0.25), Children: children}
@@ -652,7 +654,7 @@ func markdownSelectableRuns(runs []markdownRun, props MarkdownProps, width, font
 	if props.Window == nil || props.InlineTrailing != nil || textIndex == nil {
 		return nil
 	}
-	value, rich, links := markdownRunsContent(runs, fontSize, props.Theme)
+	value, rich, links := markdownRunsContent(runs, fontSize, props.Theme, props.strikeText)
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
@@ -667,7 +669,7 @@ func markdownSelectableID(id string) string {
 	return id
 }
 
-func markdownRunsContent(runs []markdownRun, fontSize float32, theme Theme) (string, []TextFieldRichRun, []markdownLinkRange) {
+func markdownRunsContent(runs []markdownRun, fontSize float32, theme Theme, strikeText bool) (string, []TextFieldRichRun, []markdownLinkRange) {
 	var builder strings.Builder
 	rich := make([]TextFieldRichRun, 0, len(runs))
 	links := make([]markdownLinkRange, 0)
@@ -701,7 +703,7 @@ func markdownRunsContent(runs []markdownRun, fontSize float32, theme Theme) (str
 			background = withAlpha(theme.PreviewText, 18)
 		}
 		rich = append(rich, TextFieldRichRun{
-			Start: start, End: offset, Style: style, Color: color, Underline: underline, Strike: run.style.strike, Background: background,
+			Start: start, End: offset, Style: style, Color: color, Underline: underline, Strike: run.style.strike || strikeText, Background: background,
 		})
 	}
 	return builder.String(), rich, links
@@ -831,6 +833,7 @@ func markdownListWidget(block markdownBlock, props MarkdownProps, width float32,
 			marker = woxwidget.Semantics{Role: woxui.AccessibilityRoleCheckBox, Label: item.label, Checked: item.checked, Disabled: true, Child: documentCheckbox(fontSize, 18, DocumentListMarkerColor, item.checked)}
 			if item.checked {
 				itemProps.Theme.PreviewText = props.Theme.ResultSubtitle
+				itemProps.strikeText = true
 			}
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: []woxwidget.Widget{

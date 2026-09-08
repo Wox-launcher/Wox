@@ -68,6 +68,13 @@ func TestNotesNativeMinSizeMatchesWindowFloor(t *testing.T) {
 	}
 }
 
+func TestNotesEditorPaddingClearsWindowResizeEdge(t *testing.T) {
+	padding := notesEditorPadding()
+	if padding.Left < 32 || padding.Right < 32 {
+		t.Fatalf("editor padding = %+v, want at least 32px sides so checklist glyphs stay off the resize hit zone", padding)
+	}
+}
+
 func (s *notesWindowTestServices) NotesSave(_ context.Context, id, _ string, document common.NoteDocument) (common.NoteSaveResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -690,7 +697,7 @@ func TestNotesListCaretScrollsDocument(t *testing.T) {
 			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 				return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 					ID: "notes.editor", Document: controller.document, Width: 400, Height: 240, LineHeight: 24, Zoom: 1,
-					Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24}, Style: controller.editorStyle(),
+					Padding: notesEditorPadding(), Style: controller.editorStyle(),
 					Theme: controller.app.palette.componentTheme(), Window: window, Autofocus: true,
 					Controller: controller.editor, FocusNode: controller.editorFocus, Focused: controller.editorFocus.HasFocus(),
 					FocusedTableBlock: -1, FocusedImageBlock: -1, ActiveSegmentStart: controller.activeTextSegment.Start,
@@ -760,7 +767,7 @@ func TestNotesClickBelowTextBlocks(t *testing.T) {
 			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 				return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 					ID: "notes.editor", Document: controller.document, Width: 400, Height: 240, LineHeight: 24,
-					Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24}, Style: controller.editorStyle(),
+					Padding: notesEditorPadding(), Style: controller.editorStyle(),
 					Window: window, Autofocus: true, Controller: controller.editor, FocusNode: controller.editorFocus,
 					Focused: controller.editorFocus.HasFocus(), FocusedTableBlock: -1, FocusedImageBlock: -1,
 					ActiveSegmentStart: controller.activeTextSegment.Start, OnTextFocus: controller.focusNoteText,
@@ -786,7 +793,7 @@ func TestNotesClickBelowTextBlocks(t *testing.T) {
 				t.Fatal("clicking beside the current line must not append a paragraph")
 			}
 			if blockType == common.NoteBlockTask {
-				click(woxui.Point{X: 20, Y: 20})
+				click(woxui.Point{X: notesEditorPaddingLeft + 8, Y: notesEditorPaddingTop + 8})
 				if !controller.document.Blocks[0].Checked {
 					t.Fatal("checkbox click must still toggle the task")
 				}
@@ -1190,6 +1197,27 @@ func notesOverlayContainsText(widget woxwidget.Widget, want string) bool {
 		}
 	})
 	return found
+}
+
+func TestNotesAltArrowReordersChecklistItem(t *testing.T) {
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+		{ID: "a", Type: common.NoteBlockTask, Text: "one"},
+		{ID: "b", Type: common.NoteBlockTask, Text: "two"},
+		{ID: "c", Type: common.NoteBlockTask, Text: "three"},
+	}}
+	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note", Document: document})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	controller.document, controller.blockRanges = document, ranges
+	controller.selection = woxui.TextSelection{Anchor: ranges[1].TextStart, Focus: ranges[1].TextStart}
+	if !controller.nudgeTaskBlock(1) || controller.document.Blocks[0].ID != "a" || controller.document.Blocks[1].ID != "c" || controller.document.Blocks[2].ID != "b" {
+		t.Fatalf("nudge down = %#v", controller.document.Blocks)
+	}
+	controller.startTaskReorder(2)
+	controller.dragTaskReorder(2, 0)
+	controller.endTaskReorder()
+	if controller.document.Blocks[0].ID != "b" || controller.document.Blocks[1].ID != "a" || controller.document.Blocks[2].ID != "c" {
+		t.Fatalf("drag to first = %#v", controller.document.Blocks)
+	}
 }
 
 func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {

@@ -68,6 +68,8 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		CloseGlyph(16, color),
 		SearchGlyph(18, color),
 		PinGlyph(15, color),
+		MoveVerticalGlyph(16, color),
+		GripDotsGlyph(16, color),
 		AddGlyph(18, color),
 		DeleteGlyph(15, color),
 		ChatBubbleGlyph(22, color),

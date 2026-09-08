@@ -55,8 +55,8 @@ func TestMarkdownUsesSharedDocumentDecorations(t *testing.T) {
 		t.Fatalf("task marker = %#v, want shared document checkbox", marker.Child)
 	}
 	body := row.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Wrap)
-	if body.Children[0].(woxwidget.Text).Color != theme.ResultSubtitle {
-		t.Fatalf("completed task text color = %#v, want muted %#v", body.Children[0].(woxwidget.Text).Color, theme.ResultSubtitle)
+	if text := body.Children[0].(woxwidget.Text); text.Color != theme.ResultSubtitle || !text.Strike {
+		t.Fatalf("completed task text = %#v, want muted %#v with strikethrough", text, theme.ResultSubtitle)
 	}
 	bullet := renderMarkdownBlock(ParseMarkdown("- item").blocks[0], MarkdownProps{Theme: theme}, 300, new(int), new(int)).(woxwidget.Flex)
 	bulletMarker := bullet.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
@@ -249,7 +249,7 @@ func TestMarkdownTableUsesCollapsedGridLines(t *testing.T) {
 }
 
 func TestMarkdownLinkUsesHandCursor(t *testing.T) {
-	_, _, links := markdownRunsContent(ParseMarkdown("[Dashboard](https://developer.spotify.com/dashboard)").blocks[0].runs, 12, Theme{})
+	_, _, links := markdownRunsContent(ParseMarkdown("[Dashboard](https://developer.spotify.com/dashboard)").blocks[0].runs, 12, Theme{}, false)
 	if markdownCursorAt(links, 0) != woxui.PointerCursorHand {
 		t.Fatal("hovering a Markdown link should use the hand cursor")
 	}

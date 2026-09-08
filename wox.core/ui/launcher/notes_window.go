@@ -48,6 +48,13 @@ const (
 	notesSearchOverlayPadding = float32(12)
 	notesSearchOverlayGap     = float32(8)
 	notesSearchOverlayTop     = float32(44)
+	// notesEditorPaddingLeft keeps checklist glyphs and the left-gutter handle
+	// clear of the native window resize hit zone. 40 also lines up with the
+	// Windows title slot.
+	notesEditorPaddingLeft   = float32(40)
+	notesEditorPaddingRight  = float32(40)
+	notesEditorPaddingTop    = float32(12)
+	notesEditorPaddingBottom = float32(24)
 	// notesToolbarActionsWidth is the five 32-wide title-bar buttons plus gaps
 	// and the 6px inset used to place that cluster. Equal macOS title insets
 	// used to be 220, which left only 20px at the 460 default width.
@@ -116,6 +123,9 @@ type notesWindowController struct {
 	windowPinned      bool
 	windowMaximized   bool
 	restoreFrame      woxui.Rect
+	taskReorderFrom   int
+	taskReorderTo     int
+	taskHover         int
 }
 
 func newNotesWindowController(app *App, record common.NoteRecord) *notesWindowController {
@@ -124,6 +134,7 @@ func newNotesWindowController(app *App, record common.NoteRecord) *notesWindowCo
 		searchEditor: woxwidget.NewTextEditingController(""), searchFocus: woxwidget.NewFocusNode(),
 		linkEditor: woxwidget.NewTextEditingController("https://"), linkFocus: woxwidget.NewFocusNode(),
 		windowID: woxui.WindowID("wox.notes." + newID()), formatVisible: true, zoom: 1, focusedTableBlock: -1, focusedImageBlock: -1,
+		taskReorderFrom: -1, taskReorderTo: -1, taskHover: -1,
 	}
 	controller.applyRecord(record)
 	return controller
@@ -375,6 +386,7 @@ func (c *notesWindowController) applyRecord(record common.NoteRecord) {
 	c.activeTextSegment = woxcomponent.NoteDocumentSegment{}
 	c.focusedTableBlock = -1
 	c.focusedImageBlock = -1
+	c.taskReorderFrom, c.taskReorderTo, c.taskHover = -1, -1, -1
 	if c.markdownView {
 		c.editor.SetText(notesplugin.ToMarkdown(c.document), false)
 		c.richRuns, c.blockRanges = nil, nil
@@ -511,7 +523,7 @@ func (c *notesWindowController) applyMarkdownToDocument() {
 func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "notes.editor.markdown", Label: c.app.translate("i18n:notes_editor"), Width: width, Height: height,
-		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24}, Transparent: true, DisableHover: true,
+		Padding: notesEditorPadding(), Transparent: true, DisableHover: true,
 		Style: woxui.TextStyle{Size: 14 * c.zoom, Family: woxui.FontFamilyMonospace}, LineHeight: 22 * c.zoom,
 		TextAlignmentY: 0.5, TextColor: theme.PreviewText, Value: c.editor.Text(), Controller: c.editor,
 		FocusNode: c.editorFocus, Focused: c.editorFocus.HasFocus(), Autofocus: true,
@@ -950,7 +962,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 	} else {
 		editor = woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 			ID: "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
-			Width: frame.Size.Width, Height: editorHeight, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+			Width: frame.Size.Width, Height: editorHeight, Padding: notesEditorPadding(),
 			Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme,
 			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
 			FocusNode: c.editorFocus, Focused: (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
@@ -983,6 +995,8 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 				Smaller: c.app.translate("i18n:notes_image_smaller"), Larger: c.app.translate("i18n:notes_image_larger"),
 				Delete: c.app.translate("i18n:notes_image_delete"),
 			},
+			ReorderTaskLabel: a.translate("i18n:notes_reorder_task"), ReorderingTask: c.taskReorderFrom, HoveredTask: c.taskHover, ReorderDest: c.taskReorderTo,
+			OnHoverTask: c.hoverTask, OnReorderTaskStart: c.startTaskReorder, OnReorderTaskDrag: c.dragTaskReorder, OnReorderTaskEnd: c.endTaskReorder,
 		})
 		c.requestTextFocus = false
 	}
@@ -1073,6 +1087,11 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	})})
 	content := woxwidget.Stack{Width: width, Height: launcherview.NotesToolbarHeight, Children: children}
 	return woxwidget.Container{Width: width, Height: launcherview.NotesToolbarHeight, Child: content}
+}
+
+// notesEditorPadding insets the rich and Markdown editors from the window frame.
+func notesEditorPadding() woxwidget.Insets {
+	return woxwidget.Insets{Left: notesEditorPaddingLeft, Top: notesEditorPaddingTop, Right: notesEditorPaddingRight, Bottom: notesEditorPaddingBottom}
 }
 
 // notesTitleSlot places the window title like other Wox chrome: centered on
@@ -1606,6 +1625,14 @@ func (c *notesWindowController) onKey(event woxui.KeyEvent) bool {
 		}
 		return c.changeListIndent(delta)
 	}
+	if event.Modifiers&woxui.KeyModifierAlt != 0 && event.Modifiers&^woxui.KeyModifierAlt == 0 {
+		switch event.Key {
+		case woxui.KeyArrowUp:
+			return c.nudgeTaskBlock(-1)
+		case woxui.KeyArrowDown:
+			return c.nudgeTaskBlock(1)
+		}
+	}
 	if !event.Modifiers.HasPrimary() {
 		return false
 	}
@@ -1854,6 +1881,113 @@ func (c *notesWindowController) openNoteLink(target string) {
 	if err := c.managed.Window().OpenExternalURL(target); err != nil {
 		c.fail(err)
 	}
+}
+
+// hoverTask reveals the left-gutter handle for the checklist item under the pointer.
+func (c *notesWindowController) hoverTask(block int) {
+	if c.taskHover == block {
+		return
+	}
+	c.taskHover = block
+	c.invalidate()
+}
+
+// startTaskReorder begins a checklist drag without rewriting the document until drop.
+func (c *notesWindowController) startTaskReorder(block int) {
+	if c.record.DeletedAt > 0 || block < 0 || block >= len(c.document.Blocks) || c.document.Blocks[block].Type != common.NoteBlockTask {
+		return
+	}
+	c.taskReorderFrom, c.taskReorderTo = block, block
+}
+
+// dragTaskReorder records the insert-before index under the pointer so the editor can preview it.
+func (c *notesWindowController) dragTaskReorder(block int, contentY float32) {
+	if c.taskReorderFrom < 0 {
+		c.startTaskReorder(block)
+	}
+	if c.taskReorderFrom < 0 {
+		return
+	}
+	dest := c.taskReorderDest(contentY)
+	if dest == c.taskReorderTo {
+		return
+	}
+	c.taskReorderTo = dest
+	c.invalidate()
+}
+
+// taskReorderDest maps the pointer's document Y onto an insert-before index.
+func (c *notesWindowController) taskReorderDest(contentY float32) int {
+	lineHeight := float32(24) * c.zoom
+	if lineHeight <= 0 {
+		lineHeight = 24
+	}
+	innerWidth := c.lastFrame.Width - 32
+	if innerWidth <= 0 {
+		innerWidth = 400
+	}
+	var window *woxui.Window
+	if c.managed != nil {
+		window = c.managed.Window()
+	}
+	return woxcomponent.NoteTaskLiveDest(c.document, c.blockRanges, c.taskReorderFrom, contentY, lineHeight, innerWidth, c.editor.Text(), c.richRuns, c.editorStyle(), window)
+}
+
+// endTaskReorder commits the pending checklist move.
+func (c *notesWindowController) endTaskReorder() {
+	from, dest := c.taskReorderFrom, c.taskReorderTo
+	c.taskReorderFrom, c.taskReorderTo = -1, -1
+	if from < 0 {
+		return
+	}
+	c.applyTaskMove(from, dest)
+}
+
+// nudgeTaskBlock moves the caret's checklist item one slot with Alt+Arrow.
+func (c *notesWindowController) nudgeTaskBlock(delta int) bool {
+	index := woxcomponent.NoteTaskAtCaret(c.document, c.blockRanges, c.selection)
+	if index < 0 || c.record.DeletedAt > 0 {
+		return false
+	}
+	dest := woxcomponent.NoteTaskNudgeDest(c.document, index, delta)
+	return c.applyTaskMove(index, dest)
+}
+
+// applyTaskMove writes one checklist reorder through the shared undo and save path.
+func (c *notesWindowController) applyTaskMove(from, dest int) bool {
+	updated, next := woxcomponent.MoveNoteTaskGroup(c.document, from, dest)
+	if next == from && noteDocumentsEqual(updated, c.document) {
+		c.invalidate()
+		return false
+	}
+	c.rememberDocumentUndo(c.document, false)
+	c.document = updated
+	c.reproject(false)
+	c.focusNoteBlock(next)
+	return true
+}
+
+// focusNoteBlock puts the caret on the moved task so the handle stays on that item.
+func (c *notesWindowController) focusNoteBlock(index int) {
+	for _, blockRange := range c.blockRanges {
+		if blockRange.Block == index {
+			c.editor.SetCaret(blockRange.TextStart)
+			c.selection = c.editor.State().Selection
+			return
+		}
+	}
+}
+
+func noteDocumentsEqual(left, right common.NoteDocument) bool {
+	if len(left.Blocks) != len(right.Blocks) {
+		return false
+	}
+	for index := range left.Blocks {
+		if left.Blocks[index].ID != right.Blocks[index].ID {
+			return false
+		}
+	}
+	return true
 }
 
 // toggleTaskBlock updates one task through the same undo and autosave path as keyboard formatting.

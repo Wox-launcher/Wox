@@ -1129,6 +1129,7 @@ type Text struct {
 	Style     woxui.TextStyle
 	Color     woxui.Color
 	Underline bool
+	Strike    bool
 }
 
 // TextBlock wraps and clips text in Go so every renderer receives the same shaped line boxes.
@@ -1237,6 +1238,9 @@ func (w Text) layout(ctx context, available constraints) *node {
 			displayList.DrawText(w.Value, bounds, w.Style, w.Color)
 			if w.Underline && bounds.Width > 0 && bounds.Height > 0 {
 				displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - 1, Width: bounds.Width, Height: 1}, w.Color)
+			}
+			if w.Strike && bounds.Width > 0 && bounds.Height > 0 {
+				displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height*0.52, Width: bounds.Width, Height: 1}, w.Color)
 			}
 		},
 	}

@@ -3023,6 +3023,7 @@
   "notes_format_bullet": "无序列表",
   "notes_format_ordered": "有序列表",
   "notes_format_task": "任务列表",
+  "notes_reorder_task": "调整任务顺序",
   "notes_format_quote": "引用",
   "notes_format_divider": "分隔线",
   "notes_format_table": "表格",

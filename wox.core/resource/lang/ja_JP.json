@@ -3024,6 +3024,7 @@
   "notes_format_bullet": "箇条書きリスト",
   "notes_format_ordered": "番号付きリスト",
   "notes_format_task": "タスクリスト",
+  "notes_reorder_task": "タスクの順序を変更",
   "notes_format_quote": "引用",
   "notes_format_divider": "区切り線",
   "notes_format_table": "表",

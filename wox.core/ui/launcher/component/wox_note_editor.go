@@ -68,6 +68,14 @@ type NoteEditorProps struct {
 	OnImageActionHover   func(inside bool, label string, bounds woxui.Rect)
 	OnTextFocus          func(segmentStart int)
 	ImageActionLabels    NoteImageActionLabels
+	ReorderTaskLabel     string
+	ReorderingTask       int
+	HoveredTask          int
+	ReorderDest          int
+	OnHoverTask          func(block int)
+	OnReorderTaskStart   func(block int)
+	OnReorderTaskDrag    func(block int, contentY float32)
+	OnReorderTaskEnd     func()
 }
 
 // WoxNoteEditor renders linear Notes text segments and structural table and image blocks.
@@ -80,6 +88,13 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 	}
 	if props.ActiveSegmentStart < 0 {
 		props.ActiveSegmentStart = -1
+	}
+	if props.ReorderingTask < 0 {
+		props.ReorderingTask = -1
+		props.ReorderDest = -1
+	}
+	if props.HoveredTask < 0 {
+		props.HoveredTask = -1
 	}
 	segments := noteDocumentSegments(props.Document)
 	if len(segments) == 1 && !segments[0].Structural() {
@@ -178,7 +193,7 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 }
 
 func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id string, height float32, primary bool, padding woxwidget.Insets) woxwidget.Widget {
-	value, runs, _ := ProjectNoteSegment(props.Document, segment, props.Style, props.Theme)
+	value, runs, ranges := ProjectNoteSegment(props.Document, segment, props.Style, props.Theme)
 	controller := (*woxwidget.TextEditingController)(nil)
 	focus := (*woxwidget.FocusNode)(nil)
 	focused := false
@@ -205,6 +220,8 @@ func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id 
 		LineHeight: props.LineHeight, TextAlignmentY: 0.5, TextColor: props.TextColor, Value: value,
 		Controller: controller, FocusNode: focus, Focused: focused, Autofocus: autofocus,
 		ReadOnly: props.ReadOnly, MaxLines: 10000, ExposeVisualLines: true, Window: props.Window, Theme: props.Theme,
+		TrailingHandle: noteEditorTaskReorderHandle(props, segment, ranges),
+		OnHoverOffset:  noteEditorHoverTask(props, ranges),
 		OnChanged: func(text string) {
 			if props.OnChanged != nil {
 				props.OnChanged(start, text)
@@ -233,6 +250,100 @@ func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id 
 		OnPaste:        props.OnPaste,
 		TransformPaste: props.TransformPaste,
 	})
+}
+
+// noteEditorHoverTask maps pointer offsets onto the hovered checklist item.
+func noteEditorHoverTask(props NoteEditorProps, ranges []NoteBlockRange) func(int, bool) {
+	if props.OnHoverTask == nil || props.ReadOnly {
+		return nil
+	}
+	return func(offset int, inside bool) {
+		if !inside {
+			props.OnHoverTask(-1)
+			return
+		}
+		index := NoteBlockAt(ranges, offset)
+		if index < 0 || index >= len(props.Document.Blocks) || props.Document.Blocks[index].Type != common.NoteBlockTask {
+			props.OnHoverTask(-1)
+			return
+		}
+		props.OnHoverTask(index)
+	}
+}
+
+// noteEditorTaskReorderHandle shows a left-gutter move handle for the hovered or focused task.
+func noteEditorTaskReorderHandle(props NoteEditorProps, segment NoteDocumentSegment, ranges []NoteBlockRange) *TextFieldTrailingHandle {
+	if props.ReadOnly || props.OnReorderTaskStart == nil || props.OnReorderTaskDrag == nil {
+		return nil
+	}
+	index := props.ReorderingTask
+	if index < 0 && props.OnHoverTask != nil && props.HoveredTask >= 0 {
+		index = props.HoveredTask
+	}
+	if index < 0 {
+		if !props.Focused {
+			return nil
+		}
+		index = NoteTaskAtCaret(props.Document, ranges, props.Selection)
+	}
+	if index < segment.Start || index >= segment.End || index >= len(props.Document.Blocks) || props.Document.Blocks[index].Type != common.NoteBlockTask {
+		return nil
+	}
+	blockRange := NoteRangeForBlock(ranges, index)
+	start, onStart, onDrag, onEnd := index, props.OnReorderTaskStart, props.OnReorderTaskDrag, props.OnReorderTaskEnd
+	handle := &TextFieldTrailingHandle{
+		Start: blockRange.Start, End: blockRange.End, Size: 16, Label: props.ReorderTaskLabel,
+		Preview: noteTaskReorderPreview(props.Document.Blocks[index].Text),
+		Active:  props.ReorderingTask >= 0,
+		OnPanStart: func() {
+			if onStart != nil {
+				onStart(start)
+			}
+		},
+		OnPanUpdate: func(contentY float32) {
+			if onDrag != nil {
+				onDrag(start, contentY)
+			}
+		},
+		OnPanEnd: onEnd,
+	}
+	if props.ReorderingTask >= 0 {
+		groupStart, groupEnd := NoteTaskGroup(props.Document, props.ReorderingTask)
+		if dest := props.ReorderDest; dest < groupStart || dest > groupEnd {
+			if y, ok := noteEditorInsertLineY(props, segment, ranges, dest); ok {
+				handle.ShowDropLine = true
+				handle.DropLineY = y
+			}
+		}
+	}
+	return handle
+}
+
+// noteTaskReorderPreview is the short label that follows the pointer while dragging.
+func noteTaskReorderPreview(value string) string {
+	runes := []rune(strings.Join(strings.Fields(value), " "))
+	if len(runes) > 24 {
+		return string(runes[:24]) + "…"
+	}
+	return string(runes)
+}
+
+// noteEditorInsertLineY maps an insert-before block index onto document Y in this text segment.
+func noteEditorInsertLineY(props NoteEditorProps, segment NoteDocumentSegment, ranges []NoteBlockRange, dest int) (float32, bool) {
+	if props.LineHeight <= 0 {
+		return 0, false
+	}
+	value, runs, _ := ProjectNoteSegment(props.Document, segment, props.Style, props.Theme)
+	if props.Controller != nil && props.ActiveSegmentStart == segment.Start && props.Controller.Text() != "" {
+		value = props.Controller.Text()
+	}
+	innerWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
+	var measurer textFieldMeasurer
+	if props.Window != nil {
+		measurer = props.Window
+	}
+	lines := textFieldRichLines(value, measurer, props.Style, innerWidth, true, NoteFieldRuns(runs))
+	return noteTaskInsertLineY(props.Document, ranges, dest, props.LineHeight, lines)
 }
 
 const (

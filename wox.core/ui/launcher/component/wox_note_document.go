@@ -217,7 +217,8 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 			}
 			runs = append(runs, NoteTextRun{
 				Start: textStart + offset, End: textStart + end, Style: style,
-				Color: color, Underline: inline.underline || inline.link != "", Strike: inline.strike, Background: background,
+				Color: color, Underline: inline.underline || inline.link != "",
+				Strike: inline.strike || block.Type == common.NoteBlockTask && block.Checked, Background: background,
 			})
 			offset = end
 		}
@@ -887,6 +888,189 @@ func NoteRangeForBlock(ranges []NoteBlockRange, block int) NoteBlockRange {
 		}
 	}
 	return ranges[0]
+}
+
+// NoteTaskAtCaret returns the task block that contains the caret, or -1.
+func NoteTaskAtCaret(document common.NoteDocument, ranges []NoteBlockRange, selection woxui.TextSelection) int {
+	if len(document.Blocks) == 0 || len(ranges) == 0 {
+		return -1
+	}
+	index := NoteBlockAt(ranges, selection.Focus)
+	if index < 0 || index >= len(document.Blocks) || document.Blocks[index].Type != common.NoteBlockTask {
+		return -1
+	}
+	return index
+}
+
+// NoteTaskGroup reports the inclusive start and exclusive end of a task plus
+// following more-indented list items that should move with it.
+func NoteTaskGroup(document common.NoteDocument, index int) (int, int) {
+	if index < 0 || index >= len(document.Blocks) || document.Blocks[index].Type != common.NoteBlockTask {
+		return index, index
+	}
+	end := index + 1
+	indent := document.Blocks[index].Indent
+	for end < len(document.Blocks) {
+		block := document.Blocks[end]
+		if !noteListBlock(block) || block.Indent <= indent {
+			break
+		}
+		end++
+	}
+	return index, end
+}
+
+func noteListBlock(block common.NoteBlock) bool {
+	return block.Type == common.NoteBlockBullet || block.Type == common.NoteBlockOrdered || block.Type == common.NoteBlockTask
+}
+
+// NoteTaskLiveDest maps a document-local Y onto an insert-before index using
+// wrapped-line midpoints so neighboring items do not oscillate while dragging.
+func NoteTaskLiveDest(document common.NoteDocument, ranges []NoteBlockRange, from int, contentY, lineHeight, innerWidth float32, value string, runs []NoteTextRun, style woxui.TextStyle, window *woxui.Window) int {
+	var measurer textFieldMeasurer
+	if window != nil {
+		measurer = window
+	}
+	return noteTaskLiveDest(document, ranges, from, contentY, lineHeight, textFieldRichLines(value, measurer, style, innerWidth, true, NoteFieldRuns(runs)))
+}
+
+func noteTaskLiveDest(document common.NoteDocument, ranges []NoteBlockRange, from int, contentY, lineHeight float32, lines []textFieldLine) int {
+	start, end := NoteTaskGroup(document, from)
+	if start >= end || lineHeight <= 0 || len(lines) == 0 {
+		return start
+	}
+	target := -1
+	var targetTop, targetBottom float32
+	for _, blockRange := range ranges {
+		top, bottom, ok := noteRangeContentSpan(ranges, lines, lineHeight, blockRange.Block)
+		if !ok {
+			continue
+		}
+		if contentY >= top && contentY < bottom {
+			target = blockRange.Block
+			targetTop, targetBottom = top, bottom
+		}
+	}
+	if target < 0 {
+		if contentY < 0 {
+			return 0
+		}
+		return len(document.Blocks)
+	}
+	if target >= start && target < end {
+		return start
+	}
+	mid := (targetTop + targetBottom) / 2
+	if target < start {
+		if contentY < mid {
+			return target
+		}
+		return target + 1
+	}
+	if contentY > mid {
+		return target + 1
+	}
+	return target
+}
+
+func noteRangeContentSpan(ranges []NoteBlockRange, lines []textFieldLine, lineHeight float32, block int) (float32, float32, bool) {
+	blockRange, ok := noteBlockRangeByIndex(ranges, block)
+	if !ok {
+		return 0, 0, false
+	}
+	first, last := -1, -1
+	for index, line := range lines {
+		if line.end < blockRange.Start || line.start > blockRange.End {
+			continue
+		}
+		if first < 0 {
+			first = index
+		}
+		last = index
+	}
+	if first < 0 {
+		return 0, 0, false
+	}
+	return float32(first) * lineHeight, float32(last+1) * lineHeight, true
+}
+
+func noteBlockRangeByIndex(ranges []NoteBlockRange, block int) (NoteBlockRange, bool) {
+	for _, blockRange := range ranges {
+		if blockRange.Block == block {
+			return blockRange, true
+		}
+	}
+	return NoteBlockRange{}, false
+}
+
+// noteTaskInsertLineY is the document Y of the gap before dest.
+func noteTaskInsertLineY(document common.NoteDocument, ranges []NoteBlockRange, dest int, lineHeight float32, lines []textFieldLine) (float32, bool) {
+	if lineHeight <= 0 || len(lines) == 0 {
+		return 0, false
+	}
+	if dest <= 0 {
+		return 0, true
+	}
+	if dest >= len(document.Blocks) {
+		return float32(len(lines)) * lineHeight, true
+	}
+	top, _, ok := noteRangeContentSpan(ranges, lines, lineHeight, dest)
+	return top, ok
+}
+
+// NoteTaskDropDest maps a pointer offset onto an insert-before index for MoveNoteTaskGroup.
+func NoteTaskDropDest(document common.NoteDocument, ranges []NoteBlockRange, from, offset int) int {
+	start, end := NoteTaskGroup(document, from)
+	if start >= end || len(ranges) == 0 {
+		return start
+	}
+	target := NoteBlockAt(ranges, offset)
+	if target < start {
+		return target
+	}
+	if target >= end {
+		return target + 1
+	}
+	return start
+}
+
+// NoteTaskNudgeDest moves a task group one slot up or down.
+func NoteTaskNudgeDest(document common.NoteDocument, from, delta int) int {
+	start, end := NoteTaskGroup(document, from)
+	if start >= end {
+		return start
+	}
+	if delta < 0 {
+		return max(0, start-1)
+	}
+	return min(len(document.Blocks), end+1)
+}
+
+// MoveNoteTaskGroup moves the task at from (and its indented descendants) so the
+// group starts at dest in the resulting document. dest is an insert-before index
+// in the original document; dest == len(Blocks) appends.
+func MoveNoteTaskGroup(document common.NoteDocument, from, dest int) (common.NoteDocument, int) {
+	start, end := NoteTaskGroup(document, from)
+	if start >= end {
+		return document, from
+	}
+	if dest < 0 {
+		dest = 0
+	}
+	if dest > len(document.Blocks) {
+		dest = len(document.Blocks)
+	}
+	if dest >= start && dest <= end {
+		return document, start
+	}
+	updated := CloneNoteDocument(document)
+	group := append([]common.NoteBlock(nil), updated.Blocks[start:end]...)
+	updated.Blocks = slices.Delete(updated.Blocks, start, end)
+	if dest > start {
+		dest -= end - start
+	}
+	updated.Blocks = slices.Insert(updated.Blocks, dest, group...)
+	return updated, dest
 }
 
 // NoteTaskAtOffset limits task activation to the rendered checkbox prefix.

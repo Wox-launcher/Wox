@@ -2737,6 +2737,7 @@
   "notes_image_smaller": "Reduzir",
   "notes_image_larger": "Ampliar",
   "notes_image_delete": "Excluir imagem",
+  "notes_reorder_task": "Reordenar tarefa",
   "notes_view_markdown": "Alternar para visualização Markdown",
   "notes_view_preview": "Alternar para visualização de prévia",
   "plugin_ai_chat_attachment_failed": "Não foi possível anexar %s: %s",

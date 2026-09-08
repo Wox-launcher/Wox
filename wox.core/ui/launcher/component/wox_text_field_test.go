@@ -350,6 +350,32 @@ func (m *fakeTextMeasurer) MeasureText(text string, style woxui.TextStyle) (woxu
 	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * width, Height: style.Size}}, nil
 }
 
+func TestTextFieldTrailingHandleSitsInLeadingGutter(t *testing.T) {
+	measurer := &fakeTextMeasurer{charWidth: 10}
+	style := woxui.TextStyle{Size: 14}
+	single := woxui.TextEditingState{Text: "☐ task"}
+	bounds, ok := textFieldTrailingHandleBounds(single, measurer, style, nil, 8, 24, 0, 200, 80, 16, 0, 6, 16, true)
+	if !ok || bounds.Width != 16 || bounds.Height != 16 {
+		t.Fatalf("handle bounds = %#v ok=%t", bounds, ok)
+	}
+	if bounds.X >= 0 || bounds.Y != 4 {
+		t.Fatalf("single-line handle origin = %+v, want left gutter and vertically centered", bounds)
+	}
+	wrapped := woxui.TextEditingState{Text: "☐ 12345678901234567890"}
+	end := len([]rune(wrapped.Text))
+	lines := textFieldRichLines(wrapped.Text, measurer, style, 80, true, nil)
+	if len(lines) < 2 {
+		t.Fatalf("wrapped lines = %d, want at least two visual lines", len(lines))
+	}
+	bounds, ok = textFieldTrailingHandleBounds(wrapped, measurer, style, nil, 8, 24, 0, 80, 200, 16, 0, end, 16, true)
+	if !ok {
+		t.Fatal("wrapped handle bounds missing")
+	}
+	if bounds.X >= 0 || bounds.Y != 4 {
+		t.Fatalf("wrapped handle = %+v, want first-line left gutter", bounds)
+	}
+}
+
 func TestTextFieldExposesVisualLineSemantics(t *testing.T) {
 	controller := woxwidget.NewTextEditingController("☐ 第一行\n第二行")
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {

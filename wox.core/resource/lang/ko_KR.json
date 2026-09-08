@@ -3022,6 +3022,7 @@
   "notes_format_bullet": "글머리 기호 목록",
   "notes_format_ordered": "번호 매기기 목록",
   "notes_format_task": "작업 목록",
+  "notes_reorder_task": "작업 순서 변경",
   "notes_format_quote": "인용",
   "notes_format_divider": "구분선",
   "notes_format_table": "표",

@@ -79,8 +79,8 @@ func TestCheckedTaskUsesMutedTextAndClickablePrefix(t *testing.T) {
 	muted := woxui.Color{R: 120, G: 120, B: 120, A: 255}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "task", Type: common.NoteBlockTask, Text: "done", Checked: true}}}
 	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{ResultSubtitle: muted, Cursor: woxui.Color{R: 40, G: 130, B: 230, A: 255}})
-	if len(runs) != 2 || !runs[0].Checkbox || !runs[0].Checked || runs[0].Color != woxcomponent.DocumentListMarkerColor || runs[1].Color != muted {
-		t.Fatalf("checked task color = %#v, want marker %#v and muted %#v", runs, woxcomponent.DocumentListMarkerColor, muted)
+	if len(runs) != 2 || !runs[0].Checkbox || !runs[0].Checked || runs[0].Color != woxcomponent.DocumentListMarkerColor || runs[1].Color != muted || !runs[1].Strike {
+		t.Fatalf("checked task = %#v, want marker %#v and muted strikethrough %#v", runs, woxcomponent.DocumentListMarkerColor, muted)
 	}
 	if index, ok := noteTaskAtOffset(document, ranges, ranges[0].Start); !ok || index != 0 {
 		t.Fatal("task checkbox prefix was not clickable")

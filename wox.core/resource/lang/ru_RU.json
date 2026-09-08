@@ -2738,6 +2738,7 @@
   "notes_image_smaller": "Уменьшить",
   "notes_image_larger": "Увеличить",
   "notes_image_delete": "Удалить изображение",
+  "notes_reorder_task": "Изменить порядок задачи",
   "notes_view_markdown": "Переключить на Markdown",
   "notes_view_preview": "Переключить на предпросмотр",
   "plugin_ai_chat_attachment_failed": "Не удалось прикрепить %s: %s",

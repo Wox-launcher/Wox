@@ -171,6 +171,8 @@ var uiIcons = map[string]WoxImage{
 	"control.warning":            newMonochromeUIIcon(`<path d="M12 3 2.8 20h18.4z"/><path d="M12 9v5M12 17h.01"/>`),
 	"control.refresh":            newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
 	"control.swap":               newMonochromeUIIcon(`<path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/>`),
+	"control.move-vertical":      newMonochromeUIIcon(`<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>`),
+	"control.grip-dots":          newMonochromeUIIcon(`<circle cx="9" cy="6" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="6" r="1.6" fill="#fff" stroke="none"/><circle cx="9" cy="12" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="#fff" stroke="none"/><circle cx="9" cy="18" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="18" r="1.6" fill="#fff" stroke="none"/>`),
 	"control.loading":            newMonochromeUIIcon(`<circle cx="12" cy="12" r="9" opacity=".15"/><path d="M12 3a9 9 0 0 1 9 9"/>`),
 	"control.email":              newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>`),
 	"control.key":                newMonochromeUIIcon(`<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l3 3"/>`),
