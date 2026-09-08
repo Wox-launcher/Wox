@@ -536,7 +536,7 @@ func SetLauncherQueryAndWaitComplete(t *testing.T, ctx context.Context, client *
 	return snapshot
 }
 
-// ReplaceLauncherQuery clears retained results before submitting a fresh query generation.
+// ReplaceLauncherQuery clears the previous query before submitting a fresh query generation.
 func ReplaceLauncherQuery(t *testing.T, ctx context.Context, client *automationdriver.Client, query string) woxwidget.AutomationSnapshot {
 	t.Helper()
 	snapshot, err := client.Snapshot(ctx)
@@ -545,24 +545,8 @@ func ReplaceLauncherQuery(t *testing.T, ctx context.Context, client *automationd
 	}
 	current, found := automationdriver.Find(snapshot, "launcher.query.input")
 	if found && current.Value != "" {
-		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, ""); err != nil {
-			t.Fatalf("clear retained launcher query %q: %v", current.Value, err)
-		}
-		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
-			if !inputFound || input.Value != "" {
-				return false
-			}
-			for _, node := range snapshot.Tree.Nodes {
-				if strings.HasPrefix(node.AutomationID, "launcher.result.") {
-					return false
-				}
-			}
-			return true
-		})
-		if err != nil {
-			t.Fatalf("wait for retained launcher query %q to clear: %v", current.Value, err)
-		}
+		// Empty queries can restore homepage MRU results, so wait for completion rather than an empty list.
+		snapshot = SetLauncherQueryAndWaitComplete(t, ctx, client, "")
 	}
 	if query == "" {
 		return snapshot

@@ -557,7 +557,7 @@ plugins:
 	cd ci && go run . plugin
 
 # PLUGIN and OUT are optional. Example: make plugin-health PLUGIN=Obsidian OUT=plugin-health.json
-plugin-health:
+plugin-health: ensure-resources
 	cd ci/pluginhealth && go run -tags "$(SQLITE_BUILD_TAGS)" . \
 		-store "$(CURDIR)/store-plugin.json" \
 		$(if $(strip $(PLUGIN)),-plugin "$(PLUGIN)",) \
