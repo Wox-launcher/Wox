@@ -55,11 +55,11 @@ func TestSelectedFileSearchTypeAcceptsContent(t *testing.T) {
 }
 
 func TestFileSearchResultTailsMarksContentMatches(t *testing.T) {
-	if tails := fileSearchResultTails(filesearch.SearchResult{Path: "/tmp/name.txt"}); len(tails) != 0 {
+	if tails := fileSearchResultTails(filesearch.SearchResult{Path: "/tmp/name.txt"}, false); len(tails) != 0 {
 		t.Fatalf("name matches should not get a content tail, got %#v", tails)
 	}
 
-	tails := fileSearchResultTails(filesearch.SearchResult{Path: "/tmp/content.txt", IsContentMatch: true})
+	tails := fileSearchResultTails(filesearch.SearchResult{Path: "/tmp/content.txt", IsContentMatch: true}, false)
 	if len(tails) != 1 || tails[0].Text != "i18n:plugin_file_result_tail_content" {
 		t.Fatalf("content matches should get a content tail, got %#v", tails)
 	}

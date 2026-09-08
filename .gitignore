@@ -53,3 +53,4 @@ www/docs/.vitepress/dist
 .deps
 wox.ui.flutter/
 .gocache/
+cache/

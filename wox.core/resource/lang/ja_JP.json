@@ -1416,6 +1416,8 @@
   "plugin_file_refinement_type_content": "コンテンツ",
   "plugin_file_result_tail_content": "コンテンツ",
   "plugin_file_result_tail_content_tooltip": "一致したファイル内容",
+  "plugin_file_result_tail_recent": "最近",
+  "plugin_file_result_tail_recent_tooltip": "最近アクセスした項目",
   "plugin_file_refinement_sort": "並び替え",
   "plugin_file_refinement_sort_relevance": "関連性",
   "plugin_file_refinement_sort_name": "名前",

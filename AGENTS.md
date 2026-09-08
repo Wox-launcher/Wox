@@ -39,4 +39,5 @@
 
 ## Debug
 
+- Wox's default core log path is `~/.wox/log/wox.log` (`%USERPROFILE%\.wox\log\wox.log` on Windows). When a bug cannot be understood from the code alone, read this log first for clues before adding more instrumentation.
 - When troubleshooting an issue, if you cannot pinpoint the exact cause with 100% certainty, you can start by adding log statements to the relevant code and reviewing the logs to identify the problem. The log output should contain sufficient information to help understand the program’s state and behavior.

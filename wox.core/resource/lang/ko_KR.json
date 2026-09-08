@@ -1416,6 +1416,8 @@
   "plugin_file_refinement_type_content": "콘텐츠",
   "plugin_file_result_tail_content": "콘텐츠",
   "plugin_file_result_tail_content_tooltip": "일치하는 파일 콘텐츠입니다",
+  "plugin_file_result_tail_recent": "최근",
+  "plugin_file_result_tail_recent_tooltip": "최근에 연 항목",
   "plugin_file_refinement_sort": "정렬",
   "plugin_file_refinement_sort_relevance": "관련성",
   "plugin_file_refinement_sort_name": "이름",

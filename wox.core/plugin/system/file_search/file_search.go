@@ -27,6 +27,7 @@ import (
 	"wox/util/filesearchservice"
 	"wox/util/nativecontextmenu"
 	"wox/util/permission"
+	"wox/util/recentfiles"
 	"wox/util/shell"
 	"wox/util/trash"
 )
@@ -68,9 +69,15 @@ const (
 	toolbarErrorReasonMaxChars              = 28
 	fileSearchResultLimit                   = 100
 	fileSearchContentResultLimit            = 20
+	fileSearchRecentResultLimit             = 50
+	fileSearchRecentCandidateLimit          = 80
 	fileSearchRefinedCandidateLimit         = 300
 	fileSearchRefinementSortScoreStep       = 1000000
 )
+
+// listRecentFilesFn is the OS recent-file lookup so tests can inject fixtures
+// without touching Spotlight, Windows Recent, or recently-used.xbel.
+var listRecentFilesFn = recentfiles.List
 
 const (
 	fileSearchTypeRefinementKey     = "file_type"
@@ -871,15 +878,25 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	queryStartedAt := util.GetSystemTimestamp()
 	diagnostics := fileSearchQueryDiagnostics{}
 
-	if c.engine == nil {
-		return plugin.QueryResponse{}
-	}
-
 	if c.isStatusQuery(query) {
+		if c.engine == nil {
+			return plugin.QueryResponse{}
+		}
 		return c.queryStatus(ctx)
 	}
 
 	if strings.TrimSpace(query.Search) == "" {
+		// Feature addition: an empty triggered File Search query lists OS
+		// recent files
+		// Global empty queries stay empty so start-page / "*" do not dump
+		// recents into mixed results.
+		if query.Type != plugin.QueryTypeInput || query.IsGlobalQuery() {
+			return plugin.QueryResponse{}
+		}
+		return c.queryRecentFiles(ctx, query, queryStartedAt)
+	}
+
+	if c.engine == nil {
 		return plugin.QueryResponse{}
 	}
 
@@ -895,7 +912,66 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		return plugin.QueryResponse{}
 	}
 	results = refineFileSearchResults(results, selectedType, selectedSort, fileSearchResultLimitFor(selectedType, selectedSort))
+	queryResults := c.materializeFileSearchResults(ctx, query, results, selectedSort, false, &diagnostics)
+	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
+	response := plugin.NewQueryResponse(queryResults)
+	response.Refinements = c.buildFileSearchRefinements(ctx)
+	return response
+}
+
+// queryRecentFiles lists OS-tracked recently accessed files for an empty triggered query.
+func (c *FileSearchPlugin) queryRecentFiles(ctx context.Context, query plugin.Query, queryStartedAt int64) plugin.QueryResponse {
+	diagnostics := fileSearchQueryDiagnostics{}
+	searchStartedAt := util.GetSystemTimestamp()
+	items, err := listRecentFilesFn(ctx, recentfiles.ListOption{Limit: fileSearchRecentCandidateLimit})
+	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent files lookup failed: %s", err.Error()))
+		response := plugin.NewQueryResponse(nil)
+		response.Refinements = c.buildFileSearchRefinements(ctx)
+		return response
+	}
+
+	selectedType := selectedFileSearchType(query)
+	selectedSort := selectedFileSearchSort(query)
+	results := recentFilesToSearchResults(items, c.getConfiguredSkipHiddenFiles(ctx))
+	results = refineFileSearchResults(results, selectedType, selectedSort, fileSearchRecentResultLimit)
+	queryResults := c.materializeFileSearchResults(ctx, query, results, selectedSort, true, &diagnostics)
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("recent files: os=%d visible=%d", len(items), len(queryResults)))
+	c.logQueryDiagnostics(ctx, "recent", diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
+
+	response := plugin.NewQueryResponse(queryResults)
+	response.Refinements = c.buildFileSearchRefinements(ctx)
+	return response
+}
+
+// recentFilesToSearchResults keeps existing, non-hidden OS recents in access order.
+func recentFilesToSearchResults(items []recentfiles.File, skipHidden bool) []filesearch.SearchResult {
+	results := make([]filesearch.SearchResult, 0, len(items))
+	for index, item := range items {
+		info, err := os.Lstat(item.Path)
+		if err != nil {
+			continue
+		}
+		if skipHidden && isHiddenFileSearchPath(item.Path) {
+			continue
+		}
+		results = append(results, filesearch.SearchResult{
+			Path:       item.Path,
+			Name:       filepath.Base(item.Path),
+			ParentPath: filepath.Dir(item.Path),
+			IsDir:      info.IsDir(),
+			Mtime:      info.ModTime().UnixMilli(),
+			Size:       info.Size(),
+			Score:      int64(len(items) - index),
+		})
+	}
+	return results
+}
+
+// materializeFileSearchResults turns indexed or recent rows into launcher results.
+func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, query plugin.Query, results []filesearch.SearchResult, selectedSort string, recent bool, diagnostics *fileSearchQueryDiagnostics) []plugin.QueryResult {
 	// Split result-materialization timing out from engine search timing because
 	// os.Stat/icon setup can make the plugin itself look slow even when the
 	// indexed lookup has already finished.
@@ -908,7 +984,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	showPreview := c.getConfiguredShowPreview(ctx)
 	queryResults := make([]plugin.QueryResult, 0, len(results))
 	for index, item := range results {
-		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
+		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, diagnostics)
 		actions := c.buildFileSearchResultActions(ctx, item)
 
 		group, groupScore := fileSearchResultGroup(query)
@@ -919,7 +995,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			Score:      item.Score,
 			Group:      group,
 			GroupScore: groupScore,
-			Tails:      fileSearchResultTails(item),
+			Tails:      fileSearchResultTails(item, recent),
 			Actions:    actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
@@ -938,12 +1014,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		queryResults = append(queryResults, queryResult)
 	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt
-
-	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
-
-	response := plugin.NewQueryResponse(queryResults)
-	response.Refinements = c.buildFileSearchRefinements(ctx)
-	return response
+	return queryResults
 }
 
 // fileSearchResultGroup keeps global-search file hits in their own section so
@@ -1055,8 +1126,13 @@ func contentHitToSearchResult(hit filesearch.ContentSearchResult, index int, tot
 	}, true
 }
 
-// fileSearchResultTails marks content-index hits so they stay distinct from name matches.
-func fileSearchResultTails(item filesearch.SearchResult) []plugin.QueryResultTail {
+// fileSearchResultTails marks content-index hits and OS recent-file rows.
+func fileSearchResultTails(item filesearch.SearchResult, recent bool) []plugin.QueryResultTail {
+	if recent {
+		tail := plugin.NewQueryResultTailText("i18n:plugin_file_result_tail_recent")
+		tail.Tooltip = "i18n:plugin_file_result_tail_recent_tooltip"
+		return []plugin.QueryResultTail{tail}
+	}
 	if !item.IsContentMatch {
 		return nil
 	}
@@ -1076,6 +1152,10 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 				if err := shell.Open(item.Path); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open file search result: path=%s err=%s", item.Path, err.Error()))
 					c.api.Notify(ctx, fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+					return
+				}
+				if recordErr := recentfiles.RecordAccess(ctx, item.Path); recordErr != nil {
+					c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("failed to record recent file access: path=%s err=%s", item.Path, recordErr.Error()))
 				}
 			},
 		},

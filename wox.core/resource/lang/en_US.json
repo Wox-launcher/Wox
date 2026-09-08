@@ -1416,6 +1416,8 @@
   "plugin_file_refinement_type_content": "Content",
   "plugin_file_result_tail_content": "Content",
   "plugin_file_result_tail_content_tooltip": "Matched file contents",
+  "plugin_file_result_tail_recent": "Recent",
+  "plugin_file_result_tail_recent_tooltip": "Recently accessed",
   "plugin_file_refinement_sort": "Sort",
   "plugin_file_refinement_sort_relevance": "Relevance",
   "plugin_file_refinement_sort_name": "Name",
