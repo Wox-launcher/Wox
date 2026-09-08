@@ -1233,7 +1233,6 @@ func (a *ApplicationPlugin) watchRootOnlyAppChanges(ctx context.Context, appDire
 				a.rebuildHotkeyAppCandidates(ctx)
 				a.rebuildQueryEntries(ctx)
 				a.saveAppToCache(ctx)
-				a.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 			}
 		})
 	}
@@ -1524,7 +1523,6 @@ func (a *ApplicationPlugin) reconcileFallbackAppDirectories(ctx context.Context,
 	a.rebuildHotkeyAppCandidates(ctx)
 	a.rebuildQueryEntries(ctx)
 	a.saveAppToCache(ctx)
-	a.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 }
 
 func (a *ApplicationPlugin) getLocalAppDirectoryForChange(ctx context.Context, directoryPath string) appDirectory {
