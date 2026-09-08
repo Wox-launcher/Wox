@@ -284,7 +284,8 @@ func resolveAttentionIcon(ctx context.Context, source AttentionPluginSource, req
 	if icon.IsEmpty() {
 		icon = common.WoxIcon
 	}
-	return common.ConvertIcon(ctx, icon, source.PluginDirectory)
+	converted, _ := common.ConvertPluginIcon(ctx, icon, source.PluginID, source.PluginDirectory, common.IconConversion{})
+	return converted
 }
 
 func marshalAttentionAction(action *AttentionAction) (string, error) {

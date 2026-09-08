@@ -1124,7 +1124,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 		pluginName := w.getLocalPluginName(ctx, lp.metadata)
 		pluginDescription := w.getLocalPluginDescription(ctx, lp.metadata)
 		iconImage := common.ParseWoxImageOrDefault(lp.metadata.Icon, wpmIcon)
-		iconImage = common.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
+		iconImage, _ = common.ConvertPluginIcon(ctx, iconImage, lp.metadata.Id, lp.metadata.Directory, common.IconConversion{})
 
 		return plugin.QueryResult{
 			Id:       uuid.NewString(),

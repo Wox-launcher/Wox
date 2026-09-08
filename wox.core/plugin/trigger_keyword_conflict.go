@@ -183,7 +183,7 @@ func (m *Manager) buildTriggerKeywordConflictResponse(ctx context.Context, query
 		previewPlugins = append(previewPlugins, triggerKeywordConflictPreviewPlugin{
 			PluginId:        pluginInstance.Metadata.Id,
 			PluginName:      pluginInstance.GetName(ctx),
-			Icon:            common.ConvertIcon(ctx, icon, pluginInstance.PluginDirectory),
+			Icon:            pluginInstance.ConvertIcon(ctx, icon),
 			TriggerKeywords: append([]string{}, pluginInstance.GetTriggerKeywords()...),
 		})
 	}

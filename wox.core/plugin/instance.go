@@ -11,6 +11,9 @@ import (
 )
 
 type Instance struct {
+	imageMu          sync.RWMutex
+	imageCacheClosed bool
+
 	Plugin               Plugin                 // plugin implementation
 	API                  API                    // APIs exposed to plugin
 	Metadata             Metadata               // metadata parsed from plugin.json

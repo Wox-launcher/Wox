@@ -317,7 +317,7 @@ func (a *APIImpl) ShowApp(ctx context.Context) {
 func (a *APIImpl) Notify(ctx context.Context, message string) {
 	icon := a.pluginInstance.Metadata.Icon
 	if parsedIcon, err := common.ParseWoxImage(icon); err == nil {
-		convertedIcon := common.ConvertIcon(ctx, parsedIcon, a.pluginInstance.PluginDirectory)
+		convertedIcon := a.pluginInstance.ConvertIcon(ctx, parsedIcon)
 		icon = convertedIcon.String()
 	}
 

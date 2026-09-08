@@ -74,47 +74,70 @@ func ClearDerivedPathExistenceCache() {
 	derivedPathExistenceCache.Clear()
 }
 
-// CleanupExpired removes image cache files that have not been touched within the retention window.
+// RemoveDirectory removes only a descendant of the image cache and forgets
+// positive disk lookups even after a partially successful deletion.
+func RemoveDirectory(directory string) error {
+	cleanDirectory, ok := managedCachePath(directory)
+	if !ok {
+		return fmt.Errorf("not an image cache subdirectory: %s", directory)
+	}
+	directory = cleanDirectory
+	err := os.RemoveAll(directory)
+	for _, filename := range derivedPathExistenceCache.Keys() {
+		if pathWithin(directory, filename) {
+			derivedPathExistenceCache.Delete(filename)
+		}
+	}
+	touchState.mu.Lock()
+	for filename := range touchState.attempts {
+		if pathWithin(directory, filename) {
+			delete(touchState.attempts, filename)
+		}
+	}
+	touchState.mu.Unlock()
+	return err
+}
+
+// CleanupExpired removes unused images, including plugin-owned subdirectories.
 func CleanupExpired(ctx context.Context) (int, error) {
 	cacheDir := util.GetLocation().GetImageCacheDirectory()
-	entries, err := os.ReadDir(cacheDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, err
-	}
-
 	cutoff := time.Now().Add(-retentionAge)
 	removedCount := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	err := filepath.WalkDir(cacheDir, func(filename string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			if filename == cacheDir {
+				return walkErr
+			}
+			util.GetLogger().Debug(ctx, fmt.Sprintf("failed to walk image cache: path=%s err=%v", filename, walkErr))
+			return nil
 		}
-
-		info, infoErr := entry.Info()
-		if infoErr != nil {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("failed to read image cache file info: name=%s err=%s", entry.Name(), infoErr.Error()))
-			continue
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("failed to read image cache file info: path=%s err=%v", filename, err))
+			return nil
 		}
 		if !info.ModTime().Before(cutoff) {
-			continue
+			return nil
 		}
-
-		cachePath := filepath.Join(cacheDir, entry.Name())
-		if removeErr := os.Remove(cachePath); removeErr != nil {
-			if os.IsNotExist(removeErr) {
-				forgetMemoryState(cachePath)
-				continue
+		if err := os.Remove(filename); err != nil {
+			if os.IsNotExist(err) {
+				forgetMemoryState(filename)
+				return nil
 			}
-			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to remove expired image cache file: path=%s err=%s", cachePath, removeErr.Error()))
-			continue
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to remove expired image cache file: path=%s err=%s", filename, err))
+			return nil
 		}
-		forgetMemoryState(cachePath)
+		forgetMemoryState(filename)
 		removedCount++
-	}
-
-	return removedCount, nil
+		return nil
+	})
+	return removedCount, err
 }
 
 // StartCleanupRoutine runs image cache cleanup once at startup and then on a fixed schedule.
@@ -153,7 +176,7 @@ func managedCachePath(cachePath string) (string, bool) {
 
 	cleanPath := filepath.Clean(cachePath)
 	cacheDir := filepath.Clean(util.GetLocation().GetImageCacheDirectory())
-	if !strings.EqualFold(filepath.Dir(cleanPath), cacheDir) {
+	if !pathWithin(cacheDir, cleanPath) {
 		return "", false
 	}
 	return cleanPath, true
@@ -182,4 +205,10 @@ func forgetMemoryState(cachePath string) {
 	cleanPath := filepath.Clean(cachePath)
 	forgetTouchAttempt(cleanPath)
 	derivedPathExistenceCache.Delete(cleanPath)
+}
+
+// pathWithin excludes the root itself and sibling paths with the same prefix.
+func pathWithin(directory, filename string) bool {
+	rel, err := filepath.Rel(directory, filename)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }

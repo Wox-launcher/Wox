@@ -65,6 +65,8 @@ type lazyResultIconEntry struct {
 	ResultId        string
 	OriginalIcon    common.WoxImage
 	PluginDirectory string
+	PluginInstance  *Instance
+	CacheScope      string
 	TargetSize      int
 	CreatedAt       int64
 
@@ -656,6 +658,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 	m.deactivatePlugin(ctx, pluginInstance)
+	pluginInstance.closeImageCache(ctx)
 
 	m.removePluginInstances(func(instance *Instance) bool {
 		return instance.Metadata.Id == pluginInstance.Metadata.Id
@@ -1410,7 +1413,7 @@ func (m *Manager) buildMetadataBackedQueryLayout(ctx context.Context, pluginInst
 
 	iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
 	if parseErr == nil {
-		convertedIcon := common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
+		convertedIcon := pluginInstance.ConvertIcon(ctx, iconImg)
 		layout.Icon = &convertedIcon
 	} else {
 		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
@@ -2098,7 +2101,7 @@ func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *
 		item.Subtitle = m.translatePlugin(ctx, pluginInstance, item.Subtitle)
 
 		if item.Icon != nil && !item.Icon.IsEmpty() {
-			convertedIcon := common.ConvertIcon(ctx, *item.Icon, pluginInstance.PluginDirectory)
+			convertedIcon := pluginInstance.ConvertIcon(ctx, *item.Icon)
 			item.Icon = &convertedIcon
 		}
 
@@ -2108,7 +2111,7 @@ func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *
 				tail.Text = m.translatePlugin(ctx, pluginInstance, tail.Text)
 			}
 			if tail.Type == QueryResultTailTypeImage {
-				tail.Image = common.ConvertIcon(ctx, tail.Image, pluginInstance.PluginDirectory)
+				tail.Image = pluginInstance.ConvertIcon(ctx, tail.Image)
 			}
 		}
 	}
@@ -2432,7 +2435,7 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 			Recorder:    recorder,
 		}
 	}
-	convertedIcon := common.ConvertIconWithSizeMaybeLazyWithDiagnostics(ctx, icon, pluginDirectory, resultIconSize, diagnostics)
+	convertedIcon := pluginInstance.convertIcon(ctx, icon, common.IconConversion{Size: resultIconSize, AllowLazy: true, Diagnostics: diagnostics})
 	if convertedIcon.ImageType != common.WoxImageTypeLazyLoad {
 		return convertedIcon
 	}
@@ -2452,7 +2455,7 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 	// Result icon conversion is the only place that has both plugin path context
 	// and stable result/query IDs. Common returns only a source-bearing lazy marker;
 	// manager owns token registration because it also owns the result cache.
-	registeredIcon := m.registerLazyResultIcon(ctx, pluginInstance, query, resultId, *payload.Source, pluginDirectory, targetSize)
+	registeredIcon := m.registerLazyResultIcon(ctx, pluginInstance, query, resultId, *payload.Source, pluginDirectory, targetSize, payload.CacheScope)
 	if !registeredIcon.IsEmpty() {
 		return registeredIcon
 	}
@@ -2461,12 +2464,12 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 	// unregistered lazy marker to UI.
 	if recorder != nil {
 		diagnostics.Purpose = "result_icon_lazy_fallback"
-		return common.ConvertIconWithSizeWithDiagnostics(ctx, *payload.Source, pluginDirectory, targetSize, diagnostics)
+		return pluginInstance.convertIcon(ctx, *payload.Source, common.IconConversion{Size: targetSize, CacheScope: payload.CacheScope, Diagnostics: diagnostics})
 	}
-	return common.ConvertIconWithSize(ctx, *payload.Source, pluginDirectory, targetSize)
+	return pluginInstance.convertIcon(ctx, *payload.Source, common.IconConversion{Size: targetSize, CacheScope: payload.CacheScope})
 }
 
-func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *Instance, query Query, resultId string, normalized common.WoxImage, pluginDirectory string, size int) common.WoxImage {
+func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *Instance, query Query, resultId string, normalized common.WoxImage, pluginDirectory string, size int, cacheScope string) common.WoxImage {
 	if query.SessionId == "" || query.Id == "" || resultId == "" {
 		return common.WoxImage{}
 	}
@@ -2481,6 +2484,8 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 		ResultId:        resultId,
 		OriginalIcon:    normalized,
 		PluginDirectory: pluginDirectory,
+		PluginInstance:  pluginInstance,
+		CacheScope:      cacheScope,
 		TargetSize:      size,
 		CreatedAt:       util.GetSystemTimestamp(),
 	})
@@ -2492,7 +2497,7 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 	logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) icon deferred as lazyloadimage, size: %d", pluginName, resultId, size))
 	// The authorization token is query-scoped, while the source hash is stable
 	// across queries so UI can reuse an already decoded icon.
-	cacheKey := fmt.Sprintf("%s-%d", normalized.Hash(), size)
+	cacheKey := fmt.Sprintf("%s-%s-%d", util.Md5([]byte(cacheScope)), normalized.Hash(), size)
 	return common.NewWoxImageLazyLoad(token, cacheKey, common.ImageThumbnailPlaceholderIcon, size)
 }
 
@@ -2507,6 +2512,14 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token not found")
 	}
 
+	// Hold the instance read lock through publication, not just conversion.
+	if entry.PluginInstance != nil {
+		entry.PluginInstance.imageMu.RLock()
+		defer entry.PluginInstance.imageMu.RUnlock()
+		if entry.PluginInstance.imageCacheClosed {
+			return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("plugin is unloaded")
+		}
+	}
 	resultCache, cacheFound := m.findResultCacheInSession(entry.SessionId, entry.QueryId, entry.ResultId)
 	if !cacheFound {
 		m.lazyResultIcons.Delete(token)
@@ -2537,7 +2550,14 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 	// because this path runs after UI has built an image widget for the
 	// result. That keeps the query response fast while still reusing the existing
 	// crop/resize/cache behavior for the actual thumbnail artifact.
-	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
+	pluginID := ""
+	if entry.PluginInstance != nil {
+		pluginID = entry.PluginInstance.Metadata.Id
+	}
+	converted, err := common.ConvertPluginIcon(ctx, entry.OriginalIcon, pluginID, entry.PluginDirectory, common.IconConversion{Size: entry.TargetSize, CacheScope: entry.CacheScope})
+	if err != nil {
+		return common.ImageThumbnailPlaceholderIcon, err
+	}
 	// URL GIFs used to stay typed as url because conversion skipped resize.
 	// UI cannot decode that type, so they collapsed to the placeholder. The
 	// converter now downloads the file first; a remaining url means the fetch failed.
@@ -3031,7 +3051,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	ActionDefaultsCostUs := time.Since(actionDefaultsTimingStart).Microseconds()
 	actionIconStart := util.GetSystemTimestamp()
 	actionIconTimingStart := time.Now()
-	ActionIconCount := convertActionIcons(ctx, result.Actions, pluginInstance.PluginDirectory, actionIconCache)
+	ActionIconCount := convertActionIcons(ctx, result.Actions, pluginInstance, actionIconCache)
 	ActionIconCost := util.GetSystemTimestamp() - actionIconStart
 	ActionIconCostUs := time.Since(actionIconTimingStart).Microseconds()
 	actionCallbackStart := util.GetSystemTimestamp()
@@ -3065,7 +3085,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
 			TailImageCount++
-			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
+			result.Tails[i].Image = pluginInstance.ConvertIcon(ctx, result.Tails[i].Image)
 		}
 	}
 	TailIconCost := util.GetSystemTimestamp() - tailIconStart
@@ -3401,7 +3421,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 }
 
 // convertActionIcons normalizes each distinct source once within a plugin response.
-func convertActionIcons(ctx context.Context, actions []QueryResultAction, pluginDirectory string, cache map[common.WoxImage]common.WoxImage) int {
+func convertActionIcons(ctx context.Context, actions []QueryResultAction, pluginInstance *Instance, cache map[common.WoxImage]common.WoxImage) int {
 	convertedCount := 0
 	for index := range actions {
 		source := actions[index].Icon
@@ -3412,7 +3432,7 @@ func convertActionIcons(ctx context.Context, actions []QueryResultAction, plugin
 			actions[index].Icon = converted
 			continue
 		}
-		converted := common.ConvertIcon(ctx, source, pluginDirectory)
+		converted := pluginInstance.ConvertIcon(ctx, source)
 		actions[index].Icon = converted
 		convertedCount++
 		if cache != nil {
@@ -3554,7 +3574,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			if actions[actionIndex].Icon.IsEmpty() {
 				actions[actionIndex].Icon = common.ExecuteActionIcon
 			} else {
-				actions[actionIndex].Icon = common.ConvertIcon(ctx, actions[actionIndex].Icon, pluginInstance.PluginDirectory)
+				actions[actionIndex].Icon = pluginInstance.ConvertIcon(ctx, actions[actionIndex].Icon)
 			}
 			if actions[actionIndex].Type == "" {
 				if len(actions[actionIndex].Form) > 0 || actions[actionIndex].OnSubmit != nil {
@@ -3672,7 +3692,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, tails[i].Tooltip)
 			}
 			if tails[i].Type == QueryResultTailTypeImage {
-				tails[i].Image = common.ConvertIcon(ctx, tails[i].Image, pluginInstance.PluginDirectory)
+				tails[i].Image = pluginInstance.ConvertIcon(ctx, tails[i].Image)
 			}
 		}
 
@@ -5011,7 +5031,7 @@ func (m *Manager) BuildScopeIcons(ctx context.Context, query Query) []common.Wox
 			logger.Error(ctx, fmt.Sprintf("failed to parse scope icon for %s: %s", pluginInstance.Metadata.Id, parseErr.Error()))
 			continue
 		}
-		icons = append(icons, common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory))
+		icons = append(icons, pluginInstance.ConvertIcon(ctx, iconImg))
 		if len(icons) >= 3 {
 			break
 		}
@@ -5195,7 +5215,7 @@ func (m *Manager) normalizeGlanceItem(ctx context.Context, pluginInstance *Insta
 		PluginId: pluginInstance.Metadata.Id,
 		Id:       item.Id,
 		Text:     pluginInstance.translateMetadataText(ctx, common.I18nString(item.Text)),
-		Icon:     common.ConvertIcon(ctx, item.Icon, pluginInstance.PluginDirectory),
+		Icon:     pluginInstance.ConvertIcon(ctx, item.Icon),
 		Tooltip:  pluginInstance.translateMetadataText(ctx, common.I18nString(item.Tooltip)),
 	}
 
@@ -5210,7 +5230,7 @@ func (m *Manager) normalizeGlanceItem(ctx context.Context, pluginInstance *Insta
 		action.Name = pluginInstance.translateMetadataText(ctx, common.I18nString(action.Name))
 		action.ContextData = common.ContextData(lo.Assign(map[string]string{}, action.ContextData))
 		if !action.Icon.IsEmpty() {
-			action.Icon = common.ConvertIcon(ctx, action.Icon, pluginInstance.PluginDirectory)
+			action.Icon = pluginInstance.ConvertIcon(ctx, action.Icon)
 		}
 		m.glanceActions.Store(glanceActionCacheKey(pluginInstance.Metadata.Id, item.Id, action.Id), action)
 		uiItem.Action = &GlanceActionUI{
@@ -5383,7 +5403,7 @@ func (m *Manager) normalizeToolbarMsg(ctx context.Context, pluginInstance *Insta
 	if icon.IsEmpty() {
 		icon = common.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, common.WoxImage{})
 	}
-	normalizedIcon := common.ConvertIcon(ctx, icon, pluginInstance.PluginDirectory)
+	normalizedIcon := pluginInstance.ConvertIcon(ctx, icon)
 
 	normalized := ToolbarMsg{
 		Id:            msg.Id,
@@ -5403,7 +5423,7 @@ func (m *Manager) normalizeToolbarMsg(ctx context.Context, pluginInstance *Insta
 		if !action.Icon.IsEmpty() {
 			// Action icons share the same toolbar payload path as the message icon. Normalize them
 			// before storing callbacks so plugin-relative assets stay usable when actions are shown.
-			action.Icon = common.ConvertIcon(ctx, action.Icon, pluginInstance.PluginDirectory)
+			action.Icon = pluginInstance.ConvertIcon(ctx, action.Icon)
 		}
 
 		if action.Action == nil {

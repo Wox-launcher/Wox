@@ -316,10 +316,10 @@ func TestConvertActionIconsReusesConvertedSource(t *testing.T) {
 	first := []QueryResultAction{{Icon: icon}, {Icon: icon}}
 	second := []QueryResultAction{{Icon: icon}}
 
-	if converted := convertActionIcons(context.Background(), first, "", cache); converted != 1 {
+	if converted := convertActionIcons(context.Background(), first, nil, cache); converted != 1 {
 		t.Fatalf("first conversion count = %d, want 1", converted)
 	}
-	if converted := convertActionIcons(context.Background(), second, "", cache); converted != 0 {
+	if converted := convertActionIcons(context.Background(), second, nil, cache); converted != 0 {
 		t.Fatalf("reused conversion count = %d, want 0", converted)
 	}
 	if first[0].Icon != icon || first[1].Icon != icon || second[0].Icon != icon {
