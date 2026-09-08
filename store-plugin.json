@@ -546,11 +546,11 @@
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
-    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.CodexUsage/master/images/app.svg",
-    "Website": "https://github.com/Wox-launcher/Wox.Plugin.CodexUsage",
-    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.CodexUsage/releases/latest/download/Wox.Plugin.CodexUsage.wox",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.AIQuota/master/images/app.svg",
+    "Website": "https://github.com/Wox-launcher/Wox.Plugin.AIQuota",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.AIQuota/releases/latest/download/Wox.Plugin.AIQuota.wox",
     "ScreenshotUrls": [
-      "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.CodexUsage/master/screenshot.png"
+      "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.AIQuota/master/screenshot.png"
     ],
     "SupportedOS": [
       "Windows",
@@ -558,15 +558,15 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-06-09 15:59:48",
+    "DateUpdated": "2026-09-08 21:42:48",
     "I18n": {
       "en_US": {
-        "plugin_name": "Codex Usage",
-        "plugin_desc": "Show Codex rate limits inside Wox"
+        "plugin_name": "AI Quota",
+        "plugin_desc": "Show AI rate limits inside Wox"
       },
       "zh_CN": {
-        "plugin_name": "Codex Usage",
-        "plugin_desc": "在 Wox 中显示 Codex 限额用量"
+        "plugin_name": "AI额度",
+        "plugin_desc": "在 Wox 中显示 AI 限额用量"
       }
     }
   },
