@@ -22,6 +22,8 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/setting"
+	"wox/setting/definition"
+	"wox/setting/validator"
 
 	"wox/util"
 	"wox/util/browser"
@@ -222,7 +224,11 @@ const (
 	systemActionPinInQueryID        = "__system_pin_in_query__"
 	systemActionUnpinInQueryID      = "__system_unpin_in_query__"
 	systemActionResetRankingID      = "__system_reset_ranking__"
+	systemActionAddQueryShortcutID  = "__system_add_query_shortcut__"
 	systemActionOpenPluginSettingID = "__system_open_plugin_setting__"
+
+	queryShortcutFormShortcutKey = "shortcut"
+	queryShortcutFormQueryKey    = "query"
 )
 
 func GetPluginManager() *Manager {
@@ -1911,9 +1917,91 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		Action:                 resetRankingAction,
 	})
 
+	if queryText, ok := newQueryShortcutText(query, settingManager.GetWoxSetting(ctx).QueryShortcuts.Get()); ok {
+		defaultActions = append(defaultActions, m.newAddQueryShortcutAction(pluginInstance, queryText))
+	}
+
 	defaultActions = append(defaultActions, openPluginSettingAction)
 
 	return defaultActions
+}
+
+// newQueryShortcutText returns the query text that can become a new shortcut.
+// Only typed queries qualify, and a query that already is a shortcut target is
+// skipped because aliasing it again would just duplicate the existing entry.
+func newQueryShortcutText(query Query, existingShortcuts []setting.QueryShortcut) (string, bool) {
+	if query.Type != QueryTypeInput {
+		return "", false
+	}
+	queryText := strings.TrimSpace(query.RawQuery)
+	if queryText == "" {
+		return "", false
+	}
+	for _, shortcut := range existingShortcuts {
+		if shortcut.Query == queryText {
+			return "", false
+		}
+	}
+	return queryText, true
+}
+
+// newAddQueryShortcutAction saves the current query as a shortcut from an inline
+// action form. Naming an alias is a single-field edit, so it stays in the launcher
+// instead of sending the user to the settings window.
+func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText string) QueryResultAction {
+	return QueryResultAction{
+		Id:                     systemActionAddQueryShortcutID,
+		Name:                   "i18n:plugin_manager_add_query_shortcut",
+		Icon:                   common.QueryShortcutIcon,
+		Type:                   QueryResultActionTypeForm,
+		IsSystemAction:         true,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:        queryShortcutFormShortcutKey,
+					Label:      "i18n:plugin_manager_add_query_shortcut_shortcut",
+					Tooltip:    "i18n:plugin_manager_add_query_shortcut_shortcut_tooltip",
+					Validators: []validator.PluginSettingValidator{{Type: validator.PluginSettingValidatorTypeNotEmpty, Value: &validator.PluginSettingValidatorNotEmpty{}}},
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          queryShortcutFormQueryKey,
+					Label:        "i18n:plugin_manager_add_query_shortcut_query",
+					DefaultValue: queryText,
+					Validators:   []validator.PluginSettingValidator{{Type: validator.PluginSettingValidatorTypeNotEmpty, Value: &validator.PluginSettingValidatorNotEmpty{}}},
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext FormActionContext) {
+			api := NewAPI(pluginInstance)
+			shortcut := setting.QueryShortcut{
+				Shortcut: strings.TrimSpace(actionContext.Values[queryShortcutFormShortcutKey]),
+				Query:    strings.TrimSpace(actionContext.Values[queryShortcutFormQueryKey]),
+			}
+			if shortcut.Shortcut == "" || shortcut.Query == "" {
+				return
+			}
+
+			shortcutSetting := setting.GetSettingManager().GetWoxSetting(ctx).QueryShortcuts
+			existing := shortcutSetting.Get()
+			for _, saved := range existing {
+				if strings.EqualFold(saved.Shortcut, shortcut.Shortcut) {
+					api.Notify(ctx, "i18n:plugin_manager_add_query_shortcut_duplicated")
+					return
+				}
+			}
+
+			shortcutSetting.Set(append(append([]setting.QueryShortcut(nil), existing...), shortcut))
+			// The settings window reads Wox settings once when it opens, so it must be
+			// told about a shortcut added from the launcher.
+			m.ui.ReloadSetting(ctx)
+			api.Notify(ctx, "i18n:plugin_manager_add_query_shortcut_success")
+		},
+	}
 }
 
 func (m *Manager) newOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance) QueryResultAction {
@@ -4554,7 +4642,9 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 
 func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, actionId string, contextData map[string]string) {
 	meta := resultCache.PluginInstance.Metadata
-	if actionId != systemActionResetRankingID {
+	// Ranking history describes how often a result is used, so maintenance actions
+	// that only change Wox configuration must not boost the result they were run from.
+	if actionId != systemActionResetRankingID && actionId != systemActionAddQueryShortcutID {
 		// Add actioned result for statistics
 		scoreHash := resultScoreHash(meta.Id, resultCache.Result)
 		setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)

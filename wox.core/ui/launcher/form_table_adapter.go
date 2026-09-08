@@ -719,10 +719,12 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	}
 	if markdown {
 		props.OnOpenLink = a.openAboutLink
+	}
+	if value.QueryTest {
 		actionTint := palette.componentTheme().ResultSubtitle
 		props.ActionIcon = a.imageForTint(settingControlIconSource("bolt"), &actionTint, physicalImageSize(18, callbacks.imageScale))
 		props.ActionLabel = a.translate("i18n:ui_query_hotkeys_test_query")
-		props.OnActionTap = a.runFormTableQueryHotkeyTest
+		props.OnActionTap = func() { a.runFormTableQueryTest(index) }
 		props.OnActionHover = func(inside bool, anchor woxui.Rect) {
 			a.setSettingChoiceTooltip(inside, a.translate("i18n:ui_query_hotkeys_test_query"), anchor)
 		}

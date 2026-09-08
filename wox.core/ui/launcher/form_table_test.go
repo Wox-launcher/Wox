@@ -734,6 +734,29 @@ func TestReplaceQueryHotkeyVariablesForTestUsesSampleValues(t *testing.T) {
 	}
 }
 
+// TestQueryValuedColumnsOfferQueryTest guards the shared test button that query hotkeys,
+// query shortcuts and tray queries all rely on to preview the edited query.
+func TestQueryValuedColumnsOfferQueryTest(t *testing.T) {
+	form := newHotkeySettingsForm(settingsData{})
+	tables := map[string]bool{"QueryHotkeys": false, "QueryShortcuts": false, "TrayQueries": false}
+	for _, definition := range form.definitions {
+		if _, tracked := tables[definition.Value.Key]; !tracked {
+			continue
+		}
+		fields, _ := formTableRowFields(definition, nil)
+		for _, field := range fields.definitions {
+			if field.Value.Key == "Query" {
+				tables[definition.Value.Key] = field.Value.QueryTest
+			}
+		}
+	}
+	for table, enabled := range tables {
+		if !enabled {
+			t.Fatalf("%s query field should expose the query test button", table)
+		}
+	}
+}
+
 func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 	target := newHotkeySettingsForm(settingsData{})
 	definition := formDefinition{}

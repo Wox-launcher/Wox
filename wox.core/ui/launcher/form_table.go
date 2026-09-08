@@ -185,17 +185,19 @@ func replaceQueryHotkeyVariablesForTest(query string) string {
 	return replaced
 }
 
-// runFormTableQueryHotkeyTest opens the launcher with the editor query, substituting variables with sample values.
-func (a *App) runFormTableQueryHotkeyTest() {
+// runFormTableQueryTest opens the launcher with the edited query so the user can verify it
+// without leaving the row editor. Query hotkeys carry {wox:...} variables that are replaced
+// with sample values; fields without them, such as query shortcuts, pass through unchanged.
+func (a *App) runFormTableQueryTest(index int) {
 	state := a.activeFormTableEditor()
-	if state == nil || state.rowForm == nil || state.definition.Value.Key != "QueryHotkeys" {
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || !state.rowForm.definitions[index].Value.QueryTest {
 		return
 	}
 	if state.rowForm.editor != nil {
 		syncFormFieldsEditorLocked(state.rowForm)
 	}
 	// Keep leading/trailing spaces from the editor; only reject blank-only queries.
-	queryText := state.rowForm.values["Query"]
+	queryText := state.rowForm.values[state.rowForm.definitions[index].Value.Key]
 	if strings.TrimSpace(queryText) == "" {
 		return
 	}
@@ -214,13 +216,13 @@ func (a *App) runFormTableQueryHotkeyTest() {
 		}
 	}
 	a.setQuery(newInputQuery(resolved))
-	util.Go(a.lifecycleCtx, "show launcher for query hotkey test", func() {
+	util.Go(a.lifecycleCtx, "show launcher for query test", func() {
 		if err := a.showWindow(params); err != nil {
-			util.GetLogger().Error(a.lifecycleCtx, "show launcher for query hotkey test: "+err.Error())
+			util.GetLogger().Error(a.lifecycleCtx, "show launcher for query test: "+err.Error())
 			return
 		}
 		if err := a.sendCurrentQuery(); err != nil {
-			util.GetLogger().Error(a.lifecycleCtx, "send query hotkey test: "+err.Error())
+			util.GetLogger().Error(a.lifecycleCtx, "send query test: "+err.Error())
 		}
 	})
 }
@@ -502,7 +504,7 @@ func formTableColumnValue(column formTableColumn, row map[string]any) string {
 }
 
 func formTableColumnDefinition(column formTableColumn, row map[string]any) (formDefinition, bool) {
-	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind}
+	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, QueryTest: column.QueryTest}
 	switch column.Type {
 	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable":
 		value.MaxLines = max(1, column.TextMaxLines)

@@ -2128,7 +2128,9 @@ type formDefinitionValue struct {
 	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
 	ColumnType string `json:"ColumnType"`
 	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
-	QueryVariableKind string              `json:"QueryVariableKind"`
+	QueryVariableKind string `json:"QueryVariableKind"`
+	// QueryTest shows the test button that runs this field's value as a launcher query.
+	QueryTest         bool                `json:"QueryTest"`
 	Content           string              `json:"Content"`
 	MaxLines          int                 `json:"MaxLines"`
 	IsMulti           bool                `json:"IsMulti"`
@@ -2186,6 +2188,8 @@ type formTableColumn struct {
 	PreviewMatchedApps bool `json:"PreviewMatchedApps"`
 	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
 	QueryVariableKind string `json:"QueryVariableKind"`
+	// QueryTest shows the test button that runs this column's value as a launcher query.
+	QueryTest bool `json:"QueryTest"`
 }
 
 // formTableColumnVisibleWhen shows a row-editor field only when another field has one of Values.

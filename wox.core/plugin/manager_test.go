@@ -143,6 +143,38 @@ func Test_QueryShortcut(t *testing.T) {
 	assert.Equal(t, "wpm install 1 x {1}", query)
 }
 
+func TestNewQueryShortcutText(t *testing.T) {
+	existing := []setting.QueryShortcut{{Shortcut: "tr", Query: "chatgpt translate"}}
+
+	queryText, ok := newQueryShortcutText(Query{Type: QueryTypeInput, RawQuery: "  google wox  "}, existing)
+	assert.True(t, ok)
+	assert.Equal(t, "google wox", queryText)
+
+	// A query that a shortcut already expands to would only duplicate that entry.
+	_, ok = newQueryShortcutText(Query{Type: QueryTypeInput, RawQuery: "chatgpt translate"}, existing)
+	assert.False(t, ok)
+
+	_, ok = newQueryShortcutText(Query{Type: QueryTypeInput, RawQuery: "   "}, existing)
+	assert.False(t, ok)
+
+	_, ok = newQueryShortcutText(Query{Type: QueryTypeSelection, RawQuery: "google wox"}, existing)
+	assert.False(t, ok)
+}
+
+func TestAddQueryShortcutActionUsesInlineForm(t *testing.T) {
+	action := (&Manager{}).newAddQueryShortcutAction(&Instance{Metadata: Metadata{Id: "wox"}}, "google wox")
+
+	assert.Equal(t, QueryResultActionTypeForm, action.Type)
+	assert.True(t, action.IsSystemAction)
+	assert.True(t, action.PreventHideAfterAction)
+	assert.NotNil(t, action.OnSubmit)
+	require.Len(t, action.Form, 2)
+	assert.Equal(t, queryShortcutFormShortcutKey, action.Form[0].Value.GetKey())
+	assert.Empty(t, action.Form[0].Value.GetDefaultValue())
+	assert.Equal(t, queryShortcutFormQueryKey, action.Form[1].Value.GetKey())
+	assert.Equal(t, "google wox", action.Form[1].Value.GetDefaultValue())
+}
+
 func TestPolishUpdatableResultClearsPreviewForGlobalQuery(t *testing.T) {
 	manager, pluginInstance := newTestManagerWithCachedResult(Query{
 		Id:        "query-global",
