@@ -1286,5 +1286,37 @@
     ],
     "DateCreated": "2026-09-08 12:57:47",
     "DateUpdated": "2026-09-08 12:57:47"
+  },
+  {
+    "Id": "b7e2c4a1-8f3d-4e91-9c6a-2d5b1a0e8f47",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "python",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/1906dd58-4caf-45e2-8874-7da532242cca",
+    "Website": "https://gist.github.com/qianlifeng/a46c95ef4bd0e5f782e873260ed72491",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/a46c95ef4bd0e5f782e873260ed72491/raw/Wox.Plugin.LockKeybord.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/12eea724-e736-49cc-96ea-0853bda76a02"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-09 12:42:00",
+    "DateUpdated": "2026-09-09 12:42:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Wox.Plugin.LockKeybord",
+        "plugin_description": "Lock the keyboard so you can wipe it without triggering shortcuts"
+      },
+      "zh_CN": {
+        "plugin_name": "Wox.Plugin.LockKeybord",
+        "plugin_description": "锁定键盘，方便擦拭按键且不会误触快捷键"
+      }
+    }
   }
 ]

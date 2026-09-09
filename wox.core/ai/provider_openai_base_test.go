@@ -12,7 +12,64 @@ import (
 	"wox/common"
 	"wox/setting"
 	"wox/util"
+
+	"github.com/tmc/langchaingo/jsonschema"
 )
+
+func TestConvertToolsOmitsNonObjectProperties(t *testing.T) {
+	provider := &OpenAIBaseProvider{}
+	tools := provider.convertTools([]common.Tool{{
+		Name:        "bash",
+		Description: "run a command",
+		Parameters: jsonschema.Definition{
+			Type: jsonschema.Object,
+			Properties: map[string]jsonschema.Definition{
+				"command": {Type: jsonschema.String, Description: "shell command"},
+				"timeout": {Type: jsonschema.Integer, Description: "seconds"},
+				"names": {
+					Type:        jsonschema.Array,
+					Description: "tool names",
+					Items:       &jsonschema.Definition{Type: jsonschema.String},
+				},
+			},
+			Required: []string{"command"},
+		},
+	}})
+	if len(tools) != 1 {
+		t.Fatalf("converted tools = %d, want 1", len(tools))
+	}
+
+	data, err := json.Marshal(tools[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	function, _ := payload["function"].(map[string]any)
+	parameters, _ := function["parameters"].(map[string]any)
+	properties, _ := parameters["properties"].(map[string]any)
+	command, _ := properties["command"].(map[string]any)
+	timeout, _ := properties["timeout"].(map[string]any)
+	names, _ := properties["names"].(map[string]any)
+	if _, ok := command["properties"]; ok {
+		t.Fatalf("string property must not include properties: %s", data)
+	}
+	if _, ok := timeout["properties"]; ok {
+		t.Fatalf("integer property must not include properties: %s", data)
+	}
+	if command["type"] != "string" || timeout["type"] != "integer" {
+		t.Fatalf("property types = %s", data)
+	}
+	items, _ := names["items"].(map[string]any)
+	if names["type"] != "array" || items["type"] != "string" {
+		t.Fatalf("array property = %s", data)
+	}
+	if _, ok := items["properties"]; ok {
+		t.Fatalf("array item string must not include properties: %s", data)
+	}
+}
 
 func TestDeepSeekConversationReplayPreservesReasoning(t *testing.T) {
 	provider := NewOpenAIBaseProvider(setting.AIProvider{Name: "deepseek", Host: "https://api.deepseek.com"})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -17,11 +18,13 @@ import (
 	"github.com/openai/openai-go/v3/packages/pagination"
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/packages/ssestream"
+	"github.com/tmc/langchaingo/jsonschema"
 )
 
 type OpenAIBaseProviderOptions struct {
 	Headers            map[string]string
 	ChatRequestOptions func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) []option.RequestOption
+	ModelsListOptions  []option.RequestOption
 }
 
 // OpenAIBaseProvider is the base provider for all OpenAI compatible providers
@@ -107,7 +110,7 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 			Messages: messages,
 			Tools:    convertedTools,
 			ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
-				OfAuto: param.Opt[string]{},
+				OfAuto: openai.String("auto"),
 			},
 		}
 		createdStream = client.Chat.Completions.NewStreaming(ctx, chatParams, requestOptions...)
@@ -132,7 +135,7 @@ func (o *OpenAIBaseProvider) getChatRequestOptions(ctx context.Context, model co
 // Models returns the list of available models from the OpenAI compatible provider
 func (o *OpenAIBaseProvider) Models(ctx context.Context) ([]common.Model, error) {
 	client := o.getClient(ctx)
-	models, err := client.Models.List(ctx)
+	models, err := client.Models.List(ctx, o.options.ModelsListOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,62 +162,74 @@ func (o *OpenAIBaseProvider) Ping(ctx context.Context) error {
 }
 
 func (o *OpenAIBaseProvider) convertTools(tools []common.Tool) []openai.ChatCompletionToolUnionParam {
-	/*
-		{
-			Type: "function",
-			Function: &llms.FunctionDefinition{
-				Name:        "getCurrentWeather",
-				Description: "Get the current weather in a given location",
-				Parameters: jsonschema.Definition{
-					Type: jsonschema.Object,
-					Properties: map[string]jsonschema.Definition{
-						"rationale": {
-							Type:        jsonschema.String,
-							Description: "The rationale for choosing this function call with these parameters",
-						},
-						"location": {
-							Type:        jsonschema.String,
-							Description: "The city and state, e.g. San Francisco, CA",
-						},
-						"unit": {
-							Type: jsonschema.String,
-							Enum: []string{"celsius", "fahrenheit"},
-						},
-					},
-					Required: []string{"rationale", "location"},
-				},
-			},
-		}
-	*/
 	convertedTools := make([]openai.ChatCompletionToolUnionParam, len(tools))
 	for i, tool := range tools {
-		parametersMap := make(map[string]any)
-		parametersMap["type"] = tool.Parameters.Type
-
-		if tool.Parameters.Properties != nil {
-			parametersMap["properties"] = tool.Parameters.Properties
-		} else {
-			parametersMap["properties"] = map[string]any{}
-		}
-
-		if len(tool.Parameters.Required) > 0 {
-			parametersMap["required"] = tool.Parameters.Required
-		}
-
 		convertedTools[i] = openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
 			Name:        tool.Name,
 			Description: openai.String(tool.Description),
-			Parameters:  openai.FunctionParameters(parametersMap),
+			Parameters:  openai.FunctionParameters(jsonSchemaDefinitionToMap(tool.Parameters)),
 		})
 	}
 	return convertedTools
 }
 
+// jsonSchemaDefinitionToMap copies a tool schema without langchaingo's empty
+// `properties` on non-object types. Strict OpenAI-compatible hosts such as
+// SiliconFlow reject that extra field with HTTP 400.
+func jsonSchemaDefinitionToMap(def jsonschema.Definition) map[string]any {
+	result := map[string]any{}
+	if def.Type != "" {
+		result["type"] = string(def.Type)
+	}
+	if def.Description != "" {
+		result["description"] = def.Description
+	}
+	if len(def.Enum) > 0 {
+		result["enum"] = def.Enum
+	}
+	if def.Type == jsonschema.Object || len(def.Properties) > 0 {
+		properties := map[string]any{}
+		for name, property := range def.Properties {
+			properties[name] = jsonSchemaDefinitionToMap(property)
+		}
+		result["properties"] = properties
+		if _, ok := result["type"]; !ok {
+			result["type"] = string(jsonschema.Object)
+		}
+	}
+	if len(def.Required) > 0 {
+		result["required"] = def.Required
+	}
+	if def.Items != nil {
+		result["items"] = jsonSchemaDefinitionToMap(*def.Items)
+	}
+	return result
+}
+
+func formatProviderAPIError(err error) string {
+	var apiErr *openai.Error
+	if !errors.As(err, &apiErr) {
+		return err.Error()
+	}
+
+	// SiliconFlow and other OpenAI-compatible hosts often return a JSON body
+	// whose `code` is a number. The SDK then drops RawJSON and the UI only
+	// shows "400 Bad Request". Keep the HTTP status and attach the body.
+	if raw := strings.TrimSpace(apiErr.RawJSON()); raw != "" && raw != "{}" {
+		return err.Error()
+	}
+	if dumped := strings.TrimSpace(string(apiErr.DumpResponse(true))); dumped != "" {
+		return fmt.Sprintf("%v\n%s", err, dumped)
+	}
+	return err.Error()
+}
+
 func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStreamData, error) {
 	if !s.stream.Next() {
 		if s.stream.Err() != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream error: %v", s.stream.Err()))
-			return common.ChatStreamData{}, s.stream.Err()
+			streamErr := formatProviderAPIError(s.stream.Err())
+			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream error: %s", streamErr))
+			return common.ChatStreamData{}, errors.New(streamErr)
 		}
 
 		var toolCallInfos []common.ToolCallInfo
