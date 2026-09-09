@@ -65,6 +65,7 @@ func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
+			"b",
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
@@ -98,30 +99,10 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
 	bookmarks := c.getBookmarksSnapshot()
+	loose := !query.IsGlobalQuery()
 	for _, b := range bookmarks {
 		var bookmark = b
-		var isMatch bool
-		var matchScore int64
-
-		var minMatchScore int64 = 50 // bookmark plugin has strict match score to avoid too many unrelated results
-
-		isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, bookmark.Name, query.Search)
-
-		if isNameMatch && nameScore >= minMatchScore {
-			isMatch = true
-			matchScore = nameScore
-		} else {
-			//url match must be exact part match
-			contains := strings.Contains(bookmark.Url, query.Search)
-			if contains {
-				isUrlMatch, urlScore := plugin.IsStringMatchScoreNoPinYin(ctx, bookmark.Url, query.Search)
-				if isUrlMatch && urlScore >= minMatchScore {
-					isMatch = true
-					matchScore = urlScore
-				}
-			}
-		}
-
+		isMatch, matchScore := matchBookmark(ctx, bookmark, query.Search, loose)
 		if isMatch {
 			// default icon, use cached favicon if exists (no network)
 			icon := browserBookmarkIcon
@@ -151,6 +132,46 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) p
 	}
 
 	return plugin.NewQueryResponse(results)
+}
+
+// matchBookmark keeps global search strict so bookmarks do not flood every query.
+// Command search drops the score floor and matches each query word against title or URL.
+func matchBookmark(ctx context.Context, bookmark Bookmark, search string, loose bool) (bool, int64) {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return loose, 5
+	}
+
+	minMatchScore := int64(50)
+	if loose {
+		minMatchScore = 0
+	}
+
+	isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, bookmark.Name, search)
+	if isNameMatch && nameScore >= minMatchScore {
+		return true, nameScore
+	}
+
+	if !loose {
+		if !strings.Contains(bookmark.Url, search) {
+			return false, 0
+		}
+		isUrlMatch, urlScore := plugin.IsStringMatchScoreNoPinYin(ctx, bookmark.Url, search)
+		if isUrlMatch && urlScore >= minMatchScore {
+			return true, urlScore
+		}
+		return false, 0
+	}
+
+	var urlScore int64
+	for _, token := range strings.Fields(search) {
+		isUrlMatch, tokenScore := plugin.IsStringMatchScoreNoPinYin(ctx, bookmark.Url, token)
+		if !isUrlMatch {
+			return false, 0
+		}
+		urlScore += tokenScore
+	}
+	return true, urlScore
 }
 
 func (c *BrowserBookmarkPlugin) reloadBookmarks(ctx context.Context) {
