@@ -87,8 +87,11 @@ type terminalMatch struct {
 }
 
 // buildTerminalPreview delegates presentation to the pure view while retaining controller-owned text layout caching.
-func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height float32, tags []previewview.PreviewTag) woxwidget.Widget {
-	key := "terminal\x00" + snapshot.SessionID
+func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height, imageScale float32, tags []previewview.PreviewTag) woxwidget.Widget {
+	font := ""
+	if a.generalSettings != nil {
+		font = a.generalSettings.Data().AppFontFamily
+	}
 	matches := make([]previewview.TerminalMatch, len(snapshot.Matches))
 	for index, match := range snapshot.Matches {
 		matches[index] = previewview.TerminalMatch{Start: match.start, End: match.end}
@@ -101,7 +104,10 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 		Fullscreen: a.terminalFullscreen, SearchHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("shift+f")), "+"),
 		FullscreenHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+"), Tags: tags,
 		LayoutText: func(value string, style woxui.TextStyle, textWidth, lineHeight float32) woxwidget.TextBlockLayout {
-			return a.previewTextLayout(key, value, style, textWidth, lineHeight)
+			return a.terminalLayout.measure(value, terminalLayoutKey{
+				session: snapshot.SessionID, font: font, window: a.window, width: textWidth,
+				scale: imageScale, lineHeight: lineHeight, style: style,
+			})
 		},
 		OnClampScroll: a.clampTerminalPreviewScroll, OnScroll: a.scrollTerminalPreview, OnOpenSearch: a.openTerminalSearch,
 		OnSetSearch: a.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.setTerminalSearchQuery(value) },
@@ -205,6 +211,7 @@ func (a *App) scheduleTerminalSubscription(sessionID string) {
 
 // deactivateTerminalPreview releases core output when the selected preview no longer uses it.
 func (a *App) deactivateTerminalPreview() {
+	a.terminalLayout = terminalLayoutCache{}
 	oldSessionID := ""
 	searchWasOpen := false
 	if a.terminalPreview != nil {

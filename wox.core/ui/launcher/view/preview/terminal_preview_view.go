@@ -2,6 +2,7 @@ package preview
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -245,7 +246,15 @@ func terminalOutputText(props TerminalPreviewProps, value string, style woxui.Te
 		return text
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: text}, {Child: woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		for _, segment := range segments {
+		start, end := 0, len(segments)
+		if clip, ok := displayList.ClipRect(); ok {
+			// Match overlays need the same viewport culling as TextBlock itself.
+			first := max(0, int((clip.Y-bounds.Y)/18))
+			last := max(first, int((clip.Y+clip.Height-bounds.Y)/18)+1)
+			start = sort.Search(len(segments), func(i int) bool { return segments[i].line >= first })
+			end = sort.Search(len(segments), func(i int) bool { return segments[i].line >= last })
+		}
+		for _, segment := range segments[start:end] {
 			line := layout.Lines[segment.line]
 			prefixMetrics, _ := props.Window.MeasureText(line[:segment.start], style)
 			matchMetrics, _ := props.Window.MeasureText(line[segment.start:segment.end], style)
@@ -263,6 +272,9 @@ func terminalOutputText(props TerminalPreviewProps, value string, style woxui.Te
 
 // terminalHighlightSegments maps absolute byte ranges onto the wrapped lines rendered by TextBlock.
 func terminalHighlightSegments(value string, lines []string, matches []TerminalMatch) []terminalHighlightSegment {
+	if len(matches) == 0 {
+		return nil
+	}
 	segments := make([]terminalHighlightSegment, 0, len(matches))
 	cursor := 0
 	matchIndex := 0

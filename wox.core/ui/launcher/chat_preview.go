@@ -1965,6 +1965,7 @@ func (a *App) deactivateChatPreview() {
 		a.chatFullscreen = false
 		return
 	}
+	a.chatMarkdown = chatMarkdownCache{}
 	state := a.chatPreview
 	wasActive := state != nil && state.active
 	wasFullscreen := a.chatFullscreen
@@ -2000,6 +2001,7 @@ func (a *App) resetChatPreview() {
 		questionID = a.chatPreview.question.QuestionID
 	}
 	a.chatPreview = nil
+	a.chatMarkdown = chatMarkdownCache{}
 	a.chatFullscreen = false
 	if questionID != "" {
 		util.Go(a.lifecycleCtx, "cancel reset AI question", func() {

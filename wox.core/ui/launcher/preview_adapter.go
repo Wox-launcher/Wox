@@ -57,7 +57,7 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 	}
 	tags := append(a.previewTags(preview.PreviewTags), a.previewTags(a.previewBodyTags(preview))...)
 	if preview.PreviewType == "terminal" {
-		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height, tags)
+		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height, imageScale, tags)
 	}
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale)
@@ -164,6 +164,11 @@ func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPositi
 
 // markdownProps centralizes the image and link actions shared by generic and structured Markdown previews.
 func (a *App) markdownProps(id, value, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
+	return a.markdownPropsWithDocument(id, a.markdownDocument(value), baseDirectory, palette, width, imageScale)
+}
+
+// markdownPropsWithDocument shares actions without reparsing a chat's retained document.
+func (a *App) markdownPropsWithDocument(id string, document woxcomponent.MarkdownDocument, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
 	resolveSource := func(source string) (woxImage, bool) {
 		trimmed := strings.TrimSpace(source)
 		if trimmed == "" {
@@ -192,7 +197,7 @@ func (a *App) markdownProps(id, value, baseDirectory string, palette uiPalette, 
 		return woxImage{}, false
 	}
 	return woxcomponent.MarkdownProps{
-		ID: id, Document: a.markdownDocument(value), Width: width, Theme: palette.componentTheme(), Window: a.window,
+		ID: id, Document: document, Width: width, Theme: palette.componentTheme(), Window: a.window,
 		ResolveImage: func(source string) (*woxui.Image, string) {
 			imageSource, ok := resolveSource(source)
 			if !ok {

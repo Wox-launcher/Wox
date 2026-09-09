@@ -244,6 +244,8 @@ type App struct {
 	nativeFilePreviewOcclusion                woxui.Rect
 	nativeFilePreviewReportedOcclusion        woxui.Rect
 	mdDocs                                    map[string]woxcomponent.MarkdownDocument
+	chatMarkdown                              chatMarkdownCache
+	terminalLayout                            terminalLayoutCache
 	previewLayouts                            map[string]woxwidget.TextBlockLayout
 	dictationAudio                            *dictationPreviewAudioState
 	terminalPreview                           *terminalPreviewState

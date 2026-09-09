@@ -528,7 +528,11 @@ func formatChatRoundDuration(start, end int64) string {
 
 // chatMessagesProps prepares semantic messages and leaves their widget composition to the view.
 func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height, imageScale float32) previewview.ChatMessagesProps {
-	// ponytail: Add viewport virtualization after profiling a real long chat; the current full list preserves exact scroll height with less state.
+	// LazyList needs every row's height, but unchanged historical Markdown must not
+	// rebuild a widget tree just to supply that height on each streamed frame.
+	if a.chatMarkdown.chatID != snapshot.chat.ID {
+		a.chatMarkdown = chatMarkdownCache{chatID: snapshot.chat.ID}
+	}
 	innerWidth := max(float32(0), width-4)
 	innerHeight := max(float32(0), height-14)
 	emptyMessage := a.translate("i18n:ui_ai_chat_empty_prompt")
@@ -616,6 +620,11 @@ func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]boo
 		ToolSummary: summary, ToolSummaryWidth: summaryWidth, ToolLeading: leading, ToolStatus: status, ToolStatusColor: statusColor,
 		Theme: palette.componentTheme(), OnToggleRound: func() { a.toggleChatDisclosure(activityID) },
 	}
+	// Collapsed groups only display the summary. Preparing hidden responses can
+	// overflow the text-layout cache and remeasure every tool on each scroll frame.
+	if !props.RoundExpanded {
+		return props
+	}
 	props.Tools = make([]previewview.ChatToolCallProps, 0, len(item.tools))
 	for index, conversation := range item.tools {
 		props.Tools = append(props.Tools, a.chatToolCallProps(activityID, index, conversation, expanded, palette, width-24))
@@ -661,6 +670,9 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 		Key: callID, Name: name, NameWidth: nameWidth, Duration: duration, DurationWidth: durationWidth,
 		Status: status, StatusColor: chatToolStatusColor(status, palette.componentTheme()), Expanded: expanded[callID],
 		OnToggle: func() { a.toggleChatDisclosure(callID) },
+	}
+	if !props.Expanded {
+		return props
 	}
 	params := tool.Delta
 	if status != "streaming" {
@@ -809,10 +821,20 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		props.Text = strings.TrimSpace(conversation.Text)
 		if props.Text != "" {
 			if conversation.Role == "assistant" {
-				markdown := a.markdownProps(fmt.Sprintf("chat-markdown-%s-%d", key, index), props.Text, "", palette, innerWidth, imageScale)
+				markdown := a.markdownPropsWithDocument(fmt.Sprintf("chat-markdown-%s-%d", key, index), woxcomponent.MarkdownDocument{}, "", palette, innerWidth, imageScale)
 				markdown.FontSize = 13
+				font := ""
+				if a.generalSettings != nil {
+					font = a.generalSettings.Data().AppFontFamily
+				}
+				id := conversation.ID
+				if id == "" {
+					id = fmt.Sprintf("index-%d", index)
+				}
+				markdown, props.TextLayout.Size = a.chatMarkdown.measure(id, props.Text, chatMarkdownLayoutKey{
+					width: innerWidth, scale: imageScale, font: font, images: a.imagesRevision.Load(), window: a.window,
+				}, markdown)
 				props.Markdown = &markdown
-				props.TextLayout.Size = woxwidget.MeasureStateless(a.window, woxcomponent.WoxMarkdown(markdown), innerWidth)
 			} else {
 				props.TextLayout = a.previewTextLayout(fmt.Sprintf("chat-text\x00%s\x00%d", key, index), props.Text, woxui.TextStyle{Size: 13}, innerWidth, 19)
 			}

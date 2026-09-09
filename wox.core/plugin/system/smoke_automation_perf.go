@@ -64,20 +64,18 @@ func queryGridFixture() plugin.QueryResponse {
 // queryChatFixture publishes an observable streaming state and completes it after the last update.
 func (p *smokeAutomationPlugin) queryChatFixture() plugin.QueryResponse {
 	resultID := "perf-chat-result"
-	preview := chatFixturePreview(true)
+	preview := chatFixturePreview(true, 0)
 	api := p.api
 	go func() {
 		for step := 1; step <= smokeAutomationChatStreamCount; step++ {
 			time.Sleep(20 * time.Millisecond)
-			title := fmt.Sprintf("Perf chat stream %d", step)
-			// Title-only updates keep the 200-message preview retained; replacing
-			// PreviewData on every tick rebuilds the whole conversation on the UI thread.
-			api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Title: &title})
+			// Grow the actual answer so adapter preparation is included in frame costs.
+			preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: chatFixturePreview(true, step), ScrollPosition: plugin.WoxPreviewScrollPositionBottom}
+			api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Preview: &preview})
 		}
-		// Hidden result titles are not a completion signal in fullscreen chat.
 		// Publish the final preview once so the Stop control returns to Send;
 		// serial updates ensure no older timer can arrive after completion.
-		completed := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: chatFixturePreview(false), ScrollPosition: plugin.WoxPreviewScrollPositionBottom}
+		completed := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: chatFixturePreview(false, smokeAutomationChatStreamCount), ScrollPosition: plugin.WoxPreviewScrollPositionBottom}
 		api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Preview: &completed})
 	}()
 	ratio := 0.0
@@ -105,8 +103,8 @@ func queryWarmCacheFixture() plugin.QueryResponse {
 	return plugin.NewQueryResponse(results)
 }
 
-// chatFixturePreview keeps message content fixed across the streaming completion transition.
-func chatFixturePreview(streaming bool) string {
+// chatFixturePreview exercises distinct historical Markdown and a growing final answer.
+func chatFixturePreview(streaming bool, step int) string {
 	conversations := make([]common.Conversation, 0, smokeAutomationChatCount)
 	for index := range smokeAutomationChatCount {
 		role := common.ConversationRoleUser
@@ -121,10 +119,28 @@ func chatFixturePreview(streaming bool) string {
 			default:
 				text = strings.Repeat("Longer streaming-style paragraph for variable height. ", 8)
 			}
+			text = fmt.Sprintf("**Reply %d**\n\n%s", index, text)
+			if index == smokeAutomationChatCount-1 {
+				text += strings.Repeat(" More streamed text.", step)
+			}
 		}
 		conversations = append(conversations, common.Conversation{
 			Id: fmt.Sprintf("perf-msg-%d", index), Role: role, Text: text, Timestamp: int64(index),
 		})
+	}
+	// End with tools so the round stays visible after streaming stops. Separate
+	// summaries with reasoning, matching long agent runs with collapsed payloads.
+	conversations = append(conversations, common.Conversation{Id: "perf-tool-request", Role: common.ConversationRoleUser, Text: "Inspect these sources."})
+	for index := range 31 {
+		id := fmt.Sprintf("perf-tool-%d", index)
+		conversations = append(conversations,
+			common.Conversation{Id: id + "-reasoning", Role: common.ConversationRoleAssistant, Reasoning: strings.Repeat("Inspecting the next source. ", 20)},
+			common.Conversation{Id: id, Role: common.ConversationRoleTool, ToolCallInfo: common.ToolCallInfo{
+				Id: id, Name: "web_fetch", Source: common.ToolSourceBuiltin, Status: "succeeded",
+				Arguments: map[string]any{"url": "https://example.com/fixture"},
+				Response:  strings.Repeat("Deterministic hidden tool response. ", 200),
+			}},
+		)
 	}
 	raw, err := json.Marshal(common.AIChatPreviewData{
 		ActiveChat: common.AIChatData{Id: "perf-chat", Title: "Perf chat", Conversations: conversations, IsStreaming: streaming},
