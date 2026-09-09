@@ -61,10 +61,12 @@ func (i *PluginInstallerPlugin) Init(ctx context.Context, initParams plugin.Init
 }
 
 func (i *PluginInstallerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	// File-selection queries also cover double-clicked .wox packages forwarded
+	// through the wox://install deeplink / OS file association.
 	if query.Type == plugin.QueryTypeSelection &&
 		query.Selection.Type == selection.SelectionTypeFile &&
 		len(query.Selection.FilePaths) == 1 &&
-		strings.HasSuffix(query.Selection.FilePaths[0], ".wox") {
+		util.IsPluginPackagePath(query.Selection.FilePaths[0]) {
 		results := i.queryForSelectionFile(ctx, query.Selection.FilePaths[0])
 		// Preview panel takes 60% of the width so plugin detail is given more room.
 		ratio := 0.4

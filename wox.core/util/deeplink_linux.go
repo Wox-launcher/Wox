@@ -9,7 +9,8 @@ import (
 	"path/filepath"
 )
 
-// EnsureDeepLinkProtocolHandler registers the desktop entry as the wox URL handler.
+// EnsureDeepLinkProtocolHandler registers the desktop entry as the wox URL
+// handler and the default application for .wox plugin packages.
 func EnsureDeepLinkProtocolHandler(ctx context.Context) bool {
 	desktopFilePath, err := LinuxDesktopEntryPath()
 	if err != nil {
@@ -27,14 +28,30 @@ func EnsureDeepLinkProtocolHandler(ctx context.Context) bool {
 		return false
 	}
 
-	cmd := exec.Command("xdg-mime", "default", LinuxDesktopFileName(), "x-scheme-handler/wox")
+	if err := writeLinuxPluginPackageMimeType(); err != nil {
+		GetLogger().Error(ctx, fmt.Sprintf("failed to write plugin package MIME type: %s", err.Error()))
+	}
+
+	cmd := exec.Command("xdg-mime", "default", LinuxDesktopFileName(), pluginPackageURLMIME)
 	if err := cmd.Run(); err != nil {
 		GetLogger().Error(ctx, fmt.Sprintf("failed to register protocol handler: %s", err.Error()))
+	}
+
+	cmd = exec.Command("xdg-mime", "default", LinuxDesktopFileName(), PluginPackageMIMEType)
+	if err := cmd.Run(); err != nil {
+		GetLogger().Error(ctx, fmt.Sprintf("failed to register .wox file association: %s", err.Error()))
 	}
 
 	cmd = exec.Command("update-desktop-database", filepath.Dir(desktopFilePath))
 	if err := cmd.Run(); err != nil {
 		GetLogger().Warn(ctx, fmt.Sprintf("failed to update desktop database: %s", err.Error()))
+	}
+
+	if mimeDir, mimeErr := linuxMimeDirectory(); mimeErr == nil {
+		cmd = exec.Command("update-mime-database", mimeDir)
+		if err := cmd.Run(); err != nil {
+			GetLogger().Warn(ctx, fmt.Sprintf("failed to update MIME database: %s", err.Error()))
+		}
 	}
 
 	GetLogger().Info(ctx, fmt.Sprintf("Linux desktop entry registered successfully: %s", desktopFilePath))

@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=Wox
-Exec=wox %u
+Exec=wox %U
 Icon=io.github.WoxLauncher.Wox
 Categories=Utility;
-MimeType=x-scheme-handler/wox;
+MimeType=x-scheme-handler/wox;application/x-wox-plugin;
 Terminal=false
 StartupWMClass=wox
 X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

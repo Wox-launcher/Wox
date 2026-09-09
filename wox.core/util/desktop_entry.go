@@ -65,7 +65,8 @@ func BuildLinuxDesktopEntry(includeURLField bool, autostart bool) (string, error
 
 	execLine := fmt.Sprintf("Exec=%s", quoteDesktopExecArg(execPath))
 	if includeURLField {
-		execLine += " %u"
+		// %U accepts both wox:// URLs and file:// / local .wox paths.
+		execLine += " %U"
 	}
 
 	lines := []string{
@@ -76,7 +77,7 @@ func BuildLinuxDesktopEntry(includeURLField bool, autostart bool) (string, error
 		execLine,
 		"Icon=" + LinuxDesktopAppID,
 		"Categories=Utility;",
-		"MimeType=x-scheme-handler/wox;",
+		"MimeType=" + pluginPackageURLMIME + ";" + PluginPackageMIMEType + ";",
 		"Terminal=false",
 		"StartupWMClass=" + LinuxDesktopWMClass,
 		"X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2",
@@ -131,6 +132,51 @@ func linuxDesktopExecPath() (string, error) {
 // not be written into the user desktop entry or used as a relaunch target.
 func isEphemeralDebugExecutable(path string) bool {
 	return strings.HasPrefix(filepath.Base(path), "__debug_bin")
+}
+
+func linuxMimeDirectory() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".local", "share", "mime"), nil
+}
+
+func linuxPluginPackageMimePath() (string, error) {
+	mimeDir, err := linuxMimeDirectory()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(mimeDir, "packages", LinuxDesktopAppID+".xml"), nil
+}
+
+func buildLinuxPluginPackageMimeType() string {
+	return strings.Join([]string{
+		`<?xml version="1.0" encoding="UTF-8"?>`,
+		`<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">`,
+		`  <mime-type type="` + PluginPackageMIMEType + `">`,
+		`    <comment>Wox Plugin Package</comment>`,
+		`    <glob pattern="*` + PluginPackageExtension + `"/>`,
+		`  </mime-type>`,
+		`</mime-info>`,
+		``,
+	}, "\n")
+}
+
+// writeLinuxPluginPackageMimeType installs the per-user MIME definition so
+// file managers can associate *.wox archives with Wox.
+func writeLinuxPluginPackageMimeType() error {
+	path, err := linuxPluginPackageMimePath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("failed to create MIME package directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(buildLinuxPluginPackageMimeType()), 0644); err != nil {
+		return fmt.Errorf("failed to write MIME type: %w", err)
+	}
+	return nil
 }
 
 func quoteDesktopExecArg(value string) string {

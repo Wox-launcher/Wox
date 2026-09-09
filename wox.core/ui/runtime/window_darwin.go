@@ -1277,6 +1277,18 @@ func woxGoDarwinProtocolURL(_ C.uintptr_t, rawURL *C.char) {
 	dispatchProtocolURL(C.GoString(rawURL))
 }
 
+//export woxGoDarwinOpenFile
+func woxGoDarwinOpenFile(_ C.uintptr_t, rawPath *C.char) {
+	if rawPath == nil {
+		return
+	}
+	filePath, ok := util.PluginPackagePathFromArg(C.GoString(rawPath))
+	if !ok {
+		return
+	}
+	dispatchProtocolURL(util.PluginPackageInstallDeepLink(filePath))
+}
+
 //export woxGoDarwinCall
 func woxGoDarwinCall(context C.uintptr_t) {
 	cgo.Handle(context).Value().(func())()

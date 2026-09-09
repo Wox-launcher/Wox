@@ -21,6 +21,10 @@
   <provides>
     <binary>wox</binary>
   </provides>
+  <mimetypes>
+    <mimetype>x-scheme-handler/wox</mimetype>
+    <mimetype>application/x-wox-plugin</mimetype>
+  </mimetypes>
   <categories>
     <category>Utility</category>
   </categories>

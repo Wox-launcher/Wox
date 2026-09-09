@@ -41,6 +41,12 @@ Use an explicit keyword when you want one plugin. For example, `f report` search
 
 ## Plugins
 
+### How do I install a downloaded `.wox` plugin?
+
+Double-click the `.wox` file. Wox opens the plugin installer so you can confirm Install, Upgrade, Reinstall, or Downgrade. You can also select the file and invoke Wox, which uses the same installer.
+
+On Windows and Linux, start Wox once after installing or updating so it can register the `.wox` file association.
+
 ### Plugin installation failed. What should I check?
 
 1. Confirm network access to the plugin store and release host.

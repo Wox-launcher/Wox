@@ -6,9 +6,12 @@ Deep links let another app or script open Wox with a prepared query. This is use
 
 ```text
 wox://query?q=<url-encoded-query>
+wox://install?path=<url-encoded-file>
 ```
 
 The `q` value is the exact query text Wox should place into the launcher. URL-encode spaces and symbols.
+
+`wox://install?path=` opens the local plugin installer for a `.wox` package. Double-clicking a `.wox` file uses this same path after Wox registers the file association.
 
 ## Examples
 
@@ -34,6 +37,12 @@ Start an AI chat:
 
 ```text
 wox://query?q=chat%20summarize%20this
+```
+
+Open a downloaded plugin package in the installer:
+
+```text
+wox://install?path=/Users/demo/Downloads/wox.plugin.example.wox
 ```
 
 ## From Scripts

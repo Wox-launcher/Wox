@@ -556,6 +556,30 @@ func selectionShowContext(hideOnLostFocus bool) common.ShowContext {
 	return common.ShowContext{ShowSource: common.ShowSourceSelection, HideOnBlur: hideOnLostFocus}
 }
 
+// showPluginPackageInstaller opens the local .wox installer from a file association.
+func (m *Manager) showPluginPackageInstaller(ctx context.Context, rawPath string) {
+	filePath, ok := util.PluginPackagePathFromArg(rawPath)
+	if !ok {
+		logger.Warn(ctx, "ignored plugin package install deeplink with an invalid path")
+		return
+	}
+
+	// Hide-on-blur would close the installer when Explorer/Finder refocuses
+	// after a double-click, before the user can confirm the install.
+	m.RefreshActiveWindowSnapshot(ctx)
+	m.openSecondaryInstance(ctx, string(common.ShowSourceSelection), common.PlainQuery{
+		QueryType: plugin.QueryTypeSelection,
+		QuerySelection: selection.Selection{
+			Type:      selection.SelectionTypeFile,
+			FilePaths: []string{filePath},
+		},
+	}, pluginPackageInstallShowContext())
+}
+
+func pluginPackageInstallShowContext() common.ShowContext {
+	return common.ShowContext{ShowSource: common.ShowSourceSelection, HideOnBlur: false}
+}
+
 // openSecondaryInstance preserves the primary launcher while opening a session-owned query window.
 func (m *Manager) openSecondaryInstance(ctx context.Context, instanceName string, query common.PlainQuery, showContext common.ShowContext) {
 	if query.QueryId == "" {
@@ -2146,6 +2170,14 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 			})
 			m.ui.ShowApp(ctx, common.ShowContext{})
 		}
+	}
+
+	// wox://install?path=<url-encoded-file>
+	// Used when the user double-clicks a .wox package or opens one through the
+	// registered file association. Reuse the selection installer instead of
+	// installing silently so the user can confirm install/upgrade/reinstall.
+	if command == "install" {
+		m.showPluginPackageInstaller(ctx, arguments["path"])
 	}
 
 	if command == "select" {

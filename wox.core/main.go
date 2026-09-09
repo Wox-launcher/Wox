@@ -165,13 +165,9 @@ func run() {
 	} else {
 		util.GetLogger().Info(ctx, fmt.Sprintf("startup pid: %d, executable: <error>, args: %v", os.Getpid(), os.Args))
 	}
-	// Keep cold-start protocol URLs until the embedded UI is ready; forwarded URLs already have a receiver.
-	startupDeepLinks := make([]string, 0, 1)
-	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "wox://") {
-			startupDeepLinks = append(startupDeepLinks, arg)
-		}
-	}
+	// Keep cold-start protocol URLs and .wox file opens until the embedded UI is
+	// ready. A second process already forwards these to the running instance.
+	startupDeepLinks := util.CollectStartupDeepLinks(os.Args[1:])
 
 	// Check for an existing instance BEFORE doing any heavy initialization (database, analytics,
 	// migrations). When this process is launched as a one-shot deeplink forwarder (e.g. via the

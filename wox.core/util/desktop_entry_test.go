@@ -20,4 +20,20 @@ func TestBuildLinuxDesktopEntryDeclaresKWinScreenshotInterface(t *testing.T) {
 	if !strings.Contains(entry, "Icon="+LinuxDesktopAppID+"\n") {
 		t.Fatalf("desktop entry does not declare icon %q:\n%s", LinuxDesktopAppID, entry)
 	}
+	if !strings.Contains(entry, "Exec=\"/tmp/Wox.AppImage\" %U\n") {
+		t.Fatalf("desktop entry does not accept URL and file arguments:\n%s", entry)
+	}
+	if !strings.Contains(entry, "MimeType="+pluginPackageURLMIME+";"+PluginPackageMIMEType+";\n") {
+		t.Fatalf("desktop entry does not declare plugin package MIME type:\n%s", entry)
+	}
+}
+
+func TestBuildLinuxPluginPackageMimeTypeDeclaresGlob(t *testing.T) {
+	mime := buildLinuxPluginPackageMimeType()
+	if !strings.Contains(mime, `type="`+PluginPackageMIMEType+`"`) {
+		t.Fatalf("MIME type missing %s:\n%s", PluginPackageMIMEType, mime)
+	}
+	if !strings.Contains(mime, `<glob pattern="*`+PluginPackageExtension+`"/>`) {
+		t.Fatalf("MIME type missing .wox glob:\n%s", mime)
+	}
 }

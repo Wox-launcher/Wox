@@ -24,6 +24,7 @@
 extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinCloseRequested(uintptr_t context);
 extern void woxGoDarwinProtocolURL(uintptr_t context, const char *url);
+extern void woxGoDarwinOpenFile(uintptr_t context, const char *path);
 extern void woxGoDarwinWebViewHideRequested(uintptr_t context);
 extern void woxGoDarwinWebViewTooltip(uintptr_t context, int32_t visible, const char *text, float x, float y, float width, float height);
 extern void woxGoDarwinWebViewNavigationChanged(uintptr_t context, const char *url, int32_t can_go_back, int32_t can_go_forward);
@@ -285,12 +286,19 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
 - (void)application:(NSApplication *)application openURLs:(NSArray<NSURL *> *)urls {
   (void)application;
   for (NSURL *url in urls) {
-    if (![[url.scheme lowercaseString] isEqualToString:@"wox"]) {
+    NSString *scheme = [url.scheme lowercaseString];
+    if ([scheme isEqualToString:@"wox"]) {
+      NSString *absolute_string = url.absoluteString;
+      if (absolute_string.length > 0) {
+        woxGoDarwinProtocolURL(_context, absolute_string.UTF8String);
+      }
       continue;
     }
-    NSString *absolute_string = url.absoluteString;
-    if (absolute_string.length > 0) {
-      woxGoDarwinProtocolURL(_context, absolute_string.UTF8String);
+    if (url.isFileURL) {
+      NSString *path = url.path;
+      if (path.length > 0) {
+        woxGoDarwinOpenFile(_context, path.UTF8String);
+      }
     }
   }
 }

@@ -31,6 +31,48 @@
                 </array>
             </dict>
         </array>
+        <key>CFBundleDocumentTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleTypeName</key>
+                <string>Wox Plugin Package</string>
+                <key>CFBundleTypeRole</key>
+                <string>Viewer</string>
+                <key>CFBundleTypeIconFile</key>
+                <string>app.icns</string>
+                <key>LSHandlerRank</key>
+                <string>Owner</string>
+                <key>CFBundleTypeExtensions</key>
+                <array>
+                    <string>wox</string>
+                </array>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>com.github.wox.plugin</string>
+                </array>
+            </dict>
+        </array>
+        <key>UTExportedTypeDeclarations</key>
+        <array>
+            <dict>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.data</string>
+                    <string>public.zip-archive</string>
+                </array>
+                <key>UTTypeDescription</key>
+                <string>Wox Plugin Package</string>
+                <key>UTTypeIdentifier</key>
+                <string>com.github.wox.plugin</string>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <array>
+                        <string>wox</string>
+                    </array>
+                </dict>
+            </dict>
+        </array>
         <key>NSHighResolutionCapable</key>
         <true/>
         <key>NSMicrophoneUsageDescription</key>

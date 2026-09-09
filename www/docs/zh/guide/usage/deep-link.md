@@ -6,9 +6,12 @@
 
 ```text
 wox://query?q=<url-encoded-query>
+wox://install?path=<url-encoded-file>
 ```
 
 `q` 的值就是 Wox 要放入查询框的文本。空格和特殊符号需要 URL 编码。
+
+`wox://install?path=` 会打开本地 `.wox` 插件安装界面。双击 `.wox` 文件时，Wox 在注册文件关联后走同一条路径。
 
 ## 示例
 
@@ -34,6 +37,12 @@ wox://query?q=100%20%2B%2020
 
 ```text
 wox://query?q=chat%20summarize%20this
+```
+
+打开已下载的插件包安装界面：
+
+```text
+wox://install?path=/Users/demo/Downloads/wox.plugin.example.wox
 ```
 
 ## 在脚本中使用
