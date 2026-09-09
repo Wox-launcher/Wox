@@ -2204,6 +2204,7 @@
   "plugin_converter_time_unit_workdays": "рабочих дней",
   "plugin_converter_copy_result": "Копировать",
   "plugin_folder_open": "Открыть",
+  "plugin_folder_open_containing_folder": "Открыть содержащую папку",
   "plugin_folder_enter": "Войти в папку",
   "plugin_folder_browse_here": "Открыть папку здесь",
   "plugin_folder_show_hidden_files": "Показать скрытые файлы",

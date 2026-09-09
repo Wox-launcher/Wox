@@ -2442,6 +2442,7 @@
   "plugin_converter_time_unit_weeks": "周",
   "plugin_converter_time_unit_years": "年",
   "plugin_folder_open": "打开",
+  "plugin_folder_open_containing_folder": "打开所在文件夹",
   "plugin_folder_enter": "进入文件夹",
   "plugin_folder_browse_here": "浏览此文件夹",
   "plugin_folder_show_hidden_files": "显示隐藏文件",

@@ -27,10 +27,11 @@ const (
 	PluginCommandDataPath         = "path"
 	folderResultScore       int64 = 1000
 
-	folderOpenActionID               = "open_folder"
-	folderEnterActionID              = "enter_folder"
-	folderExecuteCommandHereActionID = "execute_command_here"
-	folderToggleHiddenFilesActionID  = "toggle_hidden_files"
+	folderOpenActionID                 = "open_folder"
+	folderEnterActionID                = "enter_folder"
+	folderOpenContainingFolderActionID = "open_containing_folder"
+	folderExecuteCommandHereActionID   = "execute_command_here"
+	folderToggleHiddenFilesActionID    = "toggle_hidden_files"
 
 	folderFavoritesSettingKey     = "favorites"
 	folderFavoriteFormNameKey     = "name"
@@ -394,6 +395,15 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 			actions = append(actions, p.buildAddFavoriteAction(filepath.Base(path), path))
 		}
 	} else {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_folder_open_containing_folder",
+			Icon: common.OpenContainingFolderIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := shell.OpenFileInFolder(path); err != nil && p.api != nil {
+					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open containing folder: path=%s err=%s", path, err.Error()))
+				}
+			},
+		})
 		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, false))
 	}
 

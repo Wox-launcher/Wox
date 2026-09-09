@@ -2203,6 +2203,7 @@
   "plugin_converter_time_unit_workdays": "dias úteis",
   "plugin_converter_copy_result": "Copiar",
   "plugin_folder_open": "Abrir",
+  "plugin_folder_open_containing_folder": "Abrir pasta contendo",
   "plugin_folder_enter": "Entrar na pasta",
   "plugin_folder_browse_here": "Navegar nesta pasta",
   "plugin_folder_show_hidden_files": "Mostrar arquivos ocultos",

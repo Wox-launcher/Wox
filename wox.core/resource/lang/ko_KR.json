@@ -2440,6 +2440,7 @@
   "plugin_converter_time_unit_weeks": "주",
   "plugin_converter_time_unit_years": "년",
   "plugin_folder_open": "열기",
+  "plugin_folder_open_containing_folder": "상위 폴더 열기",
   "plugin_folder_enter": "폴더로 들어가기",
   "plugin_folder_browse_here": "폴더 찾아보기",
   "plugin_folder_show_hidden_files": "숨김 파일 표시",

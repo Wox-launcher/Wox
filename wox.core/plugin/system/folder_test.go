@@ -24,6 +24,7 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	fileActions := folderPlugin.buildPathActions("file.txt", false, nil)
 	assertFolderActionIDs(t, fileActions, []string{
 		folderOpenActionID,
+		folderOpenContainingFolderActionID,
 		folderExecuteCommandHereActionID,
 		folderToggleHiddenFilesActionID,
 	})

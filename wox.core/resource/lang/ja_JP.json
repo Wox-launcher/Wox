@@ -2441,6 +2441,7 @@
   "plugin_converter_time_unit_weeks": "週",
   "plugin_converter_time_unit_years": "年",
   "plugin_folder_open": "開く",
+  "plugin_folder_open_containing_folder": "含むフォルダーを開く",
   "plugin_folder_enter": "フォルダーに入る",
   "plugin_folder_browse_here": "フォルダーを参照",
   "plugin_folder_show_hidden_files": "隠しファイルを表示",
