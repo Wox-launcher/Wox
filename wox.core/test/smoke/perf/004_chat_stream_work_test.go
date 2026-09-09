@@ -28,6 +28,18 @@ func Test004ChatStreamWork(t *testing.T) {
 		if !found {
 			t.Fatal("streaming chat control was not exposed")
 		}
+		if chat, ok := automationdriver.Find(snapshot, "chat.messages"); ok {
+			// Scroll back while the long reasoning row changes, not only after completion.
+			for range 8 {
+				if err := client.Pointer(ctx, woxui.PointerEvent{
+					Kind: woxui.PointerScroll, Scroll: woxui.Point{Y: 80},
+					Position: woxui.Point{X: chat.Bounds.X + chat.Bounds.Width/2, Y: chat.Bounds.Y + chat.Bounds.Height/2},
+				}); err != nil {
+					t.Fatalf("scroll during reasoning stream: %v", err)
+				}
+				time.Sleep(120 * time.Millisecond)
+			}
+		}
 		streamSamples := collectPresentedSamples(t, ctx, client)
 		assertFrameWork(t, streamSamples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)

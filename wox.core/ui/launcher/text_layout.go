@@ -8,18 +8,18 @@ import (
 )
 
 // Layout heights are logical units; native display/font changes invalidate reuse.
-type terminalLayoutKey struct {
+type textLayoutKey struct {
 	session, font            string
 	window                   *woxui.Window
 	width, scale, lineHeight float32
 	style                    woxui.TextStyle
 }
 
-// Keep only the current bounded terminal window, not 128 full output revisions.
+// Keep only the current text version, not full layouts for every streamed token.
 // Complete paragraphs are stable during append; the final paragraph can rewrap.
 // ponytail: a single unbroken paragraph still reflows in full; chunk it only if profiling warrants it.
-type terminalLayoutCache struct {
-	key         terminalLayoutKey
+type textLayoutCache struct {
+	key         textLayoutKey
 	value       string
 	layout      woxwidget.TextBlockLayout
 	prefixEnd   int
@@ -27,7 +27,7 @@ type terminalLayoutCache struct {
 }
 
 // measure reflows the changed tail, falling back to full layout after history replacement or resize.
-func (c *terminalLayoutCache) measure(value string, key terminalLayoutKey) woxwidget.TextBlockLayout {
+func (c *textLayoutCache) measure(value string, key textLayoutKey) woxwidget.TextBlockLayout {
 	if c.layout.Lines != nil && c.key == key && c.value == value {
 		return c.layout
 	}
@@ -53,6 +53,6 @@ func (c *terminalLayoutCache) measure(value string, key terminalLayoutKey) woxwi
 		tail := woxwidget.LayoutTextBlock(key.window, value[nextPrefix:], key.style, key.width, 0, key.lineHeight)
 		prefixLines = len(layout.Lines) - len(tail.Lines)
 	}
-	*c = terminalLayoutCache{key: key, value: value, layout: layout, prefixEnd: nextPrefix, prefixLines: prefixLines}
+	*c = textLayoutCache{key: key, value: value, layout: layout, prefixEnd: nextPrefix, prefixLines: prefixLines}
 	return layout
 }

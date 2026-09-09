@@ -1220,12 +1220,14 @@ func TestResultPreviewBecameVisible(t *testing.T) {
 	}
 }
 
-func TestMediaPreviewBypassesPreparedSectionBoundary(t *testing.T) {
-	app := &App{}
-	result := queryResult{Preview: queryPreview{PreviewType: "media", PreviewData: `{"title":"Track"}`}}
-	widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1)
-	if _, wrapped := widget.(woxwidget.Boundary[launcherPreparedSectionProps]); wrapped {
-		t.Fatal("media preview retained the full-section boundary")
+func TestLivePreviewBypassesPreparedSectionBoundary(t *testing.T) {
+	for _, kind := range []string{"media", "chat"} {
+		app := &App{}
+		result := queryResult{Preview: queryPreview{PreviewType: kind, PreviewData: `{"title":"Track"}`}}
+		widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1)
+		if _, wrapped := widget.(woxwidget.Boundary[launcherPreparedSectionProps]); wrapped {
+			t.Fatalf("%s preview retained the full-section boundary", kind)
+		}
 	}
 }
 

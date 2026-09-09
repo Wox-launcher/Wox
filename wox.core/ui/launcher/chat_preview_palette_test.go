@@ -114,29 +114,6 @@ func TestChatCommandPaletteFiltersModelsAndSkills(t *testing.T) {
 	}
 }
 
-func TestChatPreviewSectionSignatureIncludesCatalogs(t *testing.T) {
-	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
-	ai.SetModelsLoading(true)
-	ai.SetSkillsLoading(true)
-	app := &App{
-		aiSettings:  ai,
-		chatPreview: &chatPreviewState{panel: chatCommandPanel, key: "chat-1"},
-	}
-
-	loading := launcherSectionSignature(app.chatPreviewSectionState())
-	ai.SetSkills([]chatSkill{{Name: "wox-plugin-creator"}})
-	skillsReady := launcherSectionSignature(app.chatPreviewSectionState())
-	if loading == skillsReady {
-		t.Fatal("skill catalog apply kept the preview-section signature; slash palette would skip rebuild")
-	}
-
-	ai.SetModels([]aiModel{{Name: "grok-4.6", Provider: "grok"}})
-	modelsReady := launcherSectionSignature(app.chatPreviewSectionState())
-	if skillsReady == modelsReady {
-		t.Fatal("model catalog apply kept the preview-section signature")
-	}
-}
-
 func TestChatCommandCatalogShowsModelLoadingWhileSkillsReady(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetSkills([]chatSkill{{Name: "wox-plugin-creator", Description: "Create plugins"}})

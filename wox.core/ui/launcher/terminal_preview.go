@@ -104,7 +104,7 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 		Fullscreen: a.terminalFullscreen, SearchHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("shift+f")), "+"),
 		FullscreenHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+"), Tags: tags,
 		LayoutText: func(value string, style woxui.TextStyle, textWidth, lineHeight float32) woxwidget.TextBlockLayout {
-			return a.terminalLayout.measure(value, terminalLayoutKey{
+			return a.terminalLayout.measure(value, textLayoutKey{
 				session: snapshot.SessionID, font: font, window: a.window, width: textWidth,
 				scale: imageScale, lineHeight: lineHeight, style: style,
 			})
@@ -211,7 +211,7 @@ func (a *App) scheduleTerminalSubscription(sessionID string) {
 
 // deactivateTerminalPreview releases core output when the selected preview no longer uses it.
 func (a *App) deactivateTerminalPreview() {
-	a.terminalLayout = terminalLayoutCache{}
+	a.terminalLayout = textLayoutCache{}
 	oldSessionID := ""
 	searchWasOpen := false
 	if a.terminalPreview != nil {

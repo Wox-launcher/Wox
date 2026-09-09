@@ -951,8 +951,10 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	resolved := a.resolvePreview(result.Preview)
 	showChatHeader := resolved.PreviewType != "chat" || !launcherPreviewTitleBarVisible(snapshot)
 	child := a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader)
-	// Media owns smaller animation and live-data boundaries; an enclosing section boundary would promote every update to the full preview.
-	if resolved.PreviewType == "media" {
+	// Chat is already prepared above and owns retained scrolling/message state.
+	// Hashing its entire history to cache a trivial wrapper costs more than rebuilding it.
+	// Media likewise owns its smaller animation and live-data boundaries.
+	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" {
 		return child
 	}
 	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.translationsRevision.Load(), a.imagesRevision.Load()}
@@ -964,12 +966,6 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	case "trigger_keyword_conflict":
 		if a.triggerConflict != nil {
 			state = append(state, snapshotTriggerConflictPreviewLocked(a.triggerConflict))
-		}
-	case "chat":
-		if a.chatPreview != nil {
-			// Catalogs live on aiSettings, not chatPreview. Omit them and a skill
-			// callback that only flips skillsLoading keeps this signature and skips Build.
-			state = append(state, a.chatPreviewSectionState())
 		}
 	case "terminal":
 		state = append(state, snapshotTerminalPreview(a.terminalPreview))

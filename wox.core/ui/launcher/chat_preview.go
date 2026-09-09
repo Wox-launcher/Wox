@@ -474,7 +474,8 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		return nil
 	}
 	snapshot := &chatPreviewSnapshot{
-		key:              state.key,
+		// Payload revisions must not recreate scroll/drag state on every streamed update.
+		key:              state.resultID + "|" + state.chat.ID,
 		queryID:          state.queryID,
 		resultID:         state.resultID,
 		chat:             cloneChatData(state.chat),
@@ -510,7 +511,7 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 	return snapshot
 }
 
-// chatPreviewDataAndKey validates the payload and derives its stable controller identity.
+// chatPreviewDataAndKey validates the payload and derives its content revision for update detection.
 func chatPreviewDataAndKey(result queryResult, preview queryPreview) (chatPreviewData, string, error) {
 	var data chatPreviewData
 	if err := json.Unmarshal([]byte(preview.PreviewData), &data); err != nil {
@@ -609,14 +610,6 @@ func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (
 	snapshot := snapshotChatPreviewLocked(a.chatPreview)
 	a.attachChatPreviewCatalogs(snapshot)
 	return snapshot, nil
-}
-
-// chatPreviewSectionState is the preview-section cache key, including catalogs that
-// arrive after the slash palette opens so skills can paint before models finish.
-func (a *App) chatPreviewSectionState() *chatPreviewSnapshot {
-	snapshot := snapshotChatPreviewLocked(a.chatPreview)
-	a.attachChatPreviewCatalogs(snapshot)
-	return snapshot
 }
 
 // attachChatPreviewCatalogs copies the shared model and skill catalogs onto a render snapshot.

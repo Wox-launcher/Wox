@@ -223,7 +223,7 @@ func TestDeactivateChatPreviewKeepsActiveConversationInDedicatedWindow(t *testin
 }
 
 func TestChatWindowTitleBarIncludesCaptionControls(t *testing.T) {
-	app := &App{palette: defaultPalette(), chatPreview: &chatPreviewState{key: "chat", chat: chatData{Title: "Hello"}}}
+	app := &App{palette: defaultPalette(), chatPreview: &chatPreviewState{key: "revision", resultID: "result", chat: chatData{ID: "chat", Title: "Hello"}}}
 	bar := app.buildChatWindowTitleBar(800, true, app.palette.componentTheme()).(woxwidget.Stack)
 	var chrome woxcomponent.WindowCloseChromeProps
 	found := false
@@ -262,7 +262,7 @@ func TestChatWindowTitleBarIncludesCaptionControls(t *testing.T) {
 		t.Fatal("dedicated chat title bar is missing the conversation header")
 	}
 	background := header.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Gesture)
-	if background.ID != "chat-titlebar-drag-chat" || background.OnDragStart == nil {
+	if background.ID != "chat-titlebar-drag-result|chat" || background.OnDragStart == nil {
 		t.Fatal("dedicated chat header does not drag the chat window")
 	}
 }
@@ -278,7 +278,7 @@ func findChatWindowHeader(bar woxwidget.Stack) (woxwidget.Container, bool) {
 			continue
 		}
 		gesture, ok := stack.Children[0].Child.(woxwidget.Gesture)
-		if ok && gesture.ID == "chat-titlebar-drag-chat" {
+		if ok && gesture.ID == "chat-titlebar-drag-result|chat" {
 			return container, true
 		}
 	}

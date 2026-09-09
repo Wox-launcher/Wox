@@ -884,6 +884,11 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 	}
 
 	innerWidth := max(float32(24), cardWidth-24)
+	if props.Role != "user" {
+		// Frameless messages have only 4 units of right padding. Using bubble padding
+		// here invalidates the prepared layout and reflows long reasoning every frame.
+		innerWidth = max(float32(24), cardWidth-4)
+	}
 	actions, _ := chatMessageActions(props, hovered, onActionHover)
 	hasActions := len(actions) > 0
 	showRoleHeader := props.Role == "tool" || props.Role == "system" || props.ToolText != ""

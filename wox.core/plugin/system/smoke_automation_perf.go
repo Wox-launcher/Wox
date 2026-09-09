@@ -68,7 +68,7 @@ func (p *smokeAutomationPlugin) queryChatFixture() plugin.QueryResponse {
 	api := p.api
 	go func() {
 		for step := 1; step <= smokeAutomationChatStreamCount; step++ {
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(120 * time.Millisecond)
 			// Grow the actual answer so adapter preparation is included in frame costs.
 			preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: chatFixturePreview(true, step), ScrollPosition: plugin.WoxPreviewScrollPositionBottom}
 			api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Preview: &preview})
@@ -133,8 +133,17 @@ func chatFixturePreview(streaming bool, step int) string {
 	conversations = append(conversations, common.Conversation{Id: "perf-tool-request", Role: common.ConversationRoleUser, Text: "Inspect these sources."})
 	for index := range 31 {
 		id := fmt.Sprintf("perf-tool-%d", index)
+		reasoning := strings.Repeat("Inspecting the next source. ", 20)
+		if index == 30 {
+			// A long active reasoning message uses plain text, bypassing Markdown caching.
+			var lines strings.Builder
+			for line := range 400 {
+				fmt.Fprintf(&lines, "Reasoning line %d: inspect the weather code and return 晴天 ☀️ or 阴天 ☁️.\n", line)
+			}
+			reasoning += lines.String() + strings.Repeat(" More reasoning.", step)
+		}
 		conversations = append(conversations,
-			common.Conversation{Id: id + "-reasoning", Role: common.ConversationRoleAssistant, Reasoning: strings.Repeat("Inspecting the next source. ", 20)},
+			common.Conversation{Id: id + "-reasoning", Role: common.ConversationRoleAssistant, Reasoning: reasoning},
 			common.Conversation{Id: id, Role: common.ConversationRoleTool, ToolCallInfo: common.ToolCallInfo{
 				Id: id, Name: "web_fetch", Source: common.ToolSourceBuiltin, Status: "succeeded",
 				Arguments: map[string]any{"url": "https://example.com/fixture"},

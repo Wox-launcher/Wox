@@ -12,8 +12,8 @@ import (
 
 // TestTerminalLayoutReuse compares incremental chunks and invalidation with a fresh layout.
 func TestTerminalLayoutReuse(t *testing.T) {
-	var cache terminalLayoutCache
-	key := terminalLayoutKey{session: "test", width: 560, scale: 1, lineHeight: 18, style: woxui.TextStyle{Size: 12}}
+	var cache textLayoutCache
+	key := textLayoutKey{session: "test", width: 560, scale: 1, lineHeight: 18, style: woxui.TextStyle{Size: 12}}
 	values := []string{"", "one", "one\r", "one\r\n", "one\r\n中文", "one\r\n中文\n\nlast", "one\r\n中文\n\nreplacement", "history\none\r\n中文\n\nreplacement", "trimmed\n", "x\r\ry", "x\r\ry\r", "x\r\ry\r\nend"}
 	for _, width := range []float32{560, 0, 320} {
 		key.width = width

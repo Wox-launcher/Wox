@@ -8,6 +8,21 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestFramelessChatTextUsesPreparedWidth prevents a full reflow inside TextBlock on every frame.
+func TestFramelessChatTextUsesPreparedWidth(t *testing.T) {
+	for _, width := range []float32{320, 560, 1000} {
+		layout := woxwidget.TextBlockLayout{ConstraintWidth: width - 8, HasConstraintWidth: true, Size: woxui.Size{Height: 160}, LineHeight: 16}
+		props := ChatMessageProps{Role: "assistant", Reasoning: "thinking", ReasoningLayout: layout}
+		view := chatMessageContent(props, width, false, nil, nil).(woxwidget.Gesture)
+		card := view.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Flex)
+		body := card.Children[0].(woxwidget.Container)
+		text := body.Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
+		if text.Width != layout.ConstraintWidth || text.Width != body.Width-body.Padding.Right {
+			t.Fatalf("viewport %.0f: prepared width %.0f, rendered %.0f", width, layout.ConstraintWidth, text.Width)
+		}
+	}
+}
+
 func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 	action := func() {}
 	copyAction := func() bool { return true }

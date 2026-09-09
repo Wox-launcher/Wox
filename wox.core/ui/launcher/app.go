@@ -245,8 +245,8 @@ type App struct {
 	nativeFilePreviewReportedOcclusion        woxui.Rect
 	mdDocs                                    map[string]woxcomponent.MarkdownDocument
 	chatMarkdown                              chatMarkdownCache
-	terminalLayout                            terminalLayoutCache
-	previewLayouts                            map[string]woxwidget.TextBlockLayout
+	terminalLayout                            textLayoutCache
+	previewLayouts                            map[string]*textLayoutCache
 	dictationAudio                            *dictationPreviewAudioState
 	terminalPreview                           *terminalPreviewState
 
@@ -312,7 +312,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		fileRequests:           map[string]bool{},
 		filePreviewManualPaths: map[string]bool{},
 		mdDocs:                 map[string]woxcomponent.MarkdownDocument{},
-		previewLayouts:         map[string]woxwidget.TextBlockLayout{},
+		previewLayouts:         map[string]*textLayoutCache{},
 		noteWindows:            map[string]*notesWindowController{},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,

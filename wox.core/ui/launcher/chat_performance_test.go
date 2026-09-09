@@ -9,7 +9,63 @@ import (
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+// TestChatStreamKeepsWidgetIdentity separates content revisions from retained interaction state.
+func TestChatStreamKeepsWidgetIdentity(t *testing.T) {
+	state := &chatPreviewState{key: "revision-1", resultID: "result", chat: chatData{ID: "chat"}}
+	before := snapshotChatPreviewLocked(state).key
+	state.key = "revision-2"
+	if snapshotChatPreviewLocked(state).key != before {
+		t.Fatal("stream update replaced scrollbar identity")
+	}
+	state.chat.ID = "other"
+	if snapshotChatPreviewLocked(state).key == before {
+		t.Fatal("different conversation retained the old identity")
+	}
+}
+
+// TestPreviewTextReplacesStreamVersions guards the shared path used by chat reasoning.
+func TestPreviewTextReplacesStreamVersions(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	style := woxui.TextStyle{Size: 11}
+	for i := range 200 {
+		value := "completed paragraph\n" + fmt.Sprint(i)
+		got := app.previewTextLayout("reasoning", value, style, 560, 16)
+		if len(app.previewLayouts) != 1 || app.previewLayouts["reasoning"].value != value {
+			t.Fatal("stream update retained an obsolete text version")
+		}
+		reused := app.previewTextLayout("reasoning", value, style, 560, 16)
+		if &got.Lines[0] != &reused.Lines[0] {
+			t.Fatal("scrolling rebuilt unchanged reasoning")
+		}
+	}
+	got := app.previewTextLayout("reasoning", "replacement", style, 320, 22)
+	want := woxwidget.LayoutTextBlock(nil, "replacement", style, 320, 0, 22)
+	if got.Size != want.Size || got.LineHeight != want.LineHeight || got.Lines[0] != "replacement" {
+		t.Fatal("replacement or changed layout constraints reused stale output")
+	}
+	for i := range 130 {
+		app.previewTextLayout(fmt.Sprint(i), "small", style, 560, 16)
+	}
+	if len(app.previewLayouts) > 128 {
+		t.Fatal("text cache exceeded its entry budget")
+	}
+	app.previewLayouts["large"] = &textLayoutCache{value: strings.Repeat("x", 2<<20)}
+	app.previewTextLayout("next", "small", style, 560, 16)
+	if len(app.previewLayouts) != 1 {
+		t.Fatal("text cache exceeded its source byte budget")
+	}
+	snapshot := &chatPreviewSnapshot{chat: chatData{ID: "width", IsStreaming: true, Conversations: []chatConversation{{Role: "assistant", Reasoning: "thinking"}}}}
+	for _, width := range []float32{320, 560, 1000} {
+		props := app.chatMessagesProps(snapshot, defaultPalette(), width, 500, 1.5)
+		if props.Messages[0].ReasoningLayout.ConstraintWidth != width-8 {
+			t.Fatal("adapter width disagrees with frameless message padding")
+		}
+	}
+}
 
 // TestCollapsedChatToolsSkipHiddenLayouts covers both disclosure levels and reopening.
 func TestCollapsedChatToolsSkipHiddenLayouts(t *testing.T) {
@@ -161,5 +217,21 @@ func BenchmarkChatMessagesPreparation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		snapshot.chat.Conversations[199].Text = fmt.Sprintf("Streaming answer %d", i)
 		app.chatMessagesProps(snapshot, palette, 800, 500, 1)
+	}
+}
+
+// BenchmarkChatReasoningPreparation measures a growing plain-text reasoning message, not Markdown.
+func BenchmarkChatReasoningPreparation(b *testing.B) {
+	app := New(false, nil)
+	defer app.cancel()
+	base := strings.Repeat("def weather_icon(code):\n    return '晴天 ☀️' if code == 0 else '阴天 ☁️'\n\n", 150)
+	snapshot := &chatPreviewSnapshot{chat: chatData{ID: "reasoning", IsStreaming: true, Conversations: []chatConversation{{ID: "active", Role: "assistant", Reasoning: base}}}}
+	palette := defaultPalette()
+	app.chatMessagesProps(snapshot, palette, 560, 500, 1)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		snapshot.chat.Conversations[0].Reasoning = base + fmt.Sprint(i)
+		app.chatMessagesProps(snapshot, palette, 560, 500, 1)
 	}
 }

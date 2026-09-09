@@ -353,17 +353,31 @@ func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette 
 }
 
 func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, width, lineHeight float32) woxwidget.TextBlockLayout {
-	hash := sha256.Sum256([]byte(value))
-	key := fmt.Sprintf("%s|%.2f|%.2f|%d|%x", scrollKey, width, style.Size, style.Weight, hash)
-	if layout, ok := a.previewLayouts[key]; ok {
-		return layout
+	// Cache by semantic source, so changing reasoning replaces its previous version.
+	const maxSourceBytes = 2 << 20
+	cached := a.previewLayouts[scrollKey]
+	if cached == nil || cached.value != value {
+		retained := len(value)
+		for id, entry := range a.previewLayouts {
+			if id != scrollKey {
+				retained += len(entry.value)
+			}
+		}
+		if retained > maxSourceBytes || (cached == nil && len(a.previewLayouts) >= 128) {
+			clear(a.previewLayouts)
+		}
 	}
-	layout := woxwidget.LayoutTextBlock(a.window, value, style, width, 0, lineHeight)
-	if len(a.previewLayouts) >= 128 {
-		a.previewLayouts = map[string]woxwidget.TextBlockLayout{}
+	if cached == nil {
+		cached = &textLayoutCache{}
 	}
-	a.previewLayouts[key] = layout
-	return layout
+	if len(value) <= maxSourceBytes {
+		a.previewLayouts[scrollKey] = cached
+	}
+	font := ""
+	if a.generalSettings != nil {
+		font = a.generalSettings.Data().AppFontFamily
+	}
+	return cached.measure(value, textLayoutKey{session: scrollKey, font: font, window: a.window, width: width, lineHeight: lineHeight, style: style})
 }
 
 func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
