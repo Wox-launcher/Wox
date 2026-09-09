@@ -1310,11 +1310,11 @@
     "DateUpdated": "2026-09-09 12:42:00",
     "I18n": {
       "en_US": {
-        "plugin_name": "Wox.Plugin.LockKeybord",
+        "plugin_name": "Lock Keybord",
         "plugin_description": "Lock the keyboard so you can wipe it without triggering shortcuts"
       },
       "zh_CN": {
-        "plugin_name": "Wox.Plugin.LockKeybord",
+        "plugin_name": "锁定键盘",
         "plugin_description": "锁定键盘，方便擦拭按键且不会误触快捷键"
       }
     }
