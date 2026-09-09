@@ -1236,7 +1236,7 @@
     "Id": "35E4296B-89E2-492E-977B-0120ECCB5C95",
     "Name": "i18n:plugin_name",
     "Author": "Wox-Launcher",
-    "Version": "0.1.0",
+    "Version": "0.1.1",
     "MinWoxVersion": "2.4.2",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -1252,7 +1252,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-06 18:03:00",
-    "DateUpdated": "2026-09-06 18:03:00",
+    "DateUpdated": "2026-09-09 12:08:36",
     "I18n": {
       "en_US": {
         "plugin_name": "GitHub",
