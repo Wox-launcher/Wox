@@ -42,6 +42,7 @@
 15% tip on 42
 ratio of 3 to 5
 square root of 625
+cube root of 27
 2 power 10
 USD1K
 8 dollars/hour in gbp
@@ -50,8 +51,21 @@ USD1K
 145 mins to timespan
 workhours in 2023
 55h in workdays
+1/3 to 2 dp
+π to 5 digits
+21 rounded up to nearest 5
+17 rounded down to nearest 3
+meters in 10 km
+days in 3 weeks
+seconds in a day
+300 + 20 km
+$20 + 30
 ```
 
+`1/3 to 2 dp` 和 `π to 5 digits` 会把结果四舍五入到指定小数位。
+`21 rounded up to nearest 5` 和 `17 rounded down to nearest 3` 会取到指定步长的倍数。
+`meters in 10 km` 和 `seconds in a day` 表示“这个量里有多少个该单位”。
+无单位数字和带单位的量相加时，会继承该单位：`300 + 20 km`、`$20 + 30`。
 `tip on` 返回小费金额。工作日按周一至周五、每天 8 小时计算，不扣除节假日。`m` 默认表示分钟，有明确长度上下文时表示米；可以写 `meters` 或 `minutes` 消除歧义。物理单位转换必须完整匹配维度，例如使用 `km/h in m/s`，不接受 `km/h in m`。
 
 ## 日期与时区
@@ -71,8 +85,28 @@ August 5 + 5
 3:45pm + 5
 monday in 3 weeks
 35 days ago
+3pm GMT+8 to Paris
+7:30am LAX to Japan
+Tokyo time
+time difference between Seattle and Moscow
+difference between PDT & AEST
+5.5 minutes as timespan
+4.54 hours as timespan
+72 days as timespan
+5.5 minutes as laptime
+03:04:05 + 01:02:03
+00:12:05 − 00:04:09
+03:04:05 as timespan
+3 hours 4 minutes 5 seconds as laptime
+12.5 minutes in minutes and seconds
+1.4 weeks in hours and minutes
+4.5 weeks in days and hours
+1 hour 30 minutes at 1.5x
+time saved 5 min at 1.5x
 ```
 
+`GMT+8`、`UTC-7` 是固定偏移。`Tokyo time` 表示该地当前时间。
+`time difference between Seattle and Moscow` 表示两个时区此刻的时差。
 省略日期时，使用源时区的今天。IST 固定表示印度（`Asia/Kolkata`）；CET 使用 `Europe/Paris`，包含夏令时偏移。夏令时切换期间不存在或重复的当地时刻不会返回单一转换结果。副标题显示源和目标的日期、时区及 UTC 偏移。
 
 操作菜单支持复制格式化结果、未格式化结果、问题和答案。未格式化时间结果保留时区偏移。

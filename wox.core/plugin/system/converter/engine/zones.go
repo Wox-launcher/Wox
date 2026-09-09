@@ -200,7 +200,7 @@ func ZoneAliases() map[string]string {
 	for k, v := range zoneAliases {
 		result[k] = v
 	}
-	for k, v := range map[string]string{"ist": "Asia/Kolkata", "ldn": "Europe/London", "são paulo": "America/Sao_Paulo", "jfk": "America/New_York", "lhr": "Europe/London", "sfo": "America/Los_Angeles", "san francisco": "America/Los_Angeles"} {
+	for k, v := range map[string]string{"ist": "Asia/Kolkata", "ldn": "Europe/London", "são paulo": "America/Sao_Paulo", "jfk": "America/New_York", "lhr": "Europe/London", "sfo": "America/Los_Angeles", "lax": "America/Los_Angeles", "san francisco": "America/Los_Angeles"} {
 		result[k] = v
 	}
 	return result

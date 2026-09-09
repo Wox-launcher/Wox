@@ -25,6 +25,195 @@ func plain(n *big.Rat) string {
 	return s
 }
 
+// roundToNearest applies ceil, floor, or half-away-from-zero to a multiple of step.
+func roundToNearest(n, step *big.Rat, dir string) *big.Rat {
+	q := new(big.Rat).Quo(n, step)
+	var k *big.Int
+	switch dir {
+	case "up":
+		k = ceilRat(q)
+	case "down":
+		k = floorRat(q)
+	default:
+		k = roundHalfAwayRat(q)
+	}
+	return new(big.Rat).Mul(new(big.Rat).SetInt(k), step)
+}
+
+// floorRat is mathematical floor; QuoRem truncates toward zero.
+func floorRat(r *big.Rat) *big.Int {
+	q, rem := new(big.Int).QuoRem(new(big.Int).Set(r.Num()), r.Denom(), new(big.Int))
+	if rem.Sign() != 0 && r.Sign() < 0 {
+		q.Sub(q, big.NewInt(1))
+	}
+	return q
+}
+
+// ceilRat is mathematical ceiling; QuoRem truncates toward zero.
+func ceilRat(r *big.Rat) *big.Int {
+	q, rem := new(big.Int).QuoRem(new(big.Int).Set(r.Num()), r.Denom(), new(big.Int))
+	if rem.Sign() != 0 && r.Sign() > 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	return q
+}
+
+// roundHalfAwayRat rounds halves away from zero.
+func roundHalfAwayRat(r *big.Rat) *big.Int {
+	abs := new(big.Rat).Abs(r)
+	q, rem := new(big.Int).QuoRem(new(big.Int).Set(abs.Num()), abs.Denom(), new(big.Int))
+	if new(big.Int).Lsh(rem, 1).Cmp(abs.Denom()) >= 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if r.Sign() < 0 {
+		q.Neg(q)
+	}
+	return q
+}
+
+// roundedMagnitude applies nearest-step rounding to the number that will be shown.
+func roundedMagnitude(n *big.Rat, r Evaluation, percent bool) *big.Rat {
+	if n == nil {
+		return nil
+	}
+	m := n
+	if percent {
+		m = new(big.Rat).Mul(n, big.NewRat(100, 1))
+	}
+	if r.Nearest != nil {
+		m = roundToNearest(m, r.Nearest, r.RoundDir)
+	}
+	return m
+}
+
+// formatMagnitude keeps requested decimal places, including trailing zeros.
+func formatMagnitude(n *big.Rat, decimals *int) string {
+	if n == nil {
+		return ""
+	}
+	if decimals == nil {
+		return plain(n)
+	}
+	s := n.FloatString(*decimals)
+	if strings.HasPrefix(s, "-") && strings.Trim(s[1:], "0.") == "" {
+		return s[1:]
+	}
+	return s
+}
+
+func durationScale(symbol string) *big.Rat {
+	switch symbol {
+	case "w":
+		return big.NewRat(604800, 1)
+	case "d":
+		return big.NewRat(86400, 1)
+	case "h":
+		return big.NewRat(3600, 1)
+	case "min":
+		return big.NewRat(60, 1)
+	case "ms":
+		return big.NewRat(1, 1000)
+	default:
+		return big.NewRat(1, 1)
+	}
+}
+
+func durationLabel(symbol string, n *big.Rat, longMinSec bool) string {
+	one := n.Cmp(big.NewRat(1, 1)) == 0
+	switch symbol {
+	case "w":
+		if one {
+			return "week"
+		}
+		return "weeks"
+	case "d":
+		if one {
+			return "day"
+		}
+		return "days"
+	case "h":
+		if one {
+			return "hour"
+		}
+		return "hours"
+	case "min":
+		if longMinSec {
+			if one {
+				return "minute"
+			}
+			return "minutes"
+		}
+		return "min"
+	case "ms":
+		return "ms"
+	default:
+		if longMinSec {
+			if one {
+				return "second"
+			}
+			return "seconds"
+		}
+		return "s"
+	}
+}
+
+// formatDurationParts splits seconds into the requested units, largest first.
+func formatDurationParts(seconds *big.Rat, units []string, o FormatOptions, longMinSec bool) string {
+	if len(units) == 0 {
+		units = []string{"w", "d", "h", "min", "s"}
+	}
+	negative := seconds.Sign() < 0
+	remain := new(big.Rat).Abs(seconds)
+	var parts []string
+	for i, symbol := range units {
+		scale := durationScale(symbol)
+		if i == len(units)-1 {
+			amount := new(big.Rat).Quo(remain, scale)
+			if amount.Sign() == 0 && len(parts) > 0 {
+				break
+			}
+			parts = append(parts, formatNumber(plain(amount), o)+" "+durationLabel(symbol, amount, longMinSec))
+			break
+		}
+		quot := new(big.Rat).Quo(remain, scale)
+		if !quot.IsInt() {
+			quot.SetInt(new(big.Int).Quo(quot.Num(), quot.Denom()))
+		}
+		if quot.Sign() > 0 {
+			parts = append(parts, formatNumber(plain(quot), o)+" "+durationLabel(symbol, quot, longMinSec))
+			remain.Sub(remain, new(big.Rat).Mul(quot, scale))
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "0 "+durationLabel(units[len(units)-1], big.NewRat(0, 1), longMinSec))
+	}
+	text := strings.Join(parts, " ")
+	if negative {
+		return "-" + text
+	}
+	return text
+}
+
+// formatLaptime renders a duration as HH:MM:SS, the Soulver laptime form.
+func formatLaptime(seconds *big.Rat) string {
+	negative := seconds.Sign() < 0
+	total := new(big.Rat).Abs(seconds)
+	whole := new(big.Int).Quo(total.Num(), total.Denom())
+	frac := new(big.Rat).Sub(total, new(big.Rat).SetInt(whole))
+	h := new(big.Int).Quo(whole, big.NewInt(3600))
+	rem := new(big.Int).Mod(whole, big.NewInt(3600))
+	m := new(big.Int).Quo(rem, big.NewInt(60))
+	s := new(big.Int).Mod(rem, big.NewInt(60))
+	text := fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	if frac.Sign() != 0 {
+		text += strings.TrimPrefix(plain(frac), "0")
+	}
+	if negative {
+		return "-" + text
+	}
+	return text
+}
+
 // formatNumber groups only the numeric portion and preserves its sign.
 func formatNumber(s string, o FormatOptions) string {
 	parts := strings.SplitN(s, ".", 2)
@@ -108,41 +297,32 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 		p.Formatted = p.Raw + " " + r.Target
 		return p
 	}
-	if r.Target == "timespan" {
+	if r.Target == "timespan" || r.Target == "laptime" || r.Target == "parts" {
 		f, _ := c.factor(v.Unit, Env{})
 		seconds := new(big.Rat).Mul(v.Number, f)
 		p.Raw = plain(seconds) + " s"
-		negative := seconds.Sign() < 0
-		seconds.Abs(seconds)
-		integer := new(big.Int).Quo(seconds.Num(), seconds.Denom())
-		fraction := new(big.Rat).Sub(seconds, new(big.Rat).SetInt(integer))
-		parts := []string{}
-		for _, part := range []struct {
-			n int64
-			s string
-		}{{86400, "d"}, {3600, "h"}, {60, "min"}, {1, "s"}} {
-			q, rem := new(big.Int), new(big.Int)
-			q.QuoRem(integer, big.NewInt(part.n), rem)
-			if part.n == 1 && fraction.Sign() != 0 {
-				parts = append(parts, formatNumber(plain(new(big.Rat).Add(new(big.Rat).SetInt(q), fraction)), o)+" s")
-			} else if q.Sign() != 0 {
-				parts = append(parts, q.String()+" "+part.s)
-			}
-			integer = rem
+		if r.Target == "laptime" {
+			p.Formatted = formatLaptime(seconds)
+			p.Raw = p.Formatted
+			return p
 		}
-		if len(parts) == 0 {
-			parts = append(parts, "0 s")
+		units := r.FormatUnits
+		if r.Target == "timespan" {
+			units = []string{"w", "d", "h", "min", "s"}
 		}
-		p.Formatted = strings.Join(parts, " ")
-		if negative {
-			p.Formatted = "-" + p.Formatted
-		}
+		// Soulver timespan uses "minutes"/"seconds" once hours or larger appear;
+		// requested unit lists keep the compact min/s forms.
+		longMinSec := r.Target == "timespan" && seconds.Cmp(big.NewRat(3600, 1)) >= 0
+		p.Formatted = formatDurationParts(seconds, units, o, longMinSec)
 		return p
 	}
-	s := plain(v.Number)
+	magnitude := roundedMagnitude(v.Number, r, v.Kind == Percent)
+	s := formatMagnitude(magnitude, r.Decimals)
 	p.Raw = s
 	if v.Kind == Percent {
-		s = plain(new(big.Rat).Mul(v.Number, big.NewRat(100, 1)))
+		if r.Decimals == nil && r.Nearest == nil {
+			p.Raw = plain(v.Number)
+		}
 		p.Formatted = formatNumber(s, o) + "%"
 		return p
 	}
@@ -157,32 +337,37 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 			for name := range v.Unit {
 				d := c.Units[name]
 				precision := -1
-				switch d.Dimension {
-				case "money", "mass", "temperature", "volume":
-					precision = 2
-				case "length":
-					precision = 3
-				case "time":
-					precision = 2
-				}
-				if precision >= 0 {
-					s = strings.TrimRight(strings.TrimRight(v.Number.FloatString(precision), "0"), ".")
-					if s == "" || s == "-0" {
-						s = "0"
+				explicit := r.Decimals != nil || r.Nearest != nil
+				if !explicit {
+					switch d.Dimension {
+					case "money", "mass", "temperature", "volume":
+						precision = 2
+					case "length":
+						precision = 3
+					case "time":
+						precision = 2
+					}
+					if precision >= 0 {
+						s = strings.TrimRight(strings.TrimRight(v.Number.FloatString(precision), "0"), ".")
+						if s == "" || s == "-0" {
+							s = "0"
+						}
 					}
 				}
 				if d.Dimension == "time" {
 					key := map[string]string{"ms": "milliseconds", "s": "seconds", "min": "minutes", "h": "hours", "d": "days", "w": "weeks", "y": "years", "workday": "workdays"}[name]
 					unit = translate("plugin_converter_time_unit_"+key, d.Plural)
-					if name == "w" && !v.Number.IsInt() {
-						scaled := new(big.Rat).Mul(v.Number, big.NewRat(1000, 1))
-						s = new(big.Rat).SetFrac(new(big.Int).Quo(scaled.Num(), scaled.Denom()), big.NewInt(1000)).FloatString(3)
-					} else if !v.Number.IsInt() {
-						s = v.Number.FloatString(2)
+					if !explicit {
+						if name == "w" && !v.Number.IsInt() {
+							scaled := new(big.Rat).Mul(v.Number, big.NewRat(1000, 1))
+							s = new(big.Rat).SetFrac(new(big.Int).Quo(scaled.Num(), scaled.Denom()), big.NewInt(1000)).FloatString(3)
+						} else if !v.Number.IsInt() {
+							s = v.Number.FloatString(2)
+						}
 					}
 				} else if d.Dimension != "storage" && d.Dimension != "money" {
 					unit = d.Plural
-					if new(big.Rat).Abs(v.Number).Cmp(big.NewRat(1, 1)) == 0 {
+					if new(big.Rat).Abs(magnitude).Cmp(big.NewRat(1, 1)) == 0 {
 						unit = d.Singular
 					}
 				}

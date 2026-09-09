@@ -29,12 +29,24 @@ var explicitYearRE = regexp.MustCompile(`\d{4}`)
 var dateRE = regexp.MustCompile(`(?i)^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:\s+(\d{4}))?$`)
 var monthFirstRE = regexp.MustCompile(`(?i)^([a-z]+)\s+(\d{1,2})(?:\s+(\d{4}))?$`)
 var dateArithmeticRE = regexp.MustCompile(`(?i)^(.+?)\s+([+-])\s+(\d+)(?:\s+(days?|weeks?|months?|years?|hours?|minutes?))?$`)
+var betweenRE = regexp.MustCompile(`(?i)^(?:time\s+)?difference\s+between\s+(.+?)\s+(?:and|&)\s+(.+)$`)
+var utcOffsetRE = regexp.MustCompile(`(?i)^(gmt|utc)\s*([+-])\s*(\d{1,2})(?::(\d{2}))?$`)
 
 // parseTemporal owns all time-prefixed forms in one entry, avoiding route-order fallback.
 func (c *Catalog) parseTemporal(input string) (*temporalQuery, bool, error) {
 	s := strings.TrimSpace(input)
 	lower := strings.ToLower(s)
 	q := &temporalQuery{}
+	if m := betweenRE.FindStringSubmatch(s); m != nil {
+		q.kind = "between"
+		q.source = strings.TrimSpace(m[1])
+		q.target = strings.TrimSpace(m[2])
+		if _, err := c.location(q.source); err != nil {
+			return q, true, err
+		}
+		_, err := c.location(q.target)
+		return q, true, err
+	}
 	if strings.HasPrefix(lower, "time in ") || strings.HasPrefix(lower, "now in ") {
 		rest := strings.TrimSpace(s[strings.Index(lower, " in ")+len(" in "):])
 		q.kind = "now"
@@ -142,18 +154,39 @@ func (c *Catalog) parseTemporal(input string) (*temporalQuery, bool, error) {
 		q.unit = m[4]
 		return q, true, nil
 	}
+	if strings.HasSuffix(lower, " time") {
+		place := strings.TrimSpace(s[:len(s)-len(" time")])
+		if place != "" {
+			if _, err := c.location(place); err == nil {
+				q.kind = "now"
+				q.target = place
+				return q, true, nil
+			}
+		}
+	}
+	if strings.HasPrefix(lower, "time saved ") {
+		return nil, false, nil
+	}
 	if strings.HasPrefix(lower, "time ") || strings.HasPrefix(lower, "workhours ") {
 		return nil, true, invalid("invalid time query")
 	}
 	return nil, false, nil
 }
 func isDateText(s string) bool {
-	return dateRE.MatchString(s) || monthFirstRE.MatchString(s) || len(s) == 10 && s[4] == '-' && s[7] == '-'
+	if len(s) == 10 && s[4] == '-' && s[7] == '-' {
+		return true
+	}
+	// dateRE / monthFirstRE also match "20 km"; require a real month name.
+	_, err := parseDate(s, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	return err == nil
 }
 
 // location resolves only registered aliases or canonical IANA names.
 func (c *Catalog) location(s string) (*time.Location, error) {
 	s = strings.TrimSpace(s)
+	if loc, ok := parseUTCOffset(s); ok {
+		return loc, nil
+	}
 	if alias, ok := c.Zones[strings.ToLower(s)]; ok {
 		s = alias
 	}
@@ -162,6 +195,31 @@ func (c *Catalog) location(s string) (*time.Location, error) {
 		return nil, invalid("unknown timezone " + s)
 	}
 	return l, nil
+}
+
+// parseUTCOffset accepts GMT+8 / UTC-07:00 as a fixed offset, not an IANA name.
+func parseUTCOffset(s string) (*time.Location, bool) {
+	m := utcOffsetRE.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return nil, false
+	}
+	hours, _ := strconv.Atoi(m[3])
+	mins := 0
+	if m[4] != "" {
+		mins, _ = strconv.Atoi(m[4])
+	}
+	if hours > 14 || mins > 59 {
+		return nil, false
+	}
+	offset := hours*3600 + mins*60
+	if m[2] == "-" {
+		offset = -offset
+	}
+	name := strings.ToUpper(m[1]) + m[2] + m[3]
+	if m[4] != "" {
+		name += ":" + m[4]
+	}
+	return time.FixedZone(name, offset), true
 }
 
 // parseClock anchors a wall clock to a neutral date without reading local time.
@@ -298,7 +356,25 @@ func (c *Catalog) evaluateTemporal(query *Query, env Env) (Evaluation, error) {
 			return r, e
 		}
 		v = Value{Kind: Clock, Time: t}
-	case "now", "delay", "diff":
+	case "now", "delay", "diff", "between":
+		if q.kind == "between" {
+			src, e := c.location(q.source)
+			if e != nil {
+				return r, e
+			}
+			dst, e := c.location(q.target)
+			if e != nil {
+				return r, e
+			}
+			_, a := env.Now.In(src).Zone()
+			_, b := env.Now.In(dst).Zone()
+			hours := a - b
+			if hours < 0 {
+				hours = -hours
+			}
+			v = Value{Kind: Quantity, Number: big.NewRat(int64(hours), 3600), Unit: Unit{"h": 1}}
+			break
+		}
 		loc := env.Local
 		if q.target != "" {
 			loc, err = c.location(q.target)

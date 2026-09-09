@@ -44,6 +44,7 @@ grouping separator settings as Calculator.
 15% tip on 42
 ratio of 3 to 5
 square root of 625
+cube root of 27
 2 power 10
 USD1K
 8 dollars/hour in gbp
@@ -52,8 +53,21 @@ USD1K
 145 mins to timespan
 workhours in 2023
 55h in workdays
+1/3 to 2 dp
+π to 5 digits
+21 rounded up to nearest 5
+17 rounded down to nearest 3
+meters in 10 km
+days in 3 weeks
+seconds in a day
+300 + 20 km
+$20 + 30
 ```
 
+`1/3 to 2 dp` and `π to 5 digits` round the answer to that many decimal places.
+`21 rounded up to nearest 5` and `17 rounded down to nearest 3` snap to a multiple of the step.
+`meters in 10 km` and `seconds in a day` ask how many of a unit are in a quantity.
+A bare number added to a quantity inherits that unit: `300 + 20 km`, `$20 + 30`.
 `tip on` returns the tip amount. Workdays mean Monday–Friday, eight hours per day,
 without holidays. `m` means minutes unless an explicit length context selects
 meters. Use `meters` or `minutes` to remove ambiguity. Partial physical conversion
@@ -76,8 +90,28 @@ August 5 + 5
 3:45pm + 5
 monday in 3 weeks
 35 days ago
+3pm GMT+8 to Paris
+7:30am LAX to Japan
+Tokyo time
+time difference between Seattle and Moscow
+difference between PDT & AEST
+5.5 minutes as timespan
+4.54 hours as timespan
+72 days as timespan
+5.5 minutes as laptime
+03:04:05 + 01:02:03
+00:12:05 − 00:04:09
+03:04:05 as timespan
+3 hours 4 minutes 5 seconds as laptime
+12.5 minutes in minutes and seconds
+1.4 weeks in hours and minutes
+4.5 weeks in days and hours
+1 hour 30 minutes at 1.5x
+time saved 5 min at 1.5x
 ```
 
+`GMT+8` and `UTC-7` are fixed offsets. `Tokyo time` means the current time in that place.
+`time difference between Seattle and Moscow` is the offset gap between two zones.
 When the date is omitted, the source timezone supplies today's date. IST means
 India (`Asia/Kolkata`); CET uses `Europe/Paris`, including summer time. Missing or
 repeated local times at daylight-saving transitions are rejected. Results show

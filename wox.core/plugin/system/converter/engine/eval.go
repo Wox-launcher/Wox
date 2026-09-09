@@ -48,23 +48,45 @@ func (c *Catalog) Evaluate(ctx context.Context, q *Query, env Env) (result Evalu
 			return Evaluation{}, err
 		}
 	}
-	if q.format == "timespan" && !sameUnit(c.dimensions(v.Unit), Unit{"time": 1}) {
+	if q.speed != nil {
+		if !sameUnit(c.dimensions(v.Unit), Unit{"time": 1}) {
+			return Evaluation{}, invalid("playback speed needs a duration")
+		}
+		if q.timeSaved {
+			factor := new(big.Rat).Sub(q.speed, big.NewRat(1, 1))
+			factor.Quo(factor, q.speed)
+			v.Number.Mul(v.Number, factor)
+		} else {
+			v.Number.Quo(v.Number, q.speed)
+		}
+		if q.format == "" && len(q.formatUnits) == 0 {
+			q.format = "timespan"
+		}
+	}
+	format := q.format
+	if format == "" && q.laptime && len(q.target) == 0 && len(q.formatUnits) == 0 {
+		format = "laptime"
+	}
+	if (format == "timespan" || format == "laptime" || format == "parts") && !sameUnit(c.dimensions(v.Unit), Unit{"time": 1}) {
 		return Evaluation{}, invalid("timespan needs a duration")
 	}
-	if isBase(q.format) && (v.Kind != Number || !v.Number.IsInt()) {
+	if isBase(format) && (v.Kind != Number || !v.Number.IsInt()) {
 		return Evaluation{}, invalid("base conversion requires an integer")
 	}
-	if q.root.text == "base" && q.format == "" {
+	if q.root.text == "base" && format == "" {
 		return Evaluation{}, invalid("base conversion requires a target")
 	}
-	r := Evaluation{Value: v, Target: q.format, Expression: q.Expression, Currency: q.Money, RateUpdatedAt: env.RateUpdatedAt}
+	if (q.decimals != nil || q.nearest != nil) && v.Kind != Number && v.Kind != Percent && v.Kind != Quantity {
+		return Evaluation{}, invalid("rounding requires a numeric result")
+	}
+	r := Evaluation{Value: v, Target: format, Expression: q.Expression, Currency: q.Money, RateUpdatedAt: env.RateUpdatedAt, Decimals: q.decimals, Nearest: q.nearest, RoundDir: q.roundDir, FormatUnits: q.formatUnits}
 	if q.root.op == "ratio" {
 		a, _ := c.eval(q.root.args[0], env)
 		b, _ := c.eval(q.root.args[1], env)
 		r.Ratio = plain(a.Number) + ":" + plain(b.Number)
 	}
 	// Keep the existing single-duration shortcuts in presentation selection only.
-	if len(q.target) == 0 && q.format == "" && q.root.op == "quantity" && len(v.Unit) == 1 {
+	if len(q.target) == 0 && format == "" && q.decimals == nil && q.nearest == nil && q.speed == nil && len(q.formatUnits) == 0 && q.root.op == "quantity" && len(v.Unit) == 1 {
 		target := ""
 		if v.Unit["h"] == 1 {
 			target = "min"
@@ -183,6 +205,23 @@ func (c *Catalog) add(a, b Value, subtract, rightLiteral bool, env Env) (Value, 
 		b.Number.Mul(a.Number, b.Number)
 		b.Kind = a.Kind
 		b.Unit = copyUnit(a.Unit)
+	}
+	// A bare number inherits the other operand's unit: 300 + 20 km, $20 + 30.
+	// Absolute temperatures treat the number as a difference, not a second point.
+	if a.Kind == Number && b.Kind == Quantity {
+		a.Kind = Quantity
+		if c.absolute(b.Unit) {
+			a.Unit = deltaUnit(b.Unit)
+		} else {
+			a.Unit = copyUnit(b.Unit)
+		}
+	} else if b.Kind == Number && a.Kind == Quantity {
+		b.Kind = Quantity
+		if c.absolute(a.Unit) {
+			b.Unit = deltaUnit(a.Unit)
+		} else {
+			b.Unit = copyUnit(a.Unit)
+		}
 	}
 	if a.Kind != b.Kind {
 		return Value{}, invalid("incompatible addition")
@@ -370,22 +409,26 @@ func (c *Catalog) function(name string, args []Value, env Env) (Value, error) {
 	}
 	var values []*big.Rat
 	for _, a := range args {
-		if a.Kind != Number && !(name == "sqrt" && a.Kind == Quantity) {
+		if a.Kind != Number && !((name == "sqrt" || name == "cbrt") && a.Kind == Quantity) {
 			return Value{}, invalid("function requires numbers")
 		}
 		values = append(values, a.Number)
 	}
 	result := args[0]
-	if name == "sqrt" && result.Kind == Quantity {
+	if (name == "sqrt" || name == "cbrt") && result.Kind == Quantity {
 		if c.absolute(result.Unit) {
 			return Value{}, invalid("absolute temperature root")
 		}
+		divisor := 2
+		if name == "cbrt" {
+			divisor = 3
+		}
 		result.Unit = copyUnit(result.Unit)
 		for k, n := range result.Unit {
-			if n%2 != 0 {
+			if n%divisor != 0 {
 				return Value{}, invalid("fractional unit dimension")
 			}
-			result.Unit[k] = n / 2
+			result.Unit[k] = n / divisor
 		}
 	}
 	if isExtraFunction(name) {

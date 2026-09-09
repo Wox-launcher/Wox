@@ -21,15 +21,22 @@ type node struct {
 	text     string
 }
 type Query struct {
-	root       *node
-	temporal   *temporalQuery
-	target     Unit
-	format     string
-	ppi        *big.Rat
-	Expression string
-	Domain     bool
-	Crypto     bool
-	Money      bool
+	root        *node
+	temporal    *temporalQuery
+	target      Unit
+	format      string
+	decimals    *int
+	nearest     *big.Rat
+	roundDir    string
+	ppi         *big.Rat
+	speed       *big.Rat
+	formatUnits []string
+	timeSaved   bool
+	laptime     bool
+	Expression  string
+	Domain      bool
+	Crypto      bool
+	Money       bool
 }
 type parser struct {
 	tokens          []token
@@ -49,6 +56,15 @@ func lex(input string, options ParseOptions) ([]token, error) {
 			continue
 		}
 		start := i
+		// Two-colon HH:MM:SS is a duration. Clock literals only have one colon, so
+		// they must not steal the first HH:MM of a laptime before the second colon.
+		if runes[i] >= '0' && runes[i] <= '9' {
+			if text, sec, ok := scanLaptime(runes[i:]); ok {
+				tokens = append(tokens, token{text: "laptime", value: sec, pos: i})
+				i += len([]rune(text))
+				continue
+			}
+		}
 		if text, t := temporalLiteral(string(runes[i:])); t != nil {
 			tokens = append(tokens, token{text: text, pos: i, temporal: t})
 			i += len([]rune(text))
@@ -90,8 +106,12 @@ func lex(input string, options ParseOptions) ([]token, error) {
 			tokens = append(tokens, token{text: strings.ToLower(string(runes[start:i])), pos: start})
 			continue
 		}
-		if strings.ContainsRune("+-*/^(),;%=?$€£¥²³", runes[i]) {
-			tokens = append(tokens, token{text: string(runes[i]), pos: i})
+		if strings.ContainsRune("+-*/^(),;%=?$€£¥²³−–", runes[i]) {
+			text := string(runes[i])
+			if runes[i] == '−' || runes[i] == '–' {
+				text = "-"
+			}
+			tokens = append(tokens, token{text: text, pos: i})
 			i++
 			continue
 		}
@@ -135,34 +155,96 @@ func (c *Catalog) Parse(input string, options ParseOptions) (result *Query, err 
 		return nil, err
 	}
 	p := parser{tokens: tokens, catalog: c, query: q}
-	q.root, err = p.expr(0)
-	if err != nil {
-		return nil, err
-	}
-	if p.accept("to") || p.accept("in") || p.accept("=") {
+	if p.peek() == "time" && p.i+1 < len(p.tokens) && p.tokens[p.i+1].text == "saved" {
+		p.accept("time")
+		p.accept("saved")
 		q.Domain = true
-		if p.tokens[p.i-1].text == "=" && !p.accept("?") {
+		q.timeSaved = true
+		q.root, err = p.expr(0)
+		if err != nil {
+			return nil, err
+		}
+		if err = p.parsePlayback(); err != nil {
+			return nil, err
+		}
+	} else if p.looksLikeInverted() {
+		if err = p.parseInverted(); err != nil {
+			return nil, err
+		}
+	} else {
+		q.root, err = p.expr(0)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !q.timeSaved && q.target == nil && p.accept("rounded") {
+		q.Domain = true
+		dir := "nearest"
+		if p.accept("up") {
+			dir = "up"
+		} else if p.accept("down") {
+			dir = "down"
+		}
+		if err = p.parseNearest(dir); err != nil {
+			return nil, err
+		}
+	} else if !q.timeSaved && q.target == nil && (p.accept("to") || p.accept("in") || p.accept("as") || p.accept("=")) {
+		q.Domain = true
+		prep := p.tokens[p.i-1].text
+		if prep == "=" && !p.accept("?") {
 			return nil, invalid("expected ?")
 		}
-		if strings.Contains("|timespan|bin|oct|dec|hex|", "|"+p.peek()+"|") && p.peek() != "" {
-			q.format = p.peek()
-			p.i++
-		} else {
-			q.target, err = p.unit()
-			if err != nil {
-				return nil, err
+		// Rounding uses "to N dp|digits" or "to nearest N". Claim it before unit().
+		rounded := false
+		if prep == "to" {
+			if p.accept("nearest") {
+				if err = p.finishNearest("nearest"); err != nil {
+					return nil, err
+				}
+				rounded = true
+			} else {
+				var ok bool
+				ok, err = p.tryRounding()
+				if err != nil {
+					return nil, err
+				}
+				rounded = ok
 			}
 		}
-		if p.accept("at") {
-			t := p.tokens[p.i]
-			if t.value == nil || t.value.Sign() <= 0 {
-				return nil, invalid("expected positive PPI")
+		if !rounded {
+			if isFormatWord(p.peek()) {
+				q.format = p.peek()
+				p.i++
+			} else {
+				var u Unit
+				u, err = p.unit()
+				if err != nil {
+					return nil, err
+				}
+				if p.accept("and") {
+					if err = p.parseUnitParts(u); err != nil {
+						return nil, err
+					}
+				} else {
+					q.target = u
+					if p.accept("at") {
+						t := p.tokens[p.i]
+						if t.value == nil || t.value.Sign() <= 0 {
+							return nil, invalid("expected positive PPI")
+						}
+						q.ppi = t.value
+						p.i++
+						if !p.accept("ppi") {
+							return nil, invalid("expected ppi")
+						}
+					}
+				}
 			}
-			q.ppi = t.value
-			p.i++
-			if !p.accept("ppi") {
-				return nil, invalid("expected ppi")
-			}
+		}
+	}
+	if !q.timeSaved {
+		if err = p.parsePlayback(); err != nil {
+			return nil, err
 		}
 	}
 	if p.peek() != "" {
@@ -271,7 +353,12 @@ func (p *parser) primary() (*node, error) {
 		}
 		return p.suffix(n)
 	}
-	if p.accept("square") {
+	if p.peek() == "square" || p.peek() == "cube" {
+		name := "sqrt"
+		if p.peek() == "cube" {
+			name = "cbrt"
+		}
+		p.i++
 		p.query.Domain = true
 		if !p.accept("root") || !p.accept("of") {
 			return nil, invalid("expected root of")
@@ -280,7 +367,7 @@ func (p *parser) primary() (*node, error) {
 		if e != nil {
 			return nil, e
 		}
-		return p.make(&node{op: "function", text: "sqrt", args: []*node{n}})
+		return p.make(&node{op: "function", text: name, args: []*node{n}})
 	}
 	if p.accept("ratio") {
 		p.query.Domain = true
@@ -353,11 +440,11 @@ func (p *parser) primary() (*node, error) {
 		}
 		return p.suffix(n)
 	}
-	if t.text == "pi" || t.text == "e" {
+	if t.text == "pi" || t.text == "π" || t.text == "e" {
 		p.i++
-		v := rational("3.141592653589793")
+		v := rational("3.1415926535897932384626433832795028841971693993751058209749445923")
 		if t.text == "e" {
-			v = rational("2.718281828459045")
+			v = rational("2.7182818284590452353602874713526624977572470936999595749669676277")
 		}
 		return p.make(&node{op: "value", value: Value{Kind: Number, Number: v}})
 	}
@@ -381,6 +468,16 @@ func (p *parser) primary() (*node, error) {
 		p.query.Crypto = p.query.Crypto || p.catalog.Crypto[symbol]
 		p.query.Money = p.query.Money || p.catalog.Units[symbol].Dimension == "money"
 		return p.make(&node{op: "quantity", value: Value{Unit: Unit{symbol: 1}}, args: []*node{n}})
+	}
+	if t.value != nil && t.text == "laptime" {
+		p.i++
+		p.query.Domain = true
+		p.query.laptime = true
+		n, e := p.make(&node{op: "value", value: Value{Kind: Number, Number: t.value}})
+		if e != nil {
+			return nil, e
+		}
+		return p.make(&node{op: "quantity", args: []*node{n}, value: Value{Unit: Unit{"s": 1}}})
 	}
 	if t.value == nil {
 		// Hexadecimal suffix form contains letters and is meaningful only before hex.
@@ -439,7 +536,7 @@ func (p *parser) suffix(n *node) (*node, error) {
 	}
 	// in followed by a unit is a conversion preposition, not an inch suffix.
 	if p.peek() == "in" {
-		if _, ok := p.catalog.resolve(p.tokens[p.i+1].text); ok || p.tokens[p.i+1].text == "timespan" {
+		if _, ok := p.catalog.resolve(p.tokens[p.i+1].text); ok || isFormatWord(p.tokens[p.i+1].text) {
 			return n, nil
 		}
 	}
@@ -529,6 +626,200 @@ func (p *parser) unit() (Unit, error) {
 }
 func isBase(s string) bool { return s == "hex" || s == "bin" || s == "oct" || s == "dec" }
 
+func isFormatWord(s string) bool {
+	return s == "timespan" || s == "laptime" || isBase(s)
+}
+
+// scanLaptime reads HH:MM:SS[.ms]. Two colons distinguish it from a clock.
+func scanLaptime(runes []rune) (string, *big.Rat, bool) {
+	i := 0
+	for i < len(runes) && unicode.IsDigit(runes[i]) {
+		i++
+	}
+	if i == 0 || i >= len(runes) || runes[i] != ':' {
+		return "", nil, false
+	}
+	if i+2 >= len(runes) || !unicode.IsDigit(runes[i+1]) || !unicode.IsDigit(runes[i+2]) {
+		return "", nil, false
+	}
+	if i+3 >= len(runes) || runes[i+3] != ':' {
+		return "", nil, false
+	}
+	if i+5 >= len(runes) || !unicode.IsDigit(runes[i+4]) || !unicode.IsDigit(runes[i+5]) {
+		return "", nil, false
+	}
+	end := i + 6
+	if end < len(runes) && runes[end] == '.' {
+		frac := end + 1
+		for frac < len(runes) && unicode.IsDigit(runes[frac]) {
+			frac++
+		}
+		if frac == end+1 {
+			return "", nil, false
+		}
+		end = frac
+	}
+	text := string(runes[:end])
+	parts := strings.SplitN(text, ":", 3)
+	hours, ok1 := new(big.Rat).SetString(parts[0])
+	mins, ok2 := new(big.Rat).SetString(parts[1])
+	secs, ok3 := new(big.Rat).SetString(parts[2])
+	if !ok1 || !ok2 || !ok3 || mins.Cmp(big.NewRat(60, 1)) >= 0 || secs.Cmp(big.NewRat(60, 1)) >= 0 {
+		return "", nil, false
+	}
+	total := new(big.Rat).Mul(hours, big.NewRat(3600, 1))
+	total.Add(total, new(big.Rat).Mul(mins, big.NewRat(60, 1)))
+	total.Add(total, secs)
+	return text, total, true
+}
+
+// parsePlayback consumes "at 1.5x" after a duration.
+func (p *parser) parsePlayback() error {
+	if !p.accept("at") {
+		if p.query.timeSaved {
+			return invalid("expected at")
+		}
+		return nil
+	}
+	t := p.tokens[p.i]
+	if t.value == nil || t.value.Sign() <= 0 {
+		return invalid("expected positive speed")
+	}
+	p.i++
+	if !p.accept("x") {
+		return invalid("expected x")
+	}
+	p.query.speed = new(big.Rat).Set(t.value)
+	p.query.Domain = true
+	return nil
+}
+
+// parseUnitParts reads "minutes and seconds" after the first unit and in/as/to.
+func (p *parser) parseUnitParts(first Unit) error {
+	symbol, err := p.singleTimeUnit(first)
+	if err != nil {
+		return err
+	}
+	p.query.format = "parts"
+	p.query.formatUnits = []string{symbol}
+	for {
+		u, e := p.unit()
+		if e != nil {
+			return e
+		}
+		symbol, e = p.singleTimeUnit(u)
+		if e != nil {
+			return e
+		}
+		p.query.formatUnits = append(p.query.formatUnits, symbol)
+		if !p.accept("and") {
+			return nil
+		}
+	}
+}
+
+func (p *parser) singleTimeUnit(u Unit) (string, error) {
+	if len(u) != 1 {
+		return "", invalid("expected a time unit")
+	}
+	for symbol, exponent := range u {
+		if exponent != 1 {
+			return "", invalid("expected a time unit")
+		}
+		if symbol != "?m" && p.catalog.Units[symbol].Dimension != "time" {
+			return "", invalid("expected a time unit")
+		}
+		return symbol, nil
+	}
+	return "", invalid("expected a time unit")
+}
+
+// looksLikeInverted detects "meters in 10 km": a leading unit, then in/to.
+func (p *parser) looksLikeInverted() bool {
+	start := p.i
+	crypto, money := p.query.Crypto, p.query.Money
+	_, err := p.unit()
+	ok := err == nil && (p.peek() == "in" || p.peek() == "to")
+	p.i = start
+	p.query.Crypto, p.query.Money = crypto, money
+	return ok
+}
+
+// parseInverted reads how-many-X-in-Y, including "seconds in a day".
+func (p *parser) parseInverted() error {
+	target, err := p.unit()
+	if err != nil {
+		return err
+	}
+	if !p.accept("in") && !p.accept("to") {
+		return invalid("expected in")
+	}
+	p.query.Domain = true
+	p.query.target = target
+	if p.accept("a") || p.accept("an") {
+		u, err := p.unit()
+		if err != nil {
+			return err
+		}
+		n, err := p.make(&node{op: "value", value: number(1)})
+		if err != nil {
+			return err
+		}
+		p.query.root, err = p.make(&node{op: "quantity", args: []*node{n}, value: Value{Unit: u}})
+		return err
+	}
+	p.query.root, err = p.expr(0)
+	return err
+}
+
+func isDecimalPlacesWord(s string) bool {
+	return s == "dp" || s == "dps" || s == "digit" || s == "digits"
+}
+
+// tryRounding recognizes "N dp" / "N digits" after to. These request output
+// precision, so they must be claimed before unit() treats the number as a unit.
+func (p *parser) tryRounding() (bool, error) {
+	t := p.tokens[p.i]
+	if t.value == nil || !t.value.IsInt() || t.value.Sign() < 0 || !t.value.Num().IsInt64() {
+		return false, nil
+	}
+	word := ""
+	if p.i+1 < len(p.tokens) {
+		word = p.tokens[p.i+1].text
+	}
+	if !isDecimalPlacesWord(word) {
+		return false, nil
+	}
+	n := t.value.Num().Int64()
+	if n > 64 {
+		return true, invalid("decimal places exceed limit")
+	}
+	places := int(n)
+	p.query.decimals = &places
+	p.i += 2
+	return true, nil
+}
+
+// parseNearest consumes "to nearest N" after rounded/up/down.
+func (p *parser) parseNearest(dir string) error {
+	if !p.accept("to") || !p.accept("nearest") {
+		return invalid("expected to nearest")
+	}
+	return p.finishNearest(dir)
+}
+
+// finishNearest reads the positive step after the word nearest.
+func (p *parser) finishNearest(dir string) error {
+	t := p.tokens[p.i]
+	if t.value == nil || t.value.Sign() <= 0 {
+		return invalid("expected positive step")
+	}
+	p.i++
+	p.query.nearest = new(big.Rat).Set(t.value)
+	p.query.roundDir = dir
+	return nil
+}
+
 // parseBase interprets digits using the explicitly selected base.
 func parseBase(s, base string) (*big.Rat, error) {
 	radix := map[string]int{"hex": 16, "bin": 2, "oct": 8, "dec": 10}[base]
@@ -555,6 +846,9 @@ func (c *Catalog) resolveAmbiguity(q *Query) error {
 	inspect(q.target)
 	var walk func(*node)
 	walk = func(n *node) {
+		if n == nil {
+			return
+		}
 		inspect(n.value.Unit)
 		for _, a := range n.args {
 			walk(a)
@@ -576,12 +870,26 @@ func (c *Catalog) resolveAmbiguity(q *Query) error {
 	}
 	replace(q.target)
 	walk = func(n *node) {
+		if n == nil {
+			return
+		}
 		replace(n.value.Unit)
 		for _, a := range n.args {
 			walk(a)
 		}
 	}
 	walk(q.root)
+	for i, symbol := range q.formatUnits {
+		if symbol != "?m" {
+			continue
+		}
+		has = true
+		k := "min"
+		if length {
+			k = "m"
+		}
+		q.formatUnits[i] = k
+	}
 	if has && length && duration {
 		return invalid("ambiguous m: use meters or minutes")
 	}

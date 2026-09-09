@@ -45,7 +45,13 @@ polling have been removed. `modules` now contains the existing price services;
 ## Defined semantics
 
 - Number/Quantity arithmetic uses rational numbers; rounding occurs at output.
+  `1/3 to 2 dp` and `π to 5 digits` request that many decimal places. `dp` and
+  `digits` are aliases. `21 rounded up to nearest 5` and `17 rounded down to
+  nearest 3` snap to a multiple of the step. Intermediate arithmetic stays exact.
   Transcendental functions are approximate and reject non-finite results.
+  `meters in 10 km` asks how many of the leading unit are in the following
+  quantity; `a`/`an` means one (`seconds in a day`). A bare number added to a
+  quantity inherits that unit (`300 + 20 km`, `$20 + 30`).
 - `%` is preserved until evaluation. `19m + 47%` increases the quantity by 47%;
   `10% + 20%` is 30%. `of` multiplies by the percentage, `off` subtracts it.
   `15% tip on 42` returns the tip amount (6.3). Ratios display their two operands
@@ -72,9 +78,15 @@ polling have been removed. `modules` now contains the existing price services;
   `workhours in 2023` is 2080 hours. No new persisted settings are introduced.
 - Omitted timezone dates use the source zone's today. IST explicitly means
   Asia/Kolkata. CET/CEST preserve the Europe/Paris alias and use seasonal offsets.
-  Explicit local times that are missing or repeated at a DST transition are
-  rejected. Embedded tzdata makes this independent of OS timezone installation.
-- `timespan` is a formatting target, not a unit. Existing `1h → minutes`,
+  `GMT+8` / `UTC-7` are fixed offsets. `Tokyo time` is `time in Tokyo`.
+  `time difference between Seattle and Moscow` is the absolute offset gap at the
+  reference instant. Explicit local times that are missing or repeated at a DST
+  transition are rejected. Embedded tzdata makes this independent of OS timezone
+  installation.
+- `timespan` is a formatting target, not a unit. `as` is a synonym of `to`.
+  `as laptime` and HH:MM:SS literals (two colons) are durations. `in hours and
+  minutes` splits a duration into those units. `at 1.5x` scales playback time;
+  `time saved 5 min at 1.5x` is the time removed. Existing `1h → minutes`,
   `1 week → days`, and `10 days → weeks` shortcuts remain presentation choices.
 - Parsing follows Calculator's effective separator settings. Existing physical,
   duration, and storage rows remain ungrouped; raw values preserve necessary units

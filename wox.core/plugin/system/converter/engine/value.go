@@ -68,6 +68,10 @@ type Evaluation struct {
 	Currency      bool
 	RateUpdatedAt int64
 	Ratio         string
+	Decimals      *int
+	Nearest       *big.Rat
+	RoundDir      string
+	FormatUnits   []string
 }
 
 type Presentation struct {
