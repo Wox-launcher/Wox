@@ -100,11 +100,21 @@ func TestDedicatedChatEscapeDismissesPanelsWithoutClosingWindow(t *testing.T) {
 	}
 	for _, panel := range []string{"", "history", "models", "skills", chatCommandPanel, "debug"} {
 		app.chatPreview.panel = panel
+		app.chatPreview.sidebarOpen = panel == "history"
 		if !app.onDedicatedChatKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
 			t.Fatalf("dedicated window did not handle Escape for panel %q", panel)
 		}
-		if app.chatPreview.panel != "" || !app.chatPreview.active || app.chatPreview.editor.State().Text != "unsent draft" {
-			t.Fatalf("Escape must dismiss panel %q without changing composer state", panel)
+		if !app.chatPreview.active || app.chatPreview.editor.State().Text != "unsent draft" {
+			t.Fatalf("Escape must keep the dedicated composer after panel %q", panel)
+		}
+		if chatOverlayPanel(panel) {
+			if app.chatPreview.panel != "" || app.chatPreview.sidebarOpen {
+				t.Fatalf("Escape must dismiss overlay %q without opening the sidebar", panel)
+			}
+			continue
+		}
+		if app.chatPreview.panel != panel || app.chatPreview.sidebarOpen != (panel == "history") {
+			t.Fatalf("dedicated Escape folded the root surface: panel %q -> %q sidebar=%v", panel, app.chatPreview.panel, app.chatPreview.sidebarOpen)
 		}
 	}
 	select {

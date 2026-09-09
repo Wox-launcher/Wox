@@ -1797,11 +1797,14 @@ func (a *App) handleChatKey(event woxui.KeyEvent, dedicated bool) bool {
 		return false
 	}
 	if event.Key == woxui.KeyEscape {
+		if dedicated {
+			// The dedicated window is the root surface. Escape may dismiss a
+			// floating overlay, but it must not climb into the persistent
+			// history sidebar or close the composer window.
+			return true
+		}
 		if panel == "history" {
 			a.closeChatPanel()
-		} else if dedicated {
-			// The dedicated composer keeps its window and draft when Escape bubbles up.
-			return true
 		} else if a.isPrimary {
 			a.exitChatMode()
 		} else {
