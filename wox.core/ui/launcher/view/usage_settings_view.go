@@ -12,13 +12,10 @@ import (
 )
 
 const (
-	usagePageHorizontalInset = float32(40)
-	usagePageTopInset        = float32(34)
-	usagePageBottomInset     = float32(30)
-	usageSectionGap          = float32(18)
-	usageCardGap             = float32(12)
-	usageKPIHeight           = float32(92)
-	usageHeatmapPanelHeight  = float32(252)
+	usageSectionGap         = float32(18)
+	usageCardGap            = float32(12)
+	usageKPIHeight          = float32(92)
+	usageHeatmapPanelHeight = float32(252)
 )
 
 // UsagePeriod describes one report period selector.
@@ -83,7 +80,7 @@ type UsageSettingsProps struct {
 
 // UsageSettingsView builds the responsive dashboard used by the Usage settings route.
 func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
-	contentWidth := max(float32(0), props.Width-usagePageHorizontalInset*2)
+	contentWidth := SettingsPageContentWidth(props.Width)
 	header, _ := usageSummaryHeader(props, contentWidth)
 	kpiGrid, _ := usageKPIGrid(props, contentWidth)
 	rankings, _ := usageRankings(props, contentWidth)
@@ -94,14 +91,9 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 		}})
 	}
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
-	return woxwidget.Container{
-		Width: props.Width, Height: props.Height,
-		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageHorizontalInset, Bottom: usagePageBottomInset},
-		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "usage-page-scroll", FillWidth: true, FillHeight: true,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultTitle,
-		}),
-	}
+	return SettingsPage(SettingsPageProps{
+		ID: "usage-page-scroll", Width: props.Width, Height: props.Height, Gap: usageSectionGap, Children: children,
+	})
 }
 
 // usageSummaryHeader keeps the report title, period filter, and share action on one balanced row when space permits.
