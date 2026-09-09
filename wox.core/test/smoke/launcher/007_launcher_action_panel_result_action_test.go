@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -27,15 +28,19 @@ func Test007LauncherActionPanelResultAction(t *testing.T) {
 		}
 
 		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
-		execute, found := automationdriver.Find(snapshot, "action-result-execute-0")
-		if !found || !execute.Selected {
-			t.Fatalf("Execute action = found %v selected %v, want selected action", found, execute.Selected)
+		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			execute, found := automationdriver.Find(snapshot, "action-result-execute-0")
+			return found && execute.Selected
+		})
+		if err != nil {
+			t.Fatalf("wait for selected Execute action: %v; %s", err, formatActionPanelResultNodes(snapshot))
 		}
+		execute, _ := automationdriver.Find(snapshot, "action-result-execute-0")
 		if err := client.Perform(ctx, execute.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("activate Shell Execute action: %v", err)
 		}
 
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			status, statusFound := automationdriver.Find(snapshot, "launcher.preview.terminal.status")
 			output, outputFound := automationdriver.Find(snapshot, "launcher.preview.terminal.output")
 			_, panelFound := automationdriver.Find(snapshot, "action-search")
@@ -67,4 +72,16 @@ func selectedActionPanelResult(snapshot woxwidget.AutomationSnapshot) (woxui.Acc
 		}
 	}
 	return woxui.AccessibilityNode{}, false
+}
+
+func formatActionPanelResultNodes(snapshot woxwidget.AutomationSnapshot) string {
+	nodes := actionPanelResultNodes(snapshot)
+	if len(nodes) == 0 {
+		return "action nodes=[]"
+	}
+	parts := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		parts = append(parts, fmt.Sprintf("%s selected=%v label=%q", node.AutomationID, node.Selected, node.Label))
+	}
+	return "action nodes=[" + strings.Join(parts, "; ") + "]"
 }

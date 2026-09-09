@@ -15,6 +15,7 @@ type semanticBehavior struct {
 	liveRegion       woxui.AccessibilityLiveRegion
 	enabled          bool
 	selected         bool
+	hovered          bool
 	checked          bool
 	expanded         bool
 	readOnly         bool
@@ -78,6 +79,7 @@ type Semantics struct {
 	LiveRegion     woxui.AccessibilityLiveRegion
 	Disabled       bool
 	Selected       bool
+	Hovered        bool
 	Checked        bool
 	Expanded       bool
 	ReadOnly       bool
@@ -110,6 +112,7 @@ func (w Semantics) layout(ctx context, available constraints) *node {
 		liveRegion:     w.LiveRegion,
 		enabled:        !w.Disabled,
 		selected:       w.Selected,
+		hovered:        w.Hovered,
 		checked:        w.Checked,
 		expanded:       w.Expanded,
 		readOnly:       w.ReadOnly,

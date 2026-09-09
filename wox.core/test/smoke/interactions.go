@@ -304,12 +304,22 @@ func OpenResultActionPanel(t *testing.T, ctx context.Context, client *automation
 	}
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		input, found := automationdriver.Find(snapshot, "action-search")
-		return found && input.Focused
+		return found && input.Focused && actionPanelHasSelectedItem(snapshot)
 	})
 	if err != nil {
 		t.Fatalf("wait for launcher action panel: %v", err)
 	}
 	return snapshot
+}
+
+// actionPanelHasSelectedItem reports whether any action menu item is selected.
+func actionPanelHasSelectedItem(snapshot woxwidget.AutomationSnapshot) bool {
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "action-") && node.Role == woxui.AccessibilityRoleMenuItem && node.Selected {
+			return true
+		}
+	}
+	return false
 }
 
 // ActivateSelectedResultAction opens the action panel and invokes the current action matching a stable prefix.

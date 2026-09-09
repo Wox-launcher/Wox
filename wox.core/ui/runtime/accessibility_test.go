@@ -38,6 +38,7 @@ func TestAccessibilityTreeContentHashCoversEveryNodeField(t *testing.T) {
 		{name: "focusable", change: func(tree *AccessibilityTree) { tree.Nodes[0].Focusable = true }},
 		{name: "focused", change: func(tree *AccessibilityTree) { tree.Nodes[0].Focused = true }},
 		{name: "selected", change: func(tree *AccessibilityTree) { tree.Nodes[0].Selected = true }},
+		{name: "hovered", change: func(tree *AccessibilityTree) { tree.Nodes[0].Hovered = true }},
 		{name: "checked", change: func(tree *AccessibilityTree) { tree.Nodes[0].Checked = true }},
 		{name: "expanded", change: func(tree *AccessibilityTree) { tree.Nodes[0].Expanded = true }},
 		{name: "read only", change: func(tree *AccessibilityTree) { tree.Nodes[0].ReadOnly = true }},

@@ -1809,6 +1809,7 @@ func (h *Host) buildAccessibilityTree(diagnostics []string, work *frameWorkCount
 				Focusable:        h.isFocusable(current),
 				Focused:          current.id == h.focused,
 				Selected:         semantic.selected,
+				Hovered:          semantic.hovered,
 				Checked:          semantic.checked,
 				Expanded:         semantic.expanded,
 				ReadOnly:         semantic.readOnly,

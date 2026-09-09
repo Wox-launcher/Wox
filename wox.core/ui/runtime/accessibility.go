@@ -75,6 +75,7 @@ type AccessibilityNode struct {
 	Focusable      bool
 	Focused        bool
 	Selected       bool
+	Hovered        bool
 	Checked        bool
 	Expanded       bool
 	ReadOnly       bool
@@ -312,6 +313,7 @@ const (
 	accessibilityStateFocusable
 	accessibilityStateFocused
 	accessibilityStateSelected
+	accessibilityStateHovered
 	accessibilityStateChecked
 	accessibilityStateExpanded
 	accessibilityStateReadOnly
@@ -347,6 +349,9 @@ func accessibilityNodeStateFlags(node AccessibilityNode) uint32 {
 	}
 	if node.Selected {
 		flags |= accessibilityStateSelected
+	}
+	if node.Hovered {
+		flags |= accessibilityStateHovered
 	}
 	if node.Checked {
 		flags |= accessibilityStateChecked

@@ -194,6 +194,40 @@ func TestActionKeepVisibleAccountsForGroupDivider(t *testing.T) {
 	}
 }
 
+func TestActionStillPointerDoesNotStealDefaultSelection(t *testing.T) {
+	phase := 0
+	selected := 0
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		if phase == 0 {
+			return woxwidget.Gesture{ID: "placeholder", Child: woxwidget.Container{Width: 400, Height: 220}}
+		}
+		view, _, _ := ActionsView(ActionsProps{
+			Window: &woxui.Window{}, WindowWidth: 600, WindowHeight: 600, DensityScale: 1,
+			ActionPadding: woxwidget.UniformInsets(10), Theme: woxcomponent.Theme{}, Selected: selected,
+			Items: []ActionItem{
+				{Index: 0, ID: "result-execute-0", Label: "Execute"},
+				{Index: 1, ID: "result-execute_background-1", Label: "Background"},
+			},
+			OnSelect: func(index int) { selected = index },
+		})
+		return view
+	})
+	host.AttachServices(actionSearchHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 220}, PixelSize: woxui.PixelSize{Width: 400, Height: 220}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	// Park the pointer where the second action row will appear after the panel opens.
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 170, Y: 104}})
+	phase = 1
+	host.Frame(&woxui.DisplayList{}, frame)
+	if selected != 0 {
+		t.Fatalf("opening under a still pointer selected %d, want the default action", selected)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 172, Y: 106}})
+	if selected != 1 {
+		t.Fatalf("pointer move selected %d, want the hovered action", selected)
+	}
+}
+
 func TestActionRowCentersIconAndLabel(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),

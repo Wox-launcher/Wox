@@ -211,9 +211,10 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 		titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridItemTitleFontSize, props.DensityScale)}, Color: props.Theme.ResultTitle}
 		children = append(children, woxwidget.Container{Width: props.VisualWidth, Height: props.TitleHeight, Padding: woxwidget.Insets{Top: 4}, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)})
 	}
+	onPointer, onHover := hoverEnterOnPointerMove(result.OnHover)
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", result.ID)), AutomationID: "launcher.result." + result.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: result.Title, Value: result.QuickSelectNumber, Selected: result.Selected,
+		Label: result.Title, Value: result.QuickSelectNumber, Selected: result.Selected, Hovered: result.Hovered,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {
@@ -227,13 +228,10 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 			return nil
 		},
 		Child: woxwidget.Gesture{
-			ID: fmt.Sprintf("grid-result-%s", result.ID),
-			OnHover: func(inside bool) {
-				if result.OnHover != nil {
-					result.OnHover(inside)
-				}
-			},
-			OnTap: result.OnSelect,
+			ID:        fmt.Sprintf("grid-result-%s", result.ID),
+			OnPointer: onPointer,
+			OnHover:   onHover,
+			OnTap:     result.OnSelect,
 			OnSecondaryTapDown: func(woxui.Point) {
 				if result.OnSecondaryTapDown != nil {
 					result.OnSecondaryTapDown()

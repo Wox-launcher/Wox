@@ -51,7 +51,7 @@ func verifySemanticsEqual(left, right *semanticBehavior) error {
 	}
 	if left.automationID != right.automationID || left.role != right.role || left.label != right.label ||
 		left.description != right.description || left.value != right.value || left.liveRegion != right.liveRegion ||
-		left.enabled != right.enabled || left.selected != right.selected || left.checked != right.checked ||
+		left.enabled != right.enabled || left.selected != right.selected || left.hovered != right.hovered || left.checked != right.checked ||
 		left.expanded != right.expanded || left.readOnly != right.readOnly || left.protected != right.protected ||
 		left.hidden != right.hidden || left.nativeBoundary != right.nativeBoundary ||
 		left.hasTextSelection != right.hasTextSelection || left.selectionStart != right.selectionStart ||

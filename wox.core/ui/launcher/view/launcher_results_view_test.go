@@ -75,6 +75,31 @@ func TestLauncherResultsExposeCompletionState(t *testing.T) {
 	}
 }
 
+func TestLauncherResultExposesHoveredSemantics(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return LauncherResultsView(LauncherResultsProps{
+			Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+			Items: []LauncherResultItem{{ID: "hovered", Title: "Hovered", Hovered: true}},
+		})
+	})
+	host.AttachServices(actionSearchHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 50}, PixelSize: woxui.PixelSize{Width: 320, Height: 50}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	var row woxui.AccessibilityNode
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "launcher.result.hovered" {
+			row = node
+			break
+		}
+	}
+	if row.AutomationID == "" {
+		t.Fatal("hovered result was missing from the host snapshot")
+	}
+	if !row.Hovered || row.Selected {
+		t.Fatalf("hovered result snapshot = hovered %v selected %v, want hover without selection", row.Hovered, row.Selected)
+	}
+}
+
 func TestLauncherResultWiresSecondaryTap(t *testing.T) {
 	tapped := false
 	result := LauncherResultsView(LauncherResultsProps{
@@ -88,6 +113,49 @@ func TestLauncherResultWiresSecondaryTap(t *testing.T) {
 	gesture.OnSecondaryTapDown(woxui.Point{})
 	if !tapped {
 		t.Fatal("secondary tap callback was not wired to the result row")
+	}
+}
+
+func TestLauncherResultStillPointerDoesNotHoverUntilMove(t *testing.T) {
+	phase := 0
+	hovered := ""
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		if phase == 0 {
+			return woxwidget.Gesture{ID: "placeholder", Child: woxwidget.Container{Width: 320, Height: 120}}
+		}
+		return LauncherResultsView(LauncherResultsProps{
+			Width: 320, Height: 120, ContentHeight: 100, RowHeight: 50, Complete: true,
+			Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+			Items: []LauncherResultItem{
+				{ID: "first", Title: "Open Wox Settings", OnHover: func(inside bool) {
+					if inside {
+						hovered = "first"
+					} else if hovered == "first" {
+						hovered = ""
+					}
+				}},
+				{ID: "second", Title: "QQ Music", OnHover: func(inside bool) {
+					if inside {
+						hovered = "second"
+					} else if hovered == "second" {
+						hovered = ""
+					}
+				}},
+			},
+		})
+	})
+	host.AttachServices(actionSearchHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 120}, PixelSize: woxui.PixelSize{Width: 320, Height: 120}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 160, Y: 75}})
+	phase = 1
+	host.Frame(&woxui.DisplayList{}, frame)
+	if hovered != "" {
+		t.Fatalf("opening results under a still pointer hovered %q, want no hover", hovered)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 162, Y: 77}})
+	if hovered != "second" {
+		t.Fatalf("pointer move hovered %q, want the row under the cursor", hovered)
 	}
 }
 

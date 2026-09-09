@@ -258,6 +258,26 @@ func WrapLauncherResultsStatus(complete bool, child woxwidget.Widget) woxwidget.
 	}
 }
 
+// hoverEnterOnPointerMove keeps layout refresh from highlighting a still pointer.
+// Host re-hit-tests after rebuild; that OnHover(true) must not become a result
+// hover. Leave still uses OnHover so the highlight clears when the pointer exits
+// or the row is replaced.
+func hoverEnterOnPointerMove(onHover func(bool)) (func(woxui.PointerEvent) bool, func(bool)) {
+	if onHover == nil {
+		return nil, nil
+	}
+	return func(event woxui.PointerEvent) bool {
+			if event.Kind == woxui.PointerMove {
+				onHover(true)
+			}
+			return false
+		}, func(inside bool) {
+			if !inside {
+				onHover(false)
+			}
+		}
+}
+
 // launcherResultRow builds one pure row subtree from fully prepared props.
 func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	item := props.Item
@@ -352,14 +372,12 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		Width: props.RowWidth, Height: props.RowHeight, Padding: props.ItemPadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: rowChildren},
 	}
+	onPointer, onHover := hoverEnterOnPointerMove(item.OnHover)
 	resultControl := woxwidget.Gesture{
-		ID: fmt.Sprintf("result-gesture-%s", item.ID),
-		OnHover: func(inside bool) {
-			if item.OnHover != nil {
-				item.OnHover(inside)
-			}
-		},
-		OnTap: item.OnSelect,
+		ID:        fmt.Sprintf("result-gesture-%s", item.ID),
+		OnPointer: onPointer,
+		OnHover:   onHover,
+		OnTap:     item.OnSelect,
 		OnSecondaryTapDown: func(woxui.Point) {
 			if item.OnSecondaryTapDown != nil {
 				item.OnSecondaryTapDown()
@@ -378,7 +396,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID)), AutomationID: "launcher.result." + item.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: titleValue, Description: subtitleValue, Value: item.QuickSelectNumber, Selected: item.Selected,
+		Label: titleValue, Description: subtitleValue, Value: item.QuickSelectNumber, Selected: item.Selected, Hovered: item.Hovered,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {
@@ -464,10 +482,11 @@ func launcherResultTailHover(props launcherResultTailsProps, index int, tooltip 
 	if label == "" {
 		label = strings.TrimSpace(props.Items[index].ImageText)
 	}
+	onPointer, onHover := hoverEnterOnPointerMove(props.OnHover)
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleText, Label: label, Description: tooltip,
 		Child: woxwidget.Gesture{
-			ID: id, OnHover: props.OnHover, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+			ID: id, OnPointer: onPointer, OnHover: onHover, OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				props.OnTooltip(inside, tooltip, bounds)
 			}, OnTap: props.OnSelect, OnSecondaryTapDown: func(woxui.Point) {
 				if props.OnSecondaryTapDown != nil {

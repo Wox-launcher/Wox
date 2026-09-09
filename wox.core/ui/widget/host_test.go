@@ -646,6 +646,18 @@ func TestHostSemanticsExposesEnabledCursorRect(t *testing.T) {
 	}
 }
 
+func TestHostSemanticsExposesHovered(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Semantics{Key: "row", AutomationID: "row", Role: woxui.AccessibilityRoleListItem, Label: "Row", Hovered: true, Child: Container{Width: 10, Height: 10}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	node := findAutomationNode(t, host.Snapshot().Tree, "row")
+	if !node.Hovered {
+		t.Fatal("hovered semantics were missing from the host snapshot")
+	}
+}
+
 func TestHostSemanticsProtectsValuesAndReportsDuplicateAutomationIDs(t *testing.T) {
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Flex{Children: []Widget{

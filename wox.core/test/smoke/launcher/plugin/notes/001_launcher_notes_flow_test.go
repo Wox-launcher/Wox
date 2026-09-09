@@ -83,7 +83,7 @@ func clickTaskCheckbox(t *testing.T, ctx context.Context, client *automationdriv
 	if !found {
 		t.Fatal("Notes editor is unavailable for task click")
 	}
-	position := woxui.Point{X: editor.Bounds.X + 20, Y: editor.Bounds.Y + 48}
+	position := taskCheckboxPoint(snapshot, editor)
 	for _, kind := range []woxui.PointerEventKind{woxui.PointerDown, woxui.PointerUp} {
 		if err := client.Pointer(ctx, woxui.PointerEvent{Kind: kind, Button: woxui.PointerButtonPrimary, Position: position}); err != nil {
 			t.Fatalf("click Notes task checkbox: %v", err)

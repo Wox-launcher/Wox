@@ -240,10 +240,14 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		automationID := "action-" + item.ID
 		row := woxwidget.Gesture{
 			ID: "action-" + item.ID,
-			OnHover: func(inside bool) {
-				if inside && props.OnSelect != nil {
+			// Hover after layout follows a still pointer. Selecting on that path
+			// would steal the default action when Ctrl/Cmd+J opens the panel
+			// under an existing cursor. PointerMove is a real user motion.
+			OnPointer: func(event woxui.PointerEvent) bool {
+				if event.Kind == woxui.PointerMove && props.OnSelect != nil {
 					props.OnSelect(item.Index)
 				}
+				return false
 			},
 			OnTap: activate,
 			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{

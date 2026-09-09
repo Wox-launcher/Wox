@@ -73,9 +73,32 @@ func waitForEditorValue(t *testing.T, ctx context.Context, client *automationdri
 		return found && editor.Value == value
 	})
 	if err != nil {
-		t.Fatalf("wait for Notes editor value %q: %v", value, err)
+		editor, found := automationdriver.Find(snapshot, "notes.editor")
+		t.Fatalf("wait for Notes editor value %q: %v; found=%v value=%q", value, err, found, editor.Value)
 	}
 	return snapshot
+}
+
+// taskCheckboxPoint aims at the painted checkbox, not the left-gutter reorder handle.
+func taskCheckboxPoint(snapshot woxwidget.AutomationSnapshot, editor woxui.AccessibilityNode) woxui.Point {
+	if handle, found := automationdriver.Find(snapshot, "notes.editor.reorder"); found && handle.Bounds.Width > 0 {
+		// Handle right edge sits 12px left of the 16px checkbox; +20 is the box center.
+		return woxui.Point{X: handle.Bounds.X + handle.Bounds.Width + 20, Y: handle.Bounds.Y + handle.Bounds.Height/2}
+	}
+	lineIndex := 0
+	if index, ok := findChecklistVisualLine(editor.TextLines); ok {
+		lineIndex = index
+	}
+	const (
+		paddingLeft = float32(40)
+		paddingTop  = float32(12)
+		lineHeight  = float32(24)
+		checkboxMid = float32(8)
+	)
+	return woxui.Point{
+		X: editor.Bounds.X + paddingLeft + checkboxMid,
+		Y: editor.Bounds.Y + paddingTop + float32(lineIndex)*lineHeight + lineHeight/2,
+	}
 }
 
 func selectedResultID(t *testing.T, snapshot woxwidget.AutomationSnapshot) string {
@@ -136,7 +159,7 @@ func waitForSearchRow(t *testing.T, ctx context.Context, client *automationdrive
 
 func findChecklistVisualLine(lines []woxui.AccessibilityTextLine) (int, bool) {
 	for index, line := range lines {
-		if strings.Contains(line.Text, "☐") {
+		if strings.Contains(line.Text, "☐") || strings.Contains(line.Text, "☑") {
 			return index, true
 		}
 	}
