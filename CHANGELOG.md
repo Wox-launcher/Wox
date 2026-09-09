@@ -1,16 +1,20 @@
 # Changelog
 
-## v2.4.3 - 2026-09-08
+## v2.4.3 - 2026-09-09
 
-This release adds structured query hints so Web Search and other commands can collect multiple named inputs with Tab instead of a single free-text box.
+This release adds query hints so Web Search and other commands can collect multiple named inputs with Tab instead of a single free-text box.
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/query_hint.jpg)
+
 
 - Add
-  - [`Query`] Add structured query hints for command templates so users can fill multi-part commands with argument chips, ghost placeholders, and Tab completion. Web Search templates can collect multiple named inputs, including selected text and clipboard text captured before the launcher takes focus.
-  - [`Feedback`] Add a built-in Feedback plugin to export diagnostics, review crash reports, clear logs before a reproduction, and open GitHub issues or feature requests.
+  - [`Query`] Add query hints for command templates so users can fill multi-part commands with argument chips, ghost placeholders, and Tab completion. Web Search templates can collect multiple named inputs, including selected text and clipboard text captured before the launcher takes focus.
+  - [`Feedback`] Add a built-in Feedback plugin to export diagnostics, review crash reports, clear logs before a reproduction, and open GitHub issues or feature requests.  
+  ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/feedback.jpg)
 
 - Improve
   - [`AI`] Group the provider dropdown into API and Installed CLI, use brand icons for local CLI providers, and allow searching the list
-  - [`AI Chat`] Support popping a conversation into a dedicated window that keeps the unsent draft after the launcher hides, attach selected text, files, and images without mixing them into instructions, and edit `{wox:...}` placeholders as tokens [#4543](https://github.com/Wox-launcher/Wox/issues/4543)
+  - [`AI Chat`] Support popping a conversation into a dedicated window that keeps the unsent draft after the launcher hides, attach selected text, files, and images without mixing them into instructions, edit `{wox:...}` placeholders as tokens [#4543](https://github.com/Wox-launcher/Wox/issues/4543), and grow the composer from one to five wrapped lines
   - [`File Search`] Show OS recent files for an empty File Search query, using Windows Jump Lists, macOS Spotlight last-used dates, and Linux recently-used.xbel
   - [`Quick Jump`] Rename File Explorer Search to Quick Jump (`jump`), keep saved paths per OS, skip ignored applications, navigate Wox's own Windows pickers, and inject 32-bit window hooks so 32-bit hosts such as Foxmail and Office work [#4511](https://github.com/Wox-launcher/Wox/issues/4511)
   - [`App`] Support hide-from-search with live wildcard or selected-app ignore rules and a match preview [#4537](https://github.com/Wox-launcher/Wox/issues/4537), and support Japanese (ja_JP)
@@ -20,17 +24,24 @@ This release adds structured query hints so Web Search and other commands can co
   - [`Hotkey`] Improve macOS hotkey recording with an Accessibility permission prompt and a local fallback when global recording is unavailable [#4548](https://github.com/Wox-launcher/Wox/issues/4548)
   - [`Preview`] Defer large text, Office, and PDF previews behind a details-first gate so rapid selection does not start heavy reads
   - [`Browser`] Improve browser window identification so tab results stay scoped to the active browser [#4542](https://github.com/Wox-launcher/Wox/issues/4542)
+  - [`Converter`] Expand unit, currency, date, and percentage queries into typed expressions so nested conversions, tips, workdays, and timezone sentences compose in one query, with copy actions for formatted, raw, and question-answer results
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/converter_time.jpg)
+  - [`Query`] Support saving the current query as a shortcut from the action panel, and add a Query Test button in settings for query hotkeys, shortcuts, and tray queries
+  - [`Folder`] Support Windows environment variables such as `%LOCALAPPDATA%` in folder paths
+  - [`Notes`] Support reordering checklist tasks by dragging the trailing handle
 
 - Fix
   - [`App`] Fix Linux apps whose icons sit directly in XDG data icon dirs showing the default icon
   - [`Quick Jump`] Fix Windows Move Items folder choosers and cut hung window-hook waits that delayed dialog navigation [#4511](https://github.com/Wox-launcher/Wox/issues/4511)
   - [`UI`] Fix hidden WebView renderers being destroyed on Windows memory trim, and clip native file previews under overlays so they match rounded corners
   - [`Launcher`] Fix caret placement on long query text
+  - [`AI Chat`] Fix conversations resetting about every 30 seconds when App directory scans refreshed the query [#4551](https://github.com/Wox-launcher/Wox/issues/4551), and keep fullscreen chat after hide/show
 
 - Store
   - Plugin
     - [Linkding](https://github.com/Myraxion/Wox.Plugin.Linkding) Search, save, and manage bookmarks from your Linkding instance [@Myraxion](https://github.com/Myraxion)
     - [GitHub](https://github.com/Wox-launcher/Wox.Plugin.Github) Manage GitHub issues and notifications [@Wox-launcher](https://github.com/Wox-launcher)
+    - [Notion](https://github.com/lmgarret/wox-notion-plugin) Search Notion pages and databases, jump to recent pages, and quick-capture notes from the launcher [@lmgarret](https://github.com/lmgarret)
 
 ## v2.4.2 - 2026-09-03
 
