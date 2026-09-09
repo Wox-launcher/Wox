@@ -1235,7 +1235,7 @@
   {
     "Id": "35E4296B-89E2-492E-977B-0120ECCB5C95",
     "Name": "i18n:plugin_name",
-    "Author": "qianlifeng",
+    "Author": "Wox-Launcher",
     "Version": "0.1.0",
     "MinWoxVersion": "2.4.2",
     "Runtime": "nodejs",

@@ -282,6 +282,16 @@ func (c *Catalog) evaluateTemporal(query *Query, env Env) (Evaluation, error) {
 			return r, e
 		}
 		v = Value{Kind: Date, Time: t}
+	case "localLiteral":
+		date, e := parseDate(q.date, now)
+		if e != nil {
+			return r, e
+		}
+		clock, e := parseClock(q.clock)
+		if e != nil {
+			return r, e
+		}
+		v.Time, err = localInstant(date, clock, env.Local)
 	case "clockLiteral":
 		t, e := parseClock(q.clock)
 		if e != nil {

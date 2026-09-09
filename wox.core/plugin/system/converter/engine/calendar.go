@@ -21,6 +21,11 @@ func temporalLiteral(input string) (string, *temporalQuery) {
 		if baseTargetSuffix.MatchString(input[len(s):]) && (strings.HasSuffix(strings.ToLower(s), "oct") || strings.HasSuffix(strings.ToLower(s), "dec")) {
 			return "", nil
 		}
+		rest := input[len(s):]
+		trimmed := strings.TrimLeft(rest, " \t")
+		if clock := clockLiteralPrefix.FindString(trimmed); len(trimmed) < len(rest) && clock != "" {
+			return s + rest[:len(rest)-len(trimmed)] + clock, &temporalQuery{kind: "localLiteral", date: s, clock: clock}
+		}
 		return s, &temporalQuery{kind: "dateLiteral", date: s}
 	}
 	if s := clockLiteralPrefix.FindString(input); s != "" {

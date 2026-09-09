@@ -301,6 +301,9 @@ func (p *parser) primary() (*node, error) {
 		return p.make(&node{op: "ratio", args: []*node{a, b}})
 	}
 	t := p.tokens[p.i]
+	if t.text == "now" {
+		t.temporal = &temporalQuery{kind: "now"}
+	}
 	if t.temporal != nil {
 		p.i++
 		p.query.Domain = true
@@ -445,7 +448,36 @@ func (p *parser) suffix(n *node) (*node, error) {
 		return nil, e
 	}
 	p.query.Domain = true
-	return p.make(&node{op: "quantity", args: []*node{n}, value: Value{Unit: u}})
+	n, e = p.make(&node{op: "quantity", args: []*node{n}, value: Value{Unit: u}})
+	// Keep compound durations in one operand so subtraction negates every part.
+	for e == nil && p.catalog.isDurationUnit(u) && p.tokens[p.i].value != nil {
+		t := p.tokens[p.i]
+		p.i++
+		u, e = p.unit()
+		if e != nil {
+			return nil, e
+		}
+		if !p.catalog.isDurationUnit(u) {
+			return nil, invalid("compound durations require time units")
+		}
+		part, err := p.make(&node{op: "quantity", args: []*node{{op: "value", value: Value{Kind: Number, Number: t.value}}}, value: Value{Unit: u}})
+		if err != nil {
+			return nil, err
+		}
+		n, e = p.make(&node{op: "+", args: []*node{n, part}})
+	}
+	return n, e
+}
+
+// isDurationUnit excludes compound dimensions and calendar months.
+func (c *Catalog) isDurationUnit(u Unit) bool {
+	if len(u) != 1 {
+		return false
+	}
+	for symbol, exponent := range u {
+		return exponent == 1 && (symbol == "?m" || c.Units[symbol].Dimension == "time")
+	}
+	return false
 }
 
 // unit consumes unit factors only; numeric multiplication remains expression syntax.

@@ -216,3 +216,44 @@ func TestFractionalTimespanAndErrorKinds(t *testing.T) {
 		t.Fatalf("untyped domain error: %v", err)
 	}
 }
+
+// TestInstantExpressions fixes the clock and zone to verify elapsed arithmetic.
+func TestInstantExpressions(t *testing.T) {
+	c, env := fixture()
+	env.Local = time.FixedZone("test", 8*3600)
+	env.Now = time.Date(2026, 6, 10, 16, 0, 0, 0, env.Local)
+	for _, tc := range []struct{ input, raw string }{
+		{"now + 4d17h", "2026-06-15T09:00:00+08:00"},
+		{"2026-06-14 16:00 - now", "345600 s"},
+		{"now - 4d17h", "2026-06-05T23:00:00+08:00"},
+		{"NOW - now", "0 s"},
+		{"now + (4d17h * 2)", "2026-06-20T02:00:00+08:00"},
+		{"(2026-06-14 16:00 - now) to hours", "96 h"},
+		{"now + 1h30m15s", "2026-06-10T17:30:15+08:00"},
+		{"now + 4d 17h", "2026-06-15T09:00:00+08:00"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			q, err := c.Parse(tc.input, ParseOptions{DecimalSeparator: "."})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := c.Evaluate(context.Background(), q, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Format(r, FormatOptions{}).Raw; got != tc.raw {
+				t.Fatalf("got %q, want %q", got, tc.raw)
+			}
+		})
+	}
+	env.Local, _ = time.LoadLocation("Europe/Berlin")
+	for _, input := range []string{"now + 4d17kg", "now + 4d17", "2026-02-30 16:00 - now", "2026-03-29 02:30 - now", "2026-10-25 02:30 - now"} {
+		q, err := c.Parse(input, ParseOptions{DecimalSeparator: "."})
+		if err == nil {
+			_, err = c.Evaluate(context.Background(), q, env)
+		}
+		if err == nil {
+			t.Errorf("accepted invalid expression %q", input)
+		}
+	}
+}

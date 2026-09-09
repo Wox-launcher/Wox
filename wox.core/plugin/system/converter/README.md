@@ -53,6 +53,9 @@ polling have been removed. `modules` now contains the existing price services;
 - Full conversions require equal dimensions. A single currency target may replace
   the money factor (exponent 1) of a rate: `8 dollars/hour in gbp`. Partial physical
   conversions such as `km/h in m` and `m² in ft` are rejected. Use `m/s` or `ft²`.
+- `now` uses the captured reference instant. Date and clock literals together
+  (such as `2026-06-14 16:00`) use the local timezone. Compound durations such as
+  `4d17h` form one operand; days here mean 24 elapsed hours.
 - Date differences count calendar days. Instant differences measure elapsed time.
   Clock differences are signed within the same abstract day, without an assumed
   midnight rollover. Clock addition displays a day offset when it crosses midnight.
