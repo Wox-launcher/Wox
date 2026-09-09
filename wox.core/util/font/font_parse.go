@@ -43,16 +43,20 @@ func parseWindowsRegFontsOutput(output string) []string {
 			continue
 		}
 
-		name := strings.TrimSpace(match[1])
-		name = strings.TrimPrefix(name, "@")
-		name = windowsRegFontSuffixRegex.ReplaceAllString(name, "")
-		name = strings.TrimSpace(name)
-		if name != "" {
+		if name := sanitizeWindowsRegistryFontName(match[1]); name != "" {
 			fontFamilies = append(fontFamilies, name)
 		}
 	}
 
 	return fontFamilies
+}
+
+// sanitizeWindowsRegistryFontName strips vertical-font prefixes and "(TrueType)" suffixes.
+func sanitizeWindowsRegistryFontName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, "@")
+	name = windowsRegFontSuffixRegex.ReplaceAllString(name, "")
+	return strings.TrimSpace(name)
 }
 
 func parseSystemProfilerFontsOutput(output []byte) []string {
