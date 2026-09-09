@@ -1,11 +1,15 @@
 package modules
 
 import (
+	"os"
 	"testing"
 	"wox/util"
 )
 
 func TestParseExchangeRateFromHKAB(t *testing.T) {
+	if os.Getenv("WOX_TEST_ENABLE_NETWORK") == "false" {
+		t.Skip("external price service disabled by WOX_TEST_ENABLE_NETWORK")
+	}
 	ctx := util.NewTraceContext()
 	err := util.GetLocation().Init()
 	if err != nil {

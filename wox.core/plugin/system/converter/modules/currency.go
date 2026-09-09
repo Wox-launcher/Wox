@@ -5,21 +5,20 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
-	"wox/plugin"
-	"wox/plugin/system/converter/core"
 	"wox/util"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/shopspring/decimal"
 )
 
 type CurrencyModule struct {
-	*regexBaseModule
 	rates         *util.HashMap[string, float64]
+	snapshotMu    sync.RWMutex
 	rateUpdatedAt atomic.Int64
 }
 
@@ -31,12 +30,8 @@ var supportedCurrencyCodes = []string{
 	"idr", "ils", "php",
 }
 
-// Use one supported-currency pattern for tokenizer and handlers. The previous
-// duplicated regex fragments made it easy to add a rate without making the
-// query parseable, so this shared pattern keeps both stages in sync.
-var supportedCurrencyPattern = `(?i)(` + strings.Join(supportedCurrencyCodes, "|") + `)`
-
-func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
+// NewCurrencyModule initializes the existing offline rates without starting network access.
+func NewCurrencyModule() *CurrencyModule {
 	m := &CurrencyModule{
 		rates: util.NewHashMap[string, float64](),
 	}
@@ -83,39 +78,6 @@ func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
 		m.rates.Store(currency, rate)
 	}
 
-	const (
-		numberPattern = `([0-9]+(?:\.[0-9]+)?)`
-	)
-
-	// Initialize pattern handlers with atomic patterns
-	handlers := []*patternHandler{
-		{
-			Pattern:     numberPattern + `\s*` + supportedCurrencyPattern,
-			Priority:    1000,
-			Description: "Handle currency amount (e.g., 10 USD)",
-			Handler:     m.handleSingleCurrency,
-		},
-		{
-			Pattern:     `in\s+` + supportedCurrencyPattern,
-			Priority:    900,
-			Description: "Handle 'in' conversion format (e.g., in EUR)",
-			Handler:     m.handleInConversion,
-		},
-		{
-			Pattern:     `to\s+` + supportedCurrencyPattern,
-			Priority:    800,
-			Description: "Handle 'to' conversion format (e.g., to EUR)",
-			Handler:     m.handleToConversion,
-		},
-		{
-			Pattern:     `=\s*\?\s*` + supportedCurrencyPattern,
-			Priority:    700,
-			Description: "Handle '=?' conversion format (e.g., =?EUR)",
-			Handler:     m.handleToConversion,
-		},
-	}
-
-	m.regexBaseModule = NewRegexBaseModule(api, "currency", handlers)
 	return m
 }
 
@@ -126,6 +88,7 @@ type exchangeRateSource struct {
 	parse func(context.Context) (map[string]float64, error)
 }
 
+// StartExchangeRateSyncSchedule refreshes rates until the plugin lifecycle ends.
 func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 	util.Go(ctx, "currency_exchange_rate_sync", func() {
 		// Try named data sources so successful refreshes can be surfaced in the
@@ -155,7 +118,14 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 			break
 		}
 
-		for range time.NewTicker(1 * time.Hour).C {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 			for _, source := range sources {
 				rates, err := source.parse(ctx)
 				if err != nil {
@@ -179,6 +149,8 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 }
 
 func (m *CurrencyModule) applyLiveRates(rates map[string]float64) {
+	m.snapshotMu.Lock()
+	defer m.snapshotMu.Unlock()
 	// Record the refresh timestamp only after rates are stored. That keeps the UI
 	// tail tied to data the converter can actually use, instead of showing a
 	// misleading "fresh" marker for a failed refresh attempt.
@@ -202,164 +174,6 @@ func (m *CurrencyModule) logLiveRateUpdate(ctx context.Context, source string, r
 // rates, which the converter exposes as a warning tail.
 func (m *CurrencyModule) LastRateUpdatedAt() int64 {
 	return m.rateUpdatedAt.Load()
-}
-
-func (m *CurrencyModule) Convert(ctx context.Context, value core.Result, toUnit core.Unit) (core.Result, error) {
-	fromCurrency := value.Unit.Name
-	toCurrency := toUnit.Name
-
-	// Check if currencies are supported
-	fromRate, fromOk := m.rates.Load(fromCurrency)
-	toRate, toOk := m.rates.Load(toCurrency)
-
-	if !fromOk {
-		return core.Result{}, fmt.Errorf("unsupported currency: %s", fromCurrency)
-	}
-	if !toOk {
-		return core.Result{}, fmt.Errorf("unsupported currency: %s", toCurrency)
-	}
-
-	// Convert to USD first (as base currency), then to target currency
-	amountFloat, _ := value.RawValue.Float64()
-	amountInUSD := amountFloat / fromRate
-	result := amountInUSD * toRate
-	resultDecimal := decimal.NewFromFloat(result)
-
-	return core.Result{
-		DisplayValue: m.formatWithCurrencySymbol(resultDecimal, toCurrency),
-		RawValue:     resultDecimal,
-		Unit:         toUnit,
-		Module:       m,
-	}, nil
-}
-
-func (m *CurrencyModule) CanConvertTo(unit string) bool {
-	return m.rates.Exist(strings.ToUpper(unit))
-}
-
-// Helper functions
-
-func (m *CurrencyModule) handleSingleCurrency(ctx context.Context, matches []string) (core.Result, error) {
-	amount, err := decimal.NewFromString(matches[1])
-	if err != nil {
-		return core.Result{}, fmt.Errorf("invalid amount: %s", matches[1])
-	}
-
-	currency := strings.ToUpper(matches[2])
-
-	// Check if the currency is supported
-	if !m.rates.Exist(currency) {
-		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
-	}
-
-	return core.Result{
-		DisplayValue: m.formatWithCurrencySymbol(amount, currency),
-		RawValue:     amount,
-		Unit:         core.Unit{Name: currency, Type: core.UnitTypeCurrency},
-		Module:       m,
-	}, nil
-}
-
-func (m *CurrencyModule) handleInConversion(ctx context.Context, matches []string) (core.Result, error) {
-	currency := strings.ToUpper(matches[1])
-	if !m.rates.Exist(currency) {
-		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
-	}
-	return core.Result{
-		DisplayValue: fmt.Sprintf("in %s", currency),
-		RawValue:     decimal.NewFromInt(0),
-		Unit:         core.Unit{Name: currency, Type: core.UnitTypeCurrency},
-		Module:       m,
-	}, nil
-}
-
-func (m *CurrencyModule) handleToConversion(ctx context.Context, matches []string) (core.Result, error) {
-	currency := strings.ToUpper(matches[1])
-	if !m.rates.Exist(currency) {
-		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
-	}
-	return core.Result{
-		DisplayValue: fmt.Sprintf("to %s", currency),
-		RawValue:     decimal.NewFromInt(0),
-		Unit:         core.Unit{Name: currency, Type: core.UnitTypeCurrency},
-		Module:       m,
-	}, nil
-}
-
-func (m *CurrencyModule) formatWithCurrencySymbol(amount decimal.Decimal, currency string) string {
-	var symbol string
-	// Format newly supported currencies with recognizable symbols or code prefixes.
-	// A bare numeric result was not enough once the converter accepted more
-	// currencies because several share the same local symbol.
-	switch currency {
-	case "USD":
-		symbol = "$"
-	case "EUR":
-		symbol = "€"
-	case "GBP":
-		symbol = "£"
-	case "JPY":
-		symbol = "¥"
-	case "CNY":
-		symbol = "¥"
-	case "AUD":
-		symbol = "A$"
-	case "CAD":
-		symbol = "C$"
-	case "HKD":
-		symbol = "HK$"
-	case "SGD":
-		symbol = "S$"
-	case "CHF":
-		symbol = "CHF "
-	case "NZD":
-		symbol = "NZ$"
-	case "SEK":
-		symbol = "kr "
-	case "NOK":
-		symbol = "kr "
-	case "DKK":
-		symbol = "kr "
-	case "PLN":
-		symbol = "zł "
-	case "CZK":
-		symbol = "Kč "
-	case "HUF":
-		symbol = "Ft "
-	case "RON":
-		symbol = "lei "
-	case "BGN":
-		symbol = "лв "
-	case "ISK":
-		symbol = "kr "
-	case "TRY":
-		symbol = "₺"
-	case "INR":
-		symbol = "₹"
-	case "KRW":
-		symbol = "₩"
-	case "MXN":
-		symbol = "MX$"
-	case "BRL":
-		symbol = "R$"
-	case "ZAR":
-		symbol = "R "
-	case "THB":
-		symbol = "฿"
-	case "MYR":
-		symbol = "RM "
-	case "IDR":
-		symbol = "Rp "
-	case "ILS":
-		symbol = "₪"
-	case "PHP":
-		symbol = "₱"
-	default:
-		symbol = ""
-	}
-
-	// Format with exactly 2 decimal places
-	return fmt.Sprintf("%s%s", symbol, amount.Round(2))
 }
 
 func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates map[string]float64, err error) {
@@ -541,31 +355,22 @@ func (m *CurrencyModule) parseExchangeRateFromECB(ctx context.Context) (rates ma
 	return rates, nil
 }
 
-func (m *CurrencyModule) TokenPatterns() []core.TokenPattern {
-	// Currency tokens must carry their owner module into parsing. Without this,
-	// the generic parser can retry earlier regex modules and let short unit aliases
-	// reinterpret strings like "1000hkd" before currency conversion runs.
-	return []core.TokenPattern{
-		{
-			Pattern:   `([0-9]+(?:\.[0-9]+)?)\s*` + supportedCurrencyPattern,
-			Type:      core.IdentToken,
-			Priority:  1000,
-			FullMatch: false,
-			Module:    m,
-		},
-		{
-			Pattern:   `(?i)(?:in|to)\s+` + supportedCurrencyPattern,
-			Type:      core.ConversionToken,
-			Priority:  900,
-			FullMatch: false,
-			Module:    m,
-		},
-		{
-			Pattern:   `(?i)=\s*\?\s*` + supportedCurrencyPattern,
-			Type:      core.ConversionToken,
-			Priority:  800,
-			FullMatch: false,
-			Module:    m,
-		},
-	}
+// Snapshot copies USD-per-unit prices and their timestamp under the refresh lock.
+func (m *CurrencyModule) Snapshot() (map[string]*big.Rat, int64) {
+	m.snapshotMu.RLock()
+	defer m.snapshotMu.RUnlock()
+	prices := map[string]*big.Rat{}
+	m.rates.Range(func(code string, rate float64) bool {
+		if rate > 0 {
+			r, ok := new(big.Rat).SetString(strconv.FormatFloat(rate, 'f', -1, 64))
+			if ok {
+				prices[strings.ToUpper(code)] = new(big.Rat).Inv(r)
+			}
+		}
+		return true
+	})
+	return prices, m.rateUpdatedAt.Load()
 }
+
+// CurrencyCodes exposes syntax without requiring prices or network access.
+func CurrencyCodes() []string { return append([]string(nil), supportedCurrencyCodes...) }

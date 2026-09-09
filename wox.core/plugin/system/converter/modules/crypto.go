@@ -4,20 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"wox/plugin"
-	"wox/plugin/system/converter/core"
 	"wox/util"
-
-	"github.com/shopspring/decimal"
 )
 
 type CryptoModule struct {
-	*regexBaseModule
 	prices           *util.HashMap[string, float64]
 	priceSyncMu      sync.Mutex
+	snapshotMu       sync.RWMutex
 	priceSyncStarted bool
 	priceSyncCancel  context.CancelFunc
 }
@@ -38,7 +36,8 @@ type CoinGeckoResponse struct {
 	} `json:"binancecoin"`
 }
 
-func NewCryptoModule(ctx context.Context, api plugin.API) *CryptoModule {
+// NewCryptoModule initializes local prices; fetching requires the separate consent-gated start.
+func NewCryptoModule() *CryptoModule {
 	m := &CryptoModule{
 		prices: util.NewHashMap[string, float64](),
 	}
@@ -48,40 +47,6 @@ func NewCryptoModule(ctx context.Context, api plugin.API) *CryptoModule {
 	m.prices.Store("usdt", 1.0)    // USDT is pegged to USD
 	m.prices.Store("bnb", 850.0)   // Approximate BNB price in USD
 
-	const (
-		cryptoPattern = `(?i)(btc|eth|usdt|bnb)`
-		numberPattern = `([0-9]+(?:\.[0-9]+)?)`
-	)
-
-	// Initialize pattern handlers with atomic patterns
-	handlers := []*patternHandler{
-		{
-			Pattern:     numberPattern + `\s*` + cryptoPattern,
-			Priority:    1000,
-			Description: "Handle cryptocurrency amount (e.g., 1 BTC)",
-			Handler:     m.handleSingleCrypto,
-		},
-		{
-			Pattern:     `in\s+` + cryptoPattern,
-			Priority:    900,
-			Description: "Handle 'in' conversion format (e.g., in BTC)",
-			Handler:     m.handleInConversion,
-		},
-		{
-			Pattern:     `to\s+` + cryptoPattern,
-			Priority:    800,
-			Description: "Handle 'to' conversion format (e.g., to BTC)",
-			Handler:     m.handleToConversion,
-		},
-		{
-			Pattern:     `=\s*\?\s*` + cryptoPattern,
-			Priority:    700,
-			Description: "Handle '=?' conversion format (e.g., =?BTC)",
-			Handler:     m.handleToConversion,
-		},
-	}
-
-	m.regexBaseModule = NewRegexBaseModule(api, "crypto", handlers)
 	return m
 }
 
@@ -100,9 +65,7 @@ func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context, onInitialSync
 	util.Go(syncCtx, "crypto_price_sync", func() {
 		prices, err := m.fetchCryptoPrices(syncCtx)
 		if err == nil {
-			for k, v := range prices {
-				m.prices.Store(k, v)
-			}
+			m.applyPrices(prices)
 		} else if syncCtx.Err() == nil {
 			util.GetLogger().Error(syncCtx, fmt.Sprintf("Failed to fetch initial crypto prices: %s", err.Error()))
 		}
@@ -119,9 +82,7 @@ func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context, onInitialSync
 			case <-ticker.C:
 				prices, err := m.fetchCryptoPrices(syncCtx)
 				if err == nil {
-					for k, v := range prices {
-						m.prices.Store(k, v)
-					}
+					m.applyPrices(prices)
 				} else if syncCtx.Err() == nil {
 					util.GetLogger().Error(syncCtx, fmt.Sprintf("Failed to fetch crypto prices: %s", err.Error()))
 				}
@@ -139,108 +100,6 @@ func (m *CryptoModule) StopPriceSyncSchedule() {
 		m.priceSyncCancel()
 		m.priceSyncCancel = nil
 	}
-}
-
-func (m *CryptoModule) Convert(ctx context.Context, value core.Result, toUnit core.Unit) (core.Result, error) {
-	fromCrypto := value.Unit.Name
-
-	// Get crypto price in USD
-	cryptoPrice, ok := m.prices.Load(fromCrypto)
-	if !ok {
-		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", fromCrypto)
-	}
-
-	// Convert amount to USD first
-	amountFloat, _ := value.RawValue.Float64()
-	amountInUSD := amountFloat * cryptoPrice
-
-	// If target unit is USD, return USD result
-	if toUnit.Name == core.UnitUSD.Name {
-		resultDecimal := decimal.NewFromFloat(amountInUSD)
-		return core.Result{
-			DisplayValue: fmt.Sprintf("$%s", resultDecimal.Round(2)),
-			RawValue:     resultDecimal,
-			Unit:         core.UnitUSD,
-			Module:       m,
-		}, nil
-	}
-
-	// If target unit is a currency, we need to convert from USD to that currency
-	// This requires access to currency exchange rates, so we'll delegate to currency module
-	if toUnit.Type == core.UnitTypeCurrency {
-		// Create a USD result first
-		usdResult := core.Result{
-			DisplayValue: fmt.Sprintf("$%s", decimal.NewFromFloat(amountInUSD).Round(2)),
-			RawValue:     decimal.NewFromFloat(amountInUSD),
-			Unit:         core.UnitUSD,
-			Module:       m,
-		}
-
-		// Try to find currency module to do the conversion
-		// This is a bit of a hack, but we need to access the currency module
-		// In a real implementation, we might want to inject dependencies
-		return usdResult, nil
-	}
-
-	// For other unit types, we only support USD conversion
-	return core.Result{}, fmt.Errorf("crypto module only supports converting to USD or currency units")
-}
-
-// Helper functions
-func (m *CryptoModule) handleSingleCrypto(ctx context.Context, matches []string) (core.Result, error) {
-	amount, err := decimal.NewFromString(matches[1])
-	if err != nil {
-		return core.Result{}, fmt.Errorf("invalid amount: %s", matches[1])
-	}
-
-	crypto := strings.ToLower(matches[2])
-
-	// Check if the cryptocurrency is supported
-	cryptoPrice, ok := m.prices.Load(crypto)
-	if !ok {
-		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", crypto)
-	}
-
-	// Calculate value in USD
-	amountFloat, _ := amount.Float64()
-	amountInUSD := amountFloat * cryptoPrice
-
-	// Always display in USD, let the outer converter handle locale-specific currency conversion
-	displayValue := fmt.Sprintf("%s %s ≈ $%s", amount.String(), strings.ToUpper(crypto), decimal.NewFromFloat(amountInUSD).Round(2))
-
-	// Create a result with the crypto amount
-	result := core.Result{
-		DisplayValue: displayValue,
-		RawValue:     amount,
-		Unit:         core.Unit{Name: crypto, Type: core.UnitTypeCrypto},
-		Module:       m,
-	}
-
-	return result, nil
-}
-
-func (m *CryptoModule) handleInConversion(ctx context.Context, matches []string) (core.Result, error) {
-	crypto := strings.ToLower(matches[1])
-	if !m.prices.Exist(crypto) {
-		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", crypto)
-	}
-	return core.Result{
-		DisplayValue: fmt.Sprintf("in %s", strings.ToUpper(crypto)),
-		Unit:         core.Unit{Name: crypto, Type: core.UnitTypeCrypto},
-		Module:       m,
-	}, nil
-}
-
-func (m *CryptoModule) handleToConversion(ctx context.Context, matches []string) (core.Result, error) {
-	crypto := strings.ToLower(matches[1])
-	if !m.prices.Exist(crypto) {
-		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", crypto)
-	}
-	return core.Result{
-		DisplayValue: fmt.Sprintf("to %s", strings.ToUpper(crypto)),
-		Unit:         core.Unit{Name: crypto, Type: core.UnitTypeCrypto},
-		Module:       m,
-	}, nil
 }
 
 func (m *CryptoModule) fetchCryptoPrices(ctx context.Context) (map[string]float64, error) {
@@ -261,4 +120,30 @@ func (m *CryptoModule) fetchCryptoPrices(ctx context.Context) (map[string]float6
 	prices["bnb"] = response.BinanceCoin.Usd
 
 	return prices, nil
+}
+
+// applyPrices publishes a complete refresh before any query can copy it.
+func (m *CryptoModule) applyPrices(prices map[string]float64) {
+	m.snapshotMu.Lock()
+	defer m.snapshotMu.Unlock()
+	for k, v := range prices {
+		m.prices.Store(k, v)
+	}
+}
+
+// Snapshot returns independent USD prices; parsing never needs this data.
+func (m *CryptoModule) Snapshot() map[string]*big.Rat {
+	m.snapshotMu.RLock()
+	defer m.snapshotMu.RUnlock()
+	prices := map[string]*big.Rat{}
+	m.prices.Range(func(code string, price float64) bool {
+		if price > 0 {
+			r, ok := new(big.Rat).SetString(strconv.FormatFloat(price, 'f', -1, 64))
+			if ok {
+				prices[strings.ToUpper(code)] = r
+			}
+		}
+		return true
+	})
+	return prices
 }

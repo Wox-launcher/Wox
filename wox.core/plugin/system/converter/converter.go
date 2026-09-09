@@ -3,16 +3,17 @@ package converter
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strings"
+	"time"
 	"wox/common"
 	"wox/plugin"
-	"wox/plugin/system/converter/core"
+	"wox/plugin/system/converter/engine"
 	"wox/plugin/system/converter/modules"
 	"wox/util"
+	"wox/util/calc"
 	"wox/util/clipboard"
 	"wox/util/locale"
-
-	"github.com/samber/lo"
 )
 
 const (
@@ -26,11 +27,11 @@ func init() {
 }
 
 type Converter struct {
-	api          plugin.API
-	lifecycleCtx context.Context
-	registry     *core.ModuleRegistry
-	tokenizer    *core.Tokenizer
-	cryptoModule *modules.CryptoModule
+	api            plugin.API
+	lifecycleCtx   context.Context
+	catalog        *engine.Catalog
+	currencyModule *modules.CurrencyModule
+	cryptoModule   *modules.CryptoModule
 }
 
 func (c *Converter) GetMetadata() plugin.Metadata {
@@ -69,31 +70,11 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 	c.lifecycleCtx = ctx
 
-	registry := core.NewModuleRegistry()
-
-	// Register math module first (highest priority for complex expressions)
-	registry.Register(modules.NewMathModule(ctx, c.api))
-
-	registry.Register(modules.NewBaseModule(ctx, c.api))
-
-	// Length, weight, and temperature conversions previously fell through to the
-	// calculator placeholder because Converter only knew about base/time/rates.
-	// Register the units module here so those physical conversions stay in Converter.
-	registry.Register(modules.NewUnitModule(ctx, c.api))
-
-	registry.Register(modules.NewTimeModule(ctx, c.api))
-
-	currencyModule := modules.NewCurrencyModule(ctx, c.api)
-	currencyModule.StartExchangeRateSyncSchedule(ctx)
-	registry.Register(currencyModule)
-
-	cryptoModule := modules.NewCryptoModule(ctx, c.api)
-	registry.Register(cryptoModule)
+	c.catalog = newCatalog()
+	c.currencyModule = modules.NewCurrencyModule()
+	c.currencyModule.StartExchangeRateSyncSchedule(ctx)
+	cryptoModule := modules.NewCryptoModule()
 	c.cryptoModule = cryptoModule
-
-	tokenizer := core.NewTokenizer(registry.GetTokenPatterns())
-	c.registry = registry
-	c.tokenizer = tokenizer
 
 	if c.api.GetSetting(ctx, cryptoPriceSyncConsentSettingKey) == "true" {
 		cryptoModule.StartPriceSyncSchedule(ctx, nil)
@@ -102,226 +83,6 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 		cryptoModule.StopPriceSyncSchedule()
 	})
 	c.api.OnMRURestore(ctx, c.handleMRURestore)
-}
-
-// parseExpression parses a complex expression like "1btc + 100usd"
-func (c *Converter) parseExpression(ctx context.Context, tokens []core.Token) (results []core.Result, operators []string, targetUnit core.Unit, err error) {
-	for i := 0; i < len(tokens); i++ {
-		token := tokens[i]
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("----- %s (%s) -----", token.Str, token.Kind.String()))
-
-		if token.Kind == core.OperationToken {
-			operators = append(operators, token.Str)
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> operators: %s", strings.Join(operators, ", ")))
-			continue
-		}
-
-		if token.Kind == core.EosToken {
-			break
-		}
-
-		if token.Kind == core.ConversionToken {
-			result, err := c.calculateToken(ctx, token)
-			if err == nil {
-				targetUnit = result.Unit
-			}
-			if targetUnit.Name == "" {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse target unit from token %s", token.Str))
-				return nil, nil, core.Unit{}, fmt.Errorf("failed to parse target unit: %s", token.Str)
-			} else {
-				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> target unit: %s", targetUnit.Name))
-			}
-
-			continue
-		}
-
-		result, err := c.calculateToken(ctx, token)
-		if err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to calculate token %s: no module can handle it", token.Str))
-			return nil, nil, core.Unit{}, fmt.Errorf("no module can handle token: %s", token.Str)
-		}
-		results = append(results, result)
-	}
-
-	// If we have a target unit, convert all values to that unit
-	if targetUnit.Name != "" {
-		for i := range results {
-			if results[i].Unit.Type == targetUnit.Type {
-				// Try all modules for conversion, not just the original module
-				var converted bool
-				for _, module := range c.registry.Modules() {
-					if convertedValue, err := module.Convert(ctx, results[i], targetUnit); err == nil {
-						results[i] = convertedValue
-						converted = true
-						break
-					}
-				}
-				if !converted {
-					return nil, nil, core.Unit{}, fmt.Errorf("no module can convert %s to %s", results[i].Unit.Name, targetUnit.Name)
-				}
-			}
-		}
-	}
-
-	return results, operators, targetUnit, nil
-}
-
-func (c *Converter) calculateToken(ctx context.Context, token core.Token) (core.Result, error) {
-	// The tokenizer has already chosen the most specific pattern for this token.
-	// The old parser retried every module in registration order, which allowed
-	// broad unit/time regexes to reinterpret a currency token such as "1000hkd"
-	// before CurrencyModule could calculate it. Use the owning module first so
-	// tokenization and calculation stay on the same route.
-	if token.Module != nil {
-		return token.Module.Calculate(ctx, token)
-	}
-
-	// Older token patterns did not always populate Module. Keep this fallback so
-	// existing number/base/time expressions continue to work while each module is
-	// migrated to explicit ownership.
-	for _, module := range c.registry.Modules() {
-		if result, err := module.Calculate(ctx, token); err == nil {
-			return result, nil
-		}
-	}
-	return core.Result{}, fmt.Errorf("no module can handle token: %s", token.Str)
-}
-
-// calculateExpression calculates expressions with mixed units
-// For example: "1btc + 100usd" will convert everything to USD and then calculate
-func (c *Converter) calculateExpression(ctx context.Context, results []core.Result, operators []string, targetUnit core.Unit) (core.Result, error) {
-	// check if operators count is equal to results count - 1
-	if len(operators) != len(results)-1 {
-		return core.Result{}, fmt.Errorf("invalid expression: operators count (%d) does not match results count (%d) - 1", len(operators), len(results))
-	}
-
-	// If there are no operators and only one value, E.g. "100usd", "1btc"
-	if len(operators) == 0 && len(results) == 1 {
-		if targetUnit.Name == "" {
-			if isBaseNumberUnit(results[0].Unit) {
-				return core.Result{}, fmt.Errorf("base conversion requires explicit target unit")
-			}
-			if results[0].Unit.Type == core.UnitTypeCrypto || results[0].Unit.Type == core.UnitTypeCurrency {
-				defaultCurrency := GetUserDefaultCurrency()
-				targetUnit = core.Unit{Name: defaultCurrency, Type: core.UnitTypeCurrency}
-				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Single crypto/currency value, using user's default currency: %s", defaultCurrency))
-			} else {
-				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("No operators, No target unit, returning the only result: %s", results[0].DisplayValue))
-				return results[0], nil
-			}
-		}
-
-		if targetUnit.Name != "" {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("No operators, target unit is set, converting the only result: %s to %s", results[0].DisplayValue, targetUnit.Name))
-
-			// For crypto to currency conversion, handle it specially, E.g. "1btc to cny"
-			if results[0].Unit.Type == core.UnitTypeCrypto && targetUnit.Type == core.UnitTypeCurrency {
-				// First convert to USD
-				usdResult, err := results[0].Module.Convert(ctx, results[0], core.UnitUSD)
-				if err != nil {
-					return core.Result{}, err
-				}
-
-				// If target is USD, return USD result directly
-				if targetUnit.Name == "USD" {
-					return usdResult, nil
-				}
-
-				// For other currencies, convert USD to target currency
-				for _, module := range c.registry.Modules() {
-					if convertedResult, err := module.Convert(ctx, usdResult, targetUnit); err == nil {
-						return convertedResult, nil
-					}
-				}
-			}
-
-			// Try all modules for conversion, not just the original module
-			for _, module := range c.registry.Modules() {
-				if convertedResult, err := module.Convert(ctx, results[0], targetUnit); err == nil {
-					return convertedResult, nil
-				}
-			}
-			return core.Result{}, fmt.Errorf("no module can convert %s to %s", results[0].Unit.Name, targetUnit.Name)
-		}
-	}
-
-	if targetUnit.Name == "" {
-		// if all results are time units, the target unit should be time
-		allResultsAreTime := lo.EveryBy(results, func(r core.Result) bool { return r.Unit.Type == core.UnitTypeTime })
-		allResultsAreCurrencyOrCrypto := lo.EveryBy(results, func(r core.Result) bool {
-			return r.Unit.Type == core.UnitTypeCurrency || r.Unit.Type == core.UnitTypeCrypto
-		})
-
-		if allResultsAreTime {
-			// use last timezone as the target unit
-			for _, result := range results {
-				if result.Unit.Type == core.UnitTypeTime {
-					targetUnit = result.Unit
-					break
-				}
-			}
-
-			targetUnit = core.Unit{Name: results[len(results)-1].Unit.Name, Type: core.UnitTypeTime}
-		} else if allResultsAreCurrencyOrCrypto {
-			defaultCurrency := GetUserDefaultCurrency()
-			targetUnit = core.Unit{Name: defaultCurrency, Type: core.UnitTypeCurrency}
-		} else {
-			c.api.Log(ctx, plugin.LogLevelDebug, "No target unit, using USD as default")
-			targetUnit = core.UnitUSD
-		}
-	}
-
-	// Convert all values to USD for currency and crypto
-	for i := range results {
-		if results[i].Unit.Type == core.UnitTypeCurrency || results[i].Unit.Type == core.UnitTypeCrypto {
-			var err error
-			// First convert to USD
-			results[i], err = results[i].Module.Convert(ctx, results[i], core.UnitUSD)
-			if err != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to convert %s to USD: %v", results[i].DisplayValue, err))
-				return core.Result{}, err
-			} else {
-				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Converted %s to USD => %s", results[i].DisplayValue, results[i].RawValue.String()))
-			}
-		}
-	}
-
-	// Calcualte the result
-	result := results[0]
-	for i, operator := range operators {
-		nextResult := results[i+1]
-		switch operator {
-		case "+":
-			result.RawValue = result.RawValue.Add(nextResult.RawValue)
-		case "-":
-			result.RawValue = result.RawValue.Sub(nextResult.RawValue)
-		case "*":
-			result.RawValue = result.RawValue.Mul(nextResult.RawValue)
-		case "/":
-			result.RawValue = result.RawValue.Div(nextResult.RawValue)
-		}
-
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculated result with %s %s %s => %s", result.DisplayValue, operator, nextResult.DisplayValue, result.RawValue.String()))
-	}
-	result.DisplayValue = fmt.Sprintf("%s %s", result.RawValue.String(), targetUnit.Name)
-
-	// Convert (or format) the result to the target unit
-	shouldConvert := targetUnit.Name != result.Unit.Name
-	if targetUnit.Type == core.UnitTypeCurrency && result.Unit.Type == core.UnitTypeCurrency {
-		// Even when the unit is the same (e.g., USD), convert to format with currency symbol
-		shouldConvert = true
-	}
-	if shouldConvert {
-		for _, module := range c.registry.Modules() {
-			if convertedResult, err := module.Convert(ctx, result, targetUnit); err == nil {
-				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Converted result with module %s => displayValue=%s, rawValue=%s, unit=%s", module.Name(), convertedResult.DisplayValue, convertedResult.RawValue.String(), convertedResult.Unit.Name))
-				result = convertedResult
-				break
-			}
-		}
-	}
-
-	return result, nil
 }
 
 // GetUserDefaultCurrency returns the user's default currency based on their locale
@@ -349,85 +110,71 @@ func GetUserDefaultCurrency() string {
 	return "USD" // fallback to USD
 }
 
-func isBaseNumberUnit(unit core.Unit) bool {
-	switch strings.ToLower(unit.Name) {
-	case "bin", "oct", "dec", "hex":
-		return true
-	default:
-		return false
+// newCatalog binds static vocabulary without creating any data services.
+func newCatalog() *engine.Catalog {
+	c := engine.NewCatalog()
+	for _, code := range modules.CurrencyCodes() {
+		c.AddCurrency(code, false)
 	}
+	for _, code := range []string{"BTC", "ETH", "USDT", "BNB"} {
+		c.AddCurrency(code, true)
+	}
+	return c
+}
+
+// numberOptions shares Calculator's effective persisted settings without rewriting them.
+func numberOptions() engine.ParseOptions {
+	decimalMode := calc.DecimalSeparatorSystem
+	thousandsMode := calc.ThousandsSeparatorSystem
+	if instance := plugin.GetPluginManager().GetPluginInstanceById("bd723c38-f28d-4152-8621-76fd21d6456e"); instance != nil && instance.Setting != nil {
+		if value, ok := instance.Setting.Get("DecimalSeparator"); ok && value != "" {
+			decimalMode = calc.DecimalSeparator(value)
+		}
+		if value, ok := instance.Setting.Get("ThousandsSeparator"); ok && value != "" {
+			thousandsMode = calc.ThousandsSeparator(value)
+		}
+	}
+	decimal := calc.GetDecimalSeparator(decimalMode)
+	thousands := calc.GetThousandsSeparator(thousandsMode, decimal)
+	if thousands == decimal {
+		thousands = ""
+	}
+	return engine.ParseOptions{DecimalSeparator: decimal, ThousandsSeparator: thousands}
 }
 
 func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	if query.Search == "" {
+	if strings.TrimSpace(query.Search) == "" {
 		return plugin.QueryResponse{}
 	}
-
-	tokens, err := c.tokenizer.Tokenize(ctx, query.Search)
-	if err != nil {
-		// c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Tokenize error: %v", err))
+	options := numberOptions()
+	parsed, err := c.catalog.Parse(query.Search, options)
+	if err != nil || !parsed.Domain {
 		return plugin.QueryResponse{}
 	}
-
-	if c.usesCryptoModule(tokens) && c.api.GetSetting(ctx, cryptoPriceSyncConsentSettingKey) != "true" {
+	if parsed.Crypto && c.api.GetSetting(ctx, cryptoPriceSyncConsentSettingKey) != "true" {
 		return plugin.NewQueryResponse([]plugin.QueryResult{c.buildCryptoConsentResult()})
 	}
-
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Tokens: %s", strings.Join(lo.Map(tokens, func(t core.Token, _ int) string { return t.String() }), ", ")))
-
-	// Try to parse as an expression (could be a simple math expression or a mixed unit expression)
-	results, operators, targetUnit, err := c.parseExpression(ctx, tokens)
-	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Parse expression error: %v", err))
-		// For invalid expressions, return a search suggestion
-		return plugin.QueryResponse{}
+	prices := map[string]*big.Rat{}
+	var updated int64
+	if parsed.Money && c.currencyModule != nil {
+		prices, updated = c.currencyModule.Snapshot()
 	}
-
-	if len(results) == 0 {
-		c.api.Log(ctx, plugin.LogLevelDebug, "No values parsed from expression")
-		return plugin.QueryResponse{}
-	}
-
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Expression parsed: values=%s, operators=%s, targetUnit=%s", strings.Join(lo.Map(results, func(v core.Result, _ int) string { return v.DisplayValue }), ", "), strings.Join(operators, ", "), targetUnit.Name))
-
-	// Calculate the result (handles both simple and mixed unit expressions)
-	result, err := c.calculateExpression(ctx, results, operators, targetUnit)
-	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Calculation  expression error: %v", err))
-		return plugin.QueryResponse{}
-	} else {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculation result: displayValue=%s, rawValue=%s, unit=%s", result.DisplayValue, result.RawValue.String(), result.Unit.Name))
-	}
-
-	return plugin.QueryResponse{
-		AutoRecordQueryHistory: true,
-		Results: []plugin.QueryResult{{
-			Title: result.DisplayValue,
-			Icon:  common.PluginConverterIcon,
-			Tails: c.buildResultTails(ctx, result),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:        "i18n:plugin_converter_copy_result",
-					ContextData: common.ContextData{"query": query.Search},
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						clipboard.WriteText(result.DisplayValue)
-					},
-				},
-			},
-		}},
-	}
-}
-
-// usesCryptoModule identifies queries that would consume live CoinGecko prices.
-func (c *Converter) usesCryptoModule(tokens []core.Token) bool {
-	for _, token := range tokens {
-		// Regex token patterns are owned by the embedded regexBaseModule, so compare
-		// the logical module name instead of the outer CryptoModule pointer.
-		if token.Module != nil && token.Module.Name() == c.cryptoModule.Name() {
-			return true
+	if parsed.Crypto && c.cryptoModule != nil {
+		for code, price := range c.cryptoModule.Snapshot() {
+			prices[code] = price
 		}
 	}
-	return false
+	evaluation, err := c.catalog.Evaluate(ctx, parsed, engine.Env{Now: time.Now(), Local: time.Local, DefaultCurrency: GetUserDefaultCurrency(), Prices: prices, RateUpdatedAt: updated})
+	if err != nil {
+		return plugin.QueryResponse{}
+	}
+	presentation := c.catalog.Format(evaluation, engine.FormatOptions{DecimalSeparator: options.DecimalSeparator, ThousandsSeparator: options.ThousandsSeparator, Translate: func(key string) string { return c.api.GetTranslation(ctx, key) }})
+	actions := []plugin.QueryResultAction{}
+	for _, item := range []struct{ key, text string }{{"plugin_converter_copy_result", presentation.Formatted}, {"plugin_converter_copy_raw", presentation.Raw}, {"plugin_converter_copy_question_answer", presentation.Expression + " = " + presentation.Formatted}} {
+		text := item.text
+		actions = append(actions, plugin.QueryResultAction{Name: "i18n:" + item.key, ContextData: common.ContextData{"query": query.Search}, Action: func(context.Context, plugin.ActionContext) { clipboard.WriteText(text) }})
+	}
+	return plugin.QueryResponse{AutoRecordQueryHistory: true, Results: []plugin.QueryResult{{Title: presentation.Formatted, SubTitle: presentation.SubTitle, Icon: common.PluginConverterIcon, Tails: c.buildResultTails(ctx, presentation), Actions: actions}}}
 }
 
 // buildCryptoConsentResult gates the first network access behind an explicit action.
@@ -474,62 +221,18 @@ func (c *Converter) buildCryptoConsentResult() plugin.QueryResult {
 	}
 }
 
-// buildResultTails chooses the contextual tail for the calculated converter result.
-func (c *Converter) buildResultTails(ctx context.Context, result core.Result) []plugin.QueryResultTail {
-	if timeZoneTail := c.buildTimeZoneTail(result); len(timeZoneTail) > 0 {
-		return timeZoneTail
+// buildResultTails uses the timestamp captured with the prices that produced this result.
+func (c *Converter) buildResultTails(ctx context.Context, result engine.Presentation) []plugin.QueryResultTail {
+	if result.TimeZone != "" {
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(result.TimeZone)}
 	}
-
-	return c.buildCurrencyRateTails(ctx, result)
-}
-
-// buildTimeZoneTail exposes the resolved IANA timezone for location-based time queries.
-func (c *Converter) buildTimeZoneTail(result core.Result) []plugin.QueryResultTail {
-	if result.Unit.Type != core.UnitTypeTime {
+	if !result.Currency {
 		return nil
 	}
-
-	if result.Unit.Name != "UTC" && !strings.Contains(result.Unit.Name, "/") {
-		return nil
+	if result.RateUpdatedAt == 0 {
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(c.api.GetTranslation(ctx, "plugin_converter_rates_fallback"))}
 	}
-
-	return []plugin.QueryResultTail{
-		plugin.NewQueryResultTailText(result.Unit.Name),
-	}
-}
-
-func (c *Converter) buildCurrencyRateTails(ctx context.Context, result core.Result) []plugin.QueryResultTail {
-	if result.Unit.Type != core.UnitTypeCurrency {
-		return nil
-	}
-
-	for _, module := range c.registry.Modules() {
-		currencyModule, ok := module.(*modules.CurrencyModule)
-		if !ok {
-			continue
-		}
-
-		updatedAt := currencyModule.LastRateUpdatedAt()
-		if updatedAt == 0 {
-			// Currency conversions can run from approximate startup rates before
-			// the first network refresh finishes. Show that state explicitly so
-			// users do not mistake fallback data for fresh exchange rates.
-			return []plugin.QueryResultTail{
-				plugin.NewQueryResultTailText(c.api.GetTranslation(ctx, "plugin_converter_rates_fallback")),
-			}
-		}
-
-		// Put the live-rate refresh timestamp in the result tail so users can judge
-		// how fresh the exchange rate is without opening settings or logs. Currency
-		// rates are shown as relative time only; other timestamps keep the existing
-		// absolute util.FormatTimestamp format used elsewhere in Wox.
-		relativeUpdatedAt := c.formatCurrencyRateUpdatedAgo(ctx, updatedAt)
-		return []plugin.QueryResultTail{
-			plugin.NewQueryResultTailText(fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated"), relativeUpdatedAt)),
-		}
-	}
-
-	return nil
+	return []plugin.QueryResultTail{plugin.NewQueryResultTailText(fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated"), c.formatCurrencyRateUpdatedAgo(ctx, result.RateUpdatedAt)))}
 }
 
 func (c *Converter) formatCurrencyRateUpdatedAgo(ctx context.Context, updatedAt int64) string {
