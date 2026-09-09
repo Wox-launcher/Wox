@@ -60,6 +60,7 @@ func TestTimeCorpus(t *testing.T) {
 	c, env := fixture()
 	for _, tc := range []struct{ input, raw string }{
 		{"5pm ldn in sf", "2026-09-08T09:00:00-07:00"}, {"time in tokyo", "2026-09-08T21:00:00+09:00"},
+		{"now in sf", "2026-09-08T05:00:00-07:00"}, {"NOW in America/Los_Angeles", "2026-09-08T05:00:00-07:00"},
 		{"monday in 3 weeks", "2026-10-05"}, {"Monday in 3 days", "2026-09-14"}, {"days until 31 Mar", "204 d"},
 		{"time diff Paris", "2 h"}, {"diff Paris", "2 h"}, {"time in 4 hours", "2026-09-08T16:00:00Z"},
 		{"time in 4 hours in San Francisco", "2026-09-08T09:00:00-07:00"},

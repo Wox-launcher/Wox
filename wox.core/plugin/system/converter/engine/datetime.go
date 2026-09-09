@@ -35,8 +35,8 @@ func (c *Catalog) parseTemporal(input string) (*temporalQuery, bool, error) {
 	s := strings.TrimSpace(input)
 	lower := strings.ToLower(s)
 	q := &temporalQuery{}
-	if strings.HasPrefix(lower, "time in ") {
-		rest := strings.TrimSpace(s[len("time in "):])
+	if strings.HasPrefix(lower, "time in ") || strings.HasPrefix(lower, "now in ") {
+		rest := strings.TrimSpace(s[strings.Index(lower, " in ")+len(" in "):])
 		q.kind = "now"
 		q.target = rest
 		if m := delayRE.FindStringSubmatch(rest); m != nil {

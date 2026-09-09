@@ -67,6 +67,7 @@ is not implied: use `km/h in m/s`, rather than `km/h in m`.
 5pm ldn in sf
 time in São Paulo
 time in JFK
+now in sf
 time diff Paris
 diff Paris
 time in 4 hours in San Francisco
