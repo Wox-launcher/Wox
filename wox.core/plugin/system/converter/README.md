@@ -66,15 +66,17 @@ polling have been removed. `modules` now contains the existing price services;
   Clock differences are signed within the same abstract day, without an assumed
   midnight rollover. Clock addition displays a day offset when it crosses midnight.
 - A bare number added to a date means days; to a clock it means hours. Instants
-  require an explicit duration. Calendar months use Go calendar normalization;
-  month-end overflow advances into the following month rather than clamping.
-- Standalone years remain 365-day durations; date arithmetic uses calendar years.
+  require an explicit duration. Calendar months clamp to the last valid day of the
+  target month (`January 31 2020 + 1 month` is 29 February 2020).
+- Standalone years use the mean Gregorian year (365.2425 days); date arithmetic
+  uses calendar years.
 - `32f to c` converts absolute temperature. Subtracting absolute temperatures
   produces a temperature difference. Adding a temperature literal to an absolute
   temperature treats the right literal as a difference. Use `deltaC`/`deltaF`
   explicitly otherwise. Absolute temperatures cannot be multiplied or used with
   relative percentage adjustments.
-- Workdays are Monday–Friday, eight hours per day, without holiday deductions.
+- Workdays are Monday–Friday, eight hours per day. Date offsets in workdays also
+  skip New Year's Day, Independence Day, Thanksgiving, Christmas, and Boxing Day.
   `workhours in 2023` is 2080 hours. No new persisted settings are introduced.
 - Omitted timezone dates use the source zone's today. IST explicitly means
   Asia/Kolkata. CET/CEST preserve the Europe/Paris alias and use seasonal offsets.
@@ -92,8 +94,23 @@ polling have been removed. `modules` now contains the existing price services;
   duration, and storage rows remain ungrouped; raw values preserve necessary units
   and timezone offsets. Three copy actions return formatted, raw, or question/answer.
 
+- Soulver sentence forms that fit a single query are supported: word operators
+  (`plus`, `multiplied by`), percentages (`10% on 200`, `20 is 10% of what`,
+  `50 to 75 is what %`), lists (`average of`, `gcd of`), comparisons, `if then
+  else`, proportions, compound interest, playback/laptime/timespan, video
+  timecode (`03:10:20:05 at 30 fps`), cooking densities, holidays, bitwise
+  operators, pace, file-transfer time, inflation phrases, income tax, time zones,
+  and comments / ignored words on one line. Clock literals with am/pm subtract as
+  an absolute same-day interval; 24-hour clocks stay signed. Mixed currencies keep
+  the last unit. Formatted dimensionless and money values of 100,000 or more use
+  SI compact symbols (`3.3M`, `$7B`); rates such as `182,621.25/year` stay
+  expanded. Sheet variables, line references, live weather, Wolfram, historical
+  FX, and custom units stay out of Converter.
+- `$30 × 4 days` is an implicit daily rate. `m × m` is area in meters.
+
 These are Wox's explicit defaults where Raycast's documentation does not specify
-an output policy (not a claim of undocumented behavioral equivalence).
+an output policy (not a claim of undocumented behavioral equivalence). The
+executable Soulver corpus lives in `engine/soulver_test.go`.
 
 ## Limits and verification
 

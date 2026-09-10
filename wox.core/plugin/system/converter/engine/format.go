@@ -2,7 +2,9 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -101,6 +103,34 @@ func formatMagnitude(n *big.Rat, decimals *int) string {
 	return s
 }
 
+func formatMixedFraction(m, step *big.Rat) string {
+	if m == nil {
+		return ""
+	}
+	if step != nil && step.Num().Cmp(big.NewInt(1)) == 0 && step.Denom().Sign() > 0 {
+		den := step.Denom().Int64()
+		scaled := new(big.Rat).Mul(m, new(big.Rat).SetInt(step.Denom()))
+		if scaled.IsInt() {
+			num := scaled.Num().Int64()
+			sign := ""
+			if num < 0 {
+				sign = "-"
+				num = -num
+			}
+			whole := num / den
+			rem := num % den
+			if rem == 0 {
+				return sign + strconv.FormatInt(whole, 10)
+			}
+			if whole == 0 {
+				return sign + strconv.FormatInt(rem, 10) + "/" + strconv.FormatInt(den, 10)
+			}
+			return sign + strconv.FormatInt(whole, 10) + " " + strconv.FormatInt(rem, 10) + "/" + strconv.FormatInt(den, 10)
+		}
+	}
+	return m.RatString()
+}
+
 func durationScale(symbol string) *big.Rat {
 	switch symbol {
 	case "w":
@@ -157,6 +187,49 @@ func durationLabel(symbol string, n *big.Rat, longMinSec bool) string {
 	}
 }
 
+func formatCivilSpan(months, days int) string {
+	if months < 0 {
+		months = -months
+	}
+	if days < 0 {
+		days = -days
+	}
+	years := months / 12
+	months = months % 12
+	weeks := days / 7
+	days = days % 7
+	var parts []string
+	if years != 0 {
+		unit := "years"
+		if years == 1 {
+			unit = "year"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", years, unit))
+	}
+	if months != 0 {
+		unit := "months"
+		if months == 1 {
+			unit = "month"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", months, unit))
+	}
+	if weeks != 0 {
+		unit := "weeks"
+		if weeks == 1 {
+			unit = "week"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", weeks, unit))
+	}
+	if days != 0 || len(parts) == 0 {
+		unit := "days"
+		if days == 1 {
+			unit = "day"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", days, unit))
+	}
+	return strings.Join(parts, " ")
+}
+
 // formatDurationParts splits seconds into the requested units, largest first.
 func formatDurationParts(seconds *big.Rat, units []string, o FormatOptions, longMinSec bool) string {
 	if len(units) == 0 {
@@ -169,6 +242,10 @@ func formatDurationParts(seconds *big.Rat, units []string, o FormatOptions, long
 		scale := durationScale(symbol)
 		if i == len(units)-1 {
 			amount := new(big.Rat).Quo(remain, scale)
+			if symbol == "s" && !amount.IsInt() && len(parts) > 0 {
+				f, _ := amount.Float64()
+				amount = big.NewRat(int64(math.Round(f)), 1)
+			}
 			if amount.Sign() == 0 && len(parts) > 0 {
 				break
 			}
@@ -257,23 +334,50 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 		return translate("ui_weekday_"+keys[t.Weekday()], t.Weekday().String()[:3])
 	}
 	switch v.Kind {
+	case Boolean:
+		if v.Number.Sign() != 0 {
+			p.Raw = "true"
+		} else {
+			p.Raw = "false"
+		}
+		p.Formatted = p.Raw
+		return p
 	case CalendarSpan:
 		p.Raw = fmt.Sprintf("%d months %d days", v.Months, v.Days)
-		p.Formatted = p.Raw
+		p.Formatted = formatCivilSpan(v.Months, v.Days)
 		return p
 	case Date:
 		p.Raw = v.Time.Format("2006-01-02")
+		if r.Target == "weekday" {
+			p.Formatted = v.Time.Weekday().String()
+			return p
+		}
+		if r.Target == "datepattern" && len(r.FormatUnits) > 0 {
+			p.Formatted = v.Time.Format(goDateLayout(r.FormatUnits[0]))
+			return p
+		}
 		p.Formatted = fmt.Sprintf(translate("plugin_converter_weekday_date_format", "%s, %s"), weekday(v.Time), p.Raw)
 		return p
 	case Clock:
 		p.Raw = v.Time.Format("15:04")
-		p.Formatted = p.Raw
-		if v.Days != 0 {
+		p.Formatted = formatClock12(v.Time)
+		if v.Days == -1 {
+			p.Formatted = "Yesterday at " + p.Formatted
+			p.Raw = p.Raw + " (-1 d)"
+		} else if v.Days == 1 {
+			p.Formatted = "Tomorrow at " + p.Formatted
+			p.Raw = p.Raw + " (+1 d)"
+		} else if v.Days != 0 {
 			p.Formatted += fmt.Sprintf(" (%+d d)", v.Days)
 			p.Raw = p.Formatted
 		}
 		return p
 	case Instant:
+		if r.Target == "iso8601" {
+			p.Raw = v.Time.Format(time.RFC3339)
+			p.Formatted = p.Raw
+			return p
+		}
 		p.Raw = v.Time.Format(time.RFC3339Nano)
 		clock := fmt.Sprintf(translate("plugin_converter_time_format", "%02d:%02d (%s)"), v.Time.Hour(), v.Time.Minute(), weekday(v.Time))
 		p.Formatted = clock
@@ -288,6 +392,43 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 		}
 		return p
 	}
+	if (r.Target == "place" || r.Target == "gps") && len(r.FormatUnits) > 0 {
+		p.Formatted = strings.Join(r.FormatUnits, "")
+		p.Raw = p.Formatted
+		return p
+	}
+	if r.Target == "timecode" {
+		p.Formatted = formatTimecode(v.Number, r.FPS)
+		p.Raw = p.Formatted
+		return p
+	}
+	if r.Target == "dms" {
+		p.Formatted = formatDMS(v.Number)
+		p.Raw = p.Formatted
+		return p
+	}
+	if r.Target == "pitch" {
+		midi, _ := v.Number.Float64()
+		p.Formatted = pitchName(midi)
+		p.Raw = p.Formatted
+		return p
+	}
+	if r.Target == "midi" {
+		p.Formatted = plain(v.Number)
+		p.Raw = p.Formatted
+		return p
+	}
+	if r.Target == "pace" {
+		p.Formatted = formatPace(v)
+		p.Raw = p.Formatted
+		return p
+	}
+	if r.Target == "sci" {
+		f, _ := v.Number.Float64()
+		p.Raw = strconv.FormatFloat(f, 'e', 6, 64)
+		p.Formatted = p.Raw
+		return p
+	}
 	if isBase(r.Target) {
 		base := map[string]int{"bin": 2, "oct": 8, "dec": 10, "hex": 16}[r.Target]
 		p.Raw = v.Number.Num().Text(base)
@@ -295,6 +436,37 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 			p.Raw = strings.ToUpper(p.Raw)
 		}
 		p.Formatted = p.Raw + " " + r.Target
+		switch r.Target {
+		case "hex":
+			p.Formatted = "0x" + strings.ToUpper(v.Number.Num().Text(16))
+		case "bin":
+			p.Formatted = "0b" + v.Number.Num().Text(2)
+		case "oct":
+			p.Formatted = "0o" + v.Number.Num().Text(8)
+		case "dec":
+			p.Formatted = formatNumber(v.Number.Num().String(), o)
+		}
+		return p
+	}
+	if r.Target == "percent" {
+		pct := new(big.Rat).Mul(v.Number, big.NewRat(100, 1))
+		if v.Kind == Percent {
+			pct = v.Number
+			pct = new(big.Rat).Mul(v.Number, big.NewRat(100, 1))
+		}
+		p.Raw = plain(pct) + "%"
+		p.Formatted = formatNumber(plain(pct), o) + "%"
+		return p
+	}
+	if r.Target == "multiplier" || r.Target == "multiple" || r.Target == "x" {
+		p.Raw = plain(v.Number) + "x"
+		p.Formatted = p.Raw
+		return p
+	}
+	if r.Target == "fraction" {
+		m := roundedMagnitude(v.Number, r, false)
+		p.Raw = m.RatString()
+		p.Formatted = formatMixedFraction(m, r.Nearest)
 		return p
 	}
 	if r.Target == "timespan" || r.Target == "laptime" || r.Target == "parts" {
@@ -328,7 +500,7 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 	}
 	if v.Kind == Quantity {
 		// Existing duration/storage/unit rows do not group digits; parsing still shares Calculator settings.
-		if c.dimensions(v.Unit)["money"] == 0 {
+		if c.dimensions(v.Unit)["money"] == 0 && c.dimensions(v.Unit)["time"] != -1 && c.dimensions(v.Unit)["frame"] == 0 && r.Substance == "" {
 			o.ThousandsSeparator = ""
 		}
 		p.Raw += " " + unitText(v.Unit)
@@ -340,7 +512,7 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 				explicit := r.Decimals != nil || r.Nearest != nil
 				if !explicit {
 					switch d.Dimension {
-					case "money", "mass", "temperature", "volume":
+					case "money", "mass", "temperature", "volume", "pixel":
 						precision = 2
 					case "length":
 						precision = 3
@@ -354,17 +526,41 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 						}
 					}
 				}
+				if name == "lb" && !explicit {
+					if parts, ok := formatPoundsOunces(v.Number); ok {
+						p.Formatted = parts
+						return p
+					}
+				}
+				if name == "ft" && !explicit && r.Target == "ftin" {
+					if parts, ok := formatFeetInches(v.Number); ok {
+						p.Formatted = parts
+						return p
+					}
+				}
 				if d.Dimension == "time" {
-					key := map[string]string{"ms": "milliseconds", "s": "seconds", "min": "minutes", "h": "hours", "d": "days", "w": "weeks", "y": "years", "workday": "workdays"}[name]
+					if name == "h" {
+						if parts, ok := formatHourMinutes(v.Number); ok {
+							p.Formatted = parts
+							return p
+						}
+					}
+					key := map[string]string{"ms": "milliseconds", "s": "seconds", "min": "minutes", "h": "hours", "d": "days", "w": "weeks", "y": "years", "workday": "workdays", "mo": "months", "ns": "nanoseconds", "us": "microseconds"}[name]
 					unit = translate("plugin_converter_time_unit_"+key, d.Plural)
 					if !explicit {
 						if name == "w" && !v.Number.IsInt() {
 							scaled := new(big.Rat).Mul(v.Number, big.NewRat(1000, 1))
 							s = new(big.Rat).SetFrac(new(big.Int).Quo(scaled.Num(), scaled.Denom()), big.NewInt(1000)).FloatString(3)
 						} else if !v.Number.IsInt() {
-							s = v.Number.FloatString(2)
+							if new(big.Rat).Abs(v.Number).Cmp(rational("0.01")) < 0 {
+								s = plain(v.Number)
+							} else {
+								s = v.Number.FloatString(2)
+							}
 						}
 					}
+				} else if r.Substance != "" {
+					unit = d.Symbol
 				} else if d.Dimension != "storage" && d.Dimension != "money" {
 					unit = d.Plural
 					if new(big.Rat).Abs(magnitude).Cmp(big.NewRat(1, 1)) == 0 {
@@ -378,20 +574,68 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 				if c.Units[code].Dimension != "money" {
 					continue
 				}
-				symbol := map[string]string{"USD": "$", "EUR": "€", "GBP": "£", "CNY": "¥", "JPY": "¥", "INR": "₹", "HKD": "HK$", "AUD": "A$", "CAD": "C$"}[code]
+				symbol := map[string]string{"USD": "$", "EUR": "€", "GBP": "£", "CNY": "¥", "JPY": "¥", "INR": "₹", "HKD": "HK$", "AUD": "A$", "CAD": "C$", "RUB": "₽", "NZD": "NZ$", "SGD": "S$", "TWD": "NT$", "BRL": "R$", "DKK": "kr"}[code]
 				if symbol != "" {
+					if r.Decimals == nil && r.Nearest == nil {
+						s = strings.TrimRight(strings.TrimRight(v.Number.FloatString(2), "0"), ".")
+						if s == "" || s == "-0" {
+							s = "0"
+						}
+						if s == "0" && v.Number.Sign() != 0 {
+							s = strings.TrimRight(strings.TrimRight(v.Number.FloatString(4), "0"), ".")
+							if s == "" || s == "-0" {
+								s = "0"
+							}
+						}
+					}
 					rest := copyUnit(v.Unit)
 					delete(rest, code)
 					p.Formatted = symbol + formatNumber(s, o)
-					if len(rest) > 0 {
-						suffix := unitText(rest)
-						p.Formatted += strings.TrimPrefix(suffix, "1")
+					if len(rest) == 0 {
+						if compact, ok := compactSI(v.Number, true); ok {
+							p.Formatted = symbol + compact
+						}
+					} else {
+						p.Formatted += rateSuffix(rest)
 					}
 					return p
 				}
 			}
 		}
+		if c.dimensions(v.Unit)["money"] == 0 {
+			numName := ""
+			den := false
+			for k, n := range v.Unit {
+				if c.Units[k].Dimension != "time" && k != "?m" && k != "mo" {
+					continue
+				}
+				if n == 1 {
+					numName = c.Units[k].Plural
+					if new(big.Rat).Abs(magnitude).Cmp(big.NewRat(1, 1)) == 0 {
+						numName = c.Units[k].Singular
+					}
+				}
+				if n == -1 {
+					den = true
+				}
+			}
+			if numName != "" && den {
+				p.Formatted = formatNumber(s, o) + " " + numName + rateSuffix(v.Unit)
+				return p
+			}
+			if den && len(v.Unit) == 1 {
+				p.Formatted = formatNumber(s, o) + rateSuffix(v.Unit)
+				return p
+			}
+		}
 		p.Formatted = formatNumber(s, o) + " " + unit
+		return p
+	}
+	if compact, ok := compactSI(v.Number, false); ok && r.Target == "" {
+		p.Formatted = compact
+		if r.Ratio != "" {
+			p.Formatted = r.Ratio
+		}
 		return p
 	}
 	p.Formatted = formatNumber(s, o)
@@ -399,4 +643,123 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 		p.Formatted = r.Ratio
 	}
 	return p
+}
+
+func compactSI(n *big.Rat, money bool) (string, bool) {
+	if n == nil {
+		return "", false
+	}
+	abs := new(big.Rat).Abs(n)
+	if abs.Cmp(rational("100000")) < 0 {
+		return "", false
+	}
+	type step struct {
+		min, scale *big.Rat
+		suffix     string
+	}
+	steps := []step{
+		{rational("1000000000000"), rational("1000000000000"), "T"},
+		{rational("1000000000"), rational("1000000000"), map[bool]string{true: "B", false: "G"}[money]},
+		{rational("1000000"), rational("1000000"), "M"},
+		{rational("100000"), rational("1000"), "k"},
+	}
+	sign := ""
+	if n.Sign() < 0 {
+		sign = "-"
+	}
+	for _, st := range steps {
+		if abs.Cmp(st.min) >= 0 {
+			q := new(big.Rat).Quo(abs, st.scale)
+			full := q.FloatString(12)
+			if i := strings.Index(full, "."); i >= 0 && strings.Trim(full[i+4:], "0") != "" {
+				return "", false
+			}
+			return sign + strings.TrimRight(strings.TrimRight(q.FloatString(3), "0"), ".") + st.suffix, true
+		}
+	}
+	return "", false
+}
+
+func rateSuffix(u Unit) string {
+	names := map[string]string{"y": "year", "mo": "month", "month": "month", "w": "week", "d": "day", "h": "hour", "min": "minute", "s": "second", "workday": "workday"}
+	for k, n := range u {
+		if n == -1 {
+			if name, ok := names[k]; ok {
+				return "/" + name
+			}
+			return "/" + k
+		}
+	}
+	return strings.TrimPrefix(unitText(u), "1")
+}
+
+func formatClock12(t time.Time) string {
+	h, m := t.Hour(), t.Minute()
+	suffix := "am"
+	if h >= 12 {
+		suffix = "pm"
+	}
+	h12 := h % 12
+	if h12 == 0 {
+		h12 = 12
+	}
+	return fmt.Sprintf("%d:%02d %s", h12, m, suffix)
+}
+
+// formatHourMinutes renders a non-integer hour quantity as "8 hours 35 min"
+// when the minute remainder is exact, matching Soulver clock intervals.
+func formatHourMinutes(n *big.Rat) (string, bool) {
+	if n == nil || n.IsInt() {
+		return "", false
+	}
+	mins := new(big.Rat).Mul(n, big.NewRat(60, 1))
+	if !mins.IsInt() || !mins.Num().IsInt64() {
+		return "", false
+	}
+	total := mins.Num().Int64()
+	neg := ""
+	if total < 0 {
+		neg = "-"
+		total = -total
+	}
+	h := total / 60
+	m := total % 60
+	if m == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("%s%d hours %d min", neg, h, m), true
+}
+
+func formatFeetInches(n *big.Rat) (string, bool) {
+	if n == nil || n.Sign() <= 0 {
+		return "", false
+	}
+	inches := new(big.Rat).Mul(n, big.NewRat(12, 1))
+	if !inches.IsInt() || !inches.Num().IsInt64() {
+		return "", false
+	}
+	total := inches.Num().Int64()
+	ft := total / 12
+	rem := total % 12
+	if rem == 0 || ft == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("%d feet %d inches", ft, rem), true
+}
+
+func formatPoundsOunces(n *big.Rat) (string, bool) {
+	if n == nil || n.Sign() <= 0 {
+		return "", false
+	}
+	oz := new(big.Rat).Mul(n, big.NewRat(16, 1))
+	if !oz.IsInt() || !oz.Num().IsInt64() {
+		return "", false
+	}
+	total := oz.Num().Int64()
+	lb := total / 16
+	rem := total % 16
+	if rem == 0 || lb == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("%d lb %d oz", lb, rem), true
 }

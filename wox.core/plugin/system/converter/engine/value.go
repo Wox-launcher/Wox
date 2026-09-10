@@ -33,6 +33,8 @@ type Env struct {
 	DefaultCurrency string
 	Prices          map[string]*big.Rat
 	RateUpdatedAt   int64
+	FPS             *big.Rat
+	Substance       string
 }
 
 type Kind uint8
@@ -45,7 +47,12 @@ const (
 	Clock
 	Instant
 	CalendarSpan
+	Boolean
 )
+
+func isTemporal(k Kind) bool {
+	return k == Date || k == Clock || k == Instant || k == CalendarSpan
+}
 
 // Unit retains authored factors for display; dimensions are derived from definitions.
 type Unit map[string]int
@@ -58,6 +65,9 @@ type Value struct {
 	Unit         Unit
 	Time         time.Time
 	Months, Days int
+	// Ampm is set when a clock literal used am/pm. Soulver clock-clock minus
+	// then returns the absolute same-day interval; 24-hour clocks stay signed.
+	Ampm bool
 }
 
 type Evaluation struct {
@@ -72,6 +82,8 @@ type Evaluation struct {
 	Nearest       *big.Rat
 	RoundDir      string
 	FormatUnits   []string
+	FPS           *big.Rat
+	Substance     string
 }
 
 type Presentation struct {

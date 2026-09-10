@@ -11,7 +11,7 @@ import (
 func fixture() (*Catalog, Env) {
 	c := NewCatalog()
 	prices := map[string]*big.Rat{}
-	for code, price := range map[string]string{"USD": "1", "EUR": "2", "GBP": "1.25", "JPY": "0.01", "CNY": "0.125", "INR": "0.0125", "HKD": "0.125", "BTC": "80000", "ETH": "3000", "USDT": "1", "BNB": "850"} {
+	for code, price := range map[string]string{"USD": "1", "EUR": "2", "GBP": "1.25", "JPY": "0.01", "CNY": "0.125", "INR": "0.0125", "HKD": "0.125", "BTC": "80000", "ETH": "3000", "USDT": "1", "BNB": "850", "RUB": "0.01", "AUD": "0.5", "DKK": "0.15", "NZD": "1", "CAD": "1", "SGD": "1", "TWD": "1", "BRL": "1"} {
 		c.AddCurrency(code, code == "BTC" || code == "ETH" || code == "USDT" || code == "BNB")
 		prices[code] = rational(price)
 	}
@@ -99,7 +99,7 @@ func TestTimeCorpus(t *testing.T) {
 
 func TestInvalidAndResourceLimits(t *testing.T) {
 	c, env := fixture()
-	for _, input := range []string{"(1 USD + 2 USD", "1 USD +", "1 USD / 0", "1 USD + 2 meters", "1km/h in m", "2 meters^2 in ft", "2^100000", "(2^4096)^4096", "sqrt(-1)", "sin(1;2)", "1USD to EUR junk", "2026-03-29 02:30 Europe/Berlin to UTC", "2026-10-25 02:30 Europe/Berlin to UTC", "2026-02-30 2 am ist to cet", "time in nowhere-invalid", "1/3 to 65 dp", "now to 2 dp", "21 rounded up", "21 rounded up to nearest 0", "now rounded up to nearest 5", "meters in 10 kg", "difference between Seattle", "time difference between nowhere and Paris", strings.Repeat("(", 65) + "1" + strings.Repeat(")", 65), strings.Repeat("9", 4097)} {
+	for _, input := range []string{"(1 USD + 2 USD", "1 USD +", "1 USD / 0", "1 USD + 2 meters", "1km/h in m", "2 meters^2 in ft", "2^100000", "(2^4096)^4096", "sqrt(-1)", "sin(1;2)", "2026-03-29 02:30 Europe/Berlin to UTC", "2026-10-25 02:30 Europe/Berlin to UTC", "2026-02-30 2 am ist to cet", "time in nowhere-invalid", "1/3 to 65 dp", "now to 2 dp", "21 rounded up to nearest 0", "now rounded up to nearest 5", "meters in 10 kg", "difference between Seattle", "time difference between nowhere and Paris", strings.Repeat("(", 65) + "1" + strings.Repeat(")", 65), strings.Repeat("9", 4097)} {
 		t.Run(input[:min(len(input), 80)], func(t *testing.T) {
 			q, e := c.Parse(input, ParseOptions{})
 			if e == nil {
