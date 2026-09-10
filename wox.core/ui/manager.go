@@ -42,6 +42,7 @@ import (
 	"wox/util/ime"
 	"wox/util/keyboard"
 	"wox/util/osvariant"
+	"wox/util/overlay/confettioverlay"
 	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -1202,8 +1203,16 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	m.showMainHotkeyToolbarWarning(ctx)
 
 	if m.pendingStartupNotify != nil {
+		msg := *m.pendingStartupNotify
+		playConfetti := msg.Confetti
+		msg.Confetti = false
 		logger.Info(ctx, "showing pending startup notify")
-		m.ui.Notify(ctx, *m.pendingStartupNotify)
+		m.ui.Notify(ctx, msg)
+		if playConfetti {
+			if err := confettioverlay.Show(); err != nil {
+				logger.Warn(ctx, "show startup confetti: "+err.Error())
+			}
+		}
 		m.pendingStartupNotify = nil
 	}
 }

@@ -17,6 +17,7 @@ import (
 	woxscreenshot "wox/ui/screenshot"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/overlay/confettioverlay"
 )
 
 // SessionID identifies the launcher instance receiving core push updates.
@@ -243,10 +244,15 @@ func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI)
 }
 
 // ShowNotificationMessage displays one transient notification in the launcher toolbar.
-func (a *App) ShowNotificationMessage(_ context.Context, message common.NotifyMsg) error {
+func (a *App) ShowNotificationMessage(ctx context.Context, message common.NotifyMsg) error {
 	converted := toolbarMessage{Text: message.Text, Icon: imageFromString(message.Icon), DisplaySeconds: message.DisplaySeconds}
 	return a.runOnUI("show notification message", func() {
 		a.applyToolbarMessage(converted)
+		if message.Confetti {
+			if err := confettioverlay.Show(); err != nil {
+				util.GetLogger().Warn(ctx, "show notification confetti: "+err.Error())
+			}
+		}
 	})
 }
 

@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -302,8 +303,10 @@ func run() {
 	for _, arg := range os.Args {
 		if arg == "--updated" {
 			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+				Icon:           icons.Get(icons.StatusInstalled).String(),
 				Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_update_success"),
 				DisplaySeconds: 5,
+				Confetti:       true,
 			})
 			break
 		}

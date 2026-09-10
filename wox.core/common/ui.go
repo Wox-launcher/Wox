@@ -323,4 +323,5 @@ type NotifyMsg struct {
 	Icon           string // WoxImage.String(), can be empty
 	Text           string // can be empty
 	DisplaySeconds int    // 0 means display forever
+	Confetti       bool   // play a fullscreen confetti overlay when shown in-app
 }
