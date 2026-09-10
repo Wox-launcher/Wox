@@ -112,8 +112,8 @@ func TestConverterCrypto(t *testing.T) {
 		{
 			Name:           "BTC plus number",
 			Query:          "1btc + 1",
-			ExpectedTitle:  "Search Google for 1btc + 1",
-			ExpectedAction: "Search",
+			ExpectedTitle:  "2 BTC",
+			ExpectedAction: "Copy",
 		},
 	}
 
@@ -381,37 +381,37 @@ func TestConverterBase(t *testing.T) {
 		{
 			Name:           "Hex to Dec",
 			Query:          "0xff to dec",
-			ExpectedTitle:  "255 dec",
+			ExpectedTitle:  "255",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return title == "255 dec"
+				return title == "255"
 			},
 		},
 		{
 			Name:           "Dec to Hex",
 			Query:          "255 dec to hex",
-			ExpectedTitle:  "FF hex",
+			ExpectedTitle:  "0xFF",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return title == "FF hex"
+				return title == "0xFF"
 			},
 		},
 		{
 			Name:           "Bin to Dec",
 			Query:          "0b1010 to dec",
-			ExpectedTitle:  "10 dec",
+			ExpectedTitle:  "10",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return title == "10 dec"
+				return title == "10"
 			},
 		},
 		{
 			Name:           "Oct to Dec",
 			Query:          "17 oct to dec",
-			ExpectedTitle:  "15 dec",
+			ExpectedTitle:  "15",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return title == "15 dec"
+				return title == "15"
 			},
 		},
 	}

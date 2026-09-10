@@ -392,6 +392,7 @@ test: ensure-resources
 # tests leak saved settings, favorites, and histories into later make test
 # runs, which makes CI and local reruns fail for reasons unrelated to code.
 test-isolated:
+	@echo "Compiling wox.core/test (sqlite CGO). No === RUN output until compile finishes; first run or a large converter change can take a few minutes."
 	cd wox.core && WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
 # The fast Go UI layer runs on every relevant change and never opens a native window.

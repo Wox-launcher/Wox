@@ -55,13 +55,22 @@ func (c *Catalog) Evaluate(ctx context.Context, q *Query, env Env) (result Evalu
 		if target == "" {
 			target = "USD"
 		}
-		keep := false
+		// Mixed fiat keeps the authored unit ($200 + €200 stays euros).
+		// Lone crypto and crypto+crypto convert to default fiat (1BTC, 1BTC+1ETH).
+		// Crypto plus a bare number keeps the coin (1btc + 1 → 2 BTC).
+		keepFiat := false
 		for k := range v.Unit {
-			if c.Units[k].Dimension == "money" && k != target {
-				keep = true
+			if c.Units[k].Dimension == "money" && k != target && !c.Crypto[k] {
+				keepFiat = true
 			}
 		}
-		if !keep {
+		keepCrypto := false
+		for k := range v.Unit {
+			if c.Crypto[k] && hasBareNumberAddend(q.root) {
+				keepCrypto = true
+			}
+		}
+		if !keepFiat && !keepCrypto {
 			v, err = c.convert(v, Unit{target: 1}, env, nil)
 			if err != nil {
 				return Evaluation{}, err
@@ -356,7 +365,7 @@ func (c *Catalog) add(a, b Value, subtract, rightLiteral bool, env Env) (Value, 
 		b.Kind = a.Kind
 		b.Unit = copyUnit(a.Unit)
 	}
-	// A bare number inherits the other operand's unit: 300 + 20 km, $20 + 30.
+	// A bare number inherits the other operand's unit: 300 + 20 km, $20 + 30, 1btc + 1.
 	// Absolute temperatures treat the number as a difference, not a second point.
 	if a.Kind == Number && b.Kind == Quantity {
 		a.Kind = Quantity
@@ -840,4 +849,22 @@ func isYearNumber(v Value) bool {
 func yearAsDate(v Value, env Env) Value {
 	y := int(v.Number.Num().Int64())
 	return Value{Kind: Date, Time: time.Date(y, 1, 1, 0, 0, 0, 0, env.Local)}
+}
+
+// hasBareNumberAddend reports +/− of a money quantity with a dimensionless number.
+func hasBareNumberAddend(n *node) bool {
+	if n == nil || (n.op != "+" && n.op != "-") || len(n.args) != 2 {
+		return false
+	}
+	return isBareNumberNode(n.args[0]) || isBareNumberNode(n.args[1])
+}
+
+func isBareNumberNode(n *node) bool {
+	if n == nil {
+		return false
+	}
+	if n.op == "value" && n.value.Kind == Number {
+		return true
+	}
+	return n.op == "quantity" && len(n.value.Unit) == 0
 }

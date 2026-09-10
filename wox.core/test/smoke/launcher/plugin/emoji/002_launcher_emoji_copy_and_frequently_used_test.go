@@ -36,6 +36,13 @@ func Test002LauncherEmojiCopyAndFrequentlyUsed(t *testing.T) {
 			t.Fatalf("copy robot emoji: %v", err)
 		}
 		waitForClipboardText(t, ctx, "🤖")
+		// Copy runs off the UI thread. Hide is scheduled only after recordUsage
+		// returns, so waiting for it avoids reopening the stale first-query panel.
+		if _, err := client.WaitForWindowState(ctx, "primary", func(state automationdriver.WindowState) bool {
+			return state.Exists && !state.Visible && state.Lifecycle == "hidden"
+		}); err != nil {
+			t.Fatalf("wait for launcher to hide after copying: %v", err)
+		}
 
 		smoke.ShowLauncher(t, ctx, client)
 		snapshot = smoke.ReplaceLauncherQuery(t, ctx, client, "emoji 🤖")
@@ -45,16 +52,21 @@ func Test002LauncherEmojiCopyAndFrequentlyUsed(t *testing.T) {
 		}
 		previousResultID := results[0].AutomationID
 		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
-		removeAction, found := emojiActionByLabel(snapshot,
-			"Remove from frequently used", "从常用中移除", "Remover dos frequentes", "Удалить из часто используемых")
-		if !found {
-			t.Fatal("remove-from-frequently-used action was not exposed after copying")
+		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			_, found := emojiActionByLabel(snapshot,
+				"Remove from frequently used", "从常用中移除", "Remover dos frequentes", "Удалить из часто используемых")
+			return found
+		})
+		if err != nil {
+			t.Fatalf("remove-from-frequently-used action was not exposed after copying: %v; actions=%+v", err, emojiActions(snapshot))
 		}
+		removeAction, _ := emojiActionByLabel(snapshot,
+			"Remove from frequently used", "从常用中移除", "Remover dos frequentes", "Удалить из часто используемых")
 		if err := client.Perform(ctx, removeAction.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("remove robot from frequently used: %v", err)
 		}
 
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			currentResults := emojiResults(snapshot)
 			resultsNode, resultsFound := automationdriver.Find(snapshot, "launcher.results")
 			_, panelOpen := automationdriver.Find(snapshot, "action-search")
