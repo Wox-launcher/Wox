@@ -97,6 +97,7 @@ const (
 	SysSleep        = "sys.sleep"
 	SysDisplaySleep = "sys.display-sleep"
 	SysLogout       = "sys.logout"
+	SysShutdown     = "sys.shutdown"
 	SysEject        = "sys.eject"
 	SysDesktop      = "sys.desktop"
 	SysScreenSaver  = "sys.screensaver"

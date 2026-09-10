@@ -174,7 +174,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:                     "shutdown_computer",
 			Title:                  "i18n:plugin_sys_shutdown_computer",
-			Icon:                   icons.Get(icons.ActionExit),
+			Icon:                   icons.Get(icons.SysShutdown),
 			Aliases:                []string{"shutdown", "shut down", "power off", "关机", "关闭电脑"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {

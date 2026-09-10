@@ -383,6 +383,8 @@ The `Icon` string uses a `prefix:data` format. Supported prefixes:
 | `url:`      | Remote image URL.                            | `"url:https://example.com/icon.png"`  |
 | `lottie:`   | Lottie animation JSON.                       | `"lottie:{...}"`                      |
 
+Plugin metadata and result-row `Icon` values may use any of these formats. Action Panel leading icons should be `svg:` markup that paints with `var(--wox-theme-icon-color)`. See `references/icons.md`.
+
 ## Features Specification
 
 Enable optional capabilities by adding them to the `Features` array.

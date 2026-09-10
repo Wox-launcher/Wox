@@ -324,9 +324,9 @@ func resultIDByLabel(t *testing.T, snapshot woxwidget.AutomationSnapshot, label,
 
 func exitLabel(language string) string {
 	if language == "简体中文" {
-		return "退出Wox"
+		return "退出 Wox"
 	}
-	return "Exit"
+	return "Exit Wox"
 }
 
 func differentLanguage(current string) string {

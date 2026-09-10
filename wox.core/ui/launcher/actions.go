@@ -232,7 +232,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		return nil, 0, 0
 	}
 	items := actionPanelDisplayItems(snapshot.actionEntries, snapshot.actionIndices, func(index int, action actionPanelEntry) launcherview.ActionItem {
-		icon, selectedIcon := a.actionPanelIcons(action, snapshot.palette, physicalImageSize(22, imageScale))
+		icon, selectedIcon := a.actionPanelIcons(action, snapshot.palette, physicalImageSize(int(snapshot.densityMetrics.scaled(launcherview.ActionIconSize)), imageScale))
 		return launcherview.ActionItem{
 			Kind: launcherview.ActionItemKindAction, Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, SelectedIcon: selectedIcon,
 			Tail: action.Tail, TailIcon: a.imageForSize(action.TailIcon, physicalImageSize(launcherview.ActionTailIconSize, imageScale)), HotkeyLabels: formatHotkeyLabels(action.Hotkey),

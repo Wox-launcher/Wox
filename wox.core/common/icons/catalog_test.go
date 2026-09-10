@@ -2,6 +2,7 @@ package icons
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -157,6 +158,39 @@ func TestActionIconsAreThemeAdaptiveSVGs(t *testing.T) {
 		}
 		if err := renderCatalogSVG(icon.ImageData, 24, 24); err != nil {
 			t.Fatalf("render %s: %v", name, err)
+		}
+	}
+}
+
+// pluginCreatorActionAssets maps the SVGs bundled with the wox-plugin-creator
+// skill to the catalog verbs they mirror. Third-party plugins cannot call
+// icons.Get, so the skill ships copies; this keeps them from drifting.
+var pluginCreatorActionAssets = map[string]string{
+	"execute.svg":                ActionExecute,
+	"copy.svg":                   ActionCopy,
+	"open.svg":                   ActionOpen,
+	"open-containing-folder.svg": ActionOpenContainingFolder,
+	"delete.svg":                 ActionDelete,
+	"edit.svg":                   ActionEdit,
+	"paste.svg":                  ActionPaste,
+	"add.svg":                    ActionAdd,
+	"search.svg":                 ActionSearch,
+	"settings.svg":               ActionSettings,
+}
+
+func TestPluginCreatorSkillActionAssetsMatchCatalog(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", ".agents", "skills", "wox-plugin-creator", "assets", "iconify", "action")
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("skill assets not present: %v", err)
+	}
+	for file, name := range pluginCreatorActionAssets {
+		data, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			t.Errorf("read %s: %v", file, err)
+			continue
+		}
+		if got, want := strings.TrimSpace(string(data)), Get(name).ImageData; got != want {
+			t.Errorf("%s differs from catalog %q; copy the catalog SVG into the skill asset", file, name)
 		}
 	}
 }

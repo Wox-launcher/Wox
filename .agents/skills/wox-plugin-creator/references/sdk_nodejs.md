@@ -99,6 +99,8 @@ interface WoxImage {
 }
 ```
 
+Action icons should be `{ ImageType: "svg", ImageData: "<svg ... var(--wox-theme-icon-color) ...>" }`, not emoji. See `references/icons.md`.
+
 ## Public API Methods
 
 The `ctx` object is required for all API calls.

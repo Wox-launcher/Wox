@@ -183,6 +183,25 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	}
 }
 
+func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{ID: "app", Name: "Apps"}, {ID: "sys", Name: "System"}})
+	a.setPluginSelectionLocked(0)
+	a.pluginSettings.SetDetailTab("keywords")
+
+	// Saving a trigger keyword refreshes the same plugin's form; the tab must survive.
+	a.setPluginSelectionLocked(0)
+	if tab := a.pluginSettings.DetailTab(); tab != "keywords" {
+		t.Fatalf("detail tab after same-plugin refresh = %q, want keywords", tab)
+	}
+
+	a.setPluginSelectionLocked(1)
+	if tab := a.pluginSettings.DetailTab(); tab != "settings" {
+		t.Fatalf("detail tab after selecting another plugin = %q, want settings", tab)
+	}
+}
+
 func TestPreparePluginSettingSaveValuesTracksDictationDerivedFields(t *testing.T) {
 	definition := formDefinition{Type: "dictationHotkey"}
 	definition.Value.Key = dictationDefaultHotkeyKey

@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -98,6 +97,9 @@ func previewTagsForValues(values ...string) []previewTag {
 
 // buildUpdatePreview maps update state and translated labels into the dedicated Flutter-aligned view.
 func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	// The header title carries the update state and the pill carries the version,
+	// so the panel does not echo the "update" query as a bare "Update" heading.
+	title := a.translate("i18n:plugin_update_title")
 	status := ""
 	statusColor := woxui.Color{R: 76, G: 175, B: 80, A: 255}
 	if !data.AutoUpdateEnabled {
@@ -111,7 +113,8 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 		if version == "" {
 			status = a.translate("i18n:plugin_update_status_none")
 		} else {
-			status = fmt.Sprintf(a.translate("i18n:plugin_update_status_none_with_version"), version)
+			title = a.translate("i18n:plugin_update_title_up_to_date")
+			status = version
 		}
 	} else {
 		current := strings.TrimSpace(data.CurrentVersion)
@@ -134,7 +137,6 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 			statusColor = woxui.Color{R: 33, G: 150, B: 243, A: 255}
 		}
 	}
-	title := a.translate("i18n:plugin_update_title")
 	if data.HasUpdate {
 		title = a.translate("i18n:plugin_doctor_version_update_available")
 	}

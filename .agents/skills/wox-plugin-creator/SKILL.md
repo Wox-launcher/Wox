@@ -63,11 +63,12 @@ If a plugin needs to cache anything on disk, put it under the Wox plugin cache f
 
 ### 2) Author result and action icons
 
-- Read `references/icons.md` for icon selection, inline SVG patterns, and placement rules.
-- Use `var(--wox-theme-icon-color)` for theme-adaptive SVG paints; see [SVG Theme Colors](references/icons.md#svg-theme-colors) for the black/white mapping and brand-color preservation rules.
-- When the requested icon semantics already match a bundled generic icon under `assets/iconify/`, prefer reusing that local reference before searching for a new one.
-- Use `scripts/search_iconify.py` to search Iconify collections and fetch ready-to-inline SVG constants for `icons.ts` or `icons.py`.
-- Single-file SDK plugins cannot use relative image paths. Use emoji, URL, SVG, base64, or an absolute path.
+- Read `references/icons.md` before choosing any glyph. Result-row and plugin-identity icons may be colorful; Action Panel leading icons must not.
+- Prefer a bundled monochrome verb from `assets/iconify/action/` (copy, open, execute/lightning, delete, edit, paste, add, search, settings). These SVGs already use `var(--wox-theme-icon-color)` so the Action Panel can tint them to the row label.
+- Do not use emoji, brand logos, the plugin mark, or mixed-color result art as the leading action icon. The panel only tints SVGs that contain the theme variable; anything else stays authored and looks inconsistent next to system actions.
+- Execute actions use the lightning verb (`action/execute.svg`), not a gear or play triangle. Settings actions use the gear.
+- For a new action metaphor, fetch a monochrome Iconify outline with `scripts/search_iconify.py` (it rewrites `currentColor` to the theme variable by default). Use `--no-wox-theme` only for colorful **result** icons.
+- Single-file SDK plugins cannot use relative image paths. Inline the SVG for actions; emoji/URL/base64 are acceptable for result identity only.
 
 ### 3) Package and submit plugin
 
@@ -145,4 +146,4 @@ Do not target older interpreters. Script plugins still use the user's system Pyt
 
 - scripts: `scripts/scaffold_wox_plugin.py`, `scripts/search_iconify.py`
 - references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/icons.md`, `references/refinements.md`
-- assets: `assets/script_plugin_templates/`, `assets/single_file_plugin_templates/`, `assets/iconify/`
+- assets: `assets/script_plugin_templates/`, `assets/single_file_plugin_templates/`, `assets/iconify/action/`

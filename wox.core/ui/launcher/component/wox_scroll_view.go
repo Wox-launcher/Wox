@@ -152,8 +152,8 @@ func (s *scrollViewState) scheduleHide(context woxwidget.StateContext) {
 	if s.pointerInside || s.hovered || s.dragging {
 		return
 	}
-	s.hideAt = time.Now().Add(2 * time.Second)
-	s.hideTimer = time.AfterFunc(2*time.Second, context.Invalidate)
+	s.hideAt = time.Now().Add(500 * time.Millisecond)
+	s.hideTimer = time.AfterFunc(500*time.Millisecond, context.Invalidate)
 }
 
 // setPointerInside keeps the overlay visible without widening it for view-level hover.

@@ -76,7 +76,7 @@ func TestSystemPlugin(t *testing.T) {
 		{
 			Name:           "Exit command",
 			Query:          "exit",
-			ExpectedTitle:  "Exit",
+			ExpectedTitle:  "Exit Wox",
 			ExpectedAction: "Execute",
 		},
 	}

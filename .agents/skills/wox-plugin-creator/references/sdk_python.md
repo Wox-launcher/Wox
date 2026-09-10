@@ -65,6 +65,8 @@ class WoxImage:
     def new_relative(cls, path: str) -> "WoxImage"
 ```
 
+Action icons should be theme-adaptive SVG (`svg:` / inline markup with `var(--wox-theme-icon-color)`), not emoji. See `references/icons.md`.
+
 Return refinements on `QueryResponse.refinements`. Read selected values from `query.refinements` on the next query. See `references/refinements.md`.
 
 `hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `sys.platform == "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token.

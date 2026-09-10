@@ -461,9 +461,18 @@ func (a *App) setPluginSelectionLocked(index int) {
 		}
 	}
 	a.aiSettings.SetModelManager(nil)
-	a.pluginSettings.SetDetailTab("settings")
+	// Only a change of plugin resets the detail tab. Catalog reloads and post-save
+	// definition refreshes re-run this for the already selected plugin, and jumping
+	// back to Settings there loses the Trigger Keywords tab the user just edited in.
+	previous := a.pluginSettings.Selected()
+	samePlugin := previous >= 0 && previous < len(plugins) && plugins[previous].ID == plugin.ID
+	if !samePlugin {
+		a.pluginSettings.SetDetailTab("settings")
+		if a.pluginSettings.PluginsStore() {
+			a.pluginSettings.SetDetailTab("description")
+		}
+	}
 	if a.pluginSettings.PluginsStore() {
-		a.pluginSettings.SetDetailTab("description")
 		a.pluginSettings.SetSelected(index)
 		a.pluginSettings.SetForm(nil)
 		return

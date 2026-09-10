@@ -8,6 +8,13 @@ import urllib.request
 from urllib.error import HTTPError, URLError
 
 API_BASE = "https://api.iconify.design"
+WOX_THEME_ICON_COLOR = "var(--wox-theme-icon-color)"
+
+
+def apply_wox_theme_variable(svg: str) -> str:
+    # Iconify monotone outlines use currentColor. The Action Panel only tints
+    # SVGs that contain the Wox theme variable, so rewrite it on fetch.
+    return svg.replace("currentColor", WOX_THEME_ICON_COLOR)
 
 
 def http_get_json(url: str) -> dict:
@@ -143,6 +150,8 @@ def wrap_svg(svg: str, output_format: str, const_name: str) -> str:
 
 def fetch_icon(args: argparse.Namespace) -> int:
     svg = http_get_text(build_svg_url(args.icon, args.height, args.color))
+    if args.wox_theme:
+        svg = apply_wox_theme_variable(svg)
     content = wrap_svg(svg, args.format, args.const_name)
 
     if args.out:
@@ -204,6 +213,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch_parser.add_argument(
         "--out", default="", help="Write output to a file instead of stdout"
+    )
+    fetch_parser.add_argument(
+        "--wox-theme",
+        dest="wox_theme",
+        action="store_true",
+        default=True,
+        help="Rewrite currentColor to var(--wox-theme-icon-color) (default)",
+    )
+    fetch_parser.add_argument(
+        "--no-wox-theme",
+        dest="wox_theme",
+        action="store_false",
+        help="Keep fetched paints unchanged, for colorful result icons",
     )
     fetch_parser.set_defaults(func=fetch_icon)
 

@@ -17,7 +17,12 @@ const (
 	ActionGroupDividerHeight = ActionDividerHeight
 	ActionSearchHeight       = 46
 	MaxVisibleActions        = 8
-	ActionTailIconSize       = 18
+	// ActionIconSize is the logical leading glyph size before launcher density scaling.
+	// The adapter rasterizes at the same scaled size so the panel never resamples.
+	ActionIconSize     = 22
+	ActionTailIconSize = 18
+	// actionIconSlotPadding is the leading gutter around the glyph (5 left + 10 right).
+	actionIconSlotPadding = 15
 )
 
 // ActionItemKind distinguishes selectable actions from non-interactive group chrome.
@@ -224,9 +229,11 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		if selected && item.SelectedIcon != nil {
 			iconSource = item.SelectedIcon
 		}
-		var icon woxwidget.Widget = woxwidget.Painter{Width: 22, Height: 22}
+		iconSize := scaledLauncherSize(ActionIconSize, props.DensityScale)
+		iconSlotWidth := iconSize + actionIconSlotPadding
+		var icon woxwidget.Widget = woxwidget.Painter{Width: iconSize, Height: iconSize}
 		if iconSource != nil {
-			icon = woxwidget.Image{Source: iconSource, Width: 22, Height: 22}
+			icon = woxwidget.Image{Source: iconSource, Width: iconSize, Height: iconSize}
 		}
 		trailingWidth := float32(0)
 		var trailing []woxwidget.Widget
@@ -278,7 +285,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: trailing,
 			}}
 		}
-		labelWidth := max(float32(40), innerWidth-37-trailingWidth)
+		labelWidth := max(float32(40), innerWidth-iconSlotWidth-trailingWidth)
 		labelLineHeight := scaledLauncherSize(18, props.DensityScale)
 		activate := func() {
 			if props.OnSelect != nil {
@@ -303,8 +310,8 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			OnTap: activate,
 			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{
 				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-					woxwidget.Align{Width: 37, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
-						Width: 37, Padding: woxwidget.Insets{Left: 5, Right: 10}, Child: icon,
+					woxwidget.Align{Width: iconSlotWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
+						Width: iconSlotWidth, Padding: woxwidget.Insets{Left: 5, Right: 10}, Child: icon,
 					}},
 					woxwidget.Align{Width: labelWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.TextBlock{
 						Value: item.Label, Width: labelWidth, Height: labelLineHeight, LineHeight: labelLineHeight, MaxLines: 1, AlignmentY: 0.5,
