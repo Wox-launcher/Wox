@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -24,9 +25,9 @@ import (
 var timerPluginIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#4f7cff"/><path fill="#fff" d="M12 7a1 1 0 0 1 1 1v3.586l2.207 2.207a1 1 0 1 1-1.414 1.414l-2.5-2.5A1 1 0 0 1 11 12V8a1 1 0 0 1 1-1z"/><path fill="#4f7cff" d="M11 2h2v2h-2z"/><path fill="#dbe6ff" d="M16.5 4.2 17.9 5.6 16.5 7 15.1 5.6z"/></svg>`)
 
 var (
-	timerPauseIcon  = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#f5c542"/><path fill="#fff" d="M9 7h2v10H9zm4 0h2v10h-2z"/></svg>`)
-	timerResumeIcon = common.ExecuteRunIcon
-	timerPinIcon    = common.UIIcon("screenshot.pin")
+	timerPauseIcon  = icons.Get(icons.ActionPause)
+	timerResumeIcon = icons.Get(icons.ActionRun)
+	timerPinIcon    = icons.Get(icons.ActionPin)
 )
 
 const (
@@ -246,7 +247,7 @@ func (t *TimerPlugin) buildTimerActions(ctx context.Context, timerID string) []p
 	actions = append(actions, plugin.QueryResultAction{
 		Id:                     timerID + ":edit_note",
 		Name:                   "i18n:plugin_timer_action_edit_note",
-		Icon:                   common.EditIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		Form: definition.PluginSettingDefinitions{
@@ -270,7 +271,7 @@ func (t *TimerPlugin) buildTimerActions(ctx context.Context, timerID string) []p
 	actions = append(actions, plugin.QueryResultAction{
 		Id:                     timerID + ":delete",
 		Name:                   "i18n:plugin_timer_action_delete",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			t.deleteTimer(ctx, timerID)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 )
 
@@ -179,7 +180,7 @@ func (m *Manager) buildTriggerKeywordConflictResponse(ctx context.Context, query
 
 	previewPlugins := make([]triggerKeywordConflictPreviewPlugin, 0, len(conflict.PluginInstances))
 	for _, pluginInstance := range conflict.PluginInstances {
-		icon := pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.WoxIcon)
+		icon := pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, icons.Get(icons.BrandWox))
 		previewPlugins = append(previewPlugins, triggerKeywordConflictPreviewPlugin{
 			PluginId:        pluginInstance.Metadata.Id,
 			PluginName:      pluginInstance.GetName(ctx),
@@ -246,7 +247,8 @@ func (m *Manager) newTriggerKeywordConflictOpenPluginSettingAction(ctx context.C
 		Id:                     fmt.Sprintf("%s_%s", systemActionOpenPluginSettingID, pluginInstance.Metadata.Id),
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.GetName(ctx)),
 		SearchAliases:          []string{fmt.Sprintf(i18n.GetI18nManager().TranslateWoxEnUs(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.Metadata.GetNameEn(ctx))},
-		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
+		Icon:                   icons.Get(icons.ActionSettings),
+		TailIcon:               pluginIdentityIcon(pluginInstance),
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext ActionContext) {

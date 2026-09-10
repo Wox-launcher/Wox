@@ -244,6 +244,8 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 		Hotkey:                 action.Hotkey,
 		Form:                   definitions,
 		IsSystemAction:         action.IsSystemAction,
+		Tail:                   action.Tail,
+		TailIcon:               fromCoreImage(action.TailIcon),
 	}
 }
 

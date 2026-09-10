@@ -6,10 +6,11 @@ import (
 	"image"
 	"image/color"
 	"image/gif"
+	"strings"
 	"sync"
 	"testing"
 
-	"wox/common"
+	"wox/common/icons"
 	woxui "wox/ui/runtime"
 )
 
@@ -285,10 +286,10 @@ func TestDecodeSVGImageCurrentColorDefaultsToBlack(t *testing.T) {
 }
 
 func TestIsLoadingIconMatchesSharedLoadingSVG(t *testing.T) {
-	if !isLoadingIcon(fromCoreImage(common.LoadingIcon)) {
+	if !isLoadingIcon(fromCoreImage(icons.Get(icons.StatusLoading))) {
 		t.Fatal("shared LoadingIcon should be recognized as a loading placeholder")
 	}
-	if isLoadingIcon(fromCoreImage(common.SearchIcon)) {
+	if isLoadingIcon(fromCoreImage(icons.Get(icons.ActionSearch))) {
 		t.Fatal("a regular result icon should not be treated as loading")
 	}
 }
@@ -302,6 +303,61 @@ func TestImageCacheReplaceUpdatesByteCounter(t *testing.T) {
 	app.insertImageLocked("photo", &woxui.Image{Width: 20, Height: 20})
 	if got := app.imageCacheByteSizeLocked(); got != 1600 {
 		t.Fatalf("replaced cache bytes = %d, want 1600", got)
+	}
+}
+
+func mostOpaqueImagePixel(image *woxui.Image) (color.RGBA, bool) {
+	var best color.RGBA
+	found := false
+	for y := 0; y < image.Height; y++ {
+		for x := 0; x < image.Width; x++ {
+			pixel := image.RGBAAt(x, y)
+			if !found || pixel.A > best.A {
+				best = pixel
+				found = true
+			}
+		}
+	}
+	return best, found && best.A >= 200
+}
+
+func TestActionCopyIconFollowsRowTextTint(t *testing.T) {
+	source := fromCoreImage(icons.Get(icons.ActionCopy))
+	tint := woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	decoded, err := decodeWoxImageWithTint(source, &tint, 48)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := mostOpaqueImagePixel(decoded)
+	if !ok {
+		t.Fatal("tinted action.copy has no visible stroke")
+	}
+	if got.R != tint.R || got.G != tint.G || got.B != tint.B || got.A < 240 {
+		t.Fatalf("tinted action.copy pixel = %+v, want selected-text white", got)
+	}
+}
+
+func TestActionCopyIconFollowsAppearance(t *testing.T) {
+	source := fromCoreImage(icons.Get(icons.ActionCopy))
+	if !strings.Contains(source.ImageData, "var(--wox-theme-icon-color)") {
+		t.Fatal("action.copy must use var(--wox-theme-icon-color)")
+	}
+	for _, dark := range []bool{false, true} {
+		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 48, 48, dark)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := uint8(0)
+		if dark {
+			want = 255
+		}
+		got, ok := mostOpaqueImagePixel(decoded)
+		if !ok {
+			t.Fatalf("dark=%v: action.copy has no visible stroke", dark)
+		}
+		if got.R != want || got.G != want || got.B != want || got.A < 240 {
+			t.Fatalf("dark=%v: action.copy pixel = %+v, want theme icon color", dark, got)
+		}
 	}
 }
 

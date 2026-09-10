@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/database"
 	"wox/plugin"
 	"wox/setting"
@@ -45,7 +46,7 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_notes_plugin_description",
-		Icon:          common.PluginNotesIcon.String(),
+		Icon:          icons.Get(icons.PluginNotes).String(),
 		TriggerKeywords: []string{
 			"note",
 		},
@@ -111,8 +112,8 @@ func (p *Plugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResp
 
 func (p *Plugin) newResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: common.PluginNotesIcon, Score: 1_000_000, ScoreKey: "note:new",
-		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: common.PluginNotesIcon, ContextData: noteActionContext(notesMRUNewID), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: icons.Get(icons.PluginNotes), Score: 1_000_000, ScoreKey: "note:new",
+		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: icons.Get(icons.ActionAdd), ContextData: noteActionContext(notesMRUNewID), Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.createAndOpen(ctx)
 		}}},
 	}
@@ -148,7 +149,7 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 		results = append(results, result)
 	}
 	if len(results) == 0 {
-		results = append(results, plugin.QueryResult{Title: "i18n:plugin_notes_no_results", SubTitle: "i18n:plugin_notes_no_results_subtitle", Icon: common.SearchIcon})
+		results = append(results, plugin.QueryResult{Title: "i18n:plugin_notes_no_results", SubTitle: "i18n:plugin_notes_no_results_subtitle", Icon: icons.Get(icons.ActionSearch)})
 	}
 	return results
 }
@@ -157,7 +158,7 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 func (p *Plugin) noteResult(record common.NoteRecord) plugin.QueryResult {
 	group, groupScore := noteResultGroup(record)
 	return plugin.QueryResult{
-		Id: record.ID, Title: NoteTitle(record.Document), Icon: common.PluginNotesIcon, ScoreKey: "note:" + record.ID,
+		Id: record.ID, Title: NoteTitle(record.Document), Icon: icons.Get(icons.PluginNotes), ScoreKey: "note:" + record.ID,
 		Group: group, GroupScore: groupScore,
 		Tails:   []plugin.QueryResultTail{plugin.NewQueryResultTailText(util.FormatTimestamp(record.UpdatedAt))},
 		Actions: p.noteActions(record),
@@ -167,7 +168,7 @@ func (p *Plugin) noteResult(record common.NoteRecord) plugin.QueryResult {
 func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultAction {
 	contextData := noteActionContext(record.ID)
 	if record.DeletedAt > 0 {
-		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: common.UpdateIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: icons.Get(icons.ActionUpdate), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.Restore(record.ID); err != nil {
 				p.notifyError(ctx, err)
 				return
@@ -175,14 +176,13 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 		}}}
 	}
-	// Plugin actions are not tinted by the action panel, so use colored icons
-	// instead of monochrome UIIcon glyphs that disappear on the panel.
-	pinName, pinIcon := "i18n:plugin_notes_action_pin", common.PinIcon
+	// Action verbs use theme-adaptive catalog SVGs so they stay visible on both appearances.
+	pinName, pinIcon := "i18n:plugin_notes_action_pin", icons.Get(icons.ActionPin)
 	if record.PinnedAt > 0 {
-		pinName, pinIcon = "i18n:plugin_notes_action_unpin", common.UnpinIcon
+		pinName, pinIcon = "i18n:plugin_notes_action_unpin", icons.Get(icons.ActionUnpin)
 	}
 	return []plugin.QueryResultAction{
-		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: common.OpenIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: icons.Get(icons.ActionOpen), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 		}},
 		{Id: "pin", Name: pinName, Icon: pinIcon, PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
@@ -191,21 +191,21 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 			}
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		}},
-		{Id: "copy-link", Name: "i18n:plugin_notes_action_copy_link", Icon: common.CopyIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "copy-link", Name: "i18n:plugin_notes_action_copy_link", Icon: icons.Get(icons.ActionCopy), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if err := clipboard.WriteText(noteDeepLink(record.ID)); err != nil {
 				p.notifyError(ctx, err)
 			}
 		}},
-		{Id: "export-markdown", Name: "i18n:plugin_notes_action_export_markdown", Icon: common.InstallIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-markdown", Name: "i18n:plugin_notes_action_export_markdown", Icon: icons.Get(icons.ActionInstall), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "md"})
 		}},
-		{Id: "export-text", Name: "i18n:plugin_notes_action_export_text", Icon: common.TextIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-text", Name: "i18n:plugin_notes_action_export_text", Icon: icons.Get(icons.ActionText), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "txt"})
 		}},
-		{Id: "export-html", Name: "i18n:plugin_notes_action_export_html", Icon: common.InstallIcon, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "export-html", Name: "i18n:plugin_notes_action_export_html", Icon: icons.Get(icons.ActionInstall), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID, ExportFormat: "html"})
 		}},
-		{Id: "delete", Name: "i18n:plugin_notes_action_delete", Icon: common.TrashIcon, PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "delete", Name: "i18n:plugin_notes_action_delete", Icon: icons.Get(icons.ActionDelete), PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.Delete(record.ID); err != nil {
 				p.notifyError(ctx, err)
 			}
@@ -268,7 +268,7 @@ func (p *Plugin) handlePluginCommand(ctx context.Context, request plugin.PluginC
 func CreateNoteAction(api plugin.API, title string, text string, path string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name: "i18n:plugin_notes_action_save",
-		Icon: common.PluginNotesIcon,
+		Icon: icons.Get(icons.ActionAdd),
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
 				PluginId: common.NotesPluginID,

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -29,7 +30,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var sysIcon = common.PluginSysIcon
+var sysIcon = icons.Get(icons.PluginSys)
 
 var setVolumeAliases = []string{"set volume", "volume", "音量", "设置音量"}
 
@@ -144,7 +145,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "lock_computer",
 			Title:       "i18n:plugin_sys_lock_computer",
-			Icon:        common.LockIcon,
+			Icon:        icons.Get(icons.ActionLock),
 			Aliases:     []string{"lock screen", "lock computer", "锁屏", "锁定"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -154,7 +155,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "empty_trash",
 			Title:       "i18n:plugin_sys_empty_trash",
-			Icon:        common.TrashIcon,
+			Icon:        icons.Get(icons.ActionDelete),
 			Aliases:     []string{"empty recycle bin", "trash", "recycle bin", "清空回收站", "清空废纸篓"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -164,7 +165,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:      "quit_wox",
 			Title:   "i18n:plugin_sys_quit_wox",
-			Icon:    common.ExitIcon,
+			Icon:    icons.Get(icons.ActionExit),
 			Aliases: []string{"exit wox", "quit", "退出", "退出 wox"},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				ui.GetUIManager().ExitApp(ctx)
@@ -173,7 +174,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:                     "shutdown_computer",
 			Title:                  "i18n:plugin_sys_shutdown_computer",
-			Icon:                   common.ExitIcon,
+			Icon:                   icons.Get(icons.ActionExit),
 			Aliases:                []string{"shutdown", "shut down", "power off", "关机", "关闭电脑"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -183,7 +184,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:                     "restart_computer",
 			Title:                  "i18n:plugin_sys_restart_computer",
-			Icon:                   common.UpdateIcon,
+			Icon:                   icons.Get(icons.ActionUpdate),
 			Aliases:                []string{"restart", "reboot", "重启", "重启电脑"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -194,7 +195,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			ID:                     "open_wox_settings",
 			Title:                  "i18n:plugin_sys_open_wox_settings",
 			PreventHideAfterAction: true,
-			Icon:                   common.WoxIcon,
+			Icon:                   icons.Get(icons.BrandWox),
 			Aliases:                []string{"settings", "wox settings", "打开设置", "wox 设置"},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.DefaultSettingWindowContext)
@@ -204,10 +205,10 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			ID:         "copy_wox_version",
 			Title:      "i18n:plugin_sys_copy_wox_version",
 			SubTitle:   updater.CURRENT_VERSION,
-			Icon:       common.CopyIcon,
+			Icon:       icons.Get(icons.ActionCopy),
 			Aliases:    []string{"version", "copy version", "复制版本", "wox version"},
 			ActionName: "i18n:plugin_sys_copy",
-			ActionIcon: common.CopyIcon,
+			ActionIcon: icons.Get(icons.ActionCopy),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := clipboard.WriteText(updater.CURRENT_VERSION); err != nil {
 					r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy Wox version: %s", err.Error()))
@@ -217,7 +218,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "open_system_settings",
 			Title:       "i18n:plugin_sys_open_system_settings",
-			Icon:        common.SettingIcon,
+			Icon:        icons.Get(icons.ActionSettings),
 			Aliases:     []string{"system settings", "settings app", "control panel", "打开系统设置", "系统设置"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isOpenSystemSettingsCommandAvailable,
@@ -230,7 +231,8 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			QueryHint:        &common.QueryHint{Elements: []common.QueryElement{{Id: "volume", Kind: common.QueryElementArgument, Placeholder: "i18n:plugin_sys_set_volume_placeholder", Required: true}}},
 			Title:            "i18n:plugin_sys_set_volume",
 			SubTitle:         "i18n:plugin_sys_set_volume_subtitle",
-			Icon:             sysVolumeIcon,
+			Icon:             icons.Get(icons.SysVolume),
+			ActionIcon:       icons.Get(icons.ActionVolume),
 			Aliases:          setVolumeAliases,
 			SupportedOS:      []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable:      isVolumeCommandAvailable,
@@ -255,7 +257,8 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "volume-up",
 			Title:       "i18n:plugin_sys_volume_up",
-			Icon:        sysVolumeUpIcon,
+			Icon:        icons.Get(icons.SysVolumeUp),
+			ActionIcon:  icons.Get(icons.ActionVolumeUp),
 			Aliases:     []string{"turn volume up", "volume up", "increase volume", "音量加", "调高音量"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isVolumeCommandAvailable,
@@ -266,7 +269,8 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "volume-down",
 			Title:       "i18n:plugin_sys_volume_down",
-			Icon:        sysVolumeDownIcon,
+			Icon:        icons.Get(icons.SysVolumeDown),
+			ActionIcon:  icons.Get(icons.ActionVolumeDown),
 			Aliases:     []string{"turn volume down", "volume down", "decrease volume", "音量减", "调低音量"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isVolumeCommandAvailable,
@@ -277,7 +281,8 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "toggle-mute",
 			Title:       "i18n:plugin_sys_toggle_mute",
-			Icon:        sysMuteIcon,
+			Icon:        icons.Get(icons.SysMute),
+			ActionIcon:  icons.Get(icons.ActionMute),
 			Aliases:     []string{"mute", "toggle mute", "unmute", "静音", "切换静音"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isVolumeCommandAvailable,
@@ -288,7 +293,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:                     "sleep",
 			Title:                  "i18n:plugin_sys_sleep",
-			Icon:                   sysSleepIcon,
+			Icon:                   icons.Get(icons.SysSleep),
 			Aliases:                []string{"sleep computer", "suspend", "睡眠", "电脑睡眠"},
 			SupportedOS:            []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable:            isSleepCommandAvailable,
@@ -300,7 +305,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "sleep-displays",
 			Title:       "i18n:plugin_sys_sleep_displays",
-			Icon:        sysDisplaySleepIcon,
+			Icon:        icons.Get(icons.SysDisplaySleep),
 			Aliases:     []string{"sleep displays", "turn off display", "monitor off", "关闭显示器", "显示器睡眠"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isSleepDisplaysCommandAvailable,
@@ -311,7 +316,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:                     "log-out",
 			Title:                  "i18n:plugin_sys_log_out",
-			Icon:                   sysLogoutIcon,
+			Icon:                   icons.Get(icons.SysLogout),
 			Aliases:                []string{"logout", "sign out", "log out", "注销", "登出"},
 			SupportedOS:            []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable:            isLogoutCommandAvailable,
@@ -323,7 +328,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "eject-all-disks",
 			Title:       "i18n:plugin_sys_eject_all_disks",
-			Icon:        sysEjectIcon,
+			Icon:        icons.Get(icons.SysEject),
 			Aliases:     []string{"eject disks", "eject all", "弹出磁盘", "弹出所有磁盘"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS},
 			IsAvailable: isEjectAllDisksCommandAvailable,
@@ -334,7 +339,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "show-desktop",
 			Title:       "i18n:plugin_sys_show_desktop",
-			Icon:        sysDesktopIcon,
+			Icon:        icons.Get(icons.SysDesktop),
 			Aliases:     []string{"desktop", "show desktop", "显示桌面"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isShowDesktopCommandAvailable,
@@ -345,7 +350,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "show-task-view",
 			Title:       "i18n:plugin_sys_show_task_view",
-			Icon:        sysDesktopIcon,
+			Icon:        icons.Get(icons.SysDesktop),
 			Aliases:     []string{"task view", "window switcher", "virtual desktop", "virtual desktops", "desktops", "任务视图", "虚拟桌面", "窗口选择", "窗口切换"},
 			SupportedOS: []string{util.PlatformWindows},
 			IsAvailable: isShowTaskViewCommandAvailable,
@@ -356,7 +361,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "show-screen-saver",
 			Title:       "i18n:plugin_sys_show_screen_saver",
-			Icon:        sysScreenSaverIcon,
+			Icon:        icons.Get(icons.SysScreenSaver),
 			Aliases:     []string{"screen saver", "screensaver", "显示屏保", "屏幕保护"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isShowScreenSaverCommandAvailable,
@@ -367,7 +372,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "quit-all-applications",
 			Title:       "i18n:plugin_sys_quit_all_applications",
-			Icon:        sysQuitAppsIcon,
+			Icon:        icons.Get(icons.SysQuitApps),
 			Aliases:     []string{"quit all apps", "close all apps", "退出所有应用", "关闭所有应用"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS},
 			IsAvailable: isQuitAllApplicationsCommandAvailable,
@@ -378,7 +383,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "hide-all-apps-except-frontmost",
 			Title:       "i18n:plugin_sys_hide_all_apps_except_frontmost",
-			Icon:        sysHideAppsIcon,
+			Icon:        icons.Get(icons.SysHideApps),
 			Aliases:     []string{"hide all apps", "hide others", "隐藏其他应用", "只显示当前应用"},
 			SupportedOS: []string{util.PlatformMacOS},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -388,7 +393,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "unhide-all-hidden-apps",
 			Title:       "i18n:plugin_sys_unhide_all_hidden_apps",
-			Icon:        sysUnhideAppsIcon,
+			Icon:        icons.Get(icons.SysUnhideApps),
 			Aliases:     []string{"unhide all apps", "show hidden apps", "取消隐藏应用", "显示隐藏应用"},
 			SupportedOS: []string{util.PlatformMacOS},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -398,7 +403,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "toggle-system-appearance",
 			Title:       "i18n:plugin_sys_toggle_system_appearance",
-			Icon:        sysAppearanceIcon,
+			Icon:        icons.Get(icons.SysAppearance),
 			Aliases:     []string{"toggle appearance", "dark mode", "light mode", "切换外观", "深色模式", "浅色模式"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isToggleSystemAppearanceCommandAvailable,
@@ -409,7 +414,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 		{
 			ID:          "toggle-hidden-files",
 			Title:       "i18n:plugin_sys_toggle_hidden_files",
-			Icon:        sysHiddenFilesIcon,
+			Icon:        icons.Get(icons.SysHiddenFiles),
 			Aliases:     []string{"hidden files", "show hidden files", "toggle hidden files", "隐藏文件", "显示隐藏文件"},
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			IsAvailable: isToggleHiddenFilesCommandAvailable,
@@ -418,11 +423,12 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			},
 		},
 		{
-			ID:       "clear_all_cache",
-			Title:    "i18n:plugin_sys_clear_all_cache",
-			SubTitle: "i18n:plugin_sys_clear_all_cache_subtitle",
-			Icon:     common.NewWoxImageEmoji("🗑️"),
-			Aliases:  []string{"clear cache", "cache", "清理缓存", "清除缓存"},
+			ID:         "clear_all_cache",
+			Title:      "i18n:plugin_sys_clear_all_cache",
+			SubTitle:   "i18n:plugin_sys_clear_all_cache_subtitle",
+			Icon:       common.NewWoxImageEmoji("🗑️"),
+			ActionIcon: icons.Get(icons.ActionDelete),
+			Aliases:    []string{"clear cache", "cache", "清理缓存", "清除缓存"},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				location := util.GetLocation()
 				cacheDirectory := location.GetCacheDirectory()
@@ -454,7 +460,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			ID:       "open_onboarding",
 			Title:    "Open onboarding",
 			SubTitle: "Open the first-run onboarding window",
-			Icon:     sysOnboardingIcon,
+			Icon:     icons.Get(icons.SysOnboarding),
 			Aliases:  []string{"onboarding", "open onboarding", "first run", "setup guide", "引导", "打开引导"},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				plugin.GetPluginManager().GetUI().OpenOnboardingWindow(ctx)
@@ -464,7 +470,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			ID:                     "toggle_recording_mode",
 			Title:                  "Toggle recording mode",
 			SubTitle:               "Use a normal launcher window level so screen recording tools can capture Wox",
-			Icon:                   common.WoxIcon,
+			Icon:                   icons.Get(icons.BrandWox),
 			Aliases:                []string{"recording mode", "screen recording", "capture wox"},
 			SupportedOS:            []string{util.PlatformMacOS},
 			PreventHideAfterAction: true,
@@ -489,7 +495,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			ID:                     "toggle_repaint_debug",
 			Title:                  "Toggle repaint highlights",
 			SubTitle:               "Show rainbow outlines around repainted regions",
-			Icon:                   common.CPUProfileIcon,
+			Icon:                   icons.Get(icons.ActionCPUProfile),
 			Aliases:                []string{"highlight repaints", "repaint debug", "rainbow repaint", "partial refresh", "damage debug", "局部刷新", "重绘调试"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -507,9 +513,9 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 		},
 		{
 			Title: "test notification long",
-			Icon:  common.CPUProfileIcon,
+			Icon:  icons.Get(icons.ActionCPUProfile),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				img, _ := common.WoxIcon.ToImage()
+				img, _ := icons.Get(icons.BrandWox).ToImage()
 				notifier.Notify(img, "This is a very long notification message to test the notification system in Wox.\n"+
 					"If you see this message, the notification system is working properly.\n"+
 					"You can customize the duration, appearance, and behavior of notifications as needed.\n"+
@@ -519,23 +525,24 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 
 		{
 			Title: "test notification short",
-			Icon:  common.CPUProfileIcon,
+			Icon:  icons.Get(icons.ActionCPUProfile),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				img, _ := common.WoxIcon.ToImage()
+				img, _ := icons.Get(icons.BrandWox).ToImage()
 				notifier.Notify(img, `This is a very short notification.`+time.Now().String())
 			},
 		},
 
 		{
 			Title: "test attention",
-			Icon:  sysAttentionIcon,
+			Icon:  icons.Get(icons.SysAttention),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				now := time.Now().Format(time.RFC3339)
+				attentionIcon := icons.Get(icons.SysAttention)
 				r.api.PushAttention(ctx, plugin.PushAttentionRequest{
 					Key:         "sys_test_attention",
 					Title:       "Test attention " + now,
 					Description: "This is a persistent attention item pushed from the system test command.",
-					Icon:        &sysAttentionIcon,
+					Icon:        &attentionIcon,
 					Action: &plugin.AttentionAction{
 						Type:  plugin.AttentionActionTypeChangeQuery,
 						Query: "attention ",
@@ -548,7 +555,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			ID:                     "test_toolbar_progress",
 			Title:                  "test toolbar progress",
 			SubTitle:               "Preview indeterminate and determinate toolbar progress",
-			Icon:                   common.CPUProfileIcon,
+			Icon:                   icons.Get(icons.ActionCPUProfile),
 			Aliases:                []string{"toolbar progress", "progress animation", "loading animation"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -584,7 +591,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 		{
 			ID:    "cpu_profiling",
 			Title: "i18n:plugin_sys_performance_cpu_profiling",
-			Icon:  common.CPUProfileIcon,
+			Icon:  icons.Get(icons.ActionCPUProfile),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				cpuProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "cpu.prof")
 				f, err := os.Create(cpuProfPath)
@@ -613,7 +620,8 @@ func (r *SysPlugin) fixedVolumeCommand(percent int) SysCommand {
 	return SysCommand{
 		ID:          fmt.Sprintf("set-volume-%d", percent),
 		Title:       fmt.Sprintf("i18n:plugin_sys_set_volume_%d", percent),
-		Icon:        sysVolumeIcon,
+		Icon:        icons.Get(icons.SysVolume),
+		ActionIcon:  icons.Get(icons.ActionVolume),
 		Aliases:     []string{fmt.Sprintf("set volume %d", percent), fmt.Sprintf("volume %d", percent), fmt.Sprintf("音量 %d", percent), fmt.Sprintf("设置音量 %d", percent)},
 		SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 		IsAvailable: isVolumeCommandAvailable,
@@ -681,7 +689,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		matchScore := matchResult.Score
 		isTriggerKeywordMatch := slices.Contains(instance.GetTriggerKeywords(), query.Search)
 		if isNameMatch || isTriggerKeywordMatch {
-			pluginIcon := common.SettingIcon
+			pluginIcon := icons.Get(icons.ActionSettings)
 			iconImg, parseErr := common.ParseWoxImage(instance.Metadata.Icon)
 			if parseErr == nil {
 				pluginIcon = common.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
@@ -694,7 +702,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_sys_execute",
-						Icon: common.ExecuteRunIcon,
+						Icon: icons.Get(icons.ActionExecute),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
 								Path:  "/plugin/setting",
@@ -891,7 +899,7 @@ func (r *SysPlugin) buildCommandAction(command SysCommand, contextData common.Co
 		if _, valid := parseVolumeContext(contextData); !valid {
 			return plugin.QueryResultAction{
 				Name:                   command.Title,
-				Icon:                   command.Icon,
+				Icon:                   icons.Get(icons.ActionVolume),
 				PreventHideAfterAction: true,
 				ContextData:            contextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -909,7 +917,7 @@ func (r *SysPlugin) buildCommandAction(command SysCommand, contextData common.Co
 	}
 	actionIcon := command.ActionIcon
 	if actionIcon.IsEmpty() {
-		actionIcon = common.ExecuteRunIcon
+		actionIcon = icons.Get(icons.ActionExecute)
 	}
 
 	return plugin.QueryResultAction{

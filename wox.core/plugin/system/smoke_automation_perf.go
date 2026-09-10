@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 )
 
@@ -32,7 +33,7 @@ func queryListFixture() plugin.QueryResponse {
 			Id:       fmt.Sprintf("perf-list-%04d", index),
 			Title:    fmt.Sprintf("Perf list result %04d", index),
 			SubTitle: "Deterministic list fixture",
-			Icon:     common.PluginAppIcon,
+			Icon:     icons.Get(icons.PluginApp),
 		})
 	}
 	return plugin.NewQueryResponse(results)
@@ -46,7 +47,7 @@ func queryGridFixture() plugin.QueryResponse {
 			Id:         fmt.Sprintf("perf-grid-%04d", index),
 			Title:      fmt.Sprintf("Grid %04d", index),
 			SubTitle:   group,
-			Icon:       common.PluginAppIcon,
+			Icon:       icons.Get(icons.PluginApp),
 			Group:      group,
 			GroupScore: int64(1000 - index/50),
 		})
@@ -81,7 +82,7 @@ func (p *smokeAutomationPlugin) queryChatFixture() plugin.QueryResponse {
 	ratio := 0.0
 	return plugin.QueryResponse{
 		Results: []plugin.QueryResult{{
-			Id: resultID, Title: "Perf chat stream 0", Icon: common.PluginAppIcon,
+			Id: resultID, Title: "Perf chat stream 0", Icon: icons.Get(icons.PluginApp),
 			Preview: plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: preview, ScrollPosition: plugin.WoxPreviewScrollPositionBottom},
 		}},
 		Layout: plugin.QueryLayout{ChatMode: true, ResultPreviewWidthRatio: &ratio},
@@ -89,7 +90,7 @@ func (p *smokeAutomationPlugin) queryChatFixture() plugin.QueryResponse {
 }
 
 func queryWarmCacheFixture() plugin.QueryResponse {
-	icons := []common.WoxImage{common.PluginAppIcon, common.PluginCalculatorIcon}
+	icons := []common.WoxImage{icons.Get(icons.PluginApp), icons.Get(icons.PluginCalculator)}
 	titles := []string{"Warm cache alpha", "Warm cache beta"}
 	results := make([]plugin.QueryResult, 0, smokeAutomationWarmCacheCount)
 	for index := range smokeAutomationWarmCacheCount {

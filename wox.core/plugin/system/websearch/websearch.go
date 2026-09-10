@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting/definition"
@@ -26,7 +27,7 @@ const (
 
 var webSearchesSettingKey = "webSearches"
 
-var webSearchIcon = common.PluginWebsearchIcon
+var webSearchIcon = icons.Get(icons.PluginWebsearch)
 
 var defaultWebSearchAddedKey = "defaultWebSearchAdded"
 
@@ -257,7 +258,7 @@ func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSear
 	}
 	// if search url is google, return google icon
 	if strings.Contains(search.Urls[0], "google.com") {
-		return common.GoogleIcon
+		return icons.Get(icons.BrandGoogle)
 	}
 
 	// Preserve URL order because it defines parameter order.
@@ -286,7 +287,7 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 					Browser:    webSearchBrowserSystem,
 					IsFallback: true,
 					Enabled:    true,
-					Icon:       common.GoogleIcon,
+					Icon:       icons.Get(icons.BrandGoogle),
 				},
 			}
 			if marshal, err := json.Marshal(webSearches); err == nil {
@@ -324,7 +325,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		if !complete {
 			results = append(results, plugin.QueryResult{
 				Title: "i18n:plugin_websearch_fill_parameters", SubTitle: strings.Join(names, " · "), Icon: search.Icon,
-				Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_fill_parameters", PreventHideAfterAction: true,
+				Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_fill_parameters", Icon: icons.Get(icons.ActionEdit), PreventHideAfterAction: true,
 					Action: func(ctx context.Context, _ plugin.ActionContext) {
 						hint := search.queryHint(names)
 						for i := range hint.Elements {
@@ -394,7 +395,7 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 	}
 	return plugin.QueryResult{
 		Title: renderWebSearchTemplate(search.Title, values, false), Score: 100, Icon: search.Icon,
-		Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_search", Icon: common.SearchIcon,
+		Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_search", Icon: icons.Get(icons.ActionSearch),
 			Action: func(ctx context.Context, _ plugin.ActionContext) {
 				util.Go(ctx, "open web search urls", func() { r.openSearchUrls(ctx, search, values) })
 			},
@@ -431,7 +432,7 @@ func (r *WebSearchPlugin) resolveWebSearchBrowser(itemBrowser string, defaultBro
 
 func (r *WebSearchPlugin) getWebSearchDefaultBrowserOptions() []definition.PluginSettingValueSelectOption {
 	options := []definition.PluginSettingValueSelectOption{
-		{Label: "i18n:plugin_websearch_browser_system_default", Value: webSearchBrowserSystem, Icon: common.PluginBrowserIcon},
+		{Label: "i18n:plugin_websearch_browser_system_default", Value: webSearchBrowserSystem, Icon: icons.Get(icons.PluginBrowser)},
 	}
 
 	for _, localBrowser := range browser.GetInstalledBrowsers() {
@@ -447,7 +448,7 @@ func (r *WebSearchPlugin) getWebSearchDefaultBrowserOptions() []definition.Plugi
 
 func (r *WebSearchPlugin) getWebSearchItemBrowserOptions() []definition.PluginSettingValueSelectOption {
 	options := []definition.PluginSettingValueSelectOption{
-		{Label: "i18n:plugin_websearch_browser_use_default", Value: webSearchBrowserUseDefault, Icon: common.PluginBrowserIcon},
+		{Label: "i18n:plugin_websearch_browser_use_default", Value: webSearchBrowserUseDefault, Icon: icons.Get(icons.PluginBrowser)},
 	}
 
 	for _, localBrowser := range browser.GetInstalledBrowsers() {

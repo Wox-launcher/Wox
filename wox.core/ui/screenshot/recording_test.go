@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"wox/common"
+	"wox/common/icons"
 	"wox/util/keyboard"
 )
 
@@ -486,7 +486,7 @@ func TestRecordingSaveDialogCanHidePreviewSurfacesWithoutWindows(t *testing.T) {
 }
 
 func TestRecordingRecordIconUsesRingAndDot(t *testing.T) {
-	icon := common.UIIcon("control.record")
+	icon := icons.Get("control.record")
 	if !strings.Contains(icon.ImageData, `r="8.25"`) || !strings.Contains(icon.ImageData, `r="4.75"`) {
 		t.Fatalf("record icon should be a solid circle inside a ring")
 	}

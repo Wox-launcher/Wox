@@ -4,9 +4,22 @@ import (
 	"runtime"
 	"testing"
 
+	"wox/common/icons"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 )
+
+func TestActionPanelTintsThemeAdaptiveSVGOnly(t *testing.T) {
+	if !svgUsesThemeIconColor(fromCoreImage(icons.Get(icons.ActionCopy))) {
+		t.Fatal("action.copy must follow the row text tint")
+	}
+	if svgUsesThemeIconColor(fromCoreImage(icons.Get(icons.PluginApp))) {
+		t.Fatal("plugin.app is a brand SVG and must not be flattened by a source-in tint")
+	}
+	if svgUsesThemeIconColor(settingControlIconSource("refresh")) {
+		t.Fatal("control masks do not use the theme variable; local actions tint them separately")
+	}
+}
 
 func TestWebViewLocalActionPanelEntries(t *testing.T) {
 	results := []queryResult{{ID: "webview", Preview: queryPreview{PreviewType: "webview"}}}
@@ -113,7 +126,7 @@ func TestUnifiedActionPanelEntriesOrdersPluginThenSystem(t *testing.T) {
 		Actions: []resultAction{
 			{ID: "__system_pin_in_query__", Name: "Pin", IsSystemAction: true},
 			{ID: "copy", Name: "Copy"},
-			{ID: "__system_reset_ranking__", Name: "Reset", IsSystemAction: true},
+			{ID: "__system_reset_ranking__", Name: "Reset", Tail: "+55", IsSystemAction: true},
 			{ID: "keyword", Name: "Add keyword"},
 		},
 	}}
@@ -139,6 +152,9 @@ func TestUnifiedActionPanelEntriesOrdersPluginThenSystem(t *testing.T) {
 	}
 	if entries[0].ActionIndex != 1 || entries[2].ActionIndex != 0 {
 		t.Fatalf("action indices = %+v, want original result.Actions positions", entries)
+	}
+	if entries[3].Tail != "+55" {
+		t.Fatalf("reset ranking tail = %q, want +55", entries[3].Tail)
 	}
 }
 

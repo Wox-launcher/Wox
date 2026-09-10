@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	shellplugin "wox/plugin/system/shell"
@@ -72,7 +73,7 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_folder_plugin_description",
-		Icon:          common.FolderIcon.String(),
+		Icon:          icons.Get(icons.PluginFolder).String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -156,7 +157,7 @@ func (p *FolderPlugin) handlePluginCommand(ctx context.Context, request plugin.P
 func BrowsePathAction(api plugin.API, path string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_folder_browse_here",
-		Icon:                   common.FolderIcon,
+		Icon:                   icons.Get(icons.ActionOpen),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
@@ -355,16 +356,11 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, favoriteInd
 
 // buildPathActions keeps Enter opening the path while primary+Enter enters folders.
 func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *folderFavoriteMatch) []plugin.QueryResultAction {
-	openIcon := common.ExecuteRunIcon
-	if isDir {
-		openIcon = common.FolderIcon
-	}
-
 	actions := []plugin.QueryResultAction{
 		{
 			Id:        folderOpenActionID,
 			Name:      "i18n:plugin_folder_open",
-			Icon:      openIcon,
+			Icon:      icons.Get(icons.ActionOpen),
 			IsDefault: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				_ = shell.Open(path)
@@ -376,7 +372,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     folderEnterActionID,
 			Name:                   "i18n:plugin_folder_enter",
-			Icon:                   common.FolderIcon,
+			Icon:                   icons.Get(icons.ActionOpen),
 			Hotkey:                 util.PrimaryHotkey("enter"),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -396,8 +392,9 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 		}
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
+			Id:   folderOpenContainingFolderActionID,
 			Name: "i18n:plugin_folder_open_containing_folder",
-			Icon: common.OpenContainingFolderIcon,
+			Icon: icons.Get(icons.ActionOpenContainingFolder),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := shell.OpenFileInFolder(path); err != nil && p.api != nil {
 					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open containing folder: path=%s err=%s", path, err.Error()))
@@ -417,7 +414,7 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 		{
 			Id:        folderOpenActionID,
 			Name:      "i18n:plugin_folder_open",
-			Icon:      common.FolderIcon,
+			Icon:      icons.Get(icons.ActionOpen),
 			IsDefault: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				_ = shell.Open(path)
@@ -426,7 +423,7 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 		{
 			Id:                     folderEnterActionID,
 			Name:                   "i18n:plugin_folder_enter",
-			Icon:                   common.FolderIcon,
+			Icon:                   icons.Get(icons.ActionOpen),
 			Hotkey:                 util.PrimaryHotkey("enter"),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -465,7 +462,7 @@ func (p *FolderPlugin) buildToggleHiddenFilesAction() plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Id:                     folderToggleHiddenFilesActionID,
 		Name:                   actionName,
-		Icon:                   common.FolderIcon,
+		Icon:                   icons.Get(icons.ActionHide),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			p.showHiddenFiles.Store(!showHiddenFiles)
@@ -481,7 +478,7 @@ func (p *FolderPlugin) buildAddFavoriteAction(name string, path string) plugin.Q
 	return plugin.QueryResultAction{
 		Id:                     "add_folder_favorite",
 		Name:                   "i18n:plugin_folder_add_as_favorite",
-		Icon:                   common.PluginBookmarkIcon,
+		Icon:                   icons.Get(icons.ActionStar),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		ContextData:            p.buildFavoriteActionContextData(name, path, -1),
@@ -519,7 +516,7 @@ func (p *FolderPlugin) buildEditFavoriteAction(name string, path string, favorit
 	return plugin.QueryResultAction{
 		Id:                     "edit_folder_favorite",
 		Name:                   "i18n:plugin_folder_edit_favorite",
-		Icon:                   common.EditIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		ContextData:            p.buildFavoriteActionContextData(name, path, favoriteIndex),
@@ -551,7 +548,7 @@ func (p *FolderPlugin) buildDeleteFavoriteAction(name string, path string, favor
 	return plugin.QueryResultAction{
 		Id:                     "delete_folder_favorite",
 		Name:                   "i18n:plugin_folder_delete_favorite",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		ContextData:            p.buildFavoriteActionContextData(name, path, favoriteIndex),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -819,7 +816,7 @@ func getFolderPluginPathIcon(path string, isDir bool) common.WoxImage {
 	if util.IsMacOS() && strings.EqualFold(filepath.Ext(strings.TrimRight(path, `/\`)), ".app") {
 		return common.NewWoxImageFileIcon(path)
 	}
-	return common.FolderIcon
+	return icons.Get(icons.PluginFolder)
 }
 
 // isHiddenFolderEntry follows the same dotfile convention as File Search hidden filtering.

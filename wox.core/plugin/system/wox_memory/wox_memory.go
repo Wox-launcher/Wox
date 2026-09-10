@@ -11,6 +11,7 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -49,7 +50,7 @@ func (p *WoxMemoryPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion:   "2.0.0",
 		Runtime:         "Go",
 		Description:     "i18n:plugin_wox_memory_plugin_description",
-		Icon:            common.CPUProfileIcon.String(),
+		Icon:            icons.Get(icons.ActionCPUProfile).String(),
 		TriggerKeywords: []string{"woxmemory"},
 		Commands: []plugin.MetadataCommand{
 			{Command: goCommand, Description: "i18n:plugin_wox_memory_go_command"},
@@ -59,7 +60,7 @@ func (p *WoxMemoryPlugin) GetMetadata() plugin.Metadata {
 		},
 		SupportedOS: []string{"Windows", "Macos", "Linux"},
 		Glances: []plugin.MetadataGlance{
-			{Id: glanceID, Name: "i18n:plugin_wox_memory_glance_name", Description: "i18n:plugin_wox_memory_glance_description", Icon: common.CPUProfileIcon.String(), RefreshIntervalMs: glanceRefreshIntervalMs},
+			{Id: glanceID, Name: "i18n:plugin_wox_memory_glance_name", Description: "i18n:plugin_wox_memory_glance_description", Icon: icons.Get(icons.ActionCPUProfile).String(), RefreshIntervalMs: glanceRefreshIntervalMs},
 		},
 	}
 }
@@ -240,7 +241,7 @@ func (p *WoxMemoryPlugin) Glance(ctx context.Context, request plugin.GlanceReque
 		return plugin.GlanceResponse{Items: []plugin.GlanceItem{{
 			Id:      glanceID,
 			Text:    text,
-			Icon:    common.CPUProfileIcon,
+			Icon:    icons.Get(icons.ActionCPUProfile),
 			Tooltip: fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_glance_tooltip"), text, os.Getpid()),
 		}}}
 	}
@@ -254,9 +255,10 @@ func (p *WoxMemoryPlugin) heapProfileResult(ctx context.Context) plugin.QueryRes
 		Id:       "memory.profile",
 		Title:    translateMemory(ctx, "plugin_wox_memory_profile_action"),
 		SubTitle: fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_profile_path"), profilePath),
-		Icon:     common.CPUProfileIcon,
+		Icon:     icons.Get(icons.ActionCPUProfile),
 		Actions: []plugin.QueryResultAction{{
 			Name: translateMemory(ctx, "plugin_wox_memory_profile_action"),
+			Icon: icons.Get(icons.ActionCPUProfile),
 			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
 				writeHeapProfile(actionCtx, profilePath)
 			},
@@ -388,7 +390,7 @@ func (p *WoxMemoryPlugin) goBreakdownAction(query plugin.Query) plugin.QueryResu
 	return plugin.QueryResultAction{
 		Id:                     "memory.go.breakdown",
 		Name:                   "i18n:plugin_wox_memory_go_action",
-		Icon:                   common.CPUProfileIcon,
+		Icon:                   icons.Get(icons.ActionCPUProfile),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
 		Action: func(actionCtx context.Context, _ plugin.ActionContext) {
@@ -493,7 +495,7 @@ func (p *WoxMemoryPlugin) nativeBreakdownAction(query plugin.Query) plugin.Query
 	return plugin.QueryResultAction{
 		Id:                     "memory.native.breakdown",
 		Name:                   "i18n:plugin_wox_memory_native_action",
-		Icon:                   common.CPUProfileIcon,
+		Icon:                   icons.Get(icons.ActionCPUProfile),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
 		Action: func(actionCtx context.Context, _ plugin.ActionContext) {
@@ -657,7 +659,7 @@ func (p *WoxMemoryPlugin) separateProcessAction(query plugin.Query) plugin.Query
 	return plugin.QueryResultAction{
 		Id:                     "memory.process.detail",
 		Name:                   "i18n:plugin_wox_memory_process_action",
-		Icon:                   common.CPUProfileIcon,
+		Icon:                   icons.Get(icons.ActionCPUProfile),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
 		Action: func(actionCtx context.Context, _ plugin.ActionContext) {
@@ -906,7 +908,7 @@ func owningProcessIndex(processID int, parents, ownerIndexByProcessID map[int]in
 }
 
 func memoryDiagnosticResult(id, title, subtitle string, bytes uint64, group string, groupScore int64) plugin.QueryResult {
-	return plugin.QueryResult{Id: id, Title: title, SubTitle: subtitle, Icon: common.CPUProfileIcon, Score: int64(bytes), ScoreKey: id, Group: group, GroupScore: groupScore}
+	return plugin.QueryResult{Id: id, Title: title, SubTitle: subtitle, Icon: icons.Get(icons.ActionCPUProfile), Score: int64(bytes), ScoreKey: id, Group: group, GroupScore: groupScore}
 }
 
 func translateMemory(ctx context.Context, key string) string {

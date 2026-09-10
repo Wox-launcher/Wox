@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"wox/common"
+	"wox/common/icons"
 	"wox/database"
 	"wox/i18n"
 	"wox/setting"
@@ -278,7 +279,7 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 		action = func(ctx context.Context, actionContext ActionContext) {
 			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
 				Text:           i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_start"),
-				Icon:           common.PluginDoctorIcon.String(),
+				Icon:           icons.Get(icons.PluginDoctor).String(),
 				DisplaySeconds: 6,
 			})
 
@@ -287,23 +288,23 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 				util.GetLogger().Error(ctx, fmt.Sprintf("database repair failed: %v", err))
 				if result.RecoveredPath != "" && !result.Swapped {
 					msg := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_manual"), result.RecoveredPath)
-					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
 					return
 				}
 				msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_failed")
-				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
 				GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data"})
 				return
 			}
 
 			if result.Swapped {
 				msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_success")
-				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
 				return
 			}
 
 			msg := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_manual"), result.RecoveredPath)
-			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
 		}
 	}
 

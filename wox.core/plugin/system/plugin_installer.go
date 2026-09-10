@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/selection"
@@ -38,7 +39,7 @@ func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_plugin_installer_plugin_description",
-		Icon:          common.PluginInstallerIcon.String(),
+		Icon:          icons.Get(icons.PluginInstaller).String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -146,7 +147,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   actionButtonName,
-				Icon:                   pluginIcon,
+				Icon:                   icons.Get(icons.ActionInstall),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "install plugin from local", func() {
@@ -165,7 +166,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 						if updatable := i.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
 							// Use the shared installed SVG instead of a platform emoji so
 							// local plugin install results match the WPM installed status.
-							newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.PluginInstalledIcon}}
+							newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
 							updatable.Tails = &newTails
 
 							// create "Start Using" action if plugin has non-wildcard trigger keyword
@@ -179,7 +180,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 											// add "Start Using" action
 											newActions = append(newActions, plugin.QueryResultAction{
 												Name:                   "i18n:plugin_wpm_start_using",
-												Icon:                   common.NewWoxImageEmoji("▶️"),
+												Icon:                   icons.Get(icons.ActionOpen),
 												PreventHideAfterAction: true,
 												IsDefault:              true,
 												Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -216,14 +217,14 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 }
 
 func resolvePluginIcon(filePath string, metadata plugin.Metadata) common.WoxImage {
-	icon := common.ParseWoxImageOrDefault(metadata.Icon, common.WoxIcon)
+	icon := common.ParseWoxImageOrDefault(metadata.Icon, icons.Get(icons.BrandWox))
 	if icon.ImageType != common.WoxImageTypeRelativePath {
 		return icon
 	}
 
 	iconBytes, err := readFileFromZip(filePath, icon.ImageData)
 	if err != nil {
-		return common.WoxIcon
+		return icons.Get(icons.BrandWox)
 	}
 
 	return newArchiveIconImage(icon.ImageData, iconBytes)

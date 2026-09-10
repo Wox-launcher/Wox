@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"time"
-	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -14,7 +14,7 @@ import (
 	"wox/util/shell"
 )
 
-var backupIcon = common.PluginBackupIcon
+var backupIcon = icons.Get(icons.PluginBackup)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &BackupPlugin{})
@@ -70,6 +70,7 @@ func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_backup_action",
+					Icon:                   icons.Get(icons.ActionInstall),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						backupErr := setting.GetSettingManager().Backup(ctx, setting.BackupTypeManual)
@@ -111,6 +112,7 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_backup_restore",
+					Icon:                   icons.Get(icons.ActionUpdate),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						restoreErr := setting.GetSettingManager().Restore(ctx, backup.Id)

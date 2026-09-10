@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -65,7 +66,7 @@ type windowManagerCommand struct {
 	Op       windowOperation
 }
 
-var windowManagerIcon = common.PluginWindowManagerIcon
+var windowManagerIcon = icons.Get(icons.PluginWindowManager)
 var windowManagerCommands = []windowManagerCommand{
 	{Command: "left-half", TitleKey: "plugin_window_manager_command_left_half", Aliases: []string{"left", "left half", "左半屏"}, Op: operationLeftHalf},
 	{Command: "right-half", TitleKey: "plugin_window_manager_command_right_half", Aliases: []string{"right", "right half", "右半屏"}, Op: operationRightHalf},
@@ -275,6 +276,7 @@ func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Qu
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_window_manager_action_apply",
+				Icon:                   icons.Get(icons.ActionRun),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				ContextData: map[string]string{

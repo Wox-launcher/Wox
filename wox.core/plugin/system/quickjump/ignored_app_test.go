@@ -2,14 +2,14 @@ package quickjump
 
 import (
 	"testing"
-	"wox/common"
+	"wox/common/icons"
 	"wox/setting/definition"
 	"wox/util/window"
 )
 
 func TestQuickJumpPluginUsesDedicatedIcon(t *testing.T) {
 	icon := (&QuickJumpPlugin{}).GetMetadata().Icon
-	if icon != common.PluginQuickJumpIcon.String() {
+	if icon != icons.Get(icons.PluginQuickJump).String() {
 		t.Fatalf("plugin icon = %q, want dedicated quick jump icon", icon)
 	}
 }

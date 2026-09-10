@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	"wox/common/icons"
 	notesplugin "wox/plugin/system/notes"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
@@ -61,7 +62,7 @@ const (
 	notesToolbarActionsWidth = float32(174)
 )
 
-var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(common.PluginNotesIcon), nil, 256)
+var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginNotes)), nil, 256)
 
 // notesWindowIcon is the notes plugin glyph used both in the title bar and on the taskbar.
 func notesWindowIcon() *woxui.Image {

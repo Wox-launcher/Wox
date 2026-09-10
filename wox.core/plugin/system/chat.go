@@ -14,6 +14,7 @@ import (
 	_ "wox/ai/builtintool"
 	aitool "wox/ai/builtintool/wox"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
@@ -24,7 +25,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var aiChatIcon = common.PluginAIChatIcon
+var aiChatIcon = icons.Get(icons.PluginAIChat)
 var aiChatsSettingKey = "ai_chats"
 
 const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
@@ -187,6 +188,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_chat_start_chat",
+					Icon:                   icons.Get(icons.ActionAdd),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// Generate the chat id up front so it can be shared with
@@ -1176,7 +1178,7 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 			{
 				Id:                     aiChatEnterChatModeActionId,
 				Name:                   "i18n:ui_ai_chat_start_chat",
-				Icon:                   aiChatIcon,
+				Icon:                   icons.Get(icons.ActionAdd),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1241,7 +1243,7 @@ func (r *AIChatPlugin) querySelection(ctx context.Context, query plugin.Query) p
 	return plugin.NewQueryResponse([]plugin.QueryResult{{
 		Title: r.api.GetTranslation(ctx, "plugin_ai_chat_selection_quote"), Icon: aiChatIcon, Score: 2000, Preview: preview,
 		Actions: []plugin.QueryResultAction{{
-			Name: "i18n:plugin_ai_chat_selection_quote_action", Icon: aiChatIcon, IsDefault: true, PreventHideAfterAction: true,
+			Name: "i18n:plugin_ai_chat_selection_quote_action", Icon: icons.Get(icons.ActionAdd), IsDefault: true, PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				var attachments []common.AIChatAttachment
 				if query.Selection.Type == selection.SelectionTypeText {

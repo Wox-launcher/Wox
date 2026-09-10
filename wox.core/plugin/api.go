@@ -8,6 +8,7 @@ import (
 	"time"
 	"wox/ai"
 	"wox/common"
+	"wox/common/icons"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
@@ -340,7 +341,7 @@ func (a *APIImpl) PushAttention(ctx context.Context, request PushAttentionReques
 		request.Description = a.GetTranslation(ctx, request.Description)
 	}
 
-	defaultIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, common.WoxIcon)
+	defaultIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, icons.Get(icons.BrandWox))
 	_, err := GetAttentionManager().Push(ctx, AttentionPluginSource{
 		PluginID:        a.pluginInstance.Metadata.Id,
 		PluginDirectory: a.pluginInstance.PluginDirectory,
@@ -1124,7 +1125,7 @@ func (a *APIImpl) Screenshot(ctx context.Context, option ScreenshotOption) Scree
 		// Third-party screenshot callers need a visible identity marker in the floating toolbox.
 		// The UI cannot reliably infer the plugin from the generic CaptureScreenshot method,
 		// so core resolves the metadata icon here and sends only the render-ready WoxImage.
-		callerIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, common.WoxIcon)
+		callerIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, icons.Get(icons.BrandWox))
 		request.CallerIcon = &callerIcon
 	}
 

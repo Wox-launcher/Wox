@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	"wox/common/icons"
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	woxsvg "wox/util/svg"
@@ -1292,7 +1293,7 @@ func drawScreenshotEditorToolbarIconSized(displayList *DisplayList, name string,
 		displayList.DrawImage(cached.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
 		return
 	}
-	icon := common.UIIcon(name)
+	icon := icons.Get(name)
 	if icon.ImageType != common.WoxImageTypeSvg || icon.ImageData == "" {
 		return
 	}
@@ -1370,7 +1371,7 @@ func screenshotEditorCursorRaster(width, height int) (*image.RGBA, error) {
 
 // renderScreenshotEditorCursorImage rasterizes the shared cursor marker at the requested export scale.
 func renderScreenshotEditorCursorImage(width, height int) (*image.RGBA, error) {
-	icon := common.UIIcon("screenshot.cursor")
+	icon := icons.Get("screenshot.cursor")
 	if icon.ImageType != common.WoxImageTypeSvg || icon.ImageData == "" {
 		return nil, errors.New("screenshot cursor icon is unavailable")
 	}

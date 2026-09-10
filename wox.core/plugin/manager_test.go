@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/database"
 	"wox/setting"
 	"wox/util"
@@ -326,6 +327,26 @@ func TestOpenPluginSettingActionIncludesEnglishAlias(t *testing.T) {
 	assert.Equal(t, []string{"Open System Command settings"}, action.SearchAliases)
 }
 
+func TestActionedRankingScoreTailFormatsBoost(t *testing.T) {
+	if got := actionedRankingScoreTail(55); got != "+55" {
+		t.Fatalf("actionedRankingScoreTail(55) = %q, want +55", got)
+	}
+	if got := actionedRankingScoreTail(0); got != "" {
+		t.Fatalf("actionedRankingScoreTail(0) = %q, want empty", got)
+	}
+	if got := actionedRankingScoreTail(-1); got != "" {
+		t.Fatalf("actionedRankingScoreTail(-1) = %q, want empty", got)
+	}
+}
+
+func TestOpenPluginSettingActionUsesVerbIconAndPluginTail(t *testing.T) {
+	pluginIcon := icons.Get(icons.PluginApp)
+	pluginInstance := &Instance{Metadata: Metadata{Name: "App", Icon: pluginIcon.String()}}
+	action := (&Manager{}).newOpenPluginSettingAction(context.Background(), pluginInstance)
+	assert.Equal(t, icons.Get(icons.ActionSettings), action.Icon)
+	assert.Equal(t, pluginIcon, action.TailIcon)
+}
+
 func TestConvertActionIconsReusesConvertedSource(t *testing.T) {
 	icon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>`)
 	cache := make(map[common.WoxImage]common.WoxImage)
@@ -389,7 +410,7 @@ func TestLoadLazyResultIconHydratesRemoteGIF(t *testing.T) {
 	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	token := "remote-gif-token"
 	source := common.NewWoxImageUrl(server.URL + "/doge.gif")
-	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), common.ImageThumbnailPlaceholderIcon, common.ResultListIconSize)
+	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
 	cachedResult, found := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
 	if !found {
 		t.Fatal("expected cached result")
@@ -407,7 +428,7 @@ func TestLoadLazyResultIconHydratesRemoteGIF(t *testing.T) {
 	if loaded.ImageType != common.WoxImageTypeAbsolutePath || !loaded.IsAnimatedGif() {
 		t.Fatalf("hydrated remote GIF = %+v, want cached GIF file", loaded)
 	}
-	if loaded == common.ImageThumbnailPlaceholderIcon {
+	if loaded == icons.Get(icons.StatusImagePlaceholder) {
 		t.Fatal("remote GIF should not fall back to the placeholder icon")
 	}
 	if requestCount != 1 {
@@ -453,7 +474,7 @@ func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {
 	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	token := "remote-icon-token"
 	source := common.NewWoxImageUrl(server.URL + "/icon.png")
-	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), common.ImageThumbnailPlaceholderIcon, common.ResultListIconSize)
+	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
 	cachedResult, found := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
 	if !found {
 		t.Fatal("expected cached result")
@@ -468,10 +489,10 @@ func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load lazy remote icon: %v", err)
 	}
-	if loaded != common.ImageThumbnailPlaceholderIcon {
+	if loaded != icons.Get(icons.StatusImagePlaceholder) {
 		t.Fatalf("failed remote URL should resolve to placeholder, got %+v", loaded)
 	}
-	if cachedResult.Result.Icon != common.ImageThumbnailPlaceholderIcon {
+	if cachedResult.Result.Icon != icons.Get(icons.StatusImagePlaceholder) {
 		t.Fatalf("cached failed remote URL should be placeholder, got %+v", cachedResult.Result.Icon)
 	}
 	if requestCount != 1 {

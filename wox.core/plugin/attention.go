@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/database"
 	"wox/util"
 
@@ -282,7 +283,7 @@ func resolveAttentionIcon(ctx context.Context, source AttentionPluginSource, req
 		icon = *requestedIcon
 	}
 	if icon.IsEmpty() {
-		icon = common.WoxIcon
+		icon = icons.Get(icons.BrandWox)
 	}
 	converted, _ := common.ConvertPluginIcon(ctx, icon, source.PluginID, source.PluginDirectory, common.IconConversion{})
 	return converted
@@ -323,7 +324,7 @@ func ParseAttentionAction(raw string) (*AttentionAction, error) {
 func ParseAttentionIcon(raw string) common.WoxImage {
 	icon, err := common.ParseWoxImage(raw)
 	if err != nil || icon.IsEmpty() {
-		return common.WoxIcon
+		return icons.Get(icons.BrandWox)
 	}
 	return icon
 }

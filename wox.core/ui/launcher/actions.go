@@ -39,6 +39,8 @@ type actionPanelEntry struct {
 	SearchAliases        []string
 	Icon                 woxImage
 	Hotkey               string
+	Tail                 string
+	TailIcon             woxImage
 	IsDefault            bool
 	Source               actionPanelSource
 	ResultIndex          int
@@ -150,7 +152,7 @@ func unifiedActionPanelEntries(results []queryResult, selected int, message *too
 		}
 		entries = append(entries, actionPanelEntry{
 			Key: fmt.Sprintf("result:%s:%s:%d", result.ID, action.ID, index), ID: fmt.Sprintf("result-%s-%d", action.ID, index),
-			Name: action.Name, SearchAliases: action.SearchAliases, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
+			Name: action.Name, SearchAliases: action.SearchAliases, Icon: action.Icon, Tail: action.Tail, TailIcon: action.TailIcon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
 			ResultIndex: selected, ActionIndex: index, IsSystemAction: action.IsSystemAction,
 		})
 	}
@@ -197,6 +199,28 @@ func actionPanelDisplayItems(entries []actionPanelEntry, indices []int, makeItem
 	return items
 }
 
+// actionPanelIcons tints only monochrome verb SVGs (and local white masks) so
+// they follow the row label. Brand and plugin SVGs stay as authored; a source-in
+// tint would flatten their filled shapes into a solid blob.
+func (a *App) actionPanelIcons(action actionPanelEntry, palette uiPalette, iconSize int) (*woxui.Image, *woxui.Image) {
+	if action.Source == actionPanelSourceLocal || svgUsesThemeIconColor(action.Icon) {
+		return a.imageForTint(action.Icon, &palette.actionText, iconSize), a.imageForTint(action.Icon, &palette.actionSelectedText, iconSize)
+	}
+	icon := a.imageForSize(action.Icon, iconSize)
+	return icon, icon
+}
+
+func svgUsesThemeIconColor(source woxImage) bool {
+	switch source.ImageType {
+	case "svg":
+		return strings.Contains(source.ImageData, "var(--wox-theme-icon-color)")
+	case "base64":
+		return strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml") && strings.Contains(source.ImageData, "var(--wox-theme-icon-color)")
+	default:
+		return false
+	}
+}
+
 // actionPanelVisibleListHeight sizes the scroll list from filtered entries, including a visible group divider.
 func actionPanelVisibleListHeight(entries []actionPanelEntry, indices []int) float32 {
 	return launcherview.ActionPanelListHeight(actionPanelDisplayItems(entries, indices, nil))
@@ -208,13 +232,10 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		return nil, 0, 0
 	}
 	items := actionPanelDisplayItems(snapshot.actionEntries, snapshot.actionIndices, func(index int, action actionPanelEntry) launcherview.ActionItem {
-		iconSize := physicalImageSize(22, imageScale)
-		icon := a.imageForSize(action.Icon, iconSize)
-		if action.Source == actionPanelSourceLocal {
-			icon = a.imageForTint(action.Icon, &snapshot.palette.actionText, iconSize)
-		}
+		icon, selectedIcon := a.actionPanelIcons(action, snapshot.palette, physicalImageSize(22, imageScale))
 		return launcherview.ActionItem{
-			Kind: launcherview.ActionItemKindAction, Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, HotkeyLabels: formatHotkeyLabels(action.Hotkey),
+			Kind: launcherview.ActionItemKindAction, Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, SelectedIcon: selectedIcon,
+			Tail: action.Tail, TailIcon: a.imageForSize(action.TailIcon, physicalImageSize(launcherview.ActionTailIconSize, imageScale)), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		}
 	})
 	return launcherview.ActionsBoundary(launcherview.ActionsProps{

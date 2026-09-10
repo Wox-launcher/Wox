@@ -4,7 +4,7 @@ import (
 	"math"
 	"sync"
 
-	"wox/common"
+	"wox/common/icons"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	woxsvg "wox/util/svg"
@@ -29,7 +29,7 @@ func svgIcon(name string, size float32, color woxui.Color) woxwidget.Widget {
 
 // svgIconImage returns the cached raster used by static and animated icon widgets.
 func svgIconImage(name string, size float32, color woxui.Color) *woxui.Image {
-	source := common.UIIcon(name)
+	source := icons.Get(name)
 	if source.ImageType != "svg" || source.ImageData == "" {
 		return nil
 	}

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	notesplugin "wox/plugin/system/notes"
 	"wox/plugin/system/quickjump"
@@ -21,7 +22,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var selectionIcon = common.PluginSelectionIcon
+var selectionIcon = icons.Get(icons.PluginSelection)
 
 // selectionCommandPreview is the command name that, when used in a selection file
 // query, causes the plugin to return only the file preview result instead of
@@ -335,10 +336,11 @@ func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string
 	var results []plugin.QueryResult
 	results = append(results, plugin.QueryResult{
 		Title: i.api.GetTranslation(ctx, "selection_copy"),
-		Icon:  common.CopyIcon,
+		Icon:  icons.Get(icons.ActionCopy),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: i.api.GetTranslation(ctx, "selection_copy_to_clipboard"),
+				Icon: icons.Get(icons.ActionCopy),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(text)
 				},
@@ -374,11 +376,11 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, query plugi
 	var results []plugin.QueryResult
 	results = append(results, plugin.QueryResult{
 		Title: i.api.GetTranslation(ctx, "selection_copy_path"),
-		Icon:  common.CopyIcon,
+		Icon:  icons.Get(icons.ActionCopy),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: i.api.GetTranslation(ctx, "selection_copy"),
-				Icon: common.CopyIcon,
+				Icon: icons.Get(icons.ActionCopy),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(strings.Join(filePaths, "\n"))
 				},
@@ -393,11 +395,11 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, query plugi
 		// share with airdrop
 		results = append(results, plugin.QueryResult{
 			Title: i.api.GetTranslation(ctx, "selection_share_with_airdrop"),
-			Icon:  common.AirdropIcon,
+			Icon:  icons.Get(icons.ActionAirdrop),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: i.api.GetTranslation(ctx, "selection_share"),
-					Icon: common.AirdropIcon,
+					Icon: icons.Get(icons.ActionAirdrop),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						airdrop.Airdrop(filePaths)
 					},
@@ -416,11 +418,11 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 
 	results = append(results, plugin.QueryResult{
 		Title: i.api.GetTranslation(ctx, "selection_open_containing_folder"),
-		Icon:  common.OpenContainingFolderIcon,
+		Icon:  icons.Get(icons.ActionOpenContainingFolder),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: i.api.GetTranslation(ctx, "selection_open_containing_folder"),
-				Icon: common.OpenContainingFolderIcon,
+				Icon: icons.Get(icons.ActionOpenContainingFolder),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.OpenFileInFolder(filePath)
 				},
@@ -446,11 +448,11 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 	results = append(results, plugin.QueryResult{
 		Title: i.api.GetTranslation(ctx, "selection_preview"),
 		Score: 1000,
-		Icon:  common.PreviewIcon,
+		Icon:  icons.Get(icons.ActionPreview),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: i.api.GetTranslation(ctx, "selection_preview"),
-				Icon: common.PreviewIcon,
+				Icon: icons.Get(icons.ActionPreview),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				},
 			},
@@ -480,11 +482,11 @@ func (i *SelectionPlugin) queryForFilePreviewOnly(ctx context.Context, filePath 
 		{
 			Title: i.api.GetTranslation(ctx, "selection_preview"),
 			Score: 1000,
-			Icon:  common.PreviewIcon,
+			Icon:  icons.Get(icons.ActionPreview),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: i.api.GetTranslation(ctx, "selection_preview"),
-					Icon: common.PreviewIcon,
+					Icon: icons.Get(icons.ActionPreview),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					},
 				},

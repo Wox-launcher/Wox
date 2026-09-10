@@ -9,6 +9,7 @@ import (
 	"sync"
 	"unicode"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -25,7 +26,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var aiCommandIcon = common.PluginAICommandIcon
+var aiCommandIcon = icons.Get(icons.PluginAICommand)
 var aiCommandTitleIcon, _ = aiCommandIcon.ToImage()
 
 var (
@@ -344,7 +345,7 @@ func renderAICommandPrompt(prompt string, inputText string) string {
 func (c *Plugin) buildCopyAnswerAction(answer string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name: "i18n:plugin_ai_command_copy",
-		Icon: common.CopyIcon,
+		Icon: icons.Get(icons.ActionCopy),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(answer); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy ai command answer: %s", err.Error()))
@@ -618,6 +619,7 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 	actions := []plugin.QueryResultAction{
 		{
 			Name:                   "i18n:plugin_ai_command_run",
+			Icon:                   icons.Get(icons.ActionRun),
 			IsDefault:              defaultAction == aiCommandDefaultActionRun,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -626,6 +628,7 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 		},
 		{
 			Name:      "i18n:plugin_ai_command_run_and_show",
+			Icon:      icons.Get(icons.ActionPreview),
 			IsDefault: defaultAction == aiCommandDefaultActionRunAndShow,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				util.Go(ctx, "ai command run and show", func() {
@@ -664,6 +667,7 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 	if allowRunAndPaste {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:      "i18n:plugin_ai_command_run_and_paste",
+			Icon:      icons.Get(icons.ActionPaste),
 			IsDefault: defaultAction == aiCommandDefaultActionRunAndPaste,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				util.Go(ctx, "ai command run and paste", func() {
@@ -872,6 +876,7 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_command_run",
+					Icon:                   icons.Get(icons.ActionOpen),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.api.ChangeQuery(ctx, common.PlainQuery{

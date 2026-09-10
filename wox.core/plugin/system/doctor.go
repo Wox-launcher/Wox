@@ -2,12 +2,12 @@ package system
 
 import (
 	"context"
-	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
 )
 
-var doctorIcon = common.PluginDoctorIcon
+var doctorIcon = icons.Get(icons.PluginDoctor)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &DoctorPlugin{})
@@ -47,17 +47,18 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	checkResults := plugin.RunDoctorChecks(ctx)
 
 	for _, check := range checkResults {
-		icon := common.ErrorIcon
+		icon := icons.Get(icons.ActionError)
 		if check.Passed {
-			icon = common.CorrectIcon
+			icon = icons.Get(icons.ActionCorrect)
 		}
 		if check.Severity == plugin.DoctorCheckSeverityWarning {
-			icon = common.StarIcon
+			icon = icons.Get(icons.ActionStar)
 		}
 
 		actions := []plugin.QueryResultAction{
 			{
 				Name:                   check.ActionName,
+				Icon:                   icons.Get(icons.ActionRun),
 				PreventHideAfterAction: check.PreventHideAfterAction,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					check.Action(ctx, actionContext)
@@ -72,6 +73,7 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 			if check.Ignored {
 				actions = append(actions, plugin.QueryResultAction{
 					Name: "i18n:plugin_doctor_unignore",
+					Icon: icons.Get(icons.ActionPreview),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						toggleDoctorCheckIgnored(ctx, string(check.Type), false)
 					},
@@ -79,6 +81,7 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 			} else {
 				actions = append(actions, plugin.QueryResultAction{
 					Name: "i18n:plugin_doctor_ignore",
+					Icon: icons.Get(icons.ActionHide),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						toggleDoctorCheckIgnored(ctx, string(check.Type), true)
 					},

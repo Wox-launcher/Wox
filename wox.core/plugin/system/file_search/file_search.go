@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system/file_search/indexpolicy"
 	notesplugin "wox/plugin/system/notes"
@@ -32,7 +33,7 @@ import (
 	"wox/util/trash"
 )
 
-var fileIcon = common.PluginFileIcon
+var fileIcon = icons.Get(icons.PluginFile)
 
 const (
 	PluginID                       = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
@@ -1147,7 +1148,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	actions := []plugin.QueryResultAction{
 		{
 			Name: "i18n:plugin_file_open",
-			Icon: common.PreviewIcon,
+			Icon: icons.Get(icons.ActionPreview),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := shell.Open(item.Path); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open file search result: path=%s err=%s", item.Path, err.Error()))
@@ -1164,7 +1165,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	if item.IsDir {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_folder_enter",
-			Icon:                   common.FolderIcon,
+			Icon:                   icons.Get(icons.ActionOpen),
 			Hotkey:                 util.PrimaryHotkey("enter"),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1177,7 +1178,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_file_open_containing_folder",
-			Icon: common.OpenContainingFolderIcon,
+			Icon: icons.Get(icons.ActionOpenContainingFolder),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := shell.OpenFileInFolder(item.Path); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to reveal file search result: path=%s err=%s", item.Path, err.Error()))
@@ -1192,7 +1193,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name: "i18n:plugin_clipboard_delete",
-		Icon: common.TrashIcon,
+		Icon: icons.Get(icons.ActionDelete),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			err := trash.MoveToTrash(item.Path)
 			if err != nil {
@@ -1209,7 +1210,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	if nativecontextmenu.IsSupported() {
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_file_show_context_menu",
-			Icon: common.PluginMenusIcon,
+			Icon: icons.Get(icons.ActionContextMenu),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+item.Path)
 				err := nativecontextmenu.ShowContextMenu(item.Path)
@@ -1252,7 +1253,7 @@ func ensureFileSearchFolderBrowseQuery(folderPath string) string {
 func (c *FileSearchPlugin) buildIndexFilesAction() plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_file_index_files",
-		Icon:                   common.ExecuteRunIcon,
+		Icon:                   icons.Get(icons.ActionRun),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			c.indexFilesFromScratch(ctx)
@@ -1264,7 +1265,7 @@ func (c *FileSearchPlugin) buildIndexFilesAction() plugin.QueryResultAction {
 func (c *FileSearchPlugin) buildRebuildContentIndexAction() plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_file_rebuild_content_index",
-		Icon:                   common.ExecuteRunIcon,
+		Icon:                   icons.Get(icons.ActionRun),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			c.rebuildContentIndex(ctx)
@@ -1475,7 +1476,7 @@ func resolveFileSearchResultIcon(ctx context.Context, result filesearch.SearchRe
 		if icon := resolveFileSearchMacAppBundleIcon(ctx, result.Path); !icon.IsEmpty() {
 			return icon
 		}
-		return common.FolderIcon
+		return icons.Get(icons.PluginFolder)
 	}
 
 	if shouldUseFileSearchImageThumbnail(result.Path) {
@@ -1892,7 +1893,7 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 	}
 
 	title := c.api.GetTranslation(ctx, "plugin_file_status_error")
-	icon := common.PermissionIcon
+	icon := icons.Get(icons.ActionRunAsAdministrator)
 	progress := (*int)(nil)
 	indeterminate := false
 	hasPermissionError := util.IsMacOS() && isFileAccessPermissionError(status.LastError)
@@ -2504,7 +2505,7 @@ func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, hasPermissionE
 	return []plugin.ToolbarMsgAction{
 		{
 			Name:   "i18n:plugin_file_status_open_privacy_settings",
-			Icon:   common.PermissionIcon,
+			Icon:   icons.Get(icons.ActionRunAsAdministrator),
 			Hotkey: util.PrimaryHotkey("enter"),
 			Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
 				permission.OpenPrivacySecuritySettings(ctx)

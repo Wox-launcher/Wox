@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 	"time"
-	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/menus"
@@ -11,7 +11,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var menusIcon = common.PluginMenusIcon
+var menusIcon = icons.Get(icons.PluginMenus)
 var menusCacheTTL = time.Minute
 var menusCache = util.NewHashMap[int, menusCacheEntry]()
 
@@ -96,6 +96,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_menus_execute",
+					Icon: icons.Get(icons.ActionExecute),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						menus.ExecuteActiveAppMenu(query.Env.ActiveWindowPid, menu)
 					},

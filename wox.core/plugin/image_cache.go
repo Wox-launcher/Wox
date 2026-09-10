@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"wox/common"
+	"wox/common/icons"
 	"wox/util"
 )
 
@@ -21,7 +22,7 @@ func (i *Instance) convertIcon(ctx context.Context, image common.WoxImage, confi
 	i.imageMu.RLock()
 	defer i.imageMu.RUnlock()
 	if i.imageCacheClosed {
-		return common.ImageThumbnailPlaceholderIcon
+		return icons.Get(icons.StatusImagePlaceholder)
 	}
 	converted, err := common.ConvertPluginIcon(ctx, image, i.Metadata.Id, i.PluginDirectory, config)
 	if err != nil {

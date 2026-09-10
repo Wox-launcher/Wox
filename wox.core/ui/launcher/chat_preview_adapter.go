@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
@@ -1076,7 +1077,7 @@ func (a *App) chatAttachmentProps(attachments []common.AIChatAttachment, quoteLa
 		switch attachment.Kind {
 		case common.AIChatAttachmentFile:
 			item.Text = attachment.URL
-			item.Image = a.imageFor(fromCoreImage(common.PluginFileIcon))
+			item.Image = a.imageFor(fromCoreImage(icons.Get(icons.PluginFile)))
 		case common.AIChatAttachmentImage:
 			item.Text = a.translate("i18n:plugin_ai_chat_image_label")
 			if path := common.ChatAttachmentPath(attachment); path != "" {

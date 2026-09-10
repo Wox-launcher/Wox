@@ -28,6 +28,7 @@ import (
 	"sync"
 	"unsafe"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/fileicon"
@@ -540,7 +541,7 @@ func (a *MacRetriever) getSystemSettingsApps(ctx context.Context) []appInfo {
 		}
 
 		if icon.ImageData == "" {
-			icon = common.WoxIcon
+			icon = icons.Get(icons.BrandWox)
 		}
 
 		// Build full URI with x-apple.systempreferences scheme

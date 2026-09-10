@@ -9,6 +9,7 @@ import (
 	"wox/account"
 	"wox/cloudsync"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
@@ -16,7 +17,7 @@ import (
 )
 
 var (
-	cloudSyncIcon     = common.PluginCloudSyncIcon
+	cloudSyncIcon     = icons.Get(icons.PluginCloudSync)
 	cloudSyncPushIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="8" y="14" width="48" height="36" rx="10" fill="#2563eb"/><path fill="#dbeafe" d="M22 42h21a8 8 0 0 0 1.4-15.9A13 13 0 0 0 19.1 29A6.5 6.5 0 0 0 22 42"/><path fill="#1d4ed8" d="M31 40h4V30h5l-7-7l-7 7h5z"/></svg>`)
 	cloudSyncPullIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="8" y="14" width="48" height="36" rx="10" fill="#059669"/><path fill="#d1fae5" d="M22 42h21a8 8 0 0 0 1.4-15.9A13 13 0 0 0 19.1 29A6.5 6.5 0 0 0 22 42"/><path fill="#047857" d="M31 23h4v10h5l-7 7l-7-7h5z"/></svg>`)
 )
@@ -92,7 +93,7 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_cloudsync_action_sync_now",
-				Icon:                   common.UpdateIcon,
+				Icon:                   icons.Get(icons.ActionUpdate),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -135,7 +136,7 @@ func (p *CloudSyncPlugin) loginRequiredResult(ctx context.Context) plugin.QueryR
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_update_action_open_settings",
-				Icon:                   common.SettingIcon,
+				Icon:                   icons.Get(icons.ActionSettings),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -224,7 +225,7 @@ func (p *CloudSyncPlugin) historyResults(ctx context.Context, query plugin.Query
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_cloudsync_history_action_view_details",
-					Icon:                   common.SearchIcon,
+					Icon:                   icons.Get(icons.ActionSearch),
 					IsDefault:              true,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -298,7 +299,7 @@ func (p *CloudSyncPlugin) historyDetailResults(ctx context.Context, historyID ui
 			result.Actions = []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_cloudsync_history_action_copy_error",
-					Icon: common.CopyIcon,
+					Icon: icons.Get(icons.ActionCopy),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						clipboard.WriteText(errorText)
 					},

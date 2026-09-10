@@ -15,6 +15,7 @@ import (
 	"time"
 	"wox/analytics"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
@@ -34,7 +35,7 @@ import (
 	"github.com/tidwall/pretty"
 )
 
-var appIcon = common.PluginAppIcon
+var appIcon = icons.Get(icons.PluginApp)
 
 var errSkipAppIndexing = errors.New("skip app indexing")
 
@@ -519,7 +520,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_app_start_reindex",
-						Icon: common.ExecuteRunIcon,
+						Icon: icons.Get(icons.ActionRun),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.Go(ctx, "reindex app", func() {
 								a.stopAppChangeWatcher()
@@ -813,7 +814,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 	actions := []plugin.QueryResultAction{
 		{
 			Name:        "i18n:plugin_app_open",
-			Icon:        common.OpenIcon,
+			Icon:        icons.Get(icons.ActionOpen),
 			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
@@ -862,7 +863,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		if canRunAsAdministrator {
 			actions = append(actions, plugin.QueryResultAction{
 				Name:        "i18n:plugin_app_open_as_administrator",
-				Icon:        common.PermissionIcon,
+				Icon:        icons.Get(icons.ActionRunAsAdministrator),
 				ContextData: contextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
@@ -879,7 +880,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 	if info.Type != AppTypeWindowsSetting {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:        "i18n:plugin_app_open_containing_folder",
-			Icon:        common.OpenContainingFolderIcon,
+			Icon:        icons.Get(icons.ActionOpenContainingFolder),
 			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
@@ -892,7 +893,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name:        "i18n:plugin_app_copy_path",
-		Icon:        common.CopyIcon,
+		Icon:        icons.Get(icons.ActionCopy),
 		ContextData: contextData,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(info.Path); err != nil {
@@ -904,7 +905,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name:        "i18n:plugin_app_hide",
-		Icon:        common.HideAppIcon,
+		Icon:        icons.Get(icons.ActionHide),
 		ContextData: contextData,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			a.hideAppFromSearch(ctx, info, displayName)
@@ -921,7 +922,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 	if info.Type != AppTypeUWP && info.Type != AppTypeWindowsSetting && nativecontextmenu.IsSupported() {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:        "i18n:plugin_file_show_context_menu",
-			Icon:        common.PluginMenusIcon,
+			Icon:        icons.Get(icons.ActionContextMenu),
 			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				a.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+info.Path)
@@ -2262,7 +2263,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 				actions = append(actions, plugin.QueryResultAction{
 					Name:          "i18n:plugin_app_terminate",
 					SearchAliases: []string{"kill"},
-					Icon:          common.TerminateAppIcon,
+					Icon:          icons.Get(icons.ActionTerminate),
 					ContextData: common.ContextData{
 						"name":   appInfo.Name,
 						"path":   appInfo.Path,
@@ -2484,7 +2485,7 @@ func (a *ApplicationPlugin) toIgnoredHotkeyApp(info appInfo) (setting.IgnoredHot
 
 	icon := info.Icon
 	if icon.IsEmpty() {
-		icon = common.PluginAppIcon
+		icon = icons.Get(icons.PluginApp)
 	}
 
 	return setting.IgnoredHotkeyApp{
@@ -2533,7 +2534,7 @@ func (a *ApplicationPlugin) indexedAppsForPreview(ctx context.Context, pattern s
 		}
 		icon := info.Icon
 		if icon.IsEmpty() {
-			icon = common.PluginAppIcon
+			icon = icons.Get(icons.PluginApp)
 		}
 		apps = append(apps, setting.IgnoredHotkeyApp{
 			Name:     name,

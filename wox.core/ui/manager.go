@@ -21,6 +21,7 @@ import (
 	"wox/ai"
 	"wox/analytics"
 	"wox/common"
+	"wox/common/icons"
 	"wox/diagnostic"
 	corehotkey "wox/hotkey"
 	"wox/i18n"
@@ -680,7 +681,7 @@ func (m *Manager) showMainHotkeyToolbarWarning(ctx context.Context) {
 	m.ui.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
 		Id:       mainHotkeyRegistrationToolbarMessageID,
 		Title:    title,
-		Icon:     common.ErrorIcon,
+		Icon:     icons.Get(icons.ActionError),
 		Fallback: true,
 	})
 }

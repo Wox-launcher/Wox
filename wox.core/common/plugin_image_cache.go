@@ -59,14 +59,14 @@ func ConvertPluginIcon(ctx context.Context, image WoxImage, pluginID, pluginDire
 	}
 	root, state, err := pluginImageCacheFor(pluginID)
 	if err != nil {
-		return ImageThumbnailPlaceholderIcon, err
+		return imageThumbnailPlaceholder, err
 	}
 	// ponytail: serialize conversions per plugin; use per-source locks if contention becomes measurable.
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	directory := filepath.Join(root, strconv.FormatUint(state.generation, 10))
 	if config.CacheScope != "" && config.CacheScope != directory {
-		return ImageThumbnailPlaceholderIcon, fmt.Errorf("plugin image request is stale")
+		return imageThumbnailPlaceholder, fmt.Errorf("plugin image request is stale")
 	}
 	ctx = context.WithValue(ctx, imageCacheDirectoryKey{}, directory)
 	converted := convertIconWithSize(ctx, image, pluginDirectory, config.Size, config.AllowLazy, config.Diagnostics)
@@ -75,7 +75,7 @@ func ConvertPluginIcon(ctx context.Context, image WoxImage, pluginID, pluginDire
 	if converted.ImageType == WoxImageTypeLazyLoad {
 		payload, err := ParseWoxLazyLoadImagePayload(converted)
 		if err != nil {
-			return ImageThumbnailPlaceholderIcon, err
+			return imageThumbnailPlaceholder, err
 		}
 		payload.CacheScope = directory
 		data, _ := json.Marshal(payload)
@@ -88,7 +88,7 @@ func ConvertPluginIcon(ctx context.Context, image WoxImage, pluginID, pluginDire
 	}
 	if err != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to cache plugin image: plugin=%s err=%v", pluginID, err))
-		return ImageThumbnailPlaceholderIcon, err
+		return imageThumbnailPlaceholder, err
 	}
 	return converted, nil
 }

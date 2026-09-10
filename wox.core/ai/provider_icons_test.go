@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"wox/common"
+	"wox/common/icons"
 	"wox/setting"
 )
 
@@ -14,7 +15,7 @@ func TestInstalledCLIProvidersUseBrandIcons(t *testing.T) {
 		t.Fatal("codex-cli should reuse the OpenAI brand icon")
 	}
 
-	terminal := common.UIIcon("control.terminal")
+	terminal := icons.Get("control.terminal")
 	for _, name := range []common.ProviderName{"claude-cli", "codex-cli", "opencode-cli", "grok-cli"} {
 		icon := providerFactories[name](context.Background(), setting.AIProvider{Name: name}).GetIcon()
 		if icon.ImageData == "" || icon.ImageData == terminal.ImageData {

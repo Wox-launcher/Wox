@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -16,7 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var calculatorIcon = common.PluginCalculatorIcon
+var calculatorIcon = icons.Get(icons.PluginCalculator)
 
 const (
 	calculatorExpressionScore int64 = 50
@@ -163,7 +164,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_calculator_copy_result",
-					Icon: common.CopyIcon,
+					Icon: icons.Get(icons.ActionCopy),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
@@ -177,7 +178,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 				{
 					Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
 					IsDefault: true,
-					Icon:      common.CopyIcon,
+					Icon:      icons.Get(icons.ActionCopy),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
@@ -211,7 +212,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_calculator_copy_result",
-						Icon: common.CopyIcon,
+						Icon: icons.Get(icons.ActionCopy),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(result)
 						},
@@ -219,7 +220,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 					{
 						Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
 						IsDefault: true,
-						Icon:      common.CopyIcon,
+						Icon:      icons.Get(icons.ActionCopy),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(formattedResult)
 						},
@@ -253,7 +254,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 					Actions: []plugin.QueryResultAction{
 						{
 							Name: "i18n:plugin_calculator_copy_result",
-							Icon: common.CopyIcon,
+							Icon: icons.Get(icons.ActionCopy),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(h.Result)
 							},
@@ -261,13 +262,14 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 						{
 							Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
 							IsDefault: true,
-							Icon:      common.CopyIcon,
+							Icon:      icons.Get(icons.ActionCopy),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(formattedHistoryResult)
 							},
 						},
 						{
 							Name:                   "i18n:plugin_calculator_recalculate",
+							Icon:                   icons.Get(icons.ActionRun),
 							PreventHideAfterAction: true,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								c.api.ChangeQuery(ctx, common.PlainQuery{

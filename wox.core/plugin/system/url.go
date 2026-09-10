@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/shell"
@@ -14,7 +15,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var urlIcon = common.PluginUrlIcon
+var urlIcon = icons.Get(icons.PluginUrl)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &UrlPlugin{})
@@ -124,7 +125,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:        "i18n:plugin_url_open",
-						Icon:        common.PluginBrowserIcon,
+						Icon:        icons.Get(icons.ActionOpen),
 						ContextData: contextData,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := shell.Open(history.Url)
@@ -135,7 +136,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 					},
 					{
 						Name:        "i18n:plugin_url_remove",
-						Icon:        common.TrashIcon,
+						Icon:        icons.Get(icons.ActionDelete),
 						ContextData: contextData,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							r.removeRecentUrl(ctx, history.Url)
@@ -164,7 +165,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_url_open",
-					Icon:        urlIcon,
+					Icon:        icons.Get(icons.ActionOpen),
 					ContextData: contextData,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						openErr := shell.Open(normalizedURL)
@@ -293,7 +294,7 @@ func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 		result.Actions = []plugin.QueryResultAction{
 			{
 				Name:        "i18n:plugin_url_open",
-				Icon:        common.OpenIcon,
+				Icon:        icons.Get(icons.ActionOpen),
 				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					openErr := shell.Open(url)
@@ -304,7 +305,7 @@ func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 			},
 			{
 				Name:        "i18n:plugin_url_remove",
-				Icon:        common.TrashIcon,
+				Icon:        icons.Get(icons.ActionDelete),
 				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					r.removeRecentUrl(ctx, url)
@@ -312,12 +313,12 @@ func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 			},
 		}
 	} else {
-		result.Icon = common.OpenIcon
+		result.Icon = icons.Get(icons.ActionOpen)
 		result.SubTitle = "i18n:plugin_url_open_in_browser"
 		result.Actions = []plugin.QueryResultAction{
 			{
 				Name:        "i18n:plugin_url_open",
-				Icon:        urlIcon,
+				Icon:        icons.Get(icons.ActionOpen),
 				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					openErr := shell.Open(url)

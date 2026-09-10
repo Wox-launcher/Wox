@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -18,7 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var indicatorIcon = common.PluginIndicatorIcon
+var indicatorIcon = icons.Get(icons.PluginIndicator)
 
 const (
 	indicatorQueryResultLimit           = 30
@@ -173,6 +174,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		actions := []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_indicator_activate",
+				Icon:                   icons.Get(icons.ActionOpen),
 				PreventHideAfterAction: true,
 				ContextData: common.ContextData{
 					"triggerKeyword": triggerKeywordToUse,
@@ -228,6 +230,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			commandActions := []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_indicator_activate",
+					Icon:                   icons.Get(icons.ActionOpen),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						i.api.ChangeQuery(ctx, common.PlainQuery{
@@ -366,7 +369,7 @@ func (i *IndicatorPlugin) buildIndicatorUpgradeTails(installedVersion string, st
 	return []plugin.QueryResultTail{
 		{
 			Type:  plugin.QueryResultTailTypeImage,
-			Image: common.UpgradeIcon,
+			Image: icons.Get(icons.ActionUpgrade),
 		},
 		{
 			Type: plugin.QueryResultTailTypeText,
@@ -378,7 +381,7 @@ func (i *IndicatorPlugin) buildIndicatorUpgradeTails(installedVersion string, st
 func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_upgrade",
-		Icon:                   common.UpdateIcon,
+		Icon:                   icons.Get(icons.ActionUpdate),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			pluginName := storePlugin.GetName(ctx)
@@ -418,7 +421,8 @@ func (i *IndicatorPlugin) createOpenPluginSettingsAction(ctx context.Context, pl
 	return plugin.QueryResultAction{
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_open_plugin_settings"), pluginName),
 		SearchAliases:          []string{fmt.Sprintf(i18n.GetI18nManager().TranslateWoxEnUs(ctx, "plugin_indicator_open_plugin_settings"), pluginInstance.Metadata.GetNameEn(ctx))},
-		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
+		Icon:                   icons.Get(icons.ActionSettings),
+		TailIcon:               pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.WoxImage{}),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
@@ -468,6 +472,7 @@ func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 	actions := []plugin.QueryResultAction{
 		{
 			Name:                   "i18n:plugin_indicator_activate",
+			Icon:                   icons.Get(icons.ActionOpen),
 			PreventHideAfterAction: true,
 			ContextData:            mruData.ContextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {

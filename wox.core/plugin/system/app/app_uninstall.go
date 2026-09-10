@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 )
@@ -272,7 +273,7 @@ func (a *ApplicationPlugin) buildUninstallAction(info appInfo, displayName strin
 	return plugin.QueryResultAction{
 		Id:          appUninstallActionID,
 		Name:        "i18n:plugin_app_uninstall",
-		Icon:        common.TrashIcon,
+		Icon:        icons.Get(icons.ActionDelete),
 		ContextData: actionContextData,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			a.executeUninstall(ctx, info, displayName)

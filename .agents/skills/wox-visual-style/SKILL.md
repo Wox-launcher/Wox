@@ -50,7 +50,7 @@ Interpret results in context. Primitive gestures are valid for page-specific poi
 3. Use the ordinary 32-unit control height only inside its defined scope. Preserve special Launcher and Action Panel geometry. Author only whole logical units for size, padding, gap, radius, border, font size, and line height.
 4. Align controls by interaction frame and centerline. Preserve the internal geometry of checkboxes and switches.
 5. Cover every applicable state from the state matrix, including non-color cues and accessibility semantics.
-6. Prefer an existing categorized SVG from `wox.core/common/icons.go`; add a reusable icon there before introducing a local asset. For theme-adaptive SVG paints, use `var(--wox-theme-icon-color)` explicitly; follow the SVG theme-color contract in [Components, icons, and content](references/visual-style-guide.md#components-icons-and-content).
+6. Prefer an existing catalog name from `wox/common/icons` via `icons.Get`; add a new semantic name there before introducing a local asset. For theme-adaptive SVG paints, use `var(--wox-theme-icon-color)` explicitly; follow the SVG theme-color contract in [Components, icons, and content](references/visual-style-guide.md#components-icons-and-content).
 7. Check light and dark themes, long or translated text, narrow widths, scrolling, logical units, DPI boundaries, and disabled/error content.
 
 Express alignment through layout primitives first: use `Align`, Flex main/cross-axis alignment, `Expanded`, or `Constrained` to center and place controls. Do not hand-calculate offsets such as `(rowHeight-controlHeight)/2`, or use padding as a substitute for alignment; improve the owning layout/component boundary when the existing primitives cannot express the relationship.

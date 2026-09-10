@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	filesearchplugin "wox/plugin/system/file_search"
@@ -105,7 +106,7 @@ func (c *QuickJumpPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_quickjump_plugin_description",
-		Icon:          common.PluginQuickJumpIcon.String(),
+		Icon:          icons.Get(icons.PluginQuickJump).String(),
 		TriggerKeywords: []string{
 			"jump",
 		},
@@ -337,7 +338,7 @@ func (c *QuickJumpPlugin) queryFileSearchResults(ctx context.Context, query plug
 		}
 		icon := common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
 		if item.IsDir {
-			icon = common.FolderIcon
+			icon = icons.Get(icons.PluginFolder)
 			if util.IsMacOS() && strings.HasSuffix(strings.ToLower(item.Name), ".app") {
 				icon = common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
 			}
@@ -363,11 +364,12 @@ func (c *QuickJumpPlugin) queryAddQuickJumpPath(ctx context.Context, query plugi
 		{
 			Title:    "i18n:plugin_quickjump_add_quick_jump_title",
 			SubTitle: path,
-			Icon:     common.PluginQuickJumpIcon,
+			Icon:     icons.Get(icons.PluginQuickJump),
 			Score:    200,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:      "i18n:ui_add",
+					Icon:      icons.Get(icons.ActionAdd),
 					IsDefault: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						if c.addQuickJumpPath(ctx, path) {
@@ -429,7 +431,7 @@ func (c *QuickJumpPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query
 		fullPath := filepath.Join(dirPath, entry.Name())
 		var icon common.WoxImage
 		if isDir {
-			icon = common.FolderIcon
+			icon = icons.Get(icons.PluginFolder)
 
 			// On macOS, use the .app icon for application bundles
 			if util.IsMacOS() && strings.HasSuffix(strings.ToLower(entry.Name()), ".app") {
@@ -448,6 +450,7 @@ func (c *QuickJumpPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query
 func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64, isGlobalResult bool) plugin.QueryResult {
 	defaultAction := plugin.QueryResultAction{
 		Name:                   "i18n:plugin_quickjump_reveal_in_explorer",
+		Icon:                   icons.Get(icons.ActionOpenContainingFolder),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -456,6 +459,7 @@ func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title st
 	}
 	if isDir {
 		defaultAction.Name = "i18n:plugin_quickjump_jump_to"
+		defaultAction.Icon = icons.Get(icons.ActionOpen)
 		defaultAction.Action = func(ctx context.Context, actionContext plugin.ActionContext) {
 			c.jumpToFolder(ctx, query.Env, fullPath)
 		}
@@ -469,6 +473,7 @@ func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title st
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_quickjump_open",
+				Icon: icons.Get(icons.ActionOpen),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.Open(fullPath)
 				},
@@ -576,11 +581,12 @@ func (c *QuickJumpPlugin) buildJumpFolderResult(query plugin.Query, title string
 	return plugin.QueryResult{
 		Title:    title,
 		SubTitle: folderPath,
-		Icon:     common.PluginQuickJumpIcon,
+		Icon:     icons.Get(icons.PluginQuickJump),
 		Score:    score,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_quickjump_jump_to",
+				Icon:                   icons.Get(icons.ActionOpen),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.jumpToFolder(ctx, query.Env, folderPath)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/filesearch"
@@ -87,7 +87,7 @@ func (c *FileSearchPlugin) buildStatusQueryResponse(diagnostics filesearch.Diagn
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "Copy Report",
-						Icon:                   common.CopyIcon,
+						Icon:                   icons.Get(icons.ActionCopy),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							c.api.Copy(ctx, plugin.CopyParams{Type: plugin.CopyTypePlainText, Text: report})

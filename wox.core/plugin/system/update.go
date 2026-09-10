@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -13,7 +14,7 @@ import (
 	"wox/util/shell"
 )
 
-var updateIcon = common.UpdateIcon
+var updateIcon = icons.Get(icons.ActionUpdate)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &UpdatePlugin{})
@@ -135,7 +136,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 			plugin.QueryResultAction{
 				Name:                   "i18n:plugin_update_action_enable_auto_update",
 				IsDefault:              true,
-				Icon:                   common.CorrectIcon,
+				Icon:                   icons.Get(icons.ActionCorrect),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if woxSetting := setting.GetSettingManager().GetWoxSetting(ctx); woxSetting != nil {
@@ -151,7 +152,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 			},
 			p.buildSwitchReleaseChannelAction(ctx, autoUpdateEnabled, releaseChannel, channelVersions),
 			plugin.QueryResultAction{
-				Icon:                   common.SettingIcon,
+				Icon:                   icons.Get(icons.ActionSettings),
 				Name:                   "i18n:plugin_update_action_open_settings",
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -162,7 +163,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 		if info.DownloadUrl != "" {
 			actions = append(actions, plugin.QueryResultAction{
 				Name:                   "i18n:plugin_update_action_manual_download",
-				Icon:                   updateIcon,
+				Icon:                   icons.Get(icons.ActionInstall),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					latest := updater.GetUpdateInfo()
@@ -177,7 +178,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 
 	checkAction := plugin.QueryResultAction{
 		Name:                   "i18n:plugin_update_action_check",
-		Icon:                   common.UpdateIcon,
+		Icon:                   icons.Get(icons.ActionUpdate),
 		IsDefault:              info.Status != updater.UpdateStatusReady,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -194,7 +195,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 	if info.DownloadUrl != "" {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_update_action_manual_download",
-			Icon:                   updateIcon,
+			Icon:                   icons.Get(icons.ActionInstall),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				latest := updater.GetUpdateInfo()
@@ -208,7 +209,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 	if info.Status == updater.UpdateStatusReady && info.DownloadedPath != "" {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_update_action_apply",
-			Icon:                   common.InstallIcon,
+			Icon:                   icons.Get(icons.ActionInstall),
 			IsDefault:              true,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -239,7 +240,7 @@ func (p *UpdatePlugin) buildSwitchReleaseChannelAction(ctx context.Context, auto
 	return plugin.QueryResultAction{
 		Id:                     fmt.Sprintf("switch_to_%s_channel", targetChannel),
 		Name:                   p.switchReleaseChannelActionName(ctx, targetChannel, updateChannelLatestVersion(channelVersions, targetChannel)),
-		Icon:                   common.StarIcon,
+		Icon:                   icons.Get(icons.ActionStar),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)

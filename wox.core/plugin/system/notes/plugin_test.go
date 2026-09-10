@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/fuzzymatch"
@@ -104,7 +105,7 @@ func TestNoteResultsPinActionAndPinnedGroup(t *testing.T) {
 		t.Fatalf("unpinned note group = %#v", unpinned.Results[0])
 	}
 	assertNoteActionIcons(t, unpinned.Results[0].Actions)
-	if unpinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_pin" || unpinned.Results[0].Actions[1].Icon.String() != common.PinIcon.String() {
+	if unpinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_pin" || unpinned.Results[0].Actions[1].Icon.String() != icons.Get(icons.ActionPin).String() {
 		t.Fatalf("pin action = %#v", unpinned.Results[0].Actions[1])
 	}
 
@@ -118,7 +119,7 @@ func TestNoteResultsPinActionAndPinnedGroup(t *testing.T) {
 	if pinned.Results[0].Group != "i18n:plugin_notes_group_pinned" || pinned.Results[0].GroupScore != 100 {
 		t.Fatalf("pinned note group = %#v", pinned.Results[0])
 	}
-	if pinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_unpin" || pinned.Results[0].Actions[1].Icon.String() != common.UnpinIcon.String() {
+	if pinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_unpin" || pinned.Results[0].Actions[1].Icon.String() != icons.Get(icons.ActionUnpin).String() {
 		t.Fatalf("unpin action = %#v", pinned.Results[0].Actions[1])
 	}
 }
@@ -126,13 +127,13 @@ func TestNoteResultsPinActionAndPinnedGroup(t *testing.T) {
 func assertNoteActionIcons(t *testing.T, actions []plugin.QueryResultAction) {
 	t.Helper()
 	want := map[string]string{
-		"open":            common.OpenIcon.String(),
-		"pin":             common.PinIcon.String(),
-		"copy-link":       common.CopyIcon.String(),
-		"export-markdown": common.InstallIcon.String(),
-		"export-text":     common.TextIcon.String(),
-		"export-html":     common.InstallIcon.String(),
-		"delete":          common.TrashIcon.String(),
+		"open":            icons.Get(icons.ActionOpen).String(),
+		"pin":             icons.Get(icons.ActionPin).String(),
+		"copy-link":       icons.Get(icons.ActionCopy).String(),
+		"export-markdown": icons.Get(icons.ActionInstall).String(),
+		"export-text":     icons.Get(icons.ActionText).String(),
+		"export-html":     icons.Get(icons.ActionInstall).String(),
+		"delete":          icons.Get(icons.ActionDelete).String(),
 	}
 	if len(actions) != len(want) {
 		t.Fatalf("actions = %#v", actions)
@@ -269,7 +270,7 @@ func TestCreateNoteActionUsesPluginCommand(t *testing.T) {
 	if action.Name != "i18n:plugin_notes_action_save" {
 		t.Fatalf("action name = %q", action.Name)
 	}
-	if action.Icon.String() != common.PluginNotesIcon.String() {
+	if action.Icon.String() != icons.Get(icons.ActionAdd).String() {
 		t.Fatalf("action icon = %q", action.Icon.String())
 	}
 }

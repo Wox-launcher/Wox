@@ -1,0 +1,186 @@
+package icons
+
+import "wox/common"
+
+var tuneUIIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>`)
+
+var defaultUIIcons = map[string]common.WoxImage{
+
+	// Settings navigation.
+	SettingsGeneral:          newMonochromeUIIcon(`<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.4.28.75.62 1 .99.25.38.39.82.4 1.27v1.48c-.01.45-.15.9-.4 1.27-.25.37-.6.71-1 .99z"/>`),
+	SettingsUi:               newMonochromeUIIcon(`<path d="M12 3a9 9 0 1 0 0 18h1.5a1.5 1.5 0 0 0 0-3H12a1.5 1.5 0 0 1 0-3h2a7 7 0 0 0 7-7c0-2.76-4.03-5-9-5z"/><path d="M7.5 10.5h.01M9.5 6.5h.01M14.5 6.5h.01M17 10h.01"/>`),
+	SettingsAi:               newMonochromeUIIcon(`<path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4zM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>`),
+	SettingsNetwork:          newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>`),
+	SettingsData:             newMonochromeUIIcon(`<path d="M3 7.5h6l2-2h10v13H3z"/>`),
+	SettingsDataBackup:       newMonochromeUIIcon(`<path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.2 8.6 4.7 4.7 0 0 0 7 18z"/><path d="m9 13 3-3 3 3M12 10v6"/>`),
+	SettingsDataCloudsync:    newMonochromeUIIcon(`<path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.2 8.6 4.7 4.7 0 0 0 7 18z"/>`),
+	SettingsPlugins:          newMonochromeUIIcon(`<path d="M8.5 3v4H5a2 2 0 0 0-2 2v3.5h4a2 2 0 1 1 0 4H3V21h6a2 2 0 0 0 2-2v-3.5h3.5a2 2 0 1 0 4 0H21V9a2 2 0 0 0-2-2h-3.5V3a2 2 0 1 0-4 0z"/>`),
+	SettingsPluginsStore:     newMonochromeUIIcon(`<path d="M6 8h12l1 13H5zM9 8V6a3 3 0 0 1 6 0v2"/>`),
+	SettingsPluginsInstalled: newMonochromeUIIcon(`<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M17 14v6M14 17h6"/>`),
+	SettingsPluginsRuntime:   newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 10 2 2-2 2M12 15h4"/>`),
+	SettingsThemes:           newMonochromeUIIcon(`<path d="M12 3a9 9 0 1 0 0 18h1.5a1.5 1.5 0 0 0 0-3H12a1.5 1.5 0 0 1 0-3h2a7 7 0 0 0 7-7c0-2.76-4.03-5-9-5z"/><path d="M7.5 10.5h.01M9.5 6.5h.01M14.5 6.5h.01M17 10h.01"/>`),
+	SettingsThemesStore:      newMonochromeUIIcon(`<path d="M6 8h12l1 13H5zM9 8V6a3 3 0 0 1 6 0v2"/>`),
+	SettingsThemesInstalled:  newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`),
+	SettingsThemesEdit:       tuneUIIcon,
+	SettingsUsage:            newMonochromeUIIcon(`<path d="M4 19V9M9 19V5M14 19v-7M19 19V3"/>`),
+	SettingsDebug:            newMonochromeUIIcon(`<path d="M8 9h8M9 4h6l1 3H8zM6 12h12v5a6 6 0 0 1-12 0zM3 14h3M18 14h3M4 20l3-2M20 20l-3-2"/>`),
+	SettingsUpdate:           newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
+	SettingsPrivacy:          newMonochromeUIIcon(`<path d="M12 3 5 6v5c0 4.8 2.9 8.2 7 10 4.1-1.8 7-5.2 7-10V6z"/>`),
+	SettingsAbout:            newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>`),
+
+	// Query hotkey window positions.
+	PositionSystemDefault: newSystemDefaultPositionUIIcon(),
+	PositionTopLeft:       newPositionUIIcon("7", "7"),
+	PositionTopCenter:     newPositionUIIcon("12", "7"),
+	PositionTopRight:      newPositionUIIcon("17", "7"),
+	PositionMiddleLeft:    newPositionUIIcon("7", "12"),
+	PositionCenter:        newPositionUIIcon("12", "12"),
+	PositionMiddleRight:   newPositionUIIcon("17", "12"),
+	PositionBottomLeft:    newPositionUIIcon("7", "17"),
+	PositionBottomCenter:  newPositionUIIcon("12", "17"),
+	PositionBottomRight:   newPositionUIIcon("17", "17"),
+
+	// Windows taskbar and system-tray chrome.
+	SystemWindows:   newMonochromeUIIcon(`<path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/>`),
+	SystemBrowser:   newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6M12 21v-6M3 12h6"/>`),
+	SystemCode:      newMonochromeUIIcon(`<path d="m8 6-6 6 6 6M16 6l6 6-6 6M14 3l-4 18"/>`),
+	SystemWifi:      newMonochromeUIIcon(`<path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>`),
+	SystemVolume:    newMonochromeUIIcon(`<path d="M4 10v4h3l4 3V7l-4 3zM15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/>`),
+	SystemBluetooth: newMonochromeUIIcon(`<path d="m12 3 5 5-5 4 5 4-5 5V3zM4 8l12 8M4 16l12-8"/>`),
+
+	// Reusable controls.
+	ControlAdd:               newMonochromeUIIcon(`<path d="M12 5v14M5 12h14"/>`),
+	ControlChatBubble:        common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M4 4h16v13H8l-4 4z"/></svg>`),
+	ControlAddCircle:         newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>`),
+	ControlRemove:            newMonochromeUIIcon(`<path d="M5 12h14"/>`),
+	ControlUndo:              newMonochromeUIIcon(`<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`),
+	ControlSave:              newMonochromeUIIcon(`<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>`),
+	ControlOverwrite:         newMonochromeUIIcon(`<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M12 10v7"/><path d="m9 13.5 3 3.5 3-3.5"/>`),
+	ControlSearch:            newMonochromeUIIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`),
+	ControlFullscreen:        newMonochromeUIIcon(`<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
+	ControlFullscreenExit:    newMonochromeUIIcon(`<path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/>`),
+	ControlSidebar:           newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>`),
+	ControlTune:              tuneUIIcon,
+	ControlSettingsSuggest:   newMonochromeUIIcon(`<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15"/><path d="m18 3 .55 1.45L20 5l-1.45.55L18 7l-.55-1.45L16 5l1.45-.55z"/>`),
+	ControlLocate:            newMonochromeUIIcon(`<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`),
+	ControlBrightness:        newMonochromeUIIcon(`<circle cx="12" cy="12" r="5"/><path d="M12 7a5 5 0 0 0 0 10zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>`),
+	ControlCheckCircle:       newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`),
+	ControlBuild:             newMonochromeUIIcon(`<path d="M14.7 6.3a4 4 0 0 0-5-5L12 3.6 9.6 6 7.3 3.7a4 4 0 0 0 5 5L20 16.4a2.1 2.1 0 0 1-3 3z"/>`),
+	ControlArticle:           newMonochromeUIIcon(`<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h6M9 11h6M9 15h4"/>`),
+	ControlTerminal:          newMonochromeUIIcon(`<path d="m5 7 5 5-5 5M12 17h7"/>`),
+	ControlPlayArrow:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg>`),
+	ControlHourglassEmpty:    newMonochromeUIIcon(`<path d="M6 2h12M6 22h12M7 2c0 5 2 7 5 10-3 3-5 5-5 10M17 2c0 5-2 7-5 10 3 3 5 5 5 10"/>`),
+	ControlSparkles:          newMonochromeUIIcon(`<path d="m12 3 1.15 3.1L16 7.25l-2.85 1.15L12 11.5l-1.15-3.1L8 7.25l2.85-1.15z"/><path d="m18 12 .85 2.15L21 15l-2.15.85L18 18l-.85-2.15L15 15l2.15-.85zM6 13l.65 1.85L8.5 15.5l-1.85.65L6 18l-.65-1.85-1.85-.65 1.85-.65z"/>`),
+	ControlWaveform:          newMonochromeUIIcon(`<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4"/>`),
+	ControlMultitrackAudio:   newMonochromeUIIcon(`<path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/>`),
+	ControlPlayCircle:        newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
+	ControlRecord:            newMonochromeUIIcon(`<circle cx="12" cy="12" r="8.25"/><circle cx="12" cy="12" r="4.75" fill="currentColor" stroke="none"/>`),
+	ControlStop:              newMonochromeUIIcon(`<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>`),
+	ScreenshotVideoCamera:    newMonochromeUIIcon(`<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>`),
+	ControlPause:             newMonochromeUIIcon(`<path d="M9 7v10M15 7v10"/>`),
+	ControlExternal:          newMonochromeUIIcon(`<path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/>`),
+	ControlLink:              newMonochromeUIIcon(`<path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07 0l-2 2A5 5 0 0 0 12 20.07l1.15-1.15"/>`),
+	ControlStore:             newMonochromeUIIcon(`<path d="M4 9h16M5 9l1-5h12l1 5M6 9v11h12V9"/><path d="M9 20v-6h6v6"/>`),
+	ControlFilter:            newMonochromeUIIcon(`<path d="M4 5h16l-6 7v6l-4 2v-8z"/>`),
+	ControlInbox:             newMonochromeUIIcon(`<path d="M4 4h16v13a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4z"/><path d="M4 13h3l3 3h4l3-3h3"/>`),
+	ControlEdit:              newMonochromeUIIcon(`<path d="M13.5 6.5l4 4M4 20h4l10.5-10.5a2.83 2.83 0 1 0-4-4L4 16v4z"/>`),
+	ControlList:              newMonochromeUIIcon(`<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>`),
+	ControlCopy:              newMonochromeUIIcon(`<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>`),
+	ControlDelete:            newMonochromeUIIcon(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`),
+	ControlFolderOpen:        newMonochromeUIIcon(`<path d="M3 7h6l2 2h10l-2 10H5z"/><path d="M3 7v12h2"/>`),
+	ControlAccessibility:     newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.2" r="1.25" fill="#fff" stroke="none"/><path d="M6.8 11.6 12 10.3l5.2 1.3"/><path d="M12 8.6v3.8"/><path d="M8.8 18.4 12 12.4l3.2 6"/>`),
+	ControlInternalDrive:     newMonochromeUIIcon(`<rect x="3.5" y="5" width="17" height="14" rx="5"/><path d="M7 15.5v2M9.5 15.5v2M12 15.5v2M14.5 15.5v2M17 15.5v2"/>`),
+	ControlEmoji:             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>`),
+	ControlUpload:            newMonochromeUIIcon(`<path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5"/>`),
+	ControlDownload:          newMonochromeUIIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
+	ControlError:             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>`),
+	ControlWarning:           newMonochromeUIIcon(`<path d="M12 3 2.8 20h18.4z"/><path d="M12 9v5M12 17h.01"/>`),
+	ControlRefresh:           newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
+	ControlSwap:              newMonochromeUIIcon(`<path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/>`),
+	ControlMoveVertical:      newMonochromeUIIcon(`<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>`),
+	ControlGripDots:          newMonochromeUIIcon(`<circle cx="9" cy="6" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="6" r="1.6" fill="#fff" stroke="none"/><circle cx="9" cy="12" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="#fff" stroke="none"/><circle cx="9" cy="18" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="18" r="1.6" fill="#fff" stroke="none"/>`),
+	ControlLoading:           newMonochromeUIIcon(`<circle cx="12" cy="12" r="9" opacity=".15"/><path d="M12 3a9 9 0 0 1 9 9"/>`),
+	ControlEmail:             newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>`),
+	ControlKey:               newMonochromeUIIcon(`<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l3 3"/>`),
+	ControlKeyboard:          newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6M8 16h8"/>`),
+	ControlKeyboardTab:       newMonochromeUIIcon(`<path d="M4 12h10M10 8l4 4-4 4"/><path d="M18 7v10"/>`),
+	ControlDemo:              newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
+	ControlBolt:              newMonochromeUIIcon(`<path d="M13 2 4.5 13.5h5.5L9 22l10-13h-6z"/>`),
+	ControlOnboarding:        newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m16.2 7.8-2.1 6.4-6.4 2.1 2.1-6.4z"/>`),
+	ControlDocument:          newMonochromeUIIcon(`<path d="M6 2h8l4 4v16H6zM14 2v5h5M9 12h6M9 16h6"/>`),
+	ControlCode:              newMonochromeUIIcon(`<path d="m8 9-3 3 3 3M16 9l3 3-3 3"/>`),
+	ControlCheckboxChecked:   newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 5-6"/>`),
+	ControlCheckboxUnchecked: newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/>`),
+	ControlClose:             common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>`),
+	ControlWindowMinimize:    common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="square"><path d="M6 12h12"/></svg>`),
+	ControlWindowMaximize:    common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="miter"><rect x="6.5" y="6.5" width="11" height="11"/></svg>`),
+	ControlWindowRestore:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="miter" stroke-linecap="square"><path d="M9 5.5h9.5V15"/><rect x="5.5" y="8.5" width="10" height="10"/></svg>`),
+	ControlMenu:              common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>`),
+	ControlChevronUp:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>`),
+	ControlChevronDown:       common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`),
+	ControlClock:             common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`),
+	ControlFilterList:        common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>`),
+	ControlCheck:             common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>`),
+	ControlArrowLeft:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M15.41 7.41 10.83 12l4.58 4.59L14 18l-6-6 6-6z"/></svg>`),
+	ControlArrowRight:        common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>`),
+	ControlArrowDown:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>`),
+	ControlModelTraining:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M15.5 13.5c0 2-2.5 3.5-2.5 5h-2c0-1.5-2.5-3-2.5-5 0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5M13 19.5h-2v.5c0 .55.45 1 1 1s1-.45 1-1zM19 13c0 1.39-.41 2.69-1.12 3.78-.25.39-.19.91.14 1.24.44.44 1.2.38 1.54-.15A8.95 8.95 0 0 0 21 13c0-2.36-.91-4.51-2.4-6.12-.39-.42-1.05-.43-1.45-.03-.38.38-.38.99-.02 1.39A6.97 6.97 0 0 1 19 13M15.65 4.65l-2.79-2.79c-.32-.32-.86-.1-.86.35V4a9 9 0 0 0-7.56 13.88c.34.53 1.1.59 1.54.15.33-.33.39-.84.14-1.23A6.97 6.97 0 0 1 12 6v1.79c0 .45.54.67.85.35l2.79-2.79c.2-.19.2-.51.01-.7"/></svg>`),
+	ControlMoreHorizontal:    common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`),
+	ControlPin:               newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
+
+	// Notes and other compact editor format bars.
+	ControlFormatHeading:       newMonochromeUIIcon(`<path d="M6 5v14M18 5v14M6 12h12"/>`),
+	ControlFormatBold:          newMonochromeUIIcon(`<path d="M7 5h7a3.5 3.5 0 0 1 0 7H7zM7 12h8a3.5 3.5 0 0 1 0 7H7z"/>`),
+	ControlFormatItalic:        newMonochromeUIIcon(`<path d="M15 5H9M13 19H7M13.5 5 10.5 19"/>`),
+	ControlFormatUnderline:     newMonochromeUIIcon(`<path d="M7 5v7a5 5 0 0 0 10 0V5M5 20h14"/>`),
+	ControlFormatStrikethrough: newMonochromeUIIcon(`<path d="M5 12h14M16 7.2C15.2 5.8 13.8 5 12 5c-2.6 0-4.2 1.5-4.2 3.2 0 3.6 8.4 2 8.4 6.2 0 1.8-1.6 3.6-4.2 3.6-2 0-3.5-.9-4.3-2.2"/>`),
+	ControlFormatOrdered:       newMonochromeUIIcon(`<path d="M11 6h9M11 12h9M11 18h9M5 8V4.5l-1.4 1M4 13.2h2.6L4 18h3"/>`),
+	ControlFormatQuote:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>`),
+	ControlFormatDivider:       newMonochromeUIIcon(`<path d="M5 12h14"/>`),
+	ControlFormatTable:         newMonochromeUIIcon(`<path d="M4 6h16v12H4zM4 10h16M4 14h16M10 6v12M16 6v12"/>`),
+	ControlTableInsertRow:      newMonochromeUIIcon(`<path d="M4 3h16v11H4zM4 7.5h16M10 3v11M8 18h8M12 14v8"/>`),
+	ControlTableInsertColumn:   newMonochromeUIIcon(`<path d="M3 4h12v16H3zM3 9.5h12M3 15h12M8 4v16M17 12h5M19.5 9.5v5"/>`),
+	ControlTableDeleteRow:      newMonochromeUIIcon(`<path d="M4 3h16v11H4zM4 7.5h16M10 3v11M8 19h8"/>`),
+	ControlTableDeleteColumn:   newMonochromeUIIcon(`<path d="M3 4h12v16H3zM3 9.5h12M3 15h12M8 4v16M17 12h5"/>`),
+
+	// Screenshot annotation toolbar.
+	ScreenshotSelect:           newMonochromeUIIcon(`<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="2 2"/>`),
+	ScreenshotRectangle:        newMonochromeUIIcon(`<rect x="4" y="5" width="16" height="14" rx="1"/>`),
+	ScreenshotEllipse:          newMonochromeUIIcon(`<ellipse cx="12" cy="12" rx="8" ry="7"/>`),
+	ScreenshotText:             newMonochromeUIIcon(`<path d="M5 5h14M12 5v14" stroke-width="2.4"/>`),
+	ScreenshotArrow:            newMonochromeUIIcon(`<path d="M5 19 19 5M11 5h8v8"/>`),
+	ScreenshotNumber:           newMonochromeUIIcon(`<circle cx="12" cy="12" r="8.5"/><path d="m10 9 2-2v10M9.5 17h5"/>`),
+	ScreenshotMosaic:           newMonochromeUIIcon(`<rect x="3.5" y="3.5" width="17" height="17" rx=".75"/><path d="M4 4h4v4H4zM12 4h4v4h-4zM8 8h4v4H8zM16 8h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4zM8 16h4v4H8zM16 16h4v4h-4z" fill="#fff" stroke="none"/>`),
+	ScreenshotScrollingCapture: newMonochromeUIIcon(`<path d="m8 7 4-4 4 4M12 3v18M8 17l4 4 4-4"/>`),
+	ScreenshotCursor:           common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4.5 2.5v16.2l4.1-4 3.4 7.1 3.8-1.8-3.3-6.8h6.1L4.5 2.5Z" fill="#fff" stroke="#171717" stroke-width="1.6" stroke-linejoin="round"/></svg>`),
+	ScreenshotPin:              newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
+
+	// Usage dashboard.
+	UsageShare:      common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M6 22q-.825 0-1.412-.587T4 20V10q0-.825.588-1.412T6 8h2q.425 0 .713.288T9 9t-.288.713T8 10H6v10h12V10h-2q-.425 0-.712-.288T15 9t.288-.712T16 8h2q.825 0 1.413.588T20 10v10q0 .825-.587 1.413T18 22zm5.288-6.288Q11 15.425 11 15V4.825l-.9.9q-.3.3-.7.288T8.7 5.7q-.275-.3-.287-.7t.287-.7l2.6-2.6q.15-.15.325-.212T12 1.425t.375.063t.325.212l2.6 2.6q.275.275.275.688T15.3 5.7q-.3.3-.712.3t-.713-.3L13 4.825V15q0 .425-.288.713T12 16t-.712-.288"/></svg>`),
+	UsageVisibility: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M15.188 14.688Q16.5 13.375 16.5 11.5t-1.312-3.187T12 7T8.813 8.313T7.5 11.5t1.313 3.188T12 16t3.188-1.312m-5.1-1.276Q9.3 12.625 9.3 11.5t.788-1.912T12 8.8t1.913.788t.787 1.912t-.787 1.913T12 14.2t-1.912-.787m-4.2 3.787q-2.763-1.8-4.363-4.75q-.125-.225-.187-.462t-.063-.488t.063-.488t.187-.462q1.6-2.95 4.363-4.75T12 4t6.113 1.8t4.362 4.75q.125.225.188.463t.062.487t-.062.488t-.188.462q-1.6 2.95-4.362 4.75T12 19t-6.113-1.8m11.3-1.687Q19.55 14.025 20.8 11.5q-1.25-2.525-3.613-4.012T12 6T6.813 7.488T3.2 11.5q1.25 2.525 3.613 4.013T12 17t5.188-1.487"/></svg>`),
+	UsageRocket:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M6.125 12.15q.65-1.65 1.563-3.175T9.75 6.1l-1.3-.275q-.5-.1-.975.05t-.825.5L3.5 9.525q-.375.375-.288.9t.588.725zm14.7-9.75q-2.65-.125-5.037 1.025T11.525 6.45q-1.2 1.2-2.113 2.6T7.826 12q-.125.325-.125.663t.25.587l3.125 3.125q.25.25.588.25t.662-.125q1.55-.675 2.95-1.588t2.6-2.112q1.875-1.875 3.025-4.262T21.925 3.5q0-.2-.1-.4t-.25-.35t-.35-.25t-.4-.1M13.9 8.438q0-.838.575-1.413t1.413-.575t1.412.575t.575 1.413T17.3 9.85t-1.412.575t-1.413-.575t-.575-1.412M12.175 18.2l1 2.325q.2.5.725.6t.9-.275l3.15-3.15q.35-.35.5-.837t.05-.988l-.25-1.3q-1.375 1.15-2.887 2.063T12.175 18.2M4.05 16.05q.875-.875 2.125-.888t2.125.863t.875 2.125t-.875 2.125q-1.2 1.2-2.838 1.425t-3.287.45q.225-1.65.463-3.287T4.05 16.05"/></svg>`),
+	UsageApps:       common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M4.588 19.413Q4 18.825 4 18t.588-1.412T6 16t1.413.588T8 18t-.587 1.413T6 20t-1.412-.587m6 0Q10 18.825 10 18t.588-1.412T12 16t1.413.588T14 18t-.587 1.413T12 20t-1.412-.587m6 0Q16 18.825 16 18t.588-1.412T18 16t1.413.588T20 18t-.587 1.413T18 20t-1.412-.587m-12-6Q4 12.825 4 12t.588-1.412T6 10t1.413.588T8 12t-.587 1.413T6 14t-1.412-.587m6 0Q10 12.825 10 12t.588-1.412T12 10t1.413.588T14 12t-.587 1.413T12 14t-1.412-.587m6 0Q16 12.825 16 12t.588-1.412T18 10t1.413.588T20 12t-.587 1.413T18 14t-1.412-.587m-12-6Q4 6.825 4 6t.588-1.412T6 4t1.413.588T8 6t-.587 1.413T6 8t-1.412-.587m6 0Q10 6.825 10 6t.588-1.412T12 4t1.413.588T14 6t-.587 1.413T12 8t-1.412-.587m6 0Q16 6.825 16 6t.588-1.412T18 4t1.413.588T20 6t-.587 1.413T18 8t-1.412-.587"/></svg>`),
+	UsageBolt:       common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M9 15H5.9q-.6 0-.888-.537t.063-1.038l7.475-10.75q.25-.35.65-.487t.825.012t.625.525t.15.8L14 10h3.875q.65 0 .913.575t-.163 1.075L10.4 21.5q-.275.325-.675.425t-.775-.075t-.587-.537t-.163-.788z"/></svg>`),
+	UsageCalendar:   common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M5 22q-.825 0-1.412-.587T3 20V6q0-.825.588-1.412T5 4h1V3q0-.425.288-.712T7 2t.713.288T8 3v1h8V3q0-.425.288-.712T17 2t.713.288T18 3v1h1q.825 0 1.413.588T21 6v14q0 .825-.587 1.413T19 22zm0-2h14V10H5zM5 8h14V6H5zm0 0V6z"/></svg>`),
+	UsageExtension:  common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M5 19h13v-3.975q0-.275.138-.525t.412-.375l.575-.275q.4-.2.638-.55t.237-.8q0-.425-.238-.788t-.637-.562l-.55-.25q-.275-.125-.425-.363T18 10V6h-3.925q-.375 0-.662-.238t-.338-.612l-.125-.85q-.075-.55-.487-.925T11.5 3q-.575 0-.987.375t-.488.925l-.125.85q-.05.375-.337.613T8.9 6H5v2.15q1.4.525 2.2 1.7T8 12.5q0 1.5-.8 2.675t-2.2 1.7zm0 2q-.85 0-1.425-.575T3 19v-3.125q0-.275.2-.488t.475-.262q.975-.2 1.65-.913T6 12.5q0-.975-.675-1.675T3.675 9.9Q3.4 9.825 3.2 9.612T3 9.125V6q0-.825.588-1.412T5 4h3.05q.175-1.275 1.15-2.137T11.5 1q1.3 0 2.275.863T14.95 4H18q.825 0 1.413.588T20 6v3.35q.9.45 1.45 1.3T22 12.5q0 1.025-.55 1.875T20 15.65V19q0 .85-.587 1.425T18 21zm7.5-8.5"/></svg>`),
+	UsageTrophy:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M7 21v-2h4v-3.1q-1.225-.275-2.187-1.037T7.4 12.95q-1.875-.225-3.137-1.637T3 8V7q0-.825.588-1.412T5 5h2V3h10v2h2q.825 0 1.413.588T21 7v1q0 1.9-1.263 3.313T16.6 12.95q-.45 1.15-1.412 1.913T13 15.9V19h4v2zm0-10.2V7H5v1q0 .95.55 1.713T7 10.8m10 0q.9-.325 1.45-1.088T19 8V7h-2z"/></svg>`),
+	UsageMedal:      common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="m12 19.65l-1.85 1.4q-.3.225-.6.013t-.175-.563l.725-2.3l-1.825-1.3q-.3-.2-.175-.55t.475-.35H10.8l.7-2.3l-3.55-2.1q-.45-.275-.7-.725T7 9.85V4q0-.825.588-1.412T9 2h6q.825 0 1.413.588T17 4v5.85q0 .575-.25 1.025t-.7.725l-3.55 2.1l.7 2.3h2.225q.35 0 .475.35t-.175.55L13.9 18.2l.725 2.3q.125.35-.175.563t-.6-.013zM9 4v5.85l2 1.2V4zm6 0h-2v7.05l2-1.2zm-2 3.525"/></svg>`),
+
+	// Runtime and plugin brands.
+	RuntimePython: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#0288d1" d="M9.86 2A2.86 2.86 0 0 0 7 4.86v1.68h4.29c.39 0 .71.57.71.96H4.86A2.86 2.86 0 0 0 2 10.36v3.781a2.86 2.86 0 0 0 2.86 2.86h1.18v-2.68a2.85 2.85 0 0 1 2.85-2.86h5.25c1.58 0 2.86-1.271 2.86-2.851V4.86A2.86 2.86 0 0 0 14.14 2zm-.72 1.61c.4 0 .72.12.72.71s-.32.891-.72.891c-.39 0-.71-.3-.71-.89s.32-.711.71-.711"/><path fill="#fdd835" d="M17.959 7v2.68a2.85 2.85 0 0 1-2.85 2.859H9.86A2.85 2.85 0 0 0 7 15.389v3.75a2.86 2.86 0 0 0 2.86 2.86h4.28A2.86 2.86 0 0 0 17 19.14v-1.68h-4.291c-.39 0-.709-.57-.709-.96h7.14A2.86 2.86 0 0 0 22 13.64V9.86A2.86 2.86 0 0 0 19.14 7zM8.32 11.513l-.004.004l.038-.004zm6.54 7.276c.39 0 .71.3.71.89a.71.71 0 0 1-.71.71c-.4 0-.72-.12-.72-.71s.32-.89.72-.89"/></svg>`),
+	RuntimeNodejs: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="#8bc34a" d="M16 20.003v2h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-2v-2h4v-2h-4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2v2Z"/><path fill="#8bc34a" d="m16 3.003l-12 7v14l4 2h6v-13.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v11.5H8l-2-1.034V11.15l10-5.833l10 5.833v11.703l-10 5.833l-1.745-1.022L13 29.253l3 1.75l12-7v-14Z"/></svg>`),
+	RuntimeScript: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke-width="1.5"><path fill="#d7e0ff" d="M18 22H2v-6h3V2h17v6h-4z"/><path stroke="#4147d5" d="M14.25 22h3.25H2v-6h12.25v4"/><path stroke="#4147d5" d="M13.5 22H18V4.5M8 8h7m-7 4h7"/><path stroke="#4147d5" d="M5 16V2h17v6h-4"/></g></svg>`),
+	PluginGithub:  common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 98 96"><path fill="#24292f" fill-rule="evenodd" clip-rule="evenodd" d="M48.9 0C21.9 0 0 22 0 49.1c0 21.7 14 40.1 33.4 46.6 2.4.5 3.3-1.1 3.3-2.4 0-1.2 0-4.2-.1-8.3-13.6 3-16.4-6.6-16.4-6.6-2.2-5.7-5.4-7.2-5.4-7.2-4.4-3 .3-3 .3-3 4.9.3 7.5 5.1 7.5 5.1 4.3 7.5 11.4 5.3 14.1 4.1.4-3.2 1.7-5.3 3.1-6.5-10.8-1.2-22.2-5.4-22.2-24.2 0-5.4 1.9-9.7 5-13.2-.5-1.2-2.2-6.2.5-13 0 0 4.1-1.3 13.4 5 3.9-1.1 8-1.6 12.2-1.6s8.3.6 12.2 1.6c9.3-6.3 13.4-5 13.4-5 2.7 6.8 1 11.8.5 13 3.1 3.5 5 7.8 5 13.2 0 18.8-11.4 22.9-22.3 24.1 1.8 1.5 3.3 4.5 3.3 9.1 0 6.5-.1 11.8-.1 13.4 0 1.3.9 2.9 3.4 2.4C84 89.2 98 70.8 98 49.1 97.8 22 75.9 0 48.9 0z"/></svg>`),
+}
+
+func newMonochromeUIIcon(paths string) common.WoxImage {
+	return common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` + paths + `</svg>`)
+}
+
+func newPositionUIIcon(x, y string) common.WoxImage {
+	return common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="#8a8f98" stroke-width="1.5"/><circle cx="` + x + `" cy="` + y + `" r="2.7" fill="#5da3ef"/></svg>`)
+}
+
+func newSystemDefaultPositionUIIcon() common.WoxImage {
+	return common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="#8a8f98" stroke-width="1.5"/><path d="M8 21h8M12 18v3" fill="none" stroke="#8a8f98" stroke-width="1.5" stroke-linecap="round"/><path d="m12 7 .8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z" fill="#5da3ef"/></svg>`)
+}

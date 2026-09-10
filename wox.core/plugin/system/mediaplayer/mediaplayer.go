@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 
@@ -22,7 +23,7 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
-var mediaIcon = common.PluginMediaPlayerIcon
+var mediaIcon = icons.Get(icons.PluginMediaPlayer)
 
 const (
 	// PluginID identifies the built-in media player plugin for internal plugin commands.
@@ -352,11 +353,25 @@ func (m *MediaPlayerPlugin) buildMediaActions(mediaInfo *MediaInfo, preferredDef
 	}
 }
 
+func mediaCommandActionIcon(command string) common.WoxImage {
+	switch command {
+	case mediaControlPause:
+		return icons.Get(icons.ActionPause)
+	case mediaControlNext:
+		return icons.Get(icons.ActionSkipNext)
+	case mediaControlPrevious:
+		return icons.Get(icons.ActionSkipPrevious)
+	default:
+		return icons.Get(icons.ActionRun)
+	}
+}
+
 // buildMediaCommandAction captures the command value so every action invokes its own playback operation.
 func (m *MediaPlayerPlugin) buildMediaCommandAction(command string, name string, isDefault bool) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Id:                     "media-control-" + command,
 		Name:                   name,
+		Icon:                   mediaCommandActionIcon(command),
 		IsDefault:              isDefault,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -372,7 +387,7 @@ func (m *MediaPlayerPlugin) buildOpenMediaAction() plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Id:                     "media-open-player",
 		Name:                   "i18n:plugin_mediaplayer_open",
-		Icon:                   mediaIcon,
+		Icon:                   icons.Get(icons.ActionOpen),
 		Hotkey:                 util.PrimaryHotkey("enter"),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -407,7 +422,7 @@ func (m *MediaPlayerPlugin) formatSubTitle(mediaInfo *MediaInfo) string {
 func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 	if len(mediaInfo.Artwork) == 0 {
 		if mediaInfo.State == PlaybackStatePlaying {
-			return common.MediaPlayingIcon
+			return icons.Get(icons.StatusPlaying)
 		}
 		return mediaIcon
 	}
@@ -415,7 +430,7 @@ func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 	coverDataURI, ok := formatRecordArtworkDataURI(mediaInfo.Artwork)
 	if !ok {
 		if mediaInfo.State == PlaybackStatePlaying {
-			return common.MediaPlayingIcon
+			return icons.Get(icons.StatusPlaying)
 		}
 		return mediaIcon
 	}

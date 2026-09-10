@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
@@ -250,7 +250,7 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 	// the user's Enter key matches their current context.
 	copyAction := plugin.QueryResultAction{
 		Name:      "i18n:plugin_dictation_history_copy",
-		Icon:      common.CopyIcon,
+		Icon:      icons.Get(icons.ActionCopy),
 		IsDefault: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(record.Content); err != nil {
@@ -272,7 +272,7 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name: "i18n:plugin_dictation_history_delete",
-		Icon: common.TrashIcon,
+		Icon: icons.Get(icons.ActionDelete),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			h.remove(ctx, record.ID)
 			h.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
@@ -406,6 +406,7 @@ func buildPasteToActiveWindowAction(ctx context.Context, api dictationSettingAPI
 
 	action := plugin.QueryResultAction{
 		Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), query.Env.ActiveWindowTitle),
+		Icon:      icons.Get(icons.ActionPaste),
 		IsDefault: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(text); err != nil {
@@ -429,7 +430,7 @@ func buildPasteToActiveWindowAction(ctx context.Context, api dictationSettingAPI
 	}
 
 	if !query.Env.ActiveWindowIcon.IsEmpty() {
-		action.Icon = query.Env.ActiveWindowIcon
+		action.TailIcon = query.Env.ActiveWindowIcon
 	}
 	return action, true
 }

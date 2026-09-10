@@ -353,6 +353,12 @@ type QueryResultAction struct {
 
 	// internal use
 	IsSystemAction bool
+	// Tail is optional trailing text on the Action Panel row, such as the
+	// usage-history score boost on Reset ranking.
+	Tail string
+	// TailIcon is an optional identity glyph shown at the trailing edge of the
+	// Action Panel row, such as the plugin icon on Open plugin settings.
+	TailIcon common.WoxImage
 }
 
 type ActionContext struct {
@@ -404,6 +410,8 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				Form:                   action.Form,
 				ContextData:            action.ContextData,
 				IsSystemAction:         action.IsSystemAction,
+				Tail:                   action.Tail,
+				TailIcon:               action.TailIcon,
 			}
 		}),
 	}
@@ -467,6 +475,8 @@ type QueryResultActionUI struct {
 
 	// internal use
 	IsSystemAction bool
+	Tail           string
+	TailIcon       common.WoxImage
 }
 
 // UpdatableResult is used to update a query result that is currently displayed in the UI.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system/converter/engine"
 	"wox/plugin/system/converter/modules"
@@ -44,7 +45,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_converter_plugin_description",
-		Icon:          common.PluginConverterIcon.String(),
+		Icon:          icons.Get(icons.PluginConverter).String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -172,9 +173,9 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 	actions := []plugin.QueryResultAction{}
 	for _, item := range []struct{ key, text string }{{"plugin_converter_copy_result", presentation.Formatted}, {"plugin_converter_copy_raw", presentation.Raw}, {"plugin_converter_copy_question_answer", presentation.Expression + " = " + presentation.Formatted}} {
 		text := item.text
-		actions = append(actions, plugin.QueryResultAction{Name: "i18n:" + item.key, ContextData: common.ContextData{"query": query.Search}, Action: func(context.Context, plugin.ActionContext) { clipboard.WriteText(text) }})
+		actions = append(actions, plugin.QueryResultAction{Name: "i18n:" + item.key, Icon: icons.Get(icons.ActionCopy), ContextData: common.ContextData{"query": query.Search}, Action: func(context.Context, plugin.ActionContext) { clipboard.WriteText(text) }})
 	}
-	return plugin.QueryResponse{AutoRecordQueryHistory: true, Results: []plugin.QueryResult{{Title: presentation.Formatted, SubTitle: presentation.SubTitle, Icon: common.PluginConverterIcon, Tails: c.buildResultTails(ctx, presentation), Actions: actions}}}
+	return plugin.QueryResponse{AutoRecordQueryHistory: true, Results: []plugin.QueryResult{{Title: presentation.Formatted, SubTitle: presentation.SubTitle, Icon: icons.Get(icons.PluginConverter), Tails: c.buildResultTails(ctx, presentation), Actions: actions}}}
 }
 
 // buildCryptoConsentResult gates the first network access behind an explicit action.
@@ -183,12 +184,12 @@ func (c *Converter) buildCryptoConsentResult() plugin.QueryResult {
 		Id:       cryptoConsentResultID,
 		Title:    "i18n:plugin_converter_crypto_consent_title",
 		SubTitle: "i18n:plugin_converter_crypto_consent_subtitle",
-		Icon:     common.PluginConverterIcon,
+		Icon:     icons.Get(icons.PluginConverter),
 		Actions: []plugin.QueryResultAction{
 			{
 				Id:                     cryptoConsentActionID,
 				Name:                   "i18n:plugin_converter_crypto_consent_allow",
-				Icon:                   common.ExecuteRunIcon,
+				Icon:                   icons.Get(icons.ActionRun),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {

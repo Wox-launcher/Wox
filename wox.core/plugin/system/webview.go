@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -58,7 +59,7 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_webview_plugin_description",
-		Icon:          common.PluginWebviewIcon.String(),
+		Icon:          icons.Get(icons.PluginWebview).String(),
 		TriggerKeywords: []string{
 			"webview",
 		},
@@ -251,7 +252,7 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:      "i18n:plugin_webview_open_in_browser",
-					Icon:      common.SearchIcon,
+					Icon:      icons.Get(icons.ActionOpen),
 					IsDefault: true,
 					Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
 						if openErr := browser.OpenURL(site.Url, ""); openErr != nil {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -18,7 +19,7 @@ import (
 
 const colorHistorySettingKey = "colorHistory"
 
-var colorPluginIcon = common.PluginColorIcon
+var colorPluginIcon = icons.Get(icons.PluginColor)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ColorPlugin{})
@@ -201,11 +202,11 @@ func buildColorTailSwatch(kind string, hex string, tooltip string) plugin.QueryR
 
 func (c *ColorPlugin) buildColorActions(ctx context.Context, color parsedColor, item ColorHistoryItem, complement string, analogousLeft string, analogousRight string, rgb string, hsl string) []plugin.QueryResultAction {
 	favoriteActionName := "i18n:plugin_color_mark_favorite"
-	favoriteActionIcon := common.PinIcon
+	favoriteActionIcon := icons.Get(icons.ActionPin)
 	nextFavoriteValue := true
 	if item.Favorite {
 		favoriteActionName = "i18n:plugin_color_cancel_favorite"
-		favoriteActionIcon = common.UnpinIcon
+		favoriteActionIcon = icons.Get(icons.ActionUnpin)
 		nextFavoriteValue = false
 	}
 
@@ -226,7 +227,7 @@ func (c *ColorPlugin) buildColorActions(ctx context.Context, color parsedColor, 
 		},
 		{
 			Name:                   "i18n:plugin_color_name_color",
-			Icon:                   common.EditIcon,
+			Icon:                   icons.Get(icons.ActionEdit),
 			Type:                   plugin.QueryResultActionTypeForm,
 			PreventHideAfterAction: true,
 			Form: definition.PluginSettingDefinitions{
@@ -247,7 +248,7 @@ func (c *ColorPlugin) buildColorActions(ctx context.Context, color parsedColor, 
 		},
 		{
 			Name:                   "i18n:plugin_color_delete",
-			Icon:                   common.TrashIcon,
+			Icon:                   icons.Get(icons.ActionDelete),
 			PreventHideAfterAction: true,
 			Hotkey:                 util.PrimaryHotkey("d"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -261,7 +262,7 @@ func (c *ColorPlugin) buildColorActions(ctx context.Context, color parsedColor, 
 func (c *ColorPlugin) buildCopyAction(name string, text string, isDefault bool) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:      name,
-		Icon:      common.CopyIcon,
+		Icon:      icons.Get(icons.ActionCopy),
 		IsDefault: isDefault,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(text); err != nil {

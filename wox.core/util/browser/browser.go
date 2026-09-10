@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -112,7 +113,7 @@ func IconForBrowserID(browserID string) common.WoxImage {
 			return option.Icon
 		}
 	}
-	return common.ChromeIcon
+	return icons.Get(icons.BrandChrome)
 }
 
 func GetInstalledBrowsers() []BrowserOption {

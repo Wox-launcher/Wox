@@ -228,6 +228,82 @@ func TestActionStillPointerDoesNotStealDefaultSelection(t *testing.T) {
 	}
 }
 
+func TestActionRowUsesSelectedIconWithLabelColor(t *testing.T) {
+	normal := &woxui.Image{Width: 1, Height: 1}
+	selected := &woxui.Image{Width: 2, Height: 2}
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, Selected: 0,
+		Items: []ActionItem{
+			{Index: 0, ID: "copy", Label: "Copy Path", Icon: normal, SelectedIcon: selected},
+			{Index: 1, ID: "open", Label: "Open", Icon: normal, SelectedIcon: selected},
+		},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	rows := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	selectedIcon := rows[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Image)
+	if selectedIcon.Source != selected {
+		t.Fatalf("selected action icon = %#v, want the selected-text tint", selectedIcon.Source)
+	}
+	idleIcon := rows[1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Image)
+	if idleIcon.Source != normal {
+		t.Fatalf("unselected action icon = %#v, want the default text tint", idleIcon.Source)
+	}
+}
+
+func TestActionRowShowsScoreTextAsTail(t *testing.T) {
+	tailColor := woxui.Color{R: 180, G: 180, B: 190, A: 255}
+	selectedTail := woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, ResultTail: tailColor, SelectedTail: selectedTail, Selected: 0,
+		Items: []ActionItem{
+			{Index: 0, ID: "reset", Label: "Reset ranking", Icon: &woxui.Image{}, Tail: "+55"},
+			{Index: 1, ID: "pin", Label: "Pin", Icon: &woxui.Image{}, Tail: "+8"},
+		},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	rows := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	selectedRow := rows[0].(woxwidget.Semantics)
+	if selectedRow.Label != "Reset ranking +55" {
+		t.Fatalf("selected score semantics = %q, want the boost in the accessible label", selectedRow.Label)
+	}
+	selectedTailSlot := selectedRow.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align)
+	selectedTextWidth := actionPanelTailTextWidth(nil, "+55", woxcomponent.TailFontSize)
+	if selectedTailSlot.Width != selectedTextWidth+15 || selectedTailSlot.Height != ActionRowHeight || selectedTailSlot.Vertical != 0.5 {
+		t.Fatalf("selected score tail slot = %#v, want measured text in the trailing hotkey gutter", selectedTailSlot)
+	}
+	selectedContainer := selectedTailSlot.Child.(woxwidget.Container)
+	if selectedContainer.Padding.Left != 10 || selectedContainer.Padding.Right != 5 {
+		t.Fatalf("selected score tail inset = %#v, want the same 10/5 gutter as hotkeys", selectedContainer.Padding)
+	}
+	selectedText, ok := selectedContainer.Child.(woxwidget.Text)
+	if !ok || selectedText.Value != "+55" || selectedText.Style.Size != woxcomponent.TailFontSize || selectedText.Color != selectedTail {
+		t.Fatalf("selected score tail = %#v, want +55 in SelectedTail at TailFontSize", selectedContainer.Child)
+	}
+	idleText := rows[1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Text)
+	if idleText.Value != "+8" || idleText.Color != tailColor {
+		t.Fatalf("unselected score tail = %#v, want +8 in ResultTail", idleText)
+	}
+}
+
+func TestActionRowShowsPluginIconAsTail(t *testing.T) {
+	tail := &woxui.Image{Width: 18, Height: 18}
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, Items: []ActionItem{{ID: "settings", Label: "Open App settings", Icon: &woxui.Image{}, TailIcon: tail}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	content := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(content.Children) != 3 {
+		t.Fatalf("action row children = %d, want leading icon, label, and plugin tail", len(content.Children))
+	}
+	tailSlot := content.Children[2].(woxwidget.Align)
+	if tailSlot.Width != ActionTailIconSize+15 || tailSlot.Height != ActionRowHeight || tailSlot.Vertical != 0.5 {
+		t.Fatalf("plugin tail slot = %#v, want an 18px icon in the trailing hotkey gutter", tailSlot)
+	}
+	if image, ok := tailSlot.Child.(woxwidget.Container).Child.(woxwidget.Image); !ok || image.Source != tail || image.Width != ActionTailIconSize {
+		t.Fatalf("plugin tail icon = %#v, want the authored plugin image", tailSlot.Child)
+	}
+}
+
 func TestActionRowCentersIconAndLabel(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),

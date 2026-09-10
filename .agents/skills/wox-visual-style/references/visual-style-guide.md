@@ -71,8 +71,9 @@ Preserve the current special contracts unless a task explicitly targets them:
 | Launcher structured block | Semantic text-color background with alpha 10/255 (18/255 when active), extending 3 logical units horizontally without moving text, clipped to the editor and shared gaps between adjacent blocks |
 | Action Panel header | 18 optically centered line; do not use a 16 Text slot |
 | Action Panel filter | 40 input inside a 46-high slot |
-| Action Panel row | 40 |
+| Action Panel row | 40; optional 18 plugin identity tail or usage-score text such as `+55` in the trailing gutter, same 10/5 inset as hotkeys |
 | Action Panel group divider | 16-high slot with a 1px `PreviewSplit` hairline; same treatment as the title divider |
+| Action Panel verb icons | Monochrome `action.*` SVGs using `var(--wox-theme-icon-color)` as the untinted fallback. On the Action Panel, tint only those theme-adaptive SVGs with `ActionText` / `ActionSelectedText` so they match the row label. Do not source-in tint plugin, brand, or status identity icons; a filled brand SVG would collapse into a solid blob. The SVG variable itself stays appearance black/white and is not a per-row text color. Execute actions use `action.execute` (lightning), not settings or play. |
 
 If a shared primitive serves both an ordinary page and a special surface, provide an explicit context-specific composition or semantic size instead of changing one default and relying on call-site overrides.
 
@@ -242,7 +243,7 @@ If the widget runtime lacks a reusable pressed-state capability, improve the sha
 
 Use shared `Wox*` components before primitive widgets. A page may use a primitive `Gesture` for a page-specific region, drag target, or tooltip, but not to recreate a common control.
 
-- Prefer categorized SVG icons from `wox.core/common/icons.go`.
+- Prefer categorized SVG icons from `wox/common/icons` via `icons.Get`. Add a new semantic name there before introducing a local asset. Action Panel verbs (`action.*`) are monochrome and must use `var(--wox-theme-icon-color)` because the panel does not tint plugin action images. Settings chrome (`control.*`, `settings.*`) stays a white mask for host tinting.
 - For SVG paints that should adapt to Wox appearance, write `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"`. The shared launcher image pipeline resolves this explicit variable to white (`#ffffff`) in dark themes and black (`#000000`) in light themes, including inline, file, and Base64 SVGs. Preserve fixed brand colors and gradients; do not classify authored black/white paints to infer theme behavior or tint an entire mixed-color SVG. Standard SVG `currentColor` keeps its normal semantics and is not this Wox variable. Existing controls that intentionally tint an entire icon retain that behavior.
 - Place Settings help tooltips above their trigger, including table header/cell info icons and choice-picker options. If the top side overflows, flip below the trigger.
 - Use 16-unit icons in ordinary controls, 18 in navigation, and 24 where an item needs stronger identity.

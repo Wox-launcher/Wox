@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -243,7 +244,7 @@ func Show(ctx context.Context, opts Options) error {
 	}
 	var runtimeLogo *woxui.Image
 	if runtime.GOOS != "darwin" {
-		logo, err := common.WoxIcon.ToImageWithoutRemoteFetch()
+		logo, err := icons.Get(icons.BrandWox).ToImageWithoutRemoteFetch()
 		if err != nil {
 			return fmt.Errorf("failed to decode Wox logo: %w", err)
 		}

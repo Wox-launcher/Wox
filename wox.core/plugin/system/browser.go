@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -21,7 +21,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var browserIcon = common.PluginBrowserIcon
+var browserIcon = icons.Get(icons.PluginBrowser)
 var browserWebsocketPortSettingKey = "browserWebsocketPort"
 
 func init() {
@@ -168,6 +168,7 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_browser_open_tab",
+					Icon: icons.Get(icons.ActionOpen),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						msg := []byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex))
 						if tab.session != nil {

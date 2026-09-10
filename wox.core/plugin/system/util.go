@@ -13,6 +13,7 @@ import (
 	"path"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
@@ -31,7 +32,7 @@ var windowIconCache = util.NewHashMap[string, common.WoxImage]()
 func GetWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.WoxImage, error) {
 	parseUrl, err := url.Parse(websiteUrl)
 	if err != nil {
-		return common.PluginWebsearchIcon, fmt.Errorf("failed to parse url for %s: %s", websiteUrl, err.Error())
+		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to parse url for %s: %s", websiteUrl, err.Error())
 	}
 	hostUrl := parseUrl.Scheme + "://" + parseUrl.Host
 
@@ -56,23 +57,23 @@ func GetWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 	// 2) Fallback to besticon crawler
 	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
 	iconFinder := besticon.New(option).NewIconFinder()
-	icons, fetchErr := iconFinder.FetchIcons(hostUrl)
+	siteIcons, fetchErr := iconFinder.FetchIcons(hostUrl)
 	if fetchErr != nil {
-		return common.PluginWebsearchIcon, fmt.Errorf("failed to fetch icons for %s: %s", hostUrl, fetchErr.Error())
+		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to fetch icons for %s: %s", hostUrl, fetchErr.Error())
 	}
 
-	if len(icons) == 0 {
-		return common.PluginWebsearchIcon, fmt.Errorf("no icons found for %s", hostUrl)
+	if len(siteIcons) == 0 {
+		return icons.Get(icons.PluginWebsearch), fmt.Errorf("no icons found for %s", hostUrl)
 	}
 
-	image, imageEr := icons[0].Image()
+	image, imageEr := siteIcons[0].Image()
 	if imageEr != nil {
-		return common.PluginWebsearchIcon, fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
+		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
 	}
 
 	woxImage, woxImageErr := common.NewWoxImage(*image)
 	if woxImageErr != nil {
-		return common.PluginWebsearchIcon, fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
+		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
 	}
 
 	// save to cache
@@ -207,6 +208,7 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 
 	action := plugin.QueryResultAction{
 		Name:      actionName,
+		Icon:      icons.Get(icons.ActionPaste),
 		IsDefault: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if actionCallback != nil {
@@ -226,7 +228,7 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 	}
 
 	if !windowIcon.IsEmpty() {
-		action.Icon = windowIcon
+		action.TailIcon = windowIcon
 	}
 
 	return action, nil

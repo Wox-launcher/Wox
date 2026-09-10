@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"os"
 	"time"
-	"wox/common"
+	"wox/common/icons"
 	"wox/diagnostic"
 	"wox/plugin"
 	"wox/updater"
@@ -41,7 +41,7 @@ func (p *FeedbackPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "i18n:plugin_feedback_plugin_description",
-		Icon:          common.PluginFeedbackIcon.String(),
+		Icon:          icons.Get(icons.PluginFeedback).String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"feedback",
@@ -102,12 +102,12 @@ func (p *FeedbackPlugin) buildBugResult() plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:    "i18n:plugin_feedback_bug_title",
 		SubTitle: "i18n:plugin_feedback_bug_subtitle",
-		Icon:     common.PluginFeedbackIcon,
+		Icon:     icons.Get(icons.PluginFeedback),
 		Score:    300,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_feedback_bug_title",
-				Icon:      common.PluginFeedbackIcon,
+				Icon:      icons.Get(icons.ActionOpen),
 				IsDefault: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					p.exportDiagnostics(ctx)
@@ -121,12 +121,12 @@ func (p *FeedbackPlugin) buildFeatureResult() plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:    "i18n:plugin_feedback_feature_title",
 		SubTitle: "i18n:plugin_feedback_feature_subtitle",
-		Icon:     common.PluginNotesIcon,
+		Icon:     icons.Get(icons.PluginNotes),
 		Score:    200,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_feedback_feature_title",
-				Icon:      common.PluginNotesIcon,
+				Icon:      icons.Get(icons.ActionOpen),
 				IsDefault: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					p.openFeatureRequest(ctx)
@@ -140,12 +140,12 @@ func (p *FeedbackPlugin) buildClearLogsResult() plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:    "i18n:plugin_feedback_clear_logs_title",
 		SubTitle: "i18n:plugin_feedback_clear_logs_subtitle",
-		Icon:     common.TrashIcon,
+		Icon:     icons.Get(icons.ActionDelete),
 		Score:    100,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_feedback_clear_logs_title",
-				Icon:                   common.TrashIcon,
+				Icon:                   icons.Get(icons.ActionDelete),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -160,7 +160,7 @@ func (p *FeedbackPlugin) buildNoCrashResult() plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:    "i18n:plugin_feedback_no_crashes_title",
 		SubTitle: "i18n:plugin_feedback_no_crashes_description",
-		Icon:     common.PluginFeedbackIcon,
+		Icon:     icons.Get(icons.PluginFeedback),
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeMarkdown,
 			PreviewData: "i18n:plugin_feedback_no_crashes_preview",
@@ -198,7 +198,7 @@ func (p *FeedbackPlugin) buildCrashIncidentResult(ctx context.Context, incident 
 	return plugin.QueryResult{
 		Title:    title,
 		SubTitle: subtitle,
-		Icon:     common.PluginFeedbackIcon,
+		Icon:     icons.Get(icons.PluginFeedback),
 		// The launcher re-sorts cached results by score, so preserve newest-first event ordering here.
 		Score: incident.DetectedAt,
 		Preview: plugin.WoxPreview{
@@ -214,7 +214,7 @@ func (p *FeedbackPlugin) buildCrashIncidentActions(incident diagnostic.CrashInci
 	return []plugin.QueryResultAction{
 		{
 			Name:                   "i18n:plugin_feedback_action_package_issue",
-			Icon:                   common.OpenContainingFolderIcon,
+			Icon:                   icons.Get(icons.ActionOpenContainingFolder),
 			IsDefault:              true,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -223,7 +223,7 @@ func (p *FeedbackPlugin) buildCrashIncidentActions(incident diagnostic.CrashInci
 		},
 		{
 			Name:                   "i18n:plugin_feedback_action_open_package",
-			Icon:                   common.OpenContainingFolderIcon,
+			Icon:                   icons.Get(icons.ActionOpenContainingFolder),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				reportPath, _, err := p.ensureCrashReport(ctx, incident)

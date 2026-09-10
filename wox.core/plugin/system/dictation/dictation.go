@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
@@ -79,7 +80,7 @@ const (
 )
 
 var (
-	dictationIcon = common.PluginDictationIcon
+	dictationIcon = icons.Get(icons.PluginDictation)
 
 	errInputDeviceMissing = errors.New("input device missing")
 

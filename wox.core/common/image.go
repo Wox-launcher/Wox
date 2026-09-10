@@ -146,11 +146,11 @@ type WoxLazyLoadImagePayload struct {
 	CacheScope  string    `json:"cacheScope,omitempty"`
 }
 
-func (w *WoxImage) String() string {
+func (w WoxImage) String() string {
 	return fmt.Sprintf("%s:%s", w.ImageType, w.ImageData)
 }
 
-func (w *WoxImage) IsEmpty() bool {
+func (w WoxImage) IsEmpty() bool {
 	return w.ImageData == ""
 }
 
@@ -198,16 +198,16 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 	return nil, NOT_PNG_ERR
 }
 
-func (w *WoxImage) ToImage() (image.Image, error) {
+func (w WoxImage) ToImage() (image.Image, error) {
 	return w.ToImageWithContext(util.NewTraceContext())
 }
 
 // ToImageWithContext converts an image while allowing remote fetch callers to apply cancellation or timeout.
-func (w *WoxImage) ToImageWithContext(ctx context.Context) (image.Image, error) {
+func (w WoxImage) ToImageWithContext(ctx context.Context) (image.Image, error) {
 	return w.toImage(ctx, true)
 }
 
-func (w *WoxImage) ToImageWithoutRemoteFetch() (image.Image, error) {
+func (w WoxImage) ToImageWithoutRemoteFetch() (image.Image, error) {
 	// Some user-visible flows, such as screenshot success notifications, only need a best-effort icon.
 	// The previous implementation always routed emoji icons through Twemoji download on cache miss, which
 	// blocked those flows on network latency. Callers that need predictable completion can use this local-only path.
@@ -458,7 +458,7 @@ func (w *WoxImage) IsValid() bool {
 	return true
 }
 
-func (w *WoxImage) Hash() string {
+func (w WoxImage) Hash() string {
 	return util.Md5([]byte(w.ImageType + w.ImageData))
 }
 
@@ -746,12 +746,17 @@ func NewWoxImageLazyLoad(token string, cacheKey string, placeholder WoxImage, ta
 	}
 }
 
+// imageThumbnailPlaceholder is the conversion fallback inside common. This
+// package cannot import wox/common/icons without a cycle; the catalog registers
+// the same SVG as status.image-placeholder.
+var imageThumbnailPlaceholder = NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" fill="#E6E9F2"/><path fill="#A6B0C3" d="M7.5 9.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/><path fill="#7B879C" d="M5 18h14l-4.7-6.2a1.4 1.4 0 0 0-2.2 0l-2.5 3.3-1.1-1.4a1.3 1.3 0 0 0-2.1.1z"/></svg>`)
+
 func NewWoxImageLazyLoadCandidate(source WoxImage, targetSize int) WoxImage {
 	// Candidate lazy images are returned only inside core while polishing results.
 	// The manager replaces this source-bearing marker with a token-bearing
 	// lazyloadimage after it has registered the result in its cache.
 	payload, _ := json.Marshal(WoxLazyLoadImagePayload{
-		Placeholder: ImageThumbnailPlaceholderIcon,
+		Placeholder: imageThumbnailPlaceholder,
 		TargetSize:  targetSize,
 		Source:      &source,
 	})

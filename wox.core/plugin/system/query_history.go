@@ -3,13 +3,13 @@ package system
 import (
 	"context"
 	"strings"
-	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
 )
 
-var queryHistoryIcon = common.PluginQueryHistoryIcon
+var queryHistoryIcon = icons.Get(icons.PluginQueryHistory)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &QueryHistoryPlugin{})
@@ -67,6 +67,7 @@ func (i *QueryHistoryPlugin) Query(ctx context.Context, query plugin.Query) plug
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_query_history_use",
+						Icon:                   icons.Get(icons.ActionOpen),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							i.api.ChangeQuery(ctx, history.Query)

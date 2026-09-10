@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 )
@@ -85,7 +86,7 @@ func (a *ApplicationPlugin) toIgnoredApp(info appInfo, displayName string) ignor
 
 	icon := info.Icon
 	if icon.IsEmpty() {
-		icon = common.PluginAppIcon
+		icon = icons.Get(icons.PluginApp)
 	}
 
 	return ignoredApp{

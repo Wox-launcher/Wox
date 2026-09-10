@@ -13,6 +13,7 @@ import (
 	texttmpl "text/template"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -28,7 +29,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var wpmIcon = common.PluginWPMIcon
+var wpmIcon = icons.Get(icons.PluginWPM)
 var localPluginDirectoriesKey = "local_plugin_directories"
 
 const (
@@ -334,6 +335,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 				Icon:     wpmIcon,
 				Actions: []plugin.QueryResultAction{{
 					Name:                   command.Command,
+					Icon:                   icons.Get(icons.ActionOpen),
 					IsDefault:              true,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -418,7 +420,7 @@ func (w *WPMPlugin) buildGlobalStorePluginResult(ctx context.Context, pluginMani
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_wpm_view_install",
-				Icon:                   wpmIcon,
+				Icon:                   icons.Get(icons.ActionOpen),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -531,7 +533,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 		Icon:     wpmIcon,
 		Actions: []plugin.QueryResultAction{{
 			Name:      "i18n:plugin_wpm_copy_ai_prompt",
-			Icon:      common.CopyIcon,
+			Icon:      icons.Get(icons.ActionCopy),
 			IsDefault: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := clipboard.WriteText(prompt); err != nil {
@@ -556,6 +558,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",
+					Icon:                   icons.Get(icons.ActionAdd),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -584,6 +587,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			actions = []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_wpm_script_plugin_open_existing_file",
+					Icon: icons.Get(icons.ActionOpen),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						scriptFilePath := path.Join(util.GetLocation().GetUserSingleFilePluginsDirectory(), fileName)
 						openErr := shell.Open(scriptFilePath)
@@ -594,6 +598,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 				},
 				{
 					Name:                   "i18n:plugin_wpm_script_plugin_overwrite_existing_file",
+					Icon:                   icons.Get(icons.ActionUpdate),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -613,6 +618,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			actions = []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",
+					Icon:                   icons.Get(icons.ActionAdd),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -652,6 +658,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			actions = []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_wpm_script_plugin_open_existing_file",
+					Icon: icons.Get(icons.ActionOpen),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
 						scriptFilePath := path.Join(userScriptPluginDirectory, fileName)
@@ -663,6 +670,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 				},
 				{
 					Name:                   "i18n:plugin_wpm_script_plugin_overwrite_existing_file",
+					Icon:                   icons.Get(icons.ActionUpdate),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -682,6 +690,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			actions = []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",
+					Icon:                   icons.Get(icons.ActionAdd),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -738,6 +747,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_uninstall",
+					Icon:                   icons.Get(icons.ActionDelete),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := pluginInstance.GetName(ctx)
@@ -827,7 +837,7 @@ func (w *WPMPlugin) buildPostInstallActions(ctx context.Context, pluginManifest 
 					kwCopy := kw
 					newActions = append(newActions, plugin.QueryResultAction{
 						Name:                   "i18n:plugin_wpm_start_using",
-						Icon:                   common.NewWoxImageEmoji("▶️"),
+						Icon:                   icons.Get(icons.ActionOpen),
 						PreventHideAfterAction: true,
 						IsDefault:              true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -848,7 +858,7 @@ func (w *WPMPlugin) buildPostInstallActions(ctx context.Context, pluginManifest 
 func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_install",
-		Icon:                   common.InstallIcon,
+		Icon:                   icons.Get(icons.ActionInstall),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			// Lock the UI immediately (before spawning the goroutine) so the user
@@ -892,7 +902,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 
 				// Update tails, preview, and actions to the installed state.
 				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.PluginInstalledIcon}}
+					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
 					updatable.Tails = &newTails
 					successPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
 					updatable.Preview = &successPreview
@@ -917,7 +927,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_upgrade",
-		Icon:                   common.UpdateIcon,
+		Icon:                   icons.Get(icons.ActionUpdate),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			// Lock the UI immediately so the user cannot press Enter again
@@ -961,7 +971,7 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 
 				// Update tails, preview, and actions to the installed state.
 				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.PluginInstalledIcon}}
+					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
 					updatable.Tails = &newTails
 					successPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
 					updatable.Preview = &successPreview
@@ -984,7 +994,7 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_uninstall",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			pluginName := pluginManifest.GetName(ctx)
@@ -1055,10 +1065,10 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			// plugin is installed, check if upgrade is available
 			if upgradeFlag {
 				// show an upgrade icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.UpgradeIcon})
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.ActionUpgrade)})
 			} else {
 				// show an installed icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.PluginInstalledIcon})
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)})
 			}
 		}
 
@@ -1084,7 +1094,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		if pluginManifest.Website != "" {
 			actions = append(actions, plugin.QueryResultAction{
 				Name: "i18n:plugin_wpm_visit_website",
-				Icon: common.PluginWebsearchIcon,
+				Icon: icons.Get(icons.ActionOpen),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.Open(pluginManifest.Website)
 				},
@@ -1094,7 +1104,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		if pluginManifest.DownloadUrl != "" {
 			actions = append(actions, plugin.QueryResultAction{
 				Name: "i18n:plugin_wpm_manual_download",
-				Icon: common.PluginAppIcon,
+				Icon: icons.Get(icons.ActionInstall),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.Open(pluginManifest.DownloadUrl)
 				},
@@ -1155,6 +1165,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:      "i18n:plugin_wpm_reload",
+					Icon:      icons.Get(icons.ActionUpdate),
 					IsDefault: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.reloadLocalDistPlugin(ctx, lp.metadata, "reload by user")
@@ -1162,6 +1173,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 				},
 				{
 					Name: "i18n:plugin_wpm_open_directory",
+					Icon: icons.Get(icons.ActionOpenContainingFolder),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						openErr := shell.Open(lp.metadata.Directory)
 						if openErr != nil {
@@ -1171,6 +1183,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 				},
 				{
 					Name: "i18n:plugin_wpm_remove",
+					Icon: icons.Get(icons.ActionHide),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
 							return directory != lp.metadata.Directory
@@ -1180,6 +1193,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 				},
 				{
 					Name: "i18n:plugin_wpm_remove_and_delete",
+					Icon: icons.Get(icons.ActionDelete),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						deleteErr := trash.MoveToTrash(lp.metadata.Directory)
 						if deleteErr != nil {
@@ -1206,6 +1220,7 @@ func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_reload",
+					Icon:                   icons.Get(icons.ActionUpdate),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.reloadAllDevPlugins(ctx)

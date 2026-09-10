@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting"
@@ -22,7 +23,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var emojiIcon = common.PluginEmojiIcon
+var emojiIcon = icons.Get(icons.PluginEmoji)
 
 var (
 	primaryActionSettingKey = "primary_action"
@@ -452,7 +453,7 @@ func (e *EmojiPlugin) createAIPlaceholderResult() plugin.QueryResult {
 		Id:         uuid.New().String(),
 		Title:      "i18n:plugin_emoji_ai_matching",
 		SubTitle:   "i18n:plugin_emoji_ai_matching_subtitle",
-		Icon:       common.LoadingIcon,
+		Icon:       icons.Get(icons.StatusLoading),
 		Group:      "i18n:plugin_emoji_ai_group",
 		GroupScore: 90,
 		Score:      90,
@@ -529,7 +530,7 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 	actions := []plugin.QueryResultAction{
 		{
 			Name:      "i18n:plugin_emoji_copy",
-			Icon:      common.CopyIcon,
+			Icon:      icons.Get(icons.ActionCopy),
 			IsDefault: copyIsDefault,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				clipboard.WriteText(emoji)
@@ -558,7 +559,7 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name: "i18n:plugin_emoji_copy_large",
-		Icon: common.NewWoxImageEmoji("🖼️"),
+		Icon: icons.Get(icons.ActionCopy),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			img, err := emojiimage.Render(emoji, 200)
 			if err != nil {
@@ -579,7 +580,7 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 	existingDescriptions := strings.Join(e.customDescriptions[emoji], ", ")
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_emoji_add_keyword",
-		Icon:                   common.AirdropIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		Form: definition.PluginSettingDefinitions{
@@ -616,7 +617,7 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 	if isFrequentlyUsed {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_emoji_remove_frequently_used",
-			Icon:                   common.TrashIcon,
+			Icon:                   icons.Get(icons.ActionDelete),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				e.removeUsage(ctx, emoji)

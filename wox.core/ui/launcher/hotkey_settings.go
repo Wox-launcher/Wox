@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wox/common"
+	"wox/common/icons"
 	"wox/setting"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -152,16 +152,16 @@ func settingsRowsJSON(value any) string {
 
 func queryHotkeyPositionOptions() []formOption {
 	return []formOption{
-		{Label: "i18n:ui_query_position_system_default", Value: string(setting.QueryHotkeyPositionSystemDefault), Icon: fromCoreImage(common.UIIcon("position.system-default"))},
-		{Label: "i18n:ui_query_position_top_left", Value: string(setting.QueryHotkeyPositionTopLeft), Icon: fromCoreImage(common.UIIcon("position.top-left"))},
-		{Label: "i18n:ui_query_position_top_center", Value: string(setting.QueryHotkeyPositionTopCenter), Icon: fromCoreImage(common.UIIcon("position.top-center"))},
-		{Label: "i18n:ui_query_position_top_right", Value: string(setting.QueryHotkeyPositionTopRight), Icon: fromCoreImage(common.UIIcon("position.top-right"))},
-		{Label: "i18n:ui_query_position_middle_left", Value: string(setting.QueryHotkeyPositionMiddleLeft), Icon: fromCoreImage(common.UIIcon("position.middle-left"))},
-		{Label: "i18n:ui_query_position_center", Value: string(setting.QueryHotkeyPositionCenter), Icon: fromCoreImage(common.UIIcon("position.center"))},
-		{Label: "i18n:ui_query_position_middle_right", Value: string(setting.QueryHotkeyPositionMiddleRight), Icon: fromCoreImage(common.UIIcon("position.middle-right"))},
-		{Label: "i18n:ui_query_position_bottom_left", Value: string(setting.QueryHotkeyPositionBottomLeft), Icon: fromCoreImage(common.UIIcon("position.bottom-left"))},
-		{Label: "i18n:ui_query_position_bottom_center", Value: string(setting.QueryHotkeyPositionBottomCenter), Icon: fromCoreImage(common.UIIcon("position.bottom-center"))},
-		{Label: "i18n:ui_query_position_bottom_right", Value: string(setting.QueryHotkeyPositionBottomRight), Icon: fromCoreImage(common.UIIcon("position.bottom-right"))},
+		{Label: "i18n:ui_query_position_system_default", Value: string(setting.QueryHotkeyPositionSystemDefault), Icon: fromCoreImage(icons.Get("position.system-default"))},
+		{Label: "i18n:ui_query_position_top_left", Value: string(setting.QueryHotkeyPositionTopLeft), Icon: fromCoreImage(icons.Get("position.top-left"))},
+		{Label: "i18n:ui_query_position_top_center", Value: string(setting.QueryHotkeyPositionTopCenter), Icon: fromCoreImage(icons.Get("position.top-center"))},
+		{Label: "i18n:ui_query_position_top_right", Value: string(setting.QueryHotkeyPositionTopRight), Icon: fromCoreImage(icons.Get("position.top-right"))},
+		{Label: "i18n:ui_query_position_middle_left", Value: string(setting.QueryHotkeyPositionMiddleLeft), Icon: fromCoreImage(icons.Get("position.middle-left"))},
+		{Label: "i18n:ui_query_position_center", Value: string(setting.QueryHotkeyPositionCenter), Icon: fromCoreImage(icons.Get("position.center"))},
+		{Label: "i18n:ui_query_position_middle_right", Value: string(setting.QueryHotkeyPositionMiddleRight), Icon: fromCoreImage(icons.Get("position.middle-right"))},
+		{Label: "i18n:ui_query_position_bottom_left", Value: string(setting.QueryHotkeyPositionBottomLeft), Icon: fromCoreImage(icons.Get("position.bottom-left"))},
+		{Label: "i18n:ui_query_position_bottom_center", Value: string(setting.QueryHotkeyPositionBottomCenter), Icon: fromCoreImage(icons.Get("position.bottom-center"))},
+		{Label: "i18n:ui_query_position_bottom_right", Value: string(setting.QueryHotkeyPositionBottomRight), Icon: fromCoreImage(icons.Get("position.bottom-right"))},
 	}
 }
 

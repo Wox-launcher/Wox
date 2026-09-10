@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/setting"
 	"wox/ui/contract"
@@ -57,14 +58,14 @@ func (s *CoreServices) ClearLogs(ctx context.Context, sessionID string) error {
 	ctx = uiServiceContext(ctx, sessionID)
 	if err := util.GetLogger().ClearHistory(); err != nil {
 		GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
-			Icon:           common.WoxIcon.String(),
+			Icon:           icons.Get(icons.BrandWox).String(),
 			Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_failed"), err.Error()),
 			DisplaySeconds: 6,
 		})
 		return err
 	}
 	GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
-		Icon:           common.WoxIcon.String(),
+		Icon:           icons.Get(icons.BrandWox).String(),
 		Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_success"),
 		DisplaySeconds: 4,
 	})

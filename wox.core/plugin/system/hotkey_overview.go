@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 )
 
@@ -71,7 +72,7 @@ func (p *HotkeyOverviewPlugin) Query(ctx context.Context, query plugin.Query) pl
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_hotkey_overview_open_settings",
-						Icon:                   common.WoxIcon,
+						Icon:                   icons.Get(icons.ActionSettings),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.DefaultSettingWindowContext)
@@ -113,7 +114,7 @@ func (p *HotkeyOverviewPlugin) buildGlobalEntryResult() plugin.QueryResult {
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_hotkey_overview_open_overview",
-				Icon:                   common.ExecuteRunIcon,
+				Icon:                   icons.Get(icons.ActionRun),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {

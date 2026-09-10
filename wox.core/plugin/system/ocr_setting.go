@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 	"strings"
-	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util/ocr"
@@ -76,7 +76,7 @@ func NormalizeOCRModelID(raw string) string {
 func NewCopyOCRTextAction(api plugin.API, text string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name: "i18n:plugin_ocr_copy_text",
-		Icon: common.CopyIcon,
+		Icon: icons.Get(icons.ActionCopy),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			api.Copy(ctx, plugin.CopyParams{Type: plugin.CopyTypePlainText, Text: text})
 		},

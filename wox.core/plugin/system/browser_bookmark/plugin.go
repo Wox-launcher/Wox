@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting/definition"
@@ -24,7 +25,7 @@ func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &BrowserBookmarkPlugin{})
 }
 
-var browserBookmarkIcon = common.PluginBookmarkIcon
+var browserBookmarkIcon = icons.Get(icons.PluginBookmark)
 
 const (
 	browserBookmarkIndexBrowsersSettingKey = "indexBrowsers"
@@ -118,6 +119,7 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) p
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
+						Icon: icons.Get(icons.ActionOpen),
 						ContextData: common.ContextData{
 							"name": bookmark.Name,
 							"url":  bookmark.Url,
@@ -315,7 +317,7 @@ func (c *BrowserBookmarkPlugin) getBookmarkIndexBrowserOptions(installedBrowsers
 		{
 			Label:       "i18n:plugin_browser_bookmark_index_browsers_all",
 			Value:       definition.PluginSettingValueSelectOptionValueSelectAll,
-			Icon:        common.PluginBrowserIcon,
+			Icon:        icons.Get(icons.PluginBrowser),
 			IsSelectAll: true,
 		},
 	}
@@ -446,6 +448,7 @@ func (c *BrowserBookmarkPlugin) handleMRURestore(ctx context.Context, mruData pl
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:        "i18n:plugin_browser_bookmark_open_in_browser",
+				Icon:        icons.Get(icons.ActionOpen),
 				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.Open(url)

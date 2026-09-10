@@ -2110,6 +2110,8 @@ type resultAction struct {
 	Hotkey                 string           `json:"Hotkey"`
 	Form                   []formDefinition `json:"Form"`
 	IsSystemAction         bool             `json:"IsSystemAction"`
+	Tail                   string           `json:"Tail"`
+	TailIcon               woxImage         `json:"TailIcon"`
 }
 
 type formDefinition struct {

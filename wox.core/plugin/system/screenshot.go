@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	notesplugin "wox/plugin/system/notes"
 	"wox/setting/definition"
@@ -29,7 +30,7 @@ import (
 	"github.com/disintegration/imaging"
 )
 
-var screenshotIcon = common.PluginScreenshotIcon
+var screenshotIcon = icons.Get(icons.PluginScreenshot)
 var screenshotCommandNew = "new"
 var screenshotHistoryPreviewWidth = 1024
 var screenshotHistoryIconWidth = 40
@@ -256,6 +257,7 @@ func (p *ScreenshotPlugin) newScreenshotResult() plugin.QueryResult {
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_screenshot_capture_action",
+				Icon:      icons.Get(icons.ActionRun),
 				IsDefault: true,
 				Action:    p.captureScreenshot,
 			},
@@ -755,7 +757,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_screenshot_history_copy",
-				Icon:      common.CopyIcon,
+				Icon:      icons.Get(icons.ActionCopy),
 				IsDefault: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					p.copyScreenshotHistoryItem(ctx, item.path)
@@ -763,7 +765,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 			},
 			{
 				Name: "i18n:plugin_screenshot_history_open",
-				Icon: common.OpenIcon,
+				Icon: icons.Get(icons.ActionOpen),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := shell.Open(item.path); err != nil {
 						p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open screenshot history item: path=%s err=%s", item.path, err.Error()))
@@ -773,7 +775,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 			},
 			{
 				Name: "i18n:plugin_screenshot_history_open_folder",
-				Icon: common.OpenContainingFolderIcon,
+				Icon: icons.Get(icons.ActionOpenContainingFolder),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := shell.OpenFileInFolder(item.path); err != nil {
 						p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open screenshot history item folder: path=%s err=%s", item.path, err.Error()))

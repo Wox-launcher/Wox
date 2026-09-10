@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/database"
 	"wox/plugin"
 	"wox/util"
@@ -138,7 +139,7 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     attentionOpenActionID,
 			Name:                   "i18n:plugin_attention_action_open",
-			Icon:                   common.ExecuteRunIcon,
+			Icon:                   icons.Get(icons.ActionRun),
 			IsDefault:              true,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -155,7 +156,7 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     attentionMarkReadActionID,
 			Name:                   "i18n:plugin_attention_action_mark_read",
-			Icon:                   common.PluginInstalledIcon,
+			Icon:                   icons.Get(icons.ActionCorrect),
 			IsDefault:              len(actions) == 0,
 			PreventHideAfterAction: true,
 			Hotkey:                 util.PrimaryHotkey("enter"),

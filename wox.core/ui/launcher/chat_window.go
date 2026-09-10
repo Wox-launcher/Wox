@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"strings"
 
-	"wox/common"
+	"wox/common/icons"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
@@ -22,7 +22,7 @@ const (
 	chatWindowMinimumHeight = float32(480)
 )
 
-var chatWindowIcon, _ = decodeWoxImageWithTint(fromCoreImage(common.PluginAIChatIcon), nil, 256)
+var chatWindowIcon, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginAIChat)), nil, 256)
 
 func chatWindowNativeMinSize() woxui.Size {
 	return woxui.Size{Width: chatWindowMinimumWidth, Height: chatWindowMinimumHeight}

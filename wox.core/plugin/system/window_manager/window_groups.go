@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -279,6 +280,7 @@ func (p *WindowManagerPlugin) windowGroupResult(ctx context.Context, group windo
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_window_manager_group_action_apply",
+				Icon:      icons.Get(icons.ActionRun),
 				IsDefault: true,
 				ContextData: map[string]string{
 					windowManagerMRUTypeKey:    windowManagerMRUTypeGroup,

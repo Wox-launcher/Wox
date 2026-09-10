@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 	"wox/common"
+	"wox/common/icons"
 	"wox/util"
 )
 
@@ -63,7 +64,7 @@ func TestPluginImageUnloadWaitsForLazyPublication(t *testing.T) {
 	if _, err := manager.LoadLazyResultIcon(ctx, registered.Token); err == nil {
 		t.Fatal("unloaded lazy request was accepted")
 	}
-	if got := instance.ConvertIcon(ctx, source); got != common.ImageThumbnailPlaceholderIcon {
+	if got := instance.ConvertIcon(ctx, source); got != icons.Get(icons.StatusImagePlaceholder) {
 		t.Fatal("old instance can still generate icons")
 	}
 }

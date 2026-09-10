@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system"
 	notesplugin "wox/plugin/system/notes"
@@ -38,7 +39,7 @@ import (
 	"golang.org/x/image/bmp"
 )
 
-var clipboardIcon = common.PluginClipboardIcon
+var clipboardIcon = icons.Get(icons.PluginClipboard)
 var isKeepTextHistorySettingKey = "is_keep_text_history"
 var textHistoryDaysSettingKey = "text_history_days"
 var isKeepImageHistorySettingKey = "is_keep_image_history"
@@ -1136,7 +1137,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	actions := []plugin.QueryResultAction{
 		{
 			Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
-			Icon: common.CopyIcon,
+			Icon: icons.Get(icons.ActionCopy),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
@@ -1166,7 +1167,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		singlePath := filePaths[0]
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_clipboard_open_path",
-			Icon: common.OpenIcon,
+			Icon: icons.Get(icons.ActionOpen),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := shell.Open(singlePath); err != nil {
@@ -1178,7 +1179,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		if !util.IsDirExists(singlePath) {
 			actions = append(actions, plugin.QueryResultAction{
 				Name: "i18n:selection_open_containing_folder",
-				Icon: common.OpenContainingFolderIcon,
+				Icon: icons.Get(icons.ActionOpenContainingFolder),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.moveRecordToTop(ctx, record.ID)
 					if err := shell.OpenFileInFolder(singlePath); err != nil {
@@ -1195,7 +1196,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_mark_favorite",
-			Icon:                   common.PinIcon,
+			Icon:                   icons.Get(icons.ActionPin),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.markAsFavorite(ctx, record); err != nil {
@@ -1209,7 +1210,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_cancel_favorite",
-			Icon:                   common.UnpinIcon,
+			Icon:                   icons.Get(icons.ActionUnpin),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.cancelFavorite(ctx, record.ID); err != nil {
@@ -1228,7 +1229,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	}
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_edit_alias",
-		Icon:                   common.EditIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		Form: definition.PluginSettingDefinitions{
@@ -1276,7 +1277,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		Hotkey:                 util.PrimaryHotkey("d"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1307,19 +1308,19 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 
 func (c *ClipboardPlugin) resolveClipboardFileRecordIcon(filePaths []string) common.WoxImage {
 	if len(filePaths) == 0 {
-		return common.PluginFileIcon
+		return icons.Get(icons.PluginFile)
 	}
 
 	if len(filePaths) > 1 {
-		return common.MultipleFileStackIcon
+		return icons.Get(icons.ActionMultipleFiles)
 	}
 
 	singlePath := strings.TrimSpace(filePaths[0])
 	if singlePath == "" {
-		return common.PluginFileIcon
+		return icons.Get(icons.PluginFile)
 	}
 	if util.IsDirExists(singlePath) {
-		return common.FolderIcon
+		return icons.Get(icons.PluginFolder)
 	}
 
 	return common.NewWoxImageFileIcon(singlePath)
@@ -1361,7 +1362,7 @@ func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePat
 		extension := strings.TrimPrefix(filepath.Ext(filePath), ".")
 		typeLabel := strings.ToUpper(extension)
 		if util.IsDirExists(filePath) {
-			icon = common.FolderIcon
+			icon = icons.Get(icons.PluginFolder)
 			typeLabel = "DIR"
 		}
 		if typeLabel == "" {
@@ -1406,7 +1407,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	actions := []plugin.QueryResultAction{
 		{
 			Name: "i18n:plugin_clipboard_copy",
-			Icon: common.CopyIcon,
+			Icon: icons.Get(icons.ActionCopy),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := clipboard.WriteText(record.Content); err != nil {
@@ -1436,7 +1437,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if normalizedLink != "" {
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_clipboard_open_link",
-			Icon: common.OpenIcon,
+			Icon: icons.Get(icons.ActionOpen),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := shell.Open(normalizedLink); err != nil {
@@ -1449,7 +1450,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if openDirectoryPath != "" {
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_clipboard_open_path",
-			Icon: common.OpenContainingFolderIcon,
+			Icon: icons.Get(icons.ActionOpenContainingFolder),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
 				if err := shell.Open(openDirectoryPath); err != nil {
@@ -1468,7 +1469,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_mark_favorite",
-			Icon:                   common.PinIcon,
+			Icon:                   icons.Get(icons.ActionPin),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.markAsFavorite(ctx, record); err != nil {
@@ -1482,7 +1483,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_cancel_favorite",
-			Icon:                   common.UnpinIcon,
+			Icon:                   icons.Get(icons.ActionUnpin),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.cancelFavorite(ctx, record.ID); err != nil {
@@ -1498,7 +1499,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	// Delete action (works for both history and favorites)
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		Hotkey:                 util.PrimaryHotkey("d"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1514,7 +1515,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	// add edit action to edit text content
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_edit_text",
-		Icon:                   common.EditIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		Form: definition.PluginSettingDefinitions{
@@ -1569,7 +1570,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	}
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_edit_alias",
-		Icon:                   common.EditIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		Form: definition.PluginSettingDefinitions{
@@ -1730,7 +1731,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
-				Icon: common.CopyIcon,
+				Icon: icons.Get(icons.ActionCopy),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.moveRecordToTop(ctx, record.ID)
 					if err := c.restoreImageRecordToClipboard(ctx, record); err != nil {
@@ -1761,7 +1762,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 
 	result.Actions = append(result.Actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		Hotkey:                 util.PrimaryHotkey("d"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1916,7 +1917,7 @@ func (c *ClipboardPlugin) getResultGroup(ctx context.Context, record ClipboardRe
 
 // getDefaultTextIcon returns the default text icon
 func (c *ClipboardPlugin) getDefaultTextIcon() common.WoxImage {
-	return common.TextIcon
+	return icons.Get(icons.ActionText)
 }
 
 // generateImagePreviewAndIcon generates preview and icon for image records
@@ -1947,7 +1948,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 	if sourceImage == nil {
 		// Return default icons if image is not available
 		previewImage := c.getDefaultTextIcon()
-		iconImage := common.PreviewIcon
+		iconImage := icons.Get(icons.ActionPreview)
 		return previewImage, iconImage
 	}
 
@@ -1964,7 +1965,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 		}
 		iconImage, iconErr := common.NewWoxImage(compressedIconImg)
 		if iconErr != nil {
-			iconImage = common.PreviewIcon
+			iconImage = icons.Get(icons.ActionPreview)
 		}
 		return previewImage, iconImage
 	}
@@ -1978,7 +1979,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 		}
 		iconImage, iconErr := common.NewWoxImage(compressedIconImg)
 		if iconErr != nil {
-			iconImage = common.PreviewIcon
+			iconImage = icons.Get(icons.ActionPreview)
 		}
 		return previewImage, iconImage
 	}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -20,7 +21,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var themeIcon = common.PluginThemeIcon
+var themeIcon = icons.Get(icons.PluginTheme)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ThemePlugin{})
@@ -113,6 +114,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   changeThemeText,
+						Icon:                   icons.Get(icons.ActionRun),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							uiManager.ChangeTheme(ctx, theme)
@@ -128,7 +130,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			} else {
 				result.Actions = append(result.Actions, plugin.QueryResultAction{
 					Name: openThemeFolderText,
-					Icon: common.OpenContainingFolderIcon,
+					Icon: icons.Get(icons.ActionOpenContainingFolder),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						if err := shell.OpenFileInFolder(themePath); err != nil {
 							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open theme folder %s: %s", themePath, err.Error()))
@@ -137,6 +139,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				})
 				result.Actions = append(result.Actions, plugin.QueryResultAction{
 					Name:                   uninstallThemeText,
+					Icon:                   icons.Get(icons.ActionDelete),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						uiManager.UninstallTheme(ctx, theme)
@@ -177,6 +180,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   installThemeText,
+						Icon:                   icons.Get(icons.ActionInstall),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							uiManager.InstallTheme(ctx, theme)
@@ -203,6 +207,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_setting"),
+						Icon:                   icons.Get(icons.ActionSettings),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
@@ -303,6 +308,7 @@ Please directly output the JSON configuration, do not add any other content.
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_apply"),
+				Icon:                   icons.Get(icons.ActionRun),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "theme ai stream", func() {
@@ -407,6 +413,7 @@ func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []pl
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_restore_action"),
+					Icon:                   icons.Get(icons.ActionUpdate),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						plugin.GetPluginManager().GetUI().RestoreTheme(ctx)

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
-	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
@@ -36,7 +36,7 @@ func (s *ShellPlugin) buildExecuteAsAdministratorAction(data shellContextData) p
 	return plugin.QueryResultAction{
 		Id:                     "execute_as_administrator",
 		Name:                   "i18n:plugin_shell_execute_as_administrator",
-		Icon:                   common.PermissionIcon,
+		Icon:                   icons.Get(icons.ActionRunAsAdministrator),
 		PreventHideAfterAction: false,
 		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {

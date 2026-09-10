@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
@@ -688,7 +689,7 @@ func (s *ScriptPlugin) runtimeIssueResponse(ctx context.Context, err error) (plu
 	if installURL != "" {
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_script_runtime_install_action",
-			Icon: common.InstallIcon,
+			Icon: icons.Get(icons.ActionInstall),
 			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
 				if openErr := shell.Open(installURL); openErr != nil {
 					util.GetLogger().Error(actionCtx, fmt.Sprintf("script plugin %s failed to open runtime install url %s: %s", s.metadata.GetName(actionCtx), installURL, openErr.Error()))

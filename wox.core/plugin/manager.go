@@ -20,6 +20,7 @@ import (
 	"wox/ai"
 	"wox/analytics"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/setting"
 	"wox/setting/definition"
@@ -1888,7 +1889,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		defaultActions = append(defaultActions, QueryResultAction{
 			Id:                     systemActionUnpinInQueryID,
 			Name:                   "i18n:plugin_manager_unpin_in_query",
-			Icon:                   common.UnpinIcon,
+			Icon:                   icons.Get(icons.ActionUnpin),
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 removeFromFavoriteAction,
@@ -1897,7 +1898,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		defaultActions = append(defaultActions, QueryResultAction{
 			Id:                     systemActionPinInQueryID,
 			Name:                   "i18n:plugin_manager_pin_in_query",
-			Icon:                   common.PinIcon,
+			Icon:                   icons.Get(icons.ActionPin),
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 addToFavoriteAction,
@@ -1911,10 +1912,14 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		api.Notify(ctx, "i18n:plugin_manager_reset_ranking_success")
 		api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
 	}
+	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, QueryResult{
+		Title: title, SubTitle: subTitle, ScoreKey: scoreKey,
+	}, query.RawQuery)
 	defaultActions = append(defaultActions, QueryResultAction{
 		Id:                     systemActionResetRankingID,
 		Name:                   "i18n:plugin_manager_reset_ranking",
-		Icon:                   common.RevertRankingIcon,
+		Icon:                   icons.Get(icons.ActionRevertRanking),
+		Tail:                   actionedRankingScoreTail(actionedScore),
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
 		Action:                 resetRankingAction,
@@ -1955,7 +1960,7 @@ func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText 
 	return QueryResultAction{
 		Id:                     systemActionAddQueryShortcutID,
 		Name:                   "i18n:plugin_manager_add_query_shortcut",
-		Icon:                   common.QueryShortcutIcon,
+		Icon:                   icons.Get(icons.ActionQueryShortcut),
 		Type:                   QueryResultActionTypeForm,
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
@@ -2007,12 +2012,20 @@ func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText 
 	}
 }
 
+func pluginIdentityIcon(pluginInstance *Instance) common.WoxImage {
+	if pluginInstance == nil {
+		return common.WoxImage{}
+	}
+	return pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.WoxImage{})
+}
+
 func (m *Manager) newOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance) QueryResultAction {
 	return QueryResultAction{
 		Id:                     systemActionOpenPluginSettingID,
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.GetName(ctx)),
 		SearchAliases:          []string{fmt.Sprintf(i18n.GetI18nManager().TranslateWoxEnUs(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.Metadata.GetNameEn(ctx))},
-		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
+		Icon:                   icons.Get(icons.ActionSettings),
+		TailIcon:               pluginIdentityIcon(pluginInstance),
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext ActionContext) {
@@ -2241,6 +2254,14 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, res
 	}
 
 	return score
+}
+
+// actionedRankingScoreTail formats the usage-history boost that Reset ranking clears.
+func actionedRankingScoreTail(score int64) string {
+	if score <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("+%d", score)
 }
 
 func (m *Manager) startSessionQueryCache(query Query) {
@@ -2498,18 +2519,18 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 	// The authorization token is query-scoped, while the source hash is stable
 	// across queries so UI can reuse an already decoded icon.
 	cacheKey := fmt.Sprintf("%s-%s-%d", util.Md5([]byte(cacheScope)), normalized.Hash(), size)
-	return common.NewWoxImageLazyLoad(token, cacheKey, common.ImageThumbnailPlaceholderIcon, size)
+	return common.NewWoxImageLazyLoad(token, cacheKey, icons.Get(icons.StatusImagePlaceholder), size)
 }
 
 func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.WoxImage, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token is empty")
+		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image token is empty")
 	}
 
 	entry, found := m.lazyResultIcons.Load(token)
 	if !found || entry == nil {
-		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token not found")
+		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image token not found")
 	}
 
 	// Hold the instance read lock through publication, not just conversion.
@@ -2517,13 +2538,13 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 		entry.PluginInstance.imageMu.RLock()
 		defer entry.PluginInstance.imageMu.RUnlock()
 		if entry.PluginInstance.imageCacheClosed {
-			return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("plugin is unloaded")
+			return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("plugin is unloaded")
 		}
 	}
 	resultCache, cacheFound := m.findResultCacheInSession(entry.SessionId, entry.QueryId, entry.ResultId)
 	if !cacheFound {
 		m.lazyResultIcons.Delete(token)
-		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image result is no longer cached")
+		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image result is no longer cached")
 	}
 
 	if resultCache.Result.Icon.ImageType != common.WoxImageTypeLazyLoad {
@@ -2531,12 +2552,12 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 		if !resultCache.Result.Icon.IsEmpty() {
 			return resultCache.Result.Icon, nil
 		}
-		return common.ImageThumbnailPlaceholderIcon, nil
+		return icons.Get(icons.StatusImagePlaceholder), nil
 	}
 	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(resultCache.Result.Icon)
 	if payloadErr != nil || payload.Token != token {
 		m.lazyResultIcons.Delete(token)
-		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token is stale")
+		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image token is stale")
 	}
 
 	entry.mu.Lock()
@@ -2556,13 +2577,13 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 	}
 	converted, err := common.ConvertPluginIcon(ctx, entry.OriginalIcon, pluginID, entry.PluginDirectory, common.IconConversion{Size: entry.TargetSize, CacheScope: entry.CacheScope})
 	if err != nil {
-		return common.ImageThumbnailPlaceholderIcon, err
+		return icons.Get(icons.StatusImagePlaceholder), err
 	}
 	// URL GIFs used to stay typed as url because conversion skipped resize.
 	// UI cannot decode that type, so they collapsed to the placeholder. The
 	// converter now downloads the file first; a remaining url means the fetch failed.
 	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad || converted.ImageType == common.WoxImageTypeUrl {
-		converted = common.ImageThumbnailPlaceholderIcon
+		converted = icons.Get(icons.StatusImagePlaceholder)
 	}
 
 	entry.icon = converted
@@ -3037,7 +3058,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 		if result.Actions[actionIndex].Icon.IsEmpty() {
 			// set default action icon if not present
-			result.Actions[actionIndex].Icon = common.ExecuteActionIcon
+			result.Actions[actionIndex].Icon = icons.Get(icons.ActionExecute)
 		}
 		if result.Actions[actionIndex].Type == "" {
 			if len(result.Actions[actionIndex].Form) > 0 || result.Actions[actionIndex].OnSubmit != nil {
@@ -3316,7 +3337,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 		if !hasFavoriteTail {
 			result.Tails = append(result.Tails, QueryResultTail{
 				Type:         QueryResultTailTypeImage,
-				Image:        common.PinIcon,
+				Image:        icons.Get(icons.ActionPin),
 				ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify favorite tail
 				IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
 			})
@@ -3424,22 +3445,27 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 func convertActionIcons(ctx context.Context, actions []QueryResultAction, pluginInstance *Instance, cache map[common.WoxImage]common.WoxImage) int {
 	convertedCount := 0
 	for index := range actions {
-		source := actions[index].Icon
-		if source.IsEmpty() {
-			continue
-		}
-		if converted, found := cache[source]; found {
-			actions[index].Icon = converted
-			continue
-		}
-		converted := pluginInstance.ConvertIcon(ctx, source)
-		actions[index].Icon = converted
-		convertedCount++
-		if cache != nil {
-			cache[source] = converted
-		}
+		convertedCount += convertActionImage(&actions[index].Icon, pluginInstance, cache, ctx)
+		convertedCount += convertActionImage(&actions[index].TailIcon, pluginInstance, cache, ctx)
 	}
 	return convertedCount
+}
+
+func convertActionImage(image *common.WoxImage, pluginInstance *Instance, cache map[common.WoxImage]common.WoxImage, ctx context.Context) int {
+	if image == nil || image.IsEmpty() {
+		return 0
+	}
+	source := *image
+	if converted, found := cache[source]; found {
+		*image = converted
+		return 0
+	}
+	converted := pluginInstance.ConvertIcon(ctx, source)
+	*image = converted
+	if cache != nil {
+		cache[source] = converted
+	}
+	return 1
 }
 
 // logPolishResultTiming preserves the existing slow-result diagnostic for paths that are not already aggregated by query finalize.
@@ -3572,7 +3598,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				actions[actionIndex].Id = uuid.NewString()
 			}
 			if actions[actionIndex].Icon.IsEmpty() {
-				actions[actionIndex].Icon = common.ExecuteActionIcon
+				actions[actionIndex].Icon = icons.Get(icons.ActionExecute)
 			} else {
 				actions[actionIndex].Icon = pluginInstance.ConvertIcon(ctx, actions[actionIndex].Icon)
 			}
@@ -3710,7 +3736,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			if !hasFavoriteTail {
 				tails = append(tails, QueryResultTail{
 					Type:         QueryResultTailTypeImage,
-					Image:        common.PinIcon,
+					Image:        icons.Get(icons.ActionPin),
 					ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify favorite tail
 					IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
 				})
@@ -4173,7 +4199,7 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 			logger.Info(ctx, fmt.Sprintf("silent query done, total results: %d, cost %d ms", len(results), util.GetSystemTimestamp()-startTimestamp))
 
 			// execute default action if only one result
-			woxIcon, _ := common.WoxIcon.ToImage()
+			woxIcon, _ := icons.Get(icons.BrandWox).ToImage()
 			if len(results) == 1 {
 				result := results[0]
 				for _, action := range result.Actions {
@@ -4986,7 +5012,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			removeMRUAction := QueryResultAction{
 				Id:             uuid.NewString(),
 				Name:           i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
-				Icon:           common.TrashIcon,
+				Icon:           icons.Get(icons.ActionDelete),
 				IsSystemAction: true,
 				Action: func(ctx context.Context, actionContext ActionContext) {
 					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.Hash)

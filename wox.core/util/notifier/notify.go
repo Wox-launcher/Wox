@@ -3,7 +3,7 @@ package notifier
 import (
 	"image"
 
-	"wox/common"
+	"wox/common/icons"
 	"wox/util"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
@@ -17,7 +17,7 @@ func Notify(icon image.Image, message string) {
 		return
 	}
 	if icon == nil {
-		img, _ := common.WoxIcon.ToImage()
+		img, _ := icons.Get(icons.BrandWox).ToImage()
 		icon = img
 	}
 

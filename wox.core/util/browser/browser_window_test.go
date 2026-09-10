@@ -2,7 +2,7 @@ package browser
 
 import (
 	"testing"
-	"wox/common"
+	"wox/common/icons"
 )
 
 func TestBrowserIDFromExtensionRequest(t *testing.T) {
@@ -29,23 +29,23 @@ func TestIconForBrowserID(t *testing.T) {
 	if firefoxIcon.Hash() == chromeIcon.Hash() {
 		t.Fatal("Firefox and Chrome icons must differ")
 	}
-	if unknownIcon.Hash() != common.ChromeIcon.Hash() {
+	if unknownIcon.Hash() != icons.Get(icons.BrandChrome).Hash() {
 		t.Fatal("unknown browser IDs should fall back to Chrome")
 	}
 }
 
 func TestIsBrowserWindowName(t *testing.T) {
 	cases := map[string]bool{
-		"":                                false,
-		"notepad":                         false,
-		"Google Chrome":                   true,
-		"firefox":                         true,
-		"Mozilla Firefox":                 true,
-		"GitHub - Mozilla Firefox":        true,
-		"Microsoft Edge":                  true,
-		"Some Page — Microsoft Edge":      true,
-		"chrome.exe":                      true,
-		"firefox.exe":                     true,
+		"":                           false,
+		"notepad":                    false,
+		"Google Chrome":              true,
+		"firefox":                    true,
+		"Mozilla Firefox":            true,
+		"GitHub - Mozilla Firefox":   true,
+		"Microsoft Edge":             true,
+		"Some Page — Microsoft Edge": true,
+		"chrome.exe":                 true,
+		"firefox.exe":                true,
 	}
 
 	for name, want := range cases {

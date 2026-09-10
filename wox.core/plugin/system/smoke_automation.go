@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 
@@ -124,9 +125,9 @@ func queryGroupJump() plugin.QueryResponse {
 
 func groupJumpResult(id, title, group string, score, groupScore int64) plugin.QueryResult {
 	return plugin.QueryResult{
-		Id: id, Title: title, Icon: common.PluginAppIcon, Score: score, Group: group, GroupScore: groupScore,
+		Id: id, Title: title, Icon: icons.Get(icons.PluginApp), Score: score, Group: group, GroupScore: groupScore,
 		Actions: []plugin.QueryResultAction{{
-			Id: smokeAutomationKeepOpenAction, Name: "Keep open", IsDefault: true, PreventHideAfterAction: true,
+			Id: smokeAutomationKeepOpenAction, Name: "Keep open", Icon: icons.Get(icons.ActionRun), IsDefault: true, PreventHideAfterAction: true,
 		}},
 	}
 }
@@ -134,8 +135,8 @@ func groupJumpResult(id, title, group string, score, groupScore int64) plugin.Qu
 // queryPinRanking returns stable ordering without mutating persisted plugin settings.
 func queryPinRanking() plugin.QueryResponse {
 	return plugin.NewQueryResponse([]plugin.QueryResult{
-		{Id: "pin-ranking-first-fixture", Title: "Pin ranking first fixture", Icon: common.PluginAppIcon},
-		{Id: "pin-ranking-second-fixture", Title: "Pin ranking second fixture", Icon: common.PluginAppIcon},
+		{Id: "pin-ranking-first-fixture", Title: "Pin ranking first fixture", Icon: icons.Get(icons.PluginApp)},
+		{Id: "pin-ranking-second-fixture", Title: "Pin ranking second fixture", Icon: icons.Get(icons.PluginApp)},
 	})
 }
 
@@ -144,11 +145,12 @@ func (p *smokeAutomationPlugin) queryAttentionFixture() plugin.QueryResponse {
 	return plugin.NewQueryResponse([]plugin.QueryResult{{
 		Id:    "attention-smoke-fixture",
 		Title: "Attention smoke fixture",
-		Icon:  common.PluginAppIcon,
+		Icon:  icons.Get(icons.PluginApp),
 		Actions: []plugin.QueryResultAction{
 			{
 				Id:                     "push-fresh-attention",
 				Name:                   "Push fresh attention",
+				Icon:                   icons.Get(icons.ActionAdd),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -159,6 +161,7 @@ func (p *smokeAutomationPlugin) queryAttentionFixture() plugin.QueryResponse {
 			{
 				Id:                     "repeat-attention",
 				Name:                   "Repeat attention",
+				Icon:                   icons.Get(icons.ActionUpdate),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					p.pushAttentionFixture(ctx, false)
@@ -201,7 +204,7 @@ func (*smokeAutomationPlugin) querySlow(ctx context.Context) plugin.QueryRespons
 	case <-ctx.Done():
 		return plugin.QueryResponse{}
 	case <-timer.C:
-		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Slow query completed", Icon: common.PluginAppIcon}})
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Slow query completed", Icon: icons.Get(icons.PluginApp)}})
 	}
 }
 
@@ -209,9 +212,9 @@ func (*smokeAutomationPlugin) querySlow(ctx context.Context) plugin.QueryRespons
 func (p *smokeAutomationPlugin) queryStreamingPreview() plugin.QueryResponse {
 	resultID := uuid.NewString()
 	return plugin.NewQueryResponse([]plugin.QueryResult{{
-		Id: resultID, Title: "Streaming preview pending", Icon: common.PluginAppIcon,
+		Id: resultID, Title: "Streaming preview pending", Icon: icons.Get(icons.PluginApp),
 		Actions: []plugin.QueryResultAction{{
-			Id: "publish-preview", Name: "Publish preview", PreventHideAfterAction: true,
+			Id: "publish-preview", Name: "Publish preview", Icon: icons.Get(icons.ActionPreview), PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				title := "Streaming preview received"
 				p.api.UpdateResult(ctx, plugin.UpdatableResult{
@@ -228,7 +231,7 @@ func queryTooltipPreview() plugin.QueryResponse {
 	return plugin.NewQueryResponse([]plugin.QueryResult{{
 		Id:    "tooltip-smoke-fixture",
 		Title: "Tooltip smoke fixture",
-		Icon:  common.PluginAppIcon,
+		Icon:  icons.Get(icons.PluginApp),
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeText,
 			PreviewData: "Hover the preview tag to show a native tooltip.",
@@ -240,6 +243,7 @@ func queryTooltipPreview() plugin.QueryResponse {
 		Actions: []plugin.QueryResultAction{{
 			Id:                     smokeAutomationKeepOpenAction,
 			Name:                   "Keep open",
+			Icon:                   icons.Get(icons.ActionRun),
 			IsDefault:              true,
 			PreventHideAfterAction: true,
 		}},
@@ -252,10 +256,11 @@ func (p *smokeAutomationPlugin) queryQuickSelect() plugin.QueryResponse {
 		{
 			Id:    "quick-select-first-fixture",
 			Title: "Quick select first fixture",
-			Icon:  common.PluginAppIcon,
+			Icon:  icons.Get(icons.PluginApp),
 			Actions: []plugin.QueryResultAction{{
 				Id:                     "keep-open",
 				Name:                   "Keep open",
+				Icon:                   icons.Get(icons.ActionRun),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -266,10 +271,11 @@ func (p *smokeAutomationPlugin) queryQuickSelect() plugin.QueryResponse {
 		{
 			Id:    "quick-select-second-fixture",
 			Title: "Quick select second fixture",
-			Icon:  common.PluginAppIcon,
+			Icon:  icons.Get(icons.PluginApp),
 			Actions: []plugin.QueryResultAction{{
 				Id:                     smokeAutomationResultAction,
 				Name:                   "Hide launcher",
+				Icon:                   icons.Get(icons.ActionHide),
 				IsDefault:              true,
 				PreventHideAfterAction: false,
 				Action: func(ctx context.Context, _ plugin.ActionContext) {
@@ -294,11 +300,12 @@ func (p *smokeAutomationPlugin) queryToolbarLong(ctx context.Context) plugin.Que
 func (p *smokeAutomationPlugin) queryToolbarWithStatus(ctx context.Context, title string) plugin.QueryResponse {
 	p.showToolbarMessage(ctx, title)
 	return plugin.NewQueryResponse([]plugin.QueryResult{{
-		Title: "Toolbar smoke fixture", Icon: common.PluginAppIcon,
+		Title: "Toolbar smoke fixture", Icon: icons.Get(icons.PluginApp),
 		Actions: []plugin.QueryResultAction{
 			{
 				Id:                     smokeAutomationResultAction,
 				Name:                   "Hide launcher",
+				Icon:                   icons.Get(icons.ActionHide),
 				IsDefault:              true,
 				Hotkey:                 "enter",
 				PreventHideAfterAction: false,
@@ -309,6 +316,7 @@ func (p *smokeAutomationPlugin) queryToolbarWithStatus(ctx context.Context, titl
 			{
 				Id:                     smokeAutomationSecondaryAction,
 				Name:                   "Open folder",
+				Icon:                   icons.Get(icons.ActionOpenContainingFolder),
 				Hotkey:                 util.PrimaryHotkey("enter"),
 				PreventHideAfterAction: true,
 				Action: func(callbackCtx context.Context, _ plugin.ActionContext) {
@@ -324,7 +332,7 @@ func (p *smokeAutomationPlugin) showToolbarMessage(ctx context.Context, title st
 	p.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
 		Id:            smokeAutomationToolbarMessageID,
 		Title:         title,
-		Icon:          common.PluginAppIcon,
+		Icon:          icons.Get(icons.PluginApp),
 		Indeterminate: true,
 		Actions: []plugin.ToolbarMsgAction{
 			{

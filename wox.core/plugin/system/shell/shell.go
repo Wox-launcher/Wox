@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
@@ -61,7 +62,7 @@ const (
 	emptyCommandResultGroupScore int64 = 200
 )
 
-var shellIcon = common.PluginShellIcon
+var shellIcon = icons.Get(icons.PluginShell)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ShellPlugin{})
@@ -408,7 +409,7 @@ func (s *ShellPlugin) buildEmptyCommandResultWithTrigger(ctx context.Context, in
 			{
 				Id:                     "compose",
 				Name:                   "i18n:plugin_shell_enter_command",
-				Icon:                   shellIcon,
+				Icon:                   icons.Get(icons.ActionEdit),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action:                 func(context.Context, plugin.ActionContext) {},
@@ -640,7 +641,7 @@ func PrepareCommandAtDirectoryAction(api plugin.API, path string, isDir bool) pl
 
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_file_execute_command_here",
-		Icon:                   common.PluginShellIcon,
+		Icon:                   icons.Get(icons.ActionRun),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
@@ -702,7 +703,7 @@ func (s *ShellPlugin) buildEditCommandAction(data shellContextData) plugin.Query
 	return plugin.QueryResultAction{
 		Id:                     "edit_command",
 		Name:                   "i18n:plugin_shell_edit_command",
-		Icon:                   common.EditIcon,
+		Icon:                   icons.Get(icons.ActionEdit),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		ContextData:            s.buildActionContextDataForCommand(data),
@@ -745,7 +746,7 @@ func (s *ShellPlugin) buildAddCommandAction(data shellContextData) plugin.QueryR
 	return plugin.QueryResultAction{
 		Id:                     "add_as_command",
 		Name:                   "i18n:plugin_shell_add_as_command",
-		Icon:                   common.PinIcon,
+		Icon:                   icons.Get(icons.ActionPin),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		ContextData:            s.buildActionContextDataForCommand(data),
@@ -783,7 +784,7 @@ func (s *ShellPlugin) buildRunWithInterpreterAction(data shellContextData) plugi
 	return plugin.QueryResultAction{
 		Id:                     "run_with_interpreter",
 		Name:                   "i18n:plugin_shell_run_with_interpreter",
-		Icon:                   shellIcon,
+		Icon:                   icons.Get(icons.ActionRun),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		ContextData:            s.buildActionContextDataForCommand(data),
@@ -817,7 +818,7 @@ func (s *ShellPlugin) buildChangeWorkingDirectoryAction(data shellContextData, t
 	return plugin.QueryResultAction{
 		Id:                     "change_working_directory",
 		Name:                   "i18n:plugin_shell_change_working_directory",
-		Icon:                   common.FolderIcon,
+		Icon:                   icons.Get(icons.ActionOpenContainingFolder),
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		ContextData:            contextData,
@@ -886,7 +887,7 @@ func (s *ShellPlugin) buildDeleteConfiguredCommandAction(data shellContextData) 
 	return plugin.QueryResultAction{
 		Id:                     "delete_command",
 		Name:                   "i18n:plugin_shell_delete_command",
-		Icon:                   common.TrashIcon,
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
 		ContextData:            s.buildActionContextDataForCommand(data),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1215,7 +1216,7 @@ func (s *ShellPlugin) buildHistoryTails(ctx context.Context, status string) []pl
 
 	return []plugin.QueryResultTail{{
 		Type:        plugin.QueryResultTailTypeImage,
-		Image:       common.RunningIcon,
+		Image:       icons.Get(icons.StatusRunning),
 		ImageWidth:  &size,
 		ImageHeight: &size,
 		Tooltip:     s.statusText(ctx, status),
@@ -1298,7 +1299,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     "reexecute",
 			Name:                   "i18n:plugin_shell_reexecute",
-			Icon:                   common.UpdateIcon,
+			Icon:                   icons.Get(icons.ActionUpdate),
 			PreventHideAfterAction: true,
 			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1320,7 +1321,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 			actions = append(actions, plugin.QueryResultAction{
 				Id:                     "stop",
 				Name:                   "i18n:plugin_shell_stop",
-				Icon:                   common.TerminateAppIcon,
+				Icon:                   icons.Get(icons.ActionTerminate),
 				PreventHideAfterAction: true,
 				ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1333,7 +1334,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     "delete",
 			Name:                   "i18n:plugin_shell_delete",
-			Icon:                   common.TrashIcon,
+			Icon:                   icons.Get(icons.ActionDelete),
 			PreventHideAfterAction: true,
 			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1414,7 +1415,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		{
 			Id:                     "execute",
 			Name:                   "i18n:plugin_shell_execute",
-			Icon:                   common.CorrectIcon,
+			Icon:                   icons.Get(icons.ActionExecute),
 			PreventHideAfterAction: true,
 			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1430,7 +1431,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		{
 			Id:                     "execute_background",
 			Name:                   "i18n:plugin_shell_execute_background",
-			Icon:                   common.OpenIcon,
+			Icon:                   icons.Get(icons.ActionOpen),
 			PreventHideAfterAction: false,
 			Hotkey:                 util.PrimaryHotkey("enter"),
 			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
@@ -1446,7 +1447,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	actions = append(actions, plugin.QueryResultAction{
 		Id:                     "stop",
 		Name:                   "i18n:plugin_shell_stop",
-		Icon:                   common.TerminateAppIcon,
+		Icon:                   icons.Get(icons.ActionTerminate),
 		PreventHideAfterAction: true,
 		ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1458,7 +1459,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		plugin.QueryResultAction{
 			Id:                     "reexecute",
 			Name:                   "i18n:plugin_shell_reexecute",
-			Icon:                   common.UpdateIcon,
+			Icon:                   icons.Get(icons.ActionUpdate),
 			PreventHideAfterAction: true,
 			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1474,7 +1475,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		plugin.QueryResultAction{
 			Id:                     "delete",
 			Name:                   "i18n:plugin_shell_delete",
-			Icon:                   common.TrashIcon,
+			Icon:                   icons.Get(icons.ActionDelete),
 			PreventHideAfterAction: true,
 			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1588,7 +1589,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 				{
 					Id:                     "execute_background",
 					Name:                   "i18n:plugin_shell_execute_background",
-					Icon:                   common.OpenIcon,
+					Icon:                   icons.Get(icons.ActionOpen),
 					PreventHideAfterAction: false,
 					ContextData:            s.buildActionContextData("", "", finalCommand, commandInterpreter, cmd.Alias, cmd.WorkingDirectory),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1605,7 +1606,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 				{
 					Id:                     "execute",
 					Name:                   "i18n:plugin_shell_execute",
-					Icon:                   common.CorrectIcon,
+					Icon:                   icons.Get(icons.ActionExecute),
 					PreventHideAfterAction: true,
 					ContextData:            s.buildActionContextData("", "", finalCommand, commandInterpreter, cmd.Alias, cmd.WorkingDirectory),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1621,7 +1622,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 				{
 					Id:                     "execute_background",
 					Name:                   "i18n:plugin_shell_execute_background",
-					Icon:                   common.OpenIcon,
+					Icon:                   icons.Get(icons.ActionOpen),
 					PreventHideAfterAction: false,
 					Hotkey:                 util.PrimaryHotkey("enter"),
 					ContextData:            s.buildActionContextData("", "", finalCommand, commandInterpreter, cmd.Alias, cmd.WorkingDirectory),
@@ -1786,10 +1787,10 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 			if len(actions) > 0 {
 				if isRunning {
 					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
-					actions[0].Icon = common.TerminateAppIcon
+					actions[0].Icon = icons.Get(icons.ActionTerminate)
 				} else {
 					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
-					actions[0].Icon = common.UpdateIcon
+					actions[0].Icon = icons.Get(icons.ActionUpdate)
 				}
 			}
 			updatable.Actions = &actions

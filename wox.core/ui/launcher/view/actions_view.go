@@ -17,6 +17,7 @@ const (
 	ActionGroupDividerHeight = ActionDividerHeight
 	ActionSearchHeight       = 46
 	MaxVisibleActions        = 8
+	ActionTailIconSize       = 18
 )
 
 // ActionItemKind distinguishes selectable actions from non-interactive group chrome.
@@ -34,12 +35,15 @@ type ActionItem struct {
 	ID           string
 	Label        string
 	Icon         *woxui.Image
+	SelectedIcon *woxui.Image
+	Tail         string
+	TailIcon     *woxui.Image
 	HotkeyLabels []string
 }
 
 // Equal compares every prepared visual field for one action item.
 func (i ActionItem) Equal(other ActionItem) bool {
-	if i.Kind != other.Kind || i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
+	if i.Kind != other.Kind || i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || i.SelectedIcon != other.SelectedIcon || i.Tail != other.Tail || i.TailIcon != other.TailIcon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
 		return false
 	}
 	for index := range i.HotkeyLabels {
@@ -136,6 +140,17 @@ func ActionPanelWidth(padding woxwidget.Insets, windowWidth float32) float32 {
 	return min(float32(ActionPanelContentWidth)+padding.Left+padding.Right, max(float32(240), windowWidth-28))
 }
 
+// actionPanelTailTextWidth sizes score text for the trailing gutter. Tests and
+// closed windows fall back to a rune-width estimate so layout still reserves space.
+func actionPanelTailTextWidth(window *woxui.Window, text string, fontSize float32) float32 {
+	if window != nil {
+		if metrics, err := window.MeasureText(text, woxui.TextStyle{Size: fontSize}); err == nil && metrics.Size.Width > 0 {
+			return metrics.Size.Width
+		}
+	}
+	return float32(len([]rune(text))) * max(fontSize, 1)
+}
+
 type actionsViewState struct {
 	scrollController *woxwidget.ScrollController
 }
@@ -205,12 +220,39 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			background = props.Theme.ActionSelected
 			foreground = props.Theme.ActionSelectedText
 		}
-		var icon woxwidget.Widget = woxwidget.Painter{Width: 22, Height: 22}
-		if item.Icon != nil {
-			icon = woxwidget.Image{Source: item.Icon, Width: 22, Height: 22}
+		iconSource := item.Icon
+		if selected && item.SelectedIcon != nil {
+			iconSource = item.SelectedIcon
 		}
-		hotkeyWidth := float32(0)
-		var hotkey woxwidget.Widget = woxwidget.Painter{}
+		var icon woxwidget.Widget = woxwidget.Painter{Width: 22, Height: 22}
+		if iconSource != nil {
+			icon = woxwidget.Image{Source: iconSource, Width: 22, Height: 22}
+		}
+		trailingWidth := float32(0)
+		var trailing []woxwidget.Widget
+		if item.Tail != "" {
+			fontSize := scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale)
+			textWidth := actionPanelTailTextWidth(props.Window, item.Tail, fontSize)
+			slotWidth := textWidth + 15
+			trailingWidth += slotWidth
+			tailColor := props.ResultTail
+			if selected {
+				tailColor = props.SelectedTail
+			}
+			trailing = append(trailing, woxwidget.Align{Width: slotWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
+				Width: slotWidth, Padding: woxwidget.Insets{Left: 10, Right: 5}, Child: woxwidget.Text{
+					Value: item.Tail, Style: woxui.TextStyle{Size: fontSize}, Color: tailColor,
+				},
+			}})
+		}
+		if item.TailIcon != nil {
+			iconSize := scaledLauncherSize(ActionTailIconSize, props.DensityScale)
+			slotWidth := iconSize + 15
+			trailingWidth += slotWidth
+			trailing = append(trailing, woxwidget.Align{Width: slotWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
+				Width: slotWidth, Padding: woxwidget.Insets{Left: 10, Right: 5}, Child: woxwidget.Image{Source: item.TailIcon, Width: iconSize, Height: iconSize},
+			}})
+		}
 		if len(item.HotkeyLabels) > 0 {
 			tailColor := props.ResultTail
 			chipBackground := props.Theme.ActionBackground
@@ -222,12 +264,21 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				Labels: item.HotkeyLabels, Foreground: tailColor, Background: chipBackground,
 				FontSize: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Window: props.Window,
 			})
-			hotkeyWidth = chipWidth + 15
-			hotkey = woxwidget.Align{Width: hotkeyWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
+			hotkeyWidth := chipWidth + 15
+			trailingWidth += hotkeyWidth
+			trailing = append(trailing, woxwidget.Align{Width: hotkeyWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
 				Width: hotkeyWidth, Padding: woxwidget.Insets{Left: 10, Right: 5}, Child: chip,
+			}})
+		}
+		var hotkey woxwidget.Widget = woxwidget.Painter{}
+		if len(trailing) == 1 {
+			hotkey = trailing[0]
+		} else if len(trailing) > 1 {
+			hotkey = woxwidget.Align{Width: trailingWidth, Height: ActionRowHeight, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
+				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: trailing,
 			}}
 		}
-		labelWidth := max(float32(40), innerWidth-37-hotkeyWidth)
+		labelWidth := max(float32(40), innerWidth-37-trailingWidth)
 		labelLineHeight := scaledLauncherSize(18, props.DensityScale)
 		activate := func() {
 			if props.OnSelect != nil {
@@ -263,8 +314,12 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				},
 			}},
 		}
+		semanticLabel := item.Label
+		if item.Tail != "" {
+			semanticLabel = item.Label + " " + item.Tail
+		}
 		rows = append(rows, woxwidget.Semantics{
-			Key: woxwidget.Key(automationID), AutomationID: automationID, Role: woxui.AccessibilityRoleMenuItem, Label: item.Label, Selected: selected,
+			Key: woxwidget.Key(automationID), AutomationID: automationID, Role: woxui.AccessibilityRoleMenuItem, Label: semanticLabel, Selected: selected,
 			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 			OnAction: func(action woxui.AccessibilityAction, _ string) error {
 				if action == woxui.AccessibilityActionActivate {
