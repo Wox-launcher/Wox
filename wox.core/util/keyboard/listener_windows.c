@@ -6,6 +6,11 @@ extern int keyboardHookEventCGO(int eventKind, unsigned int vkCode, unsigned int
 
 #define WM_WOX_KEYBOARD_REQUEST (WM_APP + 71)
 
+// Unassigned virtual key injected while Win is held so Explorer treats the Win
+// release as the end of a combination instead of a lone press that opens the
+// Start menu. AutoHotkey and PowerToys use the same 0xFF mask key.
+#define WOX_WIN_MASK_VK 0xFF
+
 enum requestAction
 {
     requestRegisterHotkey = 1,
@@ -113,6 +118,11 @@ static LRESULT CALLBACK lowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         // Let Caps Lock events created by SetCapsLockState update the OS toggle state
         // without re-entering Wox's Caps Lock combo state machine.
         if (event->vkCode == VK_CAPITAL && (event->flags & LLKHF_INJECTED))
+        {
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+        // Our own Win mask key carries no meaning for Go-side listeners.
+        if (event->vkCode == WOX_WIN_MASK_VK && (event->flags & LLKHF_INJECTED))
         {
             return CallNextHookEx(NULL, nCode, wParam, lParam);
         }
@@ -338,6 +348,23 @@ int woxKeyboardUnregisterHotkey(int id, unsigned long *errorCodeOut)
         *errorCodeOut = request.errorCode;
     }
     return ok;
+}
+
+// woxKeyboardSendWinMaskKey injects a press/release of the mask key. Call it
+// while Win is still held, right after the hook swallows the key pressed with it.
+void woxKeyboardSendWinMaskKey(void)
+{
+    INPUT inputs[2];
+    ZeroMemory(inputs, sizeof(inputs));
+
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = WOX_WIN_MASK_VK;
+
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = WOX_WIN_MASK_VK;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    SendInput(2, inputs, sizeof(INPUT));
 }
 
 int woxKeyboardSetRawKeyboardHookEnabled(int enabled, unsigned long *errorCodeOut)

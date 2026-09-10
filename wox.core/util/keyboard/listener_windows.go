@@ -7,6 +7,7 @@ int woxKeyboardEnsureThread(void);
 int woxKeyboardRegisterHotkey(int id, unsigned int modifiers, unsigned int vkCode, unsigned long *errorCodeOut);
 int woxKeyboardUnregisterHotkey(int id, unsigned long *errorCodeOut);
 int woxKeyboardSetRawKeyboardHookEnabled(int enabled, unsigned long *errorCodeOut);
+void woxKeyboardSendWinMaskKey(void);
 */
 import "C"
 
@@ -60,6 +61,8 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 		return nil, err
 	}
 
+	shellReserved := isWindowsShellReservedCombo(modifiers, key)
+
 	var errCode C.ulong
 	registered := false
 	for attempt := 1; attempt <= hotkeyRegistrationMaxAttempts; attempt++ {
@@ -68,14 +71,23 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 			registered = true
 			break
 		}
-		// A preceding availability probe can have just released this key. Windows
-		// may briefly report it as still registered before completing that release.
 		if uint32(errCode) != windowsErrorHotkeyAlreadyRegistered || attempt == hotkeyRegistrationMaxAttempts {
 			break
 		}
+		// Shell-reserved combos are held by Explorer permanently, so retrying only
+		// delays the hook fallback below.
+		if shellReserved {
+			break
+		}
+		// A preceding availability probe can have just released this key. Windows
+		// may briefly report it as still registered before completing that release.
 		time.Sleep(hotkeyRegistrationRetryDelay)
 	}
 	if !registered {
+		if uint32(errCode) == windowsErrorHotkeyAlreadyRegistered && shellReserved {
+			util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("hotkey is reserved by the Windows shell, falling back to keyboard hook: modifiers=%d key=%d", modifiers, key))
+			return registerHookHotkey(modifiers, key, callback)
+		}
 		return nil, fmt.Errorf("failed to register hotkey (err=%d)", uint32(errCode))
 	}
 
@@ -84,6 +96,96 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 	managerMu.Unlock()
 
 	return &hotkeyRegistration{id: id}, nil
+}
+
+// isWindowsShellReservedCombo reports whether the combination is one that
+// Explorer owns permanently: Win+Space and its Ctrl/Shift/Alt variants drive the
+// input language switcher, so RegisterHotKey always fails with
+// ERROR_HOTKEY_ALREADY_REGISTERED for them. Only these fall back to the
+// low-level keyboard hook. Other Win shortcuts keep failing so the recorder can
+// report the system conflict honestly instead of silently overriding shortcuts
+// that the hook could only partially intercept (e.g. Win+L is handled by winlogon).
+func isWindowsShellReservedCombo(modifiers Modifier, key Key) bool {
+	return key == KeySpace && modifiers&ModifierSuper != 0
+}
+
+// hookHotkey emulates RegisterHotKey through the WH_KEYBOARD_LL hook for combos
+// the shell refuses to hand out. It consumes the main key while the exact
+// modifier set is held, fires once per physical press (MOD_NOREPEAT semantics),
+// and masks the Win release so Explorer does not open the Start menu.
+//
+// Unlike RegisterHotKey, the hook is subject to UIPI: it receives no events while
+// an elevated window is in the foreground unless Wox itself runs elevated.
+type hookHotkey struct {
+	modifiers    Modifier
+	key          Key
+	callback     func()
+	sendWinMask  func()
+	mu           sync.Mutex
+	keyHeld      bool
+	subscription RawKeySubscription
+	once         sync.Once
+}
+
+func registerHookHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
+	hotkey := &hookHotkey{
+		modifiers:   modifiers,
+		key:         key,
+		callback:    callback,
+		sendWinMask: func() { C.woxKeyboardSendWinMaskKey() },
+	}
+	subscription, err := AddRawKeyListener(hotkey.handle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register hotkey through keyboard hook: %w", err)
+	}
+	hotkey.subscription = subscription
+	return hotkey, nil
+}
+
+// handle consumes both the press and the matching release of the main key so
+// the foreground application never sees half of the key sequence.
+func (h *hookHotkey) handle(event RawKeyEvent) bool {
+	if event.Key != h.key {
+		return false
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if event.Type == EventTypeKeyUp {
+		if !h.keyHeld {
+			return false
+		}
+		h.keyHeld = false
+		return true
+	}
+
+	// Auto-repeat while the key stays held: swallow it without re-triggering.
+	if h.keyHeld {
+		return true
+	}
+	if event.Modifiers != h.modifiers {
+		return false
+	}
+
+	h.keyHeld = true
+	h.sendWinMask()
+	util.Go(util.NewTraceContext(), "hook hotkey callback", h.callback)
+	return true
+}
+
+func (h *hookHotkey) Unregister() error {
+	if h == nil {
+		return nil
+	}
+
+	var unregisterErr error
+	h.once.Do(func() {
+		if h.subscription != nil {
+			unregisterErr = h.subscription.Close()
+		}
+	})
+	return unregisterErr
 }
 
 func (r *hotkeyRegistration) Unregister() error {
