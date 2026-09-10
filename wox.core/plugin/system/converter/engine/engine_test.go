@@ -44,6 +44,8 @@ func TestCompatibilityCorpus(t *testing.T) {
 		{"20 rounded up to nearest 5", "20"}, {"37 to nearest 10", "40"},
 		{"meters in 10 km", "10000 m"}, {"days in 3 weeks", "21 d"}, {"seconds in a day", "86400 s"},
 		{"300 + 20 km", "320 km"}, {"$20 + 30", "50 USD"}, {"20 km + 300", "320 km"}, {"30 + $20", "50 USD"},
+		{"cmFpbDE2Mw==", "rail163"}, {"aGVsbG8=", "hello"}, {"cmFpbDE2Mw", "rail163"},
+		{"base64 decode aGVsbG8=", "hello"}, {"aGVsbG8= to text", "hello"}, {"hello to base64", "aGVsbG8="},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			q, e := c.Parse(tc.input, ParseOptions{DecimalSeparator: "."})
@@ -92,6 +94,52 @@ func TestTimeCorpus(t *testing.T) {
 			}
 			if got := c.Format(r, FormatOptions{}).Raw; got != tc.raw {
 				t.Fatalf("got %q, want %q", got, tc.raw)
+			}
+		})
+	}
+}
+
+func TestBase64Text(t *testing.T) {
+	c, env := fixture()
+	for _, tc := range []struct{ input, raw, target string }{
+		{"cmFpbDE2Mw==", "rail163", "text"},
+		{"cmFpbDE2Mw", "rail163", "text"},
+		{"aGVsbG8=", "hello", "text"},
+		{"5L2g5aW9", "你好", "text"},
+		{"SGVsbG8gV29ybGQ=", "Hello World", "text"},
+		{"base64 aGVsbG8=", "hello", "text"},
+		{"base64 decode YQ==", "a", "text"},
+		{"YQ== to text", "a", "text"},
+		{"hello to base64", "aGVsbG8=", "base64"},
+		{"hello world as base64", "aGVsbG8gd29ybGQ=", "base64"},
+		{"base64 encode 你好", "5L2g5aW9", "base64"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			q, err := c.Parse(tc.input, ParseOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !q.Domain {
+				t.Fatal("expected domain query")
+			}
+			r, err := c.Evaluate(context.Background(), q, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := c.Format(r, FormatOptions{})
+			if p.Raw != tc.raw || p.Formatted != tc.raw {
+				t.Fatalf("got %q, want %q", p.Raw, tc.raw)
+			}
+			if r.Target != tc.target {
+				t.Fatalf("target %q, want %q", r.Target, tc.target)
+			}
+		})
+	}
+	for _, input := range []string{"hello", "Password", "YWJj", "YQ==", "AAAAAA==", "100+100=", "1+1", "test"} {
+		t.Run("reject "+input, func(t *testing.T) {
+			q, err := c.Parse(input, ParseOptions{})
+			if err == nil && q != nil && q.root != nil && q.root.value.Kind == Text {
+				t.Fatalf("auto-detected %q as %q", input, q.root.value.Text)
 			}
 		})
 	}

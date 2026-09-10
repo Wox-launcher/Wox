@@ -82,6 +82,8 @@ func TestConverterDecimalRounding(t *testing.T) {
 		{"20 is 10% of what", "200"},
 		{"average of 36, 42, 19 and 81", "44.5"},
 		{"256 as hex", "0x100"},
+		{"cmFpbDE2Mw==", "rail163"},
+		{"hello to base64", "aGVsbG8="},
 	} {
 		r := c.Query(context.Background(), plugin.Query{Search: tc.input})
 		if len(r.Results) != 1 || r.Results[0].Title != tc.title {
@@ -98,7 +100,7 @@ func TestConverterRoutingAndCopyActions(t *testing.T) {
 			t.Errorf("duplicated calculator result for %s", input)
 		}
 	}
-	for _, input := range []string{"square root of 625", "cube root of 27", "2 power 10", "cot(1)", "(1h+30min)/2 to minutes", "1/3 to 2 dp", "π to 5 digits", "21 rounded up to nearest 5", "17 rounded down to nearest 3", "meters in 10 km", "seconds in a day", "300 + 20 km", "Tokyo time", "7:30am LAX to Japan", "time difference between Seattle and Moscow", "5.5 minutes as timespan", "03:04:05 + 01:02:03", "time saved 5 min at 1.5x", "10% on 200", "256 as hex"} {
+	for _, input := range []string{"square root of 625", "cube root of 27", "2 power 10", "cot(1)", "(1h+30min)/2 to minutes", "1/3 to 2 dp", "π to 5 digits", "21 rounded up to nearest 5", "17 rounded down to nearest 3", "meters in 10 km", "seconds in a day", "300 + 20 km", "Tokyo time", "7:30am LAX to Japan", "time difference between Seattle and Moscow", "5.5 minutes as timespan", "03:04:05 + 01:02:03", "time saved 5 min at 1.5x", "10% on 200", "256 as hex", "cmFpbDE2Mw=="} {
 		r := c.Query(ctx, plugin.Query{Search: input})
 		if len(r.Results) != 1 || len(r.Results[0].Actions) != 3 {
 			t.Fatalf("missing result/actions for %s: %+v", input, r)

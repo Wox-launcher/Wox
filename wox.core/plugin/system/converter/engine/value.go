@@ -48,6 +48,8 @@ const (
 	Instant
 	CalendarSpan
 	Boolean
+	// Text is a decoded or encoded string result, not a numeric value.
+	Text
 )
 
 func isTemporal(k Kind) bool {
@@ -68,6 +70,8 @@ type Value struct {
 	// Ampm is set when a clock literal used am/pm. Soulver clock-clock minus
 	// then returns the absolute same-day interval; 24-hour clocks stay signed.
 	Ampm bool
+	// Text is set when Kind is Text; it is the decoded or encoded string.
+	Text string
 }
 
 type Evaluation struct {

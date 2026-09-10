@@ -2652,6 +2652,8 @@
   "plugin_converter_time_unit_days": "дн.",
   "plugin_converter_time_unit_weeks": "нед.",
   "plugin_converter_time_unit_years": "г.",
+  "plugin_converter_base64_decode": "Декодирование Base64",
+  "plugin_converter_base64_encode": "Кодирование Base64",
   "ui_query_refinement_filters": "Фильтры",
   "ui_query_refinement_filters_tooltip": "Фильтровать результаты поиска ({hotkey})",
   "ui_hotkey_overview_title": "Показать все сочетания Wox",

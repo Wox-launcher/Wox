@@ -2440,6 +2440,8 @@
   "plugin_converter_time_unit_days": "日",
   "plugin_converter_time_unit_weeks": "週",
   "plugin_converter_time_unit_years": "年",
+  "plugin_converter_base64_decode": "Base64 デコード",
+  "plugin_converter_base64_encode": "Base64 エンコード",
   "plugin_folder_open": "開く",
   "plugin_folder_open_containing_folder": "含むフォルダーを開く",
   "plugin_folder_enter": "フォルダーに入る",

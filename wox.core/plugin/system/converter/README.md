@@ -39,7 +39,8 @@ polling have been removed. `modules` now contains the existing price services;
   function in the evaluator. Do not reparse formatted expression strings.
 - Add domain syntax in the relevant parser and a typed operation. Do not register
   globally competing regular expressions. Regexes only recognize bounded literal
-  or domain sentence formats.
+  or domain sentence formats. Base64 decode matches a whole-query token or an
+  explicit `to text` / `base64 decode` sentence in `engine/base64.go`.
 - Add executable examples to `engine/engine_test.go`, including rejected inputs.
 
 ## Defined semantics
@@ -107,6 +108,8 @@ polling have been removed. `modules` now contains the existing price services;
   expanded. Sheet variables, line references, live weather, Wolfram, historical
   FX, and custom units stay out of Converter.
 - `$30 × 4 days` is an implicit daily rate. `m × m` is area in meters.
+- A whole-query Base64 token that decodes to printable UTF-8 is shown as text.
+  `to base64` / `as base64` encode; `to text` / `base64 decode` force decode.
 
 These are Wox's explicit defaults where Raycast's documentation does not specify
 an output policy (not a claim of undocumented behavioral equivalence). The

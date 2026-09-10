@@ -2441,6 +2441,8 @@
   "plugin_converter_time_unit_days": "天",
   "plugin_converter_time_unit_weeks": "周",
   "plugin_converter_time_unit_years": "年",
+  "plugin_converter_base64_decode": "Base64 解码",
+  "plugin_converter_base64_encode": "Base64 编码",
   "plugin_folder_open": "打开",
   "plugin_folder_open_containing_folder": "打开所在文件夹",
   "plugin_folder_enter": "进入文件夹",

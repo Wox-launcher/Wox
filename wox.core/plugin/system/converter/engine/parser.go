@@ -446,6 +446,9 @@ func (c *Catalog) Parse(input string, options ParseOptions) (result *Query, err 
 	if input == "" {
 		return nil, &Error{Kind: Unrecognized, Message: "empty input"}
 	}
+	if encoded, ok := parseBase64Query(input); ok {
+		return encoded, nil
+	}
 	q := &Query{Expression: input}
 	if expr, pattern, ok := splitDatePattern(input); ok {
 		input = expr

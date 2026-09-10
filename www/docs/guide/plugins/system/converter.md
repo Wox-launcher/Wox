@@ -24,6 +24,7 @@ Converter listens globally. Use `calculator` as an explicit keyword if another g
 | --- | --- |
 | Units | length, weight, temperature, time |
 | Number base | binary, octal, decimal, hexadecimal |
+| Base64 | decode a pasted token, or `hello to base64` |
 | Currency | common fiat currencies |
 | Crypto | common crypto symbols such as BTC, ETH, USDT, and BNB |
 | Time | timestamps, dates, durations, and time zones |
@@ -62,6 +63,9 @@ days in 3 weeks
 seconds in a day
 300 + 20 km
 $20 + 30
+cmFpbDE2Mw==
+aGVsbG8= to text
+hello to base64
 ```
 
 `1/3 to 2 dp` and `π to 5 digits` round the answer to that many decimal places.
@@ -139,6 +143,7 @@ Storage queries use `B` as the Byte base unit, decimal units such as `GB` for ba
 - Use `to`, `in`, or `=?` to make conversion intent explicit.
 - For storage conversion, `gb` means Decimal storage unit `GB`; use `gib` for Binary storage unit `GiB`.
 - Base conversion expects an integer and a target base.
+- A standalone Base64 token that decodes to readable text is converted automatically. Use `to text` / `base64 decode` when the token is short, and `to base64` to encode.
 - Currency rates refresh in the background. The first crypto query asks for explicit permission before Converter contacts CoinGecko; after confirmation, crypto prices refresh every minute while Wox is running and the choice is remembered only on that device.
 - Currency and crypto conversions may use fallback values while live sources are unavailable.
 - Without an explicit currency target, Converter chooses the default currency from your locale.

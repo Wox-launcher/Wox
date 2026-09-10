@@ -24,6 +24,7 @@
 | --- | --- |
 | 单位 | 长度、重量、温度、时间 |
 | 进制 | 二进制、八进制、十进制、十六进制 |
+| Base64 | 粘贴即解码，或使用 `hello to base64` 编码 |
 | 货币 | 常见法币 |
 | 加密货币 | BTC、ETH、USDT、BNB 等常见符号 |
 | 时间 | 时间戳、日期、时长、时区 |
@@ -60,6 +61,9 @@ days in 3 weeks
 seconds in a day
 300 + 20 km
 $20 + 30
+cmFpbDE2Mw==
+aGVsbG8= to text
+hello to base64
 ```
 
 `1/3 to 2 dp` 和 `π to 5 digits` 会把结果四舍五入到指定小数位。
@@ -130,6 +134,7 @@ time saved 5 min at 1.5x
 - 使用 `to`、`in` 或 `=?` 明确转换意图。
 - 存储转换中，`gb` 表示 Decimal storage unit `GB`；如需 Binary storage unit `GiB`，请使用 `gib`。
 - 进制转换需要整数和目标进制。
+- 单独粘贴一段能解成可读文本的 Base64 会自动解码。短文本可用 `to text` / `base64 decode`，编码用 `to base64`。
 - 货币汇率会在后台刷新。首次执行加密货币查询时，转换器会先请求明确授权；确认后才会访问 CoinGecko，并在 Wox 运行期间每分钟刷新价格。授权只保存在当前设备。
 - 实时数据源不可用时，货币和加密货币转换可能使用兜底值。
 - 未指定目标货币时，根据系统地区选择默认货币；也可以在查询末尾显式指定目标。

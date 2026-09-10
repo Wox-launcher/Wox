@@ -334,6 +334,15 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 		return translate("ui_weekday_"+keys[t.Weekday()], t.Weekday().String()[:3])
 	}
 	switch v.Kind {
+	case Text:
+		p.Raw = v.Text
+		p.Formatted = v.Text
+		if r.Target == "base64" {
+			p.SubTitle = translate("plugin_converter_base64_encode", "Base64")
+		} else {
+			p.SubTitle = translate("plugin_converter_base64_decode", "Base64")
+		}
+		return p
 	case Boolean:
 		if v.Number.Sign() != 0 {
 			p.Raw = "true"

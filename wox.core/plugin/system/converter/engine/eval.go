@@ -23,6 +23,9 @@ func (c *Catalog) Evaluate(ctx context.Context, q *Query, env Env) (result Evalu
 	if err := ctx.Err(); err != nil {
 		return Evaluation{}, err
 	}
+	if q.root != nil && q.root.op == "value" && q.root.value.Kind == Text {
+		return Evaluation{Value: q.root.value, Target: q.format, Expression: q.Expression}, nil
+	}
 	if env.Local == nil {
 		return Evaluation{}, invalid("local timezone is required")
 	}

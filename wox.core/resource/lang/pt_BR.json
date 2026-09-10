@@ -2651,6 +2651,8 @@
   "plugin_converter_time_unit_days": "dias",
   "plugin_converter_time_unit_weeks": "semanas",
   "plugin_converter_time_unit_years": "anos",
+  "plugin_converter_base64_decode": "Decodificar Base64",
+  "plugin_converter_base64_encode": "Codificar Base64",
   "ui_query_refinement_filters": "Filtros",
   "ui_query_refinement_filters_tooltip": "Filtrar resultados da pesquisa ({hotkey})",
   "ui_hotkey_overview_title": "Ver todos os atalhos do Wox",
