@@ -8,6 +8,35 @@
 #include <wchar.h>
 #include <winstring.h>
 
+enum {
+	WOX_ASYNC_POLL_MS = 10,
+	WOX_ASYNC_MANAGER_WAITS = 150,
+	WOX_ASYNC_PROPERTIES_WAITS = 50,
+	WOX_ASYNC_THUMBNAIL_WAITS = 40,
+	WOX_ASYNC_CONTROL_WAITS = 80
+};
+
+static CRITICAL_SECTION g_media_lock;
+static INIT_ONCE g_media_lock_once = INIT_ONCE_STATIC_INIT;
+static void* g_cached_manager = NULL;
+
+static BOOL CALLBACK wox_init_media_lock(PINIT_ONCE once, PVOID param, PVOID* ctx) {
+	(void)once;
+	(void)param;
+	(void)ctx;
+	InitializeCriticalSection(&g_media_lock);
+	return TRUE;
+}
+
+static void wox_media_lock(void) {
+	InitOnceExecuteOnce(&g_media_lock_once, wox_init_media_lock, NULL, NULL);
+	EnterCriticalSection(&g_media_lock);
+}
+
+static void wox_media_unlock(void) {
+	LeaveCriticalSection(&g_media_lock);
+}
+
 typedef enum WoxAsyncStatus {
 	WoxAsyncStarted = 0,
 	WoxAsyncCompleted = 1,
@@ -271,8 +300,7 @@ static int wox_contains_ascii_ci(const char* value, const char* needle) {
 	}
 	return 0;
 }
-static int wox_await_object(void* operation, void** result, int with_progress) {
-	*result = NULL;
+static HRESULT wox_wait_async(void* operation, int max_waits) {
 	if (operation == NULL) {
 		return E_POINTER;
 	}
@@ -281,8 +309,11 @@ static int wox_await_object(void* operation, void** result, int with_progress) {
 	if (FAILED(hr)) {
 		return hr;
 	}
+	if (max_waits < 1) {
+		max_waits = 1;
+	}
 	WoxAsyncStatus status = WoxAsyncStarted;
-	for (int i = 0; i < 1000; i++) {
+	for (int i = 0; i < max_waits; i++) {
 		hr = ((WoxAsyncInfoVtbl**)asyncInfo)[0]->GetStatus(asyncInfo, &status);
 		if (FAILED(hr)) {
 			wox_release(asyncInfo);
@@ -291,7 +322,7 @@ static int wox_await_object(void* operation, void** result, int with_progress) {
 		if (status != WoxAsyncStarted) {
 			break;
 		}
-		Sleep(10);
+		Sleep(WOX_ASYNC_POLL_MS);
 	}
 	if (status == WoxAsyncStarted) {
 		((WoxAsyncInfoVtbl**)asyncInfo)[0]->Cancel(asyncInfo);
@@ -307,62 +338,43 @@ static int wox_await_object(void* operation, void** result, int with_progress) {
 	if (status != WoxAsyncCompleted) {
 		wox_release(asyncInfo);
 		return E_ABORT;
-	}
-	if (with_progress) {
-		hr = ((WoxAsyncOperationWithProgressVtbl**)operation)[0]->GetResults(operation, result);
-	} else {
-		hr = ((WoxAsyncOperationVtbl**)operation)[0]->GetResults(operation, result);
 	}
 	wox_release(asyncInfo);
-	return hr;
+	return S_OK;
 }
-static int wox_await_bool(void* operation, int* result) {
-	*result = 0;
-	if (operation == NULL) {
-		return E_POINTER;
-	}
-	void* asyncInfo = NULL;
-	HRESULT hr = wox_qi(operation, &IID_WoxAsyncInfo, &asyncInfo);
+static int wox_await_object(void* operation, void** result, int with_progress, int max_waits) {
+	*result = NULL;
+	HRESULT hr = wox_wait_async(operation, max_waits);
 	if (FAILED(hr)) {
 		return hr;
 	}
-	WoxAsyncStatus status = WoxAsyncStarted;
-	for (int i = 0; i < 1000; i++) {
-		hr = ((WoxAsyncInfoVtbl**)asyncInfo)[0]->GetStatus(asyncInfo, &status);
-		if (FAILED(hr)) {
-			wox_release(asyncInfo);
-			return hr;
-		}
-		if (status != WoxAsyncStarted) {
-			break;
-		}
-		Sleep(10);
+	if (with_progress) {
+		return ((WoxAsyncOperationWithProgressVtbl**)operation)[0]->GetResults(operation, result);
 	}
-	if (status == WoxAsyncStarted) {
-		((WoxAsyncInfoVtbl**)asyncInfo)[0]->Cancel(asyncInfo);
-		wox_release(asyncInfo);
-		return HRESULT_FROM_WIN32(WAIT_TIMEOUT);
-	}
-	if (status == WoxAsyncError) {
-		HRESULT asyncHr = E_FAIL;
-		((WoxAsyncInfoVtbl**)asyncInfo)[0]->GetErrorCode(asyncInfo, &asyncHr);
-		wox_release(asyncInfo);
-		return asyncHr;
-	}
-	if (status != WoxAsyncCompleted) {
-		wox_release(asyncInfo);
-		return E_ABORT;
+	return ((WoxAsyncOperationVtbl**)operation)[0]->GetResults(operation, result);
+}
+static int wox_await_bool(void* operation, int* result, int max_waits) {
+	*result = 0;
+	HRESULT hr = wox_wait_async(operation, max_waits);
+	if (FAILED(hr)) {
+		return hr;
 	}
 	boolean ok = 0;
 	hr = ((WoxAsyncOperationBoolVtbl**)operation)[0]->GetResults(operation, &ok);
-	wox_release(asyncInfo);
 	if (FAILED(hr)) {
 		return hr;
 	}
 	*result = ok ? 1 : 0;
 	return S_OK;
 }
-static HRESULT wox_get_manager(void** manager) {
+static HRESULT wox_ensure_runtime(void) {
+	HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
+	if (SUCCEEDED(hr) || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) {
+		return S_OK;
+	}
+	return hr;
+}
+static HRESULT wox_request_manager(void** manager) {
 	*manager = NULL;
 	HSTRING className = NULL;
 	HRESULT hr = WindowsCreateString(
@@ -386,7 +398,7 @@ static HRESULT wox_get_manager(void** manager) {
 		return hr;
 	}
 	void* operationResult = NULL;
-	hr = wox_await_object(operation, &operationResult, 0);
+	hr = wox_await_object(operation, &operationResult, 0, WOX_ASYNC_MANAGER_WAITS);
 	wox_release(operation);
 	if (FAILED(hr)) {
 		return hr;
@@ -394,6 +406,42 @@ static HRESULT wox_get_manager(void** manager) {
 	hr = wox_qi(operationResult, &IID_WoxManager, manager);
 	wox_release(operationResult);
 	return hr;
+}
+static void wox_invalidate_manager(void) {
+	wox_media_lock();
+	wox_release(g_cached_manager);
+	g_cached_manager = NULL;
+	wox_media_unlock();
+}
+// SessionManager.RequestAsync is expensive and concurrent calls can stall for
+// seconds, so keep one manager for the process instead of requesting it every query.
+static HRESULT wox_get_manager(void** manager) {
+	*manager = NULL;
+	wox_media_lock();
+	if (g_cached_manager != NULL) {
+		((WoxInspectableVtbl**)g_cached_manager)[0]->AddRef(g_cached_manager);
+		*manager = g_cached_manager;
+		wox_media_unlock();
+		return S_OK;
+	}
+	wox_media_unlock();
+
+	void* created = NULL;
+	HRESULT hr = wox_request_manager(&created);
+	if (FAILED(hr) || created == NULL) {
+		return FAILED(hr) ? hr : E_FAIL;
+	}
+
+	wox_media_lock();
+	if (g_cached_manager == NULL) {
+		g_cached_manager = created;
+		created = NULL;
+	}
+	((WoxInspectableVtbl**)g_cached_manager)[0]->AddRef(g_cached_manager);
+	*manager = g_cached_manager;
+	wox_media_unlock();
+	wox_release(created);
+	return S_OK;
 }
 static HRESULT wox_get_media_properties(void* session, void** properties) {
 	*properties = NULL;
@@ -412,7 +460,7 @@ static HRESULT wox_get_media_properties(void* session, void** properties) {
 		return hr;
 	}
 	void* operationResult = NULL;
-	hr = wox_await_object(operation, &operationResult, 0);
+	hr = wox_await_object(operation, &operationResult, 0, WOX_ASYNC_PROPERTIES_WAITS);
 	wox_release(operation);
 	if (FAILED(hr)) {
 		return hr;
@@ -450,6 +498,26 @@ static int wox_get_playback_status(void* session) {
 	wox_release(playback);
 	return status;
 }
+static char* wox_get_session_app_id(void* session) {
+	if (session == NULL) {
+		return wox_strdup("");
+	}
+	void* sessionItf = NULL;
+	if (FAILED(wox_qi(session, &IID_WoxSession, &sessionItf)) || sessionItf == NULL) {
+		return wox_strdup("");
+	}
+	HSTRING appId = NULL;
+	char* out = NULL;
+	if (SUCCEEDED(((WoxSessionVtbl**)sessionItf)[0]->GetSourceAppUserModelId(sessionItf, &appId)) && appId != NULL) {
+		out = wox_hstring_to_utf8(appId);
+		WindowsDeleteString(appId);
+	}
+	wox_release(sessionItf);
+	if (out == NULL) {
+		return wox_strdup("");
+	}
+	return out;
+}
 static int wox_is_music_source(const char* sourceApp) {
 	return wox_contains_ascii_ci(sourceApp, "music") ||
 		wox_contains_ascii_ci(sourceApp, "spotify") ||
@@ -458,57 +526,34 @@ static int wox_is_music_source(const char* sourceApp) {
 		wox_contains_ascii_ci(sourceApp, "foobar") ||
 		wox_contains_ascii_ci(sourceApp, "vlc");
 }
-static int wox_media_properties_score(void* session, void* properties) {
-	if (properties == NULL) {
-		return -1;
-	}
-	WoxMediaPropertiesVtbl* vtbl = ((WoxMediaPropertiesVtbl**)properties)[0];
-	char* title = wox_get_hstring_property(properties, vtbl->GetTitle);
-	char* artist = wox_get_hstring_property(properties, vtbl->GetArtist);
-	char* album = wox_get_hstring_property(properties, vtbl->GetAlbumTitle);
-	void* thumbnail = NULL;
-	HRESULT thumbHr = vtbl->GetThumbnail(properties, &thumbnail);
+static int wox_is_browser_source(const char* sourceApp) {
+	return wox_contains_ascii_ci(sourceApp, "chrome") ||
+		wox_contains_ascii_ci(sourceApp, "msedge") ||
+		wox_contains_ascii_ci(sourceApp, "firefox") ||
+		wox_contains_ascii_ci(sourceApp, "electron");
+}
+// Score sessions with sync SMTC fields only. TryGetMediaPropertiesAsync on every
+// session is what made entering the plugin stall for more than 10 seconds.
+static int wox_session_cheap_score(void* session, const char* currentAppId) {
 	int playbackStatus = wox_get_playback_status(session);
-	int hasThumbnail = SUCCEEDED(thumbHr) && thumbnail != NULL;
-
+	char* sourceApp = wox_get_session_app_id(session);
 	int score = 0;
 	if (playbackStatus == 4) {
 		score += 10000;
-	}
-	if (wox_has_text(title)) {
+	} else if (playbackStatus == 5) {
+		score += 100;
+	} else if (playbackStatus == 3) {
 		score += 10;
 	}
-	if (wox_has_text(artist)) {
-		score += 20;
-	}
-	if (wox_has_text(album)) {
-		score += 20;
-	}
-	if (hasThumbnail) {
-		score += 100;
-	}
-	char* sourceApp = NULL;
-	void* sessionItf = NULL;
-	if (session != NULL && SUCCEEDED(wox_qi(session, &IID_WoxSession, &sessionItf)) && sessionItf != NULL) {
-		HSTRING appId = NULL;
-		if (SUCCEEDED(((WoxSessionVtbl**)sessionItf)[0]->GetSourceAppUserModelId(sessionItf, &appId)) && appId != NULL) {
-			sourceApp = wox_hstring_to_utf8(appId);
-			WindowsDeleteString(appId);
-		}
-		wox_release(sessionItf);
-	}
-	// Playing sessions should always outrank paused metadata; music apps and artwork break ties between active sessions.
 	if (wox_is_music_source(sourceApp)) {
 		score += 1000;
-	}
-	if (!wox_has_text(artist) && !wox_has_text(album) && (wox_contains_ascii_ci(sourceApp, "chrome") || wox_contains_ascii_ci(sourceApp, "msedge") || wox_contains_ascii_ci(sourceApp, "firefox") || wox_contains_ascii_ci(sourceApp, "electron"))) {
+	} else if (wox_is_browser_source(sourceApp) && playbackStatus != 4) {
 		score -= 20;
 	}
-	free(title);
-	free(artist);
-	free(album);
+	if (currentAppId != NULL && currentAppId[0] != '\0' && sourceApp != NULL && strcmp(sourceApp, currentAppId) == 0) {
+		score += 5;
+	}
 	free(sourceApp);
-	wox_release(thumbnail);
 	return score;
 }
 static HRESULT wox_select_session(void* manager, void** selected) {
@@ -547,6 +592,7 @@ static HRESULT wox_select_session(void* manager, void** selected) {
 		}
 		return hr;
 	}
+	char* currentAppId = wox_get_session_app_id(current);
 	int bestScore = -1;
 	void* bestSession = NULL;
 	for (UINT32 i = 0; i < size; i++) {
@@ -554,15 +600,7 @@ static HRESULT wox_select_session(void* manager, void** selected) {
 		if (FAILED(((WoxVectorViewVtbl**)sessions)[0]->GetAt(sessions, i, &session)) || session == NULL) {
 			continue;
 		}
-		void* properties = NULL;
-		int score = 0;
-		if (SUCCEEDED(wox_get_media_properties(session, &properties)) && properties != NULL) {
-			score = wox_media_properties_score(session, properties);
-			wox_release(properties);
-		}
-		if (current != NULL && session == current) {
-			score += 5;
-		}
+		int score = wox_session_cheap_score(session, currentAppId);
 		if (score > bestScore) {
 			wox_release(bestSession);
 			bestSession = session;
@@ -571,6 +609,7 @@ static HRESULT wox_select_session(void* manager, void** selected) {
 			wox_release(session);
 		}
 	}
+	free(currentAppId);
 	wox_release(sessions);
 	wox_release(current);
 	if (bestSession == NULL) {
@@ -597,7 +636,7 @@ static HRESULT wox_read_thumbnail(void* thumbnail, unsigned char** outBytes, int
 		return hr;
 	}
 	void* streamObject = NULL;
-	hr = wox_await_object(operation, &streamObject, 0);
+	hr = wox_await_object(operation, &streamObject, 0, WOX_ASYNC_THUMBNAIL_WAITS);
 	wox_release(operation);
 	if (FAILED(hr)) {
 		return hr;
@@ -656,7 +695,7 @@ static HRESULT wox_read_thumbnail(void* thumbnail, unsigned char** outBytes, int
 		return hr;
 	}
 	void* readBufferObject = NULL;
-	hr = wox_await_object(readOperation, &readBufferObject, 1);
+	hr = wox_await_object(readOperation, &readBufferObject, 1, WOX_ASYNC_THUMBNAIL_WAITS);
 	wox_release(readOperation);
 	if (FAILED(hr)) {
 		wox_release(buffer);
@@ -706,7 +745,7 @@ static HRESULT wox_read_thumbnail(void* thumbnail, unsigned char** outBytes, int
 	wox_release(buffer);
 	return S_OK;
 }
-static void wox_fill_media_info_from_session(void* session, WoxMediaInfo* info) {
+static void wox_fill_media_info_from_session(void* session, WoxMediaInfo* info, int include_artwork) {
 	void* properties = NULL;
 	HRESULT hr = wox_get_media_properties(session, &properties);
 	if (FAILED(hr) || properties == NULL) {
@@ -717,21 +756,24 @@ static void wox_fill_media_info_from_session(void* session, WoxMediaInfo* info) 
 	info->title = wox_get_hstring_property(properties, props->GetTitle);
 	info->artist = wox_get_hstring_property(properties, props->GetArtist);
 	info->album = wox_get_hstring_property(properties, props->GetAlbumTitle);
-	void* thumbnail = NULL;
-	hr = props->GetThumbnail(properties, &thumbnail);
-	if (SUCCEEDED(hr) && thumbnail != NULL) {
-		wox_read_thumbnail(thumbnail, &info->artwork, &info->artwork_len);
+	if (include_artwork) {
+		void* thumbnail = NULL;
+		hr = props->GetThumbnail(properties, &thumbnail);
+		if (SUCCEEDED(hr) && thumbnail != NULL) {
+			wox_read_thumbnail(thumbnail, &info->artwork, &info->artwork_len);
+		}
+		wox_release(thumbnail);
 	}
-	wox_release(thumbnail);
 	wox_release(properties);
 	void* sessionItf = NULL;
 	hr = wox_qi(session, &IID_WoxSession, &sessionItf);
 	if (SUCCEEDED(hr) && sessionItf != NULL) {
-		HSTRING appId = NULL;
-		if (SUCCEEDED(((WoxSessionVtbl**)sessionItf)[0]->GetSourceAppUserModelId(sessionItf, &appId)) && appId != NULL) {
-			info->app_id = wox_hstring_to_utf8(appId);
-			info->app_name = wox_hstring_to_utf8(appId);
-			WindowsDeleteString(appId);
+		char* appId = wox_get_session_app_id(session);
+		if (wox_has_text(appId)) {
+			info->app_id = appId;
+			info->app_name = wox_strdup(appId);
+		} else {
+			free(appId);
 		}
 		info->playback_status = wox_get_playback_status(session);
 		void* timelineObject = NULL;
@@ -788,55 +830,62 @@ static void wox_fill_media_info_from_session(void* session, WoxMediaInfo* info) 
 	}
 	info->has_media = 1;
 }
-WoxMediaInfo wox_get_media_info(void) {
+WoxMediaInfo wox_get_media_info(int include_artwork) {
 	WoxMediaInfo info;
 	memset(&info, 0, sizeof(info));
-	HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
-	int shouldUninitialize = SUCCEEDED(hr);
-	if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
+	HRESULT hr = wox_ensure_runtime();
+	if (FAILED(hr)) {
 		info.error = wox_hresult_error("RoInitialize failed", hr);
 		return info;
 	}
-	void* manager = NULL;
-	hr = wox_get_manager(&manager);
-	if (FAILED(hr) || manager == NULL) {
-		info.error = wox_hresult_error("get media manager failed", hr);
-		if (shouldUninitialize) {
-			RoUninitialize();
+
+	for (int attempt = 0; attempt < 2; attempt++) {
+		void* manager = NULL;
+		hr = wox_get_manager(&manager);
+		if (FAILED(hr) || manager == NULL) {
+			if (attempt == 0) {
+				wox_invalidate_manager();
+				continue;
+			}
+			info.error = wox_hresult_error("get media manager failed", hr);
+			return info;
 		}
-		return info;
-	}
-	void* session = NULL;
-	hr = wox_select_session(manager, &session);
-	wox_release(manager);
-	if (FAILED(hr) || session == NULL) {
-		if (shouldUninitialize) {
-			RoUninitialize();
+
+		void* session = NULL;
+		hr = wox_select_session(manager, &session);
+		wox_release(manager);
+		if (FAILED(hr) && hr != S_FALSE) {
+			if (attempt == 0) {
+				wox_invalidate_manager();
+				continue;
+			}
+			return info;
 		}
+		if (session == NULL) {
+			return info;
+		}
+		wox_fill_media_info_from_session(session, &info, include_artwork);
+		wox_release(session);
 		return info;
-	}
-	wox_fill_media_info_from_session(session, &info);
-	wox_release(session);
-	if (shouldUninitialize) {
-		RoUninitialize();
 	}
 	return info;
 }
 int wox_control_media(const char* command, char** error) {
 	*error = NULL;
-	HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
-	int shouldUninitialize = SUCCEEDED(hr);
-	if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
+	HRESULT hr = wox_ensure_runtime();
+	if (FAILED(hr)) {
 		*error = wox_hresult_error("RoInitialize failed", hr);
 		return 0;
 	}
+
 	void* manager = NULL;
 	hr = wox_get_manager(&manager);
 	if (FAILED(hr) || manager == NULL) {
+		wox_invalidate_manager();
+		hr = wox_get_manager(&manager);
+	}
+	if (FAILED(hr) || manager == NULL) {
 		*error = wox_hresult_error("get media manager failed", hr);
-		if (shouldUninitialize) {
-			RoUninitialize();
-		}
 		return 0;
 	}
 	void* session = NULL;
@@ -844,9 +893,6 @@ int wox_control_media(const char* command, char** error) {
 	wox_release(manager);
 	if (FAILED(hr) || session == NULL) {
 		*error = wox_strdup("no active media session");
-		if (shouldUninitialize) {
-			RoUninitialize();
-		}
 		return 0;
 	}
 	void* sessionItf = NULL;
@@ -854,9 +900,6 @@ int wox_control_media(const char* command, char** error) {
 	wox_release(session);
 	if (FAILED(hr) || sessionItf == NULL) {
 		*error = wox_hresult_error("query media session failed", hr);
-		if (shouldUninitialize) {
-			RoUninitialize();
-		}
 		return 0;
 	}
 	WoxSessionVtbl* vtbl = ((WoxSessionVtbl**)sessionItf)[0];
@@ -874,31 +917,19 @@ int wox_control_media(const char* command, char** error) {
 	} else {
 		wox_release(sessionItf);
 		*error = wox_strdup("unsupported media command");
-		if (shouldUninitialize) {
-			RoUninitialize();
-		}
 		return 0;
 	}
 	wox_release(sessionItf);
 	if (FAILED(hr) || operation == NULL) {
 		*error = wox_hresult_error("start media control failed", hr);
-		if (shouldUninitialize) {
-			RoUninitialize();
-		}
 		return 0;
 	}
 	int ok = 0;
-	hr = wox_await_bool(operation, &ok);
+	hr = wox_await_bool(operation, &ok, WOX_ASYNC_CONTROL_WAITS);
 	wox_release(operation);
 	if (FAILED(hr)) {
 		*error = wox_hresult_error("run media control failed", hr);
-		if (shouldUninitialize) {
-			RoUninitialize();
-		}
 		return 0;
-	}
-	if (shouldUninitialize) {
-		RoUninitialize();
 	}
 	return ok;
 }

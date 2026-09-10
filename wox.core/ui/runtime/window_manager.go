@@ -335,13 +335,14 @@ func (w *ManagedWindow) Hide() error {
 }
 
 // Close permanently releases this native instance and removes it from the registry.
+// Reentrant calls during native teardown return immediately; waiting would block
+// the UI thread that must finish teardown and deliver OnClosed.
 func (w *ManagedWindow) Close() error {
 	if w == nil || w.window == nil {
 		return nil
 	}
 	current := w.Lifecycle()
 	if current == WindowLifecycleClosing {
-		<-w.closed
 		return nil
 	}
 	if current == WindowLifecycleClosed {
@@ -350,7 +351,6 @@ func (w *ManagedWindow) Close() error {
 	previous, changed, err := w.beginTransition(WindowLifecycleClosing)
 	if err != nil {
 		if w.Lifecycle() == WindowLifecycleClosing {
-			<-w.closed
 			return nil
 		}
 		return err

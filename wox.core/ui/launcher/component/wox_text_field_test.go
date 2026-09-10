@@ -9,6 +9,42 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestTextFieldSelectionClipsOriginalLine prevents selected text from being
+// independently laid out and painted over the unselected glyphs.
+func TestTextFieldSelectionClipsOriginalLine(t *testing.T) {
+	var clips, positions []woxui.Rect
+	runs := make([]TextFieldRichRun, 3)
+	for index := range runs {
+		runs[index] = TextFieldRichRun{Start: index, End: index + 1, Advance: 10,
+			Paint: func(list *woxui.DisplayList, bounds woxui.Rect) {
+				clip, ok := list.ClipRect()
+				if !ok {
+					t.Fatal("selection painted without clipping out the other text color")
+				}
+				clips = append(clips, clip)
+				positions = append(positions, bounds)
+			},
+		}
+	}
+	list := &woxui.DisplayList{}
+	drawTextField(list, woxui.Rect{Width: 30, Height: 40},
+		woxui.TextEditingState{Text: "中A文", Selection: woxui.TextSelection{Anchor: 1, Focus: 2}},
+		woxui.TextStyle{Size: 14}, runs, woxui.Color{}, Theme{}, true, false, 2, 20, 0, 0, false, nil)
+	if len(clips) != 9 {
+		t.Fatalf("paint calls = %d, want the same three segments in each color region", len(clips))
+	}
+	for index := range clips {
+		wantClip := woxui.Rect{X: float32(index / 3 * 10), Width: 10, Height: 20}
+		wantPosition := woxui.Rect{X: float32(index % 3 * 10), Width: 10, Height: 20}
+		if clips[index] != wantClip || positions[index] != wantPosition {
+			t.Fatalf("paint %d: clip %v, position %v; want %v, %v", index, clips[index], positions[index], wantClip, wantPosition)
+		}
+	}
+	if _, active := list.ClipRect(); active {
+		t.Fatal("selection clip was not restored")
+	}
+}
+
 func TestUnfocusedSingleLineFieldKeepsOverflowLeftAligned(t *testing.T) {
 	measurer := &fakeTextMeasurer{charWidth: 10}
 	runes := []rune("abcdefghijklmnopqrstuvwxyz")

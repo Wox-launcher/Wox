@@ -22,7 +22,7 @@ typedef struct WoxMediaInfo {
     char* error;
 } WoxMediaInfo;
 
-WoxMediaInfo wox_get_media_info(void);
+WoxMediaInfo wox_get_media_info(int include_artwork);
 int wox_control_media(const char* command, char** error);
 void wox_free_media_info(WoxMediaInfo* info);
 void wox_free_string(char* value);

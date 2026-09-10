@@ -1895,10 +1895,32 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 			}
 			gutter.PaintLineGutter(displayList, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: width, Height: lineHeight})
 		}
-		drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineHeight, style, richRuns, textColor, true, textAlignmentY)
 		if focused && selectionStart < selectionEnd {
 			prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, selectionStart, style, richRuns)
-			drawTextFieldRichRange(displayList, window, displayRunes, selectionStart, selectionEnd, lineX+prefixWidth, bounds.X+bounds.Width, y, lineHeight, style, richRuns, theme.SelectionText, false, textAlignmentY)
+			selectedWidth := textFieldMeasureRange(window, displayRunes, selectionStart, selectionEnd, style, richRuns)
+			left := max(bounds.X, min(bounds.X+bounds.Width, lineX+prefixWidth))
+			right := max(left, min(bounds.X+bounds.Width, lineX+prefixWidth+selectedWidth))
+			// Keep full-line shaping and font fallback identical in every region.
+			// Repainting a selected substring over the original text shifts mixed-script
+			// baselines and doubles antialiased edges, especially on transparent fields.
+			for index, clip := range []woxui.Rect{
+				{X: bounds.X, Y: y, Width: left - bounds.X, Height: lineHeight},
+				{X: left, Y: y, Width: right - left, Height: lineHeight},
+				{X: right, Y: y, Width: bounds.X + bounds.Width - right, Height: lineHeight},
+			} {
+				if clip.Width <= 0 {
+					continue
+				}
+				color := textColor
+				if index == 1 {
+					color = theme.SelectionText
+				}
+				displayList.PushClipRect(clip)
+				drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineHeight, style, richRuns, color, index != 1, textAlignmentY)
+				displayList.PopClipRect()
+			}
+		} else {
+			drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineHeight, style, richRuns, textColor, true, textAlignmentY)
 		}
 	}
 	if !focused {

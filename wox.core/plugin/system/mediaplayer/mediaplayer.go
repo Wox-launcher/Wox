@@ -129,6 +129,12 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	m.retriever.UpdateAPI(m.api)
 	m.trackedResults = util.NewHashMap[string, mediaTrackedResult]()
 
+	// First SMTC/MediaRemote lookup is the expensive one; warm it so entering
+	// the plugin does not pay that cost on the query path.
+	util.Go(ctx, "warm media retriever", func() {
+		_, _ = m.retriever.GetCurrentMedia(util.NewTraceContext())
+	})
+
 	// Handle plugin-to-plugin commands for media control (e.g. dictation
 	// pauses media during voice input and resumes afterwards).
 	m.api.OnHandlePluginCommand(ctx, func(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {

@@ -71,7 +71,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
 		}
-		return a.buildScrollablePreviewText(scrollKey, value, color, preview.ScrollPosition, width, height)
+		return a.buildScrollablePreviewText(scrollKey, value, color, preview.ScrollPosition, width, height, palette.componentTheme())
 	}
 	errorText := palette.componentTheme().ErrorText
 	switch preview.PreviewType {
@@ -319,18 +319,16 @@ func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHisto
 	})
 }
 
-func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-previewview.ScrollablePreviewTextHorizontalPadding*2)
+func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	fontSize := a.densityMetrics.scaled(woxcomponent.PreviewBodyFontSize)
 	lineHeight := a.densityMetrics.scaled(23)
-	style := woxui.TextStyle{Size: fontSize}
-	layout := a.previewTextLayout(scrollKey, value, style, innerWidth, lineHeight)
 	initialOffset := float32(0)
 	if scrollPosition == "bottom" {
 		initialOffset = float32(math.MaxFloat32)
 	}
 	return previewview.ScrollablePreviewText(previewview.ScrollablePreviewTextProps{
-		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, Layout: layout, InitialOffset: initialOffset,
+		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, InitialOffset: initialOffset,
+		Window: a.window, Theme: theme,
 	})
 }
 
@@ -338,17 +336,15 @@ func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette 
 	if strings.TrimSpace(value) == "" {
 		value = "No preview available"
 	}
-	const horizontalPadding = float32(44)
 	fontSize := a.densityMetrics.scaled(woxcomponent.PreviewQuoteFontSize)
 	lineHeight := a.densityMetrics.scaled(25)
 	style := woxui.TextStyle{Size: fontSize}
-	textWidth := max(float32(0), width-horizontalPadding*2)
-	layout := a.previewTextLayout(scrollKey+"|quote", value, style, textWidth, lineHeight)
-	if !previewview.TextPreviewFits(layout, width, height) {
-		return a.buildScrollablePreviewText(scrollKey, value, previewColorWithOpacity(palette.previewText, 0.86), scrollPosition, width, height)
+	theme := palette.componentTheme()
+	if !previewview.TextPreviewFits(value, a.window, style, width, height, lineHeight) {
+		return a.buildScrollablePreviewText(scrollKey, value, previewColorWithOpacity(palette.previewText, 0.86), scrollPosition, width, height, theme)
 	}
 	return previewview.TextPreview(previewview.TextPreviewProps{
-		Value: value, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, Layout: layout, Theme: palette.componentTheme(), Window: a.window,
+		ID: scrollKey, Value: value, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, Theme: theme, Window: a.window,
 	})
 }
 

@@ -300,10 +300,7 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	textColor := chrome.Foreground
 	mutedColor := textOverlayMutedColor(chrome)
 	style := woxui.TextStyle{Size: textOverlayFontSize(instance.options)}
-	text := woxwidget.TextBlock{
-		Value: instance.options.Message, Style: style, Color: textColor, Width: layout.textWidth,
-		LineHeight: layout.textLayout.LineHeight, Centered: instance.options.CenterContent, Layout: &layout.textLayout,
-	}
+	text := instance.overlayMessage(layout, style, textColor, chrome)
 	var textContent woxwidget.Widget = text
 	if layout.scrollable {
 		var keepVisible *woxwidget.ScrollRange
@@ -401,6 +398,53 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		return woxwidget.Gesture{ID: "text-overlay-click", OnTap: func() { instance.options.OnClick() }, Child: root}
 	}
 	return root
+}
+
+// overlayMessage paints the body. Centered loading placeholders stay draw-only;
+// dialog and AI-command text use a read-only field so drag-select and copy work.
+// The field is a deeper gesture than the optional body OnTap, so selection wins
+// over click-to-copy on the text itself.
+func (instance *runtimeTextOverlay) overlayMessage(layout runtimeTextLayout, style woxui.TextStyle, color woxui.Color, chrome overlay.ThemeChrome) woxwidget.Widget {
+	if instance.options.CenterContent {
+		return woxwidget.TextBlock{
+			Value: instance.options.Message, Style: style, Color: color, Width: layout.textWidth,
+			LineHeight: layout.textLayout.LineHeight, Centered: true, Layout: &layout.textLayout,
+		}
+	}
+	lineHeight := layout.textLayout.LineHeight
+	if lineHeight <= 0 {
+		lineHeight = style.Size + 6
+	}
+	lines := woxcomponent.TextFieldVisualLineCount(instance.options.Message, instance.window, style, layout.textWidth, nil)
+	height := max(lineHeight, layout.textLayout.Size.Height, float32(max(1, lines))*lineHeight+1)
+	id := "text-overlay-message"
+	if instance.id != "" {
+		id += "-" + instance.id
+	}
+	return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+		ID: id, Label: instance.options.Message, Width: layout.textWidth, Height: height,
+		Padding: woxwidget.Insets{Bottom: 1}, Transparent: true, DisableHover: true,
+		Style: style, LineHeight: lineHeight, TextColor: color, Value: instance.options.Message,
+		ReadOnly: true, MaxLines: max(8, lines+4), Window: instance.window, Theme: textOverlayFieldTheme(chrome),
+	})
+}
+
+// textOverlayFieldTheme maps overlay chrome onto the selection colors a read-only field needs.
+func textOverlayFieldTheme(chrome overlay.ThemeChrome) woxcomponent.Theme {
+	selection := woxui.Color{R: 255, G: 255, B: 255, A: 61}
+	selectionText := chrome.Foreground
+	if chrome.Light {
+		selection = woxui.Color{R: 82, G: 157, B: 247, A: 204}
+		selectionText = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	}
+	return woxcomponent.Theme{
+		Background:          chrome.Background,
+		Cursor:              chrome.Foreground,
+		SelectionBackground: selection,
+		SelectionText:       selectionText,
+		QueryText:           chrome.Foreground,
+		PreviewText:         chrome.Foreground,
+	}
 }
 
 // applyTextOverlayTheme matches native vibrancy and painted chrome to the Wox theme.

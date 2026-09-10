@@ -341,3 +341,99 @@ func TestRuntimeTextOverlayBuildInvokesClick(t *testing.T) {
 		t.Fatal("clickable text overlay did not invoke OnClick")
 	}
 }
+
+func TestRuntimeTextOverlayBuildUsesSelectableMessage(t *testing.T) {
+	const body = "Please provide the text to translate."
+	instance := &runtimeTextOverlay{
+		id: "ai-command",
+		layout: runtimeTextLayout{
+			windowSize:  woxui.Size{Width: 160, Height: 48},
+			contentSize: woxui.Size{Width: 140, Height: 28},
+			textWidth:   140,
+			textLayout:  woxwidget.TextBlockLayout{Size: woxui.Size{Width: 140, Height: 20}, LineHeight: 20},
+		},
+		options: Options{Message: body, ShowCopyButton: true, OnClick: func() bool { return true }},
+	}
+	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}})
+	field, ok := findTextOverlayMessageField(root)
+	if !ok {
+		t.Fatal("text overlay message is not a read-only text field")
+	}
+	if field.ID != "text-overlay-message-ai-command" || field.Value != body || !field.ReadOnly || !field.Transparent || !field.DisableHover {
+		t.Fatalf("text overlay field = %#v, want a transparent read-only message field", field)
+	}
+	if field.Theme.SelectionBackground.A == 0 {
+		t.Fatal("text overlay field is missing a selection wash")
+	}
+}
+
+func TestRuntimeTextOverlayBuildKeepsCenteredPlaceholderAsTextBlock(t *testing.T) {
+	instance := &runtimeTextOverlay{
+		layout: runtimeTextLayout{
+			windowSize:  woxui.Size{Width: 160, Height: 48},
+			contentSize: woxui.Size{Width: 140, Height: 28},
+			textWidth:   140,
+			textLayout:  woxwidget.TextBlockLayout{Size: woxui.Size{Width: 140, Height: 20}, LineHeight: 20},
+		},
+		options: Options{Message: "Launching App", CenterContent: true, Loading: true},
+	}
+	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}})
+	if _, ok := findTextOverlayMessageField(root); ok {
+		t.Fatal("centered loading placeholder unexpectedly uses a text field")
+	}
+	if !findTextOverlayCenteredBlock(root) {
+		t.Fatal("centered loading placeholder is not a centered text block")
+	}
+}
+
+func findTextOverlayMessageField(widget woxwidget.Widget) (woxcomponent.TextFieldProps, bool) {
+	var found woxcomponent.TextFieldProps
+	ok := false
+	walkTextOverlayWidget(widget, func(child woxwidget.Widget) {
+		stateful, isStateful := child.(woxwidget.Stateful)
+		if !isStateful {
+			return
+		}
+		field, isField := stateful.Widget.(woxcomponent.TextFieldProps)
+		if !isField {
+			return
+		}
+		found = field
+		ok = true
+	})
+	return found, ok
+}
+
+func findTextOverlayCenteredBlock(widget woxwidget.Widget) bool {
+	found := false
+	walkTextOverlayWidget(widget, func(child woxwidget.Widget) {
+		block, ok := child.(woxwidget.TextBlock)
+		if ok && block.Centered && block.Value == "Launching App" {
+			found = true
+		}
+	})
+	return found
+}
+
+func walkTextOverlayWidget(widget woxwidget.Widget, visit func(woxwidget.Widget)) {
+	if widget == nil {
+		return
+	}
+	visit(widget)
+	switch typed := widget.(type) {
+	case woxwidget.Stack:
+		for _, child := range typed.Children {
+			walkTextOverlayWidget(child.Child, visit)
+		}
+	case woxwidget.Align:
+		walkTextOverlayWidget(typed.Child, visit)
+	case woxwidget.Flex:
+		for _, child := range typed.Children {
+			walkTextOverlayWidget(child, visit)
+		}
+	case woxwidget.Container:
+		walkTextOverlayWidget(typed.Child, visit)
+	case woxwidget.Gesture:
+		walkTextOverlayWidget(typed.Child, visit)
+	}
+}
