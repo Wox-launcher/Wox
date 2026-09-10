@@ -1,7 +1,17 @@
 ###############################################################################
 # Set default behavior to automatically normalize line endings.
+#
+# eol=lf checks text files out with LF on every platform, matching what the
+# index already stores. Without it, Windows checkouts get CRLF while gofmt,
+# prettier and black all write LF, so any formatter run rewrites whole files
+# and git reports hundreds of files as modified even though no content changed.
+#
+# Existing Windows clones need a one-time renormalization after pulling this,
+# otherwise the cached file sizes in .git/index still describe the CRLF copies:
+#   git add --renormalize .
+#   git checkout -- .
 ###############################################################################
-* text=auto
+* text=auto eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
@@ -64,5 +74,9 @@
 
 PythonHome/* linguist-vendored
 
-
-text eol=crlf
+###############################################################################
+# Windows-only scripts keep CRLF.
+###############################################################################
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

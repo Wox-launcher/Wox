@@ -548,7 +548,7 @@ func (p *FolderPlugin) buildDeleteFavoriteAction(name string, path string, favor
 	return plugin.QueryResultAction{
 		Id:                     "delete_folder_favorite",
 		Name:                   "i18n:plugin_folder_delete_favorite",
-		Icon:                   icons.Get(icons.ActionDelete),
+		Icon:                   icons.Get(icons.ActionUnstar),
 		PreventHideAfterAction: true,
 		ContextData:            p.buildFavoriteActionContextData(name, path, favoriteIndex),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {

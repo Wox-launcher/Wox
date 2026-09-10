@@ -1340,7 +1340,7 @@ func (c *notesWindowController) searchSectionLabel(item common.NoteSummary) stri
 	case item.DeletedAt > 0:
 		return c.app.translate("i18n:notes_deleted")
 	case item.PinnedAt > 0:
-		return c.app.translate("i18n:notes_pinned")
+		return c.app.translate("i18n:notes_favorites")
 	default:
 		return c.app.translate("i18n:notes_recent")
 	}

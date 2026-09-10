@@ -202,11 +202,11 @@ func buildColorTailSwatch(kind string, hex string, tooltip string) plugin.QueryR
 
 func (c *ColorPlugin) buildColorActions(ctx context.Context, color parsedColor, item ColorHistoryItem, complement string, analogousLeft string, analogousRight string, rgb string, hsl string) []plugin.QueryResultAction {
 	favoriteActionName := "i18n:plugin_color_mark_favorite"
-	favoriteActionIcon := icons.Get(icons.ActionPin)
+	favoriteActionIcon := icons.Get(icons.ActionStar)
 	nextFavoriteValue := true
 	if item.Favorite {
 		favoriteActionName = "i18n:plugin_color_cancel_favorite"
-		favoriteActionIcon = icons.Get(icons.ActionUnpin)
+		favoriteActionIcon = icons.Get(icons.ActionUnstar)
 		nextFavoriteValue = false
 	}
 

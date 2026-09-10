@@ -45,7 +45,9 @@ var managerOnce sync.Once
 var logger *util.Log
 
 const (
-	// ContextData key/value for favorite tail
+	// ContextData key/value for the "Pin in current query" tail. The literal stays
+	// "system:favorite" because it is documented in the published plugin SDKs; the
+	// user-facing concept it marks is a query pin, not a plugin Favorites collection.
 	favoriteTailContextDataKey   = "system:favorite"
 	favoriteTailContextDataValue = "true"
 	scoreTailContextDataKey      = "system:score"
@@ -1838,11 +1840,11 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 	resultHash := setting.NewResultHashFromParts(pluginInstance.Metadata.Id, title, subTitle, scoreKey)
 	settingManager := setting.GetSettingManager()
 	// Declare both actions first
-	var addToFavoriteAction func(context.Context, ActionContext)
-	var removeFromFavoriteAction func(context.Context, ActionContext)
+	var pinInQueryAction func(context.Context, ActionContext)
+	var unpinInQueryAction func(context.Context, ActionContext)
 
-	// Define add to favorite action
-	addToFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
+	// Define pin in current query action
+	pinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
 		settingManager.PinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
 		// Get API instance
@@ -1856,20 +1858,20 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		}
 
 		// Update the result to refresh UI
-		// Note: We don't need to manually add favorite tail here because:
-		// 1. GetUpdatableResult filters out system tails (including favorite icon)
-		// 2. PolishUpdatableResult will automatically add favorite tail back if this is a favorite result
-		// 3. This ensures the favorite tail is always managed by the system
+		// Note: We don't need to manually add the pin tail here because:
+		// 1. GetUpdatableResult filters out system tails (including the pin icon)
+		// 2. PolishUpdatableResult will automatically add the pin tail back if this result is pinned
+		// 3. This ensures the pin tail is always managed by the system
 		api.UpdateResult(ctx, *updatableResult)
 	}
 
-	// Define remove from favorite action
-	removeFromFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
+	// Define unpin from current query action
+	unpinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
 		settingManager.UnpinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
 		// Get API instance
 		api := NewAPI(pluginInstance)
-		api.Notify(ctx, "i18n:plugin_manager_unpin_in_query")
+		api.Notify(ctx, "i18n:plugin_manager_unpin_in_query_success")
 
 		// Get current result state
 		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
@@ -1878,10 +1880,10 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		}
 
 		// Update the result to refresh UI
-		// Note: We don't need to manually remove favorite tail here because:
-		// 1. GetUpdatableResult filters out system tails (including favorite icon)
-		// 2. PolishUpdatableResult will NOT add favorite tail back if this is not a favorite result
-		// 3. This ensures the favorite tail is always managed by the system
+		// Note: We don't need to manually remove the pin tail here because:
+		// 1. GetUpdatableResult filters out system tails (including the pin icon)
+		// 2. PolishUpdatableResult will NOT add the pin tail back if this result is no longer pinned
+		// 3. This ensures the pin tail is always managed by the system
 		api.UpdateResult(ctx, *updatableResult)
 	}
 
@@ -1892,7 +1894,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 			Icon:                   icons.Get(icons.ActionUnpin),
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
-			Action:                 removeFromFavoriteAction,
+			Action:                 unpinInQueryAction,
 		})
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
@@ -1901,7 +1903,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 			Icon:                   icons.Get(icons.ActionPin),
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
-			Action:                 addToFavoriteAction,
+			Action:                 pinInQueryAction,
 		})
 	}
 
@@ -3318,27 +3320,27 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	AutoScoreCostUs := time.Since(autoScoreTimingStart).Microseconds()
 	favoriteStart := util.GetSystemTimestamp()
 	favoriteTimingStart := time.Now()
-	// check if result is favorite result
-	// favorite result will not be affected by ignoreAutoScore setting, except on the MRU page where MRU score owns ranking.
-	isFavorite := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
-	if isFavorite {
-		favScore := int64(100000)
-		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.GetName(ctx), result.Title, favScore))
-		result.Score += favScore
+	// check if the user pinned this result in the current query
+	// a pinned result will not be affected by ignoreAutoScore setting, except on the MRU page where MRU score owns ranking.
+	isPinned := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+	if isPinned {
+		pinScore := int64(100000)
+		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is pinned in current query, add score: %d", pluginInstance.GetName(ctx), result.Title, pinScore))
+		result.Score += pinScore
 
-		// Add favorite icon to tails if not already present
-		hasFavoriteTail := false
+		// Add pin icon to tails if not already present
+		hasPinTail := false
 		for _, tail := range result.Tails {
 			if tail.ContextData[favoriteTailContextDataKey] == favoriteTailContextDataValue {
-				hasFavoriteTail = true
+				hasPinTail = true
 				break
 			}
 		}
-		if !hasFavoriteTail {
+		if !hasPinTail {
 			result.Tails = append(result.Tails, QueryResultTail{
 				Type:         QueryResultTailTypeImage,
 				Image:        icons.Get(icons.ActionPin),
-				ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify favorite tail
+				ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify the pin tail
 				IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
 			})
 		}
@@ -3722,22 +3724,22 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			}
 		}
 
-		// Add favorite icon to tails if this is a favorite result
-		isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle)
-		if isFavorite {
-			// Check if favorite tail already exists
-			hasFavoriteTail := false
+		// Add pin icon to tails if this result is pinned in the current query
+		isPinned := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle)
+		if isPinned {
+			// Check if pin tail already exists
+			hasPinTail := false
 			for _, tail := range tails {
 				if tail.ContextData[favoriteTailContextDataKey] == favoriteTailContextDataValue {
-					hasFavoriteTail = true
+					hasPinTail = true
 					break
 				}
 			}
-			if !hasFavoriteTail {
+			if !hasPinTail {
 				tails = append(tails, QueryResultTail{
 					Type:         QueryResultTailTypeImage,
 					Image:        icons.Get(icons.ActionPin),
-					ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify favorite tail
+					ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify the pin tail
 					IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
 				})
 			}

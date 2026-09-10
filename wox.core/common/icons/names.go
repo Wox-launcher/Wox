@@ -56,6 +56,7 @@ const (
 	ActionCorrect              = "action.correct"
 	ActionSettings             = "action.settings"
 	ActionStar                 = "action.star"
+	ActionUnstar               = "action.unstar"
 	ActionLock                 = "action.lock"
 	ActionDelete               = "action.delete"
 	ActionExit                 = "action.exit"

@@ -105,8 +105,8 @@ func TestNoteResultsPinActionAndPinnedGroup(t *testing.T) {
 		t.Fatalf("unpinned note group = %#v", unpinned.Results[0])
 	}
 	assertNoteActionIcons(t, unpinned.Results[0].Actions)
-	if unpinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_pin" || unpinned.Results[0].Actions[1].Icon.String() != icons.Get(icons.ActionPin).String() {
-		t.Fatalf("pin action = %#v", unpinned.Results[0].Actions[1])
+	if unpinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_add_favorite" || unpinned.Results[0].Actions[1].Icon.String() != icons.Get(icons.ActionStar).String() {
+		t.Fatalf("add favorite action = %#v", unpinned.Results[0].Actions[1])
 	}
 
 	if _, err := repository.SetPinned(saved.ID, true); err != nil {
@@ -116,11 +116,11 @@ func TestNoteResultsPinActionAndPinnedGroup(t *testing.T) {
 	if len(pinned.Results) != 1 {
 		t.Fatalf("expected pinned note result, got %#v", pinned.Results)
 	}
-	if pinned.Results[0].Group != "i18n:plugin_notes_group_pinned" || pinned.Results[0].GroupScore != 100 {
+	if pinned.Results[0].Group != "i18n:plugin_notes_group_favorites" || pinned.Results[0].GroupScore != 100 {
 		t.Fatalf("pinned note group = %#v", pinned.Results[0])
 	}
-	if pinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_unpin" || pinned.Results[0].Actions[1].Icon.String() != icons.Get(icons.ActionUnpin).String() {
-		t.Fatalf("unpin action = %#v", pinned.Results[0].Actions[1])
+	if pinned.Results[0].Actions[1].Name != "i18n:plugin_notes_action_remove_favorite" || pinned.Results[0].Actions[1].Icon.String() != icons.Get(icons.ActionUnstar).String() {
+		t.Fatalf("remove favorite action = %#v", pinned.Results[0].Actions[1])
 	}
 }
 
@@ -128,7 +128,7 @@ func assertNoteActionIcons(t *testing.T, actions []plugin.QueryResultAction) {
 	t.Helper()
 	want := map[string]string{
 		"open":            icons.Get(icons.ActionOpen).String(),
-		"pin":             icons.Get(icons.ActionPin).String(),
+		"pin":             icons.Get(icons.ActionStar).String(),
 		"copy-link":       icons.Get(icons.ActionCopy).String(),
 		"export-markdown": icons.Get(icons.ActionInstall).String(),
 		"export-text":     icons.Get(icons.ActionText).String(),
@@ -153,7 +153,7 @@ func TestNoteResultGroupUsesClipboardStyleBuckets(t *testing.T) {
 		wantGroup string
 		wantScore int64
 	}{
-		{common.NoteRecord{PinnedAt: now, UpdatedAt: now}, "i18n:plugin_notes_group_pinned", 100},
+		{common.NoteRecord{PinnedAt: now, UpdatedAt: now}, "i18n:plugin_notes_group_favorites", 100},
 		{common.NoteRecord{UpdatedAt: now}, "i18n:plugin_notes_group_today", 90},
 		{common.NoteRecord{UpdatedAt: now - 1000*60*60*25}, "i18n:plugin_notes_group_yesterday", 80},
 		{common.NoteRecord{UpdatedAt: now - 1000*60*60*48}, "i18n:plugin_notes_group_history", 10},

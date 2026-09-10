@@ -1196,7 +1196,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_mark_favorite",
-			Icon:                   icons.Get(icons.ActionPin),
+			Icon:                   icons.Get(icons.ActionStar),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.markAsFavorite(ctx, record); err != nil {
@@ -1210,7 +1210,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_cancel_favorite",
-			Icon:                   icons.Get(icons.ActionUnpin),
+			Icon:                   icons.Get(icons.ActionUnstar),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.cancelFavorite(ctx, record.ID); err != nil {
@@ -1469,7 +1469,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_mark_favorite",
-			Icon:                   icons.Get(icons.ActionPin),
+			Icon:                   icons.Get(icons.ActionStar),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.markAsFavorite(ctx, record); err != nil {
@@ -1483,7 +1483,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_clipboard_cancel_favorite",
-			Icon:                   icons.Get(icons.ActionUnpin),
+			Icon:                   icons.Get(icons.ActionUnstar),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.cancelFavorite(ctx, record.ID); err != nil {

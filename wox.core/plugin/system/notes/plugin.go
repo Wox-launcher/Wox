@@ -177,15 +177,17 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 		}}}
 	}
 	// Action verbs use theme-adaptive catalog SVGs so they stay visible on both appearances.
-	pinName, pinIcon := "i18n:plugin_notes_action_pin", icons.Get(icons.ActionPin)
+	// The stored field stays PinnedAt, but the user-facing concept is Favorites, shared
+	// with clipboard, color and folder; the pin glyph belongs to "Pin in current query".
+	favoriteName, favoriteIcon := "i18n:plugin_notes_action_add_favorite", icons.Get(icons.ActionStar)
 	if record.PinnedAt > 0 {
-		pinName, pinIcon = "i18n:plugin_notes_action_unpin", icons.Get(icons.ActionUnpin)
+		favoriteName, favoriteIcon = "i18n:plugin_notes_action_remove_favorite", icons.Get(icons.ActionUnstar)
 	}
 	return []plugin.QueryResultAction{
 		{Id: "open", Name: "i18n:plugin_notes_action_open", IsDefault: true, Icon: icons.Get(icons.ActionOpen), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
 		}},
-		{Id: "pin", Name: pinName, Icon: pinIcon, PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
+		{Id: "pin", Name: favoriteName, Icon: favoriteIcon, PreventHideAfterAction: true, ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if _, err := p.repository.SetPinned(record.ID, record.PinnedAt == 0); err != nil {
 				p.notifyError(ctx, err)
 			}
@@ -214,10 +216,10 @@ func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultActio
 	}
 }
 
-// noteResultGroup mirrors clipboard: pinned notes first, then today / yesterday / history.
+// noteResultGroup mirrors clipboard: favorites first, then today / yesterday / history.
 func noteResultGroup(record common.NoteRecord) (string, int64) {
 	if record.DeletedAt == 0 && record.PinnedAt > 0 {
-		return "i18n:plugin_notes_group_pinned", 100
+		return "i18n:plugin_notes_group_favorites", 100
 	}
 	elapsed := util.GetSystemTimestamp() - record.UpdatedAt
 	if elapsed < 1000*60*60*24 {
