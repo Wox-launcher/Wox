@@ -1,6 +1,6 @@
 {
   "ThemeId": "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3",
-  "ThemeName": "Wox Glass Dark",
+  "ThemeName": "Wox Glass",
   "Description": "Wox translucent dark theme with neutral glass surfaces",
   "ThemeAuthor": "Wox launcher",
   "Version": "1.0.0",
@@ -34,7 +34,7 @@
   "QueryBoxCursorColor": "#F7F7F8",
   "QueryBoxTextSelectionBackgroundColor": "rgba(255, 255, 255, 0.24)",
   "QueryBoxTextSelectionColor": "#FFFFFF",
-  "ActionContainerBackgroundColor": "#232326",
+  "ActionContainerBackgroundColor": "rgba(22, 22, 26, 0.22)",
   "ActionContainerHeaderFontColor": "#B9B9C3",
   "ActionContainerPaddingLeft": 14,
   "ActionContainerPaddingTop": 10,
@@ -44,7 +44,7 @@
   "ActionItemActiveFontColor": "#FFFFFF",
   "ActionItemFontColor": "#E7E7EC",
   "ActionQueryBoxFontColor": "#F7F7F8",
-  "ActionQueryBoxBackgroundColor": "#232326",
+  "ActionQueryBoxBackgroundColor": "rgba(255, 255, 255, 0.0)",
   "ActionQueryBoxBorderRadius": 8,
   "PreviewFontColor": "#EDEDF2",
   "PreviewSplitLineColor": "rgba(255, 255, 255, 0.16)",
@@ -58,6 +58,7 @@
   "windows": {
     "AppBackgroundColor": "rgba(18, 18, 22, 0.75)",
     "ResultItemActiveBackgroundColor": "rgba(255, 255, 255, 0.10)",
+    "ActionContainerBackgroundColor": "rgba(22, 22, 26, 0.9)",
     "ToolbarBackgroundColor": "rgba(16, 16, 20, 0.2)",
     "variants": {
       "win10": {
@@ -66,6 +67,8 @@
     }
   },
   "linux": {
+    "ActionContainerBackgroundColor": "#232326",
+    "ActionQueryBoxBackgroundColor": "#232326",
     "variants": {
       "hyprland": {
         "AppBackgroundColor": "rgba(22, 22, 26, 0.98)"

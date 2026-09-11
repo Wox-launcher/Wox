@@ -523,7 +523,7 @@ func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWid
 	panel := woxwidget.Semantics{
 		Key: "cloud-plan-tooltip-overlay", AutomationID: "cloud-plan-tooltip-overlay", Role: woxui.AccessibilityRoleGroup, Label: props.FreeLabel + " / " + props.ProLabel,
 		Child: woxwidget.Container{
-			Width: tooltipWidth, Height: tooltipHeight, Radius: 8, Color: theme.ActionBackground, BorderColor: cloudAlpha(theme.ResultSubtitle, 112), BorderWidth: 1,
+			Width: tooltipWidth, Height: tooltipHeight, Radius: 8, Floating: true, Color: theme.ActionBackground, BorderColor: cloudAlpha(theme.ResultSubtitle, 112), BorderWidth: 1,
 			Padding: woxwidget.UniformInsets(tooltipPadding), Child: cloudPlanComparison(props, tableWidth, tableHeight, false, theme),
 		},
 	}
@@ -671,7 +671,7 @@ func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, th
 func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	contentHeight := float32(len(props.Items)) * 40
 	height := min(float32(420), contentHeight+12)
-	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: height, Radius: 8, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 		rows := make([]woxwidget.Widget, 0, len(props.Items))
 		for _, item := range props.Items {
 			radius := float32(5)

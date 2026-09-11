@@ -445,10 +445,6 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 }
 
 func (a *App) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariablePickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
-	surface := woxui.Color{R: 255, G: 255, B: 255, A: 255}
-	if themeColorIsDark(palette.background) {
-		surface = woxui.Color{R: 36, G: 36, B: 36, A: 255}
-	}
 	options := a.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query)
 	choices := make([]launcherview.QueryVariableChoice, 0, len(options))
 	for _, option := range options {
@@ -458,7 +454,7 @@ func (a *App) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariable
 		})
 	}
 	return launcherview.QueryVariablePicker(launcherview.QueryVariablePickerProps{
-		Width: width, Height: height, Anchor: snapshot.anchor, Choices: choices, Selected: min(snapshot.selected, len(choices)-1), Surface: surface, Theme: palette.componentTheme(),
+		Width: width, Height: height, Anchor: snapshot.anchor, Choices: choices, Selected: min(snapshot.selected, len(choices)-1), Theme: palette.componentTheme(),
 		OnChoose: a.chooseFormTableQueryVariable, OnHover: func(index int) {
 			if state := a.activeFormTableEditor(); state != nil && state.queryVariable != nil && state.queryVariable.selected != index {
 				state.queryVariable.selected = index

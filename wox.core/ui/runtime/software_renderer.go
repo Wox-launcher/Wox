@@ -69,6 +69,11 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 			r.drawImage(command, damage, clip)
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			// Native composition surfaces are not part of deterministic software output.
+		case displayCommandFloatingMaterial:
+			// Stand in for the native material with the same tint and hairline the
+			// platforms without one paint, so reference output stays comparable.
+			r.fillRoundedRect(command.rect, command.radius, command.color, damage, clip)
+			r.strokeRoundedRect(command.rect, command.radius, 1, command.edge, damage, clip)
 		default:
 			renderErr = fmt.Errorf("unsupported display command kind %d", command.kind)
 			return false

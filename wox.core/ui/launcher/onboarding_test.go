@@ -76,20 +76,20 @@ func TestOnboardingSystemThemesUsesBundledOrder(t *testing.T) {
 	themes := []themeSettingsTheme{
 		{ID: "532238bc-6eda-4011-a080-c365b67486fc", Name: "Wox Auto"},
 		{ID: "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860", Name: "Wox Light"},
-		{ID: onboardingGlassDarkID, Name: "Wox Glass Dark"},
+		{ID: onboardingGlassID, Name: "Wox Glass"},
 		{ID: "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03", Name: "Wox Dark"},
 		{ID: "community", Name: "Community"},
 	}
 	got := onboardingSystemThemes(themes)
-	if len(got) != 4 || got[0].Name != "Wox Glass Dark" || got[1].Name != "Wox Dark" || got[2].Name != "Wox Light" || got[3].Name != "Wox Auto" {
+	if len(got) != 4 || got[0].Name != "Wox Glass" || got[1].Name != "Wox Dark" || got[2].Name != "Wox Light" || got[3].Name != "Wox Auto" {
 		t.Fatalf("onboarding system themes = %#v", got)
 	}
 }
 
-func TestOnboardingUsesBundledGlassDarkPalette(t *testing.T) {
-	background := onboardingGlassDarkTheme.Background
-	if background.R != 22 || background.G != 22 || background.B != 26 || onboardingGlassDarkTheme.QueryBackground.A != 0 {
-		t.Fatalf("onboarding theme = %#v, want bundled Wox Glass Dark palette", onboardingGlassDarkTheme)
+func TestOnboardingUsesBundledGlassPalette(t *testing.T) {
+	background := onboardingGlassTheme.Background
+	if background.R != 22 || background.G != 22 || background.B != 26 || onboardingGlassTheme.QueryBackground.A != 0 {
+		t.Fatalf("onboarding theme = %#v, want bundled Wox Glass palette", onboardingGlassTheme)
 	}
 }
 

@@ -1645,7 +1645,6 @@ type QueryVariablePickerProps struct {
 	Anchor        woxui.Rect
 	Choices       []QueryVariableChoice
 	Selected      int
-	Surface       woxui.Color
 	Theme         woxcomponent.Theme
 	OnChoose      func(int)
 	OnHover       func(int)
@@ -1725,13 +1724,8 @@ func QueryVariablePicker(props QueryVariablePickerProps) woxwidget.Widget {
 			return nil
 		}, Child: row})
 	}
-	surface := props.Surface
-	if surface.A == 0 {
-		surface = props.Theme.Background
-		surface.A = 255
-	}
 	menu := woxwidget.Semantics{AutomationID: "query-variable-picker", Role: woxui.AccessibilityRoleMenu, Child: woxwidget.Container{
-		Width: menuWidth, Height: menuHeight, Radius: 4, Color: surface, BorderColor: formTableAlpha(props.Theme.ResultSubtitle, 140), BorderWidth: 1,
+		Width: menuWidth, Height: menuHeight, Radius: 4, Floating: true, Color: props.Theme.ActionBackground, BorderColor: formTableAlpha(props.Theme.ResultSubtitle, 140), BorderWidth: 1,
 		Padding: woxwidget.UniformInsets(6), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	}}
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{

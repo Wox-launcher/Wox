@@ -55,6 +55,7 @@ func SettingsInlineTooltipOverlay(props SettingsInlineTooltipProps) (woxwidget.W
 		Width:       tooltipWidth,
 		Height:      tooltipHeight,
 		Radius:      8,
+		Floating:    true,
 		Color:       background,
 		BorderColor: border,
 		BorderWidth: 1,

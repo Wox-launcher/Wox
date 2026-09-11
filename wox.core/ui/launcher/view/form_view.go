@@ -42,7 +42,7 @@ func FormPanel(props FormPanelProps) woxwidget.Widget {
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-save", Label: props.SaveLabel, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
 	}}}
 	return woxwidget.Container{
-		Width: props.Width, Radius: 12, Color: props.Theme.ActionBackground,
+		Width: props.Width, Radius: 12, Floating: true, Color: props.Theme.ActionBackground, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
 		Padding: padding,
 		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{body, buttons}},
 	}

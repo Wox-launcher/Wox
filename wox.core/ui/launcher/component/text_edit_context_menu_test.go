@@ -7,21 +7,26 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func TestTextEditContextMenuUsesOpaqueThemeSurface(t *testing.T) {
-	menu := BuildTextEditContextMenu(TextEditContextMenuProps{
-		ID: "menu", CanPaste: true,
-		Theme: Theme{
-			QueryBackground:  woxui.Color{R: 10, G: 10, B: 10, A: 40},
-			ActionBackground: woxui.Color{R: 40, G: 44, B: 52, A: 120},
-			ActionText:       woxui.Color{R: 240, G: 240, B: 240, A: 255},
-			ResultSubtitle:   woxui.Color{R: 160, G: 160, B: 160, A: 255},
-		},
-	}).(woxwidget.Container)
-	if menu.Color.A != 255 {
-		t.Fatalf("menu background alpha = %d, want opaque 255", menu.Color.A)
+func TestTextEditContextMenuIsFloatingThemeSurface(t *testing.T) {
+	theme := Theme{
+		QueryBackground:  woxui.Color{R: 10, G: 10, B: 10, A: 40},
+		ActionBackground: woxui.Color{R: 40, G: 44, B: 52, A: 120},
+		ActionText:       woxui.Color{R: 240, G: 240, B: 240, A: 255},
+		ResultSubtitle:   woxui.Color{R: 160, G: 160, B: 160, A: 255},
 	}
-	if menu.Color.R != 40 || menu.Color.G != 44 || menu.Color.B != 52 {
-		t.Fatalf("menu background = %#v, want ActionBackground RGB", menu.Color)
+	menu := BuildTextEditContextMenu(TextEditContextMenuProps{ID: "menu", CanPaste: true, Theme: theme}).(woxwidget.Container)
+	if !menu.Floating || menu.Color != theme.ActionBackground {
+		t.Fatalf("menu surface = floating %v color %#v, want a floating surface tinted with ActionBackground as the theme wrote it", menu.Floating, menu.Color)
+	}
+	if menu.BorderWidth != 1 || menu.BorderColor.A == 0 {
+		t.Fatalf("menu edge = %#v width %v, want a visible hairline", menu.BorderColor, menu.BorderWidth)
+	}
+
+	// Themes without an action surface fall back to an opaque QueryBackground, which is often translucent.
+	theme.ActionBackground = woxui.Color{}
+	fallback := BuildTextEditContextMenu(TextEditContextMenuProps{ID: "menu", CanPaste: true, Theme: theme}).(woxwidget.Container)
+	if fallback.Color != (woxui.Color{R: 10, G: 10, B: 10, A: 255}) {
+		t.Fatalf("fallback menu background = %#v, want opaque QueryBackground", fallback.Color)
 	}
 }
 

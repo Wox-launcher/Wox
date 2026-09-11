@@ -243,9 +243,6 @@ type App struct {
 	nativeFilePreviewOcclusionTimer           *time.Timer
 	nativeFilePreviewOcclusion                woxui.Rect
 	nativeFilePreviewReportedOcclusion        woxui.Rect
-	floatingMaterialShown                     bool
-	floatingMaterialBounds                    woxui.Rect
-	floatingMaterialStyle                     woxui.FloatingMaterialStyle
 	mdDocs                                    map[string]woxcomponent.MarkdownDocument
 	chatMarkdown                              chatMarkdownCache
 	terminalLayout                            textLayoutCache
@@ -641,9 +638,6 @@ func (a *App) hideWindow(notify bool) error {
 		a.actionSelectionKey = ""
 		a.actionFilter = nil
 		a.form = nil
-		// No frame is built while hidden, so retire the panel material here instead of
-		// letting a stale glass card flash on the first frame of the next show.
-		a.syncFloatingMaterial(woxui.Rect{}, woxui.FloatingMaterialStyle{})
 		a.stopQuickSelectLocked()
 		a.visible = false
 		a.bottomAnchorY = 0

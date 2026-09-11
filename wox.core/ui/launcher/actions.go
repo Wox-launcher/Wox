@@ -245,37 +245,12 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		ActionQueryBackground: snapshot.palette.actionQueryBackground, ActionQueryText: snapshot.palette.actionQueryText,
 		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,
 		ResultItemRadius: snapshot.palette.resultItemRadius, ActionQueryRadius: snapshot.palette.actionQueryRadius,
-		ActionPadding: snapshot.palette.actionPadding, NativeMaterial: woxui.HasFloatingMaterial(),
-		HeaderLabel: a.translate("i18n:ui_actions"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
+		ActionPadding: snapshot.palette.actionPadding,
+		HeaderLabel:   a.translate("i18n:ui_actions"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
 		Items: items, Selected: snapshot.actionSelected, Filter: snapshot.actionFilter,
 		OnSelect: a.selectAction, OnActivate: a.activateSelectedAction,
 		OnFilterChanged: a.setActionFilterValue, OnFilterKey: a.onActionKey,
 	})
-}
-
-// syncFloatingMaterial keeps the native panel material aligned with the action panel built
-// this frame. An empty rectangle hides it. Every close path resets actionPanel and rebuilds,
-// so driving the material from the build pass covers all of them without per-path hooks.
-func (a *App) syncFloatingMaterial(bounds woxui.Rect, style woxui.FloatingMaterialStyle) {
-	if a.window == nil || !woxui.HasFloatingMaterial() {
-		return
-	}
-	visible := bounds.Width > 0 && bounds.Height > 0
-	if visible == a.floatingMaterialShown && bounds == a.floatingMaterialBounds && style == a.floatingMaterialStyle {
-		return
-	}
-	a.floatingMaterialShown = visible
-	a.floatingMaterialBounds = bounds
-	a.floatingMaterialStyle = style
-	var err error
-	if visible {
-		err = a.window.ShowFloatingMaterial(bounds, style)
-	} else {
-		err = a.window.HideFloatingMaterial()
-	}
-	if err != nil {
-		util.GetLogger().Error(a.lifecycleCtx, "sync action panel floating material: "+err.Error())
-	}
 }
 
 func (a *App) onActionKey(event woxui.KeyEvent) bool {

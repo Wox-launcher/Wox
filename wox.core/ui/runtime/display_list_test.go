@@ -135,6 +135,67 @@ func TestEmbeddedSurfaceOverlayBeginsOncePerFrame(t *testing.T) {
 	}
 }
 
+func TestFloatingMaterialRecordsNativeMaterialOrPaintsSurface(t *testing.T) {
+	displayList := &DisplayList{}
+	bounds := Rect{X: 20, Y: 30, Width: 200, Height: 100}
+	tint := Color{R: 22, G: 22, B: 26, A: 56}
+	edge := Color{R: 255, G: 255, B: 255, A: 40}
+	displayList.FloatingMaterial(bounds, 9, tint, edge)
+	displayList.FloatingMaterial(Rect{X: 400, Y: 40, Width: 50, Height: 50}, 4, tint, edge)
+
+	if nativeFloatingMaterialAvailable() {
+		// One overlay switch, then one material per surface for the platform window to reconcile.
+		if len(displayList.commands) != 3 || displayList.commands[0].kind != displayCommandBeginEmbeddedSurfaceOverlay {
+			t.Fatalf("commands = %+v, want overlay boundary followed by two materials", displayList.commands)
+		}
+		material := displayList.commands[1]
+		if material.kind != displayCommandFloatingMaterial || material.rect != bounds || material.radius != 9 || material.color != tint || material.edge != edge {
+			t.Fatalf("material = %+v, want the declared bounds, radius, tint and edge", material)
+		}
+		if displayList.commands[2].kind != displayCommandFloatingMaterial {
+			t.Fatalf("second material = %+v, want a second material command", displayList.commands[2])
+		}
+		return
+	}
+	if len(displayList.commands) != 4 || displayList.commands[0].kind != displayCommandFillRoundedRect || displayList.commands[1].kind != displayCommandStrokeRoundedRect {
+		t.Fatalf("commands = %+v, want tint fill and hairline edge per surface on the main surface", displayList.commands)
+	}
+	if displayList.commands[0].color != tint || displayList.commands[1].color != edge || displayList.commands[1].stroke != 1 {
+		t.Fatalf("fallback paint = %+v, want tint fill and 1px edge", displayList.commands[:2])
+	}
+}
+
+func TestFloatingMaterialCoversSurfaceStackedOverAnother(t *testing.T) {
+	if !nativeFloatingMaterialAvailable() {
+		t.Skip("without a native material every surface already paints its own opaque tint")
+	}
+	displayList := &DisplayList{}
+	tint := Color{R: 22, G: 22, B: 26, A: 56}
+	displayList.FloatingMaterial(Rect{X: 20, Y: 30, Width: 200, Height: 100}, 9, tint, Color{A: 40})
+	displayList.FloatingMaterial(Rect{X: 40, Y: 40, Width: 50, Height: 50}, 4, tint, Color{A: 40})
+
+	// The stacked surface adds an opaque fill inset by the hairline; the material samples
+	// the main surface only and would otherwise show the lower panel's text through the tint.
+	if len(displayList.commands) != 4 || displayList.commands[3].kind != displayCommandFillRoundedRect {
+		t.Fatalf("commands = %+v, want a cover fill after the stacked material", displayList.commands)
+	}
+	cover := displayList.commands[3]
+	if cover.rect != (Rect{X: 41, Y: 41, Width: 48, Height: 48}) || cover.radius != 3 || cover.color != (Color{R: 22, G: 22, B: 26, A: 255}) {
+		t.Fatalf("cover = %+v, want the opaque tint inset by 1px", cover)
+	}
+}
+
+func TestFloatingMaterialSkipsInvisibleFallbackPaint(t *testing.T) {
+	if nativeFloatingMaterialAvailable() {
+		t.Skip("native floating material records a single command regardless of colors")
+	}
+	displayList := &DisplayList{}
+	displayList.FloatingMaterial(Rect{Width: 10, Height: 10}, 2, Color{A: 255}, Color{})
+	if len(displayList.commands) != 1 || displayList.commands[0].kind != displayCommandFillRoundedRect {
+		t.Fatalf("commands = %+v, want only the tint fill when the edge is transparent", displayList.commands)
+	}
+}
+
 func TestDisplayListDamageHonorsCurrentClip(t *testing.T) {
 	displayList := &DisplayList{}
 	displayList.SetDamage(Rect{Width: 100, Height: 100})

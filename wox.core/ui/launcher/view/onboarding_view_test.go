@@ -272,7 +272,7 @@ func TestOnboardingThemeCardIsSelectableAndUsesThemePreview(t *testing.T) {
 		Theme: woxcomponent.Theme{}, ThemePreviewTitle: "wox",
 		ThemePreviewTexts: []string{"Wox", "Wox Settings"}, ThemePreviewSubs: []string{"Launcher", "Settings"}, ThemePreviewOpen: "Open",
 		OnSelectTheme: func(id string) { selectedID = id },
-	}, OnboardingTheme{ID: "glass", Name: "Wox Glass Dark", Selected: true}, 180, accent).(woxwidget.Semantics)
+	}, OnboardingTheme{ID: "glass", Name: "Wox Glass", Selected: true}, 180, accent).(woxwidget.Semantics)
 	if !card.Selected {
 		t.Fatal("selected theme card does not expose selected semantics")
 	}

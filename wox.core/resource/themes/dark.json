@@ -34,7 +34,7 @@
   "QueryBoxCursorColor": "#00A88E",
   "QueryBoxTextSelectionBackgroundColor": "rgba(0, 168, 142, 0.8)",
   "QueryBoxTextSelectionColor": "#FFFFFF",
-  "ActionContainerBackgroundColor": "#2D3440",
+  "ActionContainerBackgroundColor": "rgba(45, 52, 64, 0.6)",
   "ActionContainerHeaderFontColor": "#E2E8F0",
   "ActionContainerPaddingLeft": 14,
   "ActionContainerPaddingTop": 10,
@@ -56,6 +56,7 @@
   "ToolbarPaddingLeft": 10,
   "ToolbarPaddingRight": 10,
   "windows": {
+    "ActionContainerBackgroundColor": "rgba(45, 52, 64, 0.9)",
     "variants": {
       "win10": {
         "AppBackgroundColor": "#23293373"
@@ -63,6 +64,7 @@
     }
   },
   "linux": {
+    "ActionContainerBackgroundColor": "#2D3440",
     "variants": {
       "hyprland": {
         "AppBackgroundColor": "rgba(35, 41, 51, 0.98)"

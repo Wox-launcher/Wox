@@ -395,10 +395,11 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			Controller: state.scrollController, ThumbColor: props.Theme.ResultTitle,
 		}))
 	}
-	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Color: props.Theme.ActionBackground,
+	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Floating: true, Color: props.Theme.ActionBackground,
 		Padding: woxwidget.Insets{Top: menuPadding, Bottom: menuPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 	// Paint the border after the rows so their full-width backgrounds cannot cover the inset stroke.
+	// This also stays in Go rather than on the floating material, whose edge sits below the rows.
 	menuBorder := woxwidget.Container{Width: width, Height: height, Radius: 4, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1}
 	var surface woxwidget.Widget = woxwidget.Semantics{
 		Key: "setting-choice-menu", AutomationID: "setting-choice-menu", Role: woxui.AccessibilityRoleMenu, Label: props.Title,

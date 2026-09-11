@@ -59,6 +59,9 @@ type platformWindow struct {
 	damagePending   bool
 	fullDamage      bool
 	webView         *webviewruntime.Controller
+	// floatingMaterials mirrors what the native window currently shows, so frames
+	// that declare the same materials skip the main-thread update.
+	floatingMaterials []floatingMaterial
 }
 
 type darwinRenderFrame struct {
@@ -222,6 +225,9 @@ func (w *platformWindow) hide() error {
 		w.mu.Lock()
 		dropped := w.pendingFrame
 		w.pendingFrame = nil
+		// Hiding retired the native materials along with the surfaces; forget them so
+		// the first frame after the next show declares its materials again.
+		w.floatingMaterials = nil
 		w.mu.Unlock()
 		if dropped != nil {
 			w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=window_hidden frameId=%d", dropped.displayList.frameID))
@@ -1055,9 +1061,12 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	commandIndex := -1
 	encodeFailed := false
 	var failedCommandKind displayCommandKind
+	var materials []floatingMaterial
 	displayList.forEachCommand(func(command displayCommand) bool {
 		commandIndex++
 		switch command.kind {
+		case displayCommandFloatingMaterial:
+			materials = append(materials, floatingMaterial{bounds: command.rect, radius: command.radius, tint: command.color, edge: command.edge})
 		case displayCommandFillRoundedRect:
 			result = C.wox_darwin_window_fill_rounded_rect(
 				native,
@@ -1156,6 +1165,11 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	encodeCost := time.Since(encodeStart)
 
 	endStart := time.Now()
+	if !encodeFailed {
+		if materialResult := w.applyFloatingMaterials(native, materials); materialResult != 0 {
+			w.logRenderDiagnostic(fmt.Sprintf("event=floating_material_failed frameId=%d count=%d status=%d", displayList.frameID, len(materials), int32(materialResult)))
+		}
+	}
 	endResult := C.wox_darwin_window_end_frame(native, transactionalFrame)
 	endCost := time.Since(endStart)
 	if encodeFailed {

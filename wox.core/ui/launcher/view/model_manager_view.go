@@ -187,7 +187,8 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			Value: props.Error, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ErrorText,
 		}})
 	}
-	menuContent := woxwidget.Container{Width: menuWidth, Height: menuHeight, Radius: 4, Color: props.Theme.ActionBackground, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	menuContent := woxwidget.Container{Width: menuWidth, Height: menuHeight, Radius: 4, Floating: true, Color: props.Theme.ActionBackground, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	// The border is painted after the full-width rows, which would cover the material's own edge.
 	menuBorder := woxwidget.Container{Width: menuWidth, Height: menuHeight, Radius: 4, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1}
 	menu := woxwidget.FocusScope{Key: "model-manager-scope", Modal: true, Child: woxwidget.Stack{Width: menuWidth, Height: menuHeight, Children: []woxwidget.StackChild{{Child: menuContent}, {Child: menuBorder}}}}
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{

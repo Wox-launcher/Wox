@@ -250,10 +250,8 @@ func PluginFilterPanel(props PluginFilterPanelProps) woxwidget.Widget {
 		woxwidget.ScrollView{Key: "plugin-filter-runtime-scroll", Width: runtimeWidth, Height: rowHeight, Horizontal: true, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 14, Children: runtimeOptions}},
 	}})
 	height := float32(24) + float32(len(rows))*rowHeight + float32(max(0, len(rows)-1))*rowGap
-	background := props.Theme.Background
-	background.A = 255
 	return woxwidget.FocusScope{Key: "plugin-filter-panel", Modal: true, Child: woxwidget.Container{
-		Width: props.Width, Height: height, Radius: 8, Color: background, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
+		Width: props.Width, Height: height, Radius: 8, Floating: true, Color: props.Theme.ActionBackground, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 14, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: rowGap, Children: rows},
 	}}
 }

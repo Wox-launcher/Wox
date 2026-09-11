@@ -146,12 +146,12 @@ func TestPluginFilterPanelMatchesFlutterLayout(t *testing.T) {
 			{ID: "third-party", Label: "Third party"},
 		},
 		Runtimes: []PluginFilterOption{{ID: "nodejs", Label: "Node.js"}, {ID: "python", Label: "Python"}},
-		Theme:    woxcomponent.Theme{Background: woxui.Color{R: 10, G: 20, B: 30, A: 120}},
+		Theme:    woxcomponent.Theme{ActionBackground: woxui.Color{R: 10, G: 20, B: 30, A: 120}, PreviewSplit: woxui.Color{R: 90, G: 90, B: 90, A: 255}},
 		OnToggle: func(string) {},
 	}).(woxwidget.FocusScope).Child.(woxwidget.Container)
 
-	if panel.Color.A != 255 || panel.Height != 154 {
-		t.Fatalf("filter panel surface = alpha %d height %v, want opaque Flutter surface at 154px", panel.Color.A, panel.Height)
+	if !panel.Floating || panel.Color != (woxui.Color{R: 10, G: 20, B: 30, A: 120}) || panel.BorderWidth != 1 || panel.Height != 154 {
+		t.Fatalf("filter panel surface = floating %v color %#v border %v height %v, want a floating ActionBackground surface with a hairline at 154px", panel.Floating, panel.Color, panel.BorderWidth, panel.Height)
 	}
 	rows := panel.Child.(woxwidget.Flex)
 	if len(rows.Children) != 5 || rows.Gap != 10 {

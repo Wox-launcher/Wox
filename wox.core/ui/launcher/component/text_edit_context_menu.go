@@ -68,12 +68,13 @@ func BuildTextEditContextMenu(props TextEditContextMenuProps) woxwidget.Widget {
 		{label: "Paste", action: TextEditContextPaste, enabled: props.CanPaste},
 		{label: "Select All", action: TextEditContextSelectAll, enabled: props.CanSelectAll},
 	}
-	// Floating menus must stay opaque; QueryBackground is often translucent for acrylic windows.
+	// The menu is a floating surface tinted with the theme's ActionBackground. Themes without
+	// one fall back to an opaque QueryBackground, which is often translucent for acrylic windows.
 	background := props.Theme.ActionBackground
 	if background.A == 0 {
 		background = props.Theme.QueryBackground
+		background.A = 255
 	}
-	background.A = 255
 	border := props.Theme.ResultSubtitle
 	if border.A == 0 {
 		border = props.Theme.ActionText
@@ -117,7 +118,7 @@ func BuildTextEditContextMenu(props TextEditContextMenuProps) woxwidget.Widget {
 	}
 	return woxwidget.Container{
 		Width: textFieldContextMenuWidth, Height: textFieldContextMenuRowH * float32(len(children)), Radius: 6,
-		Color: background, BorderColor: border, BorderWidth: 1,
+		Floating: true, Color: background, BorderColor: border, BorderWidth: 1,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
 	}
 }

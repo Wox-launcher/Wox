@@ -319,7 +319,9 @@ func ChatCatalog(props ChatCatalogProps) woxwidget.Widget {
 		Key: woxwidget.Key("chat-catalog-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
 		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	// The catalog pops over the conversation, so it is a floating surface: the theme's
+	// ActionBackground may be translucent and only reads correctly over the native material.
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Floating: true, Color: props.Theme.ActionBackground, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 }
 
 // chatHistoryCatalog builds Flutter's fixed-width full-height conversation drawer.

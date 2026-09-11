@@ -56,6 +56,9 @@ type DisplayList struct {
 	// overlayBegun records that later commands already target the overlay
 	// surface; a second split would fail at the native renderer.
 	overlayBegun bool
+	// floatingMaterials lists the materials declared so far, so a later surface
+	// can tell whether it is stacked over another floating surface.
+	floatingMaterials []Rect
 }
 
 const displayListFloatTolerance = float32(1e-4)
@@ -188,7 +191,7 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 func displayCommandsEqual(left, right displayCommand) bool {
 	if left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
 		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
-		left.color != right.color || left.text != right.text || left.style.Weight != right.style.Weight ||
+		left.color != right.color || left.edge != right.edge || left.text != right.text || left.style.Weight != right.style.Weight ||
 		left.style.Family != right.style.Family || left.style.Italic != right.style.Italic ||
 		!displayListFloatsEqual(left.style.Size, right.style.Size) || !displayListFloatsEqual(left.rotation, right.rotation) {
 		return false
@@ -235,6 +238,7 @@ const (
 	displayCommandBeginEmbeddedSurfaceOverlay
 	displayCommandSetClipRect
 	displayCommandClearClip
+	displayCommandFloatingMaterial
 )
 
 type displayCommand struct {
@@ -243,11 +247,52 @@ type displayCommand struct {
 	radius   float32
 	stroke   float32
 	color    Color
+	edge     Color
 	text     string
 	style    TextStyle
 	image    *Image
 	rotation float32
 	points   []Point
+}
+
+// FloatingMaterial backs a surface that floats above other Go UI content in the same
+// window (dialog, menu, tooltip, action panel). Where the platform has a per-region
+// translucent material (see floating_material.go) the surface moves onto the overlay
+// composition surface and the material carries tint and edge natively, so the caller
+// must paint nothing else as background. Elsewhere the same call paints the tint and a
+// hairline edge directly and leaves the main surface untouched, so damage culling and
+// composition behave exactly as for an ordinary container. On both paths the tint
+// means "over the window content", so themes tune one value for every platform.
+func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Color) {
+	if rect.Width <= 0 || rect.Height <= 0 {
+		return
+	}
+	if !nativeFloatingMaterialAvailable() {
+		if tint.A != 0 {
+			d.FillRoundedRect(rect, radius, tint)
+		}
+		if edge.A != 0 {
+			d.StrokeRoundedRect(rect, radius, 1, edge)
+		}
+		return
+	}
+	d.BeginEmbeddedSurfaceOverlay(rect)
+	d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge})
+	// Every material samples the main surface only, so a surface stacked over another
+	// floating surface would show that surface's overlay pixels through its own tint.
+	// Cover them with an opaque fill of the tint colour; a translucent wash was tried and
+	// still let the lower text read through, so the stacked surface gives up the blur
+	// and keeps only the material's edge and shadow.
+	for _, lower := range d.floatingMaterials {
+		if rectsOverlap(rect, lower) {
+			cover := tint
+			cover.A = 255
+			// Inset by the hairline so the material's edge stays visible around the fill.
+			d.FillRoundedRect(Rect{X: rect.X + 1, Y: rect.Y + 1, Width: rect.Width - 2, Height: rect.Height - 2}, max(float32(0), radius-1), cover)
+			break
+		}
+	}
+	d.floatingMaterials = append(d.floatingMaterials, rect)
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.

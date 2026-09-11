@@ -25,14 +25,14 @@ import (
 const (
 	onboardingWindowWidth  = float32(1040)
 	onboardingWindowHeight = float32(800)
-	onboardingGlassDarkID  = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
+	onboardingGlassID      = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
 )
 
 // Onboarding keeps one restrained accent so neutral glass themes still expose progress and success states.
 var onboardingAccentColor = woxui.Color{R: 20, G: 184, B: 166, A: 255}
 
-var onboardingGlassDarkTheme = func() woxcomponent.Theme {
-	data, err := resource.ThemeFS.ReadFile("themes/glass-dark.json")
+var onboardingGlassTheme = func() woxcomponent.Theme {
+	data, err := resource.ThemeFS.ReadFile("themes/glass.json")
 	if err != nil {
 		return defaultPalette().componentTheme()
 	}
@@ -91,7 +91,7 @@ func (a *App) openOnboarding() error {
 		a.onboardingError = ""
 		a.onboardingQueryHotkey = nil
 		a.onboardingPlugins = onboardingPluginState{}
-		a.onboardingTheme = onboardingThemeState{selectedID: onboardingGlassDarkID}
+		a.onboardingTheme = onboardingThemeState{selectedID: onboardingGlassID}
 		a.stopHotkeyRecording()
 		settingsView = a.settingsView
 		if form := a.hotkeySettings.Form(); form != nil {
@@ -182,9 +182,9 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
 	steps := a.onboardingSteps()
 	systemThemes := onboardingSystemThemes(snapshot.theme.Themes)
-	theme := onboardingGlassDarkTheme
+	theme := onboardingGlassTheme
 	for _, systemTheme := range systemThemes {
-		if systemTheme.ID == onboardingGlassDarkID {
+		if systemTheme.ID == onboardingGlassID {
 			theme = paletteForTheme(systemTheme.previewTheme).componentTheme()
 			break
 		}
@@ -796,7 +796,7 @@ func (a *App) installOnboardingPlugin(pluginID string) {
 // onboardingSystemThemes keeps the four bundled themes in the onboarding presentation order.
 func onboardingSystemThemes(themes []themeSettingsTheme) []themeSettingsTheme {
 	ids := []string{
-		onboardingGlassDarkID,
+		onboardingGlassID,
 		"53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
 		"92dc0ea7-a52f-4b0a-9f0d-7cb36a634860",
 		"532238bc-6eda-4011-a080-c365b67486fc",
@@ -823,7 +823,7 @@ func (a *App) loadOnboardingThemes() {
 	a.onboardingTheme.error = ""
 	a.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "load onboarding themes", func() {
-		err := a.reloadThemes("installed", onboardingGlassDarkID)
+		err := a.reloadThemes("installed", onboardingGlassID)
 		_ = a.runOnUI("apply onboarding themes", func() {
 			a.onboardingTheme.loading = false
 			if err != nil {

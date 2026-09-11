@@ -113,23 +113,20 @@ type ActionsProps struct {
 	ResultItemRadius      float32
 	ActionQueryRadius     float32
 	ActionPadding         woxwidget.Insets
-	// NativeMaterial is set when the window shows a native material behind the panel
-	// (woxui.HasFloatingMaterial); the panel then draws on the overlay surface.
-	NativeMaterial  bool
-	HeaderLabel     string
-	NoMatchesLabel  string
-	Items           []ActionItem
-	Selected        int
-	Filter          string
-	OnSelect        func(int)                 `boundary:"stable"`
-	OnActivate      func()                    `boundary:"stable"`
-	OnFilterChanged func(string)              `boundary:"stable"`
-	OnFilterKey     func(woxui.KeyEvent) bool `boundary:"stable"`
+	HeaderLabel           string
+	NoMatchesLabel        string
+	Items                 []ActionItem
+	Selected              int
+	Filter                string
+	OnSelect              func(int)                 `boundary:"stable"`
+	OnActivate            func()                    `boundary:"stable"`
+	OnFilterChanged       func(string)              `boundary:"stable"`
+	OnFilterKey           func(woxui.KeyEvent) bool `boundary:"stable"`
 }
 
 // Equal compares every render dependency for the floating action panel.
 func (p ActionsProps) Equal(other ActionsProps) bool {
-	if p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ResultItemRadius != other.ResultItemRadius || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.NativeMaterial != other.NativeMaterial || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
+	if p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ResultItemRadius != other.ResultItemRadius || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
 		return false
 	}
 	for index := range p.Items {
@@ -267,7 +264,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		}
 		if len(item.HotkeyLabels) > 0 {
 			tailColor := props.ResultTail
-			chipBackground := actionPanelWash(props)
+			chipBackground := props.Theme.ActionBackground
 			if selected {
 				tailColor = props.SelectedTail
 				chipBackground = props.Theme.ActionSelected
@@ -379,56 +376,15 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		actionList,
 		woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},
 	}}
-	panel := actionPanelSurface(props, panelWidth, panelHeight, content)
+	// The panel is a floating surface: the theme's ActionBackground is its tint and the
+	// hairline already used for the group dividers is its edge (see Container.Floating).
+	panel := woxwidget.Container{
+		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Floating: true,
+		Color: props.Theme.ActionBackground, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
+		Padding: props.ActionPadding, Child: content,
+	}
 	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.
 	return woxwidget.Gesture{ID: "action-panel-surface", OnTap: func() {}, Child: panel}
-}
-
-// actionPanelSurface paints the panel background. With a native floating material the
-// panel moves onto the embedded-surface overlay so the material can sample the result rows
-// underneath, and paints no background of its own: the material carries the tint and the
-// card edge (see ActionPanelMaterialStyle). Without one, the theme color is the panel and
-// stays in the main surface exactly as before.
-func actionPanelSurface(props ActionsProps, panelWidth, panelHeight float32, content woxwidget.Widget) woxwidget.Widget {
-	if !props.NativeMaterial {
-		return woxwidget.Container{
-			Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,
-			Padding: props.ActionPadding, Child: content,
-		}
-	}
-	return woxwidget.Stack{Width: panelWidth, Height: panelHeight, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Painter{Width: panelWidth, Height: panelHeight, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.BeginEmbeddedSurfaceOverlay(bounds)
-		}}},
-		{Child: woxwidget.Container{Width: panelWidth, Height: panelHeight, Padding: props.ActionPadding, Child: content}},
-	}}
-}
-
-// actionPanelWashOpacity scales the theme panel color when a native material carries the
-// panel. Themes author ActionContainerBackgroundColor as an opaque surface because the
-// same color backs menus, dialogs and tooltips; over glass it only needs to tint.
-const actionPanelWashOpacity = 0.42
-
-// ActionPanelMaterialStyle is what the native floating material behind the action panel
-// should look like for a theme: the panel color reduced to a tint, and the theme hairline
-// already used for the panel dividers as the edge for materials without their own rim.
-func ActionPanelMaterialStyle(theme woxcomponent.Theme, radius float32) woxui.FloatingMaterialStyle {
-	return woxui.FloatingMaterialStyle{CornerRadius: radius, Tint: actionPanelMaterialTint(theme.ActionBackground), Edge: theme.PreviewSplit}
-}
-
-// actionPanelMaterialTint reduces the opaque theme panel color to the material tint.
-func actionPanelMaterialTint(panel woxui.Color) woxui.Color {
-	panel.A = uint8(float32(panel.A)*actionPanelWashOpacity + 0.5)
-	return panel
-}
-
-// actionPanelWash returns the fill for chips inside the panel: the same tint the material
-// uses when one is present, so the chips read as part of the card, else the theme color.
-func actionPanelWash(props ActionsProps) woxui.Color {
-	if props.NativeMaterial {
-		return actionPanelMaterialTint(props.Theme.ActionBackground)
-	}
-	return props.Theme.ActionBackground
 }
 
 // actionPanelDivider is the centered hairline between action groups.

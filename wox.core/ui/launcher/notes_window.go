@@ -1260,7 +1260,7 @@ func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcom
 		Content:    woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchListGap, Children: rows},
 		ThumbColor: theme.ResultSubtitle,
 	})
-	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(notesSearchOverlayPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchOverlayGap, Children: []woxwidget.Widget{
+	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(notesSearchOverlayPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchOverlayGap, Children: []woxwidget.Widget{
 		search, results,
 	}}}
 	return c.overlayScrim(size, panel, 12, notesSearchOverlayTop, func() { c.searchOpen = false; c.invalidate() })
@@ -1480,7 +1480,7 @@ func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcompo
 
 func (c *notesWindowController) moreOverlay(size woxui.Size, width float32, rows []woxwidget.Widget, theme woxcomponent.Theme) woxwidget.Widget {
 	panelHeight := float32(len(rows))*32 + 12
-	panel := woxwidget.Container{Width: width, Height: panelHeight, Radius: 9, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+	panel := woxwidget.Container{Width: width, Height: panelHeight, Radius: 9, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
 	return c.overlayScrim(size, panel, max(float32(8), size.Width-width-8), 40, func() { c.moreOpen, c.formatMore = false, false; c.invalidate() })
 }
 
@@ -1504,7 +1504,7 @@ func (c *notesWindowController) buildLinkOverlay(size woxui.Size, theme woxcompo
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.link.cancel", Label: c.app.translate("i18n:cancel"), Width: 70, Theme: theme, OnTap: func() { c.linkOpen = false; c.invalidate() }}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.link.apply", Label: c.app.translate("i18n:notes_apply"), Width: 70, Theme: theme, Variant: woxcomponent.ButtonPrimary, OnTap: c.applyLink}),
 	}}
-	panel := woxwidget.Container{Width: width, Height: 100, Radius: 10, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(10), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{field, buttons}}}
+	panel := woxwidget.Container{Width: width, Height: 100, Radius: 10, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(10), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{field, buttons}}}
 	return c.overlayScrim(size, panel, (size.Width-width)/2, 52, func() { c.linkOpen = false; c.invalidate() })
 }
 

@@ -3,18 +3,10 @@
 package woxui
 
 // Windows has no per-region backdrop: DWM Acrylic and Mica apply to a whole
-// HWND, so the launcher keeps painting an opaque panel wash there. A future
-// implementation would blur the Direct2D back buffer under the panel rectangle
-// (or host a child HWND with its own backdrop) behind this same API.
+// HWND, so DisplayList.FloatingMaterial paints the surface tint and edge on the
+// main surface there. A future implementation would blur the Direct2D back
+// buffer under the surface rectangle (or host a child HWND with its own
+// backdrop) and reconcile it per frame like the macOS window does.
 func nativeFloatingMaterialAvailable() bool {
 	return false
-}
-
-// showFloatingMaterial succeeds as a no-op so layout code can call it unconditionally.
-func (w *platformWindow) showFloatingMaterial(bounds Rect, style FloatingMaterialStyle) error {
-	return nil
-}
-
-func (w *platformWindow) hideFloatingMaterial() error {
-	return nil
 }

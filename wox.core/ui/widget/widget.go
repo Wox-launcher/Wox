@@ -217,10 +217,16 @@ func UniformInsets(value float32) Insets {
 
 // Container paints an optional background and positions one child.
 type Container struct {
-	Width             float32
-	Height            float32
-	Padding           Insets
-	Color             woxui.Color
+	Width   float32
+	Height  float32
+	Padding Insets
+	Color   woxui.Color
+	// Floating marks a surface that floats above other content in the same window
+	// (dialog, menu, tooltip, action panel). Color and BorderColor then describe the
+	// tint and hairline edge of a platform floating material (see
+	// woxui.DisplayList.FloatingMaterial), which samples the content underneath where
+	// the platform supports it; elsewhere they are painted exactly as usual.
+	Floating          bool
 	BorderColor       woxui.Color
 	BorderWidth       float32
 	LeftBorderColor   woxui.Color
@@ -350,7 +356,12 @@ func (w Container) layout(ctx context, available constraints) *node {
 	width = available.constrainWidth(width)
 	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
-	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) {
+	if w.Floating {
+		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			displayList.FloatingMaterial(bounds, w.Radius, w.Color, w.BorderColor)
+			paintContainerEdgeBorders(displayList, bounds, w)
+		}
+	} else if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			if w.Color.A != 0 {
 				displayList.FillRoundedRect(bounds, w.Radius, w.Color)

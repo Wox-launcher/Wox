@@ -72,6 +72,21 @@ func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 	}
 }
 
+func TestActionPanelIsFloatingSurfaceTintedByTheme(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ActionBackground: woxui.Color{R: 22, G: 22, B: 26, A: 56},
+		PreviewSplit:     woxui.Color{R: 255, G: 255, B: 255, A: 40},
+	}
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10), ActionQueryRadius: 9,
+		Theme: theme,
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	panel := view.Child.(woxwidget.Container)
+	if !panel.Floating || panel.Color != theme.ActionBackground || panel.BorderColor != theme.PreviewSplit || panel.BorderWidth != 1 || panel.Radius != 9 {
+		t.Fatalf("action panel surface = %#v, want a floating surface whose tint and edge come straight from the theme", panel)
+	}
+}
+
 func TestActionHeaderCentersLabel(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),

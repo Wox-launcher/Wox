@@ -73,6 +73,12 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	if radius <= 0 {
 		radius = 12
 	}
+	// Dialogs are floating surfaces: the theme's ActionBackground is their material tint
+	// and, unless the caller styles the border, the theme hairline is their edge.
+	borderColor, borderWidth := props.BorderColor, props.BorderWidth
+	if borderColor.A == 0 || borderWidth <= 0 {
+		borderColor, borderWidth = props.Theme.PreviewSplit, 1
+	}
 	key := woxwidget.Key(props.ID)
 	dialog := woxwidget.FocusScope{Key: key, Modal: true, OnKey: func(event woxui.KeyEvent) bool {
 		if !event.Down || event.Composing || event.Key != woxui.KeyEscape || props.OnEscape == nil {
@@ -83,8 +89,8 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	}, Child: woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleDialog, Label: props.Label,
 		Child: woxwidget.Container{
-			Width: props.Width, Height: props.Height, Radius: radius, Color: props.Theme.ActionBackground, Padding: props.Padding,
-			BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Child: props.Child,
+			Width: props.Width, Height: props.Height, Radius: radius, Floating: true, Color: props.Theme.ActionBackground, Padding: props.Padding,
+			BorderColor: borderColor, BorderWidth: borderWidth, Child: props.Child,
 		},
 	}}
 	if props.OverlayWidth <= 0 || props.OverlayHeight <= 0 {
