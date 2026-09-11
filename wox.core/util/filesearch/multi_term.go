@@ -10,20 +10,57 @@ import (
 // collectANDCandidateIDs intersects conditions in SQLite before limiting results.
 // Limiting a common term such as .txt first can discard every matching rare name.
 func (p *SQLiteSearchProvider) collectANDCandidateIDs(ctx context.Context, plan *queryPlan, limit int) ([]int64, error) {
-	statement, args := buildANDCandidateSQL(plan, limit, true)
+	var ids []int64
+	// Recall filename matches first so a large directory cannot exhaust the
+	// candidate cap before the scorer ever sees the strongest filename result.
+	if !plan.pathLike {
+		nameIDs, err := p.queryANDCandidateIDs(ctx, plan, limit, true)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, nameIDs...)
+		if limit > 0 && len(ids) >= limit {
+			return ids, nil
+		}
+	}
+	allIDs, err := p.queryANDCandidateIDs(ctx, plan, limit, false)
+	if err != nil {
+		return nil, err
+	}
+	// The shared deduplicator sorts IDs, which would erase filename priority.
+	seen := make(map[int64]bool, len(ids)+len(allIDs))
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, id := range allIDs {
+		if seen[id] {
+			continue
+		}
+		if limit > 0 && len(ids) >= limit {
+			break
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// queryANDCandidateIDs preserves stale-FTS fallback for both recall scopes.
+func (p *SQLiteSearchProvider) queryANDCandidateIDs(ctx context.Context, plan *queryPlan, limit int, nameOnly bool) ([]int64, error) {
+	statement, args := buildANDCandidateSQL(plan, limit, true, nameOnly)
 	ids, err := p.queryIDs(ctx, statement, args...)
 	if !isMissingFTSContentRowError(err) {
 		return ids, err
 	}
 	p.scheduleFTSRepair(ctx, "AND search", err)
-	statement, args = buildANDCandidateSQL(plan, limit, false)
+	statement, args = buildANDCandidateSQL(plan, limit, false, nameOnly)
 	return p.queryIDs(ctx, statement, args...)
 }
 
 // buildANDCandidateSQL reuses the name, directory and pinyin indexes for each
 // token. Short tokens use contains recall within AND queries, where other
 // conditions narrow the results; standalone short-query prefix rules stay intact.
-func buildANDCandidateSQL(plan *queryPlan, limit int, useFTS bool) (string, []any) {
+func buildANDCandidateSQL(plan *queryPlan, limit int, useFTS bool, nameOnly bool) (string, []any) {
 	var clauses []string
 	var args []any
 	for _, term := range plan.andTerms {
@@ -41,15 +78,21 @@ func buildANDCandidateSQL(plan *queryPlan, limit int, useFTS bool) (string, []an
 		if useFTS && utf8Len(token.rawLower) >= 3 {
 			alternatives = append(alternatives, "SELECT rowid AS entry_id FROM entries_name_fts WHERE normalized_name LIKE ?")
 			args = append(args, "%"+token.rawLower+"%")
-			alternatives = append(alternatives, `
+			if !nameOnly {
+				alternatives = append(alternatives, `
 				SELECT e.entry_id FROM entries_path_fts f
 				INNER JOIN entries d ON d.entry_id = f.rowid
 				INNER JOIN entries e ON e.path = d.path OR (e.path >= d.path || ? AND e.path < d.path || ? || char(1114111))
 				WHERE f.normalized_path LIKE ? AND d.is_dir = 1
 			`)
-			args = append(args, string(filepath.Separator), string(filepath.Separator), "%"+pathTerm+"%")
+				args = append(args, string(filepath.Separator), string(filepath.Separator), "%"+pathTerm+"%")
+			}
 		} else {
-			alternatives = append(alternatives, `SELECT entry_id FROM entries WHERE normalized_path LIKE ? ESCAPE '\'`)
+			column := "normalized_path"
+			if nameOnly {
+				column = "normalized_name"
+			}
+			alternatives = append(alternatives, "SELECT entry_id FROM entries WHERE "+column+` LIKE ? ESCAPE '\'`)
 			args = append(args, "%"+escapeLikePattern(pathTerm)+"%")
 		}
 		if token.asciiLettersDigits {
@@ -69,6 +112,11 @@ func buildANDCandidateSQL(plan *queryPlan, limit int, useFTS bool) (string, []an
 		clauses = append(clauses, "SELECT entry_id FROM ("+strings.Join(alternatives, " UNION ")+")")
 	}
 	for i := range plan.exactPhrases {
+		if nameOnly {
+			clauses = append(clauses, `SELECT entry_id FROM entries WHERE normalized_name LIKE ? ESCAPE '\'`)
+			args = append(args, "%"+escapeLikePattern(plan.exactNamePhrases[i])+"%")
+			continue
+		}
 		clauses = append(clauses, `SELECT entry_id FROM entries WHERE normalized_name LIKE ? ESCAPE '\' OR normalized_path LIKE ? ESCAPE '\'`)
 		args = append(args, "%"+escapeLikePattern(plan.exactNamePhrases[i])+"%", "%"+escapeLikePattern(plan.exactPathPhrases[i])+"%")
 	}

@@ -81,7 +81,7 @@ func TestSQLiteSearchProviderMultiTermAND(t *testing.T) {
 			// tables or racing the provider's asynchronous repair goroutine.
 			query := normalizeSearchQuery(SearchQuery{Raw: tc.query, DisablePinyin: true})
 			if len(query.plan.andTerms) > 0 {
-				statement, args := buildANDCandidateSQL(query.plan, 100, false)
+				statement, args := buildANDCandidateSQL(query.plan, 100, false, false)
 				ids, err := provider.queryIDs(ctx, statement, args...)
 				if err != nil {
 					t.Fatal(err)

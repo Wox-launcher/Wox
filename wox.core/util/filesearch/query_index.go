@@ -128,7 +128,27 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 	return plan
 }
 
+// scoreDocAgainstQuery gives filename-complete matches a separate score band.
+// A large path substring bonus must never outrank a filename satisfying every
+// condition. Explicit path queries keep their existing path-oriented ranking.
 func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
+	if query.plan == nil || query.plan.pathLike || query.wildcard != nil {
+		return scoreDocMatch(query, record, false)
+	}
+	const namePriorityScore = int64(1000000)
+	if nameMatched, nameScore := scoreDocMatch(query, record, true); nameMatched {
+		return true, namePriorityScore + min(max(nameScore, 0), namePriorityScore-1)
+	}
+	matched, score := scoreDocMatch(query, record, false)
+	if !matched {
+		return false, 0
+	}
+	return true, min(max(score, 0), namePriorityScore-1)
+}
+
+// scoreDocMatch shares matching semantics between full-path eligibility and
+// filename-only ranking, including AND conditions, phrases, and pinyin.
+func scoreDocMatch(query SearchQuery, record docRecord, nameOnly bool) (bool, int64) {
 	if query.Raw == "" {
 		return false, 0
 	}
@@ -136,6 +156,9 @@ func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
 	plan := query.plan
 	if plan == nil {
 		return false, 0
+	}
+	if nameOnly {
+		record.Path = record.name()
 	}
 	if !recordMatchesExactPhrases(plan, record) {
 		return false, 0
@@ -153,7 +176,7 @@ func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
 				total += 500
 				continue
 			}
-			matched, score := scoreDocAgainstQuery(term, record)
+			matched, score := scoreDocMatch(term, record, nameOnly)
 			if !matched {
 				return false, 0
 			}
@@ -192,8 +215,10 @@ func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
 		pathTarget = record.directoryPath()
 		pathQuery = plan.pathQuery
 	}
-	pathMatched, pathScore := scorePathMatch(pathTarget, pathQuery)
-	updateBest(pathMatched, pathScore+1500)
+	if !nameOnly {
+		pathMatched, pathScore := scorePathMatch(pathTarget, pathQuery)
+		updateBest(pathMatched, pathScore+1500)
+	}
 
 	if plan.usePinyin && !plan.pathLike && plan.rawLettersDigits != "" {
 		fullScore := maybeScoreFuzzy(record.PinyinFull, plan.rawLettersDigits, false)
