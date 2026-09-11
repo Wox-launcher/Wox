@@ -8,7 +8,9 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
+	"wox/util"
 
 	pdf "github.com/ledongthuc/pdf"
 )
@@ -83,7 +85,30 @@ func readPlainContentFile(path string, maxBytes int64) (string, error) {
 
 // extractPDFText indexes the embedded text layer only. Scanned image-only PDFs
 // need OCR and intentionally stay outside the lightweight content index path.
-func extractPDFText(path string, maxBytes int64) (string, error) {
+func extractPDFText(path string, maxBytes int64) (text string, err error) {
+	if maxBytes <= 0 {
+		return "", nil
+	}
+
+	ctx := util.NewTraceContext()
+	started := time.Now()
+	pageNum := 0
+	// Log before entering the parser: fatal OOMs cannot run deferred error logging.
+	util.GetLogger().Info(ctx, fmt.Sprintf("PDF content extraction started: path=%q", path))
+	defer func() {
+		// Page lookup also uses panic-based errors, outside GetPlainText's recovery.
+		if recovered := recover(); recovered != nil {
+			text = ""
+			err = fmt.Errorf("PDF parser panic: %v", recovered)
+		}
+		if err != nil {
+			err = fmt.Errorf("extract PDF %q page %d: %w", path, pageNum, err)
+			util.GetLogger().Warn(ctx, fmt.Sprintf("PDF content extraction failed: path=%q page=%d elapsed=%s error=%v", path, pageNum, time.Since(started), err))
+			return
+		}
+		util.GetLogger().Info(ctx, fmt.Sprintf("PDF content extraction finished: path=%q elapsed=%s textBytes=%d", path, time.Since(started), len(text)))
+	}()
+
 	f, reader, err := pdf.Open(path)
 	if err != nil {
 		return "", err
@@ -92,7 +117,7 @@ func extractPDFText(path string, maxBytes int64) (string, error) {
 
 	builder := newContentTextBuilder(maxBytes)
 	fonts := map[string]*pdf.Font{}
-	for pageNum := 1; pageNum <= reader.NumPage() && !builder.Done(); pageNum++ {
+	for pageNum = 1; pageNum <= reader.NumPage() && !builder.Done(); pageNum++ {
 		page := reader.Page(pageNum)
 		if page.V.IsNull() {
 			continue
