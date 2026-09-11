@@ -2,6 +2,8 @@
 
 Wox 是一个面向键盘使用的快速启动器，支持 Windows、macOS 和 Linux。你可以用它打开应用、查找文件、运行计算、搜索网页、复用剪贴板历史、调用 AI 模型，也可以通过插件把自己的工作流接进来。
 
+如果想比较 Wox、Flow Launcher、Raycast 或 PowerToys Run，见 [Wox 对比 Flow / Raycast / PowerToys](/zh/compare/)。
+
 它更像一个统一命令入口，而不是一组零散小工具。Wox 本体保持轻量，具体能力由系统插件和社区插件补齐。
 
 ## Wox 适合做什么

@@ -162,8 +162,86 @@
 
 .wox-home .wox-hero-note {
   margin: 16px 0 0;
-  line-height: 20px;
+  line-height: 1.6;
   color: var(--wox-home-text-soft);
+  font-size: 14px;
+}
+
+.wox-home .wox-hero-note a {
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.wox-home .wox-hero-note a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.wox-quotes {
+  border-top: 1px solid var(--wox-home-border);
+  padding-top: 48px;
+}
+
+.wox-quotes .wox-section-heading h2 {
+  max-width: none;
+}
+
+.wox-quotes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.wox-quote-card {
+  margin: 0;
+  padding: 24px;
+  border: 1px solid var(--wox-home-border);
+  background: var(--wox-home-panel);
+}
+
+.wox-quote-card blockquote {
+  margin: 0;
+}
+
+.wox-quote-card blockquote p {
+  margin: 0;
+  color: var(--vp-c-text-1);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.wox-quote-meta {
+  margin: 16px 0 0;
+  color: var(--wox-home-text-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wox-quote-meta a,
+.wox-quotes-more a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.wox-quote-meta a:hover,
+.wox-quotes-more a:hover {
+  color: var(--vp-c-text-1);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.wox-quotes-more {
+  margin: 20px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wox-release-stamp {
+  margin: 0 0 1.5rem;
+  color: var(--vp-c-text-2);
   font-size: 14px;
 }
 
@@ -357,6 +435,11 @@
   .wox-feature-grid {
     padding-left: 0;
     border-left: 0;
+  }
+
+  .wox-quotes-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 }
 

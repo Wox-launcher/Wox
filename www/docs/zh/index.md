@@ -1,6 +1,7 @@
 ---
 layout: home
-title: Wox
+title: Wox — 仍在更新的跨平台启动器（Windows / macOS / Linux）
+titleTemplate: false
 description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
 ---
 
@@ -15,7 +16,7 @@ description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
         <a class="wox-button" href="https://github.com/Wox-launcher/Wox"><svg class="wox-button-icon" aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.63 2.29 6.7 5.47 7.79.4.08.55-.18.55-.4 0-.19-.01-.84-.01-1.52-2.01.38-2.53-.5-2.69-.96-.09-.24-.48-.96-.82-1.16-.28-.15-.68-.52-.01-.53.63-.01 1.08.6 1.23.84.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.09-1.78-.21-3.64-.91-3.64-4.05 0-.89.31-1.63.82-2.2-.08-.21-.36-1.05.08-2.17 0 0 .67-.22 2.2.84A7.43 7.43 0 0 1 8 3.99c.68 0 1.36.09 2 .28 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.96.08 2.17.51.57.82 1.3.82 2.2 0 3.15-1.87 3.84-3.65 4.05.29.26.54.75.54 1.52 0 1.09-.01 1.98-.01 2.25 0 .22.15.48.55.4A8.14 8.14 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg><span>GitHub</span></a>
         <a class="wox-button" href="https://discord.gg/NnahFAwm3"><span class="wox-button-icon wox-discord-icon" aria-hidden="true"></span><span>Discord</span></a>
       </div>
-      <p class="wox-hero-note">免费，开源。</p>
+      <HomeHeroNote />
     </div>
     <figure class="wox-hero-poster">
       <img src="/images/hero-glass-dark.png" alt="Wox 深色玻璃主题，展示项目搜索和键盘操作" fetchpriority="high" />
@@ -45,6 +46,8 @@ description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
   <SystemPluginCarousel />
 
   <ThemeShowcase />
+
+  <HomeQuotes />
 
   <section class="wox-section wox-split-section">
     <div>

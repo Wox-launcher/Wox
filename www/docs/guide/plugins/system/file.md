@@ -24,6 +24,14 @@ Use a small, deliberate root list for best results:
 - Good: home subfolders, project folders, document folders, mounted work directories.
 - Avoid: whole system volumes, dependency caches, build output directories, VM images, and folders with huge generated trees.
 
+## Fast Index (Windows)
+
+On Windows, File Search can use optional Fast Indexing. Open **Settings -> Plugins -> File** and install the Wox NTFS service. The service reads the volume MFT and USN journal so large NTFS drives stay current without a full crawl. Installing it requires administrator access.
+
+Fast Indexing is Windows-only. macOS and Linux keep using the regular root-based index. Content-search directories are configured separately from filename-search roots.
+
+For a short overview of what File Search is for, see [File search launcher](/features/file-search).
+
 ## Actions
 
 | Action | Use |

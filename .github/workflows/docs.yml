@@ -6,6 +6,8 @@ on:
     paths:
       - "www/**"
       - ".github/workflows/docs.yml"
+      - CHANGELOG.md
+      - README.md
       - store-plugin.json
       - store-theme.json
   workflow_dispatch:

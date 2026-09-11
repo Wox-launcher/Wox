@@ -50,6 +50,8 @@ docs
 !www/docs/**
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
+www/docs/changelog/
+www/docs/zh/changelog/
 .deps
 wox.ui.flutter/
 .gocache/

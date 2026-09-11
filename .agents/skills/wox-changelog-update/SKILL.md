@@ -63,12 +63,19 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
       - [Wox Dracula](https://github.com/author/wox-theme-dracula) Wox theme inspired by the Dracula color scheme [@author](https://github.com/author)
   ```
 
-5. Validate before finishing.
+5. Keep README in sync only when the latest **stable** heading changes.
+
+- Update the line next to the Release badge to `Latest: vX.Y.Z · Mon YYYY`, matching that heading (for example `Latest: v2.4.3 · Sep 2026`). GitHub README is not generated.
+- Skip this when you only add bullets under an existing heading, or when the newest heading is a beta (`vX.Y.Z-beta.N`).
+- Do not hand-edit `www/docs`. Homepage version text, compare stamps, and `/changelog/*` pages are generated from `CHANGELOG.md` during `docs:dev` / `docs:build`.
+
+6. Validate before finishing.
 
 - Ensure no duplicate bullets.
 - Ensure every `Add`/`Improve`/`Fix` bullet maps to at least one commit in range.
 - Ensure every `Store` bullet maps to a plugin `Id` or theme `ThemeId` that is new since `last_release_tag`.
 - Ensure every release section you create or update has a biggest-highlight paragraph under the version heading.
+- If the latest stable heading is new or its date changed, ensure README contains `Latest: vX.Y.Z · Mon YYYY` matching it (`docs:build` fails if this line is missing).
 - Ensure markdown renders cleanly and section spacing matches nearby versions.
 - Avoid rewriting old release sections unless explicitly requested.
 - If a commit set only contains tiny UI-only polish, keep it out of changelog by default.
@@ -109,5 +116,6 @@ for t in new_t:
 ## Output Rules
 
 - Edit `CHANGELOG.md` directly.
+- If the latest stable heading changed, also update the README `Latest: vX.Y.Z · Mon YYYY` line. Do not edit `www/docs` changelog pages or homepage copy.
 - Keep final response short: what section was updated and what categories were changed, including `Store` plugin/theme counts when present.
 - If commit intent is ambiguous, state the assumption briefly in the final response.

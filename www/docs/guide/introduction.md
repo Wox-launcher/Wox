@@ -2,6 +2,8 @@
 
 Wox is a keyboard-first launcher for Windows, macOS, and Linux. Use it to open apps, find files, run calculations, search the web, reuse clipboard history, talk to AI models, and extend the launcher with plugins.
 
+If you are choosing between Wox, Flow Launcher, Raycast, or PowerToys Run, see [Wox vs Flow, Raycast, and PowerToys](/compare/).
+
 It is built for people who want one fast command window instead of a collection of small utilities. The core app stays small; plugins add the workflows you actually use.
 
 ## What Wox is good at

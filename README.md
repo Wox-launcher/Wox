@@ -8,9 +8,11 @@
 <a href="https://github.com/Wox-launcher/Wox/releases"><img src="https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg" alt="Downloads"></a>
 </p>
 
+<p align="center"><strong>Latest: v2.4.3 · Sep 2026</strong> · Windows, macOS, and Linux.</p>
+
 ![Confetti](./screenshots/confetti.png)
 
-Wox is a **fully native**, open-source launcher for macOS, Linux, and Windows — with GPU rendering on every platform. Everyday use typically stays around **~150 MB of memory**, so it can live in the background without feeling like another heavy desktop app.
+Wox is a **fully native**, open-source launcher for Windows, macOS, and Linux — with GPU rendering on every platform. It is an open-source Raycast / Alfred alternative. Everyday use typically stays around **~150 MB of memory**, so it can live in the background without feeling like another heavy desktop app.
 
 Local search, keyboard-first actions, and an extensible plugin system stay in one focused input.
 

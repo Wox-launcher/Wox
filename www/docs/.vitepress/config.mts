@@ -1,4 +1,18 @@
 import { defineConfig } from "vitepress";
+import { generateChangelogPages, getLatestRelease, getStableReleases } from "../../scripts/release-meta.mjs";
+import { applySeo } from "./seo";
+
+generateChangelogPages();
+
+const latestRelease = getLatestRelease();
+const stableReleases = getStableReleases();
+const changelogSidebarItems = [
+  { text: "All releases", link: "/changelog/" },
+  ...stableReleases.map((release) => ({
+    text: `v${release.version}`,
+    link: `/changelog/${release.version}`,
+  })),
+];
 
 export default defineConfig({
   // Custom domain https://www.woxlauncher.com/ serves this project site at the
@@ -6,65 +20,45 @@ export default defineConfig({
   base: "/",
   appearance: { initialValue: "light" },
   title: "Wox",
-  description: "A cross-platform quick launcher",
+  titleTemplate: ":title | Wox",
+  description: "A native, open-source launcher for Windows, macOS, and Linux.",
+  lastUpdated: true,
+  sitemap: {
+    hostname: "https://www.woxlauncher.com",
+  },
+  transformPageData(pageData) {
+    applySeo(pageData);
+  },
+  vite: {
+    define: {
+      __WOX_LATEST_RELEASE__: JSON.stringify(latestRelease),
+    },
+  },
 
   locales: {
     root: {
       label: "English",
       lang: "en-US",
       title: "Wox",
-      description: "A cross-platform quick launcher",
+      description: "A native, open-source launcher for Windows, macOS, and Linux.",
       themeConfig: {
         nav: [
           { text: "Home", link: "/" },
           { text: "Guide", link: "/guide/introduction" },
+          { text: "Changelog", link: "/changelog/" },
           { text: "Development", link: "/development/setup" },
           { text: "Blog", link: "/blog/" },
           { text: "Plugin Store", link: "/store/plugins" },
           { text: "Theme Store", link: "/store/themes" },
         ],
         sidebar: {
-          "/guide/": [
+          "/guide/": englishGuideSidebar(),
+          "/compare/": englishGuideSidebar(),
+          "/features/": englishGuideSidebar(),
+          "/changelog/": [
             {
-              text: "Guide",
-              items: [
-                { text: "Introduction", link: "/guide/introduction" },
-                { text: "Installation", link: "/guide/installation" },
-                { text: "FAQ", link: "/guide/faq" },
-              ],
-            },
-            {
-              text: "Usage",
-              items: [
-                { text: "Querying", link: "/guide/usage/querying" },
-                { text: "Action Panel", link: "/guide/usage/action-panel" },
-                { text: "Deep Link", link: "/guide/usage/deep-link" },
-              ],
-            },
-            {
-              text: "AI Features",
-              items: [
-                { text: "Settings", link: "/guide/ai/settings" },
-                { text: "Theme Generation", link: "/guide/ai/theme" },
-                { text: "AI Commands", link: "/guide/ai/commands" },
-              ],
-            },
-            {
-              text: "System Plugins",
-              items: [
-                { text: "Overview", link: "/guide/plugins/system/overview" },
-                { text: "Application", link: "/guide/plugins/system/application" },
-                { text: "Calculator", link: "/guide/plugins/system/calculator" },
-                { text: "Web Search", link: "/guide/plugins/system/websearch" },
-                { text: "Clipboard", link: "/guide/plugins/system/clipboard" },
-                { text: "Converter", link: "/guide/plugins/system/converter" },
-                { text: "AI Chat", link: "/guide/plugins/system/chat" },
-                { text: "File Search", link: "/guide/plugins/system/file" },
-                { text: "Browser Bookmark", link: "/guide/plugins/system/browser-bookmark" },
-                { text: "Explorer", link: "/guide/plugins/system/explorer" },
-                { text: "Emoji Search", link: "/guide/plugins/system/emoji" },
-                { text: "Other Plugins", link: "/guide/plugins/system/other-plugins" },
-              ],
+              text: "Changelog",
+              items: changelogSidebarItems,
             },
           ],
           "/development/": [
@@ -123,57 +117,27 @@ export default defineConfig({
       lang: "zh-CN",
       link: "/zh/",
       title: "Wox",
-      description: "跨平台快速启动器",
+      description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。",
       themeConfig: {
         nav: [
           { text: "首页", link: "/zh/" },
           { text: "指南", link: "/zh/guide/introduction" },
+          { text: "更新日志", link: "/zh/changelog/" },
           { text: "开发", link: "/zh/development/setup" },
           { text: "博客", link: "/zh/blog/" },
           { text: "插件商店", link: "/zh/store/plugins" },
           { text: "主题商店", link: "/zh/store/themes" },
         ],
         sidebar: {
-          "/zh/guide/": [
+          "/zh/guide/": chineseGuideSidebar(),
+          "/zh/compare/": chineseGuideSidebar(),
+          "/zh/features/": chineseGuideSidebar(),
+          "/zh/changelog/": [
             {
-              text: "指南",
+              text: "更新日志",
               items: [
-                { text: "简介", link: "/zh/guide/introduction" },
-                { text: "安装", link: "/zh/guide/installation" },
-                { text: "常见问题", link: "/zh/guide/faq" },
-              ],
-            },
-            {
-              text: "使用",
-              items: [
-                { text: "查询", link: "/zh/guide/usage/querying" },
-                { text: "操作面板", link: "/zh/guide/usage/action-panel" },
-                { text: "深度链接", link: "/zh/guide/usage/deep-link" },
-              ],
-            },
-            {
-              text: "AI 功能",
-              items: [
-                { text: "设置", link: "/zh/guide/ai/settings" },
-                { text: "主题生成", link: "/zh/guide/ai/theme" },
-                { text: "AI 命令", link: "/zh/guide/ai/commands" },
-              ],
-            },
-            {
-              text: "系统插件",
-              items: [
-                { text: "概览", link: "/zh/guide/plugins/system/overview" },
-                { text: "应用启动器", link: "/zh/guide/plugins/system/application" },
-                { text: "计算器", link: "/zh/guide/plugins/system/calculator" },
-                { text: "网页搜索", link: "/zh/guide/plugins/system/websearch" },
-                { text: "剪贴板", link: "/zh/guide/plugins/system/clipboard" },
-                { text: "转换器", link: "/zh/guide/plugins/system/converter" },
-                { text: "AI 对话", link: "/zh/guide/plugins/system/chat" },
-                { text: "文件搜索", link: "/zh/guide/plugins/system/file" },
-                { text: "浏览器书签", link: "/zh/guide/plugins/system/browser-bookmark" },
-                { text: "文件夹浏览", link: "/zh/guide/plugins/system/explorer" },
-                { text: "Emoji 搜索", link: "/zh/guide/plugins/system/emoji" },
-                { text: "其他插件", link: "/zh/guide/plugins/system/other-plugins" },
+                { text: "正式版列表", link: "/zh/changelog/" },
+                { text: "英文版本页", link: "/changelog/" },
               ],
             },
           ],
@@ -268,3 +232,113 @@ export default defineConfig({
     },
   },
 });
+
+function englishGuideSidebar() {
+  return [
+    {
+      text: "Guide",
+      items: [
+        { text: "Introduction", link: "/guide/introduction" },
+        { text: "Installation", link: "/guide/installation" },
+        { text: "FAQ", link: "/guide/faq" },
+        { text: "Compare", link: "/compare/" },
+      ],
+    },
+    {
+      text: "Features",
+      items: [
+        { text: "Clipboard history", link: "/features/clipboard-history" },
+        { text: "File search", link: "/features/file-search" },
+        { text: "Linux Wayland", link: "/features/linux-wayland" },
+      ],
+    },
+    {
+      text: "Usage",
+      items: [
+        { text: "Querying", link: "/guide/usage/querying" },
+        { text: "Action Panel", link: "/guide/usage/action-panel" },
+        { text: "Deep Link", link: "/guide/usage/deep-link" },
+      ],
+    },
+    {
+      text: "AI Features",
+      items: [
+        { text: "Settings", link: "/guide/ai/settings" },
+        { text: "Theme Generation", link: "/guide/ai/theme" },
+        { text: "AI Commands", link: "/guide/ai/commands" },
+      ],
+    },
+    {
+      text: "System Plugins",
+      items: [
+        { text: "Overview", link: "/guide/plugins/system/overview" },
+        { text: "Application", link: "/guide/plugins/system/application" },
+        { text: "Calculator", link: "/guide/plugins/system/calculator" },
+        { text: "Web Search", link: "/guide/plugins/system/websearch" },
+        { text: "Clipboard", link: "/guide/plugins/system/clipboard" },
+        { text: "Converter", link: "/guide/plugins/system/converter" },
+        { text: "AI Chat", link: "/guide/plugins/system/chat" },
+        { text: "File Search", link: "/guide/plugins/system/file" },
+        { text: "Browser Bookmark", link: "/guide/plugins/system/browser-bookmark" },
+        { text: "Explorer", link: "/guide/plugins/system/explorer" },
+        { text: "Emoji Search", link: "/guide/plugins/system/emoji" },
+        { text: "Other Plugins", link: "/guide/plugins/system/other-plugins" },
+      ],
+    },
+  ];
+}
+
+function chineseGuideSidebar() {
+  return [
+    {
+      text: "指南",
+      items: [
+        { text: "简介", link: "/zh/guide/introduction" },
+        { text: "安装", link: "/zh/guide/installation" },
+        { text: "常见问题", link: "/zh/guide/faq" },
+        { text: "对比", link: "/zh/compare/" },
+      ],
+    },
+    {
+      text: "功能",
+      items: [
+        { text: "剪贴板历史", link: "/zh/features/clipboard-history" },
+        { text: "文件搜索", link: "/zh/features/file-search" },
+        { text: "Linux Wayland", link: "/zh/features/linux-wayland" },
+      ],
+    },
+    {
+      text: "使用",
+      items: [
+        { text: "查询", link: "/zh/guide/usage/querying" },
+        { text: "操作面板", link: "/zh/guide/usage/action-panel" },
+        { text: "深度链接", link: "/zh/guide/usage/deep-link" },
+      ],
+    },
+    {
+      text: "AI 功能",
+      items: [
+        { text: "设置", link: "/zh/guide/ai/settings" },
+        { text: "主题生成", link: "/zh/guide/ai/theme" },
+        { text: "AI 命令", link: "/zh/guide/ai/commands" },
+      ],
+    },
+    {
+      text: "系统插件",
+      items: [
+        { text: "概览", link: "/zh/guide/plugins/system/overview" },
+        { text: "应用启动器", link: "/zh/guide/plugins/system/application" },
+        { text: "计算器", link: "/zh/guide/plugins/system/calculator" },
+        { text: "网页搜索", link: "/zh/guide/plugins/system/websearch" },
+        { text: "剪贴板", link: "/zh/guide/plugins/system/clipboard" },
+        { text: "转换器", link: "/zh/guide/plugins/system/converter" },
+        { text: "AI 对话", link: "/zh/guide/plugins/system/chat" },
+        { text: "文件搜索", link: "/zh/guide/plugins/system/file" },
+        { text: "浏览器书签", link: "/zh/guide/plugins/system/browser-bookmark" },
+        { text: "文件夹浏览", link: "/zh/guide/plugins/system/explorer" },
+        { text: "Emoji 搜索", link: "/zh/guide/plugins/system/emoji" },
+        { text: "其他插件", link: "/zh/guide/plugins/system/other-plugins" },
+      ],
+    },
+  ];
+}
