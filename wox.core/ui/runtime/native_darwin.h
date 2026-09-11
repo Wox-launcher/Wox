@@ -39,6 +39,8 @@ int32_t wox_darwin_window_set_pointer_passthrough(WoxDarwinWindow *window, int32
 int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char *url);
 int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height, float corner_radius);
 int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_show_floating_material(WoxDarwinWindow *window, float x, float y, float width, float height, float corner_radius, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha);
+int32_t wox_darwin_window_hide_floating_material(WoxDarwinWindow *window);
 int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window);

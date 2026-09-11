@@ -126,6 +126,15 @@ func TestEmbeddedSurfaceOverlayAlwaysRecordsSceneBoundary(t *testing.T) {
 	}
 }
 
+func TestEmbeddedSurfaceOverlayBeginsOncePerFrame(t *testing.T) {
+	displayList := &DisplayList{}
+	displayList.BeginEmbeddedSurfaceOverlay(Rect{Width: 100, Height: 100})
+	displayList.BeginEmbeddedSurfaceOverlay(Rect{X: 300, Width: 50, Height: 50})
+	if len(displayList.commands) != 1 {
+		t.Fatalf("commands = %+v, want one scene boundary when a WebView preview and a floating panel both request the overlay", displayList.commands)
+	}
+}
+
 func TestDisplayListDamageHonorsCurrentClip(t *testing.T) {
 	displayList := &DisplayList{}
 	displayList.SetDamage(Rect{Width: 100, Height: 100})

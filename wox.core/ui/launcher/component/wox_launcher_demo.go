@@ -345,7 +345,7 @@ func demoActionPanel(props LauncherDemoProps, width, height float32, alpha uint8
 	}
 	children := []woxwidget.Widget{
 		demoInlineHighlight(woxwidget.Text{Value: "Actions", Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.ActionHeader, alpha)}, demoActionHeaderHeight, 3, props.HighlightTarget == LauncherDemoHighlightActionHeader, props.HighlightColor),
-		woxwidget.Container{Width: width - 20, Height: demoActionDividerHeight, Padding: woxwidget.Insets{Top: 7, Bottom: 8}, Child: woxwidget.Container{Height: 1, Color: withAlpha(props.Theme.PreviewSplit, alpha)}},
+		woxwidget.Container{Width: width - 20, Height: demoActionHeaderGap},
 	}
 	actions := []struct {
 		label string
@@ -383,15 +383,16 @@ func demoActionPanel(props LauncherDemoProps, width, height float32, alpha uint8
 const (
 	demoActionPanelPaddingTop = float32(10)
 	demoActionHeaderHeight    = float32(18)
-	demoActionDividerHeight   = float32(16)
-	demoActionRowHeight       = float32(38)
-	demoActionSearchHeight    = float32(36)
-	demoActionCount           = 2
+	// demoActionHeaderGap mirrors the live panel, which separates the title by spacing only.
+	demoActionHeaderGap    = float32(8)
+	demoActionRowHeight    = float32(38)
+	demoActionSearchHeight = float32(36)
+	demoActionCount        = 2
 )
 
 // demoActionPanelHeight sizes the overlay to the two demo actions, matching the live panel's row-driven height.
 func demoActionPanelHeight() float32 {
-	return demoActionPanelPaddingTop + demoActionHeaderHeight + demoActionDividerHeight + float32(demoActionCount)*demoActionRowHeight + demoActionSearchHeight
+	return demoActionPanelPaddingTop + demoActionHeaderHeight + demoActionHeaderGap + float32(demoActionCount)*demoActionRowHeight + demoActionSearchHeight
 }
 
 func demoAlpha(opacity float32) uint8 { return demoScaledAlpha(opacity, 255) }

@@ -1,7 +1,6 @@
 package view
 
 import (
-	"reflect"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -154,9 +153,9 @@ func TestActionGroupDividerGeometry(t *testing.T) {
 	if !ok || line.Height != 1 || line.Color.A != 255 {
 		t.Fatalf("group divider line = %#v, want a 1px PreviewSplit hairline", divider.Child)
 	}
-	titleDivider := panel.Child.(woxwidget.Flex).Children[1]
-	if !reflect.DeepEqual(titleDivider, divider) {
-		t.Fatalf("title divider = %#v, want the same geometry and color as the group divider %#v", titleDivider, divider)
+	gap, ok := panel.Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
+	if !ok || gap.Height != ActionHeaderGap || gap.Color.A != 0 || gap.Child != nil {
+		t.Fatalf("title separator = %#v, want an empty %v-high gap without a hairline", panel.Child.(woxwidget.Flex).Children[1], ActionHeaderGap)
 	}
 }
 

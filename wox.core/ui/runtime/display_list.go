@@ -53,6 +53,9 @@ type DisplayList struct {
 	nativeDamage Rect
 	textDraws    int
 	imageDraws   int
+	// overlayBegun records that later commands already target the overlay
+	// surface; a second split would fail at the native renderer.
+	overlayBegun bool
 }
 
 const displayListFloatTolerance = float32(1e-4)
@@ -248,10 +251,13 @@ type displayCommand struct {
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.
+// The split happens once per frame: every later command already lands on the overlay, so a
+// second caller (for example a floating panel drawn after a WebView preview) is a no-op.
 func (d *DisplayList) BeginEmbeddedSurfaceOverlay(rect Rect) {
-	if rect.Width <= 0 || rect.Height <= 0 {
+	if d == nil || d.overlayBegun || rect.Width <= 0 || rect.Height <= 0 {
 		return
 	}
+	d.overlayBegun = true
 	d.appendCommand(displayCommand{kind: displayCommandBeginEmbeddedSurfaceOverlay, rect: rect})
 }
 
