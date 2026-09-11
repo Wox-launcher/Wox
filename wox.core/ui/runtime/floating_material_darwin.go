@@ -12,8 +12,8 @@ import (
 	"unsafe"
 )
 
-func nativeFloatingMaterialAvailable() bool {
-	return true
+func nativeFloatingMaterialMode() floatingMaterialMode {
+	return floatingMaterialOverlay
 }
 
 // applyFloatingMaterials hands the materials declared by the frame being encoded

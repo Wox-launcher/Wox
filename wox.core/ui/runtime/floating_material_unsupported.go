@@ -2,6 +2,6 @@
 
 package woxui
 
-func nativeFloatingMaterialAvailable() bool {
-	return false
+func nativeFloatingMaterialMode() floatingMaterialMode {
+	return floatingMaterialPainted
 }

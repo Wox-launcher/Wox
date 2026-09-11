@@ -48,6 +48,30 @@ func TestFrameDamageTrackerIncludesMovedCacheHit(t *testing.T) {
 	}
 }
 
+func TestCoverRenderedMaterialsWidensDamageThroughTouchedSurfaces(t *testing.T) {
+	panel := woxui.Rect{X: 100, Y: 100, Width: 200, Height: 100}
+	tooltip := woxui.Rect{X: 280, Y: 180, Width: 80, Height: 40}
+	untouched := woxui.Rect{X: 600, Y: 600, Width: 50, Height: 50}
+	materials := []woxui.Rect{panel, tooltip, untouched}
+
+	// A tail refresh under the panel must repaint the whole panel, and covering the panel
+	// reaches the tooltip stacked on its corner, but never a surface the damage misses.
+	got := coverRenderedMaterials(woxui.Rect{X: 120, Y: 150, Width: 10, Height: 10}, materials)
+	want := woxui.Rect{X: 100, Y: 100, Width: 260, Height: 120}
+	if got != want {
+		t.Fatalf("covered damage = %+v, want panel and tooltip %+v", got, want)
+	}
+	if base := (woxui.Rect{X: 10, Y: 10, Width: 5, Height: 5}); coverRenderedMaterials(base, materials) != base {
+		t.Fatal("damage away from every surface was widened")
+	}
+	if base := (woxui.Rect{X: 90, Y: 90, Width: 400, Height: 400}); coverRenderedMaterials(base, materials) != base {
+		t.Fatal("damage already containing the surfaces was widened")
+	}
+	if coverRenderedMaterials(woxui.Rect{}, materials) != (woxui.Rect{}) {
+		t.Fatal("empty damage was widened")
+	}
+}
+
 func TestStateInvalidateUsesNearestBoundaryBounds(t *testing.T) {
 	services := &fakeHostServices{}
 	host := NewHost(nil)

@@ -115,6 +115,10 @@ type Host struct {
 	pendingDamage        woxui.Rect
 	fullDamage           bool
 	caretDamage          woxui.Rect
+	// renderedMaterials are the renderer-blurred floating surfaces of the last presented
+	// frame (see DisplayList.RenderedFloatingMaterialRects); damage touching one of them
+	// must cover it entirely so the blur samples freshly painted content.
+	renderedMaterials []woxui.Rect
 }
 
 // NewHost creates a retained host whose builder runs once per invalidated frame.
@@ -277,6 +281,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if !fullDamage {
 		damage = unionDamageRects(damage, boundaryDamage)
 		damage = unionDamageRects(damage, removedDamage)
+		damage = coverRenderedMaterials(damage, h.renderedMaterials)
 	}
 	if damage.Width > 0 && damage.Height > 0 {
 		damage = expandDamageRect(damage, 4)
@@ -345,6 +350,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 	h.root.draw(displayList, h.focused, focusRingTarget, caretVisible, false, false, work)
 	debugFrame.draw(displayList)
+	h.renderedMaterials = displayList.RenderedFloatingMaterialRects()
 	h.recordFramePhase(frameID, woxui.FrameMetricDrawRecord, time.Since(drawStart))
 
 	accessibilityStart := time.Now()

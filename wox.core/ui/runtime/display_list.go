@@ -57,7 +57,10 @@ type DisplayList struct {
 	// surface; a second split would fail at the native renderer.
 	overlayBegun bool
 	// floatingMaterials lists the materials declared so far, so a later surface
-	// can tell whether it is stacked over another floating surface.
+	// can tell whether it is stacked over another floating surface and so the
+	// widget host can widen damage under a renderer-blurred surface (see
+	// RenderedFloatingMaterialRects). Declared surfaces are kept even when damage
+	// culling skips their command, because the next frame's damage depends on them.
 	floatingMaterials []Rect
 }
 
@@ -256,24 +259,33 @@ type displayCommand struct {
 }
 
 // FloatingMaterial backs a surface that floats above other Go UI content in the same
-// window (dialog, menu, tooltip, action panel). Where the platform has a per-region
-// translucent material (see floating_material.go) the surface moves onto the overlay
-// composition surface and the material carries tint and edge natively, so the caller
-// must paint nothing else as background. Elsewhere the same call paints the tint and a
-// hairline edge directly and leaves the main surface untouched, so damage culling and
-// composition behave exactly as for an ordinary container. On both paths the tint
-// means "over the window content", so themes tune one value for every platform.
+// window (dialog, menu, tooltip, action panel). The caller must paint nothing else as
+// background: the material carries tint and edge on every platform (see
+// floating_material.go for how each one realises it). With a native overlay material
+// the surface moves onto the overlay composition surface. With a renderer blur the
+// command stays in place in the main surface stream, so it must be recorded after the
+// content beneath and before the surface content, which is the natural paint order.
+// Without either, the same call paints the tint and a hairline edge directly, so
+// damage culling and composition behave exactly as for an ordinary container. On every
+// path the tint means "over the window content", so themes tune one value per platform.
 func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Color) {
 	if rect.Width <= 0 || rect.Height <= 0 {
 		return
 	}
-	if !nativeFloatingMaterialAvailable() {
+	switch nativeFloatingMaterialMode() {
+	case floatingMaterialPainted:
 		if tint.A != 0 {
 			d.FillRoundedRect(rect, radius, tint)
 		}
 		if edge.A != 0 {
 			d.StrokeRoundedRect(rect, radius, 1, edge)
 		}
+		return
+	case floatingMaterialRendered:
+		if d.shouldRecord(rect) {
+			d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge})
+		}
+		d.floatingMaterials = append(d.floatingMaterials, rect)
 		return
 	}
 	d.BeginEmbeddedSurfaceOverlay(rect)
@@ -293,6 +305,26 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 		}
 	}
 	d.floatingMaterials = append(d.floatingMaterials, rect)
+}
+
+// RenderedFloatingMaterialRects returns the surfaces this frame backed with a renderer
+// blur, each grown by the margin the blur samples around it, in logical coordinates.
+// The renderer reads the backdrop from the back buffer, so a later frame that repaints
+// anything under one of these rectangles must repaint the whole rectangle, or the blur
+// would sample the previous frame's tinted panel instead of the content beneath it.
+// Platforms without a renderer blur return nil.
+func (d *DisplayList) RenderedFloatingMaterialRects() []Rect {
+	if d == nil || len(d.floatingMaterials) == 0 || nativeFloatingMaterialMode() != floatingMaterialRendered {
+		return nil
+	}
+	rects := make([]Rect, len(d.floatingMaterials))
+	for index, rect := range d.floatingMaterials {
+		rects[index] = Rect{
+			X: rect.X - floatingMaterialBlurMargin, Y: rect.Y - floatingMaterialBlurMargin,
+			Width: rect.Width + 2*floatingMaterialBlurMargin, Height: rect.Height + 2*floatingMaterialBlurMargin,
+		}
+	}
+	return rects
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.

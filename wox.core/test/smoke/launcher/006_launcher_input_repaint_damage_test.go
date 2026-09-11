@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,11 +18,12 @@ import (
 // Test006LauncherInputRepaintDamage verifies idle caret blinking stays local in both launcher editors.
 // Flow: settle a completed query -> observe query-box caret frames -> open the action panel -> observe its filter caret frames.
 // Evidence: every settled frame reports non-empty logical damage contained by the focused input instead of full-window damage.
+// On Windows the action panel is a renderer-blurred floating surface, so its caret frames may repaint the panel, but still not the window.
 func Test006LauncherInputRepaintDamage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
 		snapshot := smoke.ReplaceLauncherQuery(t, ctx, client, "1+1")
-		assertIdleInputDamage(t, ctx, client, snapshot, "launcher.query.input")
+		assertIdleInputDamage(t, ctx, client, snapshot, "launcher.query.input", woxui.Rect{})
 
 		modifier := woxui.KeyModifierControl
 		if runtime.GOOS == "darwin" {
@@ -37,13 +39,27 @@ func Test006LauncherInputRepaintDamage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("wait for focused action filter: %v", err)
 		}
-		assertIdleInputDamage(t, ctx, client, snapshot, "action-search")
+		var surface woxui.Rect
+		if runtime.GOOS == "windows" {
+			// The Direct2D floating material blurs the back buffer under the panel, so any repaint
+			// inside the panel must cover the whole panel plus the blur's sampling margin. Derive
+			// the panel from its rows and filter; the outset absorbs panel padding, the header
+			// above the rows, the blur margin and the host paint outset.
+			for _, node := range snapshot.Tree.Nodes {
+				if strings.HasPrefix(node.AutomationID, "action-") {
+					surface = unionRect(surface, node.Bounds)
+				}
+			}
+			surface = expandRect(surface, 96)
+		}
+		assertIdleInputDamage(t, ctx, client, snapshot, "action-search", surface)
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})
 }
 
 // assertIdleInputDamage waits through one settling caret frame, then checks two complete blink phases.
-func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automationdriver.Client, snapshot woxwidget.AutomationSnapshot, inputID string) {
+// A non-empty surface widens the allowed damage from the input to that floating surface.
+func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automationdriver.Client, snapshot woxwidget.AutomationSnapshot, inputID string, surface woxui.Rect) {
 	t.Helper()
 	input, found := automationdriver.Find(snapshot, inputID)
 	if !found || !input.Focused {
@@ -59,6 +75,9 @@ func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automation
 	}
 	// Host damage includes a 4px paint outset; one extra logical pixel absorbs fractional layout bounds.
 	allowed := expandRect(input.Bounds, 5)
+	if surface.Width > 0 && surface.Height > 0 {
+		allowed = unionRect(allowed, surface)
+	}
 	generation := settled.Tree.Generation
 	lastFrameID := uint64(0)
 	consecutiveLocal := 0
@@ -97,6 +116,18 @@ func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automation
 
 func expandRect(rect woxui.Rect, outset float32) woxui.Rect {
 	return woxui.Rect{X: rect.X - outset, Y: rect.Y - outset, Width: rect.Width + 2*outset, Height: rect.Height + 2*outset}
+}
+
+func unionRect(left, right woxui.Rect) woxui.Rect {
+	if left.Width <= 0 || left.Height <= 0 {
+		return right
+	}
+	if right.Width <= 0 || right.Height <= 0 {
+		return left
+	}
+	x := min(left.X, right.X)
+	y := min(left.Y, right.Y)
+	return woxui.Rect{X: x, Y: y, Width: max(left.X+left.Width, right.X+right.Width) - x, Height: max(left.Y+left.Height, right.Y+right.Height) - y}
 }
 
 func containsRect(outer, inner woxui.Rect) bool {

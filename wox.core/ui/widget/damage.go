@@ -59,6 +59,37 @@ func unionDamageRects(left, right woxui.Rect) woxui.Rect {
 	return woxui.Rect{X: x, Y: y, Width: rightEdge - x, Height: bottomEdge - y}
 }
 
+// coverRenderedMaterials grows damage to include every renderer-blurred floating surface
+// it touches. The blur reads its backdrop from the back buffer, so repainting only part of
+// the content under a surface would leave the blur sampling last frame's tinted panel
+// around the change. Covering one surface can reach another, so it repeats until stable.
+func coverRenderedMaterials(damage woxui.Rect, materials []woxui.Rect) woxui.Rect {
+	if damage.Width <= 0 || damage.Height <= 0 || len(materials) == 0 {
+		return damage
+	}
+	// Each surface is merged at most once, so the loop ends even when float rounding keeps
+	// a merged surface from testing as exactly contained.
+	covered := make([]bool, len(materials))
+	for grown := true; grown; {
+		grown = false
+		for index, material := range materials {
+			if covered[index] || !damageRectsOverlap(damage, material) {
+				continue
+			}
+			damage = unionDamageRects(damage, material)
+			covered[index] = true
+			grown = true
+		}
+	}
+	return damage
+}
+
+func damageRectsOverlap(left, right woxui.Rect) bool {
+	return left.Width > 0 && left.Height > 0 && right.Width > 0 && right.Height > 0 &&
+		left.X < right.X+right.Width && right.X < left.X+left.Width &&
+		left.Y < right.Y+right.Height && right.Y < left.Y+left.Height
+}
+
 func clipDamageRect(rect woxui.Rect, size woxui.Size) woxui.Rect {
 	if rect.Width <= 0 || rect.Height <= 0 || size.Width <= 0 || size.Height <= 0 {
 		return woxui.Rect{}

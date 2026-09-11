@@ -2,6 +2,7 @@
 #include <windows.h>
 
 #include <d2d1_1.h>
+#include <d2d1effects.h>
 #include <d2d1helper.h>
 #include <d3d11.h>
 #include <dcomp.h>
@@ -49,6 +50,13 @@ struct WoxRenderer {
   uint64_t cached_image_bitmap_bytes = 0;
   uint64_t cached_image_use_serial = 0;
   ID2D1SolidColorBrush *brush = nullptr;
+  // Floating material blur resources (see wox_renderer_floating_material). The source
+  // bitmap holds a copy of the back buffer under the surface and only grows, so a panel
+  // that repaints every second reuses it; a hidden window releases it with the image cache.
+  ID2D1Bitmap1 *material_source_bitmap = nullptr;
+  D2D1_SIZE_U material_source_size = {};
+  ID2D1Effect *material_crop_effect = nullptr;
+  ID2D1Effect *material_blur_effect = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
 	std::wstring font_family = L"Segoe UI";
   bool uses_default_font_family = true;
@@ -267,6 +275,13 @@ static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
   }
   renderer->cached_image_bitmaps.clear();
   renderer->cached_image_bitmap_bytes = 0;
+}
+
+static void release_material_resources(WoxRenderer *renderer) {
+  release_com(&renderer->material_blur_effect);
+  release_com(&renderer->material_crop_effect);
+  release_com(&renderer->material_source_bitmap);
+  renderer->material_source_size = {};
 }
 
 // release_retired_image_bitmaps keeps evicted resources alive until EndDraw has
@@ -541,6 +556,7 @@ static void destroy_renderer(WoxRenderer *renderer) {
   }
   release_com(&renderer->brush);
   clear_cached_image_bitmaps(renderer);
+  release_material_resources(renderer);
   release_com(&renderer->cached_large_image_bitmap);
   release_com(&renderer->overlay_target_bitmap);
   release_com(&renderer->target_bitmap);
@@ -755,6 +771,7 @@ extern "C" int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
   clear_cached_image_bitmaps(renderer);
+  release_material_resources(renderer);
   // Releasing our bitmap references is not enough: Direct2D keeps internal CPU-side resource
   // caches after upload. A hidden window has no useful warm resources, so release them eagerly.
   renderer->d2d_device->ClearResources(0);
@@ -965,6 +982,199 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
   }
   if (release_bitmap) {
     bitmap->Release();
+  }
+  return S_OK;
+}
+
+// ensure_material_resources lazily creates the crop -> Gaussian blur graph and grows the
+// backdrop copy to at least the requested pixel size. It only grows, so a panel and a
+// tooltip of different sizes in the same frame share one bitmap instead of reallocating.
+static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, uint32_t height) {
+  if (renderer->material_source_bitmap == nullptr || renderer->material_source_size.width < width || renderer->material_source_size.height < height) {
+    release_com(&renderer->material_source_bitmap);
+    const D2D1_SIZE_U size = D2D1::SizeU(std::max(width, renderer->material_source_size.width), std::max(height, renderer->material_source_size.height));
+    renderer->material_source_size = {};
+    // Same pixel format as the swap chain: CopyFromBitmap does not convert.
+    D2D1_BITMAP_PROPERTIES1 properties = {};
+    properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    properties.dpiX = 96.0f;
+    properties.dpiY = 96.0f;
+    properties.bitmapOptions = D2D1_BITMAP_OPTIONS_NONE;
+    HRESULT result = renderer->d2d_context->CreateBitmap(size, nullptr, 0, &properties, &renderer->material_source_bitmap);
+    if (FAILED(result)) {
+      return result;
+    }
+    renderer->material_source_size = size;
+  }
+  if (renderer->material_crop_effect == nullptr) {
+    HRESULT result = renderer->d2d_context->CreateEffect(CLSID_D2D1Crop, &renderer->material_crop_effect);
+    if (FAILED(result)) {
+      return result;
+    }
+  }
+  if (renderer->material_blur_effect == nullptr) {
+    HRESULT result = renderer->d2d_context->CreateEffect(CLSID_D2D1GaussianBlur, &renderer->material_blur_effect);
+    if (FAILED(result)) {
+      return result;
+    }
+    renderer->material_blur_effect->SetInputEffect(0, renderer->material_crop_effect);
+    // SPEED lets Direct2D downsample internally for large kernels, which is what a frosted
+    // backdrop wants anyway. HARD keeps the output inside the copied region; the margin the
+    // caller adds around the surface is what keeps its edge from sampling transparent padding.
+    // MinGW's d2d1effects.h lacks the D2D1_GAUSSIANBLUR_OPTIMIZATION enum; SPEED is 0 in the Windows SDK.
+    const UINT32 optimization_speed = 0;
+    const UINT32 border_mode = D2D1_BORDER_MODE_HARD;
+    renderer->material_blur_effect->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, optimization_speed);
+    renderer->material_blur_effect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, border_mode);
+  }
+  return S_OK;
+}
+
+// blur_floating_material_backdrop replaces the pixels inside the rounded surface with a
+// blurred copy of what the frame has drawn there so far. Everything is done on the GPU:
+// copy the region (plus margin) out of the back buffer, run it through the blur graph, and
+// draw it back inside the rounded shape while the corners keep their sharp pixels. Every
+// step that can fail runs before the target is touched, so a failure leaves it as it was.
+static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin) {
+  const float scale = renderer->scale;
+  const D2D1_SIZE_U target_size = renderer->target_bitmap->GetPixelSize();
+  const auto clamp_pixel = [](float value, uint32_t limit) {
+    return static_cast<uint32_t>(std::min<float>(std::max(0.0f, value), static_cast<float>(limit)));
+  };
+  // Physical source region: the surface grown by the sampling margin, clamped to the buffer.
+  const uint32_t left = clamp_pixel(std::floor((x - blur_margin) * scale), target_size.width);
+  const uint32_t top = clamp_pixel(std::floor((y - blur_margin) * scale), target_size.height);
+  const uint32_t right = clamp_pixel(std::ceil((x + width + blur_margin) * scale), target_size.width);
+  const uint32_t bottom = clamp_pixel(std::ceil((y + height + blur_margin) * scale), target_size.height);
+  if (right <= left || bottom <= top) {
+    return S_OK;
+  }
+  const uint32_t source_width = right - left;
+  const uint32_t source_height = bottom - top;
+
+  HRESULT result = ensure_material_resources(renderer, source_width, source_height);
+  if (FAILED(result)) {
+    return result;
+  }
+  // The copy reads the back buffer, so every primitive recorded before the material
+  // must have landed there first.
+  result = renderer->d2d_context->Flush();
+  if (FAILED(result)) {
+    return result;
+  }
+  const D2D1_POINT_2U destination = D2D1::Point2U(0, 0);
+  const D2D1_RECT_U source = D2D1::RectU(left, top, right, bottom);
+  result = renderer->material_source_bitmap->CopyFromBitmap(&destination, renderer->target_bitmap, &source);
+  if (FAILED(result)) {
+    return result;
+  }
+  renderer->material_crop_effect->SetInput(0, renderer->material_source_bitmap);
+  // The cached bitmap may be larger than this region; crop so stale pixels beyond it never
+  // bleed into the kernel.
+  const D2D1_VECTOR_4F crop = {0.0f, 0.0f, static_cast<float>(source_width), static_cast<float>(source_height)};
+  renderer->material_crop_effect->SetValue(D2D1_CROP_PROP_RECT, crop);
+  // The bitmap is in physical pixels and drawn under an identity transform below, so the
+  // standard deviation is physical as well.
+  const float sigma = blur_sigma * scale;
+  renderer->material_blur_effect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
+
+  // The rounded shape and its complement inside the surface rectangle, in logical coordinates.
+  const D2D1_RECT_F bounds = {x, y, x + width, y + height};
+  const float clamped_radius = std::min(std::max(0.0f, radius), std::min(width, height) * 0.5f);
+  ID2D1RoundedRectangleGeometry *shape = nullptr;
+  ID2D1RectangleGeometry *box = nullptr;
+  ID2D1PathGeometry *corners = nullptr;
+  ID2D1GeometrySink *sink = nullptr;
+  result = renderer->d2d_factory->CreateRoundedRectangleGeometry(D2D1::RoundedRect(bounds, clamped_radius, clamped_radius), &shape);
+  if (SUCCEEDED(result)) {
+    result = renderer->d2d_factory->CreateRectangleGeometry(bounds, &box);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->d2d_factory->CreatePathGeometry(&corners);
+  }
+  if (SUCCEEDED(result)) {
+    result = corners->Open(&sink);
+  }
+  if (SUCCEEDED(result)) {
+    result = box->CombineWithGeometry(shape, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink);
+    const HRESULT close_result = sink->Close();
+    if (SUCCEEDED(result)) {
+      result = close_result;
+    }
+  }
+  if (SUCCEEDED(result)) {
+    // A layer always composites source-over onto the pixels already in the target, so drawing
+    // the blur through a rounded mask alone would stack it on the sharp content it was made
+    // from and darken the surface. Clear the rectangle first, then fill the rounded shape with
+    // the blur and its corners with the untouched copy; the two antialiased masks sum to full
+    // coverage, which replaces the interior exactly and keeps the corner pixels sharp.
+    const D2D1_POINT_2F offset = D2D1::Point2F(static_cast<float>(left), static_cast<float>(top));
+    const D2D1_RECT_F copied = {0.0f, 0.0f, static_cast<float>(source_width), static_cast<float>(source_height)};
+    D2D1_MATRIX_3X2_F transform;
+    renderer->d2d_context->GetTransform(&transform);
+    D2D1_LAYER_PARAMETERS1 layer = {};
+    layer.contentBounds = D2D1::InfiniteRect();
+    layer.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
+    layer.maskTransform = D2D1::Matrix3x2F::Identity();
+    layer.opacity = 1.0f;
+
+    renderer->d2d_context->PushAxisAlignedClip(bounds, D2D1_ANTIALIAS_MODE_ALIASED);
+    renderer->d2d_context->Clear(nullptr);
+    renderer->d2d_context->PopAxisAlignedClip();
+
+    layer.geometricMask = shape;
+    renderer->d2d_context->PushLayer(&layer, nullptr);
+    renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
+    renderer->d2d_context->DrawImage(renderer->material_blur_effect, &offset, nullptr, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
+    renderer->d2d_context->SetTransform(transform);
+    renderer->d2d_context->PopLayer();
+
+    layer.geometricMask = corners;
+    renderer->d2d_context->PushLayer(&layer, nullptr);
+    renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
+    renderer->d2d_context->DrawImage(renderer->material_source_bitmap, &offset, &copied, D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
+    renderer->d2d_context->SetTransform(transform);
+    renderer->d2d_context->PopLayer();
+  }
+  release_com(&sink);
+  release_com(&corners);
+  release_com(&box);
+  release_com(&shape);
+  // Drop the bitmap reference held by the graph so a later resize can release it promptly.
+  renderer->material_crop_effect->SetInput(0, nullptr);
+  return result;
+}
+
+// wox_renderer_floating_material realises DisplayList.FloatingMaterial on Windows: blur the
+// main surface under the rounded rectangle in place, then paint the theme tint and hairline
+// edge over it. It must run after the content beneath the surface and before the surface
+// content, which is the order the display list records. The blur is skipped on WARP, where
+// it would be a CPU convolution every repaint, and on the overlay surface, which holds
+// nothing beneath the panel to sample; both keep the flat tint that was the previous look.
+extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
+  if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->target_bitmap == nullptr) {
+    return E_UNEXPECTED;
+  }
+  if (width <= 0.0f || height <= 0.0f) {
+    return E_INVALIDARG;
+  }
+  if (!renderer->uses_warp && !renderer->overlay_active && blur_sigma > 0.0f) {
+    const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin);
+    // A lost device must surface through the normal recovery path; any other failure only
+    // costs the blur, and the tint below still reads as a panel.
+    if (FAILED(result) && FAILED(renderer->device->GetDeviceRemovedReason())) {
+      return result;
+    }
+  }
+  if (tint_alpha != 0) {
+    const int32_t result = wox_renderer_fill_rounded_rect(renderer, x, y, width, height, radius, tint_red, tint_green, tint_blue, tint_alpha);
+    if (FAILED(result)) {
+      return result;
+    }
+  }
+  if (edge_alpha != 0) {
+    return wox_renderer_stroke_rounded_rect(renderer, x, y, width, height, radius, 1.0f, edge_red, edge_green, edge_blue, edge_alpha);
   }
   return S_OK;
 }

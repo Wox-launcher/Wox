@@ -302,6 +302,25 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 			)
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			commandResult = C.wox_renderer_begin_embedded_surface_overlay(r.handle)
+		case displayCommandFloatingMaterial:
+			commandResult = C.wox_renderer_floating_material(
+				r.handle,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.float(floatingMaterialBlurSigma),
+				C.float(floatingMaterialBlurMargin),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+				C.uint8_t(command.edge.R),
+				C.uint8_t(command.edge.G),
+				C.uint8_t(command.edge.B),
+				C.uint8_t(command.edge.A),
+			)
 		case displayCommandSetClipRect:
 			commandResult = C.wox_renderer_set_clip_rect(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:
