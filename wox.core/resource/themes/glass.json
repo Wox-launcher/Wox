@@ -58,7 +58,7 @@
   "windows": {
     "AppBackgroundColor": "rgba(18, 18, 22, 0.75)",
     "ResultItemActiveBackgroundColor": "rgba(255, 255, 255, 0.10)",
-    "ActionContainerBackgroundColor": "rgba(22, 22, 26, 0.8)",
+    "ActionContainerBackgroundColor": "rgba(34, 36, 44, 0.55)",
     "ToolbarBackgroundColor": "rgba(16, 16, 20, 0.2)",
     "variants": {
       "win10": {

@@ -56,7 +56,7 @@
   "ToolbarPaddingLeft": 10,
   "ToolbarPaddingRight": 10,
   "windows": {
-    "ActionContainerBackgroundColor": "rgba(45, 52, 64, 0.8)",
+    "ActionContainerBackgroundColor": "rgba(44, 52, 66, 0.6)",
     "variants": {
       "win10": {
         "AppBackgroundColor": "#23293373"
