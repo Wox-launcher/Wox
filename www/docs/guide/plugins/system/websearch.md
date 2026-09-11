@@ -20,6 +20,8 @@ The default configuration includes Google with the `g` keyword. Add more engines
 | Keyword | Shortcut typed before the query, such as `g` |
 | Title | Result label shown in Wox |
 | URL(s) | Search URL templates |
+| Browser | Browser that opens this search |
+| Incognito | Open the search in a private/incognito window when the browser supports it. Off by default. |
 | Enabled | Whether the engine appears |
 | Default | Whether the engine is used for fallback searches |
 

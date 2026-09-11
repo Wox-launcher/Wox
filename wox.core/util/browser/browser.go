@@ -143,44 +143,104 @@ func IsInstalled(browserID string) bool {
 }
 
 func OpenURL(url string, browserID string) error {
-	switch NormalizeBrowserID(browserID) {
-	case "":
-		return shell.Open(url)
+	return openURL(url, browserID, false)
+}
+
+// OpenURLInPrivate opens url in a private/incognito window when the resolved
+// browser has a command-line private-mode flag. Unsupported browsers, including
+// Safari and an unrecognized system default, open a normal window instead.
+func OpenURLInPrivate(url string, browserID string) error {
+	return openURL(url, browserID, true)
+}
+
+func openURL(targetURL string, browserID string, private bool) error {
+	id := resolveLaunchBrowserID(browserID, private)
+	args := urlLaunchArgs(id, targetURL, private)
+	if private && len(privateWindowArgs(id)) == 0 {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("private window is not supported for browser %q, opening a normal window", id))
+	}
+
+	if id == "" {
+		return shell.Open(targetURL)
 	}
 
 	switch {
 	case util.IsWindows():
-		executable, ok := resolveWindowsBrowserExecutable(browserID)
+		executable, ok := resolveWindowsBrowserExecutable(id)
 		if !ok {
-			return shell.Open(url)
+			return shell.Open(targetURL)
 		}
-		_, err := shell.Run(executable, url)
+		_, err := shell.Run(executable, args...)
 		if err != nil {
-			return openURLInSystemBrowserWithFallback(url, err)
+			return openURLInSystemBrowserWithFallback(targetURL, err)
 		}
 		return nil
 	case util.IsMacOS():
-		appPath, ok := resolveMacBrowserApp(browserID)
+		appPath, ok := resolveMacBrowserApp(id)
 		if !ok {
-			return shell.Open(url)
+			return shell.Open(targetURL)
 		}
-		_, err := shell.Run("open", "-a", appPath, url)
+		// Existing Chrome-family processes ignore --args unless open starts a new instance.
+		if private && len(privateWindowArgs(id)) > 0 {
+			openArgs := append([]string{"-na", appPath, "--args"}, args...)
+			_, err := shell.Run("open", openArgs...)
+			if err != nil {
+				return openURLInSystemBrowserWithFallback(targetURL, err)
+			}
+			return nil
+		}
+		_, err := shell.Run("open", "-a", appPath, targetURL)
 		if err != nil {
-			return openURLInSystemBrowserWithFallback(url, err)
+			return openURLInSystemBrowserWithFallback(targetURL, err)
 		}
 		return nil
 	case util.IsLinux():
-		command, ok := resolveLinuxBrowserCommand(browserID)
+		command, ok := resolveLinuxBrowserCommand(id)
 		if !ok {
-			return shell.Open(url)
+			return shell.Open(targetURL)
 		}
-		_, err := shell.Run(command, url)
+		_, err := shell.Run(command, args...)
 		if err != nil {
-			return openURLInSystemBrowserWithFallback(url, err)
+			return openURLInSystemBrowserWithFallback(targetURL, err)
 		}
 		return nil
 	default:
-		return shell.Open(url)
+		return shell.Open(targetURL)
+	}
+}
+
+// resolveLaunchBrowserID treats "system" as unknown and, for private windows,
+// substitutes the detected OS default browser when possible.
+func resolveLaunchBrowserID(browserID string, private bool) string {
+	id := NormalizeBrowserID(browserID)
+	if id == "system" {
+		id = ""
+	}
+	if id == "" && private {
+		id = DefaultBrowserID()
+	}
+	return id
+}
+
+func urlLaunchArgs(browserID, targetURL string, private bool) []string {
+	if private {
+		if flags := privateWindowArgs(browserID); len(flags) > 0 {
+			return append(append([]string{}, flags...), targetURL)
+		}
+	}
+	return []string{targetURL}
+}
+
+func privateWindowArgs(browserID string) []string {
+	switch NormalizeBrowserID(browserID) {
+	case BrowserIDChrome, BrowserIDBrave, BrowserIDChromium, BrowserIDOpera:
+		return []string{"--incognito"}
+	case BrowserIDEdge:
+		return []string{"--inprivate"}
+	case BrowserIDFirefox:
+		return []string{"-private-window"}
+	default:
+		return nil
 	}
 }
 

@@ -1990,6 +1990,8 @@
   "plugin_websearch_enabled": "Enabled",
   "plugin_websearch_is_fallback": "Fallback",
   "plugin_websearch_is_fallback_tooltip": "Available only for searches with exactly one distinct input parameter. The complete query or selected text fills that parameter.",
+  "plugin_websearch_open_in_private": "Incognito",
+  "plugin_websearch_open_in_private_tooltip": "Open this search in a private/incognito window. Chrome, Edge, Firefox, Brave, Opera, and Chromium are supported. Safari and unrecognized system default browsers open a normal window.",
   "plugin_websearch_icon": "Icon",
   "plugin_websearch_web_searches": "Web Searches",
   "plugin_websearch_default_browser": "Default browser",

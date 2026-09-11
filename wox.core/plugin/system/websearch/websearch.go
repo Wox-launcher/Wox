@@ -40,6 +40,7 @@ type webSearch struct {
 	Title             string
 	Keyword           string
 	Browser           string
+	OpenInPrivate     bool // open the resolved browser's private/incognito window when supported
 	IsFallback        bool //if true, this search will be used when no other search is matched
 	Icon              common.WoxImage
 	Enabled           bool
@@ -152,6 +153,13 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Type:          definition.PluginSettingValueTableColumnTypeSelect,
 							Width:         100,
 							SelectOptions: r.getWebSearchItemBrowserOptions(),
+						},
+						{
+							Key:     "OpenInPrivate",
+							Label:   "i18n:plugin_websearch_open_in_private",
+							Tooltip: "i18n:plugin_websearch_open_in_private_tooltip",
+							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width:   80,
 						},
 						{
 							Key:   "Enabled",
@@ -409,7 +417,7 @@ func (r *WebSearchPlugin) openSearchUrls(ctx context.Context, search webSearch, 
 	browser := r.resolveWebSearchBrowser(search.Browser, configuredDefaultBrowser)
 	for _, template := range search.Urls {
 		resolvedURL := renderWebSearchTemplate(template, values, true)
-		if err := r.openURLInWebSearchBrowser(resolvedURL, browser); err != nil {
+		if err := r.openURLInWebSearchBrowser(resolvedURL, browser, search.OpenInPrivate); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to open web search URL: %v", err))
 		}
 		time.Sleep(time.Millisecond * 100)
@@ -462,10 +470,13 @@ func (r *WebSearchPlugin) getWebSearchItemBrowserOptions() []definition.PluginSe
 	return options
 }
 
-func (r *WebSearchPlugin) openURLInWebSearchBrowser(url string, browserId string) error {
+func (r *WebSearchPlugin) openURLInWebSearchBrowser(url string, browserId string, private bool) error {
 	normalizedBrowser := browser.NormalizeBrowserID(browserId)
 	if normalizedBrowser == "" || normalizedBrowser == webSearchBrowserSystem {
-		return browser.OpenURL(url, "")
+		normalizedBrowser = ""
+	}
+	if private {
+		return browser.OpenURLInPrivate(url, normalizedBrowser)
 	}
 	return browser.OpenURL(url, normalizedBrowser)
 }

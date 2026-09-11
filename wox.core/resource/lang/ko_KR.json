@@ -1987,6 +1987,8 @@
   "plugin_websearch_enabled": "활성화됨",
   "plugin_websearch_is_fallback": "폴백",
   "plugin_websearch_is_fallback_tooltip": "서로 다른 입력 매개변수가 정확히 하나인 검색만 지원합니다. 전체 쿼리 또는 선택한 텍스트가 해당 매개변수에 입력됩니다.",
+  "plugin_websearch_open_in_private": "시크릿",
+  "plugin_websearch_open_in_private_tooltip": "선택한 브라우저의 시크릿/사생활 보호 창에서 검색을 엽니다. Chrome, Edge, Firefox, Brave, Opera, Chromium을 지원합니다. Safari와 인식할 수 없는 시스템 기본 브라우저는 일반 창으로 엽니다.",
   "plugin_websearch_icon": "아이콘",
   "plugin_websearch_web_searches": "웹 검색",
   "plugin_websearch_default_browser": "기본 브라우저",

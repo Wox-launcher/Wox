@@ -20,6 +20,8 @@ g Wox Launcher
 | Keyword | 查询前使用的快捷关键字，例如 `g` |
 | Title | Wox 中显示的结果标题 |
 | URL(s) | 搜索 URL 模板 |
+| Browser | 打开该搜索的浏览器 |
+| Incognito | 在浏览器支持时用无痕/隐私窗口打开。默认不勾选。 |
 | Enabled | 是否显示该搜索引擎 |
 | Default | 是否用于 fallback 搜索 |
 

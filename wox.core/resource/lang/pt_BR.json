@@ -1814,6 +1814,8 @@
   "plugin_websearch_enabled": "Ativado",
   "plugin_websearch_is_fallback": "Fallback",
   "plugin_websearch_is_fallback_tooltip": "Disponível apenas para pesquisas com exatamente um parâmetro de entrada distinto. A consulta completa ou o texto selecionado preenche esse parâmetro.",
+  "plugin_websearch_open_in_private": "Privado",
+  "plugin_websearch_open_in_private_tooltip": "Abre esta pesquisa em uma janela privada/anônima. Chrome, Edge, Firefox, Brave, Opera e Chromium são suportados. O Safari e navegadores padrão do sistema não reconhecidos abrem uma janela normal.",
   "plugin_websearch_icon": "ícone",
   "plugin_websearch_web_searches": "Pesquisas na web",
   "plugin_websearch_default_browser": "Navegador padrão",

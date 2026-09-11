@@ -1815,6 +1815,8 @@
   "plugin_websearch_enabled": "Включено",
   "plugin_websearch_is_fallback": "Резервный",
   "plugin_websearch_is_fallback_tooltip": "Доступно только для поиска ровно с одним уникальным параметром ввода. В него подставляется весь запрос или выделенный текст.",
+  "plugin_websearch_open_in_private": "Инкогнито",
+  "plugin_websearch_open_in_private_tooltip": "Открывать этот поиск в приватном/инкогнито-окне. Поддерживаются Chrome, Edge, Firefox, Brave, Opera и Chromium. Safari и нераспознанные системные браузеры откроют обычное окно.",
   "plugin_websearch_icon": "Иконка",
   "plugin_websearch_web_searches": "Веб-поиски",
   "plugin_websearch_default_browser": "Браузер по умолчанию",

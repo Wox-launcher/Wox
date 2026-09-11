@@ -1989,6 +1989,8 @@
   "plugin_websearch_enabled": "启用",
   "plugin_websearch_is_fallback": "回退搜索",
   "plugin_websearch_is_fallback_tooltip": "仅支持恰好一个不同输入参数的搜索。完整查询或选中文本将填入该参数。",
+  "plugin_websearch_open_in_private": "无痕模式",
+  "plugin_websearch_open_in_private_tooltip": "在所选浏览器的无痕/隐私窗口中打开搜索。Chrome、Edge、Firefox、Brave、Opera 和 Chromium 受支持。Safari 以及无法识别的系统默认浏览器会打开普通窗口。",
   "plugin_websearch_icon": "图标",
   "plugin_websearch_web_searches": "网页搜索",
   "plugin_websearch_default_browser": "默认浏览器",

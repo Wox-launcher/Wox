@@ -1988,6 +1988,8 @@
   "plugin_websearch_enabled": "有効",
   "plugin_websearch_is_fallback": "フォールバック",
   "plugin_websearch_is_fallback_tooltip": "異なる入力パラメーターがちょうど1つの検索のみ対応します。クエリ全体または選択テキストをそのパラメーターに入力します。",
+  "plugin_websearch_open_in_private": "プライベート",
+  "plugin_websearch_open_in_private_tooltip": "選択したブラウザのプライベート/シークレットウィンドウで検索を開きます。Chrome、Edge、Firefox、Brave、Opera、Chromium に対応しています。Safari と認識できないシステムデフォルトブラウザは通常のウィンドウで開きます。",
   "plugin_websearch_icon": "アイコン",
   "plugin_websearch_web_searches": "ウェブ検索",
   "plugin_websearch_default_browser": "デフォルトブラウザ",
