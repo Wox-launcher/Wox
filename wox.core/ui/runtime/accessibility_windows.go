@@ -13,10 +13,22 @@ import "C"
 import (
 	"errors"
 	"unsafe"
+
+	"github.com/lxn/win"
 )
 
 func init() {
 	updateNativeAccessibility = updateWindowsAccessibility
+	accessibilityWindowFocused = windowsAccessibilityWindowFocused
+}
+
+// windowsAccessibilityWindowFocused checks live focus because hidden windows may
+// stop rendering before their accessibility snapshot records the focus loss.
+func windowsAccessibilityWindowFocused(window *platformWindow, _ AccessibilityTree) bool {
+	window.mu.Lock()
+	hwnd := window.hwnd
+	window.mu.Unlock()
+	return hwnd != 0 && win.GetForegroundWindow() == hwnd
 }
 
 func updateWindowsAccessibility(window *platformWindow, tree AccessibilityTree) error {

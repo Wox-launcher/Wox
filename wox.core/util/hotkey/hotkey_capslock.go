@@ -465,7 +465,15 @@ func handleCapsLockComboEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
 func waitForCapsLockComboRelease(triggeredKey keyboard.Key) {
 	deadline := time.Now().Add(capsLockComboCallbackReleaseMaxWait)
 	for time.Now().Before(deadline) {
-		if !keyboard.IsKeyPressed(keyboard.KeyCapsLock) && (triggeredKey == keyboard.KeyUnknown || !keyboard.IsKeyPressed(triggeredKey)) {
+		// Windows suppresses consumed keys before GetAsyncKeyState sees them.
+		// Wait for our hook's key-up state too, or it will swallow synthetic Copy.
+		hookPressed := false
+		if runtime.GOOS == "windows" {
+			capsLockComboMu.Lock()
+			hookPressed = capsLockComboState.capsPressed
+			capsLockComboMu.Unlock()
+		}
+		if !hookPressed && !keyboard.IsKeyPressed(keyboard.KeyCapsLock) && (triggeredKey == keyboard.KeyUnknown || !keyboard.IsKeyPressed(triggeredKey)) {
 			time.Sleep(capsLockComboCallbackReleaseSettleDelay)
 			return
 		}

@@ -171,6 +171,10 @@ type accessibilityWindowState struct {
 
 var accessibilityWindows sync.Map
 
+var accessibilityWindowFocused = func(_ *platformWindow, tree AccessibilityTree) bool {
+	return tree.WindowFocused
+}
+
 // UpdateAccessibility publishes a new immutable tree for this window.
 func (w *Window) UpdateAccessibility(tree AccessibilityTree, handler AccessibilityActionHandler) error {
 	if w == nil || w.native == nil {
@@ -270,9 +274,9 @@ func accessibilityHashString(hash uint64, value string) uint64 {
 // handled is true when a Wox window owns focus, even if the caret is collapsed,
 // so callers skip OS selection capture against our own UI.
 func SelectedTextFromFocusedWindow() (text string, handled bool) {
-	accessibilityWindows.Range(func(_, value any) bool {
+	accessibilityWindows.Range(func(key, value any) bool {
 		state, ok := value.(accessibilityWindowState)
-		if !ok || !state.tree.WindowFocused {
+		if !ok || !accessibilityWindowFocused(key.(*platformWindow), state.tree) {
 			return true
 		}
 		handled = true

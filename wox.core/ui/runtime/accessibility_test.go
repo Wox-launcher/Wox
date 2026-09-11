@@ -91,6 +91,7 @@ func TestClearAccessibilityDoesNotPublishEmptyNativeTree(t *testing.T) {
 }
 
 func TestSelectedTextFromFocusedWindowUsesFocusedEditor(t *testing.T) {
+	useSnapshotSelectionFocus(t)
 	window := &platformWindow{}
 	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
 		WindowFocused: true,
@@ -108,6 +109,7 @@ func TestSelectedTextFromFocusedWindowUsesFocusedEditor(t *testing.T) {
 }
 
 func TestSelectedTextFromFocusedWindowIgnoresBackgroundWindows(t *testing.T) {
+	useSnapshotSelectionFocus(t)
 	window := &platformWindow{}
 	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
 		WindowFocused: false,
@@ -125,6 +127,7 @@ func TestSelectedTextFromFocusedWindowIgnoresBackgroundWindows(t *testing.T) {
 }
 
 func TestSelectedTextFromFocusedWindowTreatsCollapsedCaretAsHandled(t *testing.T) {
+	useSnapshotSelectionFocus(t)
 	window := &platformWindow{}
 	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
 		WindowFocused: true,
@@ -139,6 +142,13 @@ func TestSelectedTextFromFocusedWindowTreatsCollapsedCaretAsHandled(t *testing.T
 	if !handled || text != "" {
 		t.Fatalf("collapsed caret = %q handled=%t, want handled empty", text, handled)
 	}
+}
+
+// useSnapshotSelectionFocus isolates selection slicing from native window focus.
+func useSnapshotSelectionFocus(t *testing.T) {
+	original := accessibilityWindowFocused
+	accessibilityWindowFocused = func(_ *platformWindow, tree AccessibilityTree) bool { return tree.WindowFocused }
+	t.Cleanup(func() { accessibilityWindowFocused = original })
 }
 
 func TestSelectedTextFromAccessibilityTreeSkipsProtectedFields(t *testing.T) {

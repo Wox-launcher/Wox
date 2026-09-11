@@ -2475,7 +2475,8 @@ static int activateWindowForManagementHwnd(HWND hwnd)
     SetForegroundWindow(hwnd);
     BringWindowToTop(hwnd);
     SetActiveWindow(hwnd);
-    SetFocus(hwnd);
+    // Activation lets the application restore its editor focus. Focusing the
+    // top-level HWND here steals Ctrl+V from child controls such as Scintilla.
 
     if (attachedTarget)
     {

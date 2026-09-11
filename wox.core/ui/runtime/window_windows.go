@@ -2484,7 +2484,10 @@ func activateWindow(hwnd win.HWND) bool {
 		return false
 	}
 	if win.SetForegroundWindow(hwnd) {
-		win.SetFocus(hwnd)
+		// External apps own their child-editor focus; only focus Wox's own surface.
+		if _, owned := nativeWindows.Load(uintptr(hwnd)); owned {
+			win.SetFocus(hwnd)
+		}
 		win.BringWindowToTop(hwnd)
 		return true
 	}
@@ -2495,7 +2498,9 @@ func activateWindow(hwnd win.HWND) bool {
 	foregroundThread := win.GetWindowThreadProcessId(win.GetForegroundWindow(), nil)
 	attached := foregroundThread != 0 && foregroundThread != currentThread && win.AttachThreadInput(int32(foregroundThread), int32(currentThread), true)
 	win.SetForegroundWindow(hwnd)
-	win.SetFocus(hwnd)
+	if _, owned := nativeWindows.Load(uintptr(hwnd)); owned {
+		win.SetFocus(hwnd)
+	}
 	win.BringWindowToTop(hwnd)
 	if attached {
 		win.AttachThreadInput(int32(foregroundThread), int32(currentThread), false)
