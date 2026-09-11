@@ -61,7 +61,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
-			{Command: smokeAutomationGroupJumpCommand, Description: "Two named groups for primary-arrow group jumps"},
+			{Command: smokeAutomationGroupJumpCommand, Description: "Two named groups for Option/Ctrl-arrow group jumps"},
 			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},

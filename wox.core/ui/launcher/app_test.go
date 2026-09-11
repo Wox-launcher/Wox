@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -721,6 +722,19 @@ func TestGroupSelectionIndexJumpsByGroup(t *testing.T) {
 				t.Fatalf("groupSelectionIndex() = %d, want %d", got, test.want)
 			}
 		})
+	}
+}
+
+func TestQueryGroupJumpModifierAvoidsMacOSCommandArrows(t *testing.T) {
+	got := queryGroupJumpModifier()
+	if runtime.GOOS == "darwin" {
+		if got != woxui.KeyModifierAlt {
+			t.Fatalf("macOS group jump modifier = %v, want Option", got)
+		}
+		return
+	}
+	if got != woxui.KeyModifierControl {
+		t.Fatalf("group jump modifier = %v, want Control", got)
 	}
 }
 

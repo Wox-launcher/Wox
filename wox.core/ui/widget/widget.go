@@ -1517,8 +1517,11 @@ type Gesture struct {
 	Child     Widget
 	OnHover   func(bool)
 	OnHoverAt func(inside bool, bounds woxui.Rect)
-	// CoverHover also reports OnHover while a descendant owns hit-testing, so a
-	// scroll surface can reveal its thumb when the pointer is over child cards.
+	// CoverHover also reports OnHover, and PointerMove through OnPointer, while a
+	// descendant owns hit-testing. Layout refresh under a still pointer still
+	// fires OnHover; only a real PointerMove reaches OnPointer, so a scroll
+	// surface can reveal its thumb after motion instead of appearing under a
+	// popup that just opened beneath the cursor.
 	CoverHover bool
 	// OnPressChange reports primary-button press and release without changing tap activation.
 	OnPressChange func(pressed bool)

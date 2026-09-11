@@ -38,9 +38,10 @@ type ScrollViewProps struct {
 
 type scrollViewState struct {
 	visible bool
-	// pointerInside keeps the thin overlay visible while the pointer is over the
-	// scroll surface. hovered widens the thumb only when the pointer is on the
-	// scrollbar hit target, so entering the view does not jump to the drag width.
+	// pointerInside keeps an already-visible overlay from fading while the
+	// pointer is over the scroll surface. It does not reveal the thumb; that
+	// waits for a real PointerMove, wheel, or offset change. hovered widens
+	// the thumb only when the pointer is on the scrollbar hit target.
 	pointerInside  bool
 	hovered        bool
 	dragging       bool
@@ -156,7 +157,7 @@ func (s *scrollViewState) scheduleHide(context woxwidget.StateContext) {
 	s.hideTimer = time.AfterFunc(500*time.Millisecond, context.Invalidate)
 }
 
-// setPointerInside keeps the overlay visible without widening it for view-level hover.
+// setPointerInside tracks whether the pointer is over the surface without revealing the thumb.
 func (s *scrollViewState) setPointerInside(context woxwidget.StateContext, inside bool) {
 	if s.pointerInside == inside {
 		return
@@ -290,12 +291,19 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 			children = append(children, woxwidget.StackChild{Top: thumbOffset, Right: 2, AnchorRight: true, Child: thumb})
 		}
 	}
-	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), CoverHover: true, OnHover: func(inside bool) {
+	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), CoverHover: true, OnPointer: func(event woxui.PointerEvent) bool {
+		if state == nil || props.HideScrollbar || event.Kind != woxui.PointerMove {
+			return false
+		}
+		// Host re-hit-tests after a popup or rebuild lands under a still
+		// pointer. That path only fires OnHover; reveal the thumb after a
+		// real move, matching launcher result hover.
+		state.show(context)
+		state.setPointerInside(context, true)
+		return false
+	}, OnHover: func(inside bool) {
 		if state == nil || props.HideScrollbar {
 			return
-		}
-		if inside {
-			state.show(context)
 		}
 		state.setPointerInside(context, inside)
 	}, OnScrollHandled: func(delta woxui.Point) bool {

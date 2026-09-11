@@ -1224,6 +1224,9 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		h.revealCaret = false
 	}
 	h.trackPointer(event)
+	if event.Kind == woxui.PointerMove {
+		h.dispatchCoverPointerMove(event)
+	}
 	if h.dispatchRawPointer(event) {
 		return
 	}
@@ -1396,6 +1399,24 @@ func (h *Host) updatePointerFocus(target *node) {
 	}
 	if focused != nil && focused.focus != nil && focused.focus.unfocusOnPointerOutside && (target == nil || !h.isDescendantOf(target, focused.id)) {
 		h.setFocus(0)
+	}
+}
+
+// dispatchCoverPointerMove delivers real pointer motion to CoverHover ancestors.
+// refreshHoverFromPointer still uses OnHover, so a rebuilt overlay under a still
+// cursor does not look like the user moved.
+func (h *Host) dispatchCoverPointerMove(event woxui.PointerEvent) {
+	if h.root == nil {
+		return
+	}
+	target := h.root.hitTest(event.Position)
+	for current := target; current != nil; current = current.parent {
+		if current == target || current.gesture == nil || !current.gesture.coverHover || current.gesture.onPointer == nil {
+			continue
+		}
+		local := event
+		local.Position = current.localPoint(event.Position)
+		current.gesture.onPointer(local)
 	}
 }
 

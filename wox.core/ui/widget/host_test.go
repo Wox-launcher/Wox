@@ -1225,6 +1225,41 @@ func TestHostMultiTapRequiresNearbyClicks(t *testing.T) {
 	}
 }
 
+func TestHostCoverHoverDeliversPointerMoveToAncestor(t *testing.T) {
+	var parentMoves int
+	var parentHover []bool
+	phase := 0
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		if phase == 0 {
+			return Container{Width: 100, Height: 20}
+		}
+		return Gesture{
+			ID: "parent", CoverHover: true,
+			OnHover: func(inside bool) { parentHover = append(parentHover, inside) },
+			OnPointer: func(event woxui.PointerEvent) bool {
+				if event.Kind == woxui.PointerMove {
+					parentMoves++
+				}
+				return false
+			},
+			Child: Gesture{ID: "child", Child: Container{Width: 100, Height: 20}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 10, Y: 5}})
+	phase = 1
+	renderTestFrame(host)
+	if parentMoves != 0 || len(parentHover) != 1 || !parentHover[0] {
+		t.Fatalf("still pointer under rebuilt cover hover = moves %d hover %v, want hover without motion", parentMoves, parentHover)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 12, Y: 6}})
+	if parentMoves != 1 {
+		t.Fatalf("cover hover pointer moves = %d, want 1 after a real move over the child", parentMoves)
+	}
+}
+
 func TestHostCoverHoverSurvivesDescendantHit(t *testing.T) {
 	var parent []bool
 	var first []bool

@@ -24,9 +24,9 @@ const (
 	groupJumpBLast      = "Group jump B last"
 )
 
-// Test023LauncherQueryGroupJump verifies primary-arrow navigation jumps by result group.
-// Flow: query ungrouped rows above two named groups -> primary+Down into group A -> Down to that group's last result -> primary+Up -> continue Down/Up across later groups.
-// Evidence: primary+Up from a group's last result selects that group's first result instead of the ungrouped top row, then later jumps land on the next group's first, the last group's last, and that last group's first.
+// Test023LauncherQueryGroupJump verifies group-jump navigation jumps by result group.
+// Flow: query ungrouped rows above two named groups -> Option/Ctrl+Down into group A -> Down to that group's last result -> Option/Ctrl+Up -> continue Down/Up across later groups.
+// Evidence: Option/Ctrl+Up from a group's last result selects that group's first result instead of the ungrouped top row, then later jumps land on the next group's first, the last group's last, and that last group's first.
 func Test023LauncherQueryGroupJump(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
@@ -39,7 +39,7 @@ func Test023LauncherQueryGroupJump(t *testing.T) {
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 
-		modifier := groupJumpPrimaryModifier()
+		modifier := groupJumpModifier()
 		if err := client.PressKey(ctx, woxui.KeyArrowDown, modifier); err != nil {
 			t.Fatalf("jump to first named group: %v", err)
 		}
@@ -73,9 +73,9 @@ func Test023LauncherQueryGroupJump(t *testing.T) {
 	})
 }
 
-func groupJumpPrimaryModifier() woxui.KeyModifiers {
+func groupJumpModifier() woxui.KeyModifiers {
 	if runtime.GOOS == "darwin" {
-		return woxui.KeyModifierMeta
+		return woxui.KeyModifierAlt
 	}
 	return woxui.KeyModifierControl
 }

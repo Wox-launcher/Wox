@@ -1495,8 +1495,8 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
-	// Intercept before the query editor so macOS Cmd+Up/Down cannot move the caret.
-	if event.Modifiers == queryPrimaryModifier() {
+	// Intercept before the query editor so the group-jump shortcut cannot move the caret.
+	if event.Modifiers == queryGroupJumpModifier() {
 		switch event.Key {
 		case woxui.KeyArrowUp:
 			a.moveSelectionByGroup(-1)
@@ -1814,7 +1814,17 @@ func selectableIndex(results []queryResult) int {
 	return -1
 }
 
-// groupSelectionIndex returns the selectable index for primary-modifier group jumps.
+// queryGroupJumpModifier is Option on macOS so it does not collide with Cocoa
+// Cmd+Up/Down document caret movement, and Control elsewhere to avoid
+// Mission Control and desktop switching.
+func queryGroupJumpModifier() woxui.KeyModifiers {
+	if runtime.GOOS == "darwin" {
+		return woxui.KeyModifierAlt
+	}
+	return woxui.KeyModifierControl
+}
+
+// groupSelectionIndex returns the selectable index for group jumps.
 func groupSelectionIndex(results []queryResult, current, direction int) int {
 	if len(results) == 0 {
 		return current

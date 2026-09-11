@@ -43,17 +43,29 @@ func TestWoxScrollViewCanFillResolvedParentSize(t *testing.T) {
 	}
 }
 
-func TestWoxScrollViewRevealsThumbOnHover(t *testing.T) {
+func TestWoxScrollViewRevealsThumbOnPointerMove(t *testing.T) {
 	props := ScrollViewProps{Key: "hover-scroll", Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}}
 	state := &scrollViewState{}
 	state.InitState(woxwidget.StateContext{}, props)
 	view := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture)
-	if view.OnHover == nil || !view.CoverHover {
-		t.Fatal("scroll view does not reveal the thumb when the pointer is over child content")
+	if view.OnHover == nil || view.OnPointer == nil || !view.CoverHover {
+		t.Fatal("scroll view does not track pointer motion over child content")
 	}
 	view.OnHover(true)
+	if state.visible || !state.pointerInside || state.hovered {
+		t.Fatalf("still-pointer hover = visible %v inside %v hovered %v, want inside without a thumb", state.visible, state.pointerInside, state.hovered)
+	}
+	if view.OnPointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 10, Y: 10}}) {
+		t.Fatal("pointer enter should not consume the event")
+	}
+	if state.visible {
+		t.Fatal("pointer enter revealed the thumb under a still pointer")
+	}
+	if view.OnPointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 12, Y: 12}}) {
+		t.Fatal("pointer move should not consume the event")
+	}
 	if !state.visible || !state.pointerInside || state.hovered {
-		t.Fatalf("hovered scroll = visible %v inside %v hovered %v, want a thin overlay thumb", state.visible, state.pointerInside, state.hovered)
+		t.Fatalf("moved scroll = visible %v inside %v hovered %v, want a thin overlay thumb", state.visible, state.pointerInside, state.hovered)
 	}
 	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
 	thumb := stack.Children[1].Child.(woxwidget.Gesture)
