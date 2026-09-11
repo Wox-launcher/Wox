@@ -208,7 +208,7 @@ const (
 	linuxSelectionPollDelay = 50 * time.Millisecond
 )
 
-func GetSelected(ctx context.Context) (Selection, error) {
+func getSelectedFromOS(ctx context.Context) (Selection, error) {
 	// Try X11 PRIMARY selection first. This works for XWayland apps and X11 sessions.
 	if text, err := readLinuxSelectionText(linuxPrimarySelection); err == nil && text != "" {
 		util.GetLogger().Debug(ctx, "selection: Successfully got text via PRIMARY selection")

@@ -23,8 +23,8 @@ import (
 	"wox/util"
 )
 
-// GetSelected is the macOS implementation that tries A11y API first, then falls back to clipboard
-func GetSelected(ctx context.Context) (Selection, error) {
+// getSelectedFromOS is the macOS implementation that tries A11y API first, then falls back to clipboard
+func getSelectedFromOS(ctx context.Context) (Selection, error) {
 
 	// Try accessibility API first
 	// First try to get selected text

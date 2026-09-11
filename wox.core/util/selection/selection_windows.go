@@ -363,9 +363,9 @@ func (v *IUIAutomationTextRange) GetText(maxLength int32, text *string) error {
 	return nil
 }
 
-// GetSelected tries to get the selected text using UI Automation first,
+// getSelectedFromOS tries to get the selected text using UI Automation first,
 // and falls back to clipboard method if it fails.
-func GetSelected(ctx context.Context) (Selection, error) {
+func getSelectedFromOS(ctx context.Context) (Selection, error) {
 	// Try UI Automation first
 	text, err := getSelectedByUIA()
 	if err == nil && text != "" {

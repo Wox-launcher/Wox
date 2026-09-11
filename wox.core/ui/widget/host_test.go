@@ -362,6 +362,25 @@ func TestHostExposesWindowFocusedOnFrameInfo(t *testing.T) {
 	}
 }
 
+func TestHostPublishesWindowFocusedOnAccessibilityTree(t *testing.T) {
+	services := &fakeHostServices{}
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Semantics{AutomationID: "note", Role: woxui.AccessibilityRoleTextField, Label: "Note", Child: Container{Width: 20, Height: 20}}
+	})
+	host.AttachServices(services)
+	defer host.Dispose()
+
+	renderTestFrame(host)
+	if !services.tree.WindowFocused {
+		t.Fatal("focused host did not publish WindowFocused on the accessibility tree")
+	}
+	host.SetWindowFocused(false)
+	renderTestFrame(host)
+	if services.tree.WindowFocused {
+		t.Fatal("unfocused host still published WindowFocused")
+	}
+}
+
 func TestHostKeepsPressedIdentityAcrossKeyedReorder(t *testing.T) {
 	order := []string{"a", "b"}
 	taps := map[string]int{}

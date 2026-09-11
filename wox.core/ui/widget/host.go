@@ -1853,7 +1853,7 @@ func (h *Host) buildAccessibilityTree(diagnostics []string, work *frameWorkCount
 	for _, diagnostic := range diagnostics {
 		h.reportDiagnostic(diagnostic)
 	}
-	return woxui.AccessibilityTree{Generation: h.generation, RootIDs: roots, Nodes: nodes}, diagnostics
+	return woxui.AccessibilityTree{Generation: h.generation, WindowFocused: h.WindowFocused(), RootIDs: roots, Nodes: nodes}, diagnostics
 }
 
 func accessibilityActionsForFocusability(actions []woxui.AccessibilityAction, focusable bool) []woxui.AccessibilityAction {

@@ -129,6 +129,7 @@ func GetUIManager() *Manager {
 		// Inject the UI Manager as the dictation hotkey registrar to break the
 		// import cycle between ui and plugin/system/dictation.
 		dictationplugin.SetHotkeyRegistrar(managerInstance)
+		selection.SetInternalSelectedTextProvider(woxui.SelectedTextFromFocusedWindow)
 	})
 	return managerInstance
 }

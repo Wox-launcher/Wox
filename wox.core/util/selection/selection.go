@@ -3,7 +3,9 @@ package selection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"wox/util"
@@ -14,6 +16,11 @@ import (
 var noSelection = errors.New("no selection")
 var ErrSelectionUnsupported = errors.New("selection retrieval unsupported")
 var lastClipboardChangeTimestamp atomic.Int64
+
+var (
+	internalSelectedTextMu sync.RWMutex
+	internalSelectedText   func() (string, bool)
+)
 
 type SelectionType string
 
@@ -34,6 +41,36 @@ func InitSelection() {
 	clipboard.Watch(func(data clipboard.Data) {
 		lastClipboardChangeTimestamp.Store(util.GetSystemTimestamp())
 	})
+}
+
+// SetInternalSelectedTextProvider registers in-process editor selection, used
+// when a Wox window owns focus and OS UI Automation cannot see our custom UI.
+func SetInternalSelectedTextProvider(provider func() (string, bool)) {
+	internalSelectedTextMu.Lock()
+	internalSelectedText = provider
+	internalSelectedTextMu.Unlock()
+}
+
+// GetSelected prefers a focused Wox editor, then falls back to the OS capture path.
+func GetSelected(ctx context.Context) (Selection, error) {
+	if text, handled := lookupInternalSelectedText(); handled {
+		if text == "" {
+			return Selection{}, noSelection
+		}
+		util.GetLogger().Debug(ctx, fmt.Sprintf("using internal UI selected text, runes=%d", len([]rune(text))))
+		return Selection{Type: SelectionTypeText, Text: text}, nil
+	}
+	return getSelectedFromOS(ctx)
+}
+
+func lookupInternalSelectedText() (string, bool) {
+	internalSelectedTextMu.RLock()
+	provider := internalSelectedText
+	internalSelectedTextMu.RUnlock()
+	if provider == nil {
+		return "", false
+	}
+	return provider()
 }
 
 func (s *Selection) String() string {

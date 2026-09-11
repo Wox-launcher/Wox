@@ -9,6 +9,10 @@ func TestAccessibilityTreeContentHashIgnoresGeneration(t *testing.T) {
 	if accessibilityTreeContentHash(tree) != accessibilityTreeContentHash(changed) {
 		t.Fatal("generation-only changes should not rebuild native accessibility objects")
 	}
+	changed.WindowFocused = true
+	if accessibilityTreeContentHash(tree) != accessibilityTreeContentHash(changed) {
+		t.Fatal("window-focus-only changes should not rebuild native accessibility objects")
+	}
 }
 
 func TestAccessibilityTreeContentHashCoversEveryNodeField(t *testing.T) {
@@ -83,6 +87,67 @@ func TestClearAccessibilityDoesNotPublishEmptyNativeTree(t *testing.T) {
 	}
 	if _, ok := accessibilityWindows.Load(window); ok {
 		t.Fatal("closing a window must remove its accessibility action state")
+	}
+}
+
+func TestSelectedTextFromFocusedWindowUsesFocusedEditor(t *testing.T) {
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
+		WindowFocused: true,
+		Nodes: []AccessibilityNode{{
+			ID: 1, Focused: true, HasTextSelection: true, Value: "hello 世界",
+			SelectionStart: 6, SelectionEnd: 8,
+		}},
+	}})
+	t.Cleanup(func() { accessibilityWindows.Delete(window) })
+
+	text, handled := SelectedTextFromFocusedWindow()
+	if !handled || text != "世界" {
+		t.Fatalf("selected text = %q handled=%t, want 世界", text, handled)
+	}
+}
+
+func TestSelectedTextFromFocusedWindowIgnoresBackgroundWindows(t *testing.T) {
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
+		WindowFocused: false,
+		Nodes: []AccessibilityNode{{
+			ID: 1, Focused: true, HasTextSelection: true, Value: "background",
+			SelectionStart: 0, SelectionEnd: 10,
+		}},
+	}})
+	t.Cleanup(func() { accessibilityWindows.Delete(window) })
+
+	text, handled := SelectedTextFromFocusedWindow()
+	if handled || text != "" {
+		t.Fatalf("background window leaked selection %q handled=%t", text, handled)
+	}
+}
+
+func TestSelectedTextFromFocusedWindowTreatsCollapsedCaretAsHandled(t *testing.T) {
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
+		WindowFocused: true,
+		Nodes: []AccessibilityNode{{
+			ID: 1, Focused: true, HasTextSelection: true, Value: "note",
+			SelectionStart: 2, SelectionEnd: 2,
+		}},
+	}})
+	t.Cleanup(func() { accessibilityWindows.Delete(window) })
+
+	text, handled := SelectedTextFromFocusedWindow()
+	if !handled || text != "" {
+		t.Fatalf("collapsed caret = %q handled=%t, want handled empty", text, handled)
+	}
+}
+
+func TestSelectedTextFromAccessibilityTreeSkipsProtectedFields(t *testing.T) {
+	got := selectedTextFromAccessibilityTree(AccessibilityTree{Nodes: []AccessibilityNode{{
+		Focused: true, HasTextSelection: true, Protected: true, Value: "secret",
+		SelectionStart: 0, SelectionEnd: 6,
+	}}})
+	if got != "" {
+		t.Fatalf("protected selection = %q", got)
 	}
 }
 

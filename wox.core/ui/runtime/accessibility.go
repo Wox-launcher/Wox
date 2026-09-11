@@ -102,8 +102,11 @@ type AccessibilityTextLine struct {
 // AccessibilityTree is the versioned snapshot consumed by native bridges and test automation.
 type AccessibilityTree struct {
 	Generation uint64
-	RootIDs    []AccessibilityNodeID
-	Nodes      []AccessibilityNode
+	// WindowFocused is true when this window currently owns key focus. Internal
+	// selection capture uses it so OS UI Automation is not used against Wox editors.
+	WindowFocused bool
+	RootIDs       []AccessibilityNodeID
+	Nodes         []AccessibilityNode
 }
 
 // AccessibilityUpdate is reserved for a future incremental native accessibility path.
@@ -261,6 +264,43 @@ func accessibilityHashString(hash uint64, value string) uint64 {
 		hash = accessibilityHashByte(hash, value[index])
 	}
 	return hash
+}
+
+// SelectedTextFromFocusedWindow returns selected text from a focused Wox editor.
+// handled is true when a Wox window owns focus, even if the caret is collapsed,
+// so callers skip OS selection capture against our own UI.
+func SelectedTextFromFocusedWindow() (text string, handled bool) {
+	accessibilityWindows.Range(func(_, value any) bool {
+		state, ok := value.(accessibilityWindowState)
+		if !ok || !state.tree.WindowFocused {
+			return true
+		}
+		handled = true
+		if selected := selectedTextFromAccessibilityTree(state.tree); selected != "" {
+			text = selected
+			return false
+		}
+		return true
+	})
+	return text, handled
+}
+
+func selectedTextFromAccessibilityTree(tree AccessibilityTree) string {
+	for _, node := range tree.Nodes {
+		if !node.Focused || !node.HasTextSelection || node.Protected {
+			continue
+		}
+		start, end := node.SelectionStart, node.SelectionEnd
+		if start < 0 || end < 0 || start == end {
+			return ""
+		}
+		runes := []rune(node.Value)
+		if start > end || end > len(runes) {
+			return ""
+		}
+		return string(runes[start:end])
+	}
+	return ""
 }
 
 // AccessibilitySnapshot returns a detached copy suitable for automation readers.
