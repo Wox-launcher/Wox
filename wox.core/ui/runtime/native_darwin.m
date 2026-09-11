@@ -254,6 +254,42 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
   return capture == NULL ? NULL : capture(CGDisplayBounds(display_id), kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowImageBestResolution);
 }
 
+// create_window_material_view wraps the renderer view in the process-default
+// window material and returns it retained (+1) for the caller to release.
+//
+// macOS 26 introduced Liquid Glass (NSGlassEffectView). It is preferred when the
+// running system provides it and the Popover vibrancy remains the fallback on
+// macOS 12-15. The theme's translucent AppBackgroundColor wash is painted by the
+// Go UI on top of either material, so themes keep controlling how much of the
+// desktop shows through.
+//
+// The glass class is resolved by name and configured through KVC instead of the
+// SDK symbols because the Intel release build still compiles against the macOS
+// 15 SDK, which does not ship NSGlassEffectView.h.
+static NSView *create_window_material_view(NSRect frame, NSView *content) {
+  Class glass_class = NSClassFromString(@"NSGlassEffectView");
+  if (glass_class != Nil) {
+    NSView *glass_view = [[glass_class alloc] initWithFrame:frame];
+    glass_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [glass_view setValue:@(wox_window_corner_radius) forKey:@"cornerRadius"];
+    // contentView is the only slot AppKit guarantees to render inside the glass
+    // with its legibility treatments; plain subviews have unspecified z-order.
+    [glass_view setValue:content forKey:@"contentView"];
+    return glass_view;
+  }
+
+  NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
+  effect_view.material = NSVisualEffectMaterialPopover;
+  effect_view.state = NSVisualEffectStateActive;
+  effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+  effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  effect_view.wantsLayer = YES;
+  effect_view.layer.cornerRadius = wox_window_corner_radius;
+  effect_view.layer.masksToBounds = YES;
+  [effect_view addSubview:content];
+  return effect_view;
+}
+
 @interface WoxNativeWindow : NSWindow
 @property(nonatomic, assign) BOOL woxNonactivating;
 @end
@@ -2949,19 +2985,11 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       // turn those transparent pixels into a fullscreen blur.
       native_window.contentView = view;
     } else {
-      // Process default material. Every non-screenshot window uses this
-      // Popover vibrancy; do not specialize it per window or focus state.
-      NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
-      effect_view.material = NSVisualEffectMaterialPopover;
-      effect_view.state = NSVisualEffectStateActive;
-      effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-      effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-      effect_view.wantsLayer = YES;
-      effect_view.layer.cornerRadius = wox_window_corner_radius;
-      effect_view.layer.masksToBounds = YES;
-      [effect_view addSubview:view];
-      native_window.contentView = effect_view;
-      [effect_view release];
+      // Process default material. Every non-screenshot window uses the same
+      // material; do not specialize it per window or focus state.
+      NSView *material_view = create_window_material_view(frame, view);
+      native_window.contentView = material_view;
+      [material_view release];
     }
     native_window.delegate = delegate;
     [view registerForDraggedTypes:@[NSPasteboardTypeFileURL]];

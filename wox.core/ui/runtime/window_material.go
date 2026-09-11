@@ -8,8 +8,9 @@ import (
 // Window material is a process default owned by Open, not a per-window option.
 //
 // Every window uses the same native material: Desktop Acrylic on Windows 11,
-// Accent Acrylic on Windows 10, NSVisualEffectMaterialPopover on macOS, and
-// ext-background-effect-v1 blur on Linux compositors that advertise it.
+// Accent Acrylic on Windows 10, Liquid Glass (NSGlassEffectView) on macOS 26+,
+// NSVisualEffectMaterialPopover on older macOS, and ext-background-effect-v1
+// blur on Linux compositors that advertise it.
 // Linux sessions without that protocol paint an opaque theme wash instead.
 //
 // WindowRoleScreenshot is the only opt-out, because that surface must show
