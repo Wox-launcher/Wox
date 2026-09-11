@@ -37,6 +37,7 @@ f .pdf
 
 - 用文件名片段：`f invoice q1`。
 - 知道扩展名时加上扩展名：`f proposal .pdf`。
+- 空格分隔的条件按 AND 匹配，顺序不限：`f amiga .txt` 可以找到 `amiga_workbench.txt`。连续短语用双引号包裹：`f "release notes" .txt`。
 - 名称太常见时加目录线索：`f design README`。
 - 结果太多时，优先收窄配置根目录，而不是只靠更长的查询。
 

@@ -13,6 +13,7 @@ import (
 // the runtime flow easier to follow: SQLite recalls candidates, then this code
 // reranks them with the same wildcard, path, extension, and pinyin semantics.
 type queryPlan struct {
+	andTerms              []SearchQuery
 	raw                   string
 	rawLower              string
 	rawLettersDigits      string
@@ -107,6 +108,15 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 		shortQueryLength:      utf8Len(rawLower),
 	}
 
+	// Unquoted whitespace separates AND conditions. Keep wildcard patterns intact
+	// so existing patterns containing literal spaces retain their meaning.
+	fields := strings.Fields(raw)
+	if query.wildcard == nil && (len(fields) > 1 || len(fields) > 0 && len(exactPhrases) > 0) {
+		for _, field := range fields {
+			plan.andTerms = append(plan.andTerms, normalizeSearchQuery(SearchQuery{Raw: field, DisablePinyin: query.DisablePinyin}))
+		}
+	}
+
 	if plan.shortQueryLength <= 2 {
 		plan.preRerankLimit = min(defaultPreRerankLimit, 2000)
 	}
@@ -132,6 +142,24 @@ func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
 	}
 	if query.wildcard != nil {
 		return query.wildcard.match(record.name(), record.Path)
+	}
+	if len(plan.andTerms) > 0 {
+		var total int64
+		for _, term := range plan.andTerms {
+			if term.plan.extensionOnly {
+				if record.IsDir || normalizeExtension(filepath.Ext(record.name())) != term.plan.extension {
+					return false, 0
+				}
+				total += 500
+				continue
+			}
+			matched, score := scoreDocAgainstQuery(term, record)
+			if !matched {
+				return false, 0
+			}
+			total += score
+		}
+		return true, total
 	}
 	if plan.raw == "" && len(plan.exactPhrases) > 0 {
 		return true, scoreExactPhraseMatch(plan, record)

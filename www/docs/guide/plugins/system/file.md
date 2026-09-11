@@ -37,6 +37,7 @@ Use a small, deliberate root list for best results:
 
 - Use file name fragments: `f invoice q1`.
 - Add an extension when you know it: `f proposal .pdf`.
+- Spaces combine conditions with AND, in any order: `f amiga .txt` matches `amiga_workbench.txt`. Use double quotes for a continuous phrase: `f "release notes" .txt`.
 - Add a folder hint when names are common: `f design README`.
 - If results feel too broad, narrow the configured roots instead of relying only on longer queries.
 

@@ -89,6 +89,9 @@ func (p *SQLiteSearchProvider) collectCandidateIDs(ctx context.Context, query Se
 	}
 
 	plan := query.plan
+	if len(plan.andTerms) > 0 {
+		return p.collectANDCandidateIDs(ctx, plan, limit)
+	}
 	if len(plan.exactPhrases) > 0 {
 		exactIDs, err := p.collectExactPhraseCandidateIDs(ctx, plan, limit)
 		if err != nil {
