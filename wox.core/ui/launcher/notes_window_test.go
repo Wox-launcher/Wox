@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -1660,5 +1664,78 @@ func TestNotesSearchOverlayDoesNotOverflow(t *testing.T) {
 	})
 	if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) != 0 {
 		t.Fatalf("search overlay diagnostics = %v, want none", diagnostics)
+	}
+}
+
+func TestNotesPastePlainTextLeavesDefaultInsert(t *testing.T) {
+	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}}},
+	})
+	if controller.pasteDocument("hello") {
+		t.Fatal("plain text paste must be inserted by the text field")
+	}
+}
+
+func TestNotesClipboardImageBeatsLoneURLOrFilename(t *testing.T) {
+	photo := image.NewRGBA(image.Rect(0, 0, 200, 120))
+	if noteClipboardTextOutranksImage("https://v2ex.com/t/93922", photo) || noteClipboardTextOutranksImage("clipboard.png", photo) {
+		t.Fatal("a copied photo must win over a lone URL or filename on the same clipboard")
+	}
+	if !noteClipboardTextOutranksImage("hello world", photo) {
+		t.Fatal("prose plus a DIB preview must stay text")
+	}
+	preview := image.NewRGBA(image.Rect(0, 0, 40, 20))
+	if !noteClipboardTextOutranksImage("https://v2ex.com/t/93922", preview) {
+		t.Fatal("a tiny bitmap riding with a URL is a preview, not a photo")
+	}
+}
+
+func TestNotesPasteInsertsClipboardImage(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}}},
+	})
+	if !controller.pasteImportedImage(image.NewRGBA(image.Rect(0, 0, 8, 6)), "clipboard.png") {
+		t.Fatal("image paste was not handled")
+	}
+	found := false
+	for _, block := range controller.document.Blocks {
+		if block.Type == common.NoteBlockImage && block.Image != nil && block.Image.FileName == "clipboard.png" && block.Image.Width == 8 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("pasted blocks = %#v", controller.document.Blocks)
+	}
+}
+
+func TestNotesPasteInsertsImageFile(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	path := filepath.Join(t.TempDir(), "shot.png")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create image: %v", err)
+	}
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 8, 6))); err != nil {
+		file.Close()
+		t.Fatalf("encode image: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close image: %v", err)
+	}
+	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "above"}}},
+	})
+	if !controller.pasteClipboardFiles([]string{path}) {
+		t.Fatal("image file paste was not handled")
+	}
+	found := false
+	for _, block := range controller.document.Blocks {
+		if block.Type == common.NoteBlockImage && block.Image != nil && block.Image.FileName == "shot.png" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("pasted file blocks = %#v", controller.document.Blocks)
 	}
 }

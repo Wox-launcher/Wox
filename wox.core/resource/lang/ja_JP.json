@@ -3016,6 +3016,7 @@
   "notes_apply": "適用",
   "notes_saving": "保存中...",
   "notes_save_failed": "ノートを保存できませんでした",
+  "notes_paste_failed": "ノートに貼り付けできませんでした",
   "notes_retry": "再試行",
   "notes_conflict_copy": "同期競合が別のノートとして保存されました。",
   "notes_format_block": "見出し",

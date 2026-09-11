@@ -214,6 +214,33 @@ func TestSingleLineTextFieldFiltersNewlinesOnPaste(t *testing.T) {
 	}
 }
 
+func TestTextFieldOnPasteRunsForEmptyClipboard(t *testing.T) {
+	controller := woxwidget.NewTextEditingController("keep")
+	provider := &memoryClipboard{}
+	SetClipboardProvider(provider)
+	t.Cleanup(func() { SetClipboardProvider(nil) })
+	called := false
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return WoxTextField(TextFieldProps{
+			ID: "notes", Width: 200, Height: 40, Controller: controller,
+			OnPaste: func(value string) bool {
+				called = true
+				return value == ""
+			},
+		})
+	})
+	host.AttachServices(&hotkeyRecorderHostServices{})
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 40}, PixelSize: woxui.PixelSize{Width: 200, Height: 40}, Scale: 1})
+	host.RequestFocus("notes")
+	primary := woxui.KeyModifierControl | woxui.KeyModifierMeta
+	if !host.Key(woxui.KeyEvent{Key: woxui.Key("v"), Modifiers: primary, Down: true}) || !called {
+		t.Fatal("empty clipboard must still invoke OnPaste so images can be handled")
+	}
+	if controller.Text() != "keep" {
+		t.Fatalf("empty handled paste mutated text to %q", controller.Text())
+	}
+}
+
 func TestReadOnlyTextFieldAllowsSelectAndCopy(t *testing.T) {
 	controller := woxwidget.NewTextEditingController("readable")
 	provider := &memoryClipboard{}

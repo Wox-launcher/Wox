@@ -27,6 +27,20 @@ func TestNoteCodecsPreserveSupportedFormattingAndEscapeHTML(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownKeepsBareURLs(t *testing.T) {
+	const url = "https://v2ex.com/t/93922"
+	document := ParseMarkdown(url)
+	if len(document.Blocks) != 1 || document.Blocks[0].Type != common.NoteBlockParagraph || document.Blocks[0].Text != url {
+		t.Fatalf("bare URL was dropped: %#v", document.Blocks)
+	}
+	if len(document.Blocks[0].Spans) == 0 || document.Blocks[0].Spans[0].Link != url {
+		t.Fatalf("bare URL was not stored as a link span: %#v", document.Blocks[0])
+	}
+	if got := ToMarkdown(document); !strings.Contains(got, url) {
+		t.Fatalf("exported markdown lost the URL: %q", got)
+	}
+}
+
 func TestParseMarkdownBuildsRichBlocks(t *testing.T) {
 	document := ParseMarkdown("# **Title**\n- [x] done\n- item\n\n> quote")
 	if len(document.Blocks) != 4 {

@@ -2744,6 +2744,7 @@
   "notes_image_smaller": "Уменьшить",
   "notes_image_larger": "Увеличить",
   "notes_image_delete": "Удалить изображение",
+  "notes_paste_failed": "Не удалось вставить в заметку",
   "notes_reorder_task": "Изменить порядок задачи",
   "notes_view_markdown": "Переключить на Markdown",
   "notes_view_preview": "Переключить на предпросмотр",

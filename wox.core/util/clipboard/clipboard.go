@@ -345,21 +345,44 @@ func WriteText(text string) error {
 	})
 }
 
-// ReadText returns the current clipboard text and a nil error when the clipboard holds text.
-// An empty clipboard (no recognizable data) returns "" + nil. Non-text data returns "" + nil
-// so callers that only care about text can treat it as "nothing to paste".
+// ReadText returns clipboard text when a text format is present.
+// Office and browser copies often also advertise a bitmap preview; those must
+// not hide the text, so this reads CF_UNICODETEXT / equivalent directly.
+// An empty clipboard or a text-less image/file payload returns "" + nil.
 func ReadText() (string, error) {
-	data, err := Read()
+	text, err := readText()
 	if err != nil {
 		if errors.Is(err, noDataErr) {
 			return "", nil
 		}
 		return "", err
 	}
-	if text, ok := data.(*TextData); ok {
-		return text.Text, nil
+	return text, nil
+}
+
+// ReadFilePaths returns copied filesystem paths, or nil when the clipboard has none.
+func ReadFilePaths() ([]string, error) {
+	paths, err := readFilePaths()
+	if err != nil {
+		if errors.Is(err, noDataErr) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return "", nil
+	return paths, nil
+}
+
+// ReadImage returns a clipboard bitmap when PNG/DIB data is present.
+// Text or file formats that travel with a screenshot do not hide the image.
+func ReadImage() (image.Image, error) {
+	img, err := readImage()
+	if err != nil {
+		if errors.Is(err, noDataErr) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return img, nil
 }
 
 type TextData struct {

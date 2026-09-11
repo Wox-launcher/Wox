@@ -3018,6 +3018,7 @@
   "notes_apply": "Apply",
   "notes_saving": "Saving...",
   "notes_save_failed": "Could not save note",
+  "notes_paste_failed": "Could not paste into note",
   "notes_retry": "Retry",
   "notes_conflict_copy": "A sync conflict was preserved as a separate note.",
   "notes_format_block": "Heading",

@@ -3014,6 +3014,7 @@
   "notes_apply": "적용",
   "notes_saving": "저장 중...",
   "notes_save_failed": "메모를 저장할 수 없습니다",
+  "notes_paste_failed": "노트에 붙여넣을 수 없습니다",
   "notes_retry": "다시 시도",
   "notes_conflict_copy": "동기화 충돌 내용이 별도 메모로 보존되었습니다.",
   "notes_format_block": "제목",

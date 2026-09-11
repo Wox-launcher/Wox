@@ -5,7 +5,7 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -62,6 +62,40 @@ func ImportNoteImage(src string) (common.NoteImage, error) {
 		imported.Height = config.Height
 	}
 	return imported, nil
+}
+
+// ImportNoteImageFromImage writes a decoded clipboard bitmap into notes attachments.
+func ImportNoteImageFromImage(img image.Image, fileName string) (common.NoteImage, error) {
+	if img == nil {
+		return common.NoteImage{}, fmt.Errorf("image is required")
+	}
+	directory := util.GetLocation().GetNotesAttachmentsDirectory()
+	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
+		return common.NoteImage{}, err
+	}
+	fileName = strings.TrimSpace(fileName)
+	if fileName == "" {
+		fileName = "clipboard.png"
+	}
+	id := uuid.NewString() + noteImageExtension(fileName)
+	destPath := filepath.Join(directory, id)
+	dest, err := os.Create(destPath)
+	if err != nil {
+		return common.NoteImage{}, fmt.Errorf("create attachment: %w", err)
+	}
+	if err := png.Encode(dest, img); err != nil {
+		dest.Close()
+		_ = os.Remove(destPath)
+		return common.NoteImage{}, fmt.Errorf("encode attachment: %w", err)
+	}
+	if err := dest.Close(); err != nil {
+		_ = os.Remove(destPath)
+		return common.NoteImage{}, err
+	}
+	bounds := img.Bounds()
+	return common.NoteImage{
+		ID: id, FileName: filepath.Base(fileName), Width: bounds.Dx(), Height: bounds.Dy(),
+	}, nil
 }
 
 // RemoveNoteAttachment deletes one local attachment file. Missing files are ignored.

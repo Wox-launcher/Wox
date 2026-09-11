@@ -120,6 +120,7 @@ type TextFieldProps struct {
 	OnUndo            func() bool
 	OnRedo            func() bool
 	// OnPaste receives raw clipboard text and, when it returns true, replaces the default insert.
+	// Empty text is still delivered so callers can paste images or files from the same shortcut.
 	OnPaste            func(string) bool
 	TransformPaste     func(string) string
 	OnFocusChange      func(bool)
@@ -417,12 +418,15 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			return false
 		}
 		text, err := provider.ReadText()
-		if err != nil || text == "" {
-			return true
+		if err != nil {
+			text = ""
 		}
 		if original.OnPaste != nil && original.OnPaste(text) {
 			notifySelection()
 			invalidate()
+			return true
+		}
+		if text == "" {
 			return true
 		}
 		if original.TransformPaste != nil {

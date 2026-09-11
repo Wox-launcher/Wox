@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -530,6 +531,7 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 		FocusNode: c.editorFocus, Focused: c.editorFocus.HasFocus(), Autofocus: true,
 		ReadOnly: c.record.DeletedAt > 0, MaxLines: 10000, Window: c.managed.Window(), Theme: theme,
 		OnChanged: c.onMarkdownChanged, OnKey: c.onKey, OnUndo: c.undoDocument, OnRedo: c.redoDocument,
+		OnPaste: c.pasteFromClipboard,
 	})
 }
 
@@ -977,9 +979,15 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 				c.focusedImageBlock = -1
 				c.invalidate()
 			}, OnTapOffset: c.handleBlockTap, OnTapBelowText: c.appendParagraphBelowText, CursorAtOffset: c.editorCursorAt, OnKey: c.onKey,
-			OnUndo: c.undoDocument, OnRedo: c.redoDocument, OnPaste: c.pasteDocument,
-			TransformPaste: func(value string) string { return notesplugin.ToMarkdown(notesplugin.ParseMarkdown(value)) },
-			OnTableChange:  c.replaceTable, OnTableFocus: c.focusTableCell, OnTableKey: c.onTableKey, OnTablePaste: c.pasteTableClipboard,
+			OnUndo: c.undoDocument, OnRedo: c.redoDocument, OnPaste: c.pasteFromClipboard,
+			TransformPaste: func(value string) string {
+				converted := notesplugin.ToMarkdown(notesplugin.ParseMarkdown(value))
+				if strings.TrimSpace(converted) == "" && strings.TrimSpace(value) != "" {
+					return value
+				}
+				return converted
+			},
+			OnTableChange: c.replaceTable, OnTableFocus: c.focusTableCell, OnTableKey: c.onTableKey, OnTablePaste: c.pasteTableClipboard,
 			OnDeleteEmptySegment: c.deleteEmptyTextSegment,
 			OnTableInsertRow:     c.tableInsertRow, OnTableInsertColumn: c.tableInsertColumn, OnTableDeleteRow: c.tableDeleteRow,
 			OnTableDeleteColumn: c.tableDeleteColumn, OnTableDelete: c.tableDelete, OnTableActionHover: c.updateTableActionTooltip,
@@ -1661,6 +1669,8 @@ func (c *notesWindowController) onKey(event woxui.KeyEvent) bool {
 		c.toggleMarkdownView()
 	case woxui.Key("k"):
 		c.openLink()
+	case woxui.Key("v"):
+		return c.pasteFromClipboard("")
 	case woxui.Key("z"):
 		if event.Modifiers&woxui.KeyModifierShift != 0 {
 			return c.redoDocument()
@@ -2019,9 +2029,91 @@ func (c *notesWindowController) reproject(resetSelection bool) {
 	c.invalidate()
 }
 
+// pasteFromClipboard inserts files, a clipboard bitmap, or structured text at the caret.
+func (c *notesWindowController) pasteFromClipboard(value string) bool {
+	if c.record.DeletedAt > 0 {
+		return true
+	}
+	if strings.TrimSpace(value) == "" {
+		if text, err := clipboard.ReadText(); err == nil {
+			value = text
+		}
+	}
+	img, imgErr := clipboard.ReadImage()
+	if imgErr != nil {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("note paste: read image: %v", imgErr))
+	}
+	if paths, err := clipboard.ReadFilePaths(); err == nil && len(paths) > 0 {
+		if pasted := notesplugin.DocumentFromClipboardFiles(paths); noteDocumentHasImage(pasted) || img == nil {
+			if len(pasted.Blocks) > 0 {
+				return c.insertPastedDocument(pasted)
+			}
+		}
+	}
+	if img != nil && !noteClipboardTextOutranksImage(value, img) {
+		return c.pasteImportedImage(img, "clipboard.png")
+	}
+	if strings.TrimSpace(value) != "" {
+		return c.pasteDocument(value)
+	}
+	return false
+}
+
+// noteClipboardTextOutranksImage keeps Word/browser prose instead of their DIB preview.
+// A lone URL or filename next to a real bitmap is the usual "copy image" side-channel.
+func noteClipboardTextOutranksImage(value string, img image.Image) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || img == nil {
+		return false
+	}
+	if strings.ContainsAny(value, " \t\n\r") {
+		return true
+	}
+	bounds := img.Bounds()
+	return bounds.Dx() < 64 || bounds.Dy() < 64
+}
+
+func noteDocumentHasImage(document common.NoteDocument) bool {
+	for _, block := range document.Blocks {
+		if block.Type == common.NoteBlockImage {
+			return true
+		}
+	}
+	return false
+}
+
+// pasteClipboardFiles imports copied image files and turns other paths into links.
+func (c *notesWindowController) pasteClipboardFiles(paths []string) bool {
+	pasted := notesplugin.DocumentFromClipboardFiles(paths)
+	if len(pasted.Blocks) == 0 {
+		return false
+	}
+	return c.insertPastedDocument(pasted)
+}
+
+// pasteImportedImage stores a clipboard bitmap as a note attachment and inserts it.
+func (c *notesWindowController) pasteImportedImage(img image.Image, fileName string) bool {
+	pasted, err := notesplugin.DocumentFromClipboardImage(img, fileName)
+	if err != nil {
+		c.errorText = c.app.translate("i18n:notes_paste_failed")
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("paste note image: %v", err))
+		c.invalidate()
+		return true
+	}
+	return c.insertPastedDocument(pasted)
+}
+
 func (c *notesWindowController) pasteDocument(value string) bool {
 	pasted := notesplugin.ParseClipboard(value)
 	if !noteClipboardHasStructure(pasted) {
+		return false
+	}
+	return c.insertPastedDocument(pasted)
+}
+
+// insertPastedDocument places structured clipboard blocks at the caret or table focus.
+func (c *notesWindowController) insertPastedDocument(pasted common.NoteDocument) bool {
+	if len(pasted.Blocks) == 0 {
 		return false
 	}
 	c.rememberDocumentUndo(c.document, false)
@@ -2031,18 +2123,39 @@ func (c *notesWindowController) pasteDocument(value string) bool {
 	} else if len(c.blockRanges) > 0 {
 		index = noteBlockAt(c.blockRanges, c.selection.Focus)
 	}
+	insertAt := index + 1
 	if index < 0 || index >= len(c.document.Blocks) {
+		insertAt = len(c.document.Blocks)
 		c.document.Blocks = append(c.document.Blocks, pasted.Blocks...)
 	} else if c.document.Blocks[index].Type == common.NoteBlockParagraph && strings.TrimSpace(c.document.Blocks[index].Text) == "" {
+		insertAt = index
 		c.document.Blocks = slices.Replace(c.document.Blocks, index, index+1, pasted.Blocks...)
 	} else {
 		c.document.Blocks = slices.Insert(c.document.Blocks, index+1, pasted.Blocks...)
 	}
+	c.focusedImageBlock = -1
 	if pasted.Blocks[0].Type == common.NoteBlockTable {
 		c.focusedTableBlock, c.focusedTableRow, c.focusedTableCol = index+1, 0, 0
 		if index < len(c.document.Blocks) && c.document.Blocks[index].Type == common.NoteBlockTable && strings.TrimSpace(c.document.Blocks[index].Text) == "" {
 			c.focusedTableBlock = index
 		}
+	} else {
+		for offset, block := range pasted.Blocks {
+			if block.Type != common.NoteBlockImage {
+				continue
+			}
+			c.focusedTableBlock = -1
+			c.focusedImageBlock = insertAt + offset
+			break
+		}
+	}
+	if c.markdownView {
+		c.editor.SetText(notesplugin.ToMarkdown(c.document), false)
+		c.selection = c.editor.State().Selection
+		c.dirty, c.errorText = true, ""
+		c.scheduleSave()
+		c.invalidate()
+		return true
 	}
 	c.reproject(false)
 	return true
@@ -2052,7 +2165,7 @@ func noteClipboardHasStructure(document common.NoteDocument) bool {
 	if len(document.Blocks) != 1 {
 		return true
 	}
-	return document.Blocks[0].Type == common.NoteBlockTable
+	return document.Blocks[0].Type == common.NoteBlockTable || document.Blocks[0].Type == common.NoteBlockImage
 }
 
 func (c *notesWindowController) replaceTable(block int, table common.NoteTable) {
@@ -2070,11 +2183,7 @@ func (c *notesWindowController) focusTableCell(block, row, column int) {
 }
 
 func (c *notesWindowController) pasteTableClipboard(block, row, column int, value string) bool {
-	pasted := notesplugin.ParseClipboard(value)
-	if noteClipboardHasStructure(pasted) {
-		return c.pasteDocument(value)
-	}
-	return false
+	return c.pasteFromClipboard(value)
 }
 
 func (c *notesWindowController) onTableKey(block, row, column int, event woxui.KeyEvent) bool {

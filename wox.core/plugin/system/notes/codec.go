@@ -716,6 +716,12 @@ func markdownInlineContent(parent ast.Node, source []byte) (string, []common.Not
 			current.code = true
 		case *ast.Link:
 			current.link = string(value.Destination)
+		case *ast.AutoLink:
+			// GFM bare URLs are AutoLink nodes. They do not expose a child Text
+			// segment, so skipping this case drops the pasted URL entirely.
+			current.link = string(value.URL(source))
+			appendParsedText(&output, &spans, string(value.Label(source)), current)
+			return
 		case *extast.Strikethrough:
 			current.strike = true
 		case *extast.TaskCheckBox:

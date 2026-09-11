@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,35 @@ func TestSanitizeNoteImageIDRejectsPathTraversal(t *testing.T) {
 	}
 	if SanitizeNoteImageID("..") != "" || SanitizeNoteImageID(".") != "" {
 		t.Fatal("dot names must be rejected")
+	}
+}
+
+func TestImportNoteImageFromImageWritesClipboardBitmap(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	imported, err := ImportNoteImageFromImage(image.NewRGBA(image.Rect(0, 0, 8, 6)), "clipboard.png")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if imported.FileName != "clipboard.png" || imported.Width != 8 || imported.Height != 6 {
+		t.Fatalf("imported = %#v", imported)
+	}
+	if _, err := os.Stat(ResolveNoteImagePath(imported)); err != nil {
+		t.Fatalf("attachment file: %v", err)
+	}
+}
+
+func TestDocumentFromClipboardFilesImportsImagePaths(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	path := writeTempNotePNG(t)
+	document := DocumentFromClipboardFiles([]string{path})
+	found := false
+	for _, block := range document.Blocks {
+		if block.Type == common.NoteBlockImage && block.Image != nil && block.Image.FileName == "shot.png" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("clipboard files = %#v", document.Blocks)
 	}
 }
 

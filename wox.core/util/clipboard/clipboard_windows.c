@@ -197,8 +197,9 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
     UINT pngFmt = getPNGFormat();
     int hasPNG = (pngFmt != 0 && IsClipboardFormatAvailable(pngFmt));
     int hasDIB = IsClipboardFormatAvailable(CF_DIB);
+    int hasDIBV5 = IsClipboardFormatAvailable(CF_DIBV5);
 
-    if (!hasPNG && !hasDIB) {
+    if (!hasPNG && !hasDIB && !hasDIBV5) {
         return -1;  // no image data
     }
 
@@ -273,6 +274,58 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
         CloseClipboard();
 
         // Read metadata only from the validated private copy.
+        if (dibSize >= sizeof(BITMAPINFOHEADER)) {
+            BITMAPINFOHEADER *hdr = (BITMAPINFOHEADER *)buf;
+            outInfo->headerSize = (int)hdr->biSize;
+            outInfo->width = (int)hdr->biWidth;
+            outInfo->height = (int)hdr->biHeight;
+            outInfo->bitCount = (int)hdr->biBitCount;
+            outInfo->compression = (int)hdr->biCompression;
+            outInfo->sizeImage = (int)hdr->biSizeImage;
+            outInfo->clrUsed = (int)hdr->biClrUsed;
+        }
+
+        *outData = buf;
+        *outLen = (int)dibSize;
+        *outIsPNG = 0;
+        return 0;
+    }
+
+    if (hasDIBV5) {
+        HANDLE hDib = GetClipboardData(CF_DIBV5);
+        if (hDib == NULL) {
+            CloseClipboard();
+            return -3;
+        }
+
+        SIZE_T dibSize = GlobalSize(hDib);
+        if (dibSize == 0 || dibSize > 128 * 1024 * 1024) {
+            CloseClipboard();
+            return -4;
+        }
+
+        void *pDib = GlobalLock(hDib);
+        if (pDib == NULL) {
+            CloseClipboard();
+            return -5;
+        }
+
+        unsigned char *buf = (unsigned char *)malloc(dibSize);
+        if (buf == NULL) {
+            GlobalUnlock(hDib);
+            CloseClipboard();
+            return -7;
+        }
+        if (!copyReadableMemory(buf, pDib, dibSize)) {
+            free(buf);
+            GlobalUnlock(hDib);
+            CloseClipboard();
+            return -8;
+        }
+
+        GlobalUnlock(hDib);
+        CloseClipboard();
+
         if (dibSize >= sizeof(BITMAPINFOHEADER)) {
             BITMAPINFOHEADER *hdr = (BITMAPINFOHEADER *)buf;
             outInfo->headerSize = (int)hdr->biSize;

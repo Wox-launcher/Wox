@@ -2,6 +2,7 @@ package notes
 
 import (
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,17 +88,54 @@ func documentFromImagePath(title string, path string) (common.NoteDocument, erro
 	if err != nil {
 		return common.NoteDocument{}, err
 	}
+	return documentFromImportedImage(title, imported), nil
+}
+
+// DocumentFromClipboardImage stores a pasted bitmap as a local notes attachment.
+func DocumentFromClipboardImage(img image.Image, fileName string) (common.NoteDocument, error) {
+	imported, err := ImportNoteImageFromImage(img, fileName)
+	if err != nil {
+		return common.NoteDocument{}, err
+	}
+	return documentFromImportedImage("", imported), nil
+}
+
+// DocumentFromClipboardFiles turns copied filesystem paths into image blocks or path links.
+func DocumentFromClipboardFiles(paths []string) common.NoteDocument {
+	var blocks []common.NoteBlock
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if isLikelyNoteImagePath(path) {
+			imported, err := ImportNoteImage(path)
+			if err == nil {
+				blocks = append(blocks, common.NoteBlock{Type: common.NoteBlockImage, Image: &imported})
+				continue
+			}
+		}
+		name := filepath.Base(path)
+		blocks = append(blocks, ParseMarkdown(fmt.Sprintf("[%s](%s)", name, path)).Blocks...)
+	}
+	if len(blocks) == 0 {
+		return common.NoteDocument{}
+	}
+	return NormalizeDocument(common.NoteDocument{Version: documentVersion, Blocks: blocks})
+}
+
+func documentFromImportedImage(title string, imported common.NoteImage) common.NoteDocument {
 	blocks := []common.NoteBlock{
 		{ID: uuid.NewString(), Type: common.NoteBlockParagraph},
 		{ID: uuid.NewString(), Type: common.NoteBlockImage, Image: &imported},
 		{ID: uuid.NewString(), Type: common.NoteBlockParagraph},
 	}
-	if title != "" && title != filepath.Base(path) {
+	if title != "" && title != imported.FileName && title != filepath.Base(imported.FileName) {
 		blocks = append([]common.NoteBlock{{
 			ID: uuid.NewString(), Type: common.NoteBlockHeading1, Text: title,
 		}}, blocks...)
 	}
-	return NormalizeDocument(common.NoteDocument{Version: documentVersion, Blocks: blocks}), nil
+	return NormalizeDocument(common.NoteDocument{Version: documentVersion, Blocks: blocks})
 }
 
 // readNoteSourceFile imports a small UTF-8 text file so binary and huge files stay path-only.

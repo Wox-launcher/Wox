@@ -3015,6 +3015,7 @@
   "notes_apply": "应用",
   "notes_saving": "正在保存...",
   "notes_save_failed": "无法保存笔记",
+  "notes_paste_failed": "无法粘贴到笔记",
   "notes_retry": "重试",
   "notes_conflict_copy": "同步冲突内容已保留为单独笔记。",
   "notes_format_block": "标题",
