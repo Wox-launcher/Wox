@@ -18,7 +18,7 @@ import (
 // Test006LauncherInputRepaintDamage verifies idle caret blinking stays local in both launcher editors.
 // Flow: settle a completed query -> observe query-box caret frames -> open the action panel -> observe its filter caret frames.
 // Evidence: every settled frame reports non-empty logical damage contained by the focused input instead of full-window damage.
-// On Windows the action panel is a renderer-blurred floating surface, so its caret frames may repaint the panel, but still not the window.
+// On Windows and Linux the action panel is a renderer-blurred floating surface, so its caret frames may repaint the panel, but still not the window.
 func Test006LauncherInputRepaintDamage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
@@ -40,11 +40,11 @@ func Test006LauncherInputRepaintDamage(t *testing.T) {
 			t.Fatalf("wait for focused action filter: %v", err)
 		}
 		var surface woxui.Rect
-		if runtime.GOOS == "windows" {
-			// The Direct2D floating material blurs the back buffer under the panel, so any repaint
-			// inside the panel must cover the whole panel plus the blur's sampling margin. Derive
-			// the panel from its rows and filter; the outset absorbs panel padding, the header
-			// above the rows, the blur margin and the host paint outset.
+		if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
+			// The renderer-blurred floating material samples the back buffer under the panel, so
+			// any repaint inside the panel must cover the whole panel plus the blur's sampling
+			// margin. Derive the panel from its rows and filter; the outset absorbs panel padding,
+			// the header above the rows, the blur margin and the host paint outset.
 			for _, node := range snapshot.Tree.Nodes {
 				if strings.HasPrefix(node.AutomationID, "action-") {
 					surface = unionRect(surface, node.Bounds)

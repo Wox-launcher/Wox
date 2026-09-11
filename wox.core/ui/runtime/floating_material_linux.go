@@ -2,11 +2,12 @@
 
 package woxui
 
-// Linux compositor blur (ext-background-effect-v1) is a whole-surface effect
-// and cannot be scoped to a surface rectangle, so DisplayList.FloatingMaterial
-// paints the surface tint and edge on the main surface there. A GL blur of the
-// framebuffer under the rectangle would slot in behind this same API as
-// floatingMaterialRendered, like the Windows Direct2D renderer does.
+// Linux compositor blur (ext-background-effect-v1) is a whole-window desktop
+// backdrop and cannot be scoped to a surface rectangle. The OpenGL renderer
+// blurs its own back buffer under the surface instead (see
+// wox_linux_window_floating_material), which samples the Go content beneath
+// the panel but not the desktop behind the window; the window material already
+// covers that.
 func nativeFloatingMaterialMode() floatingMaterialMode {
-	return floatingMaterialPainted
+	return floatingMaterialRendered
 }

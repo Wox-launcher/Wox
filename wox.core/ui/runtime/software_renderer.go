@@ -70,8 +70,8 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			// Native composition surfaces are not part of deterministic software output.
 		case displayCommandFloatingMaterial:
-			// Stand in for the native material with the same tint and hairline the
-			// platforms without one paint, so reference output stays comparable.
+			// Stand in for the native or renderer-blurred material with the same tint
+			// and hairline, so reference output stays comparable without a GPU blur.
 			r.fillRoundedRect(command.rect, command.radius, command.color, damage, clip)
 			r.strokeRoundedRect(command.rect, command.radius, 1, command.edge, damage, clip)
 		default:

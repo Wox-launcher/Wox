@@ -51,6 +51,7 @@ int32_t wox_linux_window_close(WoxLinuxWindow *window);
 int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_linux_window_begin_embedded_surface_overlay(WoxLinuxWindow *window);
 int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha);
 int32_t wox_linux_window_fill_convex_polygon(WoxLinuxWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);

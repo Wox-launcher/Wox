@@ -140,6 +140,29 @@ typedef struct {
   GLint texture_color;
   GLint texture_rotation;
   GLint texture_radius;
+  GLuint blur_program;
+  GLuint blur_blit_program;
+  GLuint blur_compose_program;
+  GLuint blur_framebuffer;
+  GLuint blur_source_texture;
+  GLuint blur_ping_texture;
+  GLuint blur_pong_texture;
+  int blur_source_width;
+  int blur_source_height;
+  int blur_ping_width;
+  int blur_ping_height;
+  int blur_pong_width;
+  int blur_pong_height;
+  GLint blur_texel;
+  GLint blur_direction;
+  GLint blur_sigma;
+  GLint compose_viewport;
+  GLint compose_rect;
+  GLint compose_radius;
+  GLint compose_source;
+  GLint compose_scale;
+  bool software_gl;
+  bool blur_unavailable;
   bool ready;
   bool frame_open;
   bool damage_active;
@@ -883,6 +906,68 @@ static const char *const texture_fragment_source =
     "  fragment_color = texture(u_texture, v_uv) * u_color * coverage;\n"
     "}\n";
 
+static const char *const blur_vertex_source =
+    "#version 330 core\n"
+    "out vec2 v_uv;\n"
+    "void main() {\n"
+    "  vec2 corners[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0));\n"
+    "  vec2 corner = corners[gl_VertexID];\n"
+    "  gl_Position = vec4(corner.x * 2.0 - 1.0, corner.y * 2.0 - 1.0, 0.0, 1.0);\n"
+    "  v_uv = corner;\n"
+    "}\n";
+
+static const char *const blur_fragment_source =
+    "#version 330 core\n"
+    "uniform sampler2D u_texture;\n"
+    "uniform vec2 u_texel;\n"
+    "uniform vec2 u_direction;\n"
+    "uniform float u_sigma;\n"
+    "in vec2 v_uv;\n"
+    "out vec4 fragment_color;\n"
+    "void main() {\n"
+    "  int radius = int(min(ceil(u_sigma * 3.0), 32.0));\n"
+    "  float two_sigma_sq = 2.0 * u_sigma * u_sigma;\n"
+    "  if (two_sigma_sq < 0.0001) { fragment_color = texture(u_texture, v_uv); return; }\n"
+    "  vec4 color = vec4(0.0);\n"
+    "  float weight_sum = 0.0;\n"
+    "  for (int offset = -32; offset <= 32; offset++) {\n"
+    "    if (offset < -radius || offset > radius) continue;\n"
+    "    float weight = exp(-(float(offset) * float(offset)) / two_sigma_sq);\n"
+    "    color += texture(u_texture, v_uv + u_texel * u_direction * float(offset)) * weight;\n"
+    "    weight_sum += weight;\n"
+    "  }\n"
+    "  fragment_color = color / max(weight_sum, 0.0001);\n"
+    "}\n";
+
+static const char *const blit_fragment_source =
+    "#version 330 core\n"
+    "uniform sampler2D u_texture;\n"
+    "in vec2 v_uv;\n"
+    "out vec4 fragment_color;\n"
+    "void main() { fragment_color = texture(u_texture, v_uv); }\n";
+
+static const char *const compose_fragment_source =
+    "#version 330 core\n"
+    "uniform sampler2D u_original;\n"
+    "uniform sampler2D u_blurred;\n"
+    "uniform vec4 u_rect;\n"
+    "uniform float u_radius;\n"
+    "uniform vec4 u_source;\n"
+    "uniform float u_scale;\n"
+    "in vec2 v_local;\n"
+    "out vec4 fragment_color;\n"
+    "void main() {\n"
+    "  float radius = clamp(u_radius, 0.0, min(u_rect.z, u_rect.w) * 0.5);\n"
+    "  vec2 half_size = u_rect.zw * 0.5;\n"
+    "  vec2 edge = abs(v_local - half_size) - (half_size - radius);\n"
+    "  float distance_value = length(max(edge, vec2(0.0))) + min(max(edge.x, edge.y), 0.0) - radius;\n"
+    "  float antialias = max(fwidth(distance_value), 0.001);\n"
+    "  float coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
+    "  vec2 pixel = (u_rect.xy + v_local) * u_scale;\n"
+    "  vec2 uv = vec2((pixel.x - u_source.x) / u_source.z, 1.0 - (pixel.y - u_source.y) / u_source.w);\n"
+    "  fragment_color = mix(texture(u_original, uv), texture(u_blurred, uv), coverage);\n"
+    "}\n";
+
 typedef void (*WoxMainFunction)(void *data);
 
 typedef struct {
@@ -1308,6 +1393,27 @@ static bool linux_gl_area_can_make_current(GtkWidget *gl_area) {
   return gl_area != NULL && GTK_IS_GL_AREA(gl_area) && gtk_widget_get_realized(gl_area) && gtk_gl_area_get_context(GTK_GL_AREA(gl_area)) != NULL;
 }
 
+// linux_gl_renderer_is_software skips the floating-material blur on CPU rasterizers
+// the same way Windows skips it on WARP: a large Gaussian every caret blink is not
+// worth the fill rate.
+static bool linux_gl_renderer_is_software(const char *renderer) {
+  if (renderer == NULL) {
+    return false;
+  }
+  char lower[256];
+  size_t length = 0;
+  for (; renderer[length] != '\0' && length + 1 < sizeof(lower); length++) {
+    char value = renderer[length];
+    if (value >= 'A' && value <= 'Z') {
+      value = (char)(value - 'A' + 'a');
+    }
+    lower[length] = value;
+  }
+  lower[length] = '\0';
+  return strstr(lower, "llvmpipe") != NULL || strstr(lower, "softpipe") != NULL || strstr(lower, "swrast") != NULL ||
+         strstr(lower, "swiftshader") != NULL || strstr(lower, "microsoft basic render") != NULL;
+}
+
 static bool initialize_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
   GError *error = gtk_gl_area_get_error(GTK_GL_AREA(gl_area));
@@ -1363,6 +1469,7 @@ static bool initialize_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *render
   glUseProgram(renderer->texture_program);
   glUniform1i(glGetUniformLocation(renderer->texture_program, "u_texture"), 0);
   glUseProgram(0);
+  renderer->software_gl = linux_gl_renderer_is_software(gl_renderer);
   if (renderer->texts == NULL) {
     renderer->texts = calloc((size_t)WOX_LINUX_TEXT_CACHE_MAX, sizeof(WoxLinuxTextCacheEntry));
     if (renderer->texts == NULL) {
@@ -1424,6 +1531,27 @@ static void destroy_renderer(WoxLinuxRenderer *renderer, GtkWidget *gl_area) {
       }
       if (renderer->frame_texture != 0) {
         glDeleteTextures(1, &renderer->frame_texture);
+      }
+      if (renderer->blur_framebuffer != 0) {
+        glDeleteFramebuffers(1, &renderer->blur_framebuffer);
+      }
+      if (renderer->blur_source_texture != 0) {
+        glDeleteTextures(1, &renderer->blur_source_texture);
+      }
+      if (renderer->blur_ping_texture != 0) {
+        glDeleteTextures(1, &renderer->blur_ping_texture);
+      }
+      if (renderer->blur_pong_texture != 0) {
+        glDeleteTextures(1, &renderer->blur_pong_texture);
+      }
+      if (renderer->blur_program != 0) {
+        glDeleteProgram(renderer->blur_program);
+      }
+      if (renderer->blur_blit_program != 0) {
+        glDeleteProgram(renderer->blur_blit_program);
+      }
+      if (renderer->blur_compose_program != 0) {
+        glDeleteProgram(renderer->blur_compose_program);
       }
       glDeleteVertexArrays(1, &renderer->vertex_array);
       glDeleteProgram(renderer->texture_program);
@@ -4774,6 +4902,262 @@ int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, fl
   glUniform1f(renderer->rect_stroke_width, stroke_width);
   glUniform1i(renderer->rect_polygon_count, 0);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  return 0;
+}
+
+static bool ensure_owned_texture(GLuint *texture, int *current_width, int *current_height, int width, int height, GLint filter) {
+  if (texture == NULL || current_width == NULL || current_height == NULL || width <= 0 || height <= 0) {
+    return false;
+  }
+  if (*texture != 0 && *current_width == width && *current_height == height) {
+    glBindTexture(GL_TEXTURE_2D, *texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+    return true;
+  }
+  if (*texture == 0) {
+    glGenTextures(1, texture);
+    if (*texture == 0) {
+      return false;
+    }
+  }
+  glBindTexture(GL_TEXTURE_2D, *texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+  *current_width = width;
+  *current_height = height;
+  return true;
+}
+
+static bool ensure_blur_programs(WoxLinuxRenderer *renderer) {
+  if (renderer == NULL || renderer->blur_unavailable) {
+    return false;
+  }
+  if (renderer->blur_program != 0 && renderer->blur_blit_program != 0 && renderer->blur_compose_program != 0) {
+    return true;
+  }
+  renderer->blur_program = create_program(blur_vertex_source, blur_fragment_source);
+  renderer->blur_blit_program = create_program(blur_vertex_source, blit_fragment_source);
+  renderer->blur_compose_program = create_program(rect_vertex_source, compose_fragment_source);
+  if (renderer->blur_program == 0 || renderer->blur_blit_program == 0 || renderer->blur_compose_program == 0) {
+    if (renderer->blur_program != 0) {
+      glDeleteProgram(renderer->blur_program);
+    }
+    if (renderer->blur_blit_program != 0) {
+      glDeleteProgram(renderer->blur_blit_program);
+    }
+    if (renderer->blur_compose_program != 0) {
+      glDeleteProgram(renderer->blur_compose_program);
+    }
+    renderer->blur_program = 0;
+    renderer->blur_blit_program = 0;
+    renderer->blur_compose_program = 0;
+    renderer->blur_unavailable = true;
+    return false;
+  }
+  if (renderer->blur_framebuffer == 0) {
+    glGenFramebuffers(1, &renderer->blur_framebuffer);
+  }
+  renderer->blur_texel = glGetUniformLocation(renderer->blur_program, "u_texel");
+  renderer->blur_direction = glGetUniformLocation(renderer->blur_program, "u_direction");
+  renderer->blur_sigma = glGetUniformLocation(renderer->blur_program, "u_sigma");
+  renderer->compose_viewport = glGetUniformLocation(renderer->blur_compose_program, "u_viewport");
+  renderer->compose_rect = glGetUniformLocation(renderer->blur_compose_program, "u_rect");
+  renderer->compose_radius = glGetUniformLocation(renderer->blur_compose_program, "u_radius");
+  renderer->compose_source = glGetUniformLocation(renderer->blur_compose_program, "u_source");
+  renderer->compose_scale = glGetUniformLocation(renderer->blur_compose_program, "u_scale");
+  glUseProgram(renderer->blur_program);
+  glUniform1i(glGetUniformLocation(renderer->blur_program, "u_texture"), 0);
+  glUseProgram(renderer->blur_blit_program);
+  glUniform1i(glGetUniformLocation(renderer->blur_blit_program, "u_texture"), 0);
+  glUseProgram(renderer->blur_compose_program);
+  glUniform1i(glGetUniformLocation(renderer->blur_compose_program, "u_original"), 0);
+  glUniform1i(glGetUniformLocation(renderer->blur_compose_program, "u_blurred"), 1);
+  glUseProgram(0);
+  return renderer->blur_framebuffer != 0;
+}
+
+static void restore_frame_target(WoxLinuxRenderer *renderer, const GLint viewport[4], const GLint scissor_box[4], GLboolean scissor_enabled) {
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->frame_framebuffer);
+  glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+  if (scissor_enabled) {
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(scissor_box[0], scissor_box[1], scissor_box[2], scissor_box[3]);
+  } else {
+    glDisable(GL_SCISSOR_TEST);
+  }
+  glEnable(GL_BLEND);
+  glBlendEquation(GL_FUNC_ADD);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static bool bind_texture_as_blur_target(WoxLinuxRenderer *renderer, GLuint texture, int width, int height) {
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->blur_framebuffer);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    return false;
+  }
+  glViewport(0, 0, width, height);
+  glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_BLEND);
+  return true;
+}
+
+// blur_floating_material_backdrop replaces the pixels inside the rounded surface with a
+// blurred copy of what the frame has drawn there so far. The copy is downsampled, run
+// through a separable Gaussian, then written back through a rounded mask so the corners
+// of the bounding box keep their sharp pixels. Failure leaves the target as it was.
+static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin) {
+  if (renderer == NULL || renderer->software_gl || renderer->frame_texture == 0 || blur_sigma <= 0.0f) {
+    return false;
+  }
+  if (!ensure_blur_programs(renderer)) {
+    return false;
+  }
+  const float scale = renderer->scale;
+  const int frame_width = renderer->frame_width;
+  const int frame_height = renderer->frame_height;
+  int left = (int)floorf((x - blur_margin) * scale);
+  int top = (int)floorf((y - blur_margin) * scale);
+  int right = (int)ceilf((x + width + blur_margin) * scale);
+  int bottom = (int)ceilf((y + height + blur_margin) * scale);
+  if (left < 0) {
+    left = 0;
+  }
+  if (top < 0) {
+    top = 0;
+  }
+  if (right > frame_width) {
+    right = frame_width;
+  }
+  if (bottom > frame_height) {
+    bottom = frame_height;
+  }
+  const int copy_width = right - left;
+  const int copy_height = bottom - top;
+  if (copy_width <= 0 || copy_height <= 0 || copy_width > 4096 || copy_height > 4096) {
+    return false;
+  }
+  const int gl_bottom = frame_height - bottom;
+  const float physical_sigma = blur_sigma * scale;
+  int factor = 4;
+  if (physical_sigma < 4.0f) {
+    factor = 1;
+  } else if (physical_sigma < 8.0f) {
+    factor = 2;
+  }
+  int down_width = copy_width / factor;
+  int down_height = copy_height / factor;
+  if (down_width < 1) {
+    down_width = 1;
+  }
+  if (down_height < 1) {
+    down_height = 1;
+  }
+  const float pass_sigma = physical_sigma / (float)factor;
+
+  GLint viewport[4];
+  GLint scissor_box[4];
+  glGetIntegerv(GL_VIEWPORT, viewport);
+  glGetIntegerv(GL_SCISSOR_BOX, scissor_box);
+  const GLboolean scissor_enabled = glIsEnabled(GL_SCISSOR_TEST);
+
+  if (!ensure_owned_texture(&renderer->blur_source_texture, &renderer->blur_source_width, &renderer->blur_source_height, copy_width, copy_height, GL_LINEAR)) {
+    return false;
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->frame_framebuffer);
+  glBindTexture(GL_TEXTURE_2D, renderer->blur_source_texture);
+  glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, left, gl_bottom, copy_width, copy_height);
+
+  if (!ensure_owned_texture(&renderer->blur_ping_texture, &renderer->blur_ping_width, &renderer->blur_ping_height, down_width, down_height, GL_LINEAR) ||
+      !ensure_owned_texture(&renderer->blur_pong_texture, &renderer->blur_pong_width, &renderer->blur_pong_height, down_width, down_height, GL_LINEAR)) {
+    restore_frame_target(renderer, viewport, scissor_box, scissor_enabled);
+    return false;
+  }
+
+  glBindVertexArray(renderer->vertex_array);
+  if (!bind_texture_as_blur_target(renderer, renderer->blur_ping_texture, down_width, down_height)) {
+    restore_frame_target(renderer, viewport, scissor_box, scissor_enabled);
+    return false;
+  }
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, renderer->blur_source_texture);
+  glUseProgram(renderer->blur_blit_program);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+  if (!bind_texture_as_blur_target(renderer, renderer->blur_pong_texture, down_width, down_height)) {
+    restore_frame_target(renderer, viewport, scissor_box, scissor_enabled);
+    return false;
+  }
+  glBindTexture(GL_TEXTURE_2D, renderer->blur_ping_texture);
+  glUseProgram(renderer->blur_program);
+  glUniform2f(renderer->blur_texel, 1.0f / (float)down_width, 1.0f / (float)down_height);
+  glUniform2f(renderer->blur_direction, 1.0f, 0.0f);
+  glUniform1f(renderer->blur_sigma, pass_sigma);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+  if (!bind_texture_as_blur_target(renderer, renderer->blur_ping_texture, down_width, down_height)) {
+    restore_frame_target(renderer, viewport, scissor_box, scissor_enabled);
+    return false;
+  }
+  glBindTexture(GL_TEXTURE_2D, renderer->blur_pong_texture);
+  glUniform2f(renderer->blur_direction, 0.0f, 1.0f);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+  restore_frame_target(renderer, viewport, scissor_box, scissor_enabled);
+  glBlendFunc(GL_ONE, GL_ZERO);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, renderer->blur_source_texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, renderer->blur_ping_texture);
+  glUseProgram(renderer->blur_compose_program);
+  glUniform2f(renderer->compose_viewport, renderer->logical_width, renderer->logical_height);
+  glUniform4f(renderer->compose_rect, x, y, width, height);
+  glUniform1f(renderer->compose_radius, radius);
+  glUniform4f(renderer->compose_source, (float)left, (float)top, (float)copy_width, (float)copy_height);
+  glUniform1f(renderer->compose_scale, scale);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  return true;
+}
+
+// wox_linux_window_floating_material realises DisplayList.FloatingMaterial on Linux: blur
+// the main surface under the rounded rectangle in place, then paint the theme tint and
+// hairline edge over it. The overlay surface holds nothing beneath the panel to sample,
+// and software GL would convolve on the CPU every repaint, so both keep the flat tint.
+int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
+    return -1;
+  }
+  if (width <= 0.0f || height <= 0.0f) {
+    return 0;
+  }
+  WoxLinuxRenderer *renderer = window->active_renderer;
+  if (renderer == &window->renderer && !renderer->software_gl && blur_sigma > 0.0f) {
+    blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin);
+  }
+  if (tint_alpha != 0) {
+    int32_t result = wox_linux_window_fill_rounded_rect(window, x, y, width, height, radius, tint_red, tint_green, tint_blue, tint_alpha);
+    if (result != 0) {
+      return result;
+    }
+  }
+  if (edge_alpha != 0) {
+    return wox_linux_window_stroke_rounded_rect(window, x, y, width, height, radius, 1.0f, edge_red, edge_green, edge_blue, edge_alpha);
+  }
   return 0;
 }
 

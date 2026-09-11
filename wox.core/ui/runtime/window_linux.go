@@ -786,6 +786,25 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 			)
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			result = C.wox_linux_window_begin_embedded_surface_overlay(native)
+		case displayCommandFloatingMaterial:
+			result = C.wox_linux_window_floating_material(
+				native,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.float(floatingMaterialBlurSigma),
+				C.float(floatingMaterialBlurMargin),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+				C.uint8_t(command.edge.R),
+				C.uint8_t(command.edge.G),
+				C.uint8_t(command.edge.B),
+				C.uint8_t(command.edge.A),
+			)
 		case displayCommandSetClipRect:
 			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:

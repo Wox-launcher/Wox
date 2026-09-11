@@ -64,7 +64,7 @@
     }
   },
   "linux": {
-    "ActionContainerBackgroundColor": "#2D3440",
+    "ActionContainerBackgroundColor": "rgba(44, 52, 66, 0.6)",
     "variants": {
       "hyprland": {
         "AppBackgroundColor": "rgba(35, 41, 51, 0.98)"

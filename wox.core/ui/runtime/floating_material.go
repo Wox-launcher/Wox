@@ -25,7 +25,9 @@ package woxui
 //     while the frame is encoded, then paints the tint and edge over the blur.
 //     Everything drawn before the material this frame, including other floating
 //     surfaces, is part of the sampled backdrop, so stacking needs no cover.
-//   - Linux paints the tint and edge as ordinary commands; there is no blur.
+//   - Linux does the same with its OpenGL back buffer. Compositor blur
+//     (ext-background-effect-v1) is a whole-window desktop backdrop and cannot
+//     sample Go content underneath a panel.
 
 // floatingMaterialMode is how the current platform realises a floating material.
 type floatingMaterialMode uint8
