@@ -23,7 +23,7 @@ int32_t wox_linux_window_center(WoxLinuxWindow *window, float width, float heigh
 int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window);
 int32_t wox_linux_window_minimize(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enabled);
-int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom);
+int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom, float radius);
 int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_set_min_size(WoxLinuxWindow *window, float width, float height);
 int32_t wox_linux_window_set_icon(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
@@ -67,5 +67,6 @@ int32_t wox_linux_test_resource_cache_generation(void);
 int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t height, int32_t grip);
 int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot);
 int32_t wox_linux_test_window_requests_background_blur(int32_t screenshot, int32_t blur_available);
+float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested);
 
 #endif

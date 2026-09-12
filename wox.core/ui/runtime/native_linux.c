@@ -85,6 +85,11 @@ enum {
 // matching windowsResizeGrip. Undecorated GTK windows have no SSD borders.
 static const int wox_linux_resize_grip = 10;
 
+// wox_linux_window_corner_radius matches DefaultWindowCornerRadius when custom
+// chrome does not author a radius. Windows and macOS clip the native surface to
+// that shape; Linux has to punch the same silhouette into the presented alpha.
+static const float wox_linux_window_corner_radius = 14.0f;
+
 static const uint64_t wox_linux_image_cache_max_bytes = 8ULL * 1024ULL * 1024ULL;
 static const uint64_t wox_linux_image_cache_max_entry_bytes = 1ULL * 1024ULL * 1024ULL;
 static const uint64_t wox_linux_large_image_max_bytes = 32ULL * 1024ULL * 1024ULL;
@@ -242,6 +247,7 @@ struct WoxLinuxWindow {
   bool application_window;
   bool screenshot_window;
   bool custom_window_chrome;
+  float corner_radius;
   bool topmost;
   bool layer_shell_enabled;
   void *background_effect;
@@ -2874,6 +2880,53 @@ static void on_gl_unrealize(GtkGLArea *area, gpointer data) {
   destroy_renderer(renderer, GTK_WIDGET(area));
 }
 
+// linux_custom_chrome_corner_radius is the present clip for authored chrome.
+// A negative requested radius keeps the default rounded shape, matching macOS.
+static float linux_custom_chrome_corner_radius(bool custom, float requested) {
+  if (!custom) {
+    return 0.0f;
+  }
+  if (requested < 0.0f) {
+    return wox_linux_window_corner_radius;
+  }
+  return requested;
+}
+
+// apply_linux_window_corner_mask punches the window silhouette after a rectangular
+// blit. Widget Radius only paints a rounded fill; children can still write the
+// corner cutouts. Windows clips the composition visual and HWND, macOS sets
+// masksToBounds; Linux presents a rectangle, so those pixels stayed opaque.
+static void apply_linux_window_corner_mask(WoxLinuxWindow *window, WoxLinuxRenderer *renderer) {
+  if (window == NULL || renderer == NULL || !window->per_pixel_alpha || renderer->rect_program == 0 || renderer->vertex_array == 0) {
+    return;
+  }
+  if (renderer->logical_width <= 0.0f || renderer->logical_height <= 0.0f || renderer->frame_width <= 0 || renderer->frame_height <= 0) {
+    return;
+  }
+  float radius = fminf(window->corner_radius, fminf(renderer->logical_width, renderer->logical_height) * 0.5f);
+  if (radius <= 0.0f) {
+    return;
+  }
+  glViewport(0, 0, renderer->frame_width, renderer->frame_height);
+  glDisable(GL_SCISSOR_TEST);
+  glBindVertexArray(renderer->vertex_array);
+  glEnable(GL_BLEND);
+  glBlendEquation(GL_FUNC_ADD);
+  glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
+  glUseProgram(renderer->rect_program);
+  glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
+  glUniform4f(renderer->rect_bounds, 0.0f, 0.0f, renderer->logical_width, renderer->logical_height);
+  const float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  glUniform4fv(renderer->rect_color, 1, color);
+  glUniform1f(renderer->rect_radius, radius);
+  glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glUniform1i(renderer->rect_polygon_count, 0);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  glUseProgram(0);
+  glBindVertexArray(0);
+}
+
 static void present_linux_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *renderer) {
   if (renderer == NULL || renderer->frame_framebuffer == 0) {
     return;
@@ -2884,6 +2937,7 @@ static void present_linux_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *ren
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, default_framebuffer);
   glBlitFramebuffer(0, 0, renderer->frame_width, renderer->frame_height, 0, 0, renderer->frame_width, renderer->frame_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
   glBindFramebuffer(GL_FRAMEBUFFER, default_framebuffer);
+  apply_linux_window_corner_mask(window, renderer);
   glFlush();
   if (wox_linux_render_trace_enabled) {
     GLenum gl_error = glGetError();
@@ -3730,13 +3784,21 @@ int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enable
   return run_on_main_sync(set_hide_on_blur_main, &call) ? call.result : -1;
 }
 
+typedef struct {
+  WoxLinuxWindow *window;
+  bool enabled;
+  float radius;
+  int32_t result;
+} WoxChromeCall;
+
 static void set_window_chrome_main(void *data) {
-  WoxBoolCall *call = data;
+  WoxChromeCall *call = data;
   if (call->window->closed) {
     call->result = -1;
     return;
   }
   call->window->custom_window_chrome = call->enabled;
+  call->window->corner_radius = linux_custom_chrome_corner_radius(call->enabled, call->radius);
   if (call->enabled) {
     destroy_linux_background_effect(call->window);
     return;
@@ -3744,11 +3806,11 @@ static void set_window_chrome_main(void *data) {
   apply_linux_background_effect(call->window);
 }
 
-int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom) {
+int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom, float radius) {
   if (window == NULL) {
     return -1;
   }
-  WoxBoolCall call = {.window = window, .enabled = custom != 0};
+  WoxChromeCall call = {.window = window, .enabled = custom != 0, .radius = radius};
   return run_on_main_sync(set_window_chrome_main, &call) ? call.result : -1;
 }
 
@@ -5408,6 +5470,7 @@ static int32_t finish_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRende
   }
   glBlitFramebuffer(0, 0, renderer->frame_width, renderer->frame_height, 0, 0, renderer->frame_width, renderer->frame_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
   glBindFramebuffer(GL_FRAMEBUFFER, renderer->default_framebuffer);
+  apply_linux_window_corner_mask(window, renderer);
   glFlush();
   renderer->frame_open = false;
   renderer->last_presented_generation = renderer->context_generation;
@@ -5535,4 +5598,8 @@ int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t heigh
 
 int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot) {
   return (int32_t)layer_shell_stack_layer(topmost != 0, screenshot != 0);
+}
+
+float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested) {
+  return linux_custom_chrome_corner_radius(custom != 0, requested);
 }
