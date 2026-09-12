@@ -123,13 +123,11 @@ type CloudPluginExclusionsProps struct {
 	SectionLabel   string
 	Tips           string
 	ColumnLabel    string
-	EmptyLabel     string
 	Items          []CloudPluginExclusionProps
 	AddLabel       string
 	OperationLabel string
 	AddIcon        *woxui.Image
 	DeleteIcon     *woxui.Image
-	EmptyIcon      *woxui.Image
 	OnAdd          func()
 }
 
@@ -643,8 +641,8 @@ func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height f
 	return FormTableField(FormTableFieldProps{
 		ID: "cloud-plugin-exclusions", Title: props.SectionLabel, Description: props.Tips, Width: width, Height: height, MaxHeight: 260, InlineTitle: true,
 		Columns: []FormTableColumn{{Label: props.ColumnLabel}}, Rows: rows, HideEditAction: true, HideCloneAction: true,
-		AddLabel: props.AddLabel, OperationLabel: props.OperationLabel, EmptyLabel: props.EmptyLabel,
-		AddIcon: props.AddIcon, DeleteIcon: props.DeleteIcon, EmptyIcon: props.EmptyIcon,
+		AddLabel: props.AddLabel, OperationLabel: props.OperationLabel,
+		AddIcon: props.AddIcon, DeleteIcon: props.DeleteIcon,
 		HeaderWeight: woxui.FontWeightSemibold, Theme: theme, OnAdd: props.OnAdd,
 		OnDeleteRow: func(index int) {
 			if index >= 0 && index < len(props.Items) {

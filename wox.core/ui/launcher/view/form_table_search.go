@@ -16,6 +16,15 @@ type formTableSearchState struct {
 	focused bool
 }
 
+// formTableSearchVisible hides the idle search control when the list has no
+// rows. A typed query still keeps it so no-matches can be refined.
+func formTableSearchVisible(props FormTableFieldProps) bool {
+	if !props.EnableSearch {
+		return false
+	}
+	return len(props.Rows) > 0 || strings.TrimSpace(props.SearchQuery) != ""
+}
+
 // FormTableField mounts local search state only for searchable tables.
 func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	if !props.EnableSearch {

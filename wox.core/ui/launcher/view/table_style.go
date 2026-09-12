@@ -9,7 +9,6 @@ import (
 const (
 	tableSurfaceHeaderHeight = float32(36)
 	tableSurfaceRowHeight    = float32(36)
-	tableSurfaceEmptyHeight  = float32(82)
 	tableSurfaceBorderWidth  = woxcomponent.TableGridBorderWidth
 )
 

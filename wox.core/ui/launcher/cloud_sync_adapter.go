@@ -476,13 +476,11 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 		SectionLabel:   a.translate("i18n:ui_cloud_sync_plugin_exclusions"),
 		Tips:           a.translate("i18n:ui_cloud_sync_plugin_exclusions_tips"),
 		ColumnLabel:    a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"),
-		EmptyLabel:     a.translate("i18n:ui_no_data"),
 		Items:          items,
 		AddLabel:       a.translate("i18n:ui_add"),
 		OperationLabel: a.translate("i18n:ui_operation"),
 		AddIcon:        a.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)),
 		DeleteIcon:     a.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)),
-		EmptyIcon:      a.imageForTint(settingControlIconSource("inbox"), &foreground, physicalImageSize(24, imageScale)),
 		OnAdd:          a.openCloudPluginExclusionDialog,
 	}
 }

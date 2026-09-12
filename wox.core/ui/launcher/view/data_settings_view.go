@@ -167,9 +167,13 @@ func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 		}})
 	}
 	maxHeight := int(tableSurfaceHeaderHeight + tableSurfaceRowHeight*5)
+	height := FormTableFieldHeight(true, "", visibleRows, maxHeight)
+	if visibleRows == 0 && strings.TrimSpace(props.Labels.BackupEmpty) != "" {
+		height += woxcomponent.SettingsControlHeight
+	}
 	return FormTableField(FormTableFieldProps{
 		ID: "data-backups", Title: props.Labels.BackupListTitle, Width: width,
-		Height: FormTableFieldHeight(true, "", visibleRows, maxHeight), MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true,
+		Height: height, MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true,
 		Columns: []FormTableColumn{{Label: props.Labels.BackupDate, Width: 350}, {Label: props.Labels.BackupType, Width: 220}, {Label: props.Labels.BackupOperation, Width: dataBackupOperationColumnWidth}},
 		Rows:    rows, SecondaryLabel: props.Labels.BackupNow, EmptyLabel: props.Labels.BackupEmpty,
 		HeaderWeight: woxui.FontWeightSemibold, Theme: props.Theme, OnSecondary: props.OnCreateBackup,

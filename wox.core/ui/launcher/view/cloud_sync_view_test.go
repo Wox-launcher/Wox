@@ -231,6 +231,15 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 		t.Fatal("selected plugin icon is not forwarded to the closed dropdown")
 	}
 
+	empty := cloudPluginExclusionsCard(CloudPluginExclusionsProps{
+		SectionLabel: "Plugin Sync Exclusions", Tips: "Plugins added to this table will not sync their data or settings.",
+		AddLabel: "Add", ColumnLabel: "Plugin",
+	}, 700, FormTableFieldHeight(true, "Plugins added to this table will not sync their data or settings.", 0, 260), woxcomponent.Theme{})
+	emptyChildren := empty.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(emptyChildren) != 1 {
+		t.Fatalf("empty exclusions children = %d, want only the header", len(emptyChildren))
+	}
+
 	rowIcon := &woxui.Image{}
 	card := cloudPluginExclusionsCard(CloudPluginExclusionsProps{
 		SectionLabel: "Exclusions", ColumnLabel: "Plugin", Tips: "Tips", Items: []CloudPluginExclusionProps{{Name: "Plugin A", Icon: rowIcon}},

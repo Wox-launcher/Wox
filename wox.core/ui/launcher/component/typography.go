@@ -34,4 +34,6 @@ const (
 	TableEmptyFontSize              = float32(13)
 	ButtonFontSize                  = float32(13)
 	CompactButtonFontSize           = float32(11)
+	TagFontSize                     = float32(11)
+	CompactTagFontSize              = float32(9)
 )

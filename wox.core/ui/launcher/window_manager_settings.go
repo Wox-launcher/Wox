@@ -810,7 +810,7 @@ func (a *App) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGrou
 		Width: width, Height: height, URLs: urls, Window: a.formTableNativeWindow(), Theme: theme,
 		Title: a.translate("i18n:plugin_window_manager_group_browser_urls"), Description: a.translate("i18n:plugin_window_manager_group_browser_urls_description"),
 		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"),
-		DeleteLabel: a.translate("i18n:ui_delete"), OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"), DeleteConfirmation: a.translate("i18n:ui_delete_row_confirm"), RequiredLabel: a.translate("i18n:ui_validator_value_can_not_be_empty"),
+		DeleteLabel: a.translate("i18n:ui_delete"), OperationLabel: a.translate("i18n:ui_operation"), DeleteConfirmation: a.translate("i18n:ui_delete_row_confirm"), RequiredLabel: a.translate("i18n:ui_validator_value_can_not_be_empty"),
 		ExtensionChecking: editor.extensionChecking, ExtensionConnected: editor.extensionConnected,
 		ExtensionConnectedLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_connected"), ExtensionDisconnectedLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_not_connected"),
 		ExtensionInstallLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_install"),

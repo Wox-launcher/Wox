@@ -15,7 +15,16 @@ func TestWoxTagKeepsFullPixelOutline(t *testing.T) {
 		t.Fatalf("tag chrome = radius %v border %v padding %+v color %#v, want 3/1/%+v/%#v", tag.Radius, tag.BorderWidth, tag.Padding, tag.BorderColor, wantPadding, color)
 	}
 	label := tag.Child.(woxwidget.Text)
-	if label.Value != "系统" || label.Style.Size != 11 || label.Color != color {
-		t.Fatalf("tag label = %q size %v color %#v, want 系统/11/%#v", label.Value, label.Style.Size, label.Color, color)
+	if label.Value != "系统" || label.Style.Size != TagFontSize || label.Color != color {
+		t.Fatalf("tag label = %q size %v color %#v, want 系统/%v/%#v", label.Value, label.Style.Size, label.Color, TagFontSize, color)
+	}
+}
+
+func TestWoxCompactTagUsesDenseMetadataSize(t *testing.T) {
+	color := woxui.Color{R: 80, G: 90, B: 100, A: 255}
+	tag := WoxCompactTag("Disabled", color).(woxwidget.Container)
+	label := tag.Child.(woxwidget.Text)
+	if label.Value != "Disabled" || label.Style.Size != CompactTagFontSize {
+		t.Fatalf("compact tag = %q size %v, want Disabled/%v", label.Value, label.Style.Size, CompactTagFontSize)
 	}
 }

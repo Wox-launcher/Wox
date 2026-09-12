@@ -112,7 +112,7 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 func (a *App) formTableRowSummary(definition formDefinition, row map[string]any) string {
 	parts := make([]string, 0, 3)
 	for _, column := range definition.Value.Columns {
-		if column.HideInTable {
+		if column.HideInTable || formTableIsRowStatusColumn(column) {
 			continue
 		}
 		label := a.translate(column.Label)
@@ -155,7 +155,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	emptyIconRasterSize := physicalImageSize(24, callbacks.imageScale)
 	visibleColumns := make([]formTableColumn, 0, len(definition.Value.Columns))
 	for _, column := range definition.Value.Columns {
-		if !column.HideInTable {
+		if !column.HideInTable && !formTableIsRowStatusColumn(column) {
 			visibleColumns = append(visibleColumns, column)
 		}
 	}
@@ -218,8 +218,8 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		SearchLabel: a.translate("i18n:ui_table_search"), SearchPlaceholder: a.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: a.settingsNativeWindow(),
 		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.translate("i18n:ui_delete_row_confirm"),
-		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
-		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
+		OperationLabel: a.translate("i18n:ui_operation"),
+		InfoIcon:       a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
 		DisabledEditIcon: a.imageForTint(settingControlIconSource("edit"), &disabledForeground, rowIconRasterSize), DisabledCloneIcon: a.imageForTint(settingControlIconSource("copy"), &disabledForeground, rowIconRasterSize), DisabledDeleteIcon: a.imageForTint(settingControlIconSource("delete"), &disabledForeground, rowIconRasterSize),
 		EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
@@ -292,9 +292,37 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 		for columnIndex, column := range columns {
 			cells[columnIndex] = a.formTableViewCell(column, current.row, theme, imageScale)
 		}
-		viewRows = append(viewRows, launcherview.FormTableRow{Index: current.index, ReadOnly: formTableSkillRowReadOnly(definition, current.row), Cells: cells})
+		status := a.formTableRowStatus(definition.Value.Columns, current.row)
+		if status != "" && len(cells) > 0 {
+			if cells[0].SearchText != "" {
+				cells[0].SearchText += " " + status
+			} else {
+				cells[0].SearchText = status
+			}
+		}
+		viewRows = append(viewRows, launcherview.FormTableRow{Index: current.index, ReadOnly: formTableSkillRowReadOnly(definition, current.row), Cells: cells, Status: status})
 	}
 	return viewRows
+}
+
+// formTableIsRowStatusColumn hides Disabled checkboxes from the grid. A checkbox
+// in the table looks toggleable, but the value can only change in the editor.
+func formTableIsRowStatusColumn(column formTableColumn) bool {
+	return column.Type == "checkbox" && strings.EqualFold(column.Key, "Disabled")
+}
+
+// formTableRowStatus returns the quiet Disabled label when that checkbox is on.
+func (a *App) formTableRowStatus(columns []formTableColumn, row map[string]any) string {
+	for _, column := range columns {
+		if !formTableIsRowStatusColumn(column) || formTableColumnValue(column, row) != "true" {
+			continue
+		}
+		if strings.TrimSpace(column.Label) != "" {
+			return a.translate(column.Label)
+		}
+		return a.translate("i18n:ui_disabled")
+	}
+	return ""
 }
 
 func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.Theme, imageScale float32) launcherview.FormTableCell {

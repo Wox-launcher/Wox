@@ -736,10 +736,10 @@ func TestFormTableMixedLayoutPlacesDescriptionBelowTable(t *testing.T) {
 	if table.Gap != 4 {
 		t.Fatalf("table tooltip gap = %v, want Flutter's 4", table.Gap)
 	}
-	if len(table.Children) != 2 {
-		t.Fatalf("table child count = %d, want grid and tooltip", len(table.Children))
+	if len(table.Children) != 1 {
+		t.Fatalf("table child count = %d, want only the tooltip when the list is empty", len(table.Children))
 	}
-	description := table.Children[1].(woxwidget.TextBlock)
+	description := table.Children[0].(woxwidget.TextBlock)
 	if description.Value != "Configure custom commands." {
 		t.Fatalf("table tooltip = %q", description.Value)
 	}
@@ -806,6 +806,7 @@ func TestFormTableExpandsLastColumnBeforePinnedOperation(t *testing.T) {
 	props := FormTableFieldProps{
 		ID: "ignored-apps", Width: 626, Height: 118, OperationLabel: "Operation", Theme: woxcomponent.Theme{},
 		Columns: []FormTableColumn{{Label: "Application", Tooltip: "Application help"}},
+		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "Notes"}}}},
 	}
 
 	grid := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()))
@@ -885,8 +886,8 @@ func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
 	headerCell := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container)
 	headerAlign := headerCell.Child.(woxwidget.Align)
 	header := headerAlign.Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
-	body := formTableDataCell(props, FormTableCell{Text: "Translate"}, 120).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
-	empty := formTableEmptyState(props, 240, tableSurfaceEmptyHeight).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
+	body := formTableDataCellContent(t, formTableDataCell(props, FormTableCell{Text: "Translate"}, 120)).(woxwidget.TextBlock)
+	empty := formTableEmptyLabel(t, formTableEmptyState(props, 240, woxcomponent.SettingsControlHeight))
 
 	if header.Style.Size != woxcomponent.TableHeaderFontSize || header.Style.Weight != woxui.FontWeightRegular || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
 		t.Fatalf("table typography = size %v weight %v / %v / %v, want regular %v/%v/%v", header.Style.Size, header.Style.Weight, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)

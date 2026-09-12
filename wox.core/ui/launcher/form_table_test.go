@@ -106,6 +106,40 @@ func TestFormTableCheckboxCellShowsLocalizedDisabledText(t *testing.T) {
 	}
 }
 
+func TestFormTableDisabledColumnBecomesRowStatus(t *testing.T) {
+	app := &App{translations: map[string]string{
+		"ui_disabled":                      "Disabled",
+		"plugin_dictation_action_disabled": "Disabled",
+	}}
+	if !formTableIsRowStatusColumn(formTableColumn{Key: "Disabled", Type: "checkbox"}) {
+		t.Fatal("Disabled checkbox should be a row status")
+	}
+	if !formTableIsRowStatusColumn(formTableColumn{Key: "disabled", Type: "checkbox"}) {
+		t.Fatal("disabled checkbox should be a row status")
+	}
+	if formTableIsRowStatusColumn(formTableColumn{Key: "CacheDisabled", Type: "checkbox"}) {
+		t.Fatal("CacheDisabled must stay a visible checkbox column")
+	}
+	if formTableIsRowStatusColumn(formTableColumn{Key: "Disabled", Type: "text"}) {
+		t.Fatal("non-checkbox Disabled fields are not row status")
+	}
+
+	definition := formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys", Columns: []formTableColumn{
+		{Key: "Name", Type: "text", Label: "Name"},
+		{Key: "Disabled", Type: "checkbox", Label: "i18n:ui_disabled"},
+	}}}
+	rows := app.formTableViewRows(definition, []formTableColumn{{Key: "Name", Type: "text"}}, []map[string]any{
+		{"Name": "Clipboard", "Disabled": false},
+		{"Name": "Chat", "Disabled": true},
+	}, woxcomponent.Theme{}, 1)
+	if len(rows) != 2 || rows[0].Status != "" || rows[1].Status != "Disabled" {
+		t.Fatalf("row status = %#v, want only the disabled row labeled", rows)
+	}
+	if rows[1].Cells[0].SearchText != "Chat Disabled" {
+		t.Fatalf("search text = %q, want the status included", rows[1].Cells[0].SearchText)
+	}
+}
+
 func TestFormTableMultilineFieldUsesRowFormEditingController(t *testing.T) {
 	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "InjectCss", Label: "Inject CSS", MaxLines: 12}}
 	fields := newFormFieldsState([]formDefinition{definition}, map[string]string{"InjectCss": "header {\n  display: none;\n}"}, true)

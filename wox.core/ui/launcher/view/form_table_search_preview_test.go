@@ -51,6 +51,7 @@ func TestFormTableSearchIconAppearsBeforeAdd(t *testing.T) {
 		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
 		EnableSearch: true, SearchLabel: "Search", AddLabel: "Add",
 		SearchIcon: &woxui.Image{}, Theme: woxcomponent.Theme{},
+		Rows: []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "Chrome"}}}},
 	}
 	actions := formTableHeaderActions(props).(woxwidget.Flex)
 	if len(actions.Children) != 2 {
@@ -62,19 +63,53 @@ func TestFormTableSearchIconAppearsBeforeAdd(t *testing.T) {
 	}
 }
 
+func TestFormTableSearchHiddenWhenEmpty(t *testing.T) {
+	props := FormTableFieldProps{
+		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
+		EnableSearch: true, SearchOpen: true, SearchLabel: "Search", AddLabel: "Add",
+		SearchIcon: &woxui.Image{}, Theme: woxcomponent.Theme{},
+	}
+	actions := formTableHeaderActions(props).(woxwidget.Flex)
+	if len(actions.Children) != 1 {
+		t.Fatalf("empty header actions = %d, want only add", len(actions.Children))
+	}
+	field := formTableField(props)
+	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(children) != 1 {
+		t.Fatalf("empty field children = %d, want only the header", len(children))
+	}
+}
+
 func TestFormTableSearchFieldAppearsWhenOpen(t *testing.T) {
 	field := formTableField(FormTableFieldProps{
 		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
 		EnableSearch: true, SearchOpen: true, SearchPlaceholder: "Filter...",
 		SearchIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		Rows: []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "Chrome"}}}},
 	})
 	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
-	if len(children) < 3 {
-		t.Fatalf("inline children = %d, want header, search, grid", len(children))
+	if len(children) != 3 {
+		t.Fatalf("inline children = %d, want header, search, and grid", len(children))
 	}
 	search := children[1].(woxwidget.Container)
 	if search.Height != woxcomponent.SettingsSearchHeight {
 		t.Fatalf("search height = %v, want %v", search.Height, woxcomponent.SettingsSearchHeight)
+	}
+}
+
+func TestFormTableSearchRemainsWhenNoMatches(t *testing.T) {
+	field := formTableField(FormTableFieldProps{
+		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
+		EnableSearch: true, SearchOpen: true, SearchQuery: "zzz",
+		SearchPlaceholder: "Filter...", EmptyLabel: "No matches", NoMatchesLabel: "No matches",
+		SearchIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.Theme{},
+	})
+	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(children) != 3 {
+		t.Fatalf("no-match children = %d, want header, search, and empty copy", len(children))
+	}
+	if _, ok := children[1].(woxwidget.Container); !ok {
+		t.Fatal("no-match state must keep the search field")
 	}
 }
 

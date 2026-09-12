@@ -192,8 +192,9 @@ Use the configured application font and shared constants in `launcher/component/
 | Settings plugin detail tab | 14 | Regular; selection uses the underline, not weight |
 | Ordinary button label | 11 | Regular; opt into semibold only for a specific emphasis |
 | Supporting dense metadata | 10-11 | Regular or medium |
+| Compact table status tag | 9 | Regular; `WoxCompactTag` only |
 
-Use weight before adding another size. Keep ordinary body text at 13 and avoid text below 10. Apple uses 13 points as the default macOS body size and 10 points as the recommended minimum for custom type.
+Use weight before adding another size. Keep ordinary body text at 13 and avoid text below 10, except compact table status tags at 9. Apple uses 13 points as the default macOS body size and 10 points as the recommended minimum for custom type.
 
 Use measured text and alignment containers. Do not position text with guessed baselines or platform-specific offsets. Define line height explicitly for wrapping text and test configured fonts with taller native metrics.
 

@@ -482,6 +482,107 @@ func TestFormTableRowFieldRendersInlineValidationError(t *testing.T) {
 	}
 }
 
+func formTableEmptyLabel(t *testing.T, empty woxwidget.Widget) woxwidget.TextBlock {
+	t.Helper()
+	align, ok := empty.(woxwidget.Align)
+	if !ok {
+		t.Fatalf("empty state = %T, want a compact aligned line", empty)
+	}
+	label, ok := align.Child.(woxwidget.TextBlock)
+	if !ok {
+		t.Fatalf("empty label = %T, want a single TextBlock", align.Child)
+	}
+	return label
+}
+
+func TestFormTableEmptyStateOmitsGridChrome(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "ignored-apps", Title: "Ignore Hotkey Apps",
+		Description: "When one of these apps is active, Wox global hotkeys on this platform will be ignored",
+		Width:       720, InlineTitle: true, AddLabel: "Add",
+		Columns: []FormTableColumn{{Label: "App", Width: 420}},
+		Theme:   woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 150, G: 152, B: 156, A: 255}},
+	})
+	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(children) != 1 {
+		t.Fatalf("empty field children = %d, want only the header", len(children))
+	}
+	if _, grid := children[0].(woxwidget.Stateful); grid {
+		t.Fatal("empty table must not mount spreadsheet chrome")
+	}
+	if formTableEmptyState(FormTableFieldProps{}, 240, woxcomponent.SettingsControlHeight) != nil {
+		t.Fatal("unused empty lists must not paint a placeholder sentence")
+	}
+	noMatches := formTableEmptyLabel(t, formTableEmptyState(FormTableFieldProps{
+		EmptyLabel: "No matches", Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 150, A: 255}},
+	}, 240, woxcomponent.SettingsControlHeight))
+	if noMatches.Value != "No matches" {
+		t.Fatalf("search empty copy = %q, want the no-matches sentence", noMatches.Value)
+	}
+	invalid := formTableEmptyLabel(t, formTableEmptyState(FormTableFieldProps{
+		EmptyLabel: "None", Invalid: true, Theme: woxcomponent.Theme{ErrorText: woxui.Color{R: 210, A: 255}},
+	}, 240, woxcomponent.SettingsControlHeight))
+	if invalid.Value != "Invalid table data" || invalid.Color.R != 210 {
+		t.Fatalf("invalid empty copy = %#v, want error text", invalid)
+	}
+}
+
+func TestFormTableRowStatusUsesQuietLabel(t *testing.T) {
+	subtitle := woxui.Color{R: 150, G: 152, B: 156, A: 255}
+	title := woxui.Color{R: 240, G: 240, B: 240, A: 255}
+	row := FormTableRow{
+		Index:  0,
+		Status: "Disabled",
+		Cells:  []FormTableCell{{Text: "Clipboard"}, {Text: "capslock+v"}},
+	}
+	cell := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: subtitle}}, row, 0, 0, row.Cells[0], 180, false)
+	content := formTableDataCellContent(t, cell).(woxwidget.Flex)
+	if content.Gap != 6 || len(content.Children) != 2 {
+		t.Fatalf("status cell = gap %v children %d, want a 6px tag beside the name", content.Gap, len(content.Children))
+	}
+	name := content.Children[0].(woxwidget.Flexible).Child.(woxwidget.TextBlock)
+	if name.Value != "Clipboard" || !name.ShrinkWrap || name.Color.A != woxcomponent.DisabledContentAlpha {
+		t.Fatalf("disabled name = %#v, want shrink-wrapped reduced emphasis", name)
+	}
+	tag := content.Children[1].(woxwidget.Container)
+	label := tag.Child.(woxwidget.Text)
+	if tag.Radius != 3 || tag.BorderWidth != 1 || tag.BorderColor != subtitle || label.Value != "Disabled" || label.Style.Size != woxcomponent.CompactTagFontSize {
+		t.Fatalf("status tag = %#v / %#v, want the compact WoxTag beside the name", tag, label)
+	}
+	hotkey := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.Theme{ResultTitle: title}}, row, 0, 1, row.Cells[1], 120, false)
+	hotkeyContent := formTableDataCellContent(t, hotkey)
+	hotkeyText, ok := hotkeyContent.(woxwidget.TextBlock)
+	if !ok {
+		t.Fatalf("hotkey cell = %T, want plain text", hotkeyContent)
+	}
+	if hotkeyText.Value != "capslock+v" {
+		t.Fatalf("hotkey cell = %q", hotkeyText.Value)
+	}
+}
+
+func formTableDataCellSlot(t *testing.T, cell woxwidget.Widget) (woxwidget.Clip, woxwidget.Align, woxwidget.Widget) {
+	t.Helper()
+	container, ok := cell.(woxwidget.Container)
+	if !ok {
+		t.Fatalf("data cell = %T, want a table grid cell", cell)
+	}
+	clip, ok := container.Child.(woxwidget.Clip)
+	if !ok {
+		t.Fatalf("data cell child = %T, want Clip around a centered slot", container.Child)
+	}
+	align, ok := clip.Child.(woxwidget.Align)
+	if !ok || align.Height != tableSurfaceRowHeight || align.Vertical != 0.5 {
+		t.Fatalf("data cell slot = %#v, want a full-height vertically centered Align inside Clip", clip.Child)
+	}
+	return clip, align, align.Child
+}
+
+func formTableDataCellContent(t *testing.T, cell woxwidget.Widget) woxwidget.Widget {
+	t.Helper()
+	_, _, content := formTableDataCellSlot(t, cell)
+	return content
+}
+
 func formTableGridFlex(t *testing.T, grid woxwidget.Widget) woxwidget.Flex {
 	t.Helper()
 	frame, ok := grid.(woxwidget.Stack)
@@ -516,8 +617,9 @@ func TestFormTableColumnTitleStaysRegular(t *testing.T) {
 
 func TestFormTableUsesCollapsedGridLines(t *testing.T) {
 	theme := woxcomponent.Theme{
-		PreviewSplit: woxui.Color{R: 80, G: 90, B: 100, A: 200},
-		ResultTitle:  woxui.Color{R: 240, G: 240, B: 240, A: 255},
+		PreviewSplit:   woxui.Color{R: 80, G: 90, B: 100, A: 200},
+		ResultTitle:    woxui.Color{R: 240, G: 240, B: 240, A: 255},
+		ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255},
 	}
 	props := FormTableFieldProps{
 		ID: "hotkeys", Width: 400, Height: tableSurfaceHeaderHeight + tableSurfaceRowHeight*2,
@@ -547,11 +649,11 @@ func TestFormTableUsesCollapsedGridLines(t *testing.T) {
 		t.Fatalf("last header separator = right %.0f bottom %.0f, want bottom only", operationHeader.RightBorderWidth, operationHeader.BottomBorderWidth)
 	}
 
-	firstBody := formTableDataCellAt(props, 0, 0, props.Rows[0].Cells[0], 130, false).(woxwidget.Container)
+	firstBody := formTableDataCellAt(props, props.Rows[0], 0, 0, props.Rows[0].Cells[0], 130, false).(woxwidget.Container)
 	if firstBody.BorderWidth != 0 || firstBody.RightBorderWidth != tableSurfaceBorderWidth || firstBody.BottomBorderWidth != tableSurfaceBorderWidth {
 		t.Fatalf("body separator = full %.0f right %.0f bottom %.0f, want collapsed right+bottom", firstBody.BorderWidth, firstBody.RightBorderWidth, firstBody.BottomBorderWidth)
 	}
-	lastBody := formTableDataCellAt(props, 1, 1, props.Rows[1].Cells[1], 130, true).(woxwidget.Container)
+	lastBody := formTableDataCellAt(props, props.Rows[1], 1, 1, props.Rows[1].Cells[1], 130, true).(woxwidget.Container)
 	if lastBody.RightBorderWidth != tableSurfaceBorderWidth || lastBody.BottomBorderWidth != 0 {
 		t.Fatalf("last data separator = right %.0f bottom %.0f, want trailing only before the operation column", lastBody.RightBorderWidth, lastBody.BottomBorderWidth)
 	}
@@ -560,13 +662,13 @@ func TestFormTableUsesCollapsedGridLines(t *testing.T) {
 		t.Fatalf("last operation separator = %#v, want the outer frame to own that corner", lastOperation)
 	}
 
-	empty := formTableEmptyState(FormTableFieldProps{EmptyLabel: "None", Theme: theme}, 240, tableSurfaceEmptyHeight).(woxwidget.Container)
-	if empty.BorderWidth != 0 || empty.RightBorderWidth != 0 || empty.BottomBorderWidth != 0 {
-		t.Fatalf("empty state = %#v, want fill only so it does not double the header or frame", empty)
+	empty := formTableEmptyState(FormTableFieldProps{EmptyLabel: "None", Theme: theme}, 240, woxcomponent.SettingsControlHeight)
+	if _, framed := empty.(woxwidget.Stack); framed {
+		t.Fatal("empty state must not use table frame chrome")
 	}
-	emptyLabel := empty.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
-	if emptyLabel.Color != newTableSurfaceStyle(theme).headerText {
-		t.Fatalf("empty label = %#v, want table header text so ResultSubtitle cannot restyle it", emptyLabel.Color)
+	emptyLabel := formTableEmptyLabel(t, empty)
+	if emptyLabel.Value != "None" || emptyLabel.Color != theme.ResultSubtitle {
+		t.Fatalf("empty label = %#v, want secondary text without grid chrome", emptyLabel)
 	}
 }
 
