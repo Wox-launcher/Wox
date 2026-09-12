@@ -130,7 +130,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("theme-list-" + items[index].ID) },
 				ItemBuilder: func(index int) woxwidget.Widget { return themeListRow(props, items[index], width) },
 			}, Width: width, Height: viewportHeight,
-			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultTitle,
+			KeepVisible: keepVisible, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 
@@ -348,7 +348,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: theme.QueryText,
 	}}}}
-	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultTitle})
+	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, Theme: theme, ThumbColor: theme.ResultTitle})
 	toolbar := themeCatalogToolbar(props, theme, width, true)
 	window := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
@@ -435,7 +435,7 @@ func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	const horizontalPadding = float32(10)
 	labelStyle := woxui.TextStyle{Size: 14}
 	keycap, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
+		Theme: &theme, Toolbar: true, Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
 		Border: theme.ToolbarText, FontSize: woxcomponent.TailFontSize, Window: props.Window,
 	})
 	action := woxwidget.Container{Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{

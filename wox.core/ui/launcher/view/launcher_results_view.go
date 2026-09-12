@@ -116,10 +116,11 @@ type launcherResultRowProps struct {
 }
 
 type launcherResultBackgroundProps struct {
-	Width  float32
-	Height float32
-	Radius float32
-	Color  woxui.Color
+	Indicator woxcomponent.ResultIndicatorStyle
+	Width     float32
+	Height    float32
+	Radius    float32
+	Color     woxui.Color
 }
 
 func (p launcherResultBackgroundProps) Equal(other launcherResultBackgroundProps) bool {
@@ -243,7 +244,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 	}
 	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
-		ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
+		Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 }
 
@@ -293,8 +294,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		subtitle = props.Theme.SelectedSubtitle
 		tailColor = props.SelectedTailColor
 	} else if item.Hovered {
-		background = props.Theme.SelectedBackground
-		background.A = uint8(float32(background.A)*0.25 + 0.5)
+		background = props.Theme.ResultHoverColor()
 	}
 	titleValue := launcherResultSingleLineText(item.Title)
 	if item.Group {
@@ -353,10 +353,14 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	labelContent := woxwidget.Container{Width: labelContentWidth, Height: props.BaseHeight, Child: woxwidget.Align{Width: labelContentWidth, Height: props.BaseHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}}}
 	backgroundProps := launcherResultBackgroundProps{Width: props.RowWidth, Height: props.RowHeight, Radius: props.ItemRadius, Color: background}
+	if item.Selected {
+		// Paint on the background layer so selection never changes content geometry.
+		backgroundProps.Indicator = props.Theme.ResultIndicator()
+	}
 	backgroundLayer := woxwidget.Boundary[launcherResultBackgroundProps]{
 		Key: LauncherResultBackgroundBoundaryKey(item.ID), Label: "result-background:" + item.ID, Props: backgroundProps,
 		Build: func(props launcherResultBackgroundProps) woxwidget.Widget {
-			return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Color: props.Color}
+			return woxcomponent.ResultIndicatorBackground(props.Width, props.Height, props.Radius, props.Color, props.Indicator)
 		},
 	}
 	rowChildren := []woxwidget.Widget{

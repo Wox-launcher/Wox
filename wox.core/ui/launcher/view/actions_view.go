@@ -19,6 +19,10 @@ const (
 	ActionGroupDividerHeight = 16
 	ActionSearchHeight       = 46
 	MaxVisibleActions        = 8
+	// ActionPanelTopGap keeps the floating panel below the query chrome.
+	ActionPanelTopGap = 8
+	// ActionPanelMargin is added to theme app padding for the overlay inset.
+	ActionPanelMargin = 10
 	// ActionIconSize is the logical leading glyph size before launcher density scaling.
 	// The adapter rasterizes at the same scaled size so the panel never resamples.
 	ActionIconSize     = 22
@@ -110,9 +114,9 @@ type ActionsProps struct {
 	ActionQueryText       woxui.Color
 	ResultTail            woxui.Color
 	SelectedTail          woxui.Color
-	ResultItemRadius      float32
 	ActionQueryRadius     float32
 	ActionPadding         woxwidget.Insets
+	BottomOffset          float32
 	HeaderLabel           string
 	NoMatchesLabel        string
 	Items                 []ActionItem
@@ -126,7 +130,7 @@ type ActionsProps struct {
 
 // Equal compares every render dependency for the floating action panel.
 func (p ActionsProps) Equal(other ActionsProps) bool {
-	if p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ResultItemRadius != other.ResultItemRadius || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
+	if p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.BottomOffset != other.BottomOffset || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
 		return false
 	}
 	for index := range p.Items {
@@ -145,6 +149,17 @@ func ActionPanelBaseHeight(padding woxwidget.Insets) float32 {
 // ActionPanelWidth returns the floating panel width for the current launcher geometry.
 func ActionPanelWidth(padding woxwidget.Insets, windowWidth float32) float32 {
 	return min(float32(ActionPanelContentWidth)+padding.Left+padding.Right, max(float32(240), windowWidth-28))
+}
+
+// ActionPanelBottomOffset is the gap between the panel and the toolbar.
+func ActionPanelBottomOffset(appPaddingBottom float32) float32 {
+	return appPaddingBottom + ActionPanelMargin
+}
+
+// ActionPanelMaxHeight is the tallest overlay that still clears the query chrome
+// and the bottom-anchored search field inset.
+func ActionPanelMaxHeight(windowHeight, queryHeight, toolbarHeight, bottomOffset float32) float32 {
+	return max(float32(100), windowHeight-queryHeight-toolbarHeight-bottomOffset-ActionPanelTopGap)
 }
 
 // actionPanelTailTextWidth sizes score text for the trailing gutter. Tests and
@@ -202,7 +217,13 @@ func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeigh
 	innerWidth = max(float32(0), panelWidth-props.ActionPadding.Left-props.ActionPadding.Right)
 	listHeight = ActionPanelListHeight(props.Items)
 	panelHeight = ActionPanelBaseHeight(props.ActionPadding) + listHeight
-	panelHeight = min(panelHeight, max(float32(100), props.WindowHeight-props.QueryHeight-props.ToolbarHeight-20))
+	bottomOffset := props.BottomOffset
+	if bottomOffset <= 0 {
+		bottomOffset = ActionPanelBottomOffset(10)
+	}
+	panelHeight = min(panelHeight, ActionPanelMaxHeight(props.WindowHeight, props.QueryHeight, props.ToolbarHeight, bottomOffset))
+	// Shrink the scroll viewport with the panel so the search field stays inside its bounds.
+	listHeight = min(listHeight, max(float32(0), panelHeight-ActionPanelBaseHeight(props.ActionPadding)))
 	return panelWidth, innerWidth, panelHeight, listHeight
 }
 
@@ -217,7 +238,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
 		if item.Kind == ActionItemKindSeparator {
-			rows = append(rows, actionPanelDivider(innerWidth, props.Theme.PreviewSplit))
+			rows = append(rows, actionPanelDivider(innerWidth, props.Theme.ActionDividerColor()))
 			continue
 		}
 		selected := item.Index == props.Selected
@@ -266,10 +287,11 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			tailColor := props.ResultTail
 			chipBackground := props.Theme.ActionBackground
 			if selected {
-				tailColor = props.SelectedTail
+				tailColor = props.Theme.ActionSelectedText
 				chipBackground = props.Theme.ActionSelected
 			}
 			chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+				Theme: &props.Theme, Selected: selected,
 				Labels: item.HotkeyLabels, Foreground: tailColor, Background: chipBackground,
 				FontSize: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Window: props.Window,
 			})
@@ -310,7 +332,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				return false
 			},
 			OnTap: activate,
-			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{
+			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.Theme.ActionItemRadius, Color: background, Child: woxwidget.Flex{
 				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 					woxwidget.Align{Width: iconSlotWidth, Height: ActionRowHeight, Vertical: 0.5, Child: woxwidget.Container{
 						Width: iconSlotWidth, Padding: woxwidget.Insets{Left: 5, Right: 10}, Child: icon,
@@ -359,7 +381,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	}
 	actionList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.ActionHeader,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.ActionHeader,
 	})
 	search := actionSearchBoundary(actionSearchProps{
 		Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
@@ -376,11 +398,10 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		actionList,
 		woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},
 	}}
-	// The panel is a floating surface: the theme's ActionBackground is its tint and the
-	// hairline already used for the group dividers is its edge (see Container.Floating).
+	// Keep the floating material tint and outer edge independent from internal dividers.
 	panel := woxwidget.Container{
-		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Floating: true,
-		Color: props.Theme.ActionBackground, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
+		Width: panelWidth, Height: panelHeight, Radius: props.Theme.ActionContainerRadius, Floating: true,
+		Color: props.Theme.ActionBackground, BorderColor: props.Theme.ActionBorder, BorderWidth: props.Theme.ActionBorderWidth,
 		Padding: props.ActionPadding, Child: content,
 	}
 	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.

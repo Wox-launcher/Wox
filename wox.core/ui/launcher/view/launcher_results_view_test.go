@@ -282,6 +282,43 @@ func TestLauncherResultBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, launcherResultTailsProps{})
 }
 
+// TestLauncherResultActiveLeftBorder keeps marker state separate from content geometry.
+func TestLauncherResultActiveLeftBorder(t *testing.T) {
+	color := woxui.Color{R: 20, G: 180, B: 100, A: 255}
+	for _, selected := range []bool{false, true} {
+		for _, width := range []float32{-4, 0, 4} {
+			for _, density := range []float32{1, 1.5, 2} {
+				props := launcherResultRowProps{
+					Item:     LauncherResultItem{ID: "border", Title: "Title", Selected: selected, Hovered: true},
+					RowWidth: 300, RowHeight: 54, InnerRowWidth: 284, BaseHeight: 50,
+					ItemPadding: woxwidget.Insets{Left: 8, Right: 8}, DensityScale: density,
+					Theme: woxcomponent.Theme{SelectedBorderLeftWidth: width, SelectedBorderLeftColor: color, Cursor: woxui.Color{A: 255}},
+				}
+				row := launcherResultRow(props).(woxwidget.Semantics)
+				stack := row.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+				boundary := stack.Children[0].Child.(woxwidget.Boundary[launcherResultBackgroundProps])
+				background := boundary.Build(boundary.Props).(woxwidget.Container)
+				want := float32(0)
+				if selected {
+					want = max(float32(0), width)
+				}
+				if background.LeftBorderWidth != want || (selected && background.LeftBorderColor != color) {
+					t.Fatalf("selected=%t width=%v density=%v: unexpected border %#v", selected, width, density, background)
+				}
+				content := stack.Children[1].Child.(woxwidget.Container)
+				if content.Width != props.RowWidth || content.Padding != props.ItemPadding {
+					t.Fatalf("marker changed content geometry: %#v", content)
+				}
+				props.Item.Group = true
+				group := launcherResultRow(props).(woxwidget.Container)
+				if group.LeftBorderWidth != 0 {
+					t.Fatal("group heading must not have a selection marker")
+				}
+			}
+		}
+	}
+}
+
 func TestLauncherResultUsesIndependentUpdateBoundaries(t *testing.T) {
 	result := LauncherResultsView(LauncherResultsProps{
 		Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,

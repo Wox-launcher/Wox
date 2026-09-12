@@ -21,6 +21,9 @@ import (
 )
 
 type nativeRenderer struct {
+	cornerRadius   *float32
+	cornerClipSize [2]int
+
 	handle                       *C.WoxRenderer
 	windowHandle                 uintptr
 	width                        int
@@ -125,7 +128,7 @@ func (r *nativeRenderer) resize(width, height int) error {
 	if result < 0 {
 		return hresultError("resize renderer", result)
 	}
-	return nil
+	return r.setCornerRadius(r.cornerRadius)
 }
 
 func (r *nativeRenderer) setFontFamily(family string) error {
@@ -148,6 +151,7 @@ func (r *nativeRenderer) setFontFamily(family string) error {
 // recreate replaces all resources tied to a lost Direct3D device while keeping the Go renderer identity stable.
 func (r *nativeRenderer) recreate() error {
 	fontFamily := r.fontFamily
+	cornerRadius := r.cornerRadius
 	r.destroy()
 	replacement, err := newNativeRenderer(r.windowHandle, r.width, r.height, r.enableEmbeddedSurfaceOverlay)
 	if err != nil {
@@ -158,6 +162,10 @@ func (r *nativeRenderer) recreate() error {
 			replacement.destroy()
 			return err
 		}
+	}
+	if err := replacement.setCornerRadius(cornerRadius); err != nil {
+		replacement.destroy()
+		return err
 	}
 	*r = *replacement
 	return nil
@@ -380,4 +388,32 @@ func isRecoverableRendererError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// setCornerRadius caches physical clip geometry and survives hidden-renderer recreation.
+func (r *nativeRenderer) setCornerRadius(radius *float32) error {
+	size := [2]int{r.width, r.height}
+	if radius == nil && r.cornerRadius == nil {
+		return nil
+	}
+	if radius != nil && r.cornerRadius != nil && *radius == *r.cornerRadius && r.cornerClipSize == size {
+		return nil
+	}
+	value := float32(-1)
+	if radius != nil {
+		value = *radius
+	}
+	if r.handle != nil {
+		result := C.wox_renderer_set_corner_radius(r.handle, C.float(value))
+		if result < 0 {
+			return hresultError("set window visual clip", result)
+		}
+	}
+	r.cornerRadius = nil
+	if radius != nil {
+		copied := *radius
+		r.cornerRadius = &copied
+	}
+	r.cornerClipSize = size
+	return nil
 }

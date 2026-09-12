@@ -233,6 +233,7 @@ type ThemeEditorSettingsProps struct {
 	SaveAsLabel        string
 	SavingLabel        string
 	PreviewResultTitle string
+	PropertyLabel      string
 	PreviewResultState string
 	Window             *woxui.Window
 	QueryBoxLabel      string
@@ -295,24 +296,33 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 	}
 	results := []woxcomponent.LauncherDemoResult{
 		{Title: props.PreviewResultTitle, Subtitle: props.PreviewResultState, Tail: "Live", Glyph: "⚙", GlyphColor: woxui.Color{R: 139, G: 92, B: 246, A: 255}, Selected: true},
-		{Title: props.QueryBoxLabel, Subtitle: "QueryBoxBackgroundColor", Glyph: "⌕", GlyphColor: woxui.Color{R: 14, G: 165, B: 233, A: 255}},
+		{Hovered: props.FlashToken == "ResultItemHoverBackgroundColor", Title: props.QueryBoxLabel, Subtitle: "QueryBoxBackgroundColor", Glyph: "⌕", GlyphColor: woxui.Color{R: 14, G: 165, B: 233, A: 255}},
 		{Title: props.ResultsLabel, Subtitle: "ResultItemActiveBackgroundColor", Tail: "3 items", Glyph: "≡", GlyphColor: woxui.Color{R: 34, G: 197, B: 94, A: 255}},
 	}
 	var preview woxwidget.Widget
 	resultWidth := float32(0)
 	if props.ActiveGroup == 3 {
 		resultWidth = width * .58
-		preview = themeEditorTextPreviewPanel(props, max(float32(0), width-resultWidth-16), max(float32(0), height-119))
+		// Match the demo's 77-unit preview top and 50-unit footer clearance.
+		preview = themeEditorTextPreviewPanel(props, max(float32(0), width-resultWidth-16), max(float32(0), height-127))
+	}
+	glanceText, glanceBackground := themeAlpha(props.DraftTheme.QueryText, 178), woxui.Color{}
+	glanceIcon := glanceText
+	if props.DraftTheme.GlanceFontColor != nil {
+		glanceText, glanceBackground = props.DraftTheme.GlanceColors(props.FlashToken == "GlanceHoverBackgroundColor")
+	}
+	if props.DraftTheme.GlanceIconColor != nil {
+		glanceIcon = props.DraftTheme.GlanceIconTint()
 	}
 	return woxcomponent.WoxLauncherDemo(woxcomponent.LauncherDemoProps{
 		Width: width, Height: height, Backdrop: props.WallpaperBlurred, Background: props.DraftTheme.Background, Theme: props.DraftTheme, Opacity: 1,
 		Query: "wox search", QueryParts: []woxcomponent.LauncherDemoQueryPart{
-			{Text: "wox ", Color: props.DraftTheme.QueryText}, {Text: "search", Color: selectionText, Background: selection}, {Color: props.DraftTheme.Cursor, Caret: true},
+			{Text: "wox ", Color: props.DraftTheme.QueryText}, {Text: "search", Color: selectionText, Background: selection, Selected: props.ActiveGroup == 1}, {Color: props.DraftTheme.Cursor, Caret: true},
 		},
-		QueryAccessory: woxwidget.Container{Width: 78, Height: 30, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxcomponent.ClockGlyph(16, themeAlpha(props.DraftTheme.QueryText, 178)),
-			woxwidget.Text{Value: time.Now().Format("15:04"), Style: woxui.TextStyle{Size: woxcomponent.GlanceFontSize}, Color: themeAlpha(props.DraftTheme.QueryText, 178)},
-		}}},
+		QueryAccessory: themeEditorFlashOverlay(woxwidget.Container{Width: 78, Height: 30, Radius: 5, Color: glanceBackground, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			themeEditorFlashOverlay(woxcomponent.ClockGlyph(16, glanceIcon), 16, 16, 3, props.FlashToken == "GlanceIconColor"),
+			themeEditorFlashOverlay(woxwidget.Text{Value: time.Now().Format("15:04"), Style: woxui.TextStyle{Size: woxcomponent.GlanceFontSize}, Color: glanceText}, 41, 20, 3, props.FlashToken == "GlanceFontColor"),
+		}}}, 78, 30, 5, props.FlashToken == "GlanceBackgroundColor" || props.FlashToken == "GlanceHoverBackgroundColor"),
 		Results: results, ResultWidth: resultWidth, Preview: preview, ShowQuery: true, ShowToolbar: true,
 		PrimaryAction: props.ToolbarCopyLabel, ActionCopy: props.ToolbarCopyLabel, ActionMore: props.ToolbarMoreLabel,
 		ActionProgress: themeBoolFloat(props.ActiveGroup == 4), HighlightColor: themeEditorFlashColor(),
@@ -322,13 +332,23 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 
 func themeEditorDemoHighlightTarget(token string) woxcomponent.LauncherDemoHighlightTarget {
 	switch token {
-	case "AppBackgroundColor":
+	case "ResultItemHoverBackgroundColor":
+		return woxcomponent.LauncherDemoHighlightResultHover
+	case "ActionContainerDividerColor":
+		return woxcomponent.LauncherDemoHighlightActionDivider
+	case "ActionItemHotkeyFontColor", "ActionItemHotkeyBackgroundColor", "ActionItemHotkeyBorderColor":
+		return woxcomponent.LauncherDemoHighlightActionHotkey
+	case "ActionItemActiveHotkeyFontColor", "ActionItemActiveHotkeyBackgroundColor", "ActionItemActiveHotkeyBorderColor":
+		return woxcomponent.LauncherDemoHighlightActionActiveHotkey
+	case "ToolbarHotkeyFontColor", "ToolbarHotkeyBackgroundColor", "ToolbarHotkeyBorderColor":
+		return woxcomponent.LauncherDemoHighlightHotkey
+	case "AppBackgroundColor", "BaseBackgroundColor":
 		return woxcomponent.LauncherDemoHighlightSurface
 	case "QueryBoxBackgroundColor":
 		return woxcomponent.LauncherDemoHighlightQueryBackground
-	case "QueryBoxFontColor":
+	case "QueryBoxFontColor", "BaseTextColor":
 		return woxcomponent.LauncherDemoHighlightQueryText
-	case "QueryBoxCursorColor":
+	case "QueryBoxCursorColor", "BaseAccentColor":
 		return woxcomponent.LauncherDemoHighlightQueryCaret
 	case "QueryBoxTextSelectionBackgroundColor":
 		return woxcomponent.LauncherDemoHighlightQuerySelection
@@ -368,12 +388,28 @@ func themeEditorDemoHighlightTarget(token string) woxcomponent.LauncherDemoHighl
 func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
 	layout := previewview.ResolvePreviewLayout(width, height, true)
 	contentWidth := max(float32(0), layout.BodyWidth-24)
+	selectionColor := props.DraftTheme.SelectionBackground
+	for _, group := range props.Groups {
+		for _, token := range group.Tokens {
+			if token.Key == "PreviewTextSelectionColor" {
+				selectionColor = token.Color
+			}
+		}
+	}
 	title := themeEditorFlashOverlay(woxwidget.Text{Value: "Theme Preview", Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.DraftTheme.PreviewText}, contentWidth, 18, 3, props.FlashToken == "PreviewFontColor")
 	body := themeEditorFlashOverlay(woxwidget.TextBlock{Value: "Colors update immediately in this live preview.", Width: contentWidth, Height: 30, MaxLines: 2, Style: woxui.TextStyle{Size: 10}, LineHeight: 15, Color: themeAlpha(props.DraftTheme.PreviewText, 210)}, contentWidth, 30, 3, props.FlashToken == "PreviewFontColor")
 	selection := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: "select ", Style: woxui.TextStyle{Size: 9}, Color: props.DraftTheme.PreviewText},
-		themeEditorFlashOverlay(woxwidget.Container{Width: 42, Height: 16, Color: props.DraftTheme.SelectionBackground, Child: woxwidget.Text{Value: "preview", Style: woxui.TextStyle{Size: 9}, Color: props.DraftTheme.PreviewText}}, 42, 16, 3, props.FlashToken == "PreviewTextSelectionColor"),
+		themeEditorFlashOverlay(woxwidget.Container{Width: 42, Height: 16, Color: selectionColor, Child: woxwidget.Text{Value: "preview", Style: woxui.TextStyle{Size: 9}, Color: props.DraftTheme.PreviewText}}, 42, 16, 3, props.FlashToken == "PreviewTextSelectionColor"),
 	}}
+	// Properties describe body content; footer metadata uses PreviewTag colors in v2.
+	propertyToken := props.FlashToken == "PreviewPropertyTitleColor" || props.FlashToken == "PreviewPropertyContentColor"
+	if propertyToken && props.DraftTheme.PreviewTagFontColor != nil {
+		selection = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
+			themeEditorFlashOverlay(woxwidget.Text{Value: props.PropertyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.DraftTheme.PreviewPropertyTitle}, contentWidth, 18, 3, props.FlashToken == "PreviewPropertyTitleColor"),
+			themeEditorFlashOverlay(woxwidget.Text{Value: "702.7 KB", Style: woxui.TextStyle{Size: 12}, Color: props.DraftTheme.PreviewPropertyContent}, contentWidth, 18, 3, props.FlashToken == "PreviewPropertyContentColor"),
+		}}
+	}
 	previewBody := woxwidget.Container{Width: layout.BodyWidth, Height: layout.BodyHeight, Padding: woxwidget.UniformInsets(12), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
 		title, body, selection,
 	}}}
@@ -385,8 +421,11 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 		{Child: panelBody},
 		{Child: woxwidget.Container{Width: 1, Height: height, Color: props.DraftTheme.PreviewSplit}},
 	}
-	if props.FlashToken == "PreviewPropertyTitleColor" || props.FlashToken == "PreviewPropertyContentColor" {
-		children = append(children, woxwidget.StackChild{Left: 14, Bottom: 8, AnchorBottom: true, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: 26}, layout.InnerWidth, 26, 8, true)})
+	if props.FlashToken == "PreviewBackgroundColor" || props.FlashToken == "PreviewBorderColor" {
+		children = append(children, woxwidget.StackChild{Left: 14, Top: 12, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: layout.BodyHeight + 2}, layout.InnerWidth, layout.BodyHeight+2, 8, true)})
+	}
+	if props.FlashToken == "PreviewTagFontColor" || props.FlashToken == "PreviewTagBackgroundColor" || props.FlashToken == "PreviewTagBorderColor" || (props.DraftTheme.PreviewTagFontColor == nil && (props.FlashToken == "PreviewPropertyTitleColor" || props.FlashToken == "PreviewPropertyContentColor")) {
+		children = append(children, woxwidget.StackChild{Left: 14, Top: 12 + layout.BodyHeight + 2 + 10, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: 26}, layout.InnerWidth, 26, 8, true)})
 	}
 	if props.FlashToken == "PreviewSplitLineColor" {
 		children = append(children, woxwidget.StackChild{Child: themeEditorFlashOverlay(woxwidget.Container{Width: 3, Height: height, Color: props.DraftTheme.PreviewSplit}, 3, height, 0, true)})
@@ -460,7 +499,7 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 	}
 	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "theme-editor-group-scroll", Width: width, Height: height, ContentWidth: max(width, contentWidth),
-		Horizontal: true, ThumbColor: props.Theme.ResultTitle,
+		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips},
 	})
 }
@@ -541,7 +580,7 @@ func themeEditorTokens(props ThemeEditorSettingsProps, width, height float32) wo
 	contentWidth := max(width, float32(len(cards))*190+float32(max(0, len(cards)-1))*12)
 	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("theme-editor-token-scroll-" + strconv.Itoa(props.ActiveGroup)), Width: width, Height: height, ContentWidth: contentWidth,
-		Horizontal: true, ThumbColor: props.Theme.ResultTitle,
+		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: cards},
 	})
 }

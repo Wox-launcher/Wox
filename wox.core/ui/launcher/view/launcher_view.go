@@ -163,7 +163,25 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 	if props.Overlay != nil {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}
 	}
-	window := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: body})
+	radius := props.Radius
+	if props.Theme.AppBorderRadius != nil {
+		radius = woxui.NativeWindowCornerRadius(float32(*props.Theme.AppBorderRadius))
+	}
+	radius = min(max(float32(0), radius), min(props.Width, props.Height)/2)
+	borderColor, borderWidth := woxui.Color{}, float32(0)
+	if props.Theme.AppBorderWidth != nil {
+		borderWidth = min(float32(*props.Theme.AppBorderWidth), min(props.Width, props.Height)/2)
+	}
+	if props.Theme.AppBorderColor != nil {
+		borderColor = *props.Theme.AppBorderColor
+	}
+	// Draw the outline after content so a full-width footer cannot cover it.
+	if borderWidth > 0 {
+		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+			{Child: body}, {Child: woxwidget.Container{Width: props.Width, Height: props.Height, Radius: radius, BorderColor: borderColor, BorderWidth: borderWidth}},
+		}}
+	}
+	window := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: radius, Child: body})
 	if props.PreviewOnly {
 		window = BorderDragMoveArea(props.Width, props.Height, props.BorderWidth, window, props.OnDragStart)
 	}

@@ -127,6 +127,7 @@ const (
 	windowCommandSetHideOnBlur
 	windowCommandSetTopmost
 	windowCommandSetAppearance
+	windowCommandSetCornerRadius
 	windowCommandSetFontFamily
 	windowCommandPickFile
 	windowCommandSaveFile
@@ -153,6 +154,8 @@ const (
 )
 
 type windowCommand struct {
+	cornerRadius float32
+
 	kind                        windowCommandKind
 	bounds                      Rect
 	size                        Size
@@ -196,6 +199,9 @@ type focusRuntime struct {
 
 // platformWindow owns one Win32 window and its DirectComposition surface.
 type platformWindow struct {
+	customCornerRadius *float32
+	cornerRegion       [3]int32
+
 	options WindowOptions
 
 	mu         sync.Mutex
@@ -865,9 +871,7 @@ func (w *platformWindow) createNativeWindow() error {
 		return err
 	}
 	w.renderer = renderer
-	if windowsWindowUsesSystemBackdrop(w.options) {
-		applyWindowsBackdrop(hwnd, w.darkAppearance)
-	}
+	w.applyBackdrop()
 	nativeWindows.Store(uintptr(hwnd), w)
 	platformRuntime.Lock()
 	platformRuntime.windowCount++
@@ -1000,7 +1004,7 @@ func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintp
 }
 
 // applyWindowsBackdrop is the Windows implementation of the process default
-// material. Callers must not pick a different backdrop per window.
+// material. Explicit custom window corners disable native blur and use transparent composition.
 func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 	dark := int32(0)
 	if isDark {
@@ -1275,6 +1279,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.handleFileDrop(win.HDROP(wParam))
 		return 0
 	case win.WM_SIZE:
+		if err := window.applyCornerRadius(); err != nil {
+			window.setRunError(err)
+		}
 		if window.renderer != nil {
 			window.damageHistory.reset()
 			width := int(win.LOWORD(uint32(lParam)))
@@ -1318,6 +1325,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 					win.SWP_NOACTIVATE|win.SWP_NOZORDER,
 				)
 			}
+		}
+		if err := window.applyCornerRadius(); err != nil {
+			window.setRunError(err)
 		}
 		win.InvalidateRect(hwnd, nil, false)
 		return 0
@@ -1483,7 +1493,7 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			return 0
 		}
 	case windowsWMNCActivate:
-		if windowsWindowUsesSystemBackdrop(window.options) {
+		if window.usesSystemBackdrop() {
 			return win.DefWindowProc(hwnd, message, 1, lParam)
 		}
 	case win.WM_ACTIVATE:
@@ -1887,11 +1897,11 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{}
 	case windowCommandSetTopmost:
 		return windowCommandResult{err: w.setTopmostNative(command.topmost)}
+	case windowCommandSetCornerRadius:
+		return windowCommandResult{err: w.setCornerRadiusNative(command.cornerRadius)}
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
-		if windowsWindowUsesSystemBackdrop(w.options) {
-			applyWindowsBackdrop(w.hwnd, command.darkAppearance)
-		}
+		w.applyBackdrop()
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
 		if w.renderer == nil {
@@ -2263,16 +2273,21 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 	return w.focus.epoch, nil
 }
 
+// usesSystemBackdrop includes live theme state; an explicit zero radius is still a custom shape.
+func (w *platformWindow) usesSystemBackdrop() bool {
+	return windowsWindowUsesSystemBackdrop(w.options) && w.customCornerRadius == nil
+}
+
 // synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.
 func (w *platformWindow) synchronizeBackdropAfterShow() {
 	if !windowsWindowUsesSystemBackdrop(w.options) {
 		return
 	}
-	if osvariant.GetCurrentPlatformVariant() == "win11" && dwmSetWindowAttribute.Find() == nil {
+	if w.usesSystemBackdrop() && osvariant.GetCurrentPlatformVariant() == "win11" && dwmSetWindowAttribute.Find() == nil {
 		backdrop := int32(dwmSystemBackdropNone)
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(w.hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
-	applyWindowsBackdrop(w.hwnd, w.darkAppearance)
+	w.applyBackdrop()
 	if dwmFlush.Find() == nil {
 		_, _, _ = dwmFlush.Call()
 	}

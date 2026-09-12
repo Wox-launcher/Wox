@@ -466,7 +466,7 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	bodyContent := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: bodyChildren}
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key(props.ID + "-rows"), Width: width, Height: bodyHeight,
-		ContentHeight: contentHeight, Controller: state.verticalBody, Content: bodyContent, ThumbColor: props.Theme.ResultTitle,
+		ContentHeight: contentHeight, Controller: state.verticalBody, Content: bodyContent, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 	})
 	return formTableGridChrome(props, width, height, woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}})
 }
@@ -870,7 +870,7 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "form-table-list-scroll", Width: props.Width, Height: viewportHeight,
 			KeepVisible: keepVisible,
-			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 	status := props.Status
@@ -1440,7 +1440,7 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 		Key: "form-table-row-scroll", Width: props.Width, Height: bodyHeight,
 		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
 		// Flutter's table update dialog pads each field with bottom: 10.
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formTableRowFieldGap, Children: props.Rows}, ThumbColor: props.Theme.ResultTitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formTableRowFieldGap, Children: props.Rows}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 	})
 	children := make([]woxwidget.Widget, 0, 4)
 	if props.Header != nil {
@@ -1529,7 +1529,7 @@ func FormTablePatternPreview(props FormTablePatternPreviewProps) woxwidget.Widge
 				Key: woxwidget.Key("form-table-pattern-preview"), Width: controlWidth, Height: listHeight,
 				ContentHeight: float32(len(rows)) * formTablePatternPreviewRowHeight,
 				Content:       woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-				ThumbColor:    props.Theme.ResultTitle,
+				Theme:         props.Theme, ThumbColor: props.Theme.ResultTitle,
 			}),
 		}
 	}

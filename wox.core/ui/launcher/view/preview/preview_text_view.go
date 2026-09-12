@@ -33,8 +33,8 @@ func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: ScrollablePreviewTextHorizontalPadding, Top: verticalPadding, Right: ScrollablePreviewTextHorizontalPadding, Bottom: verticalPadding},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key("preview-scroll-" + props.ID), Offset: props.InitialOffset, FillWidth: true, FillHeight: true,
-			Content:    selectablePreviewText(previewTextFieldID(props.ID, "text"), props.Value, innerWidth, props.FontSize, props.LineHeight, props.Color, props.Window, props.Theme),
-			ThumbColor: props.Color,
+			Content: selectablePreviewText(previewTextFieldID(props.ID, "text"), props.Value, innerWidth, props.FontSize, props.LineHeight, props.Color, props.Window, props.Theme),
+			Theme:   props.Theme, ThumbColor: props.Color,
 		}),
 	}
 }

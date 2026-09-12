@@ -686,7 +686,7 @@ func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcompone
 		}
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "cloud-action-menu-scroll", Width: size.Width, Height: size.Height,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultTitle,
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: theme, ThumbColor: theme.ResultTitle,
 		})
 	}}}
 }

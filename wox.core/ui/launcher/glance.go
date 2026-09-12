@@ -57,8 +57,7 @@ type glanceCatalogItem struct {
 func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, width, imageScale float32, densityMetrics launcherDensityMetrics) woxwidget.Widget {
 	var icon *woxui.Image
 	if !hideIcon && item.Icon.ImageData != "" {
-		iconTint := palette.queryText
-		iconTint.A = uint8(float32(iconTint.A) * 0.8 * 0.72)
+		iconTint := palette.componentTheme().GlanceIconTint()
 		icon = a.imageForTint(item.Icon, &iconTint, physicalImageSize(int(densityMetrics.scaled(16)), imageScale))
 	}
 	return launcherview.GlanceBoundary(launcherview.GlanceProps{

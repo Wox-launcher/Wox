@@ -14,10 +14,73 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 	"wox/util/overlay"
 )
 
 type themeData struct {
+	PreviewBackgroundColor                     string
+	PreviewBorderColor                         string
+	PreviewBorderRadius                        *int
+	ResultItemActiveIndicatorWidth             *int
+	ResultItemActiveIndicatorInsetLeft         *int
+	ResultItemActiveIndicatorInsetTop          *int
+	ResultItemActiveIndicatorInsetBottom       *int
+	ResultItemActiveIndicatorBorderRadius      *int
+	QueryBoxBorderBottomWidth                  *int
+	ResultItemActiveIndicatorColor             string
+	QueryBoxBorderBottomColor                  string
+	PreviewTagBorderRadius                     *int
+	PreviewTagFontColor                        string
+	PreviewTagBackgroundColor                  string
+	PreviewTagBorderColor                      string
+	GlanceFontColor                            string
+	GlanceIconColor                            string
+	GlanceBackgroundColor                      string
+	RefinementButtonFontColor                  string
+	RefinementButtonIconColor                  string
+	RefinementButtonBackgroundColor            string
+	RefinementButtonBorderColor                string
+	RefinementButtonHoverBackgroundColor       string
+	RefinementButtonActiveFontColor            string
+	RefinementButtonActiveIconColor            string
+	RefinementButtonActiveBackgroundColor      string
+	RefinementButtonActiveBorderColor          string
+	RefinementButtonActiveHoverBackgroundColor string
+	RefinementBackgroundColor                  string
+	RefinementBorderColor                      string
+	RefinementTitleColor                       string
+	RefinementDividerColor                     string
+	RefinementHotkeyColor                      string
+	RefinementItemFontColor                    string
+	RefinementItemBackgroundColor              string
+	RefinementItemHoverBackgroundColor         string
+	RefinementItemActiveFontColor              string
+	RefinementItemActiveBackgroundColor        string
+	RefinementItemActiveHoverBackgroundColor   string
+	ScrollbarThumbColor                        string
+	ScrollbarThumbHoverColor                   string
+	ScrollbarThumbActiveColor                  string
+	ScrollbarWidth                             *int
+	ScrollbarHoverWidth                        *int
+	ScrollbarBorderRadius                      *int
+	AppBorderColor                             string
+	AppBorderWidth                             *int
+	AppBorderRadius                            *int
+	GlanceHoverBackgroundColor                 string
+
+	ActionContainerDividerColor           string
+	ToolbarHotkeyFontColor                string
+	ActionItemHotkeyFontColor             string
+	ActionItemActiveHotkeyFontColor       string
+	ToolbarHotkeyBackgroundColor          string
+	ActionItemHotkeyBackgroundColor       string
+	ActionItemActiveHotkeyBackgroundColor string
+	ToolbarHotkeyBorderColor              string
+	ActionItemHotkeyBorderColor           string
+	ActionItemActiveHotkeyBorderColor     string
+	ResultItemHoverBackgroundColor        string
+
 	AppBackgroundColor                   string
 	AppPaddingLeft                       int
 	AppPaddingTop                        int
@@ -36,6 +99,8 @@ type themeData struct {
 	ResultItemSubTitleColor              string
 	ResultItemTailTextColor              string
 	ResultItemActiveBackgroundColor      string
+	ResultItemActiveBorderLeftWidth      int
+	ResultItemActiveBorderLeftColor      string
 	ResultItemActiveTitleColor           string
 	ResultItemActiveSubTitleColor        string
 	ResultItemActiveTailTextColor        string
@@ -46,7 +111,11 @@ type themeData struct {
 	QueryBoxTextSelectionBackgroundColor string
 	QueryBoxTextSelectionColor           string
 	ActionContainerBackgroundColor       string
+	ActionContainerBorderColor           string
+	ActionContainerBorderWidth           *int
 	ActionContainerHeaderFontColor       string
+	ActionContainerBorderRadius          *int
+	ActionItemBorderRadius               *int
 	ActionContainerPaddingLeft           int
 	ActionContainerPaddingTop            int
 	ActionContainerPaddingRight          int
@@ -63,11 +132,83 @@ type themeData struct {
 	PreviewPropertyContentColor          string
 	ToolbarFontColor                     string
 	ToolbarBackgroundColor               string
+	ToolbarBorderColor                   string
+	ToolbarBorderWidth                   *int
 	ToolbarPaddingLeft                   int
 	ToolbarPaddingRight                  int
 }
 
 type uiPalette struct {
+	PreviewBackgroundColor                     *woxui.Color
+	PreviewBorderColor                         *woxui.Color
+	PreviewBorderRadius                        *int
+	ResultItemActiveIndicatorWidth             *int
+	ResultItemActiveIndicatorInsetLeft         *int
+	ResultItemActiveIndicatorInsetTop          *int
+	ResultItemActiveIndicatorInsetBottom       *int
+	ResultItemActiveIndicatorBorderRadius      *int
+	QueryBoxBorderBottomWidth                  *int
+	ResultItemActiveIndicatorColor             *woxui.Color
+	QueryBoxBorderBottomColor                  *woxui.Color
+	PreviewTagBorderRadius                     *int
+	PreviewTagFontColor                        *woxui.Color
+	PreviewTagBackgroundColor                  *woxui.Color
+	PreviewTagBorderColor                      *woxui.Color
+	GlanceFontColor                            *woxui.Color
+	GlanceIconColor                            *woxui.Color
+	GlanceBackgroundColor                      *woxui.Color
+	RefinementButtonFontColor                  *woxui.Color
+	RefinementButtonIconColor                  *woxui.Color
+	RefinementButtonBackgroundColor            *woxui.Color
+	RefinementButtonBorderColor                *woxui.Color
+	RefinementButtonHoverBackgroundColor       *woxui.Color
+	RefinementButtonActiveFontColor            *woxui.Color
+	RefinementButtonActiveIconColor            *woxui.Color
+	RefinementButtonActiveBackgroundColor      *woxui.Color
+	RefinementButtonActiveBorderColor          *woxui.Color
+	RefinementButtonActiveHoverBackgroundColor *woxui.Color
+	RefinementBackgroundColor                  *woxui.Color
+	RefinementBorderColor                      *woxui.Color
+	RefinementTitleColor                       *woxui.Color
+	RefinementDividerColor                     *woxui.Color
+	RefinementHotkeyColor                      *woxui.Color
+	RefinementItemFontColor                    *woxui.Color
+	RefinementItemBackgroundColor              *woxui.Color
+	RefinementItemHoverBackgroundColor         *woxui.Color
+	RefinementItemActiveFontColor              *woxui.Color
+	RefinementItemActiveBackgroundColor        *woxui.Color
+	RefinementItemActiveHoverBackgroundColor   *woxui.Color
+	ScrollbarThumbColor                        *woxui.Color
+	ScrollbarThumbHoverColor                   *woxui.Color
+	ScrollbarThumbActiveColor                  *woxui.Color
+	ScrollbarWidth                             *int
+	ScrollbarHoverWidth                        *int
+	ScrollbarBorderRadius                      *int
+	AppBorderColor                             *woxui.Color
+	AppBorderWidth                             *int
+	AppBorderRadius                            *int
+	GlanceHoverBackgroundColor                 *woxui.Color
+
+	ActionContainerDividerColor           *woxui.Color
+	ToolbarHotkeyFontColor                *woxui.Color
+	ActionItemHotkeyFontColor             *woxui.Color
+	ActionItemActiveHotkeyFontColor       *woxui.Color
+	ToolbarHotkeyBackgroundColor          *woxui.Color
+	ActionItemHotkeyBackgroundColor       *woxui.Color
+	ActionItemActiveHotkeyBackgroundColor *woxui.Color
+	ToolbarHotkeyBorderColor              *woxui.Color
+	ActionItemHotkeyBorderColor           *woxui.Color
+	ActionItemActiveHotkeyBorderColor     *woxui.Color
+	ResultItemHoverBackgroundColor        *woxui.Color
+
+	selectedBorderLeftWidth float32
+	actionBorderWidth       float32
+	actionContainerRadius   float32
+	actionItemRadius        float32
+	toolbarBorderWidth      float32
+	selectedBorderLeftColor woxui.Color
+	toolbarBorder           woxui.Color
+
 	background             woxui.Color
 	appPadding             woxwidget.Insets
 	queryBackground        woxui.Color
@@ -87,6 +228,7 @@ type uiPalette struct {
 	selectedSubtitle       woxui.Color
 	selectedTail           woxui.Color
 	actionBackground       woxui.Color
+	actionBorder           woxui.Color
 	actionHeader           woxui.Color
 	actionPadding          woxwidget.Insets
 	actionSelected         woxui.Color
@@ -104,9 +246,79 @@ type uiPalette struct {
 	toolbarPadding         woxwidget.Insets
 }
 
-// componentTheme exposes launcher colors through the stable component package boundary.
+// componentTheme exposes launcher appearance through the stable component package boundary.
 func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	return woxcomponent.Theme{
+		PreviewBackgroundColor:                     palette.PreviewBackgroundColor,
+		PreviewBorderColor:                         palette.PreviewBorderColor,
+		PreviewBorderRadius:                        palette.PreviewBorderRadius,
+		ResultItemActiveIndicatorWidth:             palette.ResultItemActiveIndicatorWidth,
+		ResultItemActiveIndicatorInsetLeft:         palette.ResultItemActiveIndicatorInsetLeft,
+		ResultItemActiveIndicatorInsetTop:          palette.ResultItemActiveIndicatorInsetTop,
+		ResultItemActiveIndicatorInsetBottom:       palette.ResultItemActiveIndicatorInsetBottom,
+		ResultItemActiveIndicatorBorderRadius:      palette.ResultItemActiveIndicatorBorderRadius,
+		QueryBoxBorderBottomWidth:                  palette.QueryBoxBorderBottomWidth,
+		ResultItemActiveIndicatorColor:             palette.ResultItemActiveIndicatorColor,
+		QueryBoxBorderBottomColor:                  palette.QueryBoxBorderBottomColor,
+		PreviewTagBorderRadius:                     palette.PreviewTagBorderRadius,
+		PreviewTagFontColor:                        palette.PreviewTagFontColor,
+		PreviewTagBackgroundColor:                  palette.PreviewTagBackgroundColor,
+		PreviewTagBorderColor:                      palette.PreviewTagBorderColor,
+		GlanceFontColor:                            palette.GlanceFontColor,
+		GlanceIconColor:                            palette.GlanceIconColor,
+		GlanceBackgroundColor:                      palette.GlanceBackgroundColor,
+		RefinementButtonFontColor:                  palette.RefinementButtonFontColor,
+		RefinementButtonIconColor:                  palette.RefinementButtonIconColor,
+		RefinementButtonBackgroundColor:            palette.RefinementButtonBackgroundColor,
+		RefinementButtonBorderColor:                palette.RefinementButtonBorderColor,
+		RefinementButtonHoverBackgroundColor:       palette.RefinementButtonHoverBackgroundColor,
+		RefinementButtonActiveFontColor:            palette.RefinementButtonActiveFontColor,
+		RefinementButtonActiveIconColor:            palette.RefinementButtonActiveIconColor,
+		RefinementButtonActiveBackgroundColor:      palette.RefinementButtonActiveBackgroundColor,
+		RefinementButtonActiveBorderColor:          palette.RefinementButtonActiveBorderColor,
+		RefinementButtonActiveHoverBackgroundColor: palette.RefinementButtonActiveHoverBackgroundColor,
+		RefinementBackgroundColor:                  palette.RefinementBackgroundColor,
+		RefinementBorderColor:                      palette.RefinementBorderColor,
+		RefinementTitleColor:                       palette.RefinementTitleColor,
+		RefinementDividerColor:                     palette.RefinementDividerColor,
+		RefinementHotkeyColor:                      palette.RefinementHotkeyColor,
+		RefinementItemFontColor:                    palette.RefinementItemFontColor,
+		RefinementItemBackgroundColor:              palette.RefinementItemBackgroundColor,
+		RefinementItemHoverBackgroundColor:         palette.RefinementItemHoverBackgroundColor,
+		RefinementItemActiveFontColor:              palette.RefinementItemActiveFontColor,
+		RefinementItemActiveBackgroundColor:        palette.RefinementItemActiveBackgroundColor,
+		RefinementItemActiveHoverBackgroundColor:   palette.RefinementItemActiveHoverBackgroundColor,
+		ScrollbarThumbColor:                        palette.ScrollbarThumbColor,
+		ScrollbarThumbHoverColor:                   palette.ScrollbarThumbHoverColor,
+		ScrollbarThumbActiveColor:                  palette.ScrollbarThumbActiveColor,
+		ScrollbarWidth:                             palette.ScrollbarWidth,
+		ScrollbarHoverWidth:                        palette.ScrollbarHoverWidth,
+		ScrollbarBorderRadius:                      palette.ScrollbarBorderRadius,
+		AppBorderColor:                             palette.AppBorderColor,
+		AppBorderWidth:                             palette.AppBorderWidth,
+		AppBorderRadius:                            palette.AppBorderRadius,
+		GlanceHoverBackgroundColor:                 palette.GlanceHoverBackgroundColor,
+
+		ActionContainerDividerColor:           palette.ActionContainerDividerColor,
+		ToolbarHotkeyFontColor:                palette.ToolbarHotkeyFontColor,
+		ActionItemHotkeyFontColor:             palette.ActionItemHotkeyFontColor,
+		ActionItemActiveHotkeyFontColor:       palette.ActionItemActiveHotkeyFontColor,
+		ToolbarHotkeyBackgroundColor:          palette.ToolbarHotkeyBackgroundColor,
+		ActionItemHotkeyBackgroundColor:       palette.ActionItemHotkeyBackgroundColor,
+		ActionItemActiveHotkeyBackgroundColor: palette.ActionItemActiveHotkeyBackgroundColor,
+		ToolbarHotkeyBorderColor:              palette.ToolbarHotkeyBorderColor,
+		ActionItemHotkeyBorderColor:           palette.ActionItemHotkeyBorderColor,
+		ActionItemActiveHotkeyBorderColor:     palette.ActionItemActiveHotkeyBorderColor,
+		ResultItemHoverBackgroundColor:        palette.ResultItemHoverBackgroundColor,
+
+		SelectedBorderLeftWidth: palette.selectedBorderLeftWidth,
+		ActionBorderWidth:       palette.actionBorderWidth,
+		ActionContainerRadius:   palette.actionContainerRadius,
+		ActionItemRadius:        palette.actionItemRadius,
+		ToolbarBorderWidth:      palette.toolbarBorderWidth,
+		SelectedBorderLeftColor: palette.selectedBorderLeftColor,
+		ToolbarBorder:           palette.toolbarBorder,
+
 		Background:             palette.background,
 		QueryBackground:        palette.queryBackground,
 		QueryText:              palette.queryText,
@@ -122,6 +334,7 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		SelectedSubtitle:       palette.selectedSubtitle,
 		SelectedTail:           palette.selectedTail,
 		ActionBackground:       palette.actionBackground,
+		ActionBorder:           palette.actionBorder,
 		ActionHeader:           palette.actionHeader,
 		ActionText:             palette.actionText,
 		ActionSelected:         palette.actionSelected,
@@ -145,6 +358,14 @@ func opaqueWindowBackground(color woxui.Color) woxui.Color {
 
 func defaultPalette() uiPalette {
 	return uiPalette{
+		actionBorderWidth:       1,
+		actionContainerRadius:   8,
+		actionItemRadius:        8,
+		toolbarBorderWidth:      1,
+		selectedBorderLeftColor: woxui.Color{R: 57, G: 204, B: 183, A: 255},
+		toolbarBorder:           woxui.Color{R: 166, G: 176, B: 190, A: 26},
+		actionBorder:            woxui.Color{R: 85, G: 96, B: 112, A: 150},
+
 		background:             opaqueWindowBackground(woxui.Color{R: 24, G: 29, B: 38, A: 242}),
 		appPadding:             woxwidget.UniformInsets(10),
 		queryBackground:        woxui.Color{R: 56, G: 67, B: 82, A: 230},
@@ -212,6 +433,9 @@ func (a *App) applyTheme(theme themeData) {
 	onboardingView := a.onboardingView
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
+		if err := a.window.SetCornerRadius(a.palette.AppBorderRadius); err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("apply theme window corners: %v", err))
+		}
 		_ = a.applyWindowBounds()
 		_ = a.window.Invalidate()
 	}
@@ -254,11 +478,100 @@ func themeColorIsDark(color woxui.Color) bool {
 // paletteForTheme resolves a complete portable palette without mutating the active UI.
 func paletteForTheme(theme themeData) uiPalette {
 	fallback := defaultPalette()
+	actionBorderWidth := float32(1)
+	if theme.ActionContainerBorderWidth != nil {
+		actionBorderWidth = max(float32(0), float32(*theme.ActionContainerBorderWidth))
+	}
 	actionQueryRadius := float32(theme.ActionQueryBoxBorderRadius)
 	if actionQueryRadius < 0 {
 		actionQueryRadius = fallback.actionQueryRadius
 	}
+	// Optional geometry keeps old themes unchanged while allowing explicit square corners and no divider.
+	actionContainerRadius := actionQueryRadius
+	if theme.ActionContainerBorderRadius != nil {
+		actionContainerRadius = max(float32(0), float32(*theme.ActionContainerBorderRadius))
+	}
+	actionItemRadius := max(float32(0), float32(theme.ResultItemBorderRadius))
+	if theme.ActionItemBorderRadius != nil {
+		actionItemRadius = max(float32(0), float32(*theme.ActionItemBorderRadius))
+	}
+	toolbarBorderWidth := float32(1)
+	if theme.ToolbarBorderWidth != nil {
+		toolbarBorderWidth = max(float32(0), float32(*theme.ToolbarBorderWidth))
+	}
+	toolbarBorder := parseThemeColor(theme.ToolbarFontColor, fallback.toolbarText)
+	toolbarBorder.A = min(toolbarBorder.A, uint8(26))
 	return uiPalette{
+		ActionContainerDividerColor:                optionalThemeColor(theme.ActionContainerDividerColor),
+		PreviewBackgroundColor:                     optionalThemeColor(theme.PreviewBackgroundColor),
+		PreviewBorderColor:                         optionalThemeColor(theme.PreviewBorderColor),
+		PreviewBorderRadius:                        theme.PreviewBorderRadius,
+		ResultItemActiveIndicatorWidth:             theme.ResultItemActiveIndicatorWidth,
+		ResultItemActiveIndicatorInsetLeft:         theme.ResultItemActiveIndicatorInsetLeft,
+		ResultItemActiveIndicatorInsetTop:          theme.ResultItemActiveIndicatorInsetTop,
+		ResultItemActiveIndicatorInsetBottom:       theme.ResultItemActiveIndicatorInsetBottom,
+		ResultItemActiveIndicatorBorderRadius:      theme.ResultItemActiveIndicatorBorderRadius,
+		QueryBoxBorderBottomWidth:                  theme.QueryBoxBorderBottomWidth,
+		ResultItemActiveIndicatorColor:             optionalThemeColor(theme.ResultItemActiveIndicatorColor),
+		QueryBoxBorderBottomColor:                  optionalThemeColor(theme.QueryBoxBorderBottomColor),
+		PreviewTagBorderRadius:                     theme.PreviewTagBorderRadius,
+		PreviewTagFontColor:                        optionalThemeColor(theme.PreviewTagFontColor),
+		PreviewTagBackgroundColor:                  optionalThemeColor(theme.PreviewTagBackgroundColor),
+		PreviewTagBorderColor:                      optionalThemeColor(theme.PreviewTagBorderColor),
+		GlanceFontColor:                            optionalThemeColor(theme.GlanceFontColor),
+		GlanceIconColor:                            optionalThemeColor(theme.GlanceIconColor),
+		GlanceBackgroundColor:                      optionalThemeColor(theme.GlanceBackgroundColor),
+		RefinementButtonFontColor:                  optionalThemeColor(theme.RefinementButtonFontColor),
+		RefinementButtonIconColor:                  optionalThemeColor(theme.RefinementButtonIconColor),
+		RefinementButtonBackgroundColor:            optionalThemeColor(theme.RefinementButtonBackgroundColor),
+		RefinementButtonBorderColor:                optionalThemeColor(theme.RefinementButtonBorderColor),
+		RefinementButtonHoverBackgroundColor:       optionalThemeColor(theme.RefinementButtonHoverBackgroundColor),
+		RefinementButtonActiveFontColor:            optionalThemeColor(theme.RefinementButtonActiveFontColor),
+		RefinementButtonActiveIconColor:            optionalThemeColor(theme.RefinementButtonActiveIconColor),
+		RefinementButtonActiveBackgroundColor:      optionalThemeColor(theme.RefinementButtonActiveBackgroundColor),
+		RefinementButtonActiveBorderColor:          optionalThemeColor(theme.RefinementButtonActiveBorderColor),
+		RefinementButtonActiveHoverBackgroundColor: optionalThemeColor(theme.RefinementButtonActiveHoverBackgroundColor),
+		RefinementBackgroundColor:                  optionalThemeColor(theme.RefinementBackgroundColor),
+		RefinementBorderColor:                      optionalThemeColor(theme.RefinementBorderColor),
+		RefinementTitleColor:                       optionalThemeColor(theme.RefinementTitleColor),
+		RefinementDividerColor:                     optionalThemeColor(theme.RefinementDividerColor),
+		RefinementHotkeyColor:                      optionalThemeColor(theme.RefinementHotkeyColor),
+		RefinementItemFontColor:                    optionalThemeColor(theme.RefinementItemFontColor),
+		RefinementItemBackgroundColor:              optionalThemeColor(theme.RefinementItemBackgroundColor),
+		RefinementItemHoverBackgroundColor:         optionalThemeColor(theme.RefinementItemHoverBackgroundColor),
+		RefinementItemActiveFontColor:              optionalThemeColor(theme.RefinementItemActiveFontColor),
+		RefinementItemActiveBackgroundColor:        optionalThemeColor(theme.RefinementItemActiveBackgroundColor),
+		RefinementItemActiveHoverBackgroundColor:   optionalThemeColor(theme.RefinementItemActiveHoverBackgroundColor),
+		ScrollbarThumbColor:                        optionalThemeColor(theme.ScrollbarThumbColor),
+		ScrollbarThumbHoverColor:                   optionalThemeColor(theme.ScrollbarThumbHoverColor),
+		ScrollbarThumbActiveColor:                  optionalThemeColor(theme.ScrollbarThumbActiveColor),
+		ScrollbarWidth:                             theme.ScrollbarWidth,
+		ScrollbarHoverWidth:                        theme.ScrollbarHoverWidth,
+		ScrollbarBorderRadius:                      theme.ScrollbarBorderRadius,
+		AppBorderColor:                             optionalThemeColor(theme.AppBorderColor),
+		AppBorderWidth:                             theme.AppBorderWidth,
+		AppBorderRadius:                            theme.AppBorderRadius,
+		GlanceHoverBackgroundColor:                 optionalThemeColor(theme.GlanceHoverBackgroundColor),
+
+		ToolbarHotkeyFontColor:                optionalThemeColor(theme.ToolbarHotkeyFontColor),
+		ActionItemHotkeyFontColor:             optionalThemeColor(theme.ActionItemHotkeyFontColor),
+		ActionItemActiveHotkeyFontColor:       optionalThemeColor(theme.ActionItemActiveHotkeyFontColor),
+		ToolbarHotkeyBackgroundColor:          optionalThemeColor(theme.ToolbarHotkeyBackgroundColor),
+		ActionItemHotkeyBackgroundColor:       optionalThemeColor(theme.ActionItemHotkeyBackgroundColor),
+		ActionItemActiveHotkeyBackgroundColor: optionalThemeColor(theme.ActionItemActiveHotkeyBackgroundColor),
+		ToolbarHotkeyBorderColor:              optionalThemeColor(theme.ToolbarHotkeyBorderColor),
+		ActionItemHotkeyBorderColor:           optionalThemeColor(theme.ActionItemHotkeyBorderColor),
+		ActionItemActiveHotkeyBorderColor:     optionalThemeColor(theme.ActionItemActiveHotkeyBorderColor),
+		ResultItemHoverBackgroundColor:        optionalThemeColor(theme.ResultItemHoverBackgroundColor),
+
+		selectedBorderLeftWidth: max(float32(0), float32(theme.ResultItemActiveBorderLeftWidth)),
+		actionBorderWidth:       actionBorderWidth,
+		actionContainerRadius:   actionContainerRadius,
+		actionItemRadius:        actionItemRadius,
+		toolbarBorderWidth:      toolbarBorderWidth,
+		selectedBorderLeftColor: parseThemeColor(theme.ResultItemActiveBorderLeftColor, parseThemeColor(theme.QueryBoxCursorColor, fallback.cursor)),
+		toolbarBorder:           parseThemeColor(theme.ToolbarBorderColor, toolbarBorder),
+
 		background:             opaqueWindowBackground(parseThemeColor(theme.AppBackgroundColor, fallback.background)),
 		appPadding:             themeInsets(theme.AppPaddingLeft, theme.AppPaddingTop, theme.AppPaddingRight, theme.AppPaddingBottom),
 		queryBackground:        parseThemeColor(theme.QueryBoxBackgroundColor, fallback.queryBackground),
@@ -278,6 +591,7 @@ func paletteForTheme(theme themeData) uiPalette {
 		selectedSubtitle:       parseThemeColor(theme.ResultItemActiveSubTitleColor, fallback.selectedSubtitle),
 		selectedTail:           parseThemeColor(theme.ResultItemActiveTailTextColor, fallback.selectedTail),
 		actionBackground:       parseThemeColor(theme.ActionContainerBackgroundColor, fallback.actionBackground),
+		actionBorder:           parseThemeColor(theme.ActionContainerBorderColor, parseThemeColor(theme.PreviewSplitLineColor, fallback.previewSplit)),
 		actionHeader:           parseThemeColor(theme.ActionContainerHeaderFontColor, fallback.actionHeader),
 		actionPadding:          themeInsets(theme.ActionContainerPaddingLeft, theme.ActionContainerPaddingTop, theme.ActionContainerPaddingRight, theme.ActionContainerPaddingBottom),
 		actionSelected:         parseThemeColor(theme.ActionItemActiveBackgroundColor, fallback.actionSelected),
@@ -425,4 +739,13 @@ func encodeThemeColor(color woxui.Color) string {
 
 func colorByte(value float64) uint8 {
 	return uint8(math.Round(max(float64(0), min(float64(255), value))))
+}
+
+// optionalThemeColor preserves absence independently from an explicitly transparent color.
+func optionalThemeColor(value string) *woxui.Color {
+	if value == "" {
+		return nil
+	}
+	parsed := parseThemeColor(value, woxui.Color{})
+	return &parsed
 }

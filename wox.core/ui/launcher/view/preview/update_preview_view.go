@@ -137,7 +137,7 @@ func UpdatePreviewView(props UpdatePreviewProps) woxwidget.Widget {
 			woxwidget.Container{Width: innerWidth, Height: scaled(15), Padding: woxwidget.Insets{Top: scaled(14)}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
 			woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-				Key: woxwidget.Key("update-preview-scroll-" + props.ID), Width: innerWidth, Height: bodyHeight, Content: body, ThumbColor: props.Theme.PreviewText,
+				Key: woxwidget.Key("update-preview-scroll-" + props.ID), Width: innerWidth, Height: bodyHeight, Content: body, Theme: props.Theme, ThumbColor: props.Theme.PreviewText,
 			}),
 		}},
 	}

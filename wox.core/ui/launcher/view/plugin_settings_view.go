@@ -133,7 +133,7 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("plugin-list-" + items[index].ID) },
 				ItemBuilder: func(index int) woxwidget.Widget { return pluginListRow(items[index], props, rowHeight) },
 			}, Width: props.Width, Height: viewportHeight,
-			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultTitle,
+			KeepVisible: keepVisible, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		})
 	}
 	searchFieldWidth := max(float32(80), props.Width)
@@ -623,7 +623,7 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollI
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 18}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key(scrollID), FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultTitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: theme, ThumbColor: theme.ResultTitle,
 	})}
 }
 
@@ -708,7 +708,7 @@ func pluginStoreDescription(props PluginStoreDetailProps, width, height float32,
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "plugin-store-description-scroll", FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, ThumbColor: theme.ResultTitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, Theme: theme, ThumbColor: theme.ResultTitle,
 	})}
 }
 

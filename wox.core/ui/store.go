@@ -12,6 +12,7 @@ import (
 	"wox/cloudsync"
 	"wox/common"
 	"wox/i18n"
+	"wox/updater"
 	"wox/util"
 	"wox/util/trash"
 
@@ -95,13 +96,25 @@ func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]commo
 		return nil, getErr
 	}
 
-	var storeThemeManifests []common.Theme
-	unmarshalErr := json.Unmarshal(response, &storeThemeManifests)
-	if unmarshalErr != nil {
-		return nil, unmarshalErr
-	}
+	return parseStoreThemes(ctx, response)
+}
 
-	return storeThemeManifests, nil
+// parseStoreThemes isolates unsupported schemas so a future entry cannot hide the entire catalog.
+func parseStoreThemes(ctx context.Context, data []byte) ([]common.Theme, error) {
+	var entries []json.RawMessage
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, err
+	}
+	themes := make([]common.Theme, 0, len(entries))
+	for _, entry := range entries {
+		var theme common.Theme
+		if err := json.Unmarshal(entry, &theme); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("skip unsupported or invalid store theme: %s", err))
+			continue
+		}
+		themes = append(themes, theme)
+	}
+	return themes, nil
 }
 
 func (s *Store) Install(ctx context.Context, theme common.Theme) error {
@@ -117,6 +130,9 @@ func (s *Store) InstallLocal(ctx context.Context, theme common.Theme) error {
 // install shares persistence for user installs and cloud restores while
 // controlling whether the theme should be applied and synced.
 func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall bool, applyTheme bool) error {
+	if err := theme.EnsureWoxVersionSupported(updater.CURRENT_VERSION); err != nil {
+		return err
+	}
 	logger.Info(ctx, fmt.Sprintf("start to install theme %s(%s)", theme.ThemeId, theme.ThemeAuthor))
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))

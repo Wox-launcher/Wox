@@ -7,6 +7,38 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestScrollbarThemePreservesAuthoredStyle checks both axes and every pointer state without native rendering.
+func TestScrollbarThemePreservesAuthoredStyle(t *testing.T) {
+	width, hoverWidth, radius := 0, 16, 0
+	normal, hover, active := woxui.Color{R: 1, A: 0}, woxui.Color{G: 2, A: 200}, woxui.Color{B: 3, A: 255}
+	for _, horizontal := range []bool{false, true} {
+		for phase := 0; phase < 3; phase++ {
+			props := ScrollViewProps{Key: "styled-scroll", Width: 100, Height: 100, ContentWidth: 200, ContentHeight: 200, Horizontal: horizontal, AlwaysShowScrollbar: true,
+				Theme: Theme{ScrollbarThumbColor: &normal, ScrollbarThumbHoverColor: &hover, ScrollbarThumbActiveColor: &active, ScrollbarWidth: &width, ScrollbarHoverWidth: &hoverWidth, ScrollbarBorderRadius: &radius}}
+			state := &scrollViewState{hovered: phase > 0, dragging: phase == 2}
+			view := buildWoxScrollView(woxwidget.StateContext{}, props, state).(woxwidget.Gesture)
+			thumb := view.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Gesture).Child.(woxwidget.AnimatedFloat)
+			thickness := thumb.Builder(1).(woxwidget.AnimatedFloat)
+			align := thickness.Builder(thickness.Target).(woxwidget.Align)
+			fill := align.Child.(woxwidget.Container)
+			wantColor, wantWidth := normal, float32(width)
+			if phase > 0 {
+				wantColor, wantWidth = hover, float32(hoverWidth)
+			}
+			if phase == 2 {
+				wantColor = active
+			}
+			gotWidth, hitWidth := fill.Width, align.Width
+			if horizontal {
+				gotWidth, hitWidth = fill.Height, align.Height
+			}
+			if fill.Color != wantColor || fill.Radius != 0 || gotWidth != wantWidth || hitWidth < max(float32(12), wantWidth) {
+				t.Fatalf("horizontal=%v phase=%d: fill=%#v hit=%v", horizontal, phase, fill, hitWidth)
+			}
+		}
+	}
+}
+
 func TestWoxScrollViewShowsHorizontalThumbAndMapsVerticalWheel(t *testing.T) {
 	props := ScrollViewProps{
 		Key: "horizontal-scroll", Width: 100, Height: 40, ContentWidth: 200, Horizontal: true,

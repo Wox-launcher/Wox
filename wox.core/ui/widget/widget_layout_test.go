@@ -347,3 +347,48 @@ func TestContainerLeftBorderKeepsFullHeightWithoutOtherEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestFloatingContainerBorderWidth checks material and stroke commands at desktop offsets.
+func TestFloatingContainerBorderWidth(t *testing.T) {
+	color := woxui.Color{R: 80, G: 150, B: 100, A: 90}
+	for _, width := range []float32{0, 1, 2} {
+		root := (Container{Width: 80, Height: 40, Radius: 4, Floating: true, BorderColor: color, BorderWidth: width}).layout(context{}, constraints{width: 80, height: 40})
+		actual := &woxui.DisplayList{}
+		root.drawAt(actual, woxui.Point{X: -100, Y: 20}, 0, 0, false, false, false, nil)
+		expected := &woxui.DisplayList{}
+		bounds := woxui.Rect{X: -100, Y: 20, Width: 80, Height: 40}
+		edge := woxui.Color{}
+		if width == 1 {
+			edge = color
+		}
+		expected.FloatingMaterial(bounds, 4, woxui.Color{}, edge)
+		if width > 1 {
+			expected.StrokeRoundedRect(bounds, 4, width, color)
+		}
+		if err := actual.Compare(expected); err != nil {
+			t.Fatalf("width %v: %v", width, err)
+		}
+	}
+}
+
+// TestContainerRoundedEdgesStayInsideSilhouette covers selected markers and adjacent edges.
+func TestContainerRoundedEdgesStayInsideSilhouette(t *testing.T) {
+	color := woxui.Color{R: 112, G: 214, B: 166, A: 128}
+	for _, floating := range []bool{false, true} {
+		root := (Container{Width: 80, Height: 24, Radius: 8, Floating: floating, LeftBorderColor: color, LeftBorderWidth: 3, RightBorderColor: color, RightBorderWidth: 2, BottomBorderColor: color, BottomBorderWidth: 1}).layout(context{}, constraints{width: 80, height: 24})
+		actual, expected := &woxui.DisplayList{}, &woxui.DisplayList{}
+		root.drawAt(actual, woxui.Point{X: -100, Y: 20}, 0, 0, false, false, false, nil)
+		bounds := woxui.Rect{X: -100, Y: 20, Width: 80, Height: 24}
+		if floating {
+			expected.FloatingMaterial(bounds, 8, woxui.Color{}, woxui.Color{})
+		}
+		for _, strip := range []woxui.Rect{{X: -100, Y: 43, Width: 80, Height: 1}, {X: -100, Y: 20, Width: 3, Height: 23}, {X: -22, Y: 20, Width: 2, Height: 23}} {
+			expected.PushClipRect(strip)
+			expected.FillRoundedRect(bounds, 8, color)
+			expected.PopClipRect()
+		}
+		if err := actual.Compare(expected); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

@@ -1265,8 +1265,8 @@ func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcom
 	results := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "notes.search.results", AutomationID: "notes.search.results", Label: c.app.translate("i18n:notes_search"),
 		Width: innerWidth, Height: scrollHeight, ContentHeight: contentHeight, KeepVisible: keepVisible,
-		Content:    woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchListGap, Children: rows},
-		ThumbColor: theme.ResultSubtitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchListGap, Children: rows},
+		Theme:   theme, ThumbColor: theme.ResultSubtitle,
 	})
 	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(notesSearchOverlayPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchOverlayGap, Children: []woxwidget.Widget{
 		search, results,

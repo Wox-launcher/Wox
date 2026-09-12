@@ -162,14 +162,14 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: rightChildren}},
 		}}},
 	}
-	border := props.Theme.ToolbarText
-	border.A = min(border.A, uint8(26))
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 		// Block result hit targets throughout the glass, including blank gutters.
 		{Child: woxwidget.Gesture{ID: "launcher-toolbar-shield", OnTap: func() {}, OnSecondaryTapDown: func(woxui.Point) {}, OnHover: func(bool) {}, OnPointer: func(woxui.PointerEvent) bool { return true }, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
 		{Child: body},
-		{Child: woxwidget.Painter{Width: props.Width, Height: 1, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FillRect(bounds, border)
+		{Child: woxwidget.Painter{Width: props.Width, Height: min(props.Height, max(float32(0), props.Theme.ToolbarBorderWidth)), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			if props.Theme.ToolbarBorderWidth > 0 {
+				displayList.FillRect(bounds, props.Theme.ToolbarBorder)
+			}
 		}}},
 	}}
 }
@@ -208,6 +208,7 @@ func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcompone
 		chipBackground = background
 	}
 	chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Theme: &theme, Toolbar: true,
 		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: chipBackground,
 		FontSize: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Compact: densityScale < 1, Window: window,
 	})

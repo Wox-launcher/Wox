@@ -223,9 +223,10 @@ type Container struct {
 	Color   woxui.Color
 	// Floating marks a surface that floats above other content in the same window
 	// (dialog, menu, tooltip, action panel). Color and BorderColor then describe the
-	// tint and hairline edge of a platform floating material (see
+	// tint and edge of a platform floating material (see
 	// woxui.DisplayList.FloatingMaterial), which samples the content underneath where
 	// the platform supports it; elsewhere they are painted exactly as usual.
+	// BorderWidth controls the edge independently of the material; zero disables it.
 	Floating          bool
 	BorderColor       woxui.Color
 	BorderWidth       float32
@@ -358,7 +359,15 @@ func (w Container) layout(ctx context, available constraints) *node {
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
 	if w.Floating {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FloatingMaterial(bounds, w.Radius, w.Color, w.BorderColor)
+			// Native material edges are always one unit; paint custom widths separately.
+			edge := w.BorderColor
+			if w.BorderWidth != 1 {
+				edge = woxui.Color{}
+			}
+			displayList.FloatingMaterial(bounds, w.Radius, w.Color, edge)
+			if w.BorderWidth > 0 && w.BorderWidth != 1 && w.BorderColor.A != 0 {
+				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
+			}
 			paintContainerEdgeBorders(displayList, bounds, w)
 		}
 	} else if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) {
@@ -387,21 +396,31 @@ func containerHasEdgeBorder(w Container) bool {
 // paintContainerEdgeBorders draws per-side strokes inside the box. Horizontal
 // edges own shared corners so adjacent 1px sides do not darken the same pixel.
 func paintContainerEdgeBorders(displayList *woxui.DisplayList, bounds woxui.Rect, w Container) {
+	// Intersect each edge strip with the rounded silhouette so it cannot cover the corners.
+	paintEdge := func(edge woxui.Rect, color woxui.Color) {
+		if w.Radius <= 0 {
+			displayList.FillRect(edge, color)
+			return
+		}
+		displayList.PushClipRect(edge)
+		displayList.FillRoundedRect(bounds, w.Radius, color)
+		displayList.PopClipRect()
+	}
 	bottom := float32(0)
 	if w.BottomBorderColor.A != 0 && w.BottomBorderWidth > 0 {
 		bottom = min(w.BottomBorderWidth, bounds.Height)
-		displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - bottom, Width: bounds.Width, Height: bottom}, w.BottomBorderColor)
+		paintEdge(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - bottom, Width: bounds.Width, Height: bottom}, w.BottomBorderColor)
 	}
 	innerHeight := max(float32(0), bounds.Height-bottom)
 	if innerHeight <= 0 {
 		return
 	}
 	if w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0 {
-		displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: min(w.LeftBorderWidth, bounds.Width), Height: innerHeight}, w.LeftBorderColor)
+		paintEdge(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: min(w.LeftBorderWidth, bounds.Width), Height: innerHeight}, w.LeftBorderColor)
 	}
 	if w.RightBorderColor.A != 0 && w.RightBorderWidth > 0 {
 		width := min(w.RightBorderWidth, bounds.Width)
-		displayList.FillRect(woxui.Rect{X: bounds.X + bounds.Width - width, Y: bounds.Y, Width: width, Height: innerHeight}, w.RightBorderColor)
+		paintEdge(woxui.Rect{X: bounds.X + bounds.Width - width, Y: bounds.Y, Width: width, Height: innerHeight}, w.RightBorderColor)
 	}
 }
 

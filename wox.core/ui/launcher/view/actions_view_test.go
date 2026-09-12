@@ -74,16 +74,36 @@ func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 
 func TestActionPanelIsFloatingSurfaceTintedByTheme(t *testing.T) {
 	theme := woxcomponent.Theme{
-		ActionBackground: woxui.Color{R: 22, G: 22, B: 26, A: 56},
-		PreviewSplit:     woxui.Color{R: 255, G: 255, B: 255, A: 40},
+		ActionBackground:      woxui.Color{R: 22, G: 22, B: 26, A: 56},
+		ActionBorder:          woxui.Color{R: 70, G: 160, B: 120, A: 100},
+		ActionBorderWidth:     2,
+		ActionContainerRadius: 9,
+		PreviewSplit:          woxui.Color{R: 255, G: 255, B: 255, A: 40},
 	}
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10), ActionQueryRadius: 9,
 		Theme: theme,
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
 	panel := view.Child.(woxwidget.Container)
-	if !panel.Floating || panel.Color != theme.ActionBackground || panel.BorderColor != theme.PreviewSplit || panel.BorderWidth != 1 || panel.Radius != 9 {
+	if !panel.Floating || panel.Color != theme.ActionBackground || panel.BorderColor != theme.ActionBorder || panel.BorderWidth != 2 || panel.Radius != 9 {
 		t.Fatalf("action panel surface = %#v, want a floating surface whose tint and edge come straight from the theme", panel)
+	}
+}
+
+// TestActionPanelIndependentRadii separates panel, result row, and query geometry.
+func TestActionPanelIndependentRadii(t *testing.T) {
+	for _, radius := range []float32{0, 12} {
+		view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+			WindowWidth: 600, WindowHeight: 600, DensityScale: 1.5, ActionQueryRadius: 4,
+			Theme: woxcomponent.Theme{ActionContainerRadius: radius, ActionItemRadius: 6},
+			Items: []ActionItem{{ID: "open", Label: "Open"}},
+		}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+		panel := view.Child.(woxwidget.Container)
+		rows := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+		row := rows[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		if panel.Radius != radius || row.Radius != 6 {
+			t.Fatalf("panel=%v row=%v", panel.Radius, row.Radius)
+		}
 	}
 }
 
@@ -120,6 +140,31 @@ func TestActionFilterUsesReadableTypeWithoutChangingGeometry(t *testing.T) {
 	}
 	if search.Style.Size != 13 {
 		t.Fatalf("action filter font size = %v, want readable 13px type", search.Style.Size)
+	}
+}
+
+func TestActionPanelMaxHeightClearsQueryAndBottomInset(t *testing.T) {
+	bottomOffset := ActionPanelBottomOffset(10)
+	got := ActionPanelMaxHeight(600, 80, 40, bottomOffset)
+	want := float32(600 - 80 - 40 - bottomOffset - ActionPanelTopGap)
+	if got != want {
+		t.Fatalf("max panel height = %v, want %v so a bottom-anchored search box clears the query", got, want)
+	}
+}
+
+// TestActionPanelClampedHeightKeepsSearchVisible covers a work-area-limited launcher.
+func TestActionPanelClampedHeightKeepsSearchVisible(t *testing.T) {
+	props := ActionsProps{
+		WindowWidth: 800, WindowHeight: 400, QueryHeight: 80, ToolbarHeight: 40,
+		ActionPadding: woxwidget.UniformInsets(10), BottomOffset: 20,
+		Items: make([]ActionItem, MaxVisibleActions),
+	}
+	_, _, panelHeight, listHeight := actionPanelGeometry(props)
+	if want := ActionPanelMaxHeight(400, 80, 40, 20); panelHeight != want {
+		t.Fatalf("panel height = %v, want %v", panelHeight, want)
+	}
+	if listHeight >= ActionPanelListHeight(props.Items) || listHeight+ActionPanelBaseHeight(props.ActionPadding) != panelHeight {
+		t.Fatalf("list height %v does not reserve search chrome inside panel height %v", listHeight, panelHeight)
 	}
 }
 

@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -10,10 +11,57 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+// TestActionBorderThemeMapping covers old themes, explicit zero, and independent edge colors.
+func TestActionBorderThemeMapping(t *testing.T) {
+	for _, tc := range []struct {
+		json  string
+		width float32
+		color woxui.Color
+	}{
+		{`{"PreviewSplitLineColor":"#123456"}`, 1, woxui.Color{R: 0x12, G: 0x34, B: 0x56, A: 255}},
+		{`{"ActionContainerBorderWidth":0,"ActionContainerBorderColor":"#ABCDEF80"}`, 0, woxui.Color{R: 0xAB, G: 0xCD, B: 0xEF, A: 128}},
+		{`{"ActionContainerBorderWidth":2,"ActionContainerBorderColor":"#ABCDEF80"}`, 2, woxui.Color{R: 0xAB, G: 0xCD, B: 0xEF, A: 128}},
+		{`{"ActionContainerBorderWidth":-2,"ActionContainerBorderColor":"rgba(0, 0, 0, 0)"}`, 0, woxui.Color{}},
+	} {
+		var core common.Theme
+		if err := json.Unmarshal([]byte(tc.json), &core); err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(core)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var draft themeData
+		if err := json.Unmarshal(encoded, &draft); err != nil {
+			t.Fatal(err)
+		}
+		for _, data := range []themeData{fromCoreTheme(core), draft} {
+			theme := paletteForTheme(data).componentTheme()
+			if theme.ActionBorderWidth != tc.width || theme.ActionBorder != tc.color {
+				t.Fatalf("%s: border = %v %#v, want %v %#v", tc.json, theme.ActionBorderWidth, theme.ActionBorder, tc.width, tc.color)
+			}
+		}
+	}
+}
+
 type themeFakeService struct {
 	themes   map[contract.ThemeCatalog][]contract.ThemeCatalogItem
 	storeErr error
 	instErr  error
+}
+
+// TestActiveResultBorderThemeMapping covers the core adapter and preview palette path.
+func TestActiveResultBorderThemeMapping(t *testing.T) {
+	for _, width := range []int{-4, 0, 4} {
+		data := fromCoreTheme(common.Theme{ResultItemActiveBorderLeftWidth: width, QueryBoxCursorColor: "#12AB34"})
+		theme := paletteForTheme(data).componentTheme()
+		if data.ResultItemActiveBorderLeftWidth != width || theme.SelectedBorderLeftWidth != float32(max(0, width)) {
+			t.Fatalf("width %d lost in theme mapping: data=%d, component=%v", width, data.ResultItemActiveBorderLeftWidth, theme.SelectedBorderLeftWidth)
+		}
+		if theme.Cursor != (woxui.Color{R: 0x12, G: 0xAB, B: 0x34, A: 255}) {
+			t.Fatalf("unexpected marker color: %#v", theme.Cursor)
+		}
+	}
 }
 
 func (f *themeFakeService) Themes(_ context.Context, _ string, catalog contract.ThemeCatalog) ([]contract.ThemeCatalogItem, error) {

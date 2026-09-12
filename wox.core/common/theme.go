@@ -3,266 +3,116 @@ package common
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
+
+	"github.com/Masterminds/semver/v3"
 )
 
-const themePlatformOverrideVariantsField = "variants"
-
-// ThemePlatformOverride preserves a raw top-level platform node from theme JSON.
-// The backend merges the node for the current OS before sending the flat theme to
-// UI, while keeping the raw node available so store-installed themes do not
-// lose platform-specific settings for other operating systems.
-type ThemePlatformOverride map[string]json.RawMessage
-
-type Theme struct {
-	ThemeId     string
-	ThemeName   string
-	ThemeAuthor string
-	ThemeUrl    string
-	Version     string
-	Description string
-	IsSystem    bool
-	IsInstalled bool
-
-	IsAutoAppearance bool   // Whether to automatically switch theme based on system appearance
-	DarkThemeId      string // ID of the dark theme variant
-	LightThemeId     string // ID of the light theme variant
-
-	AppBackgroundColor                   string
-	AppPaddingLeft                       int
-	AppPaddingTop                        int
-	AppPaddingRight                      int
-	AppPaddingBottom                     int
-	ResultContainerPaddingLeft           int
-	ResultContainerPaddingTop            int
-	ResultContainerPaddingRight          int
-	ResultContainerPaddingBottom         int
-	ResultItemBorderRadius               int
-	ResultItemPaddingLeft                int
-	ResultItemPaddingTop                 int
-	ResultItemPaddingRight               int
-	ResultItemPaddingBottom              int
-	ResultItemTitleColor                 string
-	ResultItemSubTitleColor              string
-	ResultItemTailTextColor              string
-	ResultItemBorderLeftWidth            int
-	ResultItemActiveBackgroundColor      string
-	ResultItemActiveTitleColor           string
-	ResultItemActiveSubTitleColor        string
-	ResultItemActiveBorderLeftWidth      int
-	ResultItemActiveTailTextColor        string
-	QueryBoxFontColor                    string
-	QueryBoxBackgroundColor              string
-	QueryBoxBorderRadius                 int
-	QueryBoxCursorColor                  string
-	QueryBoxTextSelectionBackgroundColor string
-	QueryBoxTextSelectionColor           string
-	ActionContainerBackgroundColor       string
-	ActionContainerHeaderFontColor       string
-	ActionContainerPaddingLeft           int
-	ActionContainerPaddingTop            int
-	ActionContainerPaddingRight          int
-	ActionContainerPaddingBottom         int
-	ActionItemActiveBackgroundColor      string
-	ActionItemActiveFontColor            string
-	ActionItemFontColor                  string
-	ActionQueryBoxFontColor              string
-	ActionQueryBoxBackgroundColor        string
-	ActionQueryBoxBorderRadius           int
-	PreviewFontColor                     string
-	PreviewSplitLineColor                string
-	PreviewPropertyTitleColor            string
-	PreviewPropertyContentColor          string
-	PreviewTextSelectionColor            string
-	ToolbarFontColor                     string
-	ToolbarBackgroundColor               string
-	ToolbarPaddingLeft                   int
-	ToolbarPaddingRight                  int
-
-	Windows *ThemePlatformOverride `json:"windows,omitempty"`
-	MacOS   *ThemePlatformOverride `json:"macos,omitempty"`
-	Linux   *ThemePlatformOverride `json:"linux,omitempty"`
+type themeSchema struct {
+	colors  func(Theme) map[string]string
+	parse   func([]byte) (Theme, error)
+	marshal func(Theme) ([]byte, error)
+	resolve func(Theme, string, string) (Theme, error)
 }
 
+var themeSchemas = map[int]themeSchema{}
+
+// registerThemeSchema is called only during package initialization by each schema file.
+func registerThemeSchema(version int, schema themeSchema) {
+	if version < 1 || schema.parse == nil || schema.marshal == nil {
+		panic("invalid theme schema registration")
+	}
+	if _, exists := themeSchemas[version]; exists {
+		panic("duplicate theme schema registration")
+	}
+	themeSchemas[version] = schema
+}
+
+// UnmarshalJSON dispatches by version; absent and historical zero versions mean v1.
 func (t *Theme) UnmarshalJSON(data []byte) error {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
+	var header struct {
+		SchemaVersion int
+		MinWoxVersion string
+	}
+	if err := json.Unmarshal(data, &header); err != nil {
 		return err
 	}
-
-	for _, platformName := range []string{"windows", "macos", "linux"} {
-		if err := validateThemePlatformOverride(raw, platformName); err != nil {
-			return err
-		}
+	if header.SchemaVersion == 0 {
+		header.SchemaVersion = 1
 	}
-
-	type themeAlias Theme
-	aux := &struct {
-		*themeAlias
-	}{
-		themeAlias: (*themeAlias)(t),
-	}
-
-	if err := json.Unmarshal(data, aux); err != nil {
-		return err
-	}
-
-	t.ResultItemBorderLeftWidth = parseJSONInt(raw, "ResultItemBorderLeftWidth", "ResultItemBorderLeft")
-	t.ResultItemActiveBorderLeftWidth = parseJSONInt(raw, "ResultItemActiveBorderLeftWidth", "ResultItemActiveBorderLeft")
-
-	return nil
-}
-
-// Only visual fields can be overridden by a platform node. Identity and control
-// fields stay top-level so a theme cannot become a different theme only on one
-// OS, and invalid keys fail while parsing instead of being silently ignored.
-var themePlatformOverrideStyleFields = map[string]bool{
-	"AppBackgroundColor":                   true,
-	"AppPaddingLeft":                       true,
-	"AppPaddingTop":                        true,
-	"AppPaddingRight":                      true,
-	"AppPaddingBottom":                     true,
-	"ResultContainerPaddingLeft":           true,
-	"ResultContainerPaddingTop":            true,
-	"ResultContainerPaddingRight":          true,
-	"ResultContainerPaddingBottom":         true,
-	"ResultItemBorderRadius":               true,
-	"ResultItemPaddingLeft":                true,
-	"ResultItemPaddingTop":                 true,
-	"ResultItemPaddingRight":               true,
-	"ResultItemPaddingBottom":              true,
-	"ResultItemTitleColor":                 true,
-	"ResultItemSubTitleColor":              true,
-	"ResultItemTailTextColor":              true,
-	"ResultItemBorderLeftWidth":            true,
-	"ResultItemBorderLeft":                 true,
-	"ResultItemActiveBackgroundColor":      true,
-	"ResultItemActiveTitleColor":           true,
-	"ResultItemActiveSubTitleColor":        true,
-	"ResultItemActiveBorderLeftWidth":      true,
-	"ResultItemActiveBorderLeft":           true,
-	"ResultItemActiveTailTextColor":        true,
-	"QueryBoxFontColor":                    true,
-	"QueryBoxBackgroundColor":              true,
-	"QueryBoxBorderRadius":                 true,
-	"QueryBoxCursorColor":                  true,
-	"QueryBoxTextSelectionBackgroundColor": true,
-	"QueryBoxTextSelectionColor":           true,
-	"ActionContainerBackgroundColor":       true,
-	"ActionContainerHeaderFontColor":       true,
-	"ActionContainerPaddingLeft":           true,
-	"ActionContainerPaddingTop":            true,
-	"ActionContainerPaddingRight":          true,
-	"ActionContainerPaddingBottom":         true,
-	"ActionItemActiveBackgroundColor":      true,
-	"ActionItemActiveFontColor":            true,
-	"ActionItemFontColor":                  true,
-	"ActionQueryBoxFontColor":              true,
-	"ActionQueryBoxBackgroundColor":        true,
-	"ActionQueryBoxBorderRadius":           true,
-	"PreviewFontColor":                     true,
-	"PreviewSplitLineColor":                true,
-	"PreviewPropertyTitleColor":            true,
-	"PreviewPropertyContentColor":          true,
-	"PreviewTextSelectionColor":            true,
-	"ToolbarFontColor":                     true,
-	"ToolbarBackgroundColor":               true,
-	"ToolbarPaddingLeft":                   true,
-	"ToolbarPaddingRight":                  true,
-}
-
-func validateThemePlatformOverride(raw map[string]json.RawMessage, platformName string) error {
-	value, ok := raw[platformName]
+	schema, ok := themeSchemas[header.SchemaVersion]
 	if !ok {
-		return nil
+		return fmt.Errorf("unsupported theme SchemaVersion %d", header.SchemaVersion)
 	}
-	if string(value) == "null" {
-		return nil
-	}
-
-	var overrides map[string]json.RawMessage
-	if err := json.Unmarshal(value, &overrides); err != nil {
-		return fmt.Errorf("platform theme override %q must be a JSON object: %w", platformName, err)
-	}
-
-	for fieldName := range overrides {
-		if fieldName == themePlatformOverrideVariantsField {
-			if err := validateThemePlatformOverrideVariants(overrides[fieldName], platformName); err != nil {
-				return err
-			}
-			continue
-		}
-		if !themePlatformOverrideStyleFields[fieldName] {
-			return fmt.Errorf("platform theme override %q contains non-style field %q", platformName, fieldName)
+	if header.MinWoxVersion != "" {
+		if _, err := semver.NewVersion(header.MinWoxVersion); err != nil {
+			return fmt.Errorf("invalid theme MinWoxVersion %q: %w", header.MinWoxVersion, err)
 		}
 	}
-
+	parsed, err := schema.parse(data)
+	if err != nil {
+		return err
+	}
+	*t = parsed
 	return nil
 }
 
-func validateThemePlatformOverrideVariants(value json.RawMessage, platformName string) error {
-	if string(value) == "null" {
-		return fmt.Errorf("platform theme override %q variants must be a JSON object", platformName)
+// MarshalJSON delegates storage semantics to the originating schema.
+func (t Theme) MarshalJSON() ([]byte, error) {
+	version := t.SchemaVersion
+	if version == 0 {
+		version = 1
 	}
-
-	var variants map[string]json.RawMessage
-	if err := json.Unmarshal(value, &variants); err != nil {
-		return fmt.Errorf("platform theme override %q variants must be a JSON object: %w", platformName, err)
+	schema, ok := themeSchemas[version]
+	if !ok {
+		return nil, fmt.Errorf("unsupported theme SchemaVersion %d", version)
 	}
-	if variants == nil {
-		return fmt.Errorf("platform theme override %q variants must be a JSON object", platformName)
+	return schema.marshal(t)
+}
+
+// HasAuthoredStyles distinguishes sparse authored themes from legacy flat values.
+func (t Theme) HasAuthoredStyles() bool { return t.source != nil }
+
+// ResolveForTarget lets each schema apply platform overrides before its own defaults.
+func (t Theme) ResolveForTarget(platform, variant string) (Theme, error) {
+	version := t.SchemaVersion
+	if version == 0 {
+		version = 1
 	}
-
-	for variantName, variantValue := range variants {
-		if string(variantValue) == "null" {
-			return fmt.Errorf("platform theme override %q variant %q must be a JSON object", platformName, variantName)
-		}
-
-		var overrides map[string]json.RawMessage
-		if err := json.Unmarshal(variantValue, &overrides); err != nil {
-			return fmt.Errorf("platform theme override %q variant %q must be a JSON object: %w", platformName, variantName, err)
-		}
-		if overrides == nil {
-			return fmt.Errorf("platform theme override %q variant %q must be a JSON object", platformName, variantName)
-		}
-
-		for fieldName := range overrides {
-			if !themePlatformOverrideStyleFields[fieldName] {
-				return fmt.Errorf("platform theme override %q variant %q contains non-style field %q", platformName, variantName, fieldName)
-			}
-		}
+	schema, ok := themeSchemas[version]
+	if !ok {
+		return Theme{}, fmt.Errorf("unsupported theme SchemaVersion %d", version)
 	}
+	if schema.resolve == nil {
+		return t, nil
+	}
+	return schema.resolve(t, platform, variant)
+}
 
+// EnsureWoxVersionSupported uses the same semantic-version floor as plugins.
+func (t Theme) EnsureWoxVersionSupported(current string) error {
+	minimum := t.MinWoxVersion
+	if minimum == "" {
+		minimum = "2.0.0"
+	}
+	required, err := semver.NewVersion(minimum)
+	if err != nil {
+		return fmt.Errorf("theme %s has invalid MinWoxVersion %q: %w", t.ThemeName, minimum, err)
+	}
+	running, err := semver.NewVersion(current)
+	if err != nil {
+		return fmt.Errorf("invalid current Wox version %q: %w", current, err)
+	}
+	if required.GreaterThan(running) {
+		return fmt.Errorf("theme %s requires Wox %s or later, current Wox version is %s", t.ThemeName, required, running)
+	}
 	return nil
 }
 
-func parseJSONInt(raw map[string]json.RawMessage, keys ...string) int {
-	for _, key := range keys {
-		value, ok := raw[key]
-		if !ok || len(value) == 0 {
-			continue
-		}
-		if string(value) == "null" {
-			continue
-		}
-
-		var intValue int
-		if err := json.Unmarshal(value, &intValue); err == nil {
-			return intValue
-		}
-
-		var floatValue float64
-		if err := json.Unmarshal(value, &floatValue); err == nil {
-			return int(floatValue)
-		}
-
-		var strValue string
-		if err := json.Unmarshal(value, &strValue); err == nil {
-			if parsed, parseErr := strconv.Atoi(strValue); parseErr == nil {
-				return parsed
-			}
-		}
+// ResolvedColors exposes additional schema colors without extending the frozen v1 wire format.
+// Callers must treat the returned map as read-only.
+func (t Theme) ResolvedColors() map[string]string {
+	if schema, ok := themeSchemas[t.SchemaVersion]; ok && schema.colors != nil {
+		return schema.colors(t)
 	}
-
-	return 0
+	return nil
 }

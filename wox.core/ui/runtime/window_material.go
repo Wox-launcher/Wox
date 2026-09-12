@@ -13,7 +13,9 @@ import (
 // blur on Linux compositors that advertise it.
 // Linux sessions without that protocol paint an opaque theme wash instead.
 //
-// WindowRoleScreenshot is the only opt-out, because that surface must show
+// Explicit custom window corners on Windows disable native blur and use
+// transparent composition; native backdrop layers do not follow arbitrary regions.
+// WindowRoleScreenshot always opts out, because that surface must show
 // the live desktop. Focus, Nonactivating, Resizable, Topmost, and
 // Application vs Utility must not pick a different material.
 //

@@ -37,7 +37,11 @@ const (
 // buildThemeEditorSettingsSurface adapts the shared draft controller to Flutter's settings-only editor layout.
 func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	groups := make([]launcherview.ThemeEditorColorGroup, 0, len(themeEditorColorGroups))
-	for _, group := range themeEditorColorGroups {
+	var resolvedColors map[string]any
+	if isV2Theme(state.raw) {
+		resolvedColors = themeEditorResolvedColors(state.raw, state.values)
+	}
+	for _, group := range themeEditorGroups(state.raw) {
 		label := a.translate(group.label)
 		labelWidth := float32(0)
 		if a.window != nil {
@@ -46,11 +50,21 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		}
 		tokens := make([]launcherview.ThemeEditorColorToken, 0, len(group.tokens))
 		for _, token := range group.tokens {
-			color, ok := decodeThemeColor(state.values[token.key])
+			value := state.values[token.key]
+			if resolvedColors != nil && value == "" {
+				value = themeMapString(resolvedColors, token.key)
+			} else {
+				value = themeEditorColorValue(state.raw, state.values, token.key)
+			}
+			color, ok := decodeThemeColor(value)
 			if !ok {
 				color = palette.componentTheme().ErrorText
 			}
-			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: a.translate(token.label), Color: color})
+			tokenLabel := a.translate(token.label)
+			if isV2Theme(state.raw) && state.values[token.key] == "" {
+				tokenLabel += " · " + a.translate("i18n:ui_theme_inherited")
+			}
+			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: tokenLabel, Color: color})
 		}
 		groups = append(groups, launcherview.ThemeEditorColorGroup{Label: label, LabelWidth: labelWidth, Tokens: tokens})
 	}
@@ -75,6 +89,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		LocateLabel:  a.translate("i18n:ui_theme_editor_locate_token"),
 		DiscardLabel: a.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.translate("i18n:ui_theme_editor_overwrite"), SaveAsLabel: a.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.translate("i18n:ui_theme_editor_saving"),
 		PreviewResultTitle: a.translate("i18n:ui_theme_editor_preview_result_theme"), PreviewResultState: a.translate("i18n:ui_theme_editor_preview_result_current"),
+		PropertyLabel: a.translate("i18n:ui_file_preview_property_size"),
 		Window:        a.window,
 		QueryBoxLabel: a.translate("i18n:ui_theme_editor_preview_result_query"), ResultsLabel: a.translate("i18n:ui_theme_editor_group_results"),
 		ToolbarCopyLabel: a.translate("i18n:ui_theme_editor_toolbar_copy"), ToolbarMoreLabel: a.translate("i18n:ui_theme_editor_toolbar_more"),
@@ -368,20 +383,21 @@ func themeEditorDefinitionIndex(definitions []formDefinition, key string) int {
 	return -1
 }
 
-func themeEditorGroupForToken(key string) int {
-	for groupIndex, group := range themeEditorColorGroups {
+// themeEditorGroupForToken uses the same schema-aware groups as the visible editor.
+func themeEditorGroupForToken(raw map[string]any, key string) int {
+	for groupIndex, group := range themeEditorGroups(raw) {
 		for _, token := range group.tokens {
 			if token.key == key {
 				return groupIndex
 			}
 		}
 	}
-	return 0
+	return -1
 }
 
 func (a *App) selectThemeEditorGroup(index int) {
 	state := a.themeSettings.ThemeEditor()
-	if state != nil && index >= 0 && index < len(themeEditorColorGroups) {
+	if state != nil && index >= 0 && index < len(themeEditorGroups(state.raw)) {
 		state.activeGroup = index
 		state.error = ""
 	}
@@ -393,7 +409,11 @@ func (a *App) locateThemeEditorToken(key string) {
 	if state == nil {
 		return
 	}
-	state.activeGroup = themeEditorGroupForToken(key)
+	group := themeEditorGroupForToken(state.raw, key)
+	if group < 0 {
+		return
+	}
+	state.activeGroup = group
 	state.flashToken = key
 	state.flashRevision++
 	revision := state.flashRevision
@@ -428,7 +448,11 @@ func (a *App) openThemeEditorTokenDialog(key string) {
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
-	state.activeGroup = themeEditorGroupForToken(key)
+	group := themeEditorGroupForToken(state.raw, key)
+	if group < 0 {
+		return
+	}
+	state.activeGroup = group
 	state.dialogMode = "token"
 	state.dialogToken = key
 	state.dialogOriginal = state.values[key]
@@ -487,14 +511,9 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 	confirmLabel := a.translate("i18n:ui_theme_editor_save_as")
 	if state.dialogMode == "token" {
 		panelHeight = 456
-		for _, token := range themeEditorTokens() {
-			if token.key == state.dialogToken {
-				title = a.translate(token.label)
-				break
-			}
-		}
+		title = a.translate(state.definitions[index].Value.Label)
 		confirmLabel = a.translate("i18n:ui_ok")
-		selectedColor, ok := decodeThemeColor(state.values[state.dialogToken])
+		selectedColor, ok := decodeThemeColor(themeEditorColorValue(state.raw, state.values, state.dialogToken))
 		if !ok {
 			selectedColor = woxui.Color{A: 255}
 		}
@@ -520,10 +539,14 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 			OnHueSaturation: a.setThemeEditorDialogHueSaturation, OnBrightnessChange: a.setThemeEditorDialogBrightness, OnOpacityChange: a.setThemeEditorDialogOpacity,
 		})
 	}
-	footer := woxwidget.Align{Width: panelWidth - 32, Height: 46, Horizontal: 1, Child: woxwidget.Container{Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+	buttons := []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.translate("i18n:ui_cancel"), Variant: woxcomponent.ButtonOutline, OnTap: a.cancelThemeEditorDialog, Theme: palette.componentTheme()}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-confirm", Label: confirmLabel, Variant: woxcomponent.ButtonPrimary, OnTap: a.confirmThemeEditorDialog, Theme: palette.componentTheme()}),
-	}}}}
+	}
+	if state.dialogMode == "token" && isV2Theme(state.raw) && !strings.HasPrefix(state.dialogToken, "Base") {
+		buttons = append([]woxwidget.Widget{woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-reset", Label: a.translate("i18n:ui_theme_restore_default"), Variant: woxcomponent.ButtonOutline, OnTap: a.resetThemeEditorToken, Theme: palette.componentTheme()})}, buttons...)
+	}
+	footer := woxwidget.Align{Width: panelWidth - 32, Height: 46, Horizontal: 1, Child: woxwidget.Container{Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: buttons}}}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "theme-editor-dialog", Label: title, Width: panelWidth, Height: panelHeight, OverlayWidth: width, OverlayHeight: height,
 		BackdropID: "theme-editor-dialog-backdrop", BackdropAlpha: 190, Padding: woxwidget.UniformInsets(16), Theme: palette.componentTheme(), OnEscape: a.cancelThemeEditorDialog,
@@ -541,7 +564,7 @@ func (a *App) updateThemeEditorDialogColor(update func(themeColorHSV) themeColor
 	if state == nil || state.dialogMode != "token" {
 		return
 	}
-	color, ok := decodeThemeColor(state.values[state.dialogToken])
+	color, ok := decodeThemeColor(themeEditorColorValue(state.raw, state.values, state.dialogToken))
 	if !ok {
 		return
 	}
@@ -604,7 +627,11 @@ func (a *App) confirmThemeEditorDialog() {
 	mode := state.dialogMode
 	value := strings.TrimSpace(state.values[state.dialogToken])
 	if mode == "token" {
-		if _, ok := decodeThemeColor(value); !ok {
+		_, valid := decodeThemeColor(themeEditorColorValue(state.raw, state.values, state.dialogToken))
+		if isV2Theme(state.raw) && strings.HasPrefix(state.dialogToken, "Base") && value == "" {
+			valid = false
+		}
+		if !valid {
 			state.error = a.translate("i18n:ui_theme_editor_invalid_color")
 			a.invalidateThemeEditorWindow()
 			return

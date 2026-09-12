@@ -121,6 +121,32 @@ func TestRefinementBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, RefinementsProps{})
 }
 
+// TestRefinementOptionTransparentStates verifies selected and hover fallbacks cannot replace authored transparency.
+func TestRefinementOptionTransparentStates(t *testing.T) {
+	transparent := woxui.Color{}
+	theme := woxcomponent.Theme{
+		ResultTitle: woxui.Color{R: 255, A: 255}, ActionSelected: woxui.Color{G: 255, A: 255},
+		RefinementItemFontColor: &transparent, RefinementItemBackgroundColor: &transparent,
+		RefinementItemHoverBackgroundColor: &transparent, RefinementItemActiveFontColor: &transparent,
+		RefinementItemActiveBackgroundColor: &transparent, RefinementItemActiveHoverBackgroundColor: &transparent,
+	}
+	for _, selected := range []bool{false, true} {
+		view, _ := refinementOption(RefinementOption{Value: "all", Selected: selected}, theme, nil, 1)
+		stateful := view.(woxwidget.Stateful)
+		state := stateful.CreateState()
+		for _, hovered := range []bool{false, true} {
+			gesture := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+			gesture.OnHoverAt(hovered, woxui.Rect{})
+			gesture = state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+			container := gesture.Child.(woxwidget.Container)
+			label := container.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Text)
+			if container.Color.A != 0 || label.Color.A != 0 {
+				t.Fatal("refinement option lost explicit transparency")
+			}
+		}
+	}
+}
+
 func refinementScroll(t *testing.T, view woxwidget.Widget) (woxcomponent.ScrollViewProps, woxwidget.Widget) {
 	t.Helper()
 	switch typed := view.(type) {

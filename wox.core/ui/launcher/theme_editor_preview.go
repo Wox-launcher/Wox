@@ -121,7 +121,7 @@ func themeMapString(raw map[string]any, key string) string {
 func themeEditorForm(raw map[string]any) ([]formDefinition, map[string]string) {
 	definitions := []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "ThemeName", Label: "Theme name", Tooltip: "Change the name to save a new copy"}}, {Type: "newline"}}
 	values := map[string]string{"ThemeName": themeMapString(raw, "ThemeName")}
-	for _, group := range themeEditorColorGroups {
+	for _, group := range themeEditorGroups(raw) {
 		definitions = append(definitions, formDefinition{Type: "head", Value: formDefinitionValue{Content: group.label}})
 		for _, token := range group.tokens {
 			definitions = append(definitions, formDefinition{Type: "textbox", Value: formDefinitionValue{Key: token.key, Label: token.label, Tooltip: "CSS color: #RRGGBB, #RRGGBBAA, rgb(), or rgba()"}})
@@ -235,14 +235,14 @@ func themeEditorDraftPalette(raw map[string]any, values map[string]string) uiPal
 // themeEditorDraftTheme merges editable values into the complete source theme.
 func themeEditorDraftTheme(raw map[string]any, values map[string]string) (themeData, error) {
 	for _, token := range themeEditorTokens() {
+		if isV2Theme(raw) {
+			break
+		}
 		if _, ok := decodeThemeColor(values[token.key]); !ok {
 			return themeData{}, fmt.Errorf("%s is not a valid CSS color", token.key)
 		}
 	}
-	draft := copyThemeMap(raw)
-	for key, value := range values {
-		draft[key] = value
-	}
+	draft := mergeThemeEditorDraft(raw, values)
 	var theme themeData
 	encoded, err := json.Marshal(draft)
 	if err == nil {
@@ -397,18 +397,27 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
-	if validationError := validateThemeEditorValues(state.values); validationError != "" {
+	validationError := validateThemeEditorValues(state.values)
+	if isV2Theme(state.raw) {
+		validationError = ""
+		if _, err := themeEditorDraftTheme(state.raw, state.values); err != nil {
+			validationError = err.Error()
+		}
+	}
+	if validationError != "" {
 		state.error = validationError
 		a.invalidateThemeEditorWindow()
 		return
 	}
 	values := copyStringMap(state.values)
-	draft := copyThemeMap(state.raw)
+	draft := mergeThemeEditorDraft(state.raw, values)
 	name = strings.TrimSpace(name)
 	values["ThemeName"] = name
 	draft["ThemeName"] = name
-	for _, token := range themeEditorTokens() {
-		draft[token.key] = strings.TrimSpace(values[token.key])
+	if !isV2Theme(state.raw) {
+		for _, token := range themeEditorTokens() {
+			draft[token.key] = strings.TrimSpace(values[token.key])
+		}
 	}
 	if overwrite && (state.isSystem || state.isAuto || state.sourceID == "") {
 		state.error = "This theme cannot be overwritten."

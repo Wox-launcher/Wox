@@ -131,7 +131,7 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 	}
 	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
-		ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
+		Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 }
 
@@ -161,8 +161,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	if result.Selected {
 		frameColor = props.Theme.SelectedBackground
 	} else if result.Hovered {
-		frameColor = props.Theme.SelectedBackground
-		frameColor.A = uint8(float32(frameColor.A)*0.25 + 0.5)
+		frameColor = props.Theme.ResultHoverColor()
 	}
 	fit := woxwidget.ImageFitCover
 	if math.Abs(float64(props.VisualWidth/props.VisualHeight-1)) < 0.01 {

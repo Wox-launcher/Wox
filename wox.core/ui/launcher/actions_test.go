@@ -184,6 +184,32 @@ func TestActionPanelDisplayItemsOmitsSeparatorWhenOnlyOneGroup(t *testing.T) {
 	}
 }
 
+func TestActionPanelWindowHeightIgnoresFilterWhenGroupsAppear(t *testing.T) {
+	entries := []actionPanelEntry{
+		{ID: "paste"}, {ID: "copy"}, {ID: "save"}, {ID: "pin", IsSystemAction: true}, {ID: "reset", IsSystemAction: true},
+	}
+	unfiltered := actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries))
+	filtered := actionPanelVisibleListHeight(entries, []int{0, 3})
+	if unfiltered <= filtered {
+		t.Fatalf("unfiltered height %v should keep the group divider and stay taller than filtered %v", unfiltered, filtered)
+	}
+	if unfiltered != float32(3*launcherview.ActionRowHeight+launcherview.ActionGroupDividerHeight+2*launcherview.ActionRowHeight) {
+		t.Fatalf("unfiltered grouped height = %v, want three plugin rows, a divider, and two system rows", unfiltered)
+	}
+}
+
+func TestActionPanelFloatingPlacementKeepsSearchPinnedWhenListShrinks(t *testing.T) {
+	bottomOffset := launcherview.ActionPanelBottomOffset(10)
+	full, _ := actionPanelFloatingPlacement(20, 600, 80, 40, 320, 400, bottomOffset)
+	filtered, _ := actionPanelFloatingPlacement(20, 600, 80, 40, 320, 280, bottomOffset)
+	if !full.AnchorBottom || !filtered.AnchorBottom {
+		t.Fatal("action panel must be bottom-anchored so the search box stays put")
+	}
+	if full.Bottom != filtered.Bottom || full.Bottom != 40+bottomOffset {
+		t.Fatalf("search-box bottom = %v / %v, want a stable toolbar inset %v", full.Bottom, filtered.Bottom, 40+bottomOffset)
+	}
+}
+
 func TestActionPanelDisplayItemsOmitsSeparatorWhenFilterLeavesOneGroup(t *testing.T) {
 	entries := []actionPanelEntry{{ID: "copy"}, {ID: "pin", IsSystemAction: true}}
 	items := actionPanelDisplayItems(entries, []int{1}, nil)

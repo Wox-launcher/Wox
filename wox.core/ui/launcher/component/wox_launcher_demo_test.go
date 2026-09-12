@@ -7,6 +7,95 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestDemoToolbarHotkeyHighlight confines locator overlays to individual keycaps.
+func TestDemoToolbarHotkeyHighlight(t *testing.T) {
+	flash := woxui.Color{R: 255, A: 255}
+	for _, target := range []LauncherDemoHighlightTarget{LauncherDemoHighlightNone, LauncherDemoHighlightHotkey} {
+		toolbar := demoToolbar(LauncherDemoProps{Width: 600, HighlightTarget: target, HighlightColor: flash}, 40, 300, 12, 255).(woxwidget.Container)
+		content := toolbar.Child.(woxwidget.Clip).Child.(woxwidget.Stack).Children[2].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+		for index, child := range content.Children {
+			keycap := index == 1 || index == 4 || index == 5
+			overlay, highlighted := child.(woxwidget.Stack)
+			if highlighted != (keycap && target == LauncherDemoHighlightHotkey) {
+				t.Fatalf("target %v: unexpected highlight on child %d", target, index)
+			}
+			if highlighted {
+				cap := overlay.Children[0].Child.(woxwidget.Container)
+				border := overlay.Children[1].Child.(woxwidget.Container)
+				if overlay.Width != cap.Width || overlay.Height != cap.Height || border.BorderColor != flash {
+					t.Fatal("hotkey highlight must follow the keycap bounds")
+				}
+			}
+		}
+	}
+}
+
+// TestDemoActionDividerHighlight makes even a transparent divider discoverable without changing layout.
+func TestDemoActionDividerHighlight(t *testing.T) {
+	transparent := woxui.Color{}
+	flash := woxui.Color{R: 255, G: 100, A: 255}
+	props := LauncherDemoProps{Theme: Theme{ActionContainerDividerColor: &transparent}, HighlightTarget: LauncherDemoHighlightActionDivider, HighlightColor: flash}
+	panel := demoActionPanel(props, 300, 200, 255).(woxwidget.Container)
+	highlight := panel.Child.(woxwidget.Flex).Children[1].(woxwidget.Stack)
+	line := highlight.Children[0].Child.(woxwidget.Align).Child.(woxwidget.Container)
+	overlay := highlight.Children[1].Child.(woxwidget.Container)
+	if highlight.Height != demoActionHeaderGap || line.Color != transparent || overlay.BorderColor != flash || overlay.BorderWidth != 2 {
+		t.Fatal("divider highlight lost geometry, alpha or visible outline")
+	}
+}
+
+// TestDemoActionPanelBorder preserves edge opacity and explicit width in previews.
+func TestDemoActionPanelBorder(t *testing.T) {
+	color := woxui.Color{R: 80, G: 150, B: 100, A: 90}
+	for _, width := range []float32{0, 1, 2} {
+		panel := demoActionPanel(LauncherDemoProps{Theme: Theme{ActionBorder: color, ActionBorderWidth: width, ActionContainerRadius: 12, ActionItemRadius: 6}}, 300, 200, 128).(woxwidget.Container)
+		row := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
+		if panel.Radius != 12 || row.Radius != 6 {
+			t.Fatalf("preview radii = %v/%v", panel.Radius, row.Radius)
+		}
+		if panel.BorderWidth != width || panel.BorderColor != demoColorOpacity(color, float32(128)/255) {
+			t.Fatalf("width %v: unexpected preview border %#v", width, panel)
+		}
+	}
+}
+
+// TestDemoToolbarIndependentDivider checks the same theme geometry and alpha as production.
+func TestDemoToolbarIndependentDivider(t *testing.T) {
+	for _, width := range []float32{0, 2} {
+		color := woxui.Color{R: 40, G: 100, B: 80, A: 80}
+		props := LauncherDemoProps{Width: 600, Opacity: 0.5, Theme: Theme{ToolbarBorder: color, ToolbarBorderWidth: width}}
+		toolbar := demoToolbar(props, 40, 300, 12, 128).(woxwidget.Container)
+		divider := toolbar.Child.(woxwidget.Clip).Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Painter)
+		if divider.Height != width {
+			t.Fatalf("divider height = %v, want %v", divider.Height, width)
+		}
+		actual, expected := &woxui.DisplayList{}, &woxui.DisplayList{}
+		bounds := woxui.Rect{Width: 600, Height: width}
+		divider.Paint(actual, bounds)
+		if width > 0 {
+			expected.FillRect(bounds, demoColorOpacity(color, 0.5))
+		}
+		if err := actual.Compare(expected); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestDemoResultActiveLeftBorder keeps theme previews consistent with launcher selection.
+func TestDemoResultActiveLeftBorder(t *testing.T) {
+	color := woxui.Color{R: 40, G: 160, A: 255}
+	for _, selected := range []bool{false, true} {
+		row := demoResultRow(LauncherDemoProps{Theme: Theme{SelectedBorderLeftWidth: 4, SelectedBorderLeftColor: color, Cursor: woxui.Color{A: 255}}}, LauncherDemoResult{Title: "Title", Selected: selected}, 300, 56, 128).(woxwidget.Container)
+		want := float32(0)
+		if selected {
+			want = 4
+		}
+		if row.LeftBorderWidth != want || (selected && row.LeftBorderColor != demoColorOpacity(color, float32(128)/255)) {
+			t.Fatalf("selected=%t: unexpected preview border %#v", selected, row)
+		}
+	}
+}
+
 func TestWoxLauncherDemoOwnsSharedWindowChrome(t *testing.T) {
 	backdrop := &woxui.Image{}
 	demo := WoxLauncherDemo(LauncherDemoProps{
@@ -224,7 +313,7 @@ func TestWoxLauncherDemoActionRowsLeadWithIcons(t *testing.T) {
 		t.Fatalf("action panel children = %d, want header, divider, and two action rows", len(rows))
 	}
 	for index, row := range []woxwidget.Widget{rows[2], rows[3]} {
-		content := row.(woxwidget.Container).Child.(woxwidget.Flex)
+		content := row.(woxwidget.Container).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Clip).Child.(woxwidget.Flex)
 		if len(content.Children) < 2 {
 			t.Fatalf("action row %d children = %d, want leading icon plus label", index, len(content.Children))
 		}

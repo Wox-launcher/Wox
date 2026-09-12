@@ -10,6 +10,13 @@ func TestThemePlatformOverrideVariantsAllowStyleFields(t *testing.T) {
 	themeJSON := []byte(`{
 		"ThemeId": "variant-theme",
 		"windows": {
+			"ActionContainerBorderColor": "#12345680",
+			"ActionContainerBorderWidth": 0,
+			"ActionContainerBorderRadius": 0,
+			"ActionItemBorderRadius": 4,
+			"ResultItemActiveBorderLeftColor": "#123456",
+			"ToolbarBorderColor": "#12345680",
+			"ToolbarBorderWidth": 0,
 			"AppBackgroundColor": "#111111",
 			"variants": {
 				"win11": {

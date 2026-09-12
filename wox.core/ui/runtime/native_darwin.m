@@ -96,6 +96,8 @@ typedef struct {
 } WoxCachedCGImage;
 
 struct WoxDarwinWindow {
+ bool has_custom_corner_radius;
+ CGFloat custom_corner_radius;
   NSWindow *window;
   WoxRenderView *view;
   WoxWindowDelegate *delegate;
@@ -302,6 +304,19 @@ static NSView *create_window_material_view(NSRect frame, NSView *content) {
   effect_view.layer.masksToBounds = YES;
   [effect_view addSubview:content];
   return effect_view;
+}
+
+// Keep the material mask and renderer clip concentric when the launcher changes height.
+static void update_window_corner_radius(WoxDarwinWindow *window) {
+ if (window == NULL || window->window == nil || !window->has_custom_corner_radius) return;
+ NSView *material = window->window.contentView;
+ CGFloat requested = window->has_custom_corner_radius ? window->custom_corner_radius : wox_window_corner_radius;
+ CGFloat radius = fmax(0, fmin(requested, fmin(material.bounds.size.width, material.bounds.size.height)/2));
+ if ([material respondsToSelector:NSSelectorFromString(@"setCornerRadius:")]) [material setValue:@(radius) forKey:@"cornerRadius"];
+ material.wantsLayer = YES;
+ material.layer.cornerRadius = radius;
+ material.layer.masksToBounds = YES;
+ [window->window invalidateShadow];
 }
 
 // WoxFloatingMaterialView is the material behind one surface that floats above
@@ -2855,6 +2870,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 - (void)setFrameSize:(NSSize)newSize {
   NSSize old_size = self.frame.size;
   [super setFrameSize:newSize];
+  update_window_corner_radius(_owner);
   [self updateBackingScale];
   if (_owner != NULL && !_owner->suppress_resize_render) {
     if (!NSEqualSizes(old_size, newSize)) {
@@ -5248,4 +5264,22 @@ int32_t wox_darwin_test_screenshot_color_shortcut(uint16_t key_code, int32_t *as
   }
   *as_hex = hex ? 1 : 0;
   return 0;
+}
+
+int32_t wox_darwin_window_set_corner_radius(WoxDarwinWindow *window, float radius) {
+ if (window == NULL) return -1;
+ __block int32_t result = 0;
+ run_on_main_sync(^{
+  if (window->closed) { result = -1; return; }
+  if (radius < 0 && !window->has_custom_corner_radius) return;
+  window->has_custom_corner_radius = true;
+  window->custom_corner_radius = radius < 0 ? wox_window_corner_radius : radius;
+  update_window_corner_radius(window);
+  if (radius < 0) {
+   window->has_custom_corner_radius = false;
+   NSView *material = window->window.contentView;
+   if ([material respondsToSelector:NSSelectorFromString(@"setCornerRadius:")]) material.layer.masksToBounds = NO;
+  }
+ });
+ return result;
 }

@@ -126,9 +126,11 @@ func (s *CoreServices) SaveTheme(ctx context.Context, sessionID string, name str
 	theme.IsAutoAppearance = false
 	theme.DarkThemeId = ""
 	theme.LightThemeId = ""
-	theme.Windows = nil
-	theme.MacOS = nil
-	theme.Linux = nil
+	if !theme.HasAuthoredStyles() {
+		theme.Windows = nil
+		theme.MacOS = nil
+		theme.Linux = nil
+	}
 	if err := GetStoreManager().Install(ctx, theme); err != nil {
 		return common.Theme{}, fmt.Errorf("save theme: %w", err)
 	}

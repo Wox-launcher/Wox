@@ -953,6 +953,9 @@ func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
 	if parseErr != nil {
 		return common.Theme{}, parseErr
 	}
+	if err := theme.EnsureWoxVersionSupported(updater.CURRENT_VERSION); err != nil {
+		return common.Theme{}, err
+	}
 	return theme, nil
 }
 
@@ -961,130 +964,13 @@ func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) 
 }
 
 func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, platformName string, variantName string) common.Theme {
-	platformNodeName, platformOverride := getThemePlatformOverrideForTarget(theme, platformName)
-	if platformOverride == nil || len(*platformOverride) == 0 {
-		return clearThemePlatformOverrides(theme)
+	resolved, err := theme.ResolveForTarget(platformName, variantName)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("resolve theme %s: %s", theme.ThemeId, err))
+		theme.Windows, theme.MacOS, theme.Linux = nil, nil, nil
+		return theme
 	}
-
-	// New feature: platform nodes are preserved on the stored Theme, but UI
-	// still expects the old flat payload. Merge the current OS override here so
-	// every caller receives the same effective style without teaching the UI about
-	// platform-specific schema details.
-	themeJSON, marshalErr := json.Marshal(theme)
-	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to marshal theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, marshalErr.Error()))
-		return clearThemePlatformOverrides(theme)
-	}
-
-	var merged map[string]json.RawMessage
-	unmarshalErr := json.Unmarshal(themeJSON, &merged)
-	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, unmarshalErr.Error()))
-		return clearThemePlatformOverrides(theme)
-	}
-
-	applyThemeOverrideFields(merged, *platformOverride)
-
-	if variantName != "" {
-		variantOverride, variantErr := getThemePlatformVariantOverride(*platformOverride, variantName)
-		if variantErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s variant %s: %s", theme.ThemeId, platformNodeName, variantName, variantErr.Error()))
-			return clearThemePlatformOverrides(theme)
-		}
-		if variantOverride != nil {
-			applyThemeOverrideFields(merged, *variantOverride)
-		}
-	}
-
-	delete(merged, "windows")
-	delete(merged, "macos")
-	delete(merged, "linux")
-
-	resolvedJSON, marshalErr := json.Marshal(merged)
-	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to encode resolved theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, marshalErr.Error()))
-		return clearThemePlatformOverrides(theme)
-	}
-
-	var resolvedTheme common.Theme
-	unmarshalErr = json.Unmarshal(resolvedJSON, &resolvedTheme)
-	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to resolve theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, unmarshalErr.Error()))
-		return clearThemePlatformOverrides(theme)
-	}
-
-	return clearThemePlatformOverrides(resolvedTheme)
-}
-
-func (m *Manager) getThemePlatformOverride(theme common.Theme) (string, *common.ThemePlatformOverride) {
-	return getThemePlatformOverrideForTarget(theme, util.GetCurrentPlatform())
-}
-
-func getThemePlatformOverrideForTarget(theme common.Theme, platformName string) (string, *common.ThemePlatformOverride) {
-	switch platformName {
-	case util.PlatformWindows:
-		return "windows", theme.Windows
-	case util.PlatformMacOS:
-		return "macos", theme.MacOS
-	case "macos":
-		return "macos", theme.MacOS
-	case util.PlatformLinux:
-		return "linux", theme.Linux
-	default:
-		return platformName, nil
-	}
-}
-
-func applyThemeOverrideFields(merged map[string]json.RawMessage, override common.ThemePlatformOverride) {
-	// Legacy border aliases must still work inside platform and variant overrides.
-	// If an override uses the old alias, remove the canonical base value first so
-	// the existing alias parser can treat the alias as the effective value.
-	if _, ok := override["ResultItemBorderLeft"]; ok {
-		delete(merged, "ResultItemBorderLeftWidth")
-	}
-	if _, ok := override["ResultItemActiveBorderLeft"]; ok {
-		delete(merged, "ResultItemActiveBorderLeftWidth")
-	}
-	for fieldName, value := range override {
-		if fieldName == "variants" {
-			continue
-		}
-		merged[fieldName] = value
-	}
-}
-
-func getThemePlatformVariantOverride(platformOverride common.ThemePlatformOverride, variantName string) (*common.ThemePlatformOverride, error) {
-	variantsValue, ok := platformOverride["variants"]
-	if !ok || string(variantsValue) == "null" {
-		return nil, nil
-	}
-
-	var variants map[string]json.RawMessage
-	if err := json.Unmarshal(variantsValue, &variants); err != nil {
-		return nil, err
-	}
-
-	variantValue, ok := variants[variantName]
-	if !ok || string(variantValue) == "null" {
-		return nil, nil
-	}
-
-	var variantOverride common.ThemePlatformOverride
-	if err := json.Unmarshal(variantValue, &variantOverride); err != nil {
-		return nil, err
-	}
-	if len(variantOverride) == 0 {
-		return nil, nil
-	}
-
-	return &variantOverride, nil
-}
-
-func clearThemePlatformOverrides(theme common.Theme) common.Theme {
-	theme.Windows = nil
-	theme.MacOS = nil
-	theme.Linux = nil
-	return theme
+	return resolved
 }
 
 func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {

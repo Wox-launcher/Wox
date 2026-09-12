@@ -226,6 +226,27 @@ func actionPanelVisibleListHeight(entries []actionPanelEntry, indices []int) flo
 	return launcherview.ActionPanelListHeight(actionPanelDisplayItems(entries, indices, nil))
 }
 
+// actionPanelUnfilteredIndices reserves window height for the full action list
+// so typing in the filter cannot shrink the launcher and move the search box.
+func actionPanelUnfilteredIndices(entries []actionPanelEntry) []int {
+	indices := make([]int, len(entries))
+	for index := range entries {
+		indices[index] = index
+	}
+	return indices
+}
+
+// actionPanelFloatingPlacement pins the search box to the toolbar so a shorter
+// filtered list, or a group divider appearing, cannot move the filter field.
+func actionPanelFloatingPlacement(left, windowHeight, queryHeight, toolbarHeight, panelWidth, panelHeight, bottomOffset float32) (launcherview.LauncherFloatingView, woxui.Rect) {
+	return launcherview.LauncherFloatingView{
+		Left: left, Bottom: toolbarHeight + bottomOffset, AnchorBottom: true,
+	}, woxui.Rect{
+		X: left, Y: max(queryHeight+launcherview.ActionPanelTopGap, windowHeight-toolbarHeight-panelHeight-bottomOffset),
+		Width: panelWidth, Height: panelHeight,
+	}
+}
+
 // buildActionPanel resolves action labels and icons before delegating to the pure panel view.
 func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight, queryHeight, toolbarHeight, imageScale float32) (woxwidget.Widget, float32, float32) {
 	if len(snapshot.actionEntries) == 0 {
@@ -244,9 +265,10 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		Theme: snapshot.palette.componentTheme(), ActionHeader: snapshot.palette.actionHeader,
 		ActionQueryBackground: snapshot.palette.actionQueryBackground, ActionQueryText: snapshot.palette.actionQueryText,
 		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,
-		ResultItemRadius: snapshot.palette.resultItemRadius, ActionQueryRadius: snapshot.palette.actionQueryRadius,
-		ActionPadding: snapshot.palette.actionPadding,
-		HeaderLabel:   a.translate("i18n:ui_actions"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
+		ActionQueryRadius: snapshot.palette.actionQueryRadius,
+		ActionPadding:     snapshot.palette.actionPadding,
+		BottomOffset:      launcherview.ActionPanelBottomOffset(snapshot.palette.appPadding.Bottom),
+		HeaderLabel:       a.translate("i18n:ui_actions"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
 		Items: items, Selected: snapshot.actionSelected, Filter: snapshot.actionFilter,
 		OnSelect: a.selectAction, OnActivate: a.activateSelectedAction,
 		OnFilterChanged: a.setActionFilterValue, OnFilterKey: a.onActionKey,
@@ -429,7 +451,11 @@ func (a *App) setActionFilterValue(value string) {
 		}
 	}
 	_ = a.applyWindowBounds()
-	// WoxTextField invalidates the nearest Action Boundary after OnChanged; SetBounds handles real size changes.
+	// Filtering must not depend on SetBounds: the window stays at the unfiltered
+	// panel height so the search box can stay pinned. Invalidate the list here.
+	if a.window != nil {
+		_ = a.window.Invalidate()
+	}
 }
 
 // normalizeActionSelectionLocked preserves the same unified action across live result and toolbar refreshes.

@@ -105,24 +105,11 @@ func RefinementToggleWidth(props RefinementsProps) float32 {
 // RefinementToggle builds the compact query accessory.
 func RefinementToggle(props RefinementsProps) woxwidget.Widget {
 	active := props.Open || props.Summary != props.DefaultLabel
-	tint := props.Theme.QueryText
-	backgroundOpacity := float32(0.075)
-	borderOpacity := float32(0.13)
-	textOpacity := float32(0.72)
-	if active {
-		tint = props.Theme.Cursor
-		backgroundOpacity = 0.15
-		borderOpacity = 0.32
-		textOpacity = 0.94
-	}
 	width := RefinementToggleWidth(props)
 	toggleHeight := scaledLauncherSize(34, props.DensityScale)
 	controlHeight := scaledLauncherSize(26, props.DensityScale)
 	return woxcomponent.Hoverable(woxwidget.Key("query-refinements-toggle"), false, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
-		toggleBackground := refinementColorWithOpacity(tint, backgroundOpacity)
-		if hovered {
-			toggleBackground = woxcomponent.ControlHoverColor(toggleBackground, tint)
-		}
+		foreground, icon, toggleBackground, border := props.Theme.RefinementButtonColors(active, hovered)
 		return woxwidget.Gesture{ID: "query-refinements-toggle", OnTap: props.OnToggle, OnHoverAt: func(inside bool, bounds woxui.Rect) {
 			onHoverAt(inside, bounds)
 			if props.OnTooltip != nil {
@@ -131,11 +118,11 @@ func RefinementToggle(props RefinementsProps) woxwidget.Widget {
 		}, Child: woxwidget.Container{
 			Width: width, Height: toggleHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(4, props.DensityScale)}, Child: woxwidget.Container{
 				Width: width, Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: toggleBackground,
-				BorderColor: refinementColorWithOpacity(tint, borderOpacity), BorderWidth: 1,
+				BorderColor: border, BorderWidth: 1,
 				Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Right: scaledLauncherSize(9, props.DensityScale)}, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{
 					Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(5, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-						refinementFilterIcon(refinementColorWithOpacity(tint, 0.92), props.DensityScale),
-						woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.QueryText, textOpacity)},
+						refinementFilterIcon(icon, props.DensityScale),
+						woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: foreground},
 					},
 				}},
 			},
@@ -156,10 +143,10 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 			titleStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}
 			titleWidth := refinementTextWidth(props.Window, refinement.Title, titleStyle) + scaledLauncherSize(14, props.DensityScale)
 			group = append(group, woxwidget.Container{Width: titleWidth, Height: groupHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(7, props.DensityScale), Right: scaledLauncherSize(7, props.DensityScale)}, Child: woxwidget.Align{Vertical: 0.5, Child: woxwidget.Text{
-				Value: refinement.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.68),
+				Value: refinement.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementThemeColor(props.Theme.RefinementTitleColor, refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.68)),
 			}}})
 			group = append(group,
-				woxwidget.Container{Width: 1, Height: scaledLauncherSize(14, props.DensityScale), Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.13)},
+				woxwidget.Container{Width: 1, Height: scaledLauncherSize(14, props.DensityScale), Color: refinementThemeColor(props.Theme.RefinementDividerColor, refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.13))},
 				woxwidget.Painter{Width: scaledLauncherSize(3, props.DensityScale), Height: groupHeight},
 			)
 			groupWidth += titleWidth + 1 + scaledLauncherSize(3, props.DensityScale)
@@ -181,9 +168,9 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 			trailingGap := scaledLauncherSize(4, props.DensityScale)
 			group = append(group,
 				woxwidget.Painter{Width: leadingGap, Height: groupHeight},
-				woxwidget.Container{Width: 1, Height: scaledLauncherSize(14, props.DensityScale), Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.11)},
+				woxwidget.Container{Width: 1, Height: scaledLauncherSize(14, props.DensityScale), Color: refinementThemeColor(props.Theme.RefinementDividerColor, refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.11))},
 				woxwidget.Painter{Width: leadingGap, Height: groupHeight},
-				woxwidget.Text{Value: refinement.Hotkey, Style: hotkeyStyle, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.58)},
+				woxwidget.Text{Value: refinement.Hotkey, Style: hotkeyStyle, Color: refinementThemeColor(props.Theme.RefinementHotkeyColor, refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.58))},
 				woxwidget.Painter{Width: trailingGap, Height: groupHeight},
 			)
 			groupWidth += leadingGap + 1 + leadingGap + hotkeyWidth + trailingGap
@@ -191,8 +178,8 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 		shellPadding := scaledLauncherSize(3, props.DensityScale)
 		shellWidth := groupWidth + shellPadding*2
 		controls = append(controls, woxwidget.Container{
-			Width: shellWidth, Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: refinementColorWithOpacity(props.Theme.ResultTitle, 0.035),
-			BorderColor: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.12), BorderWidth: 1,
+			Width: shellWidth, Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: refinementThemeColor(props.Theme.RefinementBackgroundColor, refinementColorWithOpacity(props.Theme.ResultTitle, 0.035)),
+			BorderColor: refinementThemeColor(props.Theme.RefinementBorderColor, refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.12)), BorderWidth: 1,
 			Padding: woxwidget.Insets{Left: shellPadding, Top: scaledLauncherSize(2, props.DensityScale), Right: shellPadding, Bottom: scaledLauncherSize(2, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: group},
 		})
@@ -204,7 +191,7 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 	viewportWidth := max(float32(0), props.Width-scaledLauncherSize(16, props.DensityScale))
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(10, props.DensityScale), Right: scaledLauncherSize(8, props.DensityScale), Bottom: scaledLauncherSize(8, props.DensityScale)}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-refinements-scroll", Width: viewportWidth, Height: controlHeight, ContentWidth: max(viewportWidth, contentWidth),
-		Horizontal: true, ThumbColor: props.Theme.ResultTitle,
+		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(10, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls},
 	})}
 }
@@ -216,6 +203,13 @@ func refinementOption(option RefinementOption, theme woxcomponent.Theme, window 
 		background = refinementColorWithOpacity(theme.ActionSelected, 0.22)
 		foreground = theme.ResultTitle
 	}
+
+	backgroundOverride, foregroundOverride, hoverOverride := theme.RefinementItemBackgroundColor, theme.RefinementItemFontColor, theme.RefinementItemHoverBackgroundColor
+	if option.Selected {
+		backgroundOverride, foregroundOverride, hoverOverride = theme.RefinementItemActiveBackgroundColor, theme.RefinementItemActiveFontColor, theme.RefinementItemActiveHoverBackgroundColor
+	}
+	background = refinementThemeColor(backgroundOverride, background)
+	foreground = refinementThemeColor(foregroundOverride, foreground)
 	label := option.Label
 	if label == "" {
 		label = option.Value
@@ -236,7 +230,7 @@ func refinementOption(option RefinementOption, theme woxcomponent.Theme, window 
 	content := woxcomponent.Hoverable(woxwidget.Key("refinement-"+option.Value), false, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 		optionBackground := background
 		if hovered {
-			optionBackground = woxcomponent.ControlHoverColor(background, foreground)
+			optionBackground = refinementThemeColor(hoverOverride, woxcomponent.ControlHoverColor(background, foreground))
 		}
 		return woxwidget.Gesture{ID: "refinement-" + option.Value, OnTap: option.OnTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{
 			Width: optionWidth, Height: scaledLauncherSize(22, densityScale), Radius: scaledLauncherSize(5, densityScale), Color: optionBackground, Padding: woxwidget.Insets{Left: scaledLauncherSize(10, densityScale), Right: scaledLauncherSize(10, densityScale)},
@@ -263,4 +257,11 @@ func refinementFilterIcon(color woxui.Color, densityScale float32) woxwidget.Wid
 func refinementColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {
 	color.A = uint8(min(max(opacity, float32(0)), float32(1))*255 + 0.5)
 	return color
+}
+
+func refinementThemeColor(authored *woxui.Color, fallback woxui.Color) woxui.Color {
+	if authored != nil {
+		return *authored
+	}
+	return fallback
 }

@@ -448,6 +448,9 @@ func (a *App) start() error {
 	if err := a.window.SetAppearance(themeColorIsDark(a.palette.background)); err != nil {
 		return fmt.Errorf("apply Wox UI appearance: %w", err)
 	}
+	if err := a.window.SetCornerRadius(a.palette.AppBorderRadius); err != nil {
+		return fmt.Errorf("apply Wox UI corners: %w", err)
+	}
 	if err := a.window.SetFontFamily(a.generalSettings.Data().AppFontFamily); err != nil {
 		return fmt.Errorf("apply Wox UI font: %w", err)
 	}
@@ -1085,10 +1088,9 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		toolbarMessageVisible = a.effectiveToolbarMessage() != nil
 		chatFullscreen = a.chatFullscreen
 		previewFullscreen = chatFullscreen || a.terminalFullscreen
-		if actionPanel && a.actionFilter != nil {
+		if actionPanel {
 			entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-			indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
-			actionListHeight = int(actionPanelVisibleListHeight(entries, indices))
+			actionListHeight = int(actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries)))
 		}
 		if a.selected >= 0 && a.selected < len(a.results) {
 			previewType := a.results[a.selected].Preview.PreviewType
@@ -1166,7 +1168,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		height = max(height, minimumHeight)
 	}
 	if actionPanel {
-		actionHeight := int(actionPanelBaseHeightForPalette(palette)) + max(actionRowHeight, actionListHeight)
+		actionHeight := int(actionPanelBaseHeightForPalette(palette)+launcherview.ActionPanelBottomOffset(palette.appPadding.Bottom)+launcherview.ActionPanelTopGap) + max(actionRowHeight, actionListHeight)
 		if !params.HideQueryBox {
 			actionHeight += queryAreaHeight
 		} else {
@@ -1178,7 +1180,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if toolbarHeightIncluded {
 			actionHeight += int(densityMetrics.toolbarHeight)
 		}
-		// Opening the action panel restores Flutter's full configured result height while still allowing larger panels to fit.
+		// Keep the full result area while actions are open, including when filtering leaves fewer rows.
 		height = max(height, maximumResultWindowHeight, actionHeight)
 	}
 	if formHeight > 0 {

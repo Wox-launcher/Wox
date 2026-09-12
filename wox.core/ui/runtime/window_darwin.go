@@ -1462,3 +1462,15 @@ func woxGoDarwinFileDragEnded(context C.uintptr_t, status C.int32_t) {
 		window.options.OnFileDragEnded(FileDragStatus(status))
 	}
 }
+
+// setCornerRadius updates the native material on AppKit's main thread.
+func (w *platformWindow) setCornerRadius(radius float32) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_set_corner_radius(native, C.float(radius)) != 0 {
+		return errors.New("woxui: failed to update macOS window corners")
+	}
+	return nil
+}

@@ -1,0 +1,83 @@
+{
+  "SchemaVersion": 1,
+  "ThemeId": "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860",
+  "ThemeName": "Wox Light",
+  "Description": "Wox default light theme",
+  "ThemeAuthor": "Wox launcher",
+  "Version": "1.0.0",
+  "ThemeUrl": "https://www.github.com/wox-launcher/wox",
+  "AppBackgroundColor": "rgba(236, 240, 240, 0.65)",
+  "AppPaddingLeft": 10,
+  "AppPaddingTop": 10,
+  "AppPaddingRight": 10,
+  "AppPaddingBottom": 10,
+  "ResultContainerPaddingLeft": 0,
+  "ResultContainerPaddingTop": 10,
+  "ResultContainerPaddingRight": 0,
+  "ResultContainerPaddingBottom": 0,
+  "ResultItemBorderRadius": 4,
+  "ResultItemPaddingLeft": 4,
+  "ResultItemPaddingTop": 2,
+  "ResultItemPaddingRight": 4,
+  "ResultItemPaddingBottom": 2,
+  "ResultItemTitleColor": "#454545",
+  "ResultItemSubTitleColor": "#5f6060",
+  "ResultItemTailTextColor": "#5f6060",
+  "ResultItemBorderLeftWidth": 0,
+  "ResultItemActiveBackgroundColor": "#3a6ba6",
+  "ResultItemActiveTitleColor": "#ffffff",
+  "ResultItemActiveSubTitleColor": "rgba(236, 240, 240)",
+  "ResultItemActiveTailTextColor": "rgba(236, 240, 240)",
+  "ResultItemActiveBorderLeftWidth": 0,
+  "ResultItemActiveBorderLeftColor": "#000000",
+  "QueryBoxFontColor": "#000000",
+  "QueryBoxBackgroundColor": "rgba(255,255,255,0.5)",
+  "QueryBoxBorderRadius": 8,
+  "QueryBoxCursorColor": "#000000",
+  "QueryBoxTextSelectionBackgroundColor": "#529df7",
+  "QueryBoxTextSelectionColor": "#ffffff",
+  "ActionContainerBackgroundColor": "rgba(248, 250, 250, 0.72)",
+  "ActionContainerBorderColor": "#caced0",
+  "ActionContainerBorderWidth": 1,
+  "ActionContainerBorderRadius": 8,
+  "ActionItemBorderRadius": 4,
+  "ActionContainerHeaderFontColor": "#454545",
+  "ActionContainerPaddingLeft": 14,
+  "ActionContainerPaddingTop": 10,
+  "ActionContainerPaddingRight": 14,
+  "ActionContainerPaddingBottom": 10,
+  "ActionItemActiveBackgroundColor": "#3a6ba6",
+  "ActionItemActiveFontColor": "#ffffff",
+  "ActionItemFontColor": "#454545",
+  "ActionQueryBoxFontColor": "#000000",
+  "ActionQueryBoxBackgroundColor": "#d6dada",
+  "ActionQueryBoxBorderRadius": 8,
+  "PreviewFontColor": "#454545",
+  "PreviewSplitLineColor": "#caced0",
+  "PreviewPropertyTitleColor": "#716b6b",
+  "PreviewPropertyContentColor": "#716b6b",
+  "PreviewTextSelectionColor": "#529df7",
+  "ToolbarFontColor": "#454545",
+  "ToolbarBackgroundColor": "rgba(255,255,255,0.5)",
+  "ToolbarBorderColor": "#4545451A",
+  "ToolbarBorderWidth": 1,
+  "ToolbarPaddingLeft": 10,
+  "ToolbarPaddingRight": 10,
+  "windows": {
+    "ActionContainerBackgroundColor": "rgba(248, 250, 250, 0.9)",
+    "variants": {
+      "win10": {
+        "AppBackgroundColor": "#ECF0F080"
+      }
+    }
+  },
+  "linux": {
+    "AppBackgroundColor": "#F1F5F5",
+    "ActionContainerBackgroundColor": "rgba(248, 250, 250, 0.9)",
+    "variants": {
+      "hyprland": {
+        "AppBackgroundColor": "rgba(241, 245, 245, 0.98)"
+      }
+    }
+  }
+}

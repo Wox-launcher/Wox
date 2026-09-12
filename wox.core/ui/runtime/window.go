@@ -679,3 +679,18 @@ func (w *Window) isClosed() bool {
 func (w *Window) isOpen() bool {
 	return windowLifecycle(w.lifecycle.Load()) == windowLifecycleOpen
 }
+
+// SetCornerRadius sets logical window corners; nil restores the platform default.
+func (w *Window) SetCornerRadius(radius *int) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	value := float32(-1)
+	if radius != nil {
+		if *radius < 0 {
+			return errors.New("window corner radius must be non-negative")
+		}
+		value = float32(*radius)
+	}
+	return w.native.setCornerRadius(value)
+}

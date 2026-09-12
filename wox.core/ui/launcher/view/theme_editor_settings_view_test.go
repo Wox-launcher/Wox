@@ -4,9 +4,56 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+// TestThemeEditorPreviewLocatorBounds follows the same body and tag geometry as PreviewView.
+func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
+	color := woxui.Color{R: 70, A: 90}
+	for _, size := range [][2]float32{{702, 344}, {560, 360}} {
+		for _, token := range []string{"PreviewBackgroundColor", "PreviewBorderColor", "PreviewTagFontColor", "PreviewTagBackgroundColor", "PreviewTagBorderColor", "PreviewPropertyTitleColor", "PreviewPropertyContentColor"} {
+			t.Run(token, func(t *testing.T) {
+				props := ThemeEditorSettingsProps{ActiveGroup: 3, FlashToken: token, DraftTheme: woxcomponent.Theme{PreviewTagFontColor: &color}}
+				demo := themeEditorPreviewWindow(props, size[0], size[1]).(woxwidget.Clip).Child.(woxwidget.Stack)
+				clip := demo.Children[len(demo.Children)-3].Child.(woxwidget.Clip)
+				panel := clip.Child.(woxwidget.Stack)
+				if panel.Width != clip.Width || panel.Height != clip.Height {
+					t.Fatal("preview content exceeds its launcher viewport")
+				}
+				layout := previewview.ResolvePreviewLayout(panel.Width, panel.Height, true)
+				shell := panel.Children[0].Child.(woxwidget.Container)
+				slots := shell.Child.(woxwidget.Stack).Children
+				if token == "PreviewPropertyTitleColor" || token == "PreviewPropertyContentColor" {
+					if len(panel.Children) != 2 {
+						t.Fatal("v2 property locator must not highlight footer tags")
+					}
+					body := slots[0].Child.(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+					property := body.Children[2].(woxwidget.Flex)
+					index := 0
+					if token == "PreviewPropertyContentColor" {
+						index = 1
+					}
+					if _, ok := property.Children[index].(woxwidget.Stack); !ok {
+						t.Fatal("property locator missed its body label/value")
+					}
+					return
+				}
+				marker := panel.Children[2]
+				overlay := marker.Child.(woxwidget.Stack)
+				wantTop, wantHeight := shell.Padding.Top, layout.BodyHeight+2
+				if token != "PreviewBackgroundColor" && token != "PreviewBorderColor" {
+					wantTop += slots[1].Top
+					wantHeight = slots[1].Child.(woxwidget.ScrollView).Height
+				}
+				if marker.Left != shell.Padding.Left || marker.Top != wantTop || overlay.Width != layout.InnerWidth || overlay.Height != wantHeight || marker.Top+overlay.Height > clip.Height {
+					t.Fatal("locator does not match the visible preview surface/tag strip")
+				}
+			})
+		}
+	}
+}
 
 func TestThemeEditorTokensUseHorizontalScroll(t *testing.T) {
 	tokens := make([]ThemeEditorColorToken, 5)
@@ -141,6 +188,9 @@ func TestThemeEditorMapsTokensToSemanticDemoHighlights(t *testing.T) {
 		"ResultItemActiveTailTextColor":   woxcomponent.LauncherDemoHighlightSelectedTail,
 		"ActionItemActiveFontColor":       woxcomponent.LauncherDemoHighlightActionSelectedText,
 		"ToolbarFontColor":                woxcomponent.LauncherDemoHighlightToolbarText,
+		"ToolbarHotkeyFontColor":                 woxcomponent.LauncherDemoHighlightHotkey,
+		"ToolbarHotkeyBackgroundColor":           woxcomponent.LauncherDemoHighlightHotkey,
+		"ToolbarHotkeyBorderColor":               woxcomponent.LauncherDemoHighlightHotkey,
 	}
 	for token, want := range tests {
 		if got := themeEditorDemoHighlightTarget(token); got != want {

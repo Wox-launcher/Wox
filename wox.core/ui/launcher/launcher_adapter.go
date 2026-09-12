@@ -272,10 +272,13 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		queryChromeHeight := queryHeight + refinementHeight
 		panel, panelWidth, panelHeight := a.buildActionPanel(snapshot, width, height, queryChromeHeight, toolbarHeight, frame.Scale)
 		if panel != nil {
-			rightOffset := snapshot.palette.appPadding.Right + 10
-			bottomOffset := snapshot.palette.appPadding.Bottom + 10
-			floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(rightOffset, width-panelWidth-rightOffset), Top: max(queryChromeHeight+8, height-toolbarHeight-panelHeight-bottomOffset)}
-			nativePreviewOcclusion = woxui.Rect{X: floating.Left, Y: floating.Top, Width: panelWidth, Height: panelHeight}
+			rightOffset := snapshot.palette.appPadding.Right + launcherview.ActionPanelMargin
+			bottomOffset := launcherview.ActionPanelBottomOffset(snapshot.palette.appPadding.Bottom)
+			left := max(rightOffset, width-panelWidth-rightOffset)
+			slot, occlusion := actionPanelFloatingPlacement(left, height, queryChromeHeight, toolbarHeight, panelWidth, panelHeight, bottomOffset)
+			slot.Child = panel
+			floating = &slot
+			nativePreviewOcclusion = occlusion
 		}
 	}
 	var overlay woxwidget.Widget

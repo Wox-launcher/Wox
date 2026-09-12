@@ -35,6 +35,7 @@ struct WoxRenderer {
   IDCompositionDevice *composition_device = nullptr;
   IDCompositionTarget *composition_target = nullptr;
   IDCompositionVisual *composition_root = nullptr;
+ IDCompositionRectangleClip *window_clip = nullptr;
   IDCompositionVisual *composition_visual = nullptr;
   IDCompositionVisual *overlay_visual = nullptr;
   ID2D1Factory1 *d2d_factory = nullptr;
@@ -566,7 +567,8 @@ static void destroy_renderer(WoxRenderer *renderer) {
   release_com(&renderer->dwrite_factory);
   release_com(&renderer->overlay_visual);
   release_com(&renderer->composition_visual);
-  release_com(&renderer->composition_root);
+  release_com(&renderer->window_clip);
+ release_com(&renderer->composition_root);
   release_com(&renderer->composition_target);
   release_com(&renderer->composition_device);
   release_com(&renderer->overlay_swap_chain);
@@ -1461,4 +1463,33 @@ extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {
 
 extern "C" void wox_renderer_destroy(WoxRenderer *renderer) {
   destroy_renderer(renderer);
+}
+
+// The HWND region does not replace clipping the DirectComposition visual tree (including embedded overlays).
+extern "C" int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float physical_radius) {
+ if (renderer == nullptr || renderer->composition_root == nullptr) return E_INVALIDARG;
+ HRESULT result = S_OK;
+ if (physical_radius < 0) {
+  result = renderer->composition_root->SetClip(static_cast<IDCompositionClip *>(nullptr));
+ } else {
+  if (renderer->window_clip == nullptr) result = renderer->composition_device->CreateRectangleClip(&renderer->window_clip);
+  if (FAILED(result)) return result;
+  float radius = std::min(physical_radius, std::min(renderer->width, renderer->height) * 0.5f);
+  auto clip = renderer->window_clip;
+  result = clip->SetLeft(0.0f);
+  if (SUCCEEDED(result)) result = clip->SetTop(0.0f);
+  if (SUCCEEDED(result)) result = clip->SetRight(static_cast<float>(renderer->width));
+  if (SUCCEEDED(result)) result = clip->SetBottom(static_cast<float>(renderer->height));
+  if (SUCCEEDED(result)) result = clip->SetTopLeftRadiusX(radius);
+  if (SUCCEEDED(result)) result = clip->SetTopLeftRadiusY(radius);
+  if (SUCCEEDED(result)) result = clip->SetTopRightRadiusX(radius);
+  if (SUCCEEDED(result)) result = clip->SetTopRightRadiusY(radius);
+  if (SUCCEEDED(result)) result = clip->SetBottomLeftRadiusX(radius);
+  if (SUCCEEDED(result)) result = clip->SetBottomLeftRadiusY(radius);
+  if (SUCCEEDED(result)) result = clip->SetBottomRightRadiusX(radius);
+  if (SUCCEEDED(result)) result = clip->SetBottomRightRadiusY(radius);
+  if (SUCCEEDED(result)) result = renderer->composition_root->SetClip(clip);
+ }
+ if (SUCCEEDED(result)) result = renderer->composition_device->Commit();
+ return result;
 }

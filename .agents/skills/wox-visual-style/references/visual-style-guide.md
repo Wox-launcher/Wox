@@ -70,10 +70,14 @@ Preserve the current special contracts unless a task explicitly targets them:
 | Launcher query Tab mark | One 14-square `control.keyboard-tab` glyph after the next successful Tab target, painted at query-text color with alpha 96/255 and a 4-unit gap. Center it on the query letter ink (baseline minus a quarter em), not the input box or the font line box. No keycap fill or border. Omit it on the current sole argument, an empty required argument, the last slot, or when Tab would only shake the caret |
 | Launcher structured block | Semantic text-color background with alpha 10/255 (18/255 when active), extending 3 logical units horizontally without moving text, clipped to the editor and shared gaps between adjacent blocks |
 | Launcher toolbar | Theme-tinted floating material with a top divider. With the query above results, list and grid content extend behind the footer; selection visibility and scrollbars use the unobscured viewport. Preview panes and bottom query chrome retain their usable height. The footer blocks interaction with covered results. |
+| Launcher selected list result | `ResultItemActiveBorderLeftWidth` paints a full-height left marker in logical units; zero disables it. `ResultItemActiveBorderLeftColor` sets its independent color, falling back to `QueryBoxCursorColor` when omitted or empty. The marker follows the result background rounded silhouette, including its left corners; square themes retain a full rectangular marker. It belongs to the background, never shifts content, and does not appear for hover-only rows or group headings. Theme previews use the same treatment. |
+| Launcher toolbar divider | `ToolbarBorderColor` sets the top divider independently from text; omitted or empty uses `ToolbarFontColor` with alpha capped at 26/255. `ToolbarBorderWidth` defaults to 1 logical unit; zero disables it without changing toolbar layout. |
 | Action Panel header | 18 optically centered line; do not use a 16 Text slot |
 | Action Panel filter | 40 input inside a 46-high slot |
+| Action Panel outer border | `ActionContainerBorderColor` sets the independent edge color; omitted or empty follows `PreviewSplitLineColor`. `ActionContainerBorderWidth` is in logical units; omitted defaults to 1, zero disables it. V1 internal dividers continue using `PreviewSplitLineColor`; v2 exposes `ActionContainerDividerColor`. Theme previews use the same edge. |
+| Action Panel corner geometry | `ActionContainerBorderRadius` controls panel corners, falling back to `ActionQueryBoxBorderRadius`. `ActionItemBorderRadius` controls action rows, falling back to `ResultItemBorderRadius`. Explicit zero produces square corners; all values are logical units and also apply to previews. |
 | Action Panel row | 40; optional 18 plugin identity tail or usage-score text such as `+55` in the trailing gutter, same 10/5 inset as hotkeys |
-| Action Panel group divider | 16-high slot with a 1px `PreviewSplit` hairline; same treatment as the title divider |
+| Action Panel group divider | 16-high slot with a 1-unit hairline; v2 uses `ActionContainerDividerColor`, v1 uses `PreviewSplit` |
 | Action Panel verb icons | Monochrome `action.*` SVGs using `var(--wox-theme-icon-color)` as the untinted fallback. On the Action Panel, tint only those theme-adaptive SVGs with `ActionText` / `ActionSelectedText` so they match the row label. Do not source-in tint plugin, brand, or status identity icons; a filled brand SVG would collapse into a solid blob. The SVG variable itself stays appearance black/white and is not a per-row text color. Execute actions use `action.execute` (lightning), not settings or play. |
 
 If a shared primitive serves both an ordinary page and a special surface, provide an explicit context-specific composition or semantic size instead of changing one default and relying on call-site overrides.
@@ -140,6 +144,8 @@ When implementing migration work:
 - verify that Launcher and Action Panel geometry remains unchanged.
 
 ## Color and surfaces
+
+Themes explicitly declaring `SchemaVersion: 2` derive optional styles from required `BaseBackgroundColor`, `BaseTextColor`, and `BaseAccentColor` through the shared core resolver. For theme authoring, follow [Wox Theme Creator](../../wox-theme-creator/SKILL.md). Legacy themes retain their existing fallbacks. Preserve missing authored values separately from effective swatches: an inherited editor color must stay omitted on save, and explicit zero or transparency must not trigger fallback. Platform overrides are merged before defaults are derived. V2 editor base colors are required; optional color dialogs provide Use default and inherited labels.
 
 Select color by semantic role. Do not copy RGBA values into ordinary views.
 
@@ -292,3 +298,23 @@ Before completing a visual change, confirm:
 - long text, translation, narrow width, scrolling, light/dark themes, and DPI boundaries are considered;
 - tests assert shared contracts without changing Launcher or Action Panel geometry accidentally;
 - this guide is updated in the same change if the intended shared contract changed.
+
+V2 keycaps expose independent `ToolbarHotkey{Font,Background,Border}Color`, `ActionItemHotkey{Font,Background,Border}Color`, and `ActionItemActiveHotkey{Font,Background,Border}Color` groups. Explicit transparency must survive fallback. `ResultItemHoverBackgroundColor` only paints unselected hovered list backgrounds and grid frames; selected styling retains precedence. V1 retains all contextual fallback colors.
+
+V2 generic preview surfaces expose independent background and border colors. Preview metadata tags expose independent text, background and border colors, with exact authored alpha. Glance exposes text, SVG icon tint, normal background and hover background independently from QueryBox. Legacy fallback opacity and all layout dimensions remain unchanged.
+
+V2 Filters buttons expose independent normal/active text, icon, background, border, and hover background colors. Expanded refinements expose group background, border, title, divider, hotkey, and normal/selected/hovered option colors. Explicit alpha is preserved, including selected hover. V1 keeps contextual opacity rules; launcher density still owns control geometry.
+
+Shared scrollbars accept v2 normal, hover, and dragging thumb colors plus logical thickness, hovered thickness, and radius. Preserve authored alpha; the visibility animation multiplies it without the legacy 150/255 cap. Omitted radius follows animated thickness/2. Keep the drag target at least 12 logical units and large enough for the visual thumb on both axes. Theme values travel through ScrollViewProps; do not read mutable app theme state inside the shared widget.
+
+Launcher outer chrome exposes `AppBorderColor`, `AppBorderWidth`, and `AppBorderRadius`. Draw the inset outline after content; never enlarge layout padding to accommodate it. Clamp painted radius to half the window's smaller dimension. Custom native corners apply only to the launcher: Windows updates its region on resize/DPI changes, macOS updates the material mask, and Linux native blur keeps square corners. Nil geometry preserves previous behavior; explicit zero stays zero. Theme previews use authored outline and radius values.
+
+Windows custom corners also clip the DirectComposition root, including overlay visuals. They disable System Backdrop, Accent blur, and extended glass frames, retaining transparent composition without native blur; returning to default corners restores the normal material. Preserve the clip through renderer resize and device recreation. A pure Go theme preview cannot verify native backdrop or shadow behavior.
+
+When exposing or recommending custom corners, explicitly explain the Windows tradeoff to users: system-material translucent blur is unavailable, while theme-color alpha transparency remains available. An explicit zero radius still selects custom geometry. Restoring system material requires the effective radius override to be unset, not merely assigning a default-looking number. See the theme-creator skill for authoring and delivery wording.
+
+V2 generic previews and metadata tags accept `PreviewBorderRadius` and `PreviewTagBorderRadius` in logical units. Omission retains radius 8; zero is square; radii clamp to half the surface size. Font sizing remains owned by Interface size, never by theme overrides.
+
+V2 selected-result markers use `ResultItemActiveIndicatorColor/Width/InsetLeft/InsetTop/InsetBottom/BorderRadius`; v1 retains its edge-border fields. Insets and radius default to zero, width to zero, color to base accent. Render on the background layer without changing row layout; demo and launcher share the geometry. `QueryBoxBorderBottomColor/Width` paint the query bottom edge inside its bounds, defaulting to accent/zero and preserving explicit transparency.
+
+V2 selected Action Panel keycaps use their own active tokens; normal action and Toolbar tokens cannot override them. V1 retains caller-provided surface colors. Preserve the selected white-on-blue contrast in light themes with explicit active keycap colors.

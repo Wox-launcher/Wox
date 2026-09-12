@@ -65,11 +65,23 @@ func PreviewView(props PreviewProps) woxwidget.Widget {
 }
 
 func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, height float32) woxwidget.Widget {
+	background, border := previewColorWithOpacity(theme.PreviewText, 0.035), previewColorWithOpacity(theme.PreviewSplit, 0.45)
+	if theme.PreviewBackgroundColor != nil {
+		background = *theme.PreviewBackgroundColor
+	}
+	if theme.PreviewBorderColor != nil {
+		border = *theme.PreviewBorderColor
+	}
+	radius := previewSurfaceRadius
+	if theme.PreviewBorderRadius != nil {
+		radius = float32(*theme.PreviewBorderRadius)
+	}
+	radius = min(radius, max(float32(0), min(width, height)/2))
 	contentWidth := max(float32(0), width-2)
 	contentHeight := max(float32(0), height-2)
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: previewSurfaceRadius, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
-		BorderColor: previewColorWithOpacity(theme.PreviewSplit, 0.45), BorderWidth: previewSurfaceBorderWidth, Padding: woxwidget.UniformInsets(previewSurfaceBorderWidth),
+		Width: width, Height: height, Radius: radius, Color: background,
+		BorderColor: border, BorderWidth: previewSurfaceBorderWidth, Padding: woxwidget.UniformInsets(previewSurfaceBorderWidth),
 		Child: woxwidget.Clip{Width: contentWidth, Height: contentHeight, Child: body},
 	}
 }
@@ -89,11 +101,28 @@ func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Wind
 		if len(children) > 0 {
 			contentWidth += 8
 		}
+		background := previewColorWithOpacity(theme.PreviewText, 0.035)
+		border := previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48)
+		foreground := previewColorWithOpacity(theme.PreviewPropertyContent, 0.9)
+		// V2 overrides carry their exact alpha; legacy opacity rules apply only when absent.
+		if theme.PreviewTagBackgroundColor != nil {
+			background = *theme.PreviewTagBackgroundColor
+		}
+		if theme.PreviewTagBorderColor != nil {
+			border = *theme.PreviewTagBorderColor
+		}
+		if theme.PreviewTagFontColor != nil {
+			foreground = *theme.PreviewTagFontColor
+		}
+		radius := float32(8)
+		if theme.PreviewTagBorderRadius != nil {
+			radius = min(float32(*theme.PreviewTagBorderRadius), 13)
+		}
 		pill := woxwidget.Container{
-			Width: chipWidth, Height: 26, Radius: 8, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
-			BorderColor: previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48), BorderWidth: 1,
-			Padding: woxwidget.Insets{Left: 9, Top: 6, Right: 9, Bottom: 5},
-			Child:   woxwidget.Text{Value: label, Style: style, Color: previewColorWithOpacity(theme.PreviewPropertyContent, 0.9)},
+			Width: chipWidth, Height: 26, Radius: radius, Color: background,
+			BorderColor: border, BorderWidth: 1,
+			Padding: woxwidget.Insets{Left: 9, Right: 9},
+			Child:   woxwidget.Align{Height: 26, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: style, Color: foreground}},
 		}
 		tooltip := strings.TrimSpace(tag.Tooltip)
 		if tooltip == "" {

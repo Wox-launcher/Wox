@@ -66,8 +66,7 @@ func (s *glanceViewState) Build(context woxwidget.StateContext, widget any) woxw
 	children := make([]woxwidget.Widget, 0, 2)
 	contentWidth := max(float32(0), props.Width-horizontalPadding*2)
 	textWidth := contentWidth
-	foreground := props.Theme.QueryText
-	foreground.A = uint8(float32(foreground.A) * 0.8)
+	foreground, background := props.Theme.GlanceColors(s.hovered)
 	if props.Icon != nil {
 		children = append(children, woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize})
 		textWidth -= iconSize + gap
@@ -76,11 +75,6 @@ func (s *glanceViewState) Build(context woxwidget.StateContext, widget any) woxw
 	children = append(children, woxwidget.Container{Width: max(scaledLauncherSize(20, props.DensityScale), textWidth), Child: woxwidget.Text{
 		Value: compactViewText(text, 22), Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GlanceFontSize, props.DensityScale)}, Color: foreground,
 	}})
-	background := woxui.Color{}
-	if s.hovered {
-		background = props.Theme.QueryText
-		background.A = uint8(float32(background.A) * 0.1)
-	}
 	tooltip := strings.TrimSpace(props.Tooltip)
 	if tooltip == "" {
 		tooltip = text

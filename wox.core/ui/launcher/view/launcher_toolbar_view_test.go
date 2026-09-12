@@ -8,6 +8,27 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestToolbarIndependentDivider verifies transparent and disabled borders without resizing the toolbar.
+func TestToolbarIndependentDivider(t *testing.T) {
+	for _, width := range []float32{0, 1, 3} {
+		color := woxui.Color{R: 50, G: 180, B: 120, A: 80}
+		built := LauncherToolbarView(LauncherToolbarProps{Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1.5, Theme: woxcomponent.Theme{ToolbarBorder: color, ToolbarBorderWidth: width}}).(woxwidget.Stack)
+		divider := built.Children[2].Child.(woxwidget.Painter)
+		if built.Height != 40 || divider.Height != width {
+			t.Fatalf("width %v: invalid divider geometry", width)
+		}
+		actual, expected := &woxui.DisplayList{}, &woxui.DisplayList{}
+		bounds := woxui.Rect{X: -20, Y: 10, Width: 800, Height: width}
+		divider.Paint(actual, bounds)
+		if width > 0 {
+			expected.FillRect(bounds, color)
+		}
+		if err := actual.Compare(expected); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestLauncherToolbarSplitGivesStatusPriority(t *testing.T) {
 	left, right := launcherToolbarSplit(740, 220, 150, 16)
 	if left != 220 || right != 504 {

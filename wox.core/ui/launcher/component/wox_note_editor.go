@@ -188,7 +188,7 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 	return WoxScrollView(ScrollViewProps{
 		Key: "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: props.Label,
 		Width: props.Width, Height: props.Height, Content: content,
-		ThumbColor: props.Theme.ResultSubtitle,
+		Theme: props.Theme, ThumbColor: props.Theme.ResultSubtitle,
 	})
 }
 

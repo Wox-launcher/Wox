@@ -12,6 +12,7 @@ type LauncherDemoQueryPart struct {
 	Text       string
 	Color      woxui.Color
 	Background woxui.Color
+	Selected   bool // A transparent selection still needs a discoverable locator target.
 	Caret      bool
 }
 
@@ -23,6 +24,7 @@ type LauncherDemoResult struct {
 	Glyph      string
 	GlyphColor woxui.Color
 	Selected   bool
+	Hovered    bool
 }
 
 // LauncherDemoHighlightTarget identifies one semantic surface inside the simulated launcher.
@@ -49,6 +51,11 @@ const (
 	LauncherDemoHighlightActionSelectedBackground
 	LauncherDemoHighlightActionSelectedText
 	LauncherDemoHighlightActionQueryBackground
+	LauncherDemoHighlightResultHover
+	LauncherDemoHighlightActionDivider
+	LauncherDemoHighlightHotkey
+	LauncherDemoHighlightActionHotkey
+	LauncherDemoHighlightActionActiveHotkey
 )
 
 // LauncherDemoProps contains the complete simulated launcher state shared by previews.
@@ -84,7 +91,11 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	if background.A == 0 {
 		background = props.Theme.Background
 	}
-	const appPadding, queryHeight, windowRadius = float32(10), float32(55), float32(12)
+	const appPadding, queryHeight = float32(10), float32(55)
+	windowRadius := float32(12)
+	if props.Theme.AppBorderRadius != nil {
+		windowRadius = float32(*props.Theme.AppBorderRadius)
+	}
 	const resultContainerTop, rowHeight, toolbarHeight = float32(8), float32(56), float32(40)
 	resultTop := resultContainerTop
 	if props.ShowQuery {
@@ -119,6 +130,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	if props.Preview != nil && props.ResultWidth > 0 {
 		resultWidth = min(props.ResultWidth, props.Width-120)
 	}
+	windowRadius = min(max(float32(0), windowRadius), min(props.Width, renderHeight)/2)
 	mica := woxwidget.Container{Width: props.Width, Height: renderHeight, Radius: windowRadius, Color: demoMicaColor(background)}
 	underlay := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: renderHeight, Radius: windowRadius, Color: woxui.Color{A: 255}})
 	if props.Backdrop != nil {
@@ -172,6 +184,13 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		})
 	}
 	borderColor, borderWidth := demoWindowBorderColor(props.Theme.PreviewSplit, opacity), float32(1)
+	if props.Theme.AppBorderColor != nil {
+		borderColor = *props.Theme.AppBorderColor
+		borderColor.A = uint8(float32(borderColor.A) * opacity)
+	}
+	if props.Theme.AppBorderWidth != nil {
+		borderWidth = float32(*props.Theme.AppBorderWidth)
+	}
 	if props.HighlightTarget == LauncherDemoHighlightSurface {
 		borderColor, borderWidth = props.HighlightColor, 2
 	}
@@ -197,7 +216,7 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 				continue
 			}
 			text := woxwidget.Text{Value: part.Text, Style: style, Color: withAlpha(part.Color, demoScaledAlpha(props.Opacity, part.Color.A))}
-			if part.Background.A == 0 {
+			if !part.Selected && part.Background.A == 0 {
 				parts = append(parts, demoInlineHighlight(text, lineHeight, 3, props.HighlightTarget == LauncherDemoHighlightQueryText, props.HighlightColor))
 				continue
 			}
@@ -213,7 +232,8 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 		children = append(children, props.QueryAccessory)
 	}
 	// Live query chrome uses 8px left / 6px right so glance sits on the same edge.
-	return woxwidget.Container{Height: height, Radius: 8, Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
+	borderColor, borderWidth := props.Theme.QueryBottomBorder()
+	return woxwidget.Container{BottomBorderColor: demoColorOpacity(borderColor, props.Opacity), BottomBorderWidth: borderWidth, Height: height, Radius: 8, Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
 	}}
 }
@@ -226,6 +246,8 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 	background := woxui.Color{}
 	if result.Selected {
 		background = demoColorOpacity(props.Theme.SelectedBackground, float32(alpha)/255)
+	} else if result.Hovered {
+		background = demoColorOpacity(props.Theme.ResultHoverColor(), float32(alpha)/255)
 	}
 	tailWidth := float32(0)
 	if result.Tail != "" {
@@ -268,7 +290,18 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 	row := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: 13, Top: 3, Right: 13, Bottom: 3}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: iconGap, Children: children,
 	}}
-	return demoHighlight(row, width, height, 8, props.HighlightTarget == LauncherDemoHighlightSelectedBackground && result.Selected, props.HighlightColor)
+	if result.Selected {
+		if props.Theme.ResultItemActiveIndicatorWidth != nil {
+			indicator := props.Theme.ResultIndicator()
+			indicator.Color = demoColorOpacity(indicator.Color, float32(alpha)/255)
+			content := row
+			content.Color = woxui.Color{}
+			return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: ResultIndicatorBackground(width, height, row.Radius, background, indicator)}, {Child: content}}}
+		}
+		row.LeftBorderWidth = max(float32(0), props.Theme.SelectedBorderLeftWidth)
+		row.LeftBorderColor = demoColorOpacity(props.Theme.SelectedBorderLeftColor, float32(alpha)/255)
+	}
+	return demoHighlight(row, width, height, 8, props.HighlightTarget == LauncherDemoHighlightSelectedBackground && result.Selected || props.HighlightTarget == LauncherDemoHighlightResultHover && result.Hovered && !result.Selected, props.HighlightColor)
 }
 
 // demoResultTailTextWidth estimates tail text so CJK glyphs keep the same 8px inset as production tags.
@@ -304,16 +337,26 @@ func demoToolbar(props LauncherDemoProps, height, windowHeight, windowRadius flo
 			border = withAlpha(props.Accent, demoScaledAlpha(float32(alpha)/255, 200))
 			fill = withAlpha(props.Accent, demoScaledAlpha(float32(alpha)/255, 28))
 		}
-		return woxwidget.Container{Width: width, Height: 24, Radius: 4, Color: fill, BorderColor: border, BorderWidth: 1, Child: woxwidget.Align{
-			Width: width, Height: 24, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.ToolbarText, alpha)},
+		foreground := withAlpha(props.Theme.ToolbarText, alpha)
+		if c := props.Theme.ToolbarHotkeyFontColor; c != nil {
+			foreground = demoColorOpacity(*c, float32(alpha)/255)
+		}
+		if c := props.Theme.ToolbarHotkeyBackgroundColor; c != nil {
+			fill = demoColorOpacity(*c, float32(alpha)/255)
+		}
+		if c := props.Theme.ToolbarHotkeyBorderColor; c != nil {
+			border = demoColorOpacity(*c, float32(alpha)/255)
+		}
+		cap := woxwidget.Container{Width: width, Height: 24, Radius: 4, Color: fill, BorderColor: border, BorderWidth: 1, Child: woxwidget.Align{
+			Width: width, Height: 24, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: foreground},
 		}}
+		return demoHighlight(cap, width, 24, 4, props.HighlightTarget == LauncherDemoHighlightHotkey, props.HighlightColor)
 	}
 	content := woxwidget.Widget(woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: primary, Style: woxui.TextStyle{Size: 11}, Color: withAlpha(props.Theme.ToolbarText, alpha)}, keycap("Enter", 42, false),
-		woxwidget.Container{Width: 8}, woxwidget.Text{Value: more, Style: woxui.TextStyle{Size: 11}, Color: withAlpha(props.Theme.ToolbarText, alpha)},
+		demoInlineHighlight(woxwidget.Text{Value: primary, Style: woxui.TextStyle{Size: 11}, Color: withAlpha(props.Theme.ToolbarText, alpha)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor), keycap("Enter", 42, false),
+		woxwidget.Container{Width: 8}, demoInlineHighlight(woxwidget.Text{Value: more, Style: woxui.TextStyle{Size: 11}, Color: withAlpha(props.Theme.ToolbarText, alpha)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor),
 		keycap(modifier, 42, props.ToolbarPressed), keycap("J", 26, props.ToolbarPressed),
 	}})
-	content = demoInlineHighlight(content, 28, 4, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor)
 	// Clip a window-sized rounded fill to the footer. A square toolbar fill would
 	// paint into the window's bottom corner cutouts; the query box is inset, so
 	// the top corners never showed this.
@@ -325,7 +368,11 @@ func demoToolbar(props LauncherDemoProps, height, windowHeight, windowRadius flo
 		Width: props.Width, Height: height,
 		Child: woxwidget.Stack{Width: props.Width, Height: height, Children: []woxwidget.StackChild{
 			{Top: height - windowHeight, Child: fill},
-			{Child: woxwidget.Container{Width: props.Width, Height: 1, Color: withAlpha(props.Theme.ToolbarText, demoScaledAlpha(props.Opacity, 26))}},
+			{Child: woxwidget.Painter{Width: props.Width, Height: min(height, max(float32(0), props.Theme.ToolbarBorderWidth)), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+				if props.Theme.ToolbarBorderWidth > 0 {
+					displayList.FillRect(bounds, demoColorOpacity(props.Theme.ToolbarBorder, props.Opacity))
+				}
+			}}},
 			{Child: woxwidget.Container{Width: props.Width, Height: height, Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Align{
 				Width: props.Width - 24, Height: height, Horizontal: 1, Vertical: .5, Child: content,
 			}}},
@@ -347,6 +394,10 @@ func demoActionPanel(props LauncherDemoProps, width, height float32, alpha uint8
 		demoInlineHighlight(woxwidget.Text{Value: "Actions", Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.ActionHeader, alpha)}, demoActionHeaderHeight, 3, props.HighlightTarget == LauncherDemoHighlightActionHeader, props.HighlightColor),
 		woxwidget.Container{Width: width - 20, Height: demoActionHeaderGap},
 	}
+	if props.HighlightTarget == LauncherDemoHighlightActionDivider {
+		children[1] = woxwidget.Align{Width: width - 20, Height: demoActionHeaderGap, Vertical: .5, Child: woxwidget.Container{Width: width - 20, Height: 1, Color: demoColorOpacity(props.Theme.ActionDividerColor(), float32(alpha)/255)}}
+		children[1] = demoHighlight(children[1], width-20, demoActionHeaderGap, 2, true, props.HighlightColor)
+	}
 	actions := []struct {
 		label string
 		icon  func(float32, woxui.Color) woxwidget.Widget
@@ -362,7 +413,7 @@ func demoActionPanel(props LauncherDemoProps, width, height float32, alpha uint8
 		}
 		textHighlight := props.HighlightTarget == LauncherDemoHighlightActionText && index > 0 || props.HighlightTarget == LauncherDemoHighlightActionSelectedText && index == 0
 		iconColor := withAlpha(foreground, alpha)
-		row := woxwidget.Container{Width: width - 20, Height: demoActionRowHeight, Radius: 5, Color: withAlpha(background, demoScaledAlpha(float32(alpha)/255, background.A)), Child: woxwidget.Flex{
+		row := woxwidget.Container{Width: width - 20, Height: demoActionRowHeight, Radius: props.Theme.ActionItemRadius, Color: withAlpha(background, demoScaledAlpha(float32(alpha)/255, background.A)), Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: iconSlotWidth, Height: demoActionRowHeight, Vertical: .5, Child: woxwidget.Container{
 					Width: iconSlotWidth, Padding: woxwidget.Insets{Left: 5, Right: 10}, Child: action.icon(iconSize, iconColor),
@@ -370,14 +421,34 @@ func demoActionPanel(props LauncherDemoProps, width, height float32, alpha uint8
 				woxwidget.Align{Height: demoActionRowHeight, Vertical: .5, Child: demoInlineHighlight(woxwidget.Text{Value: action.label, Style: woxui.TextStyle{Size: 10}, Color: withAlpha(foreground, alpha)}, 16, 3, textHighlight, props.HighlightColor)},
 			},
 		}}
-		children = append(children, demoHighlight(row, width-20, demoActionRowHeight, 5, props.HighlightTarget == LauncherDemoHighlightActionSelectedBackground && index == 0, props.HighlightColor))
+		keyTheme := props.Theme
+		for _, slot := range []**woxui.Color{&keyTheme.ActionItemHotkeyFontColor, &keyTheme.ActionItemHotkeyBackgroundColor, &keyTheme.ActionItemHotkeyBorderColor, &keyTheme.ActionItemActiveHotkeyFontColor, &keyTheme.ActionItemActiveHotkeyBackgroundColor, &keyTheme.ActionItemActiveHotkeyBorderColor} {
+			if *slot != nil {
+				color := demoColorOpacity(**slot, float32(alpha)/255)
+				*slot = &color
+			}
+		}
+		label := "Enter"
+		if index > 0 {
+			label = "Ctrl"
+		}
+		keycap, keyWidth := WoxHotkey(HotkeyProps{Theme: &keyTheme, Selected: index == 0, Labels: []string{label}, Foreground: withAlpha(foreground, alpha), Background: withAlpha(background, alpha), Window: &woxui.Window{}, Compact: true})
+		flash := index == 0 && props.HighlightTarget == LauncherDemoHighlightActionActiveHotkey || index > 0 && props.HighlightTarget == LauncherDemoHighlightActionHotkey
+		// Reserve a trailing slot so the preview label cannot overlap its keycap.
+		content := row.Child
+		row.Child = woxwidget.Stack{Width: width - 20, Height: demoActionRowHeight, Children: []woxwidget.StackChild{{Child: woxwidget.Clip{Width: max(float32(0), width-30-keyWidth), Height: demoActionRowHeight, Child: content}}, {Left: width - 25 - keyWidth, Child: woxwidget.Align{Width: keyWidth, Height: demoActionRowHeight, Vertical: .5, Child: demoHighlight(keycap, keyWidth, 22, 4, flash, props.HighlightColor)}}}}
+		children = append(children, demoHighlight(row, width-20, demoActionRowHeight, props.Theme.ActionItemRadius, props.HighlightTarget == LauncherDemoHighlightActionSelectedBackground && index == 0, props.HighlightColor))
 	}
 	query := woxwidget.Container{
 		Width: width - 20, Height: 28, Radius: 5, Color: demoColorOpacity(props.Theme.QueryBackground, float32(alpha)/255), Padding: woxwidget.Insets{Left: 9}, Child: woxwidget.Align{Height: 28, Vertical: .5, Child: woxwidget.Text{Value: props.Query, Style: woxui.TextStyle{Size: 9}, Color: withAlpha(props.Theme.ActionText, demoScaledAlpha(float32(alpha)/255, 170))}},
 	}
+
 	children = append(children, woxwidget.Container{Width: width - 20, Height: demoActionSearchHeight, Padding: woxwidget.Insets{Top: 8}, Child: demoHighlight(query, width-20, 28, 5, props.HighlightTarget == LauncherDemoHighlightActionQueryBackground, props.HighlightColor)})
 	panel := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: demoColorOpacity(props.Theme.ActionBackground, float32(alpha)/255), Padding: woxwidget.Insets{Left: 10, Top: demoActionPanelPaddingTop, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
-	return demoHighlight(panel, width, height, 8, props.HighlightTarget == LauncherDemoHighlightActionBackground, props.HighlightColor)
+	panel.BorderColor = demoColorOpacity(props.Theme.ActionBorder, float32(alpha)/255)
+	panel.BorderWidth = props.Theme.ActionBorderWidth
+	panel.Radius = props.Theme.ActionContainerRadius
+	return demoHighlight(panel, width, height, panel.Radius, props.HighlightTarget == LauncherDemoHighlightActionBackground, props.HighlightColor)
 }
 
 const (

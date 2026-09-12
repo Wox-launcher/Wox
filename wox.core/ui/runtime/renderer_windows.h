@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 typedef struct WoxRenderer WoxRenderer;
+int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float physical_radius);
 
 // WoxRendererGpuMemory carries what the graphics driver attributes to this process, already split
 // by where the memory physically lives. System memory the driver holds on our behalf shows up in

@@ -10,6 +10,8 @@ import (
 
 // ScrollViewProps contains the geometry and optional controlled state for a Wox scroll surface.
 type ScrollViewProps struct {
+	Theme Theme
+
 	Key     woxwidget.Key
 	Content woxwidget.Widget
 	Width   float32
@@ -251,25 +253,46 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		thumbOffset := (viewport - thumbLength) * offset / (content - viewport)
 		thumbColor := props.ThumbColor
 		thumbColor.A = min(150, thumbColor.A)
+		if props.Theme.ScrollbarThumbColor != nil {
+			thumbColor = *props.Theme.ScrollbarThumbColor
+		}
+		if state != nil && state.hovered && props.Theme.ScrollbarThumbHoverColor != nil {
+			thumbColor = *props.Theme.ScrollbarThumbHoverColor
+		}
+		if state != nil && state.dragging && props.Theme.ScrollbarThumbActiveColor != nil {
+			thumbColor = *props.Theme.ScrollbarThumbActiveColor
+		}
 		visible := state != nil && (state.visible || props.AlwaysShowScrollbar)
 		targetOpacity := float32(0)
 		if visible {
 			targetOpacity = 1
 		}
 		targetThickness := float32(3)
+		if props.Theme.ScrollbarWidth != nil {
+			targetThickness = float32(*props.Theme.ScrollbarWidth)
+		}
 		if state != nil && (state.hovered || state.dragging) {
 			targetThickness = 7
+			if props.Theme.ScrollbarHoverWidth != nil {
+				targetThickness = float32(*props.Theme.ScrollbarHoverWidth)
+			}
 		}
+		// The drag target stays usable even when the authored thumb is thin.
+		hitThickness := max(float32(12), targetThickness)
 		opacityKey := props.Key + "-scrollbar-opacity"
 		widthKey := props.Key + "-scrollbar-width"
 		var thumb woxwidget.Widget = woxwidget.AnimatedFloat{Key: opacityKey, Target: targetOpacity, Duration: 200 * time.Millisecond, Builder: func(opacity float32) woxwidget.Widget {
 			return woxwidget.AnimatedFloat{Key: widthKey, Target: targetThickness, Duration: 120 * time.Millisecond, Builder: func(thickness float32) woxwidget.Widget {
+				radius := thickness / 2
+				if props.Theme.ScrollbarBorderRadius != nil {
+					radius = float32(*props.Theme.ScrollbarBorderRadius)
+				}
 				color := thumbColor
 				color.A = uint8(float32(color.A)*opacity + 0.5)
 				if props.Horizontal {
-					return woxwidget.Align{Width: thumbLength, Height: 12, Vertical: 1, Child: woxwidget.Container{Width: thumbLength, Height: thickness, Radius: thickness / 2, Color: color}}
+					return woxwidget.Align{Width: thumbLength, Height: hitThickness, Vertical: 1, Child: woxwidget.Container{Width: thumbLength, Height: thickness, Radius: radius, Color: color}}
 				}
-				return woxwidget.Align{Width: 12, Height: thumbLength, Horizontal: 1, Child: woxwidget.Container{Width: thickness, Height: thumbLength, Radius: thickness / 2, Color: color}}
+				return woxwidget.Align{Width: hitThickness, Height: thumbLength, Horizontal: 1, Child: woxwidget.Container{Width: thickness, Height: thumbLength, Radius: radius, Color: color}}
 			}}
 		}}
 		if visible {

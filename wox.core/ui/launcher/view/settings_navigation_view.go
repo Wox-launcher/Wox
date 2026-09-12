@@ -88,8 +88,8 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			viewportHeight := max(float32(1), size.Height-searchAreaHeight)
 			nav := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 				Key: "settings-rail-scroll", KeepVisible: props.KeepVisible, Width: size.Width, Height: viewportHeight,
-				Content:    woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
-				ThumbColor: props.Theme.ResultTitle, HideScrollbar: true,
+				Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
+				Theme:   props.Theme, ThumbColor: props.Theme.ResultTitle, HideScrollbar: true,
 			})
 			stackChildren := []woxwidget.StackChild{{Child: nav}}
 			if props.ShowSearch {
@@ -207,7 +207,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "settings-search-results", Width: size.Width, Height: size.Height,
 			KeepVisible: &woxwidget.ScrollRange{Start: start, End: start + rowHeight},
-			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultTitle,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
 		})
 	}}}
 }

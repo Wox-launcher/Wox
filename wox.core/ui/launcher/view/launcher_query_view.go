@@ -277,6 +277,7 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			},
 		})
 	}
+	queryBorderColor, queryBorderWidth := props.Theme.QueryBottomBorder()
 	header := woxwidget.Widget(woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		// Bottom padding is used when the query box is anchored at the bottom so
@@ -285,6 +286,7 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right, Bottom: props.AppPadding.Bottom},
 		Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
 			Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground,
+			BottomBorderColor: queryBorderColor, BottomBorderWidth: queryBorderWidth,
 			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
 		}},
@@ -562,7 +564,7 @@ func launcherQueryScrollSurface(props LauncherQueryProps, editor woxwidget.Widge
 	keepVisible := &woxwidget.ScrollRange{Start: float32(props.CaretLine) * lineHeight, End: float32(props.CaretLine)*lineHeight + props.CaretHeight}
 	editor = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-query-scroll", Content: editor, Width: props.Width, Height: props.Height, ContentHeight: contentHeight,
-		KeepVisible: keepVisible, ThumbColor: props.Theme.ResultTitle, AlwaysShowScrollbar: true,
+		KeepVisible: keepVisible, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, AlwaysShowScrollbar: true,
 		AutomationID: "launcher.query.scroll", Label: "Query scroll position",
 	})
 	dragLeft := min(props.Width, launcherQueryMinimumEditableWidth+props.TextWidth)

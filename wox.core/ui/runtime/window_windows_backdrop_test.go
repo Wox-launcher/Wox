@@ -4,6 +4,31 @@ package woxui
 
 import "testing"
 
+// TestWindowBackdropPolicyFollowsLiveCorners covers the policy shared by show and activation across theme changes.
+func TestWindowBackdropPolicyFollowsLiveCorners(t *testing.T) {
+	w := &platformWindow{}
+	if !w.usesSystemBackdrop() {
+		t.Fatal("default window lost its material")
+	}
+	for _, radius := range []float32{0, 18} {
+		w.customCornerRadius = &radius
+		for _, visible := range []bool{true, false, true} {
+			w.focus.visible = visible
+			if w.usesSystemBackdrop() {
+				t.Fatalf("visibility %v restored Acrylic for radius %v", visible, radius)
+			}
+		}
+	}
+	w.customCornerRadius = nil
+	if !w.usesSystemBackdrop() {
+		t.Fatal("removing custom corners did not restore system material")
+	}
+	w.options.Role = WindowRoleScreenshot
+	if w.usesSystemBackdrop() {
+		t.Fatal("screenshot window acquired a backdrop")
+	}
+}
+
 func TestWindows11SystemBackdropValuesMatchWindowsSDK(t *testing.T) {
 	if dwmSystemBackdropNone != 1 {
 		t.Fatalf("disabled backdrop = %d, want DWMSBT_NONE (1)", dwmSystemBackdropNone)

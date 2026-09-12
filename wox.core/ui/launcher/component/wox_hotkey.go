@@ -7,6 +7,9 @@ import (
 
 // HotkeyProps describes a sequence of already formatted key labels.
 type HotkeyProps struct {
+	Toolbar    bool
+	Selected   bool
+	Theme      *Theme
 	Labels     []string
 	Foreground woxui.Color
 	Background woxui.Color
@@ -26,6 +29,24 @@ func WoxHotkey(props HotkeyProps) (woxwidget.Widget, float32) {
 	border := props.Border
 	if border.A == 0 {
 		border = props.Foreground
+	}
+	// Select the surface/state tokens before applying them so explicit transparency survives.
+	if props.Theme != nil {
+		foreground, background, outline := props.Theme.ActionItemHotkeyFontColor, props.Theme.ActionItemHotkeyBackgroundColor, props.Theme.ActionItemHotkeyBorderColor
+		if props.Toolbar {
+			foreground, background, outline = props.Theme.ToolbarHotkeyFontColor, props.Theme.ToolbarHotkeyBackgroundColor, props.Theme.ToolbarHotkeyBorderColor
+		} else if props.Selected {
+			foreground, background, outline = props.Theme.ActionItemActiveHotkeyFontColor, props.Theme.ActionItemActiveHotkeyBackgroundColor, props.Theme.ActionItemActiveHotkeyBorderColor
+		}
+		if foreground != nil {
+			props.Foreground = *foreground
+		}
+		if background != nil {
+			props.Background = *background
+		}
+		if outline != nil {
+			border = *outline
+		}
 	}
 	children := make([]woxwidget.Widget, 0, len(props.Labels))
 	totalWidth := float32(0)

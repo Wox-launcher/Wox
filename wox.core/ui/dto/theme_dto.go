@@ -36,6 +36,7 @@ type ThemeDto struct {
 	ResultItemActiveTitleColor           string
 	ResultItemActiveSubTitleColor        string
 	ResultItemActiveBorderLeftWidth      int
+	ResultItemActiveBorderLeftColor      string `json:",omitempty"`
 	ResultItemActiveTailTextColor        string
 	QueryBoxFontColor                    string
 	QueryBoxBackgroundColor              string
@@ -44,7 +45,11 @@ type ThemeDto struct {
 	QueryBoxTextSelectionBackgroundColor string
 	QueryBoxTextSelectionColor           string
 	ActionContainerBackgroundColor       string
+	ActionContainerBorderColor           string `json:",omitempty"`
+	ActionContainerBorderWidth           *int   `json:",omitempty"`
 	ActionContainerHeaderFontColor       string
+	ActionContainerBorderRadius          *int `json:",omitempty"`
+	ActionItemBorderRadius               *int `json:",omitempty"`
 	ActionContainerPaddingLeft           int
 	ActionContainerPaddingTop            int
 	ActionContainerPaddingRight          int
@@ -62,6 +67,8 @@ type ThemeDto struct {
 	PreviewTextSelectionColor            string
 	ToolbarFontColor                     string
 	ToolbarBackgroundColor               string
+	ToolbarBorderColor                   string `json:",omitempty"`
+	ToolbarBorderWidth                   *int   `json:",omitempty"`
 	ToolbarPaddingLeft                   int
 	ToolbarPaddingRight                  int
 }
