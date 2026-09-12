@@ -39,25 +39,28 @@ var noteTableCellPadding = woxwidget.Insets{Top: 2, Bottom: 2}
 
 // NoteTableProps describes one editable Notes table block.
 type NoteTableProps struct {
-	ID       string
-	Block    int
-	Table    common.NoteTable
-	Width    float32
-	ReadOnly bool
-	Theme    Theme
-	Window   *woxui.Window
-	Zoom     float32
-	Style    woxui.TextStyle
-	Focused  bool
-	FocusRow int
-	FocusCol int
-	OnChange func(common.NoteTable)
-	OnFocus  func(row, column int)
-	OnKey    func(row, column int, event woxui.KeyEvent) bool
-	OnPaste  func(row, column int, value string) bool
-	OnUndo   func() bool
-	OnRedo   func() bool
-	Actions  NoteTableActions
+	ID          string
+	Block       int
+	Table       common.NoteTable
+	Width       float32
+	ReadOnly    bool
+	Theme       Theme
+	Window      *woxui.Window
+	Zoom        float32
+	Style       woxui.TextStyle
+	Focused     bool
+	FocusRow    int
+	FocusCol    int
+	OnChange    func(common.NoteTable)
+	OnFocus     func(row, column int)
+	OnKey       func(row, column int, event woxui.KeyEvent) bool
+	OnPaste     func(row, column int, value string) bool
+	OnUndo      func() bool
+	OnRedo      func() bool
+	OnSelectAll func() bool
+	OnCopy      func() bool
+	OnCut       func() bool
+	Actions     NoteTableActions
 }
 
 // WoxNoteTable builds an editable GFM table at Notes editor density.
@@ -209,8 +212,11 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 				}
 				return false
 			},
-			OnUndo: props.OnUndo,
-			OnRedo: props.OnRedo,
+			OnUndo:      props.OnUndo,
+			OnRedo:      props.OnRedo,
+			OnSelectAll: props.OnSelectAll,
+			OnCopy:      props.OnCopy,
+			OnCut:       props.OnCut,
 		}),
 	})
 }

@@ -2743,6 +2743,7 @@
   "plugin_dictation_action_chat_unavailable": "AI Chat недоступен.",
   "plugin_dictation_action_copy": "Копировать",
   "plugin_dictation_action_copied": "Скопировано",
+  "notes_character_count": "%d символов",
   "notes_format_table": "Таблица",
   "notes_table_insert_row": "Вставить строку",
   "notes_table_insert_column": "Вставить столбец",

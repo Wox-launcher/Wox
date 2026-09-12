@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
@@ -101,14 +102,10 @@ func NormalizeDocument(document common.NoteDocument) common.NoteDocument {
 		block.Image = nil
 		block.Spans = normalizeSpans(block.Text, block.Spans)
 		if block.Type == common.NoteBlockCode && strings.Contains(block.Text, "\n") {
-			for index, line := range strings.Split(strings.ReplaceAll(block.Text, "\r\n", "\n"), "\n") {
-				lineBlock := block
-				lineBlock.Text, lineBlock.Spans = line, nil
-				if index > 0 {
-					lineBlock.ID = uuid.NewString()
-				}
-				blocks = append(blocks, lineBlock)
-			}
+			// Code stays line-oriented so the fence editor can remap each line.
+			// Prose soft breaks stay inside one block so Markdown source does
+			// not grow a blank line between wrapped lines.
+			blocks = append(blocks, splitNoteTextBlocks(block)...)
 			continue
 		}
 		blocks = append(blocks, block)
@@ -140,6 +137,48 @@ func EnsureNoteImageEditGaps(document common.NoteDocument) common.NoteDocument {
 	}
 	document.Blocks = blocks
 	return document
+}
+
+// splitNoteTextBlocks turns one block that contains newlines into one block per line
+// so the editor's line-oriented model can remap inline styles.
+func splitNoteTextBlocks(block common.NoteBlock) []common.NoteBlock {
+	lines := strings.Split(strings.ReplaceAll(block.Text, "\r\n", "\n"), "\n")
+	if len(lines) <= 1 {
+		return []common.NoteBlock{block}
+	}
+	parts := make([]common.NoteBlock, 0, len(lines))
+	offset := 0
+	keepSpans := block.Type != common.NoteBlockCode
+	for index, line := range lines {
+		part := block
+		part.Text = line
+		if keepSpans {
+			part.Spans = normalizeSpans(line, spansIntersectingLine(block.Spans, offset, utf8.RuneCountInString(line)))
+		} else {
+			part.Spans = nil
+		}
+		if index > 0 {
+			part.ID = uuid.NewString()
+		}
+		parts = append(parts, part)
+		offset += utf8.RuneCountInString(line) + 1
+	}
+	return parts
+}
+
+func spansIntersectingLine(spans []common.NoteSpan, start, length int) []common.NoteSpan {
+	end := start + length
+	intersected := make([]common.NoteSpan, 0, len(spans))
+	for _, span := range spans {
+		from, to := max(span.Start, start), min(span.End, end)
+		if to <= from {
+			continue
+		}
+		span.Start = from - start
+		span.End = to - start
+		intersected = append(intersected, span)
+	}
+	return intersected
 }
 
 func noteListBlockType(blockType common.NoteBlockType) bool {
@@ -286,6 +325,37 @@ func AppendTitleSuffix(document common.NoteDocument, suffix string) common.NoteD
 	return document
 }
 
+// DocumentCharacterCount counts user-visible characters, excluding markup and whitespace.
+func DocumentCharacterCount(document common.NoteDocument) int {
+	count := 0
+	for _, block := range NormalizeDocument(document).Blocks {
+		if block.Type == common.NoteBlockImage {
+			continue
+		}
+		if block.Table != nil {
+			for _, row := range block.Table.Rows {
+				for _, cell := range row {
+					count += noteVisibleCharacterCount(cell.Text)
+				}
+			}
+			continue
+		}
+		count += noteVisibleCharacterCount(block.Text)
+	}
+	return count
+}
+
+// noteVisibleCharacterCount skips whitespace so CJK 字数 and Latin letters stay comparable.
+func noteVisibleCharacterCount(value string) int {
+	count := 0
+	for _, current := range value {
+		if !unicode.IsSpace(current) {
+			count++
+		}
+	}
+	return count
+}
+
 // ToPlainText exports the note without inline formatting.
 func ToPlainText(document common.NoteDocument) string {
 	lines := make([]string, 0, len(document.Blocks))
@@ -333,36 +403,68 @@ func ToPlainText(document common.NoteDocument) string {
 	return strings.Join(lines, "\n")
 }
 
+// MarkdownCaretBlock is one document block's rune range inside ToMarkdown output.
+type MarkdownCaretBlock struct {
+	Index     int
+	Start     int
+	TextStart int
+	End       int
+}
+
+// MarkdownCaretMap is ToMarkdown output plus per-block caret ranges.
+type MarkdownCaretMap struct {
+	Markdown string
+	Blocks   []MarkdownCaretBlock
+}
+
 // ToMarkdown exports every Notes block and supported inline style.
 func ToMarkdown(document common.NoteDocument) string {
+	return MapMarkdown(document).Markdown
+}
+
+// MapMarkdown exports Markdown and records where each block sits so view toggles can keep the caret.
+func MapMarkdown(document common.NoteDocument) MarkdownCaretMap {
 	document = NormalizeDocument(document)
 	lines := make([]string, 0, len(document.Blocks)*2)
+	spans := make([]MarkdownCaretBlock, 0, len(document.Blocks))
+	lineStarts := make([]int, 0, len(document.Blocks)*2)
 	ordered := [common.NoteMaximumIndent + 1]int{1, 1, 1}
 	var previous common.NoteBlockType
 	for index := 0; index < len(document.Blocks); index++ {
 		block := document.Blocks[index]
 		indent := max(0, min(common.NoteMaximumIndent, block.Indent))
 		value := markdownInline(block.Text, block.Spans)
+		prefix := 0
+		codeIndexes := []int{index}
 		switch block.Type {
 		case common.NoteBlockHeading1:
 			value = "# " + value
+			prefix = 2
 		case common.NoteBlockHeading2:
 			value = "## " + value
+			prefix = 3
 		case common.NoteBlockHeading3:
 			value = "### " + value
+			prefix = 4
 		case common.NoteBlockQuote:
 			value = "> " + value
+			prefix = 2
 		case common.NoteBlockCode:
 			codeLines := []string{block.Text}
 			for index+1 < len(document.Blocks) && document.Blocks[index+1].Type == common.NoteBlockCode {
 				index++
+				codeIndexes = append(codeIndexes, index)
 				codeLines = append(codeLines, document.Blocks[index].Text)
 			}
 			value = "```\n" + strings.Join(codeLines, "\n") + "\n```"
+			prefix = 4
 		case common.NoteBlockBullet:
 			value = "- " + value
+			prefix = 2
 		case common.NoteBlockOrdered:
-			value = fmt.Sprintf("%d. %s", ordered[indent], value)
+			marker := fmt.Sprintf("%d. ", ordered[indent])
+			value = marker + value
+			prefix = utf8.RuneCountInString(marker)
 			ordered[indent]++
 			for level := indent + 1; level < len(ordered); level++ {
 				ordered[level] = 1
@@ -373,6 +475,7 @@ func ToMarkdown(document common.NoteDocument) string {
 				marker = "[x]"
 			}
 			value = "- " + marker + " " + value
+			prefix = 6
 		case common.NoteBlockDivider:
 			value = "---"
 		case common.NoteBlockTable:
@@ -384,23 +487,85 @@ func ToMarkdown(document common.NoteDocument) string {
 		default:
 			ordered = [common.NoteMaximumIndent + 1]int{1, 1, 1}
 		}
-		if noteListBlockType(block.Type) {
-			value = strings.Repeat("    ", indent) + value
+		if noteBlankParagraph(block) {
+			ordered = [common.NoteMaximumIndent + 1]int{1, 1, 1}
+			lineStarts = append(lineStarts, markdownJoinOffset(lines))
+			lines = append(lines, "")
+			start := lineStarts[len(lineStarts)-1]
+			spans = append(spans, MarkdownCaretBlock{Index: index, Start: start, TextStart: start, End: start})
+			previous = block.Type
+			continue
 		}
-		// GFM tables, fences, and headings must start a new block. A single
-		// newline after a paragraph keeps pipe rows inside that paragraph.
-		if len(lines) > 0 && !keepTightMarkdown(previous, block.Type) {
+		if noteListBlockType(block.Type) {
+			pad := strings.Repeat("    ", indent)
+			value = pad + value
+			prefix += utf8.RuneCountInString(pad)
+		}
+		if len(lines) > 0 && !keepTightMarkdown(previous, block.Type) && lines[len(lines)-1] != "" {
+			lineStarts = append(lineStarts, markdownJoinOffset(lines))
 			lines = append(lines, "")
 		}
+		start := markdownJoinOffset(lines)
+		lineStarts = append(lineStarts, start)
 		lines = append(lines, value)
+		if block.Type == common.NoteBlockCode && len(codeIndexes) > 0 {
+			spans = append(spans, markdownCodeCaretBlocks(codeIndexes, start, value)...)
+		} else {
+			end := start + utf8.RuneCountInString(value)
+			spans = append(spans, MarkdownCaretBlock{Index: index, Start: start, TextStart: start + prefix, End: end})
+		}
 		previous = block.Type
 	}
-	return strings.Join(lines, "\n")
+	return MarkdownCaretMap{Markdown: strings.Join(lines, "\n"), Blocks: spans}
+}
+
+func markdownJoinOffset(lines []string) int {
+	if len(lines) == 0 {
+		return 0
+	}
+	offset := 0
+	for _, line := range lines {
+		offset += utf8.RuneCountInString(line) + 1
+	}
+	return offset
+}
+
+// markdownCodeCaretBlocks maps each fenced code line onto its source code block.
+func markdownCodeCaretBlocks(indexes []int, start int, value string) []MarkdownCaretBlock {
+	// value is ```\nline\nline\n```
+	offset := start + 4
+	spans := make([]MarkdownCaretBlock, 0, len(indexes))
+	lines := strings.Split(value, "\n")
+	lineIndex := 0
+	for _, line := range lines[1:] {
+		if lineIndex >= len(indexes) {
+			break
+		}
+		if line == "```" {
+			break
+		}
+		end := offset + utf8.RuneCountInString(line)
+		blockStart := offset
+		if lineIndex == 0 {
+			blockStart = start
+		}
+		spans = append(spans, MarkdownCaretBlock{Index: indexes[lineIndex], Start: blockStart, TextStart: offset, End: end})
+		offset = end + 1
+		lineIndex++
+	}
+	if len(spans) > 0 {
+		spans[len(spans)-1].End = start + utf8.RuneCountInString(value)
+	}
+	return spans
 }
 
 // keepTightMarkdown leaves adjacent list items without a blank line between them.
 func keepTightMarkdown(previous, next common.NoteBlockType) bool {
 	return noteListBlockType(previous) && noteListBlockType(next)
+}
+
+func noteBlankParagraph(block common.NoteBlock) bool {
+	return block.Type == common.NoteBlockParagraph && strings.TrimSpace(block.Text) == "" && !block.IsStructural()
 }
 
 type inlineStyle struct {
@@ -410,28 +575,108 @@ type inlineStyle struct {
 
 // markdownInline emits minimal Markdown markers for each contiguous style run.
 func markdownInline(value string, spans []common.NoteSpan) string {
-	return encodeInline(value, spans, func(text string, style inlineStyle) string {
-		text = strings.ReplaceAll(text, "\\", "\\\\")
+	return encodeInline(value, spans, encodeMarkdownInlineRun)
+}
+
+// encodeMarkdownInlineRun wraps one contiguous style run in GFM markers.
+func encodeMarkdownInlineRun(text string, style inlineStyle) string {
+	text = strings.ReplaceAll(text, "\\", "\\\\")
+	if style.code {
+		text = "`" + strings.ReplaceAll(text, "`", "\\`") + "`"
+	}
+	if style.bold {
+		text = "**" + text + "**"
+	}
+	if style.italic {
+		text = "*" + text + "*"
+	}
+	if style.underline {
+		text = "<u>" + text + "</u>"
+	}
+	if style.strike {
+		text = "~~" + text + "~~"
+	}
+	if style.link != "" {
+		text = "[" + text + "](" + strings.ReplaceAll(style.link, ")", "%29") + ")"
+	}
+	return text
+}
+
+// MarkdownTextOffset maps a caret inside one block's Markdown (after the marker) onto document.Text.
+func MarkdownTextOffset(block common.NoteBlock, markdownOff int) int {
+	textLen := utf8.RuneCountInString(block.Text)
+	if textLen == 0 || markdownOff <= 0 || block.IsStructural() || block.Type == common.NoteBlockCode || block.Type == common.NoteBlockDivider {
+		return min(textLen, max(0, markdownOff))
+	}
+	table := mapInlineCarets(block.Text, block.Spans)
+	for index := 0; index < len(table)-1; index++ {
+		if markdownOff >= table[index+1] {
+			continue
+		}
+		if markdownOff > table[index] {
+			return index + 1
+		}
+		return index
+	}
+	return len(table) - 1
+}
+
+// MarkdownSourceOffset maps a document.Text caret onto the block's Markdown after the marker.
+func MarkdownSourceOffset(block common.NoteBlock, textOff int) int {
+	textLen := utf8.RuneCountInString(block.Text)
+	textOff = min(textLen, max(0, textOff))
+	if textLen == 0 || block.IsStructural() || block.Type == common.NoteBlockCode || block.Type == common.NoteBlockDivider {
+		return textOff
+	}
+	table := mapInlineCarets(block.Text, block.Spans)
+	return table[textOff]
+}
+
+// mapInlineCarets records the Markdown rune offset of each document.Text caret.
+func mapInlineCarets(value string, spans []common.NoteSpan) []int {
+	runes := []rune(value)
+	table := make([]int, len(runes)+1)
+	if len(runes) == 0 {
+		return table
+	}
+	spans = normalizeSpans(value, spans)
+	md := 0
+	for start := 0; start < len(runes); {
+		style := styleAt(start, spans)
+		end := start + 1
+		for end < len(runes) && styleAt(end, spans) == style {
+			end++
+		}
+		chunk := string(runes[start:end])
+		encoded := encodeMarkdownInlineRun(chunk, style)
+		inner := strings.ReplaceAll(chunk, "\\", "\\\\")
 		if style.code {
-			text = "`" + strings.ReplaceAll(text, "`", "\\`") + "`"
+			inner = strings.ReplaceAll(inner, "`", "\\`")
 		}
-		if style.bold {
-			text = "**" + text + "**"
+		innerIdx := strings.Index(encoded, inner)
+		if innerIdx < 0 {
+			for index := start; index <= end && index < len(table); index++ {
+				table[index] = md
+			}
+			md += utf8.RuneCountInString(encoded)
+			start = end
+			continue
 		}
-		if style.italic {
-			text = "*" + text + "*"
+		prefix := utf8.RuneCountInString(encoded[:innerIdx])
+		innerAt := 0
+		for index := start; index < end; index++ {
+			table[index] = md + prefix + innerAt
+			if runes[index] == '\\' || (style.code && runes[index] == '`') {
+				innerAt += 2
+			} else {
+				innerAt++
+			}
 		}
-		if style.underline {
-			text = "<u>" + text + "</u>"
-		}
-		if style.strike {
-			text = "~~" + text + "~~"
-		}
-		if style.link != "" {
-			text = "[" + text + "](" + strings.ReplaceAll(style.link, ")", "%29") + ")"
-		}
-		return text
-	})
+		md += utf8.RuneCountInString(encoded)
+		start = end
+	}
+	table[len(runes)] = md
+	return table
 }
 
 // ToHTML exports semantic HTML with all user content escaped.
@@ -583,10 +828,7 @@ func styleAt(offset int, spans []common.NoteSpan) inlineStyle {
 func ParseMarkdown(value string) common.NoteDocument {
 	source := []byte(value)
 	root := noteMarkdownParser.Parse(text.NewReader(source))
-	document := common.NoteDocument{Version: documentVersion}
-	for node := root.FirstChild(); node != nil; node = node.NextSibling() {
-		document.Blocks = append(document.Blocks, markdownBlocks(node, source)...)
-	}
+	document := common.NoteDocument{Version: documentVersion, Blocks: markdownSiblingBlocks(root, source)}
 	return NormalizeDocument(document)
 }
 
@@ -595,10 +837,8 @@ func markdownBlocks(node ast.Node, source []byte) []common.NoteBlock {
 	block := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph}
 	switch value := node.(type) {
 	case *ast.Paragraph, *ast.TextBlock:
-		if image, ok := standaloneMarkdownImage(node, source); ok {
-			block.Type = common.NoteBlockImage
-			block.Image = &image
-			break
+		if parts := markdownInlineBlocks(node, source); len(parts) > 0 {
+			return parts
 		}
 		block.Text, block.Spans = markdownInlineContent(node, source)
 	case *ast.Heading:
@@ -618,6 +858,9 @@ func markdownBlocks(node ast.Node, source []byte) []common.NoteBlock {
 	case *ast.Blockquote:
 		blocks := markdownChildBlocks(value, source)
 		for index := range blocks {
+			if noteBlankParagraph(blocks[index]) {
+				continue
+			}
 			blocks[index].Type = common.NoteBlockQuote
 		}
 		return blocks
@@ -639,11 +882,146 @@ func markdownBlocks(node ast.Node, source []byte) []common.NoteBlock {
 }
 
 func markdownChildBlocks(parent ast.Node, source []byte) []common.NoteBlock {
+	return markdownSiblingBlocks(parent, source)
+}
+
+// markdownSiblingBlocks flattens sibling Goldmark nodes and keeps source blank
+// lines as empty paragraphs. Goldmark treats those lines as separators only,
+// but the Notes editor is line-oriented and needs a block to render the gap.
+func markdownSiblingBlocks(parent ast.Node, source []byte) []common.NoteBlock {
 	var blocks []common.NoteBlock
-	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
-		blocks = append(blocks, markdownBlocks(child, source)...)
+	var previous ast.Node
+	for node := parent.FirstChild(); node != nil; node = node.NextSibling() {
+		if previous != nil {
+			blocks = append(blocks, emptyParagraphsBetween(previous, node, source)...)
+		}
+		blocks = append(blocks, markdownBlocks(node, source)...)
+		previous = node
 	}
 	return blocks
+}
+
+// emptyParagraphsBetween creates one empty paragraph for each blank source line
+// between two Goldmark siblings so paste and Markdown preview keep the gap.
+func emptyParagraphsBetween(prev, next ast.Node, source []byte) []common.NoteBlock {
+	count := blankParagraphsToInsert(prev, next, blankLinesBetweenNodes(prev, next, source))
+	if count == 0 {
+		return nil
+	}
+	blocks := make([]common.NoteBlock, count)
+	for index := range blocks {
+		blocks[index] = common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph}
+	}
+	return blocks
+}
+
+// blankParagraphsToInsert keeps every blank line between prose blocks and only
+// the extra blanks around headings, lists, and tables. ToMarkdown already emits
+// one GFM separator there; turning that into an empty paragraph would add a
+// visual gap after a Markdown view round-trip.
+func blankParagraphsToInsert(prev, next ast.Node, blankLines int) int {
+	if blankLines <= 0 {
+		return 0
+	}
+	if markdownNodeProse(prev) && markdownNodeProse(next) {
+		return blankLines
+	}
+	return blankLines - 1
+}
+
+func markdownNodeProse(node ast.Node) bool {
+	switch node.(type) {
+	case *ast.Paragraph, *ast.TextBlock, *ast.Blockquote:
+		return true
+	default:
+		return false
+	}
+}
+
+// blankLinesBetweenNodes counts visual blank lines in the source between two nodes.
+func blankLinesBetweenNodes(prev, next ast.Node, source []byte) int {
+	_, prevEnd, okPrev := markdownNodeSourceSpan(prev)
+	nextStart, _, okNext := markdownNodeSourceSpan(next)
+	if !okPrev || !okNext {
+		if next.HasBlankPreviousLines() {
+			return 1
+		}
+		return 0
+	}
+	prevEnd = extendToLineEnd(prevEnd, source)
+	nextStart = extendToLineStart(nextStart, source)
+	if nextStart <= prevEnd {
+		if next.HasBlankPreviousLines() {
+			return 1
+		}
+		return 0
+	}
+	return blankLinesInSourceGap(source[prevEnd:nextStart])
+}
+
+// markdownNodeSourceSpan returns the first and last source offsets owned by a node.
+func markdownNodeSourceSpan(node ast.Node) (start, end int, ok bool) {
+	start, end = -1, -1
+	var visit func(ast.Node)
+	visit = func(current ast.Node) {
+		if current.Type() == ast.TypeBlock || current.Type() == ast.TypeDocument {
+			if lines := current.Lines(); lines != nil {
+				for index := 0; index < lines.Len(); index++ {
+					segment := lines.At(index)
+					if start < 0 || segment.Start < start {
+						start = segment.Start
+					}
+					if segment.Stop > end {
+						end = segment.Stop
+					}
+				}
+			}
+		}
+		if text, isText := current.(*ast.Text); isText {
+			if start < 0 || text.Segment.Start < start {
+				start = text.Segment.Start
+			}
+			if text.Segment.Stop > end {
+				end = text.Segment.Stop
+			}
+		}
+		for child := current.FirstChild(); child != nil; child = child.NextSibling() {
+			visit(child)
+		}
+	}
+	visit(node)
+	return start, end, start >= 0
+}
+
+func extendToLineStart(offset int, source []byte) int {
+	for offset > 0 && source[offset-1] != '\n' {
+		offset--
+	}
+	return offset
+}
+
+func extendToLineEnd(offset int, source []byte) int {
+	for offset < len(source) && source[offset] != '\n' {
+		offset++
+	}
+	return offset
+}
+
+// blankLinesInSourceGap counts empty lines inside the exclusive source gap
+// between two block line ranges. The first and last split parts are the
+// previous line ending and the next line start, not visible blank lines.
+func blankLinesInSourceGap(gap []byte) int {
+	lines := strings.Split(strings.ReplaceAll(string(gap), "\r\n", "\n"), "\n")
+	if len(lines) < 3 {
+		return 0
+	}
+	count := 0
+	for _, line := range lines[1 : len(lines)-1] {
+		if strings.TrimSpace(line) == "" {
+			count++
+		}
+	}
+	return count
 }
 
 // markdownListBlocks flattens list items while preserving ordered and task semantics.
@@ -693,53 +1071,121 @@ func markdownTask(value string) (bool, bool) {
 func markdownInlineContent(parent ast.Node, source []byte) (string, []common.NoteSpan) {
 	var output strings.Builder
 	var spans []common.NoteSpan
-	var visit func(ast.Node, inlineStyle)
-	visit = func(node ast.Node, style inlineStyle) {
-		current := style
-		switch value := node.(type) {
-		case *ast.Text:
-			appendParsedText(&output, &spans, string(value.Segment.Value(source)), current)
-			if value.HardLineBreak() || value.SoftLineBreak() {
-				output.WriteRune('\n')
-			}
-			return
-		case *ast.String:
-			appendParsedText(&output, &spans, string(value.Value), current)
-			return
-		case *ast.Emphasis:
-			if value.Level >= 2 {
-				current.bold = true
-			} else {
-				current.italic = true
-			}
-		case *ast.CodeSpan:
-			current.code = true
-		case *ast.Link:
-			current.link = string(value.Destination)
-		case *ast.AutoLink:
-			// GFM bare URLs are AutoLink nodes. They do not expose a child Text
-			// segment, so skipping this case drops the pasted URL entirely.
-			current.link = string(value.URL(source))
-			appendParsedText(&output, &spans, string(value.Label(source)), current)
-			return
-		case *extast.Strikethrough:
-			current.strike = true
-		case *extast.TaskCheckBox:
-			if value.IsChecked {
-				output.WriteString("[x] ")
-			} else {
-				output.WriteString("[ ] ")
-			}
-			return
-		}
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			visit(child, current)
-		}
-	}
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
-		visit(child, inlineStyle{})
+		appendMarkdownInline(child, source, inlineStyle{}, &output, &spans)
 	}
 	return output.String(), normalizeSpans(output.String(), spans)
+}
+
+// markdownInlineBlocks splits a paragraph that contains pictures into text and image blocks.
+func markdownInlineBlocks(parent ast.Node, source []byte) []common.NoteBlock {
+	if image, ok := standaloneMarkdownImage(parent, source); ok {
+		return []common.NoteBlock{{ID: uuid.NewString(), Type: common.NoteBlockImage, Image: &image}}
+	}
+	type part struct {
+		image *common.NoteImage
+		text  string
+		spans []common.NoteSpan
+	}
+	var parts []part
+	var output strings.Builder
+	var spans []common.NoteSpan
+	flushText := func() {
+		value := strings.TrimSuffix(output.String(), "\n")
+		output.Reset()
+		if value == "" {
+			spans = nil
+			return
+		}
+		parts = append(parts, part{text: value, spans: normalizeSpans(value, spans)})
+		spans = nil
+	}
+	sawImage := false
+	skipLeadingBreak := false
+	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+		if imageNode, ok := child.(*ast.Image); ok {
+			if image, ok := noteImageFromAST(imageNode, source); ok {
+				sawImage = true
+				flushText()
+				copied := image
+				parts = append(parts, part{image: &copied})
+				skipLeadingBreak = true
+				continue
+			}
+		}
+		if skipLeadingBreak {
+			if text, ok := child.(*ast.Text); ok && strings.TrimSpace(string(text.Segment.Value(source))) == "" {
+				continue
+			}
+			skipLeadingBreak = false
+		}
+		appendMarkdownInline(child, source, inlineStyle{}, &output, &spans)
+	}
+	if !sawImage {
+		return nil
+	}
+	flushText()
+	blocks := make([]common.NoteBlock, 0, len(parts))
+	for _, part := range parts {
+		if part.image != nil {
+			blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockImage, Image: part.image})
+			continue
+		}
+		blocks = append(blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph, Text: part.text, Spans: part.spans})
+	}
+	return blocks
+}
+
+func appendMarkdownInline(node ast.Node, source []byte, style inlineStyle, output *strings.Builder, spans *[]common.NoteSpan) {
+	current := style
+	switch value := node.(type) {
+	case *ast.Text:
+		appendParsedText(output, spans, string(value.Segment.Value(source)), current)
+		if value.HardLineBreak() || value.SoftLineBreak() {
+			output.WriteRune('\n')
+		}
+		return
+	case *ast.String:
+		appendParsedText(output, spans, string(value.Value), current)
+		return
+	case *ast.Emphasis:
+		if value.Level >= 2 {
+			current.bold = true
+		} else {
+			current.italic = true
+		}
+	case *ast.CodeSpan:
+		current.code = true
+	case *ast.Link:
+		current.link = string(value.Destination)
+	case *ast.Image:
+		// Pictures that are not promoted to image blocks keep their destination as a link.
+		current.link = strings.TrimSpace(string(value.Destination))
+		alt, _ := markdownInlineContent(value, source)
+		if strings.TrimSpace(alt) == "" {
+			alt = current.link
+		}
+		appendParsedText(output, spans, alt, current)
+		return
+	case *ast.AutoLink:
+		// GFM bare URLs are AutoLink nodes. They do not expose a child Text
+		// segment, so skipping this case drops the pasted URL entirely.
+		current.link = string(value.URL(source))
+		appendParsedText(output, spans, string(value.Label(source)), current)
+		return
+	case *extast.Strikethrough:
+		current.strike = true
+	case *extast.TaskCheckBox:
+		if value.IsChecked {
+			output.WriteString("[x] ")
+		} else {
+			output.WriteString("[ ] ")
+		}
+		return
+	}
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		appendMarkdownInline(child, source, current, output, spans)
+	}
 }
 
 func appendParsedText(output *strings.Builder, spans *[]common.NoteSpan, value string, style inlineStyle) {
@@ -1173,12 +1619,15 @@ func normalizeNoteImage(image *common.NoteImage) *common.NoteImage {
 	if image == nil {
 		return nil
 	}
-	id := SanitizeNoteImageID(image.ID)
-	if id == "" {
+	normalized := *image
+	normalized.ID = SanitizeNoteImageID(image.ID)
+	normalized.URL = safeNoteImageURL(image.URL)
+	if normalized.ID == "" && normalized.URL == "" {
 		return nil
 	}
-	normalized := *image
-	normalized.ID = id
+	if normalized.ID != "" {
+		normalized.URL = ""
+	}
 	normalized.FileName = strings.TrimSpace(image.FileName)
 	if normalized.Width < 0 {
 		normalized.Width = 0
@@ -1204,12 +1653,22 @@ func noteImagePlainLabel(image *common.NoteImage) string {
 }
 
 func noteImageMarkdown(image *common.NoteImage) string {
-	if image == nil || SanitizeNoteImageID(image.ID) == "" {
+	if image == nil {
 		return ""
 	}
 	alt := noteImagePlainLabel(image)
 	alt = strings.ReplaceAll(alt, "]", "")
-	ref := notesImageRefPrefix + image.ID
+	if remote := NoteImageRemoteURL(*image); remote != "" {
+		return fmt.Sprintf("![%s](%s)", alt, strings.ReplaceAll(noteImageDestinationWithParams(remote, image), ")", "%29"))
+	}
+	if SanitizeNoteImageID(image.ID) == "" {
+		return ""
+	}
+	return fmt.Sprintf("![%s](%s)", alt, noteImageDestinationWithParams(notesImageRefPrefix+image.ID, image))
+}
+
+// noteImageQueryParams writes portable scale and intrinsic size for Markdown destinations.
+func noteImageQueryParams(image *common.NoteImage) []string {
 	params := make([]string, 0, 3)
 	if scale := ClampNoteImageScale(image.Scale); scale > 0 && scale < 100 {
 		params = append(params, fmt.Sprintf("scale=%d", scale))
@@ -1217,14 +1676,24 @@ func noteImageMarkdown(image *common.NoteImage) string {
 	if image.Width > 0 && image.Height > 0 {
 		params = append(params, fmt.Sprintf("width=%d", image.Width), fmt.Sprintf("height=%d", image.Height))
 	}
-	if len(params) > 0 {
-		ref += "?" + strings.Join(params, "&")
+	return params
+}
+
+// noteImageDestinationWithParams appends display params without breaking an existing query.
+func noteImageDestinationWithParams(base string, image *common.NoteImage) string {
+	params := noteImageQueryParams(image)
+	if len(params) == 0 {
+		return base
 	}
-	return fmt.Sprintf("![%s](%s)", alt, ref)
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	return base + sep + strings.Join(params, "&")
 }
 
 func noteImageHTML(image *common.NoteImage) string {
-	if image == nil || SanitizeNoteImageID(image.ID) == "" {
+	if image == nil {
 		return ""
 	}
 	attrs := ""
@@ -1233,6 +1702,12 @@ func noteImageHTML(image *common.NoteImage) string {
 	}
 	if image.Width > 0 && image.Height > 0 {
 		attrs += fmt.Sprintf(" data-notes-image-width=\"%d\" data-notes-image-height=\"%d\"", image.Width, image.Height)
+	}
+	if remote := NoteImageRemoteURL(*image); remote != "" {
+		return fmt.Sprintf("<img alt=\"%s\" src=\"%s\"%s>\n", html.EscapeString(noteImagePlainLabel(image)), html.EscapeString(remote), attrs)
+	}
+	if SanitizeNoteImageID(image.ID) == "" {
+		return ""
 	}
 	return fmt.Sprintf("<img alt=\"%s\" data-notes-image=\"%s\"%s>\n", html.EscapeString(noteImagePlainLabel(image)), html.EscapeString(image.ID), attrs)
 }
@@ -1252,12 +1727,73 @@ func standaloneMarkdownImage(node ast.Node, source []byte) (common.NoteImage, bo
 			return common.NoteImage{}, false
 		}
 	}
-	ref := parseNoteImageDestination(string(image.Destination))
-	if ref.ID == "" {
+	return noteImageFromAST(image, source)
+}
+
+// noteImageFromAST maps a Markdown image destination onto a local attachment or a remote URL.
+func noteImageFromAST(image *ast.Image, source []byte) (common.NoteImage, bool) {
+	dest := strings.TrimSpace(string(image.Destination))
+	alt, _ := markdownInlineContent(image, source)
+	alt = strings.TrimSpace(alt)
+	ref := parseNoteImageDestination(dest)
+	if ref.ID != "" {
+		return common.NoteImage{ID: ref.ID, FileName: alt, Scale: ref.Scale, Width: ref.Width, Height: ref.Height}, true
+	}
+	if image, ok := parseRemoteNoteImage(dest); ok {
+		image.FileName = alt
+		return image, true
+	}
+	return common.NoteImage{}, false
+}
+
+// parseRemoteNoteImage keeps http(s) pictures and reads optional display query params.
+func parseRemoteNoteImage(dest string) (common.NoteImage, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(dest))
+	if err != nil || parsed.Host == "" {
 		return common.NoteImage{}, false
 	}
-	alt, _ := markdownInlineContent(image, source)
-	return common.NoteImage{ID: ref.ID, FileName: strings.TrimSpace(alt), Scale: ref.Scale, Width: ref.Width, Height: ref.Height}, true
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+	default:
+		return common.NoteImage{}, false
+	}
+	query := parsed.Query()
+	image := common.NoteImage{}
+	if value := query.Get("scale"); value != "" {
+		if scale, err := strconv.Atoi(value); err == nil {
+			image.Scale = ClampNoteImageScale(scale)
+			query.Del("scale")
+		}
+	}
+	if value := query.Get("width"); value != "" {
+		if width, err := strconv.Atoi(value); err == nil && width > 0 {
+			image.Width = width
+			query.Del("width")
+		}
+	}
+	if value := query.Get("height"); value != "" {
+		if height, err := strconv.Atoi(value); err == nil && height > 0 {
+			image.Height = height
+			query.Del("height")
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	image.URL = parsed.String()
+	return image, true
+}
+
+// safeNoteImageURL allows only http(s) destinations that can be loaded as pictures.
+func safeNoteImageURL(value string) string {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+		return parsed.String()
+	default:
+		return ""
+	}
 }
 
 func standaloneHTMLImage(node *goquery.Selection) *common.NoteImage {
@@ -1276,25 +1812,44 @@ func standaloneHTMLImage(node *goquery.Selection) *common.NoteImage {
 	ref := parsedNoteImageRef{ID: SanitizeNoteImageID(img.AttrOr("data-notes-image", ""))}
 	if ref.ID == "" {
 		ref = parseNoteImageDestination(img.AttrOr("src", ""))
-	} else {
+	}
+	if ref.ID == "" {
+		image, ok := parseRemoteNoteImage(img.AttrOr("src", ""))
+		if !ok {
+			return nil
+		}
+		image.FileName = strings.TrimSpace(img.AttrOr("alt", ""))
 		if value := strings.TrimSpace(img.AttrOr("data-notes-image-scale", "")); value != "" {
 			if parsed, err := strconv.Atoi(value); err == nil {
-				ref.Scale = ClampNoteImageScale(parsed)
+				image.Scale = ClampNoteImageScale(parsed)
 			}
 		}
 		if value := strings.TrimSpace(img.AttrOr("data-notes-image-width", "")); value != "" {
-			if parsed, err := strconv.Atoi(value); err == nil {
-				ref.Width = parsed
+			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+				image.Width = parsed
 			}
 		}
 		if value := strings.TrimSpace(img.AttrOr("data-notes-image-height", "")); value != "" {
-			if parsed, err := strconv.Atoi(value); err == nil {
-				ref.Height = parsed
+			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+				image.Height = parsed
 			}
 		}
+		return &image
 	}
-	if ref.ID == "" {
-		return nil
+	if value := strings.TrimSpace(img.AttrOr("data-notes-image-scale", "")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			ref.Scale = ClampNoteImageScale(parsed)
+		}
+	}
+	if value := strings.TrimSpace(img.AttrOr("data-notes-image-width", "")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			ref.Width = parsed
+		}
+	}
+	if value := strings.TrimSpace(img.AttrOr("data-notes-image-height", "")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			ref.Height = parsed
+		}
 	}
 	return &common.NoteImage{ID: ref.ID, FileName: strings.TrimSpace(img.AttrOr("alt", "")), Scale: ref.Scale, Width: ref.Width, Height: ref.Height}
 }

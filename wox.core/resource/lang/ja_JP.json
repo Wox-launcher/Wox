@@ -3006,6 +3006,7 @@
   "notes_search": "ノートを検索",
   "notes_search_placeholder": "ノートを検索...",
   "notes_format": "書式設定バーを切り替え",
+  "notes_character_count": "%d 文字",
   "notes_new": "新しいノート",
   "notes_more": "その他",
   "notes_favorites": "お気に入り",

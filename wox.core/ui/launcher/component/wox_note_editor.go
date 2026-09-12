@@ -76,6 +76,13 @@ type NoteEditorProps struct {
 	OnReorderTaskStart   func(block int)
 	OnReorderTaskDrag    func(block int, contentY float32)
 	OnReorderTaskEnd     func()
+	// RevealCaret scrolls the document so the text caret is inside the viewport.
+	RevealCaret bool
+	// DocumentSelected highlights every text run and image because select-all spans structural blocks.
+	DocumentSelected bool
+	OnSelectAll      func() bool
+	OnCopy           func() bool
+	OnCut            func() bool
 }
 
 // WoxNoteEditor renders linear Notes text segments and structural table and image blocks.
@@ -97,12 +104,10 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 		props.HoveredTask = -1
 	}
 	segments := noteDocumentSegments(props.Document)
-	if len(segments) == 1 && !segments[0].Structural() {
-		return noteEditorTextField(props, segments[0], props.ID, props.Height, true, props.Padding)
-	}
 	children := make([]woxwidget.Widget, 0, len(segments))
 	textIndex := 0
 	contentHeight := float32(0)
+	var caretVisible *woxwidget.ScrollRange
 	for _, segment := range segments {
 		if len(children) > 0 {
 			contentHeight += noteEditorSegmentGap
@@ -152,6 +157,7 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 					return false
 				},
 				OnUndo: props.OnUndo, OnRedo: props.OnRedo,
+				OnSelectAll: props.OnSelectAll, OnCopy: props.OnCopy, OnCut: props.OnCut,
 				Actions: noteEditorTableActions(props, segment.Start),
 			})})
 			contentHeight += padding.Top + height
@@ -161,19 +167,17 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 		if textIndex > 0 {
 			fieldID = fmt.Sprintf("%s.%d", props.ID, textIndex)
 		}
-		projected, _, _ := ProjectNoteDocument(noteSegmentDocument(props.Document, segment), props.Style, props.Theme)
-		lines := 1
-		if projected != "" {
-			lines = 1 + countNoteNewlines(projected)
-		}
-		padding := noteEditorEdgePadding(props.Padding, len(children) == 0)
-		height := max(props.LineHeight, float32(lines)*props.LineHeight+padding.Top+padding.Bottom)
-		if segment.End == len(props.Document.Blocks) {
-			height = max(height, props.Height-contentHeight)
-		}
 		primary := textIndex == 0
 		if props.ActiveSegmentStart >= 0 {
 			primary = segment.Start == props.ActiveSegmentStart
+		}
+		padding := noteEditorEdgePadding(props.Padding, len(children) == 0)
+		height := noteEditorTextHeight(props, segment, primary, padding)
+		if segment.End == len(props.Document.Blocks) {
+			height = max(height, props.Height-contentHeight-props.Padding.Bottom)
+		}
+		if props.RevealCaret && primary && caretVisible == nil {
+			caretVisible = noteEditorTextCaretRange(props, segment, primary, padding, contentHeight)
 		}
 		children = append(children, noteEditorTextField(props, segment, fieldID, height, primary, padding))
 		contentHeight += height
@@ -187,9 +191,38 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 	}
 	return WoxScrollView(ScrollViewProps{
 		Key: "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: props.Label,
-		Width: props.Width, Height: props.Height, Content: content,
+		Width: props.Width, Height: props.Height, Content: content, KeepVisible: caretVisible,
 		Theme: props.Theme, ThumbColor: props.Theme.ResultSubtitle,
 	})
+}
+
+// noteEditorTextCaretRange is the scroller interval that contains the active text caret.
+func noteEditorTextCaretRange(props NoteEditorProps, segment NoteDocumentSegment, primary bool, padding woxwidget.Insets, start float32) *woxwidget.ScrollRange {
+	if props.LineHeight <= 0 {
+		return nil
+	}
+	value, runs, _ := ProjectNoteSegment(props.Document, segment, props.Style, props.Theme)
+	if primary && props.Controller != nil {
+		value = props.Controller.Text()
+	}
+	caret := props.Selection.Focus
+	if primary && props.Controller != nil {
+		caret = props.Controller.State().Selection.Focus
+	}
+	innerWidth := max(float32(0), props.Width-padding.Left-padding.Right)
+	line := TextFieldVisualLineIndex(value, caret, props.Window, props.Style, innerWidth, NoteFieldRuns(runs))
+	top := start + padding.Top + float32(line)*props.LineHeight
+	return &woxwidget.ScrollRange{Start: top, End: top + props.LineHeight}
+}
+
+// noteEditorTextHeight sizes a text segment to its wrapped lines so the outer
+// scroller, not the field, owns overflow and can show a scrollbar thumb.
+func noteEditorTextHeight(props NoteEditorProps, segment NoteDocumentSegment, primary bool, padding woxwidget.Insets) float32 {
+	value, runs, _ := ProjectNoteSegment(props.Document, segment, props.Style, props.Theme)
+	if primary && props.Controller != nil {
+		value = props.Controller.Text()
+	}
+	return TextFieldVisualHeight(value, props.Window, props.Style, props.Width, props.LineHeight, padding, NoteFieldRuns(runs))
 }
 
 func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id string, height float32, primary bool, padding woxwidget.Insets) woxwidget.Widget {
@@ -249,6 +282,10 @@ func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id 
 		OnRedo:         props.OnRedo,
 		OnPaste:        props.OnPaste,
 		TransformPaste: props.TransformPaste,
+		OnSelectAll:    props.OnSelectAll,
+		OnCopy:         props.OnCopy,
+		OnCut:          props.OnCut,
+		PaintSelection: props.DocumentSelected && !primary,
 	})
 }
 
@@ -373,7 +410,7 @@ func DeleteNoteImage(document common.NoteDocument, block int) common.NoteDocumen
 // noteEditorImage renders one attachment with the same reserved toolbar slot as tables.
 func noteEditorImage(props NoteEditorProps, blockIndex int, block common.NoteBlock, width float32) (woxwidget.Widget, float32) {
 	focused := props.FocusedImageBlock == blockIndex
-	picture, pictureHeight := noteEditorImagePicture(props, block, width, focused)
+	picture, pictureHeight := noteEditorImagePicture(props, block, width, focused || props.DocumentSelected)
 	drawWidth, drawHeight := noteEditorImageSize(nil, block.Image, width, props.Zoom)
 	if image := noteEditorResolvedImage(props, block); image != nil {
 		drawWidth, drawHeight = noteEditorImageSize(image, block.Image, width, props.Zoom)
@@ -402,7 +439,7 @@ func noteEditorImage(props NoteEditorProps, blockIndex int, block common.NoteBlo
 			}, Child: picture},
 		}
 	}
-	toolbar := noteEditorImageToolbar(props, blockIndex, width, focused)
+	toolbar := noteEditorImageToolbar(props, blockIndex, width, focused && !props.DocumentSelected)
 	if toolbar != nil && !focused && !props.ReadOnly && props.OnImageLeave != nil {
 		toolbar = woxwidget.Gesture{ID: fmt.Sprintf("%s.image.%s.chrome", props.ID, block.ID), OnTap: func() {
 			props.OnImageLeave(blockIndex, false)
@@ -476,6 +513,9 @@ func noteEditorImageLabel(props NoteEditorProps, block common.NoteBlock) string 
 		if id := strings.TrimSpace(block.Image.ID); id != "" {
 			return id
 		}
+		if remote := strings.TrimSpace(block.Image.URL); remote != "" {
+			return remote
+		}
 	}
 	return noteEditorImageMissingLabel(props)
 }
@@ -536,20 +576,19 @@ func noteEditorImageSize(image *woxui.Image, meta *common.NoteImage, availableWi
 	if meta != nil {
 		scale = float32(notespluginScale(meta.Scale)) / 100
 	}
-	width := availableWidth * scale
-	if srcWidth <= 0 || srcHeight <= 0 || width <= 0 {
-		return max(width, 80), noteEditorImagePlaceholderHeight
+	if srcWidth <= 0 || srcHeight <= 0 {
+		return max(availableWidth*scale, 80), noteEditorImagePlaceholderHeight
 	}
 	maxHeight := NoteEditorImageMaxHeight * max(zoom, 1)
-	ratio := width / float32(srcWidth)
-	drawWidth := width
-	drawHeight := float32(srcHeight) * ratio
-	if drawHeight > maxHeight {
-		ratio = maxHeight / float32(srcHeight)
-		drawWidth = float32(srcWidth) * ratio
-		drawHeight = maxHeight
+	// Fit 100% into the editor box first, then apply the user's percent.
+	// Scaling width before the height cap made +/- a no-op for tall pictures.
+	fitWidth := availableWidth
+	fitHeight := float32(srcHeight) * (fitWidth / float32(srcWidth))
+	if fitHeight > maxHeight {
+		fitHeight = maxHeight
+		fitWidth = float32(srcWidth) * (fitHeight / float32(srcHeight))
 	}
-	return drawWidth, drawHeight
+	return fitWidth * scale, fitHeight * scale
 }
 
 func notespluginScale(scale int) int {
@@ -593,14 +632,4 @@ func noteEditorEdgePadding(padding woxwidget.Insets, first bool) woxwidget.Inset
 
 func noteEditorEmptyBoundaryKey(event woxui.KeyEvent) bool {
 	return event.Down && !event.Composing && event.Modifiers == 0 && (event.Key == woxui.KeyBackspace || event.Key == woxui.KeyDelete)
-}
-
-func countNoteNewlines(value string) int {
-	count := 0
-	for _, letter := range value {
-		if letter == '\n' {
-			count++
-		}
-	}
-	return count
 }

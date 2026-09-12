@@ -3,6 +3,7 @@ package notes
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"wox/common"
 )
@@ -54,6 +55,92 @@ func TestParseMarkdownBuildsRichBlocks(t *testing.T) {
 	}
 	if document.Blocks[3].Type != common.NoteBlockQuote {
 		t.Fatalf("quote type = %s", document.Blocks[3].Type)
+	}
+}
+
+func TestParseMarkdownKeepsSoftLineBreaksInOneBlock(t *testing.T) {
+	const markdown = "first line with [link](https://wox.one)\nsecond line"
+	document := ParseMarkdown(markdown)
+	if len(document.Blocks) != 1 || document.Blocks[0].Text != "first line with link\nsecond line" {
+		t.Fatalf("soft break blocks = %#v", document.Blocks)
+	}
+	if len(document.Blocks[0].Spans) != 1 || document.Blocks[0].Spans[0].Link != "https://wox.one" || document.Blocks[0].Spans[0].Start != 16 || document.Blocks[0].Spans[0].End != 20 {
+		t.Fatalf("soft break link span = %#v", document.Blocks[0].Spans)
+	}
+	if got := ToMarkdown(document); got != markdown {
+		t.Fatalf("soft break markdown = %q, want the original source", got)
+	}
+}
+
+func TestParseMarkdownKeepsBlankLinesAsEmptyParagraphs(t *testing.T) {
+	document := ParseMarkdown("first\n\nsecond\n\n\nthird")
+	if len(document.Blocks) != 6 {
+		t.Fatalf("blocks = %#v", document.Blocks)
+	}
+	want := []string{"first", "", "second", "", "", "third"}
+	for index, text := range want {
+		if document.Blocks[index].Type != common.NoteBlockParagraph || document.Blocks[index].Text != text {
+			t.Fatalf("block %d = %#v, want paragraph %q", index, document.Blocks[index], text)
+		}
+	}
+	if got := ToMarkdown(document); got != "first\n\nsecond\n\n\nthird" {
+		t.Fatalf("markdown round-trip = %q", got)
+	}
+}
+
+func TestMarkdownCaretSkipsLinkDestination(t *testing.T) {
+	document := ParseMarkdown("最终改名 **Wox**，寓意 it just works. 见[建议](https://v2ex.com/t/986005/#r_939222)后面")
+	if len(document.Blocks) != 1 {
+		t.Fatalf("blocks = %#v", document.Blocks)
+	}
+	markdown := ToMarkdown(document)
+	urlOff := utf8.RuneCountInString(markdown[:strings.Index(markdown, "https://v2ex.com")])
+	textOff := MarkdownTextOffset(document.Blocks[0], urlOff+3)
+	if got := []rune(document.Blocks[0].Text)[:textOff]; !strings.HasSuffix(string(got), "建议") || strings.Contains(string(got), "后面") {
+		t.Fatalf("url caret mapped to %q (%d), want the link label", string(got), textOff)
+	}
+}
+
+func TestDocumentCharacterCountSkipsMarkupAndWhitespace(t *testing.T) {
+	document := ParseMarkdown("# Title\n\nhello **world**\n\n| A | B |\n| --- | --- |\n| 1 | 2 |")
+	if got := DocumentCharacterCount(document); got != 19 {
+		t.Fatalf("character count = %d, want 19 for TitlehelloworldAB12", got)
+	}
+}
+
+func TestMapMarkdownRecordsHeadingAndBodyCarets(t *testing.T) {
+	mapped := MapMarkdown(ParseMarkdown("# Title\n\nbody"))
+	if mapped.Markdown != "# Title\n\nbody" {
+		t.Fatalf("markdown = %q", mapped.Markdown)
+	}
+	if len(mapped.Blocks) != 2 {
+		t.Fatalf("spans = %#v", mapped.Blocks)
+	}
+	if mapped.Blocks[0].Start != 0 || mapped.Blocks[0].TextStart != 2 || mapped.Blocks[0].End != 7 {
+		t.Fatalf("heading span = %+v, want [0,2,7]", mapped.Blocks[0])
+	}
+	if mapped.Blocks[1].Start != 9 || mapped.Blocks[1].TextStart != 9 || mapped.Blocks[1].End != 13 {
+		t.Fatalf("body span = %+v, want [9,9,13]", mapped.Blocks[1])
+	}
+}
+
+func TestParseMarkdownDoesNotInsertBlankBetweenHeadingAndBody(t *testing.T) {
+	document := ParseMarkdown("# Title\n\nbody")
+	if len(document.Blocks) != 2 || document.Blocks[0].Type != common.NoteBlockHeading1 || document.Blocks[1].Text != "body" {
+		t.Fatalf("heading body = %#v", document.Blocks)
+	}
+	if got := ToMarkdown(document); got != "# Title\n\nbody" {
+		t.Fatalf("heading markdown = %q", got)
+	}
+}
+
+func TestParseMarkdownKeepsTightListsWithoutBlankLines(t *testing.T) {
+	document := ParseMarkdown("- a\n- b\n\npara")
+	if len(document.Blocks) != 3 || document.Blocks[0].Type != common.NoteBlockBullet || document.Blocks[1].Type != common.NoteBlockBullet || document.Blocks[2].Text != "para" {
+		t.Fatalf("tight list = %#v", document.Blocks)
+	}
+	if got := ToMarkdown(document); got != "- a\n- b\n\npara" {
+		t.Fatalf("list markdown = %q", got)
 	}
 }
 
@@ -118,6 +205,15 @@ func TestParseMarkdownKeepsGFMTables(t *testing.T) {
 	}
 	if ToPlainText(document) != "A\tB\n1\t2" && !strings.Contains(ToPlainText(document), "A") {
 		t.Fatalf("table plain text = %q", ToPlainText(document))
+	}
+}
+
+func TestParseHTMLKeepsRemoteImages(t *testing.T) {
+	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
+	document := ParseHTML(`<article><p>intro</p><img alt="" src="` + url + `"><p>after</p></article>`)
+	image := noteTestImageBlock(document)
+	if image == nil || image.URL != url {
+		t.Fatalf("html remote image = %#v", document.Blocks)
 	}
 }
 
@@ -192,6 +288,57 @@ func TestDocumentIsEmptyKeepsImages(t *testing.T) {
 	}
 	if CustomNoteTitle(document) != "shot" || NoteTitle(document) != "shot" {
 		t.Fatalf("image title = %q", NoteTitle(document))
+	}
+}
+
+func TestParseMarkdownKeepsRemoteImages(t *testing.T) {
+	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
+	const markdown = "好在随着Wox v2功能越来越完善，也越来越稳定，我想可能是时候在本论坛再次向大家推荐一次Wox了。\n\n\n![](" + url + ")\n\n\n以下是Wox的特性："
+	document := ParseMarkdown(markdown)
+	image := noteTestImageBlock(document)
+	if image == nil || image.URL != url || image.ID != "" {
+		t.Fatalf("remote image = %#v", document.Blocks)
+	}
+	if got := ToMarkdown(document); !strings.Contains(got, "![]("+url+")") || !strings.Contains(got, "好在随着Wox v2") || !strings.Contains(got, "以下是Wox的特性：") {
+		t.Fatalf("remote image markdown = %q", got)
+	}
+	if !strings.Contains(ToHTML(document), `src="`+url+`"`) {
+		t.Fatalf("remote image html = %s", ToHTML(document))
+	}
+}
+
+func TestNoteImageCodecsRoundTripRemoteDisplayScale(t *testing.T) {
+	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
+	document := NormalizeDocument(common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockImage, Image: &common.NoteImage{URL: url, Scale: 60},
+	}}})
+	markdown := ToMarkdown(document)
+	if !strings.Contains(markdown, "![]("+url+"?scale=60)") {
+		t.Fatalf("scaled remote markdown = %q", markdown)
+	}
+	parsed := ParseMarkdown(markdown)
+	image := noteTestImageBlock(parsed)
+	if image == nil || image.URL != url || image.Scale != 60 || image.ID != "" {
+		t.Fatalf("parsed scaled remote image = %#v", parsed.Blocks)
+	}
+	html := ToHTML(document)
+	if !strings.Contains(html, `src="`+url+`"`) || !strings.Contains(html, `data-notes-image-scale="60"`) {
+		t.Fatalf("scaled remote html = %s", html)
+	}
+}
+
+func TestParseMarkdownPromotesSoftBreakRemoteImage(t *testing.T) {
+	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
+	document := ParseMarkdown("intro\n![](" + url + ")\nafter")
+	image := noteTestImageBlock(document)
+	if image == nil || image.URL != url {
+		t.Fatalf("promoted remote image = %#v", document.Blocks)
+	}
+	if document.Blocks[0].Text != "intro" {
+		t.Fatalf("intro = %#v", document.Blocks[0])
+	}
+	if last := document.Blocks[len(document.Blocks)-1]; last.Text != "after" {
+		t.Fatalf("after = %#v markdown=%q", last, ToMarkdown(document))
 	}
 }
 

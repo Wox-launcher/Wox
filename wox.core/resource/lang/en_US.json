@@ -3008,6 +3008,7 @@
   "notes_search": "Search Notes",
   "notes_search_placeholder": "Search notes...",
   "notes_format": "Toggle formatting bar",
+  "notes_character_count": "%d characters",
   "notes_new": "New Note",
   "notes_more": "More",
   "notes_favorites": "Favorites",

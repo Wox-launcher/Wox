@@ -1043,6 +1043,15 @@ func (h *Host) FrameSize() woxui.Size {
 	return h.lastFrameSize
 }
 
+// RevealCaret asks the next frame to scroll ancestor views so the focused caret is visible.
+func (h *Host) RevealCaret() {
+	if h == nil {
+		return
+	}
+	h.revealCaret = true
+	h.invalidate()
+}
+
 // RequestFocus focuses the retained element with the matching widget key.
 func (h *Host) RequestFocus(key Key) bool {
 	for _, current := range h.nodes {

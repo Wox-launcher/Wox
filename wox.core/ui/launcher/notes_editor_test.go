@@ -1,9 +1,12 @@
 package launcher
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"wox/common"
+	notesplugin "wox/plugin/system/notes"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 )
@@ -290,5 +293,29 @@ func TestNotesListIndentSupportsThreeLevels(t *testing.T) {
 	outdented, _, changed, handled := adjustNoteListIndent(indented, indentedRanges, woxui.TextSelection{Anchor: indentedRanges[2].TextEnd, Focus: indentedRanges[2].TextEnd}, -1)
 	if !handled || !changed || outdented.Blocks[2].Indent != 1 {
 		t.Fatalf("outdented task = %#v", outdented.Blocks[2])
+	}
+}
+
+func TestDocumentFromEditorKeepsLinkWhenEditingInsideLabel(t *testing.T) {
+	const markdown = "一转眼13年过去了，在这些年里，Wox经历过[两届主要维护者](https://github.com/Wox-launcher/Wox/graphs/contributors?all=1)。我从2013-2015，并在2015年因为开始转向使用Mac，将Wox从[我名下](https://github.com/qianlifeng/winalfred)转到github的组织(wox-launcher), 并交由社区维护。然后第二届主要维护者 [bao-qian](https://github.com/bao-qian) 继续接棒维护Wox。\n在这13年里，Wox有过辉煌"
+	document := notesplugin.ParseMarkdown(markdown)
+	projected, _, _ := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	edited := strings.Replace(projected, "两届主要维护者", "两轮主要维护者", 1)
+	parsed := documentFromEditor(edited, document)
+	block := parsed.Blocks[0]
+	start := utf8.RuneCountInString(strings.Split(block.Text, "两轮主要维护者")[0])
+	end := start + utf8.RuneCountInString("两轮主要维护者")
+	found := false
+	for _, span := range block.Spans {
+		if span.Link != "https://github.com/Wox-launcher/Wox/graphs/contributors?all=1" {
+			continue
+		}
+		found = true
+		if span.Start != start || span.End != end {
+			t.Fatalf("edited link span = %+v text=%q, want [%d, %d) 两轮主要维护者", span, block.Text, start, end)
+		}
+	}
+	if !found {
+		t.Fatalf("contributor link was lost: text=%q spans=%#v blocks=%d", block.Text, block.Spans, len(parsed.Blocks))
 	}
 }

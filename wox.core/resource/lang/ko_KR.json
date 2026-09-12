@@ -3004,6 +3004,7 @@
   "notes_search": "메모 검색",
   "notes_search_placeholder": "메모 검색...",
   "notes_format": "서식 표시줄 전환",
+  "notes_character_count": "%d자",
   "notes_new": "새 메모",
   "notes_more": "더 보기",
   "notes_favorites": "즐겨찾기",

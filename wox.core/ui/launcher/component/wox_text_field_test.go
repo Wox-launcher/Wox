@@ -29,7 +29,7 @@ func TestTextFieldSelectionClipsOriginalLine(t *testing.T) {
 	list := &woxui.DisplayList{}
 	drawTextField(list, woxui.Rect{Width: 30, Height: 40},
 		woxui.TextEditingState{Text: "中A文", Selection: woxui.TextSelection{Anchor: 1, Focus: 2}},
-		woxui.TextStyle{Size: 14}, runs, woxui.Color{}, Theme{}, true, false, 2, 20, 0, 0, false, nil)
+		woxui.TextStyle{Size: 14}, runs, woxui.Color{}, Theme{}, true, false, false, 2, 20, 0, 0, false, nil)
 	if len(clips) != 9 {
 		t.Fatalf("paint calls = %d, want the same three segments in each color region", len(clips))
 	}
@@ -162,6 +162,32 @@ func TestMultilineTextFieldOwnsStandardEditingShortcutsBeforeParent(t *testing.T
 	}
 	if parentCalls != 0 {
 		t.Fatalf("parent shortcut handler called %d times, want standard editing shortcuts retained by the field", parentCalls)
+	}
+}
+
+func TestTextFieldOnSelectAllReplacesDefault(t *testing.T) {
+	controller := woxwidget.NewTextEditingController("alpha")
+	controller.SetCaret(2)
+	called := false
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return WoxTextField(TextFieldProps{
+			ID: "custom-select-all", Width: 200, Height: 40, Controller: controller,
+			OnSelectAll: func() bool {
+				called = true
+				return true
+			},
+		})
+	})
+	host.AttachServices(&hotkeyRecorderHostServices{})
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 40}, PixelSize: woxui.PixelSize{Width: 200, Height: 40}, Scale: 1})
+	host.RequestFocus("custom-select-all")
+	primary := woxui.KeyModifierControl | woxui.KeyModifierMeta
+	if !host.Key(woxui.KeyEvent{Key: woxui.Key("a"), Modifiers: primary, Down: true}) || !called {
+		t.Fatal("Ctrl+A should invoke OnSelectAll")
+	}
+	if controller.SelectedText() != "" {
+		t.Fatalf("OnSelectAll true should skip the field select-all, got %q", controller.SelectedText())
 	}
 }
 

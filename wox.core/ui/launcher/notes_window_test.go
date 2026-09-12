@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"wox/common"
 	notesplugin "wox/plugin/system/notes"
@@ -223,6 +224,61 @@ func TestNotesDeleteColumnUndoRestoresTheColumn(t *testing.T) {
 	restored := controller.document.Blocks[0].Table
 	if restored == nil || noteTableColumnCount(*restored) != 2 || restored.Rows[0][1].Text != "B" {
 		t.Fatalf("undone table = %#v, want both columns restored", restored)
+	}
+}
+
+func TestNotesUndoRestoresCaretAtTheEdit(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "hello world"},
+		}},
+	})
+	controller.editor.SetText("hello world", false)
+	controller.editor.SetSelection(5, 5)
+	controller.selection = controller.editor.State().Selection
+	controller.onSegmentChanged(0, "helloXY world")
+	controller.editor.SetSelection(7, 7)
+	controller.selection = controller.editor.State().Selection
+	if !controller.undoDocument() {
+		t.Fatal("Ctrl+Z should undo the insert")
+	}
+	if got := controller.editor.Text(); got != "hello world" {
+		t.Fatalf("undone text = %q", got)
+	}
+	if got := controller.editor.State().Selection; got.Anchor != 5 || got.Focus != 5 {
+		t.Fatalf("undone caret = %+v, want the pre-edit offset 5", got)
+	}
+	if !controller.redoDocument() {
+		t.Fatal("Ctrl+Y should redo the insert")
+	}
+	if got := controller.editor.Text(); got != "helloXY world" {
+		t.Fatalf("redone text = %q", got)
+	}
+	if got := controller.editor.State().Selection; got.Anchor != 7 || got.Focus != 7 {
+		t.Fatalf("redone caret = %+v, want the post-edit offset 7", got)
+	}
+}
+
+func TestNotesMarkdownUndoRestoresCaret(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: notesplugin.ParseMarkdown("hello world"),
+	})
+	controller.markdownView = true
+	controller.editor.SetText("hello world", false)
+	controller.editor.SetSelection(5, 5)
+	controller.selection = controller.editor.State().Selection
+	controller.onMarkdownChanged("helloXY world")
+	controller.editor.SetSelection(7, 7)
+	if !controller.undoDocument() {
+		t.Fatal("Ctrl+Z should undo the markdown insert")
+	}
+	if got := controller.editor.Text(); got != "hello world" {
+		t.Fatalf("undone markdown = %q", got)
+	}
+	if got := controller.editor.State().Selection; got.Anchor != 5 || got.Focus != 5 {
+		t.Fatalf("undone markdown caret = %+v, want 5", got)
 	}
 }
 
@@ -530,6 +586,159 @@ func TestNotesTogglesMarkdownViewWithPrimaryE(t *testing.T) {
 	}
 }
 
+func TestNotesToggleMarkdownViewKeepsCaretOutOfLinkURL(t *testing.T) {
+	const source = "当时收到来自Alfred的警告信，也是在群友的[建议下](https://v2ex.com/t/986005/#r_939222)，最终改名 **Wox**，寓意 it just works.\n\n一转眼13年过去了，在这些年里，Wox经历过两轮主要维护者。"
+	caret := utf8.RuneCountInString(source[:strings.Index(source, "https://v2ex.com")]) + 8
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: notesplugin.ParseMarkdown(source),
+	})
+	controller.markdownView = true
+	controller.editor.SetText(source, false)
+	controller.editor.SetSelection(caret, caret)
+	controller.selection = controller.editor.State().Selection
+	controller.toggleMarkdownView()
+	preview := controller.editor.Text()
+	focus := controller.editor.State().Selection.Focus
+	runes := []rune(preview)
+	around := string(runes[max(0, focus-6):min(len(runes), focus+6)])
+	if strings.Contains(around, "it just works") {
+		t.Fatalf("preview caret %d in %q landed on %q, want the link label not the paragraph end", focus, preview, around)
+	}
+	if !strings.Contains(around, "建议") {
+		t.Fatalf("preview caret %d in %q landed on %q, want 建议下", focus, preview, around)
+	}
+}
+
+func TestNotesToggleMarkdownViewKeepsCaretInsideLinkedParagraph(t *testing.T) {
+	const source = "最终改名 **Wox**，寓意 it just works.\n\n一转眼13年过去了，在这些年里，Wox经历过[两轮主要维护者](https://github.com/wox-launcher/Wox/grap\nhs/contributors?all=1)。我从2013年开始维护。"
+	caret := utf8.RuneCountInString(source[:strings.Index(source, "在这些年里，Wox")+len("在这些年里，")]) + 1
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: notesplugin.ParseMarkdown(source),
+	})
+	controller.markdownView = true
+	controller.editor.SetText(source, false)
+	controller.editor.SetSelection(caret, caret)
+	controller.selection = controller.editor.State().Selection
+	controller.toggleMarkdownView()
+	if controller.markdownView {
+		t.Fatal("should return to preview")
+	}
+	preview := controller.editor.Text()
+	focus := controller.editor.State().Selection.Focus
+	runes := []rune(preview)
+	if focus < 0 || focus > len(runes) {
+		t.Fatalf("preview caret %d outside %q", focus, preview)
+	}
+	window := 8
+	start := max(0, focus-window)
+	end := min(len(runes), focus+window)
+	got := string(runes[start:end])
+	if !strings.Contains(got, "Wox") || strings.Contains(got, "it just works") {
+		t.Fatalf("preview caret %d in %q landed on %q, want the Wox in the second paragraph", focus, preview, got)
+	}
+}
+
+func TestNotesToggleMarkdownViewKeepsCaret(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "h", Type: common.NoteBlockHeading1, Text: "Title"},
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "body text"},
+		}},
+	})
+	controller.editor.SetText("Title\nbody text", false)
+	controller.editor.SetSelection(8, 8)
+	controller.selection = controller.editor.State().Selection
+	_, _, controller.blockRanges = controller.projectActiveText()
+	controller.toggleMarkdownView()
+	if !controller.markdownView {
+		t.Fatal("should be in markdown view")
+	}
+	if got := controller.editor.State().Selection.Focus; got != 11 {
+		t.Fatalf("markdown caret = %d, want 11 in %q", got, controller.editor.Text())
+	}
+	controller.toggleMarkdownView()
+	if controller.markdownView {
+		t.Fatal("should return to preview")
+	}
+	if got := controller.editor.State().Selection.Focus; got != 8 {
+		t.Fatalf("preview caret = %d text=%q, want 8", got, controller.editor.Text())
+	}
+}
+
+func TestNotesToggleMarkdownViewScrollsCaretIntoView(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: strings.Repeat("body line\n", 40) + "caret here"},
+		}},
+	})
+	value, _, ranges := controller.projectActiveText()
+	controller.blockRanges = ranges
+	controller.editor.SetText(value, false)
+	caret := utf8.RuneCountInString(value)
+	controller.editor.SetSelection(caret, caret)
+	controller.selection = controller.editor.State().Selection
+	controller.toggleMarkdownView()
+	editor := controller.buildMarkdownEditor(320, 80, defaultPalette().componentTheme())
+	stateful, ok := editor.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("markdown editor = %T", editor)
+	}
+	props, ok := stateful.Widget.(woxcomponent.ScrollViewProps)
+	if !ok || props.KeepVisible == nil || props.KeepVisible.Start < 80 {
+		t.Fatalf("markdown keep visible = %#v, want the caret below the 80px viewport", props)
+	}
+	controller.toggleMarkdownView()
+	preview := woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+		ID: "notes.editor", Document: controller.document, Width: 320, Height: 80,
+		Padding: notesEditorPadding(), Style: controller.editorStyle(), LineHeight: 24, Zoom: 1,
+		Theme: defaultPalette().componentTheme(), Controller: controller.editor,
+		Selection: controller.editor.State().Selection, RevealCaret: controller.consumeEditorCaretReveal(),
+	})
+	stateful, ok = preview.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("preview editor = %T", preview)
+	}
+	props, ok = stateful.Widget.(woxcomponent.ScrollViewProps)
+	if !ok || props.KeepVisible == nil || props.KeepVisible.Start < 80 {
+		t.Fatalf("preview keep visible = %#v, want the caret below the 80px viewport", props)
+	}
+}
+
+func TestNotesMarkdownEditorUsesSharedScrollbar(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: strings.Repeat("line\n", 40)},
+		}},
+	})
+	controller.markdownView = true
+	controller.editor.SetText(strings.Repeat("line\n", 40), false)
+	editor := controller.buildMarkdownEditor(320, 80, defaultPalette().componentTheme())
+	stateful, ok := editor.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("markdown editor = %T, want a stateful WoxScrollView", editor)
+	}
+	props, ok := stateful.Widget.(woxcomponent.ScrollViewProps)
+	if !ok || props.Key != "notes.editor.scroll" || props.Height != 80 || props.AlwaysShowScrollbar {
+		t.Fatalf("markdown scroll = %#v, want a fading WoxScrollView", stateful.Widget)
+	}
+	field, ok := props.Content.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("markdown field = %T", props.Content)
+	}
+	text, ok := field.Widget.(woxcomponent.TextFieldProps)
+	if !ok || text.Height <= 80 {
+		t.Fatalf("markdown field height = %#v, want content taller than the viewport", field.Widget)
+	}
+	if text.Style != controller.editorStyle() || text.LineHeight != 24 {
+		t.Fatalf("markdown type = %#v line=%v, want the same UI font as preview", text.Style, text.LineHeight)
+	}
+}
+
 func TestNotesMarkdownViewRoundTripsTables(t *testing.T) {
 	app := &App{palette: defaultPalette()}
 	controller := newNotesWindowController(app, common.NoteRecord{
@@ -572,6 +781,174 @@ func TestNotesMarkdownViewRoundTripsImages(t *testing.T) {
 	}
 	if image.Width != 800 || image.Height != 400 {
 		t.Fatalf("image size after Ctrl+E = %#v", image)
+	}
+}
+
+func TestNotesMarkdownViewRoundTripsRemoteImages(t *testing.T) {
+	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: notesplugin.ParseMarkdown("intro\n\n![](" + url + ")\n\nafter"),
+	})
+	controller.toggleMarkdownView()
+	if !strings.Contains(controller.editor.Text(), "![]("+url+")") {
+		t.Fatalf("markdown source lost the remote image: %q", controller.editor.Text())
+	}
+	controller.toggleMarkdownView()
+	image := notesTestImageBlock(controller.document)
+	if image == nil || image.URL != url || image.ID != "" {
+		t.Fatalf("preview after Ctrl+E = %#v, want the remote image kept", controller.document.Blocks)
+	}
+}
+
+func TestNotesMarkdownViewKeepsRemoteImageScale(t *testing.T) {
+	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{URL: url, Scale: 70}},
+		}},
+	})
+	controller.toggleMarkdownView()
+	if !strings.Contains(controller.editor.Text(), url+"?scale=70") {
+		t.Fatalf("markdown source lost the remote scale: %q", controller.editor.Text())
+	}
+	controller.toggleMarkdownView()
+	image := notesTestImageBlock(controller.document)
+	if image == nil || image.URL != url || image.Scale != 70 {
+		t.Fatalf("preview after Ctrl+E = %#v, want scale 70", controller.document.Blocks)
+	}
+}
+
+func TestNotesSelectAllSpansImages(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+			{ID: "after", Type: common.NoteBlockParagraph, Text: "after"},
+		}},
+	})
+	t.Cleanup(func() {
+		if controller.saveTimer != nil {
+			controller.saveTimer.Stop()
+		}
+	})
+	if controller.editor.Text() != "before" {
+		t.Fatalf("active segment = %q, want the text before the image", controller.editor.Text())
+	}
+	if !controller.selectEntireDocument() || !controller.documentSelected {
+		t.Fatal("Ctrl+A must select the whole note when an image splits the editor")
+	}
+	if got := controller.editor.SelectedText(); got != "before" {
+		t.Fatalf("active field selection = %q, want the current run selected", got)
+	}
+	if !controller.onKey(woxui.KeyEvent{Key: woxui.KeyBackspace, Down: true}) {
+		t.Fatal("Backspace after select-all must clear the whole note")
+	}
+	if !notesplugin.DocumentIsEmpty(controller.document) || notesTestImageIndex(controller.document) >= 0 {
+		t.Fatalf("select-all delete left %#v, want an empty note without the image", controller.document.Blocks)
+	}
+	if !controller.undoDocument() || !controller.documentSelected || notesTestImageIndex(controller.document) < 0 {
+		t.Fatalf("Ctrl+Z after select-all delete should restore the note and the whole-note selection: selected=%v blocks=%#v", controller.documentSelected, controller.document.Blocks)
+	}
+	if got := controller.editor.SelectedText(); got != "before" {
+		t.Fatalf("undo selection = %q, want the first run selected again as part of the whole note", got)
+	}
+}
+
+func TestNotesSelectAllReplaceDropsTrailingBlocks(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+			{ID: "after", Type: common.NoteBlockParagraph, Text: "after"},
+		}},
+	})
+	t.Cleanup(func() {
+		if controller.saveTimer != nil {
+			controller.saveTimer.Stop()
+		}
+	})
+	if !controller.selectEntireDocument() {
+		t.Fatal("select-all should span the image")
+	}
+	controller.onSegmentChanged(0, "hello")
+	if controller.documentSelected {
+		t.Fatal("typing after select-all should end the whole-note selection")
+	}
+	if notesTestImageIndex(controller.document) >= 0 {
+		t.Fatalf("typed replacement left the image: %#v", controller.document.Blocks)
+	}
+	if len(controller.document.Blocks) == 0 || strings.TrimSpace(controller.document.Blocks[0].Text) != "hello" {
+		t.Fatalf("replacement document = %#v, want a single hello paragraph", controller.document.Blocks)
+	}
+}
+
+func TestNotesSelectAllFromFocusedImage(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+			{ID: "after", Type: common.NoteBlockParagraph, Text: "after"},
+		}},
+	})
+	controller.focusedImageBlock = notesTestImageIndex(controller.document)
+	if !controller.onKey(woxui.KeyEvent{Key: woxui.Key("a"), Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true}) {
+		t.Fatal("Ctrl+A on a focused image must select the whole note")
+	}
+	if !controller.documentSelected || controller.focusedImageBlock >= 0 {
+		t.Fatalf("image select-all: selected=%v image=%d, want a document selection", controller.documentSelected, controller.focusedImageBlock)
+	}
+}
+
+func TestNotesEditorHostSelectAllSpansImages(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
+			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
+			{ID: "after", Type: common.NoteBlockParagraph, Text: "after"},
+		}},
+	})
+	theme := app.palette.componentTheme()
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+			ID: "notes.editor", Document: controller.document, Width: 400, Height: 320,
+			Style: controller.editorStyle(), LineHeight: 24, Zoom: 1, TextColor: theme.PreviewText, Theme: theme,
+			Autofocus: true, Controller: controller.editor, FocusNode: controller.editorFocus,
+			Focused: controller.editorFocus.HasFocus(), Selection: controller.selection,
+			ActiveSegmentStart: controller.activeTextSegment.Start,
+			DocumentSelected:   controller.documentSelected,
+			OnSelectAll:        controller.selectEntireDocument,
+			OnSelectionChanged: controller.onEditorSelectionChanged,
+		})
+	})
+	host.AttachServices(&notesEditorHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 320}, PixelSize: woxui.PixelSize{Width: 400, Height: 320}, Scale: 1}
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, frame)
+	if !host.RequestFocus("notes.editor") {
+		t.Fatal("notes editor must accept focus")
+	}
+	host.Frame(displayList, frame)
+	primary := woxui.KeyModifierControl | woxui.KeyModifierMeta
+	if !host.Key(woxui.KeyEvent{Key: woxui.Key("a"), Modifiers: primary, Down: true}) || !controller.documentSelected {
+		t.Fatal("Ctrl+A in the first run must select the whole note, not stop at the image")
+	}
+}
+
+func TestNotesPlainSelectAllStaysInTheField(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "only text"},
+		}},
+	})
+	if controller.selectEntireDocument() || controller.documentSelected {
+		t.Fatal("a text-only note should keep ordinary field select-all")
 	}
 }
 
@@ -1089,17 +1466,46 @@ func walkNotesWidgets(widget woxwidget.Widget, visit func(woxwidget.Widget)) {
 	}
 }
 
+func notesFormatBarButtons(bar woxwidget.Widget) []woxcomponent.IconButtonProps {
+	var buttons []woxcomponent.IconButtonProps
+	walkNotesWidgets(bar, func(child woxwidget.Widget) {
+		stateful, ok := child.(woxwidget.Stateful)
+		if !ok {
+			return
+		}
+		button, ok := stateful.Widget.(woxcomponent.IconButtonProps)
+		if ok && strings.HasPrefix(button.ID, "notes.format.") {
+			buttons = append(buttons, button)
+		}
+	})
+	return buttons
+}
+
+func notesFormatBarHasStats(bar woxwidget.Widget) bool {
+	found := false
+	walkNotesWidgets(bar, func(child woxwidget.Widget) {
+		if semantics, ok := child.(woxwidget.Semantics); ok && semantics.AutomationID == "notes.format.stats" {
+			found = true
+		}
+	})
+	return found
+}
+
 func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 	app := &App{palette: defaultPalette()}
 	controller := newNotesWindowController(app, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{R: 240, G: 240, B: 240, A: 255}}
-	items := controller.buildFormatBar(420, theme).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	bar := controller.buildFormatBar(420, theme)
+	if !notesFormatBarHasStats(bar) {
+		t.Fatal("format bar should show the document character count on the left")
+	}
+	items := notesFormatBarButtons(bar)
 	if len(items) != 13 {
 		t.Fatalf("format items = %d, want full bar", len(items))
 	}
-	first := items[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	first := items[0]
 	if first.ID != "notes.format.block" || first.OnHoverAt == nil {
 		t.Fatalf("heading control = id %q hover %v", first.ID, first.OnHoverAt != nil)
 	}
@@ -1107,12 +1513,38 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 	if !ok || icon.Source == nil || icon.Width != 16 || icon.Height != 16 {
 		t.Fatalf("heading icon = %#v, want 16x16 SVG image", first.Icon)
 	}
-	for index, child := range items {
-		button := child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	for index, button := range items {
 		image, imageOK := button.Icon.(woxwidget.Image)
 		if !imageOK || image.Source == nil || button.OnHoverAt == nil {
 			t.Fatalf("format item %d = icon %#v hover %v, want SVG with tooltip", index, button.Icon, button.OnHoverAt != nil)
 		}
+	}
+	row := bar.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(row.Children) != 2 {
+		t.Fatalf("format row = %#v, want stats on the left and tools on the right", row.Children)
+	}
+	if _, ok := row.Children[1].(woxwidget.Expanded); !ok {
+		t.Fatalf("trailing format slot = %T, want Expanded so marks stay right-aligned", row.Children[1])
+	}
+}
+
+func TestNotesFormatBarKeepsCountInMarkdownView(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
+			{ID: "p", Type: common.NoteBlockParagraph, Text: "hello world"},
+		}},
+	})
+	controller.markdownView = true
+	bar := controller.buildFormatBar(420, defaultPalette().componentTheme())
+	if !notesFormatBarHasStats(bar) {
+		t.Fatal("markdown view should keep the character count")
+	}
+	if buttons := notesFormatBarButtons(bar); len(buttons) != 0 {
+		t.Fatalf("markdown format buttons = %d, want only the count", len(buttons))
+	}
+	if got := notesplugin.DocumentCharacterCount(controller.document); got != 10 {
+		t.Fatalf("character count = %d, want 10 for helloworld", got)
 	}
 }
 
@@ -1236,10 +1668,9 @@ func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 1, Focus: ranges[0].TextStart + 1}
 	controller.focusedTableBlock, controller.focusedTableRow, controller.focusedTableCol = 0, 1, 0
-	items := controller.buildFormatBar(420, woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}}).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	items := notesFormatBarButtons(controller.buildFormatBar(420, woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}}))
 	var bullet, tableButton woxcomponent.IconButtonProps
-	for _, child := range items {
-		button := child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	for _, button := range items {
 		switch button.ID {
 		case "notes.format.bullet":
 			bullet = button
@@ -1265,10 +1696,9 @@ func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 8, Focus: ranges[0].TextStart + 8}
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{R: 40, G: 40, B: 40, A: 255}, Cursor: woxui.Color{R: 19, G: 121, B: 210, A: 255}}
-	items := controller.buildFormatBar(420, theme).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	items := notesFormatBarButtons(controller.buildFormatBar(420, theme))
 	var underline, bold woxcomponent.IconButtonProps
-	for _, child := range items {
-		button := child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	for _, button := range items {
 		switch button.ID {
 		case "notes.format.underline":
 			underline = button

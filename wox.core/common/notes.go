@@ -46,10 +46,12 @@ type NoteTable struct {
 	Rows       [][]NoteTableCell `json:"rows"`
 }
 
-// NoteImage is a local attachment referenced by id. Bytes stay on disk, not in note JSON.
+// NoteImage is a picture block. Local attachments use ID (bytes stay on disk).
+// Remote http(s) pictures use URL and are not copied into attachments.
 // Scale is a display-width percent (20-100). Zero means 100% so full-size images omit the field.
 type NoteImage struct {
 	ID       string `json:"id"`
+	URL      string `json:"url,omitempty"`
 	FileName string `json:"fileName,omitempty"`
 	Width    int    `json:"width,omitempty"`
 	Height   int    `json:"height,omitempty"`

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"testing"
 
 	"wox/common"
@@ -70,6 +71,35 @@ func TestEnsureNoteImageEditGapsInsertsCaretParagraphs(t *testing.T) {
 	}
 }
 
+func TestNoteEditorImageSizeAppliesScaleAfterHeightFit(t *testing.T) {
+	image := &woxui.Image{Width: 800, Height: 1200}
+	meta := &common.NoteImage{Width: 800, Height: 1200}
+	fullW, fullH := noteEditorImageSize(image, meta, 380, 1)
+	if fullH != NoteEditorImageMaxHeight {
+		t.Fatalf("full tall image = %.0fx%.0f, want height %v", fullW, fullH, NoteEditorImageMaxHeight)
+	}
+	small := &common.NoteImage{Width: 800, Height: 1200, Scale: 90}
+	smallW, smallH := noteEditorImageSize(image, small, 380, 1)
+	if smallW >= fullW || smallH >= fullH {
+		t.Fatalf("90%% tall image = %.0fx%.0f, want smaller than %.0fx%.0f", smallW, smallH, fullW, fullH)
+	}
+	if smallW != fullW*0.9 || smallH != fullH*0.9 {
+		t.Fatalf("90%% tall image = %.0fx%.0f, want 90%% of %.0fx%.0f", smallW, smallH, fullW, fullH)
+	}
+}
+
+func TestNoteEditorImageSizeScalesWidePictures(t *testing.T) {
+	image := &woxui.Image{Width: 1600, Height: 800}
+	fullW, fullH := noteEditorImageSize(image, &common.NoteImage{Scale: 0}, 320, 1)
+	if fullW != 320 || fullH != 160 {
+		t.Fatalf("full wide image = %.0fx%.0f, want 320x160", fullW, fullH)
+	}
+	halfW, halfH := noteEditorImageSize(image, &common.NoteImage{Scale: 50}, 320, 1)
+	if halfW != 160 || halfH != 80 {
+		t.Fatalf("50%% wide image = %.0fx%.0f, want 160x80", halfW, halfH)
+	}
+}
+
 func TestNoteEditorImageTapHitsCenteredPicture(t *testing.T) {
 	if !noteEditorImageTapHitsPicture(woxui.Point{X: 160, Y: 40}, 320, 200, 80) {
 		t.Fatal("center of the picture should select the image")
@@ -133,6 +163,32 @@ func TestWoxNoteEditorHidesImageActionsUntilSelected(t *testing.T) {
 	focusedPicture := noteEditorImagePictureBox(t, focused)
 	if idlePicture.BorderWidth != 0 || focusedPicture.BorderWidth != 2 {
 		t.Fatalf("image highlight idle/focused = %.0f/%.0f, want 0 then 2", idlePicture.BorderWidth, focusedPicture.BorderWidth)
+	}
+}
+
+func TestWoxNoteEditorDocumentSelectedHighlightsImages(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png", Width: 400, Height: 200}},
+		{ID: "after", Type: common.NoteBlockParagraph, Text: "after"},
+	}}
+	editor := WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}, Cursor: woxui.Color{R: 80, G: 160, B: 255, A: 255}},
+		DocumentSelected:  true,
+		OnImageFocus:      func(int) {},
+		OnImageScale:      func(int, int) {},
+		OnImageDelete:     func(int) {},
+		ImageActionLabels: NoteImageActionLabels{Smaller: "Smaller", Larger: "Larger", Delete: "Delete image"},
+		ResolveImage:      func(common.NoteImage) *woxui.Image { return &woxui.Image{Width: 400, Height: 200} },
+	})
+	ids := noteTableActionIDs(noteEditorImageChrome(t, editor))
+	if ids["notes.editor.image.img.image-smaller"] || ids["notes.editor.image.img.image-delete"] {
+		t.Fatalf("document select-all showed image actions = %#v", ids)
+	}
+	picture := noteEditorImagePictureBox(t, editor)
+	if picture.BorderWidth != 2 {
+		t.Fatalf("document select-all image highlight = %.0f, want 2", picture.BorderWidth)
 	}
 }
 
@@ -249,6 +305,34 @@ func TestWoxNoteEditorKeepsDocumentInsetsOffTableGaps(t *testing.T) {
 	}
 	if field.Height != 36 {
 		t.Fatalf("leading text height = %.0f, want one line plus the top inset", field.Height)
+	}
+}
+
+func TestWoxNoteEditorScrollsWhenTextOverflows(t *testing.T) {
+	blocks := make([]common.NoteBlock, 20)
+	for index := range blocks {
+		blocks[index] = common.NoteBlock{ID: fmt.Sprintf("p%d", index), Type: common.NoteBlockParagraph, Text: "line"}
+	}
+	editor := WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: common.NoteDocument{Blocks: blocks}, Width: 320, Height: 80, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}},
+	})
+	stateful, ok := editor.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("overflowing text note = %T, want a stateful WoxScrollView", editor)
+	}
+	props, ok := stateful.Widget.(ScrollViewProps)
+	if !ok || props.Key != "notes.editor.scroll" || props.Height != 80 || props.AlwaysShowScrollbar {
+		t.Fatalf("text note scroll = %#v, want a fading WoxScrollView", stateful.Widget)
+	}
+	field, ok := noteEditorColumn(t, editor).Children[0].(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("text note field = %T", noteEditorColumn(t, editor).Children[0])
+	}
+	text, ok := field.Widget.(TextFieldProps)
+	if !ok || text.Height <= 80 {
+		t.Fatalf("text note field height = %#v, want content taller than the viewport", field.Widget)
 	}
 }
 

@@ -7,6 +7,27 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+func TestDocumentFromEditorKeepsRepeatedLinkLabel(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{{
+		Type: common.NoteBlockParagraph,
+		Text: "Wox经历过两届主要维护者。然后第二届主要维护者",
+		Spans: []common.NoteSpan{
+			{Start: 6, End: 13, Link: "https://example.com/a"},
+			{Start: 16, End: 24, Link: "https://example.com/b"},
+		},
+	}}}
+	parsed := DocumentFromEditor("Wox经历过两轮主要维护者。然后第二届主要维护者", document)
+	if len(parsed.Blocks) != 1 || parsed.Blocks[0].Text != "Wox经历过两轮主要维护者。然后第二届主要维护者" {
+		t.Fatalf("edited text = %#v", parsed.Blocks)
+	}
+	if len(parsed.Blocks[0].Spans) != 2 || parsed.Blocks[0].Spans[0].Link != "https://example.com/a" || parsed.Blocks[0].Spans[0].Start != 6 || parsed.Blocks[0].Spans[0].End != 13 {
+		t.Fatalf("first link after edit = %#v", parsed.Blocks[0].Spans)
+	}
+	if parsed.Blocks[0].Spans[1].Link != "https://example.com/b" || parsed.Blocks[0].Spans[1].Start != 16 || parsed.Blocks[0].Spans[1].End != 24 {
+		t.Fatalf("second link after edit = %#v", parsed.Blocks[0].Spans)
+	}
+}
+
 func TestNoteTaskGroupIncludesIndentedChildren(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{ID: "a", Type: common.NoteBlockTask, Text: "parent"},
@@ -88,6 +109,18 @@ func TestNoteTaskDropAndNudgeDest(t *testing.T) {
 	}
 	if dest := NoteTaskNudgeDest(document, 1, 1); dest != 3 {
 		t.Fatalf("nudge down = %d, want 3", dest)
+	}
+}
+
+func TestProjectNoteDocumentRendersEmptyParagraphsAsBlankLines(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockParagraph, Text: "first"},
+		{Type: common.NoteBlockParagraph},
+		{Type: common.NoteBlockParagraph, Text: "second"},
+	}}
+	value, _, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	if value != "first\n\nsecond" {
+		t.Fatalf("projection = %q, want a visible blank line between paragraphs", value)
 	}
 }
 

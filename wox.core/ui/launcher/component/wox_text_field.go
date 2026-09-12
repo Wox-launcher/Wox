@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -119,6 +120,14 @@ type TextFieldProps struct {
 	OnKey             func(woxui.KeyEvent) bool
 	OnUndo            func() bool
 	OnRedo            func() bool
+	// OnSelectAll replaces the default field select-all when it returns true.
+	OnSelectAll func() bool
+	// OnCopy replaces the default copy of the field selection when it returns true.
+	OnCopy func() bool
+	// OnCut replaces the default cut of the field selection when it returns true.
+	OnCut func() bool
+	// PaintSelection draws the current selection even when the field is not focused.
+	PaintSelection bool
 	// OnPaste receives raw clipboard text and, when it returns true, replaces the default insert.
 	// Empty text is still delivered so callers can paste images or files from the same shortcut.
 	OnPaste            func(string) bool
@@ -302,6 +311,9 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		displayState.Composition = woxui.MaskProtectedText(realState.Composition)
 		displayState.Selection = woxui.MapSelectionToProtectedDisplay(realState.Text, realState.Selection)
 	}
+	if props.PaintSelection && displayState.Selection.Collapsed() && displayState.Text != "" {
+		displayState.Selection = woxui.TextSelection{Anchor: 0, Focus: utf8.RuneCountInString(displayState.Text)}
+	}
 	props.editingState = displayState
 	props.caretActive = props.Focused
 	props.Focused = s.focusNode.HasFocus()
@@ -453,10 +465,16 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			if !en.canCut {
 				return
 			}
+			if original := widget.(TextFieldProps); original.OnCut != nil && original.OnCut() {
+				break
+			}
 			_ = cutSelection()
 		case textFieldContextCopy:
 			if !en.canCopy {
 				return
+			}
+			if original := widget.(TextFieldProps); original.OnCopy != nil && original.OnCopy() {
+				break
 			}
 			_ = copySelection()
 		case textFieldContextPaste:
@@ -467,6 +485,9 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		case textFieldContextSelectAll:
 			if !en.canSelectAll {
 				return
+			}
+			if original := widget.(TextFieldProps); original.OnSelectAll != nil && original.OnSelectAll() {
+				break
 			}
 			s.controller.SelectAll()
 			notifySelection()
@@ -598,15 +619,24 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		if event.Down && !event.Composing && event.Modifiers.HasPrimary() {
 			switch event.Key {
 			case woxui.Key("a"):
+				if original.OnSelectAll != nil && original.OnSelectAll() {
+					return true
+				}
 				s.controller.SelectAll()
 				notifySelection()
 				invalidate()
 				return true
 			case woxui.Key("c"):
+				if original.OnCopy != nil && original.OnCopy() {
+					return true
+				}
 				return copySelection()
 			case woxui.Key("x"):
 				if event.Modifiers&woxui.KeyModifierShift != 0 {
 					break
+				}
+				if original.OnCut != nil && original.OnCut() {
+					return true
 				}
 				if !allowsMutation || original.Protected {
 					return true
@@ -1255,7 +1285,7 @@ func textFieldInnerContent(props TextFieldProps, state woxui.TextEditingState, s
 		}
 		if props.Window != nil {
 			drawTextFieldTrailingHandleHighlight(displayList, bounds, state, style, props, softWrap)
-			drawTextField(displayList, bounds, state, style, props.RichRuns, textColor, props.Theme, focused, caretVisible, maxLines, props.LineHeight, props.verticalOffset, props.TextAlignmentY, softWrap, props.Window)
+			drawTextField(displayList, bounds, state, style, props.RichRuns, textColor, props.Theme, focused, caretVisible, props.PaintSelection, maxLines, props.LineHeight, props.verticalOffset, props.TextAlignmentY, softWrap, props.Window)
 			drawTextFieldTrailingHandleDropLine(displayList, bounds, props)
 		}
 	}}
@@ -1752,6 +1782,21 @@ func textFieldLineOriginX(baseX float32, line textFieldLine) float32 {
 	return baseX + line.indent
 }
 
+// TextFieldVisualHeight is the pixel height that shows every soft-wrapped line.
+func TextFieldVisualHeight(value string, window *woxui.Window, style woxui.TextStyle, width, lineHeight float32, padding woxwidget.Insets, runs []TextFieldRichRun) float32 {
+	if lineHeight <= 0 {
+		lineHeight = textFieldLineHeight
+	}
+	innerWidth := max(float32(0), width-padding.Left-padding.Right)
+	lines := 1
+	if window != nil && innerWidth > 0 {
+		lines = max(1, len(textFieldRichLines(value, window, style, innerWidth, true, runs)))
+	} else if value != "" {
+		lines = 1 + strings.Count(value, "\n")
+	}
+	return max(lineHeight, float32(lines)*lineHeight+padding.Top+padding.Bottom)
+}
+
 func textFieldAccessibilityLines(state woxui.TextEditingState, style woxui.TextStyle, width float32, maxLines int, props TextFieldProps) []woxui.AccessibilityTextLine {
 	if !props.ExposeVisualLines {
 		return nil
@@ -1778,6 +1823,42 @@ func textFieldLineIndex(lines []textFieldLine, offset int) int {
 
 func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style woxui.TextStyle, richRuns []TextFieldRichRun, maxLines int, lineHeight, verticalOffset, width float32, softWrap bool, focused bool, point woxui.Point) int {
 	return textFieldOffsetOnLines(state, window, style, richRuns, maxLines, lineHeight, verticalOffset, width, softWrap, focused, point)
+}
+
+// TextFieldCaretLayout is the content-local caret box used when remapping across layouts.
+type TextFieldCaretLayout struct {
+	Point     woxui.Point
+	LineWidth float32
+	AtLineEnd bool
+}
+
+// TextFieldCaretLayoutAt measures the caret's visual line so view toggles can keep it on screen.
+func TextFieldCaretLayoutAt(value string, offset int, window *woxui.Window, style woxui.TextStyle, width, lineHeight float32, runs []TextFieldRichRun) (TextFieldCaretLayout, bool) {
+	if lineHeight <= 0 || width <= 0 {
+		return TextFieldCaretLayout{}, false
+	}
+	lines := textFieldRichLines(value, window, style, width, true, runs)
+	if len(lines) == 0 {
+		return TextFieldCaretLayout{}, false
+	}
+	index := textFieldLineIndex(lines, offset)
+	line := lines[index]
+	x := textFieldCaretX(line, offset, window, style)
+	y := float32(index)*lineHeight + lineHeight*0.5
+	lineWidth := x
+	if window != nil {
+		lineWidth = line.indent + textFieldMeasureRange(window, []rune(value), line.start, line.end, style, runs)
+	}
+	return TextFieldCaretLayout{
+		Point:     woxui.Point{X: x, Y: y},
+		LineWidth: lineWidth,
+		AtLineEnd: offset == line.end,
+	}, true
+}
+
+// TextFieldOffsetAtContentPoint maps a content-local point onto a rune offset.
+func TextFieldOffsetAtContentPoint(value string, point woxui.Point, window *woxui.Window, style woxui.TextStyle, width, lineHeight float32, runs []TextFieldRichRun) int {
+	return textFieldOffsetAt(woxui.TextEditingState{Text: value}, window, style, runs, 10000, lineHeight, 0, width, true, true, point)
 }
 
 // textFieldGlyphHitAt reports whether a content-local point sits on a rendered glyph, not just a snapped caret.
@@ -1868,7 +1949,7 @@ func textFieldAlignedTextBounds(bounds woxui.Rect, value string, style woxui.Tex
 	return bounds
 }
 
-func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, richRuns []TextFieldRichRun, textColor woxui.Color, theme Theme, focused, caretVisible bool, maxLines int, lineHeight, verticalOffset, textAlignmentY float32, softWrap bool, window *woxui.Window) {
+func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, richRuns []TextFieldRichRun, textColor woxui.Color, theme Theme, focused, caretVisible, paintSelection bool, maxLines int, lineHeight, verticalOffset, textAlignmentY float32, softWrap bool, window *woxui.Window) {
 	richRuns = textFieldCompositionRichRuns(state, richRuns)
 	displayRunes, start, end, focus, compositionStart, compositionEnd := textFieldDisplayState(state)
 	lines := textFieldRichLines(string(displayRunes), window, style, bounds.Width, softWrap, richRuns)
@@ -1887,7 +1968,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 		lineX := textFieldLineOriginX(bounds.X-horizontalOffset, line)
 		selectionStart := max(start, line.start)
 		selectionEnd := min(end, line.end)
-		if focused && selectionStart < selectionEnd {
+		if (focused || paintSelection) && selectionStart < selectionEnd {
 			prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, selectionStart, style, richRuns)
 			selectedWidth := textFieldMeasureRange(window, displayRunes, selectionStart, selectionEnd, style, richRuns)
 			displayList.FillRoundedRect(woxui.Rect{X: lineX + prefixWidth, Y: y, Width: selectedWidth, Height: lineHeight}, 3, theme.SelectionBackground)
@@ -1899,7 +1980,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 			}
 			gutter.PaintLineGutter(displayList, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: width, Height: lineHeight})
 		}
-		if focused && selectionStart < selectionEnd {
+		if (focused || paintSelection) && selectionStart < selectionEnd {
 			prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, selectionStart, style, richRuns)
 			selectedWidth := textFieldMeasureRange(window, displayRunes, selectionStart, selectionEnd, style, richRuns)
 			left := max(bounds.X, min(bounds.X+bounds.Width, lineX+prefixWidth))

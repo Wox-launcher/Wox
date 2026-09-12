@@ -98,6 +98,12 @@ func TestParseNoteImageRefAcceptsPortableRefs(t *testing.T) {
 	if ParseNoteImageRef("https://example.com/a.png") != "" {
 		t.Fatal("remote images must not become attachments")
 	}
+	if got := NoteImageRemoteURL(common.NoteImage{URL: "https://example.com/a.png"}); got != "https://example.com/a.png" {
+		t.Fatalf("remote url = %q", got)
+	}
+	if NoteImageRemoteURL(common.NoteImage{ID: "abc.png", URL: "https://example.com/a.png"}) != "" {
+		t.Fatal("local attachments must win over a leftover URL")
+	}
 }
 
 func TestAdjustNoteImageScaleKeepsPercentBounds(t *testing.T) {

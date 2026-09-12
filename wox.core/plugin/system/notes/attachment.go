@@ -140,6 +140,14 @@ func ResolveNoteImagePath(image common.NoteImage) string {
 	return filepath.Join(util.GetLocation().GetNotesAttachmentsDirectory(), id)
 }
 
+// NoteImageRemoteURL returns a safe http(s) picture address when the block is not a local attachment.
+func NoteImageRemoteURL(image common.NoteImage) string {
+	if SanitizeNoteImageID(image.ID) != "" {
+		return ""
+	}
+	return safeNoteImageURL(image.URL)
+}
+
 // SanitizeNoteImageID keeps attachment ids as a single filename so notes cannot escape the attachments directory.
 func SanitizeNoteImageID(id string) string {
 	id = filepath.Base(strings.TrimSpace(id))

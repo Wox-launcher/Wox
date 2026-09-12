@@ -271,6 +271,7 @@ func noteFirstNonEmpty(values ...string) string {
 
 // DocumentFromEditor applies Markdown input rules and preserves existing inline styles across local edits.
 func DocumentFromEditor(value string, previous common.NoteDocument) common.NoteDocument {
+	previous.Blocks = flattenNoteBlockLines(previous.Blocks)
 	lines := strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")
 	blocks := make([]common.NoteBlock, 0, len(lines))
 	inCodeFence := false
@@ -474,6 +475,46 @@ func noteTypedTableSeparator(value string) bool {
 		}
 	}
 	return true
+}
+
+// flattenNoteBlockLines splits stored blocks that still contain newlines so each
+// editor line remaps against the matching previous line's spans.
+func flattenNoteBlockLines(blocks []common.NoteBlock) []common.NoteBlock {
+	flattened := make([]common.NoteBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if block.IsStructural() || !strings.Contains(block.Text, "\n") {
+			flattened = append(flattened, block)
+			continue
+		}
+		lines := strings.Split(strings.ReplaceAll(block.Text, "\r\n", "\n"), "\n")
+		offset := 0
+		for index, line := range lines {
+			part := block
+			part.Text = line
+			part.Spans = noteSpansIntersectingLine(block.Spans, offset, utf8.RuneCountInString(line))
+			if index > 0 {
+				part.ID = uuid.NewString()
+			}
+			flattened = append(flattened, part)
+			offset += utf8.RuneCountInString(line) + 1
+		}
+	}
+	return flattened
+}
+
+func noteSpansIntersectingLine(spans []common.NoteSpan, start, length int) []common.NoteSpan {
+	end := start + length
+	intersected := make([]common.NoteSpan, 0, len(spans))
+	for _, span := range spans {
+		from, to := max(span.Start, start), min(span.End, end)
+		if to <= from {
+			continue
+		}
+		span.Start = from - start
+		span.End = to - start
+		intersected = append(intersected, span)
+	}
+	return intersected
 }
 
 func remapNoteSpans(oldValue, newValue string, spans []common.NoteSpan) []common.NoteSpan {

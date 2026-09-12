@@ -3005,6 +3005,7 @@
   "notes_search": "搜索笔记",
   "notes_search_placeholder": "搜索笔记...",
   "notes_format": "显示或隐藏格式栏",
+  "notes_character_count": "%d 字",
   "notes_new": "新建笔记",
   "notes_more": "更多",
   "notes_favorites": "收藏",
