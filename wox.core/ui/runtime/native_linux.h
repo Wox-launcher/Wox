@@ -23,6 +23,7 @@ int32_t wox_linux_window_center(WoxLinuxWindow *window, float width, float heigh
 int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window);
 int32_t wox_linux_window_minimize(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enabled);
+int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom);
 int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_set_min_size(WoxLinuxWindow *window, float width, float height);
 int32_t wox_linux_window_set_icon(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);

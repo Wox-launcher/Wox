@@ -164,8 +164,16 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}
 	}
 	radius := props.Radius
+	if props.Theme.AppWindowChrome && props.Theme.AppBorderRadius == nil && radius == 0 {
+		radius = woxui.DefaultWindowCornerRadius
+	}
 	if props.Theme.AppBorderRadius != nil {
-		radius = woxui.NativeWindowCornerRadius(float32(*props.Theme.AppBorderRadius))
+		requested := float32(*props.Theme.AppBorderRadius)
+		if props.Theme.AppWindowChrome {
+			radius = requested
+		} else {
+			radius = woxui.NativeWindowCornerRadius(requested)
+		}
 	}
 	radius = min(max(float32(0), radius), min(props.Width, props.Height)/2)
 	borderColor, borderWidth := woxui.Color{}, float32(0)

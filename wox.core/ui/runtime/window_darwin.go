@@ -1463,14 +1463,18 @@ func woxGoDarwinFileDragEnded(context C.uintptr_t, status C.int32_t) {
 	}
 }
 
-// setCornerRadius updates the native material on AppKit's main thread.
-func (w *platformWindow) setCornerRadius(radius float32) error {
+// setWindowChrome removes Liquid Glass when a theme authors its own outline.
+func (w *platformWindow) setWindowChrome(custom bool, radius float32) error {
 	native, err := w.openNative()
 	if err != nil {
 		return err
 	}
-	if C.wox_darwin_window_set_corner_radius(native, C.float(radius)) != 0 {
-		return errors.New("woxui: failed to update macOS window corners")
+	enabled := C.int32_t(0)
+	if custom {
+		enabled = 1
+	}
+	if C.wox_darwin_window_set_window_chrome(native, enabled, C.float(radius)) != 0 {
+		return errors.New("woxui: failed to update macOS window chrome")
 	}
 	return nil
 }

@@ -322,6 +322,22 @@ func (w *platformWindow) setAppearance(isDark bool) error {
 	return nil
 }
 
+// setWindowChrome turns compositor blur off so a self-drawn outline is not covered.
+func (w *platformWindow) setWindowChrome(custom bool, _ float32) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	enabled := C.int32_t(0)
+	if custom {
+		enabled = 1
+	}
+	if C.wox_linux_window_set_window_chrome(native, enabled) != 0 {
+		return errors.New("woxui: failed to update Linux window chrome")
+	}
+	return nil
+}
+
 func (w *platformWindow) setFontFamily(family string) error {
 	w.mu.Lock()
 	w.fontFamily = family

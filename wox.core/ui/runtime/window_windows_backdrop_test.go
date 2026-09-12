@@ -23,6 +23,14 @@ func TestWindowBackdropPolicyFollowsLiveCorners(t *testing.T) {
 	if !w.usesSystemBackdrop() {
 		t.Fatal("removing custom corners did not restore system material")
 	}
+	w.customWindowChrome = true
+	if w.usesSystemBackdrop() {
+		t.Fatal("authored app chrome kept Acrylic")
+	}
+	w.customWindowChrome = false
+	if !w.usesSystemBackdrop() {
+		t.Fatal("clearing app chrome did not restore system material")
+	}
 	w.options.Role = WindowRoleScreenshot
 	if w.usesSystemBackdrop() {
 		t.Fatal("screenshot window acquired a backdrop")

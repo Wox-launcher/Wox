@@ -98,6 +98,6 @@ int32_t wox_darwin_test_screenshot_pixel_at_point(int32_t image_width, int32_t i
 int32_t wox_darwin_test_screenshot_inspector_rect(float frame_width, float frame_height, float pointer_x, float pointer_y, float panel_width, float panel_height, float ui_scale, float *x, float *y, float *width, float *height);
 int32_t wox_darwin_test_screenshot_color_shortcut(uint16_t key_code, int32_t *as_hex);
 
-int32_t wox_darwin_window_set_corner_radius(WoxDarwinWindow *window, float radius);
+int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t custom, float radius);
 
 #endif

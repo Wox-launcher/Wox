@@ -13,8 +13,9 @@ import (
 // blur on Linux compositors that advertise it.
 // Linux sessions without that protocol paint an opaque theme wash instead.
 //
-// Explicit custom window corners on Windows disable native blur and use
-// transparent composition; native backdrop layers do not follow arbitrary regions.
+// Authored AppBorderColor, AppBorderWidth, or AppBorderRadius disable native
+// blur on every platform and use transparent composition so the Go UI can paint
+// the outline. Native backdrop layers do not follow an arbitrary window edge.
 // WindowRoleScreenshot always opts out, because that surface must show
 // the live desktop. Focus, Nonactivating, Resizable, Topmost, and
 // Application vs Utility must not pick a different material.
@@ -50,6 +51,7 @@ func HasNativeWindowMaterial() bool {
 
 // NativeWindowCornerRadius returns the painted window-outline radius.
 // Linux compositor blur is a rectangle, so a rounded wash would leak at the corners.
+// Callers that already turned blur off for custom chrome should paint the authored radius instead.
 func NativeWindowCornerRadius(requested float32) float32 {
 	if runtime.GOOS == "linux" && HasNativeWindowMaterial() {
 		return 0

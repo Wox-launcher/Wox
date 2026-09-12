@@ -14,6 +14,9 @@ func TestAppBorderThemePreservesZeroAndTransparency(t *testing.T) {
 	if component.AppBorderColor == nil || component.AppBorderColor.A != 0 || component.AppBorderWidth == nil || *component.AppBorderWidth != 0 || component.AppBorderRadius == nil || *component.AppBorderRadius != 0 {
 		t.Fatal("window chrome lost an explicit override")
 	}
+	if !component.AppWindowChrome {
+		t.Fatal("authored outline kept system window material")
+	}
 }
 
 // TestPreviewCornerTheme checks schema validation and transport to the shared preview.

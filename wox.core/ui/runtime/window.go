@@ -680,8 +680,12 @@ func (w *Window) isOpen() bool {
 	return windowLifecycle(w.lifecycle.Load()) == windowLifecycleOpen
 }
 
-// SetCornerRadius sets logical window corners; nil restores the platform default.
-func (w *Window) SetCornerRadius(radius *int) error {
+// DefaultWindowCornerRadius is the platform clip used when custom chrome does not author a radius.
+const DefaultWindowCornerRadius float32 = 14
+
+// SetWindowChrome disables native window material when custom is true so the Go
+// UI paints the outline. radius is the clip; nil keeps the default rounded shape.
+func (w *Window) SetWindowChrome(custom bool, radius *int) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
@@ -692,5 +696,5 @@ func (w *Window) SetCornerRadius(radius *int) error {
 		}
 		value = float32(*radius)
 	}
-	return w.native.setCornerRadius(value)
+	return w.native.setWindowChrome(custom, value)
 }

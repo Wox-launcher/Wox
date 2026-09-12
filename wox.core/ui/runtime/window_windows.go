@@ -127,7 +127,7 @@ const (
 	windowCommandSetHideOnBlur
 	windowCommandSetTopmost
 	windowCommandSetAppearance
-	windowCommandSetCornerRadius
+	windowCommandSetWindowChrome
 	windowCommandSetFontFamily
 	windowCommandPickFile
 	windowCommandSaveFile
@@ -155,6 +155,7 @@ const (
 
 type windowCommand struct {
 	cornerRadius float32
+	customChrome bool
 
 	kind                        windowCommandKind
 	bounds                      Rect
@@ -200,6 +201,7 @@ type focusRuntime struct {
 // platformWindow owns one Win32 window and its DirectComposition surface.
 type platformWindow struct {
 	customCornerRadius *float32
+	customWindowChrome bool
 	cornerRegion       [3]int32
 
 	options WindowOptions
@@ -1004,7 +1006,7 @@ func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintp
 }
 
 // applyWindowsBackdrop is the Windows implementation of the process default
-// material. Explicit custom window corners disable native blur and use transparent composition.
+// material. Authored app chrome disables native blur and uses transparent composition.
 func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 	dark := int32(0)
 	if isDark {
@@ -1897,8 +1899,8 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{}
 	case windowCommandSetTopmost:
 		return windowCommandResult{err: w.setTopmostNative(command.topmost)}
-	case windowCommandSetCornerRadius:
-		return windowCommandResult{err: w.setCornerRadiusNative(command.cornerRadius)}
+	case windowCommandSetWindowChrome:
+		return windowCommandResult{err: w.setWindowChromeNative(command.customChrome, command.cornerRadius)}
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
 		w.applyBackdrop()
@@ -2273,9 +2275,9 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 	return w.focus.epoch, nil
 }
 
-// usesSystemBackdrop includes live theme state; an explicit zero radius is still a custom shape.
+// usesSystemBackdrop includes live theme state; authored app chrome disables Acrylic.
 func (w *platformWindow) usesSystemBackdrop() bool {
-	return windowsWindowUsesSystemBackdrop(w.options) && w.customCornerRadius == nil
+	return windowsWindowUsesSystemBackdrop(w.options) && w.customCornerRadius == nil && !w.customWindowChrome
 }
 
 // synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.

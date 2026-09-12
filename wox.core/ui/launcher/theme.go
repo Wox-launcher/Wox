@@ -3,7 +3,6 @@ package launcher
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math"
 	"runtime"
@@ -64,6 +63,7 @@ type themeData struct {
 	ScrollbarWidth                             *int
 	ScrollbarHoverWidth                        *int
 	ScrollbarBorderRadius                      *int
+	AppWindowChrome                            bool
 	AppBorderColor                             string
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
@@ -184,6 +184,7 @@ type uiPalette struct {
 	ScrollbarWidth                             *int
 	ScrollbarHoverWidth                        *int
 	ScrollbarBorderRadius                      *int
+	AppWindowChrome                            bool
 	AppBorderColor                             *woxui.Color
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
@@ -294,6 +295,7 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		ScrollbarWidth:                             palette.ScrollbarWidth,
 		ScrollbarHoverWidth:                        palette.ScrollbarHoverWidth,
 		ScrollbarBorderRadius:                      palette.ScrollbarBorderRadius,
+		AppWindowChrome:                            palette.AppWindowChrome,
 		AppBorderColor:                             palette.AppBorderColor,
 		AppBorderWidth:                             palette.AppBorderWidth,
 		AppBorderRadius:                            palette.AppBorderRadius,
@@ -348,9 +350,14 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	}
 }
 
+// usesCustomWindowChrome follows authored outline fields, not resolved color defaults.
+func (theme themeData) usesCustomWindowChrome() bool {
+	return theme.AppWindowChrome || theme.AppBorderWidth != nil || theme.AppBorderRadius != nil
+}
+
 // opaqueWindowBackground disables unsupported desktop translucency without changing component blending.
-func opaqueWindowBackground(color woxui.Color) woxui.Color {
-	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() {
+func opaqueWindowBackground(color woxui.Color, customChrome bool) woxui.Color {
+	if runtime.GOOS == "linux" && (customChrome || !woxui.HasNativeWindowMaterial()) {
 		color.A = 255
 	}
 	return color
@@ -366,7 +373,7 @@ func defaultPalette() uiPalette {
 		toolbarBorder:           woxui.Color{R: 166, G: 176, B: 190, A: 26},
 		actionBorder:            woxui.Color{R: 85, G: 96, B: 112, A: 150},
 
-		background:             opaqueWindowBackground(woxui.Color{R: 24, G: 29, B: 38, A: 242}),
+		background:             opaqueWindowBackground(woxui.Color{R: 24, G: 29, B: 38, A: 242}, false),
 		appPadding:             woxwidget.UniformInsets(10),
 		queryBackground:        woxui.Color{R: 56, G: 67, B: 82, A: 230},
 		queryRadius:            8,
@@ -411,16 +418,8 @@ func (a *App) reloadTheme() error {
 	if err != nil {
 		return fmt.Errorf("load current theme: %w", err)
 	}
-	encoded, err := json.Marshal(loaded)
-	if err != nil {
-		return fmt.Errorf("encode current theme: %w", err)
-	}
-	var theme themeData
-	if err := json.Unmarshal(encoded, &theme); err != nil {
-		return fmt.Errorf("decode current theme: %w", err)
-	}
 	return a.runOnUI("apply current theme", func() {
-		a.applyTheme(theme)
+		a.applyTheme(fromCoreTheme(loaded))
 	})
 }
 
@@ -433,8 +432,8 @@ func (a *App) applyTheme(theme themeData) {
 	onboardingView := a.onboardingView
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
-		if err := a.window.SetCornerRadius(a.palette.AppBorderRadius); err != nil {
-			util.GetLogger().Error(context.Background(), fmt.Sprintf("apply theme window corners: %v", err))
+		if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius); err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("apply theme window chrome: %v", err))
 		}
 		_ = a.applyWindowBounds()
 		_ = a.window.Invalidate()
@@ -548,6 +547,7 @@ func paletteForTheme(theme themeData) uiPalette {
 		ScrollbarWidth:                             theme.ScrollbarWidth,
 		ScrollbarHoverWidth:                        theme.ScrollbarHoverWidth,
 		ScrollbarBorderRadius:                      theme.ScrollbarBorderRadius,
+		AppWindowChrome:                            theme.usesCustomWindowChrome(),
 		AppBorderColor:                             optionalThemeColor(theme.AppBorderColor),
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,
@@ -572,7 +572,7 @@ func paletteForTheme(theme themeData) uiPalette {
 		selectedBorderLeftColor: parseThemeColor(theme.ResultItemActiveBorderLeftColor, parseThemeColor(theme.QueryBoxCursorColor, fallback.cursor)),
 		toolbarBorder:           parseThemeColor(theme.ToolbarBorderColor, toolbarBorder),
 
-		background:             opaqueWindowBackground(parseThemeColor(theme.AppBackgroundColor, fallback.background)),
+		background:             opaqueWindowBackground(parseThemeColor(theme.AppBackgroundColor, fallback.background), theme.usesCustomWindowChrome()),
 		appPadding:             themeInsets(theme.AppPaddingLeft, theme.AppPaddingTop, theme.AppPaddingRight, theme.AppPaddingBottom),
 		queryBackground:        parseThemeColor(theme.QueryBoxBackgroundColor, fallback.queryBackground),
 		queryRadius:            max(float32(0), float32(theme.QueryBoxBorderRadius)),

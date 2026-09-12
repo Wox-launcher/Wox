@@ -448,8 +448,8 @@ func (a *App) start() error {
 	if err := a.window.SetAppearance(themeColorIsDark(a.palette.background)); err != nil {
 		return fmt.Errorf("apply Wox UI appearance: %w", err)
 	}
-	if err := a.window.SetCornerRadius(a.palette.AppBorderRadius); err != nil {
-		return fmt.Errorf("apply Wox UI corners: %w", err)
+	if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius); err != nil {
+		return fmt.Errorf("apply Wox UI chrome: %w", err)
 	}
 	if err := a.window.SetFontFamily(a.generalSettings.Data().AppFontFamily); err != nil {
 		return fmt.Errorf("apply Wox UI font: %w", err)

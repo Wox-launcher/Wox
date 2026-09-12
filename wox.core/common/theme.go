@@ -72,6 +72,16 @@ func (t Theme) MarshalJSON() ([]byte, error) {
 // HasAuthoredStyles distinguishes sparse authored themes from legacy flat values.
 func (t Theme) HasAuthoredStyles() bool { return t.source != nil }
 
+// UsesCustomWindowChrome reports authored AppBorderColor, AppBorderWidth, or
+// AppBorderRadius. Resolved v2 color defaults do not count, so ordinary themes
+// keep system window material.
+func (t Theme) UsesCustomWindowChrome() bool {
+	if source, ok := t.source.(*themeV2Source); ok {
+		return source.appWindowChrome
+	}
+	return t.AppBorderWidth != nil || t.AppBorderRadius != nil
+}
+
 // ResolveForTarget lets each schema apply platform overrides before its own defaults.
 func (t Theme) ResolveForTarget(platform, variant string) (Theme, error) {
 	version := t.SchemaVersion

@@ -16,8 +16,30 @@ import (
 var cornerSetWindowRgn = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowRgn")
 var cornerCreateRoundRectRgn = syscall.NewLazyDLL("gdi32.dll").NewProc("CreateRoundRectRgn")
 
-func (w *platformWindow) setCornerRadius(radius float32) error {
-	return w.call(windowCommand{kind: windowCommandSetCornerRadius, cornerRadius: radius}).err
+func (w *platformWindow) setWindowChrome(custom bool, radius float32) error {
+	return w.call(windowCommand{kind: windowCommandSetWindowChrome, customChrome: custom, cornerRadius: radius}).err
+}
+
+func (w *platformWindow) setWindowChromeNative(custom bool, radius float32) error {
+	w.customWindowChrome = custom
+	if !custom {
+		if err := w.setCornerRadiusNative(-1); err != nil {
+			return err
+		}
+		w.applyBackdrop()
+		return nil
+	}
+	if radius >= 0 {
+		return w.setCornerRadiusNative(radius)
+	}
+	if w.customCornerRadius != nil {
+		if err := w.setCornerRadiusNative(-1); err != nil {
+			return err
+		}
+		w.customWindowChrome = true
+	}
+	w.applyBackdrop()
+	return nil
 }
 
 // setCornerRadiusNative restores the system region when leaving a custom theme.
@@ -52,7 +74,7 @@ func (w *platformWindow) applyBackdrop() {
 	if !windowsWindowUsesSystemBackdrop(w.options) {
 		return
 	}
-	if w.customCornerRadius == nil {
+	if w.customCornerRadius == nil && !w.customWindowChrome {
 		tryApplyWindowsAccent(w.hwnd, 0, 0, 0)
 		applyWindowsBackdrop(w.hwnd, w.darkAppearance)
 		return
@@ -77,7 +99,11 @@ func (w *platformWindow) applyBackdrop() {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clear glass frame for custom corners: HRESULT 0x%08X", uint32(result)))
 		}
 	}
-	util.GetLogger().Debug(context.Background(), fmt.Sprintf("window custom corners: transparent composition, native blur disabled, radius=%g logical, scale=%g", *w.customCornerRadius, w.scale))
+	radius := float32(-1)
+	if w.customCornerRadius != nil {
+		radius = *w.customCornerRadius
+	}
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("window custom chrome: transparent composition, native blur disabled, radius=%g logical, scale=%g", radius, w.scale))
 }
 
 // setCornerAttributes prevents DWM's own edge and rounding from overlapping authored chrome.

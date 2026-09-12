@@ -544,6 +544,7 @@ func fromCoreTheme(theme common.Theme) themeData {
 		ScrollbarWidth:                             theme.ScrollbarWidth,
 		ScrollbarHoverWidth:                        theme.ScrollbarHoverWidth,
 		ScrollbarBorderRadius:                      theme.ScrollbarBorderRadius,
+		AppWindowChrome:                            theme.UsesCustomWindowChrome(),
 		AppBorderColor:                             colors["AppBorderColor"],
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,

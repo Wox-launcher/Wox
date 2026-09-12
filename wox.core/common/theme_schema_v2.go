@@ -31,6 +31,8 @@ type ThemeSchemaV2 struct {
 	BaseTextColor       string
 	BaseAccentColor     string
 
+	// Any authored AppBorder* field disables system window material on every
+	// platform (Acrylic, Liquid Glass, compositor blur) so Go UI can paint the outline.
 	AppBorderColor  *string `json:",omitempty"`
 	AppBorderWidth  *int    `json:",omitempty"`
 	AppBorderRadius *int    `json:",omitempty"`
@@ -239,7 +241,11 @@ func decodeThemeV2(data []byte, t *Theme) error {
 			colors[key] = css
 		}
 	}
-	t.source = &themeV2Source{definition: definition, colors: colors}
+	t.source = &themeV2Source{
+		definition:      definition,
+		colors:          colors,
+		appWindowChrome: authoredAppWindowChrome(definition.AppBorderColor, definition.AppBorderWidth, definition.AppBorderRadius),
+	}
 	if err := validateV2ThemePlatforms(raw); err != nil {
 		return err
 	}
@@ -292,9 +298,24 @@ func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
 		return Theme{}, err
 	}
 	// Keep the original authored source alongside effective fields for lossless editing and sync.
+	// Window chrome follows the merged document so a platform-only outline still disables material.
 	resolved.source.(*themeV2Source).definition = t.source.(*themeV2Source).definition
+	resolved.source.(*themeV2Source).appWindowChrome = rawHasAppWindowChrome(raw)
 	resolved.Windows, resolved.MacOS, resolved.Linux = t.Windows, t.MacOS, t.Linux
 	return resolved, nil
+}
+
+func authoredAppWindowChrome(color *string, width *int, radius *int) bool {
+	return color != nil || width != nil || radius != nil
+}
+
+func rawHasAppWindowChrome(raw map[string]json.RawMessage) bool {
+	for _, key := range []string{"AppBorderColor", "AppBorderWidth", "AppBorderRadius"} {
+		if value, ok := raw[key]; ok && string(value) != "null" {
+			return true
+		}
+	}
+	return false
 }
 
 // marshalThemeV2 preserves authored v2 overrides instead of exporting resolved defaults.
@@ -524,8 +545,9 @@ func ParseThemeColor(value string) (color.NRGBA, bool) {
 
 // themeV2Source keeps authored styles separate from target-specific resolved colors.
 type themeV2Source struct {
-	definition ThemeSchemaV2
-	colors     map[string]string
+	definition      ThemeSchemaV2
+	colors          map[string]string
+	appWindowChrome bool
 }
 
 func themeV2Colors(t Theme) map[string]string {

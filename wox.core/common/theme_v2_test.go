@@ -77,6 +77,74 @@ func TestThemeV2PlatformResolution(t *testing.T) {
 	}
 }
 
+// TestThemeV2CustomWindowChromeFollowsAuthoredOutline keeps resolved color defaults from disabling system material.
+func TestThemeV2CustomWindowChromeFollowsAuthoredOutline(t *testing.T) {
+	var theme Theme
+	if err := json.Unmarshal([]byte(minimalV2Theme), &theme); err != nil {
+		t.Fatal(err)
+	}
+	if theme.UsesCustomWindowChrome() {
+		t.Fatal("resolved AppBorderColor default selected custom window chrome")
+	}
+	for _, extra := range []string{`,"AppBorderColor":"#4FAE85"`, `,"AppBorderWidth":0`, `,"AppBorderRadius":0`} {
+		var authored Theme
+		if err := json.Unmarshal([]byte(strings.TrimSuffix(minimalV2Theme, "}")+extra+`}`), &authored); err != nil {
+			t.Fatal(err)
+		}
+		if !authored.UsesCustomWindowChrome() {
+			t.Fatalf("authored %s did not select custom window chrome", extra)
+		}
+	}
+	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"macos":{"AppBorderRadius":18}}`
+	if err := json.Unmarshal([]byte(input), &theme); err != nil {
+		t.Fatal(err)
+	}
+	windows, err := theme.ResolveForTarget("windows", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if windows.UsesCustomWindowChrome() {
+		t.Fatal("macOS outline disabled Windows material")
+	}
+	mac, err := theme.ResolveForTarget("darwin", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mac.UsesCustomWindowChrome() {
+		t.Fatal("macOS outline kept system material")
+	}
+}
+
+// TestBuiltinThemesWindowChrome keeps ordinary themes on system material and outline themes self-drawn.
+func TestBuiltinThemesWindowChrome(t *testing.T) {
+	for _, name := range []string{"auto", "dark", "light", "glass"} {
+		data, err := os.ReadFile("../resource/themes/" + name + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var theme Theme
+		if err := json.Unmarshal(data, &theme); err != nil {
+			t.Fatal(err)
+		}
+		if theme.UsesCustomWindowChrome() {
+			t.Fatalf("%s selected custom window chrome", name)
+		}
+	}
+	for _, name := range []string{"jade", "saffron"} {
+		data, err := os.ReadFile("../resource/themes/" + name + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var theme Theme
+		if err := json.Unmarshal(data, &theme); err != nil {
+			t.Fatal(err)
+		}
+		if !theme.UsesCustomWindowChrome() {
+			t.Fatalf("%s kept system window material", name)
+		}
+	}
+}
+
 // TestThemeV2RejectsInvalidValues covers strict new-format validation without changing legacy parsing.
 func TestThemeV2RejectsInvalidValues(t *testing.T) {
 	for _, extra := range []string{`,"ResultItemActiveBorderLeftWidth":3`, `,"ResultItemActiveIndicatorWidth":-1`, `,"ResultItemActiveIndicatorInsetTop":1.5`, `,"QueryBoxBorderBottomWidth":-1`, `,"AppPaddingLeft":-1`, `,"AppPaddingLeft":1.5`, `,"ResultItemTitleColor":""`, `,"ToolbarBorderColor":"rgba(0,0,0,2)"`, `,"windows":{"variants":{"win11":{"ActionContainerBorderWidth":-1}}}`} {

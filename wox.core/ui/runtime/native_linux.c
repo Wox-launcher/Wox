@@ -241,6 +241,7 @@ struct WoxLinuxWindow {
   bool restore_previous_on_hide;
   bool application_window;
   bool screenshot_window;
+  bool custom_window_chrome;
   bool topmost;
   bool layer_shell_enabled;
   void *background_effect;
@@ -2672,7 +2673,13 @@ static void linux_background_effect_info(const char *message) {
 // bind on the parent surface is a protocol error. GTK also recreates the
 // Wayland surface across hide/show, so a stale effect object must be dropped.
 static void apply_linux_background_effect(WoxLinuxWindow *window) {
-  if (window == NULL || window->closed || window->window == NULL || window->screenshot_window || !wox_linux_background_blur_available()) {
+  if (window == NULL || window->closed || window->window == NULL || window->screenshot_window || window->custom_window_chrome) {
+    if (window != NULL && window->custom_window_chrome) {
+      destroy_linux_background_effect(window);
+    }
+    return;
+  }
+  if (!wox_linux_background_blur_available()) {
     return;
   }
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
@@ -3721,6 +3728,28 @@ int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enable
   }
   WoxBoolCall call = {.window = window, .enabled = enabled != 0};
   return run_on_main_sync(set_hide_on_blur_main, &call) ? call.result : -1;
+}
+
+static void set_window_chrome_main(void *data) {
+  WoxBoolCall *call = data;
+  if (call->window->closed) {
+    call->result = -1;
+    return;
+  }
+  call->window->custom_window_chrome = call->enabled;
+  if (call->enabled) {
+    destroy_linux_background_effect(call->window);
+    return;
+  }
+  apply_linux_background_effect(call->window);
+}
+
+int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxBoolCall call = {.window = window, .enabled = custom != 0};
+  return run_on_main_sync(set_window_chrome_main, &call) ? call.result : -1;
 }
 
 static void set_topmost_main(void *data) {

@@ -96,8 +96,9 @@ typedef struct {
 } WoxCachedCGImage;
 
 struct WoxDarwinWindow {
- bool has_custom_corner_radius;
- CGFloat custom_corner_radius;
+  bool has_custom_window_chrome;
+  bool has_custom_corner_radius;
+  CGFloat custom_corner_radius;
   NSWindow *window;
   WoxRenderView *view;
   WoxWindowDelegate *delegate;
@@ -307,16 +308,89 @@ static NSView *create_window_material_view(NSRect frame, NSView *content) {
 }
 
 // Keep the material mask and renderer clip concentric when the launcher changes height.
+static void apply_render_view_clip(WoxDarwinWindow *window);
+static void clear_render_view_clip(WoxDarwinWindow *window);
+static void apply_window_chrome(WoxDarwinWindow *window);
+
 static void update_window_corner_radius(WoxDarwinWindow *window) {
- if (window == NULL || window->window == nil || !window->has_custom_corner_radius) return;
- NSView *material = window->window.contentView;
- CGFloat requested = window->has_custom_corner_radius ? window->custom_corner_radius : wox_window_corner_radius;
- CGFloat radius = fmax(0, fmin(requested, fmin(material.bounds.size.width, material.bounds.size.height)/2));
- if ([material respondsToSelector:NSSelectorFromString(@"setCornerRadius:")]) [material setValue:@(radius) forKey:@"cornerRadius"];
- material.wantsLayer = YES;
- material.layer.cornerRadius = radius;
- material.layer.masksToBounds = YES;
- [window->window invalidateShadow];
+  if (window == NULL || window->window == nil) return;
+  if (window->has_custom_window_chrome) {
+    apply_render_view_clip(window);
+    return;
+  }
+  if (!window->has_custom_corner_radius) return;
+  NSView *material = window->window.contentView;
+  CGFloat requested = window->has_custom_corner_radius ? window->custom_corner_radius : wox_window_corner_radius;
+  CGFloat radius = fmax(0, fmin(requested, fmin(material.bounds.size.width, material.bounds.size.height)/2));
+  if ([material respondsToSelector:NSSelectorFromString(@"setCornerRadius:")]) [material setValue:@(radius) forKey:@"cornerRadius"];
+  material.wantsLayer = YES;
+  material.layer.cornerRadius = radius;
+  material.layer.masksToBounds = YES;
+  [window->window invalidateShadow];
+}
+
+static bool window_uses_material_wrapper(WoxDarwinWindow *window) {
+  return window != NULL && window->window != nil && window->view != nil && window->window.contentView != (NSView *)window->view;
+}
+
+static void apply_render_view_clip(WoxDarwinWindow *window) {
+  if (window == NULL || window->view == nil || window->window == nil) return;
+  NSView *view = (NSView *)window->view;
+  view.wantsLayer = YES;
+  CGFloat requested = window->has_custom_corner_radius ? window->custom_corner_radius : wox_window_corner_radius;
+  CGFloat radius = fmax(0, fmin(requested, fmin(view.bounds.size.width, view.bounds.size.height) / 2));
+  view.layer.cornerRadius = radius;
+  view.layer.masksToBounds = YES;
+  [window->window invalidateShadow];
+}
+
+static void clear_render_view_clip(WoxDarwinWindow *window) {
+  if (window == NULL || window->view == nil) return;
+  NSView *view = (NSView *)window->view;
+  view.layer.cornerRadius = 0;
+  view.layer.masksToBounds = NO;
+}
+
+// Authored app chrome paints the outline in Go UI, so Liquid Glass must not clip the window edge.
+static void detach_window_material(WoxDarwinWindow *window) {
+  if (window == NULL || window->screenshot_window || !window_uses_material_wrapper(window)) return;
+  NSView *view = (NSView *)window->view;
+  NSView *material = window->window.contentView;
+  [view retain];
+  if ([material respondsToSelector:NSSelectorFromString(@"setContentView:")]) {
+    [material setValue:nil forKey:@"contentView"];
+  }
+  [view removeFromSuperview];
+  view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  view.frame = material.bounds;
+  window->window.contentView = view;
+  [view release];
+  apply_render_view_clip(window);
+}
+
+static void attach_window_material(WoxDarwinWindow *window) {
+  if (window == NULL || window->screenshot_window || window_uses_material_wrapper(window)) return;
+  clear_render_view_clip(window);
+  NSView *view = (NSView *)window->view;
+  [view retain];
+  NSRect frame = view.bounds;
+  window->window.contentView = nil;
+  NSView *material = create_window_material_view(frame, view);
+  window->window.contentView = material;
+  [material release];
+  [view release];
+}
+
+static void apply_window_chrome(WoxDarwinWindow *window) {
+  if (window == NULL || window->screenshot_window || window->window == nil) return;
+  if (window->has_custom_window_chrome) {
+    detach_window_material(window);
+    apply_render_view_clip(window);
+  } else {
+    attach_window_material(window);
+  }
+  [window->window makeFirstResponder:(NSView *)window->view];
+  [window->window invalidateShadow];
 }
 
 // WoxFloatingMaterialView is the material behind one surface that floats above
@@ -5266,20 +5340,17 @@ int32_t wox_darwin_test_screenshot_color_shortcut(uint16_t key_code, int32_t *as
   return 0;
 }
 
-int32_t wox_darwin_window_set_corner_radius(WoxDarwinWindow *window, float radius) {
- if (window == NULL) return -1;
- __block int32_t result = 0;
- run_on_main_sync(^{
-  if (window->closed) { result = -1; return; }
-  if (radius < 0 && !window->has_custom_corner_radius) return;
-  window->has_custom_corner_radius = true;
-  window->custom_corner_radius = radius < 0 ? wox_window_corner_radius : radius;
-  update_window_corner_radius(window);
-  if (radius < 0) {
-   window->has_custom_corner_radius = false;
-   NSView *material = window->window.contentView;
-   if ([material respondsToSelector:NSSelectorFromString(@"setCornerRadius:")]) material.layer.masksToBounds = NO;
-  }
- });
- return result;
+int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t custom, float radius) {
+  if (window == NULL) return -1;
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) { result = -1; return; }
+    bool enable = custom != 0;
+    if (!enable && !window->has_custom_window_chrome) return;
+    window->has_custom_window_chrome = enable;
+    window->has_custom_corner_radius = enable && radius >= 0;
+    window->custom_corner_radius = radius >= 0 ? radius : wox_window_corner_radius;
+    apply_window_chrome(window);
+  });
+  return result;
 }
