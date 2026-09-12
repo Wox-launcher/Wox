@@ -75,6 +75,7 @@ type LauncherResultItem struct {
 type LauncherResultsProps struct {
 	Width             float32
 	Height            float32
+	UnderlayHeight    float32
 	ContentHeight     float32
 	Offset            float32
 	StartIndex        int
@@ -241,7 +242,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.RowGap, Children: rows},
 	}
 	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
+		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
 		ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 }

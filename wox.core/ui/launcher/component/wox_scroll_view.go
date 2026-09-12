@@ -14,11 +14,15 @@ type ScrollViewProps struct {
 	Content woxwidget.Widget
 	Width   float32
 	// FillWidth and FillHeight adopt dimensions resolved by the parent layout.
-	FillWidth     bool
-	FillHeight    bool
-	Height        float32
-	ContentWidth  float32
-	ContentHeight float32
+	FillWidth  bool
+	FillHeight bool
+	Height     float32
+	// UnderlayHeight extends vertical painting behind a footer without changing
+	// the usable viewport, scrollbar geometry, or controlled scroll range.
+	// Callers supply explicit content height and own selection visibility.
+	UnderlayHeight float32
+	ContentWidth   float32
+	ContentHeight  float32
 	// Horizontal scrolls along X and places the shared fading thumb along the bottom.
 	Horizontal          bool
 	Offset              float32
@@ -206,7 +210,8 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 	if props.Horizontal {
 		scroll.ContentWidth = contentHint
 	} else {
-		scroll.ContentHeight = contentHint
+		scroll.Height += max(float32(0), props.UnderlayHeight)
+		scroll.ContentHeight = max(props.Height, contentHint) + max(float32(0), props.UnderlayHeight)
 	}
 	if contentHint <= 0 {
 		scroll.OnGeometryChanged = func(viewport, content float32) {
@@ -316,7 +321,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		}
 		applyScroll(props, scrollDelta)
 		return true
-	}, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: children}}
+	}, Child: woxwidget.Stack{Width: props.Width, Height: props.Height + max(float32(0), props.UnderlayHeight), Children: children}}
 	if props.AutomationID != "" {
 		result = woxwidget.Semantics{
 			Key: props.Key + "-semantics", AutomationID: props.AutomationID, Role: woxui.AccessibilityRoleGroup, Label: props.Label,

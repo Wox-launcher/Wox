@@ -326,3 +326,23 @@ func TestWoxScrollViewUsesMeasuredContentExtent(t *testing.T) {
 	}
 	state.Dispose()
 }
+
+func TestWoxScrollUnderlayPreservesUsableViewport(t *testing.T) {
+	props := ScrollViewProps{
+		Key: "footer-underlay", Width: 300, Height: 200, ContentHeight: 600, UnderlayHeight: 40,
+		Offset: 400, OnScroll: func(float32) {},
+	}
+	view := buildWoxScrollView(woxwidget.StateContext{}, props, nil).(woxwidget.Gesture)
+	stack := view.Child.(woxwidget.Stack)
+	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
+	if stack.Height != 240 || scroll.Height != 240 || scroll.ContentHeight != 640 || scroll.Offset != 400 {
+		t.Fatalf("underlay geometry = stack %v scroll %+v", stack.Height, scroll)
+	}
+	if scrollOffset(props, 100) != 400 || scrollAxisViewport(props) != 200 {
+		t.Fatal("footer changed the usable scroll range")
+	}
+	thumb := stack.Children[1]
+	if thumb.Top >= 200 {
+		t.Fatal("scrollbar moved underneath the footer")
+	}
+}

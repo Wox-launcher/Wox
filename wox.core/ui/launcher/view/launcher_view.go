@@ -34,6 +34,7 @@ type LauncherViewProps struct {
 	Refinements   woxwidget.Widget
 	Content       woxwidget.Widget
 	Footer        woxwidget.Widget
+	FooterOverlay bool
 	QueryAtBottom bool
 	Floating      *LauncherFloatingView
 	Overlay       woxwidget.Widget
@@ -143,10 +144,16 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 			sections = append(sections, props.Header)
 		}
 	}
-	if props.Footer != nil {
+	if props.Footer != nil && !props.FooterOverlay {
 		sections = append(sections, props.Footer)
 	}
 	body := woxwidget.Widget(woxwidget.Flex{Axis: woxwidget.Vertical, Children: sections})
+	if props.Footer != nil && props.FooterOverlay {
+		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+			{Child: body},
+			{AnchorBottom: true, Child: props.Footer},
+		}}
+	}
 	if props.Floating != nil && props.Floating.Child != nil {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 			{Child: body},

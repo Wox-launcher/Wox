@@ -30,6 +30,7 @@ type LauncherGridResult struct {
 type LauncherGridProps struct {
 	Width             float32
 	Height            float32
+	UnderlayHeight    float32
 	ContentHeight     float32
 	Offset            float32
 	Columns           int
@@ -111,7 +112,7 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 	content := woxwidget.Container{
 		Width: props.Width, Height: props.ContentHeight, Padding: woxwidget.Insets{Left: 14, Right: 14},
 		Child: woxwidget.LazyList{
-			Key: "launcher-grid-rows", Width: innerWidth, Viewport: props.Height, ItemCount: len(rows),
+			Key: "launcher-grid-rows", Width: innerWidth, Viewport: props.Height + props.UnderlayHeight, ItemCount: len(rows),
 			ExtentRevision: props.ExtentRevision,
 			ItemExtentAt: func(index int) float32 {
 				if rows[index].isHeader {
@@ -129,7 +130,7 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 		},
 	}
 	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
+		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
 		ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 }

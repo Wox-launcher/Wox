@@ -238,7 +238,14 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		titleBar = a.buildPreviewTitleBar(snapshot, width, frame.WindowFocused)
 	}
 	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight-titleBarHeight)
-	content := a.buildContent(snapshot, width, contentHeight, frame.Scale)
+	// Only results extend behind the footer; previews and bottom query chrome
+	// retain their usable height so native children never cover the toolbar.
+	footerOverlay := toolbarHeight > 0 && !queryAtBottom && len(snapshot.results) > 0 && !previewFullscreen
+	underlayHeight := float32(0)
+	if footerOverlay {
+		underlayHeight = toolbarHeight
+	}
+	content := a.buildContent(snapshot, width, contentHeight, frame.Scale, underlayHeight)
 	var header woxwidget.Widget
 	if queryHeight > 0 {
 		header = a.buildHeader(snapshot, width, queryHeight, queryLineHeight, frame.Scale)
@@ -279,7 +286,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	a.requestNativeFilePreviewOcclusion(nativePreviewOcclusion)
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
-		Width: width, Height: height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer,
+		Width: width, Height: height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer, FooterOverlay: footerOverlay,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
 		PreviewOnly: previewOnly, BorderWidth: snapshot.palette.appPadding.Top, OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
@@ -895,7 +902,7 @@ func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compos
 	return lines, caretLine, caretWidth, compositionLine, compositionX, compositionWidth, textWidth
 }
 
-func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
 	if len(snapshot.results) == 0 {
 		// A query that finished with nothing still has to report completion. Dropping the
 		// status node made "results pending" and "finished empty" indistinguishable to
@@ -905,7 +912,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && launcherPreviewVisible(snapshot.layout, snapshot.results[snapshot.selected].Preview)
 	if !previewVisible {
-		return a.buildResults(snapshot, width, height, imageScale)
+		return a.buildResults(snapshot, width, height, imageScale, underlayHeight)
 	}
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
@@ -924,12 +931,12 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 		return wrapPreviewOnlyResults(snapshot, preview)
 	}
 	if ratio >= 1 {
-		return a.buildResults(snapshot, width, height, imageScale)
+		return a.buildResults(snapshot, width, height, imageScale, underlayHeight)
 	}
 	splitX := width * ratio
 	previewWidth := width - splitX
 	return launcherview.LauncherSplitContentView(
-		splitX, a.buildResults(snapshot, splitX, height, imageScale),
+		splitX, a.buildResults(snapshot, splitX, height, imageScale, underlayHeight),
 		previewWidth, a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, previewWidth, height, imageScale),
 	)
 }
@@ -1021,9 +1028,9 @@ func launcherPreviewRatio(layout queryLayout, chatFullscreen bool) float32 {
 	return ratio
 }
 
-func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
 	if snapshot.layout.GridLayout != nil {
-		return a.buildGridResults(snapshot, width, height, imageScale)
+		return a.buildGridResults(snapshot, width, height, imageScale, underlayHeight)
 	}
 	densityMetrics := snapshot.densityMetrics.normalized()
 	rowHeight := densityMetrics.resultRowHeight(snapshot.palette)
@@ -1050,7 +1057,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		offset: scroll.offset, height: height, topPadding: containerPadding.Top, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
 	})
 	offset := scroll.offset
-	start, end := visibleListResultRange(snapshot.results, offset, height, containerPadding.Top, rowHeight, groupHeight, resultRowGap)
+	start, end := visibleListResultRange(snapshot.results, offset, height+underlayHeight, containerPadding.Top, rowHeight, groupHeight, resultRowGap)
 	startOffset := listResultsPrefixHeight(snapshot.results, start, rowHeight, groupHeight, resultRowGap)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {
@@ -1080,7 +1087,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
-		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, StartOffset: startOffset, RowHeight: rowHeight, GroupRowHeight: groupHeight, RowGap: resultRowGap,
+		Width: width, Height: height, UnderlayHeight: underlayHeight, ContentHeight: contentHeight, Offset: offset, StartIndex: start, StartOffset: startOffset, RowHeight: rowHeight, GroupRowHeight: groupHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
 		Complete: snapshot.queryComplete, ScrollDetached: snapshot.resultScrollDetached,

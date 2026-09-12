@@ -69,7 +69,7 @@ func TestLauncherToolbarOmitsEmptyLeftContent(t *testing.T) {
 		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1,
 		Actions: []LauncherToolbarAction{{ID: "execute", Label: "Execute", HotkeyLabels: []string{"Enter"}}},
 	}).(woxwidget.Stack)
-	body := built.Children[0].Child.(woxwidget.Container)
+	body := built.Children[1].Child.(woxwidget.Container)
 	alignment := body.Child.(woxwidget.Align)
 	row := alignment.Child.(woxwidget.Flex)
 	if body.Padding.Top != 0 || body.Padding.Bottom != 0 || alignment.Height != 40 || alignment.Vertical != 0.5 {
@@ -92,7 +92,7 @@ func TestLauncherToolbarUsesBlankCenterForWindowDragging(t *testing.T) {
 		OnDragStart: func() { dragged = true },
 		Actions:     []LauncherToolbarAction{{ID: "execute", Label: "Execute", HotkeyLabels: []string{"Enter"}}},
 	}).(woxwidget.Stack)
-	body := built.Children[0].Child.(woxwidget.Container)
+	body := built.Children[1].Child.(woxwidget.Container)
 	row := body.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	dragArea := row.Children[1].(woxwidget.Gesture)
 	dragArea.OnDragStart()
@@ -111,7 +111,7 @@ func TestLauncherToolbarExposesStatusAndActionSemantics(t *testing.T) {
 		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1, Label: "Toolbar fixture ready",
 		Actions: []LauncherToolbarAction{{ID: "toolbar-action-keep-open", Label: "Keep open", HotkeyLabels: []string{"Ctrl", "K"}, OnTap: func() { activated = true }}},
 	}).(woxwidget.Stack)
-	body := built.Children[0].Child.(woxwidget.Container)
+	body := built.Children[1].Child.(woxwidget.Container)
 	row := body.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 
 	leftFlex := row.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -150,7 +150,7 @@ func TestLauncherToolbarKeepsSixteenPixelActionContentSpacing(t *testing.T) {
 			{ID: "background", Label: "Execute in Background", HotkeyLabels: []string{"Ctrl", "Enter"}},
 		},
 	}).(woxwidget.Stack)
-	body := built.Children[0].Child.(woxwidget.Container)
+	body := built.Children[1].Child.(woxwidget.Container)
 	row := body.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	right := row.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
 	if len(right.Children) != 2 {
@@ -194,7 +194,7 @@ func TestLauncherToolbarOmitsEmptyActionLabels(t *testing.T) {
 			{ID: "more", Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}},
 		},
 	}).(woxwidget.Stack)
-	right := built.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
+	right := built.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
 	if right.Width != emptyWidth+labeledWidth {
 		t.Fatalf("toolbar action row width = %v, want %v so empty Enter does not overlap More Actions", right.Width, emptyWidth+labeledWidth)
 	}
@@ -242,4 +242,39 @@ func toolbarActionKeycapFill(t *testing.T, action woxwidget.Container) woxui.Col
 	t.Helper()
 	chip := action.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
 	return chip.Children[0].Child.(woxwidget.Container).Color
+}
+
+func TestLauncherGlassFooterBlocksCoveredResults(t *testing.T) {
+	for _, scale := range []float32{1, 1.5, 2} {
+		activated, covered := 0, 0
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return LauncherView(LauncherViewProps{
+				Width: 400, Height: 200, FooterOverlay: true,
+				Content: woxwidget.Gesture{ID: "covered-result", OnTap: func() { covered++ }, Child: woxwidget.Container{Width: 400, Height: 200}},
+				Footer: LauncherToolbarView(LauncherToolbarProps{
+					Width: 400, Height: 40, DensityScale: 1, Window: &woxui.Window{},
+					Actions: []LauncherToolbarAction{{ID: "execute", Label: "Execute", HotkeyLabels: []string{"Enter"}, OnTap: func() { activated++ }}},
+				}),
+			})
+		})
+		host.AttachServices(actionSearchHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 200}, PixelSize: woxui.PixelSize{Width: int(400 * scale), Height: int(200 * scale)}, Scale: scale})
+		for _, point := range []woxui.Point{{X: 5, Y: 198}, {X: 370, Y: 180}} {
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+		}
+		if covered != 0 || activated != 1 {
+			t.Fatalf("scale %v: covered result activations %d, toolbar activations %d", scale, covered, activated)
+		}
+	}
+}
+
+func TestLauncherToolbarUsesThemeTintedMaterial(t *testing.T) {
+	for _, tint := range []woxui.Color{{R: 35, G: 41, B: 51, A: 76}, {R: 255, G: 255, B: 255, A: 128}} {
+		built := LauncherToolbarView(LauncherToolbarProps{Width: 400, Height: 40, Theme: woxcomponent.Theme{ToolbarBackground: tint}}).(woxwidget.Stack)
+		body := built.Children[1].Child.(woxwidget.Container)
+		if !body.Floating || body.Color != tint {
+			t.Fatalf("toolbar material = floating %v tint %+v, want %+v", body.Floating, body.Color, tint)
+		}
+	}
 }

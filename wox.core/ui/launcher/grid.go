@@ -65,7 +65,7 @@ func gridResultsHeight(results []queryResult, width float32, raw *gridLayout) in
 	return int(math.Ceil(float64(height)))
 }
 
-func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
 	layout := normalizedGridLayout(snapshot.layout.GridLayout)
 	cellWidth, cellHeight, visualWidth, visualHeight := gridCellMetrics(width, layout)
 	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
@@ -73,7 +73,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 	a.rememberQuickSelectViewport(quickSelectViewport{
 		grid: true, offset: scroll.offset, height: height, columns: layout.Columns, cellHeight: cellHeight,
 	})
-	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height)
+	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height+underlayHeight)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {
 		quickSelectVisible = a.quickSelectVisibleLocked()
@@ -104,7 +104,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 	}
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	return launcherview.LauncherGridView(launcherview.LauncherGridProps{
-		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
+		Width: width, Height: height, UnderlayHeight: underlayHeight, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
 		CellWidth: cellWidth, CellHeight: cellHeight, VisualWidth: visualWidth, VisualHeight: visualHeight,
 		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale,

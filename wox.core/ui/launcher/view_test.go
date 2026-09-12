@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxwidget "wox/ui/widget"
 )
 
@@ -13,7 +14,7 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: fmt.Sprintf("Result %d", index)}
 	}
 	app := &App{selected: -1}
-	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1)
+	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1, 0)
 	semantics := built.(woxwidget.Semantics)
 	retained := semantics.Child.(woxwidget.Stateful)
 	state := retained.CreateState()
@@ -40,7 +41,7 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 func TestBuildContentReportsCompletionWithoutResults(t *testing.T) {
 	app := &App{selected: -1}
 	for _, complete := range []bool{false, true} {
-		built := app.buildContent(viewSnapshot{selected: -1, queryComplete: complete}, 760, 0, 1)
+		built := app.buildContent(viewSnapshot{selected: -1, queryComplete: complete}, 760, 0, 1, 0)
 		semantics, ok := built.(woxwidget.Semantics)
 		if !ok {
 			t.Fatalf("empty result content = %T, want a semantics node carrying query completion", built)
@@ -98,5 +99,24 @@ func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
 	start, end := visibleListResultRange(results, 0, 70, 0, 56, 28, 0)
 	if start != 0 || end != 3 {
 		t.Fatalf("mixed visible range = %d:%d, want 0:3 including overscan", start, end)
+	}
+}
+
+// TestResultsUnderlayKeepsSelectionAboveFooter checks that extra painting does not
+// enlarge the keyboard navigation viewport or hide the final row under glass.
+func TestResultsUnderlayKeepsSelectionAboveFooter(t *testing.T) {
+	results := make([]queryResult, 40)
+	for index := range results {
+		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: "Result"}
+	}
+	app := &App{selected: 39}
+	snapshot := viewSnapshot{results: results, selected: 39}
+	plain := app.buildResults(snapshot, 760, 200, 1, 0).(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	glass := app.buildResults(snapshot, 760, 200, 1, 40).(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if glass.Offset != plain.Offset || glass.Height != plain.Height || glass.ContentHeight != plain.ContentHeight || glass.UnderlayHeight != 40 {
+		t.Fatalf("footer changed selection visibility: plain offset %v, glass offset %v viewport %v underlay %v", plain.Offset, glass.Offset, glass.Height, glass.UnderlayHeight)
+	}
+	if glass.Offset+glass.Height < glass.ContentHeight {
+		t.Fatal("final result is hidden beneath the footer")
 	}
 }
