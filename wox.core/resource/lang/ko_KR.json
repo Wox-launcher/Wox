@@ -1167,6 +1167,8 @@
   "plugin_clipboard_plugin_name": "클립보드 기록",
   "plugin_clipboard_plugin_description": "Wox용 클립보드 기록입니다",
   "plugin_clipboard_command_fav_description": "즐겨찾기한 클립보드 기록을 나열합니다",
+  "plugin_clipboard_command_paste_description": "클립보드 기록을 최신부터 하나씩 붙여넣습니다",
+  "plugin_clipboard_paste_next": "다음: %s",
   "plugin_color_plugin_name": "색상",
   "plugin_color_plugin_description": "HEX 색상을 미리 보고 복사하며 저장합니다",
   "plugin_converter_plugin_name": "변환기",

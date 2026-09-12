@@ -1150,6 +1150,8 @@
   "plugin_clipboard_plugin_name": "История буфера обмена",
   "plugin_clipboard_plugin_description": "История буфера обмена для Wox",
   "plugin_clipboard_command_fav_description": "Показать избранную историю буфера обмена",
+  "plugin_clipboard_command_paste_description": "Вставлять элементы истории от новых к старым по одному",
+  "plugin_clipboard_paste_next": "Далее: %s",
   "plugin_converter_plugin_name": "Конвертер",
   "plugin_converter_plugin_description": "Конвертация единиц, валют, времени и др.",
   "plugin_doctor_plugin_name": "Доктор Wox",

@@ -1169,6 +1169,8 @@
   "plugin_clipboard_plugin_name": "Clipboard History",
   "plugin_clipboard_plugin_description": "Clipboard history for Wox",
   "plugin_clipboard_command_fav_description": "List favorite clipboard history",
+  "plugin_clipboard_command_paste_description": "Paste history items newest to oldest, one at a time",
+  "plugin_clipboard_paste_next": "Next: %s",
   "plugin_color_plugin_name": "Color",
   "plugin_color_plugin_description": "Preview, copy, and save HEX colors",
   "plugin_converter_plugin_name": "Converter",

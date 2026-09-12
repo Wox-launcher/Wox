@@ -1150,6 +1150,8 @@
   "plugin_clipboard_plugin_name": "Histórico da área de transferência",
   "plugin_clipboard_plugin_description": "Histórico da área de transferência para Wox",
   "plugin_clipboard_command_fav_description": "Listar histórico favorito da área de transferência",
+  "plugin_clipboard_command_paste_description": "Colar itens do histórico do mais recente ao mais antigo, um de cada vez",
+  "plugin_clipboard_paste_next": "Próximo: %s",
   "plugin_converter_plugin_name": "Conversor",
   "plugin_converter_plugin_description": "Converter unidades, moedas, tempo e mais",
   "plugin_doctor_plugin_name": "Wox Doctor",

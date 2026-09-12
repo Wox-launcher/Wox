@@ -1167,6 +1167,8 @@
   "plugin_clipboard_plugin_name": "クリップボード履歴",
   "plugin_clipboard_plugin_description": "Wox 用クリップボード履歴",
   "plugin_clipboard_command_fav_description": "お気に入りのクリップボード履歴を一覧表示",
+  "plugin_clipboard_command_paste_description": "クリップボード履歴を新しい順に1件ずつ貼り付け",
+  "plugin_clipboard_paste_next": "次：%s",
   "plugin_color_plugin_name": "カラー",
   "plugin_color_plugin_description": "HEX カラーのプレビュー、コピー、保存",
   "plugin_converter_plugin_name": "コンバーター",

@@ -146,6 +146,13 @@ type ClipboardPlugin struct {
 	backgroundTasks sync.WaitGroup
 	// Cache for generated preview and icon images to avoid regeneration
 	imageCache *util.HashMap[string, *ImageCacheEntry]
+
+	pasteMu sync.Mutex
+	// pasteCursorID is the history record shown by `cb paste`. Empty means newest.
+	pasteCursorID string
+	// skipHistoryUntil blocks Watch persistence after a sequential paste restore
+	// so writing an older item cannot insert a duplicate row and reset the cursor.
+	skipHistoryUntil int64
 }
 
 type ignoredClipboardApplication struct {
@@ -191,6 +198,10 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			{
 				Command:     "fav",
 				Description: "i18n:plugin_clipboard_command_fav_description",
+			},
+			{
+				Command:     clipboardPasteCommand,
+				Description: "i18n:plugin_clipboard_command_paste_description",
 			},
 		},
 		SupportedOS: []string{
@@ -342,6 +353,10 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		if runtimeCtx.Err() != nil {
 			return
 		}
+		if c.shouldSkipHistoryCapture() {
+			c.api.Log(runtimeCtx, plugin.LogLevelInfo, "skipping clipboard history capture from sequential paste restore")
+			return
+		}
 		if c.shouldIgnoreClipboardChange(runtimeCtx) {
 			return
 		}
@@ -479,6 +494,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	// Check for duplicate content by querying the most recent record
 	if c.isDuplicateContent(ctx, data, imageHash, fileSignature) {
 		c.api.Log(ctx, plugin.LogLevelInfo, "duplicate clipboard content, skipping")
+		c.resetPasteCursor()
 		return
 	}
 
@@ -560,6 +576,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to insert clipboard record: %s", err.Error()))
 		return
 	}
+	c.resetPasteCursor()
 
 	if data.GetType() == clipboard.ClipboardTypeImage && c.isImageTextRecognitionEnabled(ctx) {
 		// Feature addition: clipboard image OCR is intentionally independent
@@ -731,6 +748,10 @@ func clipboardSearchCandidateMatches(ctx context.Context, candidate string, sear
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
 	selectedType := c.getSelectedClipboardType(query)
+
+	if query.Command == clipboardPasteCommand {
+		return c.querySequentialPaste(ctx, query)
+	}
 
 	if c.db == nil {
 		c.api.Log(ctx, plugin.LogLevelError, "database not initialized")

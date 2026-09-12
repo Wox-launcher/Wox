@@ -1167,6 +1167,8 @@
   "plugin_clipboard_plugin_name": "剪贴板历史",
   "plugin_clipboard_plugin_description": "Wox 的剪贴板历史",
   "plugin_clipboard_command_fav_description": "列出收藏的剪贴板历史",
+  "plugin_clipboard_command_paste_description": "从新到旧依次粘贴剪贴板历史，每次一条",
+  "plugin_clipboard_paste_next": "下一个：%s",
   "plugin_color_plugin_name": "颜色",
   "plugin_color_plugin_description": "预览、复制并保存 HEX 颜色",
   "plugin_converter_plugin_name": "转换器",
