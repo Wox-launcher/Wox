@@ -29,6 +29,9 @@ const (
 	recordingToolbarHeight       = float32(60) // Same bar height as the screenshot toolbar.
 	recordingToolbarSelectionGap = float32(16) // Same selection-to-toolbar gap as the screenshot toolbar.
 	recordingBorderMargin        = float32(40)
+	recordingKeycapLifetime      = 1500 * time.Millisecond
+	// Windows often key-ups V then immediately synthesizes Ctrl+V after Ctrl+Shift+V.
+	recordingChordMergeWindow = 500 * time.Millisecond
 )
 
 type recordingKeycap struct {
@@ -37,23 +40,29 @@ type recordingKeycap struct {
 }
 
 type recordingToolbarState struct {
-	mu                   sync.Mutex
-	window               *Window
-	overlay              *Window
-	overlayManaged       *ManagedWindow
-	border               *Window
-	borderManaged        *ManagedWindow
-	editor               *screenshotEditorOverlayState
-	options              ScreenshotOptions
-	platform             screenshotEditorPlatform
-	selection            Rect
-	frameSize            Size
-	session              *recordingSession
-	fps                  int
-	showPointer          bool
-	showKeypress         bool
-	keyboardUnavailable  string
-	keycaps              []recordingKeycap
+	mu                  sync.Mutex
+	window              *Window
+	overlay             *Window
+	overlayManaged      *ManagedWindow
+	border              *Window
+	borderManaged       *ManagedWindow
+	editor              *screenshotEditorOverlayState
+	options             ScreenshotOptions
+	platform            screenshotEditorPlatform
+	selection           Rect
+	frameSize           Size
+	session             *recordingSession
+	fps                 int
+	showPointer         bool
+	showKeypress        bool
+	keyboardUnavailable string
+	keycaps             []recordingKeycap
+	// heldModifiers and peakModifiers delay modifier-only keycaps until a chord
+	// completes or every modifier is released, so Ctrl+C appears as one label.
+	heldModifiers        keyboard.Modifier
+	peakModifiers        keyboard.Modifier
+	chordUsed            bool
+	pressedKeys          map[keyboard.Key]string
 	finishing            bool
 	lastError            string
 	hoverTooltip         string
@@ -606,55 +615,246 @@ func (state *recordingToolbarState) closeKeyboard() {
 
 // rawKey feeds text annotations or appends an ephemeral, never-persisted keycap label.
 func (state *recordingToolbarState) rawKey(event keyboard.RawKeyEvent) bool {
-	if event.Type != keyboard.EventTypeKeyDown {
+	if event.Type != keyboard.EventTypeKeyDown && event.Type != keyboard.EventTypeKeyUp {
 		return false
 	}
 	state.mu.Lock()
 	if !state.showKeypress {
+		state.resetRecordingKeyChord()
 		state.mu.Unlock()
 		return false
 	}
-	label := recordingKeyLabel(event)
-	if label != "" {
-		state.keycaps = append(state.keycaps, recordingKeycap{label: label, expiresAt: time.Now().Add(1500 * time.Millisecond)})
-		if len(state.keycaps) > 6 {
-			state.keycaps = append([]recordingKeycap(nil), state.keycaps[len(state.keycaps)-6:]...)
+	changed := false
+	switch {
+	case event.Key.IsModifier() && event.Type == keyboard.EventTypeKeyDown:
+		state.holdRecordingModifier(event.Key)
+	case event.Key.IsModifier() && event.Type == keyboard.EventTypeKeyUp:
+		if label := state.releaseRecordingModifier(event.Key); label != "" {
+			state.pushRecordingKeycap(label)
+			changed = true
 		}
+	case event.Type == keyboard.EventTypeKeyDown:
+		changed = state.publishRecordingKey(event)
+	case event.Type == keyboard.EventTypeKeyUp:
+		state.releaseRecordingKey(event.Key)
 	}
 	overlay := state.overlay
 	state.mu.Unlock()
-	if overlay != nil && label != "" {
+	if overlay != nil && changed {
 		_ = overlay.Invalidate()
 	}
 	return false
 }
 
+func (state *recordingToolbarState) resetRecordingKeyChord() {
+	state.heldModifiers = 0
+	state.peakModifiers = 0
+	state.chordUsed = false
+	state.pressedKeys = nil
+}
+
+func (state *recordingToolbarState) holdRecordingModifier(key keyboard.Key) {
+	flag := recordingModifierFlag(key)
+	state.heldModifiers |= flag
+	state.peakModifiers |= flag
+}
+
+// releaseRecordingModifier commits a modifier-only label only after every modifier is up
+// and no non-modifier key joined the chord. That keeps Ctrl+C from flashing as Ctrl then Ctrl+C.
+func (state *recordingToolbarState) releaseRecordingModifier(key keyboard.Key) string {
+	state.heldModifiers &^= recordingModifierFlag(key)
+	if state.heldModifiers != 0 {
+		return ""
+	}
+	label := ""
+	if !state.chordUsed {
+		label = recordingModifierLabel(state.peakModifiers)
+	}
+	state.peakModifiers = 0
+	state.chordUsed = false
+	state.pressedKeys = nil
+	return label
+}
+
+// commitRecordingChord publishes the full chord as soon as a non-modifier key arrives.
+func (state *recordingToolbarState) commitRecordingChord(event keyboard.RawKeyEvent) string {
+	event.Modifiers |= state.heldModifiers
+	label := recordingKeyLabel(event)
+	if label != "" && state.heldModifiers != 0 {
+		state.chordUsed = true
+	}
+	return label
+}
+
+// publishRecordingKey keeps one keycap for a physical key so Shift release/repeat
+// cannot split Ctrl+Shift+V into Ctrl+Shift+V plus Ctrl+V.
+func (state *recordingToolbarState) publishRecordingKey(event keyboard.RawKeyEvent) bool {
+	label := state.commitRecordingChord(event)
+	if label == "" {
+		return false
+	}
+	if state.pressedKeys == nil {
+		state.pressedKeys = map[keyboard.Key]string{}
+	}
+	if previous, held := state.pressedKeys[event.Key]; held {
+		if recordingChordExtends(previous, label) {
+			state.replaceKeycapLabel(previous, label)
+			state.pressedKeys[event.Key] = label
+			return true
+		}
+		if state.hasActiveKeycap(previous) {
+			return false
+		}
+	}
+	if published, changed, merged := state.mergeRelatedRecordingKeycap(label); merged {
+		state.pressedKeys[event.Key] = published
+		return changed
+	}
+	state.pressedKeys[event.Key] = label
+	state.pushRecordingKeycap(label)
+	return true
+}
+
+func (state *recordingToolbarState) releaseRecordingKey(key keyboard.Key) {
+	if state.heldModifiers != 0 {
+		return
+	}
+	delete(state.pressedKeys, key)
+}
+
+// mergeRelatedRecordingKeycap folds a weaker or richer echo of the last chord into
+// the same keycap. Windows key-ups V before synthesizing Ctrl+V after Ctrl+Shift+V.
+func (state *recordingToolbarState) mergeRelatedRecordingKeycap(label string) (string, bool, bool) {
+	if len(state.keycaps) == 0 || !strings.Contains(label, "+") {
+		return "", false, false
+	}
+	last := state.keycaps[len(state.keycaps)-1]
+	now := time.Now()
+	if !now.Before(last.expiresAt) {
+		return "", false, false
+	}
+	if now.Sub(last.expiresAt.Add(-recordingKeycapLifetime)) > recordingChordMergeWindow {
+		return "", false, false
+	}
+	if recordingChordExtends(last.label, label) {
+		state.replaceKeycapLabel(last.label, label)
+		return label, true, true
+	}
+	if last.label == label || recordingChordExtends(label, last.label) {
+		return last.label, false, true
+	}
+	return "", false, false
+}
+
+func (state *recordingToolbarState) hasActiveKeycap(label string) bool {
+	now := time.Now()
+	for _, keycap := range state.keycaps {
+		if keycap.label == label && now.Before(keycap.expiresAt) {
+			return true
+		}
+	}
+	return false
+}
+
+// replaceKeycapLabel updates the newest matching hint in place so a completing chord stays one cap.
+func (state *recordingToolbarState) replaceKeycapLabel(previous, next string) {
+	for index := len(state.keycaps) - 1; index >= 0; index-- {
+		if state.keycaps[index].label == previous {
+			state.keycaps[index] = recordingKeycap{label: next, expiresAt: time.Now().Add(recordingKeycapLifetime)}
+			return
+		}
+	}
+	state.pushRecordingKeycap(next)
+}
+
+func (state *recordingToolbarState) pushRecordingKeycap(label string) {
+	if label == "" {
+		return
+	}
+	state.pruneRecordingKeycaps(time.Now())
+	state.keycaps = append(state.keycaps, recordingKeycap{label: label, expiresAt: time.Now().Add(recordingKeycapLifetime)})
+	if len(state.keycaps) > 6 {
+		state.keycaps = append([]recordingKeycap(nil), state.keycaps[len(state.keycaps)-6:]...)
+	}
+}
+
+func (state *recordingToolbarState) pruneRecordingKeycaps(now time.Time) {
+	state.keycaps = visibleRecordingKeycaps(state.keycaps, now)
+}
+
+// visibleRecordingKeycaps drops expired hints so layout recenters on what is still drawn.
+func visibleRecordingKeycaps(keycaps []recordingKeycap, now time.Time) []recordingKeycap {
+	visible := make([]recordingKeycap, 0, len(keycaps))
+	for _, keycap := range keycaps {
+		if now.Before(keycap.expiresAt) {
+			visible = append(visible, keycap)
+		}
+	}
+	return visible
+}
+
+// recordingChordExtends reports whether next is a richer chord of the same key, e.g. Ctrl+V → Ctrl+Shift+V.
+func recordingChordExtends(previous, next string) bool {
+	if previous == "" || next == "" || previous == next {
+		return false
+	}
+	prevParts := strings.Split(previous, "+")
+	nextParts := strings.Split(next, "+")
+	if len(nextParts) <= len(prevParts) || prevParts[len(prevParts)-1] != nextParts[len(nextParts)-1] {
+		return false
+	}
+	for _, part := range prevParts {
+		found := false
+		for _, nextPart := range nextParts {
+			if part == nextPart {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func recordingModifierFlag(key keyboard.Key) keyboard.Modifier {
+	switch key {
+	case keyboard.KeyCtrl, keyboard.KeyLeftCtrl, keyboard.KeyRightCtrl:
+		return keyboard.ModifierCtrl
+	case keyboard.KeyAlt, keyboard.KeyLeftAlt, keyboard.KeyRightAlt:
+		return keyboard.ModifierAlt
+	case keyboard.KeyShift, keyboard.KeyLeftShift, keyboard.KeyRightShift:
+		return keyboard.ModifierShift
+	case keyboard.KeySuper, keyboard.KeyLeftSuper, keyboard.KeyRightSuper:
+		return keyboard.ModifierSuper
+	default:
+		return 0
+	}
+}
+
+// recordingModifierLabel joins held modifiers in the same Ctrl/Alt/Shift/Meta order as chords.
+func recordingModifierLabel(modifiers keyboard.Modifier) string {
+	parts := make([]string, 0, 4)
+	if modifiers&keyboard.ModifierCtrl != 0 {
+		parts = append(parts, "Ctrl")
+	}
+	if modifiers&keyboard.ModifierAlt != 0 {
+		parts = append(parts, "Alt")
+	}
+	if modifiers&keyboard.ModifierShift != 0 {
+		parts = append(parts, "Shift")
+	}
+	if modifiers&keyboard.ModifierSuper != 0 {
+		parts = append(parts, "Meta")
+	}
+	return strings.Join(parts, "+")
+}
+
 // recordingKeyLabel formats one printable or functional chord for the keycap overlay.
 func recordingKeyLabel(event keyboard.RawKeyEvent) string {
 	if event.Key.IsModifier() {
-		switch event.Key {
-		case keyboard.KeyCtrl, keyboard.KeyLeftCtrl, keyboard.KeyRightCtrl:
-			return "Ctrl"
-		case keyboard.KeyShift, keyboard.KeyLeftShift, keyboard.KeyRightShift:
-			return "Shift"
-		case keyboard.KeyAlt, keyboard.KeyLeftAlt, keyboard.KeyRightAlt:
-			return "Alt"
-		case keyboard.KeySuper, keyboard.KeyLeftSuper, keyboard.KeyRightSuper:
-			return "Meta"
-		}
-	}
-	parts := make([]string, 0, 5)
-	if event.Modifiers&keyboard.ModifierCtrl != 0 {
-		parts = append(parts, "Ctrl")
-	}
-	if event.Modifiers&keyboard.ModifierAlt != 0 {
-		parts = append(parts, "Alt")
-	}
-	if event.Modifiers&keyboard.ModifierShift != 0 {
-		parts = append(parts, "Shift")
-	}
-	if event.Modifiers&keyboard.ModifierSuper != 0 {
-		parts = append(parts, "Meta")
+		return recordingModifierLabel(recordingModifierFlag(event.Key))
 	}
 	character := event.Character
 	if character == "" {
@@ -670,8 +870,10 @@ func recordingKeyLabel(event keyboard.RawKeyEvent) string {
 	if len([]rune(character)) == 1 {
 		character = strings.ToUpper(character)
 	}
-	parts = append(parts, character)
-	return strings.Join(parts, "+")
+	if prefix := recordingModifierLabel(event.Modifiers); prefix != "" {
+		return prefix + "+" + character
+	}
+	return character
 }
 
 // recordingFunctionalKeyName supplies readable labels for non-printing keys.
@@ -712,14 +914,8 @@ func (state *recordingToolbarState) drawOverlay(displayList *DisplayList, frame 
 	}
 	state.mu.Lock()
 	now := time.Now()
-	keycaps := make([]recordingKeycap, 0, len(state.keycaps))
-	for _, keycap := range state.keycaps {
-		if now.Before(keycap.expiresAt) {
-			keycaps = append(keycaps, keycap)
-		}
-	}
-	state.keycaps = keycaps
-	visibleKeycaps := append([]recordingKeycap(nil), keycaps...)
+	state.pruneRecordingKeycaps(now)
+	visibleKeycaps := append([]recordingKeycap(nil), state.keycaps...)
 	session := state.session
 	state.mu.Unlock()
 
@@ -879,6 +1075,7 @@ func (state *recordingToolbarState) drawKeycaps(displayList *DisplayList, select
 // renderRecordingKeycaps composites ephemeral key hints in capture pixels. scale is the active
 // display's physical-to-logical ratio; scaleX and scaleY only map the capture into the target image.
 func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keycaps []recordingKeycap, now time.Time, scale float32) error {
+	keycaps = visibleRecordingKeycaps(keycaps, now)
 	if target == nil || len(keycaps) == 0 {
 		return nil
 	}
@@ -899,10 +1096,6 @@ func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keyc
 	scaleY := float32(target.Bounds().Dy()) / frame.Height
 	overlay := image.NewRGBA(target.Bounds())
 	for index, keycap := range keycaps {
-		if !now.Before(keycap.expiresAt) {
-			left += widths[index] + 6*scale
-			continue
-		}
 		alpha := uint8(230)
 		remaining := keycap.expiresAt.Sub(now)
 		if remaining < 350*time.Millisecond {
@@ -1103,6 +1296,9 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 	case screenshotEditorRectContains(state.keypressRect, event.Position) && !locked:
 		if state.keyboardUnavailable == "" {
 			state.showKeypress = !state.showKeypress
+			if !state.showKeypress {
+				state.resetRecordingKeyChord()
+			}
 		}
 	case screenshotEditorRectContains(state.primaryRect, event.Position):
 		state.mu.Unlock()
@@ -1250,6 +1446,7 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 				uiScale = max(uiScale, chromeScale(selection))
 			}
 			state.mu.Lock()
+			state.pruneRecordingKeycaps(time.Now())
 			keycaps := append([]recordingKeycap(nil), state.keycaps...)
 			state.mu.Unlock()
 			var pointer *Point
@@ -1330,6 +1527,7 @@ func (state *recordingToolbarState) restart() {
 	previous := state.session
 	state.session = nil
 	state.keycaps = nil
+	state.resetRecordingKeyChord()
 	state.lastError = ""
 	state.previewPoster = nil
 	state.previewFrame = nil

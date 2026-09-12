@@ -703,6 +703,136 @@ func TestRecordingRawKeyKeepsNewestSixKeycaps(t *testing.T) {
 	}
 }
 
+func TestRecordingRawKeyShowsChordsTogether(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	if len(state.keycaps) != 0 {
+		t.Fatalf("modifier down should wait for the rest of the chord: %+v", state.keycaps)
+	}
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyC, Character: "c", Modifiers: keyboard.ModifierCtrl,
+	})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+C" {
+		t.Fatalf("chord keycaps = %+v, want [Ctrl+C]", labelsOf(state.keycaps))
+	}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyC, Character: "c", Modifiers: keyboard.ModifierCtrl})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftCtrl})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+C" {
+		t.Fatalf("releasing a completed chord should not add a modifier-only keycap: %+v", labelsOf(state.keycaps))
+	}
+}
+
+func TestRecordingRawKeyShowsStandaloneModifiersOnRelease(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftShift})
+	if len(state.keycaps) != 0 {
+		t.Fatalf("held modifiers should stay pending: %+v", labelsOf(state.keycaps))
+	}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftShift})
+	if len(state.keycaps) != 0 {
+		t.Fatalf("partial modifier release should stay pending: %+v", labelsOf(state.keycaps))
+	}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftCtrl})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+Shift" {
+		t.Fatalf("released modifier chord = %+v, want [Ctrl+Shift]", labelsOf(state.keycaps))
+	}
+}
+
+func TestRecordingRawKeyKeepsModifierForSequentialChords(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyA, Character: "a", Modifiers: keyboard.ModifierCtrl,
+	})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyA, Character: "a", Modifiers: keyboard.ModifierCtrl})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyC, Character: "c", Modifiers: keyboard.ModifierCtrl,
+	})
+	if len(state.keycaps) != 2 || state.keycaps[0].label != "Ctrl+A" || state.keycaps[1].label != "Ctrl+C" {
+		t.Fatalf("sequential chords = %+v, want [Ctrl+A Ctrl+C]", labelsOf(state.keycaps))
+	}
+}
+
+func TestRecordingRawKeyKeepsShiftedChordOnModifierRelease(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, Character: "v",
+		Modifiers: keyboard.ModifierCtrl | keyboard.ModifierShift,
+	})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, Character: "v", Modifiers: keyboard.ModifierCtrl,
+	})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+Shift+V" {
+		t.Fatalf("shifted chord keycaps = %+v, want [Ctrl+Shift+V]", labelsOf(state.keycaps))
+	}
+}
+
+func TestRecordingRawKeyMergesEchoAfterKeyUp(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, Character: "v",
+		Modifiers: keyboard.ModifierCtrl | keyboard.ModifierShift,
+	})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyV, Character: "v"})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, Character: "v", Modifiers: keyboard.ModifierCtrl,
+	})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+Shift+V" {
+		t.Fatalf("echo after key-up = %+v, want [Ctrl+Shift+V]", labelsOf(state.keycaps))
+	}
+}
+
+func TestRecordingRawKeyMergesEchoAfterModifiersRelease(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, Character: "v",
+		Modifiers: keyboard.ModifierCtrl | keyboard.ModifierShift,
+	})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyV, Character: "v"})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, Character: "v", Modifiers: keyboard.ModifierCtrl,
+	})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+Shift+V" {
+		t.Fatalf("echo after full release = %+v, want [Ctrl+Shift+V]", labelsOf(state.keycaps))
+	}
+}
+
+func TestRecordingRawKeyUpgradesChordWhenShiftJoins(t *testing.T) {
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, showKeypress: true}
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftCtrl})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyC, Character: "c", Modifiers: keyboard.ModifierCtrl,
+	})
+	state.rawKey(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyLeftShift})
+	state.rawKey(keyboard.RawKeyEvent{
+		Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyC, Character: "c",
+		Modifiers: keyboard.ModifierCtrl | keyboard.ModifierShift,
+	})
+	if len(state.keycaps) != 1 || state.keycaps[0].label != "Ctrl+Shift+C" {
+		t.Fatalf("upgraded chord keycaps = %+v, want [Ctrl+Shift+C]", labelsOf(state.keycaps))
+	}
+}
+
+func labelsOf(keycaps []recordingKeycap) []string {
+	labels := make([]string, len(keycaps))
+	for index, keycap := range keycaps {
+		labels[index] = keycap.label
+	}
+	return labels
+}
+
 func TestRecordingKeycapsExpireWithoutPersistence(t *testing.T) {
 	state := &recordingToolbarState{
 		editor:  &screenshotEditorOverlayState{image: testScreenshotImage(t, 20, 20), selection: Rect{Width: 20, Height: 20}},
@@ -736,6 +866,38 @@ func TestRenderRecordingKeycapsCompositesOnlyInsideSelection(t *testing.T) {
 	}
 	if !dark || !bright {
 		t.Fatalf("keycap contrast dark=%t bright=%t, want a dark cap with legible text", dark, bright)
+	}
+}
+
+func TestRenderRecordingKeycapsCentersAfterExpiredHints(t *testing.T) {
+	changedBounds := func(keycaps []recordingKeycap) image.Rectangle {
+		target := image.NewRGBA(image.Rect(0, 0, 400, 240))
+		for index := 0; index < len(target.Pix); index += 4 {
+			target.Pix[index], target.Pix[index+1], target.Pix[index+2], target.Pix[index+3] = 80, 80, 80, 255
+		}
+		now := time.Now()
+		if err := renderRecordingKeycaps(target, Rect{Width: 400, Height: 240}, Size{Width: 400, Height: 240}, keycaps, now, 1); err != nil {
+			t.Fatal(err)
+		}
+		minX, minY, maxX, maxY := target.Bounds().Max.X, target.Bounds().Max.Y, target.Bounds().Min.X, target.Bounds().Min.Y
+		for y := target.Bounds().Min.Y; y < target.Bounds().Max.Y; y++ {
+			for x := target.Bounds().Min.X; x < target.Bounds().Max.X; x++ {
+				if target.RGBAAt(x, y).R != 80 {
+					minX, minY = min(minX, x), min(minY, y)
+					maxX, maxY = max(maxX, x+1), max(maxY, y+1)
+				}
+			}
+		}
+		return image.Rect(minX, minY, maxX, maxY)
+	}
+	now := time.Now()
+	visible := []recordingKeycap{{label: "Ctrl+V", expiresAt: now.Add(time.Second)}}
+	withExpired := []recordingKeycap{
+		{label: "Ctrl+C", expiresAt: now.Add(-time.Millisecond)},
+		{label: "Ctrl+V", expiresAt: now.Add(time.Second)},
+	}
+	if only, afterExpire := changedBounds(visible), changedBounds(withExpired); only != afterExpire {
+		t.Fatalf("visible keycap bounds %v vs %v after an expired sibling, want the same centered placement", only, afterExpire)
 	}
 }
 
