@@ -18,6 +18,7 @@ export interface WoxRelease {
 }
 
 export function changelogPath(): string;
+export function changelogZhPath(): string;
 export function formatDateParts(isoDate: string): Pick<
   WoxRelease,
   | "year"
@@ -33,6 +34,7 @@ export function formatDateParts(isoDate: string): Pick<
 export function publicReleaseMeta(release: WoxRelease): WoxRelease;
 export function parseChangelog(markdown?: string): WoxRelease[];
 export function getStableReleases(): WoxRelease[];
+export function getChineseReleases(): WoxRelease[];
 export function getLatestRelease(): WoxRelease;
 export function assertReadmeLatest(latest?: WoxRelease): void;
 export function generateChangelogPages(): void;

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 	"wox/setting"
 
@@ -49,6 +50,8 @@ type VersionManifest struct {
 	LinuxChecksum    string
 
 	ReleaseNotes string // newline separated with \n
+	// ReleaseNotesByLang holds optional "ReleaseNotes.{lang}" values such as ReleaseNotes.zh_CN.
+	ReleaseNotesByLang map[string]string `json:"-"`
 }
 
 type UpdateInfo struct {
@@ -56,12 +59,126 @@ type UpdateInfo struct {
 	LatestVersion  string
 	ReleaseChannel string
 	ReleaseNotes   string
-	DownloadUrl    string
-	Checksum       string // Checksum for verification
-	Status         UpdateStatus
-	UpdateError    error
-	DownloadedPath string
-	HasUpdate      bool // Whether there is an update available
+	// LocalizedReleaseNotes keeps optional per-language notes so the UI can switch language without refetching.
+	LocalizedReleaseNotes map[string]string
+	DownloadUrl           string
+	Checksum              string // Checksum for verification
+	Status                UpdateStatus
+	UpdateError           error
+	DownloadedPath        string
+	HasUpdate             bool // Whether there is an update available
+}
+
+type versionManifestJSON struct {
+	Version             string
+	MacArm64DownloadUrl string
+	MacArm64Checksum    string
+	MacAmd64DownloadUrl string
+	MacAmd64Checksum    string
+	WindowsDownloadUrl  string
+	WindowsChecksum     string
+	LinuxDownloadUrl    string
+	LinuxChecksum       string
+	ReleaseNotes        string
+}
+
+const releaseNotesLangPrefix = "ReleaseNotes."
+
+// UnmarshalJSON reads the standard manifest fields plus optional ReleaseNotes.{lang} keys.
+func (m *VersionManifest) UnmarshalJSON(data []byte) error {
+	var fields versionManifestJSON
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*m = VersionManifest{
+		Version:             fields.Version,
+		MacArm64DownloadUrl: fields.MacArm64DownloadUrl,
+		MacArm64Checksum:    fields.MacArm64Checksum,
+		MacAmd64DownloadUrl: fields.MacAmd64DownloadUrl,
+		MacAmd64Checksum:    fields.MacAmd64Checksum,
+		WindowsDownloadUrl:  fields.WindowsDownloadUrl,
+		WindowsChecksum:     fields.WindowsChecksum,
+		LinuxDownloadUrl:    fields.LinuxDownloadUrl,
+		LinuxChecksum:       fields.LinuxChecksum,
+		ReleaseNotes:        fields.ReleaseNotes,
+		ReleaseNotesByLang:  parseLocalizedReleaseNotes(data),
+	}
+	return nil
+}
+
+// MarshalJSON writes the standard manifest fields plus optional ReleaseNotes.{lang} keys.
+func (m VersionManifest) MarshalJSON() ([]byte, error) {
+	payload, err := json.Marshal(versionManifestJSON{
+		Version:             m.Version,
+		MacArm64DownloadUrl: m.MacArm64DownloadUrl,
+		MacArm64Checksum:    m.MacArm64Checksum,
+		MacAmd64DownloadUrl: m.MacAmd64DownloadUrl,
+		MacAmd64Checksum:    m.MacAmd64Checksum,
+		WindowsDownloadUrl:  m.WindowsDownloadUrl,
+		WindowsChecksum:     m.WindowsChecksum,
+		LinuxDownloadUrl:    m.LinuxDownloadUrl,
+		LinuxChecksum:       m.LinuxChecksum,
+		ReleaseNotes:        m.ReleaseNotes,
+	})
+	if err != nil || len(m.ReleaseNotesByLang) == 0 {
+		return payload, err
+	}
+
+	var raw map[string]json.RawMessage
+	if unmarshalErr := json.Unmarshal(payload, &raw); unmarshalErr != nil {
+		return nil, unmarshalErr
+	}
+	for lang, notes := range m.ReleaseNotesByLang {
+		if strings.TrimSpace(lang) == "" {
+			continue
+		}
+		encoded, encodeErr := json.Marshal(notes)
+		if encodeErr != nil {
+			return nil, encodeErr
+		}
+		raw[releaseNotesLangPrefix+lang] = encoded
+	}
+	return json.Marshal(raw)
+}
+
+// parseLocalizedReleaseNotes collects optional ReleaseNotes.{lang} fields from a version manifest.
+func parseLocalizedReleaseNotes(data []byte) map[string]string {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+
+	notesByLang := make(map[string]string)
+	for key, value := range raw {
+		lang, ok := strings.CutPrefix(key, releaseNotesLangPrefix)
+		if !ok || lang == "" {
+			continue
+		}
+		var notes string
+		if err := json.Unmarshal(value, &notes); err != nil {
+			continue
+		}
+		notesByLang[lang] = notes
+	}
+	if len(notesByLang) == 0 {
+		return nil
+	}
+	return notesByLang
+}
+
+// ReleaseNotesForLang returns localized notes when present, otherwise the English ReleaseNotes.
+func ReleaseNotesForLang(notes string, localized map[string]string, lang string) string {
+	if lang != "" && lang != "en_US" {
+		if value := strings.TrimSpace(localized[lang]); value != "" {
+			return localized[lang]
+		}
+	}
+	return notes
+}
+
+// ReleaseNotesForLang returns cached notes for the current UI language.
+func (info UpdateInfo) ReleaseNotesForLang(lang string) string {
+	return ReleaseNotesForLang(info.ReleaseNotes, info.LocalizedReleaseNotes, lang)
 }
 
 type UpdateChannelVersion struct {
@@ -239,16 +356,18 @@ func buildUpdateInfoFromManifest(ctx context.Context, currentVersion string, rel
 	}
 
 	info := UpdateInfo{
-		CurrentVersion: existingVersion.String(),
-		LatestVersion:  newVersion.String(),
-		ReleaseChannel: string(normalizedChannel),
-		ReleaseNotes:   latestVersion.ReleaseNotes,
+		CurrentVersion:        existingVersion.String(),
+		LatestVersion:         newVersion.String(),
+		ReleaseChannel:        string(normalizedChannel),
+		ReleaseNotes:          latestVersion.ReleaseNotes,
+		LocalizedReleaseNotes: latestVersion.ReleaseNotesByLang,
 	}
 
 	if normalizedChannel == setting.ReleaseChannelStable && newVersion.Prerelease() != "" {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("stable update channel ignored prerelease manifest version: %s", newVersion.String()))
 		info.LatestVersion = existingVersion.String()
 		info.ReleaseNotes = ""
+		info.LocalizedReleaseNotes = nil
 		info.Status = UpdateStatusNone
 		info.HasUpdate = false
 		return info

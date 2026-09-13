@@ -55,24 +55,36 @@ jobs:
         run: |
           # Extract changelog for current version from CHANGELOG.md
           VERSION="${{ steps.version.outputs.VERSION }}"
-          # Get content between current version header and the next version header
-          CHANGELOG=$(awk -v version="$VERSION" '
-            index($0, "## v" version " ") == 1 {
-              in_changelog = 1
-              next
-            }
-            in_changelog && /^## v[0-9]/ {
-              exit
-            }
-            in_changelog && $0 == "---" {
-              exit
-            }
-            in_changelog {
-              print
-            }
-          ' CHANGELOG.md)
+          extract_changelog() {
+            local file="$1"
+            awk -v version="$VERSION" '
+              index($0, "## v" version " ") == 1 {
+                in_changelog = 1
+                next
+              }
+              in_changelog && /^## v[0-9]/ {
+                exit
+              }
+              in_changelog && $0 == "---" {
+                exit
+              }
+              in_changelog {
+                print
+              }
+            ' "$file"
+          }
+
+          CHANGELOG=$(extract_changelog CHANGELOG.md)
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          CHANGELOG_ZH=""
+          if [ -f CHANGELOG.zh_CN.md ]; then
+            CHANGELOG_ZH=$(extract_changelog CHANGELOG.zh_CN.md)
+          fi
+          echo "CHANGELOG_ZH<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_ZH" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Compute checksums (MD5)
@@ -128,6 +140,9 @@ jobs:
           cat > release-notes.txt <<'EOF'
           ${{ steps.changelog.outputs.CHANGELOG }}
           EOF
+          cat > release-notes.zh_CN.txt <<'EOF'
+          ${{ steps.changelog.outputs.CHANGELOG_ZH }}
+          EOF
 
           if [[ "$VERSION" == *-* ]]; then
             manifests=(updater.beta.json)
@@ -141,18 +156,19 @@ jobs:
             fi
 
             tmp="$(mktemp)"
-            jq \
-              --arg version "$VERSION" \
-              --arg macUrl "$MAC_URL" \
-              --arg macMd5 "$MAC_ARM64_MD5" \
-              --arg macAmd64Url "$MAC_AMD64_URL" \
-              --arg macAmd64Md5 "$MAC_AMD64_MD5" \
-              --arg winUrl "$WIN_URL" \
-              --arg winMd5 "$WINDOWS_MD5" \
-              --arg linuxUrl "$LINUX_URL" \
-              --arg linuxMd5 "$LINUX_MD5" \
-              --rawfile notes release-notes.txt \
-              '.Version = $version
+            jq_args=(
+              --arg version "$VERSION"
+              --arg macUrl "$MAC_URL"
+              --arg macMd5 "$MAC_ARM64_MD5"
+              --arg macAmd64Url "$MAC_AMD64_URL"
+              --arg macAmd64Md5 "$MAC_AMD64_MD5"
+              --arg winUrl "$WIN_URL"
+              --arg winMd5 "$WINDOWS_MD5"
+              --arg linuxUrl "$LINUX_URL"
+              --arg linuxMd5 "$LINUX_MD5"
+              --rawfile notes release-notes.txt
+            )
+            jq_filter='.Version = $version
               | .MacArm64DownloadUrl = $macUrl
               | .MacArm64Checksum = $macMd5
               | .MacAmd64DownloadUrl = $macAmd64Url
@@ -161,8 +177,15 @@ jobs:
               | .WindowsChecksum = $winMd5
               | .LinuxDownloadUrl = $linuxUrl
               | .LinuxChecksum = $linuxMd5
-              | .ReleaseNotes = ($notes | rtrimstr("\n"))' \
-              "$manifest" > "$tmp"
+              | .ReleaseNotes = ($notes | rtrimstr("\n"))
+              | del(."ReleaseNotes.zh_CN")'
+
+            if [ -s release-notes.zh_CN.txt ] && [ -n "$(tr -d '[:space:]' < release-notes.zh_CN.txt)" ]; then
+              jq_args+=(--rawfile notesZh release-notes.zh_CN.txt)
+              jq_filter+=' | ."ReleaseNotes.zh_CN" = ($notesZh | rtrimstr("\n"))'
+            fi
+
+            jq "${jq_args[@]}" "$jq_filter" "$manifest" > "$tmp"
             mv "$tmp" "$manifest"
           done
 

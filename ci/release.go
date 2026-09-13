@@ -315,6 +315,9 @@ func gitCommitAndTag(version string) error {
 		"updater.json",
 		"updater.beta.json",
 	}
+	if _, err := os.Stat("../CHANGELOG.zh_CN.md"); err == nil {
+		files = append(files, "CHANGELOG.zh_CN.md")
+	}
 
 	for _, file := range files {
 		cmd := exec.Command("git", "add", file)

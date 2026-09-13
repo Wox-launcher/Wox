@@ -106,7 +106,7 @@ func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabl
 		CurrentVersion:    info.CurrentVersion,
 		LatestVersion:     info.LatestVersion,
 		ReleaseChannel:    releaseChannel,
-		ReleaseNotes:      info.ReleaseNotes,
+		ReleaseNotes:      info.ReleaseNotesForLang(string(i18n.GetI18nManager().GetCurrentLangCode())),
 		DownloadUrl:       info.DownloadUrl,
 		Status:            string(info.Status),
 		HasUpdate:         info.HasUpdate,

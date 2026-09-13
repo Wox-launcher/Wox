@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "../..");
 const CHANGELOG_PATH = path.join(REPO_ROOT, "CHANGELOG.md");
+const ZH_CHANGELOG_PATH = path.join(REPO_ROOT, "CHANGELOG.zh_CN.md");
 const README_PATH = path.join(REPO_ROOT, "README.md");
 const EN_CHANGELOG_DIR = path.join(REPO_ROOT, "www/docs/changelog");
 const ZH_CHANGELOG_DIR = path.join(REPO_ROOT, "www/docs/zh/changelog");
@@ -28,6 +29,10 @@ const MONTH_SHORT_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", 
 
 export function changelogPath() {
   return CHANGELOG_PATH;
+}
+
+export function changelogZhPath() {
+  return ZH_CHANGELOG_PATH;
 }
 
 export function formatDateParts(isoDate) {
@@ -119,6 +124,18 @@ export function getStableReleases() {
   return parseChangelog();
 }
 
+/** Parse stable sections from CHANGELOG.zh_CN.md when the file exists. */
+export function getChineseReleases() {
+  if (!fs.existsSync(ZH_CHANGELOG_PATH)) {
+    return [];
+  }
+  return parseChangelog(fs.readFileSync(ZH_CHANGELOG_PATH, "utf8"));
+}
+
+function chineseReleaseMap(releases = getChineseReleases()) {
+  return new Map(releases.map((release) => [release.version, release]));
+}
+
 export function getLatestRelease() {
   const releases = getStableReleases();
   if (releases.length === 0) {
@@ -135,27 +152,35 @@ export function assertReadmeLatest(latest = getLatestRelease()) {
   }
 }
 
-/** Write per-version changelog pages and language indexes from CHANGELOG.md. */
+/** Write per-version changelog pages and language indexes from CHANGELOG.md and CHANGELOG.zh_CN.md. */
 export function generateChangelogPages() {
   const releases = getStableReleases();
   if (releases.length === 0) {
     throw new Error(`No stable releases found in ${CHANGELOG_PATH}`);
   }
 
+  const chineseByVersion = chineseReleaseMap();
   fs.mkdirSync(EN_CHANGELOG_DIR, { recursive: true });
   fs.mkdirSync(ZH_CHANGELOG_DIR, { recursive: true });
 
   const expectedEnglish = new Set(["index.md"]);
+  const expectedChinese = new Set(["index.md"]);
   for (const release of releases) {
     const fileName = `${release.version}.md`;
     expectedEnglish.add(fileName);
     writeIfChanged(path.join(EN_CHANGELOG_DIR, fileName), renderVersionPage(release));
+
+    const chineseRelease = chineseByVersion.get(release.version);
+    if (chineseRelease) {
+      expectedChinese.add(fileName);
+      writeIfChanged(path.join(ZH_CHANGELOG_DIR, fileName), renderChineseVersionPage(chineseRelease));
+    }
   }
   writeIfChanged(path.join(EN_CHANGELOG_DIR, "index.md"), renderEnglishIndex(releases));
-  writeIfChanged(path.join(ZH_CHANGELOG_DIR, "index.md"), renderChineseIndex(releases));
+  writeIfChanged(path.join(ZH_CHANGELOG_DIR, "index.md"), renderChineseIndex(releases, chineseByVersion));
 
   removeStaleMarkdown(EN_CHANGELOG_DIR, expectedEnglish);
-  removeStaleMarkdown(ZH_CHANGELOG_DIR, new Set(["index.md"]));
+  removeStaleMarkdown(ZH_CHANGELOG_DIR, expectedChinese);
 }
 
 function splitHighlight(body) {
@@ -223,6 +248,25 @@ ${release.highlight}
 ${body}`;
 }
 
+function renderChineseVersionPage(release) {
+  const description = seoDescription(`${release.highlight}（${release.dateMonthZh}）`);
+  const body = release.body ? `\n\n${release.body}\n` : "\n";
+  return `---
+title: ${JSON.stringify(`Wox ${release.version}`)}
+description: ${JSON.stringify(description)}
+lastUpdated: ${release.date}
+---
+
+<!-- Generated from CHANGELOG.zh_CN.md. Do not edit. -->
+
+# Wox ${release.version}
+
+**${release.dateLongZh}** · [GitHub Release ${release.tag}](https://github.com/Wox-launcher/Wox/releases/tag/${release.tag})
+
+${release.highlight}
+${body}`;
+}
+
 function renderEnglishIndex(releases) {
   const latest = releases[0];
   const items = releases
@@ -249,27 +293,30 @@ ${items}
 `;
 }
 
-function renderChineseIndex(releases) {
+function renderChineseIndex(releases, chineseByVersion) {
   const latest = releases[0];
   const items = releases
-    .map(
-      (release) =>
-        `- [v${release.version}](/changelog/${release.version}) — ${release.dateLongZh} — ${release.highlight}`,
-    )
+    .map((release) => {
+      const chineseRelease = chineseByVersion.get(release.version);
+      if (chineseRelease) {
+        return `- [v${release.version}](./${release.version}) — ${release.dateLongZh} — ${chineseRelease.highlight}`;
+      }
+      return `- [v${release.version}](/changelog/${release.version}) — ${release.dateLongZh} — ${release.highlight}`;
+    })
     .join("\n");
   return `---
 title: "更新日志"
-description: ${JSON.stringify(`Wox 正式版更新记录。最新 ${latest.tag}（${latest.dateMonthZh}）。正文为英文版本页。`)}
+description: ${JSON.stringify(`Wox 正式版更新记录。最新 ${latest.tag}（${latest.dateMonthZh}）。`)}
 lastUpdated: ${latest.date}
 ---
 
-<!-- Generated from CHANGELOG.md. Do not edit. -->
+<!-- Generated from CHANGELOG.md and CHANGELOG.zh_CN.md. Do not edit. -->
 
 # 更新日志
 
 最新正式版 **${latest.tag}**（${latest.dateLongZh}）。
 
-下面列出各正式版日期和亮点，正文目前只有[英文版本页](/changelog/)。
+这些页面由 \`CHANGELOG.zh_CN.md\` 生成。尚未翻译的版本会链到[英文版本页](/changelog/)。
 
 ${items}
 `;

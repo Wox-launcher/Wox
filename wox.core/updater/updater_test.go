@@ -2,6 +2,7 @@ package updater
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -141,6 +142,58 @@ func TestGetUpdateChannelVersionsDoesNotExposePrereleaseAsStableLatest(t *testin
 	assert.Empty(t, versions[0].LatestVersion)
 	assert.Contains(t, versions[0].Error, "stable update channel ignored prerelease manifest version")
 	assert.Equal(t, UpdateChannelVersion{Channel: "beta", LatestVersion: "2.2.0-beta.1"}, versions[1])
+}
+
+func TestVersionManifestUnmarshalLocalizedReleaseNotes(t *testing.T) {
+	var manifest VersionManifest
+	err := json.Unmarshal([]byte(`{
+		"Version": "2.4.3",
+		"ReleaseNotes": "English notes",
+		"ReleaseNotes.zh_CN": "中文说明"
+	}`), &manifest)
+	assert.NoError(t, err)
+	assert.Equal(t, "English notes", manifest.ReleaseNotes)
+	assert.Equal(t, "中文说明", manifest.ReleaseNotesByLang["zh_CN"])
+
+	encoded, encodeErr := json.Marshal(manifest)
+	assert.NoError(t, encodeErr)
+	var raw map[string]string
+	assert.NoError(t, json.Unmarshal(encoded, &raw))
+	assert.Equal(t, "English notes", raw["ReleaseNotes"])
+	assert.Equal(t, "中文说明", raw["ReleaseNotes.zh_CN"])
+}
+
+func TestReleaseNotesForLangFallsBackToEnglish(t *testing.T) {
+	localized := map[string]string{"zh_CN": "中文说明"}
+
+	assert.Equal(t, "English notes", ReleaseNotesForLang("English notes", localized, "en_US"))
+	assert.Equal(t, "English notes", ReleaseNotesForLang("English notes", localized, ""))
+	assert.Equal(t, "中文说明", ReleaseNotesForLang("English notes", localized, "zh_CN"))
+	assert.Equal(t, "English notes", ReleaseNotesForLang("English notes", localized, "ja_JP"))
+	assert.Equal(t, "English notes", ReleaseNotesForLang("English notes", nil, "zh_CN"))
+	assert.Equal(t, "English notes", ReleaseNotesForLang("English notes", map[string]string{"zh_CN": "   "}, "zh_CN"))
+}
+
+func TestBuildUpdateInfoCopiesLocalizedReleaseNotes(t *testing.T) {
+	manifest := testVersionManifest("2.4.4")
+	manifest.ReleaseNotesByLang = map[string]string{"zh_CN": "中文说明"}
+
+	info := buildUpdateInfoFromManifest(context.Background(), "2.4.3", setting.ReleaseChannelStable, manifest)
+	assert.True(t, info.HasUpdate)
+	assert.Equal(t, "release notes", info.ReleaseNotes)
+	assert.Equal(t, "中文说明", info.LocalizedReleaseNotes["zh_CN"])
+	assert.Equal(t, "中文说明", info.ReleaseNotesForLang("zh_CN"))
+	assert.Equal(t, "release notes", info.ReleaseNotesForLang("en_US"))
+}
+
+func TestBuildUpdateInfoStablePrereleaseClearsLocalizedReleaseNotes(t *testing.T) {
+	manifest := testVersionManifest("2.5.0-beta.1")
+	manifest.ReleaseNotesByLang = map[string]string{"zh_CN": "中文说明"}
+
+	info := buildUpdateInfoFromManifest(context.Background(), "2.4.3", setting.ReleaseChannelStable, manifest)
+	assert.False(t, info.HasUpdate)
+	assert.Empty(t, info.ReleaseNotes)
+	assert.Empty(t, info.LocalizedReleaseNotes)
 }
 
 func testVersionManifest(version string) VersionManifest {

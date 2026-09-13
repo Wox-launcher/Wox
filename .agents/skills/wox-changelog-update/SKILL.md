@@ -1,19 +1,19 @@
 ---
 name: wox-changelog-update
-description: Update Wox CHANGELOG.md based on commits since the last release. Use when the user asks to "update changelog", "write release notes", or "summarize changes since last release" and the output must follow the repository's existing changelog format.
+description: Update Wox CHANGELOG.md and CHANGELOG.zh_CN.md based on commits since the last release. Use when the user asks to "update changelog", "write release notes", or "summarize changes since last release" and the output must follow the repository's existing changelog format.
 ---
 
 # Wox Update Changelog
 
 ## Overview
 
-Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wording, section order, and markdown style consistent with existing entries.
+Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version to `HEAD` and keep wording, section order, and markdown style consistent with existing entries. The two files must describe the same release with the same structure; only the language of user-facing prose changes.
 
 ## Workflow
 
 1. Identify the release boundary.
 
-- Read the top of `CHANGELOG.md` and detect the target section (usually newest version at the top).
+- Read the top of `CHANGELOG.md` and `CHANGELOG.zh_CN.md` and detect the target section (usually newest version at the top).
 - Detect the last released tag with `git tag --sort=-creatordate`.
 - Use commit range `last_release_tag..HEAD` by default.
 - If changelog heading and git tag disagree, prefer changelog context and state the assumption.
@@ -40,19 +40,20 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 
 4. Write changelog entries in repository style.
 
-- Preserve header pattern exactly (for example: `## v2.0.1 -`).
+- Preserve header pattern exactly (for example: `## v2.0.1 -`). Use the same heading, date, screenshots, issue links, and section keys in both files.
+- Keep section titles in English in both files: `- Add`, `- Improve`, `- Fix`, `- Store`. The client already localizes these labels.
 - Add a short highlight paragraph directly below every release heading you create or update, before screenshots and `Add`/`Improve`/`Fix`/`Store` sections. Follow the `v2.2.0` style: one concise, user-facing sentence or short paragraph that calls out the single biggest release highlight.
 - Keep section order: `Add`, `Improve`, `Fix`, `Store`.
 - Use bullet nesting style already used in file.
 - Keep wording concise, user-facing, and factual.
-- Match wording to the bucket. `Improve` entries should say "Improve", "Expand", "Support", or similar, not "Add", unless the entry is intentionally describing a small added option inside an improvement.
+- Match wording to the bucket. English `Improve` entries should say "Improve", "Expand", "Support", or similar, not "Add", unless the entry is intentionally describing a small added option inside an improvement.
 - For new `Add` features, explain what the feature is for and why a user would use it. Do not reduce major features to one terse implementation phrase.
 - Keep the same feature in one bullet whenever possible. For example, combine Screenshot scrolling capture, pinning, and plugin API changes into one `[`Screenshot`]` bullet instead of splitting them into separate bullets.
 - If a new feature needs screenshots but the images are not available yet, leave clearly named screenshot placeholder image lines in the same bullet so the screenshots can be added later.
 - Prefer plugin/module prefix when clear, e.g. ``[`Shell`]`` or ``[`Clipboard`]``.
 - Write issue references as Markdown links, e.g. `[#4339](https://github.com/Wox-launcher/Wox/issues/4339)`. Do not leave a bare `#4339` for the preview to rewrite later.
 - Keep existing screenshots. Add new screenshot lines when screenshots already exist, or when a user explicitly asks to reserve screenshot positions for upcoming images.
-- Write `Store` as two nested groups, omitting an empty group: `Plugin` then `Theme`. Each item is already-clickable Markdown: `[Name](page_url) Description [@github_username](https://github.com/github_username)`. Resolve `i18n:` names and descriptions from `I18n.en_US` (`plugin_name`, `plugin_desc` or `plugin_description`). Use `ThemeName` and `Description` for themes. Link the name to `Website` (plugin) or `ThemeUrl` (theme). If that URL is empty, write the plain name without a link. Append the author as a GitHub profile link. Prefer the username from a `github.com` / `gist.github.com` `Website` or `ThemeUrl`; otherwise use `Author` or `ThemeAuthor` when it is a single handle. Skip the author link when the author is only a display name. Do not add store screenshots, download URLs, or version numbers.
+- Write `Store` as two nested groups, omitting an empty group: `Plugin` then `Theme`. Each item is already-clickable Markdown: `[Name](page_url) Description [@github_username](https://github.com/github_username)`. Resolve `i18n:` names and descriptions from `I18n.en_US` in `CHANGELOG.md` and from `I18n.zh_CN` in `CHANGELOG.zh_CN.md` (`plugin_name`, `plugin_desc` or `plugin_description`). If a locale is missing, fall back to `en_US`, then `Name` / `Description`. Use `ThemeName` and `Description` for themes. Link the name to `Website` (plugin) or `ThemeUrl` (theme). If that URL is empty, write the plain name without a link. Append the author as a GitHub profile link. Prefer the username from a `github.com` / `gist.github.com` `Website` or `ThemeUrl`; otherwise use `Author` or `ThemeAuthor` when it is a single handle. Skip the author link when the author is only a display name. Do not add store screenshots, download URLs, or version numbers.
 
   ```markdown
   - Store
@@ -63,18 +64,22 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
       - [Wox Dracula](https://github.com/author/wox-theme-dracula) Wox theme inspired by the Dracula color scheme [@author](https://github.com/author)
   ```
 
+- Write the English file first, then produce the Chinese file as a line-for-line counterpart. Do not add or drop bullets in only one language.
+- Both files now contain the full version history. Keep new headings in both files and do not leave a new release in only one language.
+
 5. Keep README in sync only when the latest **stable** heading changes.
 
 - Update the line next to the Release badge to `Latest: vX.Y.Z · Mon YYYY`, matching that heading (for example `Latest: v2.4.3 · Sep 2026`). GitHub README is not generated.
 - Skip this when you only add bullets under an existing heading, or when the newest heading is a beta (`vX.Y.Z-beta.N`).
-- Do not hand-edit `www/docs`. Homepage version text, compare stamps, and `/changelog/*` pages are generated from `CHANGELOG.md` during `docs:dev` / `docs:build`.
+- Do not hand-edit `www/docs`. Homepage version text, compare stamps, and `/changelog/*` pages are generated from `CHANGELOG.md` and `CHANGELOG.zh_CN.md` during `docs:dev` / `docs:build`.
 
 6. Validate before finishing.
 
 - Ensure no duplicate bullets.
 - Ensure every `Add`/`Improve`/`Fix` bullet maps to at least one commit in range.
 - Ensure every `Store` bullet maps to a plugin `Id` or theme `ThemeId` that is new since `last_release_tag`.
-- Ensure every release section you create or update has a biggest-highlight paragraph under the version heading.
+- Ensure every release section you create or update has a biggest-highlight paragraph under the version heading in both files.
+- Ensure English and Chinese newest sections have the same headings, screenshots, issue links, and bullet count.
 - If the latest stable heading is new or its date changed, ensure README contains `Latest: vX.Y.Z · Mon YYYY` matching it (`docs:build` fails if this line is missing).
 - Ensure markdown renders cleanly and section spacing matches nearby versions.
 - Avoid rewriting old release sections unless explicitly requested.
@@ -85,11 +90,12 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 ```bash
 git tag --sort=-creatordate | head -n 20
 sed -n '1,120p' CHANGELOG.md
+sed -n '1,120p' CHANGELOG.zh_CN.md
 git log --oneline --no-merges <last_tag>..HEAD
 git show --stat --oneline <sha>
 git show <last_tag>:store-plugin.json
 git show <last_tag>:store-theme.json
-git diff -- CHANGELOG.md
+git diff -- CHANGELOG.md CHANGELOG.zh_CN.md
 ```
 
 Compare store catalogs by ID, not by file diff hunks. Example:
@@ -104,7 +110,7 @@ old_p = {p['Id'] for p in load(tag, 'store-plugin.json')}
 new_p = json.load(open('store-plugin.json', encoding='utf-8'))
 for p in new_p:
     if p['Id'] not in old_p:
-        print('plugin', p.get('Name'), p.get('Description'), p.get('Author'), p.get('Website'))
+        print('plugin', p.get('Name'), p.get('Description'), p.get('Author'), p.get('Website'), p.get('I18n'))
 old_t = {t['ThemeId'] for t in load(tag, 'store-theme.json')}
 new_t = json.load(open('store-theme.json', encoding='utf-8'))
 for t in new_t:
@@ -115,7 +121,7 @@ for t in new_t:
 
 ## Output Rules
 
-- Edit `CHANGELOG.md` directly.
+- Edit `CHANGELOG.md` and `CHANGELOG.zh_CN.md` together.
 - If the latest stable heading changed, also update the README `Latest: vX.Y.Z · Mon YYYY` line. Do not edit `www/docs` changelog pages or homepage copy.
 - Keep final response short: what section was updated and what categories were changed, including `Store` plugin/theme counts when present.
 - If commit intent is ambiguous, state the assumption briefly in the final response.

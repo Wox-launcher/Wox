@@ -1,5 +1,5 @@
 import { defineConfig } from "vitepress";
-import { generateChangelogPages, getLatestRelease, getStableReleases } from "../../scripts/release-meta.mjs";
+import { generateChangelogPages, getChineseReleases, getLatestRelease, getStableReleases } from "../../scripts/release-meta.mjs";
 import { applySeo } from "./seo";
 
 generateChangelogPages();
@@ -11,6 +11,16 @@ const changelogSidebarItems = [
   ...stableReleases.map((release) => ({
     text: `v${release.version}`,
     link: `/changelog/${release.version}`,
+  })),
+];
+const chineseReleaseVersions = new Set(getChineseReleases().map((release) => release.version));
+const chineseChangelogSidebarItems = [
+  { text: "全部版本", link: "/zh/changelog/" },
+  ...stableReleases.map((release) => ({
+    text: `v${release.version}`,
+    link: chineseReleaseVersions.has(release.version)
+      ? `/zh/changelog/${release.version}`
+      : `/changelog/${release.version}`,
   })),
 ];
 
@@ -135,10 +145,7 @@ export default defineConfig({
           "/zh/changelog/": [
             {
               text: "更新日志",
-              items: [
-                { text: "正式版列表", link: "/zh/changelog/" },
-                { text: "英文版本页", link: "/changelog/" },
-              ],
+              items: chineseChangelogSidebarItems,
             },
           ],
           "/zh/development/": [
