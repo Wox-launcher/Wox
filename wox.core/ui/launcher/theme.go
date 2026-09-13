@@ -36,6 +36,10 @@ type themeData struct {
 	GlanceFontColor                            string
 	GlanceIconColor                            string
 	GlanceBackgroundColor                      string
+	AttentionFontColor                         string
+	AttentionIconColor                         string
+	AttentionBackgroundColor                   string
+	AttentionBorderColor                       string
 	RefinementButtonFontColor                  string
 	RefinementButtonIconColor                  string
 	RefinementButtonBackgroundColor            string
@@ -68,6 +72,8 @@ type themeData struct {
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
 	GlanceHoverBackgroundColor                 string
+	AttentionHoverBackgroundColor              string
+	AttentionHoverBorderColor                  string
 
 	ActionContainerDividerColor           string
 	ToolbarHotkeyFontColor                string
@@ -160,6 +166,10 @@ type uiPalette struct {
 	GlanceFontColor                            *woxui.Color
 	GlanceIconColor                            *woxui.Color
 	GlanceBackgroundColor                      *woxui.Color
+	AttentionFontColor                         *woxui.Color
+	AttentionIconColor                         *woxui.Color
+	AttentionBackgroundColor                   *woxui.Color
+	AttentionBorderColor                       *woxui.Color
 	RefinementButtonFontColor                  *woxui.Color
 	RefinementButtonIconColor                  *woxui.Color
 	RefinementButtonBackgroundColor            *woxui.Color
@@ -195,6 +205,8 @@ type uiPalette struct {
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
 	GlanceHoverBackgroundColor                 *woxui.Color
+	AttentionHoverBackgroundColor              *woxui.Color
+	AttentionHoverBorderColor                  *woxui.Color
 
 	ActionContainerDividerColor           *woxui.Color
 	ToolbarHotkeyFontColor                *woxui.Color
@@ -274,6 +286,10 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		GlanceFontColor:                            palette.GlanceFontColor,
 		GlanceIconColor:                            palette.GlanceIconColor,
 		GlanceBackgroundColor:                      palette.GlanceBackgroundColor,
+		AttentionFontColor:                         palette.AttentionFontColor,
+		AttentionIconColor:                         palette.AttentionIconColor,
+		AttentionBackgroundColor:                   palette.AttentionBackgroundColor,
+		AttentionBorderColor:                       palette.AttentionBorderColor,
 		RefinementButtonFontColor:                  palette.RefinementButtonFontColor,
 		RefinementButtonIconColor:                  palette.RefinementButtonIconColor,
 		RefinementButtonBackgroundColor:            palette.RefinementButtonBackgroundColor,
@@ -309,6 +325,8 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		AppBorderWidth:                             palette.AppBorderWidth,
 		AppBorderRadius:                            palette.AppBorderRadius,
 		GlanceHoverBackgroundColor:                 palette.GlanceHoverBackgroundColor,
+		AttentionHoverBackgroundColor:              palette.AttentionHoverBackgroundColor,
+		AttentionHoverBorderColor:                  palette.AttentionHoverBorderColor,
 
 		ActionContainerDividerColor:           palette.ActionContainerDividerColor,
 		ToolbarHotkeyFontColor:                palette.ToolbarHotkeyFontColor,
@@ -529,6 +547,10 @@ func paletteForTheme(theme themeData) uiPalette {
 		GlanceFontColor:                            optionalThemeColor(theme.GlanceFontColor),
 		GlanceIconColor:                            optionalThemeColor(theme.GlanceIconColor),
 		GlanceBackgroundColor:                      optionalThemeColor(theme.GlanceBackgroundColor),
+		AttentionFontColor:                         optionalThemeColor(theme.AttentionFontColor),
+		AttentionIconColor:                         optionalThemeColor(theme.AttentionIconColor),
+		AttentionBackgroundColor:                   optionalThemeColor(theme.AttentionBackgroundColor),
+		AttentionBorderColor:                       optionalThemeColor(theme.AttentionBorderColor),
 		RefinementButtonFontColor:                  optionalThemeColor(theme.RefinementButtonFontColor),
 		RefinementButtonIconColor:                  optionalThemeColor(theme.RefinementButtonIconColor),
 		RefinementButtonBackgroundColor:            optionalThemeColor(theme.RefinementButtonBackgroundColor),
@@ -564,6 +586,8 @@ func paletteForTheme(theme themeData) uiPalette {
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,
 		GlanceHoverBackgroundColor:                 optionalThemeColor(theme.GlanceHoverBackgroundColor),
+		AttentionHoverBackgroundColor:              optionalThemeColor(theme.AttentionHoverBackgroundColor),
+		AttentionHoverBorderColor:                  optionalThemeColor(theme.AttentionHoverBorderColor),
 
 		ToolbarHotkeyFontColor:                optionalThemeColor(theme.ToolbarHotkeyFontColor),
 		ActionItemHotkeyFontColor:             optionalThemeColor(theme.ActionItemHotkeyFontColor),

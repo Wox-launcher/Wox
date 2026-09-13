@@ -1,11 +1,29 @@
 package fuzzymatch
 
 import (
+	"math/rand"
 	"testing"
 	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestPinyinDifferentLengthPoolReuse exercises stale generations from longer candidates.
+func TestPinyinDifferentLengthPoolReuse(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	letters := []rune("不路蓝绿重行文件夹abcdefghijklmnopqrstuvwxyz")
+	for iteration := 0; iteration < 10000; iteration++ {
+		text := make([]rune, 2+rng.Intn(30))
+		for index := range text {
+			text[index] = letters[rng.Intn(len(letters))]
+		}
+		got := FuzzyMatch(string(text), "blu", true)
+		want := FuzzyMatchPrepared(PrepareText(string(text)), PreparePattern("blu"), true)
+		if got != want {
+			t.Fatalf("text %q: direct = %+v, prepared = %+v", string(text), got, want)
+		}
+	}
+}
 
 func TestPinyinCacheOwnsMappedTerm(t *testing.T) {
 	ReleaseIdleCaches()

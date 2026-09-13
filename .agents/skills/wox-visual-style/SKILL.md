@@ -18,7 +18,7 @@ Also read the repository `AGENTS.md`, `README.md`, `Wox.code-workspace`, and `wo
 Classify the requested surface before applying size rules:
 
 - Apply the ordinary control system to Settings, dialogs, forms, tables, catalogs, onboarding management controls, and other application-management pages.
-- Keep the Launcher query, its accessories, results, toolbar, refinements, and Glance under launcher density and theme geometry.
+- Keep the Launcher query, its accessories, results, toolbar, refinements, Glance, and Attention under launcher density and theme geometry.
 - Keep the complete Action Panel, including its filter and rows, under its own geometry contract.
 - Keep native window controls and platform-owned dialogs under the platform contract.
 

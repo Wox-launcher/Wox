@@ -140,6 +140,40 @@ func TestAttentionReadItemBecomesUnreadWhenContentFingerprintChanges(t *testing.
 	}
 }
 
+func TestAttentionMarkUnreadRestoresInboxItem(t *testing.T) {
+	ctx := context.Background()
+	manager := newAttentionTestManager(t)
+
+	item, err := manager.Push(ctx, testAttentionSource(), plugin.PushAttentionRequest{
+		Key:   "notifications",
+		Title: "3 unread notifications",
+	})
+	if err != nil {
+		t.Fatalf("push item: %v", err)
+	}
+	if err := manager.MarkRead(ctx, item.IdentityKey); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	if err := manager.MarkUnread(ctx, item.IdentityKey); err != nil {
+		t.Fatalf("mark unread: %v", err)
+	}
+
+	items, err := manager.List(ctx)
+	if err != nil {
+		t.Fatalf("list items: %v", err)
+	}
+	if len(items.Unread) != 1 || len(items.Read) != 0 || items.Unread[0].IsRead {
+		t.Fatalf("expected restored unread item, got unread=%d read=%d", len(items.Unread), len(items.Read))
+	}
+	unreadCount, err := manager.UnreadCount(ctx)
+	if err != nil {
+		t.Fatalf("count unread: %v", err)
+	}
+	if unreadCount != 1 {
+		t.Fatalf("unread count = %d, want 1", unreadCount)
+	}
+}
+
 func TestPushAttentionRequestUnmarshalsObjectParameter(t *testing.T) {
 	raw := `{"key":"notifications","title":"3 unread","description":"Review GitHub","action":{"type":"change_query","query":"gh notifications"}}`
 

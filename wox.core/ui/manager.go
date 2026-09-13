@@ -143,6 +143,10 @@ func (m *Manager) AttachView(view contract.View) {
 		m.views[view.SessionID()] = view
 	}
 	m.viewMu.Unlock()
+	if view != nil {
+		// Plugin init can publish unread counts before the launcher view exists.
+		plugin.PublishAttentionUnreadCount(util.NewTraceContext())
+	}
 }
 
 func (m *Manager) getView() contract.View {

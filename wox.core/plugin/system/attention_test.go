@@ -149,6 +149,48 @@ func TestAttentionActionMarksItemRead(t *testing.T) {
 	}
 }
 
+func TestAttentionActionMarksItemUnread(t *testing.T) {
+	ctx := context.Background()
+	manager := newSystemAttentionTestManager(t)
+
+	item, err := manager.Push(ctx, plugin.AttentionPluginSource{
+		PluginID:    "github",
+		DefaultIcon: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`),
+	}, plugin.PushAttentionRequest{
+		Key:   "notifications",
+		Title: "1 unread notification",
+		Action: &plugin.AttentionAction{
+			Type:  plugin.AttentionActionTypeChangeQuery,
+			Query: "gh notifications",
+		},
+	})
+	if err != nil {
+		t.Fatalf("push item: %v", err)
+	}
+	if err := manager.MarkRead(ctx, item.IdentityKey); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+
+	attentionPlugin := &AttentionPlugin{api: &attentionActionTestAPI{}, manager: manager}
+	response := attentionPlugin.Query(ctx, plugin.Query{Type: plugin.QueryTypeInput})
+	if len(response.Results) != 1 {
+		t.Fatalf("expected one attention result, got %d", len(response.Results))
+	}
+	if len(response.Results[0].Actions) < 2 || response.Results[0].Actions[1].Id != attentionMarkUnreadActionID {
+		t.Fatalf("read item actions = %#v, want mark unread", response.Results[0].Actions)
+	}
+
+	response.Results[0].Actions[1].Action(ctx, plugin.ActionContext{})
+
+	items, err := manager.List(ctx)
+	if err != nil {
+		t.Fatalf("list items: %v", err)
+	}
+	if len(items.Unread) != 1 || len(items.Read) != 0 {
+		t.Fatalf("expected action to mark item unread, got unread=%d read=%d", len(items.Unread), len(items.Read))
+	}
+}
+
 func (a *attentionActionTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
 	return plugin.RegisterTriggerKeywordResult{Success: true}
 }

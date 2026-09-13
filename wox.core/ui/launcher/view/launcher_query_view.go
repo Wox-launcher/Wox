@@ -165,6 +165,8 @@ type LauncherHeaderProps struct {
 	Query             LauncherQueryProps
 	Refinement        woxwidget.Widget
 	RefinementWidth   float32
+	Attention         woxwidget.Widget
+	AttentionWidth    float32
 	Glance            woxwidget.Widget
 	GlanceWidth       float32
 	Icon              *woxui.Image
@@ -216,6 +218,11 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	if props.Refinement != nil {
 		children = append(children, woxwidget.Align{
 			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
+		})
+	}
+	if props.Attention != nil {
+		children = append(children, woxwidget.Align{
+			Width: props.AttentionWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Attention,
 		})
 	}
 	if props.Glance != nil {

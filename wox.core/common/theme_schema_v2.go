@@ -91,6 +91,13 @@ type ThemeSchemaV2 struct {
 	GlanceBackgroundColor      *string `json:",omitempty"`
 	GlanceHoverBackgroundColor *string `json:",omitempty"`
 
+	AttentionFontColor            *string `json:",omitempty"`
+	AttentionIconColor            *string `json:",omitempty"`
+	AttentionBackgroundColor      *string `json:",omitempty"`
+	AttentionBorderColor          *string `json:",omitempty"`
+	AttentionHoverBackgroundColor *string `json:",omitempty"`
+	AttentionHoverBorderColor     *string `json:",omitempty"`
+
 	ResultContainerPaddingLeft   *int `json:",omitempty"`
 	ResultContainerPaddingTop    *int `json:",omitempty"`
 	ResultContainerPaddingRight  *int `json:",omitempty"`
@@ -435,6 +442,7 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 		"RefinementButtonActiveHoverBackgroundColor": themeColorOpacity(accent, .22),
 
 		"PreviewBackgroundColor": d.BaseBackgroundColor, "PreviewBorderColor": divider, "PreviewTagFontColor": secondary, "PreviewTagBackgroundColor": "transparent", "PreviewTagBorderColor": divider, "GlanceFontColor": secondary, "GlanceIconColor": secondary, "GlanceBackgroundColor": "transparent", "GlanceHoverBackgroundColor": themeColorOpacity(text, .1),
+		"AttentionFontColor": secondary, "AttentionIconColor": secondary, "AttentionBackgroundColor": "transparent", "AttentionBorderColor": "transparent", "AttentionHoverBackgroundColor": themeColorOpacity(text, .1), "AttentionHoverBorderColor": "transparent",
 		"ActionContainerDividerColor": divider, "ActionItemHotkeyFontColor": secondary, "ActionItemHotkeyBackgroundColor": "transparent", "ActionItemHotkeyBorderColor": divider, "ActionItemActiveHotkeyFontColor": d.BaseTextColor, "ActionItemActiveHotkeyBackgroundColor": "transparent", "ActionItemActiveHotkeyBorderColor": d.BaseTextColor, "ToolbarHotkeyFontColor": secondary, "ToolbarHotkeyBackgroundColor": "transparent", "ToolbarHotkeyBorderColor": divider, "ResultItemHoverBackgroundColor": themeColorOpacity(accent, 0.045),
 		"AppBackgroundColor": d.BaseBackgroundColor,
 		"AppContentInset":    0, "AppContentBackgroundColor": "transparent", "AppContentBorderRadius": 0,

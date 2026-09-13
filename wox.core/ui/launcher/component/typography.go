@@ -4,6 +4,7 @@ package component
 const (
 	QueryFontSize          = float32(28)
 	GlanceFontSize         = float32(15)
+	AttentionBadgeFontSize = float32(15)
 	ResultTitleFontSize    = float32(15)
 	ResultSubtitleFontSize = float32(12)
 	TailFontSize           = float32(11)

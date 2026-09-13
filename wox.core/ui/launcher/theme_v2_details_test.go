@@ -38,7 +38,7 @@ func TestV2DetailColorsReachEditorAndRenderer(t *testing.T) {
 	}
 	for _, data := range []themeData{fromCoreTheme(theme), preview} {
 		component := paletteForTheme(data).componentTheme()
-		if component.PreviewBackgroundColor == nil || component.PreviewBorderColor == nil || component.PreviewTagFontColor == nil || component.PreviewTagBackgroundColor == nil || component.PreviewTagBorderColor == nil || component.GlanceFontColor == nil || component.GlanceIconColor == nil || component.GlanceBackgroundColor == nil || component.GlanceHoverBackgroundColor == nil || component.ToolbarHotkeyBorderColor == nil || component.ToolbarHotkeyBorderColor.A != 0 || component.ToolbarHotkeyFontColor == nil || component.ToolbarHotkeyBackgroundColor == nil || component.ActionContainerDividerColor == nil || component.ResultItemHoverBackgroundColor == nil {
+		if component.PreviewBackgroundColor == nil || component.PreviewBorderColor == nil || component.PreviewTagFontColor == nil || component.PreviewTagBackgroundColor == nil || component.PreviewTagBorderColor == nil || component.GlanceFontColor == nil || component.GlanceIconColor == nil || component.GlanceBackgroundColor == nil || component.GlanceHoverBackgroundColor == nil || component.AttentionFontColor == nil || component.AttentionIconColor == nil || component.AttentionBackgroundColor == nil || component.AttentionBorderColor == nil || component.AttentionBorderColor.A != 0 || component.AttentionHoverBackgroundColor == nil || component.AttentionHoverBorderColor == nil || component.AttentionHoverBorderColor.A != 0 || component.ToolbarHotkeyBorderColor == nil || component.ToolbarHotkeyBorderColor.A != 0 || component.ToolbarHotkeyFontColor == nil || component.ToolbarHotkeyBackgroundColor == nil || component.ActionContainerDividerColor == nil || component.ResultItemHoverBackgroundColor == nil {
 			t.Fatal("missing v2 rendering color")
 		}
 	}
@@ -47,7 +47,7 @@ func TestV2DetailColorsReachEditorAndRenderer(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, values := themeEditorForm(raw)
-	for _, field := range []string{"PreviewBackgroundColor", "PreviewBorderColor", "PreviewTagFontColor", "PreviewTagBackgroundColor", "PreviewTagBorderColor", "GlanceFontColor", "GlanceIconColor", "GlanceBackgroundColor", "GlanceHoverBackgroundColor", "ActionContainerDividerColor", "ToolbarHotkeyFontColor", "ToolbarHotkeyBackgroundColor", "ToolbarHotkeyBorderColor", "ActionItemHotkeyFontColor", "ActionItemHotkeyBackgroundColor", "ActionItemHotkeyBorderColor", "ActionItemActiveHotkeyFontColor", "ActionItemActiveHotkeyBackgroundColor", "ActionItemActiveHotkeyBorderColor", "ResultItemHoverBackgroundColor"} {
+	for _, field := range []string{"PreviewBackgroundColor", "PreviewBorderColor", "PreviewTagFontColor", "PreviewTagBackgroundColor", "PreviewTagBorderColor", "GlanceFontColor", "GlanceIconColor", "GlanceBackgroundColor", "GlanceHoverBackgroundColor", "AttentionFontColor", "AttentionIconColor", "AttentionBackgroundColor", "AttentionBorderColor", "AttentionHoverBackgroundColor", "AttentionHoverBorderColor", "ActionContainerDividerColor", "ToolbarHotkeyFontColor", "ToolbarHotkeyBackgroundColor", "ToolbarHotkeyBorderColor", "ActionItemHotkeyFontColor", "ActionItemHotkeyBackgroundColor", "ActionItemHotkeyBorderColor", "ActionItemActiveHotkeyFontColor", "ActionItemActiveHotkeyBackgroundColor", "ActionItemActiveHotkeyBorderColor", "ResultItemHoverBackgroundColor"} {
 		if _, exists := values[field]; !exists {
 			t.Fatalf("editor missing %s", field)
 		}

@@ -8,7 +8,7 @@ import (
 
 // TestThemeV2DetailColors covers inheritance, transparency, platform overrides and sparse saves.
 func TestThemeV2DetailColors(t *testing.T) {
-	fields := []string{"PreviewBackgroundColor", "PreviewBorderColor", "PreviewTagFontColor", "PreviewTagBackgroundColor", "PreviewTagBorderColor", "GlanceFontColor", "GlanceIconColor", "GlanceBackgroundColor", "GlanceHoverBackgroundColor", "ActionContainerDividerColor", "ToolbarHotkeyFontColor", "ToolbarHotkeyBackgroundColor", "ToolbarHotkeyBorderColor", "ResultItemHoverBackgroundColor"}
+	fields := []string{"PreviewBackgroundColor", "PreviewBorderColor", "PreviewTagFontColor", "PreviewTagBackgroundColor", "PreviewTagBorderColor", "GlanceFontColor", "GlanceIconColor", "GlanceBackgroundColor", "GlanceHoverBackgroundColor", "AttentionFontColor", "AttentionIconColor", "AttentionBackgroundColor", "AttentionBorderColor", "AttentionHoverBackgroundColor", "AttentionHoverBorderColor", "ActionContainerDividerColor", "ToolbarHotkeyFontColor", "ToolbarHotkeyBackgroundColor", "ToolbarHotkeyBorderColor", "ResultItemHoverBackgroundColor"}
 	for _, field := range fields {
 		for _, value := range []string{"null", `"transparent"`, `"#12345680"`, `"invalid"`} {
 			input := strings.TrimSuffix(minimalV2Theme, "}") + `,"` + field + `":` + value + `}`

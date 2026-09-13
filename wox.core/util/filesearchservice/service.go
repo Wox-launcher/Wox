@@ -16,7 +16,7 @@ const (
 	IndexDirectory  = "file-index-service"
 )
 
-var EmbeddedVersion = "2.8.1"
+var EmbeddedVersion = "2.8.2"
 var running atomic.Bool
 
 // ErrIndexNotReady lets Wox keep using its local fallback during the first build.
@@ -127,6 +127,10 @@ type Status struct {
 	InstalledVersion string
 	EmbeddedVersion  string
 	Detail           string
+}
+
+func (s Status) HasUpdate() bool {
+	return s.InstalledVersion != "" && updateAvailable(s.InstalledVersion, s.EmbeddedVersion)
 }
 
 func updateAvailable(installed, embedded string) bool {

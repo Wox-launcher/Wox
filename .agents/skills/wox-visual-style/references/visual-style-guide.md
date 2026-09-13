@@ -55,7 +55,7 @@ Do not create a second button, text field, dropdown, checkbox, switch, list item
 Do not apply the ordinary control-size system to:
 
 - the Launcher query and its accessories;
-- Launcher results, toolbar, refinements, and Glance;
+- Launcher results, toolbar, refinements, Glance, and Attention;
 - the complete Action Panel, including its filter and action rows;
 - native title-bar controls and platform-owned dialogs.
 
@@ -302,7 +302,7 @@ Before completing a visual change, confirm:
 
 V2 keycaps expose independent `ToolbarHotkey{Font,Background,Border}Color`, `ActionItemHotkey{Font,Background,Border}Color`, and `ActionItemActiveHotkey{Font,Background,Border}Color` groups. Explicit transparency must survive fallback. `ResultItemHoverBackgroundColor` only paints unselected hovered list backgrounds and grid frames; selected styling retains precedence. V1 retains all contextual fallback colors.
 
-V2 generic preview surfaces expose independent background and border colors. Preview metadata tags expose independent text, background and border colors, with exact authored alpha. Glance exposes text, SVG icon tint, normal background and hover background independently from QueryBox. Legacy fallback opacity and all layout dimensions remain unchanged.
+V2 generic preview surfaces expose independent background and border colors. Preview metadata tags expose independent text, background and border colors, with exact authored alpha. Glance exposes text, SVG icon tint, normal background and hover background independently from QueryBox. Attention uses the same idle/hover chrome as Glance: omitted fill and border stay transparent, hover wash uses query text at 10% alpha, and count text/icon follow query-text opacity unless overridden. Theme authors may still set Attention fill or border tokens; a zero-alpha border paints no stroke. Geometry stays with launcher density (30-high, radius 5, 16 icon) so the two query accessories read as one family.
 
 V2 Filters buttons expose independent normal/active text, icon, background, border, and hover background colors. Expanded refinements expose group background, border, title, divider, hotkey, and normal/selected/hovered option colors. Explicit alpha is preserved, including selected hover. V1 keeps contextual opacity rules; launcher density still owns control geometry.
 

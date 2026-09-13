@@ -18,6 +18,9 @@ import (
 type AttentionActionType string
 
 const (
+	// AttentionPluginID is the system Attention inbox plugin that owns the query-box unread badge.
+	AttentionPluginID = "3644c342-9033-44b7-8db6-246088681917"
+
 	AttentionActionTypeChangeQuery AttentionActionType = "change_query"
 
 	attentionReadRetention       = 30 * 24 * time.Hour
@@ -25,6 +28,16 @@ const (
 	attentionDatabaseMaxAttempts = 5
 	attentionDatabaseRetryDelay  = 100 * time.Millisecond
 )
+
+// IsAttentionPluginDisabled reports that the Attention inbox plugin exists and is turned off.
+// A missing instance is not treated as disabled so tests and early startup keep the last published count.
+func IsAttentionPluginDisabled() bool {
+	return attentionInstanceDisabled(GetPluginManager().GetPluginInstanceById(AttentionPluginID))
+}
+
+func attentionInstanceDisabled(instance *Instance) bool {
+	return instance != nil && instance.Setting != nil && instance.Setting.Disabled != nil && instance.Setting.Disabled.Get()
+}
 
 // PushAttentionRequest is the plugin-facing request for a persistent attention item.
 type PushAttentionRequest struct {
@@ -150,6 +163,16 @@ func (m *AttentionManager) Push(ctx context.Context, source AttentionPluginSourc
 
 // MarkRead marks an attention item as read when it exists.
 func (m *AttentionManager) MarkRead(ctx context.Context, identityKey string) error {
+	return m.setReadState(ctx, identityKey, true)
+}
+
+// MarkUnread restores a read attention item to the unread inbox.
+func (m *AttentionManager) MarkUnread(ctx context.Context, identityKey string) error {
+	return m.setReadState(ctx, identityKey, false)
+}
+
+// setReadState flips one item between the unread inbox and the read history.
+func (m *AttentionManager) setReadState(ctx context.Context, identityKey string, read bool) error {
 	if m == nil || m.db == nil {
 		return errors.New("attention manager database is not initialized")
 	}
@@ -160,15 +183,20 @@ func (m *AttentionManager) MarkRead(ctx context.Context, identityKey string) err
 	}
 
 	now := util.GetSystemTimestamp()
+	updates := map[string]any{
+		"is_read":           read,
+		"updated_timestamp": now,
+	}
+	if read {
+		updates["read_timestamp"] = now
+	} else {
+		updates["read_timestamp"] = 0
+	}
 	return retryAttentionDatabaseWrite(ctx, func() error {
 		return m.db.WithContext(ctx).
 			Model(&database.AttentionItem{}).
-			Where("identity_key = ? AND is_read = ?", identityKey, false).
-			Updates(map[string]any{
-				"is_read":           true,
-				"read_timestamp":    now,
-				"updated_timestamp": now,
-			}).Error
+			Where("identity_key = ? AND is_read = ?", identityKey, !read).
+			Updates(updates).Error
 	})
 }
 

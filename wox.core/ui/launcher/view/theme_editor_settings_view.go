@@ -306,24 +306,13 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 		// Match the demo's 77-unit preview top and 50-unit footer clearance.
 		preview = themeEditorTextPreviewPanel(props, max(float32(0), width-resultWidth-16), max(float32(0), height-127))
 	}
-	glanceText, glanceBackground := themeAlpha(props.DraftTheme.QueryText, 178), woxui.Color{}
-	glanceIcon := glanceText
-	if props.DraftTheme.GlanceFontColor != nil {
-		glanceText, glanceBackground = props.DraftTheme.GlanceColors(props.FlashToken == "GlanceHoverBackgroundColor")
-	}
-	if props.DraftTheme.GlanceIconColor != nil {
-		glanceIcon = props.DraftTheme.GlanceIconTint()
-	}
 	return woxcomponent.WoxLauncherDemo(woxcomponent.LauncherDemoProps{
 		Width: width, Height: height, Backdrop: props.WallpaperBlurred, Background: props.DraftTheme.Background, Theme: props.DraftTheme, Opacity: 1,
 		Query: "wox search", QueryParts: []woxcomponent.LauncherDemoQueryPart{
 			{Text: "wox ", Color: props.DraftTheme.QueryText}, {Text: "search", Color: selectionText, Background: selection, Selected: props.ActiveGroup == 1}, {Color: props.DraftTheme.Cursor, Caret: true},
 		},
-		QueryAccessory: themeEditorFlashOverlay(woxwidget.Container{Width: 78, Height: 30, Radius: 5, Color: glanceBackground, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			themeEditorFlashOverlay(woxcomponent.ClockGlyph(16, glanceIcon), 16, 16, 3, props.FlashToken == "GlanceIconColor"),
-			themeEditorFlashOverlay(woxwidget.Text{Value: time.Now().Format("15:04"), Style: woxui.TextStyle{Size: woxcomponent.GlanceFontSize}, Color: glanceText}, 41, 20, 3, props.FlashToken == "GlanceFontColor"),
-		}}}, 78, 30, 5, props.FlashToken == "GlanceBackgroundColor" || props.FlashToken == "GlanceHoverBackgroundColor"),
-		Results: results, ResultWidth: resultWidth, Preview: preview, ShowQuery: true, ShowToolbar: true,
+		QueryAccessory: themeEditorQueryAccessories(props),
+		Results:        results, ResultWidth: resultWidth, Preview: preview, ShowQuery: true, ShowToolbar: true,
 		PrimaryAction: props.ToolbarCopyLabel, ActionCopy: props.ToolbarCopyLabel, ActionMore: props.ToolbarMoreLabel,
 		ActionProgress: themeBoolFloat(props.ActiveGroup == 4), HighlightColor: themeEditorFlashColor(),
 		HighlightTarget: themeEditorDemoHighlightTarget(props.FlashToken),
@@ -628,6 +617,47 @@ func themeEditorTokenCard(props ThemeEditorSettingsProps, token ThemeEditorColor
 		},
 		Child: woxwidget.Gesture{ID: id + "-pointer", OnTap: activate, Child: card},
 	}
+}
+
+func themeEditorQueryAccessories(props ThemeEditorSettingsProps) woxwidget.Widget {
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		themeEditorAttentionAccessory(props),
+		themeEditorGlanceAccessory(props),
+	}}
+}
+
+func themeEditorAttentionAccessory(props ThemeEditorSettingsProps) woxwidget.Widget {
+	hovered := props.FlashToken == "AttentionHoverBackgroundColor" || props.FlashToken == "AttentionHoverBorderColor"
+	icon, label, background, border := props.DraftTheme.AttentionBadgeColors(hovered)
+	borderWidth := float32(0)
+	if border.A > 0 {
+		borderWidth = 1
+	}
+	return themeEditorFlashOverlay(woxwidget.Container{
+		Width: 50, Height: 30, Radius: 5, Color: background, BorderColor: border, BorderWidth: borderWidth,
+		Padding: woxwidget.Insets{Left: 8, Right: 8},
+		Child: woxwidget.Align{Width: 34, Height: 30, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				themeEditorFlashOverlay(woxcomponent.InboxGlyph(16, icon), 16, 16, 3, props.FlashToken == "AttentionIconColor"),
+				themeEditorFlashOverlay(woxwidget.Text{Value: "1", Style: woxui.TextStyle{Size: woxcomponent.AttentionBadgeFontSize}, Color: label}, 10, 16, 3, props.FlashToken == "AttentionFontColor"),
+			},
+		}},
+	}, 50, 30, 5, props.FlashToken == "AttentionBackgroundColor" || props.FlashToken == "AttentionBorderColor" || hovered)
+}
+
+func themeEditorGlanceAccessory(props ThemeEditorSettingsProps) woxwidget.Widget {
+	glanceText, glanceBackground := themeAlpha(props.DraftTheme.QueryText, 178), woxui.Color{}
+	glanceIcon := glanceText
+	if props.DraftTheme.GlanceFontColor != nil {
+		glanceText, glanceBackground = props.DraftTheme.GlanceColors(props.FlashToken == "GlanceHoverBackgroundColor")
+	}
+	if props.DraftTheme.GlanceIconColor != nil {
+		glanceIcon = props.DraftTheme.GlanceIconTint()
+	}
+	return themeEditorFlashOverlay(woxwidget.Container{Width: 78, Height: 30, Radius: 5, Color: glanceBackground, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		themeEditorFlashOverlay(woxcomponent.ClockGlyph(16, glanceIcon), 16, 16, 3, props.FlashToken == "GlanceIconColor"),
+		themeEditorFlashOverlay(woxwidget.Text{Value: time.Now().Format("15:04"), Style: woxui.TextStyle{Size: woxcomponent.GlanceFontSize}, Color: glanceText}, 41, 20, 3, props.FlashToken == "GlanceFontColor"),
+	}}}, 78, 30, 5, props.FlashToken == "GlanceBackgroundColor" || props.FlashToken == "GlanceHoverBackgroundColor")
 }
 
 func themeAlpha(color woxui.Color, alpha uint8) woxui.Color {

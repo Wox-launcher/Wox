@@ -19,7 +19,8 @@ func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
 	visual := children[0].(woxwidget.Stack)
 	frameBoundary := visual.Children[0].Child.(woxwidget.Boundary[launcherGridFrameProps])
 	iconBoundary := visual.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
-	titleBoundary := children[1].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTextProps])
+	titleAlign := children[1].(woxwidget.Align)
+	titleBoundary := titleAlign.Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTextProps])
 	frame := frameBoundary.Build(frameBoundary.Props).(woxwidget.Container)
 
 	if frame.Color.A != 0 || frame.BorderColor != active || frame.BorderWidth != 4 || frame.Radius != 8 {
@@ -27,6 +28,17 @@ func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
 	}
 	if frameBoundary.Key != LauncherResultBackgroundBoundaryKey("wallpaper") || iconBoundary.Key != LauncherResultIconBoundaryKey("wallpaper") || titleBoundary.Key != LauncherResultTitleBoundaryKey("wallpaper") {
 		t.Fatalf("grid boundary keys = %q/%q/%q, want independent frame/icon/title keys", frameBoundary.Key, iconBoundary.Key, titleBoundary.Key)
+	}
+}
+
+func TestLauncherGridTitleCentersUnderIcon(t *testing.T) {
+	result := launcherGridResultView(LauncherGridResult{ID: "app", Title: "QQ音乐"}, LauncherGridProps{
+		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70, ItemPadding: 4, ShowTitle: true, TitleHeight: 22,
+	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	children := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	title := children[1].(woxwidget.Align)
+	if title.Width != 108 || title.Height != 22 || title.Horizontal != 0.5 {
+		t.Fatalf("grid title align = width %.0f height %.0f horizontal %.1f, want the icon frame width and centered text", title.Width, title.Height, title.Horizontal)
 	}
 }
 

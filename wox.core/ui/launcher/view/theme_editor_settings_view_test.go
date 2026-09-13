@@ -166,8 +166,11 @@ func TestThemeEditorUsesCompleteLauncherDemo(t *testing.T) {
 	if query.Height != 55 || result.Height != 56 || toolbar.Height != 40 {
 		t.Fatalf("shared launcher demo metrics = query %v, result %v, toolbar %v", query.Height, result.Height, toolbar.Height)
 	}
-	accessory := query.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
-	timeText := accessory.Children[1].(woxwidget.Text).Value
+	accessories := query.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	if len(accessories.Children) != 2 {
+		t.Fatalf("theme demo query accessories = %d, want attention and glance", len(accessories.Children))
+	}
+	timeText := accessories.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text).Value
 	if len(timeText) != 5 || timeText[2] != ':' {
 		t.Fatalf("theme demo Glance = %q, want current HH:MM time", timeText)
 	}
@@ -188,9 +191,9 @@ func TestThemeEditorMapsTokensToSemanticDemoHighlights(t *testing.T) {
 		"ResultItemActiveTailTextColor":   woxcomponent.LauncherDemoHighlightSelectedTail,
 		"ActionItemActiveFontColor":       woxcomponent.LauncherDemoHighlightActionSelectedText,
 		"ToolbarFontColor":                woxcomponent.LauncherDemoHighlightToolbarText,
-		"ToolbarHotkeyFontColor":                 woxcomponent.LauncherDemoHighlightHotkey,
-		"ToolbarHotkeyBackgroundColor":           woxcomponent.LauncherDemoHighlightHotkey,
-		"ToolbarHotkeyBorderColor":               woxcomponent.LauncherDemoHighlightHotkey,
+		"ToolbarHotkeyFontColor":          woxcomponent.LauncherDemoHighlightHotkey,
+		"ToolbarHotkeyBackgroundColor":    woxcomponent.LauncherDemoHighlightHotkey,
+		"ToolbarHotkeyBorderColor":        woxcomponent.LauncherDemoHighlightHotkey,
 	}
 	for token, want := range tests {
 		if got := themeEditorDemoHighlightTarget(token); got != want {

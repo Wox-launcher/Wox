@@ -195,6 +195,7 @@ func (a *App) nativeHoverTooltipNeedsReplace(name, text string, anchor woxui.Rec
 var launcherHoverTooltipNames = []string{
 	"go-ui-preview-tag",
 	"go-ui-glance",
+	"go-ui-attention",
 	"go-ui-refinement",
 	"go-ui-titlebar-action",
 	"go-ui-result-tail",
@@ -207,6 +208,7 @@ func (a *App) dismissLauncherHoverTooltipsOnUI() {
 	a.previewTooltipRevision.Add(1)
 	a.resultTailTooltipRevision.Add(1)
 	a.glanceTooltipRevision.Add(1)
+	a.attentionTooltipRevision.Add(1)
 	a.refinementTooltipRevision.Add(1)
 	a.tooltipMu.Lock()
 	for _, name := range launcherHoverTooltipNames {

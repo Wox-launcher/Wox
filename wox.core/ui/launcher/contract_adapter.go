@@ -263,9 +263,20 @@ func (a *App) ClearToolbarMessage(_ context.Context, toolbarMessageID string) er
 	})
 }
 
-// UpdateAttentionUnreadCount is reserved for the launcher-wide attention decoration.
-func (a *App) UpdateAttentionUnreadCount(_ context.Context, _ int) error {
-	return nil
+// UpdateAttentionUnreadCount shows or hides the query-box unread decoration beside Glance.
+func (a *App) UpdateAttentionUnreadCount(_ context.Context, unreadCount int) error {
+	if unreadCount < 0 {
+		unreadCount = 0
+	}
+	return a.runOnUI("update attention unread count", func() {
+		if a.attentionUnreadCount == unreadCount {
+			return
+		}
+		a.attentionUnreadCount = unreadCount
+		if a.window != nil {
+			_ = a.window.Invalidate()
+		}
+	})
 }
 
 // SendChatResponse reconciles a core chat snapshot with the active preview.
@@ -517,6 +528,10 @@ func fromCoreTheme(theme common.Theme) themeData {
 		GlanceFontColor:                            colors["GlanceFontColor"],
 		GlanceIconColor:                            colors["GlanceIconColor"],
 		GlanceBackgroundColor:                      colors["GlanceBackgroundColor"],
+		AttentionFontColor:                         colors["AttentionFontColor"],
+		AttentionIconColor:                         colors["AttentionIconColor"],
+		AttentionBackgroundColor:                   colors["AttentionBackgroundColor"],
+		AttentionBorderColor:                       colors["AttentionBorderColor"],
 		RefinementButtonFontColor:                  colors["RefinementButtonFontColor"],
 		RefinementButtonIconColor:                  colors["RefinementButtonIconColor"],
 		RefinementButtonBackgroundColor:            colors["RefinementButtonBackgroundColor"],
@@ -552,6 +567,8 @@ func fromCoreTheme(theme common.Theme) themeData {
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,
 		GlanceHoverBackgroundColor:                 colors["GlanceHoverBackgroundColor"],
+		AttentionHoverBackgroundColor:              colors["AttentionHoverBackgroundColor"],
+		AttentionHoverBorderColor:                  colors["AttentionHoverBorderColor"],
 
 		ToolbarHotkeyFontColor:                colors["ToolbarHotkeyFontColor"],
 		ActionItemHotkeyFontColor:             colors["ActionItemHotkeyFontColor"],

@@ -413,6 +413,26 @@ func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 	}
 }
 
+func TestLauncherHeaderPlacesAttentionBesideGlance(t *testing.T) {
+	header := LauncherHeaderView(LauncherHeaderProps{
+		Width: 600, Height: 60, QueryBoxHeight: 50, QueryWidth: 400,
+		Attention: woxwidget.Container{Width: 30, Height: 30}, AttentionWidth: 30,
+		Glance: woxwidget.Container{Width: 40, Height: 30}, GlanceWidth: 40,
+	}).(woxwidget.Container)
+	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(row.Children) != 3 {
+		t.Fatalf("header children = %d, want query, attention, glance", len(row.Children))
+	}
+	attention, ok := row.Children[1].(woxwidget.Align)
+	if !ok || attention.Width != 30 || attention.Vertical != 0.5 {
+		t.Fatalf("attention slot = %#v, want vertically centered 30-wide Align left of glance", row.Children[1])
+	}
+	glance, ok := row.Children[2].(woxwidget.Align)
+	if !ok || glance.Width != 40 || glance.Vertical != 0.5 {
+		t.Fatalf("glance slot = %#v, want vertically centered 40-wide Align after attention", row.Children[2])
+	}
+}
+
 func TestLauncherHeaderUsesAlignmentForVerticalAccessoryPlacement(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 600, Height: 60, QueryBoxHeight: 50, QueryWidth: 400,

@@ -51,7 +51,18 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), []themeColorToken{{key: "ActionItemHotkeyFontColor", label: "i18n:ui_theme_editor_token_action_hotkey_text"}, {key: "ActionItemHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_action_hotkey_background"}, {key: "ActionItemHotkeyBorderColor", label: "i18n:ui_theme_editor_token_action_hotkey_border"}, {key: "ActionItemActiveHotkeyFontColor", label: "i18n:ui_theme_editor_token_action_active_hotkey_text"}, {key: "ActionItemActiveHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_action_active_hotkey_background"}, {key: "ActionItemActiveHotkeyBorderColor", label: "i18n:ui_theme_editor_token_action_active_hotkey_border"}}...)
 
 	groups[3].tokens = append(append([]themeColorToken(nil), groups[3].tokens...), []themeColorToken{{key: "PreviewBackgroundColor", label: "i18n:ui_theme_editor_token_preview_background"}, {key: "PreviewBorderColor", label: "i18n:ui_theme_editor_token_preview_border"}, {key: "PreviewTagFontColor", label: "i18n:ui_theme_editor_token_preview_tag_font"}, {key: "PreviewTagBackgroundColor", label: "i18n:ui_theme_editor_token_preview_tag_background"}, {key: "PreviewTagBorderColor", label: "i18n:ui_theme_editor_token_preview_tag_outline"}}...)
-	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), []themeColorToken{{key: "GlanceFontColor", label: "i18n:ui_theme_editor_token_glance_text"}, {key: "GlanceIconColor", label: "i18n:ui_theme_editor_token_glance_icon"}, {key: "GlanceBackgroundColor", label: "i18n:ui_theme_editor_token_glance_background"}, {key: "GlanceHoverBackgroundColor", label: "i18n:ui_theme_editor_token_glance_hover_background"}}...)
+	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), []themeColorToken{
+		{key: "GlanceFontColor", label: "i18n:ui_theme_editor_token_glance_text"},
+		{key: "GlanceIconColor", label: "i18n:ui_theme_editor_token_glance_icon"},
+		{key: "GlanceBackgroundColor", label: "i18n:ui_theme_editor_token_glance_background"},
+		{key: "GlanceHoverBackgroundColor", label: "i18n:ui_theme_editor_token_glance_hover_background"},
+		{key: "AttentionFontColor", label: "i18n:ui_theme_editor_token_attention_text"},
+		{key: "AttentionIconColor", label: "i18n:ui_theme_editor_token_attention_icon"},
+		{key: "AttentionBackgroundColor", label: "i18n:ui_theme_editor_token_attention_background"},
+		{key: "AttentionBorderColor", label: "i18n:ui_theme_editor_token_attention_border"},
+		{key: "AttentionHoverBackgroundColor", label: "i18n:ui_theme_editor_token_attention_hover_background"},
+		{key: "AttentionHoverBorderColor", label: "i18n:ui_theme_editor_token_attention_hover_border"},
+	}...)
 	for i := range groups[3].tokens {
 		switch groups[3].tokens[i].key {
 		case "PreviewPropertyTitleColor":

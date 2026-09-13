@@ -22,6 +22,10 @@ type Theme struct {
 	GlanceFontColor                            *woxui.Color
 	GlanceIconColor                            *woxui.Color
 	GlanceBackgroundColor                      *woxui.Color
+	AttentionFontColor                         *woxui.Color
+	AttentionIconColor                         *woxui.Color
+	AttentionBackgroundColor                   *woxui.Color
+	AttentionBorderColor                       *woxui.Color
 	RefinementButtonFontColor                  *woxui.Color
 	RefinementButtonIconColor                  *woxui.Color
 	RefinementButtonBackgroundColor            *woxui.Color
@@ -57,6 +61,8 @@ type Theme struct {
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
 	GlanceHoverBackgroundColor                 *woxui.Color
+	AttentionHoverBackgroundColor              *woxui.Color
+	AttentionHoverBorderColor                  *woxui.Color
 
 	// Optional v2 colors retain legacy contextual fallbacks when absent.
 	ActionContainerDividerColor           *woxui.Color
@@ -149,6 +155,37 @@ func (t Theme) GlanceColors(hovered bool) (foreground, background woxui.Color) {
 		background.A = uint8(float32(background.A) * .1)
 		if t.GlanceHoverBackgroundColor != nil {
 			background = *t.GlanceHoverBackgroundColor
+		}
+	}
+	return
+}
+
+// AttentionBadgeColors matches Glance chrome: no idle fill or border, hover wash from query text.
+func (t Theme) AttentionBadgeColors(hovered bool) (icon, label, background, border woxui.Color) {
+	label = t.QueryText
+	label.A = uint8(float32(label.A) * .8)
+	if t.AttentionFontColor != nil {
+		label = *t.AttentionFontColor
+	}
+	icon = t.QueryText
+	icon.A = uint8(float32(icon.A) * .8 * .72)
+	if t.AttentionIconColor != nil {
+		icon = *t.AttentionIconColor
+	}
+	if t.AttentionBackgroundColor != nil {
+		background = *t.AttentionBackgroundColor
+	}
+	if t.AttentionBorderColor != nil {
+		border = *t.AttentionBorderColor
+	}
+	if hovered {
+		background = t.QueryText
+		background.A = uint8(float32(background.A) * .1)
+		if t.AttentionHoverBackgroundColor != nil {
+			background = *t.AttentionHoverBackgroundColor
+		}
+		if t.AttentionHoverBorderColor != nil {
+			border = *t.AttentionHoverBorderColor
 		}
 	}
 	return

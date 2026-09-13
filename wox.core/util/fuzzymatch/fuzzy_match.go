@@ -1,13 +1,6 @@
 package fuzzymatch
 
-import (
-	"sync/atomic"
-	"unicode"
-)
-
-// Global generation counter to ensure unique generation IDs across function calls.
-// This prevents stale generation values from causing incorrect matches when buffers are reused.
-var globalGeneration atomic.Uint32
+import "unicode"
 
 // FuzzyMatchResult represents the result of a fuzzy match operation
 type FuzzyMatchResult struct {
@@ -823,7 +816,10 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 	}
 	*generationPtr = generation
 
-	currentGen := globalGeneration.Add(uint32(len(segments) + 1))
+	// Pooled markers belong to previous searches, whose index buffers may differ.
+	// Reset them before using local generations to avoid stale indices and counter wraparound.
+	clear(generation)
+	var currentGen uint32
 
 	for _, seg := range segments {
 		nextStates = nextStates[:0]

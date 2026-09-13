@@ -5,8 +5,10 @@ package attention
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ const (
 	attentionFixtureIdentityKey = attentionFixturePluginID + ":" + attentionFixtureKey
 	attentionFixtureTitle       = "Attention smoke item"
 	attentionFixtureQuery       = "wox-smoke attention "
+	attentionUnreadBadgeID      = "launcher.query.attention"
 )
 
 type attentionFixtureState struct {
@@ -72,6 +75,85 @@ func activateFixtureAction(t *testing.T, ctx context.Context, client *automation
 		t.Fatalf("wait for Attention fixture action %q to complete: %v", actionPrefix, err)
 	}
 	smoke.WaitForResultActionsClosed(t, ctx, client)
+}
+
+// showUnreadAttentionBadge pushes the fixture and waits until the query-box unread badge is visible.
+func showUnreadAttentionBadge(t *testing.T, ctx context.Context, client *automationdriver.Client) woxwidget.AutomationSnapshot {
+	t.Helper()
+	activateFixtureAction(t, ctx, client, "action-result-push-fresh-attention-")
+	waitForAttentionState(t, ctx, func(state attentionFixtureState) bool {
+		return state.count == 1 && !state.isRead && state.fingerprint != ""
+	})
+	smoke.ReplaceLauncherQuery(t, ctx, client, "")
+	return waitForAttentionUnreadBadge(t, ctx, client)
+}
+
+// waitForAttentionUnreadBadge waits until the query-box badge reports a non-zero unread count.
+func waitForAttentionUnreadBadge(t *testing.T, ctx context.Context, client *automationdriver.Client) woxwidget.AutomationSnapshot {
+	t.Helper()
+	snapshot, err := client.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
+		badge, found := automationdriver.Find(snapshot, attentionUnreadBadgeID)
+		if !found {
+			return false, "unread badge missing"
+		}
+		if badge.Value == "" || badge.Value == "0" {
+			return false, fmt.Sprintf("unread badge value %q", badge.Value)
+		}
+		return true, ""
+	})
+	if err != nil {
+		t.Fatalf("wait for Attention unread badge: %v", err)
+	}
+	return snapshot
+}
+
+// waitForAttentionUnreadBadgeHidden waits until the query-box unread badge leaves the tree.
+func waitForAttentionUnreadBadgeHidden(t *testing.T, ctx context.Context, client *automationdriver.Client) woxwidget.AutomationSnapshot {
+	t.Helper()
+	snapshot, err := client.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
+		if _, found := automationdriver.Find(snapshot, attentionUnreadBadgeID); found {
+			return false, "unread badge still visible"
+		}
+		return true, ""
+	})
+	if err != nil {
+		t.Fatalf("wait for Attention unread badge to hide: %v", err)
+	}
+	return snapshot
+}
+
+// waitForAttentionInboxOpened waits until the launcher is showing the Attention inbox query.
+func waitForAttentionInboxOpened(t *testing.T, ctx context.Context, client *automationdriver.Client) woxwidget.AutomationSnapshot {
+	t.Helper()
+	snapshot, err := client.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
+		input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+		results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
+		if !inputFound || input.Value != "attention " {
+			query := ""
+			if inputFound {
+				query = input.Value
+			}
+			return false, fmt.Sprintf("query %q", query)
+		}
+		if !resultsFound || results.Value != "complete" {
+			return false, "attention results incomplete"
+		}
+		if !smoke.HasLauncherResultLabel(snapshot, attentionFixtureTitle) {
+			return false, "attention fixture item missing"
+		}
+		return true, ""
+	})
+	if err != nil {
+		t.Fatalf("wait for Attention inbox: %v", err)
+	}
+	return snapshot
+}
+
+func primaryModifier() woxui.KeyModifiers {
+	if runtime.GOOS == "darwin" {
+		return woxui.KeyModifierMeta
+	}
+	return woxui.KeyModifierControl
 }
 
 // openAttentionItem selects the persisted fixture item and returns its current semantics snapshot.

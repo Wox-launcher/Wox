@@ -209,7 +209,10 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	children := []woxwidget.Widget{visual}
 	if props.ShowTitle {
 		titleProps := launcherResultTextProps{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridItemTitleFontSize, props.DensityScale)}, Color: props.Theme.ResultTitle}
-		children = append(children, woxwidget.Container{Width: props.VisualWidth, Height: props.TitleHeight, Padding: woxwidget.Insets{Top: 4}, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)})
+		children = append(children, woxwidget.Align{
+			Width: visualWidth, Height: props.TitleHeight, Horizontal: 0.5,
+			Child: woxwidget.Container{Padding: woxwidget.Insets{Top: 4}, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(result.ID), "grid-title:"+result.ID, titleProps)},
+		})
 	}
 	onPointer, onHover := hoverEnterOnPointerMove(result.OnHover)
 	return woxwidget.Semantics{

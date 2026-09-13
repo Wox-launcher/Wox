@@ -75,6 +75,8 @@ type viewSnapshot struct {
 	toolbarMsg            *toolbarMessage
 	glance                *glanceItem
 	hideGlanceIcon        bool
+	attentionUnreadCount  int
+	attentionVisible      bool
 	form                  *formSnapshot
 	tableEditor           *formTableEditorSnapshot
 	requirementFormActive bool
@@ -171,6 +173,8 @@ func (a *App) snapshot() viewSnapshot {
 		toolbarMsg:            toolbarMsg,
 		glance:                glance,
 		hideGlanceIcon:        a.generalSettings.Data().HideGlanceIcon,
+		attentionUnreadCount:  a.attentionUnreadCount,
+		attentionVisible:      a.attentionEligibleLocked(),
 		form:                  snapshotFormLocked(a.form),
 		tableEditor:           tableEditor,
 		requirementFormActive: a.requirementForm != nil && a.requirementForm.active,
@@ -444,6 +448,13 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
 	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-snapshot.densityMetrics.scaled(6))
 	queryWidth := contentWidth
+	attentionWidth := float32(0)
+	if snapshot.attentionVisible {
+		countText := launcherview.AttentionUnreadCountText(snapshot.attentionUnreadCount)
+		metrics, _ := a.window.MeasureText(countText, woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.AttentionBadgeFontSize)})
+		attentionWidth = launcherview.AttentionUnreadWidth(metrics.Size.Width, snapshot.densityMetrics.scale)
+		queryWidth -= attentionWidth + accessoryGap
+	}
 	glanceWidth := float32(0)
 	if !snapshot.queryLoading && snapshot.glance != nil {
 		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.GlanceFontSize)})
@@ -481,6 +492,10 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 	if !snapshot.queryLoading && len(snapshot.refinements) > 0 {
 		refinement = a.buildRefinementToggle(snapshot, scale)
 	}
+	var attention woxwidget.Widget
+	if snapshot.attentionVisible {
+		attention = a.buildAttentionUnread(snapshot.attentionUnreadCount, snapshot.palette, attentionWidth, scale, snapshot.densityMetrics)
+	}
 	var glance woxwidget.Widget
 	if !snapshot.queryLoading && snapshot.glance != nil {
 		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale, snapshot.densityMetrics)
@@ -509,7 +524,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		Width:     width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: headerPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight, queryLineHeight), Refinement: refinement, RefinementWidth: refinementWidth,
-		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Icons: queryIcons,
+		Attention: attention, AttentionWidth: attentionWidth, Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Icons: queryIcons,
 		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
 		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {

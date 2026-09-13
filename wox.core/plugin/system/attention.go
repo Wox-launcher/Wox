@@ -14,8 +14,9 @@ import (
 var attentionIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#4f7cff" d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13A2.5 2.5 0 0 1 17.5 21h-11A2.5 2.5 0 0 1 4 18.5z"/><path fill="#fff" d="M6.4 13.2h3.1c.5 0 .9.3 1.1.7l.5 1c.2.4.6.7 1.1.7h1.6c.5 0 .9-.3 1.1-.7l.5-1c.2-.4.6-.7 1.1-.7h3.1v5.3c0 .7-.6 1.3-1.3 1.3H7.7c-.7 0-1.3-.6-1.3-1.3z" opacity=".95"/><path fill="#dbe6ff" d="M7.8 6.2h8.4a.8.8 0 0 1 0 1.6H7.8a.8.8 0 1 1 0-1.6m0 3.2h8.4a.8.8 0 0 1 0 1.6H7.8a.8.8 0 1 1 0-1.6"/></svg>`)
 
 const (
-	attentionOpenActionID     = "attention-open"
-	attentionMarkReadActionID = "attention-mark-read"
+	attentionOpenActionID       = "attention-open"
+	attentionMarkReadActionID   = "attention-mark-read"
+	attentionMarkUnreadActionID = "attention-mark-unread"
 )
 
 func init() {
@@ -29,7 +30,7 @@ type AttentionPlugin struct {
 
 func (a *AttentionPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "3644c342-9033-44b7-8db6-246088681917",
+		Id:            plugin.AttentionPluginID,
 		Name:          "i18n:plugin_attention_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -52,6 +53,8 @@ func (a *AttentionPlugin) GetMetadata() plugin.Metadata {
 
 func (a *AttentionPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	a.api = initParams.API
+	// Replay persisted unread items so the query-box decoration appears after restart.
+	plugin.PublishAttentionUnreadCount(ctx)
 }
 
 func (a *AttentionPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -161,7 +164,20 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 			PreventHideAfterAction: true,
 			Hotkey:                 util.PrimaryHotkey("enter"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				a.markReadAndPublish(ctx, item.IdentityKey)
+				a.setReadAndPublish(ctx, item.IdentityKey, true)
+				a.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			},
+		})
+	} else {
+		actions = append(actions, plugin.QueryResultAction{
+			Id:                     attentionMarkUnreadActionID,
+			Name:                   "i18n:plugin_attention_action_mark_unread",
+			Icon:                   icons.Get(icons.ControlInbox),
+			IsDefault:              len(actions) == 0,
+			PreventHideAfterAction: true,
+			Hotkey:                 util.PrimaryHotkey("enter"),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				a.setReadAndPublish(ctx, item.IdentityKey, false)
 				a.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 			},
 		})
@@ -171,8 +187,23 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 }
 
 func (a *AttentionPlugin) markReadAndPublish(ctx context.Context, identityKey string) {
-	if err := a.getManager().MarkRead(ctx, identityKey); err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to mark attention item read: %v", err))
+	a.setReadAndPublish(ctx, identityKey, true)
+}
+
+// setReadAndPublish updates one item and refreshes the query-box unread badge.
+func (a *AttentionPlugin) setReadAndPublish(ctx context.Context, identityKey string, read bool) {
+	var err error
+	if read {
+		err = a.getManager().MarkRead(ctx, identityKey)
+	} else {
+		err = a.getManager().MarkUnread(ctx, identityKey)
+	}
+	if err != nil {
+		state := "read"
+		if !read {
+			state = "unread"
+		}
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to mark attention item %s: %v", state, err))
 		return
 	}
 	if a.manager != nil {

@@ -679,6 +679,10 @@ func (m *Manager) DisablePlugin(ctx context.Context, pluginId string) error {
 		return err
 	}
 	m.deactivatePlugin(ctx, pluginInstance)
+	if strings.EqualFold(pluginId, AttentionPluginID) {
+		// Hide the query-box unread badge as soon as the inbox plugin is turned off.
+		PublishAttentionUnreadCount(ctx)
+	}
 	return nil
 }
 
@@ -695,6 +699,9 @@ func (m *Manager) EnablePlugin(ctx context.Context, pluginId string) error {
 	if err := m.activatePlugin(ctx, pluginInstance); err != nil {
 		_ = pluginInstance.Setting.Disabled.Set(true)
 		return err
+	}
+	if strings.EqualFold(pluginId, AttentionPluginID) {
+		PublishAttentionUnreadCount(ctx)
 	}
 	return nil
 }

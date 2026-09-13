@@ -289,6 +289,14 @@ func DebugGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("settings.debug", size, color)
 }
 
+// InboxGlyph returns the shared SVG inbox icon used by the Attention unread badge.
+func InboxGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 15
+	}
+	return svgIcon("control.inbox", size, color)
+}
+
 // ClockGlyph returns the shared SVG clock icon.
 func ClockGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

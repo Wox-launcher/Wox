@@ -185,6 +185,8 @@ type App struct {
 	glanceLoading                 bool
 	glanceRevision                uint64
 	glanceTooltipRevision         atomic.Uint64
+	attentionUnreadCount          int
+	attentionTooltipRevision      atomic.Uint64
 	refinementTooltipRevision     atomic.Uint64
 	glanceTimer                   *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
@@ -1426,6 +1428,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		}
 	}
 	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
+		return true
+	}
+	if event.Key == woxui.Key("u") && event.Modifiers.HasPrimary() && a.activateAttentionUnread() {
 		return true
 	}
 	if a.onRefinementHotkey(event) {

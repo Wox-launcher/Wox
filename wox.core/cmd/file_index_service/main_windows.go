@@ -228,11 +228,19 @@ func install(ownerSID string, indexPath string) error {
 		return err
 	}
 	defer s.Close()
-	return s.Start()
+	return restartService(s)
 }
 
-// restartService applies a repaired binary path even when the old service is still running.
+// restartService configures crash recovery and applies the installed binary path.
 func restartService(service *mgr.Service) error {
+	// Retry transient crashes, but stop after repeated failures to avoid a rebuild loop.
+	if err := service.SetRecoveryActions([]mgr.RecoveryAction{
+		{Type: mgr.ServiceRestart, Delay: 5 * time.Second},
+		{Type: mgr.ServiceRestart, Delay: 30 * time.Second},
+		{Type: mgr.NoAction},
+	}, 86400); err != nil {
+		return fmt.Errorf("configure file index service recovery: %w", err)
+	}
 	status, err := service.Query()
 	if err != nil {
 		return err

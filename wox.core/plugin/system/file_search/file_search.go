@@ -81,6 +81,9 @@ const (
 // without touching Spotlight, Windows Recent, or recently-used.xbel.
 var listRecentFilesFn = recentfiles.List
 
+// executeFileIndexServiceFn lets lifecycle tests avoid the machine-wide service.
+var executeFileIndexServiceFn = filesearchservice.Execute
+
 const (
 	fileSearchTypeRefinementKey     = "file_type"
 	fileSearchTypeRefinementAll     = "all"
@@ -114,6 +117,7 @@ type FileSearchPlugin struct {
 	unsubscribeStatusChange  func()
 	toolbarMsgStateMu        sync.Mutex
 	lastToolbarMsgSignature  string
+	serviceUpdateStatus      filesearchservice.Status
 	completionHoldUntilMs    int64
 	completionHoldGeneration int64
 	contentSearchStateMu     sync.Mutex
@@ -126,6 +130,7 @@ type FileSearchPlugin struct {
 	contentCrawlRunningGen   int64
 	contentCrawlStopped      chan struct{}
 	rootsSyncMu              sync.Mutex
+	serviceSyncMu            sync.Mutex
 	rootsSyncGeneration      atomic.Int64
 }
 
@@ -348,6 +353,9 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	// Enter-time sync keeps the initial state correct and lets inactive sessions rely
 	// on manager-side ignore behavior instead of blocking every search.
 	c.api.OnEnterPluginQuery(ctx, func(ctx context.Context) {
+		if runtime.GOOS == "windows" {
+			c.refreshServiceUpdateNotice(ctx, filesearchservice.GetStatus())
+		}
 		c.syncToolbarMsg(ctx, false)
 	})
 	c.api.OnLeavePluginQuery(ctx, func(ctx context.Context) {
@@ -362,6 +370,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	if runtime.GOOS == "windows" {
 		util.Go(ctx, "auto-update file index service", func() {
 			status := filesearchservice.GetStatus()
+			c.refreshServiceUpdateNotice(ctx, status)
 			if status.State != filesearchservice.StateUpdateReady {
 				return
 			}
@@ -381,6 +390,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 				c.syncUserRoots(ctx)
 			}
 			util.GetLogger().Info(ctx, "file index service updated automatically to "+status.EmbeddedVersion)
+			c.refreshServiceUpdateNotice(ctx, filesearchservice.GetStatus())
 		})
 	}
 
@@ -453,18 +463,28 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 
 // HandleSettingAction runs lifecycle operations exposed by the File Search service row.
 func (c *FileSearchPlugin) HandleSettingAction(ctx context.Context, actionID string) error {
-	if err := filesearchservice.Execute(ctx, actionID); err != nil {
+	if err := executeFileIndexServiceFn(ctx, actionID); err != nil {
 		return err
 	}
+	// Successful install/update uses the embedded version; uninstall removes the opt-in.
+	c.refreshServiceUpdateNotice(ctx, filesearchservice.Status{})
 	if c.engine == nil {
 		return nil
 	}
-	if actionID == "uninstall" {
-		c.engine.EnableLocalNameIndex(ctx)
-	} else if !c.isContentSearchEnabled(ctx) {
-		c.engine.DisableLocalNameIndex()
-	}
-	c.syncUserRoots(ctx)
+	// The UI can publish service readiness before local scanners finish stopping.
+	// Its action context is cancelled on return, so background work needs its own lifetime.
+	backgroundCtx := context.WithoutCancel(ctx)
+	util.Go(backgroundCtx, "sync file search after service action", func() {
+		c.serviceSyncMu.Lock()
+		defer c.serviceSyncMu.Unlock()
+		// Reconcile current state instead of replaying a stale start/uninstall action.
+		if !filesearchservice.IsRunning() || c.isContentSearchEnabled(backgroundCtx) {
+			c.engine.EnableLocalNameIndex(backgroundCtx)
+		} else {
+			c.engine.DisableLocalNameIndex()
+		}
+		c.syncUserRoots(backgroundCtx)
+	})
 	return nil
 }
 
@@ -1842,6 +1862,13 @@ func (c *FileSearchPlugin) syncToolbarMsg(ctx context.Context, includeReady bool
 }
 
 func (c *FileSearchPlugin) syncToolbarMsgWithStatus(ctx context.Context, status filesearch.StatusSnapshot, includeReady bool) {
+	if msg, ok := c.serviceUpdateToolbarMsg(ctx); ok {
+		c.cancelCompletionToolbarHold()
+		if c.takeToolbarMsgUpdate(buildToolbarMsgSignature(msg)) {
+			c.api.ShowToolbarMsg(ctx, msg)
+		}
+		return
+	}
 	completionSummary := isFullIndexCompletionSummary(status)
 	toolbarMsg, found := c.buildToolbarMsgFromStatus(ctx, status, includeReady)
 	if !found {

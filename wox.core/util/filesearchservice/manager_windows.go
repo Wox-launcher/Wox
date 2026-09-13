@@ -138,7 +138,7 @@ func Execute(ctx context.Context, action string) error {
 		if err := Update(ctx, executable, EmbeddedVersion, hash); err != nil {
 			return err
 		}
-		err = waitForUpdatedService(ctx, EmbeddedVersion)
+		err = waitForHealthyService(ctx, EmbeddedVersion)
 		if err == nil {
 			markRunning()
 		}
@@ -186,12 +186,16 @@ func Execute(ctx context.Context, action string) error {
 		markStopped()
 		_ = os.RemoveAll(filepath.Join(util.GetLocation().GetFileSearchDirectory(), IndexDirectory))
 	} else {
+		if err := waitForHealthyService(ctx, EmbeddedVersion); err != nil {
+			return err
+		}
 		markRunning()
 	}
 	return nil
 }
 
-func waitForUpdatedService(ctx context.Context, version string) error {
+// waitForHealthyService waits for IPC readiness, independently of index build progress.
+func waitForHealthyService(ctx context.Context, version string) error {
 	deadline := time.Now().Add(30 * time.Second)
 	var lastErr error
 	for time.Now().Before(deadline) {
@@ -208,5 +212,5 @@ func waitForUpdatedService(ctx context.Context, version string) error {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("updated file index service did not become healthy: %v", lastErr)
+	return fmt.Errorf("file index service did not become healthy: %v", lastErr)
 }

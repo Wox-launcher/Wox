@@ -357,13 +357,21 @@ func (a *APIImpl) PushAttention(ctx context.Context, request PushAttentionReques
 
 // PublishAttentionUnreadCount pushes the current unread attention count to the UI.
 func PublishAttentionUnreadCount(ctx context.Context) {
-	count, err := GetAttentionManager().UnreadCount(ctx)
-	if err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to count unread attention items: %v", err))
-		return
+	count := 0
+	if !IsAttentionPluginDisabled() {
+		unread, err := GetAttentionManager().UnreadCount(ctx)
+		if err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to count unread attention items: %v", err))
+			return
+		}
+		count = int(unread)
 	}
 
-	GetPluginManager().GetUI().UpdateAttentionUnreadCount(ctx, int(count))
+	ui := GetPluginManager().GetUI()
+	if ui == nil {
+		return
+	}
+	ui.UpdateAttentionUnreadCount(ctx, count)
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
