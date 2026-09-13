@@ -1814,6 +1814,7 @@
   "plugin_wox_memory_profile_command": "Go ヒーププロファイルをキャプチャします",
   "plugin_wox_memory_profile_action": "Go ヒーププロファイルをキャプチャ",
   "plugin_wox_memory_profile_path": "現在の保持されている Go ヒープを %s に保存します",
+  "plugin_wox_memory_profile_disabled": "このビルドではヒープサンプリングが無効です。プロファイルを取得するには GODEBUG=memprofilerate=524288 を指定して Wox を起動してください",
   "plugin_wox_memory_glance_name": "Wox メモリ",
   "plugin_wox_memory_glance_description": "現在の Wox プロセスのメモリフットプリント",
   "plugin_wox_memory_glance_tooltip": "Wox %s (PID %d)",

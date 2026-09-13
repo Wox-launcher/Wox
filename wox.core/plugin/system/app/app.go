@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -71,6 +72,22 @@ type appInfo struct {
 	// back to a generic/default asset after a restart. Normal app search still
 	// keeps these entries visible.
 	IsDefaultIcon bool `json:"is_default_icon,omitempty"`
+}
+
+// equals compares the persisted identity of two entries. Pid is runtime-only state
+// and is intentionally ignored.
+func (info appInfo) equals(other appInfo) bool {
+	return info.Name == other.Name &&
+		slices.Equal(info.SearchableNames, other.SearchableNames) &&
+		info.Identity == other.Identity &&
+		info.Path == other.Path &&
+		info.Icon == other.Icon &&
+		info.IconSourcePath == other.IconSourcePath &&
+		info.IconSourceModifiedUnix == other.IconSourceModifiedUnix &&
+		info.Type == other.Type &&
+		info.LastModifiedUnix == other.LastModifiedUnix &&
+		info.CanRunAsAdministrator == other.CanRunAsAdministrator &&
+		info.IsDefaultIcon == other.IsDefaultIcon
 }
 
 type appCacheFile struct {
@@ -222,6 +239,13 @@ type ApplicationPlugin struct {
 
 	// Track results that need periodic refresh (running apps with CPU/memory stats)
 	trackedResults *util.HashMap[string, appInfo] // resultId -> appInfo
+
+	// unparsableApps remembers paths whose ParseAppInfo failed, keyed by path cache key
+	// with the file mtime seen at failure. Shell-namespace shortcuts such as "Run.lnk"
+	// never resolve to a file, so without this the change-feed reconciliation would
+	// retry them (with backoff sleeps) on every cycle. The entry is dropped once the
+	// file mtime changes so a repaired shortcut is parsed again.
+	unparsableApps *util.HashMap[string, int64]
 }
 
 func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
@@ -336,6 +360,7 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	a.retriever.UpdateAPI(a.api)
 	a.trackedResults = util.NewHashMap[string, appInfo]()
 	a.querySessionCache = util.NewHashMap[string, appQuerySessionCache]()
+	a.unparsableApps = util.NewHashMap[string, int64]()
 	a.rebuildIgnoreRuleMatchers(ctx)
 
 	appCache, cacheErr := a.loadAppCache(ctx)
@@ -438,9 +463,9 @@ func (a *ApplicationPlugin) populateIconSourceMetadata(ctx context.Context, info
 	iconSourcePath = filepath.Clean(iconSourcePath)
 	fileInfo, statErr := os.Stat(iconSourcePath)
 	if statErr != nil {
-		// Bug fix: keep missing icon sources from being treated as fresh cache
-		// entries. Reindexing later can recover after installers finish moving
-		// files into place, while pathless icons still keep the existing fast path.
+		// Record the missing source with a zero mtime. The cache stays reusable while
+		// the source is still missing, and is reparsed once installers finish moving
+		// files into place because the real mtime then differs from zero.
 		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("app icon source stat failed: path=%s err=%s", iconSourcePath, statErr.Error()))
 		info.IconSourcePath = iconSourcePath
 		info.IconSourceModifiedUnix = 0
@@ -492,6 +517,15 @@ func (a *ApplicationPlugin) isCachedIconSourceFresh(ctx context.Context, cached 
 
 	fileInfo, statErr := os.Stat(iconSourcePath)
 	if statErr != nil {
+		// Bug fix: a cache entry indexed while the icon source was already missing
+		// records IconSourceModifiedUnix == 0. Reparsing it produces the same entry,
+		// so treating it as stale made the fallback reconciliation rebuild the whole
+		// query index and rewrite the cache file every cycle for shortcuts whose
+		// target no longer exists. Only a source that disappeared after indexing
+		// (or reappears later, handled below) needs a reparse.
+		if cached.IconSourceModifiedUnix == 0 {
+			return true
+		}
 		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source missing for %s, reindexing: %s", cached.Path, statErr.Error()))
 		return false
 	}
@@ -1559,6 +1593,15 @@ func (a *ApplicationPlugin) upsertIndexedAppByPath(ctx context.Context, appPath 
 	// Feature change: precise change-feed paths let us refresh one app entry instead
 	// of calling indexApps(). This keeps installer bursts cheap while still reusing
 	// the existing platform parser and icon conversion behavior.
+	key := a.pathCacheKey(appPath)
+	var modifiedUnix int64
+	if fileInfo, statErr := os.Stat(appPath); statErr == nil {
+		modifiedUnix = a.getAppModifiedUnix(appPath, fileInfo)
+		if failedUnix, known := a.unparsableApps.Load(key); known && failedUnix == modifiedUnix {
+			return false
+		}
+	}
+
 	var info appInfo
 	var getErr error
 	for i := 0; i < 3; i++ {
@@ -1572,17 +1615,28 @@ func (a *ApplicationPlugin) upsertIndexedAppByPath(ctx context.Context, appPath 
 		if !errors.Is(getErr, errSkipAppIndexing) {
 			a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
 		}
+		if modifiedUnix != 0 {
+			a.unparsableApps.Store(key, modifiedUnix)
+		}
 		// If a path is still locked or otherwise unreadable after a short retry,
 		// skip the local update rather than falling back to the expensive full index.
 		return false
 	}
+	a.unparsableApps.Delete(key)
 
 	a.populateAppMetadata(ctx, appPath, &info, nil)
 	info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
 
 	for i, app := range a.apps {
-		if a.pathCacheKey(app.Path) != a.pathCacheKey(appPath) {
+		if a.pathCacheKey(app.Path) != key {
 			continue
+		}
+		// Reparsing can yield an identical entry, for example when only the cache
+		// freshness check failed. Reporting that as a change would rebuild the query
+		// index and rewrite the cache file for nothing.
+		if app.equals(info) {
+			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("app %s reparsed by change feed without changes", appPath))
+			return false
 		}
 		a.apps[i] = info
 		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app %s updated by change feed", appPath))

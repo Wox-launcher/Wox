@@ -251,10 +251,16 @@ func (p *WoxMemoryPlugin) Glance(ctx context.Context, request plugin.GlanceReque
 // heapProfileResult exposes heap capture as an explicit plugin command action.
 func (p *WoxMemoryPlugin) heapProfileResult(ctx context.Context) plugin.QueryResult {
 	profilePath := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "memory.prof")
+	subTitle := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_profile_path"), profilePath)
+	if runtime.MemProfileRate == 0 {
+		// Production disables allocation sampling to save memory, so a profile written now
+		// would be empty; tell the user how to turn sampling on for the next start.
+		subTitle = translateMemory(ctx, "plugin_wox_memory_profile_disabled")
+	}
 	return plugin.QueryResult{
 		Id:       "memory.profile",
 		Title:    translateMemory(ctx, "plugin_wox_memory_profile_action"),
-		SubTitle: fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_profile_path"), profilePath),
+		SubTitle: subTitle,
 		Icon:     icons.Get(icons.ActionCPUProfile),
 		Actions: []plugin.QueryResultAction{{
 			Name: translateMemory(ctx, "plugin_wox_memory_profile_action"),

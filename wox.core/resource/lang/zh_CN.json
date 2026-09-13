@@ -1815,6 +1815,7 @@
   "plugin_wox_memory_profile_command": "生成 Go 堆内存分析文件",
   "plugin_wox_memory_profile_action": "生成 Go 堆内存分析文件",
   "plugin_wox_memory_profile_path": "将当前保留的 Go 堆保存到 %s",
+  "plugin_wox_memory_profile_disabled": "此构建已关闭堆采样；请使用 GODEBUG=memprofilerate=524288 启动 Wox 后再采集",
   "plugin_wox_memory_glance_name": "Wox 内存",
   "plugin_wox_memory_glance_description": "当前 Wox 进程的内存占用",
   "plugin_wox_memory_glance_tooltip": "Wox %s（PID %d）",

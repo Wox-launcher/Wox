@@ -1640,6 +1640,7 @@
   "plugin_wox_memory_profile_command": "Capturar um perfil de heap do Go",
   "plugin_wox_memory_profile_action": "Capturar perfil de heap do Go",
   "plugin_wox_memory_profile_path": "Salvar o heap atual retido do Go em %s",
+  "plugin_wox_memory_profile_disabled": "A amostragem de heap está desativada nesta build; inicie o Wox com GODEBUG=memprofilerate=524288 para capturar um perfil",
   "plugin_wox_memory_glance_name": "Memória do Wox",
   "plugin_wox_memory_glance_description": "Uso atual de memória do processo Wox",
   "plugin_wox_memory_glance_tooltip": "Wox %s (PID %d)",

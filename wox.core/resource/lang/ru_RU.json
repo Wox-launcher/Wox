@@ -1641,6 +1641,7 @@
   "plugin_wox_memory_profile_command": "Создать профиль кучи Go",
   "plugin_wox_memory_profile_action": "Создать профиль кучи Go",
   "plugin_wox_memory_profile_path": "Сохранить текущую удерживаемую кучу Go в %s",
+  "plugin_wox_memory_profile_disabled": "В этой сборке выборка кучи отключена; запустите Wox с GODEBUG=memprofilerate=524288, чтобы записать профиль",
   "plugin_wox_memory_glance_name": "Память Wox",
   "plugin_wox_memory_glance_description": "Текущее потребление памяти процессом Wox",
   "plugin_wox_memory_glance_tooltip": "Wox %s (PID %d)",

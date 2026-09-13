@@ -60,6 +60,14 @@ Do not replace the idle trim with a hard two-surface allocation cap. Both existi
 
 For later comparisons, stop every other Wox instance and sample the same release-process PID throughout the run. Use real Wox data, warm up application and image caches, replay deterministic query blocks, wait for the same visible or hidden lifecycle checkpoint, and record at least three samples. `PhysicalFootprintMB` or `footprint --pid <PID> --noCategories` is the primary macOS process metric; pair it with `vmmap <PID> -summary`, `heap -s -H <PID>`, and Go heap profiles when attribution is needed. The retained [workload and sampler](../../.agents/skills/wox-memory-debug/scripts/) should be reused. Do not compare an Activity Monitor spike, a debug build, an isolated layer demo, or a different PID directly with this release baseline.
 
+## Windows hidden memory lifecycle
+
+The September 2026 Windows investigation (Intel integrated GPU, release-style build, private working set as the metric) measured a hidden idle footprint of 63-70 MB. Roughly 29 MB of that was the NT process heap, of which only about 12 MB was still allocated: a show/hide cycle allocates and frees around 25 MB of Direct2D, DirectWrite, and user-mode driver blocks, and the freed pages stay committed and resident because roughly 30,000 small long-lived blocks fragment them. `HeapCompact` does not return them. Hiding runs two staged releases in [`manager.go`](manager.go) and [`window_windows.go`](runtime/window_windows.go): `debug.FreeOSMemory` plus cache drops after 10 seconds, and `IDXGIDevice3::Trim` after 30 seconds. Both lower committed memory, so the Task Manager number they produce is real.
+
+Do not add `SetProcessWorkingSetSize(-1, -1)` / `EmptyWorkingSet` to this sequence. It was tried and drops the private working set to a few MB, but commit charge does not move: the pages only migrate to the standby list and fault back in on the next show, or turn into page-file hard faults under memory pressure. It changes the reported number without reducing memory use, so it is not an acceptable optimization for Wox.
+
+Forcing WARP (`WOX_WINDOWS_FORCE_WARP=1`) was 10 MB lower when hidden and about 40 MB lower while visible because the hardware user-mode driver keeps heap and anonymous allocations the trim cannot reach; it is not used by default because it moves rendering to the CPU.
+
 ## SVG theme colors
 
 SVG icons can use `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"` to follow Wox appearance: white in dark themes and black in light themes. Fixed colors remain unchanged, including in SVGs that mix brand colors with this variable. This applies to inline, file, and Base64 SVGs in the shared launcher image pipeline. Controls that explicitly tint an entire icon retain that behavior.

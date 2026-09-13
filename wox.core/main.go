@@ -110,6 +110,12 @@ func main() {
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(50)
 	}
+	// Heap profiling samples every allocation and keeps a stack-hash table that only
+	// grows (about 1.5 MB after a normal session). Production builds do not need it
+	// unless a heap profile is being captured; GODEBUG=memprofilerate=N restores it.
+	if util.IsProd() && !strings.Contains(os.Getenv("GODEBUG"), "memprofilerate") {
+		runtime.MemProfileRate = 0
+	}
 	if util.IsProd() && util.IsWindows() {
 		// Let Windows Error Reporting observe fatal Go runtime failures so the
 		// registered out-of-process crash module can preserve a minidump.
