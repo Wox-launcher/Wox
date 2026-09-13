@@ -804,7 +804,6 @@
   "ui_cloud_sync_plan_feature_unlimited_devices": "무제한 장치",
   "ui_cloud_sync_plan_feature_relaxed_sync_limit": "완화된 동기화 빈도 제한",
   "ui_cloud_sync_plan_feature_auto_sync": "자동 동기화",
-  "ui_cloud_sync_plan_recommended": "추천",
   "ui_cloud_sync_plan_row_price": "가격",
   "ui_cloud_sync_plan_row_devices": "장치",
   "ui_cloud_sync_plan_row_sync_mode": "동기화 모드",

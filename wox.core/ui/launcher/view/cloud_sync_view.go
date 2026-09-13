@@ -27,16 +27,15 @@ type CloudSettingsPageProps struct {
 
 // CloudIntroProps contains the signed-out product summary and plan comparison.
 type CloudIntroProps struct {
-	SectionLabel     string
-	Headline         string
-	Description      string
-	HeroIcon         *woxui.Image
-	HeroFallback     string
-	Features         []CloudIntroFeatureProps
-	FreeLabel        string
-	ProLabel         string
-	RecommendedLabel string
-	PlanRows         []CloudPlanRowProps
+	SectionLabel string
+	Headline     string
+	Description  string
+	HeroIcon     *woxui.Image
+	HeroFallback string
+	Features     []CloudIntroFeatureProps
+	FreeLabel    string
+	ProLabel     string
+	PlanRows     []CloudPlanRowProps
 }
 
 // CloudIntroFeatureProps contains one signed-out cloud capability card.
@@ -367,7 +366,7 @@ func cloudPlanComparison(props CloudIntroProps, width, height float32, compact b
 	}}
 }
 
-// cloudPlanHeader builds the plan names and Pro recommendation badge.
+// cloudPlanHeader builds the Free and Pro plan names.
 func cloudPlanHeader(props CloudIntroProps, width float32, compact bool, theme woxcomponent.Theme) woxwidget.Widget {
 	labelWidth := float32(132)
 	horizontalPadding := float32(14)
@@ -380,20 +379,11 @@ func cloudPlanHeader(props CloudIntroProps, width float32, compact bool, theme w
 		topPadding = 15
 	}
 	valueWidth := max(float32(0), (width-horizontalPadding*2-labelWidth-10)/2)
-	badgeWidth := max(float32(54), float32(len([]rune(props.RecommendedLabel)))*7+16)
-	pro := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.ProLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-		woxwidget.Container{Width: badgeWidth, Height: 18, Radius: 9, Color: woxui.Color{R: 11, G: 107, B: 211, A: 255}, Child: woxwidget.Align{
-			Width: badgeWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.RecommendedLabel, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255},
-			},
-		}},
-	}}
 	return woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: horizontalPadding, Top: topPadding, Right: horizontalPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			woxwidget.Painter{Width: labelWidth, Height: 20},
 			woxwidget.Container{Width: valueWidth, Height: 20, Child: woxwidget.Text{Value: props.FreeLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-			woxwidget.Container{Width: valueWidth, Height: 20, Child: pro},
+			woxwidget.Container{Width: valueWidth, Height: 20, Child: woxwidget.Text{Value: props.ProLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
 		},
 	}}
 }

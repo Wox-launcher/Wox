@@ -164,6 +164,22 @@ func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
 	}
 }
 
+func TestCloudPlanHeaderOmitsRecommendedBadge(t *testing.T) {
+	header := cloudPlanHeader(CloudIntroProps{FreeLabel: "Free", ProLabel: "Pro"}, 560, false, woxcomponent.Theme{}).(woxwidget.Container)
+	columns := header.Child.(woxwidget.Flex).Children
+	if len(columns) != 3 {
+		t.Fatalf("plan header columns = %d, want spacer plus Free and Pro labels", len(columns))
+	}
+	free := columns[1].(woxwidget.Container).Child.(woxwidget.Text)
+	pro := columns[2].(woxwidget.Container).Child.(woxwidget.Text)
+	if free.Value != "Free" || pro.Value != "Pro" {
+		t.Fatalf("plan header labels = %q / %q, want Free / Pro", free.Value, pro.Value)
+	}
+	if _, isBadgeRow := columns[2].(woxwidget.Container).Child.(woxwidget.Flex); isBadgeRow {
+		t.Fatal("Pro column should not wrap a recommended badge")
+	}
+}
+
 func TestCloudPlanTooltipOverlayOccupiesOnlyItsVisiblePanel(t *testing.T) {
 	overlay, left, top := CloudPlanTooltipOverlay(
 		CloudIntroProps{FreeLabel: "Free", ProLabel: "Pro"},

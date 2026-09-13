@@ -804,7 +804,6 @@
   "ui_cloud_sync_plan_feature_unlimited_devices": "無制限デバイス",
   "ui_cloud_sync_plan_feature_relaxed_sync_limit": "緩和された同期頻度制限",
   "ui_cloud_sync_plan_feature_auto_sync": "自動同期",
-  "ui_cloud_sync_plan_recommended": "おすすめ",
   "ui_cloud_sync_plan_row_price": "価格",
   "ui_cloud_sync_plan_row_devices": "デバイス",
   "ui_cloud_sync_plan_row_sync_mode": "同期モード",

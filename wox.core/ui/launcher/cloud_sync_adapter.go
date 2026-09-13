@@ -59,14 +59,13 @@ func (a *App) cloudIntroViewProps(snapshot settingsSnapshot, imageScale float32)
 		}
 	}
 	return launcherview.CloudIntroProps{
-		SectionLabel:     a.translate("i18n:ui_cloud_sync_intro_title"),
-		Headline:         a.translate("i18n:ui_cloud_sync_intro_headline"),
-		Description:      a.translate("i18n:ui_cloud_sync_intro_description"),
-		HeroIcon:         a.imageForTint(settingNavIconSource("data.cloudsync"), &iconTint, physicalImageSize(28, imageScale)),
-		HeroFallback:     "☁",
-		FreeLabel:        a.translate("i18n:ui_cloud_sync_plan_free"),
-		ProLabel:         a.translate("i18n:ui_cloud_sync_plan_pro"),
-		RecommendedLabel: a.translate("i18n:ui_cloud_sync_plan_recommended"),
+		SectionLabel: a.translate("i18n:ui_cloud_sync_intro_title"),
+		Headline:     a.translate("i18n:ui_cloud_sync_intro_headline"),
+		Description:  a.translate("i18n:ui_cloud_sync_intro_description"),
+		HeroIcon:     a.imageForTint(settingNavIconSource("data.cloudsync"), &iconTint, physicalImageSize(28, imageScale)),
+		HeroFallback: "☁",
+		FreeLabel:    a.translate("i18n:ui_cloud_sync_plan_free"),
+		ProLabel:     a.translate("i18n:ui_cloud_sync_plan_pro"),
 		Features: []launcherview.CloudIntroFeatureProps{
 			{Title: a.translate("i18n:ui_cloud_sync_intro_settings_title"), Description: a.translate("i18n:ui_cloud_sync_intro_settings_description"), Icon: a.imageForTint(settingNavIconSource("general"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⚙"},
 			{Title: a.translate("i18n:ui_cloud_sync_intro_plugins_title"), Description: a.translate("i18n:ui_cloud_sync_intro_plugins_description"), Icon: a.imageForTint(settingNavIconSource("plugins"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "◇"},
