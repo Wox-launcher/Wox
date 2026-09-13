@@ -14,6 +14,7 @@ class AttentionActionType(str, Enum):
     """Supported action types for attention items."""
 
     CHANGE_QUERY = "change_query"
+    OPEN_PLUGIN_SETTINGS = "open_plugin_settings"
 
 
 @dataclass

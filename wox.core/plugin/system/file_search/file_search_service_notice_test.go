@@ -41,6 +41,9 @@ func TestServiceUpdateNoticesOnlyForInstalledOlderVersions(t *testing.T) {
 			if len(msg.Actions) != 1 || api.attention[0].Key != "file-index-service-update-2.8.2" {
 				t.Fatal("missing settings action or version deduplication key")
 			}
+			if action := api.attention[0].Action; action == nil || action.Type != plugin.AttentionActionTypeOpenPluginSettings {
+				t.Fatalf("update notice action = %+v, want source plugin settings", action)
+			}
 			c.syncToolbarMsgWithStatus(ctx, filesearch.StatusSnapshot{}, false)
 			if len(api.toolbar) != 1 || api.toolbar[0].Title != msg.Title {
 				t.Fatal("idle index status hid the update notice")

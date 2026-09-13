@@ -1350,14 +1350,14 @@ export interface CopyParams {
   woxImage?: WoxImage
 }
 
-export type AttentionActionType = "change_query"
+export type AttentionActionType = "change_query" | "open_plugin_settings"
 
 /**
  * Action executed when the user opens a persistent attention item.
  */
 export interface AttentionAction {
   type: AttentionActionType
-  query: string
+  query?: string
 }
 
 /**

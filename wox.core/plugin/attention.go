@@ -22,6 +22,8 @@ const (
 	AttentionPluginID = "3644c342-9033-44b7-8db6-246088681917"
 
 	AttentionActionTypeChangeQuery AttentionActionType = "change_query"
+	// OpenPluginSettings opens the source plugin's settings without accepting an arbitrary target.
+	AttentionActionTypeOpenPluginSettings AttentionActionType = "open_plugin_settings"
 
 	attentionReadRetention       = 30 * 24 * time.Hour
 	attentionMaxStoredItems      = 500
@@ -321,10 +323,10 @@ func marshalAttentionAction(action *AttentionAction) (string, error) {
 	if action == nil || action.Type == "" {
 		return "", nil
 	}
-	if action.Type != AttentionActionTypeChangeQuery {
+	if action.Type != AttentionActionTypeChangeQuery && action.Type != AttentionActionTypeOpenPluginSettings {
 		return "", fmt.Errorf("unsupported attention action type: %s", action.Type)
 	}
-	if strings.TrimSpace(action.Query) == "" {
+	if action.Type == AttentionActionTypeChangeQuery && strings.TrimSpace(action.Query) == "" {
 		return "", errors.New("change_query attention action requires query")
 	}
 

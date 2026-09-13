@@ -19,7 +19,7 @@ var attentionPluginDisabled = plugin.IsAttentionPluginDisabled
 func (a *App) buildAttentionUnread(unreadCount int, palette uiPalette, width, imageScale float32, densityMetrics launcherDensityMetrics) woxwidget.Widget {
 	theme := palette.componentTheme()
 	iconTint, _, _, _ := theme.AttentionBadgeColors(false)
-	icon := a.imageForTint(fromCoreImage(icons.Get(icons.ControlInbox)), &iconTint, physicalImageSize(int(densityMetrics.scaled(15)), imageScale))
+	icon := a.imageForTint(fromCoreImage(icons.Get(icons.ControlNotification)), &iconTint, physicalImageSize(int(densityMetrics.scaled(15)), imageScale))
 	return launcherview.AttentionUnreadBoundary(launcherview.AttentionUnreadProps{
 		Width: width, Icon: icon, Tooltip: a.attentionUnreadTooltip(), CountText: launcherview.AttentionUnreadCountText(unreadCount), UnreadCount: unreadCount,
 		Theme: theme, DensityScale: densityMetrics.scale,

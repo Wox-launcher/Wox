@@ -11,7 +11,7 @@ import (
 	"wox/util"
 )
 
-var attentionIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#4f7cff" d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13A2.5 2.5 0 0 1 17.5 21h-11A2.5 2.5 0 0 1 4 18.5z"/><path fill="#fff" d="M6.4 13.2h3.1c.5 0 .9.3 1.1.7l.5 1c.2.4.6.7 1.1.7h1.6c.5 0 .9-.3 1.1-.7l.5-1c.2-.4.6-.7 1.1-.7h3.1v5.3c0 .7-.6 1.3-1.3 1.3H7.7c-.7 0-1.3-.6-1.3-1.3z" opacity=".95"/><path fill="#dbe6ff" d="M7.8 6.2h8.4a.8.8 0 0 1 0 1.6H7.8a.8.8 0 1 1 0-1.6m0 3.2h8.4a.8.8 0 0 1 0 1.6H7.8a.8.8 0 1 1 0-1.6"/></svg>`)
+var attentionIcon = icons.Get(icons.PluginAttention)
 
 const (
 	attentionOpenActionID       = "attention-open"
@@ -137,7 +137,7 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 	if actionErr != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to parse attention action: %v", actionErr))
 	}
-	if storedAction != nil && storedAction.Type == plugin.AttentionActionTypeChangeQuery {
+	if storedAction != nil && (storedAction.Type == plugin.AttentionActionTypeChangeQuery || storedAction.Type == plugin.AttentionActionTypeOpenPluginSettings) {
 		query := storedAction.Query
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     attentionOpenActionID,
@@ -147,6 +147,10 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				a.markReadAndPublish(ctx, item.IdentityKey)
+				if storedAction.Type == plugin.AttentionActionTypeOpenPluginSettings {
+					plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/plugin/setting", Param: item.PluginID})
+					return
+				}
 				a.api.ChangeQuery(ctx, common.PlainQuery{
 					QueryType: plugin.QueryTypeInput,
 					QueryText: query,

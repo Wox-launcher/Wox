@@ -102,6 +102,23 @@ func newSystemAttentionTestManager(t *testing.T) *plugin.AttentionManager {
 	return plugin.NewAttentionManager(db)
 }
 
+// TestAttentionSettingsActionIsDefault verifies the persisted action reaches the inbox as its primary action.
+func TestAttentionSettingsActionIsDefault(t *testing.T) {
+	ctx := context.Background()
+	manager := newSystemAttentionTestManager(t)
+	item, err := manager.Push(ctx, plugin.AttentionPluginSource{PluginID: "file-search"}, plugin.PushAttentionRequest{
+		Key: "update", Title: "Update available",
+		Action: &plugin.AttentionAction{Type: plugin.AttentionActionTypeOpenPluginSettings},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions := (&AttentionPlugin{manager: manager}).buildItemActions(ctx, item)
+	if len(actions) != 2 || actions[0].Id != attentionOpenActionID || !actions[0].IsDefault || actions[1].IsDefault {
+		t.Fatalf("settings action must precede mark-read as the default: %+v", actions)
+	}
+}
+
 func TestAttentionActionMarksItemRead(t *testing.T) {
 	ctx := context.Background()
 	manager := newSystemAttentionTestManager(t)

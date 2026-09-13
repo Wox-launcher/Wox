@@ -23,6 +23,7 @@ func (c *FileSearchPlugin) refreshServiceUpdateNotice(ctx context.Context, statu
 		Title:       "i18n:plugin_file_service_update_notice",
 		Description: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_service_update_description"), status.InstalledVersion, status.EmbeddedVersion),
 		Icon:        &fileIcon,
+		Action:      &plugin.AttentionAction{Type: plugin.AttentionActionTypeOpenPluginSettings},
 	})
 }
 

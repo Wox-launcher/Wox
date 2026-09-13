@@ -3,6 +3,7 @@ package icons
 const (
 	// Plugin identity.
 	PluginSelection     = "plugin.selection"
+	PluginAttention     = "plugin.attention"
 	PluginNotes         = "plugin.notes"
 	PluginAICommand     = "plugin.ai-command"
 	PluginApp           = "plugin.app"
@@ -181,6 +182,7 @@ const (
 	ControlStore               = "control.store"
 	ControlFilter              = "control.filter"
 	ControlInbox               = "control.inbox"
+	ControlNotification        = "control.notification"
 	ControlEdit                = "control.edit"
 	ControlList                = "control.list"
 	ControlCopy                = "control.copy"
