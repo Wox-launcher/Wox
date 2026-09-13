@@ -151,6 +151,10 @@ func (a *LinuxRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 	return []appInfo{}, nil
 }
 
+func (a *LinuxRetriever) PrepareExtraApps(ctx context.Context, apps []appInfo) []appInfo {
+	return apps
+}
+
 func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
 	return 0
 }

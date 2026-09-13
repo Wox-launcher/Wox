@@ -509,12 +509,21 @@ func (a *MacRetriever) GetExtraAppPaths(ctx context.Context) ([]string, error) {
 }
 
 func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
-	return a.getSystemSettingsApps(ctx), nil
+	var apps []appInfo
+	for _, info := range systemSettings {
+		if info.URI == "" {
+			continue
+		}
+		for _, displayName := range info.DisplayNames {
+			apps = append(apps, appInfo{Name: displayName, Path: "x-apple.systempreferences:" + info.URI})
+		}
+	}
+	return apps, nil
 }
 
-func (a *MacRetriever) getSystemSettingsApps(ctx context.Context) []appInfo {
-	var apps []appInfo
-
+// PrepareExtraApps generates System Settings icons after candidate discovery completes.
+func (a *MacRetriever) PrepareExtraApps(ctx context.Context, apps []appInfo) []appInfo {
+	iconsByPath := make(map[string]common.WoxImage, len(systemSettings))
 	for key, info := range systemSettings {
 		if info.URI == "" {
 			continue
@@ -543,17 +552,11 @@ func (a *MacRetriever) getSystemSettingsApps(ctx context.Context) []appInfo {
 		if icon.ImageData == "" {
 			icon = icons.Get(icons.BrandWox)
 		}
-
-		// Build full URI with x-apple.systempreferences scheme
-		fullURI := "x-apple.systempreferences:" + info.URI
-
-		// Create an app entry for each display name (supports aliases)
-		for _, displayName := range info.DisplayNames {
-			apps = append(apps, appInfo{
-				Name: displayName,
-				Path: fullURI,
-				Icon: icon,
-			})
+		iconsByPath["x-apple.systempreferences:"+info.URI] = icon
+	}
+	for i := range apps {
+		if icon, ok := iconsByPath[apps[i].Path]; ok {
+			apps[i].Icon = icon
 		}
 	}
 

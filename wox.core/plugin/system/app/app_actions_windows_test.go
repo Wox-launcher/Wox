@@ -18,6 +18,7 @@ func TestBuildAppActionsIncludesAdministratorActionForExecutableApps(t *testing.
 		{name: "url shortcut", info: appInfo{Path: `C:\Apps\Editor.url`, Type: AppTypeDesktop}},
 		{name: "full trust packaged app", info: appInfo{Path: `shell:AppsFolder\Example.App_123!App`, Type: AppTypeUWP, CanRunAsAdministrator: true}, wantAdminAction: true},
 		{name: "sandboxed UWP app", info: appInfo{Path: `shell:AppsFolder\Example.Sandbox_123!App`, Type: AppTypeUWP}},
+		{name: "browser web app", info: appInfo{Path: `shell:AppsFolder\https://example.com`, Type: AppTypeAppsFolder}},
 		{name: "Windows setting", info: appInfo{Path: "ms-settings:display", Type: AppTypeWindowsSetting}},
 	}
 
@@ -48,5 +49,14 @@ func TestBuildAppActionsIncludesAdministratorActionForExecutableApps(t *testing.
 				t.Fatalf("uninstall action presence = %t, want %t", hasUninstallAction, wantUninstallAction)
 			}
 		})
+	}
+}
+
+func TestBuildAppActionsOmitsFileActionsForAppsFolderEntries(t *testing.T) {
+	actions := (&ApplicationPlugin{}).buildAppActions(appInfo{Path: `shell:AppsFolder\https://example.com`, Type: AppTypeAppsFolder}, "Example", nil)
+	for _, action := range actions {
+		if action.Name == "i18n:plugin_app_open_containing_folder" || action.Name == "i18n:plugin_file_show_context_menu" {
+			t.Fatalf("unexpected file action %q", action.Name)
+		}
 	}
 }

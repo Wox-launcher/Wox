@@ -14,12 +14,16 @@ type recordingAppAPI struct {
 	settings         map[string]string
 	platformSpecific map[string]bool
 	notifications    []string
+	translations     map[string]string
+	toolbarMsgs      []plugin.ToolbarMsg
+	clearedToolbar   []string
 }
 
 func newRecordingAppAPI() *recordingAppAPI {
 	return &recordingAppAPI{
 		settings:         map[string]string{},
 		platformSpecific: map[string]bool{},
+		translations:     map[string]string{},
 	}
 }
 
@@ -35,6 +39,18 @@ func (r *recordingAppAPI) SetSetting(_ context.Context, option plugin.SetSetting
 
 func (r *recordingAppAPI) Notify(_ context.Context, message string) {
 	r.notifications = append(r.notifications, message)
+}
+
+func (r *recordingAppAPI) GetTranslation(_ context.Context, key string) string {
+	return r.translations[key]
+}
+
+func (r *recordingAppAPI) ShowToolbarMsg(_ context.Context, msg plugin.ToolbarMsg) {
+	r.toolbarMsgs = append(r.toolbarMsgs, msg)
+}
+
+func (r *recordingAppAPI) ClearToolbarMsg(_ context.Context, id string) {
+	r.clearedToolbar = append(r.clearedToolbar, id)
 }
 
 func TestIgnoreRulesSettingIsPlatformSpecific(t *testing.T) {
@@ -136,6 +152,42 @@ func TestBuildAppActionsIncludesHideAction(t *testing.T) {
 		}
 	}
 	t.Fatal("expected hide from search action")
+}
+
+func TestBuildAppActionsIncludesIndexAction(t *testing.T) {
+	actions := (&ApplicationPlugin{}).buildAppActions(appInfo{Name: "Notes", Path: `C:\Apps\Notes.exe`}, "Notes", nil)
+	for _, action := range actions {
+		if action.Name == "i18n:plugin_app_index" {
+			if !action.PreventHideAfterAction {
+				t.Fatal("index action should keep the launcher open")
+			}
+			return
+		}
+	}
+	t.Fatal("expected index action")
+}
+
+func TestSyncAppIndexToolbarReplaysLatestStatus(t *testing.T) {
+	api := newRecordingAppAPI()
+	api.translations["plugin_app_index_scanning"] = "Scanning application folders"
+	api.translations["plugin_app_indexing_progress"] = "Indexing apps (%d/%d)"
+	app := &ApplicationPlugin{api: api}
+
+	app.updateAppIndexStatus(context.Background(), "plugin_app_index_scanning", 0, 0)
+	app.updateAppIndexStatus(context.Background(), "plugin_app_indexing_progress", 25, 100)
+	api.toolbarMsgs = nil
+	app.syncAppIndexToolbar(context.Background())
+
+	if len(api.toolbarMsgs) != 1 || api.toolbarMsgs[0].Progress == nil || *api.toolbarMsgs[0].Progress != 25 || api.toolbarMsgs[0].Title != "Indexing apps (25/100)" {
+		t.Fatalf("unexpected replayed toolbar: %#v", api.toolbarMsgs)
+	}
+
+	app.clearAppIndexStatus(context.Background())
+	api.toolbarMsgs = nil
+	app.syncAppIndexToolbar(context.Background())
+	if len(api.toolbarMsgs) != 0 {
+		t.Fatalf("completed status was replayed: %#v", api.toolbarMsgs)
+	}
 }
 
 func TestHideAppFromSearchSavesPlatformSpecificSetting(t *testing.T) {

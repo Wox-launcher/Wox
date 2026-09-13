@@ -185,7 +185,7 @@ func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appIn
 }
 
 func resolveAppIdentityForPlatform(ctx context.Context, info appInfo) string {
-	if info.Type == AppTypeUWP || info.Type == AppTypeWindowsSetting {
+	if info.Type == AppTypeUWP || info.Type == AppTypeAppsFolder || info.Type == AppTypeWindowsSetting {
 		return ""
 	}
 
@@ -237,7 +237,7 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 		Icon: icon,
 		// Bug fix: .lnk files often keep the same timestamp when an updater
 		// replaces the target executable. Store the actual icon source so app
-		// cache reuse can notice target icon changes without a full reindex.
+		// cache reuse can notice target icon changes without a full index rebuild.
 		IconSourcePath: filepath.Clean(iconSourcePath),
 		Type:           AppTypeDesktop,
 		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
@@ -444,10 +444,10 @@ func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) 
 		util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d Windows Settings items", len(settingsApps)))
 	}
 
-	uwpApps := a.GetUWPApps(ctx)
-	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(uwpApps)))
+	appsFolderApps := a.GetAppsFolderApps(ctx)
+	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d AppsFolder apps", len(appsFolderApps)))
 
-	return append(settingsApps, uwpApps...), nil
+	return append(settingsApps, appsFolderApps...), nil
 }
 
 // getPrivateWorkingSet calculates the private (non-shared) working set size for a process
@@ -738,89 +738,87 @@ func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error
 	return shell.OpenFileInFolder(installLocation)
 }
 
-func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
-	// preload icon cache from file
-	iconCachePath := filepath.Join(util.GetLocation().GetCacheDirectory(), "app-uwp-icons.json")
-	if _, err := os.Stat(iconCachePath); !os.IsNotExist(err) {
-		iconCache, err := os.ReadFile(iconCachePath)
-		if err != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("Error reading uwp icon cache: %v", err))
-		} else {
-			// parse json
-			var cacheMap map[string]string
-			jsonErr := json.Unmarshal(iconCache, &cacheMap)
-			if jsonErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing uwp icon cache: %v", jsonErr))
-			} else {
-				// Load into sync.Map
-				count := 0
-				for k, v := range cacheMap {
-					a.uwpIconCache.Store(k, v)
-					count++
-				}
-				util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d uwp icon cache", count))
-			}
-		}
-	}
-
+// GetAppsFolderApps discovers Windows shell applications without indexing their metadata or icons.
+func (a *WindowsRetriever) GetAppsFolderApps(ctx context.Context) []appInfo {
 	var apps []appInfo
 
-	// Modify PowerShell command, add more properties and use UTF-8 encoding
-	powershellCmd := `
-		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-		Get-StartApps | Where-Object { $_.AppID -like '*!*' } | Select-Object Name, AppID | ConvertTo-Csv -NoTypeInformation
-	`
-
-	// Set command encoding to UTF-8
-	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
-	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
-		return apps
+	entries, listErr := listWindowsAppsFolderEntries()
+	if listErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error enumerating shell:AppsFolder: %v", listErr))
+	}
+	if len(entries) == 0 {
+		util.GetLogger().Info(ctx, "AppsFolder enumeration returned no items, falling back to Get-StartApps")
+		startApps, startAppsErr := a.listStartApps(ctx)
+		if startAppsErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("Error listing Start apps: %v", startAppsErr))
+			return apps
+		}
+		entries = startApps
 	}
 
-	// Parse CSV output
-	reader := csv.NewReader(strings.NewReader(string(output)))
-	records, err := reader.ReadAll()
-	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing CSV output: %v", err))
-		return apps
+	apps = extraAppsFromFolderEntries(entries, nil, strings.ToLower)
+	for _, app := range apps {
+		util.GetLogger().Info(ctx, fmt.Sprintf("Found AppsFolder app: %s, AppID: %s", app.Name, strings.TrimPrefix(app.Path, "shell:AppsFolder\\")))
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d AppsFolder apps", len(apps)))
+	return apps
+}
+
+// PrepareExtraApps enriches AppsFolder candidates during the shared indexing phase.
+func (a *WindowsRetriever) PrepareExtraApps(ctx context.Context, apps []appInfo) []appInfo {
+	iconCachePath := filepath.Join(util.GetLocation().GetCacheDirectory(), "app-uwp-icons.json")
+	if iconCache, err := os.ReadFile(iconCachePath); err == nil {
+		var cacheMap map[string]string
+		if jsonErr := json.Unmarshal(iconCache, &cacheMap); jsonErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing uwp icon cache: %v", jsonErr))
+		} else {
+			for appID, iconPath := range cacheMap {
+				a.uwpIconCache.Store(appID, iconPath)
+			}
+			util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d uwp icon cache", len(cacheMap)))
+		}
+	} else if !os.IsNotExist(err) {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error reading uwp icon cache: %v", err))
 	}
 
-	// Skip header row
 	metadataByAppID, metadataErr := a.getUWPAppMetadataBatch(ctx)
 	if metadataErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP app metadata in batch: %v", metadataErr))
 	}
-
-	for i := 1; i < len(records); i++ {
-		record := records[i]
-		if len(record) < 2 {
+	for i := range apps {
+		if !strings.HasPrefix(apps[i].Path, "shell:AppsFolder\\") {
 			continue
 		}
-
-		name := record[0]
-		appID := record[1]
-
-		if strings.Contains(appID, "!") {
-			app := appInfo{
-				Name: name,
-				Path: "shell:AppsFolder\\" + appID,
-				Icon: appIcon,
-				Type: AppTypeUWP,
+		appID := strings.TrimPrefix(apps[i].Path, "shell:AppsFolder\\")
+		if apps[i].Type == AppTypeUWP {
+			metadata, found := metadataByAppID[appID]
+			if !found || metadata.Icon.IsEmpty() {
+				// AppsFolder can expose packaged web apps that are occasionally absent
+				// from the batch snapshot. Resolve only those misses individually so a
+				// valid app icon never falls back to the generic Apps icon.
+				if fallback, fallbackErr := a.getUWPAppMetadata(ctx, appID); fallbackErr == nil {
+					if metadata.Identity == "" {
+						metadata.Identity = fallback.Identity
+					}
+					if metadata.Icon.IsEmpty() {
+						metadata.Icon = fallback.Icon
+					}
+					metadata.CanRunAsAdministrator = metadata.CanRunAsAdministrator || fallback.CanRunAsAdministrator
+				}
 			}
-
-			metadata := metadataByAppID[appID]
 			if metadata.Identity != "" {
-				app.Identity = metadata.Identity
+				apps[i].Identity = metadata.Identity
 			}
-			app.CanRunAsAdministrator = metadata.CanRunAsAdministrator
+			apps[i].CanRunAsAdministrator = metadata.CanRunAsAdministrator
 			if !metadata.Icon.IsEmpty() {
-				app.Icon = metadata.Icon
+				apps[i].Icon = metadata.Icon
 				a.uwpIconCache.Store(appID, metadata.Icon.ImageData)
 			}
-
-			apps = append(apps, app)
-			util.GetLogger().Info(ctx, fmt.Sprintf("Found UWP app: %s, AppID: %s", name, appID))
+		} else if resolved := resolveInboxAppsFolderPath(appID); resolved != "" {
+			if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, resolved); iconErr == nil {
+				apps[i].Icon = common.NewWoxImageAbsolutePath(iconPath)
+				apps[i].IconSourcePath = filepath.Clean(resolved)
+			}
 		}
 	}
 
@@ -840,8 +838,43 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 		util.GetLogger().Info(ctx, fmt.Sprintf("Saved %d uwp icon cache", count))
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(apps)))
 	return apps
+}
+
+// listStartApps is a fallback when in-process AppsFolder enumeration is empty.
+func (a *WindowsRetriever) listStartApps(ctx context.Context) ([]appsFolderEntry, error) {
+	powershellCmd := `
+		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+		Get-StartApps | Select-Object Name, AppID | ConvertTo-Csv -NoTypeInformation
+	`
+	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
+	if err != nil {
+		return nil, fmt.Errorf("error running powershell command: %w", err)
+	}
+
+	records, err := csv.NewReader(strings.NewReader(string(output))).ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing Start apps CSV: %w", err)
+	}
+	if len(records) < 2 {
+		return nil, nil
+	}
+
+	entries := make([]appsFolderEntry, 0, len(records)-1)
+	for i := 1; i < len(records); i++ {
+		record := records[i]
+		if len(record) < 2 {
+			continue
+		}
+		name := strings.TrimSpace(record[0])
+		appID := strings.TrimSpace(record[1])
+		if name == "" || appID == "" {
+			continue
+		}
+		entries = append(entries, appsFolderEntry{Name: name, AppID: appID, Packaged: strings.Contains(appID, "!") && !isAppsFolderWebAppID(appID)})
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("Listed %d Start apps via Get-StartApps fallback", len(entries)))
+	return entries, nil
 }
 
 // getUWPAppMetadataBatch retrieves package metadata once for all Start menu UWP entries.

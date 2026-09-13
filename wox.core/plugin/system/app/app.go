@@ -40,11 +40,14 @@ var appIcon = icons.Get(icons.PluginApp)
 
 var errSkipAppIndexing = errors.New("skip app indexing")
 
+const appIndexToolbarMsgID = "app-index-status"
+
 type AppType = string
 
 const (
 	AppTypeDesktop        AppType = "desktop"
 	AppTypeUWP            AppType = "uwp"
+	AppTypeAppsFolder     AppType = "apps_folder"
 	AppTypeWindowsSetting AppType = "windows_setting"
 )
 
@@ -96,10 +99,9 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-const appCacheVersion = 14
+const appCacheVersion = 15
 
 const (
-	appCommandReindex   = "reindex"
 	appCommandLaunchpad = "launchpad"
 )
 
@@ -112,15 +114,22 @@ const (
 )
 
 const (
-	appChangeDebounceWindow      = 3 * time.Second
-	appChangeMaxWait             = 20 * time.Second
-	appFallbackReconcileInterval = 30 * time.Second
+	appChangeDebounceWindow       = 3 * time.Second
+	appChangeMaxWait              = 20 * time.Second
+	appFallbackReconcileInterval  = 30 * time.Second
+	appExtraAppsReconcileInterval = 15 * time.Second
 )
 
 type appPendingChange struct {
 	Path         string
 	SemanticKind filesearch.ChangeSemanticKind
 	PathIsDir    bool
+}
+
+type appIndexStatus struct {
+	titleKey  string
+	processed int64
+	total     int64
 }
 
 type appContextData struct {
@@ -158,7 +167,7 @@ type appQueryMatch struct {
 }
 
 func (a *appInfo) GetDisplayPath() string {
-	if a.Type == AppTypeUWP || a.Type == AppTypeWindowsSetting {
+	if a.Type == AppTypeUWP || a.Type == AppTypeAppsFolder || a.Type == AppTypeWindowsSetting {
 		return ""
 	}
 	return a.Path
@@ -218,11 +227,16 @@ func init() {
 }
 
 type ApplicationPlugin struct {
-	api             plugin.API
-	pluginDirectory string
-	runtimeCtx      context.Context
-	appChangeMu     sync.Mutex
-	appChangeCancel context.CancelFunc
+	api              plugin.API
+	pluginDirectory  string
+	runtimeCtx       context.Context
+	appChangeMu      sync.Mutex
+	appChangeCancel  context.CancelFunc
+	appChangeDone    <-chan struct{}
+	appIndexMu       sync.Mutex
+	indexing         atomic.Bool
+	appIndexStatusMu sync.RWMutex
+	appIndexStatus   appIndexStatus
 
 	apps      []appInfo
 	retriever Retriever
@@ -275,10 +289,6 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 		Commands: []plugin.MetadataCommand{
-			{
-				Command:     appCommandReindex,
-				Description: "i18n:plugin_app_command_reindex",
-			},
 			{
 				Command:     appCommandLaunchpad,
 				Description: "i18n:plugin_app_command_launchpad",
@@ -362,6 +372,7 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	a.querySessionCache = util.NewHashMap[string, appQuerySessionCache]()
 	a.unparsableApps = util.NewHashMap[string, int64]()
 	a.rebuildIgnoreRuleMatchers(ctx)
+	a.api.OnEnterPluginQuery(ctx, a.syncAppIndexToolbar)
 
 	appCache, cacheErr := a.loadAppCache(ctx)
 	if cacheErr == nil {
@@ -371,8 +382,7 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	}
 
 	util.Go(runtimeCtx, "index apps", func() {
-		a.indexApps(runtimeCtx)
-		a.startAppChangeWatcher()
+		a.rebuildAppIndex(runtimeCtx, false)
 	})
 	util.Go(runtimeCtx, "refresh running apps", func() {
 		ticker := time.NewTicker(time.Second)
@@ -392,10 +402,8 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 			// Full app rescans (especially UWP) are expensive side effects of a
 			// settings write. Keep them off the caller so cloud-sync apply and the
 			// settings UI do not stay blocked in a "syncing/restoring" state.
-			a.stopAppChangeWatcher()
-			util.Go(a.runtimeCtx, "reindex apps after AppDirectories change", func() {
-				a.indexApps(a.runtimeCtx)
-				a.startAppChangeWatcher()
+			util.Go(a.runtimeCtx, "index apps after AppDirectories change", func() {
+				a.rebuildAppIndex(a.runtimeCtx, false)
 			})
 			return
 		}
@@ -497,7 +505,7 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 
 	if cached.Icon.ImageType == common.WoxImageTypeAbsolutePath && cached.Icon.ImageData != "" {
 		if _, err := os.Stat(cached.Icon.ImageData); err != nil {
-			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon missing for %s, reindexing", appPath))
+			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon missing for %s, rebuilding index entry", appPath))
 			return appInfo{}, false
 		}
 	}
@@ -526,7 +534,7 @@ func (a *ApplicationPlugin) isCachedIconSourceFresh(ctx context.Context, cached 
 		if cached.IconSourceModifiedUnix == 0 {
 			return true
 		}
-		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source missing for %s, reindexing: %s", cached.Path, statErr.Error()))
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source missing for %s, rebuilding index entry: %s", cached.Path, statErr.Error()))
 		return false
 	}
 
@@ -534,7 +542,7 @@ func (a *ApplicationPlugin) isCachedIconSourceFresh(ctx context.Context, cached 
 		// Bug fix: shortcut entries can keep the same .lnk mtime after the target
 		// app updates. Treat the icon source mtime as part of app cache freshness
 		// so stale appInfo records are reparsed and the new fileicon cache key is used.
-		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source changed for %s, reindexing", cached.Path))
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source changed for %s, rebuilding index entry", cached.Path))
 		return false
 	}
 
@@ -543,52 +551,12 @@ func (a *ApplicationPlugin) isCachedIconSourceFresh(ctx context.Context, cached 
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	queryTimingStart := time.Now()
-	// clean cache and reindex apps
-	if query.Command == appCommandReindex {
-		reindexId := uuid.NewString()
-		return plugin.NewQueryResponse([]plugin.QueryResult{
-			{
-				Id:    reindexId,
-				Title: "i18n:plugin_app_reindex",
-				Icon:  appIcon,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name: "i18n:plugin_app_start_reindex",
-						Icon: icons.Get(icons.ActionRun),
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							util.Go(ctx, "reindex app", func() {
-								a.stopAppChangeWatcher()
-								// clean cache file first
-								cachePath := a.getAppCachePath()
-								if err := os.Remove(cachePath); err == nil {
-									a.api.Log(ctx, plugin.LogLevelInfo, "app cache file removed")
-								}
-								imageCache := util.GetLocation().GetImageCacheDirectory()
-								if err := os.RemoveAll(imageCache); err == nil {
-									common.ClearConvertIconPathExistenceCache()
-									a.api.Log(ctx, plugin.LogLevelInfo, "image cache directory removed")
-								}
-								// clear in-memory app list
-								a.apps = []appInfo{}
-								a.hotkeyAppCandidates = []setting.IgnoredHotkeyApp{}
-
-								a.indexApps(ctx)
-								a.startAppChangeWatcher()
-								a.api.Notify(ctx, "i18n:plugin_app_reindex_completed")
-							})
-						},
-					},
-				},
-			},
-		})
-	}
-
 	isLaunchpadQuery := query.Command == appCommandLaunchpad
 	queryStartedAt := util.GetSystemTimestamp()
 	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
 	preparedPattern := fuzzymatch.PreparePattern(query.Search)
 
-	// Query against a stable snapshot so reindexing or settings changes do not
+	// Query against a stable snapshot so index rebuilds or settings changes do not
 	// force extra work in the middle of a keystroke.
 	snapshotStart := time.Now()
 	entries, generation := a.getQueryEntriesSnapshot()
@@ -911,7 +879,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		}
 	}
 
-	if info.Type != AppTypeWindowsSetting {
+	if info.Type != AppTypeWindowsSetting && info.Type != AppTypeAppsFolder {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:        "i18n:plugin_app_open_containing_folder",
 			Icon:        icons.Get(icons.ActionOpenContainingFolder),
@@ -953,7 +921,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 	// Bug fix: Linux cannot show the true system context menu behind this action,
 	// so keep the entry only on platforms where nativecontextmenu can honor the
 	// label instead of exposing a file-manager fallback as if it were equivalent.
-	if info.Type != AppTypeUWP && info.Type != AppTypeWindowsSetting && nativecontextmenu.IsSupported() {
+	if info.Type != AppTypeUWP && info.Type != AppTypeAppsFolder && info.Type != AppTypeWindowsSetting && nativecontextmenu.IsSupported() {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:        "i18n:plugin_file_show_context_menu",
 			Icon:        icons.Get(icons.ActionContextMenu),
@@ -971,7 +939,66 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		})
 	}
 
+	// Manual indexing lives on the action panel, matching file search,
+	// so a missed Store/PWA install can be recovered without leaving the query.
+	actions = append(actions, a.buildIndexAppsAction())
+
 	return actions
+}
+
+// buildIndexAppsAction exposes the shared full-index operation on each app result.
+func (a *ApplicationPlugin) buildIndexAppsAction() plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_app_index",
+		Icon:                   icons.Get(icons.ActionExecute),
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			a.startAppIndex()
+		},
+	}
+}
+
+// startAppIndex starts one lifecycle-bound rebuild independent of the query session.
+func (a *ApplicationPlugin) startAppIndex() {
+	if a.runtimeCtx == nil || a.runtimeCtx.Err() != nil || !a.indexing.CompareAndSwap(false, true) {
+		return
+	}
+	util.Go(a.runtimeCtx, "index apps", func() {
+		defer a.indexing.Store(false)
+		if !a.rebuildAppIndex(a.runtimeCtx, true) {
+			return
+		}
+		a.api.Notify(a.runtimeCtx, "i18n:plugin_app_index_completed")
+		a.api.RefreshQuery(a.runtimeCtx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+	})
+}
+
+// rebuildAppIndex serializes full scans and restarts change monitoring around them.
+func (a *ApplicationPlugin) rebuildAppIndex(ctx context.Context, clearCache bool) bool {
+	a.appIndexMu.Lock()
+	defer a.appIndexMu.Unlock()
+
+	a.stopAppChangeWatcher()
+	if ctx.Err() != nil {
+		return false
+	}
+	if clearCache {
+		if err := os.Remove(a.getAppCachePath()); err == nil {
+			a.api.Log(ctx, plugin.LogLevelInfo, "app cache file removed")
+		}
+		// Keep shared image files alive while the old query snapshot is visible.
+		// The icon cache already keys filesystem apps by source mtime, so an index
+		// rebuild does not need to invalidate images used by the running UI.
+		a.apps = nil
+		a.hotkeyAppCandidates = nil
+	}
+
+	a.indexApps(ctx)
+	if ctx.Err() != nil {
+		return false
+	}
+	a.startAppChangeWatcher()
+	return true
 }
 
 func (a *ApplicationPlugin) getQueryResultIcon(info appInfo, isLaunchpadQuery bool) common.WoxImage {
@@ -1050,22 +1077,30 @@ func (a *ApplicationPlugin) startAppChangeWatcher() {
 	}
 
 	watchCtx, cancel := context.WithCancel(a.runtimeCtx)
+	done := make(chan struct{})
 	a.appChangeMu.Lock()
 	a.appChangeCancel = cancel
+	a.appChangeDone = done
 	a.appChangeMu.Unlock()
 	util.Go(watchCtx, "watch app changes", func() {
+		defer close(done)
 		a.watchAppChanges(watchCtx)
 	})
 }
 
-// stopAppChangeWatcher releases active watchers before reindexing or unloading the plugin.
+// stopAppChangeWatcher releases active watchers before rebuilding the index or unloading the plugin.
 func (a *ApplicationPlugin) stopAppChangeWatcher() {
 	a.appChangeMu.Lock()
 	cancel := a.appChangeCancel
+	done := a.appChangeDone
 	a.appChangeCancel = nil
+	a.appChangeDone = nil
 	a.appChangeMu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if done != nil {
+		<-done
 	}
 }
 
@@ -1105,6 +1140,13 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 	var firstPendingAt time.Time
 	var timer *time.Timer
 	var timerC <-chan time.Time
+	var extraTickerC <-chan time.Time
+	if _, ok := a.retriever.(extraAppLister); ok {
+		// ponytail: polling avoids a native message window; add shell notifications only if sub-15-second discovery is required.
+		extraTicker := time.NewTicker(appExtraAppsReconcileInterval)
+		defer extraTicker.Stop()
+		extraTickerC = extraTicker.C
+	}
 
 	stopTimer := func() {
 		if timer == nil {
@@ -1157,6 +1199,8 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 			pending = map[string]appPendingChange{}
 			firstPendingAt = time.Time{}
 			stopTimer()
+		case <-extraTickerC:
+			a.reconcileExtraApps(ctx)
 		case <-fallbackTickerC:
 			a.reconcileFallbackAppDirectories(ctx, fallbackDirectories)
 		case signal, ok := <-feed.Signals():
@@ -1338,7 +1382,7 @@ func (a *ApplicationPlugin) getActionableAppChange(signal filesearch.ChangeSigna
 		}
 		if signal.Kind == filesearch.ChangeSignalKindRequiresRootReconcile || signal.Kind == filesearch.ChangeSignalKindFeedUnavailable {
 			// Diagnostic logging only: app indexing intentionally avoids fallback full
-			// reindexing because broad app scans are expensive. Keep the skip visible
+			// rebuilding the index because broad app scans are expensive. Keep the skip visible
 			// while testing install/uninstall flows so we can tell whether filesearch
 			// produced a precise path or only a root-level reconciliation request.
 			a.api.Log(context.Background(), plugin.LogLevelInfo, fmt.Sprintf("app change feed skipped: kind=%s reason=%s path=%s", signal.Kind, signal.Reason, signal.Path))
@@ -1670,6 +1714,8 @@ func (a *ApplicationPlugin) isPathAtOrUnderDirectory(appPath string, directoryPa
 func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	a.api.Log(ctx, plugin.LogLevelInfo, "start to get apps")
+	a.updateAppIndexStatus(ctx, "plugin_app_index_scanning", 0, 0)
+	defer a.clearAppIndexStatus(ctx)
 
 	var extraAppPaths []string
 	if retriever, ok := a.retriever.(extraAppPathRetriever); ok {
@@ -1680,9 +1726,36 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 			extraAppPaths = paths
 		}
 	}
+	appPaths := a.getAppPaths(ctx, a.getAppDirectories(ctx))
+	appPaths = a.deduplicateAppPaths(append(appPaths, extraAppPaths...))
+	extraApps, err := a.retriever.GetExtraApps(ctx)
+	if err != nil {
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting extra apps: %s", err.Error()))
+	}
 
-	appInfos := a.indexAppsByDirectory(ctx, extraAppPaths)
-	extraApps := a.indexExtraApps(ctx)
+	total := int64(len(appPaths) + len(extraApps))
+	var processed atomic.Int64
+	lastPercent := -1
+	var progressMu sync.Mutex
+	if total > 0 {
+		a.updateAppIndexStatus(ctx, "plugin_app_indexing_progress", 0, total)
+	}
+	progress := func() {
+		current := processed.Add(1)
+		percent := int(current * 100 / total)
+		progressMu.Lock()
+		defer progressMu.Unlock()
+		if percent <= lastPercent {
+			return
+		}
+		lastPercent = percent
+		a.updateAppIndexStatus(ctx, "plugin_app_indexing_progress", current, total)
+	}
+	if total == 0 {
+		progress = nil
+	}
+	appInfos := a.indexAppsByPaths(ctx, appPaths, progress)
+	extraApps = a.indexExtraApps(ctx, extraApps, progress)
 
 	//merge extra apps
 	for _, extraApp := range extraApps {
@@ -1708,6 +1781,42 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	a.saveAppToCache(ctx)
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
+}
+
+// updateAppIndexStatus stores the global indexing snapshot before pushing it to an active app query.
+func (a *ApplicationPlugin) updateAppIndexStatus(ctx context.Context, titleKey string, processed int64, total int64) {
+	a.appIndexStatusMu.Lock()
+	a.appIndexStatus = appIndexStatus{titleKey: titleKey, processed: processed, total: total}
+	a.appIndexStatusMu.Unlock()
+	a.syncAppIndexToolbar(ctx)
+}
+
+// syncAppIndexToolbar replays the current indexing snapshot when an app query becomes active.
+func (a *ApplicationPlugin) syncAppIndexToolbar(ctx context.Context) {
+	a.appIndexStatusMu.RLock()
+	status := a.appIndexStatus
+	a.appIndexStatusMu.RUnlock()
+	if status.titleKey == "" {
+		return
+	}
+
+	msg := plugin.ToolbarMsg{Id: appIndexToolbarMsgID, Title: a.api.GetTranslation(ctx, status.titleKey), Icon: appIcon}
+	if status.total <= 0 {
+		msg.Indeterminate = true
+	} else {
+		percent := int(status.processed * 100 / status.total)
+		msg.Progress = &percent
+		msg.Title = fmt.Sprintf(msg.Title, status.processed, status.total)
+	}
+	a.api.ShowToolbarMsg(ctx, msg)
+}
+
+// clearAppIndexStatus removes the completed run snapshot and any visible toolbar message.
+func (a *ApplicationPlugin) clearAppIndexStatus(ctx context.Context) {
+	a.appIndexStatusMu.Lock()
+	a.appIndexStatus = appIndexStatus{}
+	a.appIndexStatusMu.Unlock()
+	a.api.ClearToolbarMsg(ctx, appIndexToolbarMsgID)
 }
 
 func (a *ApplicationPlugin) getUserAddedPaths(ctx context.Context) []appDirectory {
@@ -1738,15 +1847,12 @@ func (a *ApplicationPlugin) getAppDirectories(ctx context.Context) []appDirector
 	return append(a.getUserAddedPaths(ctx), a.getRetriever(ctx).GetAppDirectories(ctx)...)
 }
 
-func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context, extraAppPaths []string) []appInfo {
+// indexAppsByPaths parses the application paths collected from every directory source.
+func (a *ApplicationPlugin) indexAppsByPaths(ctx context.Context, appPaths []string, progress func()) []appInfo {
 	cacheByPath := make(map[string]appInfo, len(a.apps))
 	for _, cached := range a.apps {
 		cacheByPath[a.pathCacheKey(cached.Path)] = cached
 	}
-
-	appDirectories := a.getAppDirectories(ctx)
-	appPaths := a.getAppPaths(ctx, appDirectories)
-	appPaths = a.deduplicateAppPaths(append(appPaths, extraAppPaths...))
 
 	// split into groups, so we can index apps in parallel
 	var appPathGroups [][]string
@@ -1770,39 +1876,45 @@ func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context, extraAppPa
 		var appPathGroup = appPathGroups[groupIndex]
 		util.Go(ctx, fmt.Sprintf("index app group: %d", groupIndex), func() {
 			for _, appPath := range appPathGroup {
-				fileInfo, statErr := os.Stat(appPath)
-				if statErr != nil {
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error stating %s: %s", appPath, statErr.Error()))
-					continue
-				}
-
-				if cachedInfo, ok := a.reuseAppFromCache(ctx, appPath, fileInfo, cacheByPath); ok {
-					atomic.AddInt64(&cacheHits, 1)
-					lock.Lock()
-					appInfos = append(appInfos, cachedInfo)
-					lock.Unlock()
-					continue
-				}
-
-				info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
-				if getErr != nil {
-					if errors.Is(getErr, errSkipAppIndexing) {
-						a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("skip indexing app %s: %s", appPath, getErr.Error()))
-						continue
+				func() {
+					if progress != nil {
+						defer progress()
 					}
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
-					continue
-				}
 
-				a.populateAppMetadata(ctx, appPath, &info, fileInfo)
+					fileInfo, statErr := os.Stat(appPath)
+					if statErr != nil {
+						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error stating %s: %s", appPath, statErr.Error()))
+						return
+					}
 
-				// preprocess icon
-				info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
-				atomic.AddInt64(&parsedCount, 1)
+					if cachedInfo, ok := a.reuseAppFromCache(ctx, appPath, fileInfo, cacheByPath); ok {
+						atomic.AddInt64(&cacheHits, 1)
+						lock.Lock()
+						appInfos = append(appInfos, cachedInfo)
+						lock.Unlock()
+						return
+					}
 
-				lock.Lock()
-				appInfos = append(appInfos, info)
-				lock.Unlock()
+					info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
+					if getErr != nil {
+						if errors.Is(getErr, errSkipAppIndexing) {
+							a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("skip indexing app %s: %s", appPath, getErr.Error()))
+							return
+						}
+						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
+						return
+					}
+
+					a.populateAppMetadata(ctx, appPath, &info, fileInfo)
+
+					// preprocess icon
+					info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+					atomic.AddInt64(&parsedCount, 1)
+
+					lock.Lock()
+					appInfos = append(appInfos, info)
+					lock.Unlock()
+				}()
 			}
 			waitGroup.Done()
 		}, func() {
@@ -1842,16 +1954,102 @@ func (a *ApplicationPlugin) deduplicateAppPaths(appPaths []string) []string {
 	return uniquePaths
 }
 
-func (a *ApplicationPlugin) indexExtraApps(ctx context.Context) []appInfo {
-	apps, err := a.retriever.GetExtraApps(ctx)
-	if err != nil {
-		return []appInfo{}
+// reconcileExtraApps updates virtual AppsFolder entries without a full directory scan.
+func (a *ApplicationPlugin) reconcileExtraApps(ctx context.Context) bool {
+	lister, ok := a.retriever.(extraAppLister)
+	if !ok {
+		return false
 	}
+
+	existingByPath := make(map[string]appInfo)
+	for _, app := range a.apps {
+		if isAppsFolderIndexedApp(app) {
+			existingByPath[a.pathCacheKey(app.Path)] = app
+		}
+	}
+
+	desired, err := lister.ListExtraApps(ctx, existingByPath)
+	if err != nil {
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error listing extra apps: %s", err.Error()))
+		return false
+	}
+	if len(desired) == 0 && len(existingByPath) > 0 {
+		a.api.Log(ctx, plugin.LogLevelError, "AppsFolder reconcile ignored an empty snapshot")
+		return false
+	}
+
+	kept, added, removed, changed := mergeExtraApps(a.apps, desired, a.pathCacheKey)
+	if !changed {
+		return false
+	}
+	added = a.indexExtraApps(ctx, added, nil)
+	for _, addedApp := range added {
+		kept = append(kept, addedApp)
+		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("extra app added by AppsFolder reconcile: %s", addedApp.Name))
+	}
+	for _, name := range removed {
+		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("extra app removed by AppsFolder reconcile: %s", name))
+	}
+
+	a.apps = kept
+	a.rebuildHotkeyAppCandidates(ctx)
+	a.rebuildQueryEntries(ctx)
+	a.saveAppToCache(ctx)
+	return true
+}
+
+// mergeExtraApps replaces only AppsFolder-backed entries and preserves directory-indexed apps.
+func mergeExtraApps(current []appInfo, desired []appInfo, pathKey func(string) string) (kept []appInfo, added []appInfo, removed []string, changed bool) {
+	desiredByPath := make(map[string]appInfo, len(desired))
+	for _, extra := range desired {
+		desiredByPath[pathKey(extra.Path)] = extra
+	}
+	existingExtra := make(map[string]struct{})
+	kept = make([]appInfo, 0, len(current)+len(desired))
+	for _, app := range current {
+		if !isAppsFolderIndexedApp(app) {
+			kept = append(kept, app)
+			continue
+		}
+		key := pathKey(app.Path)
+		existingExtra[key] = struct{}{}
+		next, stillPresent := desiredByPath[key]
+		if !stillPresent {
+			removed = append(removed, app.Name)
+			changed = true
+			continue
+		}
+		if !app.equals(next) {
+			kept = append(kept, next)
+			changed = true
+			continue
+		}
+		kept = append(kept, app)
+	}
+	for key, extra := range desiredByPath {
+		if _, exists := existingExtra[key]; exists {
+			continue
+		}
+		added = append(added, extra)
+		changed = true
+	}
+	return kept, added, removed, changed
+}
+
+func (a *ApplicationPlugin) indexExtraApps(ctx context.Context, apps []appInfo, progress func()) []appInfo {
+	apps = a.retriever.PrepareExtraApps(ctx, apps)
 
 	//preprocess icon
 	for i := range apps {
+		if isAppsFolderIndexedApp(apps[i]) {
+			// Classify the final platform icon before conversion changes its representation.
+			apps[i].IsDefaultIcon = apps[i].Icon.IsEmpty() || apps[i].Icon.ImageData == appIcon.ImageData
+		}
 		a.populateAppMetadata(ctx, apps[i].Path, &apps[i], nil)
 		apps[i].Icon = common.ConvertIcon(ctx, apps[i].Icon, a.pluginDirectory)
+		if progress != nil {
+			progress()
+		}
 	}
 
 	return apps

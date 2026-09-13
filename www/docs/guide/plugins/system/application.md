@@ -43,7 +43,7 @@ Wox indexes common application locations for each platform:
 Open **Settings -> Plugins -> Application** to:
 
 - Add custom app directories for portable tools
-- Reindex apps
+- Index apps from the Action Panel
 - Hide apps from search with wildcard rules or selected-app ignore rules, and preview the matches before saving
 
 ## Result Ordering
@@ -54,8 +54,8 @@ The plugin uses matching score and MRU data. Apps you launch often move up over 
 
 ### A new app is missing
 
-- Wait a few seconds for indexing.
-- Run the plugin's reindex command or restart Wox.
+- Wait up to 15 seconds for indexing.
+- Index apps from the Action Panel, or restart Wox.
 - Add the app's parent directory in plugin settings if it is a portable app.
 - Confirm the app is not hidden by an ignore rule.
 

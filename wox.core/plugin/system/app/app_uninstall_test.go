@@ -120,6 +120,7 @@ func TestShouldOfferWindowsUninstall(t *testing.T) {
 		{name: "shortcut", info: appInfo{Path: `C:\Apps\Editor.lnk`, Type: AppTypeDesktop}, want: true},
 		{name: "url shortcut", info: appInfo{Path: `C:\Apps\Game.url`, Type: AppTypeDesktop}},
 		{name: "uwp", info: appInfo{Path: `shell:AppsFolder\Example.App_123!App`, Type: AppTypeUWP}, want: true},
+		{name: "apps folder web app", info: appInfo{Path: `shell:AppsFolder\https://pixpin.cn`, Type: AppTypeAppsFolder}},
 		{name: "windows setting", info: appInfo{Path: "ms-settings:display", Type: AppTypeWindowsSetting}},
 	}
 
