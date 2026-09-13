@@ -162,10 +162,19 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: rightChildren}},
 		}}},
 	}
+	var surface woxwidget.Widget = body
+	if radius := min(max(0, props.Theme.AppContentBorderRadius), min(props.Width/2, props.Height)); radius > 0 {
+		// Extend the rounded material above the clip so only the panel's bottom corners are rounded.
+		body.Color, body.Floating = woxui.Color{}, false
+		surface = woxwidget.Clip{Width: props.Width, Height: props.Height, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+			{Top: -radius, Child: woxwidget.Container{Width: props.Width, Height: props.Height + radius, Radius: radius, Color: props.Theme.ToolbarBackground, Floating: true}},
+			{Child: body},
+		}}}
+	}
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 		// Block result hit targets throughout the glass, including blank gutters.
 		{Child: woxwidget.Gesture{ID: "launcher-toolbar-shield", OnTap: func() {}, OnSecondaryTapDown: func(woxui.Point) {}, OnHover: func(bool) {}, OnPointer: func(woxui.PointerEvent) bool { return true }, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
-		{Child: body},
+		{Child: surface},
 		{Child: woxwidget.Painter{Width: props.Width, Height: min(props.Height, max(float32(0), props.Theme.ToolbarBorderWidth)), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			if props.Theme.ToolbarBorderWidth > 0 {
 				displayList.FillRect(bounds, props.Theme.ToolbarBorder)

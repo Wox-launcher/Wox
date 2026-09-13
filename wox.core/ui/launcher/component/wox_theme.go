@@ -50,6 +50,9 @@ type Theme struct {
 	ScrollbarHoverWidth                        *int
 	ScrollbarBorderRadius                      *int
 	AppWindowChrome                            bool
+	AppContentInset                            float32
+	AppContentBackground                       woxui.Color
+	AppContentBorderRadius                     float32
 	AppBorderColor                             *woxui.Color
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int

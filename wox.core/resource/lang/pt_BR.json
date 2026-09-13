@@ -402,6 +402,7 @@
   "ui_theme_editor_group_action_panel": "Painel de ações",
   "ui_theme_editor_group_toolbar": "Barra de ferramentas",
   "ui_theme_editor_token_app_background": "Fundo do app",
+  "ui_theme_editor_token_app_content_background": "Fundo do painel de conteúdo",
   "ui_theme_base_background": "Fundo base",
   "ui_theme_base_text": "Texto base",
   "ui_theme_base_accent": "Destaque base",

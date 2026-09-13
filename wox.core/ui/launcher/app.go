@@ -1132,7 +1132,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		height += int(densityMetrics.refinementBarHeight)
 	}
 	if visibleResults > 0 {
-		height += launcherResultAreaHeight(results, layout, float32(width), maxResults, resultRowHeight, resultVerticalPadding, densityMetrics.groupHeaderHeight())
+		height += launcherResultAreaHeight(results, layout, max(0, float32(width)-2*palette.AppContentInset), maxResults, resultRowHeight, resultVerticalPadding, densityMetrics.groupHeaderHeight())
 	}
 	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)
@@ -1214,6 +1214,9 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if minimumHeight <= 0 {
 		minimumHeight = min(height, resultRowHeight)
 	}
+	// Keep the requested result capacity inside the panel; the material rim is additional window chrome.
+	height += int(2 * palette.AppContentInset)
+	minimumHeight += int(2 * palette.AppContentInset)
 	current, err := a.window.Bounds()
 	if err != nil {
 		return err

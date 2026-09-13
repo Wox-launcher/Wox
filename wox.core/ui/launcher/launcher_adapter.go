@@ -207,8 +207,8 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 			}
 		}
 	}
-	width := frame.Size.Width
-	height := frame.Size.Height
+	contentBounds := woxcomponent.LauncherContentBounds(frame.Size.Width, frame.Size.Height, snapshot.palette.AppContentInset)
+	width, height := contentBounds.Width, contentBounds.Height
 	queryHeight := float32(0)
 	previewFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
 	queryLineHeight := a.queryLineHeight(snapshot.densityMetrics)
@@ -287,9 +287,14 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 		nativePreviewOcclusion = woxui.Rect{Width: width, Height: height}
 	}
+	if nativePreviewOcclusion.Width > 0 && nativePreviewOcclusion.Height > 0 {
+		// Native preview occlusion uses window coordinates, while floating panels use content coordinates.
+		nativePreviewOcclusion.X += contentBounds.X
+		nativePreviewOcclusion.Y += contentBounds.Y
+	}
 	a.requestNativeFilePreviewOcclusion(nativePreviewOcclusion)
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
-		Width: width, Height: height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer, FooterOverlay: footerOverlay,
+		Width: frame.Size.Width, Height: frame.Size.Height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer, FooterOverlay: footerOverlay,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
 		PreviewOnly: previewOnly, BorderWidth: snapshot.palette.appPadding.Top, OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {

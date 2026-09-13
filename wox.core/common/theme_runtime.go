@@ -36,11 +36,14 @@ type Theme struct {
 	DarkThemeId      string // ID of the dark theme variant
 	LightThemeId     string // ID of the light theme variant
 
-	AppBackgroundColor string
-	AppPaddingLeft     int
-	AppPaddingTop      int
-	AppPaddingRight    int
-	AppPaddingBottom   int
+	AppBackgroundColor        string
+	AppContentInset           int
+	AppContentBackgroundColor string
+	AppContentBorderRadius    int
+	AppPaddingLeft            int
+	AppPaddingTop             int
+	AppPaddingRight           int
+	AppPaddingBottom          int
 
 	QueryBoxFontColor                    string
 	QueryBoxBackgroundColor              string

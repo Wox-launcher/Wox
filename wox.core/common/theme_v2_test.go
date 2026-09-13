@@ -10,6 +10,60 @@ import (
 
 const minimalV2Theme = `{"SchemaVersion":2,"ThemeId":"test-v2","ThemeName":"Test","BaseBackgroundColor":"#182020B8","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6"}`
 
+// TestThemeV2ContentPanel keeps sparse defaults, platform overrides and material selection independent.
+func TestThemeV2ContentPanel(t *testing.T) {
+	for _, extra := range []string{"", `,"AppContentInset":null,"AppContentBackgroundColor":null,"AppContentBorderRadius":null`, `,"AppContentInset":0,"AppContentBackgroundColor":"transparent","AppContentBorderRadius":0`} {
+		var theme Theme
+		if err := json.Unmarshal([]byte(strings.TrimSuffix(minimalV2Theme, "}")+extra+"}"), &theme); err != nil {
+			t.Fatal(err)
+		}
+		if theme.AppContentInset != 0 || theme.AppContentBorderRadius != 0 || theme.AppContentBackgroundColor != "#00000000" || theme.UsesCustomWindowChrome() {
+			t.Fatal("content defaults changed existing window appearance")
+		}
+		encoded, err := json.Marshal(theme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if extra == "" && strings.Contains(string(encoded), "AppContent") {
+			t.Fatal("sparse save materialized content defaults")
+		}
+	}
+	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"AppContentInset":12,"AppContentBackgroundColor":"#203B4ECC","AppContentBorderRadius":8,"windows":{"AppContentInset":16,"variants":{"win11":{"AppContentBorderRadius":0}}}}`
+	var theme Theme
+	if err := json.Unmarshal([]byte(input), &theme); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"windows", "macos", "linux"} {
+		resolved, err := theme.ResolveForTarget(platform, "win11")
+		if err != nil {
+			t.Fatal(err)
+		}
+		inset, radius := 12, 8
+		if platform == "windows" {
+			inset, radius = 16, 0
+		}
+		if resolved.AppContentInset != inset || resolved.AppContentBorderRadius != radius || resolved.AppContentBackgroundColor != "#203B4ECC" || resolved.UsesCustomWindowChrome() {
+			t.Fatalf("incorrect %s content panel: %+v", platform, resolved)
+		}
+	}
+	encoded, err := json.Marshal(theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Theme
+	if err := json.Unmarshal(encoded, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(theme, restored) {
+		t.Fatal("content panel round trip changed authored values")
+	}
+	for _, extra := range []string{`,"AppContentInset":-1`, `,"AppContentInset":1.5`, `,"AppContentBorderRadius":-1`, `,"AppContentBackgroundColor":"invalid"`, `,"linux":{"AppContentInset":-1}`} {
+		if err := json.Unmarshal([]byte(strings.TrimSuffix(minimalV2Theme, "}")+extra+"}"), &restored); err == nil {
+			t.Fatalf("accepted invalid content style %s", extra)
+		}
+	}
+}
+
 // TestThemeV2OptionalValuesRoundTrip verifies that resolving never materializes absent authored fields.
 func TestThemeV2OptionalValuesRoundTrip(t *testing.T) {
 	for _, tc := range []struct {

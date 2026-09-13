@@ -420,6 +420,7 @@
   "ui_theme_editor_group_action_panel": "작업 패널",
   "ui_theme_editor_group_toolbar": "도구 모음",
   "ui_theme_editor_token_app_background": "앱 배경",
+  "ui_theme_editor_token_app_content_background": "콘텐츠 패널 배경",
   "ui_theme_base_background": "기본 배경색",
   "ui_theme_base_text": "기본 텍스트 색상",
   "ui_theme_base_accent": "기본 강조색",

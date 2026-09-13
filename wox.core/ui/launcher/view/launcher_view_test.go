@@ -4,8 +4,49 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+// TestLauncherContentInsetMovesEverySectionTogether uses logical bounds across DPI transitions.
+func TestLauncherContentInsetMovesEverySectionTogether(t *testing.T) {
+	for _, layout := range []struct{ bottom, overlay bool }{{}, {bottom: true}, {overlay: true}} {
+		bounds := map[string]woxui.Rect{}
+		section := func(name string, width, height float32) woxwidget.Widget {
+			return woxwidget.Painter{Width: width, Height: height, Paint: func(_ *woxui.DisplayList, rect woxui.Rect) { bounds[name] = rect }}
+		}
+		contentHeight := float32(126)
+		if layout.overlay {
+			contentHeight += 30
+		}
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return LauncherView(LauncherViewProps{Width: 400, Height: 220,
+				Theme:  woxcomponent.Theme{AppContentInset: 12, AppContentBorderRadius: 8, AppContentBackground: woxui.Color{A: 180}},
+				Header: section("header", 376, 40), Content: section("content", 376, contentHeight), Footer: section("footer", 376, 30),
+				QueryAtBottom: layout.bottom, FooterOverlay: layout.overlay,
+				Floating: &LauncherFloatingView{Left: 220, Bottom: 35, AnchorBottom: true, Child: section("floating", 140, 60)},
+				Overlay:  section("overlay", 376, 196),
+			})
+		})
+		host.AttachServices(actionSearchHostServices{})
+		for _, scale := range []float32{1, 1.25, 1.5, 2, 1} {
+			clear(bounds)
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 220}, Scale: scale, PixelSize: woxui.PixelSize{Width: int(400 * scale), Height: int(220 * scale)}})
+			headerY, contentY := float32(12), float32(52)
+			if layout.bottom {
+				headerY, contentY = 138, 12
+			}
+			for name, want := range map[string]woxui.Rect{
+				"header": {X: 12, Y: headerY, Width: 376, Height: 40}, "content": {X: 12, Y: contentY, Width: 376, Height: contentHeight},
+				"footer": {X: 12, Y: 178, Width: 376, Height: 30}, "floating": {X: 232, Y: 113, Width: 140, Height: 60}, "overlay": {X: 12, Y: 12, Width: 376, Height: 196},
+			} {
+				if bounds[name] != want {
+					t.Fatalf("scale %v layout %+v %s: got %+v want %+v", scale, layout, name, bounds[name], want)
+				}
+			}
+		}
+	}
+}
 
 func TestBorderDragMoveAreaProvidesFourEdgeDragGestures(t *testing.T) {
 	dragged := 0

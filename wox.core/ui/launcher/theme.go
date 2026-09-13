@@ -82,6 +82,9 @@ type themeData struct {
 	ResultItemHoverBackgroundColor        string
 
 	AppBackgroundColor                   string
+	AppContentInset                      int
+	AppContentBackgroundColor            string
+	AppContentBorderRadius               int
 	AppPaddingLeft                       int
 	AppPaddingTop                        int
 	AppPaddingRight                      int
@@ -186,6 +189,9 @@ type uiPalette struct {
 	ScrollbarBorderRadius                      *int
 	AppWindowChrome                            bool
 	AppBorderColor                             *woxui.Color
+	AppContentInset                            float32
+	AppContentBackground                       woxui.Color
+	AppContentBorderRadius                     float32
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
 	GlanceHoverBackgroundColor                 *woxui.Color
@@ -296,6 +302,9 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		ScrollbarHoverWidth:                        palette.ScrollbarHoverWidth,
 		ScrollbarBorderRadius:                      palette.ScrollbarBorderRadius,
 		AppWindowChrome:                            palette.AppWindowChrome,
+		AppContentInset:                            palette.AppContentInset,
+		AppContentBackground:                       palette.AppContentBackground,
+		AppContentBorderRadius:                     palette.AppContentBorderRadius,
 		AppBorderColor:                             palette.AppBorderColor,
 		AppBorderWidth:                             palette.AppBorderWidth,
 		AppBorderRadius:                            palette.AppBorderRadius,
@@ -548,6 +557,9 @@ func paletteForTheme(theme themeData) uiPalette {
 		ScrollbarHoverWidth:                        theme.ScrollbarHoverWidth,
 		ScrollbarBorderRadius:                      theme.ScrollbarBorderRadius,
 		AppWindowChrome:                            theme.usesCustomWindowChrome(),
+		AppContentInset:                            float32(theme.AppContentInset),
+		AppContentBackground:                       parseThemeColor(theme.AppContentBackgroundColor, woxui.Color{}),
+		AppContentBorderRadius:                     float32(theme.AppContentBorderRadius),
 		AppBorderColor:                             optionalThemeColor(theme.AppBorderColor),
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,

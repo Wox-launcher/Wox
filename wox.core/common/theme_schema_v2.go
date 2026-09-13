@@ -38,10 +38,14 @@ type ThemeSchemaV2 struct {
 	AppBorderRadius *int    `json:",omitempty"`
 
 	AppBackgroundColor *string `json:",omitempty"`
-	AppPaddingLeft     *int    `json:",omitempty"`
-	AppPaddingTop      *int    `json:",omitempty"`
-	AppPaddingRight    *int    `json:",omitempty"`
-	AppPaddingBottom   *int    `json:",omitempty"`
+	// Content styling leaves native window material and outer chrome unchanged.
+	AppContentInset           *int    `json:",omitempty"`
+	AppContentBackgroundColor *string `json:",omitempty"`
+	AppContentBorderRadius    *int    `json:",omitempty"`
+	AppPaddingLeft            *int    `json:",omitempty"`
+	AppPaddingTop             *int    `json:",omitempty"`
+	AppPaddingRight           *int    `json:",omitempty"`
+	AppPaddingBottom          *int    `json:",omitempty"`
 
 	QueryBoxFontColor                    *string `json:",omitempty"`
 	QueryBoxBackgroundColor              *string `json:",omitempty"`
@@ -433,7 +437,8 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 		"PreviewBackgroundColor": d.BaseBackgroundColor, "PreviewBorderColor": divider, "PreviewTagFontColor": secondary, "PreviewTagBackgroundColor": "transparent", "PreviewTagBorderColor": divider, "GlanceFontColor": secondary, "GlanceIconColor": secondary, "GlanceBackgroundColor": "transparent", "GlanceHoverBackgroundColor": themeColorOpacity(text, .1),
 		"ActionContainerDividerColor": divider, "ActionItemHotkeyFontColor": secondary, "ActionItemHotkeyBackgroundColor": "transparent", "ActionItemHotkeyBorderColor": divider, "ActionItemActiveHotkeyFontColor": d.BaseTextColor, "ActionItemActiveHotkeyBackgroundColor": "transparent", "ActionItemActiveHotkeyBorderColor": d.BaseTextColor, "ToolbarHotkeyFontColor": secondary, "ToolbarHotkeyBackgroundColor": "transparent", "ToolbarHotkeyBorderColor": divider, "ResultItemHoverBackgroundColor": themeColorOpacity(accent, 0.045),
 		"AppBackgroundColor": d.BaseBackgroundColor,
-		"AppPaddingLeft":     10, "AppPaddingTop": 10, "AppPaddingRight": 10, "AppPaddingBottom": 10,
+		"AppContentInset":    0, "AppContentBackgroundColor": "transparent", "AppContentBorderRadius": 0,
+		"AppPaddingLeft": 10, "AppPaddingTop": 10, "AppPaddingRight": 10, "AppPaddingBottom": 10,
 		"ResultContainerPaddingLeft": 0, "ResultContainerPaddingTop": 8, "ResultContainerPaddingRight": 0, "ResultContainerPaddingBottom": 0,
 		"ResultItemBorderRadius": 8, "ResultItemPaddingLeft": 8, "ResultItemPaddingTop": 3, "ResultItemPaddingRight": 8, "ResultItemPaddingBottom": 3,
 		"ResultItemTitleColor": d.BaseTextColor, "ResultItemSubTitleColor": secondary, "ResultItemTailTextColor": secondary,

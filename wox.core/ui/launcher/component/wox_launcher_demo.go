@@ -33,6 +33,7 @@ type LauncherDemoHighlightTarget uint8
 const (
 	LauncherDemoHighlightNone LauncherDemoHighlightTarget = iota
 	LauncherDemoHighlightSurface
+	LauncherDemoHighlightContent
 	LauncherDemoHighlightQueryBackground
 	LauncherDemoHighlightQueryText
 	LauncherDemoHighlightQueryCaret
@@ -91,6 +92,9 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	if background.A == 0 {
 		background = props.Theme.Background
 	}
+	windowWidth := props.Width
+	contentBounds := LauncherContentBounds(props.Width, props.Height, props.Theme.AppContentInset)
+	props.Width, props.Height = contentBounds.Width, contentBounds.Height
 	const appPadding, queryHeight = float32(10), float32(55)
 	windowRadius := float32(12)
 	if props.Theme.AppBorderRadius != nil {
@@ -130,15 +134,16 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	if props.Preview != nil && props.ResultWidth > 0 {
 		resultWidth = min(props.ResultWidth, props.Width-120)
 	}
-	windowRadius = min(max(float32(0), windowRadius), min(props.Width, renderHeight)/2)
-	mica := woxwidget.Container{Width: props.Width, Height: renderHeight, Radius: windowRadius, Color: demoMicaColor(background)}
-	underlay := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: renderHeight, Radius: windowRadius, Color: woxui.Color{A: 255}})
+	windowHeight := renderHeight + 2*contentBounds.Y
+	windowRadius = min(max(float32(0), windowRadius), min(windowWidth, windowHeight)/2)
+	mica := woxwidget.Container{Width: windowWidth, Height: windowHeight, Radius: windowRadius, Color: demoMicaColor(background)}
+	underlay := woxwidget.Widget(woxwidget.Container{Width: windowWidth, Height: windowHeight, Radius: windowRadius, Color: woxui.Color{A: 255}})
 	if props.Backdrop != nil {
-		underlay = woxwidget.Image{Source: props.Backdrop, Width: props.Width, Height: renderHeight, Radius: windowRadius, Fit: woxwidget.ImageFitCover}
+		underlay = woxwidget.Image{Source: props.Backdrop, Width: windowWidth, Height: windowHeight, Radius: windowRadius, Fit: woxwidget.ImageFitCover}
 	}
 	// Keep the glass chrome at rest opacity while content fades. Fading the mica
 	// tint or dropping the underlay punches through to the scene behind the window.
-	children := []woxwidget.StackChild{{Child: underlay}, {Child: mica}}
+	children := []woxwidget.StackChild{}
 	if props.ShowQuery {
 		query := demoQuery(props, queryHeight, alpha)
 		children = append(children, woxwidget.StackChild{Left: appPadding, Top: appPadding, Right: appPadding, StretchWidth: true, Child: demoHighlight(query, props.Width-appPadding*2, queryHeight, 8, props.HighlightTarget == LauncherDemoHighlightQueryBackground, props.HighlightColor)})
@@ -167,7 +172,11 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		})
 	}
 	if props.ShowToolbar {
-		children = append(children, woxwidget.StackChild{Top: renderHeight - footerHeight, Child: demoToolbar(props, footerHeight, renderHeight, windowRadius, alpha)})
+		footerRadius := windowRadius
+		if props.Theme.AppContentInset > 0 || props.Theme.AppContentBorderRadius > 0 {
+			footerRadius = props.Theme.AppContentBorderRadius
+		}
+		children = append(children, woxwidget.StackChild{Top: renderHeight - footerHeight, Child: demoToolbar(props, footerHeight, renderHeight, footerRadius, alpha)})
 	}
 	if props.ActionProgress > .01 {
 		panelWidth := min(float32(250), props.Width*.42)
@@ -183,6 +192,12 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 			Child: demoActionPanel(props, panelWidth, panelHeight, demoAlpha(props.ActionProgress)),
 		})
 	}
+	if props.Theme.AppContentInset != 0 || props.Theme.AppContentBackground.A != 0 || props.Theme.AppContentBorderRadius != 0 || props.HighlightTarget == LauncherDemoHighlightContent {
+		inner := demoHighlight(woxwidget.Stack{Width: props.Width, Height: renderHeight, Children: children}, props.Width, renderHeight, props.Theme.AppContentBorderRadius, props.HighlightTarget == LauncherDemoHighlightContent, props.HighlightColor)
+		content := WoxLauncherContent(windowWidth, windowHeight, props.Theme, inner)
+		children = []woxwidget.StackChild{{Child: content}}
+	}
+	children = append([]woxwidget.StackChild{{Child: underlay}, {Child: mica}}, children...)
 	borderColor, borderWidth := demoWindowBorderColor(props.Theme.PreviewSplit, opacity), float32(1)
 	if props.Theme.AppBorderColor != nil {
 		borderColor = *props.Theme.AppBorderColor
@@ -195,9 +210,9 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		borderColor, borderWidth = props.HighlightColor, 2
 	}
 	children = append(children, woxwidget.StackChild{Child: woxwidget.Container{
-		Width: props.Width, Height: renderHeight, Radius: windowRadius, BorderColor: borderColor, BorderWidth: borderWidth,
+		Width: windowWidth, Height: windowHeight, Radius: windowRadius, BorderColor: borderColor, BorderWidth: borderWidth,
 	}})
-	return woxwidget.Clip{Width: props.Width, Height: renderHeight, Child: woxwidget.Stack{Width: props.Width, Height: renderHeight, Children: children}}
+	return woxwidget.Clip{Width: windowWidth, Height: windowHeight, Child: woxwidget.Stack{Width: windowWidth, Height: windowHeight, Children: children}}
 }
 
 func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.Widget {

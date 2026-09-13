@@ -344,6 +344,8 @@ func themeEditorDemoHighlightTarget(token string) woxcomponent.LauncherDemoHighl
 		return woxcomponent.LauncherDemoHighlightHotkey
 	case "AppBackgroundColor", "BaseBackgroundColor":
 		return woxcomponent.LauncherDemoHighlightSurface
+	case "AppContentBackgroundColor":
+		return woxcomponent.LauncherDemoHighlightContent
 	case "QueryBoxBackgroundColor":
 		return woxcomponent.LauncherDemoHighlightQueryBackground
 	case "QueryBoxFontColor", "BaseTextColor":

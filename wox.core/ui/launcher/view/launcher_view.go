@@ -121,6 +121,9 @@ func (s *previewHoverCloseState) Dispose() {}
 
 // LauncherView builds the accessible launcher window and its overlay layers.
 func LauncherView(props LauncherViewProps) woxwidget.Widget {
+	windowWidth, windowHeight := props.Width, props.Height
+	contentBounds := woxcomponent.LauncherContentBounds(windowWidth, windowHeight, props.Theme.AppContentInset)
+	props.Width, props.Height = contentBounds.Width, contentBounds.Height
 	sections := make([]woxwidget.Widget, 0, 5)
 	if props.TitleBar != nil {
 		sections = append(sections, props.TitleBar)
@@ -163,6 +166,8 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 	if props.Overlay != nil {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}
 	}
+	body = woxcomponent.WoxLauncherContent(windowWidth, windowHeight, props.Theme, body)
+	props.Width, props.Height = windowWidth, windowHeight
 	radius := props.Radius
 	if props.Theme.AppWindowChrome && props.Theme.AppBorderRadius == nil && radius == 0 {
 		radius = woxui.DefaultWindowCornerRadius

@@ -420,6 +420,7 @@
   "ui_theme_editor_group_action_panel": "Action panel",
   "ui_theme_editor_group_toolbar": "Toolbar",
   "ui_theme_editor_token_app_background": "App background",
+  "ui_theme_editor_token_app_content_background": "Content panel background",
   "ui_theme_base_background": "Base background",
   "ui_theme_base_text": "Base text",
   "ui_theme_base_accent": "Base accent",

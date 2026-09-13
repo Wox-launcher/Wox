@@ -44,6 +44,7 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 		{key: "BaseTextColor", label: "i18n:ui_theme_base_text"},
 		{key: "BaseAccentColor", label: "i18n:ui_theme_base_accent"},
 	}, groups[0].tokens...)
+	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppContentBackgroundColor", label: "i18n:ui_theme_editor_token_app_content_background"})
 	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), []themeColorToken{{key: "ResultItemHoverBackgroundColor", label: "i18n:ui_theme_editor_token_result_hover_background"}}...)
 	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), []themeColorToken{{key: "ActionContainerDividerColor", label: "i18n:ui_theme_editor_token_action_divider"}}...)
 	groups[5].tokens = append(append([]themeColorToken(nil), groups[5].tokens...), []themeColorToken{{key: "ToolbarHotkeyFontColor", label: "i18n:ui_theme_editor_token_hotkey_text"}, {key: "ToolbarHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_hotkey_background"}, {key: "ToolbarHotkeyBorderColor", label: "i18n:ui_theme_editor_token_hotkey_border"}}...)
