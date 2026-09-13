@@ -1421,6 +1421,43 @@ func TestHostRebuildRemapsHoverWithoutLeave(t *testing.T) {
 	}
 }
 
+// TestHostRemovedTooltipAnchorDismisses also covers native overlays generating an early owner leave.
+func TestHostRemovedTooltipAnchorDismisses(t *testing.T) {
+	for _, leaveFirst := range []bool{false, true} {
+		visible := true
+		dismissed := 0
+		host := NewHost(func(woxui.FrameInfo) Widget {
+			if !visible {
+				return Container{Width: 10, Height: 10}
+			}
+			return Gesture{ID: "tooltip-anchor", OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				if !inside && bounds == (woxui.Rect{}) {
+					dismissed++
+				}
+			}, Child: Container{Width: 100, Height: 20}}
+		})
+		host.AttachServices(&fakeHostServices{})
+		renderTestFrame(host)
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: woxui.Point{X: 5, Y: 5}})
+		if leaveFirst {
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave})
+		}
+		renderTestFrame(host)
+		if dismissed != 0 {
+			t.Fatal("retained trigger or ordinary pointer leave must not dismiss the tooltip")
+		}
+		visible = false
+		renderTestFrame(host)
+		if dismissed != 1 {
+			t.Fatalf("removed trigger dismissals = %d, want 1 (leaveFirst=%v)", dismissed, leaveFirst)
+		}
+		host.Dispose()
+		if dismissed != 1 {
+			t.Fatal("disposed host must not dismiss an already removed trigger again")
+		}
+	}
+}
+
 func TestHostRemovedHoverableLeavesHover(t *testing.T) {
 	visible := true
 	var hoverStates []bool

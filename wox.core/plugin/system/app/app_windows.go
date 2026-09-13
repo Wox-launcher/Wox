@@ -804,6 +804,8 @@ func (a *WindowsRetriever) PrepareExtraApps(ctx context.Context, apps []appInfo)
 						metadata.Icon = fallback.Icon
 					}
 					metadata.CanRunAsAdministrator = metadata.CanRunAsAdministrator || fallback.CanRunAsAdministrator
+				} else {
+					util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP app metadata for %s: %v", appID, fallbackErr))
 				}
 			}
 			if metadata.Identity != "" {
@@ -992,14 +994,15 @@ func (a *WindowsRetriever) getUWPAppMetadataBatch(ctx context.Context) (map[stri
 		} | ConvertTo-Csv -NoTypeInformation
 	`
 
-	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
+	// Profiles can write startup text to stdout and corrupt the CSV payload.
+	output, err := shell.RunOutput("powershell", "-NoProfile", "-NonInteractive", "-Command", powershellCmd)
 	if err != nil {
 		return nil, fmt.Errorf("PowerShell execution failed: %w", err)
 	}
 
 	records, err := csv.NewReader(strings.NewReader(strings.TrimSpace(string(output)))).ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing UWP metadata output: %w", err)
+		return nil, fmt.Errorf("error parsing UWP metadata output: %w; outputBytes=%d, outputPrefix=%q", err, len(output), output[:min(len(output), 2048)])
 	}
 	if len(records) < 2 {
 		return map[string]uwpAppMetadata{}, nil
@@ -1304,7 +1307,8 @@ func (a *WindowsRetriever) getUWPAppMetadata(ctx context.Context, appID string) 
 		}
 	`, powershellAppID, powershellAppID)
 
-	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
+	// Keep the single-app fallback isolated from profile output as well.
+	output, err := shell.RunOutput("powershell", "-NoProfile", "-NonInteractive", "-Command", powershellCmd)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command for UWP app %s: %v", appID, err))
 		return uwpAppMetadata{}, err
@@ -1319,10 +1323,10 @@ func (a *WindowsRetriever) getUWPAppMetadata(ctx context.Context, appID string) 
 	reader := csv.NewReader(strings.NewReader(outputStr))
 	records, err := reader.ReadAll()
 	if err != nil {
-		return uwpAppMetadata{}, fmt.Errorf("error parsing UWP metadata output: %w", err)
+		return uwpAppMetadata{}, fmt.Errorf("error parsing UWP metadata output: %w; outputBytes=%d, outputPrefix=%q", err, len(output), output[:min(len(output), 2048)])
 	}
 	if len(records) < 2 || len(records[1]) < 3 {
-		return uwpAppMetadata{}, fmt.Errorf("invalid UWP metadata output")
+		return uwpAppMetadata{}, fmt.Errorf("invalid UWP metadata output; outputBytes=%d, outputPrefix=%q", len(output), output[:min(len(output), 2048)])
 	}
 
 	iconPath := strings.TrimSpace(records[1][0])

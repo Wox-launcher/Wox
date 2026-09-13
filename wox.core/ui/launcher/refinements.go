@@ -165,6 +165,9 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 		a.refinementScope = ""
 		a.query.QueryRefinements = map[string]string{}
 	}
+	if a.query.QueryText == "" {
+		a.attentionQueryWasGlobal = true
+	}
 	a.query.QueryText = text
 	a.beginQueryGenerationLocked()
 	a.resultScrollDetached = false

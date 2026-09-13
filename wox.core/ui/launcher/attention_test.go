@@ -13,6 +13,7 @@ import (
 func TestUpdateAttentionUnreadCountStoresCount(t *testing.T) {
 	app := &App{
 		editor:          woxui.NewTextEditor(""),
+		query:           newInputQuery(""),
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
 	}
 	if err := app.UpdateAttentionUnreadCount(context.Background(), 3); err != nil {
@@ -77,19 +78,27 @@ func TestAttentionEligibleLockedRequiresGlobalQuery(t *testing.T) {
 	}
 }
 
-func TestAttentionEligibleLockedKeepsBadgeWhileQueryContextPending(t *testing.T) {
-	app := &App{attentionUnreadCount: 2, query: newInputQuery("chrome")}
-	if !app.attentionEligibleLocked() {
-		t.Fatal("pending query classification should keep the unread badge")
+func TestAttentionEligibleLockedWaitsForGlobalQuery(t *testing.T) {
+	app := &App{attentionUnreadCount: 2}
+	for _, text := range []string{"chrome", "app tel", "app tele", " "} {
+		app.query = newInputQuery(text)
+		for _, known := range []bool{false, true} {
+			app.queryContextKnown = known
+			for _, global := range []bool{false, true} {
+				app.queryContext = queryContext{IsGlobalQuery: global}
+				want := known && global
+				if got := app.attentionEligibleLocked(); got != want {
+					t.Fatalf("query %q eligibility = %v, want %v (known=%v, global=%v)", text, got, want, known, global)
+				}
+				if !want && app.activateAttentionUnread() {
+					t.Fatalf("hidden badge should leave the hotkey for query %q", text)
+				}
+			}
+		}
 	}
-	app.queryContextKnown = true
-	app.queryContext = queryContext{IsGlobalQuery: false, PluginID: "notes"}
-	if app.attentionEligibleLocked() {
-		t.Fatal("known plugin query should hide the unread badge")
-	}
-	app.queryContext = queryContext{IsGlobalQuery: true}
+	app.query = newInputQuery("")
 	if !app.attentionEligibleLocked() {
-		t.Fatal("known global query should show the unread badge")
+		t.Fatal("clearing the query should restore the unread badge")
 	}
 }
 
@@ -101,6 +110,35 @@ func TestAttentionEligibleLockedHidesWhenPluginDisabled(t *testing.T) {
 	app := &App{attentionUnreadCount: 2, query: newInputQuery("")}
 	if app.attentionEligibleLocked() {
 		t.Fatal("disabled Attention plugin should hide the unread badge")
+	}
+}
+
+// TestAttentionContinuousTyping preserves visibility across pending generations, including rapid edits.
+func TestAttentionContinuousTyping(t *testing.T) {
+	app := &App{attentionUnreadCount: 2, query: newInputQuery("")}
+	for _, text := range []string{"a", "as", "ass", "assd"} {
+		app.applyQueryTextChangeLocked(text)
+		if !app.attentionEligibleLocked() {
+			t.Fatalf("global typing hid the badge while %q was pending", text)
+		}
+	}
+	app.queryContextKnown = true
+	app.queryContext = queryContext{IsGlobalQuery: true}
+	app.applyQueryTextChangeLocked("app tel")
+	app.queryContextKnown = true
+	app.queryContext = queryContext{PluginID: "apps"}
+	if app.attentionEligibleLocked() {
+		t.Fatal("confirmed plugin query should hide the badge")
+	}
+	for _, text := range []string{"app tele", "app teleg", "app telegr"} {
+		app.applyQueryTextChangeLocked(text)
+		if app.attentionEligibleLocked() {
+			t.Fatalf("plugin typing flashed the badge while %q was pending", text)
+		}
+	}
+	app.applyQueryTextChangeLocked("")
+	if !app.attentionEligibleLocked() {
+		t.Fatal("clearing input should restore the badge")
 	}
 }
 

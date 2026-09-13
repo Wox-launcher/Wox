@@ -114,6 +114,9 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 func (a *App) RefreshQuery(_ context.Context, preserveSelectedIndex bool) error {
 	if err := a.runOnUI("refresh query", func() {
 		selected := a.selected
+		if a.queryContextKnown {
+			a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
+		}
 		a.query.QueryID = newInputQuery("").QueryID
 		a.queryContext = queryContext{}
 		a.queryContextKnown = false

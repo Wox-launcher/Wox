@@ -186,6 +186,7 @@ type App struct {
 	glanceRevision                uint64
 	glanceTooltipRevision         atomic.Uint64
 	attentionUnreadCount          int
+	attentionQueryWasGlobal       bool // Retains accessory visibility while the next query is being classified.
 	attentionTooltipRevision      atomic.Uint64
 	refinementTooltipRevision     atomic.Uint64
 	glanceTimer                   *time.Timer
@@ -801,6 +802,9 @@ func (a *App) notifySettingViewChanged(inSettingView bool) error {
 // a QueryID without clearing them keeps reporting that older state for the new query.
 // Callers that replace the whole query, such as setQuery, own this bookkeeping already.
 func (a *App) beginQueryGenerationLocked() {
+	if a.queryContextKnown {
+		a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
+	}
 	a.query.QueryID = newID()
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
@@ -818,6 +822,7 @@ func (a *App) setQuery(query plainQuery) {
 	query.QueryHint = query.QueryHint.Clone()
 	query.QueryHint = query.QueryHint.NormalizeForQuery(query.QueryType, query.QueryText)
 	a.query = query
+	a.attentionQueryWasGlobal = false
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.editor.SetText(query.QueryText, false)

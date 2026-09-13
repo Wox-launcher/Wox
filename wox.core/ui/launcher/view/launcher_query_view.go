@@ -226,9 +226,18 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		})
 	}
 	if props.Glance != nil {
-		children = append(children, woxwidget.Align{
+		glance := woxwidget.Align{
 			Width: props.GlanceWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Glance,
-		})
+		}
+		if props.Attention != nil {
+			// Keep the related accessories together without tightening the query's other gaps.
+			children[len(children)-1] = woxwidget.Flex{
+				Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(4, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter,
+				Children: []woxwidget.Widget{children[len(children)-1], glance},
+			}
+		} else {
+			children = append(children, glance)
+		}
 	}
 	if len(props.Icons) > 0 {
 		iconSize := scaledLauncherSize(30, props.DensityScale)

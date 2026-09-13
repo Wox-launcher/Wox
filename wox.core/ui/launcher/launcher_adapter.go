@@ -464,6 +464,9 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		}
 		glanceWidth = min(snapshot.densityMetrics.scaled(192), max(snapshot.densityMetrics.scaled(44), glanceWidth))
 		queryWidth -= glanceWidth + accessoryGap
+		if snapshot.attentionVisible {
+			queryWidth += accessoryGap - snapshot.densityMetrics.scaled(4)
+		}
 	}
 	refinementWidth := float32(0)
 	if !snapshot.queryLoading && len(snapshot.refinements) > 0 {

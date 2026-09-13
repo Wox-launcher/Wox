@@ -1530,11 +1530,12 @@ type gesture struct {
 
 // Gesture adds pointer behavior without changing its child's layout or paint.
 type Gesture struct {
-	ID        string
-	Cursor    woxui.PointerCursor
-	CursorAt  func(position woxui.Point) woxui.PointerCursor
-	Child     Widget
-	OnHover   func(bool)
+	ID       string
+	Cursor   woxui.PointerCursor
+	CursorAt func(position woxui.Point) woxui.PointerCursor
+	Child    Widget
+	OnHover  func(bool)
+	// OnHoverAt receives empty bounds when a previously hovered trigger is removed or disposed.
 	OnHoverAt func(inside bool, bounds woxui.Rect)
 	// CoverHover also reports OnHover, and PointerMove through OnPointer, while a
 	// descendant owns hit-testing. Layout refresh under a still pointer still

@@ -36,16 +36,18 @@ func (a *App) attentionEligibleLocked() bool {
 	if a.attentionUnreadCount <= 0 || a.show.HideQueryBox || attentionPluginDisabled() {
 		return false
 	}
-	if a.query.QueryType != "" && a.query.QueryType != "input" {
+	if a.query.QueryType != "input" || a.layout.Icon.ImageData != "" || len(a.layout.ScopeIcons) > 0 {
 		return false
 	}
 	if len(a.query.QueryScope.Plugins) > 0 {
 		return false
 	}
-	if a.query.QueryText == "" || !a.queryContextKnown {
-		// Keep the badge up while a new query is in flight. queryContext is cleared
-		// on every keystroke, and hiding here remounts the badge on each result.
+	if a.query.QueryText == "" {
 		return true
+	}
+	// Like Glance's retained item, keep the last state while classification is pending.
+	if !a.queryContextKnown {
+		return a.attentionQueryWasGlobal
 	}
 	return a.queryContext.IsGlobalQuery
 }
