@@ -318,7 +318,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 			if props.Image == nil {
 				return woxwidget.Painter{Width: props.Size, Height: props.Size}
 			}
-			return woxwidget.Image{Source: props.Image, Width: props.Size, Height: props.Size}
+			return woxwidget.Image{Source: props.Image, Width: props.Size, Height: props.Size, Fit: woxwidget.ImageFitContain}
 		},
 	}
 	var tail woxwidget.Widget
