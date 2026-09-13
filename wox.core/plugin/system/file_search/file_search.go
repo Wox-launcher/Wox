@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"wox/common"
 	"wox/common/icons"
@@ -124,6 +125,8 @@ type FileSearchPlugin struct {
 	contentCrawlRunning      bool
 	contentCrawlRunningGen   int64
 	contentCrawlStopped      chan struct{}
+	rootsSyncMu              sync.Mutex
+	rootsSyncGeneration      atomic.Int64
 }
 
 type fileSearchQueryDiagnostics struct {
@@ -1546,6 +1549,15 @@ func shouldUseFileSearchImageThumbnail(filePath string) bool {
 
 func (c *FileSearchPlugin) syncUserRoots(ctx context.Context) {
 	if c.engine == nil {
+		return
+	}
+
+	// Setting callbacks run asynchronously. A stale callback that already
+	// sampled roots must not overwrite a newer SaveSetting after it finishes.
+	generation := c.rootsSyncGeneration.Add(1)
+	c.rootsSyncMu.Lock()
+	defer c.rootsSyncMu.Unlock()
+	if generation != c.rootsSyncGeneration.Load() {
 		return
 	}
 

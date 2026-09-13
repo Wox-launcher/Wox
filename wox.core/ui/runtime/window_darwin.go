@@ -111,6 +111,14 @@ func platformRun(start func() error) error {
 }
 
 func platformCall(fn func()) error {
+	darwinRuntime.Lock()
+	running := darwinRuntime.current != nil
+	darwinRuntime.Unlock()
+	if !running {
+		// dispatch_sync waits on the AppKit main queue. Without Run, that queue
+		// never drains because the process main thread stays in the Go runtime.
+		return errors.New("woxui: AppKit runtime is not running")
+	}
 	handle := cgo.NewHandle(fn)
 	defer handle.Delete()
 	if C.wox_darwin_call(C.uintptr_t(handle)) != 0 {

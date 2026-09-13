@@ -15,13 +15,14 @@ import (
 )
 
 const (
-	webSearchPluginID          = "c1e350a7-c521-4dc3-b4ff-509f720fde86"
-	webSearchesTableAddID      = "plugin-settings-field-2-add"
-	webSearchKeywordFieldID    = "form-table-row-field-1"
-	webSearchTitleFieldID      = "form-table-row-field-2"
-	webSearchUrlsFieldID       = "form-table-row-field-3"
-	webSearchUrlsTrailingID    = "form-table-row-field-3-trailing"
-	webSearchEnabledFieldID    = "form-table-row-field-5"
+	webSearchPluginID       = "c1e350a7-c521-4dc3-b4ff-509f720fde86"
+	webSearchesTableAddID   = "plugin-settings-field-2-add"
+	webSearchKeywordFieldID = "form-table-row-field-1"
+	webSearchTitleFieldID   = "form-table-row-field-2"
+	webSearchUrlsFieldID    = "form-table-row-field-3"
+	webSearchUrlsTrailingID = "form-table-row-field-3-trailing"
+	// Editor fields are Icon, Keyword, Title, Urls, Browser, OpenInPrivate, Enabled.
+	webSearchEnabledFieldID    = "form-table-row-field-6"
 	webSearchTitleErrorID      = "form-table-row-field-2-error"
 	webSearchQueryVariableID   = "query-variable-0"
 	webSearchQueryVariableMenu = "query-variable-picker"

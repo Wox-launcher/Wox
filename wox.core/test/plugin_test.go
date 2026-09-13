@@ -688,6 +688,9 @@ func TestFilePlugin_PolicyUpdateRemovesIndexedPath(t *testing.T) {
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
+	t.Cleanup(func() {
+		cleanupFileSearchRoots(t, ctx, filePlugin, "policy update test")
+	})
 
 	if err := saveFileSearchRootsAndWaitReady(ctx, filePlugin, string(rootSetting), rootPath, 30*time.Second); err != nil {
 		t.Fatalf("file search root did not become ready: %v", err)
@@ -775,7 +778,7 @@ func TestFilePlugin_CustomRootsIncrementalSync(t *testing.T) {
 		t.Fatalf("failed to create initial file: %v", err)
 	}
 
-	if err := waitForFileSearchResult(ctx, "f "+initialFileName, initialFileName, initialFilePath, 8*time.Second); err != nil {
+	if err := waitForFileSearchResult(ctx, "f "+initialFileName, initialFileName, initialFilePath, 30*time.Second); err != nil {
 		t.Fatalf("initial file did not become searchable: %v", err)
 	}
 
@@ -975,10 +978,38 @@ func waitForFileSearchResult(ctx context.Context, rawQuery string, expectedTitle
 		summaries = append(summaries, fmt.Sprintf("%q (%q)", result.Title, result.SubTitle))
 	}
 	if len(summaries) == 0 {
-		return err
+		return fmt.Errorf("%w; %s", err, describeFileSearchWaitFailure(ctx, expectedPath))
 	}
 
-	return fmt.Errorf("%w; last results: %s", err, strings.Join(summaries, ", "))
+	return fmt.Errorf("%w; last results: %s; %s", err, strings.Join(summaries, ", "), describeFileSearchWaitFailure(ctx, expectedPath))
+}
+
+func describeFileSearchWaitFailure(ctx context.Context, expectedPath string) string {
+	engine, err := getFileSearchEngine()
+	if err != nil {
+		return fmt.Sprintf("engine=%v", err)
+	}
+
+	status, statusErr := engine.GetStatus(ctx)
+	if statusErr != nil {
+		return fmt.Sprintf("status=%v pathOnDisk=%t", statusErr, fileExists(expectedPath))
+	}
+
+	roots, _ := engine.ListRoots(ctx)
+	return fmt.Sprintf(
+		"indexing=%t pendingRoots=%d pendingPaths=%d activeRoot=%q roots=%d pathOnDisk=%t",
+		status.IsIndexing,
+		status.PendingDirtyRootCount,
+		status.PendingDirtyPathCount,
+		status.ActiveRootPath,
+		len(roots),
+		fileExists(expectedPath),
+	)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func ensureFileSearchResultAbsent(ctx context.Context, rawQuery string, unexpectedTitle string, unexpectedPath string, timeout time.Duration) error {
@@ -1063,7 +1094,7 @@ func waitForFileSearchUserRoots(ctx context.Context, expectedPaths []string, tim
 	}
 
 	if len(lastUserRoots) == 0 {
-		return err
+		return fmt.Errorf("%w; last user roots: none", err)
 	}
 
 	summaries := make([]string, 0, len(lastUserRoots))
@@ -1119,8 +1150,12 @@ func cleanupFileSearchRoots(t *testing.T, ctx context.Context, filePlugin *plugi
 
 func saveFileSearchRootsAndWaitReady(ctx context.Context, filePlugin *plugin.Instance, rootsSetting string, rootPath string, timeout time.Duration) error {
 	// File search root updates arrive through asynchronous setting callbacks and one shared
-	// engine instance backs the package. Wait for the configured root set to settle before
-	// asserting query results so test expectations do not race the background reindex.
+	// engine instance backs the package. Clear leftover roots first so a stale callback
+	// from an earlier test cannot keep a previous directory indexed.
+	filePlugin.API.SaveSetting(ctx, "roots", "[]", false)
+	if err := waitForFileSearchUserRoots(ctx, nil, timeout); err != nil {
+		return fmt.Errorf("reset file search roots: %w", err)
+	}
 	filePlugin.API.SaveSetting(ctx, "roots", rootsSetting, false)
 	return waitForFileSearchRootReady(ctx, rootPath, timeout)
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"wox/util"
 )
@@ -46,16 +47,20 @@ func cachedWoxFileSearchStoragePath() string {
 }
 
 type Scanner struct {
-	db                     *FileSearchDB
-	policy                 *policyState
-	onStateChange          func(ctx context.Context)
-	stopOnce               sync.Once
-	wg                     sync.WaitGroup
-	stopCh                 chan struct{}
-	requestCh              chan scanRequest
-	dirtyCh                chan struct{}
-	runningMu              sync.Mutex
-	scanRunning            bool
+	db            *FileSearchDB
+	policy        *policyState
+	onStateChange func(ctx context.Context)
+	stopOnce      sync.Once
+	wg            sync.WaitGroup
+	stopCh        chan struct{}
+	requestCh     chan scanRequest
+	dirtyCh       chan struct{}
+	runningMu     sync.Mutex
+	scanRunning   bool
+	// pendingRescan remembers RequestRescan calls that arrived while requestCh
+	// already held a request or a scan was running. The channel is size 1 and
+	// used to drop extras, which left newly added roots stuck in Preparing.
+	pendingRescan          atomic.Bool
 	changeFeed             ChangeFeed
 	dirtyQueue             *DirtyQueue
 	dirtyQueueConfig       DirtyQueueConfig
@@ -211,6 +216,7 @@ func (s *Scanner) Start(ctx context.Context) {
 					request.completeReset(nil)
 				}
 				s.scanAllRootsWithReason(rescanCtx, request.Reason)
+				s.flushPendingRescan(rescanCtx)
 			case <-s.dirtyCh:
 				s.resetDirtyTimer(dirtyTimer)
 			case <-dirtyTimer.C:
@@ -263,6 +269,29 @@ func (s *Scanner) RequestRescan(ctx context.Context) {
 	case s.requestCh <- scanRequest{Reason: "request", TraceID: traceID}:
 		util.GetLogger().Debug(contextWithTraceID(ctx, traceID), "filesearch rescan requested")
 	default:
+		// Bug fix: requestCh holds one request. A root change that arrives while
+		// that slot is full or a scan is already running used to be dropped, so
+		// the new root stayed Preparing and never became searchable. Remember
+		// the coalesced request and run another pass after in-flight work.
+		s.pendingRescan.Store(true)
+		util.GetLogger().Debug(contextWithTraceID(ctx, traceID), "filesearch rescan request coalesced")
+	}
+}
+
+func (s *Scanner) flushPendingRescan(ctx context.Context) {
+	if s == nil || !s.pendingRescan.Swap(false) {
+		return
+	}
+
+	// Re-queue on the scanner loop instead of scanning inline. The request
+	// slot was just consumed, so this follow-up is serialized with dirty
+	// flushes and cannot start a nested full scan.
+	traceID := util.GetContextTraceId(ctx)
+	select {
+	case s.requestCh <- scanRequest{Reason: "pending_rescan", TraceID: traceID}:
+		util.GetLogger().Debug(contextWithTraceID(ctx, traceID), "filesearch coalesced rescan queued")
+	default:
+		s.pendingRescan.Store(true)
 	}
 }
 
@@ -303,6 +332,7 @@ func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 	s.runningMu.Lock()
 	if s.scanRunning {
 		s.runningMu.Unlock()
+		s.pendingRescan.Store(true)
 		util.GetLogger().Debug(ctx, fmt.Sprintf("filesearch scan cycle skipped: reason=%s active=true", reason))
 		return
 	}
@@ -1702,10 +1732,14 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 			return err
 		}
 		if !ready {
-			// Fresh full scans publish foreground search before maintenance indexes
-			// are rebuilt. Keep watcher signals queued until dirty diffs can use
-			// their scoped lookup indexes again.
-			return nil
+			// Fresh full scans publish search before maintenance indexes finish.
+			// Finish that rebuild on this flush so watcher-created files are not
+			// stuck unsearchable while the background builder is pending or
+			// failed. If the rebuild still cannot run, continue anyway: scoped
+			// diffs become slower, but skipping the flush dropped live edits.
+			if err := s.db.BuildMaintenanceEntryIndexes(ctx); err != nil {
+				util.GetLogger().Warn(ctx, "filesearch dirty flush continuing without maintenance indexes: "+err.Error())
+			}
 		}
 	}
 

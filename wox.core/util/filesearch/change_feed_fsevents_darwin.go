@@ -86,6 +86,17 @@ func (f *FSEventsChangeFeed) Signals() <-chan ChangeSignal {
 func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {
 	_ = ctx
 	prepared := prepareFSEventsRefresh(roots, time.Now(), defaultFeedCursorSafeWindow)
+	f.mu.Lock()
+	keepCurrentStream := !f.closed && f.stream != nil && sameFSEventsWatchRoots(f.roots, prepared.watchRoots)
+	f.mu.Unlock()
+	if keepCurrentStream {
+		// Bug fix: full-scan completion and the later maintenance-index callback
+		// both refresh the feed. Stopping a live stream for the same root set
+		// dropped file creates that arrived during that restart window, so
+		// incremental tests and desktop edits never became searchable.
+		return nil
+	}
+
 	for _, signal := range prepared.signals {
 		f.emit(signal)
 	}

@@ -16,6 +16,9 @@ func TestDedicatedChatSurvivesLauncherPreviewReplacement(t *testing.T) {
 	state := &chatPreviewState{key: "original", chat: chatData{ID: "original"}, active: true, editor: woxui.NewTextEditor("unsent draft")}
 	app := New(false, nil)
 	defer app.cancel()
+	// Headless unit tests have no native UI thread. Clear the runtime dispatcher
+	// so applyResults can reconcile preview state inline, matching app_test.go.
+	app.uiCall = nil
 	app.chatPreview = state
 	app.chatView = &woxui.ManagedWindow{}
 	app.visible = true
@@ -44,6 +47,7 @@ func TestDedicatedChatSurvivesLauncherPreviewReplacement(t *testing.T) {
 func TestChatQueryKeepsEmbeddedAndDedicatedEntrances(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
+	app.uiCall = nil
 	app.visible = true
 	app.query = newInputQuery("chat ")
 	app.chatView = &woxui.ManagedWindow{}
@@ -76,6 +80,7 @@ func TestChatQueryKeepsEmbeddedAndDedicatedEntrances(t *testing.T) {
 func TestDedicatedChatDoesNotConsumeLauncherShortcuts(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
+	app.uiCall = nil
 	app.chatView = &woxui.ManagedWindow{}
 	app.chatPreview = &chatPreviewState{active: true}
 	modifier := woxui.KeyModifierControl
@@ -131,6 +136,7 @@ func TestDedicatedChatKeepsSecondarySessionAliveOnLauncherBlur(t *testing.T) {
 	hidden := make(chan struct{}, 1)
 	app := New(false, chatWindowTestServices{hidden: hidden})
 	defer app.cancel()
+	app.uiCall = nil
 	app.isPrimary = false
 	app.visible = true
 	app.show.HideOnBlur = true

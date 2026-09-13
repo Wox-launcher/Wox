@@ -144,7 +144,7 @@ func (p *Process) Wait(ctx context.Context) error {
 	}
 }
 
-// Close terminates the isolated Wox process and removes endpoint metadata.
+// Close hides remaining windows, asks the process to quit, then removes endpoint metadata.
 func (p *Process) Close() error {
 	if p == nil {
 		return nil
@@ -154,6 +154,13 @@ func (p *Process) Close() error {
 		select {
 		case <-p.done:
 		default:
+			// Hide Regular-policy windows before killing so macOS Dock can
+			// drop the smoke-binary tile instead of leaving a ghost icon.
+			if p.Client != nil {
+				resetCtx, resetCancel := context.WithTimeout(context.Background(), 3*time.Second)
+				_ = p.Client.Reset(resetCtx)
+				resetCancel()
+			}
 			if p.command != nil && p.command.Process != nil {
 				closeErr = terminateProcess(p.command)
 			}

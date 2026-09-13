@@ -117,6 +117,12 @@ func platformRun(start func() error) error {
 }
 
 func platformCall(fn func()) error {
+	linuxRuntime.Lock()
+	running := linuxRuntime.current != nil
+	linuxRuntime.Unlock()
+	if !running {
+		return errors.New("woxui: GTK runtime is not running")
+	}
 	handle := cgo.NewHandle(fn)
 	defer handle.Delete()
 	if C.wox_linux_call(C.uintptr_t(handle)) != 0 {

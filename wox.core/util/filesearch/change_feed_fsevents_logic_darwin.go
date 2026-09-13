@@ -145,6 +145,27 @@ func fseventRequiresRootReconcile(flags uint64) bool {
 	return flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped|fseventFlagEventIDsWrapped|fseventFlagRootChanged|fseventFlagMount|fseventFlagUnmount) != 0
 }
 
+func sameFSEventsWatchRoots(left []RootRecord, right []RootRecord) bool {
+	if len(left) != len(right) {
+		return false
+	}
+
+	type watchKey struct {
+		id   string
+		path string
+	}
+	seen := make(map[watchKey]struct{}, len(left))
+	for _, root := range left {
+		seen[watchKey{id: root.ID, path: filepath.Clean(root.Path)}] = struct{}{}
+	}
+	for _, root := range right {
+		if _, ok := seen[watchKey{id: root.ID, path: filepath.Clean(root.Path)}]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func newFSEventsRecoverySignal(root RootRecord, reason string, at time.Time) ChangeSignal {
 	return ChangeSignal{
 		Kind:          ChangeSignalKindRequiresRootReconcile,

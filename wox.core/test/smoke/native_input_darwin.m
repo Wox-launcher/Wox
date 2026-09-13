@@ -3,6 +3,7 @@
 #import <Cocoa/Cocoa.h>
 #import <ApplicationServices/ApplicationServices.h>
 #include <stdint.h>
+#include <string.h>
 
 int woxSmokeActivateApplication(int pid) {
     @autoreleasepool {
@@ -21,10 +22,46 @@ int woxSmokeTerminateApplication(int pid) {
     }
 }
 
-int woxSmokeFrontmostApplicationPid(void) {
+int woxSmokeForceTerminateApplication(int pid) {
     @autoreleasepool {
-        NSRunningApplication *application = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        return application == nil ? 0 : application.processIdentifier;
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        return application != nil && [application forceTerminate] ? 1 : 0;
+    }
+}
+
+int woxSmokeFrontmostApplicationPid(void) {
+    // Go tests do not pump AppKit's main run loop, so NSWorkspace can retain
+    // an old foreground application. Process Manager gives a live PID without
+    // requiring accessibility permission for each temporary Go test executable.
+    ProcessSerialNumber process;
+    pid_t pid = 0;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    if (GetFrontProcess(&process) == noErr) {
+        GetProcessPID(&process, &pid);
+    }
+#pragma clang diagnostic pop
+    return pid;
+}
+
+char *woxSmokeFrontmostApplicationBundleID(void) {
+    @autoreleasepool {
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:woxSmokeFrontmostApplicationPid()];
+        if (application == nil || application.bundleIdentifier.length == 0) {
+            return strdup("");
+        }
+        return strdup(application.bundleIdentifier.UTF8String);
+    }
+}
+
+int woxSmokeSessionAllowsForegroundActivation(void) {
+    @autoreleasepool {
+        // A failed PID query is not evidence of a locked session.
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:woxSmokeFrontmostApplicationPid()];
+        if ([application.bundleIdentifier isEqualToString:@"com.apple.loginwindow"]) {
+            return 0;
+        }
+        return 1;
     }
 }
 
