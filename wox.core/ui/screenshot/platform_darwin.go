@@ -71,6 +71,14 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			captured, captureErr := captureDarwinDisplay(displayID)
 			return screenshotDesktopCapture{source: captured}, captureErr
 		},
+		// Native capture already supplies BGR0; PNG-decoded RGBA would swap red and blue in the encoder.
+		captureDesktopRect: func(rect image.Rectangle) (*image.RGBA, error) {
+			frame := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+			if rect.Empty() || C.wox_darwin_capture_display_bgra(C.uint32_t(displayID), C.int32_t(rect.Min.X), C.int32_t(rect.Min.Y), C.int32_t(rect.Dx()), C.int32_t(rect.Dy()), unsafe.Pointer(&frame.Pix[0])) != 0 {
+				return nil, errors.New("failed to capture macOS recording pixels")
+			}
+			return frame, nil
+		},
 		desktopPixelOrigin: screenshotEditorDesktopPixelOrigin(bounds, source),
 		setPointerPosition: func(point Point) error {
 			if C.wox_screenshot_set_cursor_position(C.float(bounds.X+point.X), C.float(bounds.Y+point.Y)) != 0 {

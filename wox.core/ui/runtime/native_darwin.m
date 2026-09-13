@@ -5360,3 +5360,38 @@ int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t cus
   });
   return result;
 }
+
+// Copy the selected physical pixels directly into the recording buffer, avoiding PNG encoding and disk I/O per frame.
+int32_t wox_darwin_capture_display_bgra(uint32_t display_id, int32_t x, int32_t y, int32_t width, int32_t height, void *pixels) {
+  if (pixels == NULL || x < 0 || y < 0 || width <= 0 || height <= 0) {
+    return -1;
+  }
+  @autoreleasepool {
+    CGImageRef image = capture_display_image((CGDirectDisplayID)display_id);
+    if (image == NULL) {
+      return -1;
+    }
+    if ((size_t)x + width > CGImageGetWidth(image) || (size_t)y + height > CGImageGetHeight(image)) {
+      CGImageRelease(image);
+      return -1;
+    }
+    CGImageRef crop = CGImageCreateWithImageInRect(image, CGRectMake(x, y, width, height));
+    CGImageRelease(image);
+    if (crop == NULL) {
+      return -1;
+    }
+    // Normalize display profiles before encoding; little-endian skip-first stores B, G, R, X.
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef context = CGBitmapContextCreate(pixels, width, height, 8, (size_t)width * 4, colorSpace,
+                                                kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst);
+    CGColorSpaceRelease(colorSpace);
+    if (context == NULL) {
+      CGImageRelease(crop);
+      return -1;
+    }
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), crop);
+    CGContextRelease(context);
+    CGImageRelease(crop);
+    return 0;
+  }
+}

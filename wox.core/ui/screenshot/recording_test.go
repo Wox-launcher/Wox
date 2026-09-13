@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"os"
@@ -1244,5 +1245,82 @@ func TestExtractRecordingPreviewFrameFromEncodedMP4(t *testing.T) {
 	}
 	if preview.Bounds().Dx() != 32 || preview.Bounds().Dy() != 16 {
 		t.Fatalf("preview bounds = %v, want 32x16", preview.Bounds())
+	}
+}
+
+// TestRecordingSessionKeycapPixelScale covers point-based displays and physical-coordinate desktops.
+func TestRecordingSessionKeycapPixelScale(t *testing.T) {
+	for _, scale := range []float32{1, 1.5, 2} {
+		t.Run(fmt.Sprint(scale), func(t *testing.T) {
+			width, height := int(400*scale), int(240*scale)
+			state := &recordingToolbarState{
+				fps: 30, showKeypress: true,
+				selection: Rect{Width: 400, Height: 240}, frameSize: Size{Width: 400, Height: 240},
+				editor:  &screenshotEditorOverlayState{image: testScreenshotImage(t, width, height)},
+				keycaps: []recordingKeycap{{label: "K", expiresAt: time.Now().Add(time.Hour)}},
+			}
+			session, err := state.newSession()
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame, err := session.config.Compose(image.NewRGBA(image.Rect(0, 0, width, height)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			minY, maxY := height, 0
+			for y := 0; y < height; y++ {
+				for x := 0; x < width; x++ {
+					if frame.RGBAAt(x, y).A != 0 {
+						minY, maxY = min(minY, y), max(maxY, y+1)
+					}
+				}
+			}
+			if got := maxY - minY; got < int(34*scale) || got > int(40*scale) {
+				t.Fatalf("keycap height=%d at pixel scale %v", got, scale)
+			}
+		})
+	}
+}
+
+// TestRecordingEncoderPreservesRedAndBlue checks the actual MP4 round trip, including channel order.
+func TestRecordingEncoderPreservesRedAndBlue(t *testing.T) {
+	ffmpeg, err := recordingFFmpegPath()
+	if err != nil {
+		t.Skip("ffmpeg unavailable")
+	}
+	frame := image.NewRGBA(image.Rect(0, 0, 64, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 64; x++ {
+			i := frame.PixOffset(x, y)
+			frame.Pix[i+3] = 255
+			if x < 32 {
+				frame.Pix[i] = 255 // BGR0 blue.
+			} else {
+				frame.Pix[i+2] = 255 // BGR0 red.
+			}
+		}
+	}
+	path := filepath.Join(t.TempDir(), "colors.mp4")
+	encoder := &ffmpegRecordingEncoder{}
+	if err := encoder.Start(path, 64, 32, 30); err != nil {
+		t.Fatal(err)
+	}
+	if err := encoder.WriteFrame(recordingFrame{image: frame}); err != nil {
+		_ = encoder.Abort()
+		t.Fatal(err)
+	}
+	if err := encoder.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	pixels, err := exec.Command(ffmpeg, "-v", "error", "-i", path, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pixels) != 64*32*3 {
+		t.Fatalf("decoded bytes=%d", len(pixels))
+	}
+	blue, red := pixels[(16*64+16)*3:][:3], pixels[(16*64+48)*3:][:3]
+	if blue[2] < 230 || blue[0] > 20 || red[0] < 230 || red[2] > 20 {
+		t.Fatalf("colors changed after MP4 encoding: blue RGB=%v red RGB=%v", blue, red)
 	}
 }

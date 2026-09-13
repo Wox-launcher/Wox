@@ -1445,6 +1445,10 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 			if chromeScale != nil {
 				uiScale = max(uiScale, chromeScale(selection))
 			}
+			// macOS window coordinates are points, while exported frames contain Retina pixels.
+			pixelScaleX := float32(state.editor.image.Width) / state.frameSize.Width
+			pixelScaleY := float32(state.editor.image.Height) / state.frameSize.Height
+			uiScale *= pixelScaleY
 			state.mu.Lock()
 			state.pruneRecordingKeycaps(time.Now())
 			keycaps := append([]recordingKeycap(nil), state.keycaps...)
@@ -1452,6 +1456,9 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 			var pointer *Point
 			if showPointer && state.platform.cursorPosition != nil {
 				pointer = state.platform.cursorPosition()
+				if pointer != nil {
+					pointer = &Point{X: pointer.X * pixelScaleX, Y: pointer.Y * pixelScaleY}
+				}
 			}
 			if overlayErr := applyRecordingOverlays(frame, pixelSelection, pointer, keycaps, showPointer, showKeypress, time.Now(), uiScale); overlayErr != nil {
 				return nil, overlayErr

@@ -43,6 +43,7 @@ void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle);
 uintptr_t wox_darwin_show_screenshot_border(float x, float y, float width, float height, float thickness);
 void wox_darwin_dismiss_screenshot_border(uintptr_t border_handle);
 int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path);
+int32_t wox_darwin_capture_display_bgra(uint32_t display_id, int32_t x, int32_t y, int32_t width, int32_t height, void *pixels);
 int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height);
 int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window);
 int32_t wox_darwin_window_start_file_drag(WoxDarwinWindow *window, const char *paths);
