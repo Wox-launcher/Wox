@@ -12,8 +12,6 @@
 
 按 `Enter` 使用结果。打开操作面板可以复制原始值或格式化后的值。
 
-![计算器插件结果列表](/images/system-plugin-calculator.png)
-
 ## 显式模式
 
 当你想查看计算历史，或其他全局插件干扰同一段查询时，使用 `calculator`：

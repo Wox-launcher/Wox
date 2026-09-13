@@ -22,7 +22,7 @@ Download the latest stable package from [GitHub Releases](https://github.com/Wox
 
 ## Update Channels
 
-Wox checks the stable update channel by default. To receive beta prereleases, open **Settings -> General -> Update channel** and choose **Beta channel**. Beta users receive beta prereleases and later stable releases; stable users do not receive prereleases automatically.
+Wox checks the stable update channel by default. To receive beta prereleases, open **Settings -> Update -> Update channel** and choose **Beta channel**. Beta users receive beta prereleases and later stable releases; stable users do not receive prereleases automatically.
 
 ### Windows
 

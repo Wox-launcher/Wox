@@ -70,6 +70,12 @@ const plugins: SystemPlugin[] = [
     title: { en: "AI Chat", zh: "AI 对话" },
     description: { en: "Talk to configured models and agents with tools from inside Wox.", zh: "在 Wox 内与已配置的模型和 Agent 对话，并使用工具。" },
   },
+  {
+    key: "notes",
+    href: "/features/notes.html",
+    title: { en: "Notes", zh: "笔记" },
+    description: { en: "Capture floating notes with checklists, tables, and images.", zh: "用清单、表格和图片记下浮动笔记。" },
+  },
 ];
 
 const { lang } = useData();

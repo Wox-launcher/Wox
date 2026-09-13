@@ -16,9 +16,7 @@ cb fav
 | `cb <keyword>` | Filter by text, alias, or image OCR text |
 | `cb fav` | Show favorites |
 
-Press `Enter` to run the configured primary action: copy the item back to the clipboard or paste it into the active app.
-
-![Clipboard plugin history results](/images/system-plugin-clipboard.png)
+Press `Enter` to run the configured primary action: copy the item back to the clipboard or paste it into the active app, including images and emoji.
 
 ## Actions
 
@@ -28,6 +26,7 @@ Open the Action Panel to favorite an item, edit its alias, delete it, open a cop
 
 - Keep text history and retention days.
 - Keep image history and retention days.
-- Choose whether the primary action copies or pastes.
+- Search copied images by their OCR text when OCR is enabled.
+- Choose whether the primary action copies or pastes, including images and emoji.
 - Add applications whose clipboard changes should never be saved to history.
 - Tune behavior if you want Wox to avoid storing sensitive clipboard content.

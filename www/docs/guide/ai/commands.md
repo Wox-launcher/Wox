@@ -11,7 +11,7 @@ Configure [AI Settings](./settings.md) first.
 3. Add a command with a name, query keyword, model, and prompt.
 4. Use `%s` in the prompt where Wox should insert your input.
 
-![AI git msg setting](/images/ai_auto_git_msg_setting.png)
+You can also insert `{wox:selected_text}` or other query variables when the command should read the current selection.
 
 ## Example: Commit Message From a Diff
 
@@ -54,7 +54,9 @@ Use it from a Git repository:
 git diff | commit
 ```
 
-![AI git msg](/images/ai_auto_git_msg.png)
+## Silent Commands
+
+Bind a Query Hotkey to `ai commit` or `ai translate {wox:selected_text}` and choose the **Silent Run** preset when the command should run without opening the launcher. See [Hotkeys](../usage/hotkeys.md).
 
 ## Good Command Prompts
 

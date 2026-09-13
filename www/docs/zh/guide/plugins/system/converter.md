@@ -16,7 +16,7 @@
 
 转换器监听全局输入。如果其他全局结果优先级更高，可以使用 `calculator` 显式触发。
 
-![转换器插件结果列表](/images/system-plugin-converter.png)
+![在 Wox 中转换时长表达式](/images/converter.png)
 
 ## 支持内容
 

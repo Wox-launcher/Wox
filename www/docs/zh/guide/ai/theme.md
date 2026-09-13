@@ -1,6 +1,10 @@
 # 主题生成
 
-AI 主题生成会根据一段描述创建 Wox 主题。使用前先配置 [AI 设置](./settings.md)。
+AI 主题生成会根据一小段描述创建 Wox 主题。先完成 [AI 设置](./settings.md)。
+
+不使用 AI 也可以浏览和应用已有主题。运行 `theme` 可以查看当前主题、系统主题和商店主题。
+
+![在启动器中浏览 Wox 主题](/images/theme-jade.png)
 
 ## 生成主题
 
@@ -10,7 +14,7 @@ AI 主题生成会根据一段描述创建 Wox 主题。使用前先配置 [AI �
 theme ai dark graphite with teal accents
 ```
 
-建议在 prompt 里描述对比度、氛围和强调色：
+提示词尽量写清对比、氛围和强调色：
 
 ```text
 theme ai light theme, warm background, blue accent, low contrast borders
@@ -18,15 +22,13 @@ theme ai high contrast black theme with orange selection
 theme ai macOS style translucent gray with green accent
 ```
 
-![AI Theme](/images/ai_theme.jpg)
+## 留下之前先检查
 
-## 保留前先检查
+AI 生成的主题可能接近目标，但仍需要判断。检查：
 
-AI 生成的主题可能接近目标，但仍需要人工判断：
+- 普通状态和选中状态下的搜索文本都清晰可读。
+- 选中结果足够明显。
+- 副标题、尾部和动作标签有足够对比。
+- 在你平时使用的窗口尺寸下仍然好用。
 
-- 普通和选中状态下的搜索文本都清楚可读。
-- 当前选中的结果足够明显。
-- 副标题、尾部信息和动作文字有足够对比度。
-- 在你平时使用的窗口大小下仍然正常。
-
-如果效果不理想，用更具体的颜色、对比度和选中态描述再生成一次。
+如果生成结果不对，再用更具体的颜色和对比说明重新生成。

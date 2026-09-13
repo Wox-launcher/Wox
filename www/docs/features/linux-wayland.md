@@ -9,6 +9,8 @@ description: "Wox is a native Linux launcher with Wayland layer-shell support, i
 
 Wox is a native launcher on Linux, not an Electron shell. On Wayland it shows as a layer-shell overlay and still receives regular global hotkeys through the desktop portal.
 
+![Wox on Linux with compositor background blur](/images/linux-wayland.png)
+
 ## What it is
 
 Wox ships stable Linux builds alongside Windows and macOS. The main window is a layer-shell surface (namespace `gtk-layer-shell`) on the overlay layer, so it can appear above other windows without becoming a normal XDG toplevel.

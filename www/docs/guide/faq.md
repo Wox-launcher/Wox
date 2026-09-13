@@ -62,7 +62,9 @@ Run `wpm`, select the plugin, and use the update action when one is available. Y
 
 ### Does Wox require Everything?
 
-No. Wox has its own File plugin and indexes the roots you configure in plugin settings. Install [Everything](https://www.voidtools.com/) only if you also want to use Everything outside Wox.
+No. Wox has its own File plugin. On Windows it can enable **Fast Indexing**, which uses the same NTFS MFT and USN journal technique as [Everything](https://www.voidtools.com/) and can index whole volumes instead of walking every folder. macOS and Linux keep the regular root-based index.
+
+Install Everything only if you also want to use Everything outside Wox. Fast Index setup is in [File Search](./plugins/system/file.md#fast-index-windows).
 
 ### Why does file search ask for permissions on macOS?
 
@@ -76,7 +78,15 @@ Run `theme` in Wox or open **Settings -> Theme**.
 
 ### How do I change the hotkey?
 
-Open **Settings -> General** and edit the hotkey field.
+Open **Settings -> General** and edit the hotkey field. Query hotkeys, tray queries, and the selection hotkey are on the same page. See [Hotkeys](./usage/hotkeys.md).
+
+### Where did Explorer go?
+
+File Explorer Search was renamed to **Quick Jump**. The trigger is now `jump`. Open Wox in File Explorer, Finder, or an open/save dialog and type to navigate. Details are in the [Quick Jump guide](./plugins/system/explorer.md).
+
+### How do I report a problem?
+
+Query `feedback` to export diagnostics, review crash reports, clear logs, or open a GitHub issue. You can also query `doctor` for common setup checks.
 
 ## Wayland
 

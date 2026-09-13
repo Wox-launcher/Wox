@@ -9,6 +9,8 @@ description: "Wox 是原生 Linux 启动器，支持 Wayland layer-shell。快�
 
 Wox 在 Linux 上是原生启动器，不是 Electron。在 Wayland 下它作为 layer-shell 浮层显示，普通全局快捷键走桌面 portal。
 
+![Linux 上带合成器背景模糊的 Wox](/images/linux-wayland.png)
+
 ## 是什么
 
 Wox 的 Linux 正式版和 Windows、macOS 一起发。主窗口是 overlay 层上的 layer-shell 表面（namespace 为 `gtk-layer-shell`），可以盖在其他窗口上，但不是普通的 XDG 顶层窗口。

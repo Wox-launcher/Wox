@@ -1,6 +1,6 @@
 # Application Plugin
 
-Application search is a global plugin. Type an app name directly; no keyword is required.
+Application search is a global plugin. Type an app name directly; no keyword is required. `app` is also available when you want only application results.
 
 ## Quick Start
 
@@ -8,11 +8,12 @@ Application search is a global plugin. Type an app name directly; no keyword is 
 chrome
 visual studio code
 settings
+app launchpad
 ```
 
 Press `Enter` to open the selected app. If Wox can detect that the app is already running, the result can activate the existing window instead of starting another instance.
 
-![Application plugin result list](/images/system-plugin-app.png)
+`app launchpad` switches to a grid of installed apps. Bind a Query Hotkey to that command if you want a Launchpad-style shortcut.
 
 ## Actions
 
@@ -39,11 +40,15 @@ Wox indexes common application locations for each platform:
 
 ## Settings
 
-Open **Settings -> Plugins -> Application** to add custom app directories or run app reindexing. Use this when a portable app or local tool does not live in a standard application folder.
+Open **Settings -> Plugins -> Application** to:
+
+- Add custom app directories for portable tools
+- Reindex apps
+- Hide apps from search with wildcard rules or selected-app ignore rules, and preview the matches before saving
 
 ## Result Ordering
 
-The plugin uses matching score and MRU data. Apps you launch often move up over time, so the first result should become more stable after normal use.
+The plugin uses matching score and MRU data. Apps you launch often move up over time. Use the Action Panel to reset a result's usage-based ranking if the wrong app stays first.
 
 ## Troubleshooting
 
@@ -52,10 +57,11 @@ The plugin uses matching score and MRU data. Apps you launch often move up over 
 - Wait a few seconds for indexing.
 - Run the plugin's reindex command or restart Wox.
 - Add the app's parent directory in plugin settings if it is a portable app.
+- Confirm the app is not hidden by an ignore rule.
 
 ### The wrong app appears first
 
-Launch the correct result a few times. MRU scoring will lift frequently used apps above similar matches.
+Launch the correct result a few times, or reset ranking from the Action Panel.
 
 ### CPU or memory details do not appear
 

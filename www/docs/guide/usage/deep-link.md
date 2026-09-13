@@ -39,6 +39,12 @@ Start an AI chat:
 wox://query?q=chat%20summarize%20this
 ```
 
+Create a note:
+
+```text
+wox://query?q=note%20new
+```
+
 Open a downloaded plugin package in the installer:
 
 ```text

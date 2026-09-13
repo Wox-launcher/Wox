@@ -2,6 +2,10 @@
 
 AI theme generation creates a Wox theme from a short description. Configure [AI Settings](./settings.md) first.
 
+You can also browse and apply existing themes without AI. Run `theme` to see the current theme, system themes, and store themes.
+
+![Browsing Wox themes in the launcher](/images/theme-jade.png)
+
 ## Generate a Theme
 
 Open Wox and run:
@@ -17,8 +21,6 @@ theme ai light theme, warm background, blue accent, low contrast borders
 theme ai high contrast black theme with orange selection
 theme ai macOS style translucent gray with green accent
 ```
-
-![AI Theme](/images/ai_theme.jpg)
 
 ## Review Before Keeping
 

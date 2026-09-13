@@ -39,6 +39,12 @@ wox://query?q=100%20%2B%2020
 wox://query?q=chat%20summarize%20this
 ```
 
+新建笔记：
+
+```text
+wox://query?q=note%20new
+```
+
 打开已下载的插件包安装界面：
 
 ```text

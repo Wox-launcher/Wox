@@ -12,8 +12,6 @@ Calculator evaluates expressions directly in the launcher. It listens globally, 
 
 Press `Enter` to copy or use the result, depending on the current action. Open the Action Panel to copy either the raw value or the formatted value.
 
-![Calculator plugin result list](/images/system-plugin-calculator.png)
-
 ## Explicit Mode
 
 Use `calculator` when you want calculator history or when another global plugin is competing with the same query:

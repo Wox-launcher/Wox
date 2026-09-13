@@ -1,26 +1,26 @@
 # AI 命令
 
-AI 命令把一段保存好的 prompt 变成可复用的 Wox 命令。适合处理重复的模型请求：改写选中文本、总结 diff、翻译段落、解释错误信息等。
+AI 命令把一段保存好的 prompt 变成可重复使用的 Wox 命令。适合经常把同一类文本发给模型：改写选中文本、总结 diff、翻译一段话，或解释报错。
 
-先配置 [AI 设置](./settings.md)。
+先完成 [AI 设置](./settings.md)。
 
 ## 创建命令
 
-1. 打开 **设置 -> 插件 -> AI Command**。
-2. 进入命令列表。
-3. 添加命令名称、查询关键字、模型和 prompt。
-4. 在 prompt 中用 `%s` 表示运行时输入的位置。
+1. 打开 **设置 -> 插件 -> AI 命令**。
+2. 打开命令列表。
+3. 添加命令，填写名称、查询关键字、模型和 prompt。
+4. 在 prompt 里用 `%s` 表示 Wox 要插入的输入。
 
-![AI git msg setting](/images/ai_auto_git_msg_setting.png)
+如果命令需要读取当前选区，也可以插入 `{wox:selected_text}` 或其他查询变量。
 
-## 示例：根据 diff 生成提交信息
+## 示例：根据 diff 写提交说明
 
 命令设置：
 
 | 字段 | 值 |
 | --- | --- |
-| Name | `git commit msg` |
-| Query | `commit` |
+| 名称 | `git commit msg` |
+| 查询 | `commit` |
 | Vision | `No` |
 
 Prompt：
@@ -38,7 +38,7 @@ Diff:
 %s
 ```
 
-添加 macOS shell helper：
+再加一个 macOS shell 辅助函数：
 
 ```bash
 commit() {
@@ -48,17 +48,19 @@ commit() {
 }
 ```
 
-在 Git 仓库中使用：
+在 Git 仓库里这样用：
 
 ```bash
 git diff | commit
 ```
 
-![AI git msg](/images/ai_auto_git_msg.png)
+## 静默命令
 
-## 好的命令 prompt
+把快捷键查询绑定到 `ai commit` 或 `ai translate {wox:selected_text}`，并选择 **静默执行** 预设，就可以不打开启动器直接运行。见 [快捷键](../usage/hotkeys.md)。
 
-- 明确说明输出应该是什么。
-- 明确说明不要包含什么。
-- 把可复用规则放在保存的 prompt 里，运行时只传变化的输入。
-- 不要把私密内容传给在线 provider，除非这符合你的工作流。
+## 怎样写更好的 prompt
+
+- 说清楚输出应该是什么。
+- 说清楚不要包含什么。
+- 把可复用规则写在保存的 prompt 里，运行时只传入会变化的输入。
+- 不要把私密内容发给在线 provider，除非这符合你的工作流。

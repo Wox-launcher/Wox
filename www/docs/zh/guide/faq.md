@@ -62,7 +62,9 @@ Windows 和 Linux 上，安装或更新 Wox 后需要先启动一次，才会注
 
 ### Wox 必须安装 Everything 吗？
 
-不必须。Wox 有自己的 File 插件，会索引你在插件设置中配置的根目录。只有当你想在 Wox 之外也使用 Everything 时，才需要安装 [Everything](https://www.voidtools.com/)。
+不必须。Wox 有自己的 File 插件。在 Windows 上可以开启 **Fast Indexing**，技术和 [Everything](https://www.voidtools.com/) 一样，都是读 NTFS 的 MFT 和 USN 日志，因此可以索引整块磁盘，而不必遍历每个文件夹。macOS 和 Linux 仍使用常规的根目录索引。
+
+只有当你想在 Wox 之外也使用 Everything 时，才需要安装 Everything。Fast Index 的设置见 [文件搜索](./plugins/system/file.md#快速索引windows)。
 
 ### macOS 文件搜索为什么提示权限？
 
@@ -76,7 +78,15 @@ macOS 可能会限制 Desktop、Documents、Downloads、外置磁盘等位置。
 
 ### 如何修改快捷键？
 
-打开 **设置 -> 常规**，编辑快捷键字段。
+打开 **设置 -> 常规**，编辑快捷键字段。快捷键查询、托盘查询和选中热键也在同一页。见 [快捷键](./usage/hotkeys.md)。
+
+### Explorer 去哪了？
+
+文件资源管理器搜索已改名为 **快速跳转**，触发关键字是 `jump`。在资源管理器、Finder 或打开/保存对话框中打开 Wox，输入即可跳转。详见 [快速跳转](./plugins/system/explorer.md)。
+
+### 如何反馈问题？
+
+查询 `feedback` 可以导出诊断信息、查看崩溃报告、清理日志，或打开 GitHub issue。也可以查询 `doctor` 做常见配置检查。
 
 ## Wayland
 
