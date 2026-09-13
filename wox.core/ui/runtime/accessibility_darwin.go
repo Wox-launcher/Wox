@@ -18,6 +18,24 @@ import (
 
 func init() {
 	updateNativeAccessibility = updateDarwinAccessibility
+	accessibilityWindowFocused = darwinAccessibilityWindowFocused
+}
+
+// darwinAccessibilityWindowFocused uses live focus because hidden windows can
+// stop rendering before their accessibility snapshot records the focus loss.
+func darwinAccessibilityWindowFocused(window *platformWindow, _ AccessibilityTree) bool {
+	if _, err := window.openNative(); err != nil {
+		return false
+	}
+	var focused bool
+	_ = platformCall(func() {
+		// Recheck on the AppKit thread so a queued close cannot invalidate the pointer.
+		native, err := window.openNative()
+		if err == nil {
+			focused = C.wox_darwin_window_is_focused(native) != 0
+		}
+	})
+	return focused
 }
 
 func updateDarwinAccessibility(window *platformWindow, tree AccessibilityTree) error {

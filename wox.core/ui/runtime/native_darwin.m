@@ -3204,6 +3204,12 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
   }
 }
 
+// Called on the AppKit thread; a retained key window in an inactive app is not focused.
+int32_t wox_darwin_window_is_focused(WoxDarwinWindow *window) {
+  return window != NULL && !window->closed && window->window.isVisible &&
+         !window->window.isMiniaturized && NSApp.isActive && window->window.isKeyWindow;
+}
+
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
   if (window == NULL) {
     return 0;
