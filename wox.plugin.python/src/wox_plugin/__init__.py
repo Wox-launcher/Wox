@@ -248,6 +248,11 @@ from .models.query import (
     SelectionType,
 )
 from .models.query_hint import QueryElement, QueryHint
+from .models.drag_out import (
+    DragOutEvent,
+    DragOutListenOption,
+    DragOutListenResult,
+)
 from .models.trigger_keyword import (
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
@@ -319,6 +324,9 @@ __all__: List[str] = [
     "RegisterTriggerKeywordResult",
     "UnregisterTriggerKeywordOption",
     "UnregisterTriggerKeywordResult",
+    "DragOutEvent",
+    "DragOutListenOption",
+    "DragOutListenResult",
     "QueryResponse",
     "QueryRefinement",
     "QueryRefinementOption",

@@ -53,7 +53,9 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id: "0cb0d21c-45ce-4fe0-987e-24d645eca58c", Name: "Smoke Test Fixture", Runtime: "Go", Version: "1.0.0",
 		TriggerKeywords: []string{smokeAutomationTrigger},
+		Features:        []plugin.MetadataFeature{{Name: plugin.MetadataFeatureQuerySelection}},
 		Commands: []plugin.MetadataCommand{
+			{Command: "drag", Description: "Native file drag fixture"},
 			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
@@ -74,11 +76,14 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 
 func (p *smokeAutomationPlugin) Init(_ context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
+	p.api.OnDragOut(context.Background(), plugin.DragOutListenOption{Callback: p.recordSmokeDrag})
 }
 
 // Query dispatches the deterministic native smoke behaviors by metadata command.
 func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	switch query.Command {
+	case "drag":
+		return querySmokeDrag(query)
 	case smokeAutomationSlowCommand:
 		return p.querySlow(ctx)
 	case smokeAutomationStreamingCommand:

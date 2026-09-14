@@ -99,6 +99,9 @@ func (emptyChatAPI) OnEnterPluginQuery(context.Context, func(context.Context)) {
 }
 func (emptyChatAPI) OnLeavePluginQuery(context.Context, func(context.Context)) {
 }
+func (emptyChatAPI) OnDragOut(context.Context, plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
 func (emptyChatAPI) RegisterQueryCommands(context.Context, []plugin.MetadataCommand) {
 }
 func (emptyChatAPI) AIChatStream(context.Context, common.Model, []common.Conversation, common.ChatOptions, common.ChatStreamFunc) error {

@@ -67,6 +67,10 @@ func (s *stubAPI) OnEnterPluginQuery(ctx context.Context, callback func(context.
 
 func (s *stubAPI) OnLeavePluginQuery(ctx context.Context, callback func(context.Context)) {}
 
+func (s *stubAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
+
 func (s *stubAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {}
 
 func (s *stubAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {

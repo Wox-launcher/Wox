@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import getpass
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -10,11 +11,17 @@ from pathlib import Path
 RUNTIMES = [
     "nodejs",
     "python",
+    "script",
     "script-nodejs",
     "script-python",
+    "singlefile",
     "singlefile-nodejs",
     "singlefile-python",
 ]
+AUTO_RUNTIME_TYPES = {
+    "script": {"nodejs": "script-nodejs", "python": "script-python"},
+    "singlefile": {"nodejs": "singlefile-nodejs", "python": "singlefile-python"},
+}
 TEMPLATE_REPOS = {
     "nodejs": "https://github.com/Wox-launcher/Wox.Plugin.Template.Nodejs",
     "python": "https://github.com/Wox-launcher/Wox.Plugin.Template.Python",
@@ -135,6 +142,30 @@ def default_single_file_entry(name: str, ext: str) -> str:
     return f"Wox.Plugin.{safe_name}.{ext}"
 
 
+def choose_local_runtime() -> str:
+    script = Path(__file__).with_name("detect_local_runtime.py")
+    spec = importlib.util.spec_from_file_location("detect_local_runtime", script)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"Unable to load runtime detector: {script}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.choose_runtime()
+
+
+def resolve_auto_runtime_type(plugin_type: str) -> str:
+    mapping = AUTO_RUNTIME_TYPES.get(plugin_type)
+    if mapping is None:
+        return plugin_type
+    runtime = choose_local_runtime()
+    resolved = mapping.get(runtime)
+    if resolved is None:
+        raise SystemExit(
+            "No usable Node.js 20+ or Python 3.10+ found. "
+            "Install one of them, or pass an explicit --type."
+        )
+    return resolved
+
+
 def resolve_script_output(
     output_dir: Path, entry: str, ext: str, force: bool
 ) -> tuple[Path, str]:
@@ -172,6 +203,7 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
 
     args = parser.parse_args()
+    args.type = resolve_auto_runtime_type(args.type)
     output_dir = Path(args.output_dir).resolve()
 
     if not args.name:

@@ -88,26 +88,30 @@ type App struct {
 	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
 	selectionAnchor int
 	// queryMenu* retains the open query context-menu enablement snapshot for refresh/revalidation.
-	queryMenuAnchor            woxui.Point
-	queryMenuEnablement        queryMenuEnablement
-	queryMenuTheme             woxcomponent.Theme
-	results                    []queryResult
-	resultRevision             uint64
-	resultsSectionRevision     uint64
-	resultsQueryID             string
-	queryComplete              bool
-	queryTransitionTimer       *time.Timer
-	queryLoading               bool
-	queryLoadingTimer          *time.Timer
-	quickSelectMode            bool
-	quickSelectKeyPressed      bool
-	quickSelectTimer           *time.Timer
-	quickSelectViewport        quickSelectViewport
-	previewTooltipRevision     atomic.Uint64
-	resultTailTooltipRevision  atomic.Uint64
-	selected                   int
-	hoveredResult              int
-	pendingSelection           *pendingResultSelection
+	queryMenuAnchor           woxui.Point
+	queryMenuEnablement       queryMenuEnablement
+	queryMenuTheme            woxcomponent.Theme
+	results                   []queryResult
+	resultRevision            uint64
+	resultsSectionRevision    uint64
+	resultsQueryID            string
+	queryComplete             bool
+	queryTransitionTimer      *time.Timer
+	queryLoading              bool
+	queryLoadingTimer         *time.Timer
+	quickSelectMode           bool
+	quickSelectKeyPressed     bool
+	quickSelectTimer          *time.Timer
+	quickSelectViewport       quickSelectViewport
+	previewTooltipRevision    atomic.Uint64
+	resultTailTooltipRevision atomic.Uint64
+	selected                  int
+	hoveredResult             int
+	pendingSelection          *pendingResultSelection
+	pendingResultFileDrag     pendingResultFileDrag
+	resultFileDragActive      bool
+	// resultFileDragHeld keeps the launcher visible until the next user interaction.
+	resultFileDragHeld         bool
 	resultScroll               scrollController
 	resultScrollDetached       bool
 	layout                     queryLayout
@@ -404,12 +408,20 @@ func (a *App) start() error {
 		// Windows uses HWND_TOPMOST so the query window stays above other apps.
 		// macOS floating level and Linux layer-shell TOP already do that without
 		// occupying the overlay band, so timer/tooltip HUDs can sit above Wox.
-		Topmost:         launcherQueryWindowTopmost(runtime.GOOS),
-		OnFrame:         host.Frame,
-		OnPointer:       host.Pointer,
+		Topmost: launcherQueryWindowTopmost(runtime.GOOS),
+		OnFrame: host.Frame,
+		OnPointer: func(event woxui.PointerEvent) {
+			if event.Kind == woxui.PointerDown {
+				a.releaseResultFileDragHold()
+			}
+			host.Pointer(event)
+		},
 		OnFileDrop:      a.handleFileDrop,
 		OnFileDragEnded: a.handleResultDragEnded,
 		OnKey: func(event woxui.KeyEvent) bool {
+			if event.Down {
+				a.releaseResultFileDragHold()
+			}
 			if host.Key(event) {
 				return true
 			}
@@ -524,6 +536,7 @@ func (a *App) showWindow(params showAppParams) error {
 		if params.MaxResultCount <= 0 {
 			params.MaxResultCount = defaultMaxResult
 		}
+		a.releaseResultFileDragHold()
 		wasVisible = a.visible
 		a.show = params
 		a.queryHistories = append(a.queryHistories[:0], params.QueryHistories...)
@@ -731,6 +744,10 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	}
 	a.queryFocusNotifiedInActiveWindow = false
 	if !a.visible {
+		return
+	}
+	// Result file drag visibility is owned by PreventHideAfterDrag, not hide-on-blur.
+	if a.resultFileDragActive {
 		return
 	}
 	hideOnBlur := a.show.HideOnBlur
@@ -1104,7 +1121,8 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if a.selected >= 0 && a.selected < len(a.results) {
 		previewType := a.results[a.selected].Preview.PreviewType
 		guidanceFormPreview = previewType == "query_requirement_settings" || previewType == "trigger_keyword_conflict"
-		previewVisible = a.results[a.selected].Preview.PreviewData != ""
+		// Grid results can carry preview data without displaying a preview pane.
+		previewVisible = launcherPreviewVisible(layout, a.results[a.selected].Preview)
 	}
 	width := params.WindowWidth
 	if width <= 0 {
@@ -2065,8 +2083,9 @@ type queryResult struct {
 }
 
 type queryResultDragData struct {
-	Type  string   `json:"Type"`
-	Files []string `json:"Files"`
+	Type                 string   `json:"Type"`
+	Files                []string `json:"Files"`
+	PreventHideAfterDrag bool     `json:"PreventHideAfterDrag"`
 }
 
 func (d *queryResultDragData) isFiles() bool {

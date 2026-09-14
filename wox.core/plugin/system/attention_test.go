@@ -58,6 +58,9 @@ func (a *attentionActionTestAPI) OnEnterPluginQuery(ctx context.Context, callbac
 }
 func (a *attentionActionTestAPI) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
 }
+func (a *attentionActionTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
 func (a *attentionActionTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 func (a *attentionActionTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {

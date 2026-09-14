@@ -25,6 +25,10 @@ func NewGlobalFileDropQuery(paths []string) common.PlainQuery {
 
 // BuildFileDropQuery routes dropped files using the current explicit plugin target.
 // UI must not infer a target from the highlighted result list.
+//
+// A plugin that already owns the query and declares querySelection receives a
+// selection query while the visible QueryText is left as typed. Only an
+// unsupported target falls back to a global selection that replaces the query box.
 func (m *Manager) BuildFileDropQuery(_ context.Context, current common.PlainQuery, paths []string) common.PlainQuery {
 	cleaned := append([]string(nil), paths...)
 	scope := current.QueryScope.NormalizeForRouting()
@@ -35,7 +39,7 @@ func (m *Manager) BuildFileDropQuery(_ context.Context, current common.PlainQuer
 				return NewGlobalFileDropQuery(cleaned)
 			}
 		}
-		return newScopedFileDropQuery(m.retainValidScopeCommands(scope), current.QueryText, cleaned)
+		return newTargetedFileDropQuery(m.retainValidScopeCommands(scope), current.QueryText, cleaned)
 	}
 
 	parsed, owner := newQueryInputWithPlugins(current.QueryText, m.GetPluginInstances())
@@ -45,11 +49,14 @@ func (m *Manager) BuildFileDropQuery(_ context.Context, current common.PlainQuer
 	if shouldFallbackUnsupportedSelection(owner) {
 		return NewGlobalFileDropQuery(cleaned)
 	}
-	scoped := common.QueryScope{Plugins: []common.QueryScopePlugin{{
-		PluginID: owner.Metadata.Id,
-		Command:  retainValidPluginCommand(owner, parsed.Command),
-	}}}
-	return newScopedFileDropQuery(scoped, parsed.Search, cleaned)
+	if pluginInstanceDisabled(owner) {
+		scoped := common.QueryScope{Plugins: []common.QueryScopePlugin{{
+			PluginID: owner.Metadata.Id,
+			Command:  retainValidPluginCommand(owner, parsed.Command),
+		}}}
+		return newTargetedFileDropQuery(scoped, parsed.Search, cleaned)
+	}
+	return newTargetedFileDropQuery(common.QueryScope{}, current.QueryText, cleaned)
 }
 
 func shouldFallbackUnsupportedSelection(instance *Instance) bool {
@@ -58,9 +65,9 @@ func shouldFallbackUnsupportedSelection(instance *Instance) bool {
 	return instance != nil && !pluginInstanceDisabled(instance) && !instance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection)
 }
 
-func newScopedFileDropQuery(scope common.QueryScope, search string, paths []string) common.PlainQuery {
+func newTargetedFileDropQuery(scope common.QueryScope, text string, paths []string) common.PlainQuery {
 	query := NewGlobalFileDropQuery(paths)
-	query.QueryText = search
+	query.QueryText = text
 	query.QueryScope = scope.Clone()
 	return query
 }

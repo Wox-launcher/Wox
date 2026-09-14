@@ -30,6 +30,12 @@ func (w *platformWindow) startFileDrag(paths []string) (FileDragStatus, error) {
 			C.free(unsafe.Pointer(value))
 		}
 	}()
+	w.fileDragActive = true
+	defer func() {
+		w.fileDragActive = false
+		// The launcher holds visibility until user input resumes. An extra timed
+		// blur guard would swallow a real focus loss after that input.
+	}()
 	result := C.wox_windows_start_file_drag(
 		C.uintptr_t(w.hwnd),
 		(**C.char)(unsafe.Pointer(&values[0])),

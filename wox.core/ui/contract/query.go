@@ -43,6 +43,7 @@ type QueryView interface {
 type QueryServices interface {
 	StartQuery(ctx context.Context, request QueryRequest, view QueryView) error
 	QueryMRU(ctx context.Context, sessionID string, queryID string) ([]plugin.QueryResultUI, error)
+	PrepareResultDrag(ctx context.Context, sessionID string, queryID string, resultID string) func(plugin.DragOutEvent)
 	ExecuteAction(ctx context.Context, sessionID string, queryID string, resultID string, actionID string) error
 	SubmitFormAction(ctx context.Context, sessionID string, queryID string, resultID string, actionID string, values map[string]string) error
 	AcceptQueryCompletionHint(ctx context.Context, sessionID string, inputPrefix string, completionText string, source string) error

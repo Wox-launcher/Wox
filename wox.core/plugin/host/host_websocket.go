@@ -185,6 +185,8 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 	}
 
 	request := JsonRpcRequest{
+		SessionId:  util.GetContextSessionId(ctx),
+		QueryId:    util.GetContextQueryId(ctx),
 		TraceId:    util.GetContextTraceId(ctx),
 		Id:         uuid.NewString(),
 		PluginId:   metadata.Id,
@@ -346,6 +348,13 @@ func (w *WebsocketHost) onMessage(data string) {
 }
 
 func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request JsonRpcRequest) {
+	// Preserve the originating launcher when a plugin calls back into the UI.
+	if request.SessionId != "" {
+		ctx = util.WithSessionContext(ctx, request.SessionId)
+	}
+	if request.QueryId != "" {
+		ctx = util.WithQueryIdContext(ctx, request.QueryId)
+	}
 	if request.Method != "Log" {
 		util.GetLogger().Info(ctx, fmt.Sprintf("got request from plugin <%s>, method: %s", request.PluginName, request.Method))
 	}
@@ -706,6 +715,28 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			})
 		})
 		w.sendResponseToHost(ctx, request, "")
+	case "OnDragOut":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnDragOut method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		result := pluginInstance.API.OnDragOut(ctx, plugin.DragOutListenOption{
+			Callback: func(callbackCtx context.Context, event plugin.DragOutEvent) {
+				eventJSON, marshalErr := json.Marshal(event)
+				if marshalErr != nil {
+					util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to marshal drag out event: %s", request.PluginName, marshalErr))
+					return
+				}
+				w.invokeMethod(callbackCtx, metadata, "onDragOut", map[string]string{
+					"CallbackId": callbackId,
+					"Event":      string(eventJSON),
+				})
+			},
+		})
+		w.sendResponseToHost(ctx, request, result)
 	case "OnMRURestore":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {

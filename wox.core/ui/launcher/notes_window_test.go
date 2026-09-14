@@ -1497,7 +1497,7 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{R: 240, G: 240, B: 240, A: 255}}
-	bar := controller.buildFormatBar(420, theme)
+	bar := controller.buildFormatBar(640, theme)
 	if !notesFormatBarHasStats(bar) {
 		t.Fatal("format bar should show the document character count on the left")
 	}
@@ -1525,6 +1525,35 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 	}
 	if _, ok := row.Children[1].(woxwidget.Expanded); !ok {
 		t.Fatalf("trailing format slot = %T, want Expanded so marks stay right-aligned", row.Children[1])
+	}
+}
+
+func TestNotesFormatBarHidesStatsBeforeCollapsingTools(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	bar := controller.buildFormatBar(notesDefaultWidth, defaultPalette().componentTheme())
+	if notesFormatBarHasStats(bar) {
+		t.Fatal("default width should hide the character count before dropping format marks")
+	}
+	if items := notesFormatBarButtons(bar); len(items) != 13 {
+		t.Fatalf("format items = %d, want the full tool row after hiding the count", len(items))
+	}
+}
+
+func TestNotesFormatBarCollapsesToolsWhenCountHidingIsNotEnough(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{
+		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
+	})
+	bar := controller.buildFormatBar(360, defaultPalette().componentTheme())
+	items := notesFormatBarButtons(bar)
+	if len(items) != notesFormatBarLeadCount+1 {
+		t.Fatalf("narrow format items = %d, want %d tools plus more", len(items), notesFormatBarLeadCount+1)
+	}
+	if items[len(items)-1].ID != "notes.format.more" {
+		t.Fatalf("narrow overflow control = %q, want notes.format.more", items[len(items)-1].ID)
 	}
 }
 

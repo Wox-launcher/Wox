@@ -37,6 +37,29 @@ type UnregisterTriggerKeywordResult struct {
 	Success bool
 }
 
+type DragOutStatus string
+
+const (
+	DragOutStatusSuccess        DragOutStatus = "success"
+	DragOutStatusCancel         DragOutStatus = "cancel"
+	DragOutStatusCancelInSource DragOutStatus = "cancel_in_source"
+)
+
+// DragOutEvent is a post-drag notification. It does not enable, disable, or cancel the drag.
+type DragOutEvent struct {
+	ResultId string        `json:"ResultId"`
+	Files    []string      `json:"Files"`
+	Status   DragOutStatus `json:"Status"`
+}
+
+type DragOutListenOption struct {
+	Callback func(ctx context.Context, event DragOutEvent)
+}
+
+type DragOutListenResult struct {
+	Success bool
+}
+
 const (
 	LogLevelInfo    LogLevel = "Info"
 	LogLevelError   LogLevel = "Error"
@@ -98,6 +121,12 @@ type API interface {
 	// OnLeavePluginQuery registers a callback that fires once when the session leaves
 	// this plugin's query context.
 	OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context))
+	// OnDragOut registers a notification after a result file drag started from
+	// this plugin reaches a terminal OS status. QueryResultDragData is what
+	// makes a result draggable; this callback cannot block or cancel that drag.
+	// Native drags stay copy-only, so a plugin that wants take-out to empty its
+	// own source should remove those files when Status is success.
+	OnDragOut(ctx context.Context, option DragOutListenOption) DragOutListenResult
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 	// RegisterTriggerKeyword returns Success=false for invalid keywords or keywords owned by another enabled plugin.
 	// Re-registering this plugin's own keyword succeeds without adding a duplicate.
@@ -526,6 +555,14 @@ func (a *APIImpl) OnEnterPluginQuery(ctx context.Context, callback func(ctx cont
 
 func (a *APIImpl) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
 	a.pluginInstance.LeavePluginQueryCallbacks = append(a.pluginInstance.LeavePluginQueryCallbacks, callback)
+}
+
+func (a *APIImpl) OnDragOut(ctx context.Context, option DragOutListenOption) DragOutListenResult {
+	if option.Callback == nil {
+		return DragOutListenResult{Success: false}
+	}
+	a.pluginInstance.DragOutCallbacks = append(a.pluginInstance.DragOutCallbacks, option.Callback)
+	return DragOutListenResult{Success: true}
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {

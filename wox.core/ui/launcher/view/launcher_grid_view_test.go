@@ -17,14 +17,17 @@ func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
 	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	children := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	visual := children[0].(woxwidget.Stack)
-	frameBoundary := visual.Children[0].Child.(woxwidget.Boundary[launcherGridFrameProps])
-	iconBoundary := visual.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
+	iconBoundary := visual.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
+	frameBoundary := visual.Children[1].Child.(woxwidget.Boundary[launcherGridFrameProps])
 	titleAlign := children[1].(woxwidget.Align)
 	titleBoundary := titleAlign.Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTextProps])
 	frame := frameBoundary.Build(frameBoundary.Props).(woxwidget.Container)
 
 	if frame.Color.A != 0 || frame.BorderColor != active || frame.BorderWidth != 4 || frame.Radius != 8 {
 		t.Fatalf("selected grid frame = fill %#v border %#v/%.0f radius %.0f, want transparent Flutter 4px/8px frame", frame.Color, frame.BorderColor, frame.BorderWidth, frame.Radius)
+	}
+	if _, isIcon := visual.Children[0].Child.(woxwidget.Container); !isIcon {
+		t.Fatal("grid paints the image under the hover frame")
 	}
 	if frameBoundary.Key != LauncherResultBackgroundBoundaryKey("wallpaper") || iconBoundary.Key != LauncherResultIconBoundaryKey("wallpaper") || titleBoundary.Key != LauncherResultTitleBoundaryKey("wallpaper") {
 		t.Fatalf("grid boundary keys = %q/%q/%q, want independent frame/icon/title keys", frameBoundary.Key, iconBoundary.Key, titleBoundary.Key)
@@ -73,7 +76,7 @@ func TestLauncherGridImageUsesFlutterFit(t *testing.T) {
 				CellWidth: test.visualWidth, CellHeight: test.visualHeight, VisualWidth: test.visualWidth, VisualHeight: test.visualHeight,
 			}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
 			visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
-			iconBoundary := visual.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
+			iconBoundary := visual.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
 			if got := iconBoundary.Build(iconBoundary.Props).(woxwidget.Image).Fit; got != test.want {
 				t.Fatalf("grid image fit = %v, want %v", got, test.want)
 			}
@@ -94,7 +97,7 @@ func TestLauncherGridShowsQuickSelectBadge(t *testing.T) {
 	result := semantics.Child.(woxwidget.Gesture)
 	visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
 	if len(visual.Children) != 3 {
-		t.Fatalf("grid visual children = %d, want frame, icon, and quick select badge", len(visual.Children))
+		t.Fatalf("grid visual children = %d, want icon, frame, and quick select badge", len(visual.Children))
 	}
 	badge := visual.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Container)
 	chip := badge.Child.(woxwidget.Container)
@@ -109,7 +112,7 @@ func TestLauncherGridLoadingResultAnimatesSpinner(t *testing.T) {
 		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 100, Theme: woxcomponent.Theme{Cursor: woxui.Color{R: 10, G: 20, B: 30, A: 255}},
 	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
-	iconBoundary := visual.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
+	iconBoundary := visual.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
 	aligned := iconBoundary.Build(iconBoundary.Props).(woxwidget.Align)
 	if _, ok := aligned.Child.(woxwidget.LoopAnimation); !ok {
 		t.Fatal("loading grid result does not animate the shared loading indicator")

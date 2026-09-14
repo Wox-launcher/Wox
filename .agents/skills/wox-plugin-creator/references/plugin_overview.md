@@ -75,6 +75,8 @@ Script plugins are not deprecated. Use them when a one-shot command wrapper is e
 
 Single-file SDK plugins are the fastest way to get a Python or Node.js plugin that can call the full Wox API. They require Wox 2.4.2 or later.
 
+When the user does not specify a language, detect this machine: only Node.js 20+ → Node.js, only Python 3.10+ → Python, both → Node.js.
+
 1. **Create**: `wpm create <name>` and choose Python or Node.js single-file, or start from `assets/single_file_plugin_templates/`.
 2. **Edit**: Open the generated `.py` or `.js` file and update the JSON metadata block in comments. Keep `MinWoxVersion` as `"2.4.2"`.
 3. **Implement**: Modify `query` in the same file. Saving reloads the plugin.

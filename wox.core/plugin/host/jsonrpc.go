@@ -9,6 +9,8 @@ const (
 )
 
 type JsonRpcRequest struct {
+	SessionId  string `json:",omitempty"`
+	QueryId    string `json:",omitempty"`
 	TraceId    string
 	Id         string
 	PluginId   string

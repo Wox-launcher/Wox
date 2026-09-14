@@ -926,6 +926,37 @@ func TestRenderRecordingKeycapsScalesWithActiveDisplayDPI(t *testing.T) {
 	}
 }
 
+func TestRenderRecordingKeycapsCentersSingleLetterInk(t *testing.T) {
+	for _, label := range []string{"T", "E", "S"} {
+		target := image.NewRGBA(image.Rect(0, 0, 400, 240))
+		for index := 0; index < len(target.Pix); index += 4 {
+			target.Pix[index], target.Pix[index+1], target.Pix[index+2], target.Pix[index+3] = 80, 80, 80, 255
+		}
+		if err := renderRecordingKeycaps(target, Rect{Width: 400, Height: 240}, Size{Width: 400, Height: 240}, []recordingKeycap{{label: label, expiresAt: time.Now().Add(time.Second)}}, time.Now(), 1); err != nil {
+			t.Fatal(err)
+		}
+		keyMinX, keyMaxX, inkMinX, inkMaxX := 400, 0, 400, 0
+		for y := 0; y < 240; y++ {
+			for x := 0; x < 400; x++ {
+				switch red := target.RGBAAt(x, y).R; {
+				case red < 40:
+					keyMinX, keyMaxX = min(keyMinX, x), max(keyMaxX, x+1)
+				case red > 200:
+					inkMinX, inkMaxX = min(inkMinX, x), max(inkMaxX, x+1)
+				}
+			}
+		}
+		if inkMaxX <= inkMinX || keyMaxX <= keyMinX {
+			t.Fatalf("%s missing keycap or letter ink: key=%d..%d ink=%d..%d", label, keyMinX, keyMaxX, inkMinX, inkMaxX)
+		}
+		keyCenter := (keyMinX + keyMaxX) / 2
+		inkCenter := (inkMinX + inkMaxX) / 2
+		if offset := inkCenter - keyCenter; offset < -2 || offset > 2 {
+			t.Fatalf("%s letter ink center %d vs keycap center %d", label, inkCenter, keyCenter)
+		}
+	}
+}
+
 func TestCleanupRecordingOrphansKeepsRecentAndUnrelatedFiles(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()

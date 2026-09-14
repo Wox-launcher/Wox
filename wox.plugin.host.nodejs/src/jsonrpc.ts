@@ -15,7 +15,9 @@ import {
   Result,
   ResultAction,
   Selection,
-  MRUData
+  MRUData,
+  DragOutEvent,
+  DragOutStatus
 } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
@@ -110,6 +112,8 @@ function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: Q
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
+  if (request.SessionId) ctx.Values.SessionId = request.SessionId
+  if (request.QueryId) ctx.Values.QueryId = request.QueryId
   logger.info(ctx, `invoke <${request.PluginName}> method: ${request.Method}`)
 
   switch (request.Method) {
@@ -139,6 +143,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onEnterPluginQuery(ctx, request)
     case "onLeavePluginQuery":
       return onLeavePluginQuery(ctx, request)
+    case "onDragOut":
+      return onDragOut(ctx, request)
     case "onLLMStream":
       return onLLMStream(ctx, request)
     case "onMRURestore":
@@ -299,6 +305,43 @@ async function onLeavePluginQuery(ctx: Context, request: PluginJsonRpcRequest) {
 
   const callbackId = request.Params.CallbackId
   await plugin.API.leavePluginQueryCallbacks.get(callbackId)?.(ctx)
+}
+
+async function onDragOut(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const callbackId = request.Params.CallbackId
+  let event: DragOutEvent = { ResultId: "", Files: [], Status: "cancel" }
+  const rawEvent = request.Params.Event
+  if (rawEvent) {
+    try {
+      event = parseDragOutEvent(JSON.parse(rawEvent))
+    } catch {
+      logger.error(ctx, `failed to parse drag out event: ${rawEvent}`)
+    }
+  }
+  await plugin.API.dragOutCallbacks.get(callbackId)?.(ctx, event)
+}
+
+function parseDragOutEvent(raw: unknown): DragOutEvent {
+  const payload = raw && typeof raw === "object" ? (raw as { ResultId?: unknown; Files?: unknown; Status?: unknown }) : {}
+  const files = Array.isArray(payload.Files) ? payload.Files.filter((item): item is string => typeof item === "string") : []
+  return {
+    ResultId: typeof payload.ResultId === "string" ? payload.ResultId : "",
+    Files: files,
+    Status: parseDragOutStatus(payload.Status)
+  }
+}
+
+function parseDragOutStatus(status: unknown): DragOutStatus {
+  if (status === "success" || status === "cancel" || status === "cancel_in_source") {
+    return status
+  }
+  return "cancel"
 }
 
 async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {

@@ -67,6 +67,9 @@ func (a fileSearchToolbarTestAPI) OnEnterPluginQuery(ctx context.Context, callba
 }
 func (a fileSearchToolbarTestAPI) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
 }
+func (a fileSearchToolbarTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
 func (a fileSearchToolbarTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 func (a fileSearchToolbarTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {

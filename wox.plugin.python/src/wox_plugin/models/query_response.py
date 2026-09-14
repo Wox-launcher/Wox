@@ -92,6 +92,7 @@ class QueryGridLayout:
     item_margin: int = 0
     aspect_ratio: float = 0.0
     commands: List[str] = field(default_factory=list)
+    show_title: bool = False
 
     def to_json(self) -> str:
         return json.dumps(
@@ -102,6 +103,7 @@ class QueryGridLayout:
                 "ItemPadding": self.item_padding,
                 "ItemMargin": self.item_margin,
                 "AspectRatio": self.aspect_ratio,
+                "ShowTitle": self.show_title,
                 "Commands": self.commands,
             }
         )

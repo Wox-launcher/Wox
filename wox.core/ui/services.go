@@ -213,6 +213,23 @@ func (s *CoreServices) QueryMRU(ctx context.Context, sessionID string, queryID s
 	return results, nil
 }
 
+// PrepareResultDrag captures ownership before the native drag can invalidate the
+// result cache, and preserves the originating window for plugin callback API calls.
+func (s *CoreServices) PrepareResultDrag(ctx context.Context, sessionID string, queryID string, resultID string) func(plugin.DragOutEvent) {
+	manager := plugin.GetPluginManager()
+	if manager == nil {
+		return nil
+	}
+	pluginID := manager.PluginIDForCachedResult(sessionID, queryID, resultID)
+	if pluginID == "" {
+		return nil
+	}
+	ctx = util.WithQueryIdContext(uiServiceContext(ctx, sessionID), queryID)
+	return func(event plugin.DragOutEvent) {
+		manager.NotifyDragOut(ctx, pluginID, event)
+	}
+}
+
 // ExecuteAction schedules one cached query-result action.
 func (s *CoreServices) ExecuteAction(ctx context.Context, sessionID string, queryID string, resultID string, actionID string) error {
 	ctx = util.WithQueryIdContext(uiServiceContext(ctx, sessionID), queryID)

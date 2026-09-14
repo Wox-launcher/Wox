@@ -6,6 +6,38 @@ import (
 	"wox/plugin"
 )
 
+func TestParseScriptDragDataPreventHideAfterDrag(t *testing.T) {
+	item := map[string]interface{}{
+		"DragData": map[string]interface{}{
+			"Type":  "files",
+			"Files": []interface{}{"/tmp/a"},
+		},
+	}
+	got := parseScriptDragData(item)
+	if got == nil {
+		t.Fatal("file drag data should be accepted")
+	}
+	if got.PreventHideAfterDrag {
+		t.Fatal("unset PreventHideAfterDrag should default to hide")
+	}
+
+	item["DragData"].(map[string]interface{})["preventHideAfterDrag"] = true
+	got = parseScriptDragData(item)
+	if got == nil || !got.PreventHideAfterDrag {
+		t.Fatal("preventHideAfterDrag should keep Wox visible")
+	}
+
+	item["DragData"] = map[string]interface{}{
+		"type":                    "files",
+		"files":                   []interface{}{"/tmp/a"},
+		"prevent_hide_after_drag": true,
+	}
+	got = parseScriptDragData(item)
+	if got == nil || !got.PreventHideAfterDrag {
+		t.Fatal("prevent_hide_after_drag should keep Wox visible")
+	}
+}
+
 func TestScriptActionPreventHideFromActionParam(t *testing.T) {
 	keys := []string{"preventHideAfterAction", "prevent_hide_after_action", "PreventHideAfterAction"}
 	if getFirstBoolFromMap(map[string]interface{}{"id": "change-query"}, keys) {

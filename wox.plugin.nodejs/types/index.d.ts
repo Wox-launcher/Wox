@@ -21,6 +21,22 @@ export interface UnregisterTriggerKeywordResult {
   Success: boolean
 }
 
+export type DragOutStatus = "success" | "cancel" | "cancel_in_source"
+
+export interface DragOutEvent {
+  ResultId: string
+  Files: string[]
+  Status: DragOutStatus
+}
+
+export interface DragOutListenOption {
+  Callback: (ctx: Context, event: DragOutEvent) => Promise<void> | void
+}
+
+export interface DragOutListenResult {
+  Success: boolean
+}
+
 /**
  * A dictionary type for string key-value pairs.
  *
@@ -455,6 +471,7 @@ export interface QueryGridLayout {
   ItemPadding?: number
   ItemMargin?: number
   AspectRatio?: number
+  ShowTitle?: boolean
   Commands?: string[]
 }
 
@@ -643,6 +660,11 @@ export interface ResultDragData {
    * Absolute file or directory paths exported by the drag session.
    */
   Files: string[]
+
+  /**
+   * Keep Wox visible after the drag ends. Defaults to false.
+   */
+  PreventHideAfterDrag?: boolean
 }
 
 /**
@@ -1527,6 +1549,14 @@ export interface PublicAPI {
    * Register a callback for leaving this plugin query context.
    */
   OnLeavePluginQuery: (ctx: Context, callback: (ctx: Context) => Promise<void> | void) => Promise<void>
+
+  /**
+   * Register a notification after a result file drag reaches a terminal status.
+   * ResultDragData is what makes a result draggable; this callback cannot block
+   * or cancel that drag. Native result drags stay copy-only; remove this
+   * plugin's own source files only when the event status is success.
+   */
+  OnDragOut: (ctx: Context, option: DragOutListenOption) => Promise<DragOutListenResult>
 
   /**
    * Register query commands

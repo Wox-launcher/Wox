@@ -485,10 +485,8 @@ class WoxFileDragSource final : public IDropSource {
         released_in_source_ = true;
         return DRAGDROP_S_CANCEL;
       }
-      if (owner_ != nullptr) {
-        // Hide before the target processes the drop so a late overwrite or permission dialog owns the foreground UI.
-        ::ShowWindow(owner_, SW_HIDE);
-      }
+      // The launcher owns post-drag visibility, including PreventHideAfterDrag.
+      // Hiding the HWND here bypasses that policy and leaves Go visibility state stale.
       return DRAGDROP_S_DROP;
     }
     return S_OK;

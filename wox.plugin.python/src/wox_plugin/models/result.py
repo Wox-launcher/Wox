@@ -118,23 +118,29 @@ class ResultDragData:
     """
     Native drag payload exposed by a Wox result.
 
+    Setting this on a result is what makes it draggable. on_drag_out is only a
+    post-drag notification and cannot block that drag. Wox hides after the
+    drag unless prevent_hide_after_drag is true.
+
     Only file drag data is supported for now. Paths should be absolute file or
     directory paths so Wox can hand them to the operating system drag session.
     """
 
     type: str
     files: List[str] = field(default_factory=list)
+    prevent_hide_after_drag: bool = False
 
     def to_json(self) -> str:
         data = {
             "Type": self.type,
             "Files": self.files,
+            "PreventHideAfterDrag": self.prevent_hide_after_drag,
         }
         return json.dumps(data)
 
     @classmethod
-    def files_data(cls, files: List[str]) -> "ResultDragData":
-        return cls(type="files", files=files)
+    def files_data(cls, files: List[str], prevent_hide_after_drag: bool = False) -> "ResultDragData":
+        return cls(type="files", files=files, prevent_hide_after_drag=prevent_hide_after_drag)
 
     @classmethod
     def from_json(cls, json_str: str) -> "ResultDragData":
@@ -142,6 +148,7 @@ class ResultDragData:
         return cls(
             type=data.get("Type", data.get("type", "")),
             files=[str(item) for item in data.get("Files", data.get("files", []))],
+            prevent_hide_after_drag=bool(data.get("PreventHideAfterDrag", data.get("prevent_hide_after_drag", False))),
         )
 
 
@@ -897,7 +904,8 @@ class Result:
     Optional native drag payload for this result.
 
     Use ResultDragData.files_data([...]) to let users drag files or directories
-    from the result into other desktop applications.
+    from the result into other desktop applications. Wox hides after the drag
+    unless prevent_hide_after_drag is true.
     """
 
     def to_json(self) -> str:

@@ -24,6 +24,9 @@ from wox_plugin import (
     ScreenshotResult,
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
+    DragOutEvent,
+    DragOutListenOption,
+    DragOutListenResult,
     UnregisterTriggerKeywordOption,
     UnregisterTriggerKeywordResult,
     SetSettingOption,
@@ -51,6 +54,7 @@ class PluginAPI(PublicAPI):
         self.unload_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
         self.enter_plugin_query_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
         self.leave_plugin_query_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
+        self.drag_out_callbacks: Dict[str, Callable[[Context, DragOutEvent], Awaitable[None] | None]] = {}
         self.llm_stream_callbacks: Dict[str, ChatStreamCallback] = {}
         self.mru_restore_callbacks: Dict[str, Callable[[Context, MRUData], Optional[Result] | Awaitable[Optional[Result]]]] = {}
 
@@ -77,6 +81,8 @@ class PluginAPI(PublicAPI):
 
         request = {
             "TraceId": trace_id,
+            "SessionId": ctx.values.get("SessionId", ""),
+            "QueryId": ctx.values.get("QueryId", ""),
             "Id": request_id,
             "Method": method,
             "Type": PLUGIN_JSONRPC_TYPE_REQUEST,
@@ -224,6 +230,14 @@ class PluginAPI(PublicAPI):
         callback_id = str(uuid.uuid4())
         self.leave_plugin_query_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnLeavePluginQuery", {"callbackId": callback_id})
+
+    async def on_drag_out(self, ctx: Context, option: DragOutListenOption) -> DragOutListenResult:
+        if option is None or option.callback is None:
+            return DragOutListenResult(success=False)
+        callback_id = str(uuid.uuid4())
+        self.drag_out_callbacks[callback_id] = option.callback
+        result = await self.invoke_method(ctx, "OnDragOut", {"callbackId": callback_id})
+        return DragOutListenResult(success=isinstance(result, dict) and result.get("Success") is True)
 
     async def register_query_commands(self, ctx: Context, commands: list[MetadataCommand]) -> None:
         """Register query commands"""

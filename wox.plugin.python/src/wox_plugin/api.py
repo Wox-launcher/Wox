@@ -18,6 +18,10 @@ from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, 
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 from .models.toolbar_msg import ToolbarMsg
+from .models.drag_out import (
+    DragOutListenOption,
+    DragOutListenResult,
+)
 from .models.trigger_keyword import (
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
@@ -493,6 +497,16 @@ class PublicAPI(Protocol):
     async def on_leave_plugin_query(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
         """
         Register a callback for leaving this plugin query context.
+        """
+        ...
+
+    async def on_drag_out(self, ctx: Context, option: DragOutListenOption) -> DragOutListenResult:
+        """
+        Register a notification after a result file drag reaches a terminal status.
+
+        Setting ResultDragData is what makes a result draggable. This callback
+        cannot block or cancel that drag. Remove the plugin's own source files
+        only when the event status is ``success``.
         """
         ...
 

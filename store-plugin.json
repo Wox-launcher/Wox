@@ -1318,5 +1318,37 @@
         "plugin_description": "锁定键盘，方便擦拭按键且不会误触快捷键"
       }
     }
+  },
+  {
+    "Id": "7c3e9a14-6b2d-4f81-9e5a-1d8c4b0f2a67",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.4",
+    "Runtime": "python",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/343c6c2d-78b5-4f36-8ca9-61f9cd0f6cd2",
+    "Website": "https://gist.github.com/qianlifeng/b27ea5c3cc3f78d2f526c9b481ad9c24",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/b27ea5c3cc3f78d2f526c9b481ad9c24/raw/Wox.Plugin.Droppy.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/a65aaf7b-0f59-4301-8484-1a5af63892fd"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-14 22:24:09",
+    "DateUpdated": "2026-09-14 22:24:09",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Droppy",
+        "plugin_description": "A stash box for files. Drop files in, then drag them out later."
+      },
+      "zh_CN": {
+        "plugin_name": "Droppy",
+        "plugin_description": "随时打开的文件盒子：拖进去暂存，再到别处拖出去。"
+      }
+    }
   }
 ]

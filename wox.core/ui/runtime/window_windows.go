@@ -232,8 +232,12 @@ type platformWindow struct {
 	// picker as a real focus loss. IFileDialog is modal but not a child or
 	// owned HWND, so isWithinFocusDomain cannot see it.
 	nativeDialogActive bool
-	darkAppearance     bool
-	scale              float32
+	// fileDragActive keeps hide-on-blur from dismissing the launcher while a
+	// result file drag is in the OLE loop. After the drag, App decides hide
+	// from PreventHideAfterDrag instead of this focus loss.
+	fileDragActive bool
+	darkAppearance bool
+	scale          float32
 	// suppressDPIBounds keeps explicit programmatic bounds from being replaced by
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
 	suppressDPIBounds bool
@@ -2380,7 +2384,7 @@ func (w *platformWindow) confirmActivation() {
 // nonactivating overlays such as tooltips, and transient messages from the
 // current show transaction.
 func (w *platformWindow) handleBlur(nextWindow win.HWND) {
-	if !w.focus.visible || w.nativeDialogActive || w.isWithinFocusDomain(nextWindow) || isNonactivatingNativeWindow(nextWindow) {
+	if !w.focus.visible || w.nativeDialogActive || w.fileDragActive || w.isWithinFocusDomain(nextWindow) || isNonactivatingNativeWindow(nextWindow) {
 		return
 	}
 	if !w.focus.activationConfirmed || time.Now().Before(w.focus.blurGuardUntil) {

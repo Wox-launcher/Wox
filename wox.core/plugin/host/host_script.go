@@ -1020,6 +1020,11 @@ func parseScriptDragData(itemMap map[string]interface{}) *plugin.QueryResultDrag
 	return &plugin.QueryResultDragData{
 		Type:  plugin.QueryResultDragDataTypeFiles,
 		Files: files,
+		PreventHideAfterDrag: getFirstBoolFromMap(dragMap, []string{
+			"preventHideAfterDrag",
+			"prevent_hide_after_drag",
+			"PreventHideAfterDrag",
+		}),
 	}
 }
 

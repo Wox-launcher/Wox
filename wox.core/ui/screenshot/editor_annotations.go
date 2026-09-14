@@ -433,8 +433,12 @@ func drawScreenshotEditorPixelNumber(target *image.RGBA, clip image.Rectangle, a
 
 // drawScreenshotEditorPixelCenteredText centers the actual glyph ink rather than its nominal font box.
 func drawScreenshotEditorPixelCenteredText(target *image.RGBA, clip image.Rectangle, text string, center image.Point, size float32, textColor color.RGBA) {
-	parsed := screenshotEditorExportFont()
-	if parsed == nil {
+	drawScreenshotEditorPixelCenteredTextWithFont(target, clip, text, center, size, textColor, screenshotEditorExportFont())
+}
+
+// drawScreenshotEditorPixelCenteredTextWithFont paints text with a caller-chosen face, still centering glyph ink.
+func drawScreenshotEditorPixelCenteredTextWithFont(target *image.RGBA, clip image.Rectangle, text string, center image.Point, size float32, textColor color.RGBA, parsed *opentype.Font) {
+	if text == "" || parsed == nil {
 		return
 	}
 	face, err := opentype.NewFace(parsed, &opentype.FaceOptions{Size: float64(size), DPI: 72, Hinting: font.HintingFull})

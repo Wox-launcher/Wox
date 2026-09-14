@@ -13,6 +13,9 @@ import {
   ScreenshotResult,
   RegisterTriggerKeywordOption,
   RegisterTriggerKeywordResult,
+  DragOutEvent,
+  DragOutListenOption,
+  DragOutListenResult,
   UnregisterTriggerKeywordOption,
   UnregisterTriggerKeywordResult,
   SetSettingOption,
@@ -40,6 +43,7 @@ export class PluginAPI implements PublicAPI {
   unloadCallbacks: Map<string, (ctx: Context) => Promise<void>>
   enterPluginQueryCallbacks: Map<string, (ctx: Context) => Promise<void> | void>
   leavePluginQueryCallbacks: Map<string, (ctx: Context) => Promise<void> | void>
+  dragOutCallbacks: Map<string, (ctx: Context, event: DragOutEvent) => Promise<void> | void>
   llmStreamCallbacks: Map<string, AI.ChatStreamFunc>
   mruRestoreCallbacks: Map<string, (ctx: Context, mruData: MRUData) => Promise<Result | null>>
 
@@ -53,6 +57,7 @@ export class PluginAPI implements PublicAPI {
     this.unloadCallbacks = new Map<string, (ctx: Context) => Promise<void>>()
     this.enterPluginQueryCallbacks = new Map<string, (ctx: Context) => Promise<void> | void>()
     this.leavePluginQueryCallbacks = new Map<string, (ctx: Context) => Promise<void> | void>()
+    this.dragOutCallbacks = new Map<string, (ctx: Context, event: DragOutEvent) => Promise<void> | void>()
     this.llmStreamCallbacks = new Map<string, AI.ChatStreamFunc>()
     this.mruRestoreCallbacks = new Map<string, (ctx: Context, mruData: MRUData) => Promise<Result | null>>()
   }
@@ -68,6 +73,8 @@ export class PluginAPI implements PublicAPI {
     this.ws.send(
       JSON.stringify({
         TraceId: traceId,
+        SessionId: ctx.Values.SessionId,
+        QueryId: ctx.Values.QueryId,
         Id: requestId,
         Method: method,
         Type: PluginJsonRpcTypeRequest,
@@ -193,6 +200,15 @@ export class PluginAPI implements PublicAPI {
     const callbackId = crypto.randomUUID()
     this.leavePluginQueryCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnLeavePluginQuery", { callbackId })
+  }
+
+  async OnDragOut(ctx: Context, option: DragOutListenOption): Promise<DragOutListenResult> {
+    if (!option?.Callback) {
+      return { Success: false }
+    }
+    const callbackId = crypto.randomUUID()
+    this.dragOutCallbacks.set(callbackId, option.Callback)
+    return (await this.invokeMethod(ctx, "OnDragOut", { callbackId })) as DragOutListenResult
   }
 
   async RegisterQueryCommands(ctx: Context, commands: MetadataCommand[]): Promise<void> {

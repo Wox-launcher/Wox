@@ -70,6 +70,10 @@ func (e emptyAPIImpl) OnEnterPluginQuery(ctx context.Context, callback func(cont
 func (e emptyAPIImpl) OnLeavePluginQuery(ctx context.Context, callback func(context.Context)) {
 }
 
+func (e emptyAPIImpl) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
+
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 

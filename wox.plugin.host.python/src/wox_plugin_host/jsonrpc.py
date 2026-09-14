@@ -21,6 +21,7 @@ from wox_plugin import (
     Query,
     QueryResponse,
     ResultActionType,
+    DragOutEvent,
 )
 
 from . import logger
@@ -48,7 +49,11 @@ def _parse_context_data(raw: Optional[Union[str, Dict[str, Any]]]) -> Dict[str, 
 
 
 async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> Any:
-    """Handle incoming request from Wox"""
+    """Handle incoming request from Wox, retaining its UI routing context."""
+    for key in ("SessionId", "QueryId"):
+        if isinstance(request.get(key), str) and request[key]:
+            ctx.values[key] = request[key]
+
     method = request.get("Method")
     plugin_name = request.get("PluginName")
 
@@ -78,6 +83,8 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
         return await on_enter_plugin_query(ctx, request)
     elif method == "onLeavePluginQuery":
         return await on_leave_plugin_query(ctx, request)
+    elif method == "onDragOut":
+        return await on_drag_out(ctx, request)
     elif method == "onDeepLink":
         return await on_deep_link(ctx, request)
     elif method == "onMRURestore":
@@ -792,6 +799,47 @@ async def on_leave_plugin_query(ctx: Context, request: Dict[str, Any]) -> None:
         raise Exception(f"leave plugin query callback not found: {callback_id}")
 
     result = callback(ctx)
+    if inspect.isawaitable(result):
+        await result
+
+
+async def on_drag_out(ctx: Context, request: Dict[str, Any]) -> None:
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("CallbackId")
+    if not callback_id:
+        raise Exception("CallbackId is required")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance or not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    from .plugin_api import PluginAPI
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.drag_out_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"drag out callback not found: {callback_id}")
+
+    raw_event = params.get("Event")
+    event_payload: Dict[str, Any] = {}
+    if isinstance(raw_event, str) and raw_event:
+        try:
+            parsed = json.loads(raw_event)
+        except Exception:
+            parsed = {}
+        if isinstance(parsed, dict):
+            event_payload = parsed
+    elif isinstance(raw_event, dict):
+        event_payload = raw_event
+
+    result = callback(ctx, DragOutEvent.from_dict(event_payload))
     if inspect.isawaitable(result):
         await result
 

@@ -17,6 +17,8 @@ export interface PluginInstance {
 }
 
 export interface PluginJsonRpcRequest {
+  SessionId?: string
+  QueryId?: string
   TraceId: string
   Id: string
   PluginId: string

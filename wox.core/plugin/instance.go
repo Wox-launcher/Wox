@@ -39,6 +39,7 @@ type Instance struct {
 	PluginCommandHandlers     []PluginCommandHandler
 	EnterPluginQueryCallbacks []func(ctx context.Context)
 	LeavePluginQueryCallbacks []func(ctx context.Context)
+	DragOutCallbacks          []func(ctx context.Context, event DragOutEvent)
 
 	// for measure performance
 	LoadStartTimestamp    int64

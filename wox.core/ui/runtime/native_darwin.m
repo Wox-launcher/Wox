@@ -3021,7 +3021,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   }
   // The key window may not receive modifier releases after focus moves elsewhere.
   owner->view->_modifier_flags = 0;
-  if (owner->native_dialog_active) {
+  if (owner->native_dialog_active || owner->result_drag_source != NULL) {
     return;
   }
   emit_focus(owner, false);

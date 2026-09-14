@@ -121,8 +121,11 @@ func TestBuildFileDropQueryRoutesExplicitPluginAndFallsBack(t *testing.T) {
 	}
 
 	keyword := manager.BuildFileDropQuery(context.Background(), common.PlainQuery{QueryText: "file preview leftover"}, paths)
-	if keyword.QueryText != "leftover" || len(keyword.QueryScope.Plugins) != 1 || keyword.QueryScope.Plugins[0].PluginID != supported.Metadata.Id || keyword.QueryScope.Plugins[0].Command != "preview" {
-		t.Fatalf("keyword entry must become a scoped selection with parsed search: %+v", keyword)
+	if keyword.QueryType != QueryTypeSelection || keyword.QueryText != "file preview leftover" || !keyword.QueryScope.IsEmpty() {
+		t.Fatalf("keyword entry must keep the typed query and send selection: %+v", keyword)
+	}
+	if keyword.QuerySelection.Type != selection.SelectionTypeFile || len(keyword.QuerySelection.FilePaths) != 1 {
+		t.Fatalf("keyword selection = %+v", keyword.QuerySelection)
 	}
 
 	keywordFallback := manager.BuildFileDropQuery(context.Background(), common.PlainQuery{QueryText: "calc 2+2"}, paths)

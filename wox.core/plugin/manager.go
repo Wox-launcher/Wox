@@ -783,6 +783,7 @@ func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
 	pluginInstance.PluginCommandHandlers = nil
 	pluginInstance.EnterPluginQueryCallbacks = nil
 	pluginInstance.LeavePluginQueryCallbacks = nil
+	pluginInstance.DragOutCallbacks = nil
 	pluginInstance.RuntimeQueryCommands = nil
 	pluginInstance.setRuntimeTriggerKeywords(nil)
 }
@@ -2800,6 +2801,38 @@ func (m *Manager) findResultCacheInSession(sessionId string, queryId string, res
 	return foundCache, true
 }
 
+// PluginIDForCachedResult returns the plugin that produced a currently cached result.
+func (m *Manager) PluginIDForCachedResult(sessionId string, queryId string, resultId string) string {
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	if !found || resultCache == nil || resultCache.PluginInstance == nil {
+		return ""
+	}
+	return resultCache.PluginInstance.Metadata.Id
+}
+
+// NotifyDragOut delivers a terminal result-file-drag status to the owning plugin.
+// The drag itself already finished; callbacks cannot block or cancel it.
+func (m *Manager) NotifyDragOut(ctx context.Context, pluginId string, event DragOutEvent) {
+	if m == nil || pluginId == "" {
+		return
+	}
+	instance := m.getPluginInstance(pluginId)
+	if instance == nil {
+		return
+	}
+	callbacks := slices.Clone(instance.DragOutCallbacks)
+	if len(callbacks) == 0 {
+		return
+	}
+	event.Files = append([]string(nil), event.Files...)
+	for _, callback := range callbacks {
+		callback := callback
+		util.Go(ctx, fmt.Sprintf("[%s] drag out callback", instance.GetName(ctx)), func() {
+			callback(ctx, event)
+		})
+	}
+}
+
 func (m *Manager) findResultCacheById(resultId string) (*QueryResultCache, bool) {
 	if resultId == "" {
 		return nil, false
@@ -2920,8 +2953,9 @@ func normalizeQueryResultDragData(dragData *QueryResultDragData) *QueryResultDra
 	}
 
 	return &QueryResultDragData{
-		Type:  QueryResultDragDataTypeFiles,
-		Files: files,
+		Type:                 QueryResultDragDataTypeFiles,
+		Files:                files,
+		PreventHideAfterDrag: dragData.PreventHideAfterDrag,
 	}
 }
 

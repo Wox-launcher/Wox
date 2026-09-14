@@ -61,6 +61,14 @@ const (
 	// and the 6px inset used to place that cluster. Equal macOS title insets
 	// used to be 220, which left only 20px at the 460 default width.
 	notesToolbarActionsWidth = float32(174)
+	notesFormatButtonSize    = float32(28)
+	notesFormatButtonGap     = float32(2)
+	notesFormatBarPadLeft    = float32(12)
+	notesFormatBarPadRight   = float32(12)
+	notesFormatBarStatsGap   = float32(8)
+	// notesFormatBarLeadCount is the heading through link cluster kept visible
+	// before the overflow "more" control.
+	notesFormatBarLeadCount = 7
 )
 
 var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginNotes)), nil, 256)
@@ -1263,7 +1271,7 @@ func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent
 		}
 		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: "notes.format." + id, Label: label, Icon: woxcomponent.FormatGlyph(id, 16, iconColor),
-			Width: 28, Height: 28, Radius: 6, HoverBackground: woxcomponent.TitleBarAlpha(theme.ToolbarText, 20),
+			Width: notesFormatButtonSize, Height: notesFormatButtonSize, Radius: 6, HoverBackground: woxcomponent.TitleBarAlpha(theme.ToolbarText, 20),
 			Selected: formats[id], SelectedBackground: woxcomponent.TitleBarAlpha(theme.ToolbarText, 40),
 			FocusRingColor: theme.Cursor, Disabled: c.record.DeletedAt > 0, OnTap: onTap,
 			OnHoverAt: func(inside bool, bounds woxui.Rect) { c.updateToolbarTooltip(inside, label, bounds) },
@@ -1285,25 +1293,54 @@ func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent
 		item("divider", func() { c.setBlock(common.NoteBlockDivider) }),
 		item("table", c.insertTable),
 	}
-	if width < 390 {
-		items = append(items[:7], item("more", func() { c.moreOpen, c.formatMore = true, true; c.invalidate() }))
-	}
 	stats := c.noteCharacterCountLabel()
-	row := []woxwidget.Widget{
-		woxwidget.Semantics{
+	inner := max(float32(0), width-notesFormatBarPadLeft-notesFormatBarPadRight)
+	tools := notesFormatToolsWidth(len(items))
+	statsWidth := c.measureFormatBarStats(stats)
+	// Drop the count before collapsing marks. The 13-button row is 388 wide; at
+	// the 460 default that already leaves too little room for the localized count.
+	showStats := c.markdownView || inner >= tools+notesFormatBarStatsGap+statsWidth
+	if !c.markdownView && inner < tools {
+		items = append(items[:notesFormatBarLeadCount], item("more", func() { c.moreOpen, c.formatMore = true, true; c.invalidate() }))
+		tools = notesFormatToolsWidth(len(items))
+		showStats = inner >= tools+notesFormatBarStatsGap+statsWidth
+	}
+	row := []woxwidget.Widget{}
+	if showStats {
+		row = append(row, woxwidget.Semantics{
 			Key: "notes.format.stats", AutomationID: "notes.format.stats", Role: woxui.AccessibilityRoleText, Label: stats,
 			Child: woxwidget.Text{Value: stats, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
-		},
+		})
 	}
 	if !c.markdownView {
 		row = append(row, woxwidget.Expanded{Child: woxwidget.Align{
 			Height: launcherview.NotesFormatBarHeight, Horizontal: 1, Vertical: .5,
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, Children: items},
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: notesFormatButtonGap, Children: items},
 		}})
 	}
 	return woxwidget.Container{Width: width, Height: launcherview.NotesFormatBarHeight, BorderColor: theme.PreviewSplit, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 12, Right: 12},
-		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}}
+		Padding: woxwidget.Insets{Left: notesFormatBarPadLeft, Right: notesFormatBarPadRight},
+		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: notesFormatBarStatsGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}}
+}
+
+// notesFormatToolsWidth is the shrink-wrapped width of count format buttons plus gaps.
+func notesFormatToolsWidth(count int) float32 {
+	if count <= 0 {
+		return 0
+	}
+	return float32(count)*notesFormatButtonSize + float32(count-1)*notesFormatButtonGap
+}
+
+// measureFormatBarStats returns the character-count label width, with a conservative
+// fallback before the native window can measure.
+func (c *notesWindowController) measureFormatBarStats(stats string) float32 {
+	style := woxui.TextStyle{Size: 11}
+	if c != nil && c.managed != nil {
+		if metrics, err := c.managed.Window().MeasureText(stats, style); err == nil && metrics.Size.Width > 0 {
+			return metrics.Size.Width
+		}
+	}
+	return float32(utf8.RuneCountInString(stats)) * 6
 }
 
 // noteCharacterCountLabel is the live document length shown on the format bar.

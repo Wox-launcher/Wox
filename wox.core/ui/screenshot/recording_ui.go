@@ -1067,7 +1067,8 @@ func (state *recordingToolbarState) drawKeycaps(displayList *DisplayList, select
 		}
 		rect := Rect{X: left, Y: top, Width: widths[index], Height: 36 * scale}
 		displayList.FillRoundedRect(rect, 8*scale, Color{R: 24, G: 24, B: 24, A: alpha})
-		displayList.DrawText(keycap.label, Rect{X: rect.X + 10*scale, Y: rect.Y + 8*scale, Width: rect.Width - 20*scale, Height: 20 * scale}, TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: alpha})
+		textWidth := min(rect.Width-8*scale, screenshotEditorEstimatedTextWidth(keycap.label, 14*scale))
+		displayList.DrawText(keycap.label, Rect{X: rect.X + (rect.Width-textWidth)/2, Y: rect.Y + 8*scale, Width: textWidth, Height: 20 * scale}, TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: alpha})
 		left += rect.Width + 6*scale
 	}
 }
@@ -1106,8 +1107,8 @@ func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keyc
 		radius := float32(rect.Dy())
 		background := uint8(uint16(24) * uint16(alpha) / 255)
 		drawScreenshotEditorPixelLine(overlay, clip, image.Pt(rect.Min.X+rect.Dy()/2, centerY), image.Pt(rect.Max.X-rect.Dy()/2, centerY), radius, color.RGBA{R: background, G: background, B: background, A: alpha})
-		textPoint := screenshotEditorScalePoint(Point{X: left + 10*scale, Y: top + 8*scale}, scaleX, scaleY)
-		drawScreenshotEditorPixelTextWithFont(overlay, clip, keycap.label, textPoint, 14*scale*scaleY, color.RGBA{R: alpha, G: alpha, B: alpha, A: alpha}, recordingKeycapExportFont())
+		// Single letters such as T/E/S sit in a circular cap; left-padded text reads as off-center.
+		drawScreenshotEditorPixelCenteredTextWithFont(overlay, clip, keycap.label, image.Pt((rect.Min.X+rect.Max.X)/2, centerY), 14*scale*scaleY, color.RGBA{R: alpha, G: alpha, B: alpha, A: alpha}, recordingKeycapExportFont())
 		left += widths[index] + 6*scale
 	}
 	draw.Draw(target, clip, overlay, clip.Min, draw.Over)

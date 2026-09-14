@@ -97,11 +97,14 @@ func (m *mockAPI) OnGetDynamicSetting(
 }
 func (m *mockAPI) OnDeepLink(ctx context.Context, callback func(context.Context, map[string]string)) {
 }
-func (m *mockAPI) OnUnload(ctx context.Context, callback func(context.Context))                 {}
-func (m *mockAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg)                    {}
-func (m *mockAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)                     {}
-func (m *mockAPI) OnEnterPluginQuery(ctx context.Context, callback func(context.Context))       {}
-func (m *mockAPI) OnLeavePluginQuery(ctx context.Context, callback func(context.Context))       {}
+func (m *mockAPI) OnUnload(ctx context.Context, callback func(context.Context))           {}
+func (m *mockAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg)              {}
+func (m *mockAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)               {}
+func (m *mockAPI) OnEnterPluginQuery(ctx context.Context, callback func(context.Context)) {}
+func (m *mockAPI) OnLeavePluginQuery(ctx context.Context, callback func(context.Context)) {}
+func (m *mockAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
 func (m *mockAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {}
 func (m *mockAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	return nil

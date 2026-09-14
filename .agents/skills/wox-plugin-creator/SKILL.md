@@ -12,10 +12,11 @@ description: Create, scaffold, implement, and package Wox plugins (nodejs, pytho
 - Scaffold a Python plugin (clones template repo):
   - `python3 scripts/scaffold_wox_plugin.py --type python --output-dir ./MyPlugin --name "My Plugin" --trigger-keywords my`
 - Scaffold a single-file SDK plugin (uses local templates; plugin-id auto-generated; single file output):
-  - `python3 scripts/scaffold_wox_plugin.py --type singlefile-python --output-dir ./Wox.Plugin.Weather.py --name "Weather" --trigger-keywords weather`
-  - `python3 scripts/scaffold_wox_plugin.py --type singlefile-nodejs --output-dir ./Wox.Plugin.Weather.js --name "Weather" --trigger-keywords weather`
+  - Auto-detect this machine: `python3 scripts/scaffold_wox_plugin.py --type singlefile --output-dir ./Wox.Plugin.Weather --name "Weather" --trigger-keywords weather`
+  - Explicit Node.js: `python3 scripts/scaffold_wox_plugin.py --type singlefile-nodejs --output-dir ./Wox.Plugin.Weather.js --name "Weather" --trigger-keywords weather`
+  - Explicit Python: `python3 scripts/scaffold_wox_plugin.py --type singlefile-python --output-dir ./Wox.Plugin.Weather.py --name "Weather" --trigger-keywords weather`
 - Scaffold a script plugin (uses local templates; plugin-id auto-generated; single file output):
-  - `python3 scripts/scaffold_wox_plugin.py --type script-nodejs --output-dir ./Wox.Plugin.Script.MyScript.js --name "My Script" --trigger-keywords my`
+  - `python3 scripts/scaffold_wox_plugin.py --type script --output-dir ./Wox.Plugin.Script.MyScript --name "My Script" --trigger-keywords my`
 
 ## Choose a plugin type
 
@@ -23,18 +24,32 @@ description: Create, scaffold, implement, and package Wox plugins (nodejs, pytho
 - **Single-file SDK plugin**: one `.py` or CommonJS `.js` file with full Public API, loaded into the existing Python/Node runtime host. No extra process per query. Save reloads the plugin. Requires Wox 2.4.2+; header `MinWoxVersion` must be `"2.4.2"`.
 - **SDK plugin (`.wox`)**: multi-file package with dependencies, resources, TypeScript, and `plugin.json`.
 
-Single-file Python is the fastest path to a Python SDK plugin. Node.js first version must stay CommonJS (`module.exports.plugin`) and must not import `@wox-launcher/wox-plugin`.
+Node.js first version must stay CommonJS (`module.exports.plugin`) and must not import `@wox-launcher/wox-plugin`.
+
+## Choose a runtime language
+
+Honor an explicit Python or Node.js request from the user, including a `.py` or `.js` output filename.
+
+When the user does not specify a language, detect this machine before scaffolding. Do not default to Python.
+
+1. Run `python3 scripts/detect_local_runtime.py` (use `python` if `python3` is missing). It prints `nodejs`, `python`, or `none`.
+2. If that script cannot run, check the floors yourself: `node --version` for Node.js 20+, and `python3 --version` for Python 3.10+. On Windows also try `py -3 --version` and `python --version`.
+3. Decision:
+   - Only one runtime meets the floor → use that runtime
+   - Both meet the floor → use Node.js
+   - Neither meets the floor → ask the user which language they want
+4. Map the choice to `--type`: `singlefile-nodejs` / `singlefile-python`, `script-nodejs` / `script-python`, or `nodejs` / `python`. `--type singlefile` and `--type script` apply the same detection inside the scaffold.
 
 ## Workflow
 
 ### 1) Scaffold plugin files
 
-- Use `scripts/scaffold_wox_plugin.py` for `nodejs`, `python`, `script-nodejs`, `script-python`, `singlefile-python`, or `singlefile-nodejs`.
+- Use `scripts/scaffold_wox_plugin.py` for `nodejs`, `python`, `script`, `script-nodejs`, `script-python`, `singlefile`, `singlefile-python`, or `singlefile-nodejs`.
 - Pass `--name` and `--trigger-keywords` for every runtime. The scaffold exits without them.
 - For Node.js and Python packages, the scaffold clones the official template repos and replaces placeholders like `{{.ID}}`, `{{.Name}}`, `{{.Description}}`, `{{.TriggerKeywordsJSON}}`, `{{.Author}}`.
 - Before starting work in a new SDK plugin project, run `make init` in the project root when the project has not been initialized yet.
-- Script plugins are **single-file** process-per-query plugins. Prefer filenames like `Wox.Plugin.Script.<Name>.<ext>` (e.g., `Wox.Plugin.Script.Memos.py`).
-- Single-file SDK plugins are **single-file** host-loaded plugins. Prefer filenames like `Wox.Plugin.<Name>.py` or `Wox.Plugin.<Name>.js`.
+- Script plugins are **single-file** process-per-query plugins. Prefer filenames like `Wox.Plugin.Script.<Name>.<ext>` (e.g., `Wox.Plugin.Script.Memos.js` or `Wox.Plugin.Script.Memos.py`).
+- Single-file SDK plugins are **single-file** host-loaded plugins. Prefer filenames like `Wox.Plugin.<Name>.js` or `Wox.Plugin.<Name>.py`.
 - Single-file SDK plugins must set header `MinWoxVersion` to `"2.4.2"`. The scaffold applies this default when `--min-wox-version` is omitted. Do not lower it; Wox 2.4.2 is the first release that can load this plugin type, and store/CI reject older floors.
 - For script plugins, the scaffold copies Wox script templates from `~/.wox/ai/skills/wox-plugin-creator/assets/script_plugin_templates/` and fills metadata placeholders.
 - For single-file SDK plugins, the scaffold copies templates from `~/.wox/ai/skills/wox-plugin-creator/assets/single_file_plugin_templates/` (or the repo `.agents/skills/wox-plugin-creator/assets/single_file_plugin_templates/` fallback).
@@ -144,6 +159,6 @@ Do not target older interpreters. Script plugins still use the user's system Pyt
 
 ## Resources
 
-- scripts: `scripts/scaffold_wox_plugin.py`, `scripts/search_iconify.py`
+- scripts: `scripts/scaffold_wox_plugin.py`, `scripts/detect_local_runtime.py`, `scripts/search_iconify.py`
 - references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/icons.md`, `references/refinements.md`
 - assets: `assets/script_plugin_templates/`, `assets/single_file_plugin_templates/`, `assets/iconify/action/`

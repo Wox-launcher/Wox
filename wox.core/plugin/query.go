@@ -249,10 +249,15 @@ type RefreshQueryParam struct {
 
 const QueryResultDragDataTypeFiles = "files"
 
-// QueryResultDragData declares data the UI can export through a native drag session.
+// QueryResultDragData opts a result into a native file drag. Leaving it unset
+// keeps the result undraggable. OnDragOut is only a post-drag notification.
+// After the drag ends Wox hides, unless PreventHideAfterDrag is true.
 type QueryResultDragData struct {
 	Type  string
 	Files []string
+	// PreventHideAfterDrag keeps Wox visible after the drag ends. The default
+	// is false, matching action PreventHideAfterAction.
+	PreventHideAfterDrag bool
 }
 
 // Query result return from plugin

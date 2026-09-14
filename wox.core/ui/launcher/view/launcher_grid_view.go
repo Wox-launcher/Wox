@@ -184,14 +184,16 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	visualWidth := props.VisualWidth + props.ItemPadding*2
 	visualHeight := props.VisualHeight + props.ItemPadding*2
 	frameProps := launcherGridFrameProps{Width: visualWidth, Height: visualHeight, BorderColor: frameColor}
+	// Draw the hover/selected outline after the image so a full-bleed photo
+	// cannot cover the 4px frame.
 	visualChildren := []woxwidget.StackChild{
+		{Child: woxwidget.Container{Width: visualWidth, Height: visualHeight, Padding: woxwidget.UniformInsets(props.ItemPadding), Child: icon}},
 		{Child: woxwidget.Boundary[launcherGridFrameProps]{
 			Key: LauncherResultBackgroundBoundaryKey(result.ID), Label: "grid-frame:" + result.ID, Props: frameProps,
 			Build: func(props launcherGridFrameProps) woxwidget.Widget {
 				return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 8, BorderColor: props.BorderColor, BorderWidth: 4}
 			},
 		}},
-		{Child: woxwidget.Container{Width: visualWidth, Height: visualHeight, Padding: woxwidget.UniformInsets(props.ItemPadding), Child: icon}},
 	}
 	if result.QuickSelectNumber != "" {
 		fill := props.TailColor

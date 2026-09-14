@@ -97,6 +97,9 @@ func (a *aiCommandTestAPI) OnEnterPluginQuery(ctx context.Context, callback func
 }
 func (a *aiCommandTestAPI) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
 }
+func (a *aiCommandTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
+	return plugin.DragOutListenResult{}
+}
 func (a *aiCommandTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 func (a *aiCommandTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
