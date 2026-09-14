@@ -31,6 +31,7 @@ const (
 
 	healthStageCatalog  = "catalog"
 	healthStageOS       = "os"
+	healthStageCI       = "ci"
 	healthStageManifest = "manifest"
 	healthStageInstall  = "install"
 	healthStageInit     = "init"
@@ -46,6 +47,24 @@ const (
 	healthQueryRetryDelay     = time.Second
 	scriptExecutionTimeoutEnv = "WOX_SCRIPT_EXECUTION_TIMEOUT"
 )
+
+// healthQuerySkip skips a store plugin's query probe on CI runners where its
+// third-party endpoints hang until the process is killed. Init is still checked.
+type healthQuerySkip struct {
+	id        string
+	platforms []string
+	reason    string
+}
+
+var healthQuerySkips = []healthQuerySkip{
+	{
+		// IP Geolocation sequentially hits public-IP and ip-api.com endpoints.
+		// GitHub runners hang those lookups; urllib timeouts do not fire,
+		// so the script is SIGKILLed after 30s on every retry.
+		id:     "8b8a1b35-3d9e-4d7d-9f2e-3b1d0b7f9e10",
+		reason: "public-IP/geo endpoints hang on CI runners",
+	},
+}
 
 type healthOptions struct {
 	StorePath        string
@@ -304,6 +323,13 @@ func checkStorePlugin(parent context.Context, timeout time.Duration, manifest pl
 	}
 	recordInitDuration(&result, instance)
 
+	if skipped, ok := skipUnreliableHealthQuery(manifest, instance, util.GetCurrentPlatform(), runningInCI()); ok {
+		skipped.InitMs = result.InitMs
+		skipped.hasInitMs = result.hasInitMs
+		skipped.DurationMs = time.Since(started).Milliseconds()
+		return skipped
+	}
+
 	for _, query := range buildHealthProbeQueries(instance) {
 		result.Queries = append(result.Queries, query.RawQuery)
 		queryStarted := time.Now()
@@ -475,6 +501,44 @@ func matchesPluginFilter(manifest plugin.StorePluginManifest, pluginIDs []string
 		}
 	}
 	return false
+}
+
+func runningInCI() bool {
+	return os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("CI") == "true"
+}
+
+func platformMatches(platforms []string, platform string) bool {
+	if len(platforms) == 0 {
+		return true
+	}
+	for _, item := range platforms {
+		if strings.EqualFold(item, platform) {
+			return true
+		}
+	}
+	return false
+}
+
+// skipUnreliableHealthQuery skips query probes that consistently hang on a CI runner.
+func skipUnreliableHealthQuery(manifest plugin.StorePluginManifest, instance *plugin.Instance, platform string, inCI bool) (healthResult, bool) {
+	if !inCI {
+		return healthResult{}, false
+	}
+	for _, rule := range healthQuerySkips {
+		if !strings.EqualFold(rule.id, manifest.Id) || !platformMatches(rule.platforms, platform) {
+			continue
+		}
+		return healthResult{
+			Id:      manifest.Id,
+			Name:    pluginDisplayName(manifest, instance),
+			Version: manifest.Version,
+			Runtime: string(manifest.Runtime),
+			Status:  healthStatusSkipped,
+			Stage:   healthStageCI,
+			Error:   rule.reason,
+		}, true
+	}
+	return healthResult{}, false
 }
 
 func skipUnsupportedOS(manifest plugin.StorePluginManifest) (healthResult, bool) {

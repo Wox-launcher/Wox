@@ -98,6 +98,35 @@ func TestSelectManifestsMatchesEnglishName(t *testing.T) {
 	assert.Equal(t, healthStageCatalog, missing[0].Stage)
 }
 
+func TestSkipUnreliableHealthQuery(t *testing.T) {
+	manifest := plugin.StorePluginManifest{
+		Id:      "8b8a1b35-3d9e-4d7d-9f2e-3b1d0b7f9e10",
+		Name:    "IP Geolocation",
+		Version: "1.0.1",
+		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
+	}
+
+	skipped, ok := skipUnreliableHealthQuery(manifest, nil, "darwin", true)
+	assert.True(t, ok)
+	assert.Equal(t, healthStatusSkipped, skipped.Status)
+	assert.Equal(t, healthStageCI, skipped.Stage)
+	assert.Contains(t, skipped.Error, "CI runners")
+
+	skipped, ok = skipUnreliableHealthQuery(manifest, nil, "windows", true)
+	assert.True(t, ok)
+	assert.Equal(t, healthStatusSkipped, skipped.Status)
+
+	skipped, ok = skipUnreliableHealthQuery(manifest, nil, "linux", true)
+	assert.True(t, ok)
+	assert.Equal(t, healthStatusSkipped, skipped.Status)
+
+	_, ok = skipUnreliableHealthQuery(manifest, nil, "darwin", false)
+	assert.False(t, ok)
+
+	_, ok = skipUnreliableHealthQuery(plugin.StorePluginManifest{Id: "other"}, nil, "darwin", true)
+	assert.False(t, ok)
+}
+
 func TestSkipUnsupportedOS(t *testing.T) {
 	current := util.GetCurrentPlatform()
 	other := "linux"
