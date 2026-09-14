@@ -100,6 +100,7 @@ func (a *App) openDedicatedChatWindowLocked() error {
 	}
 	a.chatPreview.active = true
 	a.chatFullscreen = false
+	a.prefetchChatCatalogs()
 	a.updateChatTextInput(true)
 	if _, err := managed.Show(); err != nil {
 		return err

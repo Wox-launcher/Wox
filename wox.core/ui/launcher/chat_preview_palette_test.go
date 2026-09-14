@@ -1,10 +1,13 @@
 package launcher
 
 import (
+	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -168,6 +171,18 @@ func TestChatModelPaletteHeightShrinksToContentAndCaps(t *testing.T) {
 	}
 }
 
+func TestChatModelPaletteHeightIncludesTitleWhileLoading(t *testing.T) {
+	snapshot := &chatPreviewSnapshot{panel: "models", modelsLoading: true}
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 82 {
+		t.Fatalf("loading model palette height = %.0f, want 82 so the title and placeholder stay in one panel", height)
+	}
+
+	snapshot.modelsLoading = false
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 82 {
+		t.Fatalf("empty model palette height = %.0f, want 82 so the title and empty copy stay in one panel", height)
+	}
+}
+
 func TestReplaceChatSlashTokenWithSkillTag(t *testing.T) {
 	editor := woxui.NewTextEditor("use /wri now")
 	editor.SetCaret(8)
@@ -319,4 +334,139 @@ func TestChatHistoryViewportUpdateKeepsWheelScroll(t *testing.T) {
 	if app.chatPreview.panelScroll != scrolled {
 		t.Fatalf("viewport update changed scroll from %.0f to %.0f", scrolled, app.chatPreview.panelScroll)
 	}
+}
+
+type chatCatalogPrefetchServices struct {
+	contract.Services
+	models []contract.AIModel
+	skills []contract.AISkill
+
+	modelsStarted chan struct{}
+	skillsStarted chan struct{}
+	release       chan struct{}
+
+	modelCalls atomic.Int32
+	skillCalls atomic.Int32
+}
+
+func (s *chatCatalogPrefetchServices) AIModels(_ context.Context, _ string) ([]contract.AIModel, error) {
+	s.modelCalls.Add(1)
+	if s.modelsStarted != nil {
+		s.modelsStarted <- struct{}{}
+	}
+	if s.release != nil {
+		<-s.release
+	}
+	return append([]contract.AIModel(nil), s.models...), nil
+}
+
+func (s *chatCatalogPrefetchServices) AISkills(_ context.Context, _ string) ([]contract.AISkill, error) {
+	s.skillCalls.Add(1)
+	if s.skillsStarted != nil {
+		s.skillsStarted <- struct{}{}
+	}
+	if s.release != nil {
+		<-s.release
+	}
+	return append([]contract.AISkill(nil), s.skills...), nil
+}
+
+func waitChatCatalogPrefetch(t *testing.T, started chan struct{}) {
+	t.Helper()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("chat catalog prefetch did not start")
+	}
+}
+
+func TestPrefetchChatCatalogsLoadsOnceWhenUncached(t *testing.T) {
+	service := &chatCatalogPrefetchServices{
+		models:        []contract.AIModel{{Name: "flash", Provider: "deepseek"}},
+		skills:        []contract.AISkill{{ID: "s1", Name: "creator", Enabled: true}},
+		modelsStarted: make(chan struct{}, 1),
+		skillsStarted: make(chan struct{}, 1),
+		release:       make(chan struct{}),
+	}
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	app := &App{lifecycleCtx: t.Context(), aiSettings: ai, services: service}
+
+	app.prefetchChatCatalogs()
+	waitChatCatalogPrefetch(t, service.modelsStarted)
+	waitChatCatalogPrefetch(t, service.skillsStarted)
+	if !ai.ModelsLoading() || !ai.SkillsLoading() {
+		t.Fatal("uncached chat entry should start model and skill loads")
+	}
+
+	app.prefetchChatCatalogs()
+	if service.modelCalls.Load() != 1 || service.skillCalls.Load() != 1 {
+		t.Fatalf("in-flight prefetch started another load: models=%d skills=%d", service.modelCalls.Load(), service.skillCalls.Load())
+	}
+	close(service.release)
+}
+
+func TestPrefetchChatCatalogsSkipsCachedCatalogs(t *testing.T) {
+	service := &chatCatalogPrefetchServices{
+		modelsStarted: make(chan struct{}, 1),
+		skillsStarted: make(chan struct{}, 1),
+	}
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetModels([]aiModel{{Name: "flash", Provider: "deepseek"}})
+	ai.SetSkills([]chatSkill{{ID: "s1", Name: "creator"}})
+	app := &App{lifecycleCtx: t.Context(), aiSettings: ai, services: service}
+
+	app.prefetchChatCatalogs()
+	if ai.ModelsLoading() || ai.SkillsLoading() {
+		t.Fatal("cached catalogs should not start another load")
+	}
+	if service.modelCalls.Load() != 0 || service.skillCalls.Load() != 0 {
+		t.Fatalf("cached catalogs were fetched again: models=%d skills=%d", service.modelCalls.Load(), service.skillCalls.Load())
+	}
+}
+
+func TestEnterChatModePrefetchesUncachedCatalogs(t *testing.T) {
+	service := &chatCatalogPrefetchServices{
+		modelsStarted: make(chan struct{}, 1),
+		skillsStarted: make(chan struct{}, 1),
+		release:       make(chan struct{}),
+	}
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	app := &App{
+		lifecycleCtx: t.Context(),
+		aiSettings:   ai,
+		services:     service,
+		editor:       woxui.NewTextEditor(""),
+		chatPreview:  &chatPreviewState{editor: woxui.NewTextEditor("")},
+	}
+
+	app.enterChatMode()
+	waitChatCatalogPrefetch(t, service.modelsStarted)
+	waitChatCatalogPrefetch(t, service.skillsStarted)
+	if !ai.ModelsLoading() || !ai.SkillsLoading() {
+		t.Fatal("entering chat should prefetch catalogs when the cache is empty")
+	}
+	close(service.release)
+}
+
+func TestActivateChatPreviewPrefetchesUncachedCatalogs(t *testing.T) {
+	service := &chatCatalogPrefetchServices{
+		modelsStarted: make(chan struct{}, 1),
+		skillsStarted: make(chan struct{}, 1),
+		release:       make(chan struct{}),
+	}
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	app := &App{lifecycleCtx: t.Context(), aiSettings: ai, services: service}
+
+	if err := app.activateChatPreview(queryResult{ID: "result", QueryID: "query"}, queryPreview{
+		PreviewType: "chat",
+		PreviewData: `{"ActiveChat":{"Id":"chat"}}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitChatCatalogPrefetch(t, service.modelsStarted)
+	waitChatCatalogPrefetch(t, service.skillsStarted)
+	if !ai.ModelsLoading() || !ai.SkillsLoading() {
+		t.Fatal("showing chat should prefetch catalogs when the cache is empty")
+	}
+	close(service.release)
 }

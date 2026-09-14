@@ -475,7 +475,7 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 
 // chatCatalogLoadingItem renders a quiet, non-interactive catalog row while a group is still fetching.
 func chatCatalogLoadingItem(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	icon := woxcomponent.ModelTrainingGlyph(18, theme.ResultSubtitle)
+	icon := woxcomponent.SparklesGlyph(18, theme.ResultSubtitle)
 	if item.Kind == "skills" {
 		icon = woxcomponent.ExtensionGlyph(18, theme.ResultSubtitle)
 	}
@@ -518,7 +518,7 @@ func chatCatalogItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 			check = woxcomponent.CheckGlyph(18, iconColor)
 		}
 		titleWidth := min(float32(220), max(float32(100), width*0.42))
-		icon := woxcomponent.ModelTrainingGlyph(18, iconColor)
+		icon := woxcomponent.SparklesGlyph(18, iconColor)
 		if item.Kind == "skills" {
 			icon = woxcomponent.ExtensionGlyph(18, iconColor)
 		}
@@ -1362,7 +1362,7 @@ func (s *chatModelSelectorState) Build(context woxwidget.StateContext, widget an
 	arrowColor.A = 140
 	child := woxwidget.Container{Width: props.ModelWidth, Height: 20, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 4, Right: 4}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 0, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxcomponent.ModelTrainingGlyph(16, iconColor),
+			woxcomponent.SparklesGlyph(16, iconColor),
 			woxwidget.Container{Width: 5},
 			woxwidget.Expanded{Child: woxwidget.Align{Height: 20, Vertical: 0.5, Child: woxwidget.Text{Value: props.Model, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle}}},
 			woxwidget.Container{Width: 4},

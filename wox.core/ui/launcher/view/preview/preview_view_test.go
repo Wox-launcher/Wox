@@ -317,8 +317,11 @@ func TestChatModelSelectorUsesFlutterIconsAndHoverSurface(t *testing.T) {
 	modelIcon := row.Children[0].(woxwidget.Image)
 	modelText := row.Children[2].(woxwidget.Expanded).Child.(woxwidget.Align)
 	arrowIcon := row.Children[4].(woxwidget.Image)
-	if modelIcon.Source == nil || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
-		t.Fatalf("model chip icons = model %.0f arrow %.0f; want Flutter 16px and 14px SVGs", modelIcon.Width, arrowIcon.Width)
+	iconColor := theme.ResultTitle
+	iconColor.A = 180
+	wantIcon := woxcomponent.SparklesGlyph(16, iconColor).(woxwidget.Image)
+	if modelIcon.Source != wantIcon.Source || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
+		t.Fatalf("model chip icons = model %.0f arrow %.0f; want 16px sparkles and 14px arrow", modelIcon.Width, arrowIcon.Width)
 	}
 	input := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(0), Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme}).(woxwidget.Container)
 	card := input.Child.(woxwidget.Container)
@@ -339,7 +342,8 @@ func TestChatCatalogModelRowHighlightsOnHover(t *testing.T) {
 	stack := container.Child.(woxwidget.Stack)
 	icon := stack.Children[0].Child.(woxwidget.Image)
 
-	if row.OnHover == nil || container.Color.A != 40 || icon.Source == nil || icon.Width != 18 {
-		t.Fatalf("hovered model row = color %#v icon %.0f; want Flutter hover and 18px model icon", container.Color, icon.Width)
+	wantIcon := woxcomponent.SparklesGlyph(18, theme.PreviewText).(woxwidget.Image)
+	if row.OnHover == nil || container.Color.A != 40 || icon.Source != wantIcon.Source || icon.Width != 18 {
+		t.Fatalf("hovered model row = color %#v icon %.0f; want hover and 18px sparkles", container.Color, icon.Width)
 	}
 }

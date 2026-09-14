@@ -590,6 +590,7 @@ func (a *App) activateChatPreview(result queryResult, preview queryPreview) erro
 			loadChatID = data.ActiveChatID
 		}
 		sortChatSummaries(a.chatPreview.chats)
+		a.prefetchChatCatalogs()
 	}
 	revision := a.chatPreview.revision
 
@@ -613,6 +614,29 @@ func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (
 	snapshot := snapshotChatPreviewLocked(a.chatPreview)
 	a.attachChatPreviewCatalogs(snapshot)
 	return snapshot, nil
+}
+
+// prefetchChatCatalogs starts a one-shot model and skill fetch when chat becomes visible
+// and the shared catalogs are still empty. The picker then reuses the cache instead of
+// flashing a loading row every time it opens.
+func (a *App) prefetchChatCatalogs() {
+	if a == nil || a.aiSettings == nil || a.services == nil {
+		return
+	}
+	requestModels := !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+	requestSkills := !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
+	if requestModels {
+		a.aiSettings.SetModelsLoading(true)
+	}
+	if requestSkills {
+		a.aiSettings.SetSkillsLoading(true)
+	}
+	if requestModels {
+		util.Go(a.lifecycleCtx, "load AI models for chat", a.loadAIModels)
+	}
+	if requestSkills {
+		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
+	}
 }
 
 // attachChatPreviewCatalogs copies the shared model and skill catalogs onto a render snapshot.
@@ -1946,6 +1970,7 @@ func (a *App) enterChatMode() {
 	if state := a.chatPreview; state != nil {
 		state.active = true
 	}
+	a.prefetchChatCatalogs()
 	a.updateChatTextInput(true)
 	_ = a.applyWindowBounds()
 	a.invalidateChatSurfaces()

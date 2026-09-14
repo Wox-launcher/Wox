@@ -294,6 +294,27 @@ func TestChatDebugUsesMeasuredControlledScrollGeometry(t *testing.T) {
 	}
 }
 
+func TestChatCatalogLoadingPanelFitsTitleAndPlaceholder(t *testing.T) {
+	catalog := ChatCatalog(ChatCatalogProps{
+		Width: 400, Height: 82, Key: "models", Label: "Select Model", ContentHeight: 40,
+		Items: []ChatCatalogItemProps{{SelectID: "loading", Kind: "models", Title: "Loading models…", Placeholder: true}},
+	}).(woxwidget.Container)
+	if catalog.Height != 82 || catalog.Padding.Top+catalog.Padding.Bottom != 14 {
+		t.Fatalf("catalog chrome = height %.0f padding %+v", catalog.Height, catalog.Padding)
+	}
+	body := catalog.Child.(woxwidget.Flex)
+	if len(body.Children) != 2 {
+		t.Fatalf("catalog children = %d, want title and rows", len(body.Children))
+	}
+	header := body.Children[0].(woxwidget.Container)
+	if header.Height != 28 {
+		t.Fatalf("catalog title = %.0f, want 28", header.Height)
+	}
+	if remaining := catalog.Height - catalog.Padding.Top - catalog.Padding.Bottom - header.Height; remaining != 40 {
+		t.Fatalf("rows slot = %.0f, want 40 so the loading placeholder stays inside the panel", remaining)
+	}
+}
+
 func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
 	theme := woxcomponent.Theme{Background: woxui.Color{R: 20, G: 21, B: 22, A: 255}, ActionBackground: woxui.Color{R: 30, G: 31, B: 32, A: 255}, PreviewText: woxui.Color{A: 255}, PreviewSplit: woxui.Color{R: 90, G: 91, B: 92, A: 80}}
 	drawer := ChatCatalog(ChatCatalogProps{

@@ -2110,6 +2110,41 @@ func (m *Manager) buildSelectionFileListPreviewData(ctx context.Context, filePat
 	return string(previewData)
 }
 
+// applyDefaultSelectionPreview keeps the selection preview pane open when a
+// plugin returns no preview content. Host SDKs often emit PreviewType=text with
+// empty PreviewData, so a type-only check would still collapse the pane.
+func (m *Manager) applyDefaultSelectionPreview(ctx context.Context, query Query, preview WoxPreview) WoxPreview {
+	if query.Type != QueryTypeSelection || strings.TrimSpace(preview.PreviewData) != "" {
+		return preview
+	}
+
+	switch query.Selection.Type {
+	case selection.SelectionTypeText:
+		if strings.TrimSpace(query.Selection.Text) == "" {
+			return preview
+		}
+		return WoxPreview{
+			PreviewType: WoxPreviewTypeText,
+			PreviewData: query.Selection.Text,
+		}
+	case selection.SelectionTypeFile:
+		if len(query.Selection.FilePaths) == 0 {
+			return preview
+		}
+		return WoxPreview{
+			// Selection-file preview is now expressed as generic list rows so
+			// the same preview type can serve progress/status workflows too.
+			PreviewType: WoxPreviewTypeList,
+			PreviewData: m.buildSelectionFileListPreviewData(ctx, query.Selection.FilePaths),
+			PreviewTags: []WoxPreviewTag{
+				{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)), Tooltip: "i18n:selection_files_count"},
+			},
+		}
+	default:
+		return preview
+	}
+}
+
 func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *Instance, preview WoxPreview) WoxPreview {
 	if preview.PreviewType != WoxPreviewTypeList || preview.PreviewData == "" {
 		return preview
@@ -3132,26 +3167,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	previewTimingStart := time.Now()
 	previewDefaultStart := util.GetSystemTimestamp()
 	previewDefaultTimingStart := time.Now()
-	// add default preview for selection query if no preview is set
-	if query.Type == QueryTypeSelection && result.Preview.PreviewType == "" {
-		if query.Selection.Type == selection.SelectionTypeText {
-			result.Preview = WoxPreview{
-				PreviewType: WoxPreviewTypeText,
-				PreviewData: query.Selection.Text,
-			}
-		}
-		if query.Selection.Type == selection.SelectionTypeFile {
-			result.Preview = WoxPreview{
-				// Selection-file preview is now expressed as generic list rows so
-				// the same preview type can serve progress/status workflows too.
-				PreviewType: WoxPreviewTypeList,
-				PreviewData: m.buildSelectionFileListPreviewData(ctx, query.Selection.FilePaths),
-				PreviewTags: []WoxPreviewTag{
-					{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)), Tooltip: "i18n:selection_files_count"},
-				},
-			}
-		}
-	}
+	result.Preview = m.applyDefaultSelectionPreview(ctx, query, result.Preview)
 	PreviewDefaultCost := util.GetSystemTimestamp() - previewDefaultStart
 	PreviewDefaultCostUs := time.Since(previewDefaultTimingStart).Microseconds()
 	previewNormalizeStart := util.GetSystemTimestamp()
@@ -3773,6 +3789,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			// query results. Long-running actions commonly update list rows in place,
 			// so icon conversion and row text translation cannot live only in the
 			// first result-processing path.
+			preview = m.applyDefaultSelectionPreview(ctx, resultCache.Query, preview)
 			preview = m.normalizeListPreviewData(ctx, pluginInstance, preview)
 			preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
 		}

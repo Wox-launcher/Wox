@@ -23,6 +23,7 @@ import (
 	"wox/database"
 	"wox/setting"
 	"wox/util"
+	"wox/util/selection"
 )
 
 func TestAppendPluginInstanceRejectsDuplicateID(t *testing.T) {
@@ -550,6 +551,73 @@ func TestShouldHidePreviewForGlobalQueryStillHidesFilePreview(t *testing.T) {
 
 	assert.True(t, shouldHidePreviewForGlobalQuery(globalQuery, preview))
 	assert.False(t, shouldHidePreviewForGlobalQuery(Query{Type: QueryTypeInput, TriggerKeyword: "f"}, preview))
+}
+
+func TestApplyDefaultSelectionPreviewFillsEmptySDKPreview(t *testing.T) {
+	ctx := context.Background()
+	manager := &Manager{}
+	fileQuery := Query{
+		Type: QueryTypeSelection,
+		Selection: selection.Selection{
+			Type:      selection.SelectionTypeFile,
+			FilePaths: []string{filepath.Join(t.TempDir(), "2.4.1.exe")},
+		},
+	}
+	textQuery := Query{
+		Type: QueryTypeSelection,
+		Selection: selection.Selection{
+			Type: selection.SelectionTypeText,
+			Text: "selected quote",
+		},
+	}
+
+	emptyTextPreview := WoxPreview{PreviewType: WoxPreviewTypeText, PreviewData: ""}
+	filePreview := manager.applyDefaultSelectionPreview(ctx, fileQuery, emptyTextPreview)
+	if filePreview.PreviewType != WoxPreviewTypeList || !strings.Contains(filePreview.PreviewData, "2.4.1.exe") {
+		t.Fatalf("file selection default preview = %#v", filePreview)
+	}
+
+	textPreview := manager.applyDefaultSelectionPreview(ctx, textQuery, emptyTextPreview)
+	if textPreview.PreviewType != WoxPreviewTypeText || textPreview.PreviewData != "selected quote" {
+		t.Fatalf("text selection default preview = %#v", textPreview)
+	}
+
+	pluginPreview := WoxPreview{PreviewType: WoxPreviewTypeMarkdown, PreviewData: "# custom"}
+	kept := manager.applyDefaultSelectionPreview(ctx, fileQuery, pluginPreview)
+	if kept.PreviewType != pluginPreview.PreviewType || kept.PreviewData != pluginPreview.PreviewData {
+		t.Fatalf("explicit preview was replaced: %#v", kept)
+	}
+
+	inputPreview := manager.applyDefaultSelectionPreview(ctx, Query{Type: QueryTypeInput}, emptyTextPreview)
+	if inputPreview.PreviewType != emptyTextPreview.PreviewType || inputPreview.PreviewData != emptyTextPreview.PreviewData {
+		t.Fatalf("input query gained a selection preview: %#v", inputPreview)
+	}
+}
+
+func TestPolishUpdatableResultFillsEmptySelectionPreview(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "note.txt")
+	manager, pluginInstance := newTestManagerWithCachedResult(Query{
+		Id:        "query-selection",
+		SessionId: "session",
+		Type:      QueryTypeSelection,
+		Selection: selection.Selection{
+			Type:      selection.SelectionTypeFile,
+			FilePaths: []string{filePath},
+		},
+	}, QueryResult{
+		Id:    "result-selection",
+		Title: "Save bookmark",
+	})
+	emptyPreview := WoxPreview{PreviewType: WoxPreviewTypeText}
+
+	result := manager.PolishUpdatableResult(context.Background(), pluginInstance, UpdatableResult{
+		Id:      "result-selection",
+		Preview: &emptyPreview,
+	})
+
+	require.NotNil(t, result.Preview)
+	assert.Equal(t, WoxPreviewTypeList, result.Preview.PreviewType)
+	assert.Contains(t, result.Preview.PreviewData, "note.txt")
 }
 
 func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing.T) {

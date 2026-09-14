@@ -138,14 +138,17 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 	}
 	if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
 		items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
+		loadingHeight := chatCommandPaletteLoadingHeight(items, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
 		contentHeight := float32(len(items)) * chatCatalogRowHeight
 		if snapshot.panel == chatCommandPanel {
 			contentHeight = chatCommandContentHeight(items)
-		} else if len(items) > 0 {
+		}
+		contentHeight += loadingHeight
+		contentHeight = max(float32(40), contentHeight)
+		// Models/skills catalogs always paint the title outside the scroll viewport, including empty and loading states.
+		if snapshot.panel != chatCommandPanel {
 			contentHeight += chatCatalogGroupHeaderHeight
 		}
-		contentHeight += chatCommandPaletteLoadingHeight(items, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
-		contentHeight = max(float32(40), contentHeight)
 		return min(contentHeight+14, min(float32(310), max(float32(96), available-104)))
 	}
 	return min(float32(270), max(float32(150), available*0.44))
