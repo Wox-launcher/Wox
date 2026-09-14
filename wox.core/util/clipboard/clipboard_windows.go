@@ -49,6 +49,7 @@ func readText() (string, error) {
 	var cText *C.wchar_t
 	var cLen C.int
 	ret := C.clipboardReadText(&cText, &cLen)
+	C.clipboardReleaseDataCache()
 	if ret != 0 {
 		if ret == -1 {
 			return "", noDataErr
@@ -75,6 +76,7 @@ func readFilePaths() ([]string, error) {
 	var cPaths *C.wchar_t
 	var cLen C.int
 	ret := C.clipboardReadFilePaths(&cPaths, &cLen)
+	C.clipboardReleaseDataCache()
 	if ret != 0 {
 		if ret == -1 {
 			return nil, noDataErr
@@ -124,6 +126,7 @@ func readImageSnapshot() (*ImageSnapshot, error) {
 	var cIsPNG C.int
 	var cInfo C.BitmapInfo
 	ret := C.clipboardReadImage(&cData, &cLen, &cIsPNG, &cInfo)
+	C.clipboardReleaseDataCache()
 	if ret != 0 {
 		if ret == -1 {
 			return nil, noDataErr

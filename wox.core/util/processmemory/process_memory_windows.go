@@ -35,6 +35,10 @@ const (
 	processMemoryPrivate                 = 0x20000
 	processMemoryImage                   = 0x1000000
 	processMemoryPageGuard               = 0x100
+	processMemoryPageWriteCombine        = 0x400
+	processMemoryHeapEntryBusy           = 0x0004
+	processMemoryHeapRegion              = 0x0001
+	processMemoryHeapUncommitted         = 0x0002
 
 	// Go places every heap arena inside a single hint block, so the top bits of any live heap
 	// address identify all arena pages of this runtime. A 1 TiB block matches the runtime's
@@ -171,8 +175,11 @@ func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) 
 	attributePrivate := pid == os.Getpid()
 
 	var heapBases map[uintptr]struct{}
+	var heapFreeBytes uint64
 	if attributePrivate {
-		heapBases = nativeHeapAllocationBases()
+		heapWalk := nativeHeapAllocationBases()
+		heapBases = heapWalk.bases
+		heapFreeBytes = heapWalk.freeBytes
 	}
 
 	pageSize := uint64(os.Getpagesize())
@@ -211,13 +218,26 @@ func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) 
 			default:
 				breakdown.NativeAnonBytes += pageSize
 			}
+			if info.protect&processMemoryPageWriteCombine != 0 {
+				breakdown.GraphicsUploadBytes += pageSize
+			}
 		case processMemoryMapped:
 			breakdown.MappedBytes += pageSize
 		case processMemoryImage:
 			breakdown.ImageBytes += pageSize
 		}
 	}
+	if heapFreeBytes > breakdown.NativeHeapBytes {
+		heapFreeBytes = breakdown.NativeHeapBytes
+	}
+	breakdown.NativeHeapFreeBytes = heapFreeBytes
 	return breakdown, nil
+}
+
+// nativeHeapWalk is the local heap census used to attribute private pages.
+type nativeHeapWalk struct {
+	bases     map[uintptr]struct{}
+	freeBytes uint64
 }
 
 // nativeHeapAllocationBases collects the virtual allocations backing every Win32 heap of this
@@ -228,23 +248,23 @@ func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) 
 //
 // Returning an empty set is a valid outcome: the caller then reports those pages as direct
 // reservations, which only makes the attribution coarser rather than wrong.
-func nativeHeapAllocationBases() map[uintptr]struct{} {
+func nativeHeapAllocationBases() nativeHeapWalk {
 	// Lazy symbols must be resolved before any heap is locked. Resolving one loads its module,
 	// and the loader allocates from the process heap, which would deadlock against our own lock.
 	for _, proc := range []*syscall.LazyProc{processMemoryGetProcessHeaps, processMemoryHeapLock, processMemoryHeapUnlock, processMemoryHeapWalk, processMemoryVirtualQueryEx} {
 		if proc.Find() != nil {
-			return nil
+			return nativeHeapWalk{}
 		}
 	}
 
 	count, _, _ := processMemoryGetProcessHeaps.Call(0, 0)
 	if count == 0 {
-		return nil
+		return nativeHeapWalk{}
 	}
 	handles := make([]uintptr, count)
 	found, _, _ := processMemoryGetProcessHeaps.Call(count, uintptr(unsafe.Pointer(&handles[0])))
 	if found == 0 || found > count {
-		return nil
+		return nativeHeapWalk{}
 	}
 
 	// HeapUnlock has to run on the thread that took the lock, so the walk pins itself for the
@@ -255,6 +275,7 @@ func nativeHeapAllocationBases() map[uintptr]struct{} {
 	// The pseudo handle for the current process avoids a real handle just to query our own maps.
 	const currentProcess = ^uintptr(0)
 	bases := map[uintptr]struct{}{}
+	var freeBytes uint64
 	var walkedRegions []processMemoryAddressRange
 	var info processMemoryBasicInformation
 	for _, heap := range handles[:found] {
@@ -263,6 +284,11 @@ func nativeHeapAllocationBases() map[uintptr]struct{} {
 		for walked := 0; walked < processMemoryHeapWalkLimit; walked++ {
 			if ok, _, _ := processMemoryHeapWalk.Call(heap, uintptr(unsafe.Pointer(&entry))); ok == 0 {
 				break
+			}
+			if entry.flags&processMemoryHeapEntryBusy == 0 &&
+				entry.flags&processMemoryHeapRegion == 0 &&
+				entry.flags&processMemoryHeapUncommitted == 0 {
+				freeBytes += uint64(entry.dataSize)
 			}
 			if entry.data == 0 {
 				continue
@@ -289,7 +315,7 @@ func nativeHeapAllocationBases() map[uintptr]struct{} {
 			processMemoryHeapUnlock.Call(heap)
 		}
 	}
-	return bases
+	return nativeHeapWalk{bases: bases, freeBytes: freeBytes}
 }
 
 // classifyPrivateAllocation labels one private allocation by scanning its sub-regions once.

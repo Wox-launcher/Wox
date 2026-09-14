@@ -24,6 +24,7 @@ int clipboardGetContentType();
 int clipboardReadText(wchar_t **outText, int *outLen);
 int clipboardReadFilePaths(wchar_t **outPaths, int *outLen);
 int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, BitmapInfo *outInfo);
+void clipboardReleaseDataCache();
 int clipboardWriteText(const wchar_t *text, int textLen);
 int clipboardWriteFilePaths(const wchar_t *paths, int totalLen);
 int clipboardWriteImage(const unsigned char *pngData, int pngLen,

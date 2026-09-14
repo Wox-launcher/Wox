@@ -34,6 +34,26 @@ static BOOL copyReadableMemory(void *destination, const void *source, SIZE_T siz
     return ReadProcessMemory(GetCurrentProcess(), source, destination, size, &copied) && copied == size;
 }
 
+// clipboardReleaseDataCache drops the per-process copy user32 keeps of clipboard data fetched
+// with GetClipboardData. When the data was set by another process, user32 materializes it as a
+// GlobalAlloc block in this process and, because the clipboard owns that handle, only frees it
+// the next time this process opens the clipboard. Wox polls the sequence number without opening
+// the clipboard, so a copied screenshot would otherwise stay resident in the Wox heap until the
+// clipboard content changes. An immediate open/close pair releases the copy right after a read.
+void clipboardReleaseDataCache() {
+    if (openClipboardRetry()) {
+        CloseClipboard();
+    }
+}
+
+// closeClipboardAndReleaseCache closes the clipboard and then opens it again so user32 can
+// drop the materialized GetClipboardData copy. The second open must happen after CloseClipboard;
+// opening while this thread still holds the clipboard does nothing.
+static void closeClipboardAndReleaseCache(void) {
+    CloseClipboard();
+    clipboardReleaseDataCache();
+}
+
 // clipboardGetContentType checks what type of data is on the clipboard.
 // Returns: 0=empty, 1=text, 2=image, 3=file
 // Priority: file > image > text
@@ -143,13 +163,13 @@ int clipboardReadFilePaths(wchar_t **outPaths, int *outLen) {
 
     HANDLE hDrop = GetClipboardData(CF_HDROP);
     if (hDrop == NULL) {
-        CloseClipboard();
+        closeClipboardAndReleaseCache();
         return -3;
     }
 
     UINT fileCount = DragQueryFileW((HDROP)hDrop, 0xFFFFFFFF, NULL, 0);
     if (fileCount == 0) {
-        CloseClipboard();
+        closeClipboardAndReleaseCache();
         return -4;
     }
 
@@ -163,7 +183,7 @@ int clipboardReadFilePaths(wchar_t **outPaths, int *outLen) {
 
     wchar_t *buf = (wchar_t *)malloc(totalChars * sizeof(wchar_t));
     if (buf == NULL) {
-        CloseClipboard();
+        closeClipboardAndReleaseCache();
         return -7;
     }
 
@@ -177,7 +197,7 @@ int clipboardReadFilePaths(wchar_t **outPaths, int *outLen) {
     }
     buf[pos] = 0;  // final null
 
-    CloseClipboard();
+    closeClipboardAndReleaseCache();
 
     *outPaths = buf;
     *outLen = totalChars;
@@ -224,7 +244,7 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
                     }
                     if (buf != NULL) {
                         GlobalUnlock(hPng);
-                        CloseClipboard();
+                        closeClipboardAndReleaseCache();
 
                         *outData = buf;
                         *outLen = (int)pngSize;
@@ -241,37 +261,37 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
     if (hasDIB) {
         HANDLE hDib = GetClipboardData(CF_DIB);
         if (hDib == NULL) {
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -3;
         }
 
         SIZE_T dibSize = GlobalSize(hDib);
         if (dibSize == 0 || dibSize > 128 * 1024 * 1024) {
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -4;
         }
 
         void *pDib = GlobalLock(hDib);
         if (pDib == NULL) {
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -5;
         }
 
         unsigned char *buf = (unsigned char *)malloc(dibSize);
         if (buf == NULL) {
             GlobalUnlock(hDib);
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -7;
         }
         if (!copyReadableMemory(buf, pDib, dibSize)) {
             free(buf);
             GlobalUnlock(hDib);
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -8;
         }
 
         GlobalUnlock(hDib);
-        CloseClipboard();
+        closeClipboardAndReleaseCache();
 
         // Read metadata only from the validated private copy.
         if (dibSize >= sizeof(BITMAPINFOHEADER)) {
@@ -294,37 +314,37 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
     if (hasDIBV5) {
         HANDLE hDib = GetClipboardData(CF_DIBV5);
         if (hDib == NULL) {
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -3;
         }
 
         SIZE_T dibSize = GlobalSize(hDib);
         if (dibSize == 0 || dibSize > 128 * 1024 * 1024) {
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -4;
         }
 
         void *pDib = GlobalLock(hDib);
         if (pDib == NULL) {
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -5;
         }
 
         unsigned char *buf = (unsigned char *)malloc(dibSize);
         if (buf == NULL) {
             GlobalUnlock(hDib);
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -7;
         }
         if (!copyReadableMemory(buf, pDib, dibSize)) {
             free(buf);
             GlobalUnlock(hDib);
-            CloseClipboard();
+            closeClipboardAndReleaseCache();
             return -8;
         }
 
         GlobalUnlock(hDib);
-        CloseClipboard();
+        closeClipboardAndReleaseCache();
 
         if (dibSize >= sizeof(BITMAPINFOHEADER)) {
             BITMAPINFOHEADER *hdr = (BITMAPINFOHEADER *)buf;
@@ -343,7 +363,7 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
         return 0;
     }
 
-    CloseClipboard();
+    closeClipboardAndReleaseCache();
     return -6;
 }
 

@@ -23,11 +23,18 @@ type PrivateWorkingSetBreakdown struct {
 	// memory a library reserved from the OS directly. Separating them matters because the two
 	// have different owners: the former is ordinary C runtime allocation by any loaded component,
 	// the latter is dominated by graphics drivers and other subsystems with private allocators.
-	GoHeapBytes       uint64
-	ThreadStackBytes  uint64
-	NativeHeapBytes   uint64
-	NativeAnonBytes   uint64
-	PrivateAttributed bool
+	GoHeapBytes      uint64
+	ThreadStackBytes uint64
+	NativeHeapBytes  uint64
+	NativeAnonBytes  uint64
+	// NativeHeapFreeBytes is the committed but unused part of NativeHeapBytes. It is a subset,
+	// not an extra bucket, and is capped at NativeHeapBytes so a virtual heap walk cannot
+	// outrun resident pages.
+	NativeHeapFreeBytes uint64
+	// GraphicsUploadBytes is the WRITECOMBINE subset of NativeAnonBytes: CPU-side GPU upload
+	// and staging buffers. It is a subset, not an extra bucket.
+	GraphicsUploadBytes uint64
+	PrivateAttributed   bool
 }
 
 func GetProcessRSSBytes(pid int) (uint64, error) {

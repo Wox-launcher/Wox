@@ -319,6 +319,46 @@ func TestGoComponentOpensTheBreakdownCommand(t *testing.T) {
 	t.Fatal("the default page must report a Go memory component")
 }
 
+func TestAttributeOffHeapGoRuntimePagesMovesMetadataOutOfNative(t *testing.T) {
+	diagnostics := memoryDiagnostics{
+		privateAttributed: true,
+		goPrivateBytes:    400,
+		nativeAnonBytes:   350,
+		goMetadataBytes:   120,
+	}
+	attributeOffHeapGoRuntimePages(&diagnostics)
+	if diagnostics.goPrivateBytes != 520 || diagnostics.nativeAnonBytes != 230 {
+		t.Fatalf("after move: go=%d anon=%d, want 520 and 230", diagnostics.goPrivateBytes, diagnostics.nativeAnonBytes)
+	}
+
+	capped := memoryDiagnostics{privateAttributed: true, nativeAnonBytes: 50, goMetadataBytes: 120}
+	attributeOffHeapGoRuntimePages(&capped)
+	if capped.nativeAnonBytes != 0 || capped.goPrivateBytes != 50 {
+		t.Fatalf("metadata larger than anon must cap the move: go=%d anon=%d", capped.goPrivateBytes, capped.nativeAnonBytes)
+	}
+}
+
+func TestNativeOwnerResultsIncludeHeapFree(t *testing.T) {
+	diagnostics := memoryDiagnostics{
+		privateAttributed:   true,
+		nativeHeapBytes:     400,
+		nativeHeapFreeBytes: 150,
+		sqliteBytes:         80,
+	}
+	results := nativeOwnerResults(context.Background(), diagnostics)
+	nativeGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
+	want := []string{"memory.native.unnamed", heapFreeOwnerResultID, "memory.native.sqlite"}
+	if got := resultIDsByGroup(results)[nativeGroup]; !slices.Equal(got, want) {
+		t.Fatalf("native owners = %#v, want %#v sorted by size", got, want)
+	}
+	wantUnnamed := nativeComponentBytes(diagnostics) - diagnostics.nativeHeapFreeBytes - diagnostics.sqliteBytes
+	for _, result := range results {
+		if result.Id == "memory.native.unnamed" && result.Score != int64(wantUnnamed) {
+			t.Fatalf("unnamed = %d, want native minus heap free and SQLite (%d)", result.Score, wantUnnamed)
+		}
+	}
+}
+
 func TestNativeOwnerResultsExplainTheNativeComponent(t *testing.T) {
 	diagnostics := memoryDiagnostics{
 		privateAttributed: true,

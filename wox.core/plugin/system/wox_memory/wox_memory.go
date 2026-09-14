@@ -97,11 +97,12 @@ type memoryDiagnostics struct {
 	goPrivateBytes    uint64
 	// nativeHeapBytes and nativeAnonBytes are disjoint halves of the native component: memory
 	// served by malloc or HeapAlloc, and memory a library reserved from the OS directly.
-	nativeHeapBytes    uint64
-	nativeAnonBytes    uint64
-	threadStackBytes   uint64
-	privateImageBytes  uint64
-	privateMappedBytes uint64
+	nativeHeapBytes     uint64
+	nativeAnonBytes     uint64
+	nativeHeapFreeBytes uint64
+	threadStackBytes    uint64
+	privateImageBytes   uint64
+	privateMappedBytes  uint64
 	// nativeGapBytes is the legacy subtraction estimate, used only where the platform cannot
 	// classify private pages by owner.
 	nativeGapBytes uint64
@@ -298,6 +299,7 @@ const (
 	// Child processes below this size add noise without changing any conclusion.
 	minimumReportedChildBytes = 1 << 20
 	gpuOwnerResultID          = "memory.native.gpu"
+	heapFreeOwnerResultID     = "memory.native.heap_free"
 )
 
 // buildMemoryDiagnosticResults reports the default page: a measured partition of the private
@@ -547,6 +549,16 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 			gpuOwnerGroupScore,
 		))
 	}
+	if diagnostics.nativeHeapFreeBytes > 0 {
+		results = append(results, memoryDiagnosticResult(
+			heapFreeOwnerResultID,
+			translateMemory(ctx, "plugin_wox_memory_heap_free"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_heap_free_detail"), formatMemoryBytes(diagnostics.nativeHeapFreeBytes)),
+			diagnostics.nativeHeapFreeBytes,
+			group,
+			nativeOwnerGroupScore,
+		))
+	}
 	if diagnostics.sqliteBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.native.sqlite",
@@ -772,19 +784,23 @@ func captureMemoryDiagnostics(ctx context.Context) memoryDiagnostics {
 		privateImageBytes:  workingSet.ImageBytes,
 		privateMappedBytes: workingSet.MappedBytes,
 		decodedImageBytes:  decodedImages,
-		rendererBytes:      renderer,
-		gpu:                ui.GetUIManager().GPUMemoryDiagnostics(),
-		sqliteBytes:        sqlitememory.UsedBytes(),
-		sqlitePeakBytes:    sqlitememory.PeakBytes(),
-		paddleOCRLoaded:    paddleLoaded && paddleBytes == 0,
-		paddleOCRBytes:     paddleBytes,
+		// WRITECOMBINE pages are GPU upload/staging buffers that live in this process. They
+		// belong with the renderer, not the unnamed native remainder.
+		rendererBytes:   renderer + workingSet.GraphicsUploadBytes,
+		gpu:             ui.GetUIManager().GPUMemoryDiagnostics(),
+		sqliteBytes:     sqlitememory.UsedBytes(),
+		sqlitePeakBytes: sqlitememory.PeakBytes(),
+		paddleOCRLoaded: paddleLoaded && paddleBytes == 0,
+		paddleOCRBytes:  paddleBytes,
 	}
 	if workingSet.PrivateAttributed {
 		diagnostics.privateAttributed = true
 		diagnostics.goPrivateBytes = workingSet.GoHeapBytes
 		diagnostics.nativeHeapBytes = workingSet.NativeHeapBytes
 		diagnostics.nativeAnonBytes = workingSet.NativeAnonBytes
+		diagnostics.nativeHeapFreeBytes = workingSet.NativeHeapFreeBytes
 		diagnostics.threadStackBytes = workingSet.ThreadStackBytes
+		attributeOffHeapGoRuntimePages(&diagnostics)
 	} else {
 		diagnostics.nativeGapBytes = estimateNativeGap(processBytes, goRetained, renderer, paddleBytes, workingSet)
 	}
@@ -926,6 +942,22 @@ func subtractFloor(total, part uint64) uint64 {
 		return 0
 	}
 	return total - part
+}
+
+// attributeOffHeapGoRuntimePages moves runtime metadata that lives outside Go arenas from the
+// native anonymous bucket into the Go private total. Those pages are VirtualAlloc'd by the
+// runtime (span records, GC bitmaps, profiling tables) and are therefore invisible to the
+// arena-block classifier.
+func attributeOffHeapGoRuntimePages(diagnostics *memoryDiagnostics) {
+	if diagnostics == nil || !diagnostics.privateAttributed || diagnostics.goMetadataBytes == 0 {
+		return
+	}
+	moved := diagnostics.goMetadataBytes
+	if moved > diagnostics.nativeAnonBytes {
+		moved = diagnostics.nativeAnonBytes
+	}
+	diagnostics.nativeAnonBytes -= moved
+	diagnostics.goPrivateBytes += moved
 }
 
 // formatMemoryBytes keeps live diagnostics compact enough for result subtitles.

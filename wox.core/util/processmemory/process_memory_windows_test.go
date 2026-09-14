@@ -86,6 +86,31 @@ func TestPrivateWorkingSetBreakdownAttributesHeapAllocations(t *testing.T) {
 	}
 }
 
+func TestPrivateWorkingSetBreakdownAttributesWriteCombinePages(t *testing.T) {
+	const allocationBytes = 4 << 20
+	const memCommitReserve = 0x3000
+	const pageReadWriteCombine = 0x404
+	const memRelease = 0x8000
+	addr, _, _ := processMemoryKernel32.NewProc("VirtualAlloc").Call(0, allocationBytes, memCommitReserve, pageReadWriteCombine)
+	if addr == 0 {
+		t.Skip("WRITECOMBINE allocation is unavailable")
+	}
+	defer processMemoryKernel32.NewProc("VirtualFree").Call(addr, 0, memRelease)
+
+	touched := unsafe.Slice((*byte)(unsafe.Pointer(addr)), allocationBytes)
+	for index := range touched {
+		touched[index] = 1
+	}
+
+	breakdown, err := GetPrivateWorkingSetBreakdown(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if breakdown.GraphicsUploadBytes < allocationBytes/2 {
+		t.Fatalf("graphics upload bucket is %d after a %d byte WRITECOMBINE allocation", breakdown.GraphicsUploadBytes, allocationBytes)
+	}
+}
+
 func TestPrivateWorkingSetBreakdownSkipsAttributionForOtherProcesses(t *testing.T) {
 	// Attribution probes this runtime's own heap, so it must stay off for any other process
 	// rather than labelling unrelated pages as Go memory.
