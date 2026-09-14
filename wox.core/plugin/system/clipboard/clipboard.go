@@ -1731,8 +1731,13 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(*record.OCRText)})
 	}
 
+	title := record.Content
+	if record.Alias != nil && *record.Alias != "" {
+		title = *record.Alias
+	}
+
 	result := plugin.QueryResult{
-		Title:      record.Content, // Already formatted as "Image (WxH) (size)"
+		Title:      title,
 		Icon:       iconWoxImage,
 		Group:      group,
 		GroupScore: groupScore,
@@ -1781,6 +1786,36 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
 	}
 
+	if !record.IsFavorite {
+		result.Actions = append(result.Actions, plugin.QueryResultAction{
+			Name:                   "i18n:plugin_clipboard_mark_favorite",
+			Icon:                   icons.Get(icons.ActionStar),
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := c.markAsFavorite(ctx, record); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to set favorite: %s", err.Error()))
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("marked record as favorite: %s", record.ID))
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+				}
+			},
+		})
+	} else {
+		result.Actions = append(result.Actions, plugin.QueryResultAction{
+			Name:                   "i18n:plugin_clipboard_cancel_favorite",
+			Icon:                   icons.Get(icons.ActionUnstar),
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := c.cancelFavorite(ctx, record.ID); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to cancel favorite: %s", err.Error()))
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("cancelled record favorite: %s", record.ID))
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+				}
+			},
+		})
+	}
+
 	result.Actions = append(result.Actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   icons.Get(icons.ActionDelete),
@@ -1793,6 +1828,58 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			}
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
 			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	})
+
+	aliasDefaultValue := ""
+	if record.Alias != nil {
+		aliasDefaultValue = *record.Alias
+	}
+	result.Actions = append(result.Actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_edit_alias",
+		Icon:                   icons.Get(icons.ActionEdit),
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "alias",
+					Label:        "i18n:plugin_clipboard_edit_alias_label",
+					DefaultValue: aliasDefaultValue,
+					Tooltip:      "i18n:plugin_clipboard_edit_alias_hint",
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			raw := actionContext.Values["alias"]
+			var aliasPtr *string
+			if raw != "" {
+				aliasPtr = &raw
+			}
+
+			isUpdateSuccess := false
+			if record.IsFavorite {
+				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite alias: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update favorite alias: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record alias: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			} else {
+				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update alias: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update clipboard alias: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record alias: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			}
+
+			if isUpdateSuccess {
+				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			}
 		},
 	})
 	if record.OCRText != nil {

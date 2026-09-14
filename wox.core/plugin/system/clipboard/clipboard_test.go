@@ -57,6 +57,53 @@ func TestImagePasteFailureUsesTranslatedNotification(t *testing.T) {
 	t.Fatal("default paste action missing")
 }
 
+func TestConvertImageRecordExposesFavoriteAndAliasActions(t *testing.T) {
+	api := &imagePasteFailureAPI{}
+	c := &ClipboardPlugin{api: api, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	alias := "receipt screenshot"
+	result := c.convertImageRecord(context.Background(), ClipboardRecord{
+		ID:      "image-fav",
+		Type:    string(clipboard.ClipboardTypeImage),
+		Content: "Image (10×10) (1 B)",
+		Alias:   &alias,
+	}, plugin.Query{})
+
+	if result.Title != alias {
+		t.Fatalf("title = %q, want alias %q", result.Title, alias)
+	}
+	if !clipboardResultHasAction(result, "i18n:plugin_clipboard_mark_favorite") {
+		t.Fatal("image records must expose add to favorites")
+	}
+	if clipboardResultHasAction(result, "i18n:plugin_clipboard_cancel_favorite") {
+		t.Fatal("non-favorite image records must not expose cancel favorite")
+	}
+	if !clipboardResultHasAction(result, "i18n:plugin_clipboard_edit_alias") {
+		t.Fatal("image records must expose edit alias")
+	}
+
+	favorite := c.convertImageRecord(context.Background(), ClipboardRecord{
+		ID:         "image-fav",
+		Type:       string(clipboard.ClipboardTypeImage),
+		Content:    "Image (10×10) (1 B)",
+		IsFavorite: true,
+	}, plugin.Query{})
+	if !clipboardResultHasAction(favorite, "i18n:plugin_clipboard_cancel_favorite") {
+		t.Fatal("favorite image records must expose cancel favorite")
+	}
+	if clipboardResultHasAction(favorite, "i18n:plugin_clipboard_mark_favorite") {
+		t.Fatal("favorite image records must not expose add to favorites")
+	}
+}
+
+func clipboardResultHasAction(result plugin.QueryResult, name string) bool {
+	for _, action := range result.Actions {
+		if action.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestApplyCopyPastePrimaryActionHotkeys(t *testing.T) {
 	alternate := util.PrimaryHotkey("enter")
 
