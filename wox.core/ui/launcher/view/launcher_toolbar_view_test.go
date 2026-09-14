@@ -259,9 +259,54 @@ func TestLauncherToolbarActionHoversLabelAndKeycapsTogether(t *testing.T) {
 	}
 }
 
+// TestToolbarPrimaryHierarchy keeps configured emphasis independent of hover and secondary actions.
+func TestToolbarPrimaryHierarchy(t *testing.T) {
+	for _, alpha := range []uint8{0, 160, 255} {
+		for _, hovered := range []bool{false, true} {
+			for _, primary := range []bool{false, true} {
+				normal := woxui.Color{R: 80, G: 90, B: 100, A: 200}
+				emphasis := woxui.Color{R: 120, G: 180, B: 160, A: alpha}
+				theme := woxcomponent.Theme{ToolbarText: normal, ToolbarPrimaryFontColor: &emphasis}
+				built, _ := launcherToolbarActionSurface(LauncherToolbarAction{ID: "action", Pinned: primary, Label: "Action", HotkeyLabels: []string{"Enter"}}, theme, &woxui.Window{}, 1, hovered)
+				label := built.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Text)
+				want := normal
+				if primary {
+					want = emphasis
+				}
+				if label.Color != want {
+					t.Fatalf("primary=%v hovered=%v: color = %v, want %v", primary, hovered, label.Color, want)
+				}
+			}
+		}
+	}
+}
+
+// TestToolbarOpenPanelKeepsHoverHighlight covers open/closed and pointer transitions without changing geometry.
+func TestToolbarOpenPanelKeepsHoverHighlight(t *testing.T) {
+	theme := woxcomponent.Theme{ToolbarBackground: woxui.Color{R: 20, A: 100}, ToolbarText: woxui.Color{R: 160, A: 255}}
+	var expectedWidth float32
+	for _, active := range []bool{false, true, false} {
+		for _, hovered := range []bool{false, true} {
+			built, width := launcherToolbarActionSurface(LauncherToolbarAction{ID: launcherToolbarMoreActionID, Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}, Active: active}, theme, &woxui.Window{}, 1, hovered)
+			if expectedWidth == 0 {
+				expectedWidth = width
+			}
+			want, wantChip := woxui.Color{}, theme.ToolbarBackground
+			if active || hovered {
+				want = woxcomponent.ControlHoverColor(theme.ToolbarBackground, theme.ToolbarText)
+				wantChip = want
+			}
+			container := built.(woxwidget.Container)
+			if container.Color != want || toolbarActionKeycapFill(t, container) != wantChip || width != expectedWidth {
+				t.Fatalf("active=%v hovered=%v: incorrect trigger highlight or width", active, hovered)
+			}
+		}
+	}
+}
+
 func toolbarActionKeycapFill(t *testing.T, action woxwidget.Container) woxui.Color {
 	t.Helper()
-	chip := action.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	chip := action.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
 	return chip.Children[0].Child.(woxwidget.Container).Color
 }
 

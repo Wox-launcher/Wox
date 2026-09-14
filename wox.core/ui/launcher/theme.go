@@ -76,6 +76,10 @@ type themeData struct {
 	AttentionHoverBorderColor                  string
 
 	ActionContainerDividerColor           string
+	ToolbarPrimaryFontColor               string
+	ToolbarPrimaryHotkeyFontColor         string
+	ToolbarPrimaryHotkeyBackgroundColor   string
+	ToolbarPrimaryHotkeyBorderColor       string
 	ToolbarHotkeyFontColor                string
 	ActionItemHotkeyFontColor             string
 	ActionItemActiveHotkeyFontColor       string
@@ -209,6 +213,10 @@ type uiPalette struct {
 	AttentionHoverBorderColor                  *woxui.Color
 
 	ActionContainerDividerColor           *woxui.Color
+	ToolbarPrimaryFontColor               *woxui.Color
+	ToolbarPrimaryHotkeyFontColor         *woxui.Color
+	ToolbarPrimaryHotkeyBackgroundColor   *woxui.Color
+	ToolbarPrimaryHotkeyBorderColor       *woxui.Color
 	ToolbarHotkeyFontColor                *woxui.Color
 	ActionItemHotkeyFontColor             *woxui.Color
 	ActionItemActiveHotkeyFontColor       *woxui.Color
@@ -329,6 +337,10 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		AttentionHoverBorderColor:                  palette.AttentionHoverBorderColor,
 
 		ActionContainerDividerColor:           palette.ActionContainerDividerColor,
+		ToolbarPrimaryFontColor:               palette.ToolbarPrimaryFontColor,
+		ToolbarPrimaryHotkeyFontColor:         palette.ToolbarPrimaryHotkeyFontColor,
+		ToolbarPrimaryHotkeyBackgroundColor:   palette.ToolbarPrimaryHotkeyBackgroundColor,
+		ToolbarPrimaryHotkeyBorderColor:       palette.ToolbarPrimaryHotkeyBorderColor,
 		ToolbarHotkeyFontColor:                palette.ToolbarHotkeyFontColor,
 		ActionItemHotkeyFontColor:             palette.ActionItemHotkeyFontColor,
 		ActionItemActiveHotkeyFontColor:       palette.ActionItemActiveHotkeyFontColor,
@@ -589,6 +601,10 @@ func paletteForTheme(theme themeData) uiPalette {
 		AttentionHoverBackgroundColor:              optionalThemeColor(theme.AttentionHoverBackgroundColor),
 		AttentionHoverBorderColor:                  optionalThemeColor(theme.AttentionHoverBorderColor),
 
+		ToolbarPrimaryFontColor:               optionalThemeColor(theme.ToolbarPrimaryFontColor),
+		ToolbarPrimaryHotkeyFontColor:         optionalThemeColor(theme.ToolbarPrimaryHotkeyFontColor),
+		ToolbarPrimaryHotkeyBackgroundColor:   optionalThemeColor(theme.ToolbarPrimaryHotkeyBackgroundColor),
+		ToolbarPrimaryHotkeyBorderColor:       optionalThemeColor(theme.ToolbarPrimaryHotkeyBorderColor),
 		ToolbarHotkeyFontColor:                optionalThemeColor(theme.ToolbarHotkeyFontColor),
 		ActionItemHotkeyFontColor:             optionalThemeColor(theme.ActionItemHotkeyFontColor),
 		ActionItemActiveHotkeyFontColor:       optionalThemeColor(theme.ActionItemActiveHotkeyFontColor),

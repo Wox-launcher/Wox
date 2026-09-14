@@ -10,6 +10,73 @@ import (
 
 const minimalV2Theme = `{"SchemaVersion":2,"ThemeId":"test-v2","ThemeName":"Test","BaseBackgroundColor":"#182020B8","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6"}`
 
+// TestToolbarPrimaryThemeInheritance preserves sparse saves, per-platform inheritance and transparent overrides.
+func TestToolbarPrimaryThemeInheritance(t *testing.T) {
+	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"ToolbarFontColor":"#12345680","ToolbarHotkeyFontColor":"#23456790","ToolbarHotkeyBackgroundColor":"#34567860","ToolbarHotkeyBorderColor":"#45678950","windows":{"ToolbarFontColor":"#ABCDEF80","ToolbarPrimaryHotkeyBorderColor":"transparent"}}`
+	var theme Theme
+	if err := json.Unmarshal([]byte(input), &theme); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"windows", "macos", "linux"} {
+		resolved, err := theme.ResolveForTarget(platform, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		colors := resolved.ResolvedColors()
+		for primary, normal := range map[string]string{"ToolbarPrimaryFontColor": "ToolbarFontColor", "ToolbarPrimaryHotkeyFontColor": "ToolbarHotkeyFontColor", "ToolbarPrimaryHotkeyBackgroundColor": "ToolbarHotkeyBackgroundColor", "ToolbarPrimaryHotkeyBorderColor": "ToolbarHotkeyBorderColor"} {
+			want := colors[normal]
+			if platform == "windows" && primary == "ToolbarPrimaryHotkeyBorderColor" {
+				want = "#00000000"
+			}
+			if colors[primary] != want {
+				t.Fatalf("%s/%s = %s, want %s", platform, primary, colors[primary], want)
+			}
+		}
+	}
+	encoded, err := json.Marshal(theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &saved); err != nil {
+		t.Fatal(err)
+	}
+	for key := range saved {
+		if strings.HasPrefix(key, "ToolbarPrimary") {
+			t.Fatalf("save materialized inherited field %s", key)
+		}
+	}
+	var restored Theme
+	if err := json.Unmarshal(encoded, &restored); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := restored.ResolveForTarget("windows", "")
+	if err != nil || resolved.ResolvedColors()["ToolbarPrimaryHotkeyBorderColor"] != "#00000000" {
+		t.Fatal("save lost explicit transparent platform override")
+	}
+}
+
+// TestBuiltinHotkeyHierarchy validates shipped palettes without dimming selected shortcut text.
+func TestBuiltinHotkeyHierarchy(t *testing.T) {
+	for _, name := range []string{"dark", "light", "glass", "jade", "saffron"} {
+		data, err := os.ReadFile("../resource/themes/" + name + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var theme Theme
+		if err := json.Unmarshal(data, &theme); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		colors := theme.ResolvedColors()
+		if !strings.HasSuffix(colors["ToolbarHotkeyBorderColor"], "4D") || !strings.HasSuffix(colors["ActionItemHotkeyBorderColor"], "4D") || !strings.HasSuffix(colors["ActionItemActiveHotkeyBorderColor"], "66") || colors["ActionItemActiveHotkeyBackgroundColor"] != "#00000000" {
+			t.Fatalf("%s: keycap chrome should remain secondary", name)
+		}
+		if colors["ActionItemActiveHotkeyFontColor"] != theme.ActionItemActiveFontColor {
+			t.Fatalf("%s: selected shortcut text must retain the selected label contrast", name)
+		}
+	}
+}
+
 // TestThemeV2ContentPanel keeps sparse defaults, platform overrides and material selection independent.
 func TestThemeV2ContentPanel(t *testing.T) {
 	for _, extra := range []string{"", `,"AppContentInset":null,"AppContentBackgroundColor":null,"AppContentBorderRadius":null`, `,"AppContentInset":0,"AppContentBackgroundColor":"transparent","AppContentBorderRadius":0`} {

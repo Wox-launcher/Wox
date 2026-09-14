@@ -22,7 +22,8 @@ package woxui
 //     surface; a surface stacked over one paints an opaque cover of its tint
 //     instead (see DisplayList.FloatingMaterial).
 //   - Windows blurs the Direct2D back buffer under the surface rectangle in place
-//     while the frame is encoded, then paints the tint and edge over the blur.
+//     while the frame is encoded, compresses backdrop contrast/chroma around the
+//     authored tint without changing sampled alpha, then paints the tint and edge.
 //     Everything drawn before the material this frame, including other floating
 //     surfaces, is part of the sampled backdrop, so stacking needs no cover.
 //   - Linux does the same with its OpenGL back buffer. Compositor blur

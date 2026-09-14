@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "renderer_windows.h"
+#include "floating_material_windows_tone.h"
 
 struct CachedImageBitmap {
   uint64_t image_id = 0;
@@ -64,6 +65,7 @@ struct WoxRenderer {
   D2D1_SIZE_U material_source_size = {};
   ID2D1Effect *material_crop_effect = nullptr;
   ID2D1Effect *material_blur_effect = nullptr;
+  ID2D1Effect *material_tone_effect = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
 	std::wstring font_family = L"Segoe UI";
   bool uses_default_font_family = true;
@@ -287,6 +289,7 @@ static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
 static void release_material_resources(WoxRenderer *renderer) {
   release_com(&renderer->caret_backdrop);
   renderer->caret_valid = false;
+  release_com(&renderer->material_tone_effect);
   release_com(&renderer->material_blur_effect);
   release_com(&renderer->material_crop_effect);
   release_com(&renderer->material_source_bitmap);
@@ -1057,7 +1060,7 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
   return S_OK;
 }
 
-// ensure_material_resources lazily creates the crop -> Gaussian blur graph and grows the
+// ensure_material_resources lazily creates the crop -> Gaussian blur -> tone graph and grows the
 // backdrop copy to at least the requested pixel size. It only grows, so a panel and a
 // tooltip of different sizes in the same frame share one bitmap instead of reallocating.
 static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, uint32_t height) {
@@ -1099,6 +1102,13 @@ static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, 
     renderer->material_blur_effect->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, optimization_speed);
     renderer->material_blur_effect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, border_mode);
   }
+  if (renderer->material_tone_effect == nullptr) {
+    HRESULT result = renderer->d2d_context->CreateEffect(CLSID_D2D1ColorMatrix, &renderer->material_tone_effect);
+    if (FAILED(result)) {
+      return result;
+    }
+    renderer->material_tone_effect->SetInputEffect(0, renderer->material_blur_effect);
+  }
   return S_OK;
 }
 
@@ -1107,7 +1117,7 @@ static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, 
 // copy the region (plus margin) out of the back buffer, run it through the blur graph, and
 // draw it back inside the rounded shape while the corners keep their sharp pixels. Every
 // step that can fail runs before the target is touched, so a failure leaves it as it was.
-static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin) {
+static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue) {
   const float scale = renderer->scale;
   const D2D1_SIZE_U target_size = renderer->target_bitmap->GetPixelSize();
   const auto clamp_pixel = [](float value, uint32_t limit) {
@@ -1125,6 +1135,15 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
   const uint32_t source_height = bottom - top;
 
   HRESULT result = ensure_material_resources(renderer, source_width, source_height);
+  if (FAILED(result)) {
+    return result;
+  }
+  // Suppress bright, saturated icon blobs without changing the surface's authored alpha.
+  const auto tone = floating_material_tone_matrix(tint_red / 255.0f, tint_green / 255.0f, tint_blue / 255.0f);
+  result = renderer->material_tone_effect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, tone);
+  if (SUCCEEDED(result)) {
+    result = renderer->material_tone_effect->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
+  }
   if (FAILED(result)) {
     return result;
   }
@@ -1197,7 +1216,7 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
     layer.geometricMask = shape;
     renderer->d2d_context->PushLayer(&layer, nullptr);
     renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
-    renderer->d2d_context->DrawImage(renderer->material_blur_effect, &offset, nullptr, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
+    renderer->d2d_context->DrawImage(renderer->material_tone_effect, &offset, nullptr, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
     renderer->d2d_context->SetTransform(transform);
     renderer->d2d_context->PopLayer();
 
@@ -1231,7 +1250,7 @@ extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x
     return E_INVALIDARG;
   }
   if (!renderer->uses_warp && !renderer->overlay_active && blur_sigma > 0.0f) {
-    const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin);
+    const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin, tint_red, tint_green, tint_blue);
     // A lost device must surface through the normal recovery path; any other failure only
     // costs the blur, and the tint below still reads as a panel.
     if (FAILED(result) && FAILED(renderer->device->GetDeviceRemovedReason())) {

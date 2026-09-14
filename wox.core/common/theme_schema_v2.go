@@ -157,9 +157,13 @@ type ThemeSchemaV2 struct {
 	PreviewPropertyContentColor *string `json:",omitempty"`
 	PreviewTextSelectionColor   *string `json:",omitempty"`
 
-	ToolbarHotkeyFontColor       *string `json:",omitempty"`
-	ToolbarHotkeyBackgroundColor *string `json:",omitempty"`
-	ToolbarHotkeyBorderColor     *string `json:",omitempty"`
+	ToolbarPrimaryFontColor             *string `json:",omitempty"`
+	ToolbarPrimaryHotkeyFontColor       *string `json:",omitempty"`
+	ToolbarPrimaryHotkeyBackgroundColor *string `json:",omitempty"`
+	ToolbarPrimaryHotkeyBorderColor     *string `json:",omitempty"`
+	ToolbarHotkeyFontColor              *string `json:",omitempty"`
+	ToolbarHotkeyBackgroundColor        *string `json:",omitempty"`
+	ToolbarHotkeyBorderColor            *string `json:",omitempty"`
 
 	ActionItemHotkeyFontColor       *string `json:",omitempty"`
 	ActionItemHotkeyBackgroundColor *string `json:",omitempty"`
@@ -493,6 +497,17 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 				return nil, fmt.Errorf("%s must be non-negative", key)
 			}
 			values[key] = number
+		}
+	}
+	// Unauthored emphasis follows the effective toolbar palette, including platform overrides.
+	for primary, normal := range map[string]string{
+		"ToolbarPrimaryFontColor":             "ToolbarFontColor",
+		"ToolbarPrimaryHotkeyFontColor":       "ToolbarHotkeyFontColor",
+		"ToolbarPrimaryHotkeyBackgroundColor": "ToolbarHotkeyBackgroundColor",
+		"ToolbarPrimaryHotkeyBorderColor":     "ToolbarHotkeyBorderColor",
+	} {
+		if _, authored := values[primary]; !authored {
+			values[primary] = values[normal]
 		}
 	}
 	// Base values also pass through normalization (notably the CSS transparent keyword).

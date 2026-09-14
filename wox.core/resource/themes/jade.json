@@ -116,13 +116,15 @@
   "GlanceHoverBackgroundColor": "#F2F7F419",
   "PreviewBorderRadius": 16,
   "PreviewTagBorderRadius": 8,
+  "ToolbarPrimaryFontColor": "#F2F7F4FF",
+  "ToolbarPrimaryHotkeyFontColor": "#F2F7F4FF",
   "ToolbarHotkeyFontColor": "#BDCEC5FF",
   "ActionItemHotkeyFontColor": "#BDCEC5FF",
   "ActionItemActiveHotkeyFontColor": "#F2F7F4FF",
   "ToolbarHotkeyBackgroundColor": "#BDCEC50D",
   "ActionItemHotkeyBackgroundColor": "#BDCEC50D",
-  "ActionItemActiveHotkeyBackgroundColor": "#293C36FF",
+  "ActionItemActiveHotkeyBackgroundColor": "#00000000",
   "ToolbarHotkeyBorderColor": "#BDCEC54D",
   "ActionItemHotkeyBorderColor": "#BDCEC54D",
-  "ActionItemActiveHotkeyBorderColor": "#F2F7F4FF"
+  "ActionItemActiveHotkeyBorderColor": "#F2F7F466"
 }

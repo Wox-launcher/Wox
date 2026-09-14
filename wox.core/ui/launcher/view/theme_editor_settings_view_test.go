@@ -170,7 +170,19 @@ func TestThemeEditorUsesCompleteLauncherDemo(t *testing.T) {
 	if len(accessories.Children) != 2 {
 		t.Fatalf("theme demo query accessories = %d, want attention and glance", len(accessories.Children))
 	}
-	timeText := accessories.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text).Value
+	for _, accessory := range accessories.Children {
+		aligned := accessory.(woxwidget.Container).Child.(woxwidget.Align)
+		if aligned.Height != 30 || aligned.Vertical != 0.5 {
+			t.Fatal("preview accessories must center their content in the same 30-unit slot")
+		}
+	}
+	attentionRow := accessories.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	iconColor, _, _, _ := (woxcomponent.Theme{QueryText: woxui.Color{A: 255}}).AttentionBadgeColors(false)
+	wantIcon := woxcomponent.NotificationGlyph(16, iconColor).(woxwidget.Image)
+	if attentionRow.Children[0].(woxwidget.Image).Source != wantIcon.Source {
+		t.Fatal("preview Attention icon differs from the launcher notification icon")
+	}
+	timeText := accessories.Children[1].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Text).Value
 	if len(timeText) != 5 || timeText[2] != ':' {
 		t.Fatalf("theme demo Glance = %q, want current HH:MM time", timeText)
 	}

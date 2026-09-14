@@ -4,7 +4,62 @@ import (
 	"encoding/json"
 	"testing"
 	"wox/common"
+	"wox/util"
+	"wox/util/osvariant"
 )
+
+// TestThemeEditorActiveOverride keeps the picker, preview and saved document on the same authored layer.
+func TestThemeEditorActiveOverride(t *testing.T) {
+	for _, useVariant := range []bool{false, true} {
+		platform, variant := util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant()
+		if useVariant && variant == "" {
+			continue
+		}
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(`{"SchemaVersion":2,"ThemeId":"override","ThemeName":"Override","BaseBackgroundColor":"#182020","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6","ToolbarBackgroundColor":"#101010FF"}`), &raw); err != nil {
+			t.Fatal(err)
+		}
+		node := map[string]any{"ToolbarBackgroundColor": "#202020FF", "ToolbarBorderWidth": float64(0)}
+		raw[platform] = node
+		wantInitial, wantReset := "#202020FF", "#101010FF"
+		if useVariant {
+			node["variants"] = map[string]any{variant: map[string]any{"ToolbarBackgroundColor": "#303030FF"}}
+			wantInitial, wantReset = "#303030FF", "#202020FF"
+		}
+		original, _ := json.Marshal(raw)
+		_, values := themeEditorForm(raw)
+		if values["ToolbarBackgroundColor"] != wantInitial {
+			t.Fatal("picker ignored the active override")
+		}
+		values["ToolbarBackgroundColor"] = "#FF00FF80"
+		preview, err := themeEditorDraftTheme(raw, values)
+		if err != nil || preview.ToolbarBackgroundColor != "#FF00FF80" {
+			t.Fatalf("preview ignored edited override: %s, %v", preview.ToolbarBackgroundColor, err)
+		}
+		merged := mergeThemeEditorDraft(raw, values)
+		if merged["ToolbarBackgroundColor"] != "#101010FF" || merged[platform].(map[string]any)["ToolbarBorderWidth"] != float64(0) {
+			t.Fatal("editing a platform color changed the root color or unrelated geometry")
+		}
+		encoded, _ := json.Marshal(merged)
+		var saved common.Theme
+		if err := json.Unmarshal(encoded, &saved); err != nil {
+			t.Fatal(err)
+		}
+		resolved, err := saved.ResolveForTarget(platform, variant)
+		if err != nil || resolved.ToolbarBackgroundColor != preview.ToolbarBackgroundColor {
+			t.Fatal("saved theme disagrees with preview")
+		}
+		values["ToolbarBackgroundColor"] = ""
+		preview, err = themeEditorDraftTheme(raw, values)
+		if err != nil || preview.ToolbarBackgroundColor != wantReset {
+			t.Fatalf("reset did not inherit next layer: %s, %v", preview.ToolbarBackgroundColor, err)
+		}
+		after, _ := json.Marshal(raw)
+		if string(original) != string(after) {
+			t.Fatal("editing mutated the source theme")
+		}
+	}
+}
 
 // TestV2ThemeEditorInheritance verifies the real draft path keeps empty overrides sparse and base changes live.
 func TestV2ThemeEditorInheritance(t *testing.T) {

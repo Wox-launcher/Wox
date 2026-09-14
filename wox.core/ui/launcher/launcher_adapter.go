@@ -1362,7 +1362,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	}
 	if len(entries) > 0 {
 		actions = append(actions, launcherview.LauncherToolbarAction{
-			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(primaryHotkey("j")), OnTap: a.toggleActionPanel,
+			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(primaryHotkey("j")), Active: snapshot.actionPanel, OnTap: a.toggleActionPanel,
 		})
 	}
 	return launcherview.LauncherToolbarBoundary(launcherview.LauncherToolbarProps{

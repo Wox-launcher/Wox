@@ -48,6 +48,12 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), []themeColorToken{{key: "ResultItemHoverBackgroundColor", label: "i18n:ui_theme_editor_token_result_hover_background"}}...)
 	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), []themeColorToken{{key: "ActionContainerDividerColor", label: "i18n:ui_theme_editor_token_action_divider"}}...)
 	groups[5].tokens = append(append([]themeColorToken(nil), groups[5].tokens...), []themeColorToken{{key: "ToolbarHotkeyFontColor", label: "i18n:ui_theme_editor_token_hotkey_text"}, {key: "ToolbarHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_hotkey_background"}, {key: "ToolbarHotkeyBorderColor", label: "i18n:ui_theme_editor_token_hotkey_border"}}...)
+	groups[5].tokens = append(groups[5].tokens,
+		themeColorToken{key: "ToolbarPrimaryFontColor", label: "i18n:ui_theme_editor_token_toolbar_primary_text"},
+		themeColorToken{key: "ToolbarPrimaryHotkeyFontColor", label: "i18n:ui_theme_editor_token_toolbar_primary_hotkey_text"},
+		themeColorToken{key: "ToolbarPrimaryHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_toolbar_primary_hotkey_background"},
+		themeColorToken{key: "ToolbarPrimaryHotkeyBorderColor", label: "i18n:ui_theme_editor_token_toolbar_primary_hotkey_border"},
+	)
 	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), []themeColorToken{{key: "ActionItemHotkeyFontColor", label: "i18n:ui_theme_editor_token_action_hotkey_text"}, {key: "ActionItemHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_action_hotkey_background"}, {key: "ActionItemHotkeyBorderColor", label: "i18n:ui_theme_editor_token_action_hotkey_border"}, {key: "ActionItemActiveHotkeyFontColor", label: "i18n:ui_theme_editor_token_action_active_hotkey_text"}, {key: "ActionItemActiveHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_action_active_hotkey_background"}, {key: "ActionItemActiveHotkeyBorderColor", label: "i18n:ui_theme_editor_token_action_active_hotkey_border"}}...)
 
 	groups[3].tokens = append(append([]themeColorToken(nil), groups[3].tokens...), []themeColorToken{{key: "PreviewBackgroundColor", label: "i18n:ui_theme_editor_token_preview_background"}, {key: "PreviewBorderColor", label: "i18n:ui_theme_editor_token_preview_border"}, {key: "PreviewTagFontColor", label: "i18n:ui_theme_editor_token_preview_tag_font"}, {key: "PreviewTagBackgroundColor", label: "i18n:ui_theme_editor_token_preview_tag_background"}, {key: "PreviewTagBorderColor", label: "i18n:ui_theme_editor_token_preview_tag_outline"}}...)
@@ -74,17 +80,35 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 	return groups
 }
 
-// mergeThemeEditorDraft removes inherited overrides rather than materializing their resolved swatches.
+// themeEditorTokenSource finds the authored layer currently supplying a color, without flattening other platforms.
+func themeEditorTokenSource(raw map[string]any, key, platform, variant string) map[string]any {
+	if !isV2Theme(raw) || key == "ThemeName" {
+		return raw
+	}
+	platformNode, _ := raw[platform].(map[string]any)
+	variants, _ := platformNode["variants"].(map[string]any)
+	variantNode, _ := variants[variant].(map[string]any)
+	if variantNode[key] != nil {
+		return variantNode
+	}
+	if platformNode[key] != nil {
+		return platformNode
+	}
+	return raw
+}
+
+// mergeThemeEditorDraft edits the active authored layer so preview and persistence resolve the same color.
 func mergeThemeEditorDraft(raw map[string]any, values map[string]string) map[string]any {
 	draft := copyThemeMap(raw)
 	for key, value := range values {
+		source := themeEditorTokenSource(draft, key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
 		if isV2Theme(raw) {
 			value = strings.TrimSpace(value)
 		}
 		if isV2Theme(raw) && value == "" && key != "ThemeName" && !strings.HasPrefix(key, "Base") {
-			delete(draft, key)
+			delete(source, key)
 		} else {
-			draft[key] = value
+			source[key] = value
 		}
 	}
 	return draft

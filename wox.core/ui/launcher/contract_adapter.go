@@ -573,6 +573,10 @@ func fromCoreTheme(theme common.Theme) themeData {
 		AttentionHoverBackgroundColor:              colors["AttentionHoverBackgroundColor"],
 		AttentionHoverBorderColor:                  colors["AttentionHoverBorderColor"],
 
+		ToolbarPrimaryFontColor:               colors["ToolbarPrimaryFontColor"],
+		ToolbarPrimaryHotkeyFontColor:         colors["ToolbarPrimaryHotkeyFontColor"],
+		ToolbarPrimaryHotkeyBackgroundColor:   colors["ToolbarPrimaryHotkeyBackgroundColor"],
+		ToolbarPrimaryHotkeyBorderColor:       colors["ToolbarPrimaryHotkeyBorderColor"],
 		ToolbarHotkeyFontColor:                colors["ToolbarHotkeyFontColor"],
 		ActionItemHotkeyFontColor:             colors["ActionItemHotkeyFontColor"],
 		ActionItemActiveHotkeyFontColor:       colors["ActionItemActiveHotkeyFontColor"],

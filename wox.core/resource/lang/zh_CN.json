@@ -3098,5 +3098,9 @@
   "ui_theme_editor_token_action_hotkey_border": "动作键帽边框",
   "ui_theme_editor_token_action_active_hotkey_text": "选中动作键帽文字",
   "ui_theme_editor_token_action_active_hotkey_background": "选中动作键帽背景",
-  "ui_theme_editor_token_action_active_hotkey_border": "选中动作键帽边框"
+  "ui_theme_editor_token_action_active_hotkey_border": "选中动作键帽边框",
+  "ui_theme_editor_token_toolbar_primary_text": "主操作文字",
+  "ui_theme_editor_token_toolbar_primary_hotkey_text": "主操作快捷键文字",
+  "ui_theme_editor_token_toolbar_primary_hotkey_background": "主操作快捷键背景",
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "主操作快捷键边框"
 }

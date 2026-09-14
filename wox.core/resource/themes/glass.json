@@ -37,7 +37,7 @@
   "QueryBoxCursorColor": "#F7F7F8FF",
   "QueryBoxTextSelectionBackgroundColor": "#FFFFFF3D",
   "QueryBoxTextSelectionColor": "#FFFFFFFF",
-  "ActionContainerBackgroundColor": "#16161A38",
+  "ActionContainerBackgroundColor": "#252830D9",
   "ActionContainerBorderColor": "#FFFFFF28",
   "ActionContainerBorderWidth": 1,
   "ActionContainerBorderRadius": 8,
@@ -58,8 +58,8 @@
   "PreviewPropertyTitleColor": "#A6A6B0FF",
   "PreviewPropertyContentColor": "#E0E0E6FF",
   "PreviewTextSelectionColor": "#43434BFF",
-  "ToolbarFontColor": "#D8D8E0FF",
-  "ToolbarBackgroundColor": "#12121660",
+  "ToolbarFontColor": "#A3A3A3FF",
+  "ToolbarBackgroundColor": "#16161A04",
   "ToolbarBorderColor": "#D8D8E01A",
   "ToolbarBorderWidth": 1,
   "ToolbarPaddingLeft": 10,
@@ -67,8 +67,8 @@
   "windows": {
     "AppBackgroundColor": "#121216BF",
     "ResultItemActiveBackgroundColor": "#FFFFFF19",
-    "ActionContainerBackgroundColor": "#22242C8C",
-    "ToolbarBackgroundColor": "#1B1B1FD8",
+    "ActionContainerBackgroundColor": "#2123269E",
+    "ToolbarBackgroundColor": "#12121604",
     "variants": {
       "win10": {
         "AppBackgroundColor": "#12121663",
@@ -79,7 +79,7 @@
     "ResultItemHoverBackgroundColor": "#FFFFFF06"
   },
   "linux": {
-    "ActionContainerBackgroundColor": "#22242C8C",
+    "ActionContainerBackgroundColor": "#252830D9",
     "variants": {
       "hyprland": {
         "AppBackgroundColor": "#16161AF9",
@@ -101,13 +101,15 @@
   "GlanceIconColor": "#F7F7F892",
   "GlanceBackgroundColor": "#00000000",
   "GlanceHoverBackgroundColor": "#F7F7F819",
-  "ToolbarHotkeyFontColor": "#D8D8E0FF",
+  "ToolbarPrimaryFontColor": "#F7F7F8FF",
+  "ToolbarPrimaryHotkeyFontColor": "#F7F7F8FF",
+  "ToolbarHotkeyFontColor": "#A3A3A3FF",
   "ActionItemHotkeyFontColor": "#D8D8E0FF",
   "ActionItemActiveHotkeyFontColor": "#FFFFFFFF",
   "ToolbarHotkeyBackgroundColor": "#00000000",
   "ActionItemHotkeyBackgroundColor": "#00000000",
-  "ActionItemActiveHotkeyBackgroundColor": "#FFFFFF23",
-  "ToolbarHotkeyBorderColor": "#D8D8E0FF",
-  "ActionItemHotkeyBorderColor": "#D8D8E0FF",
-  "ActionItemActiveHotkeyBorderColor": "#FFFFFFFF"
+  "ActionItemActiveHotkeyBackgroundColor": "#00000000",
+  "ToolbarHotkeyBorderColor": "#A3A3A34D",
+  "ActionItemHotkeyBorderColor": "#D8D8E04D",
+  "ActionItemActiveHotkeyBorderColor": "#FFFFFF66"
 }

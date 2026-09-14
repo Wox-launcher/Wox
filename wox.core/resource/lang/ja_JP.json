@@ -3099,5 +3099,9 @@
   "ui_theme_editor_token_action_hotkey_border": "Action keycap border",
   "ui_theme_editor_token_action_active_hotkey_text": "Selected action keycap text",
   "ui_theme_editor_token_action_active_hotkey_background": "Selected action keycap background",
-  "ui_theme_editor_token_action_active_hotkey_border": "Selected action keycap border"
+  "ui_theme_editor_token_action_active_hotkey_border": "Selected action keycap border",
+  "ui_theme_editor_token_toolbar_primary_text": "メイン操作の文字",
+  "ui_theme_editor_token_toolbar_primary_hotkey_text": "メイン操作のショートカット文字",
+  "ui_theme_editor_token_toolbar_primary_hotkey_background": "メイン操作のショートカット背景",
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "メイン操作のショートカット枠線"
 }

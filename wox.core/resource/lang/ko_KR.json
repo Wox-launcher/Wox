@@ -3097,5 +3097,9 @@
   "ui_theme_editor_token_action_hotkey_border": "Action keycap border",
   "ui_theme_editor_token_action_active_hotkey_text": "Selected action keycap text",
   "ui_theme_editor_token_action_active_hotkey_background": "Selected action keycap background",
-  "ui_theme_editor_token_action_active_hotkey_border": "Selected action keycap border"
+  "ui_theme_editor_token_action_active_hotkey_border": "Selected action keycap border",
+  "ui_theme_editor_token_toolbar_primary_text": "기본 동작 텍스트",
+  "ui_theme_editor_token_toolbar_primary_hotkey_text": "기본 단축키 텍스트",
+  "ui_theme_editor_token_toolbar_primary_hotkey_background": "기본 단축키 배경",
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "기본 단축키 테두리"
 }

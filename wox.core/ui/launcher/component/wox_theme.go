@@ -66,6 +66,10 @@ type Theme struct {
 
 	// Optional v2 colors retain legacy contextual fallbacks when absent.
 	ActionContainerDividerColor           *woxui.Color
+	ToolbarPrimaryFontColor               *woxui.Color
+	ToolbarPrimaryHotkeyFontColor         *woxui.Color
+	ToolbarPrimaryHotkeyBackgroundColor   *woxui.Color
+	ToolbarPrimaryHotkeyBorderColor       *woxui.Color
 	ToolbarHotkeyFontColor                *woxui.Color
 	ActionItemHotkeyFontColor             *woxui.Color
 	ActionItemActiveHotkeyFontColor       *woxui.Color

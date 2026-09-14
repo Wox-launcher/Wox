@@ -98,13 +98,15 @@
   "GlanceIconColor": "#00000092",
   "GlanceBackgroundColor": "#00000000",
   "GlanceHoverBackgroundColor": "#00000019",
+  "ToolbarPrimaryFontColor": "#000000FF",
+  "ToolbarPrimaryHotkeyFontColor": "#000000FF",
   "ToolbarHotkeyFontColor": "#454545FF",
   "ActionItemHotkeyFontColor": "#454545FF",
   "ActionItemActiveHotkeyFontColor": "#FFFFFFFF",
   "ToolbarHotkeyBackgroundColor": "#00000000",
   "ActionItemHotkeyBackgroundColor": "#00000000",
-  "ActionItemActiveHotkeyBackgroundColor": "#3A6BA6FF",
-  "ToolbarHotkeyBorderColor": "#454545FF",
-  "ActionItemHotkeyBorderColor": "#454545FF",
-  "ActionItemActiveHotkeyBorderColor": "#FFFFFFFF"
+  "ActionItemActiveHotkeyBackgroundColor": "#00000000",
+  "ToolbarHotkeyBorderColor": "#4545454D",
+  "ActionItemHotkeyBorderColor": "#4545454D",
+  "ActionItemActiveHotkeyBorderColor": "#FFFFFF66"
 }

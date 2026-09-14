@@ -12,6 +12,7 @@ import (
 	"wox/common"
 	woxui "wox/ui/runtime"
 	"wox/util"
+	"wox/util/osvariant"
 )
 
 type themeColorToken struct {
@@ -125,7 +126,8 @@ func themeEditorForm(raw map[string]any) ([]formDefinition, map[string]string) {
 		definitions = append(definitions, formDefinition{Type: "head", Value: formDefinitionValue{Content: group.label}})
 		for _, token := range group.tokens {
 			definitions = append(definitions, formDefinition{Type: "textbox", Value: formDefinitionValue{Key: token.key, Label: token.label, Tooltip: "CSS color: #RRGGBB, #RRGGBBAA, rgb(), or rgba()"}})
-			values[token.key] = themeMapString(raw, token.key)
+			source := themeEditorTokenSource(raw, token.key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+			values[token.key] = themeMapString(source, token.key)
 		}
 	}
 	return definitions, values
@@ -139,9 +141,13 @@ func copyStringMap(source map[string]string) map[string]string {
 	return copy
 }
 
+// copyThemeMap isolates nested platform/variant maps before a draft or snapshot can edit them.
 func copyThemeMap(source map[string]any) map[string]any {
 	copy := make(map[string]any, len(source))
 	for key, value := range source {
+		if nested, ok := value.(map[string]any); ok {
+			value = copyThemeMap(nested)
+		}
 		copy[key] = value
 	}
 	return copy

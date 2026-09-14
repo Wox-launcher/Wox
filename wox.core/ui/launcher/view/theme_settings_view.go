@@ -435,11 +435,16 @@ func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	const horizontalPadding = float32(10)
 	labelStyle := woxui.TextStyle{Size: 14}
 	keycap, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Theme: &theme, Toolbar: true, Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
+		Theme: &theme, Toolbar: true, Primary: true, Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
 		Border: theme.ToolbarText, FontSize: woxcomponent.TailFontSize, Window: props.Window,
 	})
+	labelColor := theme.ToolbarText
+	if theme.ToolbarPrimaryFontColor != nil {
+		labelColor = *theme.ToolbarPrimaryFontColor
+	}
+
 	action := woxwidget.Container{Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.PreviewOpenLabel, Style: labelStyle, Color: theme.ToolbarText},
+		woxwidget.Text{Value: props.PreviewOpenLabel, Style: labelStyle, Color: labelColor},
 		keycap,
 	}}}
 	background := woxui.Color{}

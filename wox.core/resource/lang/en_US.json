@@ -3101,5 +3101,9 @@
   "ui_theme_editor_token_action_hotkey_border": "Action keycap border",
   "ui_theme_editor_token_action_active_hotkey_text": "Selected action keycap text",
   "ui_theme_editor_token_action_active_hotkey_background": "Selected action keycap background",
-  "ui_theme_editor_token_action_active_hotkey_border": "Selected action keycap border"
+  "ui_theme_editor_token_action_active_hotkey_border": "Selected action keycap border",
+  "ui_theme_editor_token_toolbar_primary_text": "Primary action text",
+  "ui_theme_editor_token_toolbar_primary_hotkey_text": "Primary hotkey text",
+  "ui_theme_editor_token_toolbar_primary_hotkey_background": "Primary hotkey background",
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Primary hotkey border"
 }

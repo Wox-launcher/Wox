@@ -46,6 +46,8 @@ const (
 	LauncherDemoHighlightSelectedTail
 	LauncherDemoHighlightToolbarBackground
 	LauncherDemoHighlightToolbarText
+	LauncherDemoHighlightToolbarPrimaryText
+	LauncherDemoHighlightToolbarPrimaryHotkey
 	LauncherDemoHighlightActionBackground
 	LauncherDemoHighlightActionHeader
 	LauncherDemoHighlightActionText
@@ -345,7 +347,7 @@ func demoToolbar(props LauncherDemoProps, height, windowHeight, windowRadius flo
 	if runtime.GOOS == "darwin" {
 		modifier = "Cmd"
 	}
-	keycap := func(label string, width float32, active bool) woxwidget.Widget {
+	keycap := func(label string, width float32, active, primary bool) woxwidget.Widget {
 		border := withAlpha(props.Theme.ToolbarText, demoScaledAlpha(float32(alpha)/255, 150))
 		fill := withAlpha(props.Theme.ToolbarText, demoScaledAlpha(float32(alpha)/255, 9))
 		if active {
@@ -362,15 +364,30 @@ func demoToolbar(props LauncherDemoProps, height, windowHeight, windowRadius flo
 		if c := props.Theme.ToolbarHotkeyBorderColor; c != nil {
 			border = demoColorOpacity(*c, float32(alpha)/255)
 		}
-		cap := woxwidget.Container{Width: width, Height: 24, Radius: 4, Color: fill, BorderColor: border, BorderWidth: 1, Child: woxwidget.Align{
-			Width: width, Height: 24, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: foreground},
+		if primary {
+			if c := props.Theme.ToolbarPrimaryHotkeyFontColor; c != nil {
+				foreground = demoColorOpacity(*c, float32(alpha)/255)
+			}
+			if c := props.Theme.ToolbarPrimaryHotkeyBackgroundColor; c != nil {
+				fill = demoColorOpacity(*c, float32(alpha)/255)
+			}
+			if c := props.Theme.ToolbarPrimaryHotkeyBorderColor; c != nil {
+				border = demoColorOpacity(*c, float32(alpha)/255)
+			}
+		}
+		cap := woxwidget.Container{Width: width, Height: 20, Radius: 4, Color: fill, BorderColor: border, BorderWidth: 1, Child: woxwidget.Align{
+			Width: width, Height: 20, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightRegular}, Color: foreground},
 		}}
-		return demoHighlight(cap, width, 24, 4, props.HighlightTarget == LauncherDemoHighlightHotkey, props.HighlightColor)
+		return demoHighlight(cap, width, 20, 4, props.HighlightTarget == LauncherDemoHighlightHotkey || primary && props.HighlightTarget == LauncherDemoHighlightToolbarPrimaryHotkey, props.HighlightColor)
+	}
+	primaryColor := props.Theme.ToolbarText
+	if props.Theme.ToolbarPrimaryFontColor != nil {
+		primaryColor = *props.Theme.ToolbarPrimaryFontColor
 	}
 	content := woxwidget.Widget(woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		demoInlineHighlight(woxwidget.Text{Value: primary, Style: woxui.TextStyle{Size: 11}, Color: withAlpha(props.Theme.ToolbarText, alpha)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor), keycap("Enter", 42, false),
-		woxwidget.Container{Width: 8}, demoInlineHighlight(woxwidget.Text{Value: more, Style: woxui.TextStyle{Size: 11}, Color: withAlpha(props.Theme.ToolbarText, alpha)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor),
-		keycap(modifier, 42, props.ToolbarPressed), keycap("J", 26, props.ToolbarPressed),
+		demoInlineHighlight(woxwidget.Text{Value: primary, Style: woxui.TextStyle{Size: 11}, Color: demoColorOpacity(primaryColor, float32(alpha)/255)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText || props.HighlightTarget == LauncherDemoHighlightToolbarPrimaryText, props.HighlightColor), keycap("Enter", 36, false, true),
+		woxwidget.Container{Width: 8}, demoInlineHighlight(woxwidget.Text{Value: more, Style: woxui.TextStyle{Size: 11}, Color: demoColorOpacity(props.Theme.ToolbarText, float32(alpha)/255)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor),
+		keycap(modifier, 30, props.ToolbarPressed, false), keycap("J", 20, props.ToolbarPressed, false),
 	}})
 	// Clip a window-sized rounded fill to the footer. A square toolbar fill would
 	// paint into the window's bottom corner cutouts; the query box is inset, so

@@ -2,6 +2,7 @@ package component
 
 import (
 	"math"
+	"strings"
 	"sync"
 
 	"wox/common/icons"
@@ -42,6 +43,8 @@ func svgSourceImage(name, source string, size float32, color woxui.Color) *woxui
 	if cached, ok := svgIconCache.Load(key); ok {
 		return cached.(*woxui.Image)
 	}
+	// These monochrome component icons are tinted below; resolve the theme variable to a mask first.
+	source = strings.ReplaceAll(source, "var(--wox-theme-icon-color)", "#ffffff")
 	rgba, err := woxsvg.Render(source, rasterSize, rasterSize)
 	if err != nil {
 		return nil
@@ -289,7 +292,12 @@ func DebugGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("settings.debug", size, color)
 }
 
-// InboxGlyph returns the shared SVG inbox icon used by the Attention unread badge.
+// NotificationGlyph returns the shared notification icon used by the Attention unread badge.
+func NotificationGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlNotification, size, color)
+}
+
+// InboxGlyph returns the shared SVG inbox icon.
 func InboxGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {
 		size = 15

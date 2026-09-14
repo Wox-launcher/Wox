@@ -15,12 +15,13 @@ type LauncherToolbarAction struct {
 	Label        string
 	HotkeyLabels []string
 	Pinned       bool
+	Active       bool
 	OnTap        func() `boundary:"stable"`
 }
 
 // Equal compares every visual dependency for one prepared toolbar action.
 func (a LauncherToolbarAction) Equal(other LauncherToolbarAction) bool {
-	if a.ID != other.ID || a.Label != other.Label || a.Pinned != other.Pinned || len(a.HotkeyLabels) != len(other.HotkeyLabels) {
+	if a.ID != other.ID || a.Label != other.Label || a.Pinned != other.Pinned || a.Active != other.Active || len(a.HotkeyLabels) != len(other.HotkeyLabels) {
 		return false
 	}
 	for index := range a.HotkeyLabels {
@@ -209,15 +210,21 @@ func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.
 // launcherToolbarActionSurface paints one toolbar action, including the shared hover overlay.
 func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window, densityScale float32, hovered bool) (woxwidget.Widget, float32) {
 	labelStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.ToolbarFontSize, densityScale)}
+	labelColor := theme.ToolbarText
+	// Pinned actions are the default/bare-Enter actions reserved by the launcher adapter.
+	if action.Pinned && theme.ToolbarPrimaryFontColor != nil {
+		labelColor = *theme.ToolbarPrimaryFontColor
+	}
 	labelMetrics, _ := window.MeasureText(action.Label, labelStyle)
 	background := woxui.Color{}
 	chipBackground := theme.ToolbarBackground
-	if hovered {
+	// An open popover keeps its trigger highlighted even after the pointer leaves it.
+	if hovered || action.Active {
 		background = woxcomponent.ControlHoverColor(theme.ToolbarBackground, theme.ToolbarText)
 		chipBackground = background
 	}
 	chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Theme: &theme, Toolbar: true,
+		Theme: &theme, Toolbar: true, Primary: action.Pinned,
 		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: chipBackground,
 		FontSize: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Compact: densityScale < 1, Window: window,
 	})
@@ -231,7 +238,7 @@ func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcompone
 	// doctor/default action would push Enter onto the next toolbar action.
 	if strings.TrimSpace(action.Label) != "" {
 		children = []woxwidget.Widget{
-			woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText},
+			woxwidget.Text{Value: action.Label, Style: labelStyle, Color: labelColor},
 			chip,
 		}
 		width += labelMetrics.Size.Width + gap
