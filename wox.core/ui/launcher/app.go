@@ -136,6 +136,10 @@ type App struct {
 	chatWindowFocused            bool
 	chatWindowMaximized          bool
 	chatWindowRestoreFrame       woxui.Rect
+	chatWindowGeneration         uint64
+	chatImportQueue              []chatAttachmentImportJob
+	chatImportRunning            bool
+	chatImportEpoch              uint64
 	terminalFullscreen           bool
 	actionPanel                  bool
 	actionSelected               int
@@ -1062,50 +1066,45 @@ func (a *App) applyWindowBoundsAtShowPosition() error {
 	return a.applyWindowBoundsWithPlacement(true)
 }
 
+// applyWindowBoundsWithPlacement keeps state reads and native resizing in one UI turn.
 func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
-	var params showAppParams
-	var results []queryResult
-	var layout queryLayout
-	var palette uiPalette
-	var densityMetrics launcherDensityMetrics
-	var resultCount int
-	var actionListHeight int
-	var formHeight int
-	var refinementVisible bool
-	var actionPanel bool
-	var guidanceFormPreview bool
-	var previewVisible bool
-	var toolbarMessageVisible bool
-	var previewFullscreen bool
-	var chatFullscreen bool
-	var queryText string
-	if err := a.runOnUI("snapshot launcher window bounds", func() {
-		params = a.show
-		results = append([]queryResult(nil), a.results...)
-		resultCount = len(results)
-		layout = a.layout
-		refinementVisible = len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
-		actionPanel = a.actionPanel
-		palette = a.palette
-		densityMetrics = a.densityMetrics.normalized()
-		queryText = a.editor.State().Text
-		if a.form != nil {
-			formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
-		}
-		toolbarMessageVisible = a.effectiveToolbarMessage() != nil
-		chatFullscreen = a.chatFullscreen
-		previewFullscreen = chatFullscreen || a.terminalFullscreen
-		if actionPanel {
-			entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-			actionListHeight = int(actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries)))
-		}
-		if a.selected >= 0 && a.selected < len(a.results) {
-			previewType := a.results[a.selected].Preview.PreviewType
-			guidanceFormPreview = previewType == "query_requirement_settings" || previewType == "trigger_keyword_conflict"
-			previewVisible = a.results[a.selected].Preview.PreviewData != ""
-		}
+	var boundsErr error
+	if err := a.runOnUI("apply launcher window bounds", func() {
+		boundsErr = a.applyWindowBoundsOnUI(useShowPosition)
 	}); err != nil {
 		return err
+	}
+	return boundsErr
+}
+
+// applyWindowBoundsOnUI prevents an older hotkey layout from overwriting newer query results.
+func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
+	params := a.show
+	results := a.results
+	resultCount := len(results)
+	layout := a.layout
+	refinementVisible := len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
+	actionPanel := a.actionPanel
+	palette := a.palette
+	densityMetrics := a.densityMetrics.normalized()
+	queryText := a.editor.State().Text
+	formHeight := 0
+	if a.form != nil {
+		formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
+	}
+	toolbarMessageVisible := a.effectiveToolbarMessage() != nil
+	chatFullscreen := a.chatFullscreen
+	previewFullscreen := chatFullscreen || a.terminalFullscreen
+	actionListHeight := 0
+	if actionPanel {
+		entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+		actionListHeight = int(actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries)))
+	}
+	guidanceFormPreview, previewVisible := false, false
+	if a.selected >= 0 && a.selected < len(a.results) {
+		previewType := a.results[a.selected].Preview.PreviewType
+		guidanceFormPreview = previewType == "query_requirement_settings" || previewType == "trigger_keyword_conflict"
+		previewVisible = a.results[a.selected].Preview.PreviewData != ""
 	}
 	width := params.WindowWidth
 	if width <= 0 {
@@ -1228,12 +1227,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if err != nil {
 		return err
 	}
-	var bottomAnchor float32
-	if err := a.runOnUI("read launcher bottom anchor", func() {
-		bottomAnchor = a.bottomAnchorY
-	}); err != nil {
-		return err
-	}
+	bottomAnchor := a.bottomAnchorY
 	targetHeight := float32(height)
 	x, y, nextAnchor := launcherWindowOrigin(params, current, targetHeight, useShowPosition, bottomAnchor)
 	if displays, listErr := screen.ListDisplays(); listErr == nil {
@@ -1255,14 +1249,12 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		target.X, target.Y, target.Width, target.Height))
 	if launcherBoundsEffectivelyEqual(current, target) {
 		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
-			_ = a.runOnUI("store launcher bottom anchor", func() { a.bottomAnchorY = nextAnchor })
+			a.bottomAnchorY = nextAnchor
 		}
 		return nil
 	}
 	if params.QueryBoxAtBottom {
-		if err := a.runOnUI("store launcher bottom anchor", func() { a.bottomAnchorY = nextAnchor }); err != nil {
-			return err
-		}
+		a.bottomAnchorY = nextAnchor
 	}
 	return a.window.SetBounds(target)
 }

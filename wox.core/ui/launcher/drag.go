@@ -1,25 +1,43 @@
 package launcher
 
 import (
+	"fmt"
 	"log"
-	"strings"
 
+	"wox/plugin"
 	"wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
-// handleFileDrop turns a native file drop into the same selection query used by Flutter.
+// handleFileDrop delivers launcher drops to the visible chat composer or a selection query.
 func (a *App) handleFileDrop(paths []string) {
-	cleaned := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if path = strings.TrimSpace(path); path != "" {
-			cleaned = append(cleaned, path)
-		}
-	}
+	cleaned := cleanFileDropPaths(paths)
 	if len(cleaned) == 0 {
 		return
 	}
+	if a.launcherPresentsChatInput() {
+		a.enqueueChatDraftAttachments(cleaned, nil, false)
+		return
+	}
+	a.handleLauncherSelectionFileDrop(cleaned)
+}
 
+// handleChatWindowFileDrop appends files to the dedicated chat draft only.
+func (a *App) handleChatWindowFileDrop(paths []string) {
+	cleaned := cleanFileDropPaths(paths)
+	if len(cleaned) == 0 {
+		return
+	}
+	a.enqueueChatDraftAttachments(cleaned, nil, true)
+}
+
+func (a *App) handleLauncherSelectionFileDrop(paths []string) {
+	current := toCorePlainQuery(a.query)
+	next := plugin.NewGlobalFileDropQuery(paths)
+	if manager := plugin.GetPluginManager(); manager != nil {
+		next = manager.BuildFileDropQuery(a.chatImportLifecycleCtx(), current, paths)
+	}
 	if a.window != nil {
 		_, _ = a.window.Show()
 	}
@@ -27,15 +45,9 @@ func (a *App) handleFileDrop(paths []string) {
 		a.host.RequestFocus(view.LauncherQueryInputKey)
 	}
 	a.canRecallHistory = false
-	a.setQuery(plainQuery{
-		QueryID:          newID(),
-		QueryType:        "selection",
-		QuerySelection:   selection{Type: "file", FilePaths: cleaned},
-		QueryRefinements: map[string]string{},
-		ContextData:      map[string]string{},
-	})
+	a.setQuery(fromCorePlainQuery(next))
 	if err := a.sendCurrentQuery(); err != nil {
-		log.Printf("send query after file drop: %v", err)
+		util.GetLogger().Warn(a.chatImportLifecycleCtx(), fmt.Sprintf("send query after file drop: %v", err))
 	}
 }
 

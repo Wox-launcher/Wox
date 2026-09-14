@@ -944,7 +944,7 @@ func (a *App) chatComposerInputHeight(snapshot *chatPreviewSnapshot, width float
 	for _, tag := range skillTags {
 		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme))
 	}
-	return previewview.ChatComposerHeightForLines(len(snapshot.attachments), previewview.ChatComposerVisibleLines(snapshot.editing.Text, width, window, richRuns))
+	return previewview.ChatComposerHeightForAttachments(a.chatAttachmentProps(snapshot.attachments, a.translate("i18n:ui_ai_chat_quote_label")), previewview.ChatComposerVisibleLines(snapshot.editing.Text, width, window, richRuns))
 }
 
 // chatInputProps prepares the controlled editor and toolbar actions.
@@ -984,6 +984,11 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	if snapshot.error != "" {
 		status = snapshot.error
 		statusColor = palette.componentTheme().ErrorText
+	} else if snapshot.importing {
+		status = a.translate("i18n:ui_ai_chat_importing_attachments")
+		if strings.TrimSpace(status) == "" || status == "i18n:ui_ai_chat_importing_attachments" {
+			status = "Adding attachments…"
+		}
 	} else if snapshot.loading {
 		status = "Loading…"
 	}
@@ -1006,10 +1011,10 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
 		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: window,
-		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, ActionLabel: actionLabel, Sending: streaming, Theme: theme,
+		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, ActionLabel: actionLabel, Sending: streaming, Importing: snapshot.importing, Theme: theme,
 		Attachments: a.chatAttachmentProps(snapshot.attachments, quoteLabel), QuoteDismissLabel: quoteDismiss,
 		RichRuns: richRuns, AtomicTokens: atomicTokens,
-		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: onKey,
+		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: onKey, OnPaste: a.pasteChatComposer,
 		OnModels: func() { a.toggleChatPanel("models") }, OnSend: action, OnDismissAttachment: a.dismissChatAttachment,
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -1249,21 +1247,21 @@ func (r *AIChatPlugin) querySelection(ctx context.Context, query plugin.Query) p
 				if query.Selection.Type == selection.SelectionTypeText {
 					attachments = []common.AIChatAttachment{{ID: uuid.NewString(), Kind: common.AIChatAttachmentQuote, Text: query.Selection.Text}}
 				} else {
-					for _, path := range query.Selection.FilePaths {
-						attachment, err := common.ImportChatAttachment(path)
-						if err != nil {
-							// An unsuccessful batch must not leave newly copied images behind.
-							for _, imported := range attachments {
-								if managedPath := common.ChatAttachmentPath(imported); managedPath != "" {
-									_ = os.Remove(managedPath)
-								}
-							}
-							util.GetLogger().Error(ctx, fmt.Sprintf("AI: import attachment %s: %v", path, err))
-							r.api.Notify(ctx, fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_ai_chat_attachment_failed"), filepath.Base(path), err.Error()))
-							return
+					imported, err := common.ImportChatAttachments(query.Selection.FilePaths)
+					if err != nil {
+						name := common.ChatAttachmentErrorName(err)
+						if name == "" {
+							name = "file"
 						}
-						attachments = append(attachments, attachment)
+						reason := err.Error()
+						if key := common.ChatAttachmentFailureReasonKey(err); key != "" {
+							reason = r.api.GetTranslation(ctx, key)
+						}
+						util.GetLogger().Error(ctx, fmt.Sprintf("AI: import attachment %s failed", name))
+						r.api.Notify(ctx, fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_ai_chat_attachment_failed"), name, reason))
+						return
 					}
+					attachments = imported
 				}
 				data, err := json.Marshal(attachments)
 				if err != nil {

@@ -27,6 +27,15 @@ const (
 	chatComposerDividerHeight       = float32(1)
 	chatComposerOuterPaddingY       = float32(14)
 	chatQuoteCardHeight             = float32(56)
+	// File and image drafts share one compact tile strip instead of stacked rows.
+	chatAttachmentTileSize            = float32(80)
+	chatAttachmentTileGap             = float32(8)
+	chatAttachmentTileRadius          = float32(8)
+	chatAttachmentTileLabelHeight     = float32(22)
+	chatAttachmentTileIconSize        = float32(24)
+	chatAttachmentTileDismissSize     = float32(20)
+	chatComposerAttachmentInset       = float32(8)
+	chatComposerAttachmentStripHeight = chatComposerAttachmentInset + chatAttachmentTileSize
 )
 
 func chatComposerClampLines(lineCount int) int {
@@ -54,9 +63,38 @@ func ChatComposerHeight(attachmentCount int) float32 {
 	return ChatComposerHeightForLines(attachmentCount, chatComposerMinLines)
 }
 
-// ChatComposerHeightForLines returns the pane height for a 1-5 line composer.
+// ChatComposerHeightForLines returns the pane height for a 1-5 line composer of quote cards.
 func ChatComposerHeightForLines(attachmentCount, lineCount int) float32 {
-	return chatComposerOuterPaddingY + chatComposerEditorHeight(lineCount) + chatComposerToolbarHeight + chatComposerDividerHeight + float32(min(attachmentCount, 3))*chatQuoteCardHeight
+	return chatComposerBaseHeight(lineCount) + float32(min(attachmentCount, 3))*chatQuoteCardHeight
+}
+
+// ChatComposerHeightForAttachments sizes the pane from quote cards plus one file/image tile strip.
+func ChatComposerHeightForAttachments(attachments []ChatAttachmentProps, lineCount int) float32 {
+	return chatComposerBaseHeight(lineCount) + chatComposerAttachmentsExtent(attachments)
+}
+
+func chatComposerBaseHeight(lineCount int) float32 {
+	return chatComposerOuterPaddingY + chatComposerEditorHeight(lineCount) + chatComposerToolbarHeight + chatComposerDividerHeight
+}
+
+func chatComposerAttachmentsExtent(attachments []ChatAttachmentProps) float32 {
+	quotes, tiles := 0, 0
+	for _, attachment := range attachments {
+		if chatAttachmentIsTile(attachment) {
+			tiles++
+			continue
+		}
+		quotes++
+	}
+	height := float32(0)
+	if tiles > 0 {
+		height += chatComposerAttachmentStripHeight
+	}
+	return height + float32(min(quotes, 3))*chatQuoteCardHeight
+}
+
+func chatAttachmentIsTile(attachment ChatAttachmentProps) bool {
+	return attachment.Kind == "file" || attachment.Kind == "image"
 }
 
 // ChatPreviewProps contains the typed chat panes and optional catalog drawer.
@@ -80,7 +118,7 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 	headerHeight := float32(52)
 	inputHeight := props.Input.Height
 	if inputHeight <= 0 {
-		inputHeight = ChatComposerHeightForLines(len(props.Input.Attachments), ChatComposerVisibleLines(props.Input.Editing.Text, props.Input.Width, props.Input.Window, props.Input.RichRuns))
+		inputHeight = ChatComposerHeightForAttachments(props.Input.Attachments, ChatComposerVisibleLines(props.Input.Editing.Text, props.Input.Width, props.Input.Window, props.Input.RichRuns))
 	}
 	innerWidth := max(float32(0), props.Width-20)
 	innerHeight := max(float32(0), props.Height-14)
@@ -907,9 +945,23 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 		}
 		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: headerChildren})
 	}
+	pendingTiles := make([]woxwidget.Widget, 0, len(props.Attachments))
+	flushTiles := func() {
+		if len(pendingTiles) == 0 {
+			return
+		}
+		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: chatAttachmentTileGap, Children: append([]woxwidget.Widget{}, pendingTiles...)})
+		pendingTiles = pendingTiles[:0]
+	}
 	for _, attachment := range props.Attachments {
+		if chatAttachmentIsTile(attachment) {
+			pendingTiles = append(pendingTiles, chatAttachmentCard(attachment, innerWidth, props.Theme, "", nil, true))
+			continue
+		}
+		flushTiles()
 		children = append(children, chatAttachmentCard(attachment, innerWidth, props.Theme, "", nil, true))
 	}
+	flushTiles()
 	if props.ToolText != "" {
 		children = append(children, woxwidget.TextBlock{Value: props.ToolText, Width: innerWidth, Height: props.ToolLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: textColor, Layout: &props.ToolLayout})
 	} else {
@@ -1206,8 +1258,20 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 	if showRoleHeader {
 		add(18)
 	}
+	pendingTiles := 0
 	for _, attachment := range props.Attachments {
+		if chatAttachmentIsTile(attachment) {
+			pendingTiles++
+			continue
+		}
+		if pendingTiles > 0 {
+			add(chatAttachmentTileSize)
+			pendingTiles = 0
+		}
 		add(chatAttachmentHeight(attachment))
+	}
+	if pendingTiles > 0 {
+		add(chatAttachmentTileSize)
 	}
 	if props.ToolText != "" {
 		add(props.ToolLayout.Size.Height)
@@ -1253,6 +1317,7 @@ type ChatInputProps struct {
 	StatusColor         woxui.Color
 	ActionLabel         string
 	Sending             bool
+	Importing           bool
 	Attachments         []ChatAttachmentProps
 	QuoteDismissLabel   string
 	RichRuns            []woxcomponent.TextFieldRichRun
@@ -1261,6 +1326,7 @@ type ChatInputProps struct {
 	OnFocus             func()
 	OnChanged           func(string)
 	OnKey               func(woxui.KeyEvent) bool
+	OnPaste             func(string) bool `boundary:"stable"`
 	OnModels            func()
 	OnSend              func()
 	OnDismissAttachment func(string)
@@ -1325,7 +1391,7 @@ func (s *chatModelSelectorState) Dispose() {}
 
 // ChatInput builds the multiline editor card and send toolbar.
 func ChatInput(props ChatInputProps) woxwidget.Widget {
-	quoteHeight := float32(min(len(props.Attachments), 3)) * chatQuoteCardHeight
+	quoteHeight := chatComposerAttachmentsExtent(props.Attachments)
 	style := woxui.TextStyle{Size: 13}
 	innerWidth := max(float32(0), props.Width-chatComposerEditorPaddingX*2)
 	contentLines := max(1, woxcomponent.TextFieldVisualLineCount(props.Editing.Text, props.Window, style, innerWidth, props.RichRuns))
@@ -1343,7 +1409,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 		ID: "chat-input-" + props.Key, Label: props.Hint, Hint: props.Hint, Width: props.Width, Height: fieldHeight,
 		Padding: woxwidget.Insets{Left: chatComposerEditorPaddingX, Top: chatComposerEditorPaddingTop, Right: chatComposerEditorPaddingX, Bottom: chatComposerEditorPaddingBottom}, Background: props.Theme.QueryBackground,
 		Style: style, LineHeight: chatComposerLineHeight, Value: props.Editing.Text, Focused: props.Focused, MaxLines: maxLines, Window: props.Window, Theme: props.Theme,
-		RichRuns: props.RichRuns, AtomicTokens: props.AtomicTokens,
+		RichRuns: props.RichRuns, AtomicTokens: props.AtomicTokens, OnPaste: props.OnPaste,
 		OnChanged: props.OnChanged, OnKey: props.OnKey, OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {
 				props.OnFocus()
@@ -1371,91 +1437,135 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
 		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: modelButton}},
-		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})}},
+		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, Disabled: props.Importing && !props.Sending, OnTap: props.OnSend, Theme: props.Theme})}},
 	}
 	if props.Status != "" && statusWidth > 30 {
 		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
 	}
-	cardChildren := make([]woxwidget.Widget, 0, 4)
-	attachmentCards := make([]woxwidget.Widget, 0, len(props.Attachments))
-	for _, attachment := range props.Attachments {
-		var dismiss func()
-		if props.OnDismissAttachment != nil {
-			dismiss = func() { props.OnDismissAttachment(attachment.ID) }
-		}
-		attachmentCards = append(attachmentCards, chatAttachmentCard(attachment, props.Width, props.Theme, props.QuoteDismissLabel, dismiss, false))
-	}
-	if len(attachmentCards) > 3 {
-		// A large selection must not push the editor and Send button out of the window.
-		cardChildren = append(cardChildren, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: woxwidget.Key("chat-attachments-" + props.Key), Width: props.Width, Height: quoteHeight,
-			ContentHeight: float32(len(attachmentCards)) * chatQuoteCardHeight, Theme: props.Theme, ThumbColor: props.Theme.ResultSubtitle,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: attachmentCards},
-		}))
-	} else {
-		cardChildren = append(cardChildren, attachmentCards...)
-	}
+	cardChildren := make([]woxwidget.Widget, 0, 5)
+	cardChildren = append(cardChildren, chatComposerAttachmentPanes(props)...)
 	cardChildren = append(cardChildren,
 		input,
 		woxwidget.Container{Width: props.Width, Height: 1, Color: divider},
 		woxwidget.Stack{Width: props.Width, Height: chatComposerToolbarHeight, Children: toolbarChildren},
 	)
 	card := woxwidget.Container{Width: props.Width, Height: cardHeight, Radius: 9, Color: props.Theme.QueryBackground, BorderColor: divider, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: cardChildren}}
-	return woxwidget.Container{Width: props.Width, Height: ChatComposerHeightForLines(len(props.Attachments), lineCount), Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
+	return woxwidget.Container{Width: props.Width, Height: ChatComposerHeightForAttachments(props.Attachments, lineCount), Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
 }
 
-// chatAttachmentHeight matches the sent-card geometry used by the message scroll list.
-func chatAttachmentHeight(attachment ChatAttachmentProps) float32 {
-	switch attachment.Kind {
-	case "image":
-		return 144
-	case "file":
-		return chatQuoteCardHeight
-	default:
-		return attachment.Layout.Size.Height + 36
-	}
-}
-
-// chatAttachmentCard renders compact file references and aspect-preserving image thumbnails.
-func chatAttachmentCard(attachment ChatAttachmentProps, width float32, theme woxcomponent.Theme, dismissLabel string, dismiss func(), sent bool) woxwidget.Widget {
-	if attachment.Kind != "image" && attachment.Kind != "file" {
-		return chatQuoteCard(attachment, width, theme, dismissLabel, dismiss, sent)
-	}
-	height := chatQuoteCardHeight
-	thumbnailSize := float32(36)
-	if sent {
-		height = chatAttachmentHeight(attachment)
-		if attachment.Kind == "image" {
-			thumbnailSize = min(float32(128), max(float32(36), width/3))
+// chatComposerAttachmentPanes stacks a horizontal file/image strip above quote cards.
+func chatComposerAttachmentPanes(props ChatInputProps) []woxwidget.Widget {
+	tiles := make([]woxwidget.Widget, 0, len(props.Attachments))
+	quotes := make([]woxwidget.Widget, 0, len(props.Attachments))
+	for _, attachment := range props.Attachments {
+		id := attachment.ID
+		var dismiss func()
+		if props.OnDismissAttachment != nil {
+			dismiss = func() { props.OnDismissAttachment(id) }
 		}
+		card := chatAttachmentCard(attachment, props.Width, props.Theme, props.QuoteDismissLabel, dismiss, false)
+		if chatAttachmentIsTile(attachment) {
+			tiles = append(tiles, card)
+			continue
+		}
+		quotes = append(quotes, card)
 	}
-	textColor, secondaryColor := theme.PreviewText, theme.ResultSubtitle
-	if sent {
-		textColor, secondaryColor = theme.SelectedTitle, theme.SelectedSubtitle
+	panes := make([]woxwidget.Widget, 0, 2)
+	if len(tiles) > 0 {
+		panes = append(panes, chatComposerAttachmentStrip(props.Key, props.Width, tiles, props.Theme))
 	}
-	textWidth := max(float32(0), width-thumbnailSize-24)
-	if dismiss != nil {
-		textWidth = max(float32(0), textWidth-36)
-	}
-	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-		woxwidget.TextBlock{Value: attachment.Label, Width: textWidth, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, LineHeight: 16, Color: textColor},
-		woxwidget.TextBlock{Value: attachment.Text, Width: textWidth, Height: 28, MaxLines: 2, Style: woxui.TextStyle{Size: woxcomponent.CompactButtonFontSize}, LineHeight: 14, Color: secondaryColor},
-	}}
-	children := []woxwidget.Widget{
-		woxwidget.Image{Source: attachment.Image, Width: thumbnailSize, Height: thumbnailSize, Fit: woxwidget.ImageFitContain, Radius: 4},
-		woxwidget.Expanded{Child: content},
-	}
-	if dismiss != nil {
-		children = append(children, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: "chat-attachment-dismiss-" + attachment.ID, Label: dismissLabel, Icon: woxcomponent.CloseGlyph(14, secondaryColor),
-			Width: 28, Height: 28, Radius: 14, HoverBackground: chatIconHoverBackground(theme), FocusRingColor: theme.Cursor, OnTap: dismiss,
+	if len(quotes) > 3 {
+		// A large selection must not push the editor and Send button out of the window.
+		panes = append(panes, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: woxwidget.Key("chat-attachments-" + props.Key), Width: props.Width, Height: float32(3) * chatQuoteCardHeight,
+			ContentHeight: float32(len(quotes)) * chatQuoteCardHeight, Theme: props.Theme, ThumbColor: props.Theme.ResultSubtitle,
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: quotes},
 		}))
+	} else {
+		panes = append(panes, quotes...)
+	}
+	return panes
+}
+
+// chatComposerAttachmentStrip keeps every file/image on one reserved row.
+func chatComposerAttachmentStrip(key string, width float32, tiles []woxwidget.Widget, theme woxcomponent.Theme) woxwidget.Widget {
+	innerWidth := max(float32(0), width-chatComposerAttachmentInset*2)
+	contentWidth := float32(len(tiles))*chatAttachmentTileSize + float32(max(0, len(tiles)-1))*chatAttachmentTileGap
+	row := woxwidget.Widget(woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: chatAttachmentTileGap, Children: tiles})
+	if contentWidth > innerWidth {
+		row = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: woxwidget.Key("chat-attachments-" + key), Width: innerWidth, Height: chatAttachmentTileSize,
+			ContentWidth: contentWidth, Horizontal: true, Theme: theme, ThumbColor: theme.ResultSubtitle, Content: row,
+		})
+	}
+	return woxwidget.Container{Width: width, Height: chatComposerAttachmentStripHeight, Padding: woxwidget.Insets{Left: chatComposerAttachmentInset, Top: chatComposerAttachmentInset, Right: chatComposerAttachmentInset}, Child: row}
+}
+
+// chatAttachmentHeight matches quote-card geometry used by the message scroll list.
+func chatAttachmentHeight(attachment ChatAttachmentProps) float32 {
+	if chatAttachmentIsTile(attachment) {
+		return chatAttachmentTileSize
+	}
+	return attachment.Layout.Size.Height + 36
+}
+
+// chatAttachmentCard renders file/image tiles or a quote reference card.
+func chatAttachmentCard(attachment ChatAttachmentProps, width float32, theme woxcomponent.Theme, dismissLabel string, dismiss func(), sent bool) woxwidget.Widget {
+	if chatAttachmentIsTile(attachment) {
+		return chatAttachmentTile(attachment, theme, dismissLabel, dismiss)
+	}
+	return chatQuoteCard(attachment, width, theme, dismissLabel, dismiss, sent)
+}
+
+// chatAttachmentTile is a fixed square so many drafts share one composer row.
+func chatAttachmentTile(attachment ChatAttachmentProps, theme woxcomponent.Theme, dismissLabel string, dismiss func()) woxwidget.Widget {
+	fill := theme.ResultSubtitle
+	fill.A = uint8(float32(fill.A) * 0.10)
+	border := theme.ResultSubtitle
+	border.A = uint8(float32(border.A) * 0.14)
+	labelColor := theme.PreviewText
+	iconColor := theme.ResultSubtitle
+	var body woxwidget.Widget
+	if attachment.Kind == "image" && attachment.Image != nil {
+		body = woxwidget.Image{Source: attachment.Image, Width: chatAttachmentTileSize, Height: chatAttachmentTileSize, Fit: woxwidget.ImageFitCover, Radius: chatAttachmentTileRadius}
+	} else {
+		icon := woxwidget.Widget(woxcomponent.ArticleGlyph(chatAttachmentTileIconSize, iconColor))
+		if attachment.Image != nil {
+			icon = woxwidget.Image{Source: attachment.Image, Width: chatAttachmentTileIconSize, Height: chatAttachmentTileIconSize, Fit: woxwidget.ImageFitContain}
+		}
+		labelWidth := max(float32(0), chatAttachmentTileSize-32)
+		body = woxwidget.Container{Width: chatAttachmentTileSize, Height: chatAttachmentTileSize, Radius: chatAttachmentTileRadius, Color: fill, BorderColor: border, BorderWidth: 1, Child: woxwidget.Flex{
+			Axis: woxwidget.Vertical, CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: []woxwidget.Widget{
+				woxwidget.Expanded{Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: icon}},
+				woxwidget.Container{Height: chatAttachmentTileLabelHeight, Padding: woxwidget.Insets{Left: 6, Right: 6, Bottom: 6}, Child: woxwidget.Flex{
+					Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+						woxcomponent.ArticleGlyph(12, iconColor),
+						woxwidget.TextBlock{Value: attachment.Label, Width: labelWidth, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.CompactButtonFontSize}, LineHeight: 16, Color: labelColor},
+					},
+				}},
+			},
+		}}
+	}
+	layers := []woxwidget.StackChild{{Child: body}}
+	if dismiss != nil {
+		layers = append(layers, woxwidget.StackChild{Top: 4, Right: 4, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "chat-attachment-dismiss-" + attachment.ID, Label: dismissLabel, Icon: woxcomponent.CloseGlyph(12, iconColor),
+			Width: chatAttachmentTileDismissSize, Height: chatAttachmentTileDismissSize, Radius: 10, Background: chatAttachmentTileDismissBackground(theme),
+			HoverBackground: chatIconHoverBackground(theme), FocusRingColor: theme.Cursor, OnTap: dismiss,
+		})})
 	}
 	return woxwidget.Semantics{AutomationID: "chat-attachment-" + attachment.ID, Role: woxui.AccessibilityRoleGroup, Label: attachment.Label + ": " + attachment.Text,
-		Child: woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 8, Top: 4, Right: 8, Bottom: 4},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
-		},
+		Child: woxwidget.Stack{Width: chatAttachmentTileSize, Height: chatAttachmentTileSize, Children: layers},
 	}
+}
+
+// chatAttachmentTileDismissBackground stays opaque enough to read on photos and glass chrome.
+func chatAttachmentTileDismissBackground(theme woxcomponent.Theme) woxui.Color {
+	background := theme.ActionBackground
+	if background.A < 180 {
+		background.A = 200
+	}
+	return background
 }
 
 // chatIconHoverBackground uses the quiet ResultSubtitle wash shared by chat icon actions.

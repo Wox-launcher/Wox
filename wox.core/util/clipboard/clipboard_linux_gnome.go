@@ -2,8 +2,6 @@
 
 package clipboard
 
-import "image"
-
 // gnomeWaylandClipboard uses the desktop portal on GNOME Wayland. If the
 // portal RemoteDesktop session cannot be created, reads fall back to
 // ext-data-control-v1 and writes fall back to wl-copy.
@@ -38,11 +36,11 @@ func (gnomeWaylandClipboard) readFilePaths() ([]string, error) {
 	return dataControlReadFilePaths()
 }
 
-func (gnomeWaylandClipboard) readImage() (image.Image, error) {
+func (gnomeWaylandClipboard) readImageSnapshot() (*ImageSnapshot, error) {
 	if err := portalReady(); err == nil {
-		return portalReadImage()
+		return portalReadImageSnapshot()
 	}
-	return dataControlReadImage()
+	return dataControlReadImageSnapshot()
 }
 
 func (gnomeWaylandClipboard) writeText(text string) error {

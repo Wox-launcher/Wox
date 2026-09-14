@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
-	"image/png"
 	"os/exec"
 	"time"
 )
@@ -51,12 +49,12 @@ func (waylandClipboard) readFilePaths() ([]string, error) {
 	return waylandPasteFilePaths()
 }
 
-func (waylandClipboard) readImage() (image.Image, error) {
-	img, err := dataControlReadImage()
+func (waylandClipboard) readImageSnapshot() (*ImageSnapshot, error) {
+	img, err := dataControlReadImageSnapshot()
 	if err == nil {
 		return img, nil
 	}
-	return waylandPasteImage()
+	return waylandPasteImageSnapshot()
 }
 
 func (waylandClipboard) writeText(text string) error {
@@ -118,16 +116,12 @@ func waylandPasteFilePaths() ([]string, error) {
 	return paths, nil
 }
 
-func waylandPasteImage() (image.Image, error) {
+func waylandPasteImageSnapshot() (*ImageSnapshot, error) {
 	data, err := waylandPaste(portalMimePNG)
 	if err != nil {
 		return nil, err
 	}
-	img, decodeErr := png.Decode(bytes.NewReader(data))
-	if decodeErr != nil {
-		return nil, fmt.Errorf("clipboard: failed to decode wl-paste PNG: %w", decodeErr)
-	}
-	return img, nil
+	return encodedImageSnapshot(data)
 }
 
 func waylandPasteContentType() Type {

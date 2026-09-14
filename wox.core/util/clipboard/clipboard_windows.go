@@ -117,7 +117,8 @@ func readFilePaths() ([]string, error) {
 	return paths, nil
 }
 
-func readImage() (image.Image, error) {
+// readImageSnapshot copies native bytes while leaving pixel decoding to the caller.
+func readImageSnapshot() (*ImageSnapshot, error) {
 	var cData *C.uchar
 	var cLen C.int
 	var cIsPNG C.int
@@ -131,18 +132,9 @@ func readImage() (image.Image, error) {
 	}
 	defer C.free(unsafe.Pointer(cData))
 
-	dataLen := int(cLen)
 	data := C.GoBytes(unsafe.Pointer(cData), cLen)
-
-	// PNG format: decode directly
 	if int(cIsPNG) != 0 {
-		img, err := png.Decode(bytes.NewReader(data))
-		if err != nil {
-			return nil, fmt.Errorf("clipboard: failed to decode PNG data (%d bytes): %w", dataLen, err)
-		}
-		logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded PNG image %dx%d (%d bytes)",
-			img.Bounds().Dx(), img.Bounds().Dy(), dataLen))
-		return img, nil
+		return encodedImageSnapshot(data)
 	}
 
 	// DIB format: decode based on header info
@@ -154,13 +146,16 @@ func readImage() (image.Image, error) {
 	clrUsed := int(cInfo.clrUsed)
 	sizeImage := int(cInfo.sizeImage)
 
-	// 32-bit images: manual decoder (common from Chrome/Edge, Go's bmp.Decode often fails)
-	if bitCount == 32 {
-		return decode32bppDIB(data, headerSize, width, height, compression)
-	}
-
-	// Non-32bpp: construct BMP file header and use standard decoder
-	return decodeNon32bppDIB(data, headerSize, width, height, bitCount, compression, sizeImage, clrUsed)
+	height = max(height, -height)
+	return &ImageSnapshot{
+		bounds: image.Rect(0, 0, width, height),
+		decode: func() (image.Image, error) {
+			if bitCount == 32 {
+				return decode32bppDIB(data, headerSize, width, int(cInfo.height), compression)
+			}
+			return decodeNon32bppDIB(data, headerSize, width, int(cInfo.height), bitCount, compression, sizeImage, clrUsed)
+		},
+	}, nil
 }
 
 // decode32bppDIB manually decodes a 32-bit per pixel DIB from raw data.

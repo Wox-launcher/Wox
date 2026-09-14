@@ -202,6 +202,7 @@ type chatPreviewState struct {
 	questionSelected int
 	expandedRounds   map[string]bool
 	attachments      []common.AIChatAttachment
+	importing        bool
 }
 
 type chatPreviewSnapshot struct {
@@ -236,6 +237,7 @@ type chatPreviewSnapshot struct {
 	questionSelected int
 	expandedRounds   map[string]bool
 	attachments      []common.AIChatAttachment
+	importing        bool
 }
 
 type chatCommandPaletteItem struct {
@@ -498,6 +500,7 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		questionSelected: state.questionSelected,
 		expandedRounds:   make(map[string]bool, len(state.expandedRounds)),
 		attachments:      slices.Clone(state.attachments),
+		importing:        state.importing,
 	}
 	for roundID, expanded := range state.expandedRounds {
 		snapshot.expandedRounds[roundID] = expanded
@@ -839,6 +842,7 @@ func (a *App) startNewChat() {
 	if state == nil {
 		return
 	}
+	a.cancelChatAttachmentImports()
 	if state.question != nil {
 		questionID = state.question.QuestionID
 	}
@@ -941,6 +945,7 @@ func (a *App) selectChatHistory(chatID string) {
 		a.invalidateChatSurfaces()
 		return
 	}
+	a.cancelChatAttachmentImports()
 	var selected *chatData
 	for index := range state.chats {
 		if state.chats[index].ID == chatID {
@@ -1506,7 +1511,7 @@ func (a *App) postChatRequest(key string, revision uint64, chat chatData) {
 // sendChatMessage appends the local user turn before core begins pushing authoritative snapshots.
 func (a *App) sendChatMessage() {
 	state := a.chatPreview
-	if state == nil || state.editor == nil || state.loading || state.sending || state.chat.IsStreaming || state.question != nil {
+	if state == nil || state.editor == nil || state.loading || state.sending || state.importing || state.chat.IsStreaming || state.question != nil {
 		return
 	}
 	text := strings.TrimSpace(state.editor.State().Text)
@@ -1604,11 +1609,14 @@ func (a *App) editChatConversation(messageID string) {
 	if state == nil || state.editor == nil {
 		return
 	}
-	if state.chat.IsStreaming || state.sending || state.question != nil {
+	if state.chat.IsStreaming || state.sending || state.importing || state.question != nil {
 		state.error = "Stop the active response before editing a message."
 		a.invalidateChatSurfaces()
 		return
 	}
+	a.cancelChatAttachmentImports()
+	// Editing replaces the current draft. Bump revision so an in-flight import cannot append to it.
+	state.revision++
 	messageIndex := slices.IndexFunc(state.chat.Conversations, func(message chatConversation) bool {
 		return message.ID == messageID && message.Role == "user"
 	})
@@ -1637,6 +1645,10 @@ func (a *App) editChatConversation(messageID string) {
 func (a *App) regenerateChatConversation(messageID string) {
 	state := a.chatPreview
 	if state == nil {
+		return
+	}
+	// Retry also advances the request revision used by pending attachment imports.
+	if state.importing {
 		return
 	}
 	if state.chat.IsStreaming || state.sending || state.question != nil {
@@ -1959,6 +1971,7 @@ func (a *App) deactivateChatPreview() {
 		return
 	}
 	a.chatMarkdown = chatMarkdownCache{}
+	a.cancelChatAttachmentImports()
 	state := a.chatPreview
 	wasActive := state != nil && state.active
 	wasFullscreen := a.chatFullscreen
@@ -1993,6 +2006,7 @@ func (a *App) resetChatPreview() {
 	if a.chatPreview != nil && a.chatPreview.question != nil {
 		questionID = a.chatPreview.question.QuestionID
 	}
+	a.cancelChatAttachmentImports()
 	a.chatPreview = nil
 	a.chatMarkdown = chatMarkdownCache{}
 	a.chatFullscreen = false

@@ -8,6 +8,7 @@ package clipboard
 const char* GetClipboardText();
 char* GetAllClipboardFilePaths();
 unsigned char *GetClipboardImage(size_t *length);
+unsigned char *GetClipboardImageSnapshot(size_t *length);
 void WriteClipboardText(const char *text);
 void WriteClipboardFiles(const char **filePaths, int count);
 void WriteClipboardImage(const char *imageData, int length);
@@ -79,6 +80,19 @@ func readImage() (image.Image, error) {
 			return nil, fmt.Errorf("failed to decode image: %v", err)
 		}
 		return img, nil
+	}
+
+	return nil, noDataErr
+}
+
+// readImageSnapshot captures native encoded data without NSImage rasterization.
+func readImageSnapshot() (*ImageSnapshot, error) {
+	var length C.size_t
+	imageData := C.GetClipboardImageSnapshot(&length)
+	if imageData != nil {
+		defer C.free(unsafe.Pointer(imageData))
+		data := C.GoBytes(unsafe.Pointer(imageData), C.int(length))
+		return encodedImageSnapshot(data)
 	}
 
 	return nil, noDataErr

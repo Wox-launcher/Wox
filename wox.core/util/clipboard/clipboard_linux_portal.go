@@ -3,13 +3,10 @@
 package clipboard
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"image"
-	"image/png"
 	"io"
 	"os"
 	"strings"
@@ -115,7 +112,7 @@ func portalReadFilePaths() ([]string, error) {
 	return paths, nil
 }
 
-func portalReadImage() (image.Image, error) {
+func portalReadImageSnapshot() (*ImageSnapshot, error) {
 	linuxPortalMu.Lock()
 	defer linuxPortalMu.Unlock()
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
@@ -128,11 +125,7 @@ func portalReadImage() (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	img, decodeErr := png.Decode(bytes.NewReader(data))
-	if decodeErr != nil {
-		return nil, fmt.Errorf("clipboard: failed to decode portal clipboard PNG: %w", decodeErr)
-	}
-	return img, nil
+	return encodedImageSnapshot(data)
 }
 
 func portalWriteText(text string) error {

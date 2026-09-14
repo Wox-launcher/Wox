@@ -1361,8 +1361,15 @@ func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, req
 	return PluginCommandResult{Handled: false, Message: "plugin command not handled"}, nil
 }
 
+func pluginInstanceDisabled(instance *Instance) bool {
+	if instance == nil || instance.Setting == nil || instance.Setting.Disabled == nil {
+		return false
+	}
+	return instance.Setting.Disabled.Get()
+}
+
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
-	if pluginInstance.Setting.Disabled.Get() {
+	if pluginInstanceDisabled(pluginInstance) {
 		return false
 	}
 
@@ -1377,14 +1384,12 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 	}
 
 	if query.Type == QueryTypeSelection {
-		// If the selection query carries a trigger keyword (parsed from QueryText),
-		// only route it to the plugin that owns that keyword, so users can configure
-		// a hotkey like "select " to target one specific plugin instead of all.
-		if query.TriggerKeyword != "" {
-			return lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
+		// Keyword-targeted and global selection both require the querySelection
+		// feature. Matching a trigger keyword alone must not deliver a file
+		// selection to a plugin that never declared that capability.
+		if query.TriggerKeyword != "" && !lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword) {
+			return false
 		}
-		// No trigger keyword: fall back to old behavior - deliver to all plugins
-		// that have declared the querySelection feature.
 		return pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection)
 	}
 

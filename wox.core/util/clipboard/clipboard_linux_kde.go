@@ -4,7 +4,6 @@ package clipboard
 
 import (
 	"fmt"
-	"image"
 	"os"
 	"wox/util"
 )
@@ -43,11 +42,11 @@ func (kdeWaylandClipboard) readFilePaths() ([]string, error) {
 	return dataControlReadFilePaths()
 }
 
-func (kdeWaylandClipboard) readImage() (image.Image, error) {
+func (kdeWaylandClipboard) readImageSnapshot() (*ImageSnapshot, error) {
 	if err := portalReady(); err == nil {
-		return portalReadImage()
+		return portalReadImageSnapshot()
 	}
-	return dataControlReadImage()
+	return dataControlReadImageSnapshot()
 }
 
 func (kdeWaylandClipboard) writeText(text string) error {

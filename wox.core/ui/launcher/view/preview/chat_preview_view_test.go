@@ -485,6 +485,23 @@ func TestChatInputRendersSkillTagsAsAtomicChips(t *testing.T) {
 	}
 }
 
+func TestChatInputWiresOnPasteToTextField(t *testing.T) {
+	pasted := false
+	theme := woxcomponent.Theme{QueryBackground: woxui.Color{A: 255}}
+	input := ChatInput(ChatInputProps{
+		Width: 400, Height: ChatComposerHeight(0), Key: "paste", Theme: theme,
+		OnPaste: func(string) bool {
+			pasted = true
+			return true
+		},
+		Importing: true,
+	}).(woxwidget.Container)
+	field := input.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if field.OnPaste == nil || !field.OnPaste("ignored") || !pasted {
+		t.Fatal("chat composer OnPaste must reach the shared text field")
+	}
+}
+
 func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
 	theme := woxcomponent.Theme{
 		PreviewText:     woxui.Color{R: 220, G: 225, B: 230, A: 255},
@@ -587,45 +604,74 @@ func TestSentChatQuotePreservesLinesAndMessageHeight(t *testing.T) {
 	}
 }
 
-func TestChatFileAndImageAttachmentsUseCompactCards(t *testing.T) {
-	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 180, G: 180, B: 180, A: 200}}
-	for _, kind := range []string{"file", "image"} {
-		attachment := ChatAttachmentProps{ID: "a", Kind: kind, Label: "a very long attachment name", Text: "/original/path", Image: &woxui.Image{Width: 400, Height: 100}}
-		for _, sent := range []bool{false, true} {
-			for _, width := range []float32{180, 600} {
-				view := chatAttachmentCard(attachment, width, woxcomponent.Theme{}, "Remove", nil, sent).(woxwidget.Semantics)
-				container := view.Child.(woxwidget.Container)
-				row := container.Child.(woxwidget.Flex)
-				thumbnail := row.Children[0].(woxwidget.Image)
-				if thumbnail.Fit != woxwidget.ImageFitContain {
-					t.Fatal("image aspect ratio must be preserved")
-				}
-				expected := chatQuoteCardHeight
-				if sent {
-					expected = chatAttachmentHeight(attachment)
-				}
-				if container.Height != expected || view.Label != attachment.Label+": "+attachment.Text {
-					t.Fatalf("attachment card = %#v", view)
-				}
-			}
+func TestChatFileAndImageAttachmentsUseCompactTiles(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ResultSubtitle:  woxui.Color{R: 180, G: 180, B: 180, A: 200},
+		QueryBackground: woxui.Color{R: 30, G: 30, B: 30, A: 255},
+		Cursor:          woxui.Color{R: 30, G: 110, B: 220, A: 255},
+	}
+	file := ChatAttachmentProps{ID: "file", Kind: "file", Label: "a very long attachment name", Text: "/original/path", Image: &woxui.Image{Width: 24, Height: 24}}
+	image := ChatAttachmentProps{ID: "image", Kind: "image", Label: "snapshot.png", Text: "Image", Image: &woxui.Image{Width: 400, Height: 100}}
+	for _, sent := range []bool{false, true} {
+		fileView := chatAttachmentCard(file, 400, theme, "Remove", nil, sent).(woxwidget.Semantics)
+		fileTile := fileView.Child.(woxwidget.Stack)
+		if fileTile.Width != chatAttachmentTileSize || fileTile.Height != chatAttachmentTileSize || fileView.Label != file.Label+": "+file.Text {
+			t.Fatalf("file tile = %#v", fileView)
+		}
+		fileIcon := fileTile.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Image)
+		if fileIcon.Fit != woxwidget.ImageFitContain || fileIcon.Width != chatAttachmentTileIconSize {
+			t.Fatal("file icons must stay contained inside the tile")
+		}
+
+		imageView := chatAttachmentCard(image, 180, theme, "Remove", nil, sent).(woxwidget.Semantics)
+		thumbnail := imageView.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Image)
+		if thumbnail.Fit != woxwidget.ImageFitCover || thumbnail.Width != chatAttachmentTileSize || thumbnail.Height != chatAttachmentTileSize {
+			t.Fatalf("image tile = %#v", thumbnail)
 		}
 	}
-	dismissed := chatAttachmentCard(ChatAttachmentProps{ID: "file", Kind: "file", Label: "notes.txt", Text: "/tmp/notes.txt"}, 400, theme, "Remove file", func() {}, false).(woxwidget.Semantics)
-	dismiss := dismissed.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-	if dismiss.ID != "chat-attachment-dismiss-file" || dismiss.HoverBackground != chatIconHoverBackground(theme) || dismiss.HoverBackground.A == 0 {
-		t.Fatalf("attachment dismiss = %#v, want shared icon-button hover", dismiss)
+	dismissed := chatAttachmentCard(file, 400, theme, "Remove file", func() {}, false).(woxwidget.Semantics)
+	dismiss := dismissed.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if dismiss.ID != "chat-attachment-dismiss-file" || dismiss.Width != chatAttachmentTileDismissSize || dismiss.Background != chatAttachmentTileDismissBackground(theme) || dismiss.HoverBackground != chatIconHoverBackground(theme) || dismiss.HoverBackground.A == 0 {
+		t.Fatalf("attachment dismiss = %#v, want compact overlay hover", dismiss)
+	}
+
+	files := []ChatAttachmentProps{file, file, file, file, file}
+	if ChatComposerHeightForAttachments(files, 1) != ChatComposerHeightForAttachments(files[:1], 1) {
+		t.Fatal("file tiles must share one composer row")
 	}
 	if ChatComposerHeight(100) != ChatComposerHeight(3) {
-		t.Fatal("large selections must leave the editor visible")
+		t.Fatal("large quote selections must leave the editor visible")
 	}
-	attachments := make([]ChatAttachmentProps, 5)
-	input := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(5), Attachments: attachments}).(woxwidget.Container)
+	input := ChatInput(ChatInputProps{Width: 200, Height: ChatComposerHeightForAttachments(files, 1), Key: "files", Attachments: files, Theme: theme}).(woxwidget.Container)
 	card := input.Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	if len(card.Children) != 4 {
-		t.Fatal("many attachments should use one scroll pane above the editor")
+		t.Fatal("many file tiles should use one strip above the editor")
 	}
-	if _, ok := card.Children[0].(woxwidget.Stateful); !ok {
-		t.Fatal("attachment pane must own retained scroll state")
+	strip := card.Children[0].(woxwidget.Container)
+	if strip.Height != chatComposerAttachmentStripHeight {
+		t.Fatalf("tile strip height = %.0f, want %.0f", strip.Height, chatComposerAttachmentStripHeight)
+	}
+	if _, ok := strip.Child.(woxwidget.Stateful); !ok {
+		t.Fatal("overflowing tiles must own retained horizontal scroll state")
+	}
+
+	quotes := make([]ChatAttachmentProps, 5)
+	quoted := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(5), Attachments: quotes}).(woxwidget.Container)
+	quotedCard := quoted.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if _, ok := quotedCard.Children[0].(woxwidget.Stateful); !ok {
+		t.Fatal("many quotes should keep one vertical scroll pane")
+	}
+
+	plain := ChatMessageProps{Role: "user", Text: "Explain", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}}}
+	oneTile := plain
+	oneTile.Attachments = []ChatAttachmentProps{file}
+	twoTiles := plain
+	twoTiles.Attachments = []ChatAttachmentProps{file, image}
+	if chatMessageHeight(oneTile)-chatMessageHeight(plain) != chatAttachmentTileSize+3 {
+		t.Fatal("sent file tiles must use the compact square height")
+	}
+	if chatMessageHeight(twoTiles) != chatMessageHeight(oneTile) {
+		t.Fatal("multiple sent file tiles must share one row")
 	}
 }
 

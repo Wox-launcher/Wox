@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
-	"image/png"
 	"os/exec"
 	"strings"
 	"sync"
@@ -80,16 +78,12 @@ func (c *x11Clipboard) readFilePaths() ([]string, error) {
 	return paths, nil
 }
 
-func (c *x11Clipboard) readImage() (image.Image, error) {
+func (c *x11Clipboard) readImageSnapshot() (*ImageSnapshot, error) {
 	data, err := c.readMIME(portalMimePNG)
 	if err != nil {
 		return nil, err
 	}
-	img, decodeErr := png.Decode(bytes.NewReader(data))
-	if decodeErr != nil {
-		return nil, fmt.Errorf("clipboard: failed to decode X11 PNG: %w", decodeErr)
-	}
-	return img, nil
+	return encodedImageSnapshot(data)
 }
 
 func (c *x11Clipboard) writeText(text string) error {

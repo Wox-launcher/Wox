@@ -168,6 +168,7 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 				return a.onDedicatedChatKey(event)
 			},
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },
+			OnFileDrop:       a.handleChatWindowFileDrop,
 			OnCloseRequested: a.requestCloseChatWindow,
 			OnClosed: func() {
 				host.Dispose()
@@ -178,6 +179,7 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 			host.Attach(managed.Window())
 			a.chatView = managed
 			a.chatHost = host
+			a.chatWindowGeneration++
 			fontFamily = a.generalSettings.Data().AppFontFamily
 			isDark = themeColorIsDark(a.palette.background)
 			created = true
@@ -241,6 +243,7 @@ func (a *App) closeChatWindow() error {
 
 // onChatWindowClosed returns preview lifecycle and keyboard ownership to the launcher.
 func (a *App) onChatWindowClosed() {
+	a.chatWindowGeneration++
 	a.chatView = nil
 	a.chatHost = nil
 	a.chatWindowFocused = false

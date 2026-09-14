@@ -36,7 +36,7 @@ type linuxClipboard interface {
 	readContentType() Type
 	readText() (string, error)
 	readFilePaths() ([]string, error)
-	readImage() (image.Image, error)
+	readImageSnapshot() (*ImageSnapshot, error)
 	writeText(text string) error
 	writeFilePaths(paths []string) error
 	writeImageBytes(pngData []byte) error
@@ -104,8 +104,8 @@ func readFilePaths() ([]string, error) {
 	return linuxClipboardBackend().readFilePaths()
 }
 
-func readImage() (image.Image, error) {
-	return linuxClipboardBackend().readImage()
+func readImageSnapshot() (*ImageSnapshot, error) {
+	return linuxClipboardBackend().readImageSnapshot()
 }
 
 func writeTextData(text string) error {
@@ -212,7 +212,7 @@ func dataControlReadFilePaths() ([]string, error) {
 	return paths, nil
 }
 
-func dataControlReadImage() (image.Image, error) {
+func dataControlReadImageSnapshot() (*ImageSnapshot, error) {
 	selection, err := readDataControlSelectionLocked(false)
 	if err != nil {
 		return nil, err
@@ -220,11 +220,7 @@ func dataControlReadImage() (image.Image, error) {
 	if dataControlSelectionContentType(selection) != ClipboardTypeImage {
 		return nil, noDataErr
 	}
-	img, decodeErr := png.Decode(bytes.NewReader(selection.data))
-	if decodeErr != nil {
-		return nil, fmt.Errorf("clipboard: failed to decode data-control PNG: %w", decodeErr)
-	}
-	return img, nil
+	return encodedImageSnapshot(selection.data)
 }
 
 func dataControlIsChanged() bool {

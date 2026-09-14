@@ -110,6 +110,37 @@ unsigned char *GetClipboardImage(size_t *length) {
     }
 }
 
+unsigned char *GetClipboardImageSnapshot(size_t *length) {
+    @try {
+        NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+        // Preserve encoded bytes; Go validates dimensions before decoding off the UI thread.
+        NSData *imageData = [pasteboard dataForType:NSPasteboardTypePNG];
+        if (imageData == nil) {
+            imageData = [pasteboard dataForType:NSPasteboardTypeTIFF];
+        }
+        if (imageData == nil) {
+            imageData = [pasteboard dataForType:@"public.jpeg"];
+        }
+        if (imageData == nil) {
+            imageData = [pasteboard dataForType:@"com.compuserve.gif"];
+        }
+        if (imageData == nil) {
+            return NULL;
+        }
+        *length = [imageData length];
+        unsigned char *bytes = (unsigned char *)malloc(*length);
+        if (bytes == NULL) {
+            return NULL;
+        }
+        memcpy(bytes, [imageData bytes], *length);
+
+        return bytes;
+    }
+    @catch (NSException *exception) {
+        return NULL;
+    }
+}
+
 void WriteClipboardText(const char *text) {
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     [pasteboard clearContents];

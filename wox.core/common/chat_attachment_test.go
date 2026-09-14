@@ -1,7 +1,9 @@
 package common
 
 import (
+	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -77,3 +79,41 @@ func TestChatAttachmentsKeepFilePathsAndSnapshotImages(t *testing.T) {
 		t.Fatal("accepted an oversized image")
 	}
 }
+
+func TestImportChatAttachmentsRollsBackNewFiles(t *testing.T) {
+	directory := t.TempDir()
+	previous := util.GetLocation().GetUserDataDirectory()
+	util.GetLocation().UpdateUserDataDirectory(directory)
+	t.Cleanup(func() { util.GetLocation().UpdateUserDataDirectory(previous) })
+	imagePath := filepath.Join(directory, "ok.png")
+	file, err := os.Create(imagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	_ = file.Close()
+	if _, err := ImportChatAttachments([]string{imagePath, filepath.Join(directory, "missing.bin")}); err == nil {
+		t.Fatal("expected the missing file to fail the batch")
+	}
+	entries, _ := os.ReadDir(filepath.Join(directory, "chat", "attachments"))
+	if len(entries) != 0 {
+		t.Fatalf("failed batch left managed files: %v", entries)
+	}
+}
+
+func TestImportChatImageRejectsOversizedPixelsBeforeEncode(t *testing.T) {
+	if _, err := ImportChatImage(hugeBoundsImage{}); err == nil {
+		t.Fatal("expected a 48 megapixel bitmap to fail before encoding")
+	}
+	if ClassifyChatAttachmentError(&ChatAttachmentError{Kind: ChatAttachmentErrorTooManyPixels, Err: fmt.Errorf("image exceeds 40 megapixels")}) != ChatAttachmentErrorTooManyPixels {
+		t.Fatal("pixel limit must stay classified")
+	}
+}
+
+type hugeBoundsImage struct{}
+
+func (hugeBoundsImage) ColorModel() color.Model { return color.RGBAModel }
+func (hugeBoundsImage) Bounds() image.Rectangle { return image.Rect(0, 0, 8000, 6000) }
+func (hugeBoundsImage) At(int, int) color.Color { return color.RGBA{} }
