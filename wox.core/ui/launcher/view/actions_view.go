@@ -375,13 +375,15 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		height := ActionItemHeight(item)
 		if item.Kind == ActionItemKindAction && item.Index == props.Selected {
 			keepVisible = &woxwidget.ScrollRange{Start: offset, End: offset + height}
-			break
 		}
 		offset += height
 	}
 	actionList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.ActionHeader,
+		// Row heights are fixed. Supplying their extent avoids a geometry callback
+		// that invalidates the unbounded scroll State whenever filtering resizes it.
+		ContentHeight: max(float32(ActionRowHeight), offset),
+		Content:       woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.ActionHeader,
 	})
 	search := actionSearchBoundary(actionSearchProps{
 		Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,

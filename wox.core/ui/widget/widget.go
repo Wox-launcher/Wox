@@ -142,6 +142,7 @@ type node struct {
 	semantic   *semanticBehavior
 	scroll     *scrollBehavior
 	caret      bool
+	floating   bool
 	caretPaint func(*woxui.DisplayList, woxui.Rect, bool, bool)
 	clip       bool
 	children   []*node
@@ -358,6 +359,7 @@ func (w Container) layout(ctx context, available constraints) *node {
 	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
 	if w.Floating {
+		result.floating = true
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			// Native material edges are always one unit; paint custom widths separately.
 			edge := w.BorderColor

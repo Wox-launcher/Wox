@@ -2020,8 +2020,8 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 		compositionWidth := textFieldMeasureRange(window, displayRunes, compositionStart, compositionEnd, style, nil)
 		displayList.FillRect(woxui.Rect{X: lineX + prefixWidth, Y: cursorY + lineHeight - 2, Width: compositionWidth, Height: 1}, theme.Cursor)
 	}
-	if caretVisible && start == end {
-		displayList.FillRect(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: lineHeight}, theme.Cursor)
+	if start == end {
+		displayList.DrawCaret(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: lineHeight}, theme.Cursor, caretVisible)
 	}
 }
 

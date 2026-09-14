@@ -49,10 +49,11 @@ const (
 // value costs more and makes the backdrop drift towards a flat colour.
 const floatingMaterialBlurSigma float32 = 12
 
-// floatingMaterialBlurMargin is how far outside a surface the renderer blur samples, in
-// logical pixels. Three standard deviations cover the kernel, so the surface edge blends
-// with real neighbours instead of transparent padding.
-const floatingMaterialBlurMargin = 3 * floatingMaterialBlurSigma
+// FloatingMaterialBlurMargin is how far outside a renderer-blurred surface the kernel
+// samples, in logical pixels. Three standard deviations cover the kernel, so the surface
+// edge blends with real neighbours instead of transparent padding. Damage covering uses
+// this halo to resample a surface without joining adjacent cards into one rectangle.
+const FloatingMaterialBlurMargin = 3 * floatingMaterialBlurSigma
 
 // floatingMaterial is one material declared by a frame, in logical client coordinates.
 type floatingMaterial struct {

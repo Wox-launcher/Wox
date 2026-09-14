@@ -43,6 +43,12 @@ struct WoxRenderer {
   ID2D1DeviceContext *d2d_context = nullptr;
   ID2D1Bitmap1 *target_bitmap = nullptr;
   ID2D1Bitmap1 *overlay_target_bitmap = nullptr;
+  // Only the few physical pixel columns beneath the active caret are retained.
+  ID2D1Bitmap1 *caret_backdrop = nullptr;
+  D2D1_RECT_F caret_rect = {};
+  D2D1_RECT_U caret_pixels = {};
+  float caret_scale = 0.0f;
+  bool caret_valid = false;
   ID2D1Bitmap1 *cached_large_image_bitmap = nullptr;
   uint64_t cached_large_image_id = 0;
   uint64_t cached_large_image_bytes = 0;
@@ -279,6 +285,8 @@ static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
 }
 
 static void release_material_resources(WoxRenderer *renderer) {
+  release_com(&renderer->caret_backdrop);
+  renderer->caret_valid = false;
   release_com(&renderer->material_blur_effect);
   release_com(&renderer->material_crop_effect);
   release_com(&renderer->material_source_bitmap);
@@ -725,6 +733,7 @@ extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, ui
   }
 
   renderer->d2d_context->SetTarget(nullptr);
+  renderer->caret_valid = false;
   release_com(&renderer->target_bitmap);
   release_com(&renderer->overlay_target_bitmap);
 
@@ -834,6 +843,66 @@ extern "C" int32_t wox_renderer_fill_rounded_rect(WoxRenderer *renderer, float x
     renderer->d2d_context->FillRoundedRectangle(&rounded_rect, renderer->brush);
   }
   return S_OK;
+}
+
+extern "C" void wox_renderer_invalidate_caret(WoxRenderer *renderer) {
+  renderer->caret_valid = false;
+}
+
+// Capture after text/background paint and before the caret, including when it is hidden.
+// Failed allocation/copy simply disables the fast path until a later normal frame.
+extern "C" void wox_renderer_capture_caret(WoxRenderer *renderer, float x, float y, float width, float height) {
+  renderer->caret_valid = false;
+  if (!renderer->frame_open || renderer->overlay_active) return;
+  const float scale = renderer->scale;
+  const D2D1_SIZE_U target = renderer->target_bitmap->GetPixelSize();
+  const auto clamp_pixel = [](float value, uint32_t limit) {
+    return static_cast<uint32_t>(std::min<float>(std::max(0.0f, value), static_cast<float>(limit)));
+  };
+  const D2D1_RECT_U source = {
+    clamp_pixel(std::floor(x * scale), target.width), clamp_pixel(std::floor(y * scale), target.height),
+    clamp_pixel(std::ceil((x + width) * scale), target.width), clamp_pixel(std::ceil((y + height) * scale), target.height)
+  };
+  if (source.right <= source.left || source.bottom <= source.top) return;
+  // Partial updates outside this caret have not restored its background this frame.
+  if (renderer->present_dirty && (source.left < static_cast<uint32_t>(renderer->present_dirty_rect.left) ||
+      source.top < static_cast<uint32_t>(renderer->present_dirty_rect.top) ||
+      source.right > static_cast<uint32_t>(renderer->present_dirty_rect.right) ||
+      source.bottom > static_cast<uint32_t>(renderer->present_dirty_rect.bottom))) return;
+  const D2D1_SIZE_U size = D2D1::SizeU(source.right - source.left, source.bottom - source.top);
+  if (renderer->caret_backdrop != nullptr) {
+    const auto old = renderer->caret_backdrop->GetPixelSize();
+    if (old.width != size.width || old.height != size.height) release_com(&renderer->caret_backdrop);
+  }
+  if (renderer->caret_backdrop == nullptr) {
+    const auto properties = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_NONE, renderer->target_bitmap->GetPixelFormat(), 96.0f, 96.0f);
+    if (FAILED(renderer->d2d_context->CreateBitmap(size, nullptr, 0, &properties, &renderer->caret_backdrop))) return;
+  }
+  if (FAILED(renderer->d2d_context->Flush())) return;
+  const D2D1_POINT_2U origin = {};
+  if (FAILED(renderer->caret_backdrop->CopyFromBitmap(&origin, renderer->target_bitmap, &source))) return;
+  renderer->caret_rect = D2D1::RectF(x, y, x + width, y + height);
+  renderer->caret_pixels = source;
+  renderer->caret_scale = scale;
+  renderer->caret_valid = true;
+}
+
+// S_FALSE requests normal rendering before any pixels are touched. Restore with SOURCE_COPY
+// so translucent backgrounds do not accumulate alpha across successive blink phases.
+extern "C" int32_t wox_renderer_repaint_caret(WoxRenderer *renderer, float scale, float x, float y, float width, float height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  const auto rect = renderer->caret_rect;
+  if (!renderer->caret_valid || renderer->caret_backdrop == nullptr || renderer->caret_scale != scale ||
+      rect.left != x || rect.top != y || rect.right != x + width || rect.bottom != y + height) return S_FALSE;
+  const auto pixels = renderer->caret_pixels;
+  // Snap damage outward to physical pixels so restoring antialiased edge pixels is exact.
+  HRESULT result = wox_renderer_begin_frame(renderer, scale, pixels.left / scale, pixels.top / scale,
+      (pixels.right - pixels.left) / scale, (pixels.bottom - pixels.top) / scale, 0, 0, 0, 0);
+  if (FAILED(result)) return result;
+  renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
+  const D2D1_POINT_2F offset = D2D1::Point2F(static_cast<float>(pixels.left), static_cast<float>(pixels.top));
+  renderer->d2d_context->DrawImage(renderer->caret_backdrop, &offset, nullptr, D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1_COMPOSITE_MODE_SOURCE_COPY);
+  renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
+  return wox_renderer_fill_rounded_rect(renderer, x, y, width, height, 0, red, green, blue, alpha);
 }
 
 extern "C" int32_t wox_renderer_fill_convex_polygon(WoxRenderer *renderer, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
@@ -1449,7 +1518,8 @@ extern "C" int64_t wox_renderer_resident_bytes(WoxRenderer *renderer) {
   if (renderer == nullptr) {
     return 0;
   }
-  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->cached_large_image_bytes);
+  const auto caret_size = renderer->caret_backdrop == nullptr ? D2D1::SizeU(0, 0) : renderer->caret_backdrop->GetPixelSize();
+  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->cached_large_image_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
 }
 
 extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {

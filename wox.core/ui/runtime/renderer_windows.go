@@ -219,6 +219,25 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	r.traceFrameCount++
 	damage := displayList.NativeDamage()
+	if displayList.caretPatch.Width > 0 && damage.Width > 0 {
+		caret := displayList.commands[displayList.caretCapture-1]
+		alpha := caret.color.A
+		if !caret.caretVisible {
+			alpha = 0
+		}
+		result := C.wox_renderer_repaint_caret(r.handle, C.float(scale), C.float(caret.rect.X), C.float(caret.rect.Y), C.float(caret.rect.Width), C.float(caret.rect.Height), C.uint8_t(caret.color.R), C.uint8_t(caret.color.G), C.uint8_t(caret.color.B), C.uint8_t(alpha))
+		if result < 0 {
+			return hresultError("repaint caret", result)
+		}
+		if result == 0 {
+			displayList.caretRestored = true
+			return r.endFrame()
+		}
+		// Cache loss (resize, hide, device recovery) needs a full background replay.
+		damage = Rect{}
+		displayList.SetNativeDamage(damage)
+	}
+	C.wox_renderer_invalidate_caret(r.handle)
 	if r.traceFrameCount <= windowsRenderTraceFrameLimit {
 		logWindowsRenderTrace("event=frame_begin frame=%d frameId=%d commands=%d scale=%.2f damage=%+v clear=%+v", r.traceFrameCount, displayList.FrameMetricsID(), len(displayList.commands), scale, damage, displayList.clearColor)
 	}
@@ -233,6 +252,9 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	var encodeErr error
 	displayList.forEachCommand(func(command displayCommand) bool {
 		index++
+		if index+1 == displayList.caretCapture {
+			C.wox_renderer_capture_caret(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		}
 		traceNativeCall("renderer command enter frameId=%d handle=%p index=%d kind=%d", displayList.FrameMetricsID(), r.handle, index, command.kind)
 		var commandResult C.int32_t
 		switch command.kind {
@@ -319,7 +341,7 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.float(command.rect.Height),
 				C.float(command.radius),
 				C.float(floatingMaterialBlurSigma),
-				C.float(floatingMaterialBlurMargin),
+				C.float(FloatingMaterialBlurMargin),
 				C.uint8_t(command.color.R),
 				C.uint8_t(command.color.G),
 				C.uint8_t(command.color.B),

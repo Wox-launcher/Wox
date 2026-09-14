@@ -7,7 +7,72 @@ import (
 	"wox/common/icons"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+type actionDamageServices struct {
+	formTableHostServices
+	damage woxui.Rect
+	full   bool
+}
+
+func (s *actionDamageServices) Invalidate() error                    { s.full = true; return nil }
+func (s *actionDamageServices) InvalidateRect(rect woxui.Rect) error { s.damage = rect; return nil }
+
+// TestActionUpdatesRepaintOldAndNewPanelBounds covers typing, clearing, and selection without a native window.
+func TestActionUpdatesRepaintOldAndNewPanelBounds(t *testing.T) {
+	app := &App{generalSettings: &generalSettingsController{}, actionPanel: true, actionFilter: woxui.NewTextEditor(""), results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}, {ID: "copy", Name: "Copy"}}}}}
+	services := &actionDamageServices{}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		height := float32(200)
+		if app.actionFilter.State().Text != "" {
+			height = 100
+		}
+		return woxwidget.Stack{Width: 800, Height: 600, Children: []woxwidget.StackChild{{
+			Left: 450, Top: 550 - height,
+			Child: woxwidget.Gesture{ID: "action-panel-surface", Child: woxwidget.Container{Width: 300, Height: height, Floating: true}},
+		}, {Top: 570, Child: woxwidget.Container{Width: 800, Height: 30, Floating: true}}}}
+	})
+	app.host = host
+	host.AttachServices(services)
+	defer host.Dispose()
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 600}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	previousDamage := woxui.Rect{}
+	for _, update := range []func(){func() { app.setActionFilterValue("missing") }, func() { app.setActionFilterValue("") }, func() { app.moveActionSelection(1) }, func() { app.selectAction(0) }} {
+		services.damage, services.full = woxui.Rect{}, false
+		update()
+		if services.full || services.damage.Width <= 0 {
+			t.Fatalf("action update requested full or no repaint: %+v", services)
+		}
+		frame.Damage = services.damage
+		// The native two-buffer surface also restores the previous frame's damage.
+		if previousDamage.Width > 0 {
+			top := min(previousDamage.Y, frame.Damage.Y)
+			frame.Damage.Y, frame.Damage.Height = top, 550-top
+		}
+		previousDamage = services.damage
+		var list woxui.DisplayList
+		host.Frame(&list, frame)
+		want := woxui.Rect{X: 446, Y: 346, Width: 308, Height: 208}
+		if len(list.RenderedFloatingMaterialRects()) > 0 {
+			margin := woxui.FloatingMaterialBlurMargin
+			want = woxui.Rect{X: want.X - margin, Y: want.Y - margin, Width: want.Width + 2*margin, Height: want.Height + 2*margin}
+		}
+		if got := list.NativeDamage(); got != want {
+			t.Fatalf("action damage = %+v, want old and new panel bounds %+v", got, want)
+		}
+		// A user can pause before clearing. Let both buffers forget the larger panel.
+		if app.actionFilter.State().Text != "" {
+			frame.Damage = services.damage
+			frame.Damage.Y, frame.Damage.Height = 450, 100
+			previousDamage = frame.Damage
+			for range 3 {
+				host.Frame(&woxui.DisplayList{}, frame)
+			}
+		}
+	}
+}
 
 func TestActionPanelTintsThemeAdaptiveSVGOnly(t *testing.T) {
 	if !svgUsesThemeIconColor(fromCoreImage(icons.Get(icons.ActionCopy))) {

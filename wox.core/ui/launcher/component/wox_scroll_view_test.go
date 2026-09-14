@@ -7,6 +7,43 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+type scrollDamageServices struct {
+	hotkeyRecorderHostServices
+	full, local int
+}
+
+func (s *scrollDamageServices) Invalidate() error               { s.full++; return nil }
+func (s *scrollDamageServices) InvalidateRect(woxui.Rect) error { s.local++; return nil }
+
+// Moving within a result row must not repeatedly invalidate an already-visible scrollbar.
+func TestScrollPointerMoveKeepsDamageLocal(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return WoxScrollView(ScrollViewProps{
+			Key: "results", Width: 200, Height: 100, ContentHeight: 300,
+			Content: woxwidget.Gesture{ID: "row", OnHover: func(bool) {}, Child: woxwidget.Container{Width: 200, Height: 300}},
+		})
+	})
+	defer host.Dispose()
+	services := &scrollDamageServices{}
+	host.AttachServices(services)
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 600}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	services.full, services.local = 0, 0
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 20, Y: 20}})
+	first := services.local
+	for x := float32(21); x < 40; x++ {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: x, Y: 20}})
+	}
+	if services.full != 0 || first == 0 || services.local != first {
+		t.Fatalf("pointer invalidations: full=%d local=%d first=%d", services.full, services.local, first)
+	}
+	services.full, services.local = 0, 0
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 20, Y: 20}, Scroll: woxui.Point{Y: -30}})
+	if services.full != 0 || services.local == 0 {
+		t.Fatalf("wheel invalidations: full=%d local=%d", services.full, services.local)
+	}
+}
+
 // TestScrollbarThemePreservesAuthoredStyle checks both axes and every pointer state without native rendering.
 func TestScrollbarThemePreservesAuthoredStyle(t *testing.T) {
 	width, hoverWidth, radius := 0, 16, 0

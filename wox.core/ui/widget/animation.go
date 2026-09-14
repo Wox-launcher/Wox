@@ -3,6 +3,8 @@ package widget
 import (
 	"sync"
 	"time"
+
+	woxui "wox/ui/runtime"
 )
 
 const animationFrameInterval = time.Second / 60
@@ -40,7 +42,13 @@ func (w AnimatedFloat) layout(ctx context, available constraints) *node {
 	if child == nil {
 		return &node{}
 	}
-	return child.layout(ctx, available)
+	result := child.layout(ctx, available)
+	if value != w.Target && ctx.damage != nil {
+		// Uncached animations (notably fading scrollbars) still own local paint
+		// bounds; the next animation tick must not fall back to a full window.
+		ctx.damage.add(woxui.Rect{}, result, true)
+	}
+	return result
 }
 
 // LoopAnimation rebuilds its child with a repeating normalized progress value.

@@ -145,9 +145,12 @@ func (s *scrollViewState) Dispose() {
 }
 
 func (s *scrollViewState) show(context woxwidget.StateContext) {
+	wasVisible := s.visible
 	s.visible = true
 	s.scheduleHide(context)
-	context.Invalidate()
+	if !wasVisible {
+		context.Invalidate()
+	}
 }
 
 func (s *scrollViewState) scheduleHide(context woxwidget.StateContext) {

@@ -547,12 +547,12 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 		cursorX := bounds.X + props.CaretWidth - offset
 		caretY := textTop + float32(props.CaretLine)*lineHeight
 		// Native text fields hide the blinking caret once a range is selected.
-		if (caretVisible || props.CaretShaking) && props.State.Selection.Collapsed() {
+		if props.State.Selection.Collapsed() {
 			paintX := cursorX
 			if props.CaretShaking {
 				paintX = max(bounds.X, min(bounds.X+bounds.Width-cursorWidth, cursorX+props.CaretShake))
 			}
-			displayList.FillRect(woxui.Rect{X: paintX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}, props.Theme.Cursor)
+			displayList.DrawCaret(woxui.Rect{X: paintX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}, props.Theme.Cursor, caretVisible || props.CaretShaking)
 		}
 		if props.OnTextInputState != nil {
 			props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}})

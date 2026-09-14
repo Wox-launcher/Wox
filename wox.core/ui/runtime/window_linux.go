@@ -801,7 +801,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.float(command.rect.Height),
 				C.float(command.radius),
 				C.float(floatingMaterialBlurSigma),
-				C.float(floatingMaterialBlurMargin),
+				C.float(FloatingMaterialBlurMargin),
 				C.uint8_t(command.color.R),
 				C.uint8_t(command.color.G),
 				C.uint8_t(command.color.B),

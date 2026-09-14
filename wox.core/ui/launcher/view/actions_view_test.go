@@ -16,6 +16,60 @@ func TestActionsBoundaryEqualCoversAllFields(t *testing.T) {
 
 type actionSearchHostServices struct{}
 
+// Small lists skip scrollbar State once their content extent is known.
+func actionScrollProps(list woxwidget.Widget) woxcomponent.ScrollViewProps {
+	if stateful, ok := list.(woxwidget.Stateful); ok {
+		return stateful.Widget.(woxcomponent.ScrollViewProps)
+	}
+	scroll := list.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	return woxcomponent.ScrollViewProps{
+		Width: scroll.Width, Height: scroll.Height, ContentHeight: scroll.ContentHeight,
+		KeepVisible: scroll.KeepVisible, Content: scroll.Child,
+	}
+}
+
+type actionDamageHostServices struct {
+	actionSearchHostServices
+	fullInvalidations int
+}
+
+func (s *actionDamageHostServices) Invalidate() error {
+	s.fullInvalidations++
+	return nil
+}
+
+// Filtering must not turn scroll geometry updates into a full-window invalidation.
+func TestActionFilterGeometryStaysLocal(t *testing.T) {
+	items := []ActionItem{{ID: "execute", Index: 0, Label: "Execute"}, {ID: "shortcut", Index: 1, Label: "Add shortcut"}}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		panel, _, _ := ActionsView(ActionsProps{
+			Window: &woxui.Window{}, WindowWidth: 800, WindowHeight: 600, DensityScale: 1,
+			ActionPadding: woxwidget.UniformInsets(10), Items: items,
+		})
+		return panel
+	})
+	defer host.Dispose()
+	services := &actionDamageHostServices{}
+	host.AttachServices(services)
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 600}, PixelSize: woxui.PixelSize{Width: 2000, Height: 1500}, Scale: 2.5}
+	for range 3 {
+		host.Frame(&woxui.DisplayList{}, frame)
+	}
+	for _, filtered := range [][]ActionItem{items[:1], nil, items} {
+		items = filtered
+		services.fullInvalidations = 0
+		if !host.InvalidateKey("action-panel-surface") {
+			t.Fatal("action panel is not mounted")
+		}
+		for range 3 {
+			host.Frame(&woxui.DisplayList{}, frame)
+		}
+		if services.fullInvalidations != 0 {
+			t.Fatalf("filter with %d rows triggered %d full-window invalidations", len(items), services.fullInvalidations)
+		}
+	}
+}
+
 func (actionSearchHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * max(style.Size/2, 1), Height: max(style.Size, 1)}}, nil
 }
@@ -55,7 +109,7 @@ func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
 	panel := view.Child.(woxwidget.Container)
 	content := panel.Child.(woxwidget.Flex)
-	actionList := content.Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	actionList := actionScrollProps(content.Children[2])
 	empty := actionList.Content.(woxwidget.Flex).Children[0].(woxwidget.Align)
 	if empty.Horizontal != 0.5 || empty.Vertical != 0.5 || empty.Width != actionList.Width || empty.Height != ActionRowHeight {
 		t.Fatalf("empty state geometry = %+v, want centered %vx%v slot", empty, actionList.Width, ActionRowHeight)
@@ -99,7 +153,7 @@ func TestActionPanelIndependentRadii(t *testing.T) {
 			Items: []ActionItem{{ID: "open", Label: "Open"}},
 		}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
 		panel := view.Child.(woxwidget.Container)
-		rows := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+		rows := actionScrollProps(panel.Child.(woxwidget.Flex).Children[2]).Content.(woxwidget.Flex).Children
 		row := rows[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 		if panel.Radius != radius || row.Radius != 6 {
 			t.Fatalf("panel=%v row=%v", panel.Radius, row.Radius)
@@ -197,7 +251,7 @@ func TestActionGroupDividerGeometry(t *testing.T) {
 		Items: []ActionItem{{ID: "copy", Label: "Copy"}, {Kind: ActionItemKindSeparator}, {ID: "pin", Label: "Pin"}},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
 	panel := view.Child.(woxwidget.Container)
-	actionList := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	actionList := actionScrollProps(panel.Child.(woxwidget.Flex).Children[2])
 	if actionList.Height != float32(2*ActionRowHeight+ActionGroupDividerHeight) {
 		t.Fatalf("grouped list slot = %v, want two rows plus a %v divider", actionList.Height, ActionGroupDividerHeight)
 	}
@@ -225,7 +279,7 @@ func TestActionGroupDividerIsNotInteractive(t *testing.T) {
 		Theme: woxcomponent.Theme{},
 		Items: []ActionItem{{ID: "copy", Label: "Copy"}, {Kind: ActionItemKindSeparator}, {ID: "pin", Label: "Pin"}},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
-	rows := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	rows := actionScrollProps(view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2]).Content.(woxwidget.Flex).Children
 	if _, ok := rows[1].(woxwidget.Gesture); ok {
 		t.Fatal("group divider used a gesture")
 	}
@@ -243,7 +297,7 @@ func TestActionKeepVisibleAccountsForGroupDivider(t *testing.T) {
 		Theme: woxcomponent.Theme{}, Selected: 1,
 		Items: []ActionItem{{Index: 0, ID: "copy", Label: "Copy"}, {Kind: ActionItemKindSeparator}, {Index: 1, ID: "pin", Label: "Pin"}},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
-	actionList := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	actionList := actionScrollProps(view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2])
 	if actionList.KeepVisible == nil {
 		t.Fatal("grouped selection did not request KeepVisible")
 	}
@@ -298,7 +352,7 @@ func TestActionRowUsesSelectedIconWithLabelColor(t *testing.T) {
 			{Index: 1, ID: "open", Label: "Open", Icon: normal, SelectedIcon: selected},
 		},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
-	rows := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	rows := actionScrollProps(view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2]).Content.(woxwidget.Flex).Children
 	selectedIcon := rows[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Image)
 	if selectedIcon.Source != selected {
 		t.Fatalf("selected action icon = %#v, want the selected-text tint", selectedIcon.Source)
@@ -320,7 +374,7 @@ func TestActionRowShowsScoreTextAsTail(t *testing.T) {
 			{Index: 1, ID: "pin", Label: "Pin", Icon: &woxui.Image{}, Tail: "+8"},
 		},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
-	rows := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	rows := actionScrollProps(view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2]).Content.(woxwidget.Flex).Children
 	selectedRow := rows[0].(woxwidget.Semantics)
 	if selectedRow.Label != "Reset ranking +55" {
 		t.Fatalf("selected score semantics = %q, want the boost in the accessible label", selectedRow.Label)
@@ -350,7 +404,7 @@ func TestActionRowShowsPluginIconAsTail(t *testing.T) {
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
 		Theme: woxcomponent.Theme{}, Items: []ActionItem{{ID: "settings", Label: "Open App settings", Icon: &woxui.Image{}, TailIcon: tail}},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
-	content := view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	content := actionScrollProps(view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2]).Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	if len(content.Children) != 3 {
 		t.Fatalf("action row children = %d, want leading icon, label, and plugin tail", len(content.Children))
 	}
@@ -369,7 +423,7 @@ func TestActionRowCentersIconAndLabel(t *testing.T) {
 		Theme: woxcomponent.Theme{}, Items: []ActionItem{{ID: "open", Label: "打开 系统命令 设置", Icon: &woxui.Image{}}},
 	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
 	panel := view.Child.(woxwidget.Container)
-	actionList := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	actionList := actionScrollProps(panel.Child.(woxwidget.Flex).Children[2])
 	row := actionList.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {

@@ -145,7 +145,7 @@ func TestLauncherQueryOverflowKeepsCaretVisible(t *testing.T) {
 	bounds := woxui.Rect{X: 20, Width: 100, Height: 34}
 	var actual, expected woxui.DisplayList
 	expected.DrawText(props.Lines[0].Text, woxui.Rect{X: -124, Y: bounds.Y, Width: 244, Height: 34}, props.Style, theme.QueryText)
-	expected.FillRect(woxui.Rect{X: 116, Y: bounds.Y, Width: 2, Height: 34}, theme.Cursor)
+	expected.DrawCaret(woxui.Rect{X: 116, Y: bounds.Y, Width: 2, Height: 34}, theme.Cursor, true)
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, true)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("overflow caret paint = %#v, want the caret at the visible right edge", actual)
@@ -229,7 +229,7 @@ func TestLauncherQueryHidesCaretWhenTextIsSelected(t *testing.T) {
 	collapsedHidden := &woxui.DisplayList{}
 	collapsed.Paint(collapsedVisible, bounds, true, true)
 	collapsed.Paint(collapsedHidden, bounds, true, false)
-	if collapsedVisible.CommandCount() <= collapsedHidden.CommandCount() {
+	if collapsedVisible.Compare(collapsedHidden) == nil {
 		t.Fatal("collapsed query should still paint a caret while focused")
 	}
 }

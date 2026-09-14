@@ -1,8 +1,12 @@
 package launcher
 
 import (
+	"encoding/json"
+	"reflect"
 	"runtime"
 	"testing"
+
+	"wox/resource"
 )
 
 func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testing.T) {
@@ -87,8 +91,16 @@ func TestOnboardingSystemThemesUsesBundledOrder(t *testing.T) {
 }
 
 func TestOnboardingUsesBundledGlassPalette(t *testing.T) {
-	background := onboardingGlassTheme.Background
-	if background.R != 22 || background.G != 22 || background.B != 26 || onboardingGlassTheme.QueryBackground.A != 0 {
+	data, err := resource.ThemeFS.ReadFile("themes/glass.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var theme themeData
+	if err := json.Unmarshal(data, &theme); err != nil {
+		t.Fatal(err)
+	}
+	// The bundled theme has platform overrides; compare the resolved palette.
+	if !reflect.DeepEqual(onboardingGlassTheme, paletteForTheme(theme).componentTheme()) {
 		t.Fatalf("onboarding theme = %#v, want bundled Wox Glass palette", onboardingGlassTheme)
 	}
 }

@@ -98,7 +98,14 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 	case smokeAutomationTooltipCommand:
 		return queryTooltipPreview()
 	case smokeAutomationListCommand:
-		return queryListFixture()
+		response := queryListFixture()
+		if query.Search == "preview" {
+			// Keep the right pane fixed while the result viewport scrolls independently.
+			for index := range response.Results {
+				response.Results[index].Preview = plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Stable repaint smoke preview"}
+			}
+		}
+		return response
 	case smokeAutomationGridCommand:
 		return queryGridFixture()
 	case smokeAutomationChatCommand:

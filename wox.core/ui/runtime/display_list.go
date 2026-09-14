@@ -58,10 +58,15 @@ type DisplayList struct {
 	overlayBegun bool
 	// floatingMaterials lists the materials declared so far, so a later surface
 	// can tell whether it is stacked over another floating surface and so the
-	// widget host can widen damage under a renderer-blurred surface (see
-	// RenderedFloatingMaterialRects). Declared surfaces are kept even when damage
-	// culling skips their command, because the next frame's damage depends on them.
+	// widget host can widen damage under a renderer-blurred surface using
+	// FloatingMaterialBlurMargin (see RenderedFloatingMaterialRects). Declared
+	// surfaces are kept even when damage culling skips their command, because
+	// the next frame's damage depends on them.
 	floatingMaterials []Rect
+	caretPatch        Rect
+	caretCapture      int  // One-based command index; zero disables native backdrop capture.
+	caretStable       bool // Both swap-chain buffers must have seen the unchanged background.
+	caretRestored     bool
 }
 
 const displayListFloatTolerance = float32(1e-4)
@@ -120,6 +125,9 @@ func (d *DisplayList) appendCommand(command displayCommand) {
 
 func (d *DisplayList) forEachCommand(visit func(displayCommand) bool) {
 	for _, command := range d.commands {
+		if command.caret && !command.caretVisible {
+			command.color.A = 0
+		}
 		if !visit(command) {
 			return
 		}
@@ -129,6 +137,9 @@ func (d *DisplayList) forEachCommand(visit func(displayCommand) bool) {
 // EncodedRendererResources reports the current uncached encode cost of this command stream.
 // Native caches later replace these baseline create/upload counts with hit/miss accounting.
 func (d *DisplayList) EncodedRendererResources() FrameRendererResourceMetrics {
+	if d.caretRestored {
+		return FrameRendererResourceMetrics{CacheHits: 1}
+	}
 	text := d.TextDrawCount()
 	images := d.ImageDrawCount()
 	return FrameRendererResourceMetrics{
@@ -192,7 +203,7 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 }
 
 func displayCommandsEqual(left, right displayCommand) bool {
-	if left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
+	if left.caret != right.caret || left.caretVisible != right.caretVisible || left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
 		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
 		left.color != right.color || left.edge != right.edge || left.text != right.text || left.style.Weight != right.style.Weight ||
 		left.style.Family != right.style.Family || left.style.Italic != right.style.Italic ||
@@ -245,17 +256,19 @@ const (
 )
 
 type displayCommand struct {
-	kind     displayCommandKind
-	rect     Rect
-	radius   float32
-	stroke   float32
-	color    Color
-	edge     Color
-	text     string
-	style    TextStyle
-	image    *Image
-	rotation float32
-	points   []Point
+	caret        bool
+	caretVisible bool
+	kind         displayCommandKind
+	rect         Rect
+	radius       float32
+	stroke       float32
+	color        Color
+	edge         Color
+	text         string
+	style        TextStyle
+	image        *Image
+	rotation     float32
+	points       []Point
 }
 
 // FloatingMaterial backs a surface that floats above other Go UI content in the same
@@ -308,23 +321,15 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 }
 
 // RenderedFloatingMaterialRects returns the surfaces this frame backed with a renderer
-// blur, each grown by the margin the blur samples around it, in logical coordinates.
-// The renderer reads the backdrop from the back buffer, so a later frame that repaints
-// anything under one of these rectangles must repaint the whole rectangle, or the blur
-// would sample the previous frame's tinted panel instead of the content beneath it.
+// blur, in logical coordinates and without the sample halo. The host applies
+// FloatingMaterialBlurMargin when widening later damage so a change under a surface
+// covers that surface, without joining adjacent cards into one axis-aligned rect.
 // Platforms without a renderer blur return nil.
 func (d *DisplayList) RenderedFloatingMaterialRects() []Rect {
 	if d == nil || len(d.floatingMaterials) == 0 || nativeFloatingMaterialMode() != floatingMaterialRendered {
 		return nil
 	}
-	rects := make([]Rect, len(d.floatingMaterials))
-	for index, rect := range d.floatingMaterials {
-		rects[index] = Rect{
-			X: rect.X - floatingMaterialBlurMargin, Y: rect.Y - floatingMaterialBlurMargin,
-			Width: rect.Width + 2*floatingMaterialBlurMargin, Height: rect.Height + 2*floatingMaterialBlurMargin,
-		}
-	}
-	return rects
+	return append([]Rect(nil), d.floatingMaterials...)
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.
@@ -437,6 +442,17 @@ func (d *DisplayList) Clear(color Color) {
 // FillRect fills an axis-aligned rectangle.
 func (d *DisplayList) FillRect(rect Rect, color Color) {
 	d.FillRoundedRect(rect, 0, color)
+}
+
+// DrawCaret retains the hidden phase too, so a blink can reuse the pixels beneath the caret.
+func (d *DisplayList) DrawCaret(rect Rect, color Color, visible bool) {
+	if clip, ok := d.ClipRect(); ok {
+		rect = intersectRects(rect, clip)
+	}
+	if rect.Width <= 0 || rect.Height <= 0 || !d.shouldRecord(rect) {
+		return
+	}
+	d.appendCommand(displayCommand{kind: displayCommandFillRoundedRect, rect: rect, color: color, caret: true, caretVisible: visible})
 }
 
 // FillRoundedRect fills an axis-aligned rectangle with a uniform corner radius.

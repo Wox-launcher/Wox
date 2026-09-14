@@ -1,11 +1,45 @@
 package widget
 
-import woxui "wox/ui/runtime"
+import (
+	"math"
+
+	woxui "wox/ui/runtime"
+)
 
 type boundaryDamage struct {
 	oldBounds woxui.Rect
 	node      *node
 	always    bool
+}
+
+// currentMaterialBounds includes newly grown surfaces before damage classification.
+// Previous display lists only describe the smaller panel after a filter has settled.
+func currentMaterialBounds(current *node, materials []woxui.Rect) []woxui.Rect {
+	if current == nil {
+		return materials
+	}
+	if current.floating {
+		materials = append(materials, globalRect(current))
+	}
+	for _, child := range current.children {
+		materials = currentMaterialBounds(child, materials)
+	}
+	return materials
+}
+
+// keyedNodeDamage resolves new geometry after layout; old geometry was invalidated before the frame.
+func keyedNodeDamage(current *node, keys map[Key]bool) woxui.Rect {
+	if current == nil {
+		return woxui.Rect{}
+	}
+	if keys[current.key] {
+		return globalRect(current)
+	}
+	var damage woxui.Rect
+	for _, child := range current.children {
+		damage = unionDamageRects(damage, keyedNodeDamage(child, keys))
+	}
+	return damage
 }
 
 type frameDamageTracker struct {
@@ -59,26 +93,65 @@ func unionDamageRects(left, right woxui.Rect) woxui.Rect {
 	return woxui.Rect{X: x, Y: y, Width: rightEdge - x, Height: bottomEdge - y}
 }
 
-// coverRenderedMaterials grows damage to include every renderer-blurred floating surface
-// it touches. The blur reads its backdrop from the back buffer, so repainting only part of
-// the content under a surface would leave the blur sampling last frame's tinted panel
-// around the change. Covering one surface can reach another, so it repeats until stable.
-func coverRenderedMaterials(damage woxui.Rect, materials []woxui.Rect) woxui.Rect {
+// coverRenderedMaterials grows damage so a renderer-blurred surface can resample its
+// backdrop. The blur reads the back buffer, so a change under a surface (or in its
+// sample halo) must repaint that whole surface plus sampleMargin.
+//
+// Adjacent cards such as the action panel and launcher toolbar often sit within one
+// blur kernel of each other. Unioning both into one axis-aligned rect would swallow
+// the result list between them. Damage contained by a surface is a content update:
+// only that surface and overlapping surfaces are covered. Material bounds include
+// both retained frames because native buffer repair can still reference the larger
+// panel after filtering shrinks it. Halo overlap handles damage outside every surface.
+func coverRenderedMaterials(damage woxui.Rect, materials []woxui.Rect, sampleMargin, scale float32) woxui.Rect {
 	if damage.Width <= 0 || damage.Height <= 0 || len(materials) == 0 {
 		return damage
 	}
-	// Each surface is merged at most once, so the loop ends even when float rounding keeps
-	// a merged surface from testing as exactly contained.
 	covered := make([]bool, len(materials))
+	containedCount := 0
+	if scale <= 0 {
+		scale = 1
+	}
+	for index, material := range materials {
+		// Win32 rounds invalidation outward to physical pixels. Compare on that
+		// same grid so fractional panel edges do not pull in an adjacent toolbar.
+		left := float32(math.Floor(float64(material.X*scale))) / scale
+		top := float32(math.Floor(float64(material.Y*scale))) / scale
+		right := float32(math.Ceil(float64((material.X+material.Width)*scale))) / scale
+		bottom := float32(math.Ceil(float64((material.Y+material.Height)*scale))) / scale
+		if damageRectContains(woxui.Rect{X: left, Y: top, Width: right - left, Height: bottom - top}, damage) {
+			covered[index] = true
+			containedCount++
+		}
+	}
+	if containedCount == 0 {
+		for index, material := range materials {
+			if damageRectsOverlap(damage, expandDamageRect(material, sampleMargin)) {
+				covered[index] = true
+			}
+		}
+	}
+	// A tooltip stacked on a panel shares the panel's unexpanded bounds, so covering
+	// one reaches the other. Adjacent cards with only a halo overlap stay separate.
 	for grown := true; grown; {
 		grown = false
 		for index, material := range materials {
-			if covered[index] || !damageRectsOverlap(damage, material) {
+			if covered[index] {
 				continue
 			}
-			damage = unionDamageRects(damage, material)
-			covered[index] = true
-			grown = true
+			for other, isCovered := range covered {
+				if !isCovered || !damageRectsOverlap(material, materials[other]) {
+					continue
+				}
+				covered[index] = true
+				grown = true
+				break
+			}
+		}
+	}
+	for index, material := range materials {
+		if covered[index] {
+			damage = unionDamageRects(damage, expandDamageRect(material, sampleMargin))
 		}
 	}
 	return damage
@@ -88,6 +161,13 @@ func damageRectsOverlap(left, right woxui.Rect) bool {
 	return left.Width > 0 && left.Height > 0 && right.Width > 0 && right.Height > 0 &&
 		left.X < right.X+right.Width && right.X < left.X+left.Width &&
 		left.Y < right.Y+right.Height && right.Y < left.Y+left.Height
+}
+
+func damageRectContains(outer, inner woxui.Rect) bool {
+	return inner.Width > 0 && inner.Height > 0 && outer.Width > 0 && outer.Height > 0 &&
+		inner.X >= outer.X && inner.Y >= outer.Y &&
+		inner.X+inner.Width <= outer.X+outer.Width &&
+		inner.Y+inner.Height <= outer.Y+outer.Height
 }
 
 func clipDamageRect(rect woxui.Rect, size woxui.Size) woxui.Rect {

@@ -225,9 +225,8 @@ func TestRenderedFloatingMaterialTracksSurfacesCulledByDamage(t *testing.T) {
 		t.Fatalf("commands = %+v, want the material culled outside the damage", displayList.commands)
 	}
 	rects := displayList.RenderedFloatingMaterialRects()
-	want := Rect{X: bounds.X - floatingMaterialBlurMargin, Y: bounds.Y - floatingMaterialBlurMargin, Width: bounds.Width + 2*floatingMaterialBlurMargin, Height: bounds.Height + 2*floatingMaterialBlurMargin}
-	if len(rects) != 1 || rects[0] != want {
-		t.Fatalf("rendered material rects = %+v, want the surface grown by the blur margin %+v", rects, want)
+	if len(rects) != 1 || rects[0] != bounds {
+		t.Fatalf("rendered material rects = %+v, want the unexpanded surface %+v", rects, bounds)
 	}
 	if (&DisplayList{}).RenderedFloatingMaterialRects() != nil {
 		t.Fatal("frame without floating surfaces reported rendered material rects")

@@ -434,7 +434,7 @@ func (a *App) moveActionSelection(delta int) {
 	position = (position + delta + len(indices)) % len(indices)
 	a.actionSelected = indices[position]
 	a.actionSelectionKey = entries[a.actionSelected].Key
-	_ = a.window.Invalidate()
+	a.invalidateActionPanel()
 }
 
 func (a *App) onActionTextInput(_ woxui.TextInputEvent) bool {
@@ -450,9 +450,15 @@ func (a *App) setActionFilterValue(value string) {
 			a.selectFirstFilteredActionLocked()
 		}
 	}
-	_ = a.applyWindowBounds()
-	// Filtering must not depend on SetBounds: the window stays at the unfiltered
-	// panel height so the search box can stay pinned. Invalidate the list here.
+	// Window height is based on unfiltered actions; only the floating panel changes size.
+	a.invalidateActionPanel()
+}
+
+// invalidateActionPanel covers both panel sizes when filtering changes its height.
+func (a *App) invalidateActionPanel() {
+	if a.host != nil && a.host.InvalidateKey("action-panel-surface") {
+		return
+	}
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
@@ -535,7 +541,7 @@ func (a *App) selectAction(index int) {
 		a.actionSelected = index
 		a.actionSelectionKey = entries[index].Key
 	}
-	_ = a.window.Invalidate()
+	a.invalidateActionPanel()
 }
 
 func (a *App) activateSelectedAction() {

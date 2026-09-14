@@ -117,10 +117,16 @@ type Host struct {
 	pendingDamage        woxui.Rect
 	fullDamage           bool
 	caretDamage          woxui.Rect
+	caretScene           *woxui.DisplayList
+	// keyedDamage also covers the next layout bounds when a local surface grows or moves.
+	keyedDamage map[Key]bool
 	// renderedMaterials are the renderer-blurred floating surfaces of the last presented
-	// frame (see DisplayList.RenderedFloatingMaterialRects); damage touching one of them
-	// must cover it entirely so the blur samples freshly painted content.
+	// frame (see DisplayList.RenderedFloatingMaterialRects). Damage under one of them
+	// covers that surface plus FloatingMaterialBlurMargin so the blur can resample;
+	// adjacent cards are not joined into one rectangle.
 	renderedMaterials []woxui.Rect
+	// Native double buffering can return damage from the frame before the last one.
+	previousRenderedMaterials []woxui.Rect
 }
 
 // NewHost creates a retained host whose builder runs once per invalidated frame.
@@ -187,6 +193,23 @@ func (h *Host) InvalidateBoundary(key Key) bool {
 	return true
 }
 
+// InvalidateKey repaints a mounted widget's old and next bounds without caching its subtree.
+func (h *Host) InvalidateKey(key Key) bool {
+	if h == nil {
+		return false
+	}
+	rect, found := h.BoundsForKey(key)
+	if !found {
+		return false
+	}
+	if h.keyedDamage == nil {
+		h.keyedDamage = make(map[Key]bool)
+	}
+	h.keyedDamage[key] = true
+	h.invalidateRect(rect)
+	return true
+}
+
 // SetWindowFocused keeps the retained editor focus while suspending its caret and IME when the native window is inactive.
 func (h *Host) SetWindowFocused(focused bool) {
 	h.caretBlinkMu.Lock()
@@ -198,6 +221,7 @@ func (h *Host) SetWindowFocused(focused bool) {
 	window := h.window
 	h.caretBlinkMu.Unlock()
 	if !focused {
+		h.caretScene = nil
 		h.updateCaretBlink(false)
 		if window != nil {
 			_ = window.SetTextInputState(woxui.TextInputState{})
@@ -278,11 +302,23 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 	diagnostics, removedDamage := h.elements.endFrame()
 	prepareNodeTree(root)
+	var nextKeyedDamage woxui.Rect
+	if len(h.keyedDamage) > 0 {
+		if !fullDamage {
+			nextKeyedDamage = keyedNodeDamage(root, h.keyedDamage)
+			damage = unionDamageRects(damage, nextKeyedDamage)
+		}
+		clear(h.keyedDamage)
+	}
 	boundaryDamage := damageTracker.resolve(woxui.Rect{})
 	if !fullDamage {
 		damage = unionDamageRects(damage, boundaryDamage)
 		damage = unionDamageRects(damage, removedDamage)
-		damage = coverRenderedMaterials(damage, h.renderedMaterials)
+		materials := append(h.previousRenderedMaterials, h.renderedMaterials...)
+		if len(materials) > 0 {
+			materials = currentMaterialBounds(root, materials)
+		}
+		damage = coverRenderedMaterials(damage, materials, woxui.FloatingMaterialBlurMargin, frame.Scale)
 	}
 	if damage.Width > 0 && damage.Height > 0 {
 		damage = expandDamageRect(damage, 4)
@@ -300,12 +336,19 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		damage = woxui.Rect{}
 	}
 	displayList.SetNativeDamage(damage)
-	if services, ok := h.window.(displayListDamageHostServices); ok && services.DisplayListDamageCullingEnabled() {
+	// A complete command stream lets the renderer prove that only the caret changed.
+	retainCaretScene := woxui.SupportsCaretPatch() && nodeHasActiveCaret(root, h.focused, false, false)
+	if services, ok := h.window.(displayListDamageHostServices); ok && services.DisplayListDamageCullingEnabled() && !retainCaretScene {
 		displayList.SetDamage(damage)
 	}
 	var vsync animationFrameScheduler
 	if scheduler, ok := h.window.(animationFrameScheduler); ok {
 		vsync = scheduler
+	}
+	// The native vsync request currently invalidates the entire HWND. Local
+	// animations use the existing timed callback so their damage rect survives.
+	if boundaryDamage.Width > 0 && boundaryDamage.Height > 0 {
+		vsync = nil
 	}
 	h.animations.endFrame(animation, func() {
 		if boundaryDamage.Width > 0 && boundaryDamage.Height > 0 {
@@ -351,7 +394,21 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		focusRingTarget = 0
 	}
 	h.root.draw(displayList, h.focused, focusRingTarget, caretVisible, false, false, work)
+	if retainCaretScene {
+		h.caretScene = displayList.PrepareCaretPatch(h.caretScene, !fullDamage && !incrementalDisabled())
+		if patch := displayList.CaretPatch(); patch.Width > 0 && patch.Height > 0 {
+			h.setCaretDamage(patch)
+			logicalDamage = patch
+			if debugFrame != nil {
+				debugFrame.repaintRegion = patch
+				displayList.SetNativeDamage(woxui.Rect{})
+			}
+		}
+	} else {
+		h.caretScene = nil
+	}
 	debugFrame.draw(displayList)
+	h.previousRenderedMaterials = h.renderedMaterials
 	h.renderedMaterials = displayList.RenderedFloatingMaterialRects()
 	h.recordFramePhase(frameID, woxui.FrameMetricDrawRecord, time.Since(drawStart))
 
@@ -445,6 +502,7 @@ func (h *Host) Dispose() {
 		h.elements.dispose()
 	}
 	h.root = nil
+	h.caretScene = nil
 	h.postFrame = nil
 	h.overlay = nil
 	h.overlayOwner = ""
@@ -1258,12 +1316,14 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 				if !current.gesture.onScrollHandled(event.Scroll) {
 					continue
 				}
-				h.invalidate()
+				// Scroll callbacks repaint their viewport; independent changes made by
+				// the callback can still request additional damage or a full frame.
+				h.invalidateRect(globalRect(current))
 				return
 			}
 			if current.gesture.onScroll != nil {
 				current.gesture.onScroll(event.Scroll)
-				h.invalidate()
+				h.invalidateRect(globalRect(current))
 				return
 			}
 		}

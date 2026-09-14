@@ -48,6 +48,15 @@ func (c StateContext) Invalidate() {
 		c.element.tree.host.invalidateRect(damage)
 		return
 	}
+	// Stateful controls such as scroll chrome can have a keyed paint owner without
+	// a cached Boundary. Track both its old and next bounds instead of the window.
+	paintKey := c.element.key
+	if c.element.paintNode != nil {
+		paintKey = c.element.paintNode.key
+	}
+	if paintKey != "" && c.element.tree.host.InvalidateKey(paintKey) {
+		return
+	}
 	c.element.tree.host.invalidate()
 }
 
@@ -154,6 +163,9 @@ func (w Stateful) layout(ctx context, available constraints) *node {
 	if childNode.key == "" {
 		childNode.key = w.Key
 	}
+	// Outer Gesture/Semantics wrappers can still replace this node's key after
+	// state layout returns. Read the final rendered identity when invalidating.
+	element.paintNode = childNode
 	if childNode.kind == "" {
 		childNode.kind = "stateful"
 	}
@@ -200,6 +212,7 @@ type stateElement struct {
 	tree       *elementTree
 	parent     *stateElement
 	key        Key
+	paintNode  *node
 	widgetType reflect.Type
 	widget     any
 	state      State
@@ -352,5 +365,6 @@ func (t *elementTree) disposeElement(element *stateElement) {
 		delete(element.children, identity)
 	}
 	element.state.Dispose()
+	element.paintNode = nil
 	element.mounted.Store(false)
 }
