@@ -1732,6 +1732,7 @@
   "plugin_clipboard_copy": "복사",
   "plugin_clipboard_image_restore_failed": "이미지를 클립보드에 복원할 수 없습니다. 이미지를 다시 복사해 보세요.",
   "plugin_clipboard_open_path": "경로 열기",
+  "plugin_clipboard_open_containing_folder": "상위 폴더 열기",
   "plugin_clipboard_open_link": "링크 열기",
   "plugin_clipboard_mark_favorite": "즐겨찾기에 추가",
   "plugin_clipboard_cancel_favorite": "즐겨찾기에서 제거",

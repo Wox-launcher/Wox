@@ -2458,6 +2458,7 @@
   "plugin_clipboard_copy": "Copiar",
   "plugin_clipboard_image_restore_failed": "Não foi possível restaurar a imagem para a área de transferência. Tente copiar a imagem novamente.",
   "plugin_clipboard_open_path": "Abrir caminho",
+  "plugin_clipboard_open_containing_folder": "Abrir pasta contendo",
   "plugin_clipboard_open_link": "Abrir link",
   "plugin_clipboard_mark_favorite": "Adicionar aos favoritos",
   "plugin_clipboard_cancel_favorite": "Remover dos favoritos",

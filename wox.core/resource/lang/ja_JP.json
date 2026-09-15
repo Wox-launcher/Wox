@@ -1732,6 +1732,7 @@
   "plugin_clipboard_copy": "コピー",
   "plugin_clipboard_image_restore_failed": "画像をクリップボードに復元できませんでした。画像を再度コピーしてください。",
   "plugin_clipboard_open_path": "パスを開く",
+  "plugin_clipboard_open_containing_folder": "含むフォルダーを開く",
   "plugin_clipboard_open_link": "リンクを開く",
   "plugin_clipboard_mark_favorite": "お気に入りに追加",
   "plugin_clipboard_cancel_favorite": "お気に入りから削除",

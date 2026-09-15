@@ -1733,6 +1733,7 @@
   "plugin_clipboard_copy": "复制",
   "plugin_clipboard_image_restore_failed": "无法将图片恢复到剪贴板，请重新复制图片后再试。",
   "plugin_clipboard_open_path": "打开此路径",
+  "plugin_clipboard_open_containing_folder": "打开所在文件夹",
   "plugin_clipboard_open_link": "打开链接",
   "plugin_clipboard_mark_favorite": "添加到收藏",
   "plugin_clipboard_cancel_favorite": "从收藏移除",

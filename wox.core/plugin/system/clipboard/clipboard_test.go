@@ -95,6 +95,74 @@ func TestConvertImageRecordExposesFavoriteAndAliasActions(t *testing.T) {
 	}
 }
 
+func TestConvertRecordsExposeOpenContainingFolderAction(t *testing.T) {
+	api := &imagePasteFailureAPI{}
+	c := &ClipboardPlugin{api: api, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	query := plugin.Query{}
+
+	imageWithoutPath := c.convertImageRecord(context.Background(), ClipboardRecord{
+		ID:      "image-no-path",
+		Type:    string(clipboard.ClipboardTypeImage),
+		Content: "Image (10×10) (1 B)",
+	}, query)
+	if clipboardResultHasAction(imageWithoutPath, "i18n:plugin_clipboard_open_containing_folder") {
+		t.Fatal("image records without a file path must not expose open containing folder")
+	}
+
+	imageWithPath := c.convertImageRecord(context.Background(), ClipboardRecord{
+		ID:       "image-path",
+		Type:     string(clipboard.ClipboardTypeImage),
+		Content:  "Image (10×10) (1 B)",
+		FilePath: filepath.Join(t.TempDir(), "clipboard.png"),
+	}, query)
+	if !clipboardResultHasAction(imageWithPath, "i18n:plugin_clipboard_open_containing_folder") {
+		t.Fatal("image records with a file path must expose open containing folder")
+	}
+
+	singleFile := c.convertFileRecord(context.Background(), ClipboardRecord{
+		ID:        "file-single",
+		Type:      string(clipboard.ClipboardTypeFile),
+		Content:   "shot.png",
+		FilePaths: []string{filepath.Join(t.TempDir(), "shot.png")},
+	}, query)
+	if !clipboardResultHasAction(singleFile, "i18n:plugin_clipboard_open_containing_folder") {
+		t.Fatal("single file records must expose open containing folder")
+	}
+
+	multiFile := c.convertFileRecord(context.Background(), ClipboardRecord{
+		ID:        "file-multi",
+		Type:      string(clipboard.ClipboardTypeFile),
+		Content:   "shot.png (+1)",
+		FilePaths: []string{filepath.Join(t.TempDir(), "a.png"), filepath.Join(t.TempDir(), "b.png")},
+	}, query)
+	if !clipboardResultHasAction(multiFile, "i18n:plugin_clipboard_open_containing_folder") {
+		t.Fatal("multi-file records must expose open containing folder")
+	}
+
+	root := t.TempDir()
+	textFile := filepath.Join(root, "notes.txt")
+	if err := os.WriteFile(textFile, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	textFileRecord := c.convertTextRecord(context.Background(), ClipboardRecord{
+		ID:      "text-file",
+		Type:    string(clipboard.ClipboardTypeText),
+		Content: textFile,
+	}, query)
+	if !clipboardResultHasAction(textFileRecord, "i18n:plugin_clipboard_open_containing_folder") {
+		t.Fatal("text records that are files must expose open containing folder")
+	}
+
+	textDir := c.convertTextRecord(context.Background(), ClipboardRecord{
+		ID:      "text-dir",
+		Type:    string(clipboard.ClipboardTypeText),
+		Content: root,
+	}, query)
+	if clipboardResultHasAction(textDir, "i18n:plugin_clipboard_open_containing_folder") {
+		t.Fatal("text records that are directories must keep open path instead of reveal")
+	}
+}
+
 func clipboardResultHasAction(result plugin.QueryResult, name string) bool {
 	for _, action := range result.Actions {
 		if action.Name == name {

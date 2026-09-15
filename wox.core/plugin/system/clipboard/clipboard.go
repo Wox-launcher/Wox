@@ -1103,6 +1103,20 @@ func (c *ClipboardPlugin) locationLinkActions(path string, isDir bool) []plugin.
 	}
 }
 
+// openContainingFolderAction reveals a clipboard-backed file in the system file manager.
+func (c *ClipboardPlugin) openContainingFolderAction(recordID string, filePath string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name: "i18n:plugin_clipboard_open_containing_folder",
+		Icon: icons.Get(icons.ActionOpenContainingFolder),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.moveRecordToTop(ctx, recordID)
+			if err := shell.OpenFileInFolder(filePath); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file in folder: id=%s path=%s err=%s", recordID, filePath, err.Error()))
+			}
+		},
+	}
+}
+
 // convertRecordToResult converts a database record to a query result
 func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	if record.Type == string(clipboard.ClipboardTypeText) {
@@ -1198,19 +1212,11 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		})
 
 		if !util.IsDirExists(singlePath) {
-			actions = append(actions, plugin.QueryResultAction{
-				Name: "i18n:selection_open_containing_folder",
-				Icon: icons.Get(icons.ActionOpenContainingFolder),
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					c.moveRecordToTop(ctx, record.ID)
-					if err := shell.OpenFileInFolder(singlePath); err != nil {
-						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file in folder: id=%s path=%s err=%s", record.ID, singlePath, err.Error()))
-					}
-				},
-			})
+			actions = append(actions, c.openContainingFolderAction(record.ID, singlePath))
 		}
 		actions = append(actions, c.locationLinkActions(singlePath, util.IsDirExists(singlePath))...)
 	} else if len(filePaths) > 0 {
+		actions = append(actions, c.openContainingFolderAction(record.ID, filePaths[0]))
 		actions = append(actions, notesplugin.CreateNoteAction(c.api, "", strings.Join(filePaths, "\n"), ""))
 	}
 
@@ -1479,6 +1485,10 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 				}
 			},
 		})
+	}
+
+	if filesystemPath != "" && !filesystemIsDir {
+		actions = append(actions, c.openContainingFolderAction(record.ID, filesystemPath))
 	}
 
 	if filesystemPath != "" {
@@ -1784,6 +1794,10 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 	} else {
 		applyCopyPastePrimaryAction(&result.Actions[0], nil, primaryActionCode)
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
+	}
+
+	if strings.TrimSpace(record.FilePath) != "" {
+		result.Actions = append(result.Actions, c.openContainingFolderAction(record.ID, record.FilePath))
 	}
 
 	if !record.IsFavorite {

@@ -2459,6 +2459,7 @@
   "plugin_clipboard_copy": "Копировать",
   "plugin_clipboard_image_restore_failed": "Не удалось восстановить изображение в буфере обмена. Попробуйте скопировать изображение ещё раз.",
   "plugin_clipboard_open_path": "Открыть путь",
+  "plugin_clipboard_open_containing_folder": "Открыть содержащую папку",
   "plugin_clipboard_open_link": "Открыть ссылку",
   "plugin_clipboard_mark_favorite": "Добавить в избранное",
   "plugin_clipboard_cancel_favorite": "Удалить из избранного",
