@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -57,7 +58,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 		KeepVisibleKey: formFieldsKeepVisibleKey("action-form", form.formFieldsSnapshot),
 		CancelLabel:    fmt.Sprintf("%s (Esc)", a.translate("i18n:ui_cancel")),
 		SaveLabel:      fmt.Sprintf("%s (%s)", a.translate("i18n:ui_save"), strings.Join(formatHotkeyLabels(primaryHotkey("enter")), "+")),
-		Theme:          snapshot.palette.componentTheme(),
+		Theme:          snapshot.palette.componentTheme().Controls,
 		OnCancel:       a.closeFormAction, OnSave: a.submitFormAction,
 	})
 	return panel, panelWidth, panelMaximumHeight
@@ -65,7 +66,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 
 func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, labelWidth, height float32) woxwidget.Widget {
 	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable, pickDir: a.pickFormActionDirectory}
-	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette, index, definition, width, height)
+	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette.componentTheme().Controls, index, definition, width, height)
 }
 
 // measureFormLabelWidth mirrors Flutter's measured label column while allowing each form surface to keep its own bounds.
@@ -98,7 +99,7 @@ func (a *App) measureFormLabelWidth(definitions []formDefinition, window *woxui.
 }
 
 // buildFormField translates one private form definition into a reusable field view.
-func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := definition.Value
 	switch definition.Type {
 	case "stats":
@@ -107,7 +108,7 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 			rows = append(rows, launcherview.FormStatsRow{Label: a.translate(row.Label), Value: row.Value})
 		}
 		return launcherview.FormStatsField(launcherview.FormStatsFieldProps{
-			Width: width, Height: height, Title: a.translate(value.Title), Rows: rows, Theme: palette.componentTheme(),
+			Width: width, Height: height, Title: a.translate(value.Title), Rows: rows, Theme: palette,
 		})
 	case "fileIndexService":
 		actions := make([]launcherview.FormServiceAction, 0, len(value.Actions))
@@ -124,11 +125,11 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		}
 		return launcherview.FormServiceField(launcherview.FormServiceFieldProps{
 			ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Width: width, Height: height, LabelWidth: callbacks.labelWidth, Title: a.translate(value.Title), Description: a.translate(value.Description),
-			Status: a.translate(value.Status), Detail: value.Detail, Error: callbacks.serviceError, Actions: actions, Theme: palette.componentTheme(),
+			Status: a.translate(value.Status), Detail: value.Detail, Error: callbacks.serviceError, Actions: actions, Theme: palette,
 			OnOpenLink: callbacks.openLink,
 		})
 	case "head", "label", "newline":
-		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: a.translate(value.Content), Kind: definition.Type, Theme: palette.componentTheme()})
+		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: a.translate(value.Content), Kind: definition.Type, Theme: palette})
 	case "textbox", "password", "dirPath":
 		return a.buildFormTextbox(fields, callbacks, palette, index, definition, width, height)
 	case "checkbox":
@@ -156,12 +157,12 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 	case "dictationModel", "ocrModel":
 		return a.buildFormModelField(fields, callbacks, palette, index, definition, width, height)
 	default:
-		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: fmt.Sprintf("Unsupported form field: %s", definition.Type), Kind: "unsupported", Theme: palette.componentTheme()})
+		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: fmt.Sprintf("Unsupported form field: %s", definition.Type), Kind: "unsupported", Theme: palette})
 	}
 }
 
 // buildFormAIModelField maps the JSON-backed model value into Flutter's provider and model controls.
-func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	models := aiModelsFromOptions(definition.Value.Options)
 	selected := aiModel{}
 	_ = json.Unmarshal([]byte(fields.values[definition.Value.Key]), &selected)
@@ -180,11 +181,11 @@ func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFie
 	var providerIcon *woxui.Image
 	for _, provider := range a.aiSettings.ProviderCatalog() {
 		if provider.Name == selected.Provider {
-			providerIcon = a.imageForSize(provider.Icon, physicalImageSize(18, callbacks.imageScale))
+			providerIcon = a.imageForSurface(provider.Icon, physicalImageSize(18, callbacks.imageScale), palette.Background)
 			break
 		}
 	}
-	foreground := palette.resultTitle
+	foreground := palette.Text
 	return launcherview.FormAIModelField(launcherview.FormAIModelFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
 		Provider: providerLabel, Model: modelLabel, ProviderIcon: providerIcon, ModelIcon: providerIcon, ModelsAvailable: len(models) > 0,
@@ -192,7 +193,7 @@ func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFie
 		Width:         width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index,
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(18, callbacks.imageScale)),
 		ListIcon: a.imageForTint(settingControlIconSource("list"), &foreground, physicalImageSize(18, callbacks.imageScale)),
-		Window:   a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		Window:   a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette,
 		OnOpenLink:         callbacks.openLink,
 		OnProviderTap:      func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, true, anchor) },
 		OnModelTap:         func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, false, anchor) },
@@ -213,7 +214,7 @@ func aiModelsFromOptions(options []formOption) []aiModel {
 	return models
 }
 
-func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	selectedID := fields.values[definition.Value.Key]
 	selectedLabel := selectedID
 	for _, option := range definition.Value.Options {
@@ -228,7 +229,7 @@ func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formField
 	}
 	return launcherview.FormModelField(launcherview.FormModelFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
-		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette,
 		OnOpenLink: callbacks.openLink,
 		OnTap: func(anchor woxui.Rect) {
 			callbacks.focus(index)
@@ -239,7 +240,7 @@ func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formField
 	})
 }
 
-func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	var app ignoredHotkeyApp
 	_ = json.Unmarshal([]byte(fields.values[definition.Value.Key]), &app)
 	name := app.Name
@@ -252,7 +253,7 @@ func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbac
 	}
 	return launcherview.FormAppField(launcherview.FormAppFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Name: name, Detail: compactFormTableText(detail, 64),
-		Width: width, Height: height, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+		Width: width, Height: height, Focused: fields.active && fields.focused == index, Theme: palette,
 		OnTap: func() {
 			callbacks.focus(index)
 			if callbacks.pickApp != nil {
@@ -262,7 +263,7 @@ func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbac
 	})
 }
 
-func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := fields.values[definition.Value.Key]
 	presentation := a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
 	if !presentation.Active && callbacks.hotkeyError != "" {
@@ -282,7 +283,7 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 		Value: value, Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: presentation.Status, Recording: presentation.Active, Error: presentation.Error,
 		Hold: hold, HoldPrefix: a.translate("i18n:ui_hotkey_hold_prefix"),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, SettingsLayout: callbacks.settingsLayout, AlignRecorderRight: callbacks.alignHotkeyRight,
-		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette,
 		OnOpenLink: callbacks.openLink,
 		OnTap: func() {
 			callbacks.focus(index)
@@ -305,11 +306,11 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 	})
 }
 
-func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32, checked bool, selectedLabel string) woxwidget.Widget {
+func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32, checked bool, selectedLabel string) woxwidget.Widget {
 	if definition.Type == "checkbox" {
 		return launcherview.FormSwitchField(launcherview.FormSwitchFieldProps{
 			ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
-			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Checked: checked, Theme: palette.componentTheme(),
+			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Checked: checked, Theme: palette,
 			OnOpenLink: callbacks.openLink,
 			OnChange: func(bool) {
 				callbacks.focus(index)
@@ -319,7 +320,7 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 	}
 	props := launcherview.FormSelectFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
-		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette,
 		OnOpenLink: callbacks.openLink,
 		OnTap: func() {
 			callbacks.focus(index)
@@ -333,7 +334,7 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 	return launcherview.FormSelectField(props)
 }
 
-func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	focused := fields.active && fields.focused == index
 	state := fields.editing
 	var controller *woxwidget.TextEditingController
@@ -355,7 +356,7 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Suffix: a.translate(definition.Value.Suffix),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth,
 		State: state, Controller: controller, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
-		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse, BrowseLabel: a.translate("i18n:ui_runtime_browse"),
+		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette, OnBrowse: onBrowse, BrowseLabel: a.translate("i18n:ui_runtime_browse"),
 		OnOpenLink: callbacks.openLink,
 		OnFocus:    func() { callbacks.focus(index) },
 		OnChanged: func(value string) {

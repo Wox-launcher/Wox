@@ -348,7 +348,7 @@ func (s *imageOverlayTitleBarState) Build(context woxwidget.StateContext, widget
 // bar chrome so preview and pinned screenshot windows match the WebView chrome.
 func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered, pressed string, onHover, onPress func(string, bool)) woxwidget.Widget {
 	bodyHeight := max(float32(1), props.Height-imageOverlayTitleBarHeight)
-	theme := woxcomponent.Theme{Background: props.Colors.Background, ToolbarText: props.Colors.Toolbar}
+	theme := woxcomponent.ControlTheme{Background: props.Colors.Background, ChromeText: props.Colors.Toolbar}
 	children := []woxwidget.StackChild{
 		// Fill only: the platform window owns the outer shape. A widget
 		// radius/stroke stacks a second corner on top of that clip.

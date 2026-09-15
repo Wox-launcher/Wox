@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	woxcomponent "wox/ui/launcher/component"
 
 	"github.com/google/uuid"
 
@@ -618,18 +619,18 @@ func isBrowserApp(app ignoredHotkeyApp) bool {
 	return linux[id]
 }
 
-func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot == nil {
 		return woxwidget.Container{}
 	}
 	editor := snapshot
-	iconTint := palette.resultTitle
-	addIconTint := palette.resultSubtitle
+	iconTint := palette.Text
+	addIconTint := palette.TextSecondary
 	linkTint := woxui.Color{R: 110, G: 231, B: 183, A: 255}
 	props := launcherview.WindowGroupEditorProps{
 		Width: width, Height: height, GroupName: editor.group.Name, NameError: editor.nameError,
 		LoadingDisplays: editor.loadingDisplays, DisplaysError: editor.displaysError, Editing: editor.editing,
-		SelectedDisplay: editor.selectedDisplay, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(),
+		SelectedDisplay: editor.selectedDisplay, Theme: palette, Window: a.formTableNativeWindow(),
 		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"),
 		SelectDisplayLabel:   a.translate("i18n:plugin_window_manager_group_select_display"),
 		NoDisplaysLabel:      a.translate("i18n:plugin_window_manager_group_no_displays"),
@@ -706,7 +707,7 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 					if slotTile.AppName == "" {
 						slotTile.AppName = assignment.App.Identity
 					}
-					slotTile.AppIcon = a.imageFor(assignment.App.Icon)
+					slotTile.AppIcon = a.imageForSurface(assignment.App.Icon, 256, settingsPalette().Background)
 					slotTile.IsBrowser = isBrowserApp(assignment.App)
 					for _, url := range assignment.Urls {
 						if strings.TrimSpace(url) != "" {
@@ -750,7 +751,7 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 	return woxwidget.Stack{Width: width, Height: height, Children: layers}
 }
 
-func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	apps := a.hotkeySettings.AppCandidates()
 	if identity := strings.TrimSpace(current.Identity); identity != "" {
 		found := false
@@ -771,10 +772,10 @@ func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette
 			detail = candidate.Identity
 		}
 		candidates[index] = launcherview.FormAppCandidate{
-			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSize(candidate.Icon, physicalImageSize(28, imageScale)),
+			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSurface(candidate.Icon, physicalImageSize(28, imageScale), settingsPalette().Background),
 		}
 	}
-	theme := palette.componentTheme()
+	theme := palette
 	cancelLabel := a.translate("i18n:ui_cancel")
 	confirmLabel := a.translate("i18n:ui_ok")
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
@@ -797,15 +798,10 @@ func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette
 	})
 }
 
-func (a *App) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGroupEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
-	theme := palette.componentTheme()
-	foreground := theme.ResultSubtitle
-	connectedAccent := woxui.Color{R: 74, G: 222, B: 128, A: 255}
-	disconnectedAccent := woxui.Color{R: 253, G: 186, B: 116, A: 255}
-	if !themeColorIsDark(palette.background) {
-		connectedAccent = woxui.Color{R: 21, G: 128, B: 61, A: 255}
-		disconnectedAccent = woxui.Color{R: 194, G: 65, B: 12, A: 255}
-	}
+func (a *App) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGroupEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+	theme := palette
+	foreground := theme.TextSecondary
+
 	return launcherview.WindowGroupUrlEditor(launcherview.WindowGroupUrlEditorProps{
 		Width: width, Height: height, URLs: urls, Window: a.formTableNativeWindow(), Theme: theme,
 		Title: a.translate("i18n:plugin_window_manager_group_browser_urls"), Description: a.translate("i18n:plugin_window_manager_group_browser_urls_description"),
@@ -816,9 +812,9 @@ func (a *App) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGrou
 		ExtensionInstallLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_install"),
 		AddIcon:               a.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)), EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(16, imageScale)),
 		DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, physicalImageSize(24, imageScale)),
-		ExtensionLoadingIcon: a.imageForTint(settingControlIconSource("loading"), &foreground, physicalImageSize(14, imageScale)), ExtensionConnectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &connectedAccent, physicalImageSize(14, imageScale)),
-		ExtensionDisconnectedIcon: a.imageForTint(settingControlIconSource("warning"), &disconnectedAccent, physicalImageSize(14, imageScale)), ExtensionExternalIcon: a.imageForTint(settingControlIconSource("external"), &disconnectedAccent, physicalImageSize(11, imageScale)),
-		ExtensionConnectedAccent: connectedAccent, ExtensionDisconnectedAccent: disconnectedAccent,
+		ExtensionLoadingIcon: a.imageForTint(settingControlIconSource("loading"), &foreground, physicalImageSize(14, imageScale)), ExtensionConnectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &palette.Success, physicalImageSize(14, imageScale)),
+		ExtensionDisconnectedIcon: a.imageForTint(settingControlIconSource("warning"), &palette.Warning, physicalImageSize(14, imageScale)), ExtensionExternalIcon: a.imageForTint(settingControlIconSource("external"), &palette.Warning, physicalImageSize(11, imageScale)),
+		ExtensionConnectedAccent: palette.Success, ExtensionDisconnectedAccent: palette.Warning,
 		OnCancel: a.cancelWindowManagerGroupUrlEditor,
 		OnSave:   a.saveWindowManagerGroupUrls, OnOpenExtensionStore: a.openWindowManagerExtensionStore,
 	})

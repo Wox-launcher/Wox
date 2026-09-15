@@ -528,7 +528,7 @@
   "ui_query_shortcuts_query": "쿼리",
   "ui_query_shortcuts_query_tooltip": "바로 가기가 나타내는 쿼리입니다.",
   "ui_tray_queries": "트레이 쿼리",
-  "ui_tray_queries_tips": "트레이 쿼리 아이콘을 추가합니다. 아이콘을 클릭하면 트레이/메뉴 막대 근처에서 Wox가 열리고 구성된 쿼리가 실행됩니다.",
+  "ui_tray_queries_tips": "트레이 아이콘을 클릭하면 근처에 Wox가 열리고 설정된 쿼리가 실행됩니다.",
   "ui_tray_queries_icon": "아이콘",
   "ui_tray_queries_icon_tooltip": "이 쿼리의 트레이 아이콘입니다.",
   "ui_tray_queries_query": "쿼리",

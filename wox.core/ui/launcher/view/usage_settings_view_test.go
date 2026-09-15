@@ -34,7 +34,7 @@ func TestUsageSummaryHeaderAnchorsShareActionToRight(t *testing.T) {
 }
 
 func TestUsagePeriodSelectorKeepsUnselectedOptionInteractive(t *testing.T) {
-	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 220, G: 230, B: 240, A: 255}}
+	theme := woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 220, G: 230, B: 240, A: 255}}
 	selector, _ := usagePeriodSelector(UsageSettingsProps{
 		Theme:   theme,
 		Periods: []UsagePeriod{{ID: "7d", Label: "最近 7 天", Selected: false, OnSelect: func() {}}, {ID: "30d", Label: "最近 30 天", Selected: true}},
@@ -48,7 +48,7 @@ func TestUsagePeriodSelectorKeepsUnselectedOptionInteractive(t *testing.T) {
 }
 
 func TestUsageRankingRowCentersNameAndIcon(t *testing.T) {
-	row := usageRankingRow(0, UsageRankingItem{Name: "Wox", Count: 12}, 12, 400, woxui.Color{A: 255}, true, &woxui.Image{}, []*woxui.Image{&woxui.Image{}}, woxcomponent.Theme{}).(woxwidget.Container)
+	row := usageRankingRow(0, UsageRankingItem{Name: "Wox", Count: 12}, 12, 400, woxui.Color{A: 255}, true, &woxui.Image{}, []*woxui.Image{&woxui.Image{}}, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 	icon := content.Children[1].(woxwidget.Align)
 	name := content.Children[2].(woxwidget.Clip).Child.(woxwidget.Align)

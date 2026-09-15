@@ -18,7 +18,7 @@ const (
 // TextEditContextMenuProps describes Cut/Copy/Paste/Select All enablement for one menu.
 type TextEditContextMenuProps struct {
 	ID           string
-	Theme        Theme
+	Theme        ControlTheme
 	CanCut       bool
 	CanCopy      bool
 	CanPaste     bool
@@ -68,27 +68,27 @@ func BuildTextEditContextMenu(props TextEditContextMenuProps) woxwidget.Widget {
 		{label: "Paste", action: TextEditContextPaste, enabled: props.CanPaste},
 		{label: "Select All", action: TextEditContextSelectAll, enabled: props.CanSelectAll},
 	}
-	// The menu is a floating surface tinted with the theme's ActionBackground. Themes without
-	// one fall back to an opaque QueryBackground, which is often translucent for acrylic windows.
-	background := props.Theme.ActionBackground
+	// The menu is a floating surface tinted with the theme's Surface. Themes without
+	// one fall back to an opaque InputBackground, which is often translucent for acrylic windows.
+	background := props.Theme.Surface
 	if background.A == 0 {
-		background = props.Theme.QueryBackground
+		background = props.Theme.InputBackground
 		background.A = 255
 	}
-	border := props.Theme.ResultSubtitle
+	border := props.Theme.TextSecondary
 	if border.A == 0 {
-		border = props.Theme.ActionText
+		border = props.Theme.ControlText
 	}
 	border.A = 140
-	textColor := props.Theme.ActionText
+	textColor := props.Theme.ControlText
 	if textColor.A == 0 {
-		textColor = props.Theme.QueryText
+		textColor = props.Theme.InputText
 	}
-	hoverBackground := props.Theme.ActionSelected
+	hoverBackground := props.Theme.Accent
 	if hoverBackground.A == 0 {
-		hoverBackground = props.Theme.SelectedBackground
+		hoverBackground = props.Theme.SelectionBackground
 	}
-	hoverText := props.Theme.ActionSelectedText
+	hoverText := props.Theme.AccentText
 	if hoverText.A == 0 {
 		hoverText = textColor
 	}

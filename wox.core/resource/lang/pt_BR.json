@@ -510,7 +510,7 @@
   "ui_query_shortcuts_query": "Consulta",
   "ui_query_shortcuts_query_tooltip": "A consulta representada pelo atalho.",
   "ui_tray_queries": "Consultas da bandeja",
-  "ui_tray_queries_tips": "Adicione ícones de consulta na bandeja. Ao clicar em um ícone, o Wox abre perto da bandeja/barra de menu e executa a consulta configurada.",
+  "ui_tray_queries_tips": "Clique no ícone da bandeja para abrir o Wox ao lado e executar uma consulta predefinida.",
   "ui_tray_queries_icon": "Ícone",
   "ui_tray_queries_icon_tooltip": "Ícone da bandeja para esta consulta.",
   "ui_tray_queries_query": "Consulta",

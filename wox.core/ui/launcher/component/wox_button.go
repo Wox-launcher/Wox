@@ -44,7 +44,7 @@ type ButtonProps struct {
 	OnTap             func()
 	OnTrailingHoverAt func(bool, woxui.Rect)
 	OnFocusChange     func(bool)
-	Theme             Theme
+	Theme             ControlTheme
 }
 
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
@@ -71,33 +71,33 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	const labelLineHeight = float32(18)
 	contentHeight := labelLineHeight
 
-	background := props.Theme.QueryBackground
-	foreground := props.Theme.ActionText
+	background := props.Theme.InputBackground
+	foreground := props.Theme.ControlText
 	border := woxui.Color{}
 	switch props.Variant {
 	case ButtonPrimary:
-		background = props.Theme.ActionSelected
-		foreground = props.Theme.ActionSelectedText
+		background = props.Theme.Accent
+		foreground = props.Theme.AccentText
 	case ButtonOutline:
 		background = woxui.Color{}
-		foreground = props.Theme.ResultTitle
-		border = props.Theme.ResultTitle
+		foreground = props.Theme.Text
+		border = props.Theme.Text
 	case ButtonMuted:
-		background = withAlpha(props.Theme.ResultSubtitle, 72)
-		foreground = props.Theme.ResultTitle
+		background = withAlpha(props.Theme.TextSecondary, 72)
+		foreground = props.Theme.Text
 	case ButtonSelected:
-		background = props.Theme.SelectedBackground
-		foreground = props.Theme.SelectedTitle
+		background = props.Theme.SelectionBackground
+		foreground = props.Theme.SelectionText
 	case ButtonSurface:
-		background = props.Theme.ActionBackground
-		foreground = props.Theme.PreviewText
+		background = props.Theme.Surface
+		foreground = props.Theme.BodyText
 	case ButtonText:
 		background = woxui.Color{}
-		foreground = props.Theme.ResultTitle
+		foreground = props.Theme.Text
 	case ButtonOutlinedSurface:
-		background = props.Theme.QueryBackground
-		foreground = props.Theme.ResultTitle
-		border = props.Theme.ResultTitle
+		background = props.Theme.InputBackground
+		foreground = props.Theme.Text
+		border = props.Theme.Text
 	}
 
 	onTap := props.OnTap
@@ -177,7 +177,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
 		Actions: actions, Disabled: props.Disabled,
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: radius, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: radius, OnKey: func(event woxui.KeyEvent) bool {
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

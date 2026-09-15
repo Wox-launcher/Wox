@@ -19,7 +19,6 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 	var managed *woxui.ManagedWindow
 	var openErr error
 	var fontFamily string
-	var isDark bool
 	created := false
 	if err := woxui.Call(func() {
 		if existing := a.settingsView; existing != nil && existing.Lifecycle() != woxui.WindowLifecycleClosed {
@@ -65,7 +64,6 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 			a.settingsHost = host
 			a.settingsOpen = true
 			fontFamily = a.generalSettings.Data().AppFontFamily
-			isDark = themeColorIsDark(a.palette.background)
 			created = true
 		}
 	}); err != nil {
@@ -77,7 +75,12 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 	if !created {
 		return managed, nil
 	}
-	if err := managed.Window().SetAppearance(isDark); err != nil {
+	if err := managed.Window().SetAppearance(true); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
+	// Fixed Settings colors still use the system material behind the translucent tint.
+	if err := managed.Window().SetWindowChrome(false, nil); err != nil {
 		_ = managed.Close()
 		return nil, err
 	}
@@ -97,7 +100,6 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 	var managed *woxui.ManagedWindow
 	var openErr error
 	var fontFamily string
-	var isDark bool
 	created := false
 	if err := woxui.Call(func() {
 		if existing := a.onboardingView; existing != nil && existing.Lifecycle() != woxui.WindowLifecycleClosed {
@@ -133,7 +135,6 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 			a.onboardingView = managed
 			a.onboardingHost = host
 			fontFamily = a.generalSettings.Data().AppFontFamily
-			isDark = true
 			created = true
 		}
 	}); err != nil {
@@ -145,7 +146,11 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 	if !created {
 		return managed, nil
 	}
-	if err := managed.Window().SetAppearance(isDark); err != nil {
+	if err := managed.Window().SetAppearance(true); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
+	if err := managed.Window().SetWindowChrome(false, nil); err != nil {
 		_ = managed.Close()
 		return nil, err
 	}

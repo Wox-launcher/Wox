@@ -11,7 +11,7 @@ func TestWoxSettingTargetUsesFlutterSearchHighlightCue(t *testing.T) {
 	active := woxui.Color{R: 80, G: 100, B: 120, A: 255}
 	child := woxwidget.Painter{Width: 320, Height: 62}
 	target := WoxSettingTarget(SettingTargetProps{
-		Width: 320, Height: 62, Highlighted: true, Child: child, Theme: Theme{SelectedBackground: active},
+		Width: 320, Height: 62, Highlighted: true, Child: child, Theme: ControlTheme{SelectionBackground: active},
 	}).(woxwidget.Container)
 
 	if target.Radius != 6 || target.BorderWidth != 1 {

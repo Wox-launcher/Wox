@@ -10,7 +10,7 @@ import (
 type PrivacySettingsProps struct {
 	Width                  float32
 	Height                 float32
-	Theme                  woxcomponent.Theme
+	Theme                  woxcomponent.ControlTheme
 	Title                  string
 	Description            string
 	PrivateModeTitle       string
@@ -71,7 +71,7 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 	if props.Error != "" {
 		children = append(children, woxwidget.TextBlock{
 			Value: props.Error, Width: contentWidth, Height: 32, MaxLines: 2,
-			Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: props.Theme.ErrorText,
+			Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: props.Theme.Error,
 		})
 	}
 	return woxwidget.Container{
@@ -84,7 +84,7 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 type PrivacySampleDialogProps struct {
 	Width        float32
 	Height       float32
-	Theme        woxcomponent.Theme
+	Theme        woxcomponent.ControlTheme
 	Title        string
 	Sample       string
 	CopyLabel    string
@@ -107,17 +107,17 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 	sampleHeight := max(float32(100), innerHeight-fixedHeight)
 	children := []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{
-			Value: props.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+			Value: props.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
 		}},
-		woxwidget.Container{Width: innerWidth, Height: sampleHeight, Radius: 8, Color: privacyColorAlpha(props.Theme.ActionText, 13), BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(12), Child: woxwidget.TextBlock{
+		woxwidget.Container{Width: innerWidth, Height: sampleHeight, Radius: 8, Color: privacyColorAlpha(props.Theme.Text, 13), BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(12), Child: woxwidget.TextBlock{
 			Value: props.Sample, Width: max(float32(0), innerWidth-24), Height: max(float32(0), sampleHeight-24),
-			Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: props.Theme.ActionText,
+			Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: props.Theme.Text,
 		}},
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.TextBlock{
 			Value: props.Error, Width: innerWidth, Height: 20, MaxLines: 1,
-			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
+			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error,
 		})
 	}
 	children = append(children, settingsDialogActions(innerWidth, props.Theme,

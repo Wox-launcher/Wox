@@ -430,20 +430,20 @@ func (instance *runtimeTextOverlay) overlayMessage(layout runtimeTextLayout, sty
 }
 
 // textOverlayFieldTheme maps overlay chrome onto the selection colors a read-only field needs.
-func textOverlayFieldTheme(chrome overlay.ThemeChrome) woxcomponent.Theme {
+func textOverlayFieldTheme(chrome overlay.ThemeChrome) woxcomponent.ControlTheme {
 	selection := woxui.Color{R: 255, G: 255, B: 255, A: 61}
 	selectionText := chrome.Foreground
 	if chrome.Light {
 		selection = woxui.Color{R: 82, G: 157, B: 247, A: 204}
 		selectionText = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 	}
-	return woxcomponent.Theme{
-		Background:          chrome.Background,
-		Cursor:              chrome.Foreground,
-		SelectionBackground: selection,
-		SelectionText:       selectionText,
-		QueryText:           chrome.Foreground,
-		PreviewText:         chrome.Foreground,
+	return woxcomponent.ControlTheme{
+		Background:              chrome.Background,
+		Focus:                   chrome.Foreground,
+		TextSelectionBackground: selection,
+		TextSelectionText:       selectionText,
+		InputText:               chrome.Foreground,
+		BodyText:                chrome.Foreground,
 	}
 }
 
@@ -598,7 +598,7 @@ func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, ch
 			background = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 		}
 		children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
-			ID: "text-overlay-close", Width: width, Platform: runtime.GOOS, Theme: woxcomponent.Theme{Background: background, ToolbarText: foreground}, Active: active,
+			ID: "text-overlay-close", Width: width, Platform: runtime.GOOS, Theme: woxcomponent.ControlTheme{Background: background, ChromeText: foreground}, Active: active,
 			OnClose: func() { overlay.RequestClose(instance.id) },
 		})})
 		if runtime.GOOS != "darwin" {

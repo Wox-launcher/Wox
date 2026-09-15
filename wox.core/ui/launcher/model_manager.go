@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	woxcomponent "wox/ui/launcher/component"
 
 	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
@@ -56,7 +57,7 @@ type modelManagerOptionAction struct {
 }
 
 // buildModelManagerOverlay converts controller state into the pure modal view.
-func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	title := "Dictation models"
 	downloadLabel := a.translate("i18n:plugin_dictation_model_download")
 	retryLabel := a.translate("i18n:plugin_dictation_model_retry")
@@ -126,10 +127,10 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		}
 		options = append(options, converted)
 	}
-	iconTint := palette.resultSubtitle
-	errorTint := palette.componentTheme().ErrorText
+	iconTint := palette.TextSecondary
+	errorTint := palette.Error
 	return launcherview.ModelManagerView(launcherview.ModelManagerProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), Title: title,
+		Width: width, Height: height, Theme: palette, Title: title,
 		Anchor: snapshot.anchor, Anchored: snapshot.anchored,
 		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error,
 		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, EngineKnown: snapshot.engine.Known, EngineReady: snapshot.engine.Ready,

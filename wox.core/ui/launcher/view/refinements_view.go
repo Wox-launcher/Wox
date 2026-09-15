@@ -191,7 +191,7 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 	viewportWidth := max(float32(0), props.Width-scaledLauncherSize(16, props.DensityScale))
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(10, props.DensityScale), Right: scaledLauncherSize(8, props.DensityScale), Bottom: scaledLauncherSize(8, props.DensityScale)}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-refinements-scroll", Width: viewportWidth, Height: controlHeight, ContentWidth: max(viewportWidth, contentWidth),
-		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+		Horizontal: true, Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle,
 		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(10, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls},
 	})}
 }

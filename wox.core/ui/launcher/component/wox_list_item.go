@@ -23,7 +23,7 @@ type ListItemProps struct {
 	OnTap           func()
 	OnHover         func(bool)
 	Child           woxwidget.Widget
-	Theme           Theme
+	Theme           ControlTheme
 }
 
 // WoxListItem builds a selectable row with shared pointer, keyboard, and accessibility behavior.
@@ -33,11 +33,11 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 		defaultRadius := float32(7)
 		radius = &defaultRadius
 	}
-	background := props.Theme.QueryBackground
+	background := props.Theme.InputBackground
 	if props.Background != nil {
 		background = *props.Background
 	} else if props.Selected {
-		background = props.Theme.SelectedBackground
+		background = props.Theme.SelectionBackground
 	}
 	onTap := props.OnTap
 	if props.Disabled {
@@ -54,7 +54,7 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 			if props.HoverBackground != nil {
 				rowBackground = *props.HoverBackground
 			} else {
-				rowBackground = controlHoverColor(background, props.Theme.ResultTitle)
+				rowBackground = controlHoverColor(background, props.Theme.Text)
 			}
 		}
 		if props.OnHover != nil && !props.Disabled {
@@ -77,7 +77,7 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 	}
 	var child woxwidget.Widget = content
 	if !props.SkipFocus {
-		child = woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: *radius, OnKey: func(event woxui.KeyEvent) bool {
+		child = woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: *radius, OnKey: func(event woxui.KeyEvent) bool {
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

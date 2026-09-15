@@ -22,7 +22,7 @@ type WindowCloseChromeProps struct {
 	ID       string
 	Width    float32
 	Platform string
-	Theme    Theme
+	Theme    ControlTheme
 	Active   bool
 	// Maximized switches the zoom/maximize control to its restore glyph.
 	Maximized  bool
@@ -105,9 +105,9 @@ func (s *windowCloseChromeState) Build(context woxwidget.StateContext, widget an
 		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: LinuxTitleBarCloseButton(closeID, s.hovered == "close", props.Theme, props.OnClose, onHover)})
 		if props.OnMaximize != nil {
 			right += TitleBarControlWidth
-			icon := MaximizeGlyph(14, TitleBarAlpha(props.Theme.ToolbarText, 230))
+			icon := MaximizeGlyph(14, TitleBarAlpha(props.Theme.ChromeText, 230))
 			if props.Maximized {
-				icon = RestoreGlyph(14, TitleBarAlpha(props.Theme.ToolbarText, 230))
+				icon = RestoreGlyph(14, TitleBarAlpha(props.Theme.ChromeText, 230))
 			}
 			children = append(children, woxwidget.StackChild{Right: right, AnchorRight: true, Child: LinuxTitleBarIconButton(
 				maximizeID, "maximize", icon, s.hovered == "maximize", false, props.Theme, props.OnMaximize, onHover,
@@ -116,7 +116,7 @@ func (s *windowCloseChromeState) Build(context woxwidget.StateContext, widget an
 		if props.OnMinimize != nil {
 			right += TitleBarControlWidth
 			children = append(children, woxwidget.StackChild{Right: right, AnchorRight: true, Child: LinuxTitleBarIconButton(
-				minimizeID, "minimize", MinimizeGlyph(14, TitleBarAlpha(props.Theme.ToolbarText, 230)), s.hovered == "minimize", false, props.Theme, props.OnMinimize, onHover,
+				minimizeID, "minimize", MinimizeGlyph(14, TitleBarAlpha(props.Theme.ChromeText, 230)), s.hovered == "minimize", false, props.Theme, props.OnMinimize, onHover,
 			)})
 		}
 	default:
@@ -177,8 +177,8 @@ func TitleBarAlpha(color woxui.Color, alpha uint8) woxui.Color {
 
 // LinuxTitleBarCloseButton draws the circular Linux close control with a red
 // hover fill, matching the compact native treatment.
-func LinuxTitleBarCloseButton(id string, hovered bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
-	foreground := TitleBarAlpha(theme.ToolbarText, 230)
+func LinuxTitleBarCloseButton(id string, hovered bool, theme ControlTheme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
+	foreground := TitleBarAlpha(theme.ChromeText, 230)
 	if hovered {
 		foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 	}
@@ -186,13 +186,13 @@ func LinuxTitleBarCloseButton(id string, hovered bool, theme Theme, onTap func()
 }
 
 // LinuxTitleBarIconButton draws one circular Linux caption control.
-func LinuxTitleBarIconButton(id, control string, icon woxwidget.Widget, hovered, danger bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
+func LinuxTitleBarIconButton(id, control string, icon woxwidget.Widget, hovered, danger bool, theme ControlTheme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
 	circleColor := woxui.Color{}
 	if hovered {
 		if danger {
 			circleColor = woxui.Color{R: 232, G: 17, B: 35, A: 255}
 		} else {
-			circleColor = TitleBarAlpha(theme.ToolbarText, 26)
+			circleColor = TitleBarAlpha(theme.ChromeText, 26)
 		}
 	}
 	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
@@ -203,12 +203,12 @@ func LinuxTitleBarIconButton(id, control string, icon woxwidget.Widget, hovered,
 }
 
 // WindowsTitleBarButton matches the compact native hover treatment while keeping the frameless window fully custom-drawn.
-func WindowsTitleBarButton(id, control string, hovered bool, theme Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
+func WindowsTitleBarButton(id, control string, hovered bool, theme ControlTheme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
 	background := woxui.Color{}
-	foreground := TitleBarAlpha(theme.ToolbarText, 230)
+	foreground := TitleBarAlpha(theme.ChromeText, 230)
 	closeButton := control == "close"
 	if hovered {
-		background = TitleBarAlpha(theme.ToolbarText, 26)
+		background = TitleBarAlpha(theme.ChromeText, 26)
 		if closeButton {
 			background = woxui.Color{R: 232, G: 17, B: 35, A: 255}
 			foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
@@ -249,7 +249,7 @@ func windowsTitleBarControlName(id string, closeButton bool) string {
 
 // MacTrafficLight matches the compact macOS controls and reveals their glyphs while the group is hovered.
 // Inactive (non-key) windows use a uniform gray fill until the group is hovered, matching AppKit.
-func MacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed, active bool, theme Theme, onTap func(), onHover, onPress func(string, bool)) woxwidget.Widget {
+func MacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed, active bool, theme ControlTheme, onTap func(), onHover, onPress func(string, bool)) woxwidget.Widget {
 	if !active && !hovered {
 		color = MacTrafficLightInactiveColor(theme)
 	}
@@ -283,7 +283,7 @@ func MacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxu
 }
 
 // MacTrafficLightInactiveColor is the unfocused fill used by native macOS traffic lights.
-func MacTrafficLightInactiveColor(theme Theme) woxui.Color {
+func MacTrafficLightInactiveColor(theme ControlTheme) woxui.Color {
 	if macTrafficLightThemeIsDark(theme) {
 		return woxui.Color{R: 94, G: 94, B: 96, A: 255}
 	}
@@ -291,7 +291,7 @@ func MacTrafficLightInactiveColor(theme Theme) woxui.Color {
 }
 
 // macTrafficLightThemeIsDark uses relative luminance so inactive gray tracks light and dark title bars.
-func macTrafficLightThemeIsDark(theme Theme) bool {
+func macTrafficLightThemeIsDark(theme ControlTheme) bool {
 	linear := func(value uint8) float64 {
 		channel := float64(value) / 255
 		if channel <= 0.03928 {

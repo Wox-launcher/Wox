@@ -103,22 +103,24 @@ type OnboardingProps struct {
 	ChoiceAnchor         woxui.Rect
 	Choices              []OnboardingChoice
 	Window               *woxui.Window
-	Theme                woxcomponent.Theme
-	NextDisabled         bool
-	OnDrag               func()
-	OnStep               func(int)
-	OnBack               func()
-	OnNext               func()
-	OnFinish             func()
-	OnRecordHotkey       func()
-	OnRecordQueryHotkey  func()
-	OnToggleQueryHotkey  func(bool)
-	OnToggleGlance       func(bool)
-	OnInstallPlugin      func(string)
-	OnSelectTheme        func(string)
-	OnOpenChoice         func(string)
-	OnSelectChoice       func(string)
-	OnPermission         func(string)
+	Theme                woxcomponent.ControlTheme
+	// PreviewTheme belongs only to illustrative launcher content.
+	PreviewTheme        woxcomponent.Theme
+	NextDisabled        bool
+	OnDrag              func()
+	OnStep              func(int)
+	OnBack              func()
+	OnNext              func()
+	OnFinish            func()
+	OnRecordHotkey      func()
+	OnRecordQueryHotkey func()
+	OnToggleQueryHotkey func(bool)
+	OnToggleGlance      func(bool)
+	OnInstallPlugin     func(string)
+	OnSelectTheme       func(string)
+	OnOpenChoice        func(string)
+	OnSelectChoice      func(string)
+	OnPermission        func(string)
 }
 
 // OnboardingView builds the first-run setup surface.
@@ -186,15 +188,15 @@ func onboardingHeader(props OnboardingProps) woxwidget.Widget {
 	}
 	language := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: "onboarding-language", Label: props.Labels["language"], Value: props.Language, Width: 164, Height: 34,
-		Outline: settingsColorAlpha(props.Theme.PreviewSplit, 160), Foreground: props.Theme.ResultTitle,
-		Secondary: props.Theme.ResultSubtitle, Theme: props.Theme, OnTap: openLanguage,
+		Outline: settingsColorAlpha(props.Theme.Border, 160), Foreground: props.Theme.Text,
+		Secondary: props.Theme.TextSecondary, Theme: props.Theme, OnTap: openLanguage,
 	})
 	content := woxwidget.Container{
 		Width: props.Width, Height: OnboardingHeaderHeight, Padding: woxwidget.Insets{Left: 28, Top: 17, Right: 28, Bottom: 17},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisSpaceBetween, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				logo,
-				woxwidget.Text{Value: "Wox", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+				woxwidget.Text{Value: "Wox", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 			}},
 			language,
 		}},
@@ -211,9 +213,9 @@ func onboardingPage(props OnboardingProps, step OnboardingStep, height float32) 
 	visualHeight := max(float32(180), height-136)
 	children := []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: 20},
-		woxwidget.TextBlock{Value: step.Title, Width: innerWidth, Height: 44, LineHeight: 44, MaxLines: 1, Centered: true, Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+		woxwidget.TextBlock{Value: step.Title, Width: innerWidth, Height: 44, LineHeight: 44, MaxLines: 1, Centered: true, Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 		woxwidget.Container{Width: innerWidth, Height: 12},
-		woxwidget.TextBlock{Value: props.Labels[step.ID+".body"], Width: innerWidth, Height: 40, LineHeight: 20, MaxLines: 2, Centered: true, Style: woxui.TextStyle{Size: 14}, Color: props.Theme.ResultSubtitle},
+		woxwidget.TextBlock{Value: props.Labels[step.ID+".body"], Width: innerWidth, Height: 40, LineHeight: 20, MaxLines: 2, Centered: true, Style: woxui.TextStyle{Size: 14}, Color: props.Theme.TextSecondary},
 		onboardingFeatureVisual(props, step, innerWidth, visualHeight),
 	}
 	page := woxwidget.Container{
@@ -261,38 +263,38 @@ func onboardingMainHotkeyVisual(props OnboardingProps, width float32, accent wox
 		labels = []string{"Alt", "Space"}
 	}
 	if accent.A == 0 {
-		accent = props.Theme.Cursor
+		accent = props.Theme.Focus
 	}
-	keyBorder := settingsColorAlpha(props.Theme.PreviewSplit, 180)
+	keyBorder := settingsColorAlpha(props.Theme.Border, 180)
 	keyBorderWidth := float32(1)
 	if props.HotkeyRecording {
 		keyBorder = accent
 		keyBorderWidth = 2
 	}
 	if props.HotkeyError {
-		keyBorder = props.Theme.ErrorText
+		keyBorder = props.Theme.Error
 		keyBorderWidth = 2
 	}
 	keys := make([]woxwidget.Widget, 0, len(labels)*2-1)
 	for index, label := range labels {
 		if index > 0 {
-			keys = append(keys, woxwidget.Align{Width: 28, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: "+", Style: woxui.TextStyle{Size: 14}, Color: props.Theme.ResultSubtitle}})
+			keys = append(keys, woxwidget.Align{Width: 28, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: "+", Style: woxui.TextStyle{Size: 14}, Color: props.Theme.TextSecondary}})
 		}
 		keyWidth := max(float32(52), float32(len([]rune(label)))*8+24)
 		keys = append(keys, woxwidget.Container{
-			Width: keyWidth, Height: 44, Radius: 7, Color: props.Theme.QueryBackground,
+			Width: keyWidth, Height: 44, Radius: 7, Color: props.Theme.InputBackground,
 			BorderColor: keyBorder, BorderWidth: keyBorderWidth,
-			Child: woxwidget.Align{Width: keyWidth, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
+			Child: woxwidget.Align{Width: keyWidth, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}},
 		})
 	}
 	statusColor := accent
 	statusIcon := woxcomponent.CheckCircleGlyph(18, statusColor)
 	if props.HotkeyRecording {
-		statusColor = props.Theme.ResultSubtitle
+		statusColor = props.Theme.TextSecondary
 		statusIcon = woxcomponent.KeyboardGlyph(18, statusColor)
 	}
 	if props.HotkeyError {
-		statusColor = props.Theme.ErrorText
+		statusColor = props.Theme.Error
 		statusIcon = woxcomponent.ErrorGlyph(18, statusColor)
 	}
 	keyControl := woxwidget.Semantics{
@@ -305,7 +307,7 @@ func onboardingMainHotkeyVisual(props OnboardingProps, width float32, accent wox
 			return nil
 		},
 		Child: woxwidget.Focusable{
-			Key: "onboarding-main-hotkey", FocusRingColor: props.Theme.Cursor, FocusRingRadius: 7,
+			Key: "onboarding-main-hotkey", FocusRingColor: props.Theme.Focus, FocusRingRadius: 7,
 			OnKey: func(event woxui.KeyEvent) bool {
 				if event.Down && (event.Key == woxui.KeyEnter || event.Key == woxui.KeySpace) && props.OnRecordHotkey != nil {
 					props.OnRecordHotkey()
@@ -322,7 +324,7 @@ func onboardingMainHotkeyVisual(props OnboardingProps, width float32, accent wox
 			statusIcon,
 			woxwidget.Text{Value: props.HotkeyStatus, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: statusColor},
 		}}},
-		woxwidget.Text{Value: props.Labels["hotkey.change"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Text{Value: props.Labels["hotkey.change"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 		woxwidget.Container{Width: width, Height: 24},
 		onboardingHotkeyPreview(props, labels, accent, width),
 	}}
@@ -334,23 +336,23 @@ func onboardingHotkeyPreview(props OnboardingProps, labels []string, accent woxu
 	compactKeys := make([]woxwidget.Widget, 0, len(labels)*2-1)
 	for index, label := range labels {
 		if index > 0 {
-			compactKeys = append(compactKeys, woxwidget.Text{Value: "+", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle})
+			compactKeys = append(compactKeys, woxwidget.Text{Value: "+", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary})
 		}
 		keyWidth := max(float32(48), float32(len([]rune(label)))*6+16)
 		compactKeys = append(compactKeys, woxwidget.Container{
-			Width: keyWidth, Height: 32, Radius: 6, Color: settingsColorAlpha(props.Theme.ResultTitle, 18),
-			BorderColor: settingsColorAlpha(props.Theme.PreviewSplit, 120), BorderWidth: 1,
-			Child: woxwidget.Align{Width: keyWidth, Height: 32, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
+			Width: keyWidth, Height: 32, Radius: 6, Color: settingsColorAlpha(props.Theme.Text, 18),
+			BorderColor: settingsColorAlpha(props.Theme.Border, 120), BorderWidth: 1,
+			Child: woxwidget.Align{Width: keyWidth, Height: 32, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}},
 		})
 	}
 	queryBox := onboardingQueryPreview(props, accent, previewWidth, props.Labels["hotkey.preview"], false)
 	content := woxwidget.Align{Width: width, Height: 232, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: compactKeys},
-		woxcomponent.KeyboardArrowDownGlyph(20, props.Theme.ResultSubtitle),
+		woxcomponent.KeyboardArrowDownGlyph(20, props.Theme.TextSecondary),
 		queryBox,
 	}}}
 	return woxwidget.Stack{Width: width, Height: 232, Children: []woxwidget.StackChild{
-		{Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 232, CenterY: 142, RadiusY: 108, Color: props.Theme.PreviewSplit})},
+		{Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 232, CenterY: 142, RadiusY: 108, Color: props.Theme.Border})},
 		{Child: content},
 	}}
 }
@@ -359,7 +361,7 @@ func onboardingHotkeyPreview(props OnboardingProps, labels []string, accent woxu
 func onboardingQueryPreview(props OnboardingProps, accent woxui.Color, width float32, queryText string, typed bool) woxwidget.Widget {
 	const chromeInset = float32(32)
 	const chromeHeight = float32(104)
-	surface := settingsColorAlpha(props.Theme.ActionBackground, 246)
+	surface := settingsColorAlpha(props.PreviewTheme.ActionBackground, 246)
 	chrome := woxwidget.Painter{Width: width + chromeInset*2, Height: chromeHeight, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 		for spread := float32(32); spread >= 8; spread -= 4 {
 			displayList.FillRoundedRect(woxui.Rect{
@@ -370,20 +372,20 @@ func onboardingQueryPreview(props OnboardingProps, accent woxui.Color, width flo
 		displayList.FillRoundedRect(woxui.Rect{X: bounds.X + chromeInset - 2, Y: bounds.Y + 18, Width: width + 4, Height: 64}, 12, woxui.Color{A: 12})
 		surfaceBounds := woxui.Rect{X: bounds.X + chromeInset, Y: bounds.Y + 12, Width: width, Height: 64}
 		displayList.FillRoundedRect(surfaceBounds, 10, surface)
-		displayList.StrokeRoundedRect(surfaceBounds, 10, 1, settingsColorAlpha(props.Theme.PreviewSplit, 32))
+		displayList.StrokeRoundedRect(surfaceBounds, 10, 1, settingsColorAlpha(props.PreviewTheme.PreviewSplit, 32))
 	}}
-	queryColor := props.Theme.ResultSubtitle
+	queryColor := props.PreviewTheme.ResultSubtitle
 	queryChildren := []woxwidget.Widget{woxwidget.Container{Width: 2, Height: 24, Color: accent}}
 	if typed {
-		queryColor = props.Theme.ResultTitle
+		queryColor = props.PreviewTheme.ResultTitle
 		queryChildren = nil
 	}
 	queryChildren = append(queryChildren, woxwidget.Text{Value: queryText, Style: woxui.TextStyle{Size: 14}, Color: queryColor})
 	if typed {
 		queryChildren = append(queryChildren, woxwidget.Container{Width: 2, Height: 24, Color: accent})
 	}
-	trailing := woxwidget.Widget(woxcomponent.SearchGlyph(20, props.Theme.ResultSubtitle))
-	if glance := onboardingConfiguredGlanceAccessory(props, props.Theme.ResultSubtitle); glance != nil {
+	trailing := woxwidget.Widget(woxcomponent.SearchGlyph(20, props.PreviewTheme.ResultSubtitle))
+	if glance := onboardingConfiguredGlanceAccessory(props, props.PreviewTheme.ResultSubtitle); glance != nil {
 		trailing = glance
 	}
 	queryChildren = append(queryChildren, woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Horizontal: 1, Vertical: 0.5, Child: trailing}})
@@ -413,74 +415,74 @@ func onboardingConfiguredGlanceAccessory(props OnboardingProps, color woxui.Colo
 func onboardingFeatureCard(props OnboardingProps, width, height float32, child woxwidget.Widget) woxwidget.Widget {
 	return woxwidget.Container{
 		Width: width, Height: height, Radius: 14, Padding: woxwidget.UniformInsets(24),
-		Color: settingsColorAlpha(props.Theme.ResultTitle, 12), BorderColor: settingsColorAlpha(props.Theme.PreviewSplit, 110), BorderWidth: 1,
+		Color: settingsColorAlpha(props.Theme.Text, 12), BorderColor: settingsColorAlpha(props.Theme.Border, 110), BorderWidth: 1,
 		Child: child,
 	}
 }
 
 func onboardingWelcomeVisual(props OnboardingProps, width float32, accent woxui.Color) woxwidget.Widget {
 	if accent.A == 0 {
-		accent = props.Theme.Cursor
+		accent = props.Theme.Focus
 	}
 	const stageHeight = float32(212)
 	queryWidth := min(float32(480), max(float32(0), width-96))
 	var logo woxwidget.Widget = woxwidget.Container{
-		Width: 56, Height: 56, Radius: 14, Color: props.Theme.ResultTitle,
+		Width: 56, Height: 56, Radius: 14, Color: props.Theme.Text,
 		Child: woxwidget.Align{Width: 56, Height: 56, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: "W", Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Background}},
 	}
 	if props.AppIcon != nil {
 		logo = woxwidget.Image{Source: props.AppIcon, Width: 56, Height: 56}
 	}
 	capabilities := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.Labels["welcome.apps"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
-		woxwidget.Text{Value: "·", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
-		woxwidget.Text{Value: props.Labels["welcome.files"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
-		woxwidget.Text{Value: "·", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
-		woxwidget.Text{Value: props.Labels["welcome.plugins"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
-		woxwidget.Text{Value: "·", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
-		woxwidget.Text{Value: props.Labels["welcome.ai"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Text{Value: props.Labels["welcome.apps"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+		woxwidget.Text{Value: "·", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+		woxwidget.Text{Value: props.Labels["welcome.files"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+		woxwidget.Text{Value: "·", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+		woxwidget.Text{Value: props.Labels["welcome.plugins"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+		woxwidget.Text{Value: "·", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+		woxwidget.Text{Value: props.Labels["welcome.ai"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 	}}
 	stage := woxwidget.Stack{Width: width, Height: stageHeight, Children: []woxwidget.StackChild{
-		{Top: -124, Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 336, CenterY: 236, RadiusY: 88, Color: props.Theme.PreviewSplit})},
+		{Top: -124, Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 336, CenterY: 236, RadiusY: 88, Color: props.Theme.Border})},
 		{Top: 4, Child: woxwidget.Align{Width: width, Height: 56, Horizontal: 0.5, Child: logo}},
 		{Top: 68, Child: woxwidget.Align{Width: width, Height: 104, Horizontal: 0.5, Child: onboardingQueryPreview(props, accent, queryWidth, "wox", true)}},
 		{Top: 184, Child: woxwidget.Align{Width: width, Height: 20, Horizontal: 0.5, Vertical: 0.5, Child: capabilities}},
 	}}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		stage,
-		woxwidget.Text{Value: props.Labels["welcome.hint"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Text{Value: props.Labels["welcome.hint"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 	}}
 }
 
 func onboardingQueryHotkeysVisual(props OnboardingProps, width float32, accent woxui.Color) woxwidget.Widget {
 	const demoWidth = float32(420)
 	if accent.A == 0 {
-		accent = props.Theme.Cursor
+		accent = props.Theme.Focus
 	}
 	labels := props.QueryHotkeyLabels
 	if len(labels) == 0 {
 		labels = []string{"Ctrl", "Shift", "V"}
 	}
-	keyBorder := settingsColorAlpha(props.Theme.PreviewSplit, 96)
+	keyBorder := settingsColorAlpha(props.Theme.Border, 96)
 	keyBorderWidth := float32(1)
 	if props.QueryHotkeyRecording {
 		keyBorder = accent
 		keyBorderWidth = 2
 	}
 	if props.QueryHotkeyError {
-		keyBorder = props.Theme.ErrorText
+		keyBorder = props.Theme.Error
 		keyBorderWidth = 2
 	}
 	keys := make([]woxwidget.Widget, 0, len(labels)*2-1)
 	for index, label := range labels {
 		if index > 0 {
-			keys = append(keys, woxwidget.Text{Value: "+", Style: woxui.TextStyle{Size: 14}, Color: props.Theme.ResultSubtitle})
+			keys = append(keys, woxwidget.Text{Value: "+", Style: woxui.TextStyle{Size: 14}, Color: props.Theme.TextSecondary})
 		}
 		keyWidth := max(float32(52), float32(len([]rune(label)))*8+24)
 		keys = append(keys, woxwidget.Container{
-			Width: keyWidth, Height: 44, Radius: 7, Color: props.Theme.QueryBackground,
+			Width: keyWidth, Height: 44, Radius: 7, Color: props.Theme.InputBackground,
 			BorderColor: keyBorder, BorderWidth: keyBorderWidth,
-			Child: woxwidget.Align{Width: keyWidth, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
+			Child: woxwidget.Align{Width: keyWidth, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}},
 		})
 	}
 	keyControl := woxwidget.Semantics{
@@ -498,12 +500,12 @@ func onboardingQueryHotkeysVisual(props OnboardingProps, width float32, accent w
 		woxwidget.Text{Value: "cb", Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: accent},
 		woxwidget.Container{Width: 2, Height: 22, Color: accent},
 	}
-	if glance := onboardingConfiguredGlanceAccessory(props, props.Theme.ResultSubtitle); glance != nil {
+	if glance := onboardingConfiguredGlanceAccessory(props, props.Theme.TextSecondary); glance != nil {
 		queryHeader = append(queryHeader, woxwidget.Expanded{Child: woxwidget.Align{Height: 30, Horizontal: 1, Vertical: 0.5, Child: glance}})
 	}
 	queryWindow := woxwidget.Container{
-		Width: demoWidth, Height: 188, Radius: 10, Color: props.Theme.ActionBackground,
-		BorderColor: settingsColorAlpha(props.Theme.PreviewSplit, 48), BorderWidth: 1,
+		Width: demoWidth, Height: 188, Radius: 10, Color: props.Theme.Surface,
+		BorderColor: settingsColorAlpha(props.Theme.Border, 48), BorderWidth: 1,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: demoWidth, Height: 52, Padding: woxwidget.Insets{Left: 16, Top: 11, Right: 8, Bottom: 11}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: queryHeader}},
 			onboardingQueryHotkeyResult(props, demoWidth, props.Labels["queryHotkeys.clipboard"], "Clipboard history", true),
@@ -511,45 +513,42 @@ func onboardingQueryHotkeysVisual(props OnboardingProps, width float32, accent w
 			onboardingQueryHotkeyResult(props, demoWidth, "Wox", "Copied text", false),
 		}},
 	}
-	statusColor := props.Theme.ResultSubtitle
+	statusColor := props.Theme.TextSecondary
 	statusLabel := props.Labels["queryHotkeys.notConfigured"]
 	if props.QueryHotkeyReady {
 		statusLabel = props.Labels["queryHotkeys.configured"]
 	} else if props.QueryHotkeyError {
-		statusColor = props.Theme.ErrorText
+		statusColor = props.Theme.Error
 	}
 	shortcutCaption := props.Labels["queryHotkeys.shortcut"]
-	shortcutCaptionColor := props.Theme.ResultSubtitle
+	shortcutCaptionColor := props.Theme.TextSecondary
 	if props.QueryHotkeyError {
 		shortcutCaption = props.QueryHotkeyStatus
-		shortcutCaptionColor = props.Theme.ErrorText
+		shortcutCaptionColor = props.Theme.Error
 	}
-	checkboxTheme := props.Theme
-	checkboxTheme.ActionSelected = settingsColorAlpha(props.Theme.ResultTitle, 77)
-	checkboxTheme.ActionSelectedText = props.Theme.ResultTitle
 	return woxwidget.Flex{Axis: woxwidget.Vertical, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 24, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				keyControl,
 				woxwidget.Text{Value: shortcutCaption, Style: woxui.TextStyle{Size: 12}, Color: shortcutCaptionColor},
-				woxwidget.Text{Value: props.Labels["hotkey.change"], Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+				woxwidget.Text{Value: props.Labels["hotkey.change"], Style: woxui.TextStyle{Size: 11}, Color: props.Theme.TextSecondary},
 			}},
-			woxcomponent.ArrowRightGlyph(24, props.Theme.ResultSubtitle),
+			woxcomponent.ArrowRightGlyph(24, props.Theme.TextSecondary),
 			queryWindow,
 		}},
 		woxwidget.Container{Width: width, Height: 100},
-		woxwidget.Container{Width: width, Height: 1, Color: settingsColorAlpha(props.Theme.PreviewSplit, 48)},
+		woxwidget.Container{Width: width, Height: 1, Color: settingsColorAlpha(props.Theme.Border, 48)},
 		woxwidget.Container{Width: width, Height: 20},
 		woxwidget.Container{Width: width, Height: 64, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.KeyboardGlyph(20, props.Theme.ResultSubtitle)}},
+			woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.KeyboardGlyph(20, props.Theme.TextSecondary)}},
 			woxwidget.Container{Width: 12},
 			woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.Labels["queryHotkeys.status.title"], Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-				woxwidget.Text{Value: props.Labels["queryHotkeys.status.body"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+				woxwidget.Text{Value: props.Labels["queryHotkeys.status.title"], Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+				woxwidget.Text{Value: props.Labels["queryHotkeys.status.body"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 			}}},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: statusLabel, Style: woxui.TextStyle{Size: 12}, Color: statusColor},
-				woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{ID: "onboarding-query-hotkey-enabled", Label: props.Labels["queryHotkeys.status.title"], Value: props.QueryHotkeySelected, Disabled: props.QueryHotkeyBusy, OnChange: props.OnToggleQueryHotkey, Theme: checkboxTheme}),
+				woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{ID: "onboarding-query-hotkey-enabled", Label: props.Labels["queryHotkeys.status.title"], Value: props.QueryHotkeySelected, Disabled: props.QueryHotkeyBusy, OnChange: props.OnToggleQueryHotkey, Theme: props.Theme}),
 			}},
 		}}},
 	}}
@@ -557,12 +556,12 @@ func onboardingQueryHotkeysVisual(props OnboardingProps, width float32, accent w
 
 func onboardingQueryHotkeyResult(props OnboardingProps, width float32, title, subtitle string, selected bool) woxwidget.Widget {
 	background := woxui.Color{}
-	titleColor := props.Theme.ResultTitle
-	subtitleColor := props.Theme.ResultSubtitle
+	titleColor := props.PreviewTheme.ResultTitle
+	subtitleColor := props.PreviewTheme.ResultSubtitle
 	if selected {
-		background = props.Theme.SelectedBackground
-		titleColor = props.Theme.SelectedTitle
-		subtitleColor = props.Theme.SelectedSubtitle
+		background = props.PreviewTheme.SelectedBackground
+		titleColor = props.PreviewTheme.SelectedTitle
+		subtitleColor = props.PreviewTheme.SelectedSubtitle
 	}
 	return woxwidget.Align{Width: width, Height: 40, Horizontal: 0.5, Child: woxwidget.Container{Width: width - 20, Height: 40, Radius: 6, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 5, Right: 12, Bottom: 5}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxcomponent.CopyGlyph(18, subtitleColor),
@@ -577,27 +576,27 @@ func onboardingQueryHotkeyResult(props OnboardingProps, width float32, title, su
 func onboardingPluginsVisual(props OnboardingProps, width float32) woxwidget.Widget {
 	if props.PluginsLoading && len(props.Plugins) == 0 {
 		return woxwidget.Align{Width: width, Height: 220, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxcomponent.HourglassGlyph(20, props.Theme.ResultSubtitle),
-			woxwidget.Text{Value: props.Labels["plugins.loading"], Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
+			woxcomponent.HourglassGlyph(20, props.Theme.TextSecondary),
+			woxwidget.Text{Value: props.Labels["plugins.loading"], Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
 		}}}
 	}
 	if len(props.Plugins) == 0 {
 		return woxwidget.Align{Width: width, Height: 220, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.TextBlock{
-			Value: props.PluginsError, Width: width, MaxLines: 3, Centered: true, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ErrorText,
+			Value: props.PluginsError, Width: width, MaxLines: 3, Centered: true, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Error,
 		}}
 	}
 	rows := make([]woxwidget.Widget, 0, len(props.Plugins))
 	for index, plugin := range props.Plugins {
 		plugin := plugin
-		var icon woxwidget.Widget = woxcomponent.ExtensionGlyph(24, props.Theme.ResultSubtitle)
+		var icon woxwidget.Widget = woxcomponent.ExtensionGlyph(24, props.Theme.TextSecondary)
 		if plugin.Icon != nil {
 			icon = woxwidget.Image{Source: plugin.Icon, Width: 28, Height: 28}
 		}
 		var action woxwidget.Widget
 		if plugin.Installed {
 			action = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxcomponent.CheckCircleGlyph(18, props.Theme.ResultSubtitle),
-				woxwidget.Text{Value: props.Labels["plugins.installed"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+				woxcomponent.CheckCircleGlyph(18, props.Theme.TextSecondary),
+				woxwidget.Text{Value: props.Labels["plugins.installed"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 			}}
 		} else {
 			label := props.Labels["plugins.install"]
@@ -619,23 +618,23 @@ func onboardingPluginsVisual(props OnboardingProps, width float32) woxwidget.Wid
 		}
 		rows = append(rows, woxwidget.Container{
 			Width: width, Height: 64, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 12},
-			BottomBorderColor: settingsColorAlpha(props.Theme.PreviewSplit, 48), BottomBorderWidth: bottomBorder,
+			BottomBorderColor: settingsColorAlpha(props.Theme.Border, 48), BottomBorderWidth: bottomBorder,
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
+				woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
 				woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: plugin.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-					woxwidget.TextBlock{Value: plugin.Description, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+					woxwidget.Text{Value: plugin.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+					woxwidget.TextBlock{Value: plugin.Description, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 				}}},
 				action,
 			}},
 		})
 	}
 	children := []woxwidget.Widget{
-		woxwidget.Container{Width: width, Height: float32(len(rows)) * 64, Radius: 10, Color: settingsColorAlpha(props.Theme.ResultTitle, 10), BorderColor: settingsColorAlpha(props.Theme.PreviewSplit, 48), BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}},
-		woxwidget.Text{Value: props.Labels["plugins.more"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Container{Width: width, Height: float32(len(rows)) * 64, Radius: 10, Color: settingsColorAlpha(props.Theme.Text, 10), BorderColor: settingsColorAlpha(props.Theme.Border, 48), BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}},
+		woxwidget.Text{Value: props.Labels["plugins.more"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 	}
 	if props.PluginsError != "" {
-		children = append(children, woxwidget.TextBlock{Value: props.PluginsError, Width: width, MaxLines: 2, Centered: true, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText})
+		children = append(children, woxwidget.TextBlock{Value: props.PluginsError, Width: width, MaxLines: 2, Centered: true, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error})
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 20, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}
 }
@@ -644,17 +643,17 @@ func onboardingPluginsVisual(props OnboardingProps, width float32) woxwidget.Wid
 func onboardingThemesVisual(props OnboardingProps, width float32, accent woxui.Color) woxwidget.Widget {
 	if props.ThemesLoading && len(props.Themes) == 0 {
 		return woxwidget.Align{Width: width, Height: 260, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxcomponent.HourglassGlyph(20, props.Theme.ResultSubtitle),
-			woxwidget.Text{Value: props.Labels["theme.loading"], Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
+			woxcomponent.HourglassGlyph(20, props.Theme.TextSecondary),
+			woxwidget.Text{Value: props.Labels["theme.loading"], Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
 		}}}
 	}
 	if len(props.Themes) == 0 {
 		return woxwidget.Align{Width: width, Height: 260, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.TextBlock{
-			Value: props.ThemesError, Width: width, MaxLines: 3, Centered: true, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ErrorText,
+			Value: props.ThemesError, Width: width, MaxLines: 3, Centered: true, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Error,
 		}}
 	}
 	if accent.A == 0 {
-		accent = props.Theme.Cursor
+		accent = props.Theme.Focus
 	}
 	rows := make([]woxwidget.Widget, 0, (len(props.Themes)+1)/2)
 	for index := 0; index < len(props.Themes); index += 2 {
@@ -672,7 +671,7 @@ func onboardingThemesVisual(props OnboardingProps, width float32, accent woxui.C
 	}
 	children := []woxwidget.Widget{woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: rows}}
 	if props.ThemesError != "" {
-		children = append(children, woxwidget.TextBlock{Value: props.ThemesError, Width: width, MaxLines: 2, Centered: true, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText})
+		children = append(children, woxwidget.TextBlock{Value: props.ThemesError, Width: width, MaxLines: 2, Centered: true, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error})
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}
 }
@@ -695,7 +694,7 @@ func onboardingThemeCard(props OnboardingProps, theme OnboardingTheme, width flo
 	if theme.Selected {
 		previewChildren = append(previewChildren, woxwidget.StackChild{Right: 8, Top: 8, AnchorRight: true, Child: woxcomponent.CheckCircleGlyph(20, accent)})
 	}
-	border := settingsColorAlpha(props.Theme.PreviewSplit, 96)
+	border := settingsColorAlpha(props.Theme.Border, 96)
 	if theme.Selected {
 		border = accent
 	}
@@ -707,10 +706,10 @@ func onboardingThemeCard(props OnboardingProps, theme OnboardingTheme, width flo
 	if props.ThemesApplying {
 		selectTheme = nil
 	}
-	cardBackground := props.Theme.QueryBackground
+	cardBackground := props.Theme.InputBackground
 	cardContent := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Stack{Width: contentWidth, Height: 192, Children: previewChildren},
-		woxwidget.Align{Width: contentWidth, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
+		woxwidget.Align{Width: contentWidth, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}},
 	}}
 	cardChild := woxwidget.Stack{Width: contentWidth, Height: contentHeight, Children: []woxwidget.StackChild{{Child: cardContent}}}
 	if selectTheme != nil {
@@ -730,7 +729,7 @@ func onboardingThemeCard(props OnboardingProps, theme OnboardingTheme, width flo
 
 func onboardingFinishVisual(props OnboardingProps, width float32, accent woxui.Color) woxwidget.Widget {
 	if accent.A == 0 {
-		accent = props.Theme.Cursor
+		accent = props.Theme.Focus
 	}
 	var logo woxwidget.Widget = woxwidget.Container{
 		Width: 56, Height: 56, Radius: 14, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255},
@@ -742,7 +741,7 @@ func onboardingFinishVisual(props OnboardingProps, width float32, accent woxui.C
 	queryWidth := min(float32(480), max(float32(0), width-80))
 	query := onboardingQueryPreview(props, accent, queryWidth, props.Labels["finish.query"], true)
 	queryStage := woxwidget.Stack{Width: width, Height: 224, Children: []woxwidget.StackChild{
-		{Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 224, CenterY: 132, RadiusY: 72, Color: props.Theme.PreviewSplit})},
+		{Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 224, CenterY: 132, RadiusY: 72, Color: props.Theme.Border})},
 		{Child: woxwidget.Align{Width: width, Height: 56, Horizontal: 0.5, Vertical: 0.5, Child: logo}},
 		{Top: 88, Child: woxwidget.Align{Width: width, Height: 104, Horizontal: 0.5, Vertical: 0.5, Child: query}},
 	}}
@@ -759,12 +758,12 @@ func onboardingFinishVisual(props OnboardingProps, width float32, accent woxui.C
 	rows := make([]woxwidget.Widget, 0, len(summaries)*2-1)
 	for index, summary := range summaries {
 		if index > 0 {
-			rows = append(rows, woxwidget.Container{Width: queryWidth, Height: 1, Color: settingsColorAlpha(props.Theme.PreviewSplit, 48)})
+			rows = append(rows, woxwidget.Container{Width: queryWidth, Height: 1, Color: settingsColorAlpha(props.Theme.Border, 48)})
 		}
 		rows = append(rows, woxwidget.Container{Width: queryWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxcomponent.CheckCircleGlyph(16, accent),
-			woxwidget.Text{Value: summary.label, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultTitle},
-			woxwidget.Expanded{Child: woxwidget.Align{Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: summary.value, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}},
+			woxwidget.Text{Value: summary.label, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text},
+			woxwidget.Expanded{Child: woxwidget.Align{Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: summary.value, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}}},
 		}}})
 	}
 	pluginIcons := make([]woxwidget.Widget, 0, len(props.Plugins))
@@ -772,7 +771,7 @@ func onboardingFinishVisual(props OnboardingProps, width float32, accent woxui.C
 		if !plugin.Installed {
 			continue
 		}
-		var icon woxwidget.Widget = woxcomponent.ExtensionGlyph(20, props.Theme.ResultSubtitle)
+		var icon woxwidget.Widget = woxcomponent.ExtensionGlyph(20, props.Theme.TextSecondary)
 		if plugin.Icon != nil {
 			icon = woxwidget.Image{Source: plugin.Icon, Width: 24, Height: 24}
 		}
@@ -780,18 +779,18 @@ func onboardingFinishVisual(props OnboardingProps, width float32, accent woxui.C
 	}
 	if len(pluginIcons) > 0 {
 		if len(rows) > 0 {
-			rows = append(rows, woxwidget.Container{Width: queryWidth, Height: 1, Color: settingsColorAlpha(props.Theme.PreviewSplit, 48)})
+			rows = append(rows, woxwidget.Container{Width: queryWidth, Height: 1, Color: settingsColorAlpha(props.Theme.Border, 48)})
 		}
 		rows = append(rows, woxwidget.Container{Width: queryWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxcomponent.CheckCircleGlyph(16, accent),
-			woxwidget.Text{Value: props.Labels["finish.plugins"], Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultTitle},
+			woxwidget.Text{Value: props.Labels["finish.plugins"], Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text},
 			woxwidget.Expanded{Child: woxwidget.Align{Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: pluginIcons}}},
 		}}})
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		queryStage,
 		woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		woxwidget.TextBlock{Value: props.Labels["finish.hint"], Width: queryWidth, Height: 20, MaxLines: 1, Centered: true, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		woxwidget.TextBlock{Value: props.Labels["finish.hint"], Width: queryWidth, Height: 20, MaxLines: 1, Centered: true, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 	}}
 }
 
@@ -821,38 +820,35 @@ func onboardingPermissions(props OnboardingProps, width, height float32) woxwidg
 				},
 			})
 		}
-		iconColor := props.Theme.ResultTitle
+		iconColor := props.Theme.Text
 		if iconColor.A == 0 {
 			iconColor = woxui.Color{R: 255, G: 255, B: 255, A: 220}
 		}
 		rows = append(rows, woxwidget.Container{
 			Width: width, Height: rowHeight, Padding: woxwidget.Insets{Left: 18, Top: 12, Right: 18, Bottom: 12},
-			BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 30), BorderWidth: 1,
+			BorderColor: settingsColorAlpha(props.Theme.TextSecondary, 30), BorderWidth: 1,
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 14, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				woxwidget.Container{
-					Width: 38, Height: 38, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 18),
+					Width: 38, Height: 38, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 18),
 					Child: woxwidget.Align{Width: 38, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: permissionIcon(permission.ID, 20, iconColor)},
 				},
 				woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: permission.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-					woxwidget.TextBlock{Value: permission.Description, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
+					woxwidget.Text{Value: permission.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+					woxwidget.TextBlock{Value: permission.Description, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.TextSecondary},
 				}}},
 				woxwidget.Align{Width: 110, Horizontal: 1, Vertical: 0.5, Child: action},
 			}},
 		})
 	}
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 10),
+		Width: width, Height: height, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 10),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	}
 }
 
 func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Widget {
-	switchTheme := props.Theme
-	switchTheme.ActionSelected = settingsColorAlpha(props.Theme.ResultTitle, 77)
-	switchTheme.ActionSelectedText = props.Theme.ResultTitle
 	switchControl := woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
-		ID: "onboarding-glance-enable", Label: props.Labels["glance.enable"], Value: props.GlanceEnabled, Theme: switchTheme, OnChange: props.OnToggleGlance,
+		ID: "onboarding-glance-enable", Label: props.Labels["glance.enable"], Value: props.GlanceEnabled, Theme: props.Theme, OnChange: props.OnToggleGlance,
 	})
 	openChoice := func() {
 		if props.OnOpenChoice != nil {
@@ -863,16 +859,16 @@ func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Wi
 		switchControl,
 		woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 			ID: "onboarding-glance-choice", Label: props.Labels["glance.primary"], Value: props.GlanceLabel,
-			Width: 220, Height: woxcomponent.SettingsControlHeight, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 96),
-			Foreground: props.Theme.ResultTitle, Secondary: props.Theme.ResultSubtitle, Theme: props.Theme, OnTap: openChoice,
+			Width: 220, Height: woxcomponent.SettingsControlHeight, Outline: settingsColorAlpha(props.Theme.TextSecondary, 96),
+			Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary, Theme: props.Theme, OnTap: openChoice,
 		}),
 	}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.ClockGlyph(20, props.Theme.ResultSubtitle)}},
+		woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.ClockGlyph(20, props.Theme.TextSecondary)}},
 		woxwidget.Container{Width: 12},
 		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Labels["glance.enable"], Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-			woxwidget.Text{Value: props.Labels["glance.enable.body"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+			woxwidget.Text{Value: props.Labels["glance.enable"], Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+			woxwidget.Text{Value: props.Labels["glance.enable.body"], Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 		}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls},
 	}}}
@@ -882,10 +878,10 @@ func onboardingGlanceVisual(props OnboardingProps, width float32) woxwidget.Widg
 	queryWidth := min(float32(560), width)
 	queryChildren := []woxwidget.Widget{
 		woxwidget.Expanded{Child: woxwidget.Align{Height: 64, Vertical: 0.5, Child: woxwidget.Text{
-			Value: props.Labels["glance.query"], Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.QueryText,
+			Value: props.Labels["glance.query"], Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.PreviewTheme.QueryText,
 		}}},
 	}
-	if glance := onboardingConfiguredGlanceAccessory(props, props.Theme.ResultSubtitle); glance != nil {
+	if glance := onboardingConfiguredGlanceAccessory(props, props.PreviewTheme.ResultSubtitle); glance != nil {
 		queryChildren = append(queryChildren, glance)
 	}
 	const chromeInset = float32(28)
@@ -896,8 +892,8 @@ func onboardingGlanceVisual(props OnboardingProps, width float32) woxwidget.Widg
 		}
 		displayList.FillRoundedRect(woxui.Rect{X: bounds.X + chromeInset - 2, Y: bounds.Y + 18, Width: queryWidth + 4, Height: 64}, 12, woxui.Color{A: 12})
 		surface := woxui.Rect{X: bounds.X + chromeInset, Y: bounds.Y + 12, Width: queryWidth, Height: 64}
-		displayList.FillRoundedRect(surface, 10, settingsColorAlpha(props.Theme.ActionBackground, 246))
-		displayList.StrokeRoundedRect(surface, 10, 1, settingsColorAlpha(props.Theme.PreviewSplit, 32))
+		displayList.FillRoundedRect(surface, 10, settingsColorAlpha(props.PreviewTheme.ActionBackground, 246))
+		displayList.StrokeRoundedRect(surface, 10, 1, settingsColorAlpha(props.PreviewTheme.PreviewSplit, 32))
 	}}
 	queryContent := woxwidget.Container{
 		Width: queryWidth, Height: 64,
@@ -909,12 +905,12 @@ func onboardingGlanceVisual(props OnboardingProps, width float32) woxwidget.Widg
 		{Left: chromeInset, Top: 12, Child: queryContent},
 	}}
 	queryStage := woxwidget.Stack{Width: width, Height: 156, Children: []woxwidget.StackChild{
-		{Top: -176, Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 332, CenterY: 220, RadiusY: 88, Color: props.Theme.PreviewSplit})},
+		{Top: -176, Child: woxcomponent.FadingGrid(woxcomponent.FadingGridProps{Width: width, Height: 332, CenterY: 220, RadiusY: 88, Color: props.PreviewTheme.PreviewSplit})},
 		{Child: woxwidget.Align{Width: width, Height: chromeHeight, Horizontal: 0.5, Child: queryBox}},
 	}}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		queryStage,
-		woxwidget.Container{Width: queryWidth, Height: 1, Color: settingsColorAlpha(props.Theme.PreviewSplit, 48)},
+		woxwidget.Container{Width: queryWidth, Height: 1, Color: settingsColorAlpha(props.PreviewTheme.PreviewSplit, 48)},
 		woxwidget.Container{Width: queryWidth, Height: 20},
 		onboardingGlance(props, queryWidth, 64),
 	}}
@@ -932,13 +928,13 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 	}
 	accent := props.Steps[active].Accent
 	if accent.A == 0 {
-		accent = props.Theme.Cursor
+		accent = props.Theme.Focus
 	}
 	dots := make([]woxwidget.Widget, 0, len(props.Steps))
 	for index, step := range props.Steps {
 		index := index
 		disabled := props.NextDisabled && index > active
-		color := settingsColorAlpha(props.Theme.ResultSubtitle, 84)
+		color := settingsColorAlpha(props.Theme.TextSecondary, 84)
 		size := float32(6)
 		if index == active {
 			color = accent
@@ -961,12 +957,10 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 			Child: woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Align{Width: 22, Height: 36, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: size, Height: size, Radius: size / 2, Color: color}}},
 		})
 	}
-	buttonTheme := props.Theme
-	buttonTheme.ActionSelected = accent
 	footerChildren := []woxwidget.StackChild{
 		{Child: woxwidget.Align{Width: props.Width - 56, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, Children: dots}}},
 		{AnchorRight: true, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: nextID, Label: nextLabel, Variant: woxcomponent.ButtonPrimary, Disabled: props.NextDisabled, Theme: buttonTheme, Padding: woxwidget.Insets{Left: 28, Right: 28}, OnTap: nextAction,
+			ID: nextID, Label: nextLabel, FontWeight: woxui.FontWeightSemibold, Variant: woxcomponent.ButtonPrimary, Disabled: props.NextDisabled, Theme: props.Theme, Padding: woxwidget.Insets{Left: 28, Right: 28}, OnTap: nextAction,
 		})},
 	}
 	if active > 0 {

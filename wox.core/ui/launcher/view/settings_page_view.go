@@ -38,9 +38,9 @@ func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 }
 
 // SettingsMessage builds a neutral page-level loading or error message.
-func SettingsMessage(value string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func SettingsMessage(value string, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 24}, Child: woxwidget.TextBlock{
-		Value: value, Width: width, Height: 80, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: theme.ResultSubtitle,
+		Value: value, Width: width, Height: 80, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: theme.TextSecondary,
 	}}
 }
 
@@ -61,7 +61,7 @@ type SettingRowProps struct {
 	Editing       woxui.TextEditingState
 	Focused       bool
 	Window        *woxui.Window
-	Theme         woxcomponent.Theme
+	Theme         woxcomponent.ControlTheme
 	OnTap         func()
 	OnChoiceTap   func(woxui.Rect)
 	OnFocus       func()
@@ -77,10 +77,10 @@ func SettingChoiceAnchorKey(id string) woxwidget.Key {
 // SettingRow builds a text, switch, or choice setting row.
 func SettingRow(props SettingRowProps) woxwidget.Widget {
 	fieldTheme := props.Theme
-	valueColor := props.Theme.ResultTitle
+	valueColor := props.Theme.Text
 	if props.Disabled {
-		fieldTheme.ResultTitle = props.Theme.ResultSubtitle
-		valueColor = props.Theme.ResultSubtitle
+		fieldTheme.Text = props.Theme.TextSecondary
+		valueColor = props.Theme.TextSecondary
 	}
 	valueWidth := min(float32(280), max(float32(190), props.Width*0.32))
 	if props.Kind == "text" {

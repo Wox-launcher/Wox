@@ -31,37 +31,30 @@ type SettingsRailProps struct {
 	SearchBox   woxwidget.Widget
 	SearchPanel woxwidget.Widget
 	ShowSearch  bool
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 }
 
-// settingsRailBackground is the rail wash. Opaque Linux matches the page surface.
-// Linux compositor blur must stay empty: the Windows toolbar overlay is invisible
-// on Acrylic, but the same fill reads as a sidebar color mismatch on a colorful desktop.
-func settingsRailBackground(theme woxcomponent.Theme, linux, nativeMaterial bool) woxui.Color {
+// Linux uses the root tint once; a second translucent fill would darken only the rail.
+func settingsRailBackground(theme woxcomponent.ControlTheme, linux bool) woxui.Color {
 	if linux {
-		if nativeMaterial {
-			return woxui.Color{}
-		}
-		return theme.Background
+		return woxui.Color{}
 	}
-	return settingsColorAlpha(theme.ToolbarText, 9)
+	return settingsColorAlpha(theme.TextSecondary, 9)
 }
 
 // SettingsRail builds the settings navigation rail.
 func SettingsRail(props SettingsRailProps) woxwidget.Widget {
-	railColor := settingsRailBackground(props.Theme, util.IsLinux(), woxui.HasNativeWindowMaterial())
+	railColor := settingsRailBackground(props.Theme, util.IsLinux())
 	rail := woxwidget.Container{
 		Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.UniformInsets(14),
 		Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 			items := make([]woxwidget.Widget, 0, len(props.Items))
 			for _, item := range props.Items {
 				color := woxui.Color{}
-				border := woxui.Color{}
-				foreground := props.Theme.ToolbarText
+				foreground := props.Theme.TextSecondary
 				if item.Selected {
-					color = props.Theme.SelectedBackground
-					border = settingsColorAlpha(props.Theme.SelectedBackground, 82)
-					foreground = props.Theme.SelectedTitle
+					color = props.Theme.SelectionBackground
+					foreground = props.Theme.SelectionText
 				}
 				labelStyle := woxui.TextStyle{Size: 13}
 				leftPadding := float32(10 + item.Depth*18)
@@ -74,10 +67,10 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 				if item.Parent {
 					onTap = nil
 				}
-				hoverBackground := settingsColorAlpha(props.Theme.ToolbarText, 25)
+				hoverBackground := settingsColorAlpha(props.Theme.TextSecondary, 25)
 				items = append(items, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 					ID: "settings-nav-" + item.ID, Label: item.Label, Width: size.Width, Height: 46, Radius: &radius,
-					Background: &color, HoverBackground: &hoverBackground, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: onTap, Theme: props.Theme,
+					Background: &color, HoverBackground: &hoverBackground, Selected: item.Selected, SkipFocus: item.Parent, OnTap: onTap, Theme: props.Theme,
 					Padding: woxwidget.Insets{Left: leftPadding, Right: 10}, Child: woxwidget.Align{Height: 46, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 						woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 						woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}}},
@@ -89,7 +82,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			nav := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 				Key: "settings-rail-scroll", KeepVisible: props.KeepVisible, Width: size.Width, Height: viewportHeight,
 				Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
-				Theme:   props.Theme, ThumbColor: props.Theme.ResultTitle, HideScrollbar: true,
+				Theme:   props.Theme, ThumbColor: props.Theme.Text, HideScrollbar: true,
 			})
 			stackChildren := []woxwidget.StackChild{{Child: nav}}
 			if props.ShowSearch {
@@ -101,7 +94,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			}}
 		}},
 	}
-	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {AnchorRight: true, StretchHeight: true, Child: woxwidget.Container{Width: 1, Color: settingsColorAlpha(props.Theme.ToolbarText, 26)}}}}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {AnchorRight: true, StretchHeight: true, Child: woxwidget.Container{Width: 1, Color: settingsColorAlpha(props.Theme.TextSecondary, 26)}}}}
 }
 
 // SettingsSearchBoxProps contains the search editing state and actions.
@@ -113,7 +106,7 @@ type SettingsSearchBoxProps struct {
 	Controller    *woxwidget.TextEditingController
 	SearchIcon    *woxui.Image
 	Window        *woxui.Window
-	Theme         woxcomponent.Theme
+	Theme         woxcomponent.ControlTheme
 	OnFocus       func()
 	OnClear       func()
 	OnKey         func(woxui.KeyEvent) bool
@@ -127,7 +120,7 @@ func SettingsSearchBox(props SettingsSearchBoxProps) woxwidget.Widget {
 	theme := props.Theme
 	// Unselected rail items use ToolbarText. Keep the placeholder and field chrome
 	// on that token so the search box does not pick up ResultSubtitle.
-	theme.ResultSubtitle = props.Theme.ToolbarText
+	theme.TextSecondary = props.Theme.TextSecondary
 	search := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, Value: props.State.Text, Focused: props.Focused, Autofocus: props.Focused, Controller: props.Controller,
 		SearchIcon: props.SearchIcon, Window: props.Window, Theme: theme, OnFocus: props.OnFocus, OnClear: props.OnClear,
@@ -152,7 +145,7 @@ type SettingsSearchResultsProps struct {
 	Results         []SettingsSearchResult
 	Selected        int
 	EmptyMessage    string
-	Theme           woxcomponent.Theme
+	Theme           woxcomponent.ControlTheme
 }
 
 // SettingsSearchResults builds the rail search result overlay.
@@ -169,23 +162,23 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 	} else {
 		panelHeight = min(panelHeight, float32(58))
 	}
-	background := props.Theme.ToolbarBackground
+	background := props.Theme.Background
 	background.A = 255
 	if len(props.Results) == 0 {
-		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize}, Color: props.Theme.ResultSubtitle}}
+		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize}, Color: props.Theme.TextSecondary}}
 	}
 	start := float32(selected) * rowHeight
-	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 		rows := make([]woxwidget.Widget, 0, len(props.Results))
 		showIcons := size.Width-20 >= 72
 		for index, result := range props.Results {
 			rowBackground := background
-			titleColor := props.Theme.ResultTitle
-			subtitleColor := props.Theme.ResultSubtitle
+			titleColor := props.Theme.Text
+			subtitleColor := props.Theme.TextSecondary
 			if index == selected {
-				rowBackground = props.Theme.SelectedBackground
-				titleColor = props.Theme.SelectedTitle
-				subtitleColor = props.Theme.SelectedSubtitle
+				rowBackground = props.Theme.SelectionBackground
+				titleColor = props.Theme.SelectionText
+				subtitleColor = props.Theme.SelectionText
 			}
 			textColumn := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: titleColor},
@@ -207,7 +200,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "settings-search-results", Width: size.Width, Height: size.Height,
 			KeepVisible: &woxwidget.ScrollRange{Start: start, End: start + rowHeight},
-			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.Text,
 		})
 	}}}
 }

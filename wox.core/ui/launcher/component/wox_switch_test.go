@@ -27,10 +27,10 @@ func TestWoxSwitchUsesIntegerGeometry(t *testing.T) {
 }
 
 func TestWoxSwitchAnimatesThumbSizeOnHover(t *testing.T) {
-	theme := Theme{
-		ResultTitle:        woxui.Color{R: 80, G: 90, B: 100, A: 255},
-		ActionSelected:     woxui.Color{R: 20, G: 80, B: 160, A: 255},
-		ActionSelectedText: woxui.Color{R: 255, G: 255, B: 255, A: 255},
+	theme := ControlTheme{
+		Text:       woxui.Color{R: 80, G: 90, B: 100, A: 255},
+		Accent:     woxui.Color{R: 20, G: 80, B: 160, A: 255},
+		AccentText: woxui.Color{R: 255, G: 255, B: 255, A: 255},
 	}
 	switchControl := WoxSwitch(SwitchProps{ID: "enabled", Label: "Enabled", Value: true, OnChange: func(bool) {}, Theme: theme}).(woxwidget.Semantics)
 	stateful := switchControl.Child.(woxwidget.Focusable).Child
@@ -49,5 +49,25 @@ func TestWoxSwitchAnimatesThumbSizeOnHover(t *testing.T) {
 	hoveredThumb := hovered.Children[1].Child.(woxwidget.Container)
 	if hoveredThumb.Width-normalThumb.Width != 2 {
 		t.Fatalf("switch hover thumb growth = %v, want 2", hoveredThumb.Width-normalThumb.Width)
+	}
+}
+
+// TestWoxSwitchThumbUsesAccentForeground covers both color schemes and animation overshoot.
+func TestWoxSwitchThumbUsesAccentForeground(t *testing.T) {
+	white := woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	dark := woxui.Color{R: 22, G: 22, B: 26, A: 255}
+	for _, foreground := range []woxui.Color{dark, white} {
+		animation := WoxSwitch(SwitchProps{Value: true, Theme: ControlTheme{AccentText: foreground}}).(woxwidget.AnimatedFloat)
+		for _, position := range []float32{0, 1, 1.1} {
+			visual := animation.Builder(position).(woxwidget.Stack)
+			thumb := visual.Children[1].Child.(woxwidget.Container)
+			want := foreground
+			if position == 0 {
+				want = white
+			}
+			if thumb.Color != want {
+				t.Fatalf("thumb at %v = %v, want %v", position, thumb.Color, want)
+			}
+		}
 	}
 }

@@ -20,7 +20,7 @@ type SettingsWindowProps struct {
 	Overlay     woxwidget.Widget
 	OverlayLeft float32
 	OverlayTop  float32
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 }
 
 const SettingsTitleBarHeight = woxcomponent.TitleBarHeight
@@ -67,7 +67,7 @@ type SettingsTitleBarProps struct {
 	Content    woxwidget.Widget
 	Platform   string
 	AppIcon    *woxui.Image
-	Theme      woxcomponent.Theme
+	Theme      woxcomponent.ControlTheme
 	OnDrag     func()
 	OnMinimize func()
 	OnClose    func()
@@ -147,7 +147,7 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: dragWidth, Height: height}}
 	children := make([]woxwidget.StackChild, 0, 7)
 	if props.Platform == "darwin" && props.RailWidth > 0 {
-		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 9)}})
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 9)}})
 	}
 	children = append(children, woxwidget.StackChild{Child: dragArea})
 	if props.Content != nil {
@@ -161,13 +161,13 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 		}
 		if props.CloseOnly {
 			if props.RailWidth > 0 {
-				children = append(children, woxwidget.StackChild{Left: props.RailWidth - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 26)}})
+				children = append(children, woxwidget.StackChild{Left: props.RailWidth - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 26)}})
 			}
 			children = append(children, woxwidget.StackChild{Left: 13, Child: macLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose)})
 			break
 		}
 		children = append(children,
-			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 26)}},
+			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 26)}},
 			woxwidget.StackChild{Left: 13, Child: macLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose)},
 			woxwidget.StackChild{Left: 36, Child: macLight("settings-window-minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255}, hovered == "mac-controls", pressed == "settings-window-minimize", props.OnMinimize)},
 			woxwidget.StackChild{Left: 59, Child: macLight("settings-window-zoom", woxui.Color{R: 142, G: 142, B: 147, A: 255}, "", woxui.Color{}, false, false, nil)},
@@ -178,10 +178,10 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 				children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: height, Vertical: 0.5, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}}})
 			}
 			if props.Content == nil {
-				children = append(children, woxwidget.StackChild{Left: 40, Right: 46, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}})
+				children = append(children, woxwidget.StackChild{Left: 40, Right: 46, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}})
 			}
 			children = append(children,
-				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.Border, 76)}},
 				woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "close", hovered == "close", props.Theme, props.OnClose, onHover)},
 			)
 			break
@@ -190,8 +190,8 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 			children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: height, Vertical: 0.5, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}}})
 		}
 		children = append(children,
-			woxwidget.StackChild{Left: 40, Right: 92, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-			woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+			woxwidget.StackChild{Left: 40, Right: 92, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}},
+			woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.Border, 76)}},
 			woxwidget.StackChild{Right: 46, AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-minimize", "minimize", hovered == "minimize", props.Theme, props.OnMinimize, onHover)},
 			woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "close", hovered == "close", props.Theme, props.OnClose, onHover)},
 		)
@@ -201,7 +201,7 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 			closeButton = woxcomponent.LinuxTitleBarCloseButton("settings-window-close", hovered == "close", props.Theme, props.OnClose, onHover)
 		}
 		if props.Content == nil {
-			children = append(children, woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Child: woxwidget.Align{Width: props.TitleWidth, Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}})
+			children = append(children, woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Child: woxwidget.Align{Width: props.TitleWidth, Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}})
 		}
 		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: closeButton})
 	}

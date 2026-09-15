@@ -28,10 +28,11 @@ const (
 	onboardingGlassID      = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
 )
 
-// Onboarding keeps one restrained accent so neutral glass themes still expose progress and success states.
+// Progress and illustrations use a brighter accent; management controls use Settings colors.
 var onboardingAccentColor = woxui.Color{R: 20, G: 184, B: 166, A: 255}
 
-var onboardingGlassTheme = func() woxcomponent.Theme {
+// Only illustrative launcher windows use Glass; management chrome never reads this theme.
+var onboardingPreviewTheme = func() woxcomponent.Theme {
 	data, err := resource.ThemeFS.ReadFile("themes/glass.json")
 	if err != nil {
 		return defaultPalette().componentTheme()
@@ -182,13 +183,6 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
 	steps := a.onboardingSteps()
 	systemThemes := onboardingSystemThemes(snapshot.theme.Themes)
-	theme := onboardingGlassTheme
-	for _, systemTheme := range systemThemes {
-		if systemTheme.ID == onboardingGlassID {
-			theme = paletteForTheme(systemTheme.previewTheme).componentTheme()
-			break
-		}
-	}
 	for index := range steps {
 		steps[index].Accent = onboardingAccentColor
 	}
@@ -242,7 +236,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 					source = item.Preview.Icon
 				}
 			}
-			glanceIcon = a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, frame.Scale))
+			glanceIcon = a.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, frame.Scale))
 			break
 		}
 	}
@@ -310,7 +304,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	for index, plugin := range a.onboardingPlugins.plugins {
 		plugins[index] = launcherview.OnboardingPlugin{
 			ID: plugin.ID, Name: plugin.Name, Description: plugin.Description,
-			Icon: a.imageForSize(plugin.Icon, physicalImageSize(28, frame.Scale)), Installed: plugin.IsInstalled,
+			Icon: a.imageForSurface(plugin.Icon, physicalImageSize(28, frame.Scale), snapshot.palette.Background), Installed: plugin.IsInstalled,
 			Installing: a.onboardingPlugins.operationID == plugin.ID,
 			Disabled:   a.onboardingPlugins.operationID != "",
 		}
@@ -352,7 +346,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		ThemePreviewSubs: previewSubtitles, ThemePreviewOpen: a.translate("i18n:ui_theme_preview_open"),
 		Permissions: permissions, PermissionLoading: a.onboardingLoading,
 		ChoiceKind: a.onboardingChoice, ChoiceValue: choiceValue, ChoiceAnchor: a.onboardingChoiceAnchor, Choices: choices,
-		Window: a.onboardingNativeWindow(), Theme: theme,
+		Window: a.onboardingNativeWindow(), Theme: snapshot.palette, PreviewTheme: onboardingPreviewTheme,
 		OnDrag: func() {
 			if window := a.onboardingNativeWindow(); window != nil {
 				_ = window.StartDragging()
@@ -952,7 +946,7 @@ func (a *App) onboardingChoices(snapshot settingsSnapshot, kind string, imageSca
 				}
 			}
 			choices = append(choices, launcherview.OnboardingChoice{
-				Value: glanceRefJSON(item.Ref), Label: label, Leading: a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, imageScale)), Trailing: trailing,
+				Value: glanceRefJSON(item.Ref), Label: label, Leading: a.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, imageScale)), Trailing: trailing,
 			})
 		}
 		return choices

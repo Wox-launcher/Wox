@@ -18,7 +18,7 @@ type SettingFieldProps struct {
 	Padding             woxwidget.Insets
 	DescriptionMaxLines int
 	Child               woxwidget.Widget
-	Theme               Theme
+	Theme               ControlTheme
 }
 
 // WoxSettingField builds the shared horizontal settings field layout.
@@ -32,16 +32,16 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 		gap = 20
 	}
 	labelHeight := max(float32(0), height-props.Padding.Top-props.Padding.Bottom)
-	labelText := woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}
+	labelText := woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
 	var label woxwidget.Widget = woxwidget.Container{Width: props.LabelWidth, Height: labelHeight, Padding: woxwidget.Insets{Top: 6}, Child: labelText}
 	if props.Description != "" {
 		descriptionHeight := float32(18)
-		var description woxwidget.Widget = woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: SettingsHelpFontSize}, Color: props.Theme.ResultSubtitle}
+		var description woxwidget.Widget = woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: SettingsHelpFontSize}, Color: props.Theme.TextSecondary}
 		if props.DescriptionMaxLines > 1 {
 			descriptionHeight = float32(props.DescriptionMaxLines * 16)
 			description = woxwidget.TextBlock{
 				Value: props.Description, Width: props.LabelWidth, Height: descriptionHeight, MaxLines: props.DescriptionMaxLines,
-				Style: woxui.TextStyle{Size: SettingsHelpFontSize}, LineHeight: 16, Color: props.Theme.ResultSubtitle,
+				Style: woxui.TextStyle{Size: SettingsHelpFontSize}, LineHeight: 16, Color: props.Theme.TextSecondary,
 			}
 		}
 		label = woxwidget.Container{Width: props.LabelWidth, Height: labelHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{

@@ -11,7 +11,7 @@ type SettingTargetProps struct {
 	Height      float32
 	Highlighted bool
 	Child       woxwidget.Widget
-	Theme       Theme
+	Theme       ControlTheme
 }
 
 // WoxSettingTarget keeps the search cue local to the destination without changing its layout.
@@ -19,9 +19,9 @@ func WoxSettingTarget(props SettingTargetProps) woxwidget.Widget {
 	background := woxui.Color{}
 	border := woxui.Color{}
 	if props.Highlighted {
-		background = props.Theme.SelectedBackground
+		background = props.Theme.SelectionBackground
 		background.A = 31
-		border = props.Theme.SelectedBackground
+		border = props.Theme.SelectionBackground
 		border.A = 87
 	}
 	return woxwidget.Container{

@@ -528,7 +528,7 @@
   "ui_query_shortcuts_query": "查询",
   "ui_query_shortcuts_query_tooltip": "查询内容",
   "ui_tray_queries": "托盘查询",
-  "ui_tray_queries_tips": "添加托盘查询图标。点击图标后，Wox 会在托盘/菜单栏附近打开并执行配置的查询。",
+  "ui_tray_queries_tips": "点击托盘图标，在附近打开 Wox 并运行预设查询。",
   "ui_tray_queries_icon": "图标",
   "ui_tray_queries_icon_tooltip": "该查询的托盘图标。",
   "ui_tray_queries_query": "查询",

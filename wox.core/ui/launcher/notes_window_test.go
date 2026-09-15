@@ -695,7 +695,7 @@ func TestNotesToggleMarkdownViewScrollsCaretIntoView(t *testing.T) {
 	preview := woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 		ID: "notes.editor", Document: controller.document, Width: 320, Height: 80,
 		Padding: notesEditorPadding(), Style: controller.editorStyle(), LineHeight: 24, Zoom: 1,
-		Theme: defaultPalette().componentTheme(), Controller: controller.editor,
+		Theme: defaultPalette().componentTheme().Controls, Controller: controller.editor,
 		Selection: controller.editor.State().Selection, RevealCaret: controller.consumeEditorCaretReveal(),
 	})
 	stateful, ok = preview.(woxwidget.Stateful)
@@ -917,7 +917,7 @@ func TestNotesEditorHostSelectAllSpansImages(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 			ID: "notes.editor", Document: controller.document, Width: 400, Height: 320,
-			Style: controller.editorStyle(), LineHeight: 24, Zoom: 1, TextColor: theme.PreviewText, Theme: theme,
+			Style: controller.editorStyle(), LineHeight: 24, Zoom: 1, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Autofocus: true, Controller: controller.editor, FocusNode: controller.editorFocus,
 			Focused: controller.editorFocus.HasFocus(), Selection: controller.selection,
 			ActiveSegmentStart: controller.activeTextSegment.Start,
@@ -1079,7 +1079,7 @@ func TestNotesListCaretScrollsDocument(t *testing.T) {
 				return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 					ID: "notes.editor", Document: controller.document, Width: 400, Height: 240, LineHeight: 24, Zoom: 1,
 					Padding: notesEditorPadding(), Style: controller.editorStyle(),
-					Theme: controller.app.palette.componentTheme(), Window: window, Autofocus: true,
+					Theme: controller.app.palette.componentTheme().Controls, Window: window, Autofocus: true,
 					Controller: controller.editor, FocusNode: controller.editorFocus, Focused: controller.editorFocus.HasFocus(),
 					FocusedTableBlock: -1, FocusedImageBlock: -1, ActiveSegmentStart: controller.activeTextSegment.Start,
 					OnTextFocus: controller.focusNoteText, OnChanged: controller.onSegmentChanged, OnKey: controller.onKey,
@@ -1671,7 +1671,7 @@ func TestNotesAltArrowReordersChecklistItem(t *testing.T) {
 		{ID: "c", Type: common.NoteBlockTask, Text: "three"},
 	}}
 	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note", Document: document})
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[1].TextStart, Focus: ranges[1].TextStart}
 	if !controller.nudgeTaskBlock(1) || controller.document.Blocks[0].ID != "a" || controller.document.Blocks[1].ID != "c" || controller.document.Blocks[2].ID != "b" {
@@ -1693,7 +1693,7 @@ func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {
 		{ID: "b", Type: common.NoteBlockBullet, Text: "官方提供少而精的真实示例。"},
 	}}
 	controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: document})
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 1, Focus: ranges[0].TextStart + 1}
 	controller.focusedTableBlock, controller.focusedTableRow, controller.focusedTableCol = 0, 1, 0
@@ -1721,7 +1721,7 @@ func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
 		{ID: "block", Type: common.NoteBlockParagraph, Text: "hello dsafdsfa", Spans: []common.NoteSpan{{Start: 6, End: 14, Underline: true}}},
 	}}
 	controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: document})
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 8, Focus: ranges[0].TextStart + 8}
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{R: 40, G: 40, B: 40, A: 255}, Cursor: woxui.Color{R: 19, G: 121, B: 210, A: 255}}
@@ -2040,7 +2040,7 @@ func TestNotesEditorHostBackspaceKeepsFocus(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 			ID: "notes.editor", Document: controller.document, Width: 400, Height: 240,
-			Style: controller.editorStyle(), LineHeight: 24, Zoom: 1, TextColor: theme.PreviewText, Theme: theme,
+			Style: controller.editorStyle(), LineHeight: 24, Zoom: 1, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Autofocus: true, Controller: controller.editor, FocusNode: controller.editorFocus,
 			Focused: controller.editorFocus.HasFocus() && controller.focusedTableBlock < 0, Selection: controller.selection,
 			OnChanged: controller.onSegmentChanged, OnSelectionChanged: func(selection woxui.TextSelection) {

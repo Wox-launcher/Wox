@@ -4,6 +4,10 @@
 
 `wox.core` always starts the embedded Go UI; there is no standalone Wox UI module or runner.
 
+Shared controls consume `component.ControlTheme` directly; launcher-only appearance stays in `component.Theme`. Settings defines the control colors directly without an adapter to launcher tokens.
+
+Settings uses the fixed Glass-derived dark palette in `launcher/settings_theme.go`, with a translucent window tint, system blur where supported, and translucent popup tints over floating blur materials. Onboarding management uses the same fixed colors and system material, with a separate launcher theme for its demos. Launcher themes and system appearance do not restyle Settings or onboarding management; theme previews continue to show their own theme colors.
+
 ## Architecture contract
 
 The portable Go layer owns widget layout, focus routing, text editing state, scrolling, Wox protocol DTOs, query behavior, previews, actions, and settings pages. Platform files are deliberately thin and own only the native window/event loop, renderer submission, font measurement, clipboard, file dialogs, external browser dispatch, and IME integration:

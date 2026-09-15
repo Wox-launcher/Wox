@@ -4,6 +4,7 @@ import woxui "wox/ui/runtime"
 
 // Theme contains the semantic appearance shared by Wox launcher components.
 type Theme struct {
+	Controls                                   ControlTheme
 	PreviewBackgroundColor                     *woxui.Color
 	PreviewBorderColor                         *woxui.Color
 	PreviewBorderRadius                        *int

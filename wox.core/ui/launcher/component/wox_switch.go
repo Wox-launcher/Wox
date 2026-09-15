@@ -15,7 +15,7 @@ type SwitchProps struct {
 	Value    bool
 	Disabled bool
 	OnChange func(bool)
-	Theme    Theme
+	Theme    ControlTheme
 }
 
 // WoxSwitch builds a compact switch with pointer, keyboard, and accessibility behavior.
@@ -33,17 +33,19 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 	buildVisual := func(hoverPosition float32) woxwidget.Widget {
 		return woxwidget.AnimatedFloat{Key: key, Target: target, Duration: 300 * time.Millisecond, Curve: woxwidget.AnimationEaseOutBack, Builder: func(position float32) woxwidget.Widget {
 			colorPosition := min(max(position, float32(0)), float32(1))
-			trackColor := lerpColor(withAlpha(props.Theme.ResultTitle, 77), props.Theme.ActionSelected, colorPosition)
-			hoverForeground := props.Theme.ResultTitle
+			trackColor := lerpColor(withAlpha(props.Theme.Text, 77), props.Theme.Accent, colorPosition)
+			hoverForeground := props.Theme.Text
 			if props.Value {
-				hoverForeground = props.Theme.ActionSelectedText
+				hoverForeground = props.Theme.AccentText
 			}
 			trackColor = lerpColor(trackColor, controlHoverColor(trackColor, hoverForeground), hoverPosition)
+			// The active thumb follows the accent foreground so pale tracks keep their contrast.
+			thumbColor := lerpColor(woxui.Color{R: 255, G: 255, B: 255, A: 255}, props.Theme.AccentText, colorPosition)
 			// Rest-state track and thumb sizes stay on whole logical units.
 			thumbSize := float32(10) + 4*colorPosition + 2*hoverPosition
 			return woxwidget.Stack{Width: SettingsSwitchWidth, Height: 24, Children: []woxwidget.StackChild{
 				{Left: 2, Top: 2, Child: woxwidget.Container{Width: 32, Height: 20, Radius: 10, Color: trackColor}},
-				{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+				{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: thumbColor}},
 			}}
 		}}
 	}
@@ -64,7 +66,7 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 			toggle()
 			return nil
 		},
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 12, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: 12, OnKey: func(event woxui.KeyEvent) bool {
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

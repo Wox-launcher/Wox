@@ -12,7 +12,7 @@ func TestDataLogLevelUsesSharedAnchoredDropdown(t *testing.T) {
 	var openedAt woxui.Rect
 	field := dataLogLevelField(DataSettingsProps{
 		LogLevel: "DEBUG",
-		Theme:    woxcomponent.Theme{},
+		Theme:    woxcomponent.ControlTheme{},
 		OnOpenLogLevel: func(anchor woxui.Rect) {
 			openedAt = anchor
 		},

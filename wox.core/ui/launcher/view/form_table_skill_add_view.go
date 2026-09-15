@@ -27,7 +27,7 @@ type FormTableSkillAddDialogProps struct {
 	AddWidth     float32
 	Field        woxwidget.Widget
 	FieldHeight  float32
-	Theme        woxcomponent.Theme
+	Theme        woxcomponent.ControlTheme
 	OnTab        func(int)
 	OnCancel     func()
 	OnAdd        func()
@@ -53,7 +53,7 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 	panelHeight = max(float32(0), min(panelHeight, props.Height-56))
 
 	title := woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{
-		Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+		Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
 	}}
 
 	tabs := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
@@ -74,19 +74,19 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 		hint = props.RemoteHint
 	}
 	hintText := woxwidget.TextBlock{Value: hint, Width: innerWidth, Height: hintHeight, MaxLines: 2, LineHeight: 19,
-		Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}
+		Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary}
 
 	children := []woxwidget.Widget{title, tabs, hintText, props.Field}
 	if statusHeight > 0 {
 		var status woxwidget.Widget
 		if props.Cloning {
 			status = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxcomponent.WoxLoadingIndicator(14, props.Theme.ResultSubtitle),
-				woxwidget.Text{Value: props.CloningLabel, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
+				woxcomponent.WoxLoadingIndicator(14, props.Theme.TextSecondary),
+				woxwidget.Text{Value: props.CloningLabel, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
 			}}
 		} else {
 			status = woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 22, MaxLines: 1,
-				Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ErrorText}
+				Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Error}
 		}
 		children = append(children, status)
 	}
@@ -97,7 +97,7 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 	))
 
 	body := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children}
-	border := formTableAlpha(props.Theme.ResultSubtitle, 104)
+	border := formTableAlpha(props.Theme.TextSecondary, 104)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-skill-add-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-skill-add-backdrop", BackdropAlpha: 210,
@@ -108,16 +108,16 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 }
 
 // formTableSkillAddTab mirrors Flutter's _buildAddSkillTab pill selector.
-func formTableSkillAddTab(index int, label string, selected bool, theme woxcomponent.Theme, onTap func()) woxwidget.Widget {
+func formTableSkillAddTab(index int, label string, selected bool, theme woxcomponent.ControlTheme, onTap func()) woxwidget.Widget {
 	background := woxui.Color{}
-	borderColor := formTableAlpha(theme.ResultSubtitle, 60)
-	foreground := theme.ResultSubtitle
+	borderColor := formTableAlpha(theme.TextSecondary, 60)
+	foreground := theme.TextSecondary
 	weight := woxui.FontWeightRegular
 	if selected {
-		background = theme.ActionSelected
+		background = theme.Accent
 		background.A = 24
-		borderColor = formTableAlpha(theme.ActionText, 90)
-		foreground = theme.ActionText
+		borderColor = formTableAlpha(theme.Text, 90)
+		foreground = theme.Text
 		weight = woxui.FontWeightSemibold
 	}
 	return woxwidget.Gesture{ID: fmt.Sprintf("form-table-skill-add-tab-%d", index), OnTap: onTap, Child: woxwidget.Container{

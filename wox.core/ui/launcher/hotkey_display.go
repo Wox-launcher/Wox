@@ -67,7 +67,7 @@ func formatHotkeyLabels(hotkey string) []string {
 		case "shift":
 			part = "Shift"
 		case "capslock", "caps_lock", "caps lock":
-			part = "CapsLock"
+			part = "Caps Lock"
 		case "left_ctrl":
 			part = "Left Ctrl"
 		case "right_ctrl":

@@ -12,17 +12,17 @@ type SegmentedButtonProps struct {
 	Width    float32
 	Selected bool
 	Disabled bool
-	Theme    Theme
+	Theme    ControlTheme
 	OnTap    func()
 }
 
 // WoxSegmentedButton builds a shared compact option with selected and hover states.
 func WoxSegmentedButton(props SegmentedButtonProps) woxwidget.Widget {
 	background := woxui.Color{}
-	foreground := props.Theme.ResultSubtitle
+	foreground := props.Theme.TextSecondary
 	if props.Selected {
-		background = props.Theme.SelectedBackground
-		foreground = props.Theme.SelectedTitle
+		background = props.Theme.SelectionBackground
+		foreground = props.Theme.SelectionText
 	}
 	if props.Disabled {
 		foreground = withAlpha(foreground, 120)
@@ -52,7 +52,7 @@ func WoxSegmentedButton(props SegmentedButtonProps) woxwidget.Widget {
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
 		Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 6, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: 6, OnKey: func(event woxui.KeyEvent) bool {
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

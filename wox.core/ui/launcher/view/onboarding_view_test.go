@@ -11,12 +11,13 @@ import (
 )
 
 func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
+	management := woxcomponent.ControlTheme{Background: woxui.Color{R: 22, G: 22, B: 26, A: 255}, Surface: woxui.Color{R: 37, G: 40, B: 48, A: 255}}
 	view := OnboardingView(OnboardingProps{
 		Width: 1040, Height: 800, ActiveStep: 0, ChoiceKind: "language",
 		Steps:   []OnboardingStep{{ID: "welcome", Title: "Welcome", Accent: woxui.Color{G: 200, A: 255}}},
 		Labels:  map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "back": "Back", "next": "Next"},
 		Choices: []OnboardingChoice{{Value: "en_US", Label: "English"}},
-		Theme:   woxcomponent.Theme{},
+		Theme:   management, PreviewTheme: woxcomponent.Theme{Background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
 	})
 	root, ok := view.(woxwidget.Semantics)
 	if !ok || root.AutomationID != "onboarding.window" {
@@ -26,11 +27,17 @@ func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
 	if !ok || len(stack.Children) != 2 {
 		t.Fatalf("root child = %#v, want body plus choice overlay", root.Child)
 	}
+	if body := stack.Children[0].Child.(woxwidget.Container); body.Color != management.Background {
+		t.Fatal("preview theme restyled onboarding background")
+	}
 	dropdown, ok := stack.Children[1].Child.(woxwidget.Stateful)
 	if !ok {
 		t.Fatalf("choice overlay = %#v, want shared SettingsChoiceView", stack.Children[1].Child)
 	}
 	dropdownProps, ok := dropdown.Widget.(SettingsChoiceProps)
+	if dropdownProps.Theme != management {
+		t.Fatal("preview theme restyled onboarding popup")
+	}
 	if !ok || dropdownProps.ID != "onboarding-choice-picker" {
 		t.Fatalf("choice props = %#v, want onboarding shared dropdown", dropdown.Widget)
 	}
@@ -39,7 +46,7 @@ func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
 func TestOnboardingPageCentersTitleAndUsesStaticFeatureVisual(t *testing.T) {
 	page := onboardingPage(OnboardingProps{
 		Width: 1040, MainHotkeyLabels: []string{"Alt", "Space"}, HotkeyStatus: "Available",
-		Labels: map[string]string{"mainHotkey.body": "Choose a hotkey.", "hotkey.change": "Click to record", "hotkey.preview": "Type to search"}, Theme: woxcomponent.Theme{},
+		Labels: map[string]string{"mainHotkey.body": "Choose a hotkey.", "hotkey.change": "Click to record", "hotkey.preview": "Type to search"}, Theme: woxcomponent.ControlTheme{},
 	}, OnboardingStep{ID: "mainHotkey", Title: "Set hotkey"}, 660).(woxwidget.Container)
 	content := page.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	title := content.Children[1].(woxwidget.TextBlock)
@@ -76,7 +83,9 @@ func TestOnboardingPageCentersTitleAndUsesStaticFeatureVisual(t *testing.T) {
 	if grid.Height != 232 || preview.Children[0].Top != 0 {
 		t.Fatalf("hotkey grid = height %v top %v, want full-stage backdrop", grid.Height, preview.Children[0].Top)
 	}
-	queryPreview := onboardingQueryPreview(OnboardingProps{Theme: woxcomponent.Theme{
+	queryPreview := onboardingQueryPreview(OnboardingProps{Theme: woxcomponent.ControlTheme{
+		Surface: woxui.Color{R: 35, G: 35, B: 38, A: 255}, Border: woxui.Color{R: 255, G: 255, B: 255, A: 40}, Text: woxui.Color{R: 245, G: 245, B: 247, A: 255},
+	}, PreviewTheme: woxcomponent.Theme{
 		ActionBackground: woxui.Color{R: 35, G: 35, B: 38, A: 255}, PreviewSplit: woxui.Color{R: 255, G: 255, B: 255, A: 40}, ResultTitle: woxui.Color{R: 245, G: 245, B: 247, A: 255},
 	}}, woxui.Color{G: 184, A: 255}, 480, "Type to search", false).(woxwidget.Stack)
 	if queryPreview.Width != 544 || queryPreview.Height != 104 {
@@ -88,7 +97,7 @@ func TestOnboardingPageCentersTitleAndUsesStaticFeatureVisual(t *testing.T) {
 	if displayList.CommandCount() != 10 {
 		t.Fatalf("query preview chrome commands = %d, want ambient shadow, contact shadow, surface, and border", displayList.CommandCount())
 	}
-	if _, ok := DemoPreview(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360).(woxwidget.LoopAnimation); !ok {
+	if _, ok := DemoPreview(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "welcome"}, 640, 360).(woxwidget.LoopAnimation); !ok {
 		t.Fatal("settings DemoPreview no longer exposes the preserved animated demo")
 	}
 }
@@ -98,7 +107,7 @@ func TestOnboardingWelcomeUsesSharedGridAndQueryPreview(t *testing.T) {
 		Labels: map[string]string{
 			"welcome.apps": "Apps", "welcome.files": "Files", "welcome.plugins": "Plugins", "welcome.ai": "AI", "welcome.hint": "A few steps remain",
 		},
-		Theme: woxcomponent.Theme{},
+		Theme: woxcomponent.ControlTheme{},
 	}, 640, woxui.Color{G: 184, A: 255}).(woxwidget.Flex)
 	stage := visual.Children[0].(woxwidget.Stack)
 	if _, ok := stage.Children[0].Child.(woxwidget.Painter); !ok {
@@ -115,7 +124,7 @@ func TestOnboardingWelcomeUsesSharedGridAndQueryPreview(t *testing.T) {
 
 func TestOnboardingQueryPreviewUsesConfiguredGlance(t *testing.T) {
 	preview := onboardingQueryPreview(OnboardingProps{
-		GlanceEnabled: true, GlanceValue: "62%", Theme: woxcomponent.Theme{},
+		GlanceEnabled: true, GlanceValue: "62%", Theme: woxcomponent.ControlTheme{},
 	}, woxui.Color{G: 184, A: 255}, 480, "setting", true).(woxwidget.Stack)
 	query := preview.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	trailing := query.Children[len(query.Children)-1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Container)
@@ -128,7 +137,7 @@ func TestOnboardingQueryPreviewUsesConfiguredGlance(t *testing.T) {
 func TestOnboardingHotkeyConflictDisablesNext(t *testing.T) {
 	footer := onboardingFooter(OnboardingProps{
 		Width: 1040, NextDisabled: true, Steps: []OnboardingStep{{ID: "mainHotkey", Title: "Hotkey"}, {ID: "finish", Title: "Finish"}},
-		Labels: map[string]string{"next": "Next", "finish": "Finish"}, Theme: woxcomponent.Theme{},
+		Labels: map[string]string{"next": "Next", "finish": "Finish"}, Theme: woxcomponent.ControlTheme{},
 	}, 0).(woxwidget.Container)
 	stack := footer.Child.(woxwidget.Stack)
 	next := stack.Children[len(stack.Children)-1].Child.(woxwidget.Semantics)
@@ -155,7 +164,7 @@ func TestOnboardingQueryHotkeyVisualShowsClipboardMapping(t *testing.T) {
 			"queryHotkeys.status.body": "Add more in Settings", "queryHotkeys.configured": "1 configured", "queryHotkeys.notConfigured": "Not configured", "queryHotkeys.shortcut": "Clipboard search",
 			"hotkey.change": "Click the hotkey to record another one",
 		},
-		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: subtitle, SelectedBackground: selected}, OnToggleQueryHotkey: func(value bool) { toggled = value },
+		Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: subtitle, SelectionBackground: selected}, PreviewTheme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: subtitle, SelectedBackground: selected}, OnToggleQueryHotkey: func(value bool) { toggled = value },
 	}, 640, woxui.Color{G: 184, A: 255}).(woxwidget.Flex)
 	showcase := visual.Children[0].(woxwidget.Flex)
 	shortcutColumn := showcase.Children[0].(woxwidget.Flex)
@@ -202,7 +211,7 @@ func TestOnboardingQueryHotkeyVisualShowsClipboardMapping(t *testing.T) {
 func TestOnboardingHotkeyRecordingHighlightsKeyBorders(t *testing.T) {
 	accent := woxui.Color{G: 184, A: 255}
 	main := onboardingMainHotkeyVisual(OnboardingProps{
-		MainHotkeyLabels: []string{"Alt", "Space"}, HotkeyRecording: true, Labels: map[string]string{}, Theme: woxcomponent.Theme{},
+		MainHotkeyLabels: []string{"Alt", "Space"}, HotkeyRecording: true, Labels: map[string]string{}, Theme: woxcomponent.ControlTheme{},
 	}, 640, accent).(woxwidget.Flex)
 	mainKeys := main.Children[0].(woxwidget.Align).Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Flex)
 	mainKey := mainKeys.Children[0].(woxwidget.Container)
@@ -211,7 +220,7 @@ func TestOnboardingHotkeyRecordingHighlightsKeyBorders(t *testing.T) {
 	}
 
 	query := onboardingQueryHotkeysVisual(OnboardingProps{
-		QueryHotkeyLabels: []string{"Ctrl", "Shift", "V"}, QueryHotkeyRecording: true, Labels: map[string]string{}, Theme: woxcomponent.Theme{},
+		QueryHotkeyLabels: []string{"Ctrl", "Shift", "V"}, QueryHotkeyRecording: true, Labels: map[string]string{}, Theme: woxcomponent.ControlTheme{},
 	}, 640, accent).(woxwidget.Flex)
 	queryKeys := query.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Flex)
 	queryKey := queryKeys.Children[0].(woxwidget.Container)
@@ -229,7 +238,7 @@ func TestOnboardingPluginsVisualUsesStoreMetadataAndInstallActions(t *testing.T)
 			{ID: "unsplash", Name: "Unsplash", Description: "Search images", Installed: true},
 		},
 		Labels: map[string]string{"plugins.install": "Install", "plugins.installing": "Installing", "plugins.installed": "Installed", "plugins.more": "More in Store"},
-		Theme:  woxcomponent.Theme{}, OnInstallPlugin: func(id string) { clickedID = id },
+		Theme:  woxcomponent.ControlTheme{}, OnInstallPlugin: func(id string) { clickedID = id },
 	}, 640).(woxwidget.Flex)
 	rows := visual.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
 	first := rows.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -253,7 +262,7 @@ func TestOnboardingQueryHotkeySelectedResultUsesSelectedForeground(t *testing.T)
 		ResultTitle: woxui.Color{R: 1, A: 255}, ResultSubtitle: woxui.Color{R: 2, A: 255},
 		SelectedBackground: woxui.Color{R: 3, A: 255}, SelectedTitle: woxui.Color{R: 4, A: 255}, SelectedSubtitle: woxui.Color{R: 5, A: 255},
 	}
-	row := onboardingQueryHotkeyResult(OnboardingProps{Theme: theme}, 420, "Clipboard", "Clipboard history", true).(woxwidget.Align).Child.(woxwidget.Container)
+	row := onboardingQueryHotkeyResult(OnboardingProps{PreviewTheme: theme}, 420, "Clipboard", "Clipboard history", true).(woxwidget.Align).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 	texts := content.Children[1].(woxwidget.Flex)
 	if row.Color != theme.SelectedBackground || texts.Children[0].(woxwidget.Text).Color != theme.SelectedTitle || texts.Children[1].(woxwidget.Text).Color != theme.SelectedSubtitle {
@@ -269,7 +278,7 @@ func TestOnboardingThemeCardIsSelectableAndUsesThemePreview(t *testing.T) {
 	selectedID := ""
 	accent := woxui.Color{R: 20, G: 184, B: 166, A: 255}
 	card := onboardingThemeCard(OnboardingProps{
-		Theme: woxcomponent.Theme{}, ThemePreviewTitle: "wox",
+		Theme: woxcomponent.ControlTheme{}, ThemePreviewTitle: "wox",
 		ThemePreviewTexts: []string{"Wox", "Wox Settings"}, ThemePreviewSubs: []string{"Launcher", "Settings"}, ThemePreviewOpen: "Open",
 		OnSelectTheme: func(id string) { selectedID = id },
 	}, OnboardingTheme{ID: "glass", Name: "Wox Glass", Selected: true}, 180, accent).(woxwidget.Semantics)
@@ -301,7 +310,7 @@ func TestOnboardingThemeCardIsSelectableAndUsesThemePreview(t *testing.T) {
 func TestOnboardingThemesUseTwoColumnGrid(t *testing.T) {
 	visual := onboardingThemesVisual(OnboardingProps{
 		Themes: []OnboardingTheme{{ID: "glass"}, {ID: "dark"}, {ID: "light"}, {ID: "auto"}},
-		Theme:  woxcomponent.Theme{},
+		Theme:  woxcomponent.ControlTheme{},
 	}, 760, woxui.Color{R: 20, G: 184, B: 166, A: 255}).(woxwidget.Flex)
 	grid := visual.Children[0].(woxwidget.Flex)
 	if grid.Axis != woxwidget.Vertical || len(grid.Children) != 2 {
@@ -318,7 +327,7 @@ func TestOnboardingThemesUseTwoColumnGrid(t *testing.T) {
 func TestOnboardingThemeStepUsesContinueLabel(t *testing.T) {
 	footer := onboardingFooter(OnboardingProps{
 		Width: 1040, Steps: []OnboardingStep{{ID: "themeInstall", Title: "Theme"}, {ID: "finish", Title: "Finish"}},
-		Labels: map[string]string{"next": "Continue"}, Theme: woxcomponent.Theme{},
+		Labels: map[string]string{"next": "Continue"}, Theme: woxcomponent.ControlTheme{},
 	}, 0).(woxwidget.Container)
 	button := footer.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Semantics)
 	if button.Label != "Continue" {
@@ -334,7 +343,7 @@ func TestOnboardingFinishVisualShowsSettingQueryAndConfiguredSummary(t *testing.
 			"finish.query": "setting", "finish.hotkey": "Open hotkey", "finish.glance": "Glance",
 			"finish.plugins": "Starter plugin", "finish.hint": "Change more in Settings",
 		},
-		Theme: woxcomponent.Theme{},
+		Theme: woxcomponent.ControlTheme{},
 	}, 640, woxui.Color{G: 184, A: 255}).(woxwidget.Flex)
 	queryStage := visual.Children[0].(woxwidget.Stack)
 	if queryStage.Height != 224 {
@@ -368,7 +377,11 @@ func TestOnboardingGlanceVisualIncludesLiveQueryBox(t *testing.T) {
 		Labels: map[string]string{
 			"glance.query": "wox", "glance.enable": "Enable Glance", "glance.enable.body": "Show useful information", "glance.primary": "Primary Glance",
 		},
-		Theme: woxcomponent.Theme{
+		Theme: woxcomponent.ControlTheme{
+			InputBackground: woxui.Color{R: 20, G: 21, B: 24, A: 255},
+			Text:            woxui.Color{R: 240, G: 240, B: 240, A: 255},
+			TextSecondary:   woxui.Color{R: 160, G: 160, B: 160, A: 255},
+		}, PreviewTheme: woxcomponent.Theme{
 			QueryBackground: woxui.Color{R: 20, G: 21, B: 24, A: 255},
 			ResultTitle:     woxui.Color{R: 240, G: 240, B: 240, A: 255},
 			ResultSubtitle:  woxui.Color{R: 160, G: 160, B: 160, A: 255},
@@ -395,7 +408,7 @@ func TestOnboardingGlanceVisualIncludesLiveQueryBox(t *testing.T) {
 		t.Fatalf("divider alpha = %d, want 48", divider.Color.A)
 	}
 	glanceRow := visual.Children[3].(woxwidget.Container).Child.(woxwidget.Flex)
-	if icon := glanceRow.Children[0].(woxwidget.Container); icon.Width != 40 || icon.Height != 40 || icon.Color != settingsColorAlpha(props.Theme.ResultTitle, 14) {
+	if icon := glanceRow.Children[0].(woxwidget.Container); icon.Width != 40 || icon.Height != 40 || icon.Color != settingsColorAlpha(props.Theme.Text, 14) {
 		t.Fatalf("glance row icon = %#v", icon)
 	}
 
@@ -410,7 +423,7 @@ func TestOnboardingGlanceVisualIncludesLiveQueryBox(t *testing.T) {
 
 func TestOnboardingPermissionsCenterCopyAndUseMonochromeIcons(t *testing.T) {
 	card := onboardingPermissions(OnboardingProps{
-		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{R: 240, G: 240, B: 240, A: 255}, ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255}},
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{R: 240, G: 240, B: 240, A: 255}, TextSecondary: woxui.Color{R: 160, G: 160, B: 160, A: 255}}, PreviewTheme: woxcomponent.Theme{ResultTitle: woxui.Color{R: 240, G: 240, B: 240, A: 255}, ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255}},
 		Permissions: []OnboardingPermission{
 			{ID: "accessibility", Title: "Accessibility", Description: "Read selected text."},
 			{ID: "fullDiskAccess", Title: "Full Disk Access", Description: "Search protected folders."},
@@ -458,7 +471,7 @@ func TestOnboardingHeaderAndFooterUseCompactChrome(t *testing.T) {
 		Width: 1040, Height: 800, ActiveStep: 0,
 		Steps:  []OnboardingStep{{ID: "welcome", Title: "Welcome", Accent: accent}, {ID: "finish", Title: "Finish", Accent: accent}},
 		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "back": "Back", "next": "Next"},
-		Theme:  woxcomponent.Theme{Cursor: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
+		Theme:  woxcomponent.ControlTheme{Focus: woxui.Color{R: 240, G: 240, B: 240, A: 255}}, PreviewTheme: woxcomponent.Theme{Cursor: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
 	}
 	header := onboardingHeader(props).(woxwidget.Container)
 	if header.Height != OnboardingHeaderHeight {
@@ -482,7 +495,7 @@ func TestOnboardingHeaderStartsWindowDragging(t *testing.T) {
 		Width: 1040, Height: 800, ActiveStep: 0, OnDrag: func() { dragged = true },
 		Steps:  []OnboardingStep{{ID: "welcome", Title: "Welcome"}},
 		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup"},
-		Theme:  woxcomponent.Theme{},
+		Theme:  woxcomponent.ControlTheme{},
 	}
 	header := onboardingHeader(props).(woxwidget.Stack)
 	drag := header.Children[0].Child.(woxwidget.Gesture)
@@ -537,7 +550,7 @@ func TestOnboardingHotkeyDemosDoNotOverlapWindows(t *testing.T) {
 
 func TestOnboardingSelectionWindowMirrorsLiveSelectionQuery(t *testing.T) {
 	window := onboardingSelectionWindow(OnboardingProps{
-		Theme:  woxcomponent.Theme{QueryText: woxui.Color{A: 255}},
+		Theme: woxcomponent.ControlTheme{InputText: woxui.Color{A: 255}}, PreviewTheme: woxcomponent.Theme{QueryText: woxui.Color{A: 255}},
 		Labels: map[string]string{"demo.selection.preview": "Preview"},
 	}, OnboardingStep{}, 640, 330, 1).(woxwidget.Clip)
 	children := window.Child.(woxwidget.Stack).Children
@@ -591,19 +604,19 @@ func TestOnboardingTypedQueryDemosShowResultsAfterQuery(t *testing.T) {
 		build    func(progress float32) woxwidget.Clip
 	}{
 		{"welcome", "wpm install everything", .28, onboardingDemoDuration("welcome"), func(progress float32) woxwidget.Clip {
-			return onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, progress).(woxwidget.Clip)
+			return onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "welcome"}, 640, 360, progress).(woxwidget.Clip)
 		}},
 		{"queryShortcuts", "gh repo", .18, onboardingDemoDuration("queryShortcuts"), func(progress float32) woxwidget.Clip {
-			return onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, OnboardingStep{ID: "queryShortcuts"}, 640, 360, progress).(woxwidget.Clip)
+			return onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: labels}, OnboardingStep{ID: "queryShortcuts"}, 640, 360, progress).(woxwidget.Clip)
 		}},
 		{"wpmInstall", "wpm install", .50, onboardingDemoDuration("wpmInstall"), func(progress float32) woxwidget.Clip {
-			return onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "wpmInstall"}, 640, 360, progress).(woxwidget.Clip)
+			return onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "wpmInstall"}, 640, 360, progress).(woxwidget.Clip)
 		}},
 		{"themeInstall", "theme ocean dark", .08, onboardingDemoDuration("themeInstall"), func(progress float32) woxwidget.Clip {
-			return onboardingThemeInstallDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "themeInstall"}, 640, 360, progress).(woxwidget.Clip)
+			return onboardingThemeInstallDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "themeInstall"}, 640, 360, progress).(woxwidget.Clip)
 		}},
 		{"finish", "setting", .16, onboardingDemoDuration("finish"), func(progress float32) woxwidget.Clip {
-			return onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, OnboardingStep{ID: "finish"}, 640, 360, progress).(woxwidget.Clip)
+			return onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: labels}, OnboardingStep{ID: "finish"}, 640, 360, progress).(woxwidget.Clip)
 		}},
 	}
 	for _, tc := range cases {
@@ -626,7 +639,7 @@ func TestOnboardingTypedQueryDemosShowResultsAfterQuery(t *testing.T) {
 }
 
 func TestOnboardingMainHotkeyDemoShowsCompletedQueryWithResults(t *testing.T) {
-	demo := onboardingMainHotkeyDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "mainHotkey"}, 640, 360, .72).(woxwidget.Clip)
+	demo := onboardingMainHotkeyDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "mainHotkey"}, 640, 360, .72).(woxwidget.Clip)
 	_, _, window := onboardingPlacedLauncherSlot(demo)
 	query := window.Child.(woxwidget.Stack).Children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
 	if query.Value != "app" {
@@ -719,7 +732,7 @@ func TestOnboardingWindowsTaskbarUsesCenteredAppsAndSystemTray(t *testing.T) {
 }
 
 func TestOnboardingTrayQueriesWindowSitsAgainstTrayChrome(t *testing.T) {
-	demo := onboardingTrayQueriesDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360, .80).(woxwidget.Clip)
+	demo := onboardingTrayQueriesDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{}, 640, 360, .80).(woxwidget.Clip)
 	desktop := demo.Child.(woxwidget.Stack)
 	slot := desktop.Children[len(desktop.Children)-1]
 	window := slot.Child.(woxwidget.Clip)
@@ -740,8 +753,8 @@ func TestOnboardingTrayQueriesWindowSitsAgainstTrayChrome(t *testing.T) {
 }
 
 func TestOnboardingWelcomeDemoGrowsDownIntoCenteredSlot(t *testing.T) {
-	collapsed := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, .40).(woxwidget.Clip)
-	expanded := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, 1).(woxwidget.Clip)
+	collapsed := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "welcome"}, 640, 360, .40).(woxwidget.Clip)
+	expanded := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "welcome"}, 640, 360, 1).(woxwidget.Clip)
 	collapsedSlot, collapsedFrame, collapsedWindow := onboardingPlacedLauncherSlot(collapsed)
 	expandedSlot, expandedFrame, expandedWindow := onboardingPlacedLauncherSlot(expanded)
 	contentTop := onboardingDemoDesktopChromeTop()
@@ -766,7 +779,7 @@ func TestOnboardingWelcomeDemoGrowsDownIntoCenteredSlot(t *testing.T) {
 }
 
 func TestOnboardingWelcomeDemoFadesConceptCardAsLauncherAppears(t *testing.T) {
-	demo := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome"}, 640, 360, .24).(woxwidget.Clip)
+	demo := onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "welcome"}, 640, 360, .24).(woxwidget.Clip)
 	desktop := demo.Child.(woxwidget.Stack)
 	card := desktop.Children[len(desktop.Children)-2]
 	_, _, window := onboardingPlacedLauncherSlot(demo)
@@ -780,9 +793,9 @@ func TestOnboardingWelcomeDemoFadesConceptCardAsLauncherAppears(t *testing.T) {
 
 func TestOnboardingLauncherDemosShareCenteredDownwardSlot(t *testing.T) {
 	demos := []woxwidget.Clip{
-		onboardingPermissionsDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
-		onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
-		onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
+		onboardingPermissionsDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
+		onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
+		onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
 	}
 	for _, demo := range demos {
 		slot, frame, window := onboardingPlacedLauncherSlot(demo)
@@ -822,7 +835,7 @@ func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
 
 func TestOnboardingDemoHintCardTextIsCentered(t *testing.T) {
 	card := onboardingDemoHintCard(
-		OnboardingProps{Theme: woxcomponent.Theme{}},
+		OnboardingProps{Theme: woxcomponent.ControlTheme{}},
 		OnboardingStep{},
 		"Query Hotkeys",
 		"Cmd+Shift+G",
@@ -845,7 +858,7 @@ func TestOnboardingDemoHintCardTextIsCentered(t *testing.T) {
 }
 
 func TestOnboardingPluginStoreUsesSharedWindowMetrics(t *testing.T) {
-	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1, 1).(woxwidget.Clip)
+	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1, 1).(woxwidget.Clip)
 	children := window.Child.(woxwidget.Stack).Children
 	query := children[2].Child.(woxwidget.Container)
 	result := children[3].Child.(woxwidget.Container)
@@ -857,7 +870,7 @@ func TestOnboardingPluginStoreUsesSharedWindowMetrics(t *testing.T) {
 }
 
 func TestOnboardingPluginStorePreviewFillsToToolbar(t *testing.T) {
-	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1, 1).(woxwidget.Clip)
+	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1, 1).(woxwidget.Clip)
 	children := window.Child.(woxwidget.Stack).Children
 	preview := children[len(children)-3]
 	toolbar := children[len(children)-2]
@@ -874,7 +887,7 @@ func TestOnboardingPluginStorePreviewFillsToToolbar(t *testing.T) {
 
 func TestOnboardingPluginStoreWindowFitsAboveDesktopChrome(t *testing.T) {
 	const width, height = float32(640), float32(360)
-	demo := onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "wpmInstall"}, width, height, 1).(woxwidget.Clip)
+	demo := onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "wpmInstall"}, width, height, 1).(woxwidget.Clip)
 	slot, frame, window := onboardingPlacedLauncherSlot(demo)
 	areaTop := onboardingDemoHintContentTop()
 	areaHeight := onboardingDemoDesktopContentBottom(height) - areaTop
@@ -900,7 +913,7 @@ func TestOnboardingFinishDemoTypesSettingToOpenSettings(t *testing.T) {
 		"demo.finish.system_settings": "Open System Settings",
 	}
 	step := OnboardingStep{ID: "finish"}
-	typing := onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, step, 640, 360, .20).(woxwidget.Clip)
+	typing := onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: labels}, step, 640, 360, .20).(woxwidget.Clip)
 	_, _, typingWindow := onboardingPlacedLauncherSlot(typing)
 	typingQuery := typingWindow.Child.(woxwidget.Stack).Children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
 	if typingQuery.Value == "" || typingQuery.Value == "setting" {
@@ -910,7 +923,7 @@ func TestOnboardingFinishDemoTypesSettingToOpenSettings(t *testing.T) {
 		t.Fatalf("finish height while typing = %.0f, want query plus toolbar before results", typingWindow.Height)
 	}
 
-	demo := onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.Theme{}, Labels: labels}, step, 640, 360, 1).(woxwidget.Clip)
+	demo := onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: labels}, step, 640, 360, 1).(woxwidget.Clip)
 	_, _, window := onboardingPlacedLauncherSlot(demo)
 	children := window.Child.(woxwidget.Stack).Children
 	query := children[2].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
@@ -939,7 +952,7 @@ func TestOnboardingMacDesktopUsesNativeMenuAndCursorGeometry(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("macOS menu bar only")
 	}
-	desktop := onboardingDemoDesktop(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360, false, nil).(woxwidget.Clip)
+	desktop := onboardingDemoDesktop(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{}, 640, 360, false, nil).(woxwidget.Clip)
 	menuBar := desktop.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Clip)
 	menu := menuBar.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
 	search := menu.Children[1].Child.(woxwidget.Image)
@@ -991,7 +1004,7 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 		GlanceLabel:   "CPU",
 		GlanceValue:   "62%",
 		Labels:        map[string]string{"demo.glance.value": "当前时间", "glance.body": "Status", "demo.glance.provider": "Provider", "glance.enable.body": "Body", "glance.primary": "Glance item"},
-		Theme:         woxcomponent.Theme{},
+		Theme:         woxcomponent.ControlTheme{},
 	}, OnboardingStep{}, 640, 360).(woxwidget.Clip)
 	_, frame, windowClip := onboardingPlacedLauncherSlot(demo)
 	window := windowClip.Child.(woxwidget.Stack)
@@ -1039,7 +1052,7 @@ func TestOnboardingGlanceUsesCompactInlineSettings(t *testing.T) {
 	settings := onboardingGlance(OnboardingProps{
 		GlanceEnabled: true, GlanceLabel: "CPU", GlanceValue: "62%",
 		Labels: map[string]string{"glance.enable": "Glance", "glance.enable.body": "Status", "glance.primary": "Primary"},
-		Theme:  woxcomponent.Theme{},
+		Theme:  woxcomponent.ControlTheme{},
 	}, 720, 150).(woxwidget.Container)
 	row := settings.Child.(woxwidget.Flex)
 	controls := row.Children[3].(woxwidget.Flex)
@@ -1054,7 +1067,7 @@ func TestOnboardingGlanceUsesCompactInlineSettings(t *testing.T) {
 		t.Fatal("glance dropdown has no content")
 	}
 	disabled := onboardingGlance(OnboardingProps{
-		GlanceLabel: "CPU", Labels: map[string]string{"glance.enable": "Glance", "glance.enable.body": "Status", "glance.primary": "Primary"}, Theme: woxcomponent.Theme{},
+		GlanceLabel: "CPU", Labels: map[string]string{"glance.enable": "Glance", "glance.enable.body": "Status", "glance.primary": "Primary"}, Theme: woxcomponent.ControlTheme{},
 	}, 720, 150).(woxwidget.Container).Child.(woxwidget.Flex).Children[3].(woxwidget.Flex)
 	if len(disabled.Children) != 2 {
 		t.Fatalf("disabled Glance controls = %d, want stable switch and dropdown", len(disabled.Children))

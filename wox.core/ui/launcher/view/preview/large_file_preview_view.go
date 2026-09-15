@@ -60,7 +60,7 @@ func largeFilePreviewHeader(props LargeFilePreviewProps, width float32) woxwidge
 		return title
 	}
 	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: "file-preview-load", Label: props.Action, IntrinsicWidth: true, Variant: woxcomponent.ButtonOutline, Theme: props.Theme, OnTap: props.OnLoad,
+		ID: "file-preview-load", Label: props.Action, IntrinsicWidth: true, Variant: woxcomponent.ButtonOutline, Theme: props.Theme.Controls, OnTap: props.OnLoad,
 	})
 	if props.Title == "" {
 		return woxwidget.Align{Width: width, Horizontal: 1, Child: button}

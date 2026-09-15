@@ -29,7 +29,7 @@ func TestTextFieldSelectionClipsOriginalLine(t *testing.T) {
 	list := &woxui.DisplayList{}
 	drawTextField(list, woxui.Rect{Width: 30, Height: 40},
 		woxui.TextEditingState{Text: "中A文", Selection: woxui.TextSelection{Anchor: 1, Focus: 2}},
-		woxui.TextStyle{Size: 14}, runs, woxui.Color{}, Theme{}, true, false, false, 2, 20, 0, 0, false, nil)
+		woxui.TextStyle{Size: 14}, runs, woxui.Color{}, ControlTheme{}, true, false, false, 2, 20, 0, 0, false, nil)
 	if len(clips) != 9 {
 		t.Fatalf("paint calls = %d, want the same three segments in each color region", len(clips))
 	}
@@ -73,7 +73,7 @@ func TestTextFieldDismissibleChipAnimatesHover(t *testing.T) {
 	field := WoxTextField(TextFieldProps{
 		ID: "urls", Width: 200, Height: 40,
 		OnDismissRun: func(int, int) bool { return true },
-		Theme:        Theme{ErrorText: woxui.Color{R: 200, A: 255}},
+		Theme:        ControlTheme{Error: woxui.Color{R: 200, A: 255}},
 	}).(woxwidget.Stateful)
 	state := field.CreateState().(*textFieldState)
 	state.InitState(woxwidget.StateContext{}, field.Widget)
@@ -92,7 +92,7 @@ func TestTextFieldHoverUsesSharedOverlayAndSkipsDisabledFields(t *testing.T) {
 	base := woxui.Color{R: 20, G: 30, B: 40, A: 255}
 	foreground := woxui.Color{R: 220, G: 230, B: 240, A: 255}
 	build := func(disabled, disableHover, focused bool) woxwidget.Gesture {
-		field := WoxTextField(TextFieldProps{ID: "hover", Width: 200, Height: 40, Background: base, Disabled: disabled, DisableHover: disableHover, Theme: Theme{ResultTitle: foreground}}).(woxwidget.Stateful)
+		field := WoxTextField(TextFieldProps{ID: "hover", Width: 200, Height: 40, Background: base, Disabled: disabled, DisableHover: disableHover, Theme: ControlTheme{Text: foreground}}).(woxwidget.Stateful)
 		state := field.CreateState().(*textFieldState)
 		state.InitState(woxwidget.StateContext{}, field.Widget)
 		state.hovered = true

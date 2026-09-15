@@ -276,6 +276,11 @@ type uiPalette struct {
 // componentTheme exposes launcher appearance through the stable component package boundary.
 func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	return woxcomponent.Theme{
+		Controls: woxcomponent.ControlTheme{
+			ControlText: palette.actionText, BodyText: palette.previewText, ChromeText: palette.toolbarText,
+			Background: palette.background, Surface: palette.actionBackground, Text: palette.resultTitle, TextSecondary: palette.resultSubtitle, InputBackground: palette.queryBackground, InputText: palette.queryText, Focus: palette.cursor, TextSelectionBackground: palette.selectionBackground, TextSelectionText: palette.selectionText, SelectionBackground: palette.selectedBackground, SelectionText: palette.selectedTitle, Accent: palette.actionSelected, AccentText: palette.actionSelectedText, Border: palette.previewSplit, Error: woxui.Color{R: 232, G: 95, B: 95, A: 255},
+			ScrollbarThumbColor: palette.ScrollbarThumbColor, ScrollbarThumbHoverColor: palette.ScrollbarThumbHoverColor, ScrollbarThumbActiveColor: palette.ScrollbarThumbActiveColor, ScrollbarWidth: palette.ScrollbarWidth, ScrollbarHoverWidth: palette.ScrollbarHoverWidth, ScrollbarBorderRadius: palette.ScrollbarBorderRadius,
+		},
 		PreviewBackgroundColor:                     palette.PreviewBackgroundColor,
 		PreviewBorderColor:                         palette.PreviewBorderColor,
 		PreviewBorderRadius:                        palette.PreviewBorderRadius,
@@ -478,14 +483,10 @@ func (a *App) applyTheme(theme themeData) {
 		_ = a.window.Invalidate()
 	}
 	if settingsView != nil {
-		_ = settingsView.Window().SetAppearance(isDark)
+		_ = settingsView.Window().SetAppearance(true)
 	}
 	if onboardingView != nil {
-		onboardingDark := isDark
-		if a.onboardingOpen {
-			onboardingDark = true
-		}
-		_ = onboardingView.Window().SetAppearance(onboardingDark)
+		_ = onboardingView.Window().SetAppearance(true)
 	}
 	if chatWindow := a.chatNativeWindow(); chatWindow != nil {
 		_ = chatWindow.SetAppearance(isDark)

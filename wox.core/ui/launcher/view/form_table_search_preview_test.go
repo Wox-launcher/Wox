@@ -50,7 +50,7 @@ func TestFormTableSearchIconAppearsBeforeAdd(t *testing.T) {
 	props := FormTableFieldProps{
 		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
 		EnableSearch: true, SearchLabel: "Search", AddLabel: "Add",
-		SearchIcon: &woxui.Image{}, Theme: woxcomponent.Theme{},
+		SearchIcon: &woxui.Image{}, Theme: woxcomponent.ControlTheme{},
 		Rows: []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "Chrome"}}}},
 	}
 	actions := formTableHeaderActions(props).(woxwidget.Flex)
@@ -67,7 +67,7 @@ func TestFormTableSearchHiddenWhenEmpty(t *testing.T) {
 	props := FormTableFieldProps{
 		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
 		EnableSearch: true, SearchOpen: true, SearchLabel: "Search", AddLabel: "Add",
-		SearchIcon: &woxui.Image{}, Theme: woxcomponent.Theme{},
+		SearchIcon: &woxui.Image{}, Theme: woxcomponent.ControlTheme{},
 	}
 	actions := formTableHeaderActions(props).(woxwidget.Flex)
 	if len(actions.Children) != 1 {
@@ -84,7 +84,7 @@ func TestFormTableSearchFieldAppearsWhenOpen(t *testing.T) {
 	field := formTableField(FormTableFieldProps{
 		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
 		EnableSearch: true, SearchOpen: true, SearchPlaceholder: "Filter...",
-		SearchIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		SearchIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 		Rows: []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "Chrome"}}}},
 	})
 	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
@@ -102,7 +102,7 @@ func TestFormTableSearchRemainsWhenNoMatches(t *testing.T) {
 		ID: "ignore-rules", Title: "Ignore rules", Width: 720, InlineTitle: true,
 		EnableSearch: true, SearchOpen: true, SearchQuery: "zzz",
 		SearchPlaceholder: "Filter...", EmptyLabel: "No matches", NoMatchesLabel: "No matches",
-		SearchIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		SearchIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	if len(children) != 3 {
@@ -115,7 +115,7 @@ func TestFormTableSearchRemainsWhenNoMatches(t *testing.T) {
 
 func TestFormTablePatternPreviewDefaultsCheckboxesOn(t *testing.T) {
 	props := FormTablePatternPreviewProps{
-		Width: 600, Theme: woxcomponent.Theme{},
+		Width: 600, Theme: woxcomponent.ControlTheme{},
 		OnToggle: func(string, bool) {},
 	}
 	row := formTablePatternPreviewRow(props, FormTablePatternPreviewApp{Key: "path:chrome", Name: "Chrome", Checked: true}, 600)
@@ -128,7 +128,7 @@ func TestFormTablePatternPreviewDefaultsCheckboxesOn(t *testing.T) {
 func TestFormTablePatternPreviewPutsTitleOnTheLeft(t *testing.T) {
 	preview := FormTablePatternPreview(FormTablePatternPreviewProps{
 		Width: 600, LabelWidth: 140, Title: "Apps",
-		EmptyLabel: "No indexed apps match this pattern", Theme: woxcomponent.Theme{},
+		EmptyLabel: "No indexed apps match this pattern", Theme: woxcomponent.ControlTheme{},
 	})
 	row := preview.(woxwidget.Container).Child.(woxwidget.Flex)
 	if row.Axis != woxwidget.Horizontal || len(row.Children) != 2 {

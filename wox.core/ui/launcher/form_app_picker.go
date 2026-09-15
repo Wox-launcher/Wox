@@ -3,6 +3,7 @@ package launcher
 import (
 	"encoding/json"
 	"strings"
+	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
 	woxwidget "wox/ui/widget"
@@ -10,7 +11,7 @@ import (
 )
 
 // buildFormTableAppPicker resolves controller-owned image resources before delegating to the pure view.
-func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	apps := a.hotkeySettings.AppCandidates()
 	if identity := strings.TrimSpace(snapshot.current.Identity); identity != "" {
 		found := false
@@ -31,10 +32,10 @@ func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, pale
 			detail = candidate.Identity
 		}
 		candidates[index] = launcherview.FormAppCandidate{
-			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSize(candidate.Icon, physicalImageSize(28, imageScale)),
+			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSurface(candidate.Icon, physicalImageSize(28, imageScale), palette.Background),
 		}
 	}
-	theme := palette.componentTheme()
+	theme := palette
 	cancelLabel := a.translate("i18n:ui_cancel")
 	confirmLabel := a.translate("i18n:ui_ok")
 	appsError := a.hotkeySettings.AppsError()

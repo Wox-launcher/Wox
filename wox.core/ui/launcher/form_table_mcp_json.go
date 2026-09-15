@@ -3,6 +3,7 @@ package launcher
 import (
 	"encoding/json"
 	"strings"
+	woxcomponent "wox/ui/launcher/component"
 
 	"wox/ai"
 	"wox/common"
@@ -204,7 +205,7 @@ func overlayMCPServerToolNames(rows []map[string]any) bool {
 }
 
 // buildFormTableMCPJSONImportDialog maps the JSON editor onto the shared surface.
-func (a *App) buildFormTableMCPJSONImportDialog(snapshot *formTableMCPJSONImportSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildFormTableMCPJSONImportDialog(snapshot *formTableMCPJSONImportSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	fields := snapshot.fields
 	callbacks := formFieldCallbacks{
 		idPrefix:   "form-table-mcp-json",
@@ -213,7 +214,7 @@ func (a *App) buildFormTableMCPJSONImportDialog(snapshot *formTableMCPJSONImport
 		setText:    a.setFormTableMCPJSONText,
 		onKey:      a.onFormTableKey,
 	}
-	theme := palette.componentTheme()
+	theme := palette
 	cancelLabel := a.translate("i18n:ui_cancel")
 	saveLabel := a.translate("i18n:ui_ai_mcp_import_json_confirm")
 	fieldWidth := max(float32(0), min(float32(640), width-120))

@@ -96,7 +96,7 @@ func TestSkillAddDialogRendersTabsFieldAndActions(t *testing.T) {
 	app.openFormTableSkillAdd()
 
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), uiPalette{}, 900, 700, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
 	app.settingsHost = host

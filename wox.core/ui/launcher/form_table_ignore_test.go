@@ -30,7 +30,7 @@ func TestFormTableIgnoreRuleSaveDoesNotRestoreUncheckedSavedApp(t *testing.T) {
 func TestFormTableOrdinaryAppsColumnKeepsItsText(t *testing.T) {
 	app := &App{}
 	column := formTableColumn{Key: "Apps", Type: "text"}
-	cell := app.formTableViewCell(column, map[string]any{"Apps": "ordinary plugin value"}, woxcomponent.Theme{}, 1)
+	cell := app.formTableViewCell(column, map[string]any{"Apps": "ordinary plugin value"}, woxcomponent.ControlTheme{}, 1)
 	if cell.Text != "ordinary plugin value" || len(cell.Icons) != 0 {
 		t.Fatalf("ordinary Apps column was specialized: %+v", cell)
 	}
@@ -172,7 +172,7 @@ func TestFormTableIgnoreRuleAppsCellShowsPathOnHover(t *testing.T) {
 			{"Name": "notepad", "Path": `C:\Windows\System32\notepad.exe`},
 			{"Name": "WeChat", "Path": `C:\Program Files\Tencent\WeChat\WeChat.exe`},
 		},
-	}, 1)
+	}, 1, settingsPalette().Background)
 	if len(cell.Icons) != 2 || cell.Icons[0].Tooltip != `C:\Windows\System32\notepad.exe` || cell.Icons[1].Tooltip != `C:\Program Files\Tencent\WeChat\WeChat.exe` {
 		t.Fatalf("app icon props = %+v", cell.Icons)
 	}

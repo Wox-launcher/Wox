@@ -17,7 +17,7 @@ type FormTableMCPJSONImportDialogProps struct {
 	ImportLabel string
 	Field       woxwidget.Widget
 	FieldHeight float32
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 	OnCancel    func()
 	OnImport    func()
 }
@@ -41,15 +41,15 @@ func FormTableMCPJSONImportDialog(props FormTableMCPJSONImportDialogProps) woxwi
 	panelHeight = max(float32(0), min(panelHeight, props.Height-56))
 
 	title := woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{
-		Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+		Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
 	}}
 	hintText := woxwidget.TextBlock{Value: props.Hint, Width: innerWidth, Height: hintHeight, MaxLines: 1, LineHeight: 20,
-		Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}
+		Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary}
 
 	children := []woxwidget.Widget{title, hintText, props.Field}
 	if statusHeight > 0 {
 		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 22, MaxLines: 2,
-			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ErrorText})
+			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Error})
 	}
 	children = append(children, settingsDialogActions(innerWidth, props.Theme,
 		settingsDialogAction{ID: "form-table-mcp-json-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
@@ -57,7 +57,7 @@ func FormTableMCPJSONImportDialog(props FormTableMCPJSONImportDialogProps) woxwi
 	))
 
 	body := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children}
-	border := formTableAlpha(props.Theme.ResultSubtitle, 104)
+	border := formTableAlpha(props.Theme.TextSecondary, 104)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-mcp-json-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-mcp-json-backdrop", BackdropAlpha: 210,

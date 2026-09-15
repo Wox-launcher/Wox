@@ -528,7 +528,7 @@
   "ui_query_shortcuts_query": "Query",
   "ui_query_shortcuts_query_tooltip": "The query represented by the shortcut.",
   "ui_tray_queries": "Tray Queries",
-  "ui_tray_queries_tips": "Add tray query icons. Clicking an icon opens Wox near the tray/menu bar and runs the configured query.",
+  "ui_tray_queries_tips": "Click a tray icon to open Wox nearby and run a preset query.",
   "ui_tray_queries_icon": "Icon",
   "ui_tray_queries_icon_tooltip": "Tray icon for this query.",
   "ui_tray_queries_query": "Query",

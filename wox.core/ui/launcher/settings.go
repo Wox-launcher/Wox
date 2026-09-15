@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	woxcomponent "wox/ui/launcher/component"
 
 	"wox/common"
 	"wox/ui/contract"
@@ -146,7 +147,7 @@ type settingsSnapshot struct {
 	tooltip     *settingsInlineTooltipSnapshot
 	search      settingsSearchSnapshot
 	update      updateSettingsSnapshot
-	palette     uiPalette
+	palette     woxcomponent.ControlTheme
 	plugins     pluginSettingsSnapshot
 	hotkey      hotkeySettingsSnapshot
 	appearance  appearanceSettingsSnapshot
@@ -773,7 +774,7 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		tooltip:     tooltip,
 		search:      search,
 		update:      update,
-		palette:     a.palette,
+		palette:     settingsPalette(),
 		plugins:     plugins,
 		hotkey:      hotkey,
 		appearance:  appearance,

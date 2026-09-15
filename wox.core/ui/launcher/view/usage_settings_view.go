@@ -51,7 +51,7 @@ type UsageRankingItem struct {
 type UsageSettingsProps struct {
 	Width           float32
 	Height          float32
-	Theme           woxcomponent.Theme
+	Theme           woxcomponent.ControlTheme
 	Title           string
 	Overview        string
 	ShareLabel      string
@@ -87,7 +87,7 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	children := []woxwidget.Widget{header}
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.TextBlock{
-			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText,
+			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error,
 		}})
 	}
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
@@ -110,8 +110,8 @@ func usageSummaryHeader(props UsageSettingsProps, width float32) (woxwidget.Widg
 		titleWidth = min(float32(320), max(float32(150), width-shareWidth-18))
 	}
 	titleBlock := woxwidget.Container{Width: titleWidth, Height: 54, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 21, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-		woxwidget.Clip{Width: titleWidth, Height: 20, Child: woxwidget.Text{Value: props.Overview, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
+		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 21, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+		woxwidget.Clip{Width: titleWidth, Height: 20, Child: woxwidget.Text{Value: props.Overview, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary}},
 	}}}
 	children := []woxwidget.StackChild{{Child: titleBlock}, {AnchorRight: true, Child: share}}
 	selectorTop := float32(0)
@@ -139,7 +139,7 @@ func usagePeriodSelector(props UsageSettingsProps) (woxwidget.Widget, float32) {
 		}))
 	}
 	return woxwidget.Container{
-		Width: selectorWidth, Height: 38, Radius: 8, Color: props.Theme.QueryBackground, BorderColor: usageOutlineColor(props.Theme), BorderWidth: 1,
+		Width: selectorWidth, Height: 38, Radius: 8, Color: props.Theme.InputBackground, BorderColor: usageOutlineColor(props.Theme), BorderWidth: 1,
 		Padding: woxwidget.UniformInsets(3), Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: buttons},
 	}, selectorWidth
 }
@@ -163,7 +163,7 @@ func usagePeriodButtonWidth(label string) float32 {
 func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	width := min(float32(168), max(float32(104), float32(utf8.RuneCountInString(props.ShareLabel))*8+48))
 	theme := props.Theme
-	theme.ResultSubtitle = usageOutlineColor(props.Theme)
+	theme.TextSecondary = usageOutlineColor(props.Theme)
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Radius: 8,
 		FontSize: 13, Variant: woxcomponent.ButtonOutlinedSurface,
@@ -195,7 +195,7 @@ func usageKPIGrid(props UsageSettingsProps, width float32) (woxwidget.Widget, fl
 	}, height
 }
 
-func usageKPICard(item UsageKPI, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func usageKPICard(item UsageKPI, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	iconBackground := usageWithAlpha(item.Accent, 40)
 	var icon woxwidget.Widget = woxwidget.Container{Width: 22, Height: 22}
 	if item.Icon != nil {
@@ -206,8 +206,8 @@ func usageKPICard(item UsageKPI, width float32, theme woxcomponent.Theme) woxwid
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: 46, Height: 46, Radius: 8, Color: iconBackground, Child: woxwidget.Align{Width: 46, Height: 46, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
 			woxwidget.Expanded{Child: woxwidget.Container{Height: 50, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-				woxwidget.TextBlock{Value: item.Label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle},
-				woxwidget.Text{Value: fmt.Sprintf("%d", item.Value), Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
+				woxwidget.TextBlock{Value: item.Label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary},
+				woxwidget.Text{Value: fmt.Sprintf("%d", item.Value), Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 			}}}},
 		}},
 	})
@@ -220,7 +220,7 @@ func usageActivityPanel(props UsageSettingsProps, width float32) woxwidget.Widge
 		icon = woxwidget.Image{Source: props.CalendarIcon, Width: 16, Height: 16}
 	}
 	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		icon, woxwidget.Text{Value: props.ActivityTitle, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+		icon, woxwidget.Text{Value: props.ActivityTitle, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 	}}
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
 		Width: width, Height: usageHeatmapPanelHeight, Padding: woxwidget.UniformInsets(16), BorderColor: usageOutlineColor(props.Theme), Theme: props.Theme,
@@ -245,7 +245,7 @@ type usageHeatmapThresholds struct {
 }
 
 // drawUsageHeatmap maps one year of local dates into Sunday-first weeks with localized month labels.
-func drawUsageHeatmap(displayList *woxui.DisplayList, bounds woxui.Rect, source []UsageDay, monthLabels []string, emptyLabel string, accent woxui.Color, theme woxcomponent.Theme) {
+func drawUsageHeatmap(displayList *woxui.DisplayList, bounds woxui.Rect, source []UsageDay, monthLabels []string, emptyLabel string, accent woxui.Color, theme woxcomponent.ControlTheme) {
 	days := make([]usageHeatmapDay, 0, len(source))
 	for _, day := range source {
 		date, err := time.ParseInLocation("2006-01-02", day.Date, time.Local)
@@ -254,7 +254,7 @@ func drawUsageHeatmap(displayList *woxui.DisplayList, bounds woxui.Rect, source 
 		}
 	}
 	if len(days) == 0 {
-		displayList.DrawText(emptyLabel, woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height/2 - 8, Width: bounds.Width, Height: 18}, woxui.TextStyle{Size: 12}, theme.ResultSubtitle)
+		displayList.DrawText(emptyLabel, woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height/2 - 8, Width: bounds.Width, Height: 18}, woxui.TextStyle{Size: 12}, theme.TextSecondary)
 		return
 	}
 	sort.Slice(days, func(i, j int) bool { return days[i].date.Before(days[j].date) })
@@ -291,7 +291,7 @@ func drawUsageHeatmap(displayList *woxui.DisplayList, bounds woxui.Rect, source 
 		y := gridTop + float32(row)*(cellSize+cellGap)
 		color := emptyColor
 		if day.count > 0 && maxCount > 0 {
-			color = usageHeatmapColor(day.count, thresholds, accent, theme)
+			color = usageHeatmapColor(day.count, thresholds, accent)
 		}
 		cellBounds := woxui.Rect{X: x, Y: y, Width: cellSize, Height: cellSize}
 		displayList.FillRoundedRect(cellBounds, 3, color)
@@ -305,7 +305,7 @@ func drawUsageHeatmap(displayList *woxui.DisplayList, bounds woxui.Rect, source 
 				label = monthLabels[monthIndex]
 			}
 			labelX := min(gridLeft+float32(column)*(cellSize+cellGap), gridLeft+max(float32(0), gridWidth-32))
-			displayList.DrawText(label, woxui.Rect{X: labelX, Y: monthTop, Width: 32, Height: 14}, woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, theme.ResultSubtitle)
+			displayList.DrawText(label, woxui.Rect{X: labelX, Y: monthTop, Width: 32, Height: 14}, woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, theme.TextSecondary)
 		}
 	}
 }
@@ -322,7 +322,7 @@ func usageHeatmapThresholdValues(positive []int64) usageHeatmapThresholds {
 	return usageHeatmapThresholds{low: percentile(0.25), medium: percentile(0.50), high: percentile(0.75)}
 }
 
-func usageHeatmapColor(count int64, thresholds usageHeatmapThresholds, accent woxui.Color, theme woxcomponent.Theme) woxui.Color {
+func usageHeatmapColor(count int64, thresholds usageHeatmapThresholds, accent woxui.Color) woxui.Color {
 	level := 1
 	if count > thresholds.high {
 		level = 4
@@ -331,12 +331,8 @@ func usageHeatmapColor(count int64, thresholds usageHeatmapThresholds, accent wo
 	} else if count > thresholds.low {
 		level = 2
 	}
-	baseAlpha := 46
-	step := 46
-	if usageThemeIsDark(theme) {
-		baseAlpha = 56
-		step = 41
-	}
+	baseAlpha := 56
+	step := 41
 	return usageWithAlpha(accent, uint8(min(255, baseAlpha+level*step)))
 }
 
@@ -356,7 +352,7 @@ func usageRankings(props UsageSettingsProps, width float32) (woxwidget.Widget, f
 }
 
 // usageRankingPanel combines rank, optional application imagery, a thin progress meter, and the exact count.
-func usageRankingPanel(title string, titleIcon *woxui.Image, items []UsageRankingItem, width float32, emptyLabel string, accent woxui.Color, showItemIcons bool, fallbackIcon *woxui.Image, rankIcons []*woxui.Image, theme woxcomponent.Theme) (woxwidget.Widget, float32) {
+func usageRankingPanel(title string, titleIcon *woxui.Image, items []UsageRankingItem, width float32, emptyLabel string, accent woxui.Color, showItemIcons bool, fallbackIcon *woxui.Image, rankIcons []*woxui.Image, theme woxcomponent.ControlTheme) (woxwidget.Widget, float32) {
 	panelHeight := float32(136)
 	if len(items) > 0 {
 		panelHeight = 64 + float32(len(items))*34
@@ -366,11 +362,11 @@ func usageRankingPanel(title string, titleIcon *woxui.Image, items []UsageRankin
 		icon = woxwidget.Image{Source: titleIcon, Width: 16, Height: 16}
 	}
 	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		icon, woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
+		icon, woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 	}}
 	var body woxwidget.Widget
 	if len(items) == 0 {
-		body = woxwidget.Align{Width: max(float32(0), width-32), Height: 72, Vertical: 0.5, Child: woxwidget.Text{Value: emptyLabel, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}}
+		body = woxwidget.Align{Width: max(float32(0), width-32), Height: 72, Vertical: 0.5, Child: woxwidget.Text{Value: emptyLabel, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}}
 	} else {
 		maxCount := int64(1)
 		for _, item := range items {
@@ -388,7 +384,7 @@ func usageRankingPanel(title string, titleIcon *woxui.Image, items []UsageRankin
 	}), panelHeight
 }
 
-func usageRankingRow(index int, item UsageRankingItem, maxCount int64, width float32, accent woxui.Color, showItemIcon bool, fallbackIcon *woxui.Image, rankIcons []*woxui.Image, theme woxcomponent.Theme) woxwidget.Widget {
+func usageRankingRow(index int, item UsageRankingItem, maxCount int64, width float32, accent woxui.Color, showItemIcon bool, fallbackIcon *woxui.Image, rankIcons []*woxui.Image, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	iconSlotWidth := float32(0)
 	if showItemIcon {
 		iconSlotWidth = 26
@@ -408,52 +404,44 @@ func usageRankingRow(index int, item UsageRankingItem, maxCount int64, width flo
 		children = append(children, woxwidget.Align{Width: 26, Height: 24, Vertical: 0.5, Child: icon})
 	}
 	children = append(children,
-		woxwidget.Clip{Width: nameWidth, Height: 24, Child: woxwidget.Align{Width: nameWidth, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle}}},
+		woxwidget.Clip{Width: nameWidth, Height: 24, Child: woxwidget.Align{Width: nameWidth, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13}, Color: theme.Text}}},
 		woxwidget.Container{Width: 12, Height: 24},
 		usageRankingProgress(progressWidth, item.Count, maxCount, accent, theme),
 		woxwidget.Container{Width: 10, Height: 24},
-		woxwidget.Align{Width: 32, Height: 24, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%d", item.Count), Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}},
+		woxwidget.Align{Width: 32, Height: 24, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%d", item.Count), Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary}},
 	)
 	return woxwidget.Container{Width: width, Height: 34, Padding: woxwidget.Insets{Top: 5, Bottom: 5}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}}
 }
 
-func usageRankVisual(index int, rankIcons []*woxui.Image, theme woxcomponent.Theme) woxwidget.Widget {
+func usageRankVisual(index int, rankIcons []*woxui.Image, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	if index < 3 && index < len(rankIcons) && rankIcons[index] != nil {
 		return woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: rankIcons[index], Width: 16, Height: 16}}
 	}
-	return woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%d", index+1), Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}}
+	return woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%d", index+1), Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary}}
 }
 
-func usageRankingProgress(width float32, count, maxCount int64, accent woxui.Color, theme woxcomponent.Theme) woxwidget.Widget {
+func usageRankingProgress(width float32, count, maxCount int64, accent woxui.Color, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	progress := float32(0)
 	if maxCount > 0 {
 		progress = min(float32(1), max(float32(0), float32(count)/float32(maxCount)))
 	}
-	track := usageWithAlpha(theme.ResultTitle, 18)
+	track := usageWithAlpha(theme.Text, 18)
 	return woxwidget.Align{Width: width, Height: 24, Vertical: 0.5, Child: woxwidget.Stack{Width: width, Height: 3, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Container{Width: width, Height: 3, Radius: 2, Color: track}},
 		{Child: woxwidget.Container{Width: width * progress, Height: 3, Radius: 2, Color: usageWithAlpha(accent, 184)}},
 	}}}
 }
 
-func usageOutlineColor(theme woxcomponent.Theme) woxui.Color {
-	color := theme.PreviewSplit
+func usageOutlineColor(theme woxcomponent.ControlTheme) woxui.Color {
+	color := theme.Border
 	if color.A == 0 {
-		color = theme.ResultSubtitle
+		color = theme.TextSecondary
 	}
 	return usageWithAlpha(color, 34)
 }
 
-func usageHeatmapEmptyColor(theme woxcomponent.Theme) woxui.Color {
-	if usageThemeIsDark(theme) {
-		return usageWithAlpha(theme.ResultTitle, 18)
-	}
-	return woxui.Color{R: 232, G: 237, B: 243, A: 255}
-}
-
-func usageThemeIsDark(theme woxcomponent.Theme) bool {
-	luminance := int(theme.Background.R)*299 + int(theme.Background.G)*587 + int(theme.Background.B)*114
-	return luminance < 128000
+func usageHeatmapEmptyColor(theme woxcomponent.ControlTheme) woxui.Color {
+	return usageWithAlpha(theme.Text, 18)
 }
 
 func usageWithAlpha(color woxui.Color, alpha uint8) woxui.Color {

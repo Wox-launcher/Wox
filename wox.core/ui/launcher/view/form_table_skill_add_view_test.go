@@ -11,7 +11,7 @@ func TestFormTableSkillAddDialogDoesNotDuplicateBottomPadding(t *testing.T) {
 	dialog := FormTableSkillAddDialog(FormTableSkillAddDialogProps{
 		Width: 900, Height: 700, Title: "Add skill", LocalLabel: "Local", RemoteLabel: "Remote",
 		LocalHint: "Choose a local skill.", RemoteHint: "Enter a repository.", Field: woxwidget.Container{Height: 38}, FieldHeight: 38,
-		CancelLabel: "Cancel", AddLabel: "Add", Theme: woxcomponent.Theme{},
+		CancelLabel: "Cancel", AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
 	content := props.Child.(woxwidget.Flex)

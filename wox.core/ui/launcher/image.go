@@ -186,13 +186,24 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 
 // imageForTintDimensions keeps cache and decode dimensions aligned for rectangular SVGs.
 func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int) *woxui.Image {
+	return a.imageForTintAppearance(source, tint, svgWidth, svgHeight, themeColorIsDark(a.palette.background))
+}
+
+// imageForSurface resolves only explicit SVG theme variables for the owning
+// surface, preserving fixed brand colors and sharing the appearance-aware cache.
+func (a *App) imageForSurface(source woxImage, size int, background woxui.Color) *woxui.Image {
+	return a.imageForTintAppearance(source, nil, size, size, themeColorIsDark(background))
+}
+
+// imageForTintAppearance captures appearance before asynchronous image decoding.
+func (a *App) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
 	}
 	svgWidth = max(1, svgWidth)
 	svgHeight = max(1, svgHeight)
 	// Capture appearance before asynchronous decoding; keep both cache lookups theme-specific.
-	dark := tint == nil && themeColorIsDark(a.palette.background)
+	dark = tint == nil && dark
 	// Raster-only sources do not depend on SVG theme variables.
 	switch source.ImageType {
 	case "emoji", "fileicon", "appicon", "theme":

@@ -12,7 +12,7 @@ import (
 
 // buildUsageSettingsPage maps the local analytics snapshot into its portable view.
 func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
-	theme := snapshot.palette.componentTheme()
+	theme := snapshot.palette
 	periods := make([]launcherview.UsagePeriod, 0, 4)
 	for _, id := range []string{"7d", "30d", "365d", "all"} {
 		periods = append(periods, launcherview.UsagePeriod{
@@ -57,10 +57,10 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, i
 		},
 		Days: days, HeatmapAccent: greenAccent,
 		TopApps: usageRankingItems(a, snapshot.usage.Stats.TopApps, true), TopPlugins: usageRankingItems(a, snapshot.usage.Stats.TopPlugins, false),
-		ShareIcon:       a.imageForTint(usageIconSource("share"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
-		CalendarIcon:    a.imageForTint(usageIconSource("calendar"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
-		AppsIcon:        a.imageForTint(usageIconSource("apps"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
-		PluginsIcon:     a.imageForTint(usageIconSource("extension"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
+		ShareIcon:       a.imageForTint(usageIconSource("share"), &theme.Text, physicalImageSize(16, imageScale)),
+		CalendarIcon:    a.imageForTint(usageIconSource("calendar"), &theme.Text, physicalImageSize(16, imageScale)),
+		AppsIcon:        a.imageForTint(usageIconSource("apps"), &theme.Text, physicalImageSize(16, imageScale)),
+		PluginsIcon:     a.imageForTint(usageIconSource("extension"), &theme.Text, physicalImageSize(16, imageScale)),
 		AppFallbackIcon: a.imageForTint(usageIconSource("apps"), &blueAccent, physicalImageSize(14, imageScale)),
 		RankIcons: []*woxui.Image{
 			a.imageForTint(usageIconSource("trophy"), &amberAccent, physicalImageSize(16, imageScale)),
@@ -84,7 +84,7 @@ func usageRankingItems(a *App, items []usageStatsItem, includeIcons bool) []laun
 		}
 		var icon *woxui.Image
 		if includeIcons {
-			icon = a.imageFor(item.Icon)
+			icon = a.imageForSurface(item.Icon, 256, settingsPalette().Background)
 		}
 		result = append(result, launcherview.UsageRankingItem{Name: name, Count: item.Count, Icon: icon})
 	}

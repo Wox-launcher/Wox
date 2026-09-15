@@ -12,7 +12,7 @@ func TestDictationModelManagerUsesFieldAnchoredMenu(t *testing.T) {
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 600, Height: 34}
 	overlay := ModelManagerView(ModelManagerProps{
 		Width: 1200, Height: 800, Anchor: anchor, Anchored: true, EngineReady: true,
-		RecommendedLabel: "Recommended", DeleteLabel: "Delete", Theme: woxcomponent.Theme{},
+		RecommendedLabel: "Recommended", DeleteLabel: "Delete", Theme: woxcomponent.ControlTheme{},
 		Options: []ModelManagerOption{{Name: "Qwen3-ASR 0.6B", Languages: "Chinese, English", Description: "Offline recognition", SizeMB: 600, Recommended: true, ActionLabel: "Download", ActionEnabled: true}},
 	})
 	stack, ok := overlay.(woxwidget.Stack)
@@ -38,7 +38,7 @@ func TestDictationModelManagerHidesUnknownEngineStatus(t *testing.T) {
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 600, Height: 34}
 	overlay := ModelManagerView(ModelManagerProps{
 		Width: 1200, Height: 800, Anchor: anchor, Anchored: true,
-		EngineKnown: false, EngineReady: false, EngineLabel: "Checking inference engine…", Theme: woxcomponent.Theme{},
+		EngineKnown: false, EngineReady: false, EngineLabel: "Checking inference engine…", Theme: woxcomponent.ControlTheme{},
 		Options: []ModelManagerOption{{Name: "Qwen3-ASR 0.6B", ActionLabel: "Download", ActionEnabled: true}},
 	})
 	stack := overlay.(woxwidget.Stack)
@@ -51,7 +51,7 @@ func TestDictationModelManagerHidesUnknownEngineStatus(t *testing.T) {
 
 func TestModelManagerDialogDoesNotDuplicateBottomPadding(t *testing.T) {
 	dialog := ModelManagerView(ModelManagerProps{
-		Width: 1200, Height: 800, Title: "Models", Theme: woxcomponent.Theme{},
+		Width: 1200, Height: 800, Title: "Models", Theme: woxcomponent.ControlTheme{},
 		Options: []ModelManagerOption{{Name: "Model", ActionLabel: "Download", ActionEnabled: true}},
 	}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)

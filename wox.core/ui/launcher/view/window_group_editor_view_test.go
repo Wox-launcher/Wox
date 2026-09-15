@@ -10,7 +10,7 @@ import (
 )
 
 func TestWindowGroupSelectedLayoutCardUsesStrongActiveTreatment(t *testing.T) {
-	theme := woxcomponent.Theme{ActionBackground: woxui.Color{R: 30, G: 32, B: 36, A: 255}}
+	theme := woxcomponent.ControlTheme{Surface: woxui.Color{R: 30, G: 32, B: 36, A: 255}}
 	surface := windowGroupLayoutCard(WindowGroupEditorProps{Theme: theme}, WindowGroupLayoutOptionProps{ID: "split", Selected: true}).(woxwidget.Gesture).Child.(woxwidget.Stack)
 	halo := surface.Children[0].Child.(woxwidget.Container)
 	card := surface.Children[1].Child.(woxwidget.Container)
@@ -18,7 +18,7 @@ func TestWindowGroupSelectedLayoutCardUsesStrongActiveTreatment(t *testing.T) {
 	if card.BorderColor != windowGroupSelectionColor() || card.BorderWidth != 2 {
 		t.Fatalf("selected layout border = %+v/%.0f, want green/2", card.BorderColor, card.BorderWidth)
 	}
-	if card.Color == theme.ActionBackground {
+	if card.Color == theme.Surface {
 		t.Fatal("selected layout background should have a visible green tint")
 	}
 	if halo.BorderWidth != 3 || halo.BorderColor.A == 0 {
@@ -39,7 +39,7 @@ func TestNormalizeWindowGroupURLMatchesFlutterSaveContract(t *testing.T) {
 }
 
 func TestWindowGroupExtensionStatusOnlyLinksWhenDisconnected(t *testing.T) {
-	props := WindowGroupUrlEditorProps{ExtensionDisconnectedLabel: "Disconnected", ExtensionInstallLabel: "Install", Theme: woxcomponent.Theme{}}
+	props := WindowGroupUrlEditorProps{ExtensionDisconnectedLabel: "Disconnected", ExtensionInstallLabel: "Install", Theme: woxcomponent.ControlTheme{}}
 	if _, ok := windowGroupExtensionStatus(props, 480).(woxwidget.Gesture); !ok {
 		t.Fatal("disconnected extension status should open the install link")
 	}
@@ -50,7 +50,7 @@ func TestWindowGroupExtensionStatusOnlyLinksWhenDisconnected(t *testing.T) {
 }
 
 func TestWindowGroupExtensionStatusVerticallyCentersContent(t *testing.T) {
-	status := windowGroupExtensionStatus(WindowGroupUrlEditorProps{ExtensionConnected: true, ExtensionConnectedLabel: "Connected", Theme: woxcomponent.Theme{}}, 480).(woxwidget.Container)
+	status := windowGroupExtensionStatus(WindowGroupUrlEditorProps{ExtensionConnected: true, ExtensionConnectedLabel: "Connected", Theme: woxcomponent.ControlTheme{}}, 480).(woxwidget.Container)
 	fill, ok := status.Child.(woxwidget.Constrained)
 	if !ok || !fill.FillWidth {
 		t.Fatalf("extension status fill = %#v, want parent-width constraint", status.Child)
@@ -63,7 +63,7 @@ func TestWindowGroupExtensionStatusVerticallyCentersContent(t *testing.T) {
 
 func TestWindowGroupURLDialogUsesCompactScrollableHeight(t *testing.T) {
 	state := &windowGroupURLState{rowEditor: -2}
-	dialog := state.buildDialog(woxwidget.StateContext{}, WindowGroupUrlEditorProps{Width: 1200, Height: 800, Theme: woxcomponent.Theme{}}).(woxwidget.Stateful)
+	dialog := state.buildDialog(woxwidget.StateContext{}, WindowGroupUrlEditorProps{Width: 1200, Height: 800, Theme: woxcomponent.ControlTheme{}}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
 	if props.Height != 344 {
 		t.Fatalf("URL dialog height = %.0f, want compact 344", props.Height)

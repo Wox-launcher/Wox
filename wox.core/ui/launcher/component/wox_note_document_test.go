@@ -71,7 +71,7 @@ func TestNoteTaskLiveDestUsesLineMidpoints(t *testing.T) {
 		{ID: "b", Type: common.NoteBlockTask, Text: "two"},
 		{ID: "c", Type: common.NoteBlockTask, Text: "three"},
 	}}
-	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	lines := []textFieldLine{
 		{start: ranges[0].Start, end: ranges[0].End},
 		{start: ranges[1].Start, end: ranges[1].End},
@@ -94,7 +94,7 @@ func TestNoteTaskDropAndNudgeDest(t *testing.T) {
 		{ID: "b", Type: common.NoteBlockTask, Text: "two"},
 		{ID: "c", Type: common.NoteBlockTask, Text: "three"},
 	}}
-	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	if dest := NoteTaskDropDest(document, ranges, 1, ranges[0].TextStart); dest != 0 {
 		t.Fatalf("drop onto first = %d, want 0", dest)
 	}
@@ -118,7 +118,7 @@ func TestProjectNoteDocumentRendersEmptyParagraphsAsBlankLines(t *testing.T) {
 		{Type: common.NoteBlockParagraph},
 		{Type: common.NoteBlockParagraph, Text: "second"},
 	}}
-	value, _, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	value, _, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	if value != "first\n\nsecond" {
 		t.Fatalf("projection = %q, want a visible blank line between paragraphs", value)
 	}
@@ -129,7 +129,7 @@ func TestProjectNoteDocumentUsesSharedListGutters(t *testing.T) {
 		{Type: common.NoteBlockBullet, Text: "bullet"},
 		{Type: common.NoteBlockOrdered, Text: "ordered"},
 	}}
-	_, runs, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	_, runs, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	markers := make([]TextFieldRichRun, 0, 2)
 	for _, run := range runs {
 		if run.ListMarker != "" {
@@ -150,7 +150,7 @@ func TestNoteTaskAtCaret(t *testing.T) {
 		{ID: "p", Type: common.NoteBlockParagraph, Text: "plain"},
 		{ID: "t", Type: common.NoteBlockTask, Text: "task"},
 	}}
-	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	if index := NoteTaskAtCaret(document, ranges, woxui.TextSelection{Focus: ranges[0].TextStart}); index != -1 {
 		t.Fatalf("caret in paragraph = %d, want -1", index)
 	}
@@ -164,7 +164,7 @@ func TestNoteEditorTaskReorderHandleFollowsCaret(t *testing.T) {
 		{ID: "p", Type: common.NoteBlockParagraph, Text: "plain"},
 		{ID: "t", Type: common.NoteBlockTask, Text: "task"},
 	}}
-	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	_, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	segment := NoteDocumentSegment{Start: 0, End: 2}
 	started := false
 	props := NoteEditorProps{

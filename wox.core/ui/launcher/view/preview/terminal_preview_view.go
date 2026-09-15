@@ -193,7 +193,7 @@ func terminalSearchBar(props TerminalPreviewProps, height float32) woxwidget.Wid
 		ID: string(TerminalSearchInputKey(props.SessionID)), Label: "Find in terminal output", Width: inputWidth, Height: 34,
 		Radius: 7, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 5}, Background: previewColorWithOpacity(props.Theme.Background, 0.2),
 		BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, FocusRingColor: props.Theme.Cursor, Value: props.SearchEditing.Text,
-		Focused: true, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
+		Focused: true, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme.Controls,
 		OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearch, OnKey: props.OnSearchKey,
 	})
 	count := "0/0"

@@ -73,7 +73,7 @@ func TestSettingsTitleBarMacLimitsDragAreaToRail(t *testing.T) {
 }
 
 func TestSettingsMacCloseUsesPixelPainter(t *testing.T) {
-	closeControl := woxcomponent.MacTrafficLight("close", woxui.Color{}, "×", woxui.Color{}, true, false, true, woxcomponent.Theme{}, func() {}, nil, nil).(woxwidget.Gesture)
+	closeControl := woxcomponent.MacTrafficLight("close", woxui.Color{}, "×", woxui.Color{}, true, false, true, woxcomponent.ControlTheme{}, func() {}, nil, nil).(woxwidget.Gesture)
 	symbol := closeControl.Child.(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Align).Child
 	painter, ok := symbol.(woxwidget.Painter)
 	if !ok || painter.Width != 14 || painter.Height != 14 || painter.Paint == nil {
@@ -83,7 +83,7 @@ func TestSettingsMacCloseUsesPixelPainter(t *testing.T) {
 
 func TestSettingsMacTrafficLightDarkensItsNativeColorWhilePressed(t *testing.T) {
 	glyphColor := woxui.Color{R: 126, G: 100, B: 11, A: 255}
-	control := woxcomponent.MacTrafficLight("minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", glyphColor, true, true, true, woxcomponent.Theme{}, func() {}, nil, nil).(woxwidget.Gesture)
+	control := woxcomponent.MacTrafficLight("minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", glyphColor, true, true, true, woxcomponent.ControlTheme{}, func() {}, nil, nil).(woxwidget.Gesture)
 	button := control.Child.(woxwidget.Align).Child.(woxwidget.Container)
 	if button.Color != (woxui.Color{R: 215, G: 172, B: 0, A: 255}) {
 		t.Fatalf("pressed macOS traffic light color = %#v, want darkened native yellow", button.Color)
@@ -163,7 +163,7 @@ func TestSettingsTitleBarWindowsUsesInsetStretchAndRightAnchors(t *testing.T) {
 }
 
 func TestSettingsTitleBarMacTrafficLightsGrayOutWhileUnfocused(t *testing.T) {
-	theme := woxcomponent.Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
+	theme := woxcomponent.ControlTheme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "darwin", Theme: theme, Active: false}, "", "", nil, nil).(woxwidget.Stack)
 	if len(titleBar.Children) != 5 {
 		t.Fatalf("macOS title-bar child count = %d, want drag, divider, and three traffic lights", len(titleBar.Children))
@@ -178,7 +178,7 @@ func TestSettingsTitleBarMacTrafficLightsGrayOutWhileUnfocused(t *testing.T) {
 }
 
 func TestSettingsTitleBarMacTrafficLightsKeepNativeColorsWhileFocused(t *testing.T) {
-	theme := woxcomponent.Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
+	theme := woxcomponent.ControlTheme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "darwin", Theme: theme, Active: true}, "", "", nil, nil).(woxwidget.Stack)
 	closeFill := macTrafficLightFill(t, titleBar.Children[2].Child)
 	minimizeFill := macTrafficLightFill(t, titleBar.Children[3].Child)

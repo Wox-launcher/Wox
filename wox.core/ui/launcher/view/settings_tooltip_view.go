@@ -27,7 +27,7 @@ type SettingsInlineTooltipProps struct {
 	Anchor  woxui.Rect
 	Message string
 	Side    string
-	Theme   woxcomponent.Theme
+	Theme   woxcomponent.ControlTheme
 }
 
 // SettingsInlineTooltipOverlay renders Linux fallback tooltips inside the settings window.
@@ -45,10 +45,10 @@ func SettingsInlineTooltipOverlay(props SettingsInlineTooltipProps) (woxwidget.W
 
 	left, top := settingsInlineTooltipPosition(props, tooltipWidth, tooltipHeight)
 
-	background := props.Theme.ActionBackground
-	border := props.Theme.PreviewSplit
+	background := props.Theme.Surface
+	border := props.Theme.Border
 	border.A = uint8(float32(border.A) * 0.7)
-	textColor := props.Theme.ActionText
+	textColor := props.Theme.Text
 	textColor.A = uint8(float32(textColor.A) * 0.96)
 
 	tooltip := woxwidget.Container{

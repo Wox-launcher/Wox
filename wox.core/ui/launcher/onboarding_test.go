@@ -100,8 +100,8 @@ func TestOnboardingUsesBundledGlassPalette(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The bundled theme has platform overrides; compare the resolved palette.
-	if !reflect.DeepEqual(onboardingGlassTheme, paletteForTheme(theme).componentTheme()) {
-		t.Fatalf("onboarding theme = %#v, want bundled Wox Glass palette", onboardingGlassTheme)
+	if !reflect.DeepEqual(onboardingPreviewTheme, paletteForTheme(theme).componentTheme()) {
+		t.Fatalf("onboarding theme = %#v, want bundled Wox Glass palette", onboardingPreviewTheme)
 	}
 }
 

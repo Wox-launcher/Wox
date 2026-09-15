@@ -137,7 +137,7 @@ func UpdatePreviewView(props UpdatePreviewProps) woxwidget.Widget {
 			woxwidget.Container{Width: innerWidth, Height: scaled(15), Padding: woxwidget.Insets{Top: scaled(14)}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
 			woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-				Key: woxwidget.Key("update-preview-scroll-" + props.ID), Width: innerWidth, Height: bodyHeight, Content: body, Theme: props.Theme, ThumbColor: props.Theme.PreviewText,
+				Key: woxwidget.Key("update-preview-scroll-" + props.ID), Width: innerWidth, Height: bodyHeight, Content: body, Theme: props.Theme.Controls, ThumbColor: props.Theme.PreviewText,
 			}),
 		}},
 	}
@@ -153,7 +153,7 @@ func updateEmptyReleaseNotes(message string, width, height float32, theme woxcom
 func disabledUpdatePreview(props UpdatePreviewProps, scaled func(float32) float32) woxwidget.Widget {
 	cardWidth := min(max(float32(0), props.Width-scaled(40)), scaled(760))
 	innerWidth := max(float32(0), cardWidth-scaled(40))
-	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "update-enable-auto-update", Label: props.DisabledAction, IntrinsicWidth: true, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnPrimaryAction, Theme: props.Theme})
+	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "update-enable-auto-update", Label: props.DisabledAction, IntrinsicWidth: true, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnPrimaryAction, Theme: props.Theme.Controls})
 	card := woxwidget.Container{
 		Width: cardWidth, Padding: woxwidget.UniformInsets(scaled(20)), Radius: scaled(14), Color: updateColorAlpha(props.Theme.Background, 0.35), BorderColor: updateColorAlpha(props.Theme.PreviewSplit, 0.6), BorderWidth: 1,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: scaled(12), Children: []woxwidget.Widget{

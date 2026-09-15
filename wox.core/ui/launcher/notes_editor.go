@@ -8,7 +8,7 @@ import (
 
 type noteBlockRange = woxcomponent.NoteBlockRange
 
-func projectNoteDocument(document common.NoteDocument, base woxui.TextStyle, theme woxcomponent.Theme) (string, []woxcomponent.NoteTextRun, []noteBlockRange) {
+func projectNoteDocument(document common.NoteDocument, base woxui.TextStyle, theme woxcomponent.ControlTheme) (string, []woxcomponent.NoteTextRun, []noteBlockRange) {
 	return woxcomponent.ProjectNoteDocument(document, base, theme)
 }
 

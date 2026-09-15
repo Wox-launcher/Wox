@@ -10,7 +10,7 @@ import (
 
 func TestCatalogListEmptyStateCentersTitleAndDescription(t *testing.T) {
 	state := CatalogListEmptyState(CatalogListEmptyProps{
-		Width: 250, Height: 400, Title: "No matches", Description: "Try another keyword", Theme: woxcomponent.Theme{},
+		Width: 250, Height: 400, Title: "No matches", Description: "Try another keyword", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Align)
 
 	if state.Horizontal != 0.5 || state.Vertical != 0.42 {
@@ -33,7 +33,7 @@ func TestCatalogListEmptyStateCentersTitleAndDescription(t *testing.T) {
 func TestCatalogListEmptyStateIncludesIconWhenProvided(t *testing.T) {
 	icon := &woxui.Image{Width: 24, Height: 24}
 	state := CatalogListEmptyState(CatalogListEmptyProps{
-		Width: 250, Height: 400, Title: "No matches", Description: "Try another keyword", Icon: icon, Theme: woxcomponent.Theme{},
+		Width: 250, Height: 400, Title: "No matches", Description: "Try another keyword", Icon: icon, Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Align)
 
 	column := state.Child.(woxwidget.Container).Child.(woxwidget.Flex)

@@ -43,10 +43,14 @@ Apply this guide to Settings, dialogs, forms, tables, catalogs, onboarding manag
 Use these ownership layers in order:
 
 1. This guide defines visual policy.
-2. `launcher/theme.go` resolves user theme values into the portable palette.
-3. `launcher/component.Theme` and shared typography expose semantic visual roles.
+2. `launcher/theme.go` resolves launcher theme values into the portable palette. `launcher/settings_theme.go` independently owns the single Glass-derived dark Settings palette, with a translucent window tint, translucent popup tints over floating blur materials, and native desktop material enabled. Settings does not inherit launcher colors, geometry overrides, or system light/dark changes.
+3. `launcher/component.ControlTheme` defines the semantic colors consumed directly by shared controls and Settings views. `component.Theme` retains launcher-only appearance and supplies its `Controls` field at shared-control call sites.
 4. `launcher/component/wox_*.go` owns reusable control geometry, state visuals, focus, and accessibility.
 5. `launcher/view/` composes pages and owns responsive, page-specific layout.
+
+Settings and onboarding management surfaces construct `ControlTheme` directly in `settings_theme.go` and passes it to controls, dialogs, tooltips, and navigation. Do not convert Settings appearance into `uiPalette` or `component.Theme`, or add launcher-token fallbacks to Settings. Untinted SVGs resolve explicit theme variables against their owning surface; fixed brand colors stay unchanged. Onboarding passes a separate `PreviewTheme` to illustrative launcher demos; its management surface keeps the fixed dark tint and system material even while hidden. Linux Settings rails add no duplicate tint over the root background; they do not query compositor capabilities.
+
+Theme catalog previews and the editor draft preview retain the theme being previewed while their surrounding Settings chrome uses the fixed palette.
 
 Do not create a second button, text field, dropdown, checkbox, switch, list item, panel, or dialog treatment in a view.
 
@@ -172,17 +176,23 @@ Themes explicitly declaring `SchemaVersion: 2` derive optional styles from requi
 
 Select color by semantic role. Do not copy RGBA values into ordinary views.
 
-| Role | `component.Theme` value | Use |
+| Role | `component.ControlTheme` value | Use |
 | --- | --- | --- |
-| Window canvas | `Background` | Launcher and Settings window background |
-| Inline control or quiet card | `QueryBackground` | Fields, default rows, bounded quiet regions |
-| Elevated surface | `ActionBackground` | Dialogs, popovers, temporary action surfaces |
-| Primary text | `QueryText`, `ResultTitle`, `ActionText` | Titles, values, labels |
-| Secondary text | `ResultSubtitle`, `ActionHeader`, `ToolbarText` | Help, metadata, section labels |
-| Selection | `SelectedBackground`, `SelectedTitle`, `SelectedSubtitle` | Current destination, row, or option |
-| Focus and caret | `Cursor` | Focus rings and text caret |
-| Divider | `PreviewSplit` | Hairlines, table separators, structural borders |
-| Error | `ErrorText` | Validation and operation failures |
+| Window canvas | `Background` | Window background |
+| Inline control | `InputBackground`, `InputText` | Input surface and value |
+| Elevated surface | `Surface` | Dialogs and popovers |
+| Primary text | `Text` | Titles, values, labels |
+| Control labels | `ControlText` | Button and menu labels |
+| Rich content | `BodyText` | Markdown and documents |
+| Window controls | `ChromeText` | Native title-bar glyphs |
+| Secondary text | `TextSecondary` | Help, metadata, section labels |
+| Selection | `SelectionBackground`, `SelectionText` | Current destination, row, or option |
+| Primary action | `Accent`, `AccentText` | Primary buttons, checked controls; Settings uses opaque near-white with dark foreground, independently of row selection washes; active switch thumbs use `AccentText` |
+| Status | `Info`, `Success`, `Warning` | Fixed Settings information and connection-state colors |
+| Focus and caret | `Focus` | Focus rings and text caret |
+| Text selection | `TextSelectionBackground`, `TextSelectionText` | Selected input text |
+| Divider | `Border` | Hairlines and structural borders |
+| Error | `Error` | Validation and operation failures |
 
 Derive translucent overlays from the relevant semantic foreground or surface. Keep raw colors for platform-defined visuals or genuinely semantic fixed brand/status colors, and document those exceptions locally.
 
@@ -195,9 +205,9 @@ Use no more hierarchy than the interaction needs:
 
 Do not wrap every Settings group in a card. Use section spacing and a divider for ordinary groups. Avoid shadows and blur as basic hierarchy because their rendering differs across platforms.
 
-Verify contrast in light and dark themes. Status must never depend on hue, alpha, or animation alone.
+Verify Settings contrast against its fixed dark palette and launcher controls against light and dark themes. Status must never depend on hue, alpha, or animation alone.
 
-Read-only Markdown links use the shared document blue accent and an underline, with a native hand cursor on hover. Keep keyboard focus rings on the theme's `Cursor` color; the caret color must not determine link text color.
+Read-only Markdown links use the shared document blue accent and an underline, with a native hand cursor on hover. Keep keyboard focus rings on the control theme's `Focus` color; the caret color must not determine link text color.
 
 ## Typography
 
@@ -225,6 +235,7 @@ Use measured text and alignment containers. Do not position text with guessed ba
 
 Use the 4-unit rhythm: 4, 8, 12, 16, 20, and 24. Allow 6, 10, and 14 only for established optical relationships such as icon gaps, dense text, or navigation alignment.
 
+- Settings table Add controls use the shared secondary button fill instead of a bright outline. Selected Settings navigation uses its theme selection fill without a decorative border; retain the keyboard focus ring. Table hotkeys use readable key labels separated by ` + `, preserving stored values.
 - Align repeated labels, controls, and actions to shared leading or trailing edges.
 - Align controls in one row by interaction-frame centerline.
 - Use built-in horizontal and vertical alignment primitives (`Align`, Flex alignment, `Expanded`, and `Constrained`) instead of manual offsets or calculated centering padding. Do not write formulas such as `(rowHeight-controlHeight)/2` to position a child; make the layout component express the relationship.

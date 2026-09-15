@@ -113,7 +113,7 @@ func buildWebViewTitleBar(props WebViewTitleBarProps) woxwidget.Widget {
 	)
 
 	children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
-		ID: "webview-window-close", Width: props.Width, Platform: props.Platform, Theme: props.Theme, Active: props.Active, OnClose: props.OnClose,
+		ID: "webview-window-close", Width: props.Width, Platform: props.Platform, Theme: props.Theme.Controls, Active: props.Active, OnClose: props.OnClose,
 	})})
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
 }

@@ -11,7 +11,7 @@ import (
 func TestFormTableSideTitleMatchesFormLabel(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "actions", Title: "Actions", Width: 720, LabelWidth: 80,
-		AddLabel: "Add", Theme: woxcomponent.Theme{ActionText: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
+		AddLabel: "Add", Theme: woxcomponent.ControlTheme{Text: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
 	})
 	title := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
 	if title.Value != "Actions" || title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightRegular || title.Color.R != 240 {
@@ -22,7 +22,7 @@ func TestFormTableSideTitleMatchesFormLabel(t *testing.T) {
 func TestFormTableSideTitleUsesHeaderWeight(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "hotkeys", Title: "Query Hotkeys", Width: 720, LabelWidth: 80,
-		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 	title := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
 	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightSemibold {
@@ -74,7 +74,7 @@ func TestFormTableInlineHeaderKeepsTranslatedActionLabelsVisible(t *testing.T) {
 					Width: 720, InlineTitle: true, MaxHeight: 300,
 					Columns:  []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Hotkey"}},
 					AddLabel: label.add, SecondaryLabel: label.template, AddIcon: icon, SecondaryIcon: icon,
-					OperationLabel: "Operation", EmptyLabel: "No data", Theme: woxcomponent.Theme{},
+					OperationLabel: "Operation", EmptyLabel: "No data", Theme: woxcomponent.ControlTheme{},
 				})
 			})
 			host.AttachServices(translatedLabelHostServices{})
@@ -99,7 +99,7 @@ func formTableOperationIconButton(action woxwidget.Widget) woxcomponent.IconButt
 }
 
 func TestFormTableDisabledBlocksMutatingActions(t *testing.T) {
-	props := FormTableFieldProps{ID: "commands", AddLabel: "Add", Disabled: true, Theme: woxcomponent.Theme{}}
+	props := FormTableFieldProps{ID: "commands", AddLabel: "Add", Disabled: true, Theme: woxcomponent.ControlTheme{}}
 	add := formTableAddButton(props).(woxwidget.Semantics)
 	edit := formTableIconButton(props, "commands-row-0-edit", "Edit", nil, nil, props.Disabled, func() {}).(woxwidget.Semantics)
 	if !add.Disabled || len(add.Actions) != 0 || !edit.Disabled || len(edit.Actions) != 0 {
@@ -110,7 +110,7 @@ func TestFormTableDisabledBlocksMutatingActions(t *testing.T) {
 func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 	focused := 0
 	props := FormTableRowFieldProps{
-		ID: "field", Label: "Field", Focused: true, Theme: woxcomponent.Theme{},
+		ID: "field", Label: "Field", Focused: true, Theme: woxcomponent.ControlTheme{},
 		OnFocus: func() { focused++ }, OnKey: func(woxui.KeyEvent) bool { return true }, OnTap: func() {},
 	}
 
@@ -142,7 +142,7 @@ func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 func TestFormTableRowTextControlLeavesCaretFocusToHost(t *testing.T) {
 	changes := []bool{}
 	control := formTableRowTextControl(FormTableRowFieldProps{
-		ID: "field", Focused: true, State: woxui.TextEditingState{}, Theme: woxcomponent.Theme{},
+		ID: "field", Focused: true, State: woxui.TextEditingState{}, Theme: woxcomponent.ControlTheme{},
 		OnFocusChange: func(focused bool) { changes = append(changes, focused) },
 	}, 240, woxcomponent.SettingsControlHeight)
 	field := control.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
@@ -158,7 +158,7 @@ func TestFormTableRowTextControlLeavesCaretFocusToHost(t *testing.T) {
 
 func TestFormTableRowTextControlPlacesVariableTriggerInsideInput(t *testing.T) {
 	tapped := false
-	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 200, G: 210, B: 220, A: 255}, Cursor: woxui.Color{R: 1, G: 2, B: 3, A: 255}}
+	theme := woxcomponent.ControlTheme{Text: woxui.Color{R: 200, G: 210, B: 220, A: 255}, Focus: woxui.Color{R: 1, G: 2, B: 3, A: 255}}
 	control := formTableRowTextControl(FormTableRowFieldProps{
 		ID: "prompt", State: woxui.TextEditingState{Text: "Summarize {wox:input_text}"}, Theme: theme,
 		TrailingLabel: "{}", TrailingActionLabel: "Insert dynamic placeholder", OnTrailingTap: func(woxui.Rect) { tapped = true },
@@ -195,7 +195,7 @@ func TestFormTableRowTextControlPlacesVariableTriggerInsideInput(t *testing.T) {
 }
 
 func TestFormTableRowTextControlForwardsQueryVariableChips(t *testing.T) {
-	run := woxcomponent.NewTokenChipRun(10, 35, "query", nil, woxcomponent.Theme{}).WithDismissible().WithChipEdit()
+	run := woxcomponent.NewTokenChipRun(10, 35, "query", nil, woxcomponent.ControlTheme{}).WithDismissible().WithChipEdit()
 	dismissed := false
 	edited := false
 	control := formTableRowTextControl(FormTableRowFieldProps{
@@ -224,7 +224,7 @@ func TestFormTableRowTextControlForwardsQueryVariableChips(t *testing.T) {
 
 func TestFormTableRowTextControlPlacesActionBesideInput(t *testing.T) {
 	tapped := false
-	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 200, G: 210, B: 220, A: 255}, Cursor: woxui.Color{R: 1, G: 2, B: 3, A: 255}}
+	theme := woxcomponent.ControlTheme{Text: woxui.Color{R: 200, G: 210, B: 220, A: 255}, Focus: woxui.Color{R: 1, G: 2, B: 3, A: 255}}
 	control := formTableRowTextControl(FormTableRowFieldProps{
 		ID: "query", State: woxui.TextEditingState{Text: "ai translate {wox:selected_text}"}, Theme: theme,
 		ActionIcon: &woxui.Image{}, ActionLabel: "Test this query", OnActionTap: func() { tapped = true },
@@ -253,9 +253,9 @@ func TestFormTableRowTextControlPlacesActionBesideInput(t *testing.T) {
 }
 
 func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
-	theme := woxcomponent.Theme{
-		ActionSelected: woxui.Color{R: 20, G: 80, B: 140, A: 255},
-		ResultSubtitle: woxui.Color{R: 100, G: 110, B: 120, A: 255},
+	theme := woxcomponent.ControlTheme{
+		Accent:        woxui.Color{R: 20, G: 80, B: 140, A: 255},
+		TextSecondary: woxui.Color{R: 100, G: 110, B: 120, A: 255},
 	}
 	control := formTableRowAppControl(FormTableRowFieldProps{
 		ID: "app", Value: "No app selected", SelectLabel: "Select Apps", SelectWidth: 104, Theme: theme, OnTap: func() {},
@@ -276,7 +276,7 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 		t.Fatal("app selector button should keep table-row focus synchronized")
 	}
 	button := focusedControlGesture(control.Children[1]).Child.(woxwidget.Container)
-	if button.Width != 0 || button.Height != 32 || button.Color != theme.ActionSelected {
+	if button.Width != 0 || button.Height != 32 || button.Color != theme.Accent {
 		t.Fatal("app selector action should use a content-sized Flutter-style primary button")
 	}
 	selected := formTableRowAppControl(FormTableRowFieldProps{
@@ -296,7 +296,7 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 
 func TestFormTableRowEditorActionsSizeToTranslatedLabels(t *testing.T) {
 	editor := FormTableRowEditor(FormTableRowEditorProps{
-		Width: 700, Height: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{},
+		Width: 700, Height: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Flex)
 	footer := editor.Children[len(editor.Children)-1].(woxwidget.Container)
 	if footer.Height != FormTableRowEditorFooterHeight || footer.Padding.Top != SettingsDialogActionsHeight-settingsDialogActionHeight {
@@ -325,7 +325,7 @@ func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 	header := QueryHotkeyEditorHeader(QueryHotkeyEditorHeaderProps{
 		Width: 700, Title: "Add Query Hotkey", Selected: "web-panel", Description: "Open the launcher. [Learn more](https://example.com)",
 		NormalLabel: "Normal", WebPanelLabel: "Preview", SilentLabel: "Silent", CustomLabel: "Custom",
-		DemoIcon: &woxui.Image{}, Theme: woxcomponent.Theme{}, OnSelect: func(value string) { selected = value },
+		DemoIcon: &woxui.Image{}, Theme: woxcomponent.ControlTheme{}, OnSelect: func(value string) { selected = value },
 		OnOpenLink: func(target string) { openedLink = target },
 		OnDemoHover: func(value string, inside bool, _ woxui.Rect) {
 			if inside {
@@ -369,7 +369,7 @@ func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 
 func TestQueryHotkeyEditorHeaderHidesDemoForCustomPreset(t *testing.T) {
 	header := QueryHotkeyEditorHeader(QueryHotkeyEditorHeaderProps{
-		Width: 700, Selected: "custom", Description: "Tune all options.", DemoIcon: &woxui.Image{}, Theme: woxcomponent.Theme{},
+		Width: 700, Selected: "custom", Description: "Tune all options.", DemoIcon: &woxui.Image{}, Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Container)
 	content := header.Child.(woxwidget.Flex)
 	description := content.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -391,7 +391,7 @@ func TestFormTableRowDescriptionWrapsLongPlainText(t *testing.T) {
 	}
 
 	row := FormTableRowField(FormTableRowFieldProps{
-		Kind: "textbox", Description: description, Width: width, Height: height, LabelWidth: labelWidth, MaxLines: 1, Theme: woxcomponent.Theme{},
+		Kind: "textbox", Description: description, Width: width, Height: height, LabelWidth: labelWidth, MaxLines: 1, Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	help := right.Children[1].(woxwidget.TextBlock)
@@ -406,7 +406,7 @@ func TestFormTableRowDescriptionWrapsLongPlainText(t *testing.T) {
 func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 	description := "Type { to insert variables.\n\nInstall the browser extension."
 	height := FormTableRowFieldHeight("textbox", description, 1)
-	row := FormTableRowField(FormTableRowFieldProps{Kind: "textbox", Description: description, Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.Theme{}}).(woxwidget.Container)
+	row := FormTableRowField(FormTableRowFieldProps{Kind: "textbox", Description: description, Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.ControlTheme{}}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	help := right.Children[1].(woxwidget.TextBlock)
 	if help.MaxLines != 3 || help.Height != 54 {
@@ -416,7 +416,7 @@ func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 
 func TestFormTableHotkeyStatusUsesRemainingControlWidth(t *testing.T) {
 	control := formTableRowControl(FormTableRowFieldProps{
-		ID: "hotkey", Kind: "hotkey", Recording: true, RecordingStatus: "Press a key", Theme: woxcomponent.Theme{},
+		ID: "hotkey", Kind: "hotkey", Recording: true, RecordingStatus: "Press a key", Theme: woxcomponent.ControlTheme{},
 	}, 400, 40).(woxwidget.Flex)
 	if _, ok := control.Children[1].(woxwidget.Expanded); !ok {
 		t.Fatalf("hotkey recording status slot = %T, want Expanded", control.Children[1])
@@ -431,7 +431,7 @@ func TestFormTableRowMarkdownDescriptionReservesWrappedHeight(t *testing.T) {
 		t.Fatalf("markdown height = %.0f, want more than newline-only height %.0f so the tip cannot overlap the next field", markdownHeight, plainHeight)
 	}
 	row := FormTableRowField(FormTableRowFieldProps{
-		Kind: "textbox", Description: description, DescriptionMarkdown: true, Width: 580, Height: markdownHeight, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.Theme{},
+		Kind: "textbox", Description: description, DescriptionMarkdown: true, Width: 580, Height: markdownHeight, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	help := right.Children[1].(woxwidget.Container)
@@ -448,7 +448,7 @@ func TestFormTableRowEditorUsesFlutterFieldGap(t *testing.T) {
 	editor := FormTableRowEditor(FormTableRowEditorProps{
 		Width: 500, Height: 320, Title: "Add",
 		Rows:          []woxwidget.Widget{woxwidget.Container{Height: 40}, woxwidget.Container{Height: 40}},
-		ContentHeight: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{},
+		ContentHeight: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Flex)
 	body := editor.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	content := body.Content.(woxwidget.Flex)
@@ -466,7 +466,7 @@ func TestFormTableRowFieldRendersInlineValidationError(t *testing.T) {
 	}
 	row := FormTableRowField(FormTableRowFieldProps{
 		ID: "form-table-row-field-0", Kind: "textbox", Label: "Keyword", Description: "Website keyword.", Error: errorMessage,
-		Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.Theme{ErrorText: woxui.Color{R: 255, A: 255}},
+		Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.ControlTheme{Error: woxui.Color{R: 255, A: 255}},
 	}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	if len(right.Children) != 3 {
@@ -501,7 +501,7 @@ func TestFormTableEmptyStateOmitsGridChrome(t *testing.T) {
 		Description: "When one of these apps is active, Wox global hotkeys on this platform will be ignored",
 		Width:       720, InlineTitle: true, AddLabel: "Add",
 		Columns: []FormTableColumn{{Label: "App", Width: 420}},
-		Theme:   woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 150, G: 152, B: 156, A: 255}},
+		Theme:   woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 150, G: 152, B: 156, A: 255}},
 	})
 	children := field.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	if len(children) != 1 {
@@ -514,13 +514,13 @@ func TestFormTableEmptyStateOmitsGridChrome(t *testing.T) {
 		t.Fatal("unused empty lists must not paint a placeholder sentence")
 	}
 	noMatches := formTableEmptyLabel(t, formTableEmptyState(FormTableFieldProps{
-		EmptyLabel: "No matches", Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 150, A: 255}},
+		EmptyLabel: "No matches", Theme: woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 150, A: 255}},
 	}, 240, woxcomponent.SettingsControlHeight))
 	if noMatches.Value != "No matches" {
 		t.Fatalf("search empty copy = %q, want the no-matches sentence", noMatches.Value)
 	}
 	invalid := formTableEmptyLabel(t, formTableEmptyState(FormTableFieldProps{
-		EmptyLabel: "None", Invalid: true, Theme: woxcomponent.Theme{ErrorText: woxui.Color{R: 210, A: 255}},
+		EmptyLabel: "None", Invalid: true, Theme: woxcomponent.ControlTheme{Error: woxui.Color{R: 210, A: 255}},
 	}, 240, woxcomponent.SettingsControlHeight))
 	if invalid.Value != "Invalid table data" || invalid.Color.R != 210 {
 		t.Fatalf("invalid empty copy = %#v, want error text", invalid)
@@ -535,7 +535,7 @@ func TestFormTableRowStatusUsesQuietLabel(t *testing.T) {
 		Status: "Disabled",
 		Cells:  []FormTableCell{{Text: "Clipboard"}, {Text: "capslock+v"}},
 	}
-	cell := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: subtitle}}, row, 0, 0, row.Cells[0], 180, false)
+	cell := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: subtitle}}, row, 0, 0, row.Cells[0], 180, false)
 	content := formTableDataCellContent(t, cell).(woxwidget.Flex)
 	if content.Gap != 6 || len(content.Children) != 2 {
 		t.Fatalf("status cell = gap %v children %d, want a 6px tag beside the name", content.Gap, len(content.Children))
@@ -549,7 +549,7 @@ func TestFormTableRowStatusUsesQuietLabel(t *testing.T) {
 	if tag.Radius != 3 || tag.BorderWidth != 1 || tag.BorderColor != subtitle || label.Value != "Disabled" || label.Style.Size != woxcomponent.CompactTagFontSize {
 		t.Fatalf("status tag = %#v / %#v, want the compact WoxTag beside the name", tag, label)
 	}
-	hotkey := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.Theme{ResultTitle: title}}, row, 0, 1, row.Cells[1], 120, false)
+	hotkey := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.ControlTheme{Text: title}}, row, 0, 1, row.Cells[1], 120, false)
 	hotkeyContent := formTableDataCellContent(t, hotkey)
 	hotkeyText, ok := hotkeyContent.(woxwidget.TextBlock)
 	if !ok {
@@ -602,13 +602,13 @@ func formTableHeaderLabel(props FormTableFieldProps) woxwidget.TextBlock {
 }
 
 func TestFormTableColumnTitleStaysRegular(t *testing.T) {
-	regular := formTableHeaderLabel(FormTableFieldProps{ID: "plugin-commands", Theme: woxcomponent.Theme{}})
+	regular := formTableHeaderLabel(FormTableFieldProps{ID: "plugin-commands", Theme: woxcomponent.ControlTheme{}})
 	if regular.Style.Weight != woxui.FontWeightRegular {
 		t.Fatalf("plugin table column title weight = %v, want regular", regular.Style.Weight)
 	}
 
 	settings := formTableHeaderLabel(FormTableFieldProps{
-		ID: "query-hotkeys", HeaderWeight: woxui.FontWeightSemibold, Theme: woxcomponent.Theme{},
+		ID: "query-hotkeys", HeaderWeight: woxui.FontWeightSemibold, Theme: woxcomponent.ControlTheme{},
 	})
 	if settings.Style.Weight != woxui.FontWeightRegular {
 		t.Fatalf("settings table column title weight = %v, want regular", settings.Style.Weight)
@@ -616,10 +616,10 @@ func TestFormTableColumnTitleStaysRegular(t *testing.T) {
 }
 
 func TestFormTableUsesQuietHorizontalSeparators(t *testing.T) {
-	theme := woxcomponent.Theme{
-		PreviewSplit:   woxui.Color{R: 80, G: 90, B: 100, A: 200},
-		ResultTitle:    woxui.Color{R: 240, G: 240, B: 240, A: 255},
-		ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255},
+	theme := woxcomponent.ControlTheme{
+		Border:        woxui.Color{R: 80, G: 90, B: 100, A: 200},
+		Text:          woxui.Color{R: 240, G: 240, B: 240, A: 255},
+		TextSecondary: woxui.Color{R: 160, G: 160, B: 160, A: 255},
 	}
 	props := FormTableFieldProps{
 		ID: "hotkeys", Width: 400, Height: tableSurfaceHeaderHeight + tableSurfaceRowHeight*2,
@@ -667,7 +667,7 @@ func TestFormTableUsesQuietHorizontalSeparators(t *testing.T) {
 		t.Fatal("empty state must not use table frame chrome")
 	}
 	emptyLabel := formTableEmptyLabel(t, empty)
-	if emptyLabel.Value != "None" || emptyLabel.Color != theme.ResultSubtitle {
+	if emptyLabel.Value != "None" || emptyLabel.Color != theme.TextSecondary {
 		t.Fatalf("empty label = %#v, want secondary text without grid chrome", emptyLabel)
 	}
 }
@@ -681,12 +681,12 @@ func TestFormTableScrollbarUsesValueText(t *testing.T) {
 			{Index: 0, Cells: []FormTableCell{{Text: "one"}, {Text: "ctrl"}}},
 			{Index: 1, Cells: []FormTableCell{{Text: "two"}, {Text: "alt"}}},
 		},
-		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: woxui.Color{R: 255, A: 255}},
 	}
 	body := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState())).Children[1]
 	scroll := body.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	if scroll.ThumbColor != title {
-		t.Fatalf("table scrollbar = %#v, want ResultTitle so ResultSubtitle cannot restyle it", scroll.ThumbColor)
+		t.Fatalf("table scrollbar = %#v, want Text so TextSecondary cannot restyle it", scroll.ThumbColor)
 	}
 }
 
@@ -695,7 +695,7 @@ func TestQueryVariablePickerWrapsLongDescription(t *testing.T) {
 	picker := QueryVariablePicker(QueryVariablePickerProps{
 		Width: 400, Height: 600, Anchor: woxui.Rect{X: 20, Y: 40, Width: 180, Height: 32},
 		Choices: []QueryVariableChoice{{Label: "Input Parameter", Description: description}},
-		Theme:   woxcomponent.Theme{},
+		Theme:   woxcomponent.ControlTheme{},
 	})
 	desc := queryVariablePickerDescription(t, picker)
 	if desc.Value != description || desc.MaxLines < 2 || desc.Width < 200 {

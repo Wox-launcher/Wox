@@ -9,7 +9,7 @@ import (
 
 func TestWoxCheckboxMatchesFlutterGeometryAndSemantics(t *testing.T) {
 	active := woxui.Color{R: 20, G: 40, B: 60, A: 255}
-	checkbox := WoxCheckbox(CheckboxProps{ID: "filter", Label: "Filter", Value: true, OnChange: func(bool) {}, Theme: Theme{ActionSelected: active}}).(woxwidget.Semantics)
+	checkbox := WoxCheckbox(CheckboxProps{ID: "filter", Label: "Filter", Value: true, OnChange: func(bool) {}, Theme: ControlTheme{Accent: active}}).(woxwidget.Semantics)
 	stateful := checkbox.Child.(woxwidget.Focusable).Child
 	gesture := buildHoverable(stateful, false).(woxwidget.Gesture)
 	visual := gesture.Child.(woxwidget.Container)
@@ -27,7 +27,7 @@ func TestWoxCheckboxMatchesFlutterGeometryAndSemantics(t *testing.T) {
 	if hovered.Color == visual.Color {
 		t.Fatal("checked checkbox hover background did not change")
 	}
-	disabled := WoxCheckbox(CheckboxProps{ID: "disabled", Disabled: true, OnChange: func(bool) {}, Theme: Theme{}}).(woxwidget.Semantics)
+	disabled := WoxCheckbox(CheckboxProps{ID: "disabled", Disabled: true, OnChange: func(bool) {}, Theme: ControlTheme{}}).(woxwidget.Semantics)
 	disabledGesture := buildHoverable(disabled.Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture)
 	if disabledGesture.Cursor != woxui.PointerCursorDefault {
 		t.Fatalf("disabled checkbox cursor = %v, want default", disabledGesture.Cursor)
@@ -40,7 +40,7 @@ func TestWoxCheckboxSupportsControlledFocusAndKeyboardCallbacks(t *testing.T) {
 	checkbox := WoxCheckbox(CheckboxProps{
 		ID: "filter", Label: "Filter", Focused: true, OnChange: func(bool) {},
 		OnKey:         func(woxui.KeyEvent) bool { keyHandled = true; return true },
-		OnFocusChange: func(value bool) { focused = value }, Theme: Theme{},
+		OnFocusChange: func(value bool) { focused = value }, Theme: ControlTheme{},
 	}).(woxwidget.Semantics)
 	control := checkbox.Child.(woxwidget.Focusable)
 	if !control.Autofocus || control.OnKey == nil || control.OnFocusChange == nil {

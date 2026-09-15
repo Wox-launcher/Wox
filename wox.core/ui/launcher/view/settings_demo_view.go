@@ -13,7 +13,7 @@ const (
 )
 
 // SettingsDemoOverlay places one reusable animated demo beside its title trigger.
-func SettingsDemoOverlay(props OnboardingProps, step OnboardingStep, anchor woxui.Rect, windowWidth, windowHeight float32, theme woxcomponent.Theme, onHover func(bool)) (woxwidget.Widget, float32, float32) {
+func SettingsDemoOverlay(props OnboardingProps, step OnboardingStep, anchor woxui.Rect, windowWidth, windowHeight float32, theme woxcomponent.ControlTheme, onHover func(bool)) (woxwidget.Widget, float32, float32) {
 	width := min(settingsDemoWidth, max(float32(160), windowWidth-settingsDemoMargin*2))
 	height := min(settingsDemoHeight, max(float32(140), windowHeight-settingsDemoMargin*2))
 	left := min(max(settingsDemoMargin, anchor.X+anchor.Width-width), max(settingsDemoMargin, windowWidth-width-settingsDemoMargin))
@@ -23,7 +23,7 @@ func SettingsDemoOverlay(props OnboardingProps, step OnboardingStep, anchor woxu
 	}
 	preview := woxwidget.Container{
 		Width: width, Height: height, Radius: 8, Color: theme.Background,
-		BorderColor: settingsColorAlpha(theme.ResultTitle, 31), BorderWidth: 1,
+		BorderColor: settingsColorAlpha(theme.Text, 31), BorderWidth: 1,
 		Child: woxwidget.Clip{Width: width, Height: height, Child: DemoPreview(props, step, width, height)},
 	}
 	overlay := woxwidget.Semantics{

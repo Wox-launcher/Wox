@@ -17,7 +17,7 @@ func TestFormAppPickerMatchesFlutterDialogAndDefersCommit(t *testing.T) {
 			{Name: "Finder", Identity: "com.apple.finder", Detail: "/System/Finder.app"},
 			{Name: "Safari", Identity: "com.apple.Safari", Detail: "/Applications/Safari.app"},
 		},
-		Theme: woxcomponent.Theme{}, OnConfirm: func(index int) { confirmed = index },
+		Theme: woxcomponent.ControlTheme{}, OnConfirm: func(index int) { confirmed = index },
 	}
 	for index := 0; index < 10; index++ {
 		props.Candidates = append(props.Candidates, FormAppCandidate{Name: "Utility", Identity: string(rune('a' + index))})

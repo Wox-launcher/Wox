@@ -52,11 +52,11 @@ func MeasureTokenChip(window textFieldMeasurer, label string) float32 {
 }
 
 // PaintTokenChip draws a quiet pill that replaces a backing placeholder in the editor.
-func PaintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, theme Theme) {
+func PaintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, theme ControlTheme) {
 	paintTokenChip(displayList, bounds, label, theme, 0, false)
 }
 
-func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, theme Theme, progress float32, editable bool) {
+func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, theme ControlTheme, progress float32, editable bool) {
 	if displayList == nil || bounds.Width <= 0 || bounds.Height <= 0 {
 		return
 	}
@@ -66,7 +66,7 @@ func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label str
 	if progress > 1 {
 		progress = 1
 	}
-	fill := theme.ResultSubtitle
+	fill := theme.TextSecondary
 	fill.A = uint8(float32(fill.A) * (0.16 + 0.08*progress))
 	height := min(tokenChipHeight, bounds.Height)
 	chip := woxui.Rect{
@@ -81,7 +81,7 @@ func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label str
 	labelWidth := max(float32(0), chip.Width-tokenChipPadX*2-extra*progress)
 	displayList.DrawText(label, woxui.Rect{
 		X: chip.X + tokenChipPadX, Y: chip.Y, Width: labelWidth, Height: chip.Height,
-	}, woxui.TextStyle{Size: tokenChipFontSize}, theme.ResultTitle)
+	}, woxui.TextStyle{Size: tokenChipFontSize}, theme.Text)
 	if progress > 0 {
 		if editable {
 			paintTokenChipEdit(displayList, chip, theme, progress)
@@ -91,22 +91,22 @@ func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label str
 }
 
 // tokenChipCloseColor uses the theme danger color, with the shared window-close red as fallback.
-func tokenChipCloseColor(theme Theme) woxui.Color {
-	if theme.ErrorText.A > 0 {
-		return theme.ErrorText
+func tokenChipCloseColor(theme ControlTheme) woxui.Color {
+	if theme.Error.A > 0 {
+		return theme.Error
 	}
 	return woxui.Color{R: 232, G: 17, B: 35, A: 255}
 }
 
 // paintTokenChipEdit draws the quiet circular edit control to the left of close.
-func paintTokenChipEdit(displayList *woxui.DisplayList, chip woxui.Rect, theme Theme, progress float32) {
-	circle := theme.ResultTitle
-	circle.A = uint8(float32(theme.ResultTitle.A) * 0.16)
-	paintTokenChipAction(displayList, chip, circle, theme.ResultTitle, "control.edit", progress, tokenChipCloseSlot)
+func paintTokenChipEdit(displayList *woxui.DisplayList, chip woxui.Rect, theme ControlTheme, progress float32) {
+	circle := theme.Text
+	circle.A = uint8(float32(theme.Text.A) * 0.16)
+	paintTokenChipAction(displayList, chip, circle, theme.Text, "control.edit", progress, tokenChipCloseSlot)
 }
 
 // paintTokenChipClose draws the red circular close control, fading and scaling with hover progress.
-func paintTokenChipClose(displayList *woxui.DisplayList, chip woxui.Rect, theme Theme, progress float32) {
+func paintTokenChipClose(displayList *woxui.DisplayList, chip woxui.Rect, theme ControlTheme, progress float32) {
 	paintTokenChipAction(displayList, chip, tokenChipCloseColor(theme), woxui.Color{R: 255, G: 255, B: 255, A: 255}, "control.close", progress, 0)
 }
 
@@ -129,7 +129,7 @@ func paintTokenChipAction(displayList *woxui.DisplayList, chip woxui.Rect, circl
 }
 
 // NewTokenChipRun hides placeholder text and paints a compact chip in its place.
-func NewTokenChipRun(start, end int, label string, window textFieldMeasurer, theme Theme) TextFieldRichRun {
+func NewTokenChipRun(start, end int, label string, window textFieldMeasurer, theme ControlTheme) TextFieldRichRun {
 	return TextFieldRichRun{
 		Start: start, End: end, Advance: MeasureTokenChip(window, label), HideText: true, ChipLabel: label,
 		Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
@@ -151,7 +151,7 @@ func (run TextFieldRichRun) WithChipEdit() TextFieldRichRun {
 }
 
 // withDismissibleChipHover widens one chip by progress and paints its hover actions.
-func withDismissibleChipHover(runs []TextFieldRichRun, start int, theme Theme, progress float32) []TextFieldRichRun {
+func withDismissibleChipHover(runs []TextFieldRichRun, start int, theme ControlTheme, progress float32) []TextFieldRichRun {
 	if progress <= 0 {
 		return runs
 	}

@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"strings"
+	woxcomponent "wox/ui/launcher/component"
 
 	emojiplugin "wox/plugin/system/emoji"
 	launcherview "wox/ui/launcher/view"
@@ -633,7 +634,7 @@ func (a *App) rememberFormTableEmoji(emoji string) {
 }
 
 // buildFormTableEmojiPicker maps controller state onto the pure emoji dialog.
-func (a *App) buildFormTableEmojiPicker(snapshot *formTableEmojiPickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildFormTableEmojiPicker(snapshot *formTableEmojiPickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	groups := make([]launcherview.FormTableEmojiGroup, 0, len(formTableEmojiGroups)+1)
 	if len(a.recentFormTableEmojis) > 0 {
 		groups = append(groups, launcherview.FormTableEmojiGroup{
@@ -643,8 +644,8 @@ func (a *App) buildFormTableEmojiPicker(snapshot *formTableEmojiPickerSnapshot, 
 	for _, group := range formTableEmojiGroups {
 		groups = append(groups, launcherview.FormTableEmojiGroup{Label: a.translate("i18n:" + group.LabelKey), Marker: group.Marker, Emojis: append([]string(nil), group.Emojis...)})
 	}
-	theme := palette.componentTheme()
-	iconTint := palette.resultSubtitle
+	theme := palette
+	iconTint := palette.TextSecondary
 	return launcherview.FormTableEmojiPicker(launcherview.FormTableEmojiPickerProps{
 		OverlayWidth: width, OverlayHeight: height, Window: a.formTableNativeWindow(), Theme: theme,
 		Title: a.translate("i18n:ui_select_emoji"), SearchLabel: a.translate("i18n:ui_select_emoji_search"),

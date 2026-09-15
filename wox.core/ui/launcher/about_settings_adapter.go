@@ -21,10 +21,10 @@ func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height, i
 	if snapshot.about.Error != "" {
 		status = snapshot.about.Error
 	}
-	theme := snapshot.palette.componentTheme()
-	iconTint := theme.ResultTitle
+	theme := snapshot.palette
+	iconTint := theme.Text
 	return launcherview.AboutSettingsView(launcherview.AboutSettingsProps{
-		Width: width, Height: height, AppIcon: a.imageFor(appIconImageSource), Version: version,
+		Width: width, Height: height, AppIcon: a.imageForSurface(appIconImageSource, 256, settingsPalette().Background), Version: version,
 		Description: a.translate("i18n:ui_about_description"), Status: status, Theme: theme,
 		Links: []launcherview.AboutLink{
 			{ID: "about-open-onboarding-button", Label: a.translate("i18n:ui_about_onboarding"), Icon: a.imageForTint(settingControlIconSource("onboarding"), &iconTint, physicalImageSize(18, imageScale)), OnTap: a.openAboutOnboarding},

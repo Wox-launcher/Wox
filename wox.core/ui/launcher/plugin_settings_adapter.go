@@ -25,15 +25,15 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, 
 		List:        a.pluginListProps(snapshot, listWidth, innerHeight, imageScale),
 		Detail:      a.pluginDetailProps(snapshot, detailWidth, innerHeight, imageScale),
 		FilterPanel: a.pluginFilterPanelProps(snapshot),
-		Theme:       snapshot.palette.componentTheme(),
+		Theme:       snapshot.palette,
 	})
 }
 
 // pluginListProps resolves localized catalog labels, images, selection, and callbacks.
 func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginListProps {
 	plugins := snapshot.plugins
-	iconTint := snapshot.palette.resultTitle
-	selectedIconTint := snapshot.palette.selectedTitle
+	iconTint := snapshot.palette.Text
+	selectedIconTint := snapshot.palette.SelectionText
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
 	props := launcherview.PluginListProps{
 		Width: width, Height: height,
@@ -49,7 +49,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		RefreshLabel:          a.translate("i18n:ui_refresh"),
 		FilterActive:          plugins.PluginFilters.applied(plugins.PluginsStore),
 		Refreshing:            plugins.PluginsLoading,
-		Theme:                 snapshot.palette.componentTheme(),
+		Theme:                 snapshot.palette,
 		OnClear:               a.clearPluginSearch,
 		OnSearchKey:           a.onPluginSearchKey, OnSearchFocusChange: a.setPluginSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
@@ -88,7 +88,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		}
 		props.Items = append(props.Items, launcherview.PluginListItem{
 			ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge, ShowInstalledIcon: plugins.PluginsStore && plugin.IsInstalled,
-			Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[visibleIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
+			Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[visibleIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
 			Highlighted: snapshot.highlight == "plugin:"+plugin.ID,
 			OnSelect:    func() { a.selectPlugin(index) },
 		})
@@ -115,13 +115,13 @@ func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.
 func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginDetailProps {
 	plugins := snapshot.plugins
-	emptyIconTint := snapshot.palette.resultTitle
+	emptyIconTint := snapshot.palette.Text
 	emptyIconTint.A = 160
 	props := launcherview.PluginDetailProps{
 		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"),
 		EmptyTitle: a.translate("i18n:ui_setting_plugin_empty_data"), EmptyDescription: a.translate("i18n:ui_setting_plugin_empty_subtitle"),
 		EmptyIcon: a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale)), Window: a.settingsNativeWindow(),
-		Theme: snapshot.palette.componentTheme(),
+		Theme: snapshot.palette,
 	}
 	if plugins.PluginSelected < 0 || plugins.PluginSelected >= len(plugins.Plugins) {
 		return props
@@ -181,7 +181,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 				keywordTable.Rows[index].Cells[0].Text = a.translate("i18n:ui_plugin_trigger_keyword_global")
 			}
 		}
-		accent := a.pluginDetailIntroAccent(snapshot.palette.background)
+		accent := snapshot.palette.Info
 		editor.Form = a.pluginDetailIntroFormProps(snapshot, imageScale, a.translate("i18n:ui_plugin_trigger_keywords_tip"), []woxwidget.Widget{
 			woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
 		}, accent)
@@ -209,7 +209,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		formIndex := index + 1
 		field := a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, 0)
 		target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: innerWidth, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
+			Width: innerWidth, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette,
 		})
 		rows = append(rows, woxwidget.Keyed{Key: pluginSettingRowKey(formIndex), Child: target})
 	}
@@ -256,7 +256,7 @@ func pluginSettingKeepVisibleKey(fields formFieldsSnapshot, firstVisible int) wo
 func (a *App) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, imageScale float32) launcherview.PluginHeaderProps {
 	return launcherview.PluginHeaderProps{
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author,
-		Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[snapshot.plugins.PluginSelected%len(resultColors)],
+		Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[snapshot.plugins.PluginSelected%len(resultColors)],
 		MetadataActions: a.pluginMetadataActions(snapshot, plugin, imageScale), Management: a.pluginManagementActions(snapshot, plugin),
 	}
 }
@@ -289,14 +289,6 @@ func (a *App) resolvedPluginTab(id, label string) launcherview.PluginTab {
 		}
 	}
 	return launcherview.PluginTab{ID: id, Label: label, Width: width}
-}
-
-func (a *App) pluginDetailIntroAccent(background woxui.Color) woxui.Color {
-	accent := woxui.Color{R: 33, G: 150, B: 243, A: 255}
-	if themeColorIsDark(background) {
-		accent = woxui.Color{R: 64, G: 196, B: 255, A: 255}
-	}
-	return accent
 }
 
 func (a *App) pluginDetailIntroFormProps(snapshot settingsSnapshot, imageScale float32, intro string, rows []woxwidget.Widget, accent woxui.Color) *launcherview.PluginFormProps {
@@ -345,9 +337,9 @@ func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSe
 		Columns: []launcherview.FormTableColumn{
 			{Label: a.translate("i18n:ui_plugin_trigger_keyword_column"), Tooltip: a.translate("i18n:ui_plugin_trigger_keyword_tooltip")},
 		},
-		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_trigger_keywords"), Theme: snapshot.palette.componentTheme(),
+		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_trigger_keywords"), Theme: snapshot.palette,
 	}
-	accent := a.pluginDetailIntroAccent(snapshot.palette.background)
+	accent := snapshot.palette.Info
 	return a.pluginDetailIntroFormProps(snapshot, imageScale, a.translate("i18n:ui_plugin_trigger_keywords_tip"), []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-keyword-table", Child: launcherview.FormTableField(table)},
 	}, accent)
@@ -369,9 +361,9 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 			{Label: a.translate("i18n:ui_plugin_command_name_column"), Width: 120},
 			{Label: a.translate("i18n:ui_plugin_command_desc_column")},
 		},
-		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), Theme: snapshot.palette.componentTheme(),
+		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), Theme: snapshot.palette,
 	}
-	accent := a.pluginDetailIntroAccent(snapshot.palette.background)
+	accent := snapshot.palette.Info
 	return a.pluginDetailIntroFormProps(snapshot, imageScale, a.translate("i18n:ui_plugin_commands_tip"), []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-command-table", Child: launcherview.FormTableField(table)},
 	}, accent)
@@ -495,7 +487,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		websiteLabel = a.translate("i18n:ui_plugin_website")
 		websiteChipLabel = websiteLabel + " ↗"
 		onWebsite = a.openSelectedPluginWebsite
-		iconTint := snapshot.palette.resultTitle
+		iconTint := snapshot.palette.Text
 		externalIcon = a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale))
 		if strings.Contains(strings.ToLower(plugin.Website), "github.com") {
 			websiteChipLabel = "GitHub ↗"
@@ -505,7 +497,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 	runtimeLabel := pluginRuntimeLabel(plugin.Runtime)
 	var runtimeIcon *woxui.Image
 	if source := pluginMetadataIconSource(strings.ToLower(plugin.Runtime)); source.ImageData != "" {
-		runtimeIcon = a.imageFor(source)
+		runtimeIcon = a.imageForSurface(source, 256, settingsPalette().Background)
 	}
 	var screenshot *woxui.Image
 	screenshotLoading := false
@@ -516,7 +508,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		// the description content width so store padding cannot stretch the aspect ratio.
 		screenshotWidth := max(float32(1), width)
 		requestSize := int(min(float32(2048), max(float32(512), screenshotWidth*2)))
-		screenshot = a.imageForSize(source, requestSize)
+		screenshot = a.imageForSurface(source, requestSize, settingsPalette().Background)
 		screenshotLoading = screenshot == nil
 		onScreenshot = func() { a.openPreviewImageOverlay(source) }
 	}
@@ -533,7 +525,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 	return &launcherview.PluginStoreDetailProps{
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel,
 		WebsiteLabel: websiteLabel, WebsiteChipLabel: websiteChipLabel,
-		Icon: a.imageFor(plugin.Icon), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
+		Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
 		FallbackColor: resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
 		ActiveTab: activeTab, Tabs: a.pluginStoreDetailTabs(), TabForm: tabForm, Metadata: metadata,
 		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot, OnSelectTab: a.selectPluginDetailTab,
@@ -582,7 +574,7 @@ func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.Pl
 	}
 	return &launcherview.PluginFilterPanelProps{
 		Width: 660, LabelWidth: min(labelWidth, float32(180)), RuntimeTitle: a.translate("i18n:ui_runtime_status"),
-		Options: options, Runtimes: runtimes, Theme: snapshot.palette.componentTheme(), OnToggle: a.togglePluginFilter, OnDismiss: a.closePluginFilterPanel,
+		Options: options, Runtimes: runtimes, Theme: snapshot.palette, OnToggle: a.togglePluginFilter, OnDismiss: a.closePluginFilterPanel,
 	}
 }
 
@@ -646,7 +638,7 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 func (a *App) pluginMetadataActions(snapshot settingsSnapshot, plugin pluginSettingsPlugin, imageScale float32) []launcherview.PluginAction {
 	actions := make([]launcherview.PluginAction, 0, 1)
 	if strings.TrimSpace(plugin.Website) != "" {
-		iconTint := snapshot.palette.resultTitle
+		iconTint := snapshot.palette.Text
 		actions = append(actions, launcherview.PluginAction{
 			ID: "plugin-website", Label: a.translate("i18n:ui_plugin_website"), Icon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(14, imageScale)),
 			Width: 88, Enabled: true, OnTap: a.openSelectedPluginWebsite,

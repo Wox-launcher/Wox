@@ -17,7 +17,7 @@ type CheckboxProps struct {
 	OnChange      func(bool)
 	OnKey         func(woxui.KeyEvent) bool
 	OnFocusChange func(bool)
-	Theme         Theme
+	Theme         ControlTheme
 }
 
 // WoxCheckbox builds the Flutter-aligned 18px checkbox interaction.
@@ -27,25 +27,25 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 			props.OnChange(!props.Value)
 		}
 	}
-	border := props.Theme.ResultSubtitle
+	border := props.Theme.TextSecondary
 	background := woxui.Color{}
 	var mark woxwidget.Widget
 	if props.Value {
-		border = props.Theme.ActionSelected
-		background = props.Theme.ActionSelected
-		mark = woxwidget.Align{Width: 18, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: CheckGlyph(12, props.Theme.ActionSelectedText)}
+		border = props.Theme.Accent
+		background = props.Theme.Accent
+		mark = woxwidget.Align{Width: 18, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: CheckGlyph(12, props.Theme.AccentText)}
 	}
 	buildVisual := func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 		visualBackground := background
 		visualBorder := border
 		if hovered {
-			hoverForeground := props.Theme.ActionSelected
+			hoverForeground := props.Theme.Accent
 			if props.Value {
-				hoverForeground = props.Theme.ActionSelectedText
+				hoverForeground = props.Theme.AccentText
 			}
 			visualBackground = controlHoverColor(background, hoverForeground)
 			if !props.Value {
-				visualBorder = props.Theme.ActionSelected
+				visualBorder = props.Theme.Accent
 			}
 		}
 		cursor := woxui.PointerCursorDefault
@@ -74,7 +74,7 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 			toggle()
 			return nil
 		},
-		Child: woxwidget.Focusable{Key: key, Autofocus: props.Focused, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Autofocus: props.Focused, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: 4, OnKey: func(event woxui.KeyEvent) bool {
 			if props.OnKey != nil && props.OnKey(event) {
 				return true
 			}

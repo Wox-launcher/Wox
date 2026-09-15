@@ -33,7 +33,7 @@ type FormTableEmojiPickerProps struct {
 	OverlayWidth       float32
 	OverlayHeight      float32
 	Window             *woxui.Window
-	Theme              woxcomponent.Theme
+	Theme              woxcomponent.ControlTheme
 	Groups             []FormTableEmojiGroup
 	SearchEntries      []emojisearch.Entry
 	InitialEmoji       string
@@ -115,7 +115,7 @@ func (s *formTableEmojiPickerState) buildDialog(context woxwidget.StateContext, 
 
 	searchWidth := min(float32(320), max(float32(180), innerWidth*0.45))
 	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Expanded{Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText}},
+		woxwidget.Expanded{Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}},
 		woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 			ID: "form-table-emoji-search", Label: props.SearchLabel, Width: searchWidth, Value: s.query.Text(), Autofocus: true,
 			Controller: s.query, SearchIcon: props.SearchIcon, Window: props.Window, Theme: props.Theme,
@@ -136,8 +136,8 @@ func (s *formTableEmojiPickerState) buildDialog(context woxwidget.StateContext, 
 			}, OnKey: func(event woxui.KeyEvent) bool { return s.handleKey(context, props, event) },
 		}),
 		woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: "form-table-emoji-close", Label: props.CloseLabel, Icon: woxcomponent.CloseGlyph(16, props.Theme.ResultSubtitle),
-			Width: 32, Height: 32, Radius: 6, HoverBackground: formTableAlpha(props.Theme.ResultSubtitle, 25), FocusRingColor: props.Theme.Cursor, OnTap: props.OnCancel,
+			ID: "form-table-emoji-close", Label: props.CloseLabel, Icon: woxcomponent.CloseGlyph(16, props.Theme.TextSecondary),
+			Width: 32, Height: 32, Radius: 6, HoverBackground: formTableAlpha(props.Theme.TextSecondary, 25), FocusRingColor: props.Theme.Focus, OnTap: props.OnCancel,
 		}),
 	}}
 
@@ -148,11 +148,11 @@ func (s *formTableEmojiPickerState) buildDialog(context woxwidget.StateContext, 
 	}}}
 	body := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 20, Children: []woxwidget.Widget{
 		sidebar,
-		woxwidget.Container{Width: 1, Height: contentHeight, Color: formTableAlpha(props.Theme.PreviewSplit, 150)},
+		woxwidget.Container{Width: 1, Height: contentHeight, Color: formTableAlpha(props.Theme.Border, 150)},
 		main,
 	}}
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: []woxwidget.Widget{header, body}}
-	border := formTableAlpha(props.Theme.ResultSubtitle, 104)
+	border := formTableAlpha(props.Theme.TextSecondary, 104)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-emoji-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.OverlayWidth, OverlayHeight: props.OverlayHeight, BackdropID: "form-table-emoji-backdrop", BackdropAlpha: 210,
@@ -167,12 +167,12 @@ func (s *formTableEmojiPickerState) buildSidebar(context woxwidget.StateContext,
 	for index, group := range props.Groups {
 		selected := !queryActive && s.group == index
 		background := woxui.Color{}
-		foreground := props.Theme.ResultSubtitle
+		foreground := props.Theme.TextSecondary
 		if selected {
-			background = formTableAlpha(props.Theme.ActionSelected, 44)
-			foreground = props.Theme.ActionText
+			background = formTableAlpha(props.Theme.Accent, 44)
+			foreground = props.Theme.Text
 		} else if s.hoveredGroup == index {
-			background = formTableAlpha(props.Theme.ResultSubtitle, 20)
+			background = formTableAlpha(props.Theme.TextSecondary, 20)
 		}
 		groupIndex := index
 		activate := func() {
@@ -214,7 +214,7 @@ func (s *formTableEmojiPickerState) buildSidebar(context woxwidget.StateContext,
 	}
 	return woxwidget.Container{Width: width, Height: height, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "form-table-emoji-groups-scroll", Width: width, Height: height, Controller: s.sidebarScroll,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.Text,
 	})}
 }
 
@@ -222,15 +222,15 @@ func (s *formTableEmojiPickerState) buildEmojiGrid(context woxwidget.StateContex
 	label, emojis := s.visibleEmojis(props)
 	headerHeight := float32(28)
 	gridHeight := max(float32(0), height-headerHeight-8)
-	countColor := formTableAlpha(props.Theme.ResultSubtitle, 170)
+	countColor := formTableAlpha(props.Theme.TextSecondary, 170)
 	header := woxwidget.Container{Width: width, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+		woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 		woxwidget.Text{Value: fmt.Sprintf("%d", len(emojis)), Style: woxui.TextStyle{Size: 11}, Color: countColor},
 	}}}
 	if len(emojis) == 0 {
 		return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
 			header,
-			woxwidget.Align{Width: width, Height: gridHeight, Horizontal: 0.5, Vertical: 0.42, Child: woxwidget.Text{Value: props.NoResultsLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
+			woxwidget.Align{Width: width, Height: gridHeight, Horizontal: 0.5, Vertical: 0.42, Child: woxwidget.Text{Value: props.NoResultsLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}},
 		}}
 	}
 	columns := formTableEmojiColumns(width)
@@ -239,7 +239,7 @@ func (s *formTableEmojiPickerState) buildEmojiGrid(context woxwidget.StateContex
 		cells = append(cells, s.buildEmojiCell(context, props, index, emoji))
 	}
 	grid := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "form-table-emoji-scroll", Width: width, Height: gridHeight, Controller: s.gridScroll, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+		Key: "form-table-emoji-scroll", Width: width, Height: gridHeight, Controller: s.gridScroll, Theme: props.Theme, ThumbColor: props.Theme.Text,
 		Content: woxwidget.Grid{Width: width, Columns: columns, CellWidth: formTableEmojiCellSize, CellHeight: formTableEmojiCellSize,
 			ColumnGap: formTableEmojiCellGap, RowGap: formTableEmojiCellGap, Children: cells},
 	})
@@ -279,11 +279,11 @@ func (s *formTableEmojiPickerState) visibleEmojis(props FormTableEmojiPickerProp
 
 func (s *formTableEmojiPickerState) buildEmojiCell(context woxwidget.StateContext, props FormTableEmojiPickerProps, index int, emoji string) woxwidget.Widget {
 	selected := s.selected == index
-	background := formTableAlpha(props.Theme.ResultSubtitle, 8)
+	background := formTableAlpha(props.Theme.TextSecondary, 8)
 	if selected {
-		background = formTableAlpha(props.Theme.ActionSelected, 36)
+		background = formTableAlpha(props.Theme.Accent, 36)
 	} else if s.hoveredEmoji == index {
-		background = formTableAlpha(props.Theme.ResultSubtitle, 22)
+		background = formTableAlpha(props.Theme.TextSecondary, 22)
 	}
 	activate := func() {
 		if props.OnChoose != nil {
@@ -303,7 +303,7 @@ func (s *formTableEmojiPickerState) buildEmojiCell(context woxwidget.StateContex
 		Width: formTableEmojiCellSize, Height: formTableEmojiCellSize, Radius: 8, Color: background,
 		BorderColor: formTableEmojiCellBorder(props.Theme, selected), BorderWidth: 1, Child: woxwidget.Align{
 			Width: formTableEmojiCellSize - 2, Height: formTableEmojiCellSize - 2, Horizontal: 0.5, Vertical: 0.5,
-			Child: woxwidget.Text{Value: emoji, Style: woxui.TextStyle{Size: 24}, Color: props.Theme.ActionText},
+			Child: woxwidget.Text{Value: emoji, Style: woxui.TextStyle{Size: 24}, Color: props.Theme.Text},
 		},
 	}}
 	return woxwidget.Semantics{
@@ -396,11 +396,11 @@ func formTableEmojiInitialSelection(groups []FormTableEmojiGroup, initialEmoji s
 	return 0, 0
 }
 
-func formTableEmojiCellBorder(theme woxcomponent.Theme, selected bool) woxui.Color {
+func formTableEmojiCellBorder(theme woxcomponent.ControlTheme, selected bool) woxui.Color {
 	if selected {
-		return theme.Cursor
+		return theme.Focus
 	}
-	return formTableAlpha(theme.ResultSubtitle, 44)
+	return formTableAlpha(theme.TextSecondary, 44)
 }
 
 func boolWeight(enabled bool) woxui.FontWeight {

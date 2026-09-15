@@ -23,7 +23,7 @@ type NoteEditorProps struct {
 	LineHeight           float32
 	Zoom                 float32
 	TextColor            woxui.Color
-	Theme                Theme
+	Theme                ControlTheme
 	Window               *woxui.Window
 	ReadOnly             bool
 	Autofocus            bool
@@ -192,7 +192,7 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 	return WoxScrollView(ScrollViewProps{
 		Key: "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: props.Label,
 		Width: props.Width, Height: props.Height, Content: content, KeepVisible: caretVisible,
-		Theme: props.Theme, ThumbColor: props.Theme.ResultSubtitle,
+		Theme: props.Theme, ThumbColor: props.Theme.TextSecondary,
 	})
 }
 
@@ -475,14 +475,14 @@ func noteEditorImagePicture(props NoteEditorProps, block common.NoteBlock, width
 	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom)
 	var child woxwidget.Widget
 	if image == nil || image.Width <= 0 || image.Height <= 0 {
-		child = woxwidget.Container{Width: drawWidth, Height: drawHeight, Color: withAlpha(props.Theme.PreviewText, 10)}
+		child = woxwidget.Container{Width: drawWidth, Height: drawHeight, Color: withAlpha(props.Theme.BodyText, 10)}
 		if block.Image == nil || block.Image.Width <= 0 || block.Image.Height <= 0 {
 			child = woxwidget.Container{
 				Width: drawWidth, Height: drawHeight, Padding: woxwidget.UniformInsets(10),
-				Color: withAlpha(props.Theme.PreviewText, 10),
+				Color: withAlpha(props.Theme.BodyText, 10),
 				Child: woxwidget.TextBlock{
 					Value: noteEditorImageMissingLabel(props), Width: max(float32(0), drawWidth-20), Height: 32, MaxLines: 2,
-					Style: woxui.TextStyle{Size: 12}, Color: props.Theme.PreviewText,
+					Style: woxui.TextStyle{Size: 12}, Color: props.Theme.BodyText,
 				},
 			}
 		}
@@ -492,9 +492,9 @@ func noteEditorImagePicture(props NoteEditorProps, block common.NoteBlock, width
 	border := woxui.Color{}
 	borderWidth := float32(0)
 	if focused {
-		border = props.Theme.Cursor
+		border = props.Theme.Focus
 		if border.A == 0 {
-			border = props.Theme.PreviewText
+			border = props.Theme.BodyText
 		}
 		borderWidth = 2
 	}
@@ -535,16 +535,16 @@ func noteEditorImageToolbar(props NoteEditorProps, block int, width float32, foc
 	if !focused {
 		return woxwidget.Container{Width: width, Height: noteEditorImageToolbarHeight}
 	}
-	color := props.Theme.ResultSubtitle
+	color := props.Theme.TextSecondary
 	if color.A == 0 {
-		color = props.Theme.PreviewText
+		color = props.Theme.BodyText
 	}
 	id := fmt.Sprintf("%s.image.%s", props.ID, props.Document.Blocks[block].ID)
 	button := func(kind, label string, action func()) woxwidget.Widget {
 		return WoxIconButton(IconButtonProps{
 			ID: id + "." + kind, Label: label, Icon: FormatGlyph(kind, 16, color),
 			Width: noteEditorImageToolbarHeight, Height: noteEditorImageToolbarHeight, Radius: 6,
-			HoverBackground: TitleBarAlpha(color, 20), FocusRingColor: props.Theme.Cursor, OnTap: action,
+			HoverBackground: TitleBarAlpha(color, 20), FocusRingColor: props.Theme.Focus, OnTap: action,
 			OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				if props.OnImageActionHover != nil {
 					props.OnImageActionHover(inside, label, bounds)

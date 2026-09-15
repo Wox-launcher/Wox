@@ -472,7 +472,7 @@ func (c *notesWindowController) projectActiveText() (string, []woxcomponent.Note
 		c.document.Blocks = append(c.document.Blocks, common.NoteBlock{ID: newID(), Type: common.NoteBlockParagraph})
 	}
 	c.activeTextSegment = c.resolveActiveTextSegment()
-	return woxcomponent.ProjectNoteSegment(c.document, c.activeTextSegment, c.editorStyle(), c.app.palette.componentTheme())
+	return woxcomponent.ProjectNoteSegment(c.document, c.activeTextSegment, c.editorStyle(), c.app.palette.componentTheme().Controls)
 }
 
 // resolveActiveTextSegment keeps the caret in the text run the user last entered.
@@ -622,11 +622,11 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 			Style: style, LineHeight: lineHeight,
 			TextAlignmentY: 0.5, TextColor: theme.PreviewText, Value: c.editor.Text(), Controller: c.editor,
 			FocusNode: c.editorFocus, Focused: c.editorFocus.HasFocus(), Autofocus: true,
-			ReadOnly: c.record.DeletedAt > 0, MaxLines: 10000, Window: c.managed.Window(), Theme: theme,
+			ReadOnly: c.record.DeletedAt > 0, MaxLines: 10000, Window: c.managed.Window(), Theme: theme.Controls,
 			OnChanged: c.onMarkdownChanged, OnKey: c.onKey, OnUndo: c.undoDocument, OnRedo: c.redoDocument,
 			OnPaste: c.pasteFromClipboard,
 		}),
-		Theme: theme, ThumbColor: theme.ResultSubtitle,
+		Theme: theme.Controls, ThumbColor: theme.ResultSubtitle,
 	})
 }
 
@@ -694,7 +694,7 @@ func (c *notesWindowController) bindActiveText(segmentStart int, caretAtEnd bool
 	if c.activeTextSegment.Structural() {
 		c.activeTextSegment = c.preferredTextSegment()
 	}
-	value, runs, ranges := woxcomponent.ProjectNoteSegment(c.document, c.activeTextSegment, c.editorStyle(), c.app.palette.componentTheme())
+	value, runs, ranges := woxcomponent.ProjectNoteSegment(c.document, c.activeTextSegment, c.editorStyle(), c.app.palette.componentTheme().Controls)
 	c.richRuns, c.blockRanges = runs, ranges
 	c.editor.SetText(value, false)
 	if caretAtEnd {
@@ -1070,7 +1070,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 		editor = woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 			ID: "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
 			Width: frame.Size.Width, Height: editorHeight, Padding: notesEditorPadding(),
-			Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme,
+			Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
 			FocusNode: c.editorFocus, Focused: (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
 			RevealCaret:        c.consumeEditorCaretReveal(),
@@ -1191,7 +1191,7 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: launcherview.NotesToolbarHeight, Vertical: .5, Child: woxwidget.Image{Source: notesTitleBarIcon, Width: 20, Height: 20}}})
 	}
 	children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
-		ID: "notes.toolbar.close", Width: width, Platform: runtime.GOOS, Theme: theme, Active: active, Maximized: c.windowMaximized,
+		ID: "notes.toolbar.close", Width: width, Platform: runtime.GOOS, Theme: theme.Controls, Active: active, Maximized: c.windowMaximized,
 		OnMinimize: c.minimizeWindow, OnMaximize: c.toggleMaximize, OnClose: c.requestClose,
 	})})
 	content := woxwidget.Stack{Width: width, Height: launcherview.NotesToolbarHeight, Children: children}
@@ -1237,7 +1237,7 @@ func (c *notesWindowController) composeLinuxInlineTooltip(size woxui.Size, theme
 		return overlay
 	}
 	tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
-		Width: size.Width, Height: size.Height, Anchor: c.inlineTooltip.Anchor, Message: c.inlineTooltip.Text, Side: c.inlineTooltip.Side, Theme: theme,
+		Width: size.Width, Height: size.Height, Anchor: c.inlineTooltip.Anchor, Message: c.inlineTooltip.Text, Side: c.inlineTooltip.Side, Theme: theme.Controls,
 	})
 	if tooltip == nil {
 		return overlay
@@ -1355,7 +1355,7 @@ func (c *notesWindowController) buildStatus(width float32, theme woxcomponent.Th
 	}
 	children := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Text{Value: text, Style: woxui.TextStyle{Size: 11}, Color: color}}}
 	if c.errorText != "" && c.dirty {
-		children = append(children, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.retry", Label: c.app.translate("i18n:notes_retry"), Width: 52, FontSize: 11, Theme: theme, OnTap: func() { c.runAction(c.flush) }}))
+		children = append(children, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.retry", Label: c.app.translate("i18n:notes_retry"), Width: 52, FontSize: 11, Theme: theme.Controls, OnTap: func() { c.runAction(c.flush) }}))
 	}
 	return woxwidget.Container{Width: width, Height: launcherview.NotesStatusHeight, Padding: woxwidget.Insets{Left: 12, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}}
 }
@@ -1407,14 +1407,14 @@ func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcom
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "notes.search", Label: c.app.translate("i18n:notes_search"), Hint: c.app.translate("i18n:notes_search_placeholder"),
 		Width: innerWidth, Height: notesSearchFieldHeight, Style: woxui.TextStyle{Size: 13}, Value: c.searchEditor.Text(), Controller: c.searchEditor,
-		FocusNode: c.searchFocus, Focused: true, Autofocus: true, MaxLines: 1, Window: window, Theme: theme,
+		FocusNode: c.searchFocus, Focused: true, Autofocus: true, MaxLines: 1, Window: window, Theme: theme.Controls,
 		OnChanged: func(string) { _ = c.reloadSummaries(); c.searchIndex = 0; c.invalidate() }, OnKey: c.onSearchKey,
 	})
 	results := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "notes.search.results", AutomationID: "notes.search.results", Label: c.app.translate("i18n:notes_search"),
 		Width: innerWidth, Height: scrollHeight, ContentHeight: contentHeight, KeepVisible: keepVisible,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchListGap, Children: rows},
-		Theme:   theme, ThumbColor: theme.ResultSubtitle,
+		Theme:   theme.Controls, ThumbColor: theme.ResultSubtitle,
 	})
 	panel := woxwidget.Container{Width: width, Height: height, Radius: 10, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(notesSearchOverlayPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: notesSearchOverlayGap, Children: []woxwidget.Widget{
 		search, results,
@@ -1440,7 +1440,7 @@ func (c *notesWindowController) notesListRow(summary common.NoteSummary, width f
 	return woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 		ID: "notes.search." + summary.ID, Label: label, Width: width, Height: notesSearchRowHeight, Radius: &radius,
 		Background: &background, HoverBackground: &hoverBackground, Selected: selected, SkipFocus: true,
-		Padding: woxwidget.Insets{Left: 8, Right: 8}, Theme: theme,
+		Padding: woxwidget.Insets{Left: 8, Right: 8}, Theme: theme.Controls,
 		OnTap: func() { c.openSearchItem(summary) },
 		Child: notesSearchRowChild(label, util.FormatTimestamp(summary.UpdatedAt), titleColor, metaColor),
 	})
@@ -1647,7 +1647,7 @@ func (c *notesWindowController) menuRow(id, label string, width float32, theme w
 	return woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 		ID: "notes.menu." + id, Label: label, Width: width - 12, Height: 32, Radius: &radius,
 		Background: &background, HoverBackground: &hoverBackground, SkipFocus: true,
-		OnTap: func() { c.moreOpen = false; action(); c.invalidate() }, Theme: theme,
+		OnTap: func() { c.moreOpen = false; action(); c.invalidate() }, Theme: theme.Controls,
 		Padding: woxwidget.Insets{Left: 9},
 		Child:   woxwidget.Align{Height: 32, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText}},
 	})
@@ -1655,10 +1655,10 @@ func (c *notesWindowController) menuRow(id, label string, width float32, theme w
 
 func (c *notesWindowController) buildLinkOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
 	width := min(float32(340), size.Width-32)
-	field := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{ID: "notes.link", Label: c.app.translate("i18n:notes_link"), Hint: "https://", Width: width - 20, Height: 36, Style: woxui.TextStyle{Size: 13}, Value: c.linkEditor.Text(), Controller: c.linkEditor, FocusNode: c.linkFocus, Focused: true, Autofocus: true, Window: c.managed.Window(), Theme: theme, OnKey: c.onLinkKey})
+	field := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{ID: "notes.link", Label: c.app.translate("i18n:notes_link"), Hint: "https://", Width: width - 20, Height: 36, Style: woxui.TextStyle{Size: 13}, Value: c.linkEditor.Text(), Controller: c.linkEditor, FocusNode: c.linkFocus, Focused: true, Autofocus: true, Window: c.managed.Window(), Theme: theme.Controls, OnKey: c.onLinkKey})
 	buttons := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, MainAxisAlignment: woxwidget.MainAxisEnd, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.link.cancel", Label: c.app.translate("i18n:cancel"), Width: 70, Theme: theme, OnTap: func() { c.linkOpen = false; c.invalidate() }}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.link.apply", Label: c.app.translate("i18n:notes_apply"), Width: 70, Theme: theme, Variant: woxcomponent.ButtonPrimary, OnTap: c.applyLink}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.link.cancel", Label: c.app.translate("i18n:cancel"), Width: 70, Theme: theme.Controls, OnTap: func() { c.linkOpen = false; c.invalidate() }}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "notes.link.apply", Label: c.app.translate("i18n:notes_apply"), Width: 70, Theme: theme.Controls, Variant: woxcomponent.ButtonPrimary, OnTap: c.applyLink}),
 	}}
 	panel := woxwidget.Container{Width: width, Height: 100, Radius: 10, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(10), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{field, buttons}}}
 	return c.overlayScrim(size, panel, (size.Width-width)/2, 52, func() { c.linkOpen = false; c.invalidate() })

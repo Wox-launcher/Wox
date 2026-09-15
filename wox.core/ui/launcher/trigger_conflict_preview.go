@@ -61,7 +61,7 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setText: a.setTriggerConflictText, onKey: a.onTriggerConflictPreviewKey}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
-		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("trigger-conflict", index), Child: a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, 0)})
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("trigger-conflict", index), Child: a.buildFormField(state.formFieldsSnapshot, callbacks, palette.componentTheme().Controls, index, definition, width-36, 0)})
 	}
 	dirty := false
 	for key, value := range state.values {

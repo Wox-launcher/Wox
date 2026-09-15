@@ -21,7 +21,7 @@ func TestCloudAccountPlanTooltipForwardsHover(t *testing.T) {
 			gotInside = inside
 			gotBounds = bounds
 		},
-	}, 830, 162, woxcomponent.Theme{}).(woxwidget.Container)
+	}, 830, 162, woxcomponent.ControlTheme{}).(woxwidget.Container)
 
 	column := card.Child.(woxwidget.Flex)
 	planRow := column.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -41,7 +41,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	const labelWidth = float32(520)
 	const gap = float32(32)
 
-	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{}}, width, 162, woxcomponent.Theme{}).(woxwidget.Container)
+	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{}}, width, 162, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	accountColumn := accountCard.Child.(woxwidget.Flex)
 	billingRow := accountColumn.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
 	supportValue := billingRow.Children[1].(woxwidget.Align)
@@ -56,7 +56,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 		t.Fatalf("support button width = %v, want content-sized", supportButton.Width)
 	}
 
-	buttonTheme := woxcomponent.Theme{ActionSelected: woxui.Color{R: 1, A: 255}, ResultSubtitle: woxui.Color{R: 2, A: 255}}
+	buttonTheme := woxcomponent.ControlTheme{Accent: woxui.Color{R: 1, A: 255}, TextSecondary: woxui.Color{R: 2, A: 255}}
 	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, buttonTheme).(woxwidget.Container)
 	syncRow := syncCard.Child.(woxwidget.Flex)
 	syncValue := syncRow.Children[1].(woxwidget.Align)
@@ -87,7 +87,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 }
 
 func TestCloudSettingsActionsUseSharedButtonHeight(t *testing.T) {
-	theme := woxcomponent.Theme{}
+	theme := woxcomponent.ControlTheme{}
 	buttonHeight := func(widget woxwidget.Widget) float32 {
 		return focusedControlGesture(widget).Child.(woxwidget.Container).Height
 	}
@@ -130,7 +130,7 @@ func TestCloudRefreshButtonWidthIncludesLeadingIcon(t *testing.T) {
 }
 
 func TestCloudActionMenuUsesPaddedContentSize(t *testing.T) {
-	menu := cloudActionMenu(CloudActionMenuProps{Items: []CloudActionMenuItemProps{{ID: "account", Label: "Account", OnTap: func() {}}, {ID: "logout", Label: "Log out", OnTap: func() {}}}}, 200, woxcomponent.Theme{}).(woxwidget.Container)
+	menu := cloudActionMenu(CloudActionMenuProps{Items: []CloudActionMenuItemProps{{ID: "account", Label: "Account", OnTap: func() {}}, {ID: "logout", Label: "Log out", OnTap: func() {}}}}, 200, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	builder := menu.Child.(woxwidget.LayoutBuilder)
 	scroll := builder.Build(woxui.Size{Width: 188, Height: 80}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rowWidget := scroll.Content.(woxwidget.Flex).Children[0]
@@ -145,7 +145,7 @@ func TestCloudActionMenuUsesPaddedContentSize(t *testing.T) {
 }
 
 func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
-	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}}
+	theme := woxcomponent.ControlTheme{TextSecondary: woxui.Color{A: 255}}
 	action := cloudValueAction("cloud-account-action", "account@example.com", 260, func() {}, theme).(woxwidget.Align)
 	if action.Horizontal != 1 || action.Vertical != 0.5 {
 		t.Fatalf("account action alignment = (%v, %v), want (1, 0.5)", action.Horizontal, action.Vertical)
@@ -165,7 +165,7 @@ func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
 }
 
 func TestCloudPlanHeaderOmitsRecommendedBadge(t *testing.T) {
-	header := cloudPlanHeader(CloudIntroProps{FreeLabel: "Free", ProLabel: "Pro"}, 560, false, woxcomponent.Theme{}).(woxwidget.Container)
+	header := cloudPlanHeader(CloudIntroProps{FreeLabel: "Free", ProLabel: "Pro"}, 560, false, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	columns := header.Child.(woxwidget.Flex).Children
 	if len(columns) != 3 {
 		t.Fatalf("plan header columns = %d, want spacer plus Free and Pro labels", len(columns))
@@ -186,7 +186,7 @@ func TestCloudPlanTooltipOverlayOccupiesOnlyItsVisiblePanel(t *testing.T) {
 		woxui.Rect{X: 308, Y: 192, Width: 14, Height: 14},
 		1152,
 		768,
-		woxcomponent.Theme{},
+		woxcomponent.ControlTheme{},
 	)
 	tooltip := overlay.(woxwidget.Semantics)
 	panel := tooltip.Child.(woxwidget.Container)
@@ -214,7 +214,7 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	selectedIcon := &woxui.Image{}
 	dialog := CloudPluginExclusionDialog(CloudPluginExclusionDialogProps{
 		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: CloudPluginExclusionDialogHeight, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A",
-		SelectedIcon: selectedIcon, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{}, OnCancel: func() {}, OnSave: func() {},
+		SelectedIcon: selectedIcon, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{}, OnCancel: func() {}, OnSave: func() {},
 	}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
 	if props.Width != 648 || props.Height != CloudPluginExclusionDialogHeight || props.Radius != 20 {
@@ -250,7 +250,7 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	empty := cloudPluginExclusionsCard(CloudPluginExclusionsProps{
 		SectionLabel: "Plugin Sync Exclusions", Tips: "Plugins added to this table will not sync their data or settings.",
 		AddLabel: "Add", ColumnLabel: "Plugin",
-	}, 700, FormTableFieldHeight(true, "Plugins added to this table will not sync their data or settings.", 0, 260), woxcomponent.Theme{})
+	}, 700, FormTableFieldHeight(true, "Plugins added to this table will not sync their data or settings.", 0, 260), woxcomponent.ControlTheme{})
 	emptyChildren := empty.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	if len(emptyChildren) != 1 {
 		t.Fatalf("empty exclusions children = %d, want only the header", len(emptyChildren))
@@ -259,7 +259,7 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	rowIcon := &woxui.Image{}
 	card := cloudPluginExclusionsCard(CloudPluginExclusionsProps{
 		SectionLabel: "Exclusions", ColumnLabel: "Plugin", Tips: "Tips", Items: []CloudPluginExclusionProps{{Name: "Plugin A", Icon: rowIcon}},
-	}, 700, 140, woxcomponent.Theme{}).(woxwidget.Container)
+	}, 700, 140, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	cardFlex := card.Child.(woxwidget.Flex)
 	grid := cardFlex.Children[1].(woxwidget.Stateful).Widget.(formTableGridProps)
 	if grid.field.Rows[0].Cells[0].Icon != rowIcon || grid.field.Rows[0].Cells[0].IconSize != 18 {
@@ -268,7 +268,7 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 
 	choiceDialog := CloudPluginExclusionDialog(CloudPluginExclusionDialogProps{
 		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: CloudPluginExclusionDialogHeight, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A", ChoiceOpen: true,
-		Choices: []SettingsChoice{{Value: "plugin-a", Label: "Plugin A"}}, Theme: woxcomponent.Theme{}, OnCancel: func() {}, OnSave: func() {},
+		Choices: []SettingsChoice{{Value: "plugin-a", Label: "Plugin A"}}, Theme: woxcomponent.ControlTheme{}, OnCancel: func() {}, OnSave: func() {},
 	}).(woxwidget.Stack)
 	if len(choiceDialog.Children) != 2 {
 		t.Fatalf("choice dialog layers = %d, want dialog and anchored choice menu", len(choiceDialog.Children))

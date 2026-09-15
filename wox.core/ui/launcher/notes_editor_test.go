@@ -16,7 +16,7 @@ func TestNotesEditorRoundTripAndMarkdownRules(t *testing.T) {
 		{ID: "title", Type: common.NoteBlockHeading1, Text: "Roadmap", Spans: []common.NoteSpan{{Start: 0, End: 7, Bold: true}}},
 		{ID: "task", Type: common.NoteBlockTask, Text: "Ship it"},
 	}}
-	value, runs, _ := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{QueryBackground: woxui.Color{A: 20}})
+	value, runs, _ := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{InputBackground: woxui.Color{A: 20}})
 	if value != "Roadmap\n☐ Ship it" || len(runs) == 0 {
 		t.Fatalf("unexpected projection: %q %#v", value, runs)
 	}
@@ -32,7 +32,7 @@ func TestNotesEditorRoundTripAndMarkdownRules(t *testing.T) {
 func TestNotesDividerProjectsAsHorizontalRule(t *testing.T) {
 	dividerColor := woxui.Color{R: 80, G: 90, B: 100, A: 255}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "divider", Type: common.NoteBlockDivider}}}
-	value, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{PreviewSplit: dividerColor})
+	value, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{Border: dividerColor})
 	if value != "────────" || len(runs) != 1 || !runs[0].HorizontalRule || runs[0].Color != dividerColor {
 		t.Fatalf("divider projection = %q %#v, want one semantic horizontal rule", value, runs)
 	}
@@ -46,7 +46,7 @@ func TestToggleNoteInlineAcrossBlocks(t *testing.T) {
 		{ID: "a", Type: common.NoteBlockParagraph, Text: "one"},
 		{ID: "b", Type: common.NoteBlockParagraph, Text: "two"},
 	}}
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	document = toggleNoteInline(document, ranges, woxui.TextSelection{Anchor: 1, Focus: 6}, "italic", "")
 	if len(document.Blocks[0].Spans) != 1 || len(document.Blocks[1].Spans) != 1 || !document.Blocks[0].Spans[0].Italic || !document.Blocks[1].Spans[0].Italic {
 		t.Fatalf("cross-block selection was not formatted: %#v", document.Blocks)
@@ -66,7 +66,7 @@ func TestDocumentFromEditorConvertsFencedCodePaste(t *testing.T) {
 func TestContinueNoteBlockCreatesTheNextMarker(t *testing.T) {
 	for _, blockType := range []common.NoteBlockType{common.NoteBlockBullet, common.NoteBlockOrdered, common.NoteBlockTask, common.NoteBlockQuote} {
 		document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "item", Type: blockType, Text: "first"}}}
-		_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+		_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 		if blockType == common.NoteBlockQuote && (len(runs) == 0 || !runs[0].LeadingBar || runs[0].Color != woxcomponent.DocumentListMarkerColor || runs[0].End != ranges[0].TextEnd) {
 			t.Fatalf("quote did not project a continuous #1379D2 leading bar: %#v", runs)
 		}
@@ -81,7 +81,7 @@ func TestContinueNoteBlockCreatesTheNextMarker(t *testing.T) {
 func TestCheckedTaskUsesMutedTextAndClickablePrefix(t *testing.T) {
 	muted := woxui.Color{R: 120, G: 120, B: 120, A: 255}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "task", Type: common.NoteBlockTask, Text: "done", Checked: true}}}
-	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{ResultSubtitle: muted, Cursor: woxui.Color{R: 40, G: 130, B: 230, A: 255}})
+	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{TextSecondary: muted, Focus: woxui.Color{R: 40, G: 130, B: 230, A: 255}})
 	if len(runs) != 2 || !runs[0].Checkbox || !runs[0].Checked || runs[0].Color != woxcomponent.DocumentListMarkerColor || runs[1].Color != muted || !runs[1].Strike {
 		t.Fatalf("checked task = %#v, want marker %#v and muted strikethrough %#v", runs, woxcomponent.DocumentListMarkerColor, muted)
 	}
@@ -98,7 +98,7 @@ func TestNotesActiveFormatsFollowCaretAndSelection(t *testing.T) {
 		{ID: "p", Type: common.NoteBlockParagraph, Text: "plain underlined", Spans: []common.NoteSpan{{Start: 6, End: 16, Underline: true}}},
 		{ID: "h", Type: common.NoteBlockHeading1, Text: "title"},
 	}}
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	if formats := noteActiveFormats(document, ranges, woxui.TextSelection{Anchor: ranges[0].TextStart + 8, Focus: ranges[0].TextStart + 8}); !formats["underline"] || formats["bold"] || formats["block"] {
 		t.Fatalf("caret in underline = %#v", formats)
 	}
@@ -119,7 +119,7 @@ func TestNotesActiveFormatsInTableIgnoreOutsideBullet(t *testing.T) {
 		{ID: "t", Type: common.NoteBlockTable, Table: &table},
 		{ID: "b", Type: common.NoteBlockBullet, Text: "example"},
 	}}
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	if formats := noteActiveFormats(document, ranges, woxui.TextSelection{Anchor: ranges[0].TextStart + 1, Focus: ranges[0].TextStart + 1}); !formats["bullet"] {
 		t.Fatalf("caret in the following bullet = %#v", formats)
 	}
@@ -134,7 +134,7 @@ func TestNotesLinkLooksClickableAndOpensFromText(t *testing.T) {
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 		{ID: "task", Type: common.NoteBlockTask, Text: "sadf more", Spans: []common.NoteSpan{{Start: 0, End: 4, Link: "https://wox.one"}}},
 	}}
-	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{Cursor: linkColor})
+	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{Focus: linkColor})
 	found := false
 	for _, run := range runs {
 		if run.Start == ranges[0].TextStart && run.End == ranges[0].TextStart+4 && run.Underline && run.Color == linkColor {
@@ -179,7 +179,7 @@ func TestNotesListMarkersUseFixedAccent(t *testing.T) {
 		{ID: "ordered", Type: common.NoteBlockOrdered, Text: "two"},
 		{ID: "task", Type: common.NoteBlockTask, Text: "three"},
 	}}
-	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{Cursor: woxui.Color{R: 250, G: 250, B: 250, A: 255}})
+	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{Focus: woxui.Color{R: 250, G: 250, B: 250, A: 255}})
 	want := []struct {
 		start    int
 		checkbox bool
@@ -245,7 +245,7 @@ func TestRemoveEmptyNoteSegmentClosesTheGapBetweenTables(t *testing.T) {
 
 func TestInsertNoteTableAddsEditableGrid(t *testing.T) {
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}}}
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	updated, index := woxcomponent.InsertNoteTable(document, ranges, woxui.TextSelection{})
 	if index != 0 || updated.Blocks[0].Type != common.NoteBlockTable || updated.Blocks[0].Table == nil || len(updated.Blocks[0].Table.Rows) != 2 {
 		t.Fatalf("insert table = %#v", updated.Blocks)
@@ -276,13 +276,13 @@ func TestNotesListIndentSupportsThreeLevels(t *testing.T) {
 		{ID: "child", Type: common.NoteBlockTask, Text: "child", Indent: 1},
 		{ID: "grandchild", Type: common.NoteBlockTask, Text: "grandchild", Indent: 1},
 	}}
-	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	selection := woxui.TextSelection{Anchor: ranges[2].TextEnd, Focus: ranges[2].TextEnd}
 	indented, block, changed, handled := adjustNoteListIndent(document, ranges, selection, 1)
 	if !handled || !changed || block != 2 || indented.Blocks[2].Indent != 2 {
 		t.Fatalf("third-level indent = %#v, block %d, changed %t, handled %t", indented.Blocks, block, changed, handled)
 	}
-	value, runs, indentedRanges := projectNoteDocument(indented, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	value, runs, indentedRanges := projectNoteDocument(indented, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	thirdCheckbox := false
 	for _, run := range runs {
 		thirdCheckbox = thirdCheckbox || run.Checkbox && run.Start == indentedRanges[2].Marker
@@ -299,7 +299,7 @@ func TestNotesListIndentSupportsThreeLevels(t *testing.T) {
 func TestDocumentFromEditorKeepsLinkWhenEditingInsideLabel(t *testing.T) {
 	const markdown = "一转眼13年过去了，在这些年里，Wox经历过[两届主要维护者](https://github.com/Wox-launcher/Wox/graphs/contributors?all=1)。我从2013-2015，并在2015年因为开始转向使用Mac，将Wox从[我名下](https://github.com/qianlifeng/winalfred)转到github的组织(wox-launcher), 并交由社区维护。然后第二届主要维护者 [bao-qian](https://github.com/bao-qian) 继续接棒维护Wox。\n在这13年里，Wox有过辉煌"
 	document := notesplugin.ParseMarkdown(markdown)
-	projected, _, _ := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.Theme{})
+	projected, _, _ := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	edited := strings.Replace(projected, "两届主要维护者", "两轮主要维护者", 1)
 	parsed := documentFromEditor(edited, document)
 	block := parsed.Blocks[0]

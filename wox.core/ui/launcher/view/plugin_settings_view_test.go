@@ -12,9 +12,9 @@ import (
 func TestPluginSettingsPageUsesFlutterPaneSpacing(t *testing.T) {
 	page := PluginSettingsPage(PluginSettingsPageProps{
 		Width: 1000, Height: 700,
-		List:   PluginListProps{Width: 260, Height: 660, Theme: woxcomponent.Theme{}},
-		Detail: PluginDetailProps{Width: 659, Height: 660, Theme: woxcomponent.Theme{}},
-		Theme:  woxcomponent.Theme{},
+		List:   PluginListProps{Width: 260, Height: 660, Theme: woxcomponent.ControlTheme{}},
+		Detail: PluginDetailProps{Width: 659, Height: 660, Theme: woxcomponent.ControlTheme{}},
+		Theme:  woxcomponent.ControlTheme{},
 	})
 
 	container, ok := page.(woxwidget.Container)
@@ -42,10 +42,10 @@ func TestPluginSettingsPageUsesFlutterPaneSpacing(t *testing.T) {
 func TestPluginSettingsFilterPanelAlignsWithFilterButton(t *testing.T) {
 	page := PluginSettingsPage(PluginSettingsPageProps{
 		Width: 1000, Height: 700,
-		List:        PluginListProps{Width: 250, Height: 660, Theme: woxcomponent.Theme{}},
-		Detail:      PluginDetailProps{Width: 689, Height: 660, Theme: woxcomponent.Theme{}},
-		FilterPanel: &PluginFilterPanelProps{Width: 360, Theme: woxcomponent.Theme{}},
-		Theme:       woxcomponent.Theme{},
+		List:        PluginListProps{Width: 250, Height: 660, Theme: woxcomponent.ControlTheme{}},
+		Detail:      PluginDetailProps{Width: 689, Height: 660, Theme: woxcomponent.ControlTheme{}},
+		FilterPanel: &PluginFilterPanelProps{Width: 360, Theme: woxcomponent.ControlTheme{}},
+		Theme:       woxcomponent.ControlTheme{},
 	}).(woxwidget.Stack)
 
 	positioned := page.Children[2]
@@ -57,10 +57,10 @@ func TestPluginSettingsFilterPanelAlignsWithFilterButton(t *testing.T) {
 func TestPluginSettingsFilterPanelUsesAvailableFlutterWidth(t *testing.T) {
 	page := PluginSettingsPage(PluginSettingsPageProps{
 		Width: 600, Height: 700,
-		List:        PluginListProps{Width: 250, Height: 660, Theme: woxcomponent.Theme{}},
-		Detail:      PluginDetailProps{Width: 289, Height: 660, Theme: woxcomponent.Theme{}},
-		FilterPanel: &PluginFilterPanelProps{Width: 660, Theme: woxcomponent.Theme{}},
-		Theme:       woxcomponent.Theme{},
+		List:        PluginListProps{Width: 250, Height: 660, Theme: woxcomponent.ControlTheme{}},
+		Detail:      PluginDetailProps{Width: 289, Height: 660, Theme: woxcomponent.ControlTheme{}},
+		FilterPanel: &PluginFilterPanelProps{Width: 660, Theme: woxcomponent.ControlTheme{}},
+		Theme:       woxcomponent.ControlTheme{},
 	}).(woxwidget.Stack)
 
 	positioned := page.Children[2]
@@ -71,7 +71,7 @@ func TestPluginSettingsFilterPanelUsesAvailableFlutterWidth(t *testing.T) {
 }
 
 func TestPluginTabsProvideHoverFeedback(t *testing.T) {
-	theme := woxcomponent.Theme{Cursor: woxui.Color{R: 80, G: 90, B: 100, A: 255}, ResultTitle: woxui.Color{A: 255}}
+	theme := woxcomponent.ControlTheme{Focus: woxui.Color{R: 80, G: 90, B: 100, A: 255}, Text: woxui.Color{A: 255}}
 	tabs := PluginTabs(PluginTabsProps{
 		Width: 240, Height: 44, Active: "description", Theme: theme,
 		Tabs: []PluginTab{{ID: "description", Label: "Description", Width: 120}, {ID: "commands", Label: "Commands", Width: 96}},
@@ -82,7 +82,7 @@ func TestPluginTabsProvideHoverFeedback(t *testing.T) {
 	gesture := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
 	state.hovered = true
 	hovered := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
-	wantHover := theme.Cursor
+	wantHover := theme.Focus
 	wantHover.A /= 2
 
 	if gesture.ID != "plugin-detail-tab-commands" || gesture.OnTap == nil || gesture.OnHoverAt == nil {
@@ -97,7 +97,7 @@ func TestPluginTabsProvideHoverFeedback(t *testing.T) {
 
 func TestPluginTabsUseRegularLabelWeight(t *testing.T) {
 	tabs := PluginTabs(PluginTabsProps{
-		Width: 240, Height: 44, Active: "settings", Theme: woxcomponent.Theme{},
+		Width: 240, Height: 44, Active: "settings", Theme: woxcomponent.ControlTheme{},
 		Tabs: []PluginTab{{ID: "settings", Label: "Settings", Width: 120}, {ID: "commands", Label: "Commands", Width: 96}},
 	}).(woxwidget.Container)
 	row := tabs.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
@@ -146,12 +146,12 @@ func TestPluginFilterPanelMatchesFlutterLayout(t *testing.T) {
 			{ID: "third-party", Label: "Third party"},
 		},
 		Runtimes: []PluginFilterOption{{ID: "nodejs", Label: "Node.js"}, {ID: "python", Label: "Python"}},
-		Theme:    woxcomponent.Theme{ActionBackground: woxui.Color{R: 10, G: 20, B: 30, A: 120}, PreviewSplit: woxui.Color{R: 90, G: 90, B: 90, A: 255}},
+		Theme:    woxcomponent.ControlTheme{Surface: woxui.Color{R: 10, G: 20, B: 30, A: 120}, Border: woxui.Color{R: 90, G: 90, B: 90, A: 255}},
 		OnToggle: func(string) {},
 	}).(woxwidget.FocusScope).Child.(woxwidget.Container)
 
 	if !panel.Floating || panel.Color != (woxui.Color{R: 10, G: 20, B: 30, A: 120}) || panel.BorderWidth != 1 || panel.Height != 154 {
-		t.Fatalf("filter panel surface = floating %v color %#v border %v height %v, want a floating ActionBackground surface with a hairline at 154px", panel.Floating, panel.Color, panel.BorderWidth, panel.Height)
+		t.Fatalf("filter panel surface = floating %v color %#v border %v height %v, want a floating Surface surface with a hairline at 154px", panel.Floating, panel.Color, panel.BorderWidth, panel.Height)
 	}
 	rows := panel.Child.(woxwidget.Flex)
 	if len(rows.Children) != 5 || rows.Gap != 10 {
@@ -171,17 +171,17 @@ func TestPluginListSearchUsesValueText(t *testing.T) {
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660, Placeholder: "Search 67 plugins",
-		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: woxui.Color{R: 255, A: 255}},
 	})
 	search := list.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	wantBorder := title
 	wantBorder.A = 170
 	if search.BorderColor != wantBorder {
-		t.Fatalf("plugin search border = %#v, want ResultTitle %#v", search.BorderColor, wantBorder)
+		t.Fatalf("plugin search border = %#v, want Text %#v", search.BorderColor, wantBorder)
 	}
 	input := search.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
-	if input.Theme.ResultSubtitle != title {
-		t.Fatalf("plugin search hint token = %#v, want ResultTitle so ResultSubtitle cannot restyle it", input.Theme.ResultSubtitle)
+	if input.Theme.TextSecondary != title {
+		t.Fatalf("plugin search hint token = %#v, want Text so TextSecondary cannot restyle it", input.Theme.TextSecondary)
 	}
 }
 
@@ -195,7 +195,7 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 			{ID: "clipboard", Name: "Clipboard", Status: "1.0.0", Badge: "System", Selected: true},
 			{ID: "shell", Name: "Shell", Status: "1.0.0", Badge: "System"},
 		},
-		Theme: woxcomponent.Theme{ActionSelectedText: activeColor, ResultSubtitle: inactiveColor, ResultTitle: title},
+		Theme: woxcomponent.ControlTheme{SelectionText: activeColor, AccentText: woxui.Color{A: 255}, TextSecondary: inactiveColor, Text: title},
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -229,12 +229,15 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 		t.Fatalf("badge border width = %v, want 1", badge.BorderWidth)
 	}
 	label := badge.Child.(woxwidget.Text)
+	if label.Color != activeColor || badge.BorderColor != activeColor {
+		t.Fatal("selected badge must use SelectionText for its label and border")
+	}
 	if label.Style.Size != 11 {
 		t.Fatalf("badge font size = %v, want 11", label.Style.Size)
 	}
 	inactiveBadge := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Container)
 	if inactiveBadge.BorderColor != title || inactiveBadge.Child.(woxwidget.Text).Color != title {
-		t.Fatalf("unselected System badge = border %#v text %#v, want ResultTitle", inactiveBadge.BorderColor, inactiveBadge.Child.(woxwidget.Text).Color)
+		t.Fatalf("unselected System badge = border %#v text %#v, want Text", inactiveBadge.BorderColor, inactiveBadge.Child.(woxwidget.Text).Color)
 	}
 }
 
@@ -247,7 +250,7 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 			{ID: "awake", Name: "Awake", ShowInstalledIcon: true, Selected: true},
 			{ID: "arc", Name: "Arc", ShowInstalledIcon: true},
 		},
-		Theme: woxcomponent.Theme{},
+		Theme: woxcomponent.ControlTheme{},
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -268,7 +271,7 @@ func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660,
 		Items: []PluginListItem{{ID: "clipboard", Name: "Clipboard", Selected: true, Highlighted: true}},
-		Theme: woxcomponent.Theme{SelectedBackground: selected},
+		Theme: woxcomponent.ControlTheme{SelectionBackground: selected},
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -287,7 +290,7 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	for index := range items {
 		items[index] = PluginListItem{ID: fmt.Sprint(index), Name: fmt.Sprint(index)}
 	}
-	list := PluginList(PluginListProps{Width: 260, Height: 300, Items: items, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}}})
+	list := PluginList(PluginListProps{Width: 260, Height: 300, Items: items, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}})
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	scrollbar := column.Children[1].(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
@@ -300,7 +303,7 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 func TestPluginDetailHeaderAlignsTitleWithIcon(t *testing.T) {
 	header := pluginDetailHeader(PluginHeaderProps{
 		Name: "Wox Query History", Version: "1.0.0", Author: "Wox Launcher",
-	}, 600, 114, woxcomponent.Theme{}).(woxwidget.Container)
+	}, 600, 114, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	row := identity.Child.(woxwidget.Flex)
 	if identity.Height != 40 || row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
@@ -319,7 +322,7 @@ func TestPluginDetailHeaderAlignsTitleWithIcon(t *testing.T) {
 }
 
 func TestPluginManagementButtonsUseIntrinsicWidth(t *testing.T) {
-	actions := pluginOutlineActions([]PluginAction{{ID: "plugin-uninstall", Label: "Uninstall", Width: 124, Enabled: true}}, woxcomponent.Theme{})
+	actions := pluginOutlineActions([]PluginAction{{ID: "plugin-uninstall", Label: "Uninstall", Width: 124, Enabled: true}}, woxcomponent.ControlTheme{})
 	button := focusedControlGesture(actions.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 
 	if button.Width != 0 {
@@ -328,7 +331,7 @@ func TestPluginManagementButtonsUseIntrinsicWidth(t *testing.T) {
 }
 
 func TestPluginStoreChipCentersContent(t *testing.T) {
-	chip := pluginStoreChip("v0.2.3", nil, nil, woxcomponent.Theme{}).(woxwidget.Gesture).Child.(woxwidget.Container)
+	chip := pluginStoreChip("v0.2.3", nil, nil, woxcomponent.ControlTheme{}).(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := chip.Child.(woxwidget.Align)
 
 	if content.Horizontal != 0.5 || content.Vertical != 0.5 {
@@ -339,7 +342,7 @@ func TestPluginStoreChipCentersContent(t *testing.T) {
 func TestPluginStoreWebsiteUsesSharedButtonHover(t *testing.T) {
 	store := pluginStoreDetail(PluginStoreDetailProps{
 		WebsiteLabel: "Website", ExternalIcon: &woxui.Image{}, OnWebsite: func() {},
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 	header := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	websiteRow := header.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	website := websiteRow.Children[1].(woxwidget.Align)
@@ -354,7 +357,7 @@ func TestPluginStoreDetailTabsMatchInstalledEditorMetrics(t *testing.T) {
 	tabs := []PluginTab{{ID: "description", Label: "Description", Width: 96}, {ID: "keywords", Label: "Keywords", Width: 88}}
 	store := pluginStoreDetail(PluginStoreDetailProps{
 		Name: "Shell", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "description", Tabs: tabs,
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 
 	container := store.(woxwidget.Container)
 	if container.Padding.Left != 16 || container.Padding.Right != 16 {
@@ -365,7 +368,7 @@ func TestPluginStoreDetailTabsMatchInstalledEditorMetrics(t *testing.T) {
 	editor := pluginEditor(PluginEditorProps{
 		ActiveTab: "settings",
 		Tabs:      []PluginTab{{ID: "settings", Label: "Settings", Width: 80}, {ID: "keywords", Label: "Keywords", Width: 88}},
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 	editorTabs := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
 
 	if storeTabs.Height != editorTabs.Height || storeTabs.Width != editorTabs.Width {
@@ -382,7 +385,7 @@ func TestPluginStoreKeywordsUseSharedFormTabBody(t *testing.T) {
 		ID: "plugin-keywords", Width: 720, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
 		Columns: []FormTableColumn{{Label: "Keyword", Tooltip: "The keyword that triggers this plugin."}},
 		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "awake"}}}},
-		Theme:   woxcomponent.Theme{},
+		Theme:   woxcomponent.ControlTheme{},
 	})
 	store := pluginStoreDetail(PluginStoreDetailProps{
 		Name: "Awake", Version: "0.0.4", Author: "qianlifeng", Runtime: "NodeJS", ActiveTab: "keywords",
@@ -392,7 +395,7 @@ func TestPluginStoreKeywordsUseSharedFormTabBody(t *testing.T) {
 			Rows:        []woxwidget.Widget{table},
 			IntroAccent: accent,
 		},
-	}, 800, 600, woxcomponent.Theme{Background: woxui.Color{R: 30, G: 30, B: 30, A: 255}})
+	}, 800, 600, woxcomponent.ControlTheme{Background: woxui.Color{R: 30, G: 30, B: 30, A: 255}})
 
 	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
 	rows := body.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
@@ -412,13 +415,13 @@ func TestPluginStoreCommandsUseSharedFormTabBody(t *testing.T) {
 		ID: "plugin-commands", Width: 720, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
 		Columns: []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Description"}},
 		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "fix"}, {Text: "Fix selection"}}}},
-		Theme:   woxcomponent.Theme{},
+		Theme:   woxcomponent.ControlTheme{},
 	})
 	store := pluginStoreDetail(PluginStoreDetailProps{
 		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "commands",
 		Tabs:    []PluginTab{{ID: "commands", Label: "Commands", Width: 96}},
 		TabForm: &PluginFormProps{Intro: "Commands are subcommands after the trigger keyword.", Rows: []woxwidget.Widget{table}},
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 
 	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
 	if got := body.ID; got != "plugin-detail-commands" {
@@ -436,7 +439,7 @@ func TestPluginStorePrivacyUsesSharedMetadataTabBody(t *testing.T) {
 	store := pluginStoreDetail(PluginStoreDetailProps{
 		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "privacy",
 		Tabs: []PluginTab{{ID: "privacy", Label: "Privacy", Width: 80}}, Metadata: &metadata,
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 
 	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
 	if body.Padding.Top != 18 {
@@ -448,7 +451,7 @@ func TestPluginDetailEmptyStateUsesCenteredTitleAndSubtitle(t *testing.T) {
 	body := pluginMetadataTab(PluginMetadataProps{
 		EmptyTitle:       "This plugin requires no data access",
 		EmptyDescription: "This plugin does not request sensitive data such as the active window, browser URL, or AI model access.",
-	}, 600, 400, "plugin-detail-privacy", woxcomponent.Theme{}).(woxwidget.Align)
+	}, 600, 400, "plugin-detail-privacy", woxcomponent.ControlTheme{}).(woxwidget.Align)
 
 	content := body.Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	title := content.Children[0].(woxwidget.Align).Child.(woxwidget.Text)
@@ -466,7 +469,7 @@ func TestPluginStoreCommandsEmptyStateUsesCenteredCopy(t *testing.T) {
 			EmptyTitle:       "This plugin has no command",
 			EmptyDescription: "This plugin does not provide subcommands after its trigger keyword. Use the trigger keyword directly.",
 		},
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 
 	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align)
 	title := body.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Text)
@@ -482,7 +485,7 @@ func TestPluginEditorAutoSavingFormHasNoFooter(t *testing.T) {
 		Form: &PluginFormProps{
 			Rows: []woxwidget.Widget{woxwidget.Container{Width: 400, Height: 40}},
 		},
-	}, 600, 500, woxcomponent.Theme{})
+	}, 600, 500, woxcomponent.ControlTheme{})
 
 	children := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	if len(children) != 3 {
@@ -503,7 +506,7 @@ func TestPluginEditorIntroUsesFlutterHintBoxStyle(t *testing.T) {
 	icon := &woxui.Image{}
 	editor := pluginEditor(PluginEditorProps{
 		Form: &PluginFormProps{Intro: "Trigger keyword help", IntroIcon: icon, IntroAccent: accent, Rows: []woxwidget.Widget{woxwidget.Container{Height: 40}}},
-	}, 600, 500, woxcomponent.Theme{Background: woxui.Color{R: 250, G: 250, B: 250, A: 255}})
+	}, 600, 500, woxcomponent.ControlTheme{Background: woxui.Color{R: 250, G: 250, B: 250, A: 255}})
 
 	scroll := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
 	rows := scroll.Child.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -526,7 +529,7 @@ func TestPluginEditorDescriptionUsesSharedDetailView(t *testing.T) {
 		DescriptionDetail: &PluginStoreDetailProps{
 			Name: "Shell", Description: "Run shell commands", Author: "Wox Launcher", Version: "1.0.0", Runtime: "Go", WebsiteChipLabel: "Website ↗",
 		},
-	}, 800, 600, woxcomponent.Theme{})
+	}, 800, 600, woxcomponent.ControlTheme{})
 
 	body := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
 	if body.Padding.Left != 0 || body.Padding.Right != 0 {
@@ -548,7 +551,7 @@ func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
 	row := pluginMetadataRow(PluginMetadataItem{
 		Title:       "Active window process ID",
 		Description: "For example, when browsing a webpage this plugin reads the active window process ID.",
-	}, 600, woxcomponent.Theme{}).(woxwidget.Container)
+	}, 600, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	descriptionSlot := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[1].(woxwidget.Container)
 	descriptionAlign := descriptionSlot.Child.(woxwidget.Align)
 	description := descriptionAlign.Child.(woxwidget.TextBlock)
@@ -564,7 +567,7 @@ func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
 func TestFormTableInlineTitleMatchesFormLabelWeight(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "roots", Title: "Search Roots", Width: 720, Height: 220, InlineTitle: true,
-		AddLabel: "Add", Theme: woxcomponent.Theme{ActionText: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
+		AddLabel: "Add", Theme: woxcomponent.ControlTheme{Text: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
 	})
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
 	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
@@ -576,7 +579,7 @@ func TestFormTableInlineTitleMatchesFormLabelWeight(t *testing.T) {
 func TestFormTableInlineTitleUsesHeaderWeight(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "query-hotkeys", Title: "Query Hotkeys", Width: 720, Height: 220, InlineTitle: true,
-		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
 	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
@@ -588,7 +591,7 @@ func TestFormTableInlineTitleUsesHeaderWeight(t *testing.T) {
 func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "commands", Title: "Commands", Width: 720, Height: 220, InlineTitle: true,
-		SecondaryLabel: "From Templates", AddLabel: "Add", Theme: woxcomponent.Theme{},
+		SecondaryLabel: "From Templates", AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 
 	container := field.(woxwidget.Container)
@@ -609,7 +612,7 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "query-hotkeys", Title: "Query Hotkeys", Width: 720, Height: 220, InlineTitle: true,
-		AddLabel: "Add", Theme: woxcomponent.Theme{},
+		AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 
 	// Expanded on the title consumes the leftover width, so a content-sized action
@@ -631,7 +634,7 @@ func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
 func TestFormTableInlineHeaderKeepsActionsNearTableWhenDescriptionIsPresent(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "tray-queries", Title: "Tray Queries", Description: "Open a configured query from the tray.",
-		Width: 720, Height: 220, InlineTitle: true, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		Width: 720, Height: 220, InlineTitle: true, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
@@ -655,7 +658,7 @@ func TestReadonlyInlineTableOmitsEmptyHeader(t *testing.T) {
 		ID: "plugin-commands", Width: 720, InlineTitle: true, ReadOnly: true,
 		Columns: []FormTableColumn{{Label: "Name"}, {Label: "Description"}},
 		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "fix"}, {Text: "Fix selection"}}}},
-		Theme:   woxcomponent.Theme{},
+		Theme:   woxcomponent.ControlTheme{},
 	}).(woxwidget.Container)
 
 	children := field.Child.(woxwidget.Flex).Children
@@ -673,7 +676,7 @@ func TestFormTableInlineHeaderForwardsDemoHover(t *testing.T) {
 	var gotBounds woxui.Rect
 	field := FormTableField(FormTableFieldProps{
 		ID: "query-hotkeys", Title: "Query Hotkeys", Width: 720, Height: 220, InlineTitle: true,
-		DemoKind: "query-hotkeys", DemoIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		DemoKind: "query-hotkeys", DemoIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 		OnDemoHover: func(kind string, inside bool, bounds woxui.Rect) {
 			gotKind = kind
 			gotInside = inside
@@ -697,7 +700,7 @@ func TestFormTableInlineHeaderForwardsDemoHover(t *testing.T) {
 func TestFormTableMixedLayoutUsesMeasuredLabelWidth(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "commands", Title: "Commands", Width: 720, Height: 220, LabelWidth: 84,
-		AddLabel: "Add", Theme: woxcomponent.Theme{},
+		AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 
 	container := field.(woxwidget.Container)
@@ -723,7 +726,7 @@ func TestFormTableMixedLayoutUsesMeasuredLabelWidth(t *testing.T) {
 func TestFormTableMixedLayoutPlacesDescriptionBelowTable(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "commands", Title: "Commands", Description: "Configure custom commands.",
-		Width: 720, Height: 272, LabelWidth: 84, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		Width: 720, Height: 272, LabelWidth: 84, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -775,7 +778,7 @@ func TestFormTableColumnWidthsMatchFlutterAndDoNotScale(t *testing.T) {
 
 func TestFormTablePinsOperationColumnBesideScrollableContent(t *testing.T) {
 	props := FormTableFieldProps{
-		ID: "commands", Width: 626, Height: 118, OperationLabel: "Operation", Theme: woxcomponent.Theme{},
+		ID: "commands", Width: 626, Height: 118, OperationLabel: "Operation", Theme: woxcomponent.ControlTheme{},
 		Columns: []FormTableColumn{
 			{Label: "Alias", Width: 100},
 			{Label: "Command", Tooltip: "Command help"},
@@ -804,7 +807,7 @@ func TestFormTablePinsOperationColumnBesideScrollableContent(t *testing.T) {
 
 func TestFormTableExpandsLastColumnBeforePinnedOperation(t *testing.T) {
 	props := FormTableFieldProps{
-		ID: "ignored-apps", Width: 626, Height: 118, OperationLabel: "Operation", Theme: woxcomponent.Theme{},
+		ID: "ignored-apps", Width: 626, Height: 118, OperationLabel: "Operation", Theme: woxcomponent.ControlTheme{},
 		Columns: []FormTableColumn{{Label: "Application", Tooltip: "Application help"}},
 		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "Notes"}}}},
 	}
@@ -830,7 +833,7 @@ func TestFormTableBodyScrollsAllRowsBeforeOuterPage(t *testing.T) {
 	}
 	props := FormTableFieldProps{
 		ID: "commands", Width: 626, Height: tableSurfaceHeaderHeight + tableSurfaceRowHeight*3,
-		Columns: []FormTableColumn{{Label: "Name", Width: 180}}, Rows: rows, Theme: woxcomponent.Theme{},
+		Columns: []FormTableColumn{{Label: "Name", Width: 180}}, Rows: rows, Theme: woxcomponent.ControlTheme{},
 	}
 
 	grid := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()))
@@ -850,7 +853,7 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 	icon := &woxui.Image{}
 	props := FormTableFieldProps{
 		ID: "ai-skills", HideEditAction: true, HideCloneAction: true,
-		DeleteLabel: "Delete", DeleteIcon: icon, Theme: woxcomponent.Theme{},
+		DeleteLabel: "Delete", DeleteIcon: icon, Theme: woxcomponent.ControlTheme{},
 	}
 	row := FormTableRow{
 		Index: 4, ReadOnly: true,
@@ -875,14 +878,14 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 }
 
 func TestFormTableDataCellDoesNotOpenEditor(t *testing.T) {
-	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Text: "value"}, 120)
+	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.ControlTheme{}}, FormTableCell{Text: "value"}, 120)
 	if _, interactive := cell.(woxwidget.Gesture); interactive {
 		t.Fatal("plain table cells must not open the row editor")
 	}
 }
 
 func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
-	props := FormTableFieldProps{ID: "commands", EmptyLabel: "No rows", Theme: woxcomponent.Theme{}}
+	props := FormTableFieldProps{ID: "commands", EmptyLabel: "No rows", Theme: woxcomponent.ControlTheme{}}
 	headerCell := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container)
 	headerAlign := headerCell.Child.(woxwidget.Align)
 	header := headerAlign.Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
@@ -904,7 +907,7 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 	icon := &woxui.Image{}
 	props := FormTableFieldProps{
 		ID: "commands", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
-		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}, ErrorText: woxui.Color{R: 210, A: 255}},
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}, Error: woxui.Color{R: 210, A: 255}},
 	}
 	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130, false).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
@@ -924,7 +927,7 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 
 func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 	dialog := FormTableDeleteDialog(FormTableDeleteDialogProps{
-		Width: 912, Height: 768, Message: "Are you sure?", CancelLabel: "Cancel", DeleteLabel: "Delete", Theme: woxcomponent.Theme{},
+		Width: 912, Height: 768, Message: "Are you sure?", CancelLabel: "Cancel", DeleteLabel: "Delete", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Stateful)
 	state := dialog.CreateState()
 	state.InitState(woxwidget.StateContext{}, dialog.Widget)
@@ -956,7 +959,7 @@ func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 
 func TestPluginStoreScreenshotPreservesAspectRatioFromContentWidth(t *testing.T) {
 	screenshot := &woxui.Image{Width: 1600, Height: 900}
-	widget := pluginStoreScreenshot(PluginStoreDetailProps{Screenshot: screenshot}, 580, woxcomponent.Theme{})
+	widget := pluginStoreScreenshot(PluginStoreDetailProps{Screenshot: screenshot}, 580, woxcomponent.ControlTheme{})
 	frame := widget.(woxwidget.Gesture).Child.(woxwidget.Container)
 	image := frame.Child.(woxwidget.Image)
 	wantHeight := float32(580) * 900 / 1600
@@ -970,7 +973,7 @@ func TestPluginStoreScreenshotPreservesAspectRatioFromContentWidth(t *testing.T)
 }
 
 func TestPluginStoreScreenshotShowsLoadingIndicatorBeforeImageArrives(t *testing.T) {
-	widget := pluginStoreScreenshot(PluginStoreDetailProps{ScreenshotLoading: true}, 580, woxcomponent.Theme{Cursor: woxui.Color{R: 1, G: 2, B: 3, A: 255}})
+	widget := pluginStoreScreenshot(PluginStoreDetailProps{ScreenshotLoading: true}, 580, woxcomponent.ControlTheme{Focus: woxui.Color{R: 1, G: 2, B: 3, A: 255}})
 	loading := widget.(woxwidget.Align)
 	if loading.Width != 580 || loading.Height != 48 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
 		t.Fatalf("screenshot loading align = %#v, want a compact centered placeholder", loading)
@@ -985,7 +988,7 @@ func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testin
 	body := pluginStoreDescription(PluginStoreDetailProps{
 		Name: "Strava", Description: "Workouts", Author: "Wox-launcher", Version: "0.0.1", Runtime: "Python",
 		ScreenshotLoading: true,
-	}, 580, 400, woxcomponent.Theme{Cursor: woxui.Color{A: 255}}).(woxwidget.Container)
+	}, 580, 400, woxcomponent.ControlTheme{Focus: woxui.Color{A: 255}}).(woxwidget.Container)
 
 	scroll := body.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 580, Height: 400})
 	var children []woxwidget.Widget

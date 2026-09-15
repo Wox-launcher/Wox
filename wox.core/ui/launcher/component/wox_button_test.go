@@ -9,7 +9,7 @@ import (
 
 func TestWoxButtonCentersContentInsideSymmetricPadding(t *testing.T) {
 	focusColor := woxui.Color{R: 10, G: 20, B: 30, A: 255}
-	button := WoxButton(ButtonProps{ID: "test-button", Label: "Disable", Width: 96, Theme: Theme{Cursor: focusColor}})
+	button := WoxButton(ButtonProps{ID: "test-button", Label: "Disable", Width: 96, Theme: ControlTheme{Focus: focusColor}})
 	semantics := button.(woxwidget.Semantics)
 	focusable := semantics.Child.(woxwidget.Focusable)
 	if focusable.FocusRingColor != focusColor || focusable.FocusRingRadius != 4 {
@@ -102,22 +102,22 @@ func TestWoxButtonOutlineFollowsValueText(t *testing.T) {
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	button := WoxButton(ButtonProps{
 		ID: "add", Label: "Add", Variant: ButtonOutline,
-		Theme: Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Theme: ControlTheme{Text: title, TextSecondary: woxui.Color{R: 255, A: 255}},
 	})
 	container := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
 	label := container.Child.(woxwidget.TextBlock)
 	if label.Color != title {
-		t.Fatalf("outline button label = %#v, want ResultTitle", label.Color)
+		t.Fatalf("outline button label = %#v, want Text", label.Color)
 	}
 	if container.BorderColor != title {
-		t.Fatalf("outline button border = %#v, want the same ResultTitle as the label", container.BorderColor)
+		t.Fatalf("outline button border = %#v, want the same Text as the label", container.BorderColor)
 	}
 }
 
 func TestWoxButtonUsesVariantAwareHoverOverlay(t *testing.T) {
 	base := woxui.Color{R: 20, G: 40, B: 60, A: 255}
 	foreground := woxui.Color{R: 220, G: 230, B: 240, A: 255}
-	button := WoxButton(ButtonProps{ID: "save", Label: "Save", Variant: ButtonPrimary, OnTap: func() {}, Theme: Theme{ActionSelected: base, ActionSelectedText: foreground}}).(woxwidget.Semantics)
+	button := WoxButton(ButtonProps{ID: "save", Label: "Save", Variant: ButtonPrimary, OnTap: func() {}, Theme: ControlTheme{Accent: base, AccentText: foreground}}).(woxwidget.Semantics)
 	stateful := button.Child.(woxwidget.Focusable).Child
 	normal := buildHoverable(stateful, false).(woxwidget.Gesture)
 	hovered := buildHoverable(stateful, true).(woxwidget.Gesture)

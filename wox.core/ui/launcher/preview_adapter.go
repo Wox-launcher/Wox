@@ -197,7 +197,7 @@ func (a *App) markdownPropsWithDocument(id string, document woxcomponent.Markdow
 		return woxImage{}, false
 	}
 	return woxcomponent.MarkdownProps{
-		ID: id, Document: document, Width: width, Theme: palette.componentTheme(), Window: a.window,
+		ID: id, Document: document, Width: width, Theme: palette.componentTheme().Controls, Window: a.window,
 		ResolveImage: func(source string) (*woxui.Image, string) {
 			imageSource, ok := resolveSource(source)
 			if !ok {

@@ -19,7 +19,7 @@ type FormPanelProps struct {
 	KeepVisibleKey woxwidget.Key
 	CancelLabel    string
 	SaveLabel      string
-	Theme          woxcomponent.Theme
+	Theme          woxcomponent.ControlTheme
 	OnCancel       func()
 	OnSave         func()
 }
@@ -42,7 +42,7 @@ func FormPanel(props FormPanelProps) woxwidget.Widget {
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-save", Label: props.SaveLabel, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
 	}}}
 	return woxwidget.Container{
-		Width: props.Width, Radius: 12, Floating: true, Color: props.Theme.ActionBackground, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
+		Width: props.Width, Radius: 12, Floating: true, Color: props.Theme.Surface, BorderColor: props.Theme.Border, BorderWidth: 1,
 		Padding: padding,
 		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{body, buttons}},
 	}
@@ -54,7 +54,7 @@ type FormStaticFieldProps struct {
 	Height float32
 	Value  string
 	Kind   string
-	Theme  woxcomponent.Theme
+	Theme  woxcomponent.ControlTheme
 }
 
 const (
@@ -79,7 +79,7 @@ type FormStatsFieldProps struct {
 	Height float32
 	Title  string
 	Rows   []FormStatsRow
-	Theme  woxcomponent.Theme
+	Theme  woxcomponent.ControlTheme
 }
 
 // FormStatsField builds a full-width read-only summary card for plugin settings.
@@ -94,18 +94,18 @@ func FormStatsField(props FormStatsFieldProps) woxwidget.Widget {
 			Child: woxwidget.Flex{
 				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter,
 				Children: []woxwidget.Widget{
-					woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.ResultSubtitle},
+					woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.TextSecondary},
 					woxwidget.Expanded{Child: woxwidget.Painter{}},
-					woxwidget.Text{Value: row.Value, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.ResultTitle},
+					woxwidget.Text{Value: row.Value, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.Text},
 				},
 			},
 		})
 	}
 	card := woxwidget.Container{
-		Width: innerWidth, Radius: formStatsCardRadius, Color: props.Theme.QueryBackground,
-		BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(formStatsCardPadding),
+		Width: innerWidth, Radius: formStatsCardRadius, Color: props.Theme.InputBackground,
+		BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(formStatsCardPadding),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formStatsTitleGap, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+			woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formStatsRowGap, Children: rows},
 		}},
 	}
@@ -142,19 +142,19 @@ type FormServiceFieldProps struct {
 	Detail      string
 	Error       string
 	Actions     []FormServiceAction
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 	OnOpenLink  func(string)
 }
 
 // FormServiceField builds the same label/control/help layout used by switch rows.
 func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 	row := []woxwidget.Widget{
-		woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+		woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 	}
 	if tag := formServiceVersionLabel(props.Detail); tag != "" {
-		row = append(row, woxcomponent.WoxTag(tag, props.Theme.ResultSubtitle))
+		row = append(row, woxcomponent.WoxTag(tag, props.Theme.TextSecondary))
 	} else if detail := strings.TrimSpace(props.Detail); detail != "" {
-		row = append(row, woxwidget.Text{Value: detail, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.ResultSubtitle})
+		row = append(row, woxwidget.Text{Value: detail, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.TextSecondary})
 	}
 	row = append(row, woxwidget.Expanded{Child: woxwidget.Painter{}})
 	for _, action := range props.Actions {
@@ -167,7 +167,7 @@ func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 		control = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			control,
 			woxwidget.Semantics{Role: woxui.AccessibilityRoleText, Label: props.Error, LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: woxwidget.Text{
-				Value: props.Error, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.ErrorText,
+				Value: props.Error, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.Error,
 			}},
 		}}
 	}
@@ -237,7 +237,7 @@ func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 		}
 	}
 	style := woxui.TextStyle{Size: 12}
-	color := props.Theme.ActionHeader
+	color := props.Theme.TextSecondary
 	padding := woxwidget.Insets{Top: 8}
 	if props.Kind == "unsupported" {
 		style = woxui.TextStyle{Size: 11}
@@ -260,7 +260,7 @@ type FormModelFieldProps struct {
 	Height      float32
 	LabelWidth  float32
 	Focused     bool
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 	OnTap       func(woxui.Rect)
 	OnOpenLink  func(string)
 }
@@ -270,7 +270,7 @@ func FormModelField(props FormModelFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	control := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
-		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTapBounds: props.OnTap,
+		Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary, Theme: props.Theme, OnTapBounds: props.OnTap,
 	})
 	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, nil)
 }
@@ -284,7 +284,7 @@ type FormAppFieldProps struct {
 	Width   float32
 	Height  float32
 	Focused bool
-	Theme   woxcomponent.Theme
+	Theme   woxcomponent.ControlTheme
 	OnTap   func()
 }
 
@@ -294,8 +294,8 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 	value := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
 		Width: fieldWidth, Height: 42, Radius: 8, Color: formFieldBackground(props.Focused, props.Theme), Padding: woxwidget.Insets{Left: 12, Top: 7, Right: 12},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
-			woxwidget.Text{Value: props.Detail, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
+			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+			woxwidget.Text{Value: props.Detail, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.TextSecondary},
 		}},
 	}}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
@@ -322,7 +322,7 @@ type FormHotkeyFieldProps struct {
 	Hold               bool
 	HoldPrefix         string
 	Window             *woxui.Window
-	Theme              woxcomponent.Theme
+	Theme              woxcomponent.ControlTheme
 	OnTap              func()
 	OnFocusChange      func(bool)
 	OnOpenLink         func(string)
@@ -378,9 +378,9 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		controlChildren[0] = woxwidget.StackChild{Right: edgeInset, AnchorRight: true, Child: recorderSlot}
 	}
 	if (props.Recording || props.Error) && props.Status != "" && controlWidth > recorderWidth+statusGap {
-		statusColor := props.Theme.ResultSubtitle
+		statusColor := props.Theme.TextSecondary
 		if props.Error {
-			statusColor = props.Theme.ErrorText
+			statusColor = props.Theme.Error
 		}
 		if props.SettingsLayout {
 			const labelGap = float32(32)
@@ -426,7 +426,7 @@ type FormSwitchFieldProps struct {
 	Height      float32
 	LabelWidth  float32
 	Checked     bool
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 	OnChange    func(bool)
 	OnOpenLink  func(string)
 }
@@ -447,7 +447,7 @@ type FormSelectFieldProps struct {
 	Height      float32
 	LabelWidth  float32
 	Focused     bool
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 	OnTap       func()
 	OnChoiceTap func(woxui.Rect)
 	OnOpenLink  func(string)
@@ -458,7 +458,7 @@ func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	control := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
-		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
+		Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
 	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, nil)
 }
@@ -481,7 +481,7 @@ type FormAIModelFieldProps struct {
 	LabelWidth         float32
 	Focused            bool
 	Window             *woxui.Window
-	Theme              woxcomponent.Theme
+	Theme              woxcomponent.ControlTheme
 	OnProviderTap      func(woxui.Rect)
 	OnModelTap         func(woxui.Rect)
 	OnModelNameChanged func(string)
@@ -530,7 +530,7 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 
 	provider := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID + "-provider", Label: props.Label + " provider", Value: props.Provider, Leading: props.ProviderIcon,
-		Width: providerWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader,
+		Width: providerWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary,
 		Theme: props.Theme, OnTapBounds: props.OnProviderTap,
 	})
 	var model woxwidget.Widget
@@ -544,7 +544,7 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 	} else {
 		model = woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 			ID: props.ID + "-model", Label: props.Label + " model", Value: props.Model, Leading: props.ModelIcon,
-			Width: modelWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader,
+			Width: modelWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary,
 			Theme: props.Theme, OnTapBounds: props.OnModelTap,
 		})
 	}
@@ -564,11 +564,11 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 		}
 		context.SetState(func() { s.editing = !s.editing })
 	}
-	hoverBackground := props.Theme.ResultSubtitle
+	hoverBackground := props.Theme.TextSecondary
 	hoverBackground.A = 26
 	toggle := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 		ID: props.ID + "-edit", Label: buttonLabel, Icon: woxwidget.Image{Source: icon, Width: 18, Height: 18},
-		Width: editWidth, Height: formAIModelControlHeight, Radius: 4, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor,
+		Width: editWidth, Height: formAIModelControlHeight, Radius: 4, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus,
 		Disabled: !props.ModelsAvailable || props.Model == "", OnTap: toggleEditing,
 	})
 	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, toggle}}
@@ -592,7 +592,7 @@ type FormTextFieldProps struct {
 	Protected   bool
 	MaxLines    int
 	Window      *woxui.Window
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 	OnFocus     func()
 	OnChanged   func(string)
 	OnKey       func(woxui.KeyEvent) bool
@@ -640,7 +640,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 		valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 			input,
 			woxwidget.Align{Width: suffixWidth, Height: fieldHeight, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Suffix, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.ActionText,
+				Value: props.Suffix, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.Text,
 			}},
 		}}
 	}
@@ -680,7 +680,7 @@ func formSuffixWidth(window *woxui.Window, suffix string) float32 {
 	return max(float32(1), width)
 }
 
-func formFieldLayout(id, label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.Theme, onOpenLink func(string), window *woxui.Window) woxwidget.Widget {
+func formFieldLayout(id, label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.ControlTheme, onOpenLink func(string), window *woxui.Window) woxwidget.Widget {
 	if labelWidth <= 0 {
 		labelWidth = 132
 	}
@@ -689,11 +689,11 @@ func formFieldLayout(id, label, description string, width, height, labelWidth fl
 	if description != "" {
 		var descriptionWidget woxwidget.Widget = woxwidget.TextBlock{
 			Value: description, LineHeight: 18,
-			Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
+			Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary,
 		}
 		if onOpenLink != nil {
 			markdownTheme := theme
-			markdownTheme.PreviewText = theme.ResultSubtitle
+			markdownTheme.BodyText = theme.TextSecondary
 			descriptionWidget = woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
 				ID: id + "-description", Document: woxcomponent.ParseMarkdown(description), Width: formFieldControlWidth(width, labelWidth),
 				FontSize: 11, BlockGap: 4, ExcludeLinkFocus: true, Theme: markdownTheme, Window: window, OnOpenLink: onOpenLink,
@@ -718,22 +718,22 @@ func formFieldControlWidth(width, labelWidth float32) float32 {
 	return max(float32(0), width-labelWidth-12)
 }
 
-func formFieldLabel(label string, width, height, top float32, theme woxcomponent.Theme, weight woxui.FontWeight) woxwidget.Widget {
+func formFieldLabel(label string, width, height, top float32, theme woxcomponent.ControlTheme, weight woxui.FontWeight) woxwidget.Widget {
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: top}, Child: woxwidget.Text{
-		Value: label, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: theme.ActionText,
+		Value: label, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: theme.Text,
 	}}
 }
 
-func formFieldOutline(focused bool, theme woxcomponent.Theme) woxui.Color {
+func formFieldOutline(focused bool, theme woxcomponent.ControlTheme) woxui.Color {
 	if focused {
-		return settingsColorAlpha(theme.ActionText, 220)
+		return settingsColorAlpha(theme.Text, 220)
 	}
-	return settingsColorAlpha(theme.ActionText, 190)
+	return settingsColorAlpha(theme.Text, 190)
 }
 
-func formFieldBackground(focused bool, theme woxcomponent.Theme) woxui.Color {
+func formFieldBackground(focused bool, theme woxcomponent.ControlTheme) woxui.Color {
 	if focused {
-		return theme.SelectedBackground
+		return theme.SelectionBackground
 	}
-	return theme.QueryBackground
+	return theme.InputBackground
 }

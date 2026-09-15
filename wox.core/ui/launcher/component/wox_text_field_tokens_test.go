@@ -71,14 +71,14 @@ func TestSnapTextFieldAtomicCaretMovesToNearerEdge(t *testing.T) {
 }
 
 func TestNewTokenChipRunHidesPlaceholderText(t *testing.T) {
-	run := NewTokenChipRun(0, 25, "wox-plugin-creator", nil, Theme{ResultTitle: woxui.Color{A: 255}, ResultSubtitle: woxui.Color{A: 200}})
+	run := NewTokenChipRun(0, 25, "wox-plugin-creator", nil, ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}})
 	if !run.HideText || run.Paint == nil || run.Advance < tokenChipMinWidth || run.Start != 0 || run.End != 25 || run.ChipLabel != "wox-plugin-creator" {
 		t.Fatalf("chip run = %#v, want a painted replacement for the placeholder", run)
 	}
 }
 
 func TestTokenChipHoverRevealsCloseAffordance(t *testing.T) {
-	theme := Theme{ResultTitle: woxui.Color{A: 255}, ResultSubtitle: woxui.Color{A: 200}, ErrorText: woxui.Color{R: 200, A: 255}}
+	theme := ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}, Error: woxui.Color{R: 200, A: 255}}
 	run := NewTokenChipRun(0, 20, "query", nil, theme).WithDismissible()
 	if !run.Dismissible {
 		t.Fatal("query variable chips should be dismissible")
@@ -109,13 +109,13 @@ func TestTokenChipHoverRevealsCloseAffordance(t *testing.T) {
 	if idle.ImageDrawCount() != 0 {
 		t.Fatal("idle chip should hide the close icon")
 	}
-	if got := tokenChipCloseColor(theme); got != theme.ErrorText {
+	if got := tokenChipCloseColor(theme); got != theme.Error {
 		t.Fatalf("close color = %#v, want the theme danger color", got)
 	}
 }
 
 func TestTextFieldDismissibleHitFindsCloseRegion(t *testing.T) {
-	theme := Theme{ResultTitle: woxui.Color{A: 255}, ResultSubtitle: woxui.Color{A: 200}}
+	theme := ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}}
 	value := "{wox:parameter?name=query}"
 	end := len([]rune(value))
 	run := NewTokenChipRun(0, end, "query", nil, theme).WithDismissible()

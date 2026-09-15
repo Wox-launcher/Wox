@@ -18,7 +18,7 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 		callback()
 		return nil
 	}
-	palette := defaultPalette()
+	palette := settingsPalette()
 	cacheKey := func(source woxImage, tint woxui.Color, size int) string {
 		return fmt.Sprintf("%s-svg-%d-tint-%02x%02x%02x%02x", imageKey(source), size, tint.R, tint.G, tint.B, tint.A)
 	}
@@ -28,13 +28,13 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 			continue
 		}
 		icon := &woxui.Image{}
-		app.images[cacheKey(source, palette.toolbarText, 18)] = icon
+		app.images[cacheKey(source, palette.TextSecondary, 18)] = icon
 	}
 	selectedSource := settingNavIconSource("ui")
-	normalIcon := app.images[cacheKey(selectedSource, palette.toolbarText, 18)]
-	app.imageRequested[cacheKey(selectedSource, palette.selectedTitle, 18)] = selectedSource.ImageData
+	normalIcon := app.images[cacheKey(selectedSource, palette.TextSecondary, 18)]
+	app.imageRequested[cacheKey(selectedSource, palette.SelectionText, 18)] = selectedSource.ImageData
 	searchSource := settingControlIconSource("search")
-	app.images[cacheKey(searchSource, palette.toolbarText, 18)] = &woxui.Image{}
+	app.images[cacheKey(searchSource, palette.TextSecondary, 18)] = &woxui.Image{}
 
 	rail := app.buildSettingsRail(settingsSnapshot{tab: "appearance", palette: palette}, 260, 600, 1).(woxwidget.Stack)
 	railContainer := rail.Children[0].Child.(woxwidget.Container)
@@ -61,10 +61,10 @@ func TestSettingsSearchSelectedBuiltInIconUsesSelectedTextColor(t *testing.T) {
 		callback()
 		return nil
 	}
-	palette := defaultPalette()
-	palette.selectedTitle = woxui.Color{R: 241, G: 242, B: 243, A: 255}
+	palette := settingsPalette()
+	palette.SelectionText = woxui.Color{R: 241, G: 242, B: 243, A: 255}
 	source := settingsSearchResultIconSource(settingsSearchSetting)
-	key := fmt.Sprintf("%s-svg-%d-tint-%02x%02x%02x%02x", imageKey(source), 24, palette.selectedTitle.R, palette.selectedTitle.G, palette.selectedTitle.B, palette.selectedTitle.A)
+	key := fmt.Sprintf("%s-svg-%d-tint-%02x%02x%02x%02x", imageKey(source), 24, palette.SelectionText.R, palette.SelectionText.G, palette.SelectionText.B, palette.SelectionText.A)
 	selectedIcon := &woxui.Image{}
 	app.images[key] = selectedIcon
 	snapshot := settingsSnapshot{palette: palette, search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "font"}}}
@@ -106,7 +106,7 @@ func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 	form := newHotkeySettingsForm(settingsData{MainHotkey: "Alt+Space", SelectionHotkey: "Alt+Shift+Space", IsLinuxWaylandSession: false})
 	app.hotkeySettings.SetForm(&form)
 
-	page := app.buildSettingsPage(settingsSnapshot{tab: "general", hotkey: app.hotkeySettings.Snapshot(), palette: defaultPalette()}, nil, 800, 600, 1)
+	page := app.buildSettingsPage(settingsSnapshot{tab: "general", hotkey: app.hotkeySettings.Snapshot(), palette: settingsPalette()}, nil, 800, 600, 1)
 	container := page.(woxwidget.Container)
 	scroll := container.Child.(woxwidget.ScrollView)
 	rows := scroll.Child.(woxwidget.Flex).Children

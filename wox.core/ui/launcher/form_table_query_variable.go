@@ -9,7 +9,7 @@ import (
 
 // formTableQueryVariableFieldDecorations paints {wox:...} placeholders as chips and treats them as atomic tokens.
 // Parameter chips expand only while queryVariableEdit matches them; clicking a chip does not start renaming.
-func formTableQueryVariableFieldDecorations(value string, editing queryVariableToken, window *woxui.Window, theme woxcomponent.Theme, translate func(string) string) ([]woxcomponent.TextFieldRichRun, []woxcomponent.TextFieldTokenRange) {
+func formTableQueryVariableFieldDecorations(value string, editing queryVariableToken, window *woxui.Window, theme woxcomponent.ControlTheme, translate func(string) string) ([]woxcomponent.TextFieldRichRun, []woxcomponent.TextFieldTokenRange) {
 	tokens := queryVariableTokens(value)
 	if len(tokens) == 0 {
 		return nil, nil
@@ -149,8 +149,8 @@ func queryVariableParameterNameRange(value string, token queryVariableToken) (in
 }
 
 // queryVariableExpandedParameterRun keeps the raw {wox:parameter?...} text visible while renaming.
-func queryVariableExpandedParameterRun(token queryVariableToken, theme woxcomponent.Theme) woxcomponent.TextFieldRichRun {
-	fill := theme.ResultSubtitle
+func queryVariableExpandedParameterRun(token queryVariableToken, theme woxcomponent.ControlTheme) woxcomponent.TextFieldRichRun {
+	fill := theme.TextSecondary
 	fill.A = uint8(float32(fill.A) * 0.16)
 	return woxcomponent.TextFieldRichRun{Start: token.start, End: token.end, Background: fill}
 }

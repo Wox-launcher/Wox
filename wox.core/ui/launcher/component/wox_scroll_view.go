@@ -10,7 +10,7 @@ import (
 
 // ScrollViewProps contains the geometry and optional controlled state for a Wox scroll surface.
 type ScrollViewProps struct {
-	Theme Theme
+	Theme ControlTheme
 
 	Key     woxwidget.Key
 	Content woxwidget.Widget

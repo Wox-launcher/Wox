@@ -41,7 +41,7 @@ func TestWindowManagerGroupsTableUsesInlineCloneHiddenContract(t *testing.T) {
 func TestWindowGroupEditorBuildsDialog(t *testing.T) {
 	dialog, ok := launcherview.WindowGroupEditor(launcherview.WindowGroupEditorProps{
 		Width: 1200, Height: 800, Title: "Create workspace", GroupName: "Coding", NamePlaceholder: "Name",
-		CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{}, OnCancel: func() {},
+		CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{}, OnCancel: func() {},
 	}).(woxwidget.Stateful)
 	if !ok {
 		t.Fatal("window group editor should use shared dialog shell")
@@ -60,7 +60,7 @@ func TestWindowGroupEditorAcceptsNameInput(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return launcherview.WindowGroupEditor(launcherview.WindowGroupEditorProps{
 			Width: 1200, Height: 800, Title: "Create workspace", GroupName: name, NamePlaceholder: "Name",
-			CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{}, OnNameChanged: func(value string) { name = value },
+			CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{}, OnNameChanged: func(value string) { name = value },
 		})
 	})
 	host.AttachServices(formTableHostServices{})

@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -21,15 +22,15 @@ type settingChoicePickerSnapshot struct {
 }
 
 // buildSettingChoicePickerOverlay adapts controller state to the package-independent choice picker view.
-func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.item.choices))
 	for index, choice := range snapshot.item.choices {
 		var leading *woxui.Image
 		if source := snapshot.item.icons[choice.value]; source.ImageData != "" {
 			if snapshot.item.preserveIconColor {
-				leading = a.imageForSize(source, physicalImageSize(18, imageScale))
+				leading = a.imageForSurface(source, physicalImageSize(18, imageScale), settingsPalette().Background)
 			} else {
-				leading = a.imageForTint(source, &palette.resultTitle, physicalImageSize(18, imageScale))
+				leading = a.imageForTint(source, &palette.Text, physicalImageSize(18, imageScale))
 			}
 		}
 		choices[index] = launcherview.SettingsChoice{
@@ -37,9 +38,9 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 			Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice),
 		}
 	}
-	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.resultSubtitle, physicalImageSize(16, imageScale))
+	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		ID: "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
+		ID: "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsNativeWindow(), Title: snapshot.item.title,
 		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
 	})
 }

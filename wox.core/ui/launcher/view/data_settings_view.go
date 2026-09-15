@@ -60,7 +60,7 @@ type DataSettingsLabels struct {
 type DataSettingsProps struct {
 	Width              float32
 	Height             float32
-	Theme              woxcomponent.Theme
+	Theme              woxcomponent.ControlTheme
 	Labels             DataSettingsLabels
 	Location           string
 	PendingLocation    string
@@ -100,7 +100,7 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
-			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
+			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error,
 		}})
 	}
 	return SettingsPage(SettingsPageProps{
@@ -214,7 +214,7 @@ func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget 
 	controlWidth := min(float32(280), width*0.34)
 	choice := woxwidget.Keyed{Key: SettingChoiceAnchorKey("LogLevel"), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: "data-log-level", Label: props.Labels.LogLevelTitle, Value: level, Width: controlWidth, Height: woxcomponent.SettingsControlHeight,
-		Foreground: props.Theme.ResultTitle, Theme: props.Theme, OnTapBounds: props.OnOpenLogLevel,
+		Foreground: props.Theme.Text, Theme: props.Theme, OnTapBounds: props.OnOpenLogLevel,
 	})}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogLevelTitle, Description: props.Labels.LogLevelDescription,

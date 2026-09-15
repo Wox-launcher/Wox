@@ -7,12 +7,11 @@ import (
 )
 
 // CommonDeps bundles the minimal cross-cutting dependencies every settings controller needs.
-// Controllers never receive *App; they only receive what they need to invalidate, translate, and read theme.
+// Controllers never receive *App; they only receive what they need to invalidate and translate.
 type CommonDeps struct {
 	Invalidate func()
 	Translate  func(string) string
 	IsDev      bool
-	Palette    func() uiPalette
 	RunOnUI    func(string, func()) error
 }
 

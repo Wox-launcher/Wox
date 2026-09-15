@@ -27,7 +27,7 @@ type aiProviderInfo struct {
 func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	aiForm := snapshot.ai.Form
 	props := launcherview.AISettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: aiForm != nil,
+		Width: width, Height: height, Theme: snapshot.palette, Available: aiForm != nil,
 		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
 	}
 	if aiForm == nil {
@@ -50,7 +50,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 		case "AIMCPServers":
 			field.OnAdd = func() { a.addAISettingsTableRow(index) }
 			field.SecondaryLabel = a.translate("i18n:ui_ai_mcp_import_json")
-			mcpIconColor := snapshot.palette.componentTheme().ResultTitle
+			mcpIconColor := snapshot.palette.Text
 			field.SecondaryIcon = a.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
 			field.OnSecondary = a.openAIMCPJSONImport
 		case "AISkills":
@@ -72,7 +72,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 }
 
 // addAIBuiltinToolSwitches replaces the Enabled column with an inline switch.
-func (a *App) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, definition formDefinition, value string, palette uiPalette) {
+func (a *App) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, definition formDefinition, value string, palette woxcomponent.ControlTheme) {
 	rows, err := decodeFormTableRows(value)
 	if err != nil {
 		return
@@ -92,7 +92,7 @@ func (a *App) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, 
 	if enabledColumn < 0 {
 		return
 	}
-	theme := palette.componentTheme()
+	theme := palette
 	for viewIndex := range field.Rows {
 		sourceIndex := field.Rows[viewIndex].Index
 		if sourceIndex < 0 || sourceIndex >= len(rows) || enabledColumn >= len(field.Rows[viewIndex].Cells) {
@@ -165,7 +165,7 @@ func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, va
 	if err != nil {
 		return
 	}
-	iconTint := field.Theme.ResultSubtitle
+	iconTint := field.Theme.TextSecondary
 	folderIcon := a.imageForTint(settingControlIconSource("folder-open"), &iconTint, physicalImageSize(16, imageScale))
 	for viewIndex := range field.Rows {
 		sourceIndex := field.Rows[viewIndex].Index

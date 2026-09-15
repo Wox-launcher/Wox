@@ -17,7 +17,7 @@ type DropdownProps struct {
 	Outline       woxui.Color
 	Foreground    woxui.Color
 	Secondary     woxui.Color
-	Theme         Theme
+	Theme         ControlTheme
 	Focused       bool
 	OnKey         func(woxui.KeyEvent) bool
 	OnFocusChange func(bool)
@@ -46,7 +46,7 @@ func WoxDropdown(props DropdownProps) woxwidget.Widget {
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
 		Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{
-			Key: key, Autofocus: props.Focused, Disabled: disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4,
+			Key: key, Autofocus: props.Focused, Disabled: disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: 4,
 			OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, Child: trigger,
 		},
 	}

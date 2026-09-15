@@ -29,7 +29,7 @@ func TestWoxDropdownOutlineFollowsValueText(t *testing.T) {
 	foreground := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	dropdown := WoxDropdown(DropdownProps{
 		ID: "mode", Label: "Mode", Value: "Auto", Width: 160, Height: 38, Foreground: foreground,
-		Theme: Theme{ResultSubtitle: woxui.Color{R: 255, A: 255}}, OnTap: func() {},
+		Theme: ControlTheme{TextSecondary: woxui.Color{R: 255, A: 255}}, OnTap: func() {},
 	}).(woxwidget.Semantics)
 	trigger := buildHoverable(dropdown.Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
 	want := foreground

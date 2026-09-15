@@ -54,7 +54,7 @@ func RequirementPreviewView(props RequirementPreviewProps) woxwidget.Widget {
 		Rows: props.Rows, EmptyMessage: fmt.Sprintf("No editable settings were provided for %s.", props.PluginName),
 		ScrollID: "requirement-form-scroll", KeepVisibleKey: props.KeepVisibleKey,
 		Error: props.Error, ShowError: strings.TrimSpace(props.Error) != "",
-		SaveButton: woxcomponent.ButtonProps{ID: "requirement-form-save", Label: saveLabel, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
+		SaveButton: woxcomponent.ButtonProps{ID: "requirement-form-save", Label: saveLabel, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme.Controls},
 	})
 }
 
@@ -65,6 +65,6 @@ func requirementPreviewMessage(message string, width float32, theme woxcomponent
 	}
 	return woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
 		ID: "requirement-form-message", Document: woxcomponent.ParseMarkdown(message), Width: width,
-		FontSize: 12, BlockGap: 4, ExcludeLinkFocus: true, Theme: theme, Window: window, OnOpenLink: onOpenLink,
+		FontSize: 12, BlockGap: 4, ExcludeLinkFocus: true, Theme: theme.Controls, Window: window, OnOpenLink: onOpenLink,
 	})
 }

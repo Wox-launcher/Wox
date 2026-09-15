@@ -17,7 +17,7 @@ type privacySamplePayload struct {
 // buildPrivacySettingsPage adapts controller state to the package-independent privacy view.
 func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	return launcherview.PrivacySettingsView(launcherview.PrivacySettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, Theme: snapshot.palette,
 		Title: a.translate("i18n:ui_privacy"), Description: a.translate("i18n:ui_privacy_description"),
 		PrivateModeTitle: a.translate("i18n:ui_privacy_mode_title"), PrivateModeDescription: a.translate("i18n:ui_privacy_mode_description"),
 		PrivateModeEnabled: snapshot.general.Data.EnablePrivacyMode,
@@ -38,7 +38,7 @@ func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height 
 // buildPrivacySampleOverlay adapts the Flutter-compatible payload dialog to the settings window overlay.
 func (a *App) buildPrivacySampleOverlay(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	return launcherview.PrivacySampleDialog(launcherview.PrivacySampleDialogProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, Theme: snapshot.palette,
 		Title: a.translate("i18n:ui_privacy_sample_title"), Sample: snapshot.privacy.Sample,
 		CopyLabel: a.translate("i18n:toolbar_copy"), ConfirmLabel: a.translate("i18n:ui_ok"), Error: snapshot.privacy.Error,
 		OnCopy: a.copyPrivacySample, OnClose: a.togglePrivacySample,

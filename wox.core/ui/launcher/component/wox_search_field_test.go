@@ -17,7 +17,7 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 	controller.SetText(controller.Text(), true)
 	field := WoxSearchField(SearchFieldProps{
 		ID: "search", Label: "Search", Width: 200, Focused: true, Controller: controller, SearchIcon: icon,
-		Actions: []SearchFieldAction{{ID: "action", Width: 30}}, Theme: Theme{Cursor: cursor, ResultSubtitle: subtitle}, OnFocus: func() { focusCalls++ },
+		Actions: []SearchFieldAction{{ID: "action", Width: 30}}, Theme: ControlTheme{Focus: cursor, TextSecondary: subtitle}, OnFocus: func() { focusCalls++ },
 		OnFocusChange: func(focused bool) {
 			if focused {
 				focusChanges++
@@ -58,7 +58,7 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 
 func TestWoxSearchFieldHoverSurfaceIncludesLeadingIcon(t *testing.T) {
 	field := WoxSearchField(SearchFieldProps{
-		ID: "search", Label: "Search", Width: 200, SearchIcon: &woxui.Image{}, Theme: Theme{},
+		ID: "search", Label: "Search", Width: 200, SearchIcon: &woxui.Image{}, Theme: ControlTheme{},
 	}).(woxwidget.Container)
 	stack := field.Child.(woxwidget.Stack)
 	input := stack.Children[0].Child.(woxwidget.Stateful).Widget.(TextFieldProps)

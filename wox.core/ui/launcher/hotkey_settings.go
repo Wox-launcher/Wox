@@ -24,7 +24,7 @@ type ignoredHotkeyApp struct {
 // buildHotkeySettingsPage prepares shared form fields for the pure settings page.
 func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	if snapshot.hotkey.Form == nil {
-		return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{Width: width, Height: height, Theme: snapshot.palette.componentTheme()})
+		return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{Width: width, Height: height, Theme: snapshot.palette})
 	}
 	innerWidth := max(float32(0), width-72)
 	callbacks := formFieldCallbacks{
@@ -35,7 +35,7 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("hotkey-settings", index), Child: a.buildFormField(*snapshot.hotkey.Form, callbacks, snapshot.palette, index, definition, innerWidth, 0)})
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
+		Width: width, Height: height, Theme: snapshot.palette, Available: true,
 		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("hotkey-settings", *snapshot.hotkey.Form),
 	})
 }

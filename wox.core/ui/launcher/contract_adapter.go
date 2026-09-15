@@ -414,7 +414,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
 		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 30, ShowPointer: true}, WindowManager: a.windows,
-		Theme: a.palette.componentTheme(), FontFamily: a.generalSettings.Data().AppFontFamily,
+		Theme: a.palette.componentTheme().Controls, FontFamily: a.generalSettings.Data().AppFontFamily,
 		SizeLabels: woxscreenshot.ScreenshotSizeLabels{
 			Title: a.translate("i18n:plugin_screenshot_size_title"),
 			Width: a.translate("i18n:plugin_screenshot_size_width"), Height: a.translate("i18n:plugin_screenshot_size_height"),

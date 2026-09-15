@@ -93,10 +93,10 @@ func (a *App) buildSettingsDemoOverlay(snapshot settingsSnapshot, width, height 
 	}
 	props := launcherview.OnboardingProps{
 		Wallpaper: snapshot.theme.ThemeWallpaperImage, WallpaperBlurred: snapshot.theme.ThemeWallpaperBlurred,
-		Labels: a.onboardingLabels(), Theme: snapshot.palette.componentTheme(),
+		Labels: a.onboardingLabels(), Theme: snapshot.palette, PreviewTheme: onboardingPreviewTheme,
 	}
 	kind := a.settingsDemo.kind
-	return launcherview.SettingsDemoOverlay(props, step, a.settingsDemo.anchor, width, height, snapshot.palette.componentTheme(), func(inside bool) {
+	return launcherview.SettingsDemoOverlay(props, step, a.settingsDemo.anchor, width, height, snapshot.palette, func(inside bool) {
 		a.keepSettingsDemoHover(kind, inside)
 	})
 }

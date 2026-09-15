@@ -76,7 +76,7 @@ func TestFormTableWoxImageCellDoesNotRepeatEmojiAsText(t *testing.T) {
 		imageErrors:    map[string]string{},
 	}
 
-	cell := app.formTableViewCell(formTableColumn{Key: "Icon", Type: "woxImage"}, map[string]any{"Icon": icon}, woxcomponent.Theme{}, 1)
+	cell := app.formTableViewCell(formTableColumn{Key: "Icon", Type: "woxImage"}, map[string]any{"Icon": icon}, woxcomponent.ControlTheme{}, 1)
 
 	if cell.Icon == nil {
 		t.Fatal("woxImage cell should render its image")
@@ -95,12 +95,12 @@ func TestFormTableCheckboxCellShowsLocalizedDisabledText(t *testing.T) {
 	}
 	column := formTableColumn{Key: "Disabled", Type: "checkbox"}
 
-	unchecked := app.formTableViewCell(column, map[string]any{"Disabled": false}, woxcomponent.Theme{}, 1)
+	unchecked := app.formTableViewCell(column, map[string]any{"Disabled": false}, woxcomponent.ControlTheme{}, 1)
 	if unchecked.Text != "" || unchecked.Icon != nil {
 		t.Fatalf("unchecked cell = %#v, want no text or icon", unchecked)
 	}
 
-	checked := app.formTableViewCell(column, map[string]any{"Disabled": true}, woxcomponent.Theme{}, 1)
+	checked := app.formTableViewCell(column, map[string]any{"Disabled": true}, woxcomponent.ControlTheme{}, 1)
 	if checked.Text != "Disabled" || checked.Icon != nil {
 		t.Fatalf("checked cell = %#v, want localized text without an icon", checked)
 	}
@@ -131,7 +131,7 @@ func TestFormTableDisabledColumnBecomesRowStatus(t *testing.T) {
 	rows := app.formTableViewRows(definition, []formTableColumn{{Key: "Name", Type: "text"}}, []map[string]any{
 		{"Name": "Clipboard", "Disabled": false},
 		{"Name": "Chat", "Disabled": true},
-	}, woxcomponent.Theme{}, 1)
+	}, woxcomponent.ControlTheme{}, 1)
 	if len(rows) != 2 || rows[0].Status != "" || rows[1].Status != "Disabled" {
 		t.Fatalf("row status = %#v, want only the disabled row labeled", rows)
 	}
@@ -146,7 +146,7 @@ func TestFormTableMultilineFieldUsesRowFormEditingController(t *testing.T) {
 	snapshot := snapshotFormFieldsLocked(&fields)
 	app := &App{}
 
-	row := app.buildFormTableRowField(snapshot, formFieldCallbacks{}, uiPalette{}, 0, definition, 600, 120, "")
+	row := app.buildFormTableRowField(snapshot, formFieldCallbacks{}, settingsPalette(), 0, definition, 600, 120, "")
 	rowContainer := row.(woxwidget.Container)
 	columns := rowContainer.Child.(woxwidget.Flex)
 	rightColumn := columns.Children[1].(woxwidget.Flex)
@@ -568,7 +568,7 @@ func TestQueryVariableEnterExitsParameterEdit(t *testing.T) {
 	if app.launcherTableEditor.queryVariableEdit != (queryVariableToken{}) {
 		t.Fatal("Enter should leave parameter edit mode")
 	}
-	runs, _ := formTableQueryVariableFieldDecorations(value, queryVariableToken{}, nil, woxcomponent.Theme{}, nil)
+	runs, _ := formTableQueryVariableFieldDecorations(value, queryVariableToken{}, nil, woxcomponent.ControlTheme{}, nil)
 	if len(runs) != 2 || !runs[0].HideText || !runs[1].HideText {
 		t.Fatalf("leaving a parameter should collapse it back to a chip, runs=%#v", runs)
 	}
@@ -698,14 +698,14 @@ func TestQueryVariableCollapsedParameterTokensAreAtomic(t *testing.T) {
 	if tokens := queryVariableAtomicTokens(value, editing); len(tokens) != 1 || tokens[0].start != strings.Index(value, "{wox:selected_text}") {
 		t.Fatalf("only the edited parameter should leave atomic tokens, got %#v", tokens)
 	}
-	runs, atomic := formTableQueryVariableFieldDecorations(value, queryVariableToken{}, nil, woxcomponent.Theme{}, nil)
+	runs, atomic := formTableQueryVariableFieldDecorations(value, queryVariableToken{}, nil, woxcomponent.ControlTheme{}, nil)
 	if len(atomic) != 2 || len(runs) != 2 || !runs[0].HideText || !runs[1].HideText {
 		t.Fatalf("collapsed parameters should stay chips, runs=%#v atomic=%#v", runs, atomic)
 	}
 	if !runs[0].ChipEditable || runs[1].ChipEditable {
 		t.Fatalf("only parameter chips should offer edit, runs=%#v", runs)
 	}
-	runs, atomic = formTableQueryVariableFieldDecorations(value, editing, nil, woxcomponent.Theme{}, nil)
+	runs, atomic = formTableQueryVariableFieldDecorations(value, editing, nil, woxcomponent.ControlTheme{}, nil)
 	if len(atomic) != 1 || len(runs) != 2 || runs[0].HideText || !runs[1].HideText {
 		t.Fatalf("editing a parameter should expand it and keep environment chips, runs=%#v atomic=%#v", runs, atomic)
 	}
@@ -716,7 +716,7 @@ func TestQueryVariableCollapsedParameterTokensAreAtomic(t *testing.T) {
 		t.Fatalf("environment chips should not offer edit, runs=%#v", runs)
 	}
 	collapsed := "q={wox:parameter?name=query}"
-	parameterRuns, parameterAtomic := formTableQueryVariableFieldDecorations(collapsed, queryVariableToken{}, nil, woxcomponent.Theme{}, nil)
+	parameterRuns, parameterAtomic := formTableQueryVariableFieldDecorations(collapsed, queryVariableToken{}, nil, woxcomponent.ControlTheme{}, nil)
 	if len(parameterRuns) != 1 || !parameterRuns[0].ChipEditable || len(parameterAtomic) != 1 {
 		t.Fatalf("collapsed parameter chips should offer edit, runs=%#v atomic=%#v", parameterRuns, parameterAtomic)
 	}
@@ -818,7 +818,7 @@ func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 		lifecycleCtx:        context.Background(), images: map[string]*woxui.Image{}, imageRequested: map[string]string{}, imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
 	}
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), uiPalette{}, 900, 700, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
 	app.settingsHost = host
@@ -961,7 +961,7 @@ func TestPluginTriggerKeywordRowAcceptsTextInput(t *testing.T) {
 	app.openFormTableLocked(&plugins.Form().formFieldsState, 0)
 	app.beginAddFormTableRowDirect()
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), uiPalette{}, 800, 600, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), settingsPalette(), 800, 600, 1)
 	})
 	host.AttachServices(formTableHostServices{})
 	app.settingsHost = host

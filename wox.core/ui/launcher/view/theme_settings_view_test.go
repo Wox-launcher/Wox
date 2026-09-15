@@ -31,7 +31,7 @@ func TestThemeListSearchUsesValueText(t *testing.T) {
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	list := themeList(ThemeSettingsProps{
 		Mode: "installed", SearchPlaceholder: "Search 14 themes",
-		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: woxui.Color{R: 255, A: 255}},
 	}, 260, 400).(woxwidget.Flex)
 	search := list.Children[0].(woxwidget.Container)
 	wantBorder := title
@@ -40,13 +40,13 @@ func TestThemeListSearchUsesValueText(t *testing.T) {
 		t.Fatalf("theme search border = %#v, want ResultTitle %#v", search.BorderColor, wantBorder)
 	}
 	input := search.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
-	if input.Theme.ResultSubtitle != title {
-		t.Fatalf("theme search hint token = %#v, want ResultTitle so ResultSubtitle cannot restyle it", input.Theme.ResultSubtitle)
+	if input.Theme.TextSecondary != title {
+		t.Fatalf("theme search hint token = %#v, want ResultTitle so ResultSubtitle cannot restyle it", input.Theme.TextSecondary)
 	}
 }
 
 func TestThemeApplyUsesIntrinsicOutlinedButton(t *testing.T) {
-	actions := themeActions(ThemeSettingsProps{ApplyLabel: "应用", Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}}}, ThemeCatalogItem{IsInstalled: true, IsSystem: true})
+	actions := themeActions(ThemeSettingsProps{ApplyLabel: "应用", Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}}, ThemeCatalogItem{IsInstalled: true, IsSystem: true})
 	button := focusedControlGesture(actions[0]).Child.(woxwidget.Container)
 
 	if button.Width != 0 || button.Height != 32 || button.Color.A != 0 || button.BorderWidth != 1 {
@@ -149,7 +149,7 @@ func TestThemeAutoPreviewUsesSplitVariantsAndFlutterHint(t *testing.T) {
 	wallpaper := &woxui.Image{}
 	blurred := &woxui.Image{}
 	preview := themePreviewTab(ThemeSettingsProps{
-		Theme:              woxcomponent.Theme{Background: woxui.Color{R: 20, G: 20, B: 20, A: 255}, ResultTitle: woxui.Color{A: 255}},
+		Theme:              woxcomponent.ControlTheme{Background: woxui.Color{R: 20, G: 20, B: 20, A: 255}, Text: woxui.Color{A: 255}},
 		AutoAppearanceHint: "Switches automatically", AutoAppearanceAccent: accent, AutoAppearanceIcon: &woxui.Image{},
 		Wallpaper: wallpaper, WallpaperBlurred: blurred,
 	}, ThemeCatalogItem{IsAuto: true, LightPreviewTheme: woxcomponent.Theme{Background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, DarkPreviewTheme: woxcomponent.Theme{Background: woxui.Color{A: 255}}}, 600, 700).(woxwidget.Container)
@@ -227,7 +227,7 @@ func TestThemeListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	for index := range items {
 		items[index] = ThemeCatalogItem{ID: fmt.Sprint(index), Name: fmt.Sprint(index)}
 	}
-	list := themeList(ThemeSettingsProps{Items: items, Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}}}, 260, 300).(woxwidget.Flex)
+	list := themeList(ThemeSettingsProps{Items: items, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}}, 260, 300).(woxwidget.Flex)
 	scrollbar := list.Children[1].(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
 

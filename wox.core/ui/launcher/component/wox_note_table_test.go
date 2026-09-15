@@ -118,7 +118,7 @@ func TestNoteDocumentSegmentsTreatImagesAsStructural(t *testing.T) {
 	if len(segments) != 2 || !segments[0].Image || segments[0].Table || segments[1].Structural() {
 		t.Fatalf("image segments = %#v", segments)
 	}
-	value, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	value, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	if value != "after" || len(ranges) != 1 || ranges[0].Block != 1 {
 		t.Fatalf("image projection = %q %#v", value, ranges)
 	}
@@ -133,7 +133,7 @@ func TestWoxNoteEditorHidesImageActionsUntilSelected(t *testing.T) {
 		return NoteEditorProps{
 			ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
 			Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-			Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}, Cursor: woxui.Color{R: 80, G: 160, B: 255, A: 255}},
+			Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}, BodyText: woxui.Color{A: 255}, Focus: woxui.Color{R: 80, G: 160, B: 255, A: 255}},
 			FocusedImageBlock: focused, OnImageFocus: func(int) {}, OnImageScale: func(int, int) {}, OnImageDelete: func(int) {},
 			ImageActionLabels: NoteImageActionLabels{Smaller: "Smaller", Larger: "Larger", Delete: "Delete image"},
 			ResolveImage:      func(common.NoteImage) *woxui.Image { return &woxui.Image{Width: 400, Height: 200} },
@@ -174,7 +174,7 @@ func TestWoxNoteEditorDocumentSelectedHighlightsImages(t *testing.T) {
 	editor := WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}, Cursor: woxui.Color{R: 80, G: 160, B: 255, A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}, BodyText: woxui.Color{A: 255}, Focus: woxui.Color{R: 80, G: 160, B: 255, A: 255}},
 		DocumentSelected:  true,
 		OnImageFocus:      func(int) {},
 		OnImageScale:      func(int, int) {},
@@ -199,7 +199,7 @@ func TestWoxNoteEditorPlacesImageDeleteOnTheRight(t *testing.T) {
 	chrome := noteEditorImageChrome(t, WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}, BodyText: woxui.Color{A: 255}},
 		FocusedImageBlock: 0, OnImageFocus: func(int) {}, OnImageScale: func(int, int) {}, OnImageDelete: func(int) {},
 		ImageActionLabels: NoteImageActionLabels{Smaller: "Smaller", Larger: "Larger", Delete: "Delete image"},
 		ResolveImage:      func(common.NoteImage) *woxui.Image { return &woxui.Image{Width: 400, Height: 200} },
@@ -225,7 +225,7 @@ func TestWoxNoteEditorKeepsImageSkeletonWithoutFilename(t *testing.T) {
 	editor := WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{PreviewText: woxui.Color{A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{BodyText: woxui.Color{A: 255}},
 		MissingImageLabel: "Image is missing",
 	})
 	if _, ok := findNoteEditorTextBlock(noteEditorColumn(t, editor)); ok {
@@ -269,7 +269,7 @@ func TestWoxNoteEditorRendersImageSegments(t *testing.T) {
 	editor := WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}, PreviewText: woxui.Color{A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}, BodyText: woxui.Color{A: 255}},
 		ResolveImage: func(common.NoteImage) *woxui.Image {
 			return &woxui.Image{Width: 400, Height: 200}
 		},
@@ -293,7 +293,7 @@ func TestWoxNoteEditorKeepsDocumentInsetsOffTableGaps(t *testing.T) {
 	editor := WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}},
 	})
 	column := noteEditorColumn(t, editor)
 	if column.Gap != noteEditorSegmentGap || len(column.Children) != 2 {
@@ -316,7 +316,7 @@ func TestWoxNoteEditorScrollsWhenTextOverflows(t *testing.T) {
 	editor := WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: common.NoteDocument{Blocks: blocks}, Width: 320, Height: 80, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}},
 	})
 	stateful, ok := editor.(woxwidget.Stateful)
 	if !ok {
@@ -346,7 +346,7 @@ func TestWoxNoteEditorScrollsWhenATableOverflows(t *testing.T) {
 	editor := WoxNoteEditor(NoteEditorProps{
 		ID: "notes.editor", Document: document, Width: 320, Height: 80, LineHeight: 24,
 		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
-		Style:   woxui.TextStyle{Size: 14}, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}},
 	})
 	stateful, ok := editor.(woxwidget.Stateful)
 	if !ok {
@@ -373,11 +373,11 @@ func TestWoxNoteTableHidesStructureActionsUntilCaretEnters(t *testing.T) {
 		OnDeleteTable:  func() {},
 	}
 	idle := WoxNoteTable(NoteTableProps{
-		ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14},
+		ID: "notes.table.demo", Table: table, Width: 360, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14},
 		Actions: actions,
 	})
 	focused := WoxNoteTable(NoteTableProps{
-		ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14},
+		ID: "notes.table.demo", Table: table, Width: 360, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14},
 		Actions: actions, Focused: true,
 	})
 	idleIDs := noteTableActionIDs(idle)
@@ -403,7 +403,7 @@ func TestWoxNoteTableHidesStructureActionsUntilCaretEnters(t *testing.T) {
 func TestWoxNoteTablePlacesDeleteActionOnTheRight(t *testing.T) {
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
 	chrome := noteTableChrome(t, WoxNoteTable(NoteTableProps{
-		ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14}, Focused: true,
+		ID: "notes.table.demo", Table: table, Width: 360, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14}, Focused: true,
 		Actions: NoteTableActions{
 			Labels:         NoteTableActionLabels{InsertRow: "Insert row", DeleteTable: "Delete table"},
 			OnInsertRow:    func() {},
@@ -430,7 +430,7 @@ func TestWoxNoteTablePlacesDeleteActionOnTheRight(t *testing.T) {
 func TestWoxNoteTableExposesStructureActions(t *testing.T) {
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
 	ids := noteTableActionIDs(WoxNoteTable(NoteTableProps{
-		ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{ResultSubtitle: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14}, Focused: true,
+		ID: "notes.table.demo", Table: table, Width: 360, Theme: ControlTheme{TextSecondary: woxui.Color{A: 255}}, Style: woxui.TextStyle{Size: 14}, Focused: true,
 		Actions: NoteTableActions{
 			Labels:         NoteTableActionLabels{InsertRow: "Insert row", DeleteTable: "Delete table"},
 			OnInsertRow:    func() {},
@@ -563,7 +563,7 @@ func noteTableChrome(t *testing.T, widget woxwidget.Widget) woxwidget.Widget {
 
 func TestWoxNoteTableExposesCellFields(t *testing.T) {
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
-	widget := WoxNoteTable(NoteTableProps{ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{}, Style: woxui.TextStyle{Size: 14}})
+	widget := WoxNoteTable(NoteTableProps{ID: "notes.table.demo", Table: table, Width: 360, Theme: ControlTheme{}, Style: woxui.TextStyle{Size: 14}})
 	semantics, ok := widget.(woxwidget.Semantics)
 	if !ok || semantics.AutomationID != "notes.table.demo" {
 		t.Fatalf("table widget = %#v", widget)
@@ -584,7 +584,7 @@ func TestWoxNoteTableCellsUseDocumentUndo(t *testing.T) {
 	undone := false
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
 	widget := WoxNoteTable(NoteTableProps{
-		ID: "notes.table.demo", Table: table, Width: 360, Theme: Theme{}, Style: woxui.TextStyle{Size: 14},
+		ID: "notes.table.demo", Table: table, Width: 360, Theme: ControlTheme{}, Style: woxui.TextStyle{Size: 14},
 		OnUndo: func() bool { undone = true; return true },
 	})
 	field := noteTableFirstCell(t, widget).Child.(woxwidget.Stateful).Widget.(TextFieldProps)
@@ -594,7 +594,7 @@ func TestWoxNoteTableCellsUseDocumentUndo(t *testing.T) {
 }
 
 func TestWoxNoteTableUsesCollapsedGridLines(t *testing.T) {
-	theme := Theme{PreviewSplit: woxui.Color{R: 90, G: 90, B: 90, A: 255}, PreviewText: woxui.Color{A: 255}}
+	theme := ControlTheme{Border: woxui.Color{R: 90, G: 90, B: 90, A: 255}, BodyText: woxui.Color{A: 255}}
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
 	widget := WoxNoteTable(NoteTableProps{ID: "notes.table.demo", Table: table, Width: 360, Theme: theme, Style: woxui.TextStyle{Size: 14}})
 	frame := widget.(woxwidget.Semantics).Child.(woxwidget.Stack)

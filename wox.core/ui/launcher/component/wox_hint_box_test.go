@@ -9,7 +9,7 @@ import (
 
 func TestWoxHintBoxUsesIntrinsicTextHeight(t *testing.T) {
 	accent := woxui.Color{R: 64, G: 196, B: 255, A: 255}
-	dark := Theme{Background: woxui.Color{R: 20, G: 20, B: 20, A: 255}}
+	dark := ControlTheme{Background: woxui.Color{R: 20, G: 20, B: 20, A: 255}}
 	single := WoxHintBox(HintBoxProps{Text: "Single", Width: 400, MaxLines: 1, Accent: accent, Theme: dark}).(woxwidget.Container)
 	multi := WoxHintBox(HintBoxProps{Text: "Multiple lines", Width: 400, MaxLines: 2, Accent: accent, Theme: dark}).(woxwidget.Container)
 

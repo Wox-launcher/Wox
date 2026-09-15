@@ -34,7 +34,7 @@ func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key("preview-scroll-" + props.ID), Offset: props.InitialOffset, FillWidth: true, FillHeight: true,
 			Content: selectablePreviewText(previewTextFieldID(props.ID, "text"), props.Value, innerWidth, props.FontSize, props.LineHeight, props.Color, props.Window, props.Theme),
-			Theme:   props.Theme, ThumbColor: props.Color,
+			Theme:   props.Theme.Controls, ThumbColor: props.Color,
 		}),
 	}
 }
@@ -96,7 +96,7 @@ func selectablePreviewText(id, value string, width, fontSize, lineHeight float32
 		ID: id, Label: value, Width: width, Height: height, Padding: woxwidget.Insets{Bottom: 1},
 		Transparent: true, DisableHover: true, Style: style, LineHeight: lineHeight,
 		TextColor: color, Value: value, ReadOnly: true, MaxLines: max(8, lines+4),
-		Window: window, Theme: theme,
+		Window: window, Theme: theme.Controls,
 	})
 }
 

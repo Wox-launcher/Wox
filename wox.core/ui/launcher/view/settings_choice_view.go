@@ -36,7 +36,7 @@ type SettingsChoiceProps struct {
 	Height       float32
 	Anchor       woxui.Rect
 	Filterable   bool
-	Theme        woxcomponent.Theme
+	Theme        woxcomponent.ControlTheme
 	Window       *woxui.Window
 	Title        string
 	FilterHint   string
@@ -267,13 +267,13 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			continue
 		}
 		selected := choice.Value == props.CurrentValue
-		background := props.Theme.ActionBackground
-		foreground := props.Theme.ActionText
+		background := props.Theme.Surface
+		foreground := props.Theme.Text
 		if selected {
-			background = props.Theme.SelectedBackground
-			foreground = props.Theme.SelectedTitle
+			background = props.Theme.SelectionBackground
+			foreground = props.Theme.SelectionText
 		} else if state.hovered == index || (state.hovered < 0 && state.keyboardSelected && state.selected == index) {
-			background = props.Theme.SelectedBackground
+			background = props.Theme.SelectionBackground
 			background.A = uint8(float32(background.A)*0.25 + 0.5)
 		}
 		contentWidth := max(float32(0), width-32)
@@ -385,22 +385,22 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 		})
 		searchContent := woxwidget.Container{Width: width, Height: settingsChoiceSearchHeight, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, search}}}
 		children = append(children, woxwidget.Stack{Width: width, Height: settingsChoiceSearchHeight, Children: []woxwidget.StackChild{
-			{Child: settingsChoiceRoundedEndBackground(width, settingsChoiceSearchHeight, props.Theme.ToolbarBackground, true)},
+			{Child: settingsChoiceRoundedEndBackground(width, settingsChoiceSearchHeight, props.Theme.Background, true)},
 			{Child: searchContent},
 		}})
 	}
 	if len(rows) > 0 {
 		children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key(props.ID + "-scroll"), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: width, Height: listHeight,
-			Controller: state.scrollController, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+			Controller: state.scrollController, Theme: props.Theme, ThumbColor: props.Theme.Text,
 		}))
 	}
-	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Floating: true, Color: props.Theme.ActionBackground,
+	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Floating: true, Color: props.Theme.Surface,
 		Padding: woxwidget.Insets{Top: menuPadding, Bottom: menuPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 	// Paint the border after the rows so their full-width backgrounds cannot cover the inset stroke.
 	// This also stays in Go rather than on the floating material, whose edge sits below the rows.
-	menuBorder := woxwidget.Container{Width: width, Height: height, Radius: 4, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1}
+	menuBorder := woxwidget.Container{Width: width, Height: height, Radius: 4, BorderColor: props.Theme.Border, BorderWidth: 1}
 	var surface woxwidget.Widget = woxwidget.Semantics{
 		Key: "setting-choice-menu", AutomationID: "setting-choice-menu", Role: woxui.AccessibilityRoleMenu, Label: props.Title,
 		Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: menuContent}, {Child: menuBorder}}},
@@ -417,7 +417,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 func settingsChoiceGroupHeader(width float32, choice SettingsChoice, index int, props SettingsChoiceProps) woxwidget.Widget {
 	key := woxwidget.Key(fmt.Sprintf("setting-choice-group-%d", index))
 	children := []woxwidget.Widget{woxwidget.Text{
-		Value: strings.ToUpper(choice.Label), Style: woxui.TextStyle{Size: woxcomponent.SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionHeader,
+		Value: strings.ToUpper(choice.Label), Style: woxui.TextStyle{Size: woxcomponent.SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
 	}}
 	if choice.GroupTooltip != "" && props.InfoIcon != nil && props.OnTooltip != nil {
 		children = append(children, woxwidget.Semantics{

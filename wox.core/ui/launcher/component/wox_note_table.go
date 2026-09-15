@@ -44,7 +44,7 @@ type NoteTableProps struct {
 	Table       common.NoteTable
 	Width       float32
 	ReadOnly    bool
-	Theme       Theme
+	Theme       ControlTheme
 	Window      *woxui.Window
 	Zoom        float32
 	Style       woxui.TextStyle
@@ -124,15 +124,15 @@ func noteTableToolbar(props NoteTableProps) woxwidget.Widget {
 		// Keep the same 28-unit slot while idle so revealing the bar does not push the grid down.
 		return woxwidget.Container{Width: props.Width, Height: noteTableToolbarHeight}
 	}
-	color := props.Theme.ResultSubtitle
+	color := props.Theme.TextSecondary
 	if color.A == 0 {
-		color = props.Theme.PreviewText
+		color = props.Theme.BodyText
 	}
 	button := func(id, label string, action func()) woxwidget.Widget {
 		return WoxIconButton(IconButtonProps{
 			ID: props.ID + "." + id, Label: label, Icon: FormatGlyph(id, 16, color),
 			Width: noteTableToolbarHeight, Height: noteTableToolbarHeight, Radius: 6,
-			HoverBackground: TitleBarAlpha(color, 20), FocusRingColor: props.Theme.Cursor, OnTap: action,
+			HoverBackground: TitleBarAlpha(color, 20), FocusRingColor: props.Theme.Focus, OnTap: action,
 			OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				if props.Actions.OnHover != nil {
 					props.Actions.OnHover(inside, label, bounds)
@@ -162,7 +162,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 	weight := props.Style.Weight
 	if row < table.HeaderRows {
 		weight = woxui.FontWeightSemibold
-		background = withAlpha(props.Theme.PreviewText, 12)
+		background = withAlpha(props.Theme.BodyText, 12)
 	}
 	focused := props.Focused && props.FocusRow == row && props.FocusCol == column
 	runs := NoteFieldRuns(noteTableCellRuns(cell, woxui.TextStyle{Size: props.Style.Size, Weight: weight, Family: props.Style.Family}, props.Theme))
@@ -179,7 +179,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 			Transparent: true, DisableHover: true,
 			Style:    woxui.TextStyle{Size: props.Style.Size, Weight: weight, Family: props.Style.Family},
 			RichRuns: runs, LineHeight: lineHeight, TextAlignmentY: 0.5,
-			TextColor: props.Theme.PreviewText, Value: cell.Text, Focused: focused, ReadOnly: props.ReadOnly,
+			TextColor: props.Theme.BodyText, Value: cell.Text, Focused: focused, ReadOnly: props.ReadOnly,
 			MaxLines: 1, Window: props.Window, Theme: props.Theme,
 			OnFocusChange: func(hasFocus bool) {
 				if hasFocus && props.OnFocus != nil {
@@ -221,7 +221,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 	})
 }
 
-func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle, theme Theme) []NoteTextRun {
+func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle, theme ControlTheme) []NoteTextRun {
 	styles := noteBlockStyles(common.NoteBlock{Text: cell.Text, Spans: cell.Spans}, cell.Text)
 	runs := make([]NoteTextRun, 0)
 	for offset := 0; offset < len(styles); {
@@ -240,7 +240,7 @@ func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle, theme Th
 		}
 		color := woxui.Color{}
 		if NoteOpenableLink(inline.link) != "" {
-			color = theme.Cursor
+			color = theme.Focus
 		}
 		runs = append(runs, NoteTextRun{
 			Start: offset, End: end, Style: style, Color: color,
@@ -367,8 +367,8 @@ func replaceNoteTable(document common.NoteDocument, block int, table *common.Not
 	return updated
 }
 
-func noteTableBorder(theme Theme) woxui.Color {
-	return withAlpha(theme.PreviewSplit, 100)
+func noteTableBorder(theme ControlTheme) woxui.Color {
+	return withAlpha(theme.Border, 100)
 }
 
 func noteTableZoom(zoom float32) float32 {

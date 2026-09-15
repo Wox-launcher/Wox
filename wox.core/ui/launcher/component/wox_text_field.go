@@ -116,7 +116,7 @@ type TextFieldProps struct {
 	// ExposeVisualLines publishes soft-wrapped lines and hanging indent on the text-field node.
 	ExposeVisualLines bool
 	Window            *woxui.Window
-	Theme             Theme
+	Theme             ControlTheme
 	OnKey             func(woxui.KeyEvent) bool
 	OnUndo            func() bool
 	OnRedo            func() bool
@@ -1090,10 +1090,10 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	}
 	background := props.Background
 	if background.A == 0 && !props.Transparent {
-		background = props.Theme.QueryBackground
+		background = props.Theme.InputBackground
 	}
 	if props.hovered {
-		background = controlHoverColor(background, props.Theme.ResultTitle)
+		background = controlHoverColor(background, props.Theme.Text)
 	}
 	style := props.Style
 	if style.Size <= 0 {
@@ -1101,7 +1101,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	}
 	textColor := props.TextColor
 	if textColor.A == 0 {
-		textColor = props.Theme.ActionText
+		textColor = props.Theme.ControlText
 	}
 	maxLines := max(1, props.MaxLines)
 	innerWidth := max(float32(0), props.Width-padding.Left-padding.Right)
@@ -1232,7 +1232,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	key := woxwidget.Key(props.ID)
 	focusRingColor := props.FocusRingColor
 	if focusRingColor.A == 0 && props.BorderWidth > 0 {
-		focusRingColor = props.Theme.Cursor
+		focusRingColor = props.Theme.Focus
 	}
 	selection := realState.Selection
 	value := realState.Text
@@ -1281,7 +1281,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 func textFieldInnerContent(props TextFieldProps, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, padding woxwidget.Insets, radius float32, background woxui.Color, innerWidth, innerHeight, height float32, maxLines int, softWrap bool) woxwidget.Widget {
 	painter := woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.caretActive, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 		if state.Text == "" && state.Composition == "" && props.Hint != "" {
-			displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
+			displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.TextSecondary)
 		}
 		if props.Window != nil {
 			drawTextFieldTrailingHandleHighlight(displayList, bounds, state, style, props, softWrap)
@@ -1330,9 +1330,9 @@ func textFieldTrailingHandleWidget(props TextFieldProps, state woxui.TextEditing
 	if !ok {
 		return nil
 	}
-	color := props.Theme.ResultSubtitle
+	color := props.Theme.TextSecondary
 	if color.A == 0 {
-		color = props.Theme.PreviewText
+		color = props.Theme.BodyText
 	}
 	id := props.ID + ".reorder"
 	label := spec.Label
@@ -1415,9 +1415,9 @@ func drawTextFieldTrailingHandleHighlight(displayList *woxui.DisplayList, bounds
 	if spec == nil || !spec.Active || props.Window == nil || props.LineHeight <= 0 {
 		return
 	}
-	wash := props.Theme.SelectionBackground
+	wash := props.Theme.TextSelectionBackground
 	if wash.A == 0 {
-		wash = withAlpha(props.Theme.Cursor, 36)
+		wash = withAlpha(props.Theme.Focus, 36)
 	} else {
 		wash.A = min(wash.A, 48)
 	}
@@ -1443,9 +1443,9 @@ func drawTextFieldTrailingHandleDropLine(displayList *woxui.DisplayList, bounds 
 	if y < bounds.Y-2 || y > bounds.Y+bounds.Height+2 {
 		return
 	}
-	color := props.Theme.Cursor
+	color := props.Theme.Focus
 	if color.A == 0 {
-		color = props.Theme.PreviewSplit
+		color = props.Theme.Border
 	}
 	displayList.FillRoundedRect(woxui.Rect{X: bounds.X, Y: y - 1, Width: bounds.Width, Height: 2}, 1, color)
 }
@@ -1464,9 +1464,9 @@ func textFieldReorderGhost(props TextFieldProps, handle woxui.Rect, innerWidth, 
 	if y+size > innerHeight {
 		y = max(float32(0), innerHeight-size)
 	}
-	color := props.Theme.ResultSubtitle
+	color := props.Theme.TextSecondary
 	if color.A == 0 {
-		color = props.Theme.PreviewText
+		color = props.Theme.BodyText
 	}
 	icon := woxwidget.Align{Width: size, Height: size, Horizontal: 0.5, Vertical: 0.5, Child: GripDotsGlyph(16, color)}
 	preview := spec.Preview
@@ -1480,7 +1480,7 @@ func textFieldReorderGhost(props TextFieldProps, handle woxui.Rect, innerWidth, 
 		width = size
 	}
 	x := max(float32(0), handle.X)
-	background := props.Theme.QueryBackground
+	background := props.Theme.InputBackground
 	if background.A == 0 {
 		background = props.Theme.Background
 	}
@@ -1949,7 +1949,7 @@ func textFieldAlignedTextBounds(bounds woxui.Rect, value string, style woxui.Tex
 	return bounds
 }
 
-func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, richRuns []TextFieldRichRun, textColor woxui.Color, theme Theme, focused, caretVisible, paintSelection bool, maxLines int, lineHeight, verticalOffset, textAlignmentY float32, softWrap bool, window *woxui.Window) {
+func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, richRuns []TextFieldRichRun, textColor woxui.Color, theme ControlTheme, focused, caretVisible, paintSelection bool, maxLines int, lineHeight, verticalOffset, textAlignmentY float32, softWrap bool, window *woxui.Window) {
 	richRuns = textFieldCompositionRichRuns(state, richRuns)
 	displayRunes, start, end, focus, compositionStart, compositionEnd := textFieldDisplayState(state)
 	lines := textFieldRichLines(string(displayRunes), window, style, bounds.Width, softWrap, richRuns)
@@ -1971,7 +1971,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 		if (focused || paintSelection) && selectionStart < selectionEnd {
 			prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, selectionStart, style, richRuns)
 			selectedWidth := textFieldMeasureRange(window, displayRunes, selectionStart, selectionEnd, style, richRuns)
-			displayList.FillRoundedRect(woxui.Rect{X: lineX + prefixWidth, Y: y, Width: selectedWidth, Height: lineHeight}, 3, theme.SelectionBackground)
+			displayList.FillRoundedRect(woxui.Rect{X: lineX + prefixWidth, Y: y, Width: selectedWidth, Height: lineHeight}, 3, theme.TextSelectionBackground)
 		}
 		if gutter, ok := textFieldLineGutter(line, richRuns); ok && gutter.PaintLineGutter != nil {
 			width := gutter.LineGutterWidth
@@ -1998,7 +1998,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 				}
 				color := textColor
 				if index == 1 {
-					color = theme.SelectionText
+					color = theme.TextSelectionText
 				}
 				displayList.PushClipRect(clip)
 				drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineHeight, style, richRuns, color, index != 1, textAlignmentY)
@@ -2018,10 +2018,10 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	if compositionStart >= line.start && compositionEnd <= line.end {
 		prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, compositionStart, style, nil)
 		compositionWidth := textFieldMeasureRange(window, displayRunes, compositionStart, compositionEnd, style, nil)
-		displayList.FillRect(woxui.Rect{X: lineX + prefixWidth, Y: cursorY + lineHeight - 2, Width: compositionWidth, Height: 1}, theme.Cursor)
+		displayList.FillRect(woxui.Rect{X: lineX + prefixWidth, Y: cursorY + lineHeight - 2, Width: compositionWidth, Height: 1}, theme.Focus)
 	}
 	if start == end {
-		displayList.DrawCaret(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: lineHeight}, theme.Cursor, caretVisible)
+		displayList.DrawCaret(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: lineHeight}, theme.Focus, caretVisible)
 	}
 }
 

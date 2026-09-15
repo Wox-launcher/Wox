@@ -25,7 +25,7 @@ func MarkdownPreviewView(props MarkdownPreviewProps) woxwidget.Widget {
 	innerWidth := max(float32(0), props.Width-40)
 	innerHeight := max(float32(0), props.Height-40)
 	content := woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
-		ID: props.ID, Document: props.Document, Width: innerWidth, Theme: props.Theme, Window: props.Window,
+		ID: props.ID, Document: props.Document, Width: innerWidth, Theme: props.Theme.Controls, Window: props.Window,
 		ResolveImage: props.ResolveImage, OnOpenImage: props.OnOpenImage, OnOpenLink: props.OnOpenLink,
 	})
 	return woxwidget.Container{

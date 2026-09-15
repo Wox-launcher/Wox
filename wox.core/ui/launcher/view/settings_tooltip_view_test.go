@@ -10,7 +10,7 @@ import (
 
 func TestSettingsInlineTooltipOverlayAnchorsNearField(t *testing.T) {
 	overlay, left, top := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
-		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 180, Width: 14, Height: 14}, Message: "Tooltip content", Side: "left", Theme: woxcomponent.Theme{},
+		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 180, Width: 14, Height: 14}, Message: "Tooltip content", Side: "left", Theme: woxcomponent.ControlTheme{},
 	})
 	if overlay == nil {
 		t.Fatal("expected tooltip overlay")
@@ -32,7 +32,7 @@ func TestSettingsInlineTooltipOverlayAnchorsNearField(t *testing.T) {
 
 func TestSettingsInlineTooltipOverlayFlipsInsideWindow(t *testing.T) {
 	overlay, left, _ := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
-		Width: 420, Height: 300, Anchor: woxui.Rect{X: 6, Y: 140, Width: 12, Height: 12}, Message: "Tooltip content", Side: "left", Theme: woxcomponent.Theme{},
+		Width: 420, Height: 300, Anchor: woxui.Rect{X: 6, Y: 140, Width: 12, Height: 12}, Message: "Tooltip content", Side: "left", Theme: woxcomponent.ControlTheme{},
 	})
 	if overlay == nil {
 		t.Fatal("expected tooltip overlay")
@@ -44,7 +44,7 @@ func TestSettingsInlineTooltipOverlayFlipsInsideWindow(t *testing.T) {
 
 func TestSettingsInlineTooltipOverlayAnchorsAboveField(t *testing.T) {
 	overlay, left, top := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
-		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 180, Width: 14, Height: 14}, Message: "Tooltip content", Side: "top", Theme: woxcomponent.Theme{},
+		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 180, Width: 14, Height: 14}, Message: "Tooltip content", Side: "top", Theme: woxcomponent.ControlTheme{},
 	})
 	if overlay == nil {
 		t.Fatal("expected tooltip overlay")
@@ -64,7 +64,7 @@ func TestSettingsInlineTooltipOverlayAnchorsAboveField(t *testing.T) {
 
 func TestSettingsInlineTooltipOverlayFlipsBelowWhenTopOverflows(t *testing.T) {
 	overlay, _, top := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
-		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 4, Width: 14, Height: 14}, Message: "Tooltip content", Side: "top", Theme: woxcomponent.Theme{},
+		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 4, Width: 14, Height: 14}, Message: "Tooltip content", Side: "top", Theme: woxcomponent.ControlTheme{},
 	})
 	if overlay == nil {
 		t.Fatal("expected tooltip overlay")

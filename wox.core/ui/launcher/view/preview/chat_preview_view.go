@@ -275,7 +275,7 @@ func chatHeaderButton(id, label string, selected bool, theme woxcomponent.Theme,
 	if selected {
 		variant = woxcomponent.ButtonSelected
 	}
-	return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Radius: 7, FontSize: 10, Variant: variant, OnTap: action, Theme: theme})
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Radius: 7, FontSize: 10, Variant: variant, OnTap: action, Theme: theme.Controls})
 }
 
 // ChatCatalogItemProps contains one selectable history, model, or skill entry.
@@ -355,7 +355,7 @@ func ChatCatalog(props ChatCatalogProps) woxwidget.Widget {
 	border.A = uint8(float32(border.A) * 0.14)
 	children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-catalog-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
-		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
+		Offset: props.Scroll, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 	// The catalog pops over the conversation, so it is a floating surface: the theme's
 	// ActionBackground may be translucent and only reads correctly over the native material.
@@ -571,7 +571,7 @@ func chatHistoryItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 		return woxwidget.Gesture{Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 			OnHover: onHover,
 			ID:      item.SelectID, Label: item.Title, OnTap: item.OnSelect, Width: width, Height: height,
-			Background: &background, HoverBackground: &theme.SelectedBackground, Radius: &radius, Theme: theme,
+			Background: &background, HoverBackground: &theme.SelectedBackground, Radius: &radius, Theme: theme.Controls,
 			Padding: woxwidget.Insets{Left: 12, Right: 12},
 			Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				woxcomponent.AddGlyph(18, iconColor),
@@ -620,7 +620,7 @@ func chatHistoryItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 	row := woxwidget.Gesture{Child: woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 		OnHover: onHover,
 		ID:      item.SelectID, Label: item.Title, OnTap: item.OnSelect, Selected: item.Selected,
-		Width: width, Height: rowHeight, Background: &background, HoverBackground: &theme.SelectedBackground, Radius: &radius, Theme: theme,
+		Width: width, Height: rowHeight, Background: &background, HoverBackground: &theme.SelectedBackground, Radius: &radius, Theme: theme.Controls,
 		Padding: woxwidget.Insets{Left: 12, Right: deleteWidth + 16},
 		Child:   woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13}, Color: titleColor}},
 	})}
@@ -653,7 +653,7 @@ func ChatDebug(props ChatDebugProps) woxwidget.Widget {
 	}}
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), FillWidth: true, FillHeight: true,
-		Offset: props.Scroll, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
+		Offset: props.Scroll, Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
 		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
 			Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
 			Child: woxwidget.TextBlock{Value: props.Value, Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: 10}, LineHeight: 16, Color: props.Theme.PreviewText, Layout: &props.Layout},
@@ -796,7 +796,7 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 			ItemKey:        func(index int) woxwidget.Key { return woxwidget.Key(messages[index].Key) },
 			ItemBuilder:    func(index int) woxwidget.Widget { return ChatMessage(messages[index], innerWidth) },
 		},
-		Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, OnScroll: func(delta float32) {
+		Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: func(delta float32) {
 			if props.OnScroll != nil {
 				props.OnScroll(delta, maxOffset)
 			}
@@ -1408,7 +1408,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "chat-input-" + props.Key, Label: props.Hint, Hint: props.Hint, Width: props.Width, Height: fieldHeight,
 		Padding: woxwidget.Insets{Left: chatComposerEditorPaddingX, Top: chatComposerEditorPaddingTop, Right: chatComposerEditorPaddingX, Bottom: chatComposerEditorPaddingBottom}, Background: props.Theme.QueryBackground,
-		Style: style, LineHeight: chatComposerLineHeight, Value: props.Editing.Text, Focused: props.Focused, MaxLines: maxLines, Window: props.Window, Theme: props.Theme,
+		Style: style, LineHeight: chatComposerLineHeight, Value: props.Editing.Text, Focused: props.Focused, MaxLines: maxLines, Window: props.Window, Theme: props.Theme.Controls,
 		RichRuns: props.RichRuns, AtomicTokens: props.AtomicTokens, OnPaste: props.OnPaste,
 		OnChanged: props.OnChanged, OnKey: props.OnKey, OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {
@@ -1423,7 +1423,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 			Key: woxwidget.Key("chat-input-scroll-" + props.Key), Width: props.Width, Height: editorHeight,
 			ContentHeight: fieldHeight, Content: input, AlwaysShowScrollbar: true,
 			KeepVisible: &woxwidget.ScrollRange{Start: caretTop, End: caretTop + chatComposerLineHeight},
-			Theme:       props.Theme, ThumbColor: props.Theme.ResultTitle, AutomationID: "chat-input-scroll-" + props.Key, Label: props.Hint,
+			Theme:       props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, AutomationID: "chat-input-scroll-" + props.Key, Label: props.Hint,
 		})
 	}
 	divider := props.Theme.ResultSubtitle
@@ -1437,7 +1437,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
 		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: modelButton}},
-		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, Disabled: props.Importing && !props.Sending, OnTap: props.OnSend, Theme: props.Theme})}},
+		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, Disabled: props.Importing && !props.Sending, OnTap: props.OnSend, Theme: props.Theme.Controls})}},
 	}
 	if props.Status != "" && statusWidth > 30 {
 		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
@@ -1478,7 +1478,7 @@ func chatComposerAttachmentPanes(props ChatInputProps) []woxwidget.Widget {
 		// A large selection must not push the editor and Send button out of the window.
 		panes = append(panes, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key("chat-attachments-" + props.Key), Width: props.Width, Height: float32(3) * chatQuoteCardHeight,
-			ContentHeight: float32(len(quotes)) * chatQuoteCardHeight, Theme: props.Theme, ThumbColor: props.Theme.ResultSubtitle,
+			ContentHeight: float32(len(quotes)) * chatQuoteCardHeight, Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultSubtitle,
 			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: quotes},
 		}))
 	} else {
@@ -1495,7 +1495,7 @@ func chatComposerAttachmentStrip(key string, width float32, tiles []woxwidget.Wi
 	if contentWidth > innerWidth {
 		row = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key("chat-attachments-" + key), Width: innerWidth, Height: chatAttachmentTileSize,
-			ContentWidth: contentWidth, Horizontal: true, Theme: theme, ThumbColor: theme.ResultSubtitle, Content: row,
+			ContentWidth: contentWidth, Horizontal: true, Theme: theme.Controls, ThumbColor: theme.ResultSubtitle, Content: row,
 		})
 	}
 	return woxwidget.Container{Width: width, Height: chatComposerAttachmentStripHeight, Padding: woxwidget.Insets{Left: chatComposerAttachmentInset, Top: chatComposerAttachmentInset, Right: chatComposerAttachmentInset}, Child: row}
@@ -1680,7 +1680,7 @@ func ChatQuestion(props ChatQuestionProps) woxwidget.Widget {
 			ID: props.Input.ID, Label: "Answer", Hint: "Type an answer…", Width: innerWidth, Height: props.Input.Height,
 			Radius: 7, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10, Bottom: 8}, Background: props.Theme.QueryBackground,
 			Style: woxui.TextStyle{Size: 12}, Value: props.Input.Editing.Text, Focused: props.Input.Focused, MaxLines: 4,
-			Window: props.Input.Window, Theme: props.Theme, OnChanged: props.Input.OnChanged, OnKey: props.Input.OnKey,
+			Window: props.Input.Window, Theme: props.Theme.Controls, OnChanged: props.Input.OnChanged, OnKey: props.Input.OnKey,
 			OnFocusChange: func(focused bool) {
 				if focused && props.Input.OnFocus != nil {
 					props.Input.OnFocus()
@@ -1689,8 +1689,8 @@ func ChatQuestion(props ChatQuestionProps) woxwidget.Widget {
 		}))
 	}
 	children = append(children, woxwidget.Align{Width: innerWidth, Height: 32, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-cancel", Label: "Cancel", Variant: woxcomponent.ButtonSurface, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-submit", Label: "Submit", Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-cancel", Label: "Cancel", Variant: woxcomponent.ButtonSurface, OnTap: props.OnCancel, Theme: props.Theme.Controls}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-submit", Label: "Submit", Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme.Controls}),
 	}}})
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 8}, Child: woxwidget.Clip{
 		Width: innerWidth, Height: max(float32(0), props.Height-16), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: children},

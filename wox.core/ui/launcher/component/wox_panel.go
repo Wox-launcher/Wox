@@ -14,14 +14,14 @@ type PanelProps struct {
 	Color       woxui.Color
 	BorderColor woxui.Color
 	Child       woxwidget.Widget
-	Theme       Theme
+	Theme       ControlTheme
 }
 
 // WoxPanel builds one themed settings or popup surface.
 func WoxPanel(props PanelProps) woxwidget.Widget {
 	color := props.Color
 	if color.A == 0 {
-		color = props.Theme.QueryBackground
+		color = props.Theme.InputBackground
 	}
 	radius := props.Radius
 	if radius <= 0 {

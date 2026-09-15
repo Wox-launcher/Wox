@@ -339,7 +339,6 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		Invalidate: app.invalidateSettingsWindow,
 		Translate:  app.translate,
 		IsDev:      isDev,
-		Palette:    func() uiPalette { return app.palette },
 		RunOnUI:    app.runOnUI,
 	}
 	app.sharedEdit = newSharedEditState()

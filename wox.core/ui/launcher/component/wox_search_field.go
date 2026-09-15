@@ -29,7 +29,7 @@ type SearchFieldProps struct {
 	SearchIcon    *woxui.Image
 	Actions       []SearchFieldAction
 	Window        *woxui.Window
-	Theme         Theme
+	Theme         ControlTheme
 	OnFocus       func()
 	OnClear       func()
 	OnKey         func(woxui.KeyEvent) bool
@@ -67,7 +67,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		leftPadding = leadingWidth + 2
 	}
 	rightPadding := float32(6) + clearWidth + actionsWidth + trailingInset
-	border := withAlpha(props.Theme.ResultSubtitle, 170)
+	border := withAlpha(props.Theme.TextSecondary, 170)
 	onFocusChange := props.OnFocusChange
 	if props.OnFocus != nil {
 		// Preserve the search entry hook now that the full-width field also receives icon clicks.
@@ -84,8 +84,8 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 	input := WoxTextField(TextFieldProps{
 		ID: props.ID, Label: props.Label, Hint: props.Label, Width: inputWidth, Height: height, Radius: 4,
 		Padding: woxwidget.Insets{Left: leftPadding, Top: 10, Right: rightPadding, Bottom: 10}, Transparent: true,
-		BorderColor: border, BorderWidth: 1, FocusRingColor: props.Theme.Cursor,
-		Style: woxui.TextStyle{Size: SettingsControlFontSize}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
+		BorderColor: border, BorderWidth: 1, FocusRingColor: props.Theme.Focus,
+		Style: woxui.TextStyle{Size: SettingsControlFontSize}, TextColor: props.Theme.Text, TextAlignmentY: 0.5,
 		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, Controller: props.Controller, MaxLines: 1, Window: props.Window, Theme: props.Theme,
 		OnKey: props.OnKey, OnFocusChange: onFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
@@ -98,10 +98,10 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 	}
 	overlayChildren = append(overlayChildren, woxwidget.Expanded{Child: woxwidget.Container{Height: height}})
 	if clearWidth > 0 {
-		hoverBackground := withAlpha(props.Theme.ResultSubtitle, 25)
+		hoverBackground := withAlpha(props.Theme.TextSecondary, 25)
 		overlayChildren = append(overlayChildren, woxwidget.Align{Width: clearWidth, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: WoxIconButton(IconButtonProps{
-			ID: props.ID + "-clear", Label: "Clear search", Icon: CloseGlyph(16, props.Theme.ResultSubtitle), Width: 28, Height: 28, Radius: 14,
-			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnClear,
+			ID: props.ID + "-clear", Label: "Clear search", Icon: CloseGlyph(16, props.Theme.TextSecondary), Width: 28, Height: 28, Radius: 14,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, OnTap: props.OnClear,
 		})})
 	}
 	for _, action := range props.Actions {
@@ -115,11 +115,11 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		}
 		background := woxui.Color{}
 		if action.Active {
-			background = props.Theme.SelectedBackground
+			background = props.Theme.SelectionBackground
 		}
-		hoverBackground := withAlpha(props.Theme.ResultSubtitle, 25)
+		hoverBackground := withAlpha(props.Theme.TextSecondary, 25)
 		if action.Active {
-			hoverBackground = props.Theme.SelectedBackground
+			hoverBackground = props.Theme.SelectionBackground
 		}
 		label := action.Label
 		if label == "" {
@@ -128,7 +128,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		buttonSize := min(width, float32(30))
 		overlayChildren = append(overlayChildren, woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: WoxIconButton(IconButtonProps{
 			ID: action.ID, Label: label, Icon: woxwidget.Image{Source: action.Icon, Width: iconSize, Height: iconSize}, Width: buttonSize, Height: buttonSize, Radius: buttonSize / 2,
-			Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, Disabled: action.Disabled, OnTap: action.OnTap,
+			Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, Disabled: action.Disabled, OnTap: action.OnTap,
 		})})
 	}
 	if trailingInset > 0 {

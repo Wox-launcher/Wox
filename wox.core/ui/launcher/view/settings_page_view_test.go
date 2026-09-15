@@ -40,7 +40,7 @@ func TestSettingRowDropdownUsesThemeTextColor(t *testing.T) {
 	want := woxui.Color{R: 12, G: 34, B: 56, A: 255}
 	row := SettingRow(SettingRowProps{
 		ID: "LaunchMode", Title: "Launch mode", Value: "Continue", Width: 800,
-		Theme: woxcomponent.Theme{ResultTitle: want, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Theme: woxcomponent.ControlTheme{Text: want, TextSecondary: woxui.Color{R: 255, A: 255}},
 	}).(woxwidget.Container)
 	field := focusedControlGesture(row.Child.(woxwidget.Flex).Children[1].(woxwidget.Keyed).Child).Child.(woxwidget.Container)
 	value := field.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.TextBlock)

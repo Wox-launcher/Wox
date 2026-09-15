@@ -38,7 +38,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		displayName := a.localizedRuntimeDisplayName(status.Runtime)
 		pluginLabel := strings.ReplaceAll(a.translate("i18n:ui_runtime_status_plugin_count"), "{count}", fmt.Sprintf("%d", status.LoadedPluginCount))
 		converted := launcherview.RuntimeStatus{
-			Runtime: status.Runtime, DisplayName: displayName, Mark: runtimeFallbackMark(status.Runtime), Icon: a.imageForSize(runtimeIconSource(status.Runtime), physicalImageSize(22, imageScale)), Version: version,
+			Runtime: status.Runtime, DisplayName: displayName, Mark: runtimeFallbackMark(status.Runtime), Icon: a.imageForSurface(runtimeIconSource(status.Runtime), physicalImageSize(22, imageScale), settingsPalette().Background), Version: version,
 			StatusCode: status.StatusCode, StatusLabel: a.localizedRuntimeStatusLabel(status), Detail: runtimeStatusDetail(status), PluginLabel: pluginLabel,
 			Actionable: runtimeStatusActionable(status),
 		}
@@ -48,7 +48,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 				labelKey = "ui_runtime_upgrade_runtime"
 			}
 			converted.InstallLabel = strings.ReplaceAll(a.translate("i18n:"+labelKey), "{runtime}", displayName)
-			converted.InstallIcon = a.imageForTint(settingControlIconSource("external"), &snapshot.palette.resultTitle, physicalImageSize(14, imageScale))
+			converted.InstallIcon = a.imageForTint(settingControlIconSource("external"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
 			converted.OnInstall = func() { a.openRuntimeInstallURL(status) }
 		}
 		if runtimeStatusRefreshable(status) {
@@ -56,7 +56,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			if strings.EqualFold(snapshot.runtime.Refreshing, status.Runtime) {
 				converted.RefreshLabel = a.translate("i18n:ui_runtime_refreshing_host")
 			}
-			converted.RefreshIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.resultTitle, physicalImageSize(14, imageScale))
+			converted.RefreshIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
 			converted.OnRefresh = func() { a.refreshRuntimeHost(status.Runtime) }
 		}
 		if status.CanRestart {
@@ -64,7 +64,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			if strings.EqualFold(snapshot.runtime.Restarting, status.Runtime) {
 				converted.RestartLabel = a.translate("i18n:ui_runtime_restarting_host")
 			}
-			converted.RestartIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.resultTitle, physicalImageSize(14, imageScale))
+			converted.RestartIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
 			converted.OnRestart = func() { a.restartRuntimeHost(status.Runtime) }
 		}
 		statuses = append(statuses, converted)
@@ -88,7 +88,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		})
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
-		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette.componentTheme(), Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
+		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette, Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
 		Restarting: snapshot.runtime.Restarting != "", Refreshing: snapshot.runtime.Refreshing != "", Error: snapshot.runtime.Error,
 		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})

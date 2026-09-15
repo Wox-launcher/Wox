@@ -22,7 +22,7 @@ type ConfirmIconButtonProps struct {
 	ConfirmLabel string
 	Icon         *woxui.Image
 	IdleIcon     woxwidget.Widget
-	Theme        Theme
+	Theme        ControlTheme
 	OnDelete     func()
 }
 
@@ -67,7 +67,7 @@ func (s *confirmIconButtonState) Dispose() {}
 
 // confirmIconButtonWithState applies the shared idle and confirmation treatments.
 func confirmIconButtonWithState(props ConfirmIconButtonProps, confirm bool, onHover func(bool), onDelete func()) woxwidget.Widget {
-	hoverBackground := props.Theme.ResultTitle
+	hoverBackground := props.Theme.Text
 	hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
 	label := props.Label
 	background := woxui.Color{}
@@ -80,13 +80,13 @@ func confirmIconButtonWithState(props ConfirmIconButtonProps, confirm bool, onHo
 	if confirm {
 		idleIcon = nil
 		label = props.ConfirmLabel
-		background = props.Theme.ErrorText
-		hoverBackground = props.Theme.ErrorText
-		icon = CheckGlyph(14, props.Theme.SelectedTitle)
+		background = props.Theme.Error
+		hoverBackground = props.Theme.Error
+		icon = CheckGlyph(14, props.Theme.SelectionText)
 	}
 	return WoxIconButton(IconButtonProps{
 		ID: props.ID, Label: label, Icon: icon, IdleIcon: idleIcon, Width: SettingsCompactControlHeight, Height: SettingsCompactControlHeight, Radius: radius,
-		Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnFocusChange: func(focused bool) {
+		Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, OnFocusChange: func(focused bool) {
 			if !focused && onHover != nil {
 				onHover(false)
 			}

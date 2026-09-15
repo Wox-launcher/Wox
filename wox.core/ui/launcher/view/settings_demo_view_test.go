@@ -11,12 +11,12 @@ import (
 func TestSettingsDemoOverlayClampsAndForwardsHover(t *testing.T) {
 	var hoverStates []bool
 	overlay, left, top := SettingsDemoOverlay(
-		OnboardingProps{Labels: map[string]string{}, Theme: woxcomponent.Theme{}},
+		OnboardingProps{Labels: map[string]string{}, PreviewTheme: woxcomponent.Theme{}},
 		OnboardingStep{ID: "queryHotkeys", Title: "Query Hotkeys"},
 		woxui.Rect{X: 1080, Y: 700, Width: 18, Height: 18},
 		1152,
 		768,
-		woxcomponent.Theme{},
+		woxcomponent.ControlTheme{},
 		func(inside bool) { hoverStates = append(hoverStates, inside) },
 	)
 	semantics := overlay.(woxwidget.Semantics)

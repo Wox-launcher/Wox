@@ -37,11 +37,11 @@ func TestParseMarkdownBuildsSharedPreviewBlocks(t *testing.T) {
 }
 
 func TestMarkdownUsesSharedDocumentDecorations(t *testing.T) {
-	theme := Theme{
-		Cursor:         woxui.Color{R: 30, G: 120, B: 220, A: 255},
-		PreviewText:    woxui.Color{R: 230, G: 230, B: 230, A: 255},
-		PreviewSplit:   woxui.Color{R: 90, G: 90, B: 90, A: 255},
-		ResultSubtitle: woxui.Color{R: 140, G: 140, B: 140, A: 255},
+	theme := ControlTheme{
+		Focus:         woxui.Color{R: 30, G: 120, B: 220, A: 255},
+		BodyText:      woxui.Color{R: 230, G: 230, B: 230, A: 255},
+		Border:        woxui.Color{R: 90, G: 90, B: 90, A: 255},
+		TextSecondary: woxui.Color{R: 140, G: 140, B: 140, A: 255},
 	}
 	document := ParseMarkdown("- [x] done\n\n> quote\n\n---")
 
@@ -55,8 +55,8 @@ func TestMarkdownUsesSharedDocumentDecorations(t *testing.T) {
 		t.Fatalf("task marker = %#v, want shared document checkbox", marker.Child)
 	}
 	body := row.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Wrap)
-	if text := body.Children[0].(woxwidget.Text); text.Color != theme.ResultSubtitle || !text.Strike {
-		t.Fatalf("completed task text = %#v, want muted %#v with strikethrough", text, theme.ResultSubtitle)
+	if text := body.Children[0].(woxwidget.Text); text.Color != theme.TextSecondary || !text.Strike {
+		t.Fatalf("completed task text = %#v, want muted %#v with strikethrough", text, theme.TextSecondary)
 	}
 	bullet := renderMarkdownBlock(ParseMarkdown("- item").blocks[0], MarkdownProps{Theme: theme}, 300, new(int), new(int)).(woxwidget.Flex)
 	bulletMarker := bullet.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
@@ -204,7 +204,7 @@ func TestMarkdownLinkOpensFromPointerAction(t *testing.T) {
 	document := ParseMarkdown(`[#4497](https://github.com/Wox-launcher/Wox/issues/4497)`)
 	opened := ""
 	widget := renderMarkdownBlock(document.blocks[0], MarkdownProps{
-		ID: "preview", Theme: Theme{Cursor: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, OnOpenLink: func(target string) { opened = target },
+		ID: "preview", Theme: ControlTheme{Focus: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, OnOpenLink: func(target string) { opened = target },
 	}, 300, new(int), new(int))
 
 	wrap := widget.(woxwidget.Wrap)
@@ -232,7 +232,7 @@ func TestMarkdownLinkOpensFromPointerAction(t *testing.T) {
 func TestMarkdownLinkCanExcludeKeyboardFocus(t *testing.T) {
 	document := ParseMarkdown(`[Install](https://wox.one)`)
 	widget := renderMarkdownBlock(document.blocks[0], MarkdownProps{
-		ID: "form-help", ExcludeLinkFocus: true, Theme: Theme{Cursor: woxui.Color{A: 255}}, OnOpenLink: func(string) {},
+		ID: "form-help", ExcludeLinkFocus: true, Theme: ControlTheme{Focus: woxui.Color{A: 255}}, OnOpenLink: func(string) {},
 	}, 300, new(int), new(int))
 	wrap := widget.(woxwidget.Wrap)
 	semantics := wrap.Children[0].(woxwidget.Semantics)
@@ -245,7 +245,7 @@ func TestMarkdownLinkCanExcludeKeyboardFocus(t *testing.T) {
 }
 
 func TestMarkdownTableUsesCollapsedGridLines(t *testing.T) {
-	theme := Theme{PreviewSplit: woxui.Color{R: 90, G: 90, B: 90, A: 255}, PreviewText: woxui.Color{A: 255}}
+	theme := ControlTheme{Border: woxui.Color{R: 90, G: 90, B: 90, A: 255}, BodyText: woxui.Color{A: 255}}
 	widget := renderMarkdownBlock(ParseMarkdown("| A | B |\n| - | - |\n| 1 | 2 |").blocks[0], MarkdownProps{Theme: theme}, 300, new(int), new(int)).(woxwidget.Stack)
 	if len(widget.Children) != 2 {
 		t.Fatalf("markdown table children = %d, want content plus one outer stroke", len(widget.Children))
@@ -266,7 +266,7 @@ func TestMarkdownTableUsesCollapsedGridLines(t *testing.T) {
 }
 
 func TestMarkdownLinkUsesHandCursor(t *testing.T) {
-	_, _, links := markdownRunsContent(ParseMarkdown("[Dashboard](https://developer.spotify.com/dashboard)").blocks[0].runs, 12, Theme{}, false)
+	_, _, links := markdownRunsContent(ParseMarkdown("[Dashboard](https://developer.spotify.com/dashboard)").blocks[0].runs, 12, ControlTheme{}, false)
 	if markdownCursorAt(links, 0) != woxui.PointerCursorHand {
 		t.Fatal("hovering a Markdown link should use the hand cursor")
 	}
@@ -279,7 +279,7 @@ func TestWoxMarkdownUsesSelectableTextWhenWindowIsSet(t *testing.T) {
 	const body = "Copy this and that."
 	widget := WoxMarkdown(MarkdownProps{
 		ID: "md", Document: ParseMarkdown("Copy **this** and [that](https://wox.one)."),
-		Width: 300, Window: &woxui.Window{}, Theme: Theme{PreviewText: woxui.Color{A: 255}},
+		Width: 300, Window: &woxui.Window{}, Theme: ControlTheme{BodyText: woxui.Color{A: 255}},
 		OnOpenLink: func(string) {},
 	})
 	flex := widget.(woxwidget.Flex)
@@ -301,7 +301,7 @@ func TestWoxMarkdownSelectAllCopiesPlainText(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return WoxMarkdown(MarkdownProps{
 			ID: "md", Document: ParseMarkdown("Copy **this** and [that](https://wox.one)."),
-			Width: 300, Window: &woxui.Window{}, Theme: Theme{PreviewText: woxui.Color{A: 255}},
+			Width: 300, Window: &woxui.Window{}, Theme: ControlTheme{BodyText: woxui.Color{A: 255}},
 			OnOpenLink: func(string) {},
 		})
 	})

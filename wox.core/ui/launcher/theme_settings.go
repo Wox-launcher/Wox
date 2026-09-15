@@ -44,14 +44,11 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		item := themeCatalogItem(themeSnap.Themes[themeSnap.ThemeSelected], themeSnap.ThemeSelected, snapshot)
 		detail = &item
 	}
-	iconTint := snapshot.palette.resultTitle
-	searchActionTint := snapshot.palette.resultTitle
-	selectedIconTint := snapshot.palette.selectedTitle
+	iconTint := snapshot.palette.Text
+	searchActionTint := snapshot.palette.Text
+	selectedIconTint := snapshot.palette.SelectionText
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
-	autoHintAccent := woxui.Color{R: 33, G: 150, B: 243, A: 255}
-	if themeColorIsDark(snapshot.palette.background) {
-		autoHintAccent = woxui.Color{R: 64, G: 196, B: 255, A: 255}
-	}
+	autoHintAccent := snapshot.palette.Info
 	previewTexts := make([]string, 5)
 	previewSubtitles := make([]string, 5)
 	for index := range previewTexts {
@@ -59,7 +56,7 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		previewSubtitles[index] = strings.ReplaceAll(a.translate("i18n:ui_theme_preview_subtitle"), "{index}", fmt.Sprintf("%d", index+1))
 	}
 	props := launcherview.ThemeSettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Mode: themeSnap.ThemesMode,
+		Width: width, Height: height, Theme: snapshot.palette, Mode: themeSnap.ThemesMode,
 		Error: themeSnap.ThemesError, Operation: themeSnap.ThemeOperation, UninstallArmed: themeSnap.ThemeUninstallArmed, Items: items, Detail: detail,
 		Search: themeSnap.ThemeSearch, SearchFocused: themeSnap.ThemeSearchFocused, SearchPlaceholder: fmt.Sprintf(a.translate("i18n:ui_setting_theme_search_placeholder"), len(items)),
 		LocateLabel: a.translate("i18n:ui_setting_theme_locate_current"),

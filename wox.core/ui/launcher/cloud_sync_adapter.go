@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	woxcomponent "wox/ui/launcher/component"
 
 	"wox/cloudsync"
 	launcherview "wox/ui/launcher/view"
@@ -21,9 +22,9 @@ type cloudPlanTooltipState struct {
 // buildCloudSettingsPage maps cloud state into the portable cloud settings view.
 func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	contentWidth := launcherview.SettingsPageContentWidth(width)
-	theme := snapshot.palette.componentTheme()
+	theme := snapshot.palette
 	message := snapshot.cloud.Error
-	messageColor := theme.ErrorText
+	messageColor := theme.Error
 	return launcherview.CloudSettingsPage(launcherview.CloudSettingsPageProps{
 		Width:        width,
 		Height:       height,
@@ -45,7 +46,7 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 
 // cloudIntroViewProps prepares the signed-out Flutter-equivalent product and plan summary.
 func (a *App) cloudIntroViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudIntroProps {
-	iconTint := snapshot.palette.resultTitle
+	iconTint := snapshot.palette.Text
 	freePrice := cloudBillingPriceText(snapshot.cloud.BillingPlan.Free.Price)
 	if freePrice == "" {
 		freePrice = "$0/month"
@@ -124,8 +125,8 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth, ima
 		BillingLabel:           a.translate("i18n:ui_cloud_sync_billing_help"),
 		BillingTips:            a.translate("i18n:ui_cloud_sync_billing_help_tips"),
 		SupportLabel:           a.translate("i18n:ui_cloud_sync_contact_support"),
-		InfoIcon:               a.imageForTint(settingNavIconSource("about"), &snapshot.palette.resultSubtitle, physicalImageSize(14, imageScale)),
-		SupportIcon:            a.imageForTint(settingControlIconSource("email"), &snapshot.palette.resultTitle, physicalImageSize(16, imageScale)),
+		InfoIcon:               a.imageForTint(settingNavIconSource("about"), &snapshot.palette.TextSecondary, physicalImageSize(14, imageScale)),
+		SupportIcon:            a.imageForTint(settingControlIconSource("email"), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
 		ActionsEnabled:         snapshot.cloud.Busy == "",
 		OnLogin:                func() { a.openCloudAccountForm("login") },
 		OnRegister:             func() { a.openCloudAccountForm("register") },
@@ -211,8 +212,8 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, contentWidth float32
 }
 
 func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, woxui.Color) {
-	muted := snapshot.palette.resultSubtitle
-	errorColor := snapshot.palette.componentTheme().ErrorText
+	muted := snapshot.palette.TextSecondary
+	errorColor := snapshot.palette.Error
 	if snapshot.cloud.Loading {
 		return a.translate("i18n:ui_cloud_sync_loading"), "", muted
 	}
@@ -414,7 +415,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, contentWidth, ima
 		Tips:           tips,
 		LabelWidth:     cloudSettingsLabelWidth(contentWidth, 154),
 		RefreshLabel:   cloudRefreshLabel(a, snapshot),
-		RefreshIcon:    a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.resultTitle, physicalImageSize(16, imageScale)),
+		RefreshIcon:    a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
 		RefreshEnabled: !snapshot.cloud.Loading && snapshot.cloud.Busy == "",
 		EmptyLabel:     a.translate("i18n:ui_cloud_sync_devices_empty"),
 		Items:          items,
@@ -463,14 +464,14 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 		}
 		var icon *woxui.Image
 		if plugin.Icon.ImageType != "" {
-			icon = a.imageForSize(plugin.Icon, physicalImageSize(18, imageScale))
+			icon = a.imageForSurface(plugin.Icon, physicalImageSize(18, imageScale), settingsPalette().Background)
 		}
 		items = append(items, launcherview.CloudPluginExclusionProps{
 			ID: fmt.Sprintf("cloud-plugin-%d", index), Name: name, PluginID: pluginID, Icon: icon,
 			OnDelete: func() { a.toggleCloudPluginExclusion(pluginID) },
 		})
 	}
-	foreground := snapshot.palette.resultSubtitle
+	foreground := snapshot.palette.TextSecondary
 	return launcherview.CloudPluginExclusionsProps{
 		SectionLabel:   a.translate("i18n:ui_cloud_sync_plugin_exclusions"),
 		Tips:           a.translate("i18n:ui_cloud_sync_plugin_exclusions_tips"),
@@ -485,7 +486,7 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 }
 
 // buildCloudPluginExclusionOverlay maps the transient row editor onto the Flutter-style dialog shell.
-func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialogSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialogSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	plugins := a.cloudPluginExclusionPlugins()
 	choices := make([]launcherview.SettingsChoice, 0, len(plugins))
 	selectedName := dialog.Selected
@@ -497,7 +498,7 @@ func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialo
 		}
 		leading := (*woxui.Image)(nil)
 		if plugin.Icon.ImageType != "" {
-			leading = a.imageForSize(plugin.Icon, physicalImageSize(18, imageScale))
+			leading = a.imageForSurface(plugin.Icon, physicalImageSize(18, imageScale), settingsPalette().Background)
 		}
 		choices = append(choices, launcherview.SettingsChoice{Value: plugin.ID, Label: label, Leading: leading})
 		if plugin.ID == dialog.Selected {
@@ -509,7 +510,7 @@ func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialo
 		Width: width, Height: height, PanelWidth: 648, PanelHeight: launcherview.CloudPluginExclusionDialogHeight,
 		FieldLabel: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"), Description: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin_tips"),
 		Selected: dialog.Selected, SelectedName: selectedName, SelectedIcon: selectedIcon, Choices: choices, ChoiceAnchor: dialog.ChoiceAnchor, ChoiceOpen: dialog.ChoiceOpen,
-		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Window: a.settingsNativeWindow(), Theme: palette.componentTheme(),
+		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Window: a.settingsNativeWindow(), Theme: palette,
 		OnChoiceTap: a.openCloudPluginExclusionChoice, OnChoose: a.chooseCloudPluginExclusion, OnCancel: a.closeCloudPluginExclusionDialog, OnSave: a.saveCloudPluginExclusion,
 	})
 }
@@ -537,7 +538,7 @@ func (a *App) cloudConfigNotesViewProps(snapshot settingsSnapshot, imageScale fl
 		Tips:         a.translate("i18n:ui_cloud_sync_config_notes_tips"),
 		ItemLabel:    a.translate("i18n:ui_cloud_sync_config_notes_item"),
 		ModeLabel:    a.translate("i18n:ui_cloud_sync_config_notes_mode"),
-		InfoIcon:     a.imageForTint(settingNavIconSource("about"), &snapshot.palette.resultSubtitle, physicalImageSize(14, imageScale)),
+		InfoIcon:     a.imageForTint(settingNavIconSource("about"), &snapshot.palette.TextSecondary, physicalImageSize(14, imageScale)),
 		Items:        items,
 		OnTooltip:    a.setSettingChoiceTooltip,
 	}
@@ -611,7 +612,7 @@ func (a *App) formatCloudTime(timestamp int64) string {
 }
 
 // buildCloudFormOverlay maps account form state into typed view props.
-func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
 	panelWidth := min(float32(408), max(float32(320), width-64))
 	fields := make([]launcherview.CloudFormFieldProps, 0, len(snapshot.definitions))
 	window := a.formFieldNativeWindow("cloud-form")
@@ -670,11 +671,11 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 	}
 
 	feedback := a.translate(snapshot.notice)
-	feedbackColor := palette.actionHeader
-	theme := palette.componentTheme()
+	feedbackColor := palette.TextSecondary
+	theme := palette
 	if snapshot.error != "" {
 		feedback = a.translate(snapshot.error)
-		feedbackColor = theme.ErrorText
+		feedbackColor = theme.Error
 	}
 	submitLabel := a.translate("i18n:ui_cloud_sync_confirm")
 	if snapshot.saving {

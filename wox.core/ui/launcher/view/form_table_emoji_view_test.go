@@ -49,7 +49,7 @@ func TestFormTableEmojiPickerRendersDialogAndChooses(t *testing.T) {
 			{Label: "Recommended", Marker: "👍", Emojis: []string{"🤖", "💡", "🔍", "📊", "📈", "📝", "🛠", "⚙️", "🧠", "✅", "🚀", "🎯"}},
 			{Label: "Smileys", Marker: "😊", Emojis: []string{"😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "🙂", "😉", "😍"}},
 		},
-		Theme: woxcomponent.Theme{}, InitialEmoji: "😃", OnChoose: func(emoji string) { chosen = emoji }, OnCancel: func() {},
+		Theme: woxcomponent.ControlTheme{}, InitialEmoji: "😃", OnChoose: func(emoji string) { chosen = emoji }, OnCancel: func() {},
 	}
 	state := &formTableEmojiPickerState{}
 	state.InitState(woxwidget.StateContext{}, props)

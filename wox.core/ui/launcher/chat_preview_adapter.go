@@ -945,7 +945,7 @@ func (a *App) chatComposerInputHeight(snapshot *chatPreviewSnapshot, width float
 	skillTags := chatSkillTagRanges(snapshot.editing.Text)
 	richRuns := make([]woxcomponent.TextFieldRichRun, 0, len(skillTags))
 	for _, tag := range skillTags {
-		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme))
+		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme.Controls))
 	}
 	return previewview.ChatComposerHeightForAttachments(a.chatAttachmentProps(snapshot.attachments, a.translate("i18n:ui_ai_chat_quote_label")), previewview.ChatComposerVisibleLines(snapshot.editing.Text, width, window, richRuns))
 }
@@ -1008,7 +1008,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	richRuns := make([]woxcomponent.TextFieldRichRun, 0, len(skillTags))
 	atomicTokens := make([]woxcomponent.TextFieldTokenRange, 0, len(skillTags))
 	for _, tag := range skillTags {
-		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme))
+		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme.Controls))
 		atomicTokens = append(atomicTokens, woxcomponent.TextFieldTokenRange{Start: tag.start, End: tag.end})
 	}
 	return previewview.ChatInputProps{

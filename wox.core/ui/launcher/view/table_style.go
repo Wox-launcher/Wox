@@ -22,13 +22,13 @@ type tableSurfaceStyle struct {
 }
 
 // newTableSurfaceStyle resolves the shared table colors for the active theme.
-func newTableSurfaceStyle(theme woxcomponent.Theme) tableSurfaceStyle {
+func newTableSurfaceStyle(theme woxcomponent.ControlTheme) tableSurfaceStyle {
 	return tableSurfaceStyle{
-		headerBackground: tableSurfaceAlpha(theme.ResultTitle, 14),
-		bodyBackground:   tableSurfaceAlpha(theme.ResultTitle, 5),
-		headerText:       theme.ResultSubtitle,
-		border:           tableSurfaceAlpha(theme.PreviewSplit, min(theme.PreviewSplit.A, 40)),
-		rowDivider:       tableSurfaceAlpha(theme.PreviewSplit, min(theme.PreviewSplit.A, 26)),
+		headerBackground: tableSurfaceAlpha(theme.Text, 14),
+		bodyBackground:   tableSurfaceAlpha(theme.Text, 5),
+		headerText:       theme.TextSecondary,
+		border:           tableSurfaceAlpha(theme.Border, min(theme.Border.A, 40)),
+		rowDivider:       tableSurfaceAlpha(theme.Border, min(theme.Border.A, 26)),
 	}
 }
 

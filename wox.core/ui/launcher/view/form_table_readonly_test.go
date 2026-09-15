@@ -15,7 +15,7 @@ func TestReadonlyFormTableRowDisablesOperationActions(t *testing.T) {
 		ID: "roots", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
 		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon,
 		DisabledEditIcon: disabledIcon, DisabledCloneIcon: disabledIcon, DisabledDeleteIcon: disabledIcon,
-		Theme: woxcomponent.Theme{},
+		Theme: woxcomponent.ControlTheme{},
 	}, FormTableRow{Index: -1, ReadOnly: true}, 130, false).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(actions.Children) != 3 {
@@ -55,7 +55,7 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	}
 
 	icon := &woxui.Image{}
-	cell := formTableDataCellAt(FormTableFieldProps{ID: "notes", InfoIcon: icon, Theme: woxcomponent.Theme{}}, FormTableRow{}, 2, 1, FormTableCell{Text: "Platform sync", Tooltip: "Per platform"}, 220, false)
+	cell := formTableDataCellAt(FormTableFieldProps{ID: "notes", InfoIcon: icon, Theme: woxcomponent.ControlTheme{}}, FormTableRow{}, 2, 1, FormTableCell{Text: "Platform sync", Tooltip: "Per platform"}, 220, false)
 	_, alignment, raw := formTableDataCellSlot(t, cell)
 	content := raw.(woxwidget.Flex)
 	if len(content.Children) != 2 {
@@ -79,7 +79,7 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 
 func TestFormTableCellSupportsCustomContent(t *testing.T) {
 	child := woxwidget.Text{Value: "Restore"}
-	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Child: child}, 220).(woxwidget.Container)
+	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.ControlTheme{}}, FormTableCell{Child: child}, 220).(woxwidget.Container)
 	_, content, inner := formTableDataCellSlot(t, cell)
 	if content.Width != 196 || cell.Padding.Top != 0 || inner != child {
 		t.Fatalf("custom table cell alignment = %#v with padding top %.0f, want a full-height centered slot", cell.Child, cell.Padding.Top)
@@ -87,7 +87,7 @@ func TestFormTableCellSupportsCustomContent(t *testing.T) {
 }
 
 func TestFormTableCellUsesRequestedIconSize(t *testing.T) {
-	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Icon: &woxui.Image{}, IconSize: 24}, 120).(woxwidget.Container)
+	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.ControlTheme{}}, FormTableCell{Icon: &woxui.Image{}, IconSize: 24}, 120).(woxwidget.Container)
 	_, alignment, raw := formTableDataCellSlot(t, cell)
 	content := raw.(woxwidget.Flex)
 	icon := content.Children[0].(woxwidget.Image)
@@ -98,7 +98,7 @@ func TestFormTableCellUsesRequestedIconSize(t *testing.T) {
 }
 
 func TestFormTableListRowCentersLabel(t *testing.T) {
-	list := FormTableList(FormTableListProps{Width: 240, Height: 180, Rows: []string{"shortcut"}, Theme: woxcomponent.Theme{}}).(woxwidget.Flex)
+	list := FormTableList(FormTableListProps{Width: 240, Height: 180, Rows: []string{"shortcut"}, Theme: woxcomponent.ControlTheme{}}).(woxwidget.Flex)
 	scroll := list.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	if row.Padding.Top != 0 || row.Padding.Bottom != 0 {
@@ -112,7 +112,7 @@ func TestFormTableListRowCentersLabel(t *testing.T) {
 
 func TestFormTableHeaderCellCentersLabel(t *testing.T) {
 	icon := &woxui.Image{}
-	cell := formTableHeaderCell(FormTableFieldProps{ID: "commands", InfoIcon: icon, Theme: woxcomponent.Theme{}}, FormTableColumn{Label: "快捷键", Tooltip: "alias tip"}, 160, 0).(woxwidget.Container)
+	cell := formTableHeaderCell(FormTableFieldProps{ID: "commands", InfoIcon: icon, Theme: woxcomponent.ControlTheme{}}, FormTableColumn{Label: "快捷键", Tooltip: "alias tip"}, 160, 0).(woxwidget.Container)
 	if cell.Padding.Top != 0 || cell.Padding.Bottom != 0 {
 		t.Fatalf("header padding = %#v, want horizontal insets only", cell.Padding)
 	}

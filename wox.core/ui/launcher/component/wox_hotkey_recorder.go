@@ -17,20 +17,20 @@ type HotkeyRecorderProps struct {
 	Hold          bool
 	HoldPrefix    string
 	Window        *woxui.Window
-	Theme         Theme
+	Theme         ControlTheme
 	OnFocusChange func(bool)
 }
 
 // WoxHotkeyRecorder matches Flutter's outlined recorder with platform-labelled keycaps.
 func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
-	border := withAlpha(props.Theme.ResultTitle, 140)
+	border := withAlpha(props.Theme.Text, 140)
 	if props.Error {
-		border = props.Theme.ErrorText
+		border = props.Theme.Error
 	}
 
 	contentWidth := float32(80)
 	var content woxwidget.Widget = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
-		Value: props.Placeholder, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Theme.ResultTitle,
+		Value: props.Placeholder, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Theme.Text,
 	}}
 	if props.Hold && len(props.Labels) > 0 {
 		label := strings.TrimSpace(props.HoldPrefix + " " + strings.Join(props.Labels, " + "))
@@ -41,7 +41,7 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 			}
 		}
 		content = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
-			Value: label, Style: woxui.TextStyle{Size: SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+			Value: label, Style: woxui.TextStyle{Size: SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ControlText,
 		}}
 	} else if len(props.Labels) > 0 {
 		content, contentWidth = WoxHotkey(HotkeyProps{
@@ -103,13 +103,13 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 	s.updateBinding(context, config.Props.ID)
 	contentBox := config.Child.(woxwidget.Container)
 	if s.hovered {
-		contentBox.Color = controlHoverColor(contentBox.Color, config.Props.Theme.ResultTitle)
+		contentBox.Color = controlHoverColor(contentBox.Color, config.Props.Theme.Text)
 		if !config.Props.Error {
-			contentBox.BorderColor = withAlpha(config.Props.Theme.ResultTitle, 200)
+			contentBox.BorderColor = withAlpha(config.Props.Theme.Text, 200)
 		}
 	}
 	return woxwidget.Focusable{
-		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Cursor, FocusRingRadius: 4,
+		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Focus, FocusRingRadius: 4,
 		// Keep recorder navigation local so Enter and Escape cannot fall through to page actions.
 		OnKey: func(event woxui.KeyEvent) bool {
 			if event.Down && !event.Composing && (event.Key == woxui.KeyEscape || (event.Key == woxui.KeyEnter && event.Modifiers == 0)) {

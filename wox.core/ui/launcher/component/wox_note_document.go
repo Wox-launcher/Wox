@@ -130,13 +130,13 @@ func NoteFieldRuns(runs []NoteTextRun) []TextFieldRichRun {
 }
 
 // ProjectNoteDocument creates the editor's plain-text backing value and its non-overlapping visual runs.
-func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, theme Theme) (string, []NoteTextRun, []NoteBlockRange) {
+func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, theme ControlTheme) (string, []NoteTextRun, []NoteBlockRange) {
 	var output strings.Builder
 	runs := make([]NoteTextRun, 0)
 	ranges := make([]NoteBlockRange, 0, len(document.Blocks))
 	ordered := [common.NoteMaximumIndent + 1]int{1, 1, 1}
 	offset := 0
-	codeBackground := theme.QueryBackground
+	codeBackground := theme.InputBackground
 	codeBackground.A = min(uint8(150), codeBackground.A)
 	first := true
 	for index, block := range document.Blocks {
@@ -181,7 +181,7 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 			runs = append(runs, NoteTextRun{Start: start, End: textEnd, Style: base, Color: DocumentListMarkerColor, LeadingBar: true})
 		}
 		if block.Type == common.NoteBlockDivider {
-			runs = append(runs, NoteTextRun{Start: textStart, End: textEnd, Style: base, Color: theme.PreviewSplit, HorizontalRule: true})
+			runs = append(runs, NoteTextRun{Start: textStart, End: textEnd, Style: base, Color: theme.Border, HorizontalRule: true})
 			continue
 		}
 		styles := noteBlockStyles(block, value)
@@ -219,11 +219,11 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 				background = codeBackground
 			}
 			if block.Type == common.NoteBlockTask && block.Checked {
-				color = theme.ResultSubtitle
+				color = theme.TextSecondary
 			}
 			link := NoteOpenableLink(inline.link)
 			if link != "" && color == (woxui.Color{}) {
-				color = theme.Cursor
+				color = theme.Focus
 			}
 			runs = append(runs, NoteTextRun{
 				Start: textStart + offset, End: textStart + end, Style: style,
@@ -1261,7 +1261,7 @@ func noteDocumentSegments(document common.NoteDocument) []NoteDocumentSegment {
 }
 
 // ProjectNoteSegment projects one text segment and remaps ranges onto the full document.
-func ProjectNoteSegment(document common.NoteDocument, segment NoteDocumentSegment, base woxui.TextStyle, theme Theme) (string, []NoteTextRun, []NoteBlockRange) {
+func ProjectNoteSegment(document common.NoteDocument, segment NoteDocumentSegment, base woxui.TextStyle, theme ControlTheme) (string, []NoteTextRun, []NoteBlockRange) {
 	value, runs, ranges := ProjectNoteDocument(noteSegmentDocument(document, segment), base, theme)
 	for index := range ranges {
 		ranges[index].Block += segment.Start

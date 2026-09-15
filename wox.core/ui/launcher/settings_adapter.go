@@ -68,7 +68,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if a.settingsDemo != nil {
 		overlay, overlayLeft, overlayTop = a.buildSettingsDemoOverlay(snapshot, width, height)
 	} else if snapshot.tab == "cloud" && a.cloudPlanTooltip != nil {
-		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.cloudPlanTooltip.anchor, width, height, snapshot.palette.componentTheme())
+		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.cloudPlanTooltip.anchor, width, height, snapshot.palette)
 	}
 	if snapshot.tableEditor != nil && a.settingsDemo != nil {
 		demo, left, top := a.buildSettingsDemoOverlay(snapshot, width, height)
@@ -80,7 +80,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	if snapshot.tooltip != nil {
 		tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
-			Width: width, Height: height, Anchor: snapshot.tooltip.Anchor, Message: snapshot.tooltip.Text, Side: snapshot.tooltip.Side, Theme: snapshot.palette.componentTheme(),
+			Width: width, Height: height, Anchor: snapshot.tooltip.Anchor, Message: snapshot.tooltip.Text, Side: snapshot.tooltip.Side, Theme: snapshot.palette,
 		})
 		if tooltip != nil {
 			if overlay == nil {
@@ -98,7 +98,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		}
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
-		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette,
 		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth, frame.WindowFocused), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
 		Overlay: overlay, OverlayLeft: overlayLeft, OverlayTop: overlayTop,
 	})
@@ -122,8 +122,8 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 		}
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
-		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageFor(appIconImageSource),
-		Theme: snapshot.palette.componentTheme(), Active: windowFocused,
+		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageForSurface(appIconImageSource, 256, settingsPalette().Background),
+		Theme: snapshot.palette, Active: windowFocused,
 		OnDrag: func() {
 			if window := a.settingsNativeWindow(); window != nil {
 				_ = window.StartDragging()
@@ -156,7 +156,7 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height, i
 		if theme == nil {
 			body = woxwidget.Container{Width: innerWidth, Height: bodyHeight}
 			if snapshot.theme.ThemesError != "" {
-				body = launcherview.SettingsMessage(snapshot.theme.ThemesError, innerWidth, bodyHeight, snapshot.palette.componentTheme())
+				body = launcherview.SettingsMessage(snapshot.theme.ThemesError, innerWidth, bodyHeight, snapshot.palette)
 			}
 		} else {
 			body = a.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight, imageScale)
@@ -174,13 +174,13 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 	var keepVisible *woxwidget.ScrollRange
 	for index, spec := range specs {
 		selected := spec.id == activeID
-		foreground := snapshot.palette.toolbarText
+		foreground := snapshot.palette.TextSecondary
 		if selected {
-			foreground = snapshot.palette.selectedTitle
+			foreground = snapshot.palette.SelectionText
 		}
 		var icon *woxui.Image
 		if source := settingNavIconSource(spec.id); source.ImageData != "" {
-			icon = a.imageForTint(source, &snapshot.palette.toolbarText, physicalImageSize(18, imageScale))
+			icon = a.imageForTint(source, &snapshot.palette.TextSecondary, physicalImageSize(18, imageScale))
 			if selected {
 				// Keep the cached SVG shape while its selected tint is rasterized asynchronously.
 				if selectedIcon := a.imageForTint(source, &foreground, physicalImageSize(18, imageScale)); selectedIcon != nil {
@@ -202,7 +202,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
 		Width: width, Height: height, Items: items, KeepVisible: keepVisible,
 		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth, imageScale), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight, imageScale),
-		ShowSearch: snapshot.search.Panel && strings.TrimSpace(snapshot.search.Query.Text) != "", Theme: snapshot.palette.componentTheme(),
+		ShowSearch: snapshot.search.Panel && strings.TrimSpace(snapshot.search.Query.Text) != "", Theme: snapshot.palette,
 	})
 }
 
@@ -227,10 +227,10 @@ func (a *App) activeSettingsNavLabel(snapshot settingsSnapshot) string {
 // buildSettingsSearchBox owns the settings window's default text-input focus and native IME cursor.
 func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScale float32) woxwidget.Widget {
 	placeholder := a.translate("i18n:ui_setting_search_placeholder")
-	iconTint := snapshot.palette.toolbarText
+	iconTint := snapshot.palette.TextSecondary
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused, Controller: a.settingsSearch.Editor(),
-		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
+		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsNativeWindow(), Theme: snapshot.palette,
 		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
 		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
 	})
@@ -241,13 +241,13 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 	results := a.settingsSearchResults(snapshot)
 	items := make([]launcherview.SettingsSearchResult, 0, len(results))
 	for index, result := range results {
-		iconTint := snapshot.palette.resultSubtitle
+		iconTint := snapshot.palette.TextSecondary
 		if index == snapshot.search.Selected {
-			iconTint = snapshot.palette.selectedTitle
+			iconTint = snapshot.palette.SelectionText
 		}
 		icon := a.imageForTint(settingsSearchResultIconSource(result.kind), &iconTint, physicalImageSize(24, imageScale))
 		if (result.kind == settingsSearchPlugin || result.kind == settingsSearchPluginSetting) && result.icon.ImageData != "" {
-			if pluginIcon := a.imageForSize(result.icon, physicalImageSize(24, imageScale)); pluginIcon != nil {
+			if pluginIcon := a.imageForSurface(result.icon, physicalImageSize(24, imageScale), settingsPalette().Background); pluginIcon != nil {
 				icon = pluginIcon
 			}
 		}
@@ -266,7 +266,7 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 	}
 	return launcherview.SettingsSearchResults(launcherview.SettingsSearchResultsProps{
 		Width: width, AvailableHeight: availableHeight, Results: items, Selected: snapshot.search.Selected,
-		EmptyMessage: emptyMessage, Theme: snapshot.palette.componentTheme(),
+		EmptyMessage: emptyMessage, Theme: snapshot.palette,
 	})
 }
 
@@ -320,7 +320,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
 		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: contentWidth, Height: woxcomponent.SettingsRowHeight, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette.componentTheme(),
+			Width: contentWidth, Height: woxcomponent.SettingsRowHeight, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
 		}))
 		contentHeight += woxcomponent.SettingsRowHeight
 	}
@@ -345,7 +345,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 				field = woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: field}
 			}
 			target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-				Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
+				Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette,
 			})
 			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-hotkey", index), Child: target})
 		}
@@ -356,9 +356,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 }
 
 // buildSettingsPageHeader keeps built-in pages aligned with Flutter's wide settings form.
-func (a *App) buildSettingsPageHeader(title, description string, width float32, palette uiPalette) woxwidget.Widget {
+func (a *App) buildSettingsPageHeader(title, description string, width float32, palette woxcomponent.ControlTheme) woxwidget.Widget {
 	return woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{
-		Title: title, Description: description, Width: width, Theme: palette.componentTheme(),
+		Title: title, Description: description, Width: width, Theme: palette,
 	})
 }
 
@@ -379,8 +379,8 @@ func (a *App) settingsPageDescription(tab string) string {
 	}
 }
 
-func (a *App) buildSettingsSectionHeader(label string, width float32, palette uiPalette) woxwidget.Widget {
-	return woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: label, Width: width, Theme: palette.componentTheme()})
+func (a *App) buildSettingsSectionHeader(label string, width float32, palette woxcomponent.ControlTheme) woxwidget.Widget {
+	return woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: label, Width: width, Theme: palette})
 }
 
 func (a *App) settingsSectionLabel(tab, key string) string {
@@ -490,15 +490,15 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	var valueLeading *woxui.Image
 	if source := item.icons[item.value]; source.ImageData != "" {
 		if item.preserveIconColor {
-			valueLeading = a.imageForSize(source, physicalImageSize(18, imageScale))
+			valueLeading = a.imageForSurface(source, physicalImageSize(18, imageScale), settingsPalette().Background)
 		} else {
-			valueLeading = a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, imageScale))
+			valueLeading = a.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, imageScale))
 		}
 	}
 	return launcherview.SettingRow(launcherview.SettingRowProps{
 		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,
 		Width: width, Background: background, Disabled: item.disabled,
-		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
+		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette,
 		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },
 		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },
 		OnFocus:     func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },

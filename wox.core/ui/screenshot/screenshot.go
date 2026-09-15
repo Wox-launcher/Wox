@@ -18,7 +18,7 @@ type ScreenshotOptions struct {
 	ActionTooltips        ScreenshotActionTooltips
 	RecordingTooltips     RecordingTooltips
 	SizeLabels            ScreenshotSizeLabels
-	Theme                 woxcomponent.Theme
+	Theme                 woxcomponent.ControlTheme
 	FontFamily            string
 }
 

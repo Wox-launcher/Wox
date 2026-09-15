@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"fmt"
+	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -9,7 +10,7 @@ import (
 )
 
 // buildFormTableChoicePicker adapts one table select field to the shared Flutter-style anchored menu.
-func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.options))
 	for index, option := range snapshot.options {
 		label := a.translate(option.Label)
@@ -22,18 +23,18 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 			choice.GroupTooltip = a.translate(option.GroupTooltip)
 		}
 		if option.Icon.ImageType != "" {
-			choice.Leading = a.imageForSize(option.Icon, physicalImageSize(18, imageScale))
+			choice.Leading = a.imageForSurface(option.Icon, physicalImageSize(18, imageScale), palette.Background)
 		}
 		choices[index] = choice
 	}
-	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.resultSubtitle, physicalImageSize(16, imageScale))
-	infoIcon := a.imageForTint(settingNavIconSource("about"), &palette.actionHeader, physicalImageSize(14, imageScale))
+	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
+	infoIcon := a.imageForTint(settingNavIconSource("about"), &palette.TextSecondary, physicalImageSize(14, imageScale))
 	var onTooltip func(bool, string, woxui.Rect)
 	if a.settingsTableEditor != nil {
 		onTooltip = a.setSettingChoiceTooltip
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
+		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette, Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
 		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, InfoIcon: infoIcon, OnTooltip: onTooltip, CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
 	})
 }

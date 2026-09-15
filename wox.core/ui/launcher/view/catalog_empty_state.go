@@ -14,7 +14,7 @@ type CatalogListEmptyProps struct {
 	Description string
 	Icon        *woxui.Image
 	Window      *woxui.Window
-	Theme       woxcomponent.Theme
+	Theme       woxcomponent.ControlTheme
 }
 
 // CatalogListEmptyState renders a centered icon, title, and optional subtitle for empty catalog lists.
@@ -32,10 +32,10 @@ func CatalogListEmptyState(props CatalogListEmptyProps) woxwidget.Widget {
 		})
 	}
 	if title != "" {
-		children = append(children, catalogCenteredText(contentWidth, title, woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, props.Theme.ResultTitle))
+		children = append(children, catalogCenteredText(contentWidth, title, woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, props.Theme.Text))
 	}
 	if description := props.Description; description != "" && description != title {
-		children = append(children, catalogCenteredTextBlock(props.Window, contentWidth, 17, 2, description, woxui.TextStyle{Size: 12}, props.Theme.ResultSubtitle))
+		children = append(children, catalogCenteredTextBlock(props.Window, contentWidth, 17, 2, description, woxui.TextStyle{Size: 12}, props.Theme.TextSecondary))
 	}
 	content := woxwidget.Container{
 		Width: contentWidth,

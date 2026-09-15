@@ -8,7 +8,7 @@ import (
 )
 
 func TestWindowCloseChromeUsesSharedWindowsGeometry(t *testing.T) {
-	props := WindowCloseChromeProps{ID: "test-close", Width: 420, Platform: "windows", Theme: Theme{ToolbarText: woxui.Color{A: 255}}}
+	props := WindowCloseChromeProps{ID: "test-close", Width: 420, Platform: "windows", Theme: ControlTheme{ChromeText: woxui.Color{A: 255}}}
 	chrome := (&windowCloseChromeState{}).Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
 	if chrome.Width != 420 || chrome.Height != TitleBarHeight || len(chrome.Children) != 1 || !chrome.Children[0].AnchorRight {
 		t.Fatalf("Windows close chrome = %#v, want one right-aligned 420x40 control", chrome)
@@ -21,7 +21,7 @@ func TestWindowCloseChromeUsesSharedWindowsGeometry(t *testing.T) {
 
 func TestWindowCloseChromeWindowsIncludesMinimizeAndMaximize(t *testing.T) {
 	props := WindowCloseChromeProps{
-		ID: "notes.toolbar.close", Width: 420, Platform: "windows", Theme: Theme{ToolbarText: woxui.Color{A: 255}},
+		ID: "notes.toolbar.close", Width: 420, Platform: "windows", Theme: ControlTheme{ChromeText: woxui.Color{A: 255}},
 		OnMinimize: func() {}, OnMaximize: func() {}, OnClose: func() {},
 	}
 	chrome := (&windowCloseChromeState{}).Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
@@ -43,7 +43,7 @@ func TestWindowCloseChromeWindowsIncludesMinimizeAndMaximize(t *testing.T) {
 
 func TestWindowCloseChromeMacShowsWorkingZoom(t *testing.T) {
 	props := WindowCloseChromeProps{
-		ID: "notes.toolbar.close", Width: 420, Platform: "darwin", Theme: Theme{ToolbarText: woxui.Color{A: 255}}, Active: true,
+		ID: "notes.toolbar.close", Width: 420, Platform: "darwin", Theme: ControlTheme{ChromeText: woxui.Color{A: 255}}, Active: true,
 		OnMinimize: func() {}, OnMaximize: func() {}, OnClose: func() {},
 	}
 	chrome := (&windowCloseChromeState{}).Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
@@ -61,7 +61,7 @@ func TestWindowCloseChromeMacShowsWorkingZoom(t *testing.T) {
 
 func TestWindowCloseChromeWindowsCentersCaptionIcons(t *testing.T) {
 	props := WindowCloseChromeProps{
-		ID: "notes.toolbar.close", Width: 420, Platform: "windows", Theme: Theme{ToolbarText: woxui.Color{A: 255}},
+		ID: "notes.toolbar.close", Width: 420, Platform: "windows", Theme: ControlTheme{ChromeText: woxui.Color{A: 255}},
 		OnMinimize: func() {}, OnMaximize: func() {}, OnClose: func() {},
 	}
 	chrome := (&windowCloseChromeState{}).Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
@@ -78,7 +78,7 @@ func TestWindowCloseChromeWindowsCentersCaptionIcons(t *testing.T) {
 }
 
 func TestWindowCloseChromeWindowsUsesRestoreGlyphWhenMaximized(t *testing.T) {
-	theme := Theme{ToolbarText: woxui.Color{A: 255}}
+	theme := ControlTheme{ChromeText: woxui.Color{A: 255}}
 	normal := windowsCaptionAlign(t, WindowsTitleBarButton("notes.toolbar.maximize", "maximize", false, theme, func() {}, nil)).Child.(woxwidget.Image)
 	restored := windowsCaptionAlign(t, WindowsTitleBarButton("notes.toolbar.maximize", "restore", false, theme, func() {}, nil)).Child.(woxwidget.Image)
 	if normal.Source == nil || restored.Source == nil || normal.Source.ID() == restored.Source.ID() {
@@ -113,7 +113,7 @@ func TestTitleBarChromeWidthReservesTrailingCaptionButtons(t *testing.T) {
 }
 
 func TestMacTrafficLightUsesInactiveGrayWhileUnfocused(t *testing.T) {
-	dark := Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
+	dark := ControlTheme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	native := woxui.Color{R: 255, G: 92, B: 95, A: 255}
 	control := MacTrafficLight("close", native, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, false, false, false, dark, func() {}, nil, nil)
 	if fill := macTrafficLightFill(control); fill != MacTrafficLightInactiveColor(dark) {
@@ -129,7 +129,7 @@ func TestMacTrafficLightZoomUsesCenteredPainter(t *testing.T) {
 	color := woxui.Color{R: 17, G: 96, B: 27, A: 255}
 	control := MacTrafficLight(
 		"maximize", woxui.Color{R: 40, G: 200, B: 64, A: 255}, "+", color,
-		true, false, true, Theme{}, func() {}, nil, nil,
+		true, false, true, ControlTheme{}, func() {}, nil, nil,
 	)
 	symbol := macTrafficLightSymbol(control)
 	painter, ok := symbol.(woxwidget.Painter)
@@ -148,7 +148,7 @@ func TestMacTrafficLightZoomUsesCenteredPainter(t *testing.T) {
 }
 
 func TestMacTrafficLightRestoresNativeColorOnHoverWhileUnfocused(t *testing.T) {
-	dark := Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
+	dark := ControlTheme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	native := woxui.Color{R: 255, G: 92, B: 95, A: 255}
 	glyph := woxui.Color{R: 128, G: 47, B: 49, A: 255}
 	control := MacTrafficLight("close", native, "×", glyph, true, false, false, dark, func() {}, nil, nil)
@@ -161,7 +161,7 @@ func TestMacTrafficLightRestoresNativeColorOnHoverWhileUnfocused(t *testing.T) {
 }
 
 func TestMacTrafficLightKeepsNativeColorWhileFocused(t *testing.T) {
-	dark := Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
+	dark := ControlTheme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}}
 	native := woxui.Color{R: 250, G: 200, B: 0, A: 255}
 	control := MacTrafficLight("minimize", native, "−", woxui.Color{}, false, false, true, dark, func() {}, nil, nil)
 	if fill := macTrafficLightFill(control); fill != native {
@@ -170,8 +170,8 @@ func TestMacTrafficLightKeepsNativeColorWhileFocused(t *testing.T) {
 }
 
 func TestMacTrafficLightInactiveColorFollowsAppearance(t *testing.T) {
-	dark := MacTrafficLightInactiveColor(Theme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}})
-	light := MacTrafficLightInactiveColor(Theme{Background: woxui.Color{R: 245, G: 245, B: 245, A: 255}})
+	dark := MacTrafficLightInactiveColor(ControlTheme{Background: woxui.Color{R: 24, G: 24, B: 26, A: 255}})
+	light := MacTrafficLightInactiveColor(ControlTheme{Background: woxui.Color{R: 245, G: 245, B: 245, A: 255}})
 	if dark != (woxui.Color{R: 94, G: 94, B: 96, A: 255}) {
 		t.Fatalf("dark inactive fill = %#v, want #5E5E60", dark)
 	}

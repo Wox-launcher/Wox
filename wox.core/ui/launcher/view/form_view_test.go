@@ -11,7 +11,7 @@ import (
 func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
 	panel := FormPanel(FormPanelProps{
 		Width: 388, MaximumHeight: 420, Rows: []woxwidget.Widget{woxwidget.Container{Width: 360, Height: 44}},
-		CancelLabel: "Cancel (Esc)", SaveLabel: "Save (Cmd+Enter)", Theme: woxcomponent.Theme{},
+		CancelLabel: "Cancel (Esc)", SaveLabel: "Save (Cmd+Enter)", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Container)
 	if panel.Height != 0 {
 		t.Fatalf("form panel height = %.0f, want intrinsic height", panel.Height)
@@ -39,7 +39,7 @@ func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
 }
 
 func TestFormSwitchFieldUsesAccessibleSwitch(t *testing.T) {
-	field := FormSwitchField(FormSwitchFieldProps{ID: "history", Label: "History", Width: 400, Height: 40, LabelWidth: 100, Checked: true, Theme: woxcomponent.Theme{}, OnChange: func(bool) {}})
+	field := FormSwitchField(FormSwitchFieldProps{ID: "history", Label: "History", Width: 400, Height: 40, LabelWidth: 100, Checked: true, Theme: woxcomponent.ControlTheme{}, OnChange: func(bool) {}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	control := controlColumn.Children[0].(woxwidget.Semantics)
@@ -52,19 +52,19 @@ func TestFormSelectFieldOutlineUsesValueText(t *testing.T) {
 	text := woxui.Color{R: 230, G: 234, B: 240, A: 255}
 	field := FormSelectField(FormSelectFieldProps{
 		ID: "model", Label: "Default Model", Value: "deepseek-v4-flash", Width: 400, Height: 44, LabelWidth: 100,
-		Theme: woxcomponent.Theme{ActionText: text, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		Theme: woxcomponent.ControlTheme{Text: text, TextSecondary: woxui.Color{R: 255, A: 255}},
 	})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	control := focusedControlGesture(row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 	want := text
 	want.A = 190
 	if control.BorderColor != want {
-		t.Fatalf("form dropdown outline = %#v, want ActionText %#v", control.BorderColor, want)
+		t.Fatalf("form dropdown outline = %#v, want Text %#v", control.BorderColor, want)
 	}
 }
 
 func TestFormSelectFieldUsesOutlinedDropdown(t *testing.T) {
-	field := FormSelectField(FormSelectFieldProps{ID: "action", Label: "Action", Value: "Paste", Width: 400, Height: 44, LabelWidth: 100, Theme: woxcomponent.Theme{}})
+	field := FormSelectField(FormSelectFieldProps{ID: "action", Label: "Action", Value: "Paste", Width: 400, Height: 44, LabelWidth: 100, Theme: woxcomponent.ControlTheme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	semantics := controlColumn.Children[0].(woxwidget.Semantics)
@@ -82,7 +82,7 @@ func TestFormSelectFieldUsesOutlinedDropdown(t *testing.T) {
 func TestFormFieldNaturalHeightMeasuresWrappedDescription(t *testing.T) {
 	field := FormSelectField(FormSelectFieldProps{
 		ID: "action", Label: "Action", Description: "A description that may wrap onto multiple lines",
-		Value: "Paste", Width: 240, LabelWidth: 100, Theme: woxcomponent.Theme{},
+		Value: "Paste", Width: 240, LabelWidth: 100, Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	if container.Height != 0 || container.Padding.Bottom != 10 {
@@ -100,7 +100,7 @@ func TestFormFieldMarkdownDescriptionOpensLinks(t *testing.T) {
 	opened := ""
 	field := FormSelectField(FormSelectFieldProps{
 		ID: "browser-port", Label: "Server Port", Description: "Install the [Chrome extension](https://example.com).",
-		Value: "34988", Width: 500, LabelWidth: 100, Theme: woxcomponent.Theme{}, OnOpenLink: func(target string) { opened = target },
+		Value: "34988", Width: 500, LabelWidth: 100, Theme: woxcomponent.ControlTheme{}, OnOpenLink: func(target string) { opened = target },
 	})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
@@ -121,7 +121,7 @@ func TestFormModelFieldUsesCompactAnchoredDropdown(t *testing.T) {
 	var openedAt woxui.Rect
 	field := FormModelField(FormModelFieldProps{
 		ID: "dictation-model", Label: "Recognition model", Value: "Qwen3-ASR 0.6B",
-		Width: 720, Height: 44, LabelWidth: 120, Theme: woxcomponent.Theme{}, OnTap: func(anchor woxui.Rect) { openedAt = anchor },
+		Width: 720, Height: 44, LabelWidth: 120, Theme: woxcomponent.ControlTheme{}, OnTap: func(anchor woxui.Rect) { openedAt = anchor },
 	})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
@@ -144,7 +144,7 @@ func TestFormModelFieldUsesCompactAnchoredDropdown(t *testing.T) {
 func TestFormHotkeyFieldStartsAtMeasuredControlColumn(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "dictation-hotkey", Label: "Hotkey", Description: "Press or hold a modifier",
-		Width: 720, Height: 64, LabelWidth: 120, Theme: woxcomponent.Theme{},
+		Width: 720, Height: 64, LabelWidth: 120, Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	if container.Height != 64 {
@@ -173,7 +173,7 @@ func TestFormHotkeyFieldStartsAtMeasuredControlColumn(t *testing.T) {
 func TestFormHotkeyFieldCanAlignRecorderToTheRightOfItsControlColumn(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "onboarding-hotkey", Label: "Hotkey", Description: "Show or hide Wox", Labels: []string{"Alt", "Space"},
-		Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.Theme{},
+		Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	row := container.Child.(woxwidget.Flex)
@@ -191,7 +191,7 @@ func TestFormHotkeyFieldCanAlignRecorderToTheRightOfItsControlColumn(t *testing.
 func TestFormHotkeyFieldShowsRegistrationErrorWhenNotRecording(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "onboarding-hotkey", Label: "Hotkey", Description: "Show or hide Wox", Labels: []string{"Alt", "Space"},
-		Status: "Used by another application", Error: true, Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.Theme{},
+		Status: "Used by another application", Error: true, Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	row := container.Child.(woxwidget.Flex)
@@ -209,7 +209,7 @@ func TestFormHotkeyFieldShowsRegistrationErrorWhenNotRecording(t *testing.T) {
 func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "main-hotkey", Label: "Hotkey", Description: "Show or hide Wox",
-		Width: 1120, LabelWidth: 550, SettingsLayout: true, Recording: true, Status: "Press any key", Theme: woxcomponent.Theme{},
+		Width: 1120, LabelWidth: 550, SettingsLayout: true, Recording: true, Status: "Press any key", Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	row := container.Child.(woxwidget.Flex)
@@ -240,7 +240,7 @@ func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 func TestFormHotkeyFieldShrinksSettingsLabelToKeepRecorderVisible(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "main-hotkey", Label: "Hotkey", Description: "Show or hide Wox", Labels: []string{"Super", "Space"},
-		Width: 676, LabelWidth: 550, SettingsLayout: true, Theme: woxcomponent.Theme{},
+		Width: 676, LabelWidth: 550, SettingsLayout: true, Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	row := container.Child.(woxwidget.Flex)
@@ -257,7 +257,7 @@ func TestFormHotkeyFieldShrinksSettingsLabelToKeepRecorderVisible(t *testing.T) 
 func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 	field := FormAIModelField(FormAIModelFieldProps{
 		ID: "default-model", Label: "Default model", Provider: "deepseek", Model: "deepseek-v4-flash",
-		ModelsAvailable: true, Width: 920, Height: 44, LabelWidth: 180, Theme: woxcomponent.Theme{},
+		ModelsAvailable: true, Width: 920, Height: 44, LabelWidth: 180, Theme: woxcomponent.ControlTheme{},
 	})
 	stateful := field.(woxwidget.Stateful)
 	state := &formAIModelFieldState{}
@@ -301,7 +301,7 @@ func TestFormSuffixWidthKeepsLatinUnitsVisible(t *testing.T) {
 
 func assertFormTextFieldSuffix(t *testing.T, suffix string, wantWidth float32) {
 	t.Helper()
-	field := FormTextField(FormTextFieldProps{ID: "days", Label: "Days", Suffix: suffix, Width: 400, Height: 44, LabelWidth: 100, MaxLines: 1, Theme: woxcomponent.Theme{}})
+	field := FormTextField(FormTextFieldProps{ID: "days", Label: "Days", Suffix: suffix, Width: 400, Height: 44, LabelWidth: 100, MaxLines: 1, Theme: woxcomponent.ControlTheme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	valueRow := controlColumn.Children[0].(woxwidget.Flex)
@@ -323,7 +323,7 @@ func TestFormTextFieldBrowseButtonSharesOneControlRow(t *testing.T) {
 	field := FormTextField(FormTextFieldProps{
 		ID: "cwd", Label: "Directory", Width: 400, LabelWidth: 100,
 		OnBrowse: func() {}, BrowseLabel: "Browse",
-		Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 190}, ResultTitle: woxui.Color{A: 255}},
+		Theme: woxcomponent.ControlTheme{TextSecondary: woxui.Color{A: 190}, Text: woxui.Color{A: 255}},
 	})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
@@ -348,7 +348,7 @@ func TestFormTextFieldBrowseButtonSharesOneControlRow(t *testing.T) {
 }
 
 func TestFormStaticFieldHeadUsesSectionHeader(t *testing.T) {
-	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 140, G: 146, B: 154, A: 255}}
+	theme := woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 140, G: 146, B: 154, A: 255}}
 	field := FormStaticField(FormStaticFieldProps{
 		Width: 400, Value: "Content Search", Kind: "head", Theme: theme,
 	}).(woxwidget.Container)
@@ -368,17 +368,17 @@ func TestFormStaticFieldHeadUsesSectionHeader(t *testing.T) {
 		t.Fatalf("head divider = %#v, want a 1-unit rule", divider)
 	}
 	title := column.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
-	if title.Value != "CONTENT SEARCH" || title.Style.Size != woxcomponent.SettingsSectionTitleFontSize || title.Style.Weight != woxui.FontWeightSemibold || title.Color != theme.ResultSubtitle {
-		t.Fatalf("head label = %#v, want 11 semibold uppercase ResultSubtitle", title)
+	if title.Value != "CONTENT SEARCH" || title.Style.Size != woxcomponent.SettingsSectionTitleFontSize || title.Style.Weight != woxui.FontWeightSemibold || title.Color != theme.TextSecondary {
+		t.Fatalf("head label = %#v, want 11 semibold uppercase TextSecondary", title)
 	}
 }
 
 func TestFormStatsFieldUsesQuietCardLayout(t *testing.T) {
-	theme := woxcomponent.Theme{
-		QueryBackground: woxui.Color{R: 40, G: 40, B: 44, A: 255},
-		PreviewSplit:    woxui.Color{R: 80, G: 80, B: 84, A: 255},
-		ResultTitle:     woxui.Color{R: 250, G: 250, B: 250, A: 255},
-		ResultSubtitle:  woxui.Color{R: 160, G: 160, B: 164, A: 255},
+	theme := woxcomponent.ControlTheme{
+		InputBackground: woxui.Color{R: 40, G: 40, B: 44, A: 255},
+		Border:          woxui.Color{R: 80, G: 80, B: 84, A: 255},
+		Text:            woxui.Color{R: 250, G: 250, B: 250, A: 255},
+		TextSecondary:   woxui.Color{R: 160, G: 160, B: 164, A: 255},
 	}
 	field := FormStatsField(FormStatsFieldProps{
 		Width: 420, Title: "Index Stats",
@@ -394,7 +394,7 @@ func TestFormStatsFieldUsesQuietCardLayout(t *testing.T) {
 		t.Fatalf("stats outer padding = %+v, want 16/12 section spacing", wrapper.Padding)
 	}
 	card := wrapper.Child.(woxwidget.Container)
-	if card.Radius != 8 || card.BorderWidth != 1 || card.Color != theme.QueryBackground || card.BorderColor != theme.PreviewSplit {
+	if card.Radius != 8 || card.BorderWidth != 1 || card.Color != theme.InputBackground || card.BorderColor != theme.Border {
 		t.Fatalf("stats card chrome = radius %.0f border %.0f fill %#v stroke %#v", card.Radius, card.BorderWidth, card.Color, card.BorderColor)
 	}
 	column := card.Child.(woxwidget.Flex)
@@ -416,7 +416,7 @@ func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
 	field := FormServiceField(FormServiceFieldProps{
 		Width: 420, LabelWidth: 80, Title: "Fast indexing", Description: "Install the optional Windows service.", Status: "Running", Detail: "2.8.0",
 		Actions: []FormServiceAction{{ID: "install", Label: "Install service", Primary: true, Enabled: true}},
-		Theme:   woxcomponent.Theme{ResultTitle: woxui.Color{R: 160, G: 160, B: 164, A: 255}},
+		Theme:   woxcomponent.ControlTheme{Text: woxui.Color{R: 160, G: 160, B: 164, A: 255}},
 	})
 	semantics := field.(woxwidget.Semantics)
 	if semantics.Role != woxui.AccessibilityRoleGroup || semantics.Label != "Fast indexing" {
@@ -463,7 +463,7 @@ func TestFormServiceVersionLabelPrefixesInstalledVersions(t *testing.T) {
 }
 
 func TestFormTextFieldUsesMeasuredActionLabelWidth(t *testing.T) {
-	field := FormTextField(FormTextFieldProps{ID: "content", Label: "内容", Width: 360, LabelWidth: 60, MaxLines: 8, Theme: woxcomponent.Theme{}})
+	field := FormTextField(FormTextFieldProps{ID: "content", Label: "内容", Width: 360, LabelWidth: 60, MaxLines: 8, Theme: woxcomponent.ControlTheme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	label := row.Children[0].(woxwidget.Container)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)

@@ -383,7 +383,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		// Row heights are fixed. Supplying their extent avoids a geometry callback
 		// that invalidates the unbounded scroll State whenever filtering resizes it.
 		ContentHeight: max(float32(ActionRowHeight), offset),
-		Content:       woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.ActionHeader,
+		Content:       woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme.Controls, ThumbColor: props.ActionHeader,
 	})
 	search := actionSearchBoundary(actionSearchProps{
 		Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
@@ -448,7 +448,7 @@ func actionSearchBoundary(props actionSearchProps) woxwidget.Widget {
 				ID: "action-search", Label: "Filter actions", Width: props.Width, Height: props.Height, Radius: props.Radius,
 				Padding: props.Padding, Background: props.Background, Style: props.Style, TextColor: props.TextColor,
 				Value: props.Filter, Focused: true, Autofocus: true, DisableHover: true, MaxLines: 1,
-				Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
+				Window: props.Window, Theme: props.Theme.Controls, OnChanged: props.OnChanged, OnKey: props.OnKey,
 			})
 		},
 	}

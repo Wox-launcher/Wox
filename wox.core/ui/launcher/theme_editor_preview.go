@@ -260,7 +260,7 @@ func themeEditorDraftTheme(raw map[string]any, values map[string]string) (themeD
 	return theme, nil
 }
 
-// applySettingsThemeEditorDraft previews a valid settings draft across every Wox window.
+// applySettingsThemeEditorDraft previews a valid draft on theme-aware windows; Settings chrome stays fixed.
 func (a *App) applySettingsThemeEditorDraft() {
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || !strings.HasPrefix(state.key, "settings-theme|") {

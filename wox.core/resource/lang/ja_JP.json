@@ -528,7 +528,7 @@
   "ui_query_shortcuts_query": "クエリ",
   "ui_query_shortcuts_query_tooltip": "ショートカットが表すクエリ。",
   "ui_tray_queries": "トレイクエリ",
-  "ui_tray_queries_tips": "トレイエリアアイコンを追加します。アイコンをクリックすると、トレイ/メニューバーの近くに Wox が開き、設定されたクエリが実行されます。",
+  "ui_tray_queries_tips": "トレイアイコンをクリックすると、近くに Wox を開いて設定済みのクエリを実行します。",
   "ui_tray_queries_icon": "アイコン",
   "ui_tray_queries_icon_tooltip": "このクエリのトレイアイコン。",
   "ui_tray_queries_query": "クエリ",

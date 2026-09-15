@@ -35,7 +35,7 @@ const (
 )
 
 // buildThemeEditorSettingsSurface adapts the shared draft controller to Flutter's settings-only editor layout.
-func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	groups := make([]launcherview.ThemeEditorColorGroup, 0, len(themeEditorColorGroups))
 	var resolvedColors map[string]any
 	if isV2Theme(state.raw) {
@@ -58,7 +58,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 			}
 			color, ok := decodeThemeColor(value)
 			if !ok {
-				color = palette.componentTheme().ErrorText
+				color = palette.Error
 			}
 			tokenLabel := a.translate(token.label)
 			if isV2Theme(state.raw) && state.values[token.key] == "" {
@@ -69,8 +69,8 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		groups = append(groups, launcherview.ThemeEditorColorGroup{Label: label, LabelWidth: labelWidth, Tokens: tokens})
 	}
 
-	foreground := palette.resultTitle
-	primaryForeground := palette.actionSelectedText
+	foreground := palette.Text
+	primaryForeground := palette.AccentText
 	locateIcon := a.imageForTint(settingControlIconSource("locate"), &foreground, physicalImageSize(18, imageScale))
 	discardIcon := a.imageForTint(settingControlIconSource("undo"), &foreground, physicalImageSize(18, imageScale))
 	overwriteIcon := a.imageForTint(settingControlIconSource("overwrite"), &foreground, physicalImageSize(18, imageScale))
@@ -81,7 +81,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 
 	dirty := themeEditorSnapshotDirty(state)
 	return launcherview.ThemeEditorSettingsView(launcherview.ThemeEditorSettingsProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: draftPalette.componentTheme(),
+		Width: width, Height: height, Theme: palette, DraftTheme: draftPalette.componentTheme(),
 		Groups: groups, ActiveGroup: state.activeGroup, Dirty: dirty, Saving: state.saving, CanOverwrite: !state.isSystem && !state.isAuto && state.sourceID != "", Error: state.error,
 		Wallpaper: wallpaperImage, WallpaperBlurred: wallpaperBlurred,
 		FlashToken: state.flashToken,
@@ -495,7 +495,7 @@ func (a *App) openThemeEditorSaveAsDialog() {
 	a.invalidateThemeEditorWindow()
 }
 
-func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
 	if state == nil || state.dialogMode == "" {
 		return nil
 	}
@@ -521,9 +521,9 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 		field = woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 			ID: "theme-editor-dialog-field-" + strconv.Itoa(index), Label: title, Width: 132, Height: 36, Radius: 4,
 			Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 7}, Transparent: true,
-			BorderColor: palette.actionText, BorderWidth: 1, Style: woxui.TextStyle{Size: 13},
+			BorderColor: palette.Text, BorderWidth: 1, Style: woxui.TextStyle{Size: 13},
 			Value: state.values[state.dialogToken], Focused: state.active && state.focused == index,
-			Window: a.formFieldNativeWindow("theme-editor-dialog"), Theme: palette.componentTheme(),
+			Window: a.formFieldNativeWindow("theme-editor-dialog"), Theme: palette,
 			OnFocusChange: func(focused bool) {
 				if focused {
 					a.focusThemeEditorField(index)
@@ -535,23 +535,23 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 		field = launcherview.ThemeEditorColorPicker(launcherview.ThemeEditorColorPickerProps{
 			Color: selectedColor, Hue: selectedHSV.hue, Saturation: selectedHSV.saturation, Brightness: selectedHSV.value, Opacity: selectedHSV.alpha,
 			BrightnessLabel: a.translate("i18n:ui_theme_editor_brightness"), OpacityLabel: a.translate("i18n:ui_theme_editor_opacity"),
-			ColorField: field, Theme: palette.componentTheme(),
+			ColorField: field, Theme: palette,
 			OnHueSaturation: a.setThemeEditorDialogHueSaturation, OnBrightnessChange: a.setThemeEditorDialogBrightness, OnOpacityChange: a.setThemeEditorDialogOpacity,
 		})
 	}
 	buttons := []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.translate("i18n:ui_cancel"), Variant: woxcomponent.ButtonOutline, OnTap: a.cancelThemeEditorDialog, Theme: palette.componentTheme()}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-confirm", Label: confirmLabel, Variant: woxcomponent.ButtonPrimary, OnTap: a.confirmThemeEditorDialog, Theme: palette.componentTheme()}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.translate("i18n:ui_cancel"), Variant: woxcomponent.ButtonOutline, OnTap: a.cancelThemeEditorDialog, Theme: palette}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-confirm", Label: confirmLabel, Variant: woxcomponent.ButtonPrimary, OnTap: a.confirmThemeEditorDialog, Theme: palette}),
 	}
 	if state.dialogMode == "token" && isV2Theme(state.raw) && !strings.HasPrefix(state.dialogToken, "Base") {
-		buttons = append([]woxwidget.Widget{woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-reset", Label: a.translate("i18n:ui_theme_restore_default"), Variant: woxcomponent.ButtonOutline, OnTap: a.resetThemeEditorToken, Theme: palette.componentTheme()})}, buttons...)
+		buttons = append([]woxwidget.Widget{woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-reset", Label: a.translate("i18n:ui_theme_restore_default"), Variant: woxcomponent.ButtonOutline, OnTap: a.resetThemeEditorToken, Theme: palette})}, buttons...)
 	}
 	footer := woxwidget.Align{Width: panelWidth - 32, Height: 46, Horizontal: 1, Child: woxwidget.Container{Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: buttons}}}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "theme-editor-dialog", Label: title, Width: panelWidth, Height: panelHeight, OverlayWidth: width, OverlayHeight: height,
-		BackdropID: "theme-editor-dialog-backdrop", BackdropAlpha: 190, Padding: woxwidget.UniformInsets(16), Theme: palette.componentTheme(), OnEscape: a.cancelThemeEditorDialog,
+		BackdropID: "theme-editor-dialog-backdrop", BackdropAlpha: 190, Padding: woxwidget.UniformInsets(16), Theme: palette, OnEscape: a.cancelThemeEditorDialog,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: panelWidth - 32, Height: 28, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: palette.actionText}},
+			woxwidget.Container{Width: panelWidth - 32, Height: 28, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: palette.Text}},
 			field,
 			footer,
 		}},

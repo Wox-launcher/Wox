@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -240,7 +241,7 @@ func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previ
 }
 
 // buildFormTableSkillAddDialog maps the add-skill state onto the shared dialog surface.
-func (a *App) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	fields := snapshot.fields
 	callbacks := formFieldCallbacks{
 		idPrefix:   "form-table-skill-add",
@@ -250,7 +251,7 @@ func (a *App) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, 
 		onKey:      a.onFormTableKey,
 		pickDir:    a.pickFormTableSkillAddDirectory,
 	}
-	theme := palette.componentTheme()
+	theme := palette
 	cancelLabel := a.translate("i18n:ui_cancel")
 	addLabel := a.translate("i18n:ui_add")
 	fieldWidth := max(float32(0), min(float32(480), width-140))

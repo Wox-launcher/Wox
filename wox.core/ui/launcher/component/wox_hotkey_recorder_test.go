@@ -9,7 +9,7 @@ import (
 
 func TestWoxHotkeyRecorderRendersHoldModifierAsText(t *testing.T) {
 	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{
-		ID: "hotkey", Labels: []string{"Cmd"}, Hold: true, HoldPrefix: "Hold", Theme: Theme{ActionText: woxui.Color{R: 1, A: 255}},
+		ID: "hotkey", Labels: []string{"Cmd"}, Hold: true, HoldPrefix: "Hold", Theme: ControlTheme{ControlText: woxui.Color{R: 1, A: 255}},
 	})
 	focusable := buildHotkeyRecorderForTest(recorder)
 	content := focusable.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text)
@@ -23,8 +23,8 @@ func TestWoxHotkeyRecorderRendersHoldModifierAsText(t *testing.T) {
 
 func TestWoxHotkeyRecorderUsesErrorBorder(t *testing.T) {
 	errorColor := woxui.Color{R: 220, G: 40, B: 40, A: 255}
-	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Error: true, Focused: true, Theme: Theme{
-		ErrorText: errorColor, Cursor: woxui.Color{R: 10, G: 20, B: 30, A: 255},
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Error: true, Focused: true, Theme: ControlTheme{
+		Error: errorColor, Focus: woxui.Color{R: 10, G: 20, B: 30, A: 255},
 	}})
 	container := buildHotkeyRecorderForTest(recorder).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if container.BorderColor != errorColor {
@@ -34,7 +34,7 @@ func TestWoxHotkeyRecorderUsesErrorBorder(t *testing.T) {
 
 func TestWoxHotkeyRecorderUsesKeyboardOnlyFocusRing(t *testing.T) {
 	cursor := woxui.Color{R: 10, G: 20, B: 30, A: 255}
-	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Focused: true, Theme: Theme{Cursor: cursor}})
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Focused: true, Theme: ControlTheme{Focus: cursor}})
 	focusable := buildHotkeyRecorderForTest(recorder)
 	container := focusable.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if container.BorderWidth != 1 || focusable.FocusRingColor != cursor || !focusable.Autofocus {
@@ -44,7 +44,7 @@ func TestWoxHotkeyRecorderUsesKeyboardOnlyFocusRing(t *testing.T) {
 
 func TestWoxHotkeyRecorderAddsHoverSurface(t *testing.T) {
 	foreground := woxui.Color{R: 210, G: 220, B: 230, A: 255}
-	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Theme: Theme{ResultTitle: foreground}})
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Theme: ControlTheme{Text: foreground}})
 	stateful := recorder.(woxwidget.Stateful)
 	state := &hotkeyRecorderFocusState{hovered: true}
 	state.InitState(woxwidget.StateContext{}, stateful.Widget)
@@ -62,16 +62,16 @@ func TestWoxHotkeyRecorderAddsHoverSurface(t *testing.T) {
 func TestWoxHotkeyRecorderOutlineFollowsValueText(t *testing.T) {
 	subtitle := woxui.Color{R: 255, A: 255}
 	foreground := woxui.Color{R: 210, G: 220, B: 230, A: 255}
-	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Placeholder: "Record", Theme: Theme{ResultSubtitle: subtitle, ResultTitle: foreground}})
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Placeholder: "Record", Theme: ControlTheme{TextSecondary: subtitle, Text: foreground}})
 	container := buildHotkeyRecorderForTest(recorder).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	want := foreground
 	want.A = 140
 	if container.BorderColor != want {
-		t.Fatalf("hotkey recorder border = %#v, want ResultTitle %#v", container.BorderColor, want)
+		t.Fatalf("hotkey recorder border = %#v, want Text %#v", container.BorderColor, want)
 	}
 	placeholder := container.Child.(woxwidget.Align).Child.(woxwidget.Text)
 	if placeholder.Color != foreground {
-		t.Fatalf("hotkey recorder placeholder = %#v, want ResultTitle", placeholder.Color)
+		t.Fatalf("hotkey recorder placeholder = %#v, want Text", placeholder.Color)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestWoxHotkeyRecorderFocusNodeOwnsRecordingLifecycle(t *testing.T) {
 	var focusChanges []bool
 	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
 		recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{
-			ID: "hotkey", Focused: true, Placeholder: "Record", Theme: Theme{},
+			ID: "hotkey", Focused: true, Placeholder: "Record", Theme: ControlTheme{},
 			OnFocusChange: func(focused bool) { focusChanges = append(focusChanges, focused) },
 		})
 		return recorder
@@ -101,7 +101,7 @@ func TestWoxHotkeyRecorderHandlesSpecialFocusKeys(t *testing.T) {
 	var focusChanges []bool
 	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
 		recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{
-			ID: "hotkey", Focused: true, Placeholder: "Record", Theme: Theme{},
+			ID: "hotkey", Focused: true, Placeholder: "Record", Theme: ControlTheme{},
 			OnFocusChange: func(focused bool) { focusChanges = append(focusChanges, focused) },
 		})
 		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{

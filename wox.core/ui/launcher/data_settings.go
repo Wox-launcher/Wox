@@ -26,7 +26,7 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 		backups[index] = launcherview.DataBackup{ID: backup.ID, Timestamp: backup.Timestamp, Type: backup.Type, Path: backup.Path}
 	}
 	return launcherview.DataSettingsView(launcherview.DataSettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Labels: a.dataSettingsLabels(),
+		Width: width, Height: height, Theme: snapshot.palette, Labels: a.dataSettingsLabels(),
 		Location: snapshot.dataState.Location, PendingLocation: snapshot.dataState.PendingLocation, AutoBackup: snapshot.general.Data.EnableAutoBackup,
 		Backups: backups, RestoreArmed: snapshot.dataState.RestoreArmed, LogLevel: snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
 		Error:      snapshot.dataState.Error,

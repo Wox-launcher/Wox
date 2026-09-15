@@ -131,7 +131,7 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 	}
 	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
-		Theme: props.Theme, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
+		Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 	}))
 }
 

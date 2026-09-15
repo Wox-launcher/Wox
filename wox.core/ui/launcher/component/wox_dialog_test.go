@@ -12,7 +12,7 @@ func TestWoxDialogBackdropDoesNotDismiss(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return WoxDialog(DialogProps{
 			ID: "dialog", Width: 100, Height: 100, OverlayWidth: 200, OverlayHeight: 200,
-			OnEscape: func() { cancelled++ }, Theme: Theme{}, Child: woxwidget.Container{Width: 100, Height: 100},
+			OnEscape: func() { cancelled++ }, Theme: ControlTheme{}, Child: woxwidget.Container{Width: 100, Height: 100},
 		})
 	})
 	host.AttachServices(&hotkeyRecorderHostServices{})
@@ -41,11 +41,11 @@ func TestWoxDialogEscapeOnlyClosesActiveModal(t *testing.T) {
 				ID: "inner", Width: 80, Height: 80, OverlayWidth: 200, OverlayHeight: 200, OnEscape: func() {
 					innerOpen = false
 					innerCancelled++
-				}, Theme: Theme{}, Child: woxwidget.Container{Width: 80, Height: 80},
+				}, Theme: ControlTheme{}, Child: woxwidget.Container{Width: 80, Height: 80},
 			})})
 		}
 		return WoxDialog(DialogProps{
-			ID: "outer", Width: 140, Height: 140, OverlayWidth: 200, OverlayHeight: 200, OnEscape: func() { outerCancelled++ }, Theme: Theme{},
+			ID: "outer", Width: 140, Height: 140, OverlayWidth: 200, OverlayHeight: 200, OnEscape: func() { outerCancelled++ }, Theme: ControlTheme{},
 			Child: woxwidget.Stack{Width: 140, Height: 140, Children: children},
 		})
 	})

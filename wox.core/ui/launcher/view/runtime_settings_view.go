@@ -64,7 +64,7 @@ type RuntimeSettingsProps struct {
 	Width            float32
 	Height           float32
 	SettingRowHeight float32
-	Theme            woxcomponent.Theme
+	Theme            woxcomponent.ControlTheme
 	Labels           RuntimeSettingsLabels
 	Loading          bool
 	Restarting       bool
@@ -90,14 +90,14 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 	children := []woxwidget.Widget{
 		woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{Title: props.Labels.Title, Description: props.Labels.Description, Width: contentWidth, Theme: props.Theme}),
 		woxwidget.Container{Width: contentWidth, Height: 32, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{
-			Value: props.Labels.StatusSection, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle,
+			Value: props.Labels.StatusSection, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
 		}},
 	}
 	messageHeight := float32(0)
 	if props.Error != "" {
 		messageHeight = 24
 		message := props.Error
-		color := props.Theme.ErrorText
+		color := props.Theme.Error
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: messageHeight, Padding: woxwidget.Insets{Bottom: 6}, Child: woxwidget.Text{
 			Value: message, Style: woxui.TextStyle{Size: 11}, Color: color,
 		}})
@@ -164,7 +164,7 @@ func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwid
 			message = ""
 		}
 		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{
-			Value: message, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
+			Value: message, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary,
 		}}
 	}
 	columns := runtimeStatusColumns(width)
@@ -187,19 +187,19 @@ func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwid
 func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, height float32) woxwidget.Widget {
 	theme := props.Theme
 	statusColor := runtimeStatusColor(status.StatusCode, theme)
-	var icon woxwidget.Widget = woxwidget.Text{Value: status.Mark, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}
+	var icon woxwidget.Widget = woxwidget.Text{Value: status.Mark, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.Text}
 	if status.Icon != nil {
 		icon = woxwidget.Image{Source: status.Icon, Width: 22, Height: 22}
 	}
 	pillWidth := runtimeLabelWidth(status.StatusLabel, 40, 150)
 	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: 34, Height: 34, Radius: 8, Color: runtimeWithAlpha(theme.ResultTitle, 26), Child: woxwidget.Align{
+		woxwidget.Container{Width: 34, Height: 34, Radius: 8, Color: runtimeWithAlpha(theme.Text, 26), Child: woxwidget.Align{
 			Width: 34, Height: 34, Horizontal: 0.5, Vertical: 0.5, Child: icon,
 		}},
 		woxwidget.Expanded{Child: woxwidget.Container{Height: 48, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Expanded{Child: woxwidget.Container{Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}}},
-				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: theme.ResultSubtitle}},
+				woxwidget.Expanded{Child: woxwidget.Container{Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.Text}}},
+				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: theme.TextSecondary}},
 			}},
 			woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{
 				Width: max(float32(0), pillWidth-16), Height: 22, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
@@ -212,11 +212,11 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		header,
 		woxwidget.Container{Height: 12},
 		woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.TextBlock{
-			Value: status.Detail, Height: 40, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 17, Color: theme.ResultSubtitle,
+			Value: status.Detail, Height: 40, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 17, Color: theme.TextSecondary,
 		}},
 		woxwidget.Container{Height: 14},
 		woxwidget.Container{Height: 18, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.Text{
-			Value: status.PluginLabel, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle,
+			Value: status.PluginLabel, Style: woxui.TextStyle{Size: 13}, Color: theme.TextSecondary,
 		}},
 	}
 	if status.Actionable {
@@ -299,25 +299,25 @@ func runtimeLabelWidth(label string, minimum, maximum float32) float32 {
 }
 
 // runtimeStatusColor maps runtime health to the shared success, warning, and error colors.
-func runtimeStatusColor(statusCode string, theme woxcomponent.Theme) woxui.Color {
+func runtimeStatusColor(statusCode string, theme woxcomponent.ControlTheme) woxui.Color {
 	switch statusCode {
 	case "running":
 		return woxui.Color{R: 72, G: 190, B: 112, A: 255}
 	case "executable_missing", "unsupported_version", "start_failed":
-		return theme.ErrorText
+		return theme.Error
 	default:
 		return woxui.Color{R: 225, G: 166, B: 64, A: 255}
 	}
 }
 
-func runtimeStatusBackground(statusCode string, theme woxcomponent.Theme) woxui.Color {
+func runtimeStatusBackground(statusCode string, theme woxcomponent.ControlTheme) woxui.Color {
 	return runtimeWithAlpha(runtimeStatusColor(statusCode, theme), 42)
 }
 
-func runtimeOutlineColor(theme woxcomponent.Theme) woxui.Color {
-	color := theme.PreviewSplit
+func runtimeOutlineColor(theme woxcomponent.ControlTheme) woxui.Color {
+	color := theme.Border
 	if color.A == 0 {
-		color = theme.ResultSubtitle
+		color = theme.TextSecondary
 	}
 	return runtimeWithAlpha(color, 34)
 }

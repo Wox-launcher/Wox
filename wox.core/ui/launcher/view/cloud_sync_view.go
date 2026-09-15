@@ -21,7 +21,7 @@ type CloudSettingsPageProps struct {
 	Message      string
 	MessageColor woxui.Color
 	ActionMenu   *CloudActionMenuProps
-	Theme        woxcomponent.Theme
+	Theme        woxcomponent.ControlTheme
 	OnCloseMenu  func()
 }
 
@@ -188,7 +188,7 @@ type CloudPluginExclusionDialogProps struct {
 	CancelLabel  string
 	SaveLabel    string
 	Window       *woxui.Window
-	Theme        woxcomponent.Theme
+	Theme        woxcomponent.ControlTheme
 	OnChoiceTap  func(woxui.Rect)
 	OnChoose     func(int)
 	OnCancel     func()
@@ -266,7 +266,7 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 }
 
 // cloudIntro mirrors Flutter's signed-out hero, capability cards, and responsive plan table.
-func cloudIntro(props CloudIntroProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudIntro(props CloudIntroProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	stacked := width < 760
 	compactPlan := width < 620
 	heroHeight := float32(56)
@@ -296,7 +296,7 @@ func cloudIntro(props CloudIntroProps, width float32, theme woxcomponent.Theme) 
 }
 
 // cloudIntroHero keeps the cloud mark beside the copy when space permits and stacks it on narrow pages.
-func cloudIntroHero(props CloudIntroProps, width, height float32, stacked bool, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudIntroHero(props CloudIntroProps, width, height float32, stacked bool, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	copyHeight := float32(56)
 	copyWidth := max(float32(0), width-72)
 	if stacked {
@@ -304,8 +304,8 @@ func cloudIntroHero(props CloudIntroProps, width, height float32, stacked bool, 
 		copyWidth = width
 	}
 	copy := woxwidget.Container{Width: copyWidth, Height: copyHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.Headline, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-		woxwidget.TextBlock{Value: props.Description, Width: copyWidth, Height: 30, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.ResultSubtitle},
+		woxwidget.Text{Value: props.Headline, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+		woxwidget.TextBlock{Value: props.Description, Width: copyWidth, Height: 30, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.TextSecondary},
 	}}}
 	icon := cloudIntroIcon(props.HeroIcon, props.HeroFallback, 56, 28, theme)
 	if stacked {
@@ -315,7 +315,7 @@ func cloudIntroHero(props CloudIntroProps, width, height float32, stacked bool, 
 }
 
 // cloudIntroFeatures lays out the three capability cards responsively.
-func cloudIntroFeatures(features []CloudIntroFeatureProps, width, height float32, stacked bool, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudIntroFeatures(features []CloudIntroFeatureProps, width, height float32, stacked bool, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, len(features))
 	cardWidth := width
 	if !stacked && len(features) > 0 {
@@ -332,42 +332,42 @@ func cloudIntroFeatures(features []CloudIntroFeatureProps, width, height float32
 }
 
 // cloudIntroFeature builds one bordered capability summary.
-func cloudIntroFeature(feature CloudIntroFeatureProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: 76, Radius: 8, BorderColor: cloudAlpha(theme.PreviewSplit, 180), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 12, Right: 12, Bottom: 12}, Child: woxwidget.Flex{
+func cloudIntroFeature(feature CloudIntroFeatureProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: 76, Radius: 8, BorderColor: cloudAlpha(theme.Border, 180), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 12, Right: 12, Bottom: 12}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			cloudIntroIcon(feature.Icon, feature.FallbackIcon, 34, 17, theme),
 			woxwidget.Expanded{Child: woxwidget.Container{Height: 52, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: feature.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-				woxwidget.TextBlock{Value: feature.Description, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 16, Color: theme.ResultSubtitle},
+				woxwidget.Text{Value: feature.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+				woxwidget.TextBlock{Value: feature.Description, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 16, Color: theme.TextSecondary},
 			}}}},
 		},
 	}}
 }
 
 // cloudIntroIcon applies the shared outlined icon treatment from the Flutter page.
-func cloudIntroIcon(icon *woxui.Image, fallback string, size, iconSize float32, theme woxcomponent.Theme) woxwidget.Widget {
-	var mark woxwidget.Widget = woxwidget.Text{Value: fallback, Style: woxui.TextStyle{Size: iconSize, Weight: woxui.FontWeightSemibold}, Color: cloudAlpha(theme.ResultTitle, 194)}
+func cloudIntroIcon(icon *woxui.Image, fallback string, size, iconSize float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	var mark woxwidget.Widget = woxwidget.Text{Value: fallback, Style: woxui.TextStyle{Size: iconSize, Weight: woxui.FontWeightSemibold}, Color: cloudAlpha(theme.Text, 194)}
 	if icon != nil {
 		mark = woxwidget.Image{Source: icon, Width: iconSize, Height: iconSize}
 	}
-	return woxwidget.Container{Width: size, Height: size, Radius: 8, BorderColor: cloudAlpha(theme.PreviewSplit, 210), BorderWidth: 1, Child: woxwidget.Align{
+	return woxwidget.Container{Width: size, Height: size, Radius: 8, BorderColor: cloudAlpha(theme.Border, 210), BorderWidth: 1, Child: woxwidget.Align{
 		Width: size, Height: size, Horizontal: 0.5, Vertical: 0.5, Child: mark,
 	}}
 }
 
 // cloudPlanComparison builds the responsive Free and Pro table used by Flutter.
-func cloudPlanComparison(props CloudIntroProps, width, height float32, compact bool, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudPlanComparison(props CloudIntroProps, width, height float32, compact bool, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	children := []woxwidget.Widget{cloudPlanHeader(props, width, compact, theme)}
 	for _, row := range props.PlanRows {
 		children = append(children, cloudPlanRow(row, width, compact, theme))
 	}
-	return woxwidget.Container{Width: width, Height: height, Radius: 8, BorderColor: cloudAlpha(theme.PreviewSplit, 220), BorderWidth: 1, Child: woxwidget.Flex{
+	return woxwidget.Container{Width: width, Height: height, Radius: 8, BorderColor: cloudAlpha(theme.Border, 220), BorderWidth: 1, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Children: children,
 	}}
 }
 
 // cloudPlanHeader builds the Free and Pro plan names.
-func cloudPlanHeader(props CloudIntroProps, width float32, compact bool, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudPlanHeader(props CloudIntroProps, width float32, compact bool, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	labelWidth := float32(132)
 	horizontalPadding := float32(14)
 	headerHeight := float32(40)
@@ -382,14 +382,14 @@ func cloudPlanHeader(props CloudIntroProps, width float32, compact bool, theme w
 	return woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: horizontalPadding, Top: topPadding, Right: horizontalPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			woxwidget.Painter{Width: labelWidth, Height: 20},
-			woxwidget.Container{Width: valueWidth, Height: 20, Child: woxwidget.Text{Value: props.FreeLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-			woxwidget.Container{Width: valueWidth, Height: 20, Child: woxwidget.Text{Value: props.ProLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
+			woxwidget.Container{Width: valueWidth, Height: 20, Child: woxwidget.Text{Value: props.FreeLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
+			woxwidget.Container{Width: valueWidth, Height: 20, Child: woxwidget.Text{Value: props.ProLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
 		},
 	}}
 }
 
 // cloudPlanRow builds one wide or compact comparison row.
-func cloudPlanRow(row CloudPlanRowProps, width float32, compact bool, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudPlanRow(row CloudPlanRowProps, width float32, compact bool, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	rowHeight := float32(40)
 	if compact {
 		rowHeight = 70
@@ -399,34 +399,34 @@ func cloudPlanRow(row CloudPlanRowProps, width float32, compact bool, theme woxc
 		content = cloudPlanCompactRow(row, width, theme)
 	}
 	return woxwidget.Stack{Width: width, Height: rowHeight, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: width, Height: 1, Color: cloudAlpha(theme.PreviewSplit, 180)}},
+		{Child: woxwidget.Container{Width: width, Height: 1, Color: cloudAlpha(theme.Border, 180)}},
 		{Top: 1, Child: content},
 	}}
 }
 
 // cloudPlanWideRow keeps labels and both plan values in three aligned columns.
-func cloudPlanWideRow(row CloudPlanRowProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudPlanWideRow(row CloudPlanRowProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	const labelWidth = float32(132)
 	const horizontalPadding = float32(14)
 	valueWidth := max(float32(0), (width-horizontalPadding*2-labelWidth-10)/2)
 	return woxwidget.Container{Width: width, Height: 39, Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding}, Child: woxwidget.Align{Height: 39, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: labelWidth, Height: 22, Child: woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}},
-			woxwidget.Container{Width: valueWidth, Height: 22, Child: woxwidget.TextBlock{Value: row.FreeValue, Width: valueWidth, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle}},
-			woxwidget.Container{Width: valueWidth, Height: 22, Child: woxwidget.TextBlock{Value: row.ProValue, Width: valueWidth, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
+			woxwidget.Container{Width: labelWidth, Height: 22, Child: woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary}},
+			woxwidget.Container{Width: valueWidth, Height: 22, Child: woxwidget.TextBlock{Value: row.FreeValue, Width: valueWidth, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: theme.Text}},
+			woxwidget.Container{Width: valueWidth, Height: 22, Child: woxwidget.TextBlock{Value: row.ProValue, Width: valueWidth, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
 		},
 	}}}
 }
 
 // cloudPlanCompactRow moves the row label above the two plan values on narrow pages.
-func cloudPlanCompactRow(row CloudPlanRowProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudPlanCompactRow(row CloudPlanRowProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	const horizontalPadding = float32(12)
 	return woxwidget.Container{Width: width, Height: 69, Padding: woxwidget.Insets{Left: horizontalPadding, Top: 9, Right: horizontalPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 7, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle},
+			woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: row.FreeValue, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 16, Color: theme.ResultTitle}},
-				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: row.ProValue, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, LineHeight: 16, Color: theme.ResultTitle}},
+				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: row.FreeValue, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 16, Color: theme.Text}},
+				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: row.ProValue, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, LineHeight: 16, Color: theme.Text}},
 			}},
 		},
 	}}
@@ -438,12 +438,12 @@ func cloudAlpha(color woxui.Color, alpha uint8) woxui.Color {
 }
 
 // cloudAccountCard switches between account entry points and signed-in details.
-func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	if !props.LoggedIn {
 		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 2, Top: 10, Right: 2, Bottom: 10}, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Expanded{Child: woxwidget.Align{Height: 42, Vertical: 0.5, Child: woxwidget.Text{
-					Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle,
+					Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text,
 				}}},
 				woxwidget.Align{Width: 200, Height: 42, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-login", Label: props.LoginLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnLogin, Theme: theme}),
@@ -461,13 +461,13 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 	valueWidth := max(float32(220), availableWidth-labelWidth-labelGap)
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: availableWidth, Height: 34, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: labelWidth, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: props.EmailLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
+			woxwidget.Container{Width: labelWidth, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: props.EmailLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
 			cloudValueAction("cloud-account-action", props.Email, valueWidth, props.OnOpenAccountMenu, theme),
 		}}},
 		woxwidget.Container{Width: availableWidth, Height: 61, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 61, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 				woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: props.PlanLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
+					woxwidget.Text{Value: props.PlanLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 					woxwidget.Semantics{
 						Key: "cloud-plan-tooltip-key", AutomationID: "cloud-plan-tooltip", Role: woxui.AccessibilityRoleImage, Label: props.PlanLabel,
 						Child: woxwidget.Gesture{ID: "cloud-plan-tooltip-hover", OnHoverAt: func(inside bool, bounds woxui.Rect) {
@@ -477,14 +477,14 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 						}, Child: woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}},
 					},
 				}},
-				woxwidget.Text{Value: props.PlanTips, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
+				woxwidget.Text{Value: props.PlanTips, Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary},
 			}}},
 			cloudValueAction("cloud-plan-action", props.PlanStatus, valueWidth, props.OnOpenSubscriptionMenu, theme),
 		}}},
 		woxwidget.Container{Width: availableWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.BillingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-				woxwidget.Text{Value: props.BillingTips, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
+				woxwidget.Text{Value: props.BillingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+				woxwidget.Text{Value: props.BillingTips, Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary},
 			}}},
 			woxwidget.Align{Width: valueWidth, Height: 57, Horizontal: 1, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16,
@@ -495,7 +495,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 }
 
 // CloudPlanTooltipOverlay renders Flutter's rich Free and Pro comparison and returns its window-relative placement.
-func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWidth, windowHeight float32, theme woxcomponent.Theme) (woxwidget.Widget, float32, float32) {
+func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWidth, windowHeight float32, theme woxcomponent.ControlTheme) (woxwidget.Widget, float32, float32) {
 	const tableWidth = float32(560)
 	const tooltipPadding = float32(10)
 	const tooltipMargin = float32(12)
@@ -511,7 +511,7 @@ func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWid
 	panel := woxwidget.Semantics{
 		Key: "cloud-plan-tooltip-overlay", AutomationID: "cloud-plan-tooltip-overlay", Role: woxui.AccessibilityRoleGroup, Label: props.FreeLabel + " / " + props.ProLabel,
 		Child: woxwidget.Container{
-			Width: tooltipWidth, Height: tooltipHeight, Radius: 8, Floating: true, Color: theme.ActionBackground, BorderColor: cloudAlpha(theme.ResultSubtitle, 112), BorderWidth: 1,
+			Width: tooltipWidth, Height: tooltipHeight, Radius: 8, Floating: true, Color: theme.Surface, BorderColor: cloudAlpha(theme.TextSecondary, 112), BorderWidth: 1,
 			Padding: woxwidget.UniformInsets(tooltipPadding), Child: cloudPlanComparison(props, tableWidth, tableHeight, false, theme),
 		},
 	}
@@ -519,22 +519,22 @@ func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWid
 }
 
 // cloudValueAction right-aligns an account value and the shared dropdown indicator on one center line.
-func cloudValueAction(id, value string, width float32, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
-	hoverBackground := theme.ResultSubtitle
+func cloudValueAction(id, value string, width float32, onTap func(), theme woxcomponent.ControlTheme) woxwidget.Widget {
+	hoverBackground := theme.TextSecondary
 	hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
 	return woxwidget.Align{Width: width, Height: 34, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
+			woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 			woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-				ID: id, Label: value, Icon: woxcomponent.WoxDropdownIndicator(28, 28, cloudAlpha(theme.ResultTitle, 194)), Width: 28, Height: 28, Radius: 6,
-				HoverBackground: hoverBackground, FocusRingColor: theme.Cursor, OnTap: onTap,
+				ID: id, Label: value, Icon: woxcomponent.WoxDropdownIndicator(28, 28, cloudAlpha(theme.Text, 194)), Width: 28, Height: 28, Radius: 6,
+				HoverBackground: hoverBackground, FocusRingColor: theme.Focus, OnTap: onTap,
 			}),
 		},
 	}}
 }
 
 // cloudSyncCard renders current sync state and its primary action.
-func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	const labelGap = float32(32)
 	// Reserve label space from an estimate only; the button itself sizes to its label.
 	buttonWidth := cloudFormButtonWidth(props.ButtonLabel, false)
@@ -552,7 +552,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 	return woxwidget.Container{Width: width, Height: cloudSyncCardHeight, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 50, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.StatusLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
+				woxwidget.Text{Value: props.StatusLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 				woxwidget.TextBlock{Value: statusLine, Width: labelWidth, Height: 24, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, LineHeight: 17, Color: props.Color},
 			}}},
 			woxwidget.Align{Width: valueWidth, Height: 57, Horizontal: 1, Child: button},
@@ -561,7 +561,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 }
 
 // cloudDeviceHeader renders the Flutter form row above the device list.
-func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	const labelGap = float32(32)
 	buttonWidth := cloudFormButtonWidth(props.RefreshLabel, true)
 	availableWidth := max(float32(0), width)
@@ -574,8 +574,8 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-				woxwidget.TextBlock{Value: props.Tips, Width: labelWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.ResultSubtitle},
+				woxwidget.Text{Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+				woxwidget.TextBlock{Value: props.Tips, Width: labelWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.TextSecondary},
 			}}},
 			woxwidget.Align{Width: valueWidth, Height: 50, Horizontal: 1, Child: refresh},
 		},
@@ -583,7 +583,7 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 }
 
 // cloudDeviceCard renders device activity and optional revoke actions.
-func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
 		actionWidth := float32(0)
@@ -600,10 +600,10 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 		labelWidth := max(float32(160), width-dateWidth-actionWidth-gapWidth)
 		children := []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-				woxwidget.Text{Value: item.Detail, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle},
+				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+				woxwidget.Text{Value: item.Detail, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary},
 			}}},
-			woxwidget.Align{Width: dateWidth, Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: item.LastSeen, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
+			woxwidget.Align{Width: dateWidth, Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: item.LastSeen, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}},
 		}
 		if action != nil {
 			children = append(children, action)
@@ -615,7 +615,7 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 	if len(rows) == 0 {
 		rows = append(rows, woxwidget.Container{Width: width, Height: 56, Padding: woxwidget.Insets{Left: 2}, Child: woxwidget.Align{
 			Height: 56, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
+				Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary,
 			},
 		}})
 	}
@@ -623,7 +623,7 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 }
 
 // cloudPluginExclusionsCard owns the bounded exclusion list and its scroll surface.
-func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	rows := make([]FormTableRow, 0, len(props.Items))
 	for index, item := range props.Items {
 		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{{Text: item.Name, Icon: item.Icon, IconSize: 18}}})
@@ -643,7 +643,7 @@ func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height f
 }
 
 // cloudConfigNotesCard renders translated platform sync caveats.
-func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	rows := make([]FormTableRow, 0, len(props.Items))
 	for index, note := range props.Items {
 		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{{Text: note.Item}, {Text: note.Mode, Tooltip: note.Tooltip}}})
@@ -656,25 +656,25 @@ func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, th
 }
 
 // cloudActionMenu renders the active account or subscription menu.
-func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	contentHeight := float32(len(props.Items)) * 40
 	height := min(float32(420), contentHeight+12)
-	return woxwidget.Container{Width: width, Height: height, Radius: 8, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: height, Radius: 8, Floating: true, Color: theme.Surface, BorderColor: theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 		rows := make([]woxwidget.Widget, 0, len(props.Items))
 		for _, item := range props.Items {
 			radius := float32(5)
-			background := theme.ActionBackground
-			hoverBackground := cloudAlpha(theme.ResultSubtitle, 25)
+			background := theme.Surface
+			hoverBackground := cloudAlpha(theme.TextSecondary, 25)
 			rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 				ID: item.ID, Label: item.Label, Width: size.Width, Height: 40, Radius: &radius,
 				Background: &background, HoverBackground: &hoverBackground, OnTap: item.OnTap, Theme: theme,
 				Padding: woxwidget.Insets{Left: 12, Right: 12},
-				Child:   woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText}},
+				Child:   woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.Text}},
 			}))
 		}
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "cloud-action-menu-scroll", Width: size.Width, Height: size.Height,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: theme, ThumbColor: theme.ResultTitle,
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: theme, ThumbColor: theme.Text,
 		})
 	}}}
 }
@@ -709,7 +709,7 @@ func CloudPluginExclusionDialog(props CloudPluginExclusionDialogProps) woxwidget
 		ID: "cloud-plugin-exclusion-dialog", Label: props.FieldLabel, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-plugin-exclusion-backdrop", BackdropAlpha: 205,
 		Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, Radius: 20,
-		BorderColor: cloudAlpha(props.Theme.ResultSubtitle, 104), BorderWidth: 1, InitialFocus: woxwidget.Key("cloud-plugin-exclusion-field"), OnEscape: props.OnCancel, Theme: props.Theme,
+		BorderColor: cloudAlpha(props.Theme.TextSecondary, 104), BorderWidth: 1, InitialFocus: woxwidget.Key("cloud-plugin-exclusion-field"), OnEscape: props.OnCancel, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: []woxwidget.Widget{field, actions}},
 	})
 	if !props.ChoiceOpen {
@@ -742,7 +742,7 @@ type CloudFormOverlayProps struct {
 	SubmitLabel   string
 	SubmitEnabled bool
 	Saving        bool
-	Theme         woxcomponent.Theme
+	Theme         woxcomponent.ControlTheme
 	OnCancel      func()
 	OnSubmit      func()
 }
@@ -801,7 +801,7 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 		linkHeight = 32
 		linkChildren := make([]woxwidget.Widget, 0, len(props.Links)+1)
 		if props.LinkPrefix != "" && !cloudFormHasCheckbox(props.Fields) {
-			linkChildren = append(linkChildren, woxwidget.Text{Value: props.LinkPrefix, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ActionHeader})
+			linkChildren = append(linkChildren, woxwidget.Text{Value: props.LinkPrefix, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.TextSecondary})
 		}
 		for _, link := range props.Links {
 			linkChildren = append(linkChildren, woxcomponent.WoxButton(woxcomponent.ButtonProps{
@@ -822,9 +822,9 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 		content = append(content, widget)
 		contentHeight += height
 	}
-	appendContent(woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText}, 20, 0)
+	appendContent(woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}, 20, 0)
 	if props.Description != "" {
-		appendContent(woxwidget.TextBlock{Value: props.Description, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.Theme.ActionHeader}, 34, 12)
+		appendContent(woxwidget.TextBlock{Value: props.Description, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.Theme.TextSecondary}, 34, 12)
 	}
 	appendContent(woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: rows}, rowsHeight, 24)
 	if linkHeight > 0 {
@@ -844,30 +844,30 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "cloud-form-dialog", Label: props.Title, Width: props.PanelWidth, Height: panelHeight, InitialFocus: "cloud-form-field-0",
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-form-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},
-		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Theme: props.Theme,
+		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, BorderColor: props.Theme.Border, BorderWidth: 1, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: content},
 	})
 }
 
 // cloudFormTextField renders Flutter's label-above-input account field.
-func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkProps, width float32, disabled bool, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkProps, width float32, disabled bool, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	focused := field.Focused
 	if field.FocusNode != nil {
 		focused = field.FocusNode.HasFocus()
 	}
-	border := theme.ResultSubtitle
+	border := theme.TextSecondary
 	if focused {
-		border = theme.ActionText
+		border = theme.Text
 	}
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: field.ID, Label: field.Label, Width: width, Height: 34, Radius: 4, Padding: woxwidget.Insets{Left: 8, Top: 7, Right: 8, Bottom: 6}, Transparent: true,
 		BorderColor: border, BorderWidth: 1, Style: woxui.TextStyle{Size: 13}, Value: field.State.Text, Focused: focused, Autofocus: field.Autofocus, Protected: field.Protected,
 		MaxLines: 1, Window: field.Window, Theme: theme, Controller: field.Controller, FocusNode: field.FocusNode, OnChanged: field.OnChanged, OnFocusChange: field.OnFocusChange,
 	})
-	var label woxwidget.Widget = woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}
+	var label woxwidget.Widget = woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.Text}
 	if trailingLink != nil {
 		label = woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisSpaceBetween, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText},
+			woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: trailingLink.ID, Label: trailingLink.Label, Radius: 4, Padding: woxwidget.Insets{Left: 1, Right: 1}, FontSize: 11,
 				Disabled: disabled, Variant: woxcomponent.ButtonText, OnTap: trailingLink.OnTap, Theme: theme,
@@ -881,21 +881,21 @@ func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkPr
 }
 
 // cloudFormCheckbox renders the legal-consent field as a real checkbox instead of an On/Off value row.
-func cloudFormCheckbox(field CloudFormFieldProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+func cloudFormCheckbox(field CloudFormFieldProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	var mark woxwidget.Widget = woxwidget.Container{Width: 16, Height: 16}
 	if field.Checked {
 		mark = woxwidget.Align{Width: 16, Height: 16, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-			Value: "✓", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText,
+			Value: "✓", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.Text,
 		}}
 	}
-	outline := theme.ResultSubtitle
+	outline := theme.TextSecondary
 	if field.Focused {
-		outline = theme.ActionText
+		outline = theme.Text
 	}
 	checkbox := woxwidget.Container{Width: 18, Height: 18, Radius: 3, BorderColor: outline, BorderWidth: 1, Padding: woxwidget.UniformInsets(1), Child: mark}
 	return woxwidget.Gesture{ID: field.ID, OnTap: field.OnTap, Child: woxwidget.Container{Width: width, Height: 24, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		checkbox,
-		woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText}}},
+		woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.Text}}},
 	}}}}
 }
 

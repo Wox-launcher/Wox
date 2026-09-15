@@ -287,7 +287,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
-		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
+		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette.componentTheme().Controls, width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 		nativePreviewOcclusion = woxui.Rect{Width: width, Height: height}
 	}
@@ -367,7 +367,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 			_, contentWidth := launcherview.TitleBarContentFrame(runtime.GOOS, true, width)
 			header := previewview.ChatHeader(a.chatHeaderProps(chatSnapshot, snapshot.palette, contentWidth, launcherview.SettingsTitleBarHeight, false, true))
 			return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
-				Width: width, CloseOnly: true, Content: header, Platform: runtime.GOOS, Theme: snapshot.palette.componentTheme(), Active: windowFocused,
+				Width: width, CloseOnly: true, Content: header, Platform: runtime.GOOS, Theme: snapshot.palette.componentTheme().Controls, Active: windowFocused,
 				OnDrag: func() {
 					if a.window != nil {
 						_ = a.window.StartDragging()
@@ -386,7 +386,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
 		Width: width, CloseOnly: true, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.appIcon,
-		Theme: snapshot.palette.componentTheme(), Active: windowFocused,
+		Theme: snapshot.palette.componentTheme().Controls, Active: windowFocused,
 		OnDrag: func() {
 			if a.window != nil {
 				_ = a.window.StartDragging()
@@ -714,7 +714,7 @@ func (a *App) openQueryContextMenu(windowPos woxui.Point, theme woxcomponent.The
 		a.host.ClearOverlay(owner, token)
 	}
 	menu := woxcomponent.BuildTextEditContextMenu(woxcomponent.TextEditContextMenuProps{
-		ID: "launcher.query.menu", Theme: theme,
+		ID: "launcher.query.menu", Theme: theme.Controls,
 		CanCut: en.canCut, CanCopy: en.canCopy, CanPaste: en.canPaste, CanSelectAll: en.canSelectAll,
 		OnAction: func(action woxcomponent.TextEditContextAction) {
 			clear()

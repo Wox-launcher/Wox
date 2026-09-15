@@ -510,7 +510,7 @@
   "ui_query_shortcuts_query": "Запрос",
   "ui_query_shortcuts_query_tooltip": "Запрос, представленный горячей клавишей",
   "ui_tray_queries": "Запросы в трее",
-  "ui_tray_queries_tips": "Добавьте иконки запросов в трее. При клике по иконке Wox откроется рядом с треем/строкой меню и выполнит настроенный запрос.",
+  "ui_tray_queries_tips": "Нажмите значок в трее, чтобы открыть Wox рядом и выполнить заданный запрос.",
   "ui_tray_queries_icon": "Иконка",
   "ui_tray_queries_icon_tooltip": "Иконка трея для этого запроса.",
   "ui_tray_queries_query": "Запрос",

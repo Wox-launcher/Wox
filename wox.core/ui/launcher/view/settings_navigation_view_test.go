@@ -27,7 +27,7 @@ func settingsSearchScroll(panel woxwidget.Container) woxcomponent.ScrollViewProp
 
 func TestSettingsRailMatchesFlutterSearchToNavigationGap(t *testing.T) {
 	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{},
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	content := settingsRailContent(rail)
 
@@ -39,14 +39,14 @@ func TestSettingsRailMatchesFlutterSearchToNavigationGap(t *testing.T) {
 func TestSettingsRailSelectedItemUsesThemeHighlight(t *testing.T) {
 	highlight := woxui.Color{R: 80, G: 160, B: 145, A: 255}
 	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{SelectedBackground: highlight},
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.ControlTheme{SelectionBackground: highlight},
 		Items: []SettingsNavItem{{ID: "themes.installed", Label: "Installed Themes", Selected: true}},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
 	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := focusedControlGesture(props.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 
-	if row.Color != highlight {
+	if row.BorderWidth != 0 || row.Color != highlight {
 		t.Fatalf("selected navigation fill = %#v, want theme highlight %#v", row.Color, highlight)
 	}
 }
@@ -65,7 +65,7 @@ func settingsRailItemLabel(item woxwidget.Widget) woxwidget.Text {
 
 func TestSettingsRailUsesRegularLabelWeight(t *testing.T) {
 	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{},
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.ControlTheme{},
 		Items: []SettingsNavItem{
 			{ID: "network", Label: "Network"},
 			{ID: "data", Label: "Data", Parent: true},
@@ -87,20 +87,19 @@ func TestSettingsRailUsesRegularLabelWeight(t *testing.T) {
 
 func TestSettingsSearchBoxUsesRailItemColor(t *testing.T) {
 	toolbar := woxui.Color{R: 166, G: 176, B: 190, A: 255}
-	subtitle := woxui.Color{R: 255, A: 255}
 	box := SettingsSearchBox(SettingsSearchBoxProps{
 		Width: 232, Placeholder: "Search settings",
-		Theme: woxcomponent.Theme{ToolbarText: toolbar, ResultSubtitle: subtitle, ResultTitle: woxui.Color{A: 255}},
+		Theme: woxcomponent.ControlTheme{TextSecondary: toolbar, Text: woxui.Color{A: 255}},
 	}).(woxwidget.Container)
 	field := box.Child.(woxwidget.Container)
 	wantBorder := toolbar
 	wantBorder.A = 170
 	if field.BorderColor != wantBorder {
-		t.Fatalf("settings search border = %#v, want rail ToolbarText %#v", field.BorderColor, wantBorder)
+		t.Fatalf("settings search border = %#v, want rail TextSecondary %#v", field.BorderColor, wantBorder)
 	}
 	input := field.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
-	if input.Theme.ResultSubtitle != toolbar {
-		t.Fatalf("settings search hint token = %#v, want ToolbarText so it matches unselected rail items", input.Theme.ResultSubtitle)
+	if input.Theme.TextSecondary != toolbar {
+		t.Fatalf("settings search hint token = %#v, want TextSecondary so it matches unselected rail items", input.Theme.TextSecondary)
 	}
 }
 
@@ -108,7 +107,7 @@ func TestSettingsRailHoversDestinationsButNotGroupHeaders(t *testing.T) {
 	text := woxui.Color{R: 180, G: 190, B: 200, A: 255}
 	clicked := 0
 	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{ToolbarText: text},
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.ControlTheme{TextSecondary: text},
 		Items: []SettingsNavItem{
 			{ID: "general", Label: "General", OnTap: func() { clicked++ }},
 			{ID: "plugins", Label: "Plugins", Parent: true, OnTap: func() { clicked++ }},
@@ -140,7 +139,7 @@ func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
 		items[index] = SettingsNavItem{ID: fmt.Sprintf("item-%d", index), Label: "Setting"}
 	}
 	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 300, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Items: items, Theme: woxcomponent.Theme{},
+		Width: 260, Height: 300, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Items: items, Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
 	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
@@ -150,59 +149,36 @@ func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
 	}
 }
 
-func TestSettingsRailBackgroundMatchesWindowMaterial(t *testing.T) {
-	theme := woxcomponent.Theme{
-		Background:  woxui.Color{R: 24, G: 29, B: 38, A: 242},
-		ToolbarText: woxui.Color{R: 166, G: 176, B: 190, A: 255},
+func TestSettingsRailBackgroundAvoidsDoubleTint(t *testing.T) {
+	theme := woxcomponent.ControlTheme{
+		Background:    woxui.Color{R: 24, G: 29, B: 38, A: 255},
+		TextSecondary: woxui.Color{R: 166, G: 176, B: 190, A: 255},
 	}
-	overlay := settingsColorAlpha(theme.ToolbarText, 9)
+	overlay := settingsColorAlpha(theme.TextSecondary, 9)
 
-	if got := settingsRailBackground(theme, false, true); got != overlay {
+	if got := settingsRailBackground(theme, false); got != overlay {
 		t.Fatalf("non-linux rail = %#v, want toolbar overlay %#v", got, overlay)
 	}
-	if got := settingsRailBackground(theme, true, false); got != theme.Background {
-		t.Fatalf("opaque linux rail = %#v, want page background %#v", got, theme.Background)
-	}
-	if got := settingsRailBackground(theme, true, true); got.A != 0 {
-		t.Fatalf("translucent linux rail = %#v, want no extra fill", got)
+	if got := settingsRailBackground(theme, true); got.A != 0 {
+		t.Fatalf("linux rail = %#v, want no duplicate tint", got)
 	}
 }
 
-func TestSettingsRailLinuxUsesPageBackground(t *testing.T) {
+func TestSettingsRailLinuxUsesRootTint(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-specific rail background behavior")
-	}
-	if woxui.HasNativeWindowMaterial() {
-		t.Skip("translucent linux rails stay empty so they match the page wash")
 	}
 	background := woxui.Color{R: 248, G: 248, B: 248, A: 255}
 	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{Background: background},
-	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
-
-	if rail.Color != background {
-		t.Fatalf("linux settings rail background = %#v, want page background %#v", rail.Color, background)
-	}
-}
-
-func TestSettingsRailLinuxTranslucentUsesNoFill(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("linux-specific rail background behavior")
-	}
-	if !woxui.HasNativeWindowMaterial() {
-		t.Skip("opaque linux rails match the page background")
-	}
-	rail := SettingsRail(SettingsRailProps{
-		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50},
-		Theme: woxcomponent.Theme{ToolbarText: woxui.Color{R: 166, G: 176, B: 190, A: 255}, Background: woxui.Color{R: 24, G: 29, B: 38, A: 242}},
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.ControlTheme{Background: background},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 
 	if rail.Color.A != 0 {
-		t.Fatalf("translucent linux settings rail background = %#v, want no extra fill", rail.Color)
+		t.Fatalf("linux settings rail background = %#v, want the root tint only", rail.Color)
 	}
 }
 
-func TestSettingsRailUsesToolbarOverlayWhenWindowIsTranslucent(t *testing.T) {
+func TestSettingsRailUsesSubtleOverlayOutsideLinux(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		t.Skip("linux rails do not use the windows toolbar overlay")
 	}
@@ -210,7 +186,7 @@ func TestSettingsRailUsesToolbarOverlayWhenWindowIsTranslucent(t *testing.T) {
 	want := settingsColorAlpha(toolbarText, 9)
 	rail := SettingsRail(SettingsRailProps{
 		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50},
-		Theme: woxcomponent.Theme{ToolbarText: toolbarText, Background: woxui.Color{R: 24, G: 29, B: 38, A: 242}},
+		Theme: woxcomponent.ControlTheme{TextSecondary: toolbarText, Background: woxui.Color{R: 24, G: 29, B: 38, A: 255}},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 
 	if rail.Color != want {
@@ -222,7 +198,7 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 	icon := &woxui.Image{}
 	border := woxui.Color{R: 96, G: 102, B: 110, A: 255}
 	panel := SettingsSearchResults(SettingsSearchResultsProps{
-		Width: 240, AvailableHeight: 200, Selected: 0, Theme: woxcomponent.Theme{PreviewSplit: border},
+		Width: 240, AvailableHeight: 200, Selected: 0, Theme: woxcomponent.ControlTheme{Border: border},
 		Results: []SettingsSearchResult{{Title: "Dictation", Subtitle: "Plugin · Dictation", Icon: icon}},
 	}).(woxwidget.Container)
 	if panel.Radius != 6 || panel.BorderColor != border || panel.BorderWidth != 1 {
@@ -252,10 +228,10 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 
 func TestSettingsSearchResultsUseSelectedTextColors(t *testing.T) {
 	titleColor := woxui.Color{R: 240, G: 245, B: 250, A: 255}
-	subtitleColor := woxui.Color{R: 220, G: 235, B: 245, A: 255}
+	subtitleColor := titleColor
 	panel := SettingsSearchResults(SettingsSearchResultsProps{
 		Width: 240, AvailableHeight: 200, Selected: 0,
-		Theme:   woxcomponent.Theme{SelectedTitle: titleColor, SelectedSubtitle: subtitleColor},
+		Theme:   woxcomponent.ControlTheme{SelectionText: titleColor},
 		Results: []SettingsSearchResult{{Title: "AI", Subtitle: "Settings section"}},
 	}).(woxwidget.Container)
 	props := settingsSearchScroll(panel)
@@ -272,7 +248,7 @@ func TestSettingsSearchResultsUseSelectedTextColors(t *testing.T) {
 
 func TestSettingsSearchResultsHideIconInNarrowPanel(t *testing.T) {
 	panel := SettingsSearchResults(SettingsSearchResultsProps{
-		Width: 96, AvailableHeight: 200, Theme: woxcomponent.Theme{},
+		Width: 96, AvailableHeight: 200, Theme: woxcomponent.ControlTheme{},
 		Results: []SettingsSearchResult{{Title: "General", Subtitle: "Setting", Icon: &woxui.Image{}}},
 	}).(woxwidget.Container)
 	props := settingsSearchScroll(panel)
@@ -289,7 +265,7 @@ func TestSettingsSearchResultsUseSharedScrollbarWhenOverflowing(t *testing.T) {
 		results[index] = SettingsSearchResult{Title: "Setting", Subtitle: "General"}
 	}
 	panel := SettingsSearchResults(SettingsSearchResultsProps{
-		Width: 240, AvailableHeight: 200, Selected: 7, Theme: woxcomponent.Theme{}, Results: results,
+		Width: 240, AvailableHeight: 200, Selected: 7, Theme: woxcomponent.ControlTheme{}, Results: results,
 	}).(woxwidget.Container)
 	props := settingsSearchScroll(panel)
 

@@ -34,7 +34,7 @@ type ThemeEditorColorPickerProps struct {
 	BrightnessLabel    string
 	OpacityLabel       string
 	ColorField         woxwidget.Widget
-	Theme              woxcomponent.Theme
+	Theme              woxcomponent.ControlTheme
 	OnHueSaturation    func(hue, saturation float64)
 	OnBrightnessChange func(value float64)
 	OnOpacityChange    func(value float64)
@@ -45,7 +45,7 @@ func ThemeEditorColorPicker(props ThemeEditorColorPickerProps) woxwidget.Widget 
 	const contentWidth = float32(360)
 	wheel := themeEditorColorWheel(props)
 	colorRow := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: 48, Height: 36, Radius: 6, Color: props.Color, BorderColor: themeAlpha(props.Theme.PreviewSplit, 200), BorderWidth: 1},
+		woxwidget.Container{Width: 48, Height: 36, Radius: 6, Color: props.Color, BorderColor: themeAlpha(props.Theme.Border, 200), BorderWidth: 1},
 		props.ColorField,
 	}}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: []woxwidget.Widget{
@@ -93,7 +93,7 @@ func themeEditorColorWheel(props ThemeEditorColorPickerProps) woxwidget.Widget {
 }
 
 // themeEditorColorSlider keeps pointer and accessibility value changes on the same normalized path.
-func themeEditorColorSlider(id, label string, value float64, theme woxcomponent.Theme, onChanged func(float64)) woxwidget.Widget {
+func themeEditorColorSlider(id, label string, value float64, theme woxcomponent.ControlTheme, onChanged func(float64)) woxwidget.Widget {
 	const trackWidth = float32(194)
 	const thumbSize = float32(18)
 	normalized := min(float64(1), max(float64(0), value))
@@ -105,9 +105,9 @@ func themeEditorColorSlider(id, label string, value float64, theme woxcomponent.
 	}
 	track := woxwidget.Gesture{ID: id + "-pointer", OnPanStart: setPosition, OnPanUpdate: setPosition, Child: woxwidget.Stack{
 		Width: trackWidth, Height: thumbSize, Children: []woxwidget.StackChild{
-			{Top: 7, Child: woxwidget.Container{Width: trackWidth, Height: 4, Radius: 2, Color: themeAlpha(theme.PreviewSplit, 150)}},
-			{Top: 7, Child: woxwidget.Container{Width: activeWidth, Height: 4, Radius: 2, Color: theme.SelectedBackground}},
-			{Left: max(float32(0), min(trackWidth-thumbSize, activeWidth-thumbSize/2)), Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: theme.ResultSubtitle}},
+			{Top: 7, Child: woxwidget.Container{Width: trackWidth, Height: 4, Radius: 2, Color: themeAlpha(theme.Border, 150)}},
+			{Top: 7, Child: woxwidget.Container{Width: activeWidth, Height: 4, Radius: 2, Color: theme.SelectionBackground}},
+			{Left: max(float32(0), min(trackWidth-thumbSize, activeWidth-thumbSize/2)), Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: theme.TextSecondary}},
 		},
 	}}
 	semanticTrack := woxwidget.Semantics{
@@ -138,9 +138,9 @@ func themeEditorColorSlider(id, label string, value float64, theme woxcomponent.
 		Child: track,
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Align{Width: 70, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
+		woxwidget.Align{Width: 70, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}},
 		woxwidget.Align{Width: trackWidth, Height: 24, Vertical: 0.5, Child: semanticTrack},
-		woxwidget.Container{Width: 46, Height: 24, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Width: 36, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%.0f%%", normalized*100), Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle}}},
+		woxwidget.Container{Width: 46, Height: 24, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Width: 36, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%.0f%%", normalized*100), Style: woxui.TextStyle{Size: 12}, Color: theme.Text}}},
 	}}
 }
 
@@ -212,7 +212,7 @@ type ThemeEditorColorGroup struct {
 type ThemeEditorSettingsProps struct {
 	Width              float32
 	Height             float32
-	Theme              woxcomponent.Theme
+	Theme              woxcomponent.ControlTheme
 	DraftTheme         woxcomponent.Theme
 	Groups             []ThemeEditorColorGroup
 	ActiveGroup        int
@@ -272,7 +272,7 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 	windowLeft := max(float32(0), (stageWidth-windowWidth)/2)
 	windowTop := max(float32(0), (stageHeight-windowHeight)/2)
 
-	stageColor := props.Theme.QueryBackground
+	stageColor := props.Theme.InputBackground
 	stage := woxwidget.Stack{Width: stageWidth, Height: stageHeight, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, Color: stageColor}},
 	}}
@@ -283,7 +283,7 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 	}
 	stage.Children = append(stage.Children,
 		woxwidget.StackChild{Left: windowLeft, Top: windowTop, Child: themeEditorPreviewWindow(props, windowWidth, windowHeight)},
-		woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, BorderColor: themeAlpha(props.Theme.PreviewSplit, 150), BorderWidth: 1}},
+		woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, BorderColor: themeAlpha(props.Theme.Border, 150), BorderWidth: 1}},
 	)
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Left: stageLeft, Top: stageTop, Child: stage}}}
 }
@@ -440,13 +440,13 @@ func themeEditorControlPane(props ThemeEditorSettingsProps, width, height float3
 		tokensTop = 78
 	}
 	children := []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: width, Height: 1, Color: themeAlpha(props.Theme.PreviewSplit, 184)}},
+		{Child: woxwidget.Container{Width: width, Height: 1, Color: themeAlpha(props.Theme.Border, 184)}},
 		{Left: 18, Top: 12, Child: groups},
 		{Left: 18 + groupsWidth + 14, Top: 12, Child: actions},
 		{Left: 18, Top: tokensTop, Child: themeEditorTokens(props, innerWidth, max(float32(0), height-tokensTop-6))},
 	}
 	if props.Error != "" {
-		children = append(children, woxwidget.StackChild{Left: 18, Top: 54, Child: woxwidget.Text{Value: props.Error, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ErrorText}})
+		children = append(children, woxwidget.StackChild{Left: 18, Top: 54, Child: woxwidget.Text{Value: props.Error, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.Error}})
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: children}
 }
@@ -461,15 +461,15 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 		}
 		background := woxui.Color{}
 		border := woxui.Color{}
-		foreground := themeAlpha(props.Theme.ResultTitle, 198)
+		foreground := themeAlpha(props.Theme.Text, 198)
 		if index == props.ActiveGroup {
-			background = themeAlpha(props.Theme.ActionSelected, 42)
-			border = themeAlpha(props.Theme.ActionSelected, 96)
-			foreground = props.Theme.ResultTitle
+			background = themeAlpha(props.Theme.Accent, 42)
+			border = themeAlpha(props.Theme.Accent, 96)
+			foreground = props.Theme.Text
 		}
 		id := "theme-editor-group-" + strconv.Itoa(index)
 		chip := themeEditorGroupChip(themeEditorGroupChipProps{
-			ID: id, Label: group.Label, Width: chipWidth, Height: 34, Background: background, HoverBackground: themeAlpha(props.Theme.ResultTitle, 25),
+			ID: id, Label: group.Label, Width: chipWidth, Height: 34, Background: background, HoverBackground: themeAlpha(props.Theme.Text, 25),
 			BorderColor: border, BorderWidth: themeBoolFloat(border.A != 0), Foreground: foreground, Selected: index == props.ActiveGroup, OnTap: func() {
 				if props.OnSelectGroup != nil {
 					props.OnSelectGroup(index)
@@ -494,7 +494,7 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 	}
 	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "theme-editor-group-scroll", Width: width, Height: height, ContentWidth: max(width, contentWidth),
-		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.Text,
 		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips},
 	})
 }
@@ -575,19 +575,19 @@ func themeEditorTokens(props ThemeEditorSettingsProps, width, height float32) wo
 	contentWidth := max(width, float32(len(cards))*190+float32(max(0, len(cards)-1))*12)
 	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("theme-editor-token-scroll-" + strconv.Itoa(props.ActiveGroup)), Width: width, Height: height, ContentWidth: contentWidth,
-		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+		Horizontal: true, Theme: props.Theme, ThumbColor: props.Theme.Text,
 		Content: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: cards},
 	})
 }
 
 func themeEditorTokenCard(props ThemeEditorSettingsProps, token ThemeEditorColorToken, width, height float32) woxwidget.Widget {
 	labelWidth := max(float32(0), width-86)
-	hoverBackground := props.Theme.ResultSubtitle
+	hoverBackground := props.Theme.TextSecondary
 	hoverBackground.A = 26
 	locate := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 		ID: "theme-editor-locate-" + token.Key, Label: props.LocateLabel + ": " + token.Label,
 		Icon: woxwidget.Image{Source: props.LocateIcon, Width: 15, Height: 15}, Width: 26, Height: height - 2, Radius: 4,
-		HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: func() {
+		HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, OnTap: func() {
 			if props.OnLocateToken != nil {
 				props.OnLocateToken(token.Key)
 			}
@@ -595,13 +595,13 @@ func themeEditorTokenCard(props ThemeEditorSettingsProps, token ThemeEditorColor
 	})
 	label := woxwidget.Clip{Width: labelWidth, Height: height - 2, Child: woxwidget.Align{
 		Width: labelWidth, Height: height - 2, Vertical: 0.5,
-		Child: woxwidget.Text{Value: token.Label, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultTitle},
+		Child: woxwidget.Text{Value: token.Label, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Text},
 	}}
-	card := woxwidget.Container{Width: width, Height: height, Radius: 7, BorderColor: themeAlpha(props.Theme.PreviewSplit, 148), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+	card := woxwidget.Container{Width: width, Height: height, Radius: 7, BorderColor: themeAlpha(props.Theme.Border, 148), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 		label,
 		locate,
 		woxwidget.Container{Width: 8, Height: height - 2},
-		woxwidget.Align{Width: 28, Height: height - 2, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Container{Width: 28, Height: 28, Radius: 6, Color: token.Color, BorderColor: themeAlpha(props.Theme.PreviewSplit, 190), BorderWidth: 1}},
+		woxwidget.Align{Width: 28, Height: height - 2, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Container{Width: 28, Height: 28, Radius: 6, Color: token.Color, BorderColor: themeAlpha(props.Theme.Border, 190), BorderWidth: 1}},
 	}}}
 	activate := func() {
 		if props.OnEditToken != nil {

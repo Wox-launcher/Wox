@@ -12,12 +12,12 @@ func WoxSettingTextField(props TextFieldProps) woxwidget.Widget {
 	props.Padding = woxwidget.Insets{Left: 8, Top: 6, Right: 8, Bottom: 6}
 	props.Background = woxui.Color{}
 	props.Transparent = true
-	props.BorderColor = props.Theme.ResultSubtitle
+	props.BorderColor = props.Theme.TextSecondary
 	props.BorderWidth = 1
 	props.Style = woxui.TextStyle{Size: SettingsControlFontSize}
-	props.TextColor = props.Theme.ResultTitle
+	props.TextColor = props.Theme.Text
 	if props.Disabled {
-		props.TextColor = props.Theme.ResultSubtitle
+		props.TextColor = props.Theme.TextSecondary
 	}
 	props.TextAlignmentY = 0.5
 	props.MaxLines = 1

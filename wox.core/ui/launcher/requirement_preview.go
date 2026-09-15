@@ -79,7 +79,7 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
-		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("requirement-form", index), Child: a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, 0)})
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("requirement-form", index), Child: a.buildFormField(form.formFieldsSnapshot, callbacks, palette.componentTheme().Controls, index, definition, width-36, 0)})
 	}
 	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,

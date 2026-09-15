@@ -491,7 +491,7 @@ func TestChatInputRendersSkillTagsAsAtomicChips(t *testing.T) {
 	theme := woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}, ResultSubtitle: woxui.Color{A: 200}, QueryBackground: woxui.Color{A: 255}}
 	tag := "{skill:wox-plugin-creator}"
 	end := len([]rune(tag))
-	run := woxcomponent.NewTokenChipRun(0, end, "wox-plugin-creator", nil, theme)
+	run := woxcomponent.NewTokenChipRun(0, end, "wox-plugin-creator", nil, theme.Controls)
 	input := ChatInput(ChatInputProps{
 		Width: 400, Height: ChatComposerHeight(0), Key: "skills", Editing: woxui.TextEditingState{Text: tag + " 士大夫"},
 		RichRuns: []woxcomponent.TextFieldRichRun{run}, AtomicTokens: []woxcomponent.TextFieldTokenRange{{Start: 0, End: end}},

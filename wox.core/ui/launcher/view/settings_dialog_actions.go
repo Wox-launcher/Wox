@@ -20,7 +20,7 @@ type settingsDialogAction struct {
 }
 
 // settingsDialogActions builds the shared right-aligned cancel/confirm footer used by settings dialogs.
-func settingsDialogActions(width float32, theme woxcomponent.Theme, cancel, confirm settingsDialogAction) woxwidget.Widget {
+func settingsDialogActions(width float32, theme woxcomponent.ControlTheme, cancel, confirm settingsDialogAction) woxwidget.Widget {
 	button := func(action settingsDialogAction, variant woxcomponent.ButtonVariant) woxwidget.Widget {
 		return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: action.ID, Label: action.Label, Radius: 4, FontSize: 13,

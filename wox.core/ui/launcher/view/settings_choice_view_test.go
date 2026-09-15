@@ -61,7 +61,7 @@ func TestSettingsChoiceKeyboardSkipsGroupHeaders(t *testing.T) {
 func TestGroupedSettingsChoiceRendersSectionLabel(t *testing.T) {
 	props := SettingsChoiceProps{
 		ID: "providers", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		CurrentValue: "openai", Theme: woxcomponent.Theme{ActionHeader: woxui.Color{R: 160, A: 255}},
+		CurrentValue: "openai", Theme: woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 160, A: 255}},
 		Choices: []SettingsChoice{
 			{Value: "openai", Label: "openai", Group: "API"},
 			{Value: "codex-cli", Label: "codex-cli", Group: "Installed CLI"},
@@ -106,7 +106,7 @@ func TestFilteredSettingsChoicesDoesNotSearchInternalJSONValue(t *testing.T) {
 func TestFilterableSettingsChoiceCollapsesWhenNothingMatches(t *testing.T) {
 	props := SettingsChoiceProps{
 		ID: "models", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		Theme: woxcomponent.Theme{}, Choices: []SettingsChoice{{Value: "flash", Label: "deepseek-v4-flash"}},
+		Theme: woxcomponent.ControlTheme{}, Choices: []SettingsChoice{{Value: "flash", Label: "deepseek-v4-flash"}},
 	}
 	state := &settingsChoiceState{}
 	state.InitState(woxwidget.StateContext{}, props)
@@ -129,7 +129,7 @@ func TestFilterableSettingsChoiceShowsSearchIcon(t *testing.T) {
 	icon := &woxui.Image{}
 	props := SettingsChoiceProps{
 		ID: "models", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		SearchIcon: icon, Theme: woxcomponent.Theme{}, Choices: []SettingsChoice{{Value: "flash", Label: "deepseek-v4-flash"}},
+		SearchIcon: icon, Theme: woxcomponent.ControlTheme{}, Choices: []SettingsChoice{{Value: "flash", Label: "deepseek-v4-flash"}},
 	}
 	state := &settingsChoiceState{}
 	state.InitState(woxwidget.StateContext{}, props)
@@ -159,7 +159,7 @@ func TestSettingsChoiceTrailingUsesRowTextColor(t *testing.T) {
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	props := SettingsChoiceProps{
 		ID: "glance", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		CurrentValue: "time", Theme: woxcomponent.Theme{ActionText: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
+		CurrentValue: "time", Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: woxui.Color{R: 255, A: 255}},
 		Choices: []SettingsChoice{
 			{Value: "battery", Label: "Battery", Trailing: "AC"},
 			{Value: "time", Label: "Time", Trailing: "14:35"},
@@ -174,7 +174,7 @@ func TestSettingsChoiceTrailingUsesRowTextColor(t *testing.T) {
 	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	trailing := row.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Text)
 	if trailing.Value != "AC" || trailing.Color != title {
-		t.Fatalf("choice trailing = %q %#v, want row ActionText so ResultSubtitle cannot restyle Glance values", trailing.Value, trailing.Color)
+		t.Fatalf("choice trailing = %q %#v, want row Text so TextSecondary cannot restyle Glance values", trailing.Value, trailing.Color)
 	}
 }
 
@@ -182,7 +182,7 @@ func TestSettingsChoiceSelectedItemUsesThemeHighlight(t *testing.T) {
 	highlight := woxui.Color{R: 54, G: 123, B: 220, A: 255}
 	props := SettingsChoiceProps{
 		ID: "start-page", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		CurrentValue: "recent", Theme: woxcomponent.Theme{SelectedBackground: highlight},
+		CurrentValue: "recent", Theme: woxcomponent.ControlTheme{SelectionBackground: highlight},
 		Choices: []SettingsChoice{{Value: "recent", Label: "Recent"}, {Value: "blank", Label: "Blank"}},
 	}
 	state := &settingsChoiceState{}
@@ -205,7 +205,7 @@ func TestSettingsChoiceHighlightsHoveredItemLikeLauncherResult(t *testing.T) {
 	highlight := woxui.Color{R: 54, G: 123, B: 220, A: 200}
 	props := SettingsChoiceProps{
 		ID: "start-page", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		CurrentValue: "recent", Theme: woxcomponent.Theme{SelectedBackground: highlight},
+		CurrentValue: "recent", Theme: woxcomponent.ControlTheme{SelectionBackground: highlight},
 		Choices: []SettingsChoice{{Value: "recent", Label: "Recent"}, {Value: "blank", Label: "Blank"}, {Value: "query", Label: "Query"}},
 	}
 	state := &settingsChoiceState{}
@@ -233,7 +233,7 @@ func TestFilterableSettingsChoiceUsesSharedScrollbarAndRoundedEnds(t *testing.T)
 	}
 	props := SettingsChoiceProps{
 		ID: "fonts", Width: 640, Height: 480, Anchor: woxui.Rect{X: 100, Y: 80, Width: 320, Height: 34}, Filterable: true,
-		CurrentValue: choices[0].Value, Theme: woxcomponent.Theme{}, Choices: choices,
+		CurrentValue: choices[0].Value, Theme: woxcomponent.ControlTheme{}, Choices: choices,
 	}
 	state := &settingsChoiceState{}
 	state.InitState(woxwidget.StateContext{}, props)

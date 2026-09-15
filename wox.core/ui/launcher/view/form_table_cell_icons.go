@@ -28,7 +28,7 @@ func formTableCellIcons(props FormTableFieldProps, rowIndex, columnIndex int, ce
 		children = append(children, icon)
 	}
 	if cell.IconOverflow > 0 {
-		children = append(children, woxwidget.Text{Value: fmt.Sprintf("+%d", cell.IconOverflow), Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchSubtitleFontSize}, Color: props.Theme.ResultSubtitle})
+		children = append(children, woxwidget.Text{Value: fmt.Sprintf("+%d", cell.IconOverflow), Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchSubtitleFontSize}, Color: props.Theme.TextSecondary})
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}
 }

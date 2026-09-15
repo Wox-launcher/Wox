@@ -92,7 +92,7 @@ type WindowGroupEditorProps struct {
 	LayoutGroups         []WindowGroupLayoutGroupProps
 	DisplayTiles         []WindowGroupDisplayTileProps
 	Window               *woxui.Window
-	Theme                woxcomponent.Theme
+	Theme                woxcomponent.ControlTheme
 	OnCancel             func()
 	OnSave               func()
 	OnNameChanged        func(string)
@@ -135,7 +135,7 @@ type WindowGroupUrlEditorProps struct {
 	ExtensionExternalIcon       *woxui.Image
 	ExtensionConnectedAccent    woxui.Color
 	ExtensionDisconnectedAccent woxui.Color
-	Theme                       woxcomponent.Theme
+	Theme                       woxcomponent.ControlTheme
 	OnCancel                    func()
 	OnSave                      func([]string)
 	OnOpenExtensionStore        func()
@@ -165,7 +165,7 @@ func WindowGroupEditor(props WindowGroupEditorProps) woxwidget.Widget {
 		}
 	}
 	panelHeight := fixedHeight + bodyHeight
-	border := windowGroupFadeColor(props.Theme.PreviewSplit, 230)
+	border := windowGroupFadeColor(props.Theme.Border, 230)
 	body := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 14, Children: []woxwidget.Widget{
 		windowGroupEditorHeader(props, innerWidth),
 		windowGroupEditorBody(props, innerWidth, bodyHeight),
@@ -175,7 +175,7 @@ func WindowGroupEditor(props WindowGroupEditorProps) woxwidget.Widget {
 		settingsDialogAction{ID: "window-group-save", Label: props.SaveLabel, OnTap: props.OnSave},
 	)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultTitle},
+		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.Text},
 		body,
 		actions,
 	}}
@@ -191,16 +191,16 @@ func windowGroupEditorHeader(props WindowGroupEditorProps, width float32) woxwid
 	nameField := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "window-group-name", Hint: props.NamePlaceholder, Width: 360, Height: 40, Radius: 4,
 		Padding: woxwidget.Insets{Left: 10, Top: 9, Right: 10, Bottom: 9}, Transparent: true,
-		BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.55), BorderWidth: 1,
+		BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.55), BorderWidth: 1,
 		Value: props.GroupName, Window: props.Window, Theme: props.Theme,
 		OnChanged: props.OnNameChanged,
 	})
 	children := []woxwidget.Widget{nameField}
 	if props.NameError != "" {
-		children = append(children, woxwidget.Text{Value: props.NameError, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText})
+		children = append(children, woxwidget.Text{Value: props.NameError, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error})
 	}
 	left := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: children}
-	right := woxwidget.Text{Value: props.SelectDisplayLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}
+	right := woxwidget.Text{Value: props.SelectDisplayLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{left, woxwidget.Expanded{Child: right}}}
 }
 
@@ -222,9 +222,9 @@ func windowGroupDisplayArrangement(props WindowGroupEditorProps, width, height f
 			ID: "window-group-retry-displays", Label: props.RetryLabel, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRetryDisplays, Theme: props.Theme,
 		})
 		return woxwidget.Container{
-			Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.35), BorderWidth: 1,
+			Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.35), BorderWidth: 1,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.DisplaysError, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText},
+				woxwidget.Text{Value: props.DisplaysError, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error},
 				retry,
 			}},
 		}
@@ -253,21 +253,21 @@ func windowGroupDisplayArrangement(props WindowGroupEditorProps, width, height f
 		})
 	}
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 6, Color: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.06),
-		BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.35), BorderWidth: 1,
+		Width: width, Height: height, Radius: 6, Color: windowGroupFadeColor(props.Theme.TextSecondary, 0.06),
+		BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.35), BorderWidth: 1,
 		Child: woxwidget.Stack{Width: width, Height: height, Children: children},
 	}
 }
 
 func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDisplayTileProps, width, height float32) woxwidget.Widget {
 	selectedColor := windowGroupSelectionColor()
-	border := windowGroupFadeColor(props.Theme.ResultSubtitle, 0.4)
+	border := windowGroupFadeColor(props.Theme.TextSecondary, 0.4)
 	borderWidth := float32(1)
-	background := props.Theme.QueryBackground
+	background := props.Theme.InputBackground
 	if tile.Selected {
 		border = windowGroupFadeColor(selectedColor, 0.9)
 		borderWidth = 2
-		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.08), props.Theme.QueryBackground)
+		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.08), props.Theme.InputBackground)
 	}
 	slotChildren := make([]woxwidget.StackChild, 0, len(tile.Slots))
 	for _, slot := range tile.Slots {
@@ -279,7 +279,7 @@ func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDispla
 	content := woxwidget.Stack{Width: width, Height: height, Children: slotChildren}
 	if tile.IsPrimary {
 		content.Children = append(content.Children, woxwidget.StackChild{
-			Top: 6, Right: 6, AnchorRight: true, Child: woxwidget.Text{Value: props.PrimaryDisplayLabel, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
+			Top: 6, Right: 6, AnchorRight: true, Child: woxwidget.Text{Value: props.PrimaryDisplayLabel, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.TextSecondary},
 		})
 	}
 	tileSurface := woxwidget.Widget(woxwidget.Container{
@@ -307,8 +307,8 @@ func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDispla
 
 func windowGroupLayoutPanel(props WindowGroupEditorProps, width, height float32) woxwidget.Widget {
 	header := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.LayoutsLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-		woxwidget.TextBlock{Value: props.LayoutsDescription, MaxLines: 3, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Text{Value: props.LayoutsLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+		woxwidget.TextBlock{Value: props.LayoutsDescription, MaxLines: 3, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.TextSecondary},
 	}}
 	groups := make([]woxwidget.Widget, 0, len(props.LayoutGroups))
 	for _, group := range props.LayoutGroups {
@@ -317,10 +317,10 @@ func windowGroupLayoutPanel(props WindowGroupEditorProps, width, height float32)
 	scrollContent := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: append([]woxwidget.Widget{header}, groups...)}
 	scroll := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "window-group-layout-scroll", FillWidth: true, FillHeight: true,
-		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Padding: woxwidget.UniformInsets(12), Child: scrollContent}}, Theme: props.Theme, ThumbColor: props.Theme.ResultTitle,
+		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Padding: woxwidget.UniformInsets(12), Child: scrollContent}}, Theme: props.Theme, ThumbColor: props.Theme.Text,
 	})
 	return woxwidget.Container{
-		Width: width, Height: height, Padding: woxwidget.UniformInsets(1), Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.35), BorderWidth: 1, Child: scroll,
+		Width: width, Height: height, Padding: woxwidget.UniformInsets(1), Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.35), BorderWidth: 1, Child: scroll,
 	}
 }
 
@@ -330,7 +330,7 @@ func windowGroupLayoutGroup(props WindowGroupEditorProps, group WindowGroupLayou
 		cards = append(cards, windowGroupLayoutCard(props, layout))
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: group.SlotCountLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Text{Value: group.SlotCountLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
 		woxwidget.Wrap{Gap: windowGroupLayoutCardGap, RunGap: windowGroupLayoutCardGap, Children: cards},
 	}}
 }
@@ -338,11 +338,11 @@ func windowGroupLayoutGroup(props WindowGroupEditorProps, group WindowGroupLayou
 func windowGroupLayoutCard(props WindowGroupEditorProps, layout WindowGroupLayoutOptionProps) woxwidget.Widget {
 	selected := layout.Selected
 	background := woxui.Color{}
-	border := windowGroupFadeColor(props.Theme.ResultSubtitle, 0.35)
+	border := windowGroupFadeColor(props.Theme.TextSecondary, 0.35)
 	borderWidth := float32(1)
 	selectedColor := windowGroupSelectionColor()
 	if selected {
-		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.14), props.Theme.ActionBackground)
+		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.14), props.Theme.Surface)
 		border = selectedColor
 		borderWidth = 2
 	}
@@ -353,7 +353,7 @@ func windowGroupLayoutCard(props WindowGroupEditorProps, layout WindowGroupLayou
 		Padding: woxwidget.UniformInsets(7),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 			windowGroupMiniLayout(props, layout.Slots, windowGroupLayoutCardWidth-14, miniHeight),
-			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Align{Height: 12, Horizontal: 0.5, Child: woxwidget.Text{Value: layout.Label, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultTitle}}},
+			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Align{Height: 12, Horizontal: 0.5, Child: woxwidget.Text{Value: layout.Label, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.Text}}},
 		}},
 	})
 	if selected {
@@ -386,23 +386,23 @@ func windowGroupMiniLayout(props WindowGroupEditorProps, slots []WindowGroupSlot
 		x, y, w, h := slotFractionRect(slot, width, height)
 		slotChildren = append(slotChildren, woxwidget.StackChild{
 			Left: x + 2, Top: y + 2, Child: woxwidget.Container{
-				Width: max(float32(1), w-4), Height: max(float32(1), h-4), Radius: 2, Color: windowGroupFadeColor(props.Theme.ActionSelected, 0.7),
+				Width: max(float32(1), w-4), Height: max(float32(1), h-4), Radius: 2, Color: windowGroupFadeColor(props.Theme.Accent, 0.7),
 			},
 		})
 	}
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 3, BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.45), BorderWidth: 1,
+		Width: width, Height: height, Radius: 3, BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.45), BorderWidth: 1,
 		Child: woxwidget.Stack{Width: width, Height: height, Children: slotChildren},
 	}
 }
 
 func windowGroupSlotTile(props WindowGroupEditorProps, slot WindowGroupSlotProps, selectedDisplay bool, displayIndex int, width, height float32) woxwidget.Widget {
 	hasApp := slot.AppName != ""
-	background := windowGroupFadeColor(props.Theme.ResultTitle, 0.055)
-	border := windowGroupFadeColor(props.Theme.ResultSubtitle, 0.38)
+	background := windowGroupFadeColor(props.Theme.Text, 0.055)
+	border := windowGroupFadeColor(props.Theme.TextSecondary, 0.38)
 	if hasApp {
-		background = windowGroupFadeColor(props.Theme.ActionSelected, 0.28)
-		border = windowGroupFadeColor(props.Theme.ActionSelected, 0.55)
+		background = windowGroupFadeColor(props.Theme.Accent, 0.28)
+		border = windowGroupFadeColor(props.Theme.Accent, 0.55)
 	}
 	var content woxwidget.Widget
 	if hasApp {
@@ -414,7 +414,7 @@ func windowGroupSlotTile(props WindowGroupEditorProps, slot WindowGroupSlotProps
 		}
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			icon,
-			woxwidget.Text{Value: slot.AppName, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+			woxwidget.Text{Value: slot.AppName, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 		}}
 	} else {
 		addIcon := woxwidget.Widget(woxwidget.Container{Width: 15, Height: 15})
@@ -423,7 +423,7 @@ func windowGroupSlotTile(props WindowGroupEditorProps, slot WindowGroupSlotProps
 		}
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			addIcon,
-			woxwidget.Text{Value: props.ChooseAppLabel, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+			woxwidget.Text{Value: props.ChooseAppLabel, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.TextSecondary},
 		}}
 	}
 	tile := woxwidget.Container{
@@ -574,13 +574,13 @@ func (s *windowGroupURLState) buildDialog(context woxwidget.StateContext, props 
 		}},
 	)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultTitle}},
-		woxwidget.Container{Width: innerWidth, Height: 22, Child: woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
+		woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.Text}},
+		woxwidget.Container{Width: innerWidth, Height: 22, Child: woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}},
 		table,
 		woxwidget.Container{Width: innerWidth, Height: 50, Padding: woxwidget.Insets{Top: 6}, Child: windowGroupExtensionStatus(props, innerWidth)},
 		actions,
 	}}
-	border := windowGroupFadeColor(props.Theme.PreviewSplit, 0.9)
+	border := windowGroupFadeColor(props.Theme.Border, 0.9)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "window-group-url-editor", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "window-group-url-backdrop", BackdropAlpha: 210,
@@ -599,7 +599,7 @@ func (s *windowGroupURLState) buildRowEditor(context woxwidget.StateContext, pro
 	field := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "window-group-url-row-value", Label: "URL", Hint: "URL", Width: innerWidth, Height: 40, Radius: 4,
 		Padding: woxwidget.Insets{Left: 10, Top: 9, Right: 10, Bottom: 9}, Transparent: true,
-		BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.55), BorderWidth: 1,
+		BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.55), BorderWidth: 1,
 		Value: s.draft, Window: props.Window, Theme: props.Theme,
 		OnChanged: func(value string) { context.SetState(func() { s.draft = value; s.draftError = "" }) },
 	})
@@ -623,11 +623,11 @@ func (s *windowGroupURLState) buildRowEditor(context woxwidget.StateContext, pro
 		}},
 	)
 	children := []woxwidget.Widget{
-		woxwidget.Container{Width: innerWidth, Height: 30, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText}},
+		woxwidget.Container{Width: innerWidth, Height: 30, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}},
 		field,
 	}
 	if s.draftError != "" {
-		children = append(children, woxwidget.Container{Width: innerWidth, Height: 22, Padding: woxwidget.Insets{Top: 4}, Child: woxwidget.Text{Value: s.draftError, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText}})
+		children = append(children, woxwidget.Container{Width: innerWidth, Height: 22, Padding: woxwidget.Insets{Top: 4}, Child: woxwidget.Text{Value: s.draftError, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error}})
 	}
 	children = append(children, actions)
 	panelHeight := float32(166)
@@ -649,7 +649,7 @@ func windowGroupExtensionStatus(props WindowGroupUrlEditorProps, width float32) 
 	icon := props.ExtensionDisconnectedIcon
 	label := props.ExtensionDisconnectedLabel
 	if props.ExtensionChecking {
-		accent = props.Theme.ResultSubtitle
+		accent = props.Theme.TextSecondary
 		icon = props.ExtensionLoadingIcon
 		label = "..."
 	} else if props.ExtensionConnected {
@@ -676,7 +676,7 @@ func windowGroupExtensionStatus(props WindowGroupUrlEditorProps, width float32) 
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 3, Children: installChildren},
 		}}})
 	} else {
-		content = append(content, woxwidget.Expanded{Child: woxwidget.TextBlock{Value: label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ActionText}})
+		content = append(content, woxwidget.Expanded{Child: woxwidget.TextBlock{Value: label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Text}})
 	}
 	statusRow := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: content}
 	box := woxwidget.Container{Width: width, Height: 40, Radius: 4, Color: background, BorderColor: border, BorderWidth: 1,
@@ -703,10 +703,10 @@ func normalizeWindowGroupURL(raw string) string {
 	return ""
 }
 
-func windowGroupMessageBox(width, height float32, theme woxcomponent.Theme, message string) woxwidget.Widget {
+func windowGroupMessageBox(width, height float32, theme woxcomponent.ControlTheme, message string) woxwidget.Widget {
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(theme.ResultSubtitle, 0.35), BorderWidth: 1,
-		Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: message, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}},
+		Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(theme.TextSecondary, 0.35), BorderWidth: 1,
+		Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: message, Style: woxui.TextStyle{Size: 13}, Color: theme.TextSecondary}},
 	}
 }
 

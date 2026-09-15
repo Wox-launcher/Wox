@@ -94,7 +94,7 @@ type MarkdownProps struct {
 	// ExcludeLinkFocus keeps pointer-activated links out of the keyboard focus chain.
 	// Flutter wraps form-table tooltips in ExcludeFocus for the same reason.
 	ExcludeLinkFocus bool
-	Theme            Theme
+	Theme            ControlTheme
 	// Window enables pointer hit-testing so rendered text can be selected and copied.
 	Window       *woxui.Window
 	ResolveImage func(source string) (*woxui.Image, string)
@@ -561,7 +561,7 @@ func renderMarkdownBlock(block markdownBlock, props MarkdownProps, width float32
 	case markdownList:
 		return markdownListWidget(block, props, width, linkIndex, textIndex)
 	case markdownRule:
-		return documentHorizontalRule(width, props.Theme.PreviewSplit)
+		return documentHorizontalRule(width, props.Theme.Border)
 	case markdownTable:
 		return markdownTableWidget(block.table, props, width, textIndex)
 	case markdownImage:
@@ -589,14 +589,14 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 		if run.style.bold {
 			style.Weight = woxui.FontWeightSemibold
 		}
-		color := props.Theme.PreviewText
+		color := props.Theme.BodyText
 		if run.style.strike {
 			color = withAlpha(color, 150)
 		}
 		if run.style.code {
 			for _, token := range markdownTokens(run.text) {
 				children = append(children, woxwidget.Container{
-					Padding: woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}, Radius: 3, Color: withAlpha(props.Theme.PreviewText, 18),
+					Padding: woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}, Radius: 3, Color: withAlpha(props.Theme.BodyText, 18),
 					Child: woxwidget.Text{Value: token, Style: woxui.TextStyle{Size: max(float32(10), fontSize-1)}, Color: color, Strike: run.style.strike || props.strikeText},
 				})
 			}
@@ -623,7 +623,7 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 				Child: link,
 			}
 			if !props.ExcludeLinkFocus {
-				semantics.Child = woxwidget.Focusable{Key: woxwidget.Key(id), FocusRingColor: props.Theme.Cursor, FocusRingRadius: 2, OnKey: func(event woxui.KeyEvent) bool {
+				semantics.Child = woxwidget.Focusable{Key: woxwidget.Key(id), FocusRingColor: props.Theme.Focus, FocusRingRadius: 2, OnKey: func(event woxui.KeyEvent) bool {
 					if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 						return false
 					}
@@ -669,7 +669,7 @@ func markdownSelectableID(id string) string {
 	return id
 }
 
-func markdownRunsContent(runs []markdownRun, fontSize float32, theme Theme, strikeText bool) (string, []TextFieldRichRun, []markdownLinkRange) {
+func markdownRunsContent(runs []markdownRun, fontSize float32, theme ControlTheme, strikeText bool) (string, []TextFieldRichRun, []markdownLinkRange) {
 	var builder strings.Builder
 	rich := make([]TextFieldRichRun, 0, len(runs))
 	links := make([]markdownLinkRange, 0)
@@ -685,7 +685,7 @@ func markdownRunsContent(runs []markdownRun, fontSize float32, theme Theme, stri
 		if run.style.bold {
 			style.Weight = woxui.FontWeightSemibold
 		}
-		color := theme.PreviewText
+		color := theme.BodyText
 		if run.style.strike {
 			color = withAlpha(color, 150)
 		}
@@ -700,7 +700,7 @@ func markdownRunsContent(runs []markdownRun, fontSize float32, theme Theme, stri
 		}
 		background := woxui.Color{}
 		if run.style.code {
-			background = withAlpha(theme.PreviewText, 18)
+			background = withAlpha(theme.BodyText, 18)
 		}
 		rich = append(rich, TextFieldRichRun{
 			Start: start, End: offset, Style: style, Color: color, Underline: underline, Strike: run.style.strike || strikeText, Background: background,
@@ -741,7 +741,7 @@ func markdownSelectableText(id, value string, rich []TextFieldRichRun, links []m
 	return WoxTextField(TextFieldProps{
 		ID: id, Label: value, Width: width, Height: height, Padding: woxwidget.Insets{Bottom: 1},
 		Transparent: true, DisableHover: true, Style: style, RichRuns: rich, LineHeight: lineHeight,
-		TextColor: props.Theme.PreviewText, Value: value, ReadOnly: true, MaxLines: max(8, len(lines)+4),
+		TextColor: props.Theme.BodyText, Value: value, ReadOnly: true, MaxLines: max(8, len(lines)+4),
 		Window: props.Window, Theme: props.Theme, OnTapOffset: onTapOffset, CursorAtOffset: cursorAt,
 	})
 }
@@ -796,18 +796,18 @@ func markdownCodeWidget(block markdownBlock, props MarkdownProps, width float32,
 	style := woxui.TextStyle{Size: max(float32(10), fontSize-1)}
 	children := make([]woxwidget.Widget, 0, 2)
 	if block.language != "" {
-		children = append(children, woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: max(float32(9), fontSize-2), Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.PreviewText, 180)})
+		children = append(children, woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: max(float32(9), fontSize-2), Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.BodyText, 180)})
 	}
 	if props.Window != nil && textIndex != nil {
 		*textIndex++
-		rich := []TextFieldRichRun{{Start: 0, End: utf8.RuneCountInString(code), Style: style, Color: props.Theme.PreviewText}}
+		rich := []TextFieldRichRun{{Start: 0, End: utf8.RuneCountInString(code), Style: style, Color: props.Theme.BodyText}}
 		children = append(children, markdownSelectableText(fmt.Sprintf("%s-code-%d", markdownSelectableID(props.ID), *textIndex), code, rich, nil, props, innerWidth, style.Size))
 	} else {
 		layout := woxwidget.LayoutTextBlock(props.Window, code, style, innerWidth, 0, 17)
-		children = append(children, woxwidget.TextBlock{Value: code, Width: innerWidth, Height: layout.Size.Height, Layout: &layout, Style: style, LineHeight: 17, Color: props.Theme.PreviewText})
+		children = append(children, woxwidget.TextBlock{Value: code, Width: innerWidth, Height: layout.Size.Height, Layout: &layout, Style: style, LineHeight: 17, Color: props.Theme.BodyText})
 	}
 	return woxwidget.Container{
-		Width: width, Padding: woxwidget.UniformInsets(10), Radius: 5, Color: withAlpha(props.Theme.PreviewText, 14), BorderColor: withAlpha(props.Theme.PreviewSplit, 90), BorderWidth: 1,
+		Width: width, Padding: woxwidget.UniformInsets(10), Radius: 5, Color: withAlpha(props.Theme.BodyText, 14), BorderColor: withAlpha(props.Theme.Border, 90), BorderWidth: 1,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: children},
 	}
 }
@@ -832,7 +832,7 @@ func markdownListWidget(block markdownBlock, props MarkdownProps, width float32,
 			markerWidth = documentCheckboxWidth(fontSize) + 4
 			marker = woxwidget.Semantics{Role: woxui.AccessibilityRoleCheckBox, Label: item.label, Checked: item.checked, Disabled: true, Child: documentCheckbox(fontSize, 18, DocumentListMarkerColor, item.checked)}
 			if item.checked {
-				itemProps.Theme.PreviewText = props.Theme.ResultSubtitle
+				itemProps.Theme.BodyText = props.Theme.TextSecondary
 				itemProps.strikeText = true
 			}
 		}
@@ -867,20 +867,20 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 			background := woxui.Color{}
 			if rowIndex < table.headerRows {
 				weight = woxui.FontWeightSemibold
-				background = withAlpha(props.Theme.PreviewText, 12)
+				background = withAlpha(props.Theme.BodyText, 12)
 			}
 			cellWidthInner := max(float32(0), cellWidth-16)
 			var cellText woxwidget.Widget = woxwidget.TextBlock{
-				Value: value, Width: cellWidthInner, Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}, Color: props.Theme.PreviewText,
+				Value: value, Width: cellWidthInner, Height: 18, LineHeight: 18, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}, Color: props.Theme.BodyText,
 			}
 			if props.Window != nil && textIndex != nil && strings.TrimSpace(value) != "" {
 				*textIndex++
 				style := woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}
-				rich := []TextFieldRichRun{{Start: 0, End: utf8.RuneCountInString(value), Style: style, Color: props.Theme.PreviewText}}
+				rich := []TextFieldRichRun{{Start: 0, End: utf8.RuneCountInString(value), Style: style, Color: props.Theme.BodyText}}
 				cellText = markdownSelectableText(fmt.Sprintf("%s-cell-%d", markdownSelectableID(props.ID), *textIndex), value, rich, nil, props, cellWidthInner, style.Size)
 			}
 			cells = append(cells, WoxTableGridCell(TableGridCellProps{
-				Width: cellWidth, Height: 38, Color: background, Border: withAlpha(props.Theme.PreviewSplit, 100),
+				Width: cellWidth, Height: 38, Color: background, Border: withAlpha(props.Theme.Border, 100),
 				Trailing: column < columns-1, Bottom: rowIndex < len(table.rows)-1,
 				Padding: woxwidget.Insets{Left: 8, Right: 8},
 				Child:   woxwidget.Align{Width: cellWidthInner, Height: 38, Vertical: 0.5, Child: cellText},
@@ -889,7 +889,7 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})
 	}
 	height := float32(len(rows)) * 38
-	return WoxTableGridFrame(width, height, withAlpha(props.Theme.PreviewSplit, 100), woxwidget.ScrollView{
+	return WoxTableGridFrame(width, height, withAlpha(props.Theme.Border, 100), woxwidget.ScrollView{
 		Width: width, Height: height, ContentWidth: contentWidth, Horizontal: true,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	})
@@ -909,12 +909,12 @@ func markdownImageWidget(block markdownBlock, props MarkdownProps, width float32
 		if imageError != "" {
 			label = imageError
 		}
-		return woxwidget.Container{Width: width, Height: 52, Padding: woxwidget.UniformInsets(10), Color: withAlpha(props.Theme.PreviewText, 10), Child: woxwidget.TextBlock{
-			Value: label, Width: max(float32(0), width-20), Height: 32, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.PreviewText,
+		return woxwidget.Container{Width: width, Height: 52, Padding: woxwidget.UniformInsets(10), Color: withAlpha(props.Theme.BodyText, 10), Child: woxwidget.TextBlock{
+			Value: label, Width: max(float32(0), width-20), Height: 32, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.BodyText,
 		}}
 	}
 	if image.Width <= 0 || image.Height <= 0 {
-		return woxwidget.Container{Width: width, Height: 32, Child: woxwidget.Text{Value: "Invalid Markdown image", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText}}
+		return woxwidget.Container{Width: width, Height: 32, Child: woxwidget.Text{Value: "Invalid Markdown image", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error}}
 	}
 	availableWidth := max(float32(1), width)
 	scale := availableWidth / float32(image.Width)

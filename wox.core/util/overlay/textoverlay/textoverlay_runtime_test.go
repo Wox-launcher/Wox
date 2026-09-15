@@ -362,7 +362,7 @@ func TestRuntimeTextOverlayBuildUsesSelectableMessage(t *testing.T) {
 	if field.ID != "text-overlay-message-ai-command" || field.Value != body || !field.ReadOnly || !field.Transparent || !field.DisableHover {
 		t.Fatalf("text overlay field = %#v, want a transparent read-only message field", field)
 	}
-	if field.Theme.SelectionBackground.A == 0 {
+	if field.Theme.TextSelectionBackground.A == 0 {
 		t.Fatal("text overlay field is missing a selection wash")
 	}
 }

@@ -8,25 +8,25 @@ import (
 )
 
 func TestTextEditContextMenuIsFloatingThemeSurface(t *testing.T) {
-	theme := Theme{
-		QueryBackground:  woxui.Color{R: 10, G: 10, B: 10, A: 40},
-		ActionBackground: woxui.Color{R: 40, G: 44, B: 52, A: 120},
-		ActionText:       woxui.Color{R: 240, G: 240, B: 240, A: 255},
-		ResultSubtitle:   woxui.Color{R: 160, G: 160, B: 160, A: 255},
+	theme := ControlTheme{
+		InputBackground: woxui.Color{R: 10, G: 10, B: 10, A: 40},
+		Surface:         woxui.Color{R: 40, G: 44, B: 52, A: 120},
+		ControlText:     woxui.Color{R: 240, G: 240, B: 240, A: 255},
+		TextSecondary:   woxui.Color{R: 160, G: 160, B: 160, A: 255},
 	}
 	menu := BuildTextEditContextMenu(TextEditContextMenuProps{ID: "menu", CanPaste: true, Theme: theme}).(woxwidget.Container)
-	if !menu.Floating || menu.Color != theme.ActionBackground {
-		t.Fatalf("menu surface = floating %v color %#v, want a floating surface tinted with ActionBackground as the theme wrote it", menu.Floating, menu.Color)
+	if !menu.Floating || menu.Color != theme.Surface {
+		t.Fatalf("menu surface = floating %v color %#v, want a floating surface tinted with Surface as the theme wrote it", menu.Floating, menu.Color)
 	}
 	if menu.BorderWidth != 1 || menu.BorderColor.A == 0 {
 		t.Fatalf("menu edge = %#v width %v, want a visible hairline", menu.BorderColor, menu.BorderWidth)
 	}
 
-	// Themes without an action surface fall back to an opaque QueryBackground, which is often translucent.
-	theme.ActionBackground = woxui.Color{}
+	// Themes without an action surface fall back to an opaque InputBackground, which is often translucent.
+	theme.Surface = woxui.Color{}
 	fallback := BuildTextEditContextMenu(TextEditContextMenuProps{ID: "menu", CanPaste: true, Theme: theme}).(woxwidget.Container)
 	if fallback.Color != (woxui.Color{R: 10, G: 10, B: 10, A: 255}) {
-		t.Fatalf("fallback menu background = %#v, want opaque QueryBackground", fallback.Color)
+		t.Fatalf("fallback menu background = %#v, want opaque InputBackground", fallback.Color)
 	}
 }
 
@@ -34,7 +34,7 @@ func TestTextEditContextMenuExposesStableMenuItemSemantics(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return BuildTextEditContextMenu(TextEditContextMenuProps{
 			ID: "field.menu", CanSelectAll: true, CanPaste: true,
-			Theme: Theme{ActionBackground: woxui.Color{A: 255}, ActionText: woxui.Color{A: 255}},
+			Theme: ControlTheme{Surface: woxui.Color{A: 255}, ControlText: woxui.Color{A: 255}},
 		})
 	})
 	host.AttachServices(&hotkeyRecorderHostServices{})

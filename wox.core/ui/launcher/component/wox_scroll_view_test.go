@@ -51,7 +51,7 @@ func TestScrollbarThemePreservesAuthoredStyle(t *testing.T) {
 	for _, horizontal := range []bool{false, true} {
 		for phase := 0; phase < 3; phase++ {
 			props := ScrollViewProps{Key: "styled-scroll", Width: 100, Height: 100, ContentWidth: 200, ContentHeight: 200, Horizontal: horizontal, AlwaysShowScrollbar: true,
-				Theme: Theme{ScrollbarThumbColor: &normal, ScrollbarThumbHoverColor: &hover, ScrollbarThumbActiveColor: &active, ScrollbarWidth: &width, ScrollbarHoverWidth: &hoverWidth, ScrollbarBorderRadius: &radius}}
+				Theme: ControlTheme{ScrollbarThumbColor: &normal, ScrollbarThumbHoverColor: &hover, ScrollbarThumbActiveColor: &active, ScrollbarWidth: &width, ScrollbarHoverWidth: &hoverWidth, ScrollbarBorderRadius: &radius}}
 			state := &scrollViewState{hovered: phase > 0, dragging: phase == 2}
 			view := buildWoxScrollView(woxwidget.StateContext{}, props, state).(woxwidget.Gesture)
 			thumb := view.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Gesture).Child.(woxwidget.AnimatedFloat)
