@@ -203,7 +203,7 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 
 	actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_paste")
 	if windowName != "" {
-		actionName = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), windowName)
+		actionName = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), window.CompactTitle(windowName, window.ActionTitleMaxRunes))
 	}
 
 	action := plugin.QueryResultAction{

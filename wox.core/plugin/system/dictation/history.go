@@ -405,7 +405,7 @@ func buildPasteToActiveWindowAction(ctx context.Context, api dictationSettingAPI
 	}
 
 	action := plugin.QueryResultAction{
-		Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), query.Env.ActiveWindowTitle),
+		Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), window.CompactTitle(query.Env.ActiveWindowTitle, window.ActionTitleMaxRunes)),
 		Icon:      icons.Get(icons.ActionPaste),
 		IsDefault: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {

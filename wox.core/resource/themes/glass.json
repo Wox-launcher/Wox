@@ -67,7 +67,7 @@
   "windows": {
     "AppBackgroundColor": "#121216BF",
     "ResultItemActiveBackgroundColor": "#FFFFFF19",
-    "ActionContainerBackgroundColor": "#2123269E",
+    "ActionContainerBackgroundColor": "#15151558",
     "ToolbarBackgroundColor": "#12121604",
     "variants": {
       "win10": {
