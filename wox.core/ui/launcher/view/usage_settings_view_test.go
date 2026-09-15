@@ -57,14 +57,14 @@ func TestUsageRankingRowCentersNameAndIcon(t *testing.T) {
 	}
 }
 
-func TestUsageSettingsViewUsesSharedPageWithoutScrollbar(t *testing.T) {
+func TestUsageSettingsViewUsesSharedPageWithScrollbar(t *testing.T) {
 	page := UsageSettingsView(UsageSettingsProps{Width: 800, Height: 600})
 	container := page.(woxwidget.Container)
-	if container.Padding.Left != 40 || container.Padding.Right != 40 {
-		t.Fatalf("usage page horizontal insets = %.0f/%.0f, want 40/40", container.Padding.Left, container.Padding.Right)
+	if container.Padding.Left != 40 || container.Padding.Right != 8 {
+		t.Fatalf("usage page horizontal insets = %.0f/%.0f, want 40/8", container.Padding.Left, container.Padding.Right)
 	}
-	scroll, ok := container.Child.(woxwidget.ScrollView)
-	if !ok || scroll.Key != "usage-page-scroll" {
-		t.Fatalf("usage page scroll = %#v, want the shared settings page ScrollView without a visible scrollbar", container.Child)
+	scroll, ok := container.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if !ok || scroll.HideScrollbar || scroll.Key != "usage-page-scroll" {
+		t.Fatalf("usage page scroll = %#v, want the shared settings page ScrollView with the shared fading scrollbar", container.Child)
 	}
 }

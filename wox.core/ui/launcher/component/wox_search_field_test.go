@@ -25,7 +25,7 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 		},
 	}).(woxwidget.Container)
 
-	if field.Height != SettingsSearchHeight || field.BorderColor != withAlpha(subtitle, 170) || field.BorderWidth != 1 {
+	if field.Height != SettingsSearchHeight || field.BorderColor != withAlpha(subtitle, 100) || field.BorderWidth != 1 {
 		t.Fatalf("focused search border = %#v at %v, want neutral 1px border", field.BorderColor, field.BorderWidth)
 	}
 	stack := field.Child.(woxwidget.Stack)

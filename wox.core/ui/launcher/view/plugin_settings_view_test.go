@@ -175,7 +175,7 @@ func TestPluginListSearchUsesValueText(t *testing.T) {
 	})
 	search := list.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	wantBorder := title
-	wantBorder.A = 170
+	wantBorder.A = 100
 	if search.BorderColor != wantBorder {
 		t.Fatalf("plugin search border = %#v, want Text %#v", search.BorderColor, wantBorder)
 	}
@@ -229,14 +229,14 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 		t.Fatalf("badge border width = %v, want 1", badge.BorderWidth)
 	}
 	label := badge.Child.(woxwidget.Text)
-	if label.Color != activeColor || badge.BorderColor != activeColor {
-		t.Fatal("selected badge must use SelectionText for its label and border")
+	if label.Color != inactiveColor || badge.BorderColor != inactiveColor {
+		t.Fatal("selected badge must retain the secondary text color")
 	}
 	if label.Style.Size != 11 {
 		t.Fatalf("badge font size = %v, want 11", label.Style.Size)
 	}
 	inactiveBadge := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Container)
-	if inactiveBadge.BorderColor != title || inactiveBadge.Child.(woxwidget.Text).Color != title {
+	if inactiveBadge.BorderColor != inactiveColor || inactiveBadge.Child.(woxwidget.Text).Color != inactiveColor {
 		t.Fatalf("unselected System badge = border %#v text %#v, want Text", inactiveBadge.BorderColor, inactiveBadge.Child.(woxwidget.Text).Color)
 	}
 }
@@ -303,9 +303,15 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 func TestPluginDetailHeaderAlignsTitleWithIcon(t *testing.T) {
 	header := pluginDetailHeader(PluginHeaderProps{
 		Name: "Wox Query History", Version: "1.0.0", Author: "Wox Launcher",
-	}, 600, 114, woxcomponent.ControlTheme{}).(woxwidget.Container)
-	identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	}, 600, 80, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	if len(header.Child.(woxwidget.Flex).Children) != 2 {
+		t.Fatal("plugin header must use two compact rows")
+	}
+	identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
 	row := identity.Child.(woxwidget.Flex)
+	if len(row.Children) != 2 {
+		t.Fatal("identity must contain only icon and title")
+	}
 	if identity.Height != 40 || row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("identity row = height %v alignment %v, want a 40-high centered icon/title row", identity.Height, row.CrossAxisAlignment)
 	}
@@ -339,17 +345,19 @@ func TestPluginStoreChipCentersContent(t *testing.T) {
 	}
 }
 
-func TestPluginStoreWebsiteUsesSharedButtonHover(t *testing.T) {
-	store := pluginStoreDetail(PluginStoreDetailProps{
-		WebsiteLabel: "Website", ExternalIcon: &woxui.Image{}, OnWebsite: func() {},
-	}, 800, 600, woxcomponent.ControlTheme{})
-	header := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
-	websiteRow := header.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
-	website := websiteRow.Children[1].(woxwidget.Align)
-	button := focusedControlGesture(website.Child)
-
-	if button.ID != "plugin-website" || button.OnTap == nil || button.OnHoverAt == nil {
-		t.Fatalf("website control = id %q tap %v hover %v, want shared hoverable button", button.ID, button.OnTap != nil, button.OnHoverAt != nil)
+func TestPluginStoreHeaderCentersActionsWithoutDuplicateWebsite(t *testing.T) {
+	store := pluginStoreDetail(PluginStoreDetailProps{WebsiteLabel: "Website", OnWebsite: func() {}, Management: []PluginAction{{ID: "disable", Label: "Disable", Enabled: true}}}, 800, 600, woxcomponent.ControlTheme{})
+	header := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	if header.Axis != woxwidget.Horizontal || header.CrossAxisAlignment != woxwidget.CrossAxisCenter || len(header.Children) != 2 {
+		t.Fatal("header must center actions alongside identity")
+	}
+	identity := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	if len(identity.Children) != 2 {
+		t.Fatal("identity must contain name and author only")
+	}
+	actions := header.Children[1].(woxwidget.Flex)
+	if len(actions.Children) != 1 || focusedControlGesture(actions.Children[0]).ID != "disable" {
+		t.Fatal("header must only expose management actions")
 	}
 }
 
@@ -540,11 +548,12 @@ func TestPluginEditorDescriptionUsesSharedDetailView(t *testing.T) {
 	}
 	props := body.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: body.Width, Height: body.Height - body.Padding.Top}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	detail := props.Content.(woxwidget.Flex)
-	name := detail.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
-	metadata := detail.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
-	if name.Value != "Shell" || len(metadata.Children) != 3 {
-		t.Fatalf("description detail = name %q metadata %d, want identity and version/runtime/website chips", name.Value, len(metadata.Children))
+	description := detail.Children[0].(woxwidget.TextBlock)
+	metadata := detail.Children[1].(woxwidget.Flex)
+	if description.Value != "Run shell commands" || len(metadata.Children) != 2 || detail.Gap != 16 {
+		t.Fatal("description must show original text, runtime/source metadata, and consistent spacing")
 	}
+
 }
 
 func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
@@ -552,16 +561,13 @@ func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
 		Title:       "Active window process ID",
 		Description: "For example, when browsing a webpage this plugin reads the active window process ID.",
 	}, 600, woxcomponent.ControlTheme{}).(woxwidget.Container)
-	descriptionSlot := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[1].(woxwidget.Container)
-	descriptionAlign := descriptionSlot.Child.(woxwidget.Align)
-	description := descriptionAlign.Child.(woxwidget.TextBlock)
+	content := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	title := content.Children[0].(woxwidget.TextBlock)
+	description := content.Children[1].(woxwidget.TextBlock)
+	if row.Height != 0 || content.Axis != woxwidget.Vertical || title.MaxLines != 0 || description.MaxLines != 0 || title.Width != 600 || description.Width != 600 {
+		t.Fatal("privacy title and description must wrap at full width with intrinsic height")
+	}
 
-	if description.MaxLines != 2 || description.LineHeight != 16 {
-		t.Fatalf("metadata description wrapping = %d lines at %vpx, want two 16px lines", description.MaxLines, description.LineHeight)
-	}
-	if descriptionSlot.Padding.Top != 0 || descriptionAlign.Height != 61 || descriptionAlign.Vertical != 0.5 {
-		t.Fatalf("metadata description alignment = padding %#v slot %#v, want a full-height centered slot", descriptionSlot.Padding, descriptionAlign)
-	}
 }
 
 func TestFormTableInlineTitleMatchesFormLabelWeight(t *testing.T) {
@@ -631,15 +637,15 @@ func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
 	}
 }
 
-func TestFormTableInlineHeaderKeepsActionsNearTableWhenDescriptionIsPresent(t *testing.T) {
+func TestFormTableInlineHeaderAlignsActionsWithTitleWhenDescriptionIsPresent(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "tray-queries", Title: "Tray Queries", Description: "Open a configured query from the tray.",
 		Width: 720, Height: 220, InlineTitle: true, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	if header.CrossAxisAlignment != woxwidget.CrossAxisEnd || header.Gap != 16 {
-		t.Fatalf("header alignment/gap = %v/%v, want bottom alignment with 16px action gap", header.CrossAxisAlignment, header.Gap)
+	if header.CrossAxisAlignment != woxwidget.CrossAxisStart || header.Gap != 16 {
+		t.Fatalf("header alignment/gap = %v/%v, want top alignment with 16px action gap", header.CrossAxisAlignment, header.Gap)
 	}
 	left := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	description := left.Children[1].(woxwidget.TextBlock)
@@ -967,7 +973,7 @@ func TestPluginStoreScreenshotPreservesAspectRatioFromContentWidth(t *testing.T)
 	if frame.Width != 580 || frame.Height != wantHeight {
 		t.Fatalf("screenshot frame = %vx%v, want content-width aspect ratio 580x%v", frame.Width, frame.Height, wantHeight)
 	}
-	if image.Fit != woxwidget.ImageFitContain || image.Width != frame.Width || image.Height != frame.Height {
+	if image.Radius != 8 || image.Fit != woxwidget.ImageFitContain || image.Width != frame.Width || image.Height != frame.Height {
 		t.Fatalf("screenshot image = %#v, want contain fit matching the frame", image)
 	}
 }
@@ -999,13 +1005,14 @@ func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testin
 		// Non-overflowing content may collapse to a plain scroll body without state.
 		t.Fatalf("description scroll = %T, want resolved WoxScrollView", scroll)
 	}
-	if len(children) != 5 {
-		t.Fatalf("description children = %d, want title, subtitle, chips, screenshot gap, and loading placeholder", len(children))
+	if len(children) != 3 {
+		t.Fatalf("description children = %d, want description, metadata, and loading placeholder", len(children))
 	}
-	if gap := children[3].(woxwidget.Container); gap.Height != 24 {
-		t.Fatalf("screenshot gap height = %v, want Flutter's 24px spacing above the preview", gap.Height)
+	if description := children[0].(woxwidget.TextBlock); description.Value != "Workouts" || description.MaxLines != 0 {
+		t.Fatal("description must retain the plugin text without repeating its name or author")
 	}
-	if _, ok := children[4].(woxwidget.Align); !ok {
-		t.Fatalf("description trailing child = %T, want compact screenshot loading align", children[4])
+	if _, ok := children[2].(woxwidget.Align); !ok {
+		t.Fatal("expected compact loading placeholder")
 	}
+
 }

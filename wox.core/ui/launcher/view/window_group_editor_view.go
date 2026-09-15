@@ -219,7 +219,7 @@ func windowGroupDisplayArrangement(props WindowGroupEditorProps, width, height f
 	}
 	if props.DisplaysError != "" {
 		retry := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "window-group-retry-displays", Label: props.RetryLabel, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRetryDisplays, Theme: props.Theme,
+			ID: "window-group-retry-displays", Label: props.RetryLabel, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnRetryDisplays, Theme: props.Theme,
 		})
 		return woxwidget.Container{
 			Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.35), BorderWidth: 1,

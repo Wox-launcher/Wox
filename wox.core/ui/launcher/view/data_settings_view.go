@@ -103,7 +103,7 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error,
 		}})
 	}
-	return SettingsPage(SettingsPageProps{
+	return SettingsPage(SettingsPageProps{Theme: props.Theme,
 		ID: "data-settings-scroll", Width: props.Width, Height: props.Height, Children: children,
 	})
 }
@@ -114,16 +114,16 @@ func dataSectionHeader(props DataSettingsProps, label string, width float32) wox
 
 func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 	buttons := []woxwidget.Widget{
-		dataButton(props, "data-location-open", props.Labels.Open, woxcomponent.ButtonOutline, func() {
+		dataButton(props, "data-location-open", props.Labels.Open, woxcomponent.ButtonSecondary, func() {
 			if props.OnOpenPath != nil {
 				props.OnOpenPath(props.Location)
 			}
 		}),
-		dataButton(props, "data-location-change", props.Labels.LocationChange, woxcomponent.ButtonOutline, props.OnChooseLocation),
+		dataButton(props, "data-location-change", props.Labels.LocationChange, woxcomponent.ButtonSecondary, props.OnChooseLocation),
 	}
 	if props.PendingLocation != "" {
 		buttons = []woxwidget.Widget{
-			dataButton(props, "data-location-cancel", props.Labels.Cancel, woxcomponent.ButtonOutline, props.OnCancelLocation),
+			dataButton(props, "data-location-cancel", props.Labels.Cancel, woxcomponent.ButtonSecondary, props.OnCancelLocation),
 			dataButton(props, "data-location-confirm", props.Labels.LocationChangeConfirm, woxcomponent.ButtonMuted, props.OnConfirmLocation),
 		}
 	}
@@ -231,8 +231,8 @@ func dataLogActionsField(props DataSettingsProps, width float32) woxwidget.Widge
 		Label: props.Labels.LogClearTitle, Description: props.Labels.LogClearDescription,
 		Width: width, Height: woxcomponent.SettingsRowHeight, Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
 		Child: woxwidget.Container{Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-			dataButton(props, "data-log-clear", clearLabel, woxcomponent.ButtonOutline, props.OnClearLogs),
-			dataButton(props, "data-log-open", props.Labels.LogOpenButton, woxcomponent.ButtonOutline, props.OnOpenLog),
+			dataButton(props, "data-log-clear", clearLabel, woxcomponent.ButtonSecondary, props.OnClearLogs),
+			dataButton(props, "data-log-open", props.Labels.LogOpenButton, woxcomponent.ButtonSecondary, props.OnOpenLog),
 		}}},
 	})
 }

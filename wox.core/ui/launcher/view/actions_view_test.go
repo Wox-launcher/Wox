@@ -111,8 +111,8 @@ func TestActionsEmptyStateCentersSearchIconAndMessage(t *testing.T) {
 	content := panel.Child.(woxwidget.Flex)
 	actionList := actionScrollProps(content.Children[2])
 	empty := actionList.Content.(woxwidget.Flex).Children[0].(woxwidget.Align)
-	if empty.Horizontal != 0.5 || empty.Vertical != 0.5 || empty.Width != actionList.Width || empty.Height != ActionRowHeight {
-		t.Fatalf("empty state geometry = %+v, want centered %vx%v slot", empty, actionList.Width, ActionRowHeight)
+	if empty.Horizontal != 0.5 || empty.Vertical != 0.5 || empty.Width != ActionPanelContentWidth || empty.Height != ActionRowHeight {
+		t.Fatalf("empty state geometry = %+v, want centered %vx%v slot", empty, ActionPanelContentWidth, ActionRowHeight)
 	}
 	row := empty.Child.(woxwidget.Flex)
 	if row.Axis != woxwidget.Horizontal || row.Gap != 8 || row.CrossAxisAlignment != woxwidget.CrossAxisCenter || len(row.Children) != 2 {
@@ -436,5 +436,31 @@ func TestActionRowCentersIconAndLabel(t *testing.T) {
 	label := content.Children[1].(woxwidget.Align).Child.(woxwidget.TextBlock)
 	if label.Height != 18 || label.LineHeight != 18 || label.AlignmentY != 0.5 || label.Value != "打开 系统命令 设置" {
 		t.Fatalf("action label slot = %#v, want an 18px optically centered line", label)
+	}
+}
+
+// Scroll chrome occupies the themed right gutter without widening action rows or the filter.
+func TestActionScrollbarUsesPanelGutter(t *testing.T) {
+	for _, padding := range []float32{0, 10, 16} {
+		for _, border := range []float32{0, 2, 6} {
+			props := ActionsProps{
+				WindowWidth: 600, WindowHeight: 600, DensityScale: 1,
+				ActionPadding: woxwidget.UniformInsets(padding),
+				Theme:         woxcomponent.Theme{ActionBorderWidth: border},
+				Items:         []ActionItem{{ID: "open", Label: "Open", Tail: "Enter"}},
+			}
+			width, innerWidth, height, _ := actionPanelGeometry(props)
+			panel := buildActionsView(woxwidget.StateContext{}, props, woxwidget.NewScrollController(0)).(woxwidget.Gesture).Child.(woxwidget.Container)
+			content := panel.Child.(woxwidget.Flex)
+			scroll := actionScrollProps(content.Children[2])
+			row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+			if panel.Width != width || panel.Height != height || row.Width != innerWidth || content.Children[3].(woxwidget.Container).Width != innerWidth {
+				t.Fatalf("padding %v border %v changed panel or content geometry", padding, border)
+			}
+			wantInset := min(padding, max(float32(0), border-2))
+			if panel.Padding.Right != wantInset || scroll.Width != innerWidth+padding-wantInset {
+				t.Fatalf("padding %v border %v: scroll width %v, right inset %v", padding, border, scroll.Width, panel.Padding.Right)
+			}
+		}
 	}
 }

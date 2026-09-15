@@ -9,6 +9,18 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestThemeSettingsViewUsesSharedCatalogListWidth(t *testing.T) {
+	const contentWidth = float32(840)
+	page := ThemeSettingsView(ThemeSettingsProps{Width: contentWidth, Height: 700, Theme: woxcomponent.ControlTheme{}}).(woxwidget.Flex)
+	list := page.Children[0].(woxwidget.Flex)
+	search := list.Children[0].(woxwidget.Container)
+	divider := page.Children[1].(woxwidget.Container)
+	want := woxcomponent.SettingsCatalogListWidth(contentWidth)
+	if search.Width != want || divider.Width != woxcomponent.SettingsCatalogDividerGutter {
+		t.Fatalf("theme catalog column = list %.0f gutter %.0f, want shared %.0f/%.0f", search.Width, divider.Width, want, woxcomponent.SettingsCatalogDividerGutter)
+	}
+}
+
 func TestThemeListUsesSharedSearchFieldGeometry(t *testing.T) {
 	icon := &woxui.Image{}
 	list := themeList(ThemeSettingsProps{Mode: "installed", Search: woxui.TextEditingState{Text: "query"}, LocateIcon: icon, OnClear: func() {}}, 260, 400).(woxwidget.Flex)
@@ -35,7 +47,7 @@ func TestThemeListSearchUsesValueText(t *testing.T) {
 	}, 260, 400).(woxwidget.Flex)
 	search := list.Children[0].(woxwidget.Container)
 	wantBorder := title
-	wantBorder.A = 170
+	wantBorder.A = 100
 	if search.BorderColor != wantBorder {
 		t.Fatalf("theme search border = %#v, want ResultTitle %#v", search.BorderColor, wantBorder)
 	}
@@ -45,12 +57,12 @@ func TestThemeListSearchUsesValueText(t *testing.T) {
 	}
 }
 
-func TestThemeApplyUsesIntrinsicOutlinedButton(t *testing.T) {
+func TestThemeApplyUsesIntrinsicSecondaryButton(t *testing.T) {
 	actions := themeActions(ThemeSettingsProps{ApplyLabel: "应用", Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}}, ThemeCatalogItem{IsInstalled: true, IsSystem: true})
 	button := focusedControlGesture(actions[0]).Child.(woxwidget.Container)
 
-	if button.Width != 0 || button.Height != 32 || button.Color.A != 0 || button.BorderWidth != 1 {
-		t.Fatalf("apply button = width %v height %v background alpha %v border %v, want intrinsic shared outlined button", button.Width, button.Height, button.Color.A, button.BorderWidth)
+	if button.Width != 0 || button.Height != 32 || button.Color.A != 0 || button.BorderColor.A != 0 {
+		t.Fatalf("apply button = width %v height %v background alpha %v border %v, want intrinsic shared secondary button", button.Width, button.Height, button.Color.A, button.BorderWidth)
 	}
 }
 
@@ -66,7 +78,10 @@ func TestThemeDetailKeepsVersionBesideTitle(t *testing.T) {
 	detail := ThemeCatalogItem{Name: "Aquarium", Version: "1.1.0"}
 	view := themeDetail(ThemeSettingsProps{Detail: &detail}, 600, 700).(woxwidget.Flex)
 	header := view.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
-	titleRow := header.Children[0].(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Flex)
+	if len(header.Children) != 2 || view.Children[0].(woxwidget.Container).Height != 80 {
+		t.Fatal("theme header must use two compact rows")
+	}
+	titleRow := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	author := header.Children[1].(woxwidget.Flex).Children[0]
 
 	if titleRow.Gap != 10 || titleRow.CrossAxisAlignment != woxwidget.CrossAxisCenter || titleRow.Children[0].(woxwidget.Text).Value != "Aquarium" || titleRow.Children[1].(woxwidget.Text).Value != "1.1.0" {
@@ -101,7 +116,7 @@ func TestThemeDetailWebsiteUsesSharedButtonHover(t *testing.T) {
 func TestThemeDetailAnchorsErrorToBodyBottom(t *testing.T) {
 	detail := ThemeCatalogItem{Name: "Aquarium"}
 	view := themeDetail(ThemeSettingsProps{Detail: &detail, Error: "Unable to load preview"}, 600, 700).(woxwidget.Flex)
-	body := view.Children[2].(woxwidget.Stack)
+	body := view.Children[1].(woxwidget.Stack)
 	errorLayer := body.Children[1]
 	if !errorLayer.AnchorBottom || !errorLayer.StretchWidth || errorLayer.Left != 16 || errorLayer.Right != 16 || errorLayer.Bottom != 4 {
 		t.Fatalf("theme error layout = %+v, want bottom-anchored 16px insets", errorLayer)
@@ -144,26 +159,22 @@ func TestThemeCatalogToolbarMatchesFlutterGeometry(t *testing.T) {
 	}
 }
 
-func TestThemeAutoPreviewUsesSplitVariantsAndFlutterHint(t *testing.T) {
-	accent := woxui.Color{R: 64, G: 196, B: 255, A: 255}
+func TestThemeAutoPreviewUsesSplitVariantsWithoutDuplicateHelp(t *testing.T) {
 	wallpaper := &woxui.Image{}
 	blurred := &woxui.Image{}
 	preview := themePreviewTab(ThemeSettingsProps{
-		Theme:              woxcomponent.ControlTheme{Background: woxui.Color{R: 20, G: 20, B: 20, A: 255}, Text: woxui.Color{A: 255}},
-		AutoAppearanceHint: "Switches automatically", AutoAppearanceAccent: accent, AutoAppearanceIcon: &woxui.Image{},
+		Theme:     woxcomponent.ControlTheme{Background: woxui.Color{R: 20, G: 20, B: 20, A: 255}, Text: woxui.Color{A: 255}},
 		Wallpaper: wallpaper, WallpaperBlurred: blurred,
 	}, ThemeCatalogItem{IsAuto: true, LightPreviewTheme: woxcomponent.Theme{Background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, DarkPreviewTheme: woxcomponent.Theme{Background: woxui.Color{A: 255}}}, 600, 700).(woxwidget.Container)
 	children := preview.Child.(woxwidget.Flex).Children
-	hint := children[0].(woxwidget.Container)
-	stage := children[1].(woxwidget.Align).Child.(woxwidget.Stack)
+	if len(children) != 1 {
+		t.Fatal("AUTO preview must not repeat the theme description")
+	}
+	stage := children[0].(woxwidget.Align).Child.(woxwidget.Stack)
 	autoPreview := stage.Children[2].Child.(woxwidget.Stack)
 
-	if hint.Radius != 10 || hint.BorderWidth != 1 || hint.Color.A != 36 || hint.BorderColor.A != 89 {
-		t.Fatalf("AUTO hint = radius %v fill %v border %v/%v, want Flutter dark hint treatment", hint.Radius, hint.Color.A, hint.BorderWidth, hint.BorderColor.A)
-	}
-	hintContent := hint.Child.(woxwidget.Flex)
-	if hint.Padding != woxwidget.UniformInsets(12) || hintContent.CrossAxisAlignment != woxwidget.CrossAxisStart || len(hintContent.Children) != 2 || len(stage.Children) != 4 || len(autoPreview.Children) != 3 {
-		t.Fatalf("AUTO content = hint children %d preview layers %d, want icon/text and split background/content", len(hint.Child.(woxwidget.Flex).Children), len(autoPreview.Children))
+	if len(stage.Children) != 4 || len(autoPreview.Children) != 3 {
+		t.Fatal("AUTO preview must retain its split background and content")
 	}
 	if stageWallpaper := stage.Children[1].Child.(woxwidget.Image); stageWallpaper.Source != wallpaper || stageWallpaper.Radius != 29*stage.Width/1440 {
 		t.Fatal("theme preview wallpaper should clip to the stage rounded corners")
@@ -192,8 +203,12 @@ func TestThemeAutoSwatchUsesRoundedOutline(t *testing.T) {
 
 func TestThemeSystemTagCentersLabel(t *testing.T) {
 	tagColor := woxui.Color{R: 80, G: 90, B: 100, A: 255}
-	props := ThemeSettingsProps{Mode: "installed", SystemLabel: "系统", Items: []ThemeCatalogItem{{ID: "light", Name: "Wox Light", IsSystem: true}}}
-	trailing, _ := themeListTrailing(props, props.Items[0], tagColor)
+	props := ThemeSettingsProps{
+		Mode: "installed", SystemLabel: "系统",
+		Theme: woxcomponent.ControlTheme{TextSecondary: tagColor, SelectionText: woxui.Color{R: 240, G: 244, B: 248, A: 255}},
+		Items: []ThemeCatalogItem{{ID: "light", Name: "Wox Light", IsSystem: true, Selected: true}},
+	}
+	trailing, _ := themeListTrailing(props, props.Items[0])
 	slot := trailing.(woxwidget.Align)
 	if slot.Horizontal != 1 || slot.Vertical != 0.5 {
 		t.Fatalf("system tag slot alignment = (%v, %v), want trailing and vertically centered", slot.Horizontal, slot.Vertical)
@@ -220,6 +235,10 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 	if !textExpanded || tagSlot.Width != 44 {
 		t.Fatalf("theme row slots = text expanded %v tag %.0f, want true/44", textExpanded, tagSlot.Width)
 	}
+	rowTag := tagSlot.Child.(woxwidget.Container)
+	if rowTag.BorderColor != tagColor || rowTag.Child.(woxwidget.Text).Color != tagColor {
+		t.Fatalf("selected System tag = border %#v text %#v, want secondary %#v", rowTag.BorderColor, rowTag.Child.(woxwidget.Text).Color, tagColor)
+	}
 }
 
 func TestThemeListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
@@ -233,5 +252,30 @@ func TestThemeListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 
 	if props.ContentHeight != 0 || props.ThumbColor.A != 255 {
 		t.Fatalf("theme scrollbar hint = %.0f color alpha %d, want measured shared scrollbar", props.ContentHeight, props.ThumbColor.A)
+	}
+}
+
+// TestActiveThemeExplainsDisabledApply makes the current theme state visible.
+func TestActiveThemeExplainsDisabledApply(t *testing.T) {
+	actions := themeActions(ThemeSettingsProps{ApplyLabel: "Apply", AppliedLabel: "Applied"}, ThemeCatalogItem{IsInstalled: true, IsSystem: true, Active: true})
+	semantics := actions[0].(woxwidget.Semantics)
+	if semantics.Label != "Applied" || !semantics.Disabled {
+		t.Fatalf("active theme action = %+v", semantics)
+	}
+}
+
+func TestThemeDetailShowsDescriptionAndPreviewTogether(t *testing.T) {
+	for _, mode := range []string{"store", "installed"} {
+		detail := ThemeCatalogItem{Name: "Jade", Description: "A jade theme."}
+		view := themeDetail(ThemeSettingsProps{Mode: mode, Detail: &detail, ActiveDetailTab: "description"}, 600, 700).(woxwidget.Flex)
+		if len(view.Children) != 2 {
+			t.Fatal("theme detail must not include tabs")
+		}
+		scroll := view.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+		rows := scroll.Content.(woxwidget.Flex).Children
+		description := rows[0].(woxwidget.Container).Child.(woxwidget.TextBlock)
+		if description.Value != detail.Description || description.MaxLines != 0 || len(rows) != 2 {
+			t.Fatal("description and preview must share one scroll surface")
+		}
 	}
 }

@@ -208,6 +208,7 @@ const (
 	ControlBolt                = "control.bolt"
 	ControlOnboarding          = "control.onboarding"
 	ControlDocument            = "control.document"
+	ControlDocumentation       = "control.documentation"
 	ControlCode                = "control.code"
 	ControlCheckboxChecked     = "control.checkbox.checked"
 	ControlCheckboxUnchecked   = "control.checkbox.unchecked"

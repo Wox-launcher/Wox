@@ -57,7 +57,7 @@ func TestFormSelectFieldOutlineUsesValueText(t *testing.T) {
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	control := focusedControlGesture(row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 	want := text
-	want.A = 190
+	want.A = 80
 	if control.BorderColor != want {
 		t.Fatalf("form dropdown outline = %#v, want Text %#v", control.BorderColor, want)
 	}
@@ -217,8 +217,8 @@ func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 	if label.Width != 550 || row.Gap != 32 {
 		t.Fatalf("settings label geometry = width %.0f gap %.0f, want Flutter 550/32", label.Width, row.Gap)
 	}
-	labelColumn := label.Child.(woxwidget.Flex)
-	description := labelColumn.Children[1].(woxwidget.Text)
+	labelColumn := label.Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
+	description := labelColumn.Children[1].(woxwidget.TextBlock)
 	if description.Value != "Show or hide Wox" {
 		t.Fatalf("settings description = %q, want it below the label", description.Value)
 	}
@@ -246,8 +246,8 @@ func TestFormHotkeyFieldShrinksSettingsLabelToKeepRecorderVisible(t *testing.T) 
 	row := container.Child.(woxwidget.Flex)
 	label := row.Children[0].(woxwidget.Container)
 	controlArea := row.Children[1].(woxwidget.Stack)
-	if label.Width != 360 || controlArea.Width != 280 {
-		t.Fatalf("narrow settings label/control widths = %.0f/%.0f, want 360/280", label.Width, controlArea.Width)
+	if label.Width != 440 || controlArea.Width != woxcomponent.SettingsChoiceControlWidth {
+		t.Fatalf("narrow settings label/control widths = %.0f/%.0f, want 440/%.0f", label.Width, controlArea.Width, woxcomponent.SettingsChoiceControlWidth)
 	}
 	if !controlArea.Children[0].AnchorRight || controlArea.Children[0].Right != 2 {
 		t.Fatalf("narrow settings recorder geometry = %#v, want right anchored with 2px inset", controlArea.Children[0])
@@ -342,8 +342,8 @@ func TestFormTextFieldBrowseButtonSharesOneControlRow(t *testing.T) {
 	if input.Width+8+container.Width != 288 || container.Width != browseWidth {
 		t.Fatalf("dirPath input/browse widths = %.0f/%.0f, want one full control row of 288", input.Width, container.Width)
 	}
-	if container.BorderWidth != 1 {
-		t.Fatalf("browse border width = %v, want outline", container.BorderWidth)
+	if container.BorderWidth != 0 {
+		t.Fatalf("browse border width = %v, want a quiet filled action", container.BorderWidth)
 	}
 }
 

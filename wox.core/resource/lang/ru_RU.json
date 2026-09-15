@@ -2807,5 +2807,7 @@
   "ui_theme_editor_token_toolbar_primary_text": "Текст основного действия",
   "ui_theme_editor_token_toolbar_primary_hotkey_text": "Текст клавиш основного действия",
   "ui_theme_editor_token_toolbar_primary_hotkey_background": "Фон клавиш основного действия",
-  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Граница клавиш основного действия"
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Граница клавиш основного действия",
+  "ui_setting_theme_applied": "Применено",
+  "ui_ai_mcp_empty": "Серверы MCP не настроены. Добавьте сервер, чтобы начать."
 }

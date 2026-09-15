@@ -8,15 +8,15 @@ import (
 
 func TestSettingFieldUsesSharedTypography(t *testing.T) {
 	field := WoxSettingField(SettingFieldProps{Label: "Font", Description: "Used throughout Wox", Width: 400, LabelWidth: 180}).(woxwidget.Container)
-	label := field.Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	label := field.Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	labelText := label.Children[0].(woxwidget.Text)
-	description := label.Children[1].(woxwidget.Text)
+	description := label.Children[1].(woxwidget.TextBlock)
 
 	if labelText.Style.Size != SettingsLabelFontSize || description.Style.Size != SettingsHelpFontSize {
 		t.Fatalf("setting typography = %v/%v, want %v/%v", labelText.Style.Size, description.Style.Size, SettingsLabelFontSize, SettingsHelpFontSize)
 	}
-	if field.Height != SettingsRowHeight {
-		t.Fatalf("setting row height = %.0f, want %.0f", field.Height, SettingsRowHeight)
+	if field.Height != 0 || description.Height != 0 || description.MaxLines != 0 {
+		t.Fatalf("setting row height = %.0f, want intrinsic height", field.Height)
 	}
 }
 

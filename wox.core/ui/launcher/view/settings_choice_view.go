@@ -267,7 +267,8 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			continue
 		}
 		selected := choice.Value == props.CurrentValue
-		background := props.Theme.Surface
+		// The floating menu owns the translucent fill; repainting it here darkens only the rows.
+		background := woxui.Color{}
 		foreground := props.Theme.Text
 		if selected {
 			background = props.Theme.SelectionBackground

@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	settingsWindowWidth  = 1200
-	settingsWindowHeight = 800
+	settingsWindowWidth  = woxcomponent.SettingsWindowWidth
+	settingsWindowHeight = woxcomponent.SettingsWindowHeight
 )
 
 type settingWindowContext struct {

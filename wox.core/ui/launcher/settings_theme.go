@@ -17,7 +17,7 @@ func settingsPalette() woxcomponent.ControlTheme {
 		Text: text, TextSecondary: woxui.Color{R: 168, G: 168, B: 179, A: 255},
 		InputBackground: woxui.Color{R: 255, G: 255, B: 255, A: 10}, InputText: text,
 		Focus: text, TextSelectionBackground: woxui.Color{R: 255, G: 255, B: 255, A: 61}, TextSelectionText: white,
-		SelectionBackground: woxui.Color{R: 255, G: 255, B: 255, A: 35}, SelectionText: white,
+		SelectionBackground: woxui.Color{R: 255, G: 255, B: 255, A: 32}, SelectionText: white,
 		// Active controls need an opaque fill distinct from the translucent row selection.
 		Accent: text, AccentText: woxui.Color{R: 22, G: 22, B: 26, A: 255},
 		Info:    woxui.Color{R: 64, G: 196, B: 255, A: 255},

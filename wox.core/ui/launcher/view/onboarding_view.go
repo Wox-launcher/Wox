@@ -604,7 +604,7 @@ func onboardingPluginsVisual(props OnboardingProps, width float32) woxwidget.Wid
 				label = props.Labels["plugins.installing"]
 			}
 			action = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "onboarding-plugin-install-" + plugin.ID, Label: label, Width: 88, Variant: woxcomponent.ButtonOutline,
+				ID: "onboarding-plugin-install-" + plugin.ID, Label: label, Width: 88, Variant: woxcomponent.ButtonSecondary,
 				Disabled: plugin.Disabled, Theme: props.Theme, OnTap: func() {
 					if props.OnInstallPlugin != nil {
 						props.OnInstallPlugin(plugin.ID)
@@ -812,7 +812,7 @@ func onboardingPermissions(props OnboardingProps, width, height float32) woxwidg
 			}
 			action = woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "onboarding-permission-" + permission.ID, Label: status,
-				Variant: woxcomponent.ButtonOutline, Disabled: props.PermissionLoading, Theme: props.Theme,
+				Variant: woxcomponent.ButtonSecondary, Disabled: props.PermissionLoading, Theme: props.Theme,
 				OnTap: func() {
 					if props.OnPermission != nil {
 						props.OnPermission(permission.ID)

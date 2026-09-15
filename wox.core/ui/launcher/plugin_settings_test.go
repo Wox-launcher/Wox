@@ -163,11 +163,16 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	}
 	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 
-	if props.Editor == nil || props.Editor.Form == nil || props.Editor.Form.Intro != "Command help" || len(props.Editor.Form.Rows) != 1 {
-		t.Fatalf("command form = %#v, want hint and one shared table", props.Editor)
+	if props.Editor == nil || props.Editor.Form == nil || props.Editor.Form.Intro != "" || len(props.Editor.Form.Rows) != 1 {
+		t.Fatalf("command form = %#v, want one shared table without a separate hint box", props.Editor)
 	}
 	table := props.Editor.Form.Rows[0].(woxwidget.Keyed).Child.(woxwidget.Container)
-	grid := table.Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful)
+	tableRows := table.Child.(woxwidget.Flex).Children
+	titleBlock := tableRows[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if titleBlock.Children[0].(woxwidget.Container).Child.(woxwidget.Text).Value != "Commands" || titleBlock.Children[1].(woxwidget.TextBlock).Value != "Command help" {
+		t.Fatal("command table must include its localized title and description")
+	}
+	grid := tableRows[1].(woxwidget.Stateful)
 	state := grid.CreateState()
 	state.InitState(woxwidget.StateContext{}, grid.Widget)
 	rendered := state.Build(woxwidget.StateContext{}, grid.Widget).(woxwidget.Stack).Children[1].Child.(woxwidget.Flex)

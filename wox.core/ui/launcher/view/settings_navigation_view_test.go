@@ -76,13 +76,21 @@ func TestSettingsRailUsesRegularLabelWeight(t *testing.T) {
 	rows := props.Content.(woxwidget.Flex).Children
 
 	destination := settingsRailItemLabel(rows[0])
-	group := settingsRailItemLabel(rows[1])
+	group := settingsRailGroupLabel(rows[1])
 	if destination.Style.Size != 13 || destination.Style.Weight != woxui.FontWeightRegular {
 		t.Fatalf("destination label = %+v, want 13 regular", destination.Style)
 	}
-	if group.Style.Size != 13 || group.Style.Weight != woxui.FontWeightRegular {
-		t.Fatalf("group header label = %+v, want the same 13 regular weight as destinations", group.Style)
+	if group.Value != "DATA" || group.Style.Size != woxcomponent.SettingsSectionTitleFontSize || group.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("group header label = %+v, want 11 semibold uppercase chrome", group)
 	}
+}
+
+func settingsRailGroupLabel(item woxwidget.Widget) woxwidget.Text {
+	row := item.(woxwidget.Semantics).Child.(woxwidget.Container)
+	if row.Height != woxcomponent.SettingsNavGroupHeight {
+		row = row.Child.(woxwidget.Container)
+	}
+	return row.Child.(woxwidget.Align).Child.(woxwidget.Text)
 }
 
 func TestSettingsSearchBoxUsesRailItemColor(t *testing.T) {
@@ -93,7 +101,7 @@ func TestSettingsSearchBoxUsesRailItemColor(t *testing.T) {
 	}).(woxwidget.Container)
 	field := box.Child.(woxwidget.Container)
 	wantBorder := toolbar
-	wantBorder.A = 170
+	wantBorder.A = 100
 	if field.BorderColor != wantBorder {
 		t.Fatalf("settings search border = %#v, want rail TextSecondary %#v", field.BorderColor, wantBorder)
 	}
@@ -124,8 +132,11 @@ func TestSettingsRailHoversDestinationsButNotGroupHeaders(t *testing.T) {
 	}
 	destinationGesture.OnTap()
 
-	group := rows[1].(woxwidget.Semantics).Child.(woxwidget.Gesture)
-	if group.OnTap != nil || group.OnHoverAt != nil {
+	group := rows[1].(woxwidget.Semantics)
+	if group.Role != woxui.AccessibilityRoleGroup {
+		t.Fatalf("settings group role = %q, want group chrome", group.Role)
+	}
+	if _, ok := group.Child.(woxwidget.Gesture); ok {
 		t.Fatal("settings group header should not be clickable or hoverable")
 	}
 	if clicked != 1 {
@@ -133,7 +144,33 @@ func TestSettingsRailHoversDestinationsButNotGroupHeaders(t *testing.T) {
 	}
 }
 
-func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
+func TestSettingsNavSelectedRangeAccountsForGroupLead(t *testing.T) {
+	items := []SettingsNavItem{
+		{ID: "general", Label: "General"},
+		{ID: "plugins", Label: "Plugins", Parent: true},
+		{ID: "plugins.store", Label: "Plugin Store", Selected: true, Depth: 1},
+	}
+	got := SettingsNavSelectedRange(items)
+	start := woxcomponent.SettingsNavItemHeight + woxcomponent.SettingsNavItemGap + woxcomponent.SettingsNavGroupLead + woxcomponent.SettingsNavGroupHeight + woxcomponent.SettingsNavItemGap
+	if got == nil || got.Start != start || got.End != start+woxcomponent.SettingsNavItemHeight {
+		t.Fatalf("selected nav range = %#v, want start %.0f", got, start)
+	}
+}
+
+func TestSettingsRailGroupLabelsSkipCaseFoldingForCJK(t *testing.T) {
+	rail := SettingsRail(SettingsRailProps{
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.ControlTheme{},
+		Items: []SettingsNavItem{{ID: "plugins", Label: "插件", Parent: true}},
+	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
+	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	group := settingsRailGroupLabel(props.Content.(woxwidget.Flex).Children[0])
+	if group.Value != "插件" || group.Style.Size != woxcomponent.SettingsLabelFontSize {
+		t.Fatalf("CJK group label = %+v, want 13 semibold without case folding", group)
+	}
+}
+
+func TestSettingsRailUsesSharedScrollWithScrollbar(t *testing.T) {
 	items := make([]SettingsNavItem, 12)
 	for index := range items {
 		items[index] = SettingsNavItem{ID: fmt.Sprintf("item-%d", index), Label: "Setting"}
@@ -144,8 +181,8 @@ func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
 	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
 	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 
-	if !props.HideScrollbar {
-		t.Fatal("settings rail should keep shared scrolling while hiding its scrollbar")
+	if props.HideScrollbar {
+		t.Fatal("settings rail should expose the shared fading scrollbar")
 	}
 }
 
@@ -271,5 +308,15 @@ func TestSettingsSearchResultsUseSharedScrollbarWhenOverflowing(t *testing.T) {
 
 	if props.Key != "settings-search-results" || props.ContentHeight != 0 || props.KeepVisible == nil {
 		t.Fatalf("settings search scrollbar = key %q content hint %.0f keep visible %v, want measured shared overflow surface", props.Key, props.ContentHeight, props.KeepVisible)
+	}
+}
+
+// TestSettingsSearchReplacesNavigation prevents stale navigation from showing behind results.
+func TestSettingsSearchReplacesNavigation(t *testing.T) {
+	panel := woxwidget.Container{Width: 200, Height: 120}
+	rail := SettingsRail(SettingsRailProps{Width: 228, Height: 500, ShowSearch: true, SearchPanel: panel}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	stack := settingsRailContent(rail).Children[1].(woxwidget.Stack)
+	if len(stack.Children) != 1 || stack.Children[0].Child != panel {
+		t.Fatal("search must replace navigation")
 	}
 }

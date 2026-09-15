@@ -189,11 +189,8 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 		woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
 	}}})
 	if item.Badge != "" {
-		badgeColor := props.Theme.Text
-		if item.Selected {
-			badgeColor = props.Theme.SelectionText
-		}
-		badge := woxcomponent.WoxTag(item.Badge, badgeColor)
+		// Keep the System badge on secondary text so a selected row cannot invert it.
+		badge := woxcomponent.WoxTag(item.Badge, props.Theme.TextSecondary)
 		rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
 	}
 	if item.ShowInstalledIcon {
@@ -421,7 +418,7 @@ func pluginDetailTabBody(props PluginDetailTabBodyProps) woxwidget.Widget {
 func pluginEditor(props PluginEditorProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	innerHeight := height
-	const headerHeight = float32(114)
+	const headerHeight = float32(80)
 	const tabHeight = float32(44)
 	header := pluginDetailHeader(props.Header, innerWidth, headerHeight, theme)
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
@@ -461,33 +458,21 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 	if props.Icon != nil {
 		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
 	}
-	actionsWidth := float32(0)
-	for index, action := range props.MetadataActions {
-		actionsWidth += action.Width
-		if index > 0 {
-			actionsWidth += 4
-		}
-	}
 	// Keep the icon and title as siblings. A 40-high title-only box top-aligns
 	// the text while CrossAxisCenter lifts the 32 icon against that taller box.
-	identity := woxwidget.Container{Width: width, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+	identity := woxwidget.Container{Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		icon,
 		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.InputText},
 			woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.TextSecondary},
 		}}},
 	}}}
-	author := woxwidget.Expanded{Child: woxwidget.Container{
-		Height: 30, Padding: woxwidget.Insets{Left: 8},
-		Child: woxwidget.Align{Height: 30, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}},
+	author := woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 8}, Child: woxwidget.Align{
+		Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary},
 	}}
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		identity,
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			author,
-			woxwidget.Container{Width: actionsWidth, Height: 32, Child: pluginTextActions(props.MetadataActions, theme)},
-		}},
-		woxwidget.Container{Width: width, Height: 42, Padding: woxwidget.Insets{Left: 8, Top: 3}, Child: pluginOutlineActions(props.Management, theme)},
+	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{identity, author}}},
+		pluginOutlineActions(props.Management, theme),
 	}}}
 }
 
@@ -615,7 +600,7 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollI
 		return pluginEmptySettings(props.EmptyTitle, props.EmptyDescription, width, height, theme)
 	} else {
 		if props.Header != "" {
-			rows = append(rows, woxwidget.Container{Width: width, Height: 46, Padding: woxwidget.Insets{Top: 16}, Child: woxwidget.Text{Value: props.Header, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.Text}})
+			rows = append(rows, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Bottom: 8}, Child: woxwidget.TextBlock{Value: props.Header, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}})
 		}
 		for _, item := range props.Items {
 			rows = append(rows, pluginMetadataRow(item, width, theme))
@@ -627,15 +612,16 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollI
 	})}
 }
 
+// pluginMetadataRow keeps access names and explanations readable at narrow detail widths.
 func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: 62, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: width * 0.32, Height: 61, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Height: 61, Vertical: 0.5, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.Text}}},
-			woxwidget.Container{Width: width * 0.68, Height: 61, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Height: 61, Vertical: 0.5, Child: woxwidget.TextBlock{
-				Value: item.Description, MaxLines: 2, LineHeight: 16, Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary,
-			}}},
-		}},
-		woxwidget.Container{Width: width, Height: 1, Color: theme.Border},
+	border := theme.Border
+	border.A /= 2
+	return woxwidget.Container{Width: width, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: width, Padding: woxwidget.Insets{Top: 16, Bottom: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
+			woxwidget.TextBlock{Value: item.Title, Width: width, LineHeight: 20, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+			woxwidget.TextBlock{Value: item.Description, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary},
+		}}},
+		woxwidget.Container{Width: width, Height: 1, Color: border},
 	}}}
 }
 
@@ -643,36 +629,11 @@ func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponen
 func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	innerHeight := max(float32(0), height-24)
-	var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: props.FallbackColor}
-	if props.Icon != nil {
-		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
-	}
-	const headerHeight = float32(124)
+	const headerHeight = float32(80)
 	const tabHeight = float32(44)
-	identity := woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		icon,
-		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20}, Color: theme.InputText},
-			woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.TextSecondary},
-		}}},
-	}}}
-	websiteWidth := float32(104)
-	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 32}
-	if props.WebsiteLabel != "" && props.OnWebsite != nil {
-		website = woxwidget.Align{Width: websiteWidth, Height: 32, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "plugin-website", Label: props.WebsiteLabel, Icon: props.ExternalIcon, IconSize: 13, IconGap: 7,
-			FontSize: 13, Padding: woxwidget.Insets{Left: 6, Right: 4}, Variant: woxcomponent.ButtonText,
-			OnTap: props.OnWebsite, Theme: theme,
-		})}
-	}
-	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		identity,
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 6}, Child: woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.TextSecondary}}}},
-			website,
-		}},
-		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: pluginOutlineActions(props.Management, theme)},
-	}}}
+	header := pluginDetailHeader(PluginHeaderProps{
+		Name: props.Name, Version: props.Version, Author: props.Author, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management,
+	}, innerWidth, headerHeight, theme)
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
 	bodyHeight := max(float32(1), innerHeight-headerHeight-tabHeight)
 	description := (*PluginStoreDetailProps)(nil)
@@ -692,23 +653,20 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 
 // pluginStoreDescription renders the description metadata and the first manifest screenshot.
 func pluginStoreDescription(props PluginStoreDetailProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	const topPadding = float32(24)
+	const topPadding = float32(16)
 	children := []woxwidget.Widget{
-		woxwidget.Container{Width: width, Height: 30, Child: woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
-		woxwidget.TextBlock{Value: props.Description + " · " + props.Author, Width: width, Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.Text},
-		woxwidget.Container{Width: width, Height: 42, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-			pluginStoreChip("v"+props.Version, nil, nil, theme),
+		woxwidget.TextBlock{Value: props.Description, Width: width, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.Text},
+		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			pluginStoreChip(props.Runtime, props.RuntimeIcon, nil, theme),
 			pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
-		}}},
+		}},
 	}
 	if shot := pluginStoreScreenshot(props, width, theme); shot != nil {
-		// Match Flutter's SizedBox(height: 24) between metadata chips and the screenshot.
-		children = append(children, woxwidget.Container{Height: 24}, shot)
+		children = append(children, shot)
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "plugin-store-description-scroll", FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, Theme: theme, ThumbColor: theme.Text,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: children}, Theme: theme, ThumbColor: theme.Text,
 	})}
 }
 
@@ -719,7 +677,7 @@ func pluginStoreScreenshot(props PluginStoreDetailProps, width float32, theme wo
 		screenshotHeight := width * float32(props.Screenshot.Height) / float32(props.Screenshot.Width)
 		return woxwidget.Gesture{ID: "plugin-store-screenshot", OnTap: props.OnScreenshot, Child: woxwidget.Container{
 			Width: width, Height: screenshotHeight, Radius: 8,
-			Child: woxwidget.Image{Source: props.Screenshot, Width: width, Height: screenshotHeight, Fit: woxwidget.ImageFitContain},
+			Child: woxwidget.Image{Source: props.Screenshot, Width: width, Height: screenshotHeight, Radius: 8, Fit: woxwidget.ImageFitContain},
 		}}
 	}
 	if !props.ScreenshotLoading {
@@ -736,29 +694,25 @@ func pluginStoreChip(label string, icon *woxui.Image, onTap func(), theme woxcom
 	if label == "" {
 		return nil
 	}
+	if onTap != nil {
+		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "plugin-store-chip-" + label, Label: label, Icon: icon, IconSize: 14, Variant: woxcomponent.ButtonText, OnTap: onTap, Theme: theme})
+	}
 	width := max(float32(58), float32(len([]rune(label)))*7+24)
 	children := make([]woxwidget.Widget, 0, 2)
 	if icon != nil {
 		children = append(children, woxwidget.Image{Source: icon, Width: 14, Height: 14, Fit: woxwidget.ImageFitContain})
 		width += 18
 	}
-	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.Text})
+	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary})
 	return woxwidget.Gesture{ID: "plugin-store-chip-" + label, OnTap: onTap, Child: woxwidget.Container{
-		Width: width, Height: 28, Radius: 7, Color: theme.Surface, BorderColor: theme.Text, BorderWidth: 1,
+		Width: width, Height: 28, Radius: 7, Color: theme.Surface,
 		Padding: woxwidget.Insets{Left: 10, Right: 8}, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
 	}}
 }
 
-// pluginOutlineActions matches the compact store management controls used by the Flutter route.
+// pluginOutlineActions renders quiet management actions with intrinsic button widths.
 func pluginOutlineActions(actions []PluginAction, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	buttons := make([]woxwidget.Widget, 0, len(actions))
-	for _, action := range actions {
-		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 14, IntrinsicWidth: true, Radius: 4, FontSize: 13,
-			Disabled: !action.Enabled, Variant: woxcomponent.ButtonOutline, OnTap: action.OnTap, Theme: theme,
-		}))
-	}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}
+	return pluginActions(actions, theme)
 }
 
 // pluginTextActions renders lightweight metadata links separately from lifecycle controls.

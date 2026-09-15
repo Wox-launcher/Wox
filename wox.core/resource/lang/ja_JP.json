@@ -3104,5 +3104,7 @@
   "ui_theme_editor_token_toolbar_primary_text": "メイン操作の文字",
   "ui_theme_editor_token_toolbar_primary_hotkey_text": "メイン操作のショートカット文字",
   "ui_theme_editor_token_toolbar_primary_hotkey_background": "メイン操作のショートカット背景",
-  "ui_theme_editor_token_toolbar_primary_hotkey_border": "メイン操作のショートカット枠線"
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "メイン操作のショートカット枠線",
+  "ui_setting_theme_applied": "適用済み",
+  "ui_ai_mcp_empty": "MCP サーバーが設定されていません。サーバーを追加してください。"
 }

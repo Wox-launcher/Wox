@@ -232,9 +232,9 @@
   "ui_start_page_mru": "Most Recently Used",
   "ui_start_page_mru_tips": "Show recently used items when the query is empty for quick access",
   "ui_hide_on_lost_focus": "Hide on lost focus",
-  "ui_hide_on_lost_focus_tips": "When selected, Wox will hide when it loses focus",
+  "ui_hide_on_lost_focus_tips": "Hide Wox when another window gains focus.",
   "ui_hide_on_start": "Hide on start",
-  "ui_hide_on_start_tips": "When selected, Wox will hide when it starts",
+  "ui_hide_on_start_tips": "Start Wox in the background.",
   "ui_enable_auto_update": "Enable auto update",
   "ui_enable_auto_update_tips": "When selected, Wox will automatically download updates in the background but will not install them until you confirm",
   "ui_release_channel": "Update channel",
@@ -252,7 +252,7 @@
   "ui_show_position_active_screen": "Active screen",
   "ui_show_position_last_location": "Last location",
   "ui_switch_input_method_abc": "Switch to ABC",
-  "ui_switch_input_method_abc_tips": "When selected, the input method will be switched to english when the query box gains focus",
+  "ui_switch_input_method_abc_tips": "Switch to English input when the query box gains focus.",
   "ui_lang": "Language",
   "ui_lang_tips": "Language used by Wox",
   "ui_query_hotkeys": "Query Hotkeys",
@@ -290,7 +290,7 @@
   "ui_ai": "AI",
   "ui_ai_description": "Manage AI providers used by Wox features and plugins.",
   "ui_autostart": "Autostart",
-  "ui_autostart_tips": "When selected, Wox will start automatically when the computer starts",
+  "ui_autostart_tips": "Start Wox automatically when you sign in.",
   "ui_tray_toggle_app": "Toggle Wox",
   "ui_tray_open_setting_window": "Settings",
   "ui_settings_window_title": "Wox Settings",
@@ -3106,5 +3106,7 @@
   "ui_theme_editor_token_toolbar_primary_text": "Primary action text",
   "ui_theme_editor_token_toolbar_primary_hotkey_text": "Primary hotkey text",
   "ui_theme_editor_token_toolbar_primary_hotkey_background": "Primary hotkey background",
-  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Primary hotkey border"
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Primary hotkey border",
+  "ui_setting_theme_applied": "Applied",
+  "ui_ai_mcp_empty": "No MCP servers configured. Add a server to get started."
 }

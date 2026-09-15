@@ -159,7 +159,7 @@ func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 	row = append(row, woxwidget.Expanded{Child: woxwidget.Painter{}})
 	for _, action := range props.Actions {
 		row = append(row, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "service-action-" + action.ID, Label: action.Label, Variant: woxcomponent.ButtonOutline, Disabled: !action.Enabled, OnTap: action.OnTap, Theme: props.Theme,
+			ID: "service-action-" + action.ID, Label: action.Label, Variant: woxcomponent.ButtonSecondary, Disabled: !action.Enabled, OnTap: action.OnTap, Theme: props.Theme,
 		}))
 	}
 	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}
@@ -364,7 +364,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			gap                   = float32(32)
 			edgeInset             = float32(2)
 			minimumLabelWidth     = float32(180)
-			preferredControlWidth = float32(280)
+			preferredControlWidth = woxcomponent.SettingsChoiceControlWidth
 		)
 		availableWidth := max(float32(0), props.Width-gap-edgeInset*2)
 		if availableWidth < minimumLabelWidth {
@@ -649,7 +649,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 			valueField,
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: props.ID + "-browse", Label: browseLabel, Width: browseWidth,
-				Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme,
+				Variant: woxcomponent.ButtonSecondary, OnTap: props.OnBrowse, Theme: props.Theme,
 			}),
 		}}
 	}
@@ -728,7 +728,7 @@ func formFieldOutline(focused bool, theme woxcomponent.ControlTheme) woxui.Color
 	if focused {
 		return settingsColorAlpha(theme.Text, 220)
 	}
-	return settingsColorAlpha(theme.Text, 190)
+	return settingsColorAlpha(theme.Text, 80)
 }
 
 func formFieldBackground(focused bool, theme woxcomponent.ControlTheme) woxui.Color {

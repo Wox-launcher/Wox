@@ -28,7 +28,7 @@ type PrivacySettingsProps struct {
 
 // PrivacySettingsView builds the privacy page without depending on launcher controller state.
 func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
-	contentWidth := min(float32(1120), max(float32(0), props.Width-80))
+	contentWidth := SettingsPageContentWidth(props.Width)
 	const controlWidth = float32(178)
 	labelWidth := min(float32(550), max(float32(180), contentWidth-controlWidth-32))
 	controlAreaWidth := max(controlWidth, contentWidth-labelWidth-32)

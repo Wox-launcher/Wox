@@ -88,7 +88,7 @@ func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, 
 	outline := props.Outline
 	if outline.A == 0 {
 		// Keep the outline on the value text token so ResultSubtitle cannot restyle Settings chrome.
-		outline = withAlpha(props.Foreground, 140)
+		outline = withAlpha(props.Foreground, 80)
 	}
 	background := woxui.Color{}
 	if hovered {

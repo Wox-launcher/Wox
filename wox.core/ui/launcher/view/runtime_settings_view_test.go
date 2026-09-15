@@ -7,6 +7,27 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestRuntimeStatusColumnsFitThreeCardsOnDefaultPage(t *testing.T) {
+	width := runtimeStatusThreeColumnMinWidth()
+	if width != 800 {
+		t.Fatalf("default runtime content width = %.0f, want 800", width)
+	}
+	if runtimeStatusColumns(width) != 3 {
+		t.Fatalf("default runtime columns = %d, want 3 so Node.js, Python, and Script share one row", runtimeStatusColumns(width))
+	}
+	statuses := []RuntimeStatus{{Runtime: "NODEJS"}, {Runtime: "PYTHON"}, {Runtime: "SCRIPT"}}
+	if got := runtimeStatusGridHeight(statuses, width); got != 168 {
+		t.Fatalf("default runtime grid height = %.0f, want one 168-high row", got)
+	}
+	grid := runtimeStatusGrid(RuntimeSettingsProps{Statuses: statuses}, width, 168).(woxwidget.Grid)
+	if grid.Columns != 3 || grid.CellWidth != (width-24)/3 {
+		t.Fatalf("default runtime grid = %d columns at %.0f, want 3 narrower cards", grid.Columns, grid.CellWidth)
+	}
+	if runtimeStatusColumns(width-1) != 2 {
+		t.Fatalf("runtime columns below the default page = %d, want 2", runtimeStatusColumns(width-1))
+	}
+}
+
 func TestRuntimeLabelWidthIncludesButtonPadding(t *testing.T) {
 	if width := runtimeLabelWidth("浏览", 62, 96); width != 66 {
 		t.Fatalf("runtime label width = %v, want 66", width)
@@ -27,7 +48,7 @@ func TestRuntimeExecutableSettingUsesAlignedSettingsTextField(t *testing.T) {
 func TestRuntimeLoadingDoesNotAddStatusText(t *testing.T) {
 	for _, statuses := range [][]RuntimeStatus{nil, {{Runtime: "PYTHON"}}} {
 		page := buildRuntimeSettingsView(RuntimeSettingsProps{Width: 1000, Height: 700, Loading: true, Statuses: statuses}).(woxwidget.Container)
-		content := page.Child.(woxwidget.ScrollView).Child.(woxwidget.Flex)
+		content := page.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Container).Child.(woxwidget.Flex)
 		if len(content.Children) != 6 {
 			t.Fatalf("runtime page children while loading = %d, want 6 without a loading message", len(content.Children))
 		}

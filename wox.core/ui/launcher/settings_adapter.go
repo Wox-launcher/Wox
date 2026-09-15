@@ -27,7 +27,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	if runtime.GOOS == "darwin" {
 		pageHeight = height
 	}
-	railWidth := min(float32(240), max(float32(210), width*0.22))
+	railWidth := woxcomponent.SettingsRailWidth(width)
 	var page woxwidget.Widget
 	if snapshot.tab == "plugins" {
 		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
@@ -171,8 +171,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 	specs := settingNavSpecs(snapshot.isDev)
 	activeID := activeSettingNavID(snapshot.tab, snapshot.plugins.PluginsStore, snapshot.theme.ThemesMode)
 	items := make([]launcherview.SettingsNavItem, 0, len(specs))
-	var keepVisible *woxwidget.ScrollRange
-	for index, spec := range specs {
+	for _, spec := range specs {
 		selected := spec.id == activeID
 		foreground := snapshot.palette.TextSecondary
 		if selected {
@@ -192,15 +191,12 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 			ID: spec.id, Label: a.settingNavLabel(spec), FallbackIcon: spec.icon, Icon: icon, Depth: spec.depth, Parent: spec.parent, Selected: selected,
 			OnTap: func() { a.selectSettingsNavItem(spec) },
 		})
-		if selected {
-			keepVisible = &woxwidget.ScrollRange{Start: float32(index * 50), End: float32(index*50 + 46)}
-		}
 	}
 	innerWidth := width - 28
 	searchAreaHeight := float32(58)
 	viewportHeight := max(float32(1), height-searchAreaHeight-28)
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
-		Width: width, Height: height, Items: items, KeepVisible: keepVisible,
+		Width: width, Height: height, Items: items,
 		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth, imageScale), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight, imageScale),
 		ShowSearch: snapshot.search.Panel && strings.TrimSpace(snapshot.search.Query.Text) != "", Theme: snapshot.palette,
 	})
@@ -303,8 +299,6 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		contentWidth,
 		snapshot.palette,
 	))
-	contentHeight := woxcomponent.PageHeaderHeight
-	var keepVisible *woxwidget.ScrollRange
 	var keepVisibleKey woxwidget.Key
 	currentSection := ""
 	for index, item := range items {
@@ -313,20 +307,17 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		if section != currentSection {
 			currentSection = section
 			children = append(children, a.buildSettingsSectionHeader(section, contentWidth, snapshot.palette))
-			contentHeight += 43
 		}
 		if index == snapshot.row {
-			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + woxcomponent.SettingsRowHeight}
+			keepVisibleKey = woxwidget.Key("setting-row-" + item.key)
 		}
 		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
-		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: contentWidth, Height: woxcomponent.SettingsRowHeight, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
-		}))
-		contentHeight += woxcomponent.SettingsRowHeight
+		children = append(children, woxwidget.Keyed{Key: woxwidget.Key("setting-row-" + item.key), Child: woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
+		})})
 	}
 	if snapshot.tab == "general" && snapshot.hotkey.Form != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
-		contentHeight += 43
 		hotkeyForm := *snapshot.hotkey.Form
 		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
@@ -335,7 +326,6 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 		for index, definition := range hotkeyForm.definitions {
 			if hotkeyForm.active && index == hotkeyForm.focused {
-				keepVisible = nil
 				keepVisibleKey = formFieldRowKey("settings-hotkey", index)
 			}
 			field := a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
@@ -350,8 +340,8 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-hotkey", index), Child: target})
 		}
 	}
-	return launcherview.SettingsPage(launcherview.SettingsPageProps{
-		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, KeepVisible: keepVisible, KeepVisibleKey: keepVisibleKey,
+	return launcherview.SettingsPage(launcherview.SettingsPageProps{Theme: snapshot.palette,
+		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, KeepVisibleKey: keepVisibleKey,
 	})
 }
 

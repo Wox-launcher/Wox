@@ -151,9 +151,16 @@ Do not use size to distinguish primary and secondary actions. Keep adjacent acti
 | Compact icon action | 28 by 28; use only in an approved compact context |
 | Settings/catalog search | 40 high; keep internal icon actions at least 28 by 28 |
 | Checkbox | 18 by 18 visible mark inside at least a 32 by 32 interaction frame |
-| Switch | Preserve approximately 36 by 24 visible geometry inside a 32-high alignment slot |
-| Settings row | 64 high for a label plus one description line and one ordinary control |
-| Settings choice group label | 28 high; 11 semibold uppercase secondary text; not selectable |
+| Switch | Preserve approximately 36 by 24 visible geometry inside a 32-high alignment slot. Off tracks use a stronger text-alpha wash than disabled so they stay visible on glass |
+| Settings row | 64 minimum; descriptions wrap and increase height with content |
+| Settings choice or switch slot | 200 wide; right-align the control inside the slot |
+| Settings form column | Fill the available width after the shared 40-unit page insets, including ordinary form pages |
+| Settings catalog list | 220–250 wide; 30% of the inset catalog content width. Plugin and theme catalogs share this column |
+| Settings runtime status cards | Three columns at the default 800-wide Settings content row |
+| Settings window | 1100 by 760 default to leave room for plugin list and detail panes |
+| Settings choice group label | 28 high; section-label type; not selectable |
+| Settings navigation destination | 40 high; 13 regular |
+| Settings navigation group | 28 high; section-label type; 8 lead before later groups; not selectable |
 
 Visible checkbox and switch shapes do not stretch to the frame height. Align their interaction frames and visual centers with neighboring fields.
 
@@ -218,10 +225,10 @@ Use the configured application font and shared constants in `launcher/component/
 | Settings page title | 22 | Semibold |
 | Primary body, label, value | 13 | Regular or semibold by emphasis |
 | Help and secondary control text | 12 | Regular |
-| Section label | 11 | Semibold, uppercase when already established |
+| Section label | 11 | Semibold, uppercase when the script has case; 13 semibold with no case transform for scripts without case, such as CJK |
 | Settings table field title | 13 | Semibold on Wox-owned Settings pages; regular on plugin tables |
 | Settings table column title | 13 | Regular |
-| Settings navigation item | 13 | Regular, including group headers |
+| Settings navigation item | 13 | Regular for destinations; group headers use the section-label treatment |
 | Settings plugin detail tab | 14 | Regular; selection uses the underline, not weight |
 | Ordinary button label | 11 | Regular; opt into semibold only for a specific emphasis |
 | Supporting dense metadata | 10-11 | Regular or medium |
@@ -235,7 +242,8 @@ Use measured text and alignment containers. Do not position text with guessed ba
 
 Use the 4-unit rhythm: 4, 8, 12, 16, 20, and 24. Allow 6, 10, and 14 only for established optical relationships such as icon gaps, dense text, or navigation alignment.
 
-- Settings table Add controls use the shared secondary button fill instead of a bright outline. Selected Settings navigation uses its theme selection fill without a decorative border; retain the keyboard focus ring. Table hotkeys use readable key labels separated by ` + `, preserving stored values.
+- Settings table Add controls use the shared secondary button fill instead of a bright outline. Selected Settings navigation uses its theme selection fill without a decorative border; retain the keyboard focus ring. Parent navigation rows are chrome, not destinations: no icon, hover, or selection. Table hotkeys use readable key labels separated by ` + `, preserving stored values.
+- Settings pages fill the available width after the shared 40-unit insets. Keep trailing controls and section dividers aligned to the right content edge as the window resizes.
 - Align repeated labels, controls, and actions to shared leading or trailing edges.
 - Align controls in one row by interaction-frame centerline.
 - Use built-in horizontal and vertical alignment primitives (`Align`, Flex alignment, `Expanded`, and `Constrained`) instead of manual offsets or calculated centering padding. Do not write formulas such as `(rowHeight-controlHeight)/2` to position a child; make the layout component express the relationship.
@@ -359,3 +367,13 @@ V2 generic previews and metadata tags accept `PreviewBorderRadius` and `PreviewT
 V2 selected-result markers use `ResultItemActiveIndicatorColor/Width/InsetLeft/InsetTop/InsetBottom/BorderRadius`; v1 retains its edge-border fields. Insets and radius default to zero, width to zero, color to base accent. Render on the background layer without changing row layout; demo and launcher share the geometry. `QueryBoxBorderBottomColor/Width` paint the query bottom edge inside its bounds, defaulting to accent/zero and preserving explicit transparency.
 
 V2 selected Action Panel keycaps use their own active tokens; normal action and Toolbar tokens cannot override them. V1 retains caller-provided surface colors. Preserve the selected white-on-blue contrast in light themes with explicit active keycap colors.
+
+Settings navigation uses a quiet white selection wash (alpha 32/255). Default dropdown outlines use value-text alpha 80/255 and search outlines use secondary-text alpha 100/255; hover fill and keyboard focus remain distinct. Built-in settings scroll to measured row keys so wrapped descriptions do not invalidate navigation offsets.
+
+Settings search results replace the navigation list while open and use the rail material instead of an opaque black popup. Settings pages and the navigation rail expose the shared fading scrollbar. Theme catalog actions use secondary buttons and explicitly label the active theme Applied. Keep theme previews top-aligned with a 12-unit gap; the Usage heatmap panel is 204 units high. Plugin and theme catalog lists share the 220–250 column. Their System tags keep secondary text on selected rows so the badge does not invert with the title. Runtime status cards use three columns at the default Settings content width so Node.js, Python, and Script stay on one row. AI MCP tables show an empty-state message and use a secondary Edit JSON action; skill descriptions flex to available width and expose their full text through the shared tooltip.
+
+Settings page scrollbars occupy the right gutter: content retains 40-unit horizontal insets while the scroll viewport extends to 8 units from the right window edge. The 32-unit spare strip keeps the scrollbar and its hit target clear of controls.
+
+### Settings action buttons
+
+Ordinary actions across Settings, catalogs, onboarding management, and dialogs use `ButtonSecondary`: a quiet fill without a resting outline. Primary actions retain `ButtonPrimary`; metadata links retain `ButtonText`. Focus rings, input borders, selection controls, and information tags remain distinct from action-button chrome. Table secondary actions follow this default without page-specific overrides.

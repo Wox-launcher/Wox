@@ -243,7 +243,7 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 		}})
 	}
 
-	page := SettingsPage(SettingsPageProps{
+	page := SettingsPage(SettingsPageProps{Theme: props.Theme,
 		ID: "cloud-page-scroll", Width: props.Width, Height: props.Height, Children: children,
 		Gap: 4,
 	})
@@ -447,7 +447,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 				}}},
 				woxwidget.Align{Width: 200, Height: 42, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-login", Label: props.LoginLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnLogin, Theme: theme}),
-					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-register", Label: props.RegisterLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRegister, Theme: theme}),
+					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-register", Label: props.RegisterLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnRegister, Theme: theme}),
 				}}},
 			},
 		}}
@@ -488,7 +488,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 			}}},
 			woxwidget.Align{Width: valueWidth, Height: 57, Horizontal: 1, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16,
-				Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSupport, Theme: theme,
+				Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnSupport, Theme: theme,
 			})},
 		}}},
 	}}}
@@ -544,7 +544,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Contr
 		labelWidth = max(float32(220), width-260)
 	}
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
-	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-sync", Label: props.ButtonLabel, Disabled: !props.ButtonEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSync, Theme: theme})
+	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-sync", Label: props.ButtonLabel, Disabled: !props.ButtonEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnSync, Theme: theme})
 	statusLine := props.Label
 	if props.Detail != "" {
 		statusLine += ", " + props.Detail
@@ -569,7 +569,7 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
 	refresh := woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: "cloud-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, IconSize: 16,
-		Disabled: !props.RefreshEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRefresh, Theme: theme,
+		Disabled: !props.RefreshEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnRefresh, Theme: theme,
 	})
 	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{

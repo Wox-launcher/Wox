@@ -48,12 +48,21 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 			field.OnAdd = nil
 			a.addAIBuiltinToolSwitches(&field, definition, aiForm.values[definition.Value.Key], snapshot.palette)
 		case "AIMCPServers":
+			field.EmptyLabel = a.translate("i18n:ui_ai_mcp_empty")
 			field.OnAdd = func() { a.addAISettingsTableRow(index) }
 			field.SecondaryLabel = a.translate("i18n:ui_ai_mcp_import_json")
 			mcpIconColor := snapshot.palette.Text
 			field.SecondaryIcon = a.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
 			field.OnSecondary = a.openAIMCPJSONImport
 		case "AISkills":
+			for columnIndex := range field.Columns {
+				if field.Columns[columnIndex].Key == "Description" {
+					field.Columns[columnIndex].Width = 0
+					for rowIndex := range field.Rows {
+						field.Rows[rowIndex].Cells[columnIndex].Tooltip = field.Rows[rowIndex].Cells[columnIndex].Text
+					}
+				}
+			}
 			field.OnAdd = func() { a.addAISettingsTableRow(index) }
 			field.HideEditAction = true
 			field.HideCloneAction = true
@@ -214,11 +223,11 @@ func newAISettingsForm(data settingsData) formFieldsState {
 			Value: formDefinitionValue{
 				Key: "AIProviders", Title: "i18n:ui_ai_model", SortColumnKey: "Name", InlineTable: true,
 				Columns: []formTableColumn{
-					{Key: "Status", Label: "i18n:ui_ai_providers_status", Width: 40, Type: "aiModelStatus", HideInUpdate: true},
+					{Key: "Status", Label: "i18n:ui_ai_providers_status", Width: 80, Type: "aiModelStatus", HideInUpdate: true},
 					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 100, Type: "select", Filterable: true, Validators: []formValidator{{Type: "not_empty"}}},
 					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Tooltip: "i18n:ui_ai_providers_alias_tooltip", Width: 120, Type: "text"},
 					{Key: "Host", Label: "i18n:ui_ai_providers_host", Tooltip: "i18n:ui_ai_providers_host_tooltip", Width: 160, Type: "text", VisibleWhen: api},
-					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "text", VisibleWhen: api},
+					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "text", HideInTable: true, VisibleWhen: api},
 					{Key: "Executable", Label: "i18n:ui_ai_cli_executable", Tooltip: "i18n:ui_ai_cli_executable_tooltip", Type: "text", HideInTable: true, VisibleWhen: installed},
 					{Key: "ReasoningEffort", Label: "i18n:ui_ai_cli_effort", Tooltip: "i18n:ui_ai_cli_effort_tooltip", Type: "select", SelectOptions: efforts, HideInTable: true, VisibleWhen: installed},
 				},

@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+
+	woxcomponent "wox/ui/launcher/component"
 )
 
 type usageStatsData struct {
@@ -130,7 +132,7 @@ func cropUsageShareImage(sourcePath, targetPath string, logicalWidth, logicalHei
 	}
 
 	windowPixels := source.Bounds()
-	railWidth := min(float32(250), max(float32(210), logicalWidth*0.22))
+	railWidth := woxcomponent.SettingsRailWidth(logicalWidth)
 	left := windowPixels.Min.X + int(float32(windowPixels.Dx())*railWidth/logicalWidth)
 	top := windowPixels.Min.Y + int(float32(windowPixels.Dy())*settingsTitleBarHeight/logicalHeight)
 	cropBounds := image.Rect(left, top, windowPixels.Max.X, windowPixels.Max.Y).Intersect(windowPixels)

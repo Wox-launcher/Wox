@@ -33,7 +33,7 @@ func TestWoxDropdownOutlineFollowsValueText(t *testing.T) {
 	}).(woxwidget.Semantics)
 	trigger := buildHoverable(dropdown.Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
 	want := foreground
-	want.A = 140
+	want.A = 80
 	if trigger.BorderColor != want {
 		t.Fatalf("dropdown outline = %#v, want value text %#v", trigger.BorderColor, want)
 	}

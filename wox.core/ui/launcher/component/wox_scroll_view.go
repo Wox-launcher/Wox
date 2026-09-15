@@ -30,6 +30,7 @@ type ScrollViewProps struct {
 	Offset              float32
 	Controller          *woxwidget.ScrollController
 	KeepVisible         *woxwidget.ScrollRange
+	KeepVisibleKey      woxwidget.Key
 	ThumbColor          woxui.Color
 	HideScrollbar       bool
 	AlwaysShowScrollbar bool
@@ -213,7 +214,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		// A Wox strip is never nested inside another scroller, so a horizontal
 		// surface always consumes the ordinary mouse wheel.
 		Width: props.Width, Height: props.Height, Horizontal: props.Horizontal, MapVerticalWheel: props.Horizontal,
-		Offset: offset, KeepVisible: props.KeepVisible, Child: props.Content,
+		Offset: offset, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey, Child: props.Content,
 	}
 	if props.Horizontal {
 		scroll.ContentWidth = contentHint

@@ -33,7 +33,7 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 	buildVisual := func(hoverPosition float32) woxwidget.Widget {
 		return woxwidget.AnimatedFloat{Key: key, Target: target, Duration: 300 * time.Millisecond, Curve: woxwidget.AnimationEaseOutBack, Builder: func(position float32) woxwidget.Widget {
 			colorPosition := min(max(position, float32(0)), float32(1))
-			trackColor := lerpColor(withAlpha(props.Theme.Text, 77), props.Theme.Accent, colorPosition)
+			trackColor := lerpColor(withAlpha(props.Theme.Text, SettingsSwitchOffTrackAlpha), props.Theme.Accent, colorPosition)
 			hoverForeground := props.Theme.Text
 			if props.Value {
 				hoverForeground = props.Theme.AccentText

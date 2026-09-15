@@ -26,6 +26,15 @@ func TestWoxSwitchUsesIntegerGeometry(t *testing.T) {
 	}
 }
 
+func TestWoxSwitchOffTrackStaysVisible(t *testing.T) {
+	text := woxui.Color{R: 245, G: 245, B: 247, A: 255}
+	animation := WoxSwitch(SwitchProps{Theme: ControlTheme{Text: text, Accent: text}}).(woxwidget.AnimatedFloat)
+	track := animation.Builder(0).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	if track.Color.A != SettingsSwitchOffTrackAlpha {
+		t.Fatalf("off switch track alpha = %d, want %d", track.Color.A, SettingsSwitchOffTrackAlpha)
+	}
+}
+
 func TestWoxSwitchAnimatesThumbSizeOnHover(t *testing.T) {
 	theme := ControlTheme{
 		Text:       woxui.Color{R: 80, G: 90, B: 100, A: 255},

@@ -286,7 +286,7 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 		// owns the standard control height.
 		children = append(children, formTableHeaderActions(props))
 	}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisEnd, Children: children}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: children}
 }
 
 // formTableHeaderActions keeps specialized secondary actions aligned with the
@@ -299,7 +299,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 	if props.SecondaryLabel != "" {
 		actions = append(actions, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5,
-			Variant:  woxcomponent.ButtonOutline,
+			Variant:  woxcomponent.ButtonSecondary,
 			Disabled: props.Invalid || props.Disabled, OnTap: props.OnSecondary, Theme: props.Theme,
 		}))
 	}
@@ -1245,7 +1245,7 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 	hoverBackground := formTableRowIconHoverBackground(props.Theme)
 	if props.OnBrowse != nil {
 		inputWidth = max(float32(100), inputWidth-90)
-		sideActions = append(sideActions, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Radius: 4, Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme}))
+		sideActions = append(sideActions, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Radius: 4, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnBrowse, Theme: props.Theme}))
 	}
 	if props.ActionIcon != nil && props.OnActionTap != nil {
 		actionSize := woxcomponent.SettingsControlHeight
@@ -1360,8 +1360,8 @@ func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxw
 		woxwidget.Container{
 			Width: buttonsWidth, Height: height, Padding: woxwidget.Insets{Top: 27},
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, IconSize: 14, IconGap: 6, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnEmoji, Theme: props.Theme}),
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, IconSize: 14, IconGap: 6, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnUpload, Theme: props.Theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, IconSize: 14, IconGap: 6, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonSecondary, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnEmoji, Theme: props.Theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, IconSize: 14, IconGap: 6, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonSecondary, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnUpload, Theme: props.Theme}),
 			}},
 		},
 	}}

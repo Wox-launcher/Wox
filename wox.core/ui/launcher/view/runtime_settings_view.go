@@ -118,7 +118,7 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 		top := rowsTop + float32(props.Selected)*settingRowHeight
 		keepVisible = &woxwidget.ScrollRange{Start: top, End: top + settingRowHeight}
 	}
-	return SettingsPage(SettingsPageProps{
+	return SettingsPage(SettingsPageProps{Theme: props.Theme,
 		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, KeepVisible: keepVisible,
 	})
 }
@@ -145,9 +145,15 @@ func runtimeStatusGridHeight(statuses []RuntimeStatus, width float32) float32 {
 	return height
 }
 
-// runtimeStatusColumns matches Flutter's one, two, and three-column breakpoints.
+// runtimeStatusThreeColumnMinWidth is the default Settings content width so
+// Node.js, Python, and Script stay on one row in the default window.
+func runtimeStatusThreeColumnMinWidth() float32 {
+	return SettingsPageContentWidth(woxcomponent.SettingsWindowWidth - woxcomponent.SettingsRailMaxWidth)
+}
+
+// runtimeStatusColumns prefers three cards in one row at the default page width.
 func runtimeStatusColumns(width float32) int {
-	if width >= 860 {
+	if width >= runtimeStatusThreeColumnMinWidth() {
 		return 3
 	}
 	if width >= 560 {
@@ -225,19 +231,19 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		if status.OnInstall != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-install-" + status.Runtime, Label: status.InstallLabel, Icon: status.InstallIcon, IconSize: 14,
-				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonOutline, OnTap: status.OnInstall, Theme: theme,
+				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonSecondary, OnTap: status.OnInstall, Theme: theme,
 			}))
 		}
 		if status.OnRefresh != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-refresh-" + status.Runtime, Label: status.RefreshLabel, Icon: status.RefreshIcon, IconSize: 14,
-				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRefresh, Theme: theme,
+				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonSecondary, OnTap: status.OnRefresh, Theme: theme,
 			}))
 		}
 		if status.OnRestart != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel, Icon: status.RestartIcon, IconSize: 14,
-				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRestart, Theme: theme,
+				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonSecondary, OnTap: status.OnRestart, Theme: theme,
 			}))
 		}
 		children = append(children,
@@ -270,8 +276,8 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	})
 	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		input,
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnBrowse, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnClear, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnBrowse, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnClear, Theme: props.Theme}),
 	}}
 	field := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: row.Title, Description: row.Description, Width: width, Height: height, LabelWidth: labelWidth, Gap: 32,

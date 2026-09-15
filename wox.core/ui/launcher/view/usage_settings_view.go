@@ -15,7 +15,7 @@ const (
 	usageSectionGap         = float32(18)
 	usageCardGap            = float32(12)
 	usageKPIHeight          = float32(92)
-	usageHeatmapPanelHeight = float32(252)
+	usageHeatmapPanelHeight = float32(204)
 )
 
 // UsagePeriod describes one report period selector.
@@ -80,7 +80,7 @@ type UsageSettingsProps struct {
 
 // UsageSettingsView builds the responsive dashboard used by the Usage settings route.
 func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
-	contentWidth := SettingsPageContentWidth(props.Width)
+	contentWidth := SettingsPageWideContentWidth(props.Width)
 	header, _ := usageSummaryHeader(props, contentWidth)
 	kpiGrid, _ := usageKPIGrid(props, contentWidth)
 	rankings, _ := usageRankings(props, contentWidth)
@@ -91,8 +91,8 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 		}})
 	}
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
-	return SettingsPage(SettingsPageProps{
-		ID: "usage-page-scroll", Width: props.Width, Height: props.Height, Gap: usageSectionGap, Children: children,
+	return SettingsPage(SettingsPageProps{Theme: props.Theme,
+		ID: "usage-page-scroll", Width: props.Width, Height: props.Height, Gap: usageSectionGap, Children: children, Wide: true,
 	})
 }
 
@@ -166,7 +166,7 @@ func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	theme.TextSecondary = usageOutlineColor(props.Theme)
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Radius: 8,
-		FontSize: 13, Variant: woxcomponent.ButtonOutlinedSurface,
+		FontSize: 13, Variant: woxcomponent.ButtonSecondary,
 		OnTap: props.OnShare, Theme: theme,
 	}), width
 }
@@ -226,7 +226,7 @@ func usageActivityPanel(props UsageSettingsProps, width float32) woxwidget.Widge
 		Width: width, Height: usageHeatmapPanelHeight, Padding: woxwidget.UniformInsets(16), BorderColor: usageOutlineColor(props.Theme), Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 14, Children: []woxwidget.Widget{
 			header,
-			woxwidget.Painter{Width: max(float32(0), width-32), Height: 188, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			woxwidget.Painter{Width: max(float32(0), width-32), Height: 140, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 				drawUsageHeatmap(displayList, bounds, props.Days, props.MonthLabels, props.EmptyLabel, props.HeatmapAccent, props.Theme)
 			}},
 		}},

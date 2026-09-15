@@ -48,7 +48,6 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 	searchActionTint := snapshot.palette.Text
 	selectedIconTint := snapshot.palette.SelectionText
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
-	autoHintAccent := snapshot.palette.Info
 	previewTexts := make([]string, 5)
 	previewSubtitles := make([]string, 5)
 	for index := range previewTexts {
@@ -61,13 +60,12 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		Search: themeSnap.ThemeSearch, SearchFocused: themeSnap.ThemeSearchFocused, SearchPlaceholder: fmt.Sprintf(a.translate("i18n:ui_setting_theme_search_placeholder"), len(items)),
 		LocateLabel: a.translate("i18n:ui_setting_theme_locate_current"),
 		EmptyLabel:  a.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.translate("i18n:ui_setting_theme_website"), InstallLabel: a.translate("i18n:ui_setting_theme_install"),
-		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
+		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), AppliedLabel: a.translate("i18n:ui_setting_theme_applied"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
 		PreviewLabel: a.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.translate("i18n:ui_setting_theme_description"), SystemLabel: a.translate("i18n:ui_setting_theme_system_tag"),
-		AutoAppearanceHint: a.translate("i18n:ui_setting_theme_auto_appearance_hint"), PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
+		PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
 		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
-		LocateIcon:         a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
-		AutoAppearanceIcon: a.imageForTint(settingControlIconSource("brightness"), &autoHintAccent, physicalImageSize(16, imageScale)), AutoAppearanceAccent: autoHintAccent,
-		Wallpaper: themeSnap.ThemeWallpaperImage, WallpaperBlurred: themeSnap.ThemeWallpaperBlurred,
+		LocateIcon: a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
+		Wallpaper:  themeSnap.ThemeWallpaperImage, WallpaperBlurred: themeSnap.ThemeWallpaperBlurred,
 		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale)), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, physicalImageSize(20, imageScale)),
 		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, physicalImageSize(20, imageScale)),
 		OnSelect:              a.selectTheme,

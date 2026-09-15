@@ -67,7 +67,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		leftPadding = leadingWidth + 2
 	}
 	rightPadding := float32(6) + clearWidth + actionsWidth + trailingInset
-	border := withAlpha(props.Theme.TextSecondary, 170)
+	border := withAlpha(props.Theme.TextSecondary, 100)
 	onFocusChange := props.OnFocusChange
 	if props.OnFocus != nil {
 		// Preserve the search entry hook now that the full-width field also receives icon clicks.

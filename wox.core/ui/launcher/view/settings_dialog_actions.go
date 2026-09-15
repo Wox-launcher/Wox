@@ -32,7 +32,7 @@ func settingsDialogActions(width float32, theme woxcomponent.ControlTheme, cance
 		Child: woxwidget.Align{
 			Width: width, Height: settingsDialogActionHeight, Horizontal: 1, Vertical: 0.5,
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: settingsDialogActionGap, Children: []woxwidget.Widget{
-				button(cancel, woxcomponent.ButtonOutline),
+				button(cancel, woxcomponent.ButtonSecondary),
 				button(confirm, woxcomponent.ButtonPrimary),
 			}},
 		},

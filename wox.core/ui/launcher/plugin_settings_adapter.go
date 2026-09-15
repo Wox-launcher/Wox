@@ -17,8 +17,8 @@ import (
 func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-40)
 	innerHeight := max(float32(0), height-40)
-	listWidth := min(float32(250), max(float32(220), innerWidth*0.30))
-	detailWidth := max(float32(0), innerWidth-listWidth-21)
+	listWidth := woxcomponent.SettingsCatalogListWidth(innerWidth)
+	detailWidth := max(float32(0), innerWidth-listWidth-woxcomponent.SettingsCatalogDividerGutter)
 	return launcherview.PluginSettingsPage(launcherview.PluginSettingsPageProps{
 		Width:       width,
 		Height:      height,
@@ -175,14 +175,15 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		keywordDefinition := form.definitions[0]
 		innerWidth := max(float32(0), width-32)
 		keywordTable := a.formTableFieldProps(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)
-		keywordTable.Title = ""
+		keywordTable.Title = a.translate("i18n:ui_plugin_tab_trigger_keywords")
+		keywordTable.Description = a.translate("i18n:ui_plugin_trigger_keywords_tip")
 		for index := range keywordTable.Rows {
 			if len(keywordTable.Rows[index].Cells) > 0 && keywordTable.Rows[index].Cells[0].Text == "*" {
 				keywordTable.Rows[index].Cells[0].Text = a.translate("i18n:ui_plugin_trigger_keyword_global")
 			}
 		}
 		accent := snapshot.palette.Info
-		editor.Form = a.pluginDetailIntroFormProps(snapshot, imageScale, a.translate("i18n:ui_plugin_trigger_keywords_tip"), []woxwidget.Widget{
+		editor.Form = a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 			woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
 		}, accent)
 		editor.Form.KeepVisibleKey = pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 0)
@@ -319,7 +320,7 @@ func (a *App) pluginDetailEmptyFormProps(titleKey, subtitleKey string) *launcher
 	}
 }
 
-// pluginKeywordsFormProps builds the shared hint box and keyword table used by store and installed plugin tabs.
+// pluginKeywordsFormProps builds the keyword table with its shared title and help text.
 func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width, imageScale float32, readOnly bool) *launcherview.PluginFormProps {
 	if len(plugin.TriggerKeywords) == 0 {
 		return a.pluginDetailEmptyFormProps("i18n:ui_plugin_no_trigger_keywords", "i18n:ui_plugin_no_trigger_keywords_subtitle")
@@ -334,13 +335,15 @@ func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-keywords", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: readOnly,
+		Title:       a.translate("i18n:ui_plugin_tab_trigger_keywords"),
+		Description: a.translate("i18n:ui_plugin_trigger_keywords_tip"),
 		Columns: []launcherview.FormTableColumn{
 			{Label: a.translate("i18n:ui_plugin_trigger_keyword_column"), Tooltip: a.translate("i18n:ui_plugin_trigger_keyword_tooltip")},
 		},
 		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_trigger_keywords"), Theme: snapshot.palette,
 	}
 	accent := snapshot.palette.Info
-	return a.pluginDetailIntroFormProps(snapshot, imageScale, a.translate("i18n:ui_plugin_trigger_keywords_tip"), []woxwidget.Widget{
+	return a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-keyword-table", Child: launcherview.FormTableField(table)},
 	}, accent)
 }
@@ -357,6 +360,8 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-commands", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: readOnly,
+		Title:       a.translate("i18n:ui_plugin_tab_commands"),
+		Description: a.translate("i18n:ui_plugin_commands_tip"),
 		Columns: []launcherview.FormTableColumn{
 			{Label: a.translate("i18n:ui_plugin_command_name_column"), Width: 120},
 			{Label: a.translate("i18n:ui_plugin_command_desc_column")},
@@ -364,7 +369,7 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), Theme: snapshot.palette,
 	}
 	accent := snapshot.palette.Info
-	return a.pluginDetailIntroFormProps(snapshot, imageScale, a.translate("i18n:ui_plugin_commands_tip"), []woxwidget.Widget{
+	return a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-command-table", Child: launcherview.FormTableField(table)},
 	}, accent)
 }

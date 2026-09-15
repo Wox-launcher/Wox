@@ -2,6 +2,7 @@ package component
 
 import (
 	"strings"
+	"unicode"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -19,10 +20,30 @@ type SectionHeaderProps struct {
 	Theme       ControlTheme
 }
 
+// SettingsChromeLabel returns the painted section or navigation group label.
+// Cased scripts keep the established 11/uppercase treatment. Scripts without
+// case, such as CJK, stay at 13 semibold so the label remains visible.
+func SettingsChromeLabel(label string) (string, float32) {
+	if settingsChromeLabelHasCase(label) {
+		return strings.ToUpper(label), SettingsSectionTitleFontSize
+	}
+	return label, SettingsLabelFontSize
+}
+
+func settingsChromeLabelHasCase(label string) bool {
+	for _, r := range label {
+		if unicode.ToUpper(r) != unicode.ToLower(r) {
+			return true
+		}
+	}
+	return false
+}
+
 // WoxSectionHeader builds the shared settings section divider.
 func WoxSectionHeader(props SectionHeaderProps) woxwidget.Widget {
+	label, size := SettingsChromeLabel(props.Label)
 	title := woxwidget.Align{Height: 42, Vertical: 0.5, Child: woxwidget.Text{
-		Value: strings.ToUpper(props.Label), Style: woxui.TextStyle{Size: SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
+		Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
 	}}
 	children := []woxwidget.Widget{woxwidget.Expanded{Child: title}}
 	if props.Action != nil {

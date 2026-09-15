@@ -54,13 +54,12 @@ type ThemeSettingsProps struct {
 	WebsiteLabel          string
 	InstallLabel          string
 	ApplyLabel            string
+	AppliedLabel          string
 	UninstallLabel        string
 	UpdateLabel           string
 	PreviewLabel          string
 	DescriptionLabel      string
 	SystemLabel           string
-	AutoAppearanceHint    string
-	AutoAppearanceAccent  woxui.Color
 	PreviewTitle          string
 	PreviewTexts          []string
 	PreviewSubtitles      []string
@@ -71,7 +70,6 @@ type ThemeSettingsProps struct {
 	ExternalIcon          *woxui.Image
 	InstalledIcon         *woxui.Image
 	InstalledSelectedIcon *woxui.Image
-	AutoAppearanceIcon    *woxui.Image
 	Wallpaper             *woxui.Image
 	WallpaperBlurred      *woxui.Image
 	OnSelect              func(int)
@@ -86,10 +84,10 @@ type ThemeSettingsProps struct {
 	OnOperation           func(string)
 }
 
-// ThemeSettingsView mirrors Flutter's fixed-width catalog, divider, and expanded detail pane.
+// ThemeSettingsView uses the shared catalog column, divider, and expanded detail pane.
 func ThemeSettingsView(props ThemeSettingsProps) woxwidget.Widget {
-	const listWidth = float32(260)
-	const dividerGutter = float32(21)
+	listWidth := woxcomponent.SettingsCatalogListWidth(props.Width)
+	dividerGutter := woxcomponent.SettingsCatalogDividerGutter
 	detailWidth := max(float32(0), props.Width-listWidth-dividerGutter)
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 		themeList(props, listWidth, props.Height),
@@ -172,7 +170,7 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 		titleColor = props.Theme.SelectionText
 		subtitleColor = props.Theme.SelectionText
 	}
-	trailing, _ := themeListTrailing(props, item, subtitleColor)
+	trailing, _ := themeListTrailing(props, item)
 	status := strings.TrimSpace(item.Version + "  " + item.Author)
 	var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
 	if item.IsAuto {
@@ -203,7 +201,7 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 	})}
 }
 
-func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, tagColor woxui.Color) (woxwidget.Widget, float32) {
+func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem) (woxwidget.Widget, float32) {
 	if props.Mode == "store" && item.IsInstalled {
 		icon := props.InstalledIcon
 		if item.Selected {
@@ -213,7 +211,8 @@ func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, tagColor
 	}
 	if props.Mode != "store" && item.IsSystem {
 		const width = float32(44)
-		return woxwidget.Align{Width: width, Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxTag(props.SystemLabel, tagColor)}, width
+		// Keep the System badge on secondary text so a selected row cannot invert it.
+		return woxwidget.Align{Width: width, Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxTag(props.SystemLabel, props.Theme.TextSecondary)}, width
 	}
 	return nil, 0
 }
@@ -223,9 +222,8 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 		return themeEmptyState(props, width, height)
 	}
 	theme := *props.Detail
-	const headerHeight = float32(124)
-	const tabHeight = float32(46)
-	innerWidth := max(float32(0), width-32)
+	const headerHeight = float32(80)
+	innerWidth := max(float32(0), width-40)
 	var website woxwidget.Widget = woxwidget.Container{Width: 104, Height: 32}
 	if strings.TrimSpace(theme.URL) != "" && props.OnOpenWebsite != nil {
 		website = woxwidget.Align{Width: 104, Height: 32, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
@@ -234,61 +232,47 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			Variant: woxcomponent.ButtonText, OnTap: props.OnOpenWebsite, Theme: props.Theme,
 		})}
 	}
-	header := woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: 16, Right: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: innerWidth, Height: 40, Padding: woxwidget.Insets{Left: 2}, Child: woxwidget.Clip{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.InputText},
-			woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
-		}}}},
+	header := woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: 20, Right: 20}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.InputText},
+				woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
+			}}},
+			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: themeActions(props, theme)},
+		}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Expanded{Child: woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}}},
 			website,
 		}},
-		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: themeActions(props, theme)}},
 	}}}
-	tabs := PluginTabs(PluginTabsProps{Width: width, Height: tabHeight, Active: props.ActiveDetailTab, Tabs: []PluginTab{
-		{ID: "preview", Label: props.PreviewLabel, Width: 76},
-		{ID: "description", Label: props.DescriptionLabel, Width: 96},
-	}, Theme: props.Theme, OnSelect: props.OnSelectDetailTab})
-	bodyHeight := max(float32(0), height-headerHeight-tabHeight)
-	var body woxwidget.Widget
-	if props.ActiveDetailTab == "description" {
-		body = themeDescriptionTab(theme, width, bodyHeight, props.Theme)
-	} else {
-		body = themePreviewTab(props, theme, width, bodyHeight)
+	bodyHeight := max(float32(0), height-headerHeight)
+	rows := make([]woxwidget.Widget, 0, 2)
+	if description := strings.TrimSpace(theme.Description); description != "" {
+		rows = append(rows, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
+			Value: description, Width: max(float32(0), width-40), LineHeight: 20,
+			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary,
+		}})
 	}
+	rows = append(rows, themePreviewTab(props, theme, width, bodyHeight))
+	var body woxwidget.Widget = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "theme-detail-scroll", Width: width, Height: bodyHeight, Theme: props.Theme,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+	})
 	if props.Error != "" {
 		body = woxwidget.Stack{Width: width, Height: bodyHeight, Children: []woxwidget.StackChild{
 			{Child: body},
 			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: props.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error}},
 		}}
 	}
-	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, tabs, body}}
-}
-
-func themeDescriptionTab(theme ThemeCatalogItem, width, height float32, colors woxcomponent.ControlTheme) woxwidget.Widget {
-	description := theme.Description
-	if strings.TrimSpace(description) == "" {
-		description = "—"
-	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.UniformInsets(16), Child: woxwidget.TextBlock{
-		Value: description, MaxLines: 30, Style: woxui.TextStyle{Size: 13}, LineHeight: 21, Color: colors.Text,
-	}}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}}
 }
 
 func themePreviewTab(props ThemeSettingsProps, theme ThemeCatalogItem, width, height float32) woxwidget.Widget {
 	const horizontalPadding = float32(20)
-	const topPadding = float32(20)
+	const topPadding = float32(12)
 	const bottomPadding = float32(200)
-	hintHeight := float32(0)
-	children := make([]woxwidget.Widget, 0, 2)
-	if theme.IsAuto && props.AutoAppearanceHint != "" {
-		hintHeight = 54
-		children = append(children, woxcomponent.WoxHintBox(woxcomponent.HintBoxProps{
-			Text: props.AutoAppearanceHint, Width: max(float32(0), width-horizontalPadding*2), MaxLines: 1,
-			Icon: props.AutoAppearanceIcon, Accent: props.AutoAppearanceAccent, Theme: props.Theme,
-		}))
-	}
-	stageSlotHeight := max(float32(0), height-topPadding-bottomPadding-hintHeight)
+	children := make([]woxwidget.Widget, 0, 1)
+	stageSlotHeight := max(float32(0), height-topPadding-bottomPadding)
 	stageSlotWidth := max(float32(0), width-horizontalPadding*2)
 	stageWidth := stageSlotWidth
 	stageHeight := stageWidth * 420 / 900
@@ -313,7 +297,7 @@ func themePreviewTab(props ThemeSettingsProps, theme ThemeCatalogItem, width, he
 		woxwidget.StackChild{Left: (stageWidth - previewWidth) / 2, Top: (stageHeight - previewHeight) / 2, Child: preview},
 		woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: stageRadius, BorderColor: props.Theme.Border, BorderWidth: 1}},
 	)
-	children = append(children, woxwidget.Align{Width: stageSlotWidth, Height: stageSlotHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Stack{Width: stageWidth, Height: stageHeight, Children: stageChildren}})
+	children = append(children, woxwidget.Align{Width: stageSlotWidth, Height: stageSlotHeight, Horizontal: 0.5, Vertical: 0, Child: woxwidget.Stack{Width: stageWidth, Height: stageHeight, Children: stageChildren}})
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: horizontalPadding, Top: topPadding, Right: horizontalPadding, Bottom: bottomPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 12, Children: children,
 	}}
@@ -592,7 +576,11 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 		if props.Operation == operation+":"+theme.ID {
 			label += "…"
 		}
-		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, IntrinsicWidth: true, Disabled: busy || disabled, Variant: woxcomponent.ButtonOutline, OnTap: func() {
+		variant := woxcomponent.ButtonSecondary
+		if operation == "install" || operation == "apply" || operation == "upgrade" {
+			variant = woxcomponent.ButtonPrimary
+		}
+		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, IntrinsicWidth: true, Disabled: busy || disabled, Variant: variant, OnTap: func() {
 			if props.OnOperation != nil {
 				props.OnOperation(operation)
 			}
@@ -605,7 +593,11 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 	if theme.IsUpgradable {
 		buttons = append(buttons, button("theme-upgrade", props.UpdateLabel, "upgrade", false))
 	}
-	buttons = append(buttons, button("theme-apply", props.ApplyLabel, "apply", theme.Active))
+	label := props.ApplyLabel
+	if theme.Active {
+		label = props.AppliedLabel
+	}
+	buttons = append(buttons, button("theme-apply", label, "apply", theme.Active))
 	if !theme.IsSystem {
 		label := props.UninstallLabel
 		if props.UninstallArmed == theme.ID {

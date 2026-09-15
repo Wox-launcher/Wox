@@ -378,8 +378,12 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		}
 		offset += height
 	}
+	// Let the scrollbar use the panel gutter while rows retain their themed width.
+	panelPadding := props.ActionPadding
+	panelPadding.Right = min(panelPadding.Right, max(float32(0), props.Theme.ActionBorderWidth-2))
+	scrollWidth := innerWidth + props.ActionPadding.Right - panelPadding.Right
 	actionList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight,
+		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: scrollWidth, Height: listHeight,
 		// Row heights are fixed. Supplying their extent avoids a geometry callback
 		// that invalidates the unbounded scroll State whenever filtering resizes it.
 		ContentHeight: max(float32(ActionRowHeight), offset),
@@ -404,7 +408,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	panel := woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.Theme.ActionContainerRadius, Floating: true,
 		Color: props.Theme.ActionBackground, BorderColor: props.Theme.ActionBorder, BorderWidth: props.Theme.ActionBorderWidth,
-		Padding: props.ActionPadding, Child: content,
+		Padding: panelPadding, Child: content,
 	}
 	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.
 	return woxwidget.Gesture{ID: "action-panel-surface", OnTap: func() {}, Child: panel}

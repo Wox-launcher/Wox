@@ -108,8 +108,8 @@ func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 
 	page := app.buildSettingsPage(settingsSnapshot{tab: "general", hotkey: app.hotkeySettings.Snapshot(), palette: settingsPalette()}, nil, 800, 600, 1)
 	container := page.(woxwidget.Container)
-	scroll := container.Child.(woxwidget.ScrollView)
-	rows := scroll.Child.(woxwidget.Flex).Children
+	scroll := container.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
 
 	tableSpacers := 0
 	var lastTableSpacer woxwidget.Container

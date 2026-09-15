@@ -2806,5 +2806,7 @@
   "ui_theme_editor_token_toolbar_primary_text": "Texto da ação principal",
   "ui_theme_editor_token_toolbar_primary_hotkey_text": "Texto do atalho principal",
   "ui_theme_editor_token_toolbar_primary_hotkey_background": "Fundo do atalho principal",
-  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Borda do atalho principal"
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "Borda do atalho principal",
+  "ui_setting_theme_applied": "Aplicado",
+  "ui_ai_mcp_empty": "Nenhum servidor MCP configurado. Adicione um servidor para começar."
 }

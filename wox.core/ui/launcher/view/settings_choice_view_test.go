@@ -296,3 +296,21 @@ func TestSettingsChoiceGroupTooltip(t *testing.T) {
 		t.Fatal("group without explanation should not show an icon")
 	}
 }
+
+func TestSettingsChoiceIdleRowsShareMenuBackground(t *testing.T) {
+	surface := woxui.Color{R: 22, G: 22, B: 26, A: 88}
+	props := SettingsChoiceProps{
+		ID: "width", Theme: woxcomponent.ControlTheme{Surface: surface},
+		Choices: []SettingsChoice{{Value: "600", Label: "600"}},
+	}
+	state := &settingsChoiceState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	menu := settingsChoiceMenu(woxwidget.StateContext{}, props, state, []visibleSettingsChoice{{choice: props.Choices[0]}}, 200, 64, 48, 8)
+	scope := menu.(woxwidget.FocusScope).Child.(woxwidget.Focusable).Child.(woxwidget.Semantics)
+	background := scope.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	scroll := background.Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	if background.Color != surface || row.Children[0].Child.(woxwidget.Container).Color.A != 0 {
+		t.Fatal("idle rows must inherit the menu fill without a second translucent layer")
+	}
+}

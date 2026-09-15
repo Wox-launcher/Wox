@@ -3103,5 +3103,7 @@
   "ui_theme_editor_token_toolbar_primary_text": "主操作文字",
   "ui_theme_editor_token_toolbar_primary_hotkey_text": "主操作快捷键文字",
   "ui_theme_editor_token_toolbar_primary_hotkey_background": "主操作快捷键背景",
-  "ui_theme_editor_token_toolbar_primary_hotkey_border": "主操作快捷键边框"
+  "ui_theme_editor_token_toolbar_primary_hotkey_border": "主操作快捷键边框",
+  "ui_setting_theme_applied": "已应用",
+  "ui_ai_mcp_empty": "尚未配置 MCP 服务器，添加服务器即可开始使用。"
 }

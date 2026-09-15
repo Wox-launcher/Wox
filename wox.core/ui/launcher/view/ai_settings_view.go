@@ -36,7 +36,7 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		message := woxwidget.Container{Width: contentWidth, Height: 30, Child: woxwidget.Text{
 			Value: "AI settings are unavailable.", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary,
 		}}
-		return SettingsPage(SettingsPageProps{
+		return SettingsPage(SettingsPageProps{Theme: props.Theme,
 			ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: []woxwidget.Widget{header, message},
 		})
 	}
@@ -60,7 +60,7 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error,
 		}})
 	}
-	return SettingsPage(SettingsPageProps{
+	return SettingsPage(SettingsPageProps{Theme: props.Theme,
 		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, KeepVisibleKey: keepVisibleKey,
 	})
 }

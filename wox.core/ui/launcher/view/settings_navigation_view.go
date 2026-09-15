@@ -34,6 +34,43 @@ type SettingsRailProps struct {
 	Theme       woxcomponent.ControlTheme
 }
 
+// SettingsNavSelectedRange keeps the selected destination visible inside the rail scroll.
+func SettingsNavSelectedRange(items []SettingsNavItem) *woxwidget.ScrollRange {
+	var offset float32
+	for index, item := range items {
+		lead := float32(0)
+		if item.Parent && index > 0 {
+			lead = woxcomponent.SettingsNavGroupLead
+		}
+		height := woxcomponent.SettingsNavItemHeight
+		if item.Parent {
+			height = woxcomponent.SettingsNavGroupHeight
+		}
+		if item.Selected {
+			return &woxwidget.ScrollRange{Start: offset + lead, End: offset + lead + height}
+		}
+		offset += lead + height + woxcomponent.SettingsNavItemGap
+	}
+	return nil
+}
+
+func settingsNavGroupLabel(item SettingsNavItem, width float32, theme woxcomponent.ControlTheme, lead bool) woxwidget.Widget {
+	label, size := woxcomponent.SettingsChromeLabel(item.Label)
+	row := woxwidget.Container{
+		Width: width, Height: woxcomponent.SettingsNavGroupHeight, Padding: woxwidget.Insets{Left: 12, Right: 10},
+		Child: woxwidget.Align{Height: woxcomponent.SettingsNavGroupHeight, Vertical: 0.5, Child: woxwidget.Text{
+			Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary,
+		}},
+	}
+	if lead {
+		row = woxwidget.Container{Width: width, Padding: woxwidget.Insets{Top: woxcomponent.SettingsNavGroupLead}, Child: row}
+	}
+	return woxwidget.Semantics{
+		Key: woxwidget.Key("settings-nav-" + item.ID), AutomationID: "settings-nav-" + item.ID,
+		Role: woxui.AccessibilityRoleGroup, Label: item.Label, Child: row,
+	}
+}
+
 // Linux uses the root tint once; a second translucent fill would darken only the rail.
 func settingsRailBackground(theme woxcomponent.ControlTheme, linux bool) woxui.Color {
 	if linux {
@@ -49,7 +86,11 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.UniformInsets(14),
 		Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 			items := make([]woxwidget.Widget, 0, len(props.Items))
-			for _, item := range props.Items {
+			for index, item := range props.Items {
+				if item.Parent {
+					items = append(items, settingsNavGroupLabel(item, size.Width, props.Theme, index > 0))
+					continue
+				}
 				color := woxui.Color{}
 				foreground := props.Theme.TextSecondary
 				if item.Selected {
@@ -63,15 +104,11 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 					icon = woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
 				}
 				radius := float32(6)
-				onTap := item.OnTap
-				if item.Parent {
-					onTap = nil
-				}
 				hoverBackground := settingsColorAlpha(props.Theme.TextSecondary, 25)
 				items = append(items, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-					ID: "settings-nav-" + item.ID, Label: item.Label, Width: size.Width, Height: 46, Radius: &radius,
-					Background: &color, HoverBackground: &hoverBackground, Selected: item.Selected, SkipFocus: item.Parent, OnTap: onTap, Theme: props.Theme,
-					Padding: woxwidget.Insets{Left: leftPadding, Right: 10}, Child: woxwidget.Align{Height: 46, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+					ID: "settings-nav-" + item.ID, Label: item.Label, Width: size.Width, Height: woxcomponent.SettingsNavItemHeight, Radius: &radius,
+					Background: &color, HoverBackground: &hoverBackground, Selected: item.Selected, OnTap: item.OnTap, Theme: props.Theme,
+					Padding: woxwidget.Insets{Left: leftPadding, Right: 10}, Child: woxwidget.Align{Height: woxcomponent.SettingsNavItemHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 						woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 						woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}}},
 					}}},
@@ -79,14 +116,18 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			}
 			const searchAreaHeight = float32(58)
 			viewportHeight := max(float32(1), size.Height-searchAreaHeight)
+			keepVisible := props.KeepVisible
+			if keepVisible == nil {
+				keepVisible = SettingsNavSelectedRange(props.Items)
+			}
 			nav := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-				Key: "settings-rail-scroll", KeepVisible: props.KeepVisible, Width: size.Width, Height: viewportHeight,
-				Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
-				Theme:   props.Theme, ThumbColor: props.Theme.Text, HideScrollbar: true,
+				Key: "settings-rail-scroll", KeepVisible: keepVisible, Width: size.Width, Height: viewportHeight,
+				Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: woxcomponent.SettingsNavItemGap, Children: items},
+				Theme:   props.Theme, ThumbColor: props.Theme.Text,
 			})
 			stackChildren := []woxwidget.StackChild{{Child: nav}}
 			if props.ShowSearch {
-				stackChildren = append(stackChildren, woxwidget.StackChild{Child: props.SearchPanel})
+				stackChildren = []woxwidget.StackChild{{Child: props.SearchPanel}}
 			}
 			return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 				props.SearchBox,
@@ -156,14 +197,13 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 	if len(props.Results) > 0 {
 		selected = min(max(0, props.Selected), len(props.Results)-1)
 	}
-	panelHeight := min(float32(280), props.AvailableHeight)
+	panelHeight := props.AvailableHeight
 	if len(props.Results) > 0 {
 		panelHeight = min(panelHeight, float32(len(props.Results))*rowHeight+12)
 	} else {
 		panelHeight = min(panelHeight, float32(58))
 	}
-	background := props.Theme.Background
-	background.A = 255
+	background := woxui.Color{}
 	if len(props.Results) == 0 {
 		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize}, Color: props.Theme.TextSecondary}}
 	}

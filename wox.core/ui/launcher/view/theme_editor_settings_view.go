@@ -557,8 +557,8 @@ func themeEditorActions(props ThemeEditorSettingsProps, width, height float32) w
 		saveLabel = props.SavingLabel
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-discard", Label: props.DiscardLabel, Icon: props.DiscardIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving || !props.Dirty, Variant: woxcomponent.ButtonOutline, OnTap: props.OnDiscard, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-overwrite", Label: props.OverwriteLabel, Icon: props.OverwriteIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving || !props.Dirty || !props.CanOverwrite, Variant: woxcomponent.ButtonOutline, OnTap: props.OnOverwrite, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-discard", Label: props.DiscardLabel, Icon: props.DiscardIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving || !props.Dirty, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnDiscard, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-overwrite", Label: props.OverwriteLabel, Icon: props.OverwriteIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving || !props.Dirty || !props.CanOverwrite, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnOverwrite, Theme: props.Theme}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-save-as", Label: saveLabel, Icon: props.SaveAsIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSaveAs, Theme: props.Theme}),
 	}}
 }

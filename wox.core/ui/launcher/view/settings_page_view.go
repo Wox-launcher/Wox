@@ -8,6 +8,7 @@ import (
 
 // SettingsPageProps contains prepared settings rows and scroll geometry.
 type SettingsPageProps struct {
+	Theme          woxcomponent.ControlTheme
 	ID             string
 	Width          float32
 	Height         float32
@@ -15,26 +16,43 @@ type SettingsPageProps struct {
 	Gap            float32
 	KeepVisible    *woxwidget.ScrollRange
 	KeepVisibleKey woxwidget.Key
+	// Wide keeps the full inset width for dashboards and other multi-column pages.
+	Wide bool
 }
 
-// SettingsPageContentWidth returns the content width inside the shared page insets.
+func settingsPageInsetWidth(width float32) float32 {
+	return max(float32(0), width-woxcomponent.SettingsPageHorizontalInset*2)
+}
+
+// SettingsPageContentWidth fills the available page width inside the shared insets.
 func SettingsPageContentWidth(width float32) float32 {
-	return max(float32(0), width-80)
+	return settingsPageInsetWidth(width)
+}
+
+// SettingsPageWideContentWidth returns the full inset width for catalogs and dashboards.
+func SettingsPageWideContentWidth(width float32) float32 {
+	return settingsPageInsetWidth(width)
 }
 
 // SettingsPage builds the common scrollable settings page.
 func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
+	if props.Wide {
+		contentWidth = SettingsPageWideContentWidth(props.Width)
+	}
 	viewportHeight := max(float32(1), props.Height-58)
 	id := props.ID
 	if id == "" {
 		id = "settings-page-scroll"
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 40, Top: 34, Right: 40, Bottom: 24}, Child: woxwidget.ScrollView{
-		Key: woxwidget.Key(id), ID: id, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey,
-		Width: contentWidth, Height: viewportHeight,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.Gap, Children: props.Children},
-	}}
+	inset := woxcomponent.SettingsPageHorizontalInset
+	// Extend only the viewport into the right gutter so the scrollbar cannot cover controls.
+	const scrollbarEdgeInset = float32(8)
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: inset, Top: 34, Right: scrollbarEdgeInset, Bottom: 24}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: woxwidget.Key(id), AutomationID: id, Theme: props.Theme, ThumbColor: props.Theme.TextSecondary, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey,
+		Width: contentWidth + inset - scrollbarEdgeInset, Height: viewportHeight,
+		Content: woxwidget.Container{Width: contentWidth, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.Gap, Children: props.Children}},
+	})}
 }
 
 // SettingsMessage builds a neutral page-level loading or error message.
@@ -82,7 +100,7 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 		fieldTheme.Text = props.Theme.TextSecondary
 		valueColor = props.Theme.TextSecondary
 	}
-	valueWidth := min(float32(280), max(float32(190), props.Width*0.32))
+	valueWidth := woxcomponent.SettingsChoiceControlWidth
 	if props.Kind == "text" {
 		valueWidth = min(float32(440), max(float32(280), props.Width*0.46))
 		if props.ControlWidth > 0 {

@@ -108,6 +108,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlDemo:              newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
 	ControlBolt:              newMonochromeUIIcon(`<path d="M13 2 4.5 13.5h5.5L9 22l10-13h-6z"/>`),
 	ControlOnboarding:        newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m16.2 7.8-2.1 6.4-6.4 2.1 2.1-6.4z"/>`),
+	ControlDocumentation:     newMonochromeUIIcon(`<path d="M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1zM12 5v15"/>`),
 	ControlDocument:          newMonochromeUIIcon(`<path d="M6 2h8l4 4v16H6zM14 2v5h5M9 12h6M9 16h6"/>`),
 	ControlCode:              newMonochromeUIIcon(`<path d="m8 9-3 3 3 3M16 9l3 3-3 3"/>`),
 	ControlCheckboxChecked:   newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 5-6"/>`),

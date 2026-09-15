@@ -160,7 +160,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			} else if option.State == "failed" {
 				icon = props.ErrorIcon
 			}
-			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonOutline, OnTap: option.OnAction, Theme: props.Theme})
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: option.OnAction, Theme: props.Theme})
 		}
 		activate := option.OnSelect
 		if option.OnChoose != nil {
