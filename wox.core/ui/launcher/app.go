@@ -840,6 +840,7 @@ func (a *App) setQuery(query plainQuery) {
 		query.QueryType = "input"
 	}
 	a.queryHintEditorState = queryHintEditor{}
+	hasExplicitHint := query.QueryHint != nil
 	query.QueryHint = query.QueryHint.Clone()
 	query.QueryHint = query.QueryHint.NormalizeForQuery(query.QueryType, query.QueryText)
 	a.query = query
@@ -849,6 +850,11 @@ func (a *App) setQuery(query plainQuery) {
 	a.editor.SetText(query.QueryText, false)
 	if query.QueryHint != nil {
 		a.installQueryHint(query.QueryHint)
+	} else if !hasExplicitHint && query.QueryType == "input" {
+		// Actions such as Indicator enter a trigger through ChangeQuery rather
+		// than typing. Resolve the same guidance, without retaining replacement undo.
+		a.query.QueryText = a.updateQueryHintText(query.QueryText)
+		a.queryHintEditorState.undo = nil
 	}
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()

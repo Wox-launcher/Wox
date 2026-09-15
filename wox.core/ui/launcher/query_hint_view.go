@@ -1,7 +1,9 @@
 package launcher
 
 import (
+	"slices"
 	"strings"
+	"unicode/utf8"
 	"wox/common"
 	launcherview "wox/ui/launcher/view"
 	woxwidget "wox/ui/widget"
@@ -9,6 +11,27 @@ import (
 
 // Keep neighboring ghost chips far enough apart that their 3-unit paint pads do not merge.
 const queryHintChipGap = float32(12)
+
+// queryHintSuggestionsLabel limits only the preview; all candidates remain available for completion.
+func queryHintSuggestionsLabel(suggestions []string, shortestFirst bool, width float32, measure func(string) float32) string {
+	choices := append([]string(nil), suggestions...)
+	if shortestFirst {
+		slices.SortStableFunc(choices, func(a, b string) int { return utf8.RuneCountInString(a) - utf8.RuneCountInString(b) })
+	}
+	for count := min(3, len(choices)); count > 0; count-- {
+		label := strings.Join(choices[:count], " / ")
+		if count < len(choices) {
+			label += " / …"
+		}
+		if measure(label) <= width {
+			return label
+		}
+	}
+	if measure("…") <= width {
+		return "…"
+	}
+	return ""
+}
 
 // queryHintView decorates the ordinary editor without introducing separate
 // hit targets, padding, or text layout. Selection and IME retain one coordinate space.
@@ -42,9 +65,17 @@ func (a *App) queryHintView(snapshot viewSnapshot, width, height, lineHeight flo
 					// Anchor ghost text at this argument, before those trailing separators.
 					props.CompletionOffset = -measure(string(text[end:]))
 					hints := []string{}
+					anchorX, _ := queryTextOffsetPoint(props, end, measure)
+					viewportOffset := max(float32(0), props.CaretWidth-max(float32(0), props.Width-4))
+					available := max(float32(0), props.Width-anchorX+viewportOffset-3)
 					for _, e := range snapshot.hint.Elements {
 						if e.Kind == common.QueryElementArgument && e.Value == "" {
-							hints = append(hints, string(e.Placeholder))
+							placeholder := string(e.Placeholder)
+							if len(e.Suggestions) > 0 {
+								placeholder = queryHintSuggestionsLabel(e.Suggestions, snapshot.hint.CommandSuggestions, available, measure)
+							}
+							hints = append(hints, placeholder)
+							available = max(float32(0), available-measure(placeholder)-queryHintChipGap)
 						}
 					}
 					props.CompletionSuffix = strings.Join(hints, " ")
@@ -91,7 +122,39 @@ func (a *App) queryHintView(snapshot viewSnapshot, width, height, lineHeight flo
 			}
 		}
 	}
-	a.applyQueryTabHint(&props, snapshot, measure)
+	if index, suffix := queryHintSuggestion(snapshot.hint, snapshot.queryHintActive, props.State, props.Focused); suffix != "" {
+		_, end := queryElementRange(snapshot.hint, index)
+		x, line := queryTextOffsetPoint(props, end, measure)
+		size, gap := a.queryTabHintChrome(snapshot.densityMetrics)
+		suffixWidth := measure(suffix)
+		if snapshot.hint.CommandSuggestions && !strings.HasSuffix(suffix, " ") {
+			// Match ordinary completion: the Tab mark follows the full accepted
+			// suffix, including the context space appended for commands.
+			suffixWidth = measure(suffix + " ")
+		}
+		lineStart := 0
+		for i := 0; i < line; i++ {
+			lineStart += len([]rune(props.Lines[i].Text)) + 1
+		}
+		runes := []rune(props.Lines[line].Text)
+		// Insert only painted space for the suggestion. The view maps pointer
+		// positions back across it; text, selection and IME remain one document.
+		props.CompletionInsertion = launcherview.LauncherQueryCompletionInsertion{
+			Visible: true, Line: line, X: x, Width: suffixWidth + gap + size + gap,
+			Prefix: string(runes[:end-lineStart]), Remainder: string(runes[end-lineStart:]),
+		}
+		props.CompletionSuffix, props.CompletionChips = suffix, nil
+		props.CompletionOffset = 0
+		for i := range props.Marks {
+			if props.Marks[i].Line == line && props.Marks[i].X >= x {
+				props.Marks[i].X += props.CompletionInsertion.Width
+			}
+		}
+		props.TextWidth = max(props.TextWidth, props.Lines[line].TextWidth+props.CompletionInsertion.Width)
+		attachQueryTabHint(&props, launcherview.LauncherQueryTabHint{Visible: true, Label: formatHotkeyLabels("tab")[0], X: x + suffixWidth + gap, Width: size, Height: size, Line: line})
+	} else {
+		a.applyQueryTabHint(&props, snapshot, measure)
+	}
 	return launcherview.LauncherQueryBoundary(props)
 }
 

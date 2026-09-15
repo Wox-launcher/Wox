@@ -116,6 +116,10 @@ func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plug
 }
 
 func (w *WPMPlugin) GetMetadata() plugin.Metadata {
+	// Keep developer commands callable without advertising them in the query hint.
+	commandHint := &common.QueryHint{CommandSuggestions: true, Elements: []common.QueryElement{
+		{Id: "operation", Kind: common.QueryElementArgument, Suggestions: []string{"create", "install", "uninstall"}},
+	}}
 	return plugin.Metadata{
 		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
 		Name:          "i18n:plugin_wpm_plugin_name",
@@ -133,6 +137,7 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 			"pm",
 			"*",
 		},
+		TriggerQueryHints: map[string]*common.QueryHint{"wpm": commandHint, "store": commandHint, "pm": commandHint},
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,

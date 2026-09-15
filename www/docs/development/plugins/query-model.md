@@ -89,6 +89,61 @@ capabilities; verify release support before distributing a plugin.
 
 ### Declare a suffix template
 
+#### Candidate suggestions
+
+An `argument` can include optional `Suggestions: string[]`, for example:
+
+```json
+{
+  "Elements": [
+    { "Id": "filter", "Kind": "argument", "Suggestions": ["created", "assigned", "search"] }
+  ]
+}
+```
+
+The empty argument shows the choices separated by ` / ` in one quiet chip.
+The preview shows at most three whole candidates and an ellipsis for the rest,
+using fewer candidates when the available width is narrow. All candidates remain
+available for completion.
+Typing `cr` shows only `eated` and a Tab mark. Tab appends the suffix as one
+undoable edit, without adding whitespace, executing, or leaving the argument.
+Another Tab navigates normally. Suggestions do not constrain free input and are
+never part of `Value`, `RawQuery`, or copied text until accepted. They are literal
+values, not i18n labels. Prefix matching ignores case and follows declaration
+order; any exact match suppresses further completion. Completion requires focus,
+no selection or IME composition, and a caret at the argument end.
+
+When a non-global trigger has no explicit hint, its current `Commands` supply
+automatic suggestions in declaration order, using unique primary command names.
+For example, `gh ` shows `issues / prs`; aliases remain accepted by the command
+parser but are not listed. Static and runtime commands participate. An explicit
+trigger hint always takes precedence, including an ordinary placeholder. Clearing
+a runtime hint permits this automatic fallback. Ambiguous triggers and global
+`*` plugins do not get automatic candidates.
+
+Declare `"Features": [{"Name": "disableAutoCommandHint"}]` in plugin metadata
+to opt out of automatic command suggestions. Omitting the feature keeps them enabled. Explicit trigger
+and command Query Hints still apply, and commands remain callable. Clipboard uses
+this option so its empty query stays focused on history search.
+
+Automatic command previews prefer shorter names (Unicode character count), with
+declaration order breaking ties. This affects only the preview, not matching.
+Accepting an automatic command with Tab also appends its context space and enters
+its explicit parameter template immediately. Completion and space are one undo
+step. Ordinary plugin-declared argument suggestions never append a space.
+
+If there is exactly one command candidate, the empty command position already
+shows its full name as plain ghost text with Tab. Users can accept it immediately;
+they do not need to type the first letter. Ordinary empty arguments keep their
+placeholder treatment even when they have one suggestion.
+
+Typing a space after a complete command switches to that command's explicit
+template, even when the command was entered through the trigger's suggestions.
+Templates and complete ChangeQuery hints use the same `Suggestions` field.
+Existing hints without suggestions preserve their behavior.
+
+#### Command declaration
+
 Each `Commands` entry can have `Aliases` and `QueryHint`. The template contains
 only elements **after** the command. Do not include a command text element or use
 the reserved ID `command` in the template; Wox inserts the matched command prefix.

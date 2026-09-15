@@ -21,6 +21,33 @@ func (s *queryHintRegressionServices) ResolveQueryHint(_ context.Context, text s
 	return hint
 }
 
+// Query replacement must resolve trigger hints just like typing the context separator.
+func TestQueryHintAfterChangeQuery(t *testing.T) {
+	instance := &plugin.Instance{Metadata: plugin.Metadata{TriggerKeywords: []string{"cb"}, Commands: []plugin.MetadataCommand{{Command: "fav"}, {Command: "paste"}}}}
+	a := &App{editor: woxui.NewTextEditor(""), lifecycleCtx: context.Background(), services: &queryHintRegressionServices{instance: instance}}
+	a.setQuery(newInputQuery("cb "))
+	if a.query.QueryHint == nil || !a.query.QueryHint.CommandSuggestions || a.query.QueryText != "cb " || a.editor.State().Text != "cb " {
+		t.Fatalf("replacement lost trigger guidance: %+v", a.query)
+	}
+	if len(a.queryHintEditorState.undo) != 0 {
+		t.Fatal("replacement created an undo step")
+	}
+	for _, text := range []string{"cb", "cb custom", "unrelated "} {
+		a.setQuery(newInputQuery(text))
+		if a.query.QueryHint != nil || a.query.QueryText != text {
+			t.Fatalf("unexpected hint for %q", text)
+		}
+	}
+	explicit := newInputQuery("cb ")
+	explicit.QueryHint = &common.QueryHint{Elements: []common.QueryElement{
+		{Id: "command", Kind: "text", Text: "cb "}, {Id: "query", Kind: "argument", Placeholder: "Custom"},
+	}}
+	a.setQuery(explicit)
+	if a.query.QueryHint.Elements[1].Placeholder != "Custom" || a.query.QueryHint.CommandSuggestions {
+		t.Fatal("explicit guidance lost precedence")
+	}
+}
+
 // Exercise the real resolver, editor, navigation and ghost rendering together across context types.
 func TestQueryHintRegressionFlows(t *testing.T) {
 	wordModifier := woxui.KeyModifierControl

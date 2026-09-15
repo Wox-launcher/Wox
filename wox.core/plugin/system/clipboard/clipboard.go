@@ -182,6 +182,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			"cb",
 		},
 		Features: []plugin.MetadataFeature{
+			{Name: plugin.MetadataFeatureDisableAutoCommandHint},
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},

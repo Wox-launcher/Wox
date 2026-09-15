@@ -69,6 +69,7 @@
 - `querySelection`：接收 `QueryTypeSelection`（拖拽/选中文本）查询。
 - `debounce`：输入时防抖。参数：`IntervalMs`（字符串，毫秒）。
 - `ignoreAutoScore`：关闭 Wox 默认的使用频率评分。
+- `disableAutoCommandHint`：关闭自动生成的命令提示，保留显式 Query Hint 和命令执行能力，无需参数。
 - `queryEnv`：请求查询环境。参数：`requireActiveWindowName` / `requireActiveWindowPid` / `requireActiveWindowIcon` / `requireActiveBrowserUrl`（`"true"`/`"false"`）。
 - `ai`：允许使用 Wox 的 AI API。
 - `deepLink`：插件自定义深度链接。

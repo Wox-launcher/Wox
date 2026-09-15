@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"wox/common"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	"wox/util"
 )
@@ -97,6 +98,20 @@ func (a *App) updateQueryHintText(text string) string {
 	s := &a.queryHintEditorState
 	if hint := a.query.QueryHint; hint != nil {
 		a.rememberQueryHint()
+		// A trigger's editable command suggestion must not swallow a more specific
+		// command template when the user types its context separator.
+		if strings.HasSuffix(text, " ") && text != hint.PlainText() {
+			if resolver, ok := a.services.(queryHintResolver); ok {
+				if next := resolver.ResolveQueryHint(a.lifecycleCtx, text); next != nil && len(next.Elements) > 0 && next.Elements[0].Kind == common.QueryElementText && len(next.Elements[0].Text) > len(s.prefix) {
+					selection := a.editor.State().Selection
+					// Keep authored whitespace rather than normalizing the user's text.
+					next.Elements[0].Text = text
+					a.installQueryHintTemplate(next)
+					a.editor.SetSelection(selection.Anchor, selection.Focus)
+					return a.query.QueryText
+				}
+			}
+		}
 		// A local edit retains its argument identity. Edits across semantic boundaries
 		// keep the user's text but discard metadata that can no longer be trusted.
 		old, updated := []rune(hint.PlainText()), []rune(text)
@@ -284,6 +299,40 @@ func queryHintForwardTabTarget(hint *common.QueryHint, active int) (int, bool) {
 	return next, true
 }
 
+// queryHintSuggestion is shared by painting and acceptance so Tab only inserts
+// a suffix that the focused editor can advertise at the current argument end.
+func queryHintSuggestion(hint *common.QueryHint, active int, state woxui.TextEditingState, focused bool) (int, string) {
+	if !focused || hint == nil || state.Composition != "" || !state.Selection.Collapsed() || state.Text != hint.PlainText() {
+		return -1, ""
+	}
+	active = queryHintResolveActive(hint, active, state.Selection)
+	if active < 0 || active >= len(hint.Elements) {
+		return -1, ""
+	}
+	element := hint.Elements[active]
+	_, end := queryElementRange(hint, active)
+	if element.Kind != common.QueryElementArgument || state.Selection.Focus != end {
+		return -1, ""
+	}
+	// A sole command needs no disambiguating keystroke. Ordinary empty arguments
+	// and command lists still show guidance until the user starts typing.
+	if element.Value == "" && (!hint.CommandSuggestions || len(element.Suggestions) != 1) {
+		return -1, ""
+	}
+	value := []rune(element.Value)
+	suffix := ""
+	for _, suggestion := range element.Suggestions {
+		if strings.EqualFold(suggestion, element.Value) {
+			return -1, ""
+		}
+		runes := []rune(suggestion)
+		if suffix == "" && len(runes) > len(value) && strings.EqualFold(string(runes[:len(value)]), element.Value) {
+			suffix = string(runes[len(value):])
+		}
+	}
+	return active, suffix
+}
+
 // rejectQueryTab signals an unavailable action without changing the editor or IME anchor.
 func (a *App) rejectQueryTab() {
 	if a.editor.State().Composition != "" {
@@ -333,8 +382,37 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 		a.selectTouchedQueryBlocks()
 	}
 	if event.Key == woxui.KeyTab && (event.Modifiers == 0 || event.Modifiers == woxui.KeyModifierShift) {
+		if event.Composing || a.editor.State().Composition != "" {
+			return false
+		}
 		s.active = queryHintResolveActive(hint, s.active, a.editor.State().Selection)
 		if event.Modifiers == 0 {
+			focused := a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
+			if index, suffix := queryHintSuggestion(hint, s.active, a.editor.State(), focused); suffix != "" {
+				a.rememberQueryHint()
+				next := hint.Clone()
+				next.Elements[index].Value += suffix
+				if hint.CommandSuggestions {
+					// Accept the command and its context separator in one undo step,
+					// allowing the ordinary resolver to install the command's parameters.
+					if !strings.HasSuffix(next.Elements[index].Value, " ") {
+						next.Elements[index].Value += " "
+					}
+					a.editor.SetText(next.PlainText(), false)
+					_, end := queryElementRange(next, index)
+					a.editor.SetCaret(end)
+					a.query.QueryText = a.updateQueryHintText(a.editor.State().Text)
+					a.queryHintChanged()
+					return true
+				}
+				a.query.QueryHint = next
+				a.query.QueryText = next.PlainText()
+				a.editor.SetText(a.query.QueryText, false)
+				_, end := queryElementRange(next, index)
+				a.editor.SetCaret(end)
+				a.queryHintChanged()
+				return true
+			}
 			next, ok := queryHintForwardTabTarget(hint, s.active)
 			if !ok || !a.focusQueryElement(next) {
 				a.rejectQueryTab()

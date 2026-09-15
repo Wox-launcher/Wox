@@ -16,6 +16,8 @@ const (
 // Command templates contain only suffix elements; instances include the command text.
 type QueryHint struct {
 	Elements []QueryElement
+	// CommandSuggestions identifies core-owned command guidance; it is not part of plugin JSON.
+	CommandSuggestions bool `json:"-"`
 }
 
 // QueryElement separates editable values from placeholders and atomic content.
@@ -26,6 +28,8 @@ type QueryElement struct {
 	Value       string     `json:",omitempty"`
 	Placeholder I18nString `json:",omitempty"`
 	Required    bool       `json:",omitempty"`
+	// Suggestions are literal, ordered input candidates, not constraints or translated labels.
+	Suggestions []string `json:",omitempty"`
 }
 
 func (e QueryElement) Content() string {
@@ -40,7 +44,11 @@ func (s *QueryHint) Clone() *QueryHint {
 	if s == nil {
 		return nil
 	}
-	return &QueryHint{Elements: append([]QueryElement(nil), s.Elements...)}
+	clone := &QueryHint{Elements: append([]QueryElement(nil), s.Elements...), CommandSuggestions: s.CommandSuggestions}
+	for i := range clone.Elements {
+		clone.Elements[i].Suggestions = append([]string(nil), s.Elements[i].Suggestions...)
+	}
+	return clone
 }
 
 // PlainText provides a lossy compatibility projection, never a serialization format.
@@ -81,6 +89,9 @@ func (s *QueryHint) Validate() error {
 			return fmt.Errorf("query element id must be nonempty and unique: %q", e.Id)
 		}
 		seen[e.Id] = true
+		if e.Kind != QueryElementArgument && len(e.Suggestions) > 0 {
+			return fmt.Errorf("non-argument element %q has suggestions", e.Id)
+		}
 		switch e.Kind {
 		case QueryElementText:
 			if e.Value != "" || e.Placeholder != "" || e.Required {

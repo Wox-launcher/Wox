@@ -14,6 +14,19 @@ from wox_plugin import (
 
 
 class QueryHintTest(unittest.TestCase):
+    def test_suggestions_round_trip_and_isolation(self):
+        hint = QueryHint([QueryElement("filter", "argument", value="cr", suggestions=["created", "assigned"])])
+        payload = hint.to_dict()
+        restored = QueryHint.from_value(payload)
+        self.assertEqual(restored.elements[0].suggestions, ["created", "assigned"])
+        self.assertEqual(restored.elements[0].value, "cr")
+        payload["Elements"][0]["Suggestions"][0] = "changed"
+        self.assertEqual(hint.elements[0].suggestions[0], "created")
+        self.assertEqual(restored.elements[0].suggestions[0], "created")
+        legacy = QueryHint.from_value({"Elements": [{"Id": "filter", "Kind": "argument"}]})
+        self.assertEqual(legacy.elements[0].suggestions, [])
+        self.assertNotIn("Suggestions", legacy.to_dict()["Elements"][0])
+
     def test_trigger_options(self):
         hint = QueryHint([QueryElement("input", "argument", placeholder="Input")])
         payload = RegisterTriggerKeywordOption("g", hint).to_dict()

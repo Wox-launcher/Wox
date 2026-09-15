@@ -48,8 +48,8 @@ func TestTriggerQueryHints(t *testing.T) {
 		t.Fatal("conflicting keyword received a hint")
 	}
 	manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "g"})
-	if cleared, _ := MatchQueryHint("g ", manager.instances); cleared != nil {
-		t.Fatal("nil update did not clear the runtime hint")
+	if cleared, _ := MatchQueryHint("g ", manager.instances); cleared == nil || cleared.Elements[1].Placeholder != "" || len(cleared.Elements[1].Suggestions) != 1 || cleared.Elements[1].Suggestions[0] != "find" {
+		t.Fatal("nil update should replace the runtime hint with automatic command suggestions")
 	}
 	instance.unregisterTriggerKeyword("g")
 	if restored, _ := MatchQueryHint("g ", manager.instances); restored == nil || restored.Elements[1].Placeholder != "Static" {

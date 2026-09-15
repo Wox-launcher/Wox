@@ -125,3 +125,33 @@ the existing `query.search` parsing path.
 See the [query model and Python examples](../www/docs/development/plugins/query-model.md#structured-queries).
 This is a development-build capability; verify release and SDK support before
 setting a distributable plugin's minimum versions.
+
+Arguments can offer ordered suggestions without restricting free text:
+
+```python
+hint = QueryHint(elements=[
+    QueryElement("filter", "argument", suggestions=["created", "assigned", "search"]),
+])
+# Use as MetadataCommand("issues", "Issues", query_hint=hint),
+# or in RegisterTriggerKeywordOption("gh", hint).
+```
+
+An empty slot shows `created / assigned / search`. Typing `cr` shows the `eated`
+suffix and a Tab mark. Tab inserts only that suffix, leaving the caret at the end;
+another Tab uses ordinary argument navigation. Matching ignores case, picks the
+first prefix match, and stops at an exact match. Unmatched input stays editable.
+Suggestions are literal input values and are not translated.
+
+For metadata with `TriggerKeywords: ["gh"]` and commands `issues` and `prs`,
+Wox automatically shows `issues / prs` after `gh ` when there is no explicit
+trigger Query Hint. Runtime commands participate; global `*` triggers do not.
+Empty previews show at most three complete candidates and an ellipsis, shrinking
+to fit the available width. Automatic command previews prefer shorter names;
+completion still searches the full list in declaration order. Tab completion of
+an automatic command appends a space and activates that command's own Query Hint.
+Ordinary argument suggestions do not append a space.
+Existing registration and ChangeQuery APIs carry suggestions; omitted suggestions
+preserve ordinary placeholders. The JSON field is `Suggestions`.
+
+To disable automatic command hints, add `{ "Name": "disableAutoCommandHint" }`
+to the plugin metadata's `Features` array. Explicit Query Hints remain available.

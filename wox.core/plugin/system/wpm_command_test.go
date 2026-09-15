@@ -81,6 +81,10 @@ func TestWPMCommandDiscovery(t *testing.T) {
 	api := &wpmCommandTestAPI{}
 	w := &WPMPlugin{api: api}
 	for _, keyword := range []string{"store", "wpm", "pm"} {
+		hint, _ := plugin.MatchQueryHint(keyword+" ", []*plugin.Instance{{Metadata: w.GetMetadata()}})
+		require.NotNil(t, hint)
+		require.Equal(t, []string{"create", "install", "uninstall"}, hint.Elements[1].Suggestions)
+		require.True(t, hint.CommandSuggestions, "command completion must retain its trailing space")
 		for _, tc := range []struct {
 			search string
 			count  int

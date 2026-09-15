@@ -310,10 +310,12 @@ export interface QueryHint {
   Elements: QueryElement[]
 }
 
-/** Text uses Text; arguments and atomic blocks use Value. IDs are unique per query. */
+/** Text uses Text; arguments and atomic blocks use Value. IDs are unique per query.
+ * Suggestions are ordered literal candidates; they never restrict free input.
+ */
 export type QueryElement =
   | { Id: string; Kind: "text"; Text: string }
-  | { Id: string; Kind: "argument"; Value?: string; Placeholder?: string; Required?: boolean }
+  | { Id: string; Kind: "argument"; Value?: string; Placeholder?: string; Required?: boolean; Suggestions?: string[] }
   | { Id: string; Kind: "block"; Value: string }
 
 export interface Query {

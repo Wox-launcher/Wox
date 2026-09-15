@@ -69,6 +69,7 @@ Add items to `Features` when your plugin needs extra capabilities:
 - `querySelection` – receive selection/drag/drop queries (`QueryTypeSelection`).
 - `debounce` – avoid flooding `query` while the user types. Params: `IntervalMs` (string ms).
 - `ignoreAutoScore` – opt out of Wox frequency-based auto scoring.
+- `disableAutoCommandHint` – suppress automatically generated command hints; explicit Query Hints and command execution remain available. No parameters required.
 - `queryEnv` – request query environment data. Params: `requireActiveWindowName`, `requireActiveWindowPid`, `requireActiveWindowIcon`, `requireActiveBrowserUrl` (`"true"`/`"false"`).
 - `ai` – allow usage of AI APIs from plugins.
 - `deepLink` – enables custom deep links exposed by the plugin.

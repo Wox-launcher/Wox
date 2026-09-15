@@ -55,6 +55,9 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 		TriggerKeywords: []string{smokeAutomationTrigger},
 		Features:        []plugin.MetadataFeature{{Name: plugin.MetadataFeatureQuerySelection}},
 		Commands: []plugin.MetadataCommand{
+			{Command: "query-hint", QueryHint: &common.QueryHint{Elements: []common.QueryElement{
+				{Id: "filter", Kind: common.QueryElementArgument, Suggestions: []string{"created", "assigned", "search"}},
+			}}},
 			{Command: "drag", Description: "Native file drag fixture"},
 			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},

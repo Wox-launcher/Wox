@@ -280,6 +280,7 @@ func TestQueryHintCompletionOffset(t *testing.T) {
 
 func TestQueryHintSingleEmptyArgumentPaintsChip(t *testing.T) {
 	props := LauncherQueryProps{Width: 400, Height: 34, LineHeight: 34, CaretHeight: 30,
+		Style: woxui.TextStyle{Size: 28},
 		State: woxui.TextEditingState{Text: "set volume "}, Lines: []LauncherQueryLine{{Text: "set volume ", TextWidth: 90}},
 		CompletionSuffix: "Volume (0–100)",
 		CompletionChips:  []LauncherQueryCompletionChip{{Text: "Volume (0–100)", X: 0, Width: 120}},
@@ -293,6 +294,7 @@ func TestQueryHintSingleEmptyArgumentPaintsChip(t *testing.T) {
 	expected.FillRoundedRect(woxui.Rect{X: 87, Width: 126, Height: props.CaretHeight}, 4, chip)
 	expected.DrawText("Volume (0–100)", woxui.Rect{X: 90, Width: 310, Height: props.LineHeight}, props.Style, hint)
 	expected.DrawText("set volume ", bounds, props.Style, props.Theme.QueryText)
+	expected.DrawCaret(woxui.Rect{Width: 2, Height: props.CaretHeight}, props.Theme.Cursor, false)
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("single empty argument chip = %#v", actual)
@@ -301,6 +303,7 @@ func TestQueryHintSingleEmptyArgumentPaintsChip(t *testing.T) {
 
 func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
 	props := LauncherQueryProps{Width: 400, Height: 34, LineHeight: 34, CaretHeight: 30,
+		Style: woxui.TextStyle{Size: 28},
 		State: woxui.TextEditingState{Text: "g "}, Lines: []LauncherQueryLine{{Text: "g ", TextWidth: 20}},
 		CompletionSuffix: "search query time range",
 		CompletionChips: []LauncherQueryCompletionChip{
@@ -319,6 +322,7 @@ func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
 	expected.FillRoundedRect(woxui.Rect{X: 109, Width: 76, Height: props.CaretHeight}, 4, chip)
 	expected.DrawText("time range", woxui.Rect{X: 112, Width: 288, Height: props.LineHeight}, props.Style, hint)
 	expected.DrawText("g ", bounds, props.Style, props.Theme.QueryText)
+	expected.DrawCaret(woxui.Rect{Width: 2, Height: props.CaretHeight}, props.Theme.Cursor, false)
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("multi-hint chips = %#v", actual)
@@ -582,7 +586,11 @@ func TestQueryTextBaselineSurvivesQueryHintFocusTransition(t *testing.T) {
 		before.Paint(&editing, bounds, true, false)
 		after.Paint(&label, bounds, false, false)
 		expected.DrawText("set volume ", woxui.Rect{X: bounds.X, Y: bounds.Y + 2*scale, Width: bounds.Width, Height: props.LineHeight}, props.Style, props.Theme.QueryText)
-		if !reflect.DeepEqual(editing, label) || !reflect.DeepEqual(label, expected) {
+		if !reflect.DeepEqual(label, expected) {
+			t.Fatalf("query label baseline changed at scale %v", scale)
+		}
+		expected.DrawCaret(woxui.Rect{X: bounds.X, Y: bounds.Y + 2*scale, Width: 2, Height: props.CaretHeight}, props.Theme.Cursor, false)
+		if !reflect.DeepEqual(editing, expected) {
 			t.Fatalf("query baseline changed at scale %v", scale)
 		}
 	}

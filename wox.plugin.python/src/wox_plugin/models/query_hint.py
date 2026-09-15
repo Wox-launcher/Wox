@@ -15,6 +15,7 @@ class QueryElement:
     value: str = ""
     placeholder: str = ""
     required: bool = False
+    suggestions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Encode the public Go/Node field names without leaking Python attributes."""
@@ -25,6 +26,8 @@ class QueryElement:
             result["Value"] = self.value
         if self.kind == "argument":
             result.update(Placeholder=self.placeholder, Required=self.required)
+            if self.suggestions:
+                result["Suggestions"] = list(self.suggestions)
         return result
 
 
@@ -56,6 +59,7 @@ class QueryHint:
                     value=item.get("Value", ""),
                     placeholder=item.get("Placeholder", ""),
                     required=item.get("Required", False),
+                    suggestions=list(item.get("Suggestions") or []),
                 )
                 for item in value["Elements"]
             ]

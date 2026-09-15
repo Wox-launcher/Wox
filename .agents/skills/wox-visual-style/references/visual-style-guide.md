@@ -97,6 +97,29 @@ painted caret a 220 ms damped horizontal shake of at most 3 logical units. Keep
 text, selection, and the IME anchor fixed; suppress the feedback during composition.
 See [the structured query design](../../../../wox.core/ui/launcher/QUERY_HINT.md#design-principle-continuous-input-comes-first).
 
+Arguments with `Suggestions` show their empty choices in one quiet ghost chip,
+joined with ` / `. Empty previews show at most three complete candidates and
+` / …` when truncated, reducing the count to fit available logical width.
+Core-generated command previews prefer shorter names; this must not reorder
+the candidate list used for matching. Once a prefix matches, render its suffix as
+plain ghost text and place the shared Tab glyph after it. This completion also
+shows Tab on the sole or last argument, since accepting it changes the value.
+Exact matches and unmatched input have no completion glyph; ordinary navigation
+may still advertise its next target. Paint-only space may separate a completion
+from later argument text, but native values, caret coordinates and clipboard
+content remain unchanged. Map pointer positions back across that space and clip
+long suggestions to the query viewport. Do not add a popup, border or new font.
+
+A sole command candidate is immediately actionable after the trigger separator:
+paint its complete name as plain ghost text with the Tab glyph, even before a
+prefix is typed. Do not paint the empty-argument chip for this case. Ordinary
+arguments and multiple command candidates retain the empty preview treatment.
+
+Position the command completion Tab glyph after the trailing context space that
+acceptance appends, matching ordinary query completion. Include that space in
+paint insertion width and pointer mapping; ordinary argument candidates do not
+reserve an extra space unless it is part of their actual completion suffix.
+
 ## Control size system
 
 Treat every value in this section as a logical UI unit. Convert to physical pixels only at platform or renderer boundaries.

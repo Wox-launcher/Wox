@@ -289,3 +289,33 @@ and pass a complete instance to `ChangeQuery`. Existing text queries stay valid.
 See the [query model and TypeScript examples](../www/docs/development/plugins/query-model.md#structured-queries).
 This is a development-build capability; verify release and SDK support before
 setting a distributable plugin's minimum versions.
+
+Arguments can offer optional, ordered `Suggestions` while still accepting free text:
+
+```typescript
+const hint: QueryHint = {
+  Elements: [{ Id: "filter", Kind: "argument", Suggestions: ["created", "assigned", "search"] }],
+}
+// Use as the QueryHint of the "issues" command, or of a trigger registration.
+```
+
+The empty slot shows `created / assigned / search`. Typing `cr` shows `eated`
+and a Tab mark. Tab appends that suffix without executing, adding a space, or
+moving to another argument; another Tab uses ordinary argument navigation.
+Suggestions are literal input values, not translated labels. Matching ignores case,
+uses declaration order, and stops on an exact match. Unmatched input remains valid.
+
+With `TriggerKeywords: ["gh"]` and `Commands: [{ Command: "issues", Description: "Issues" },
+{ Command: "prs", Description: "Pull requests" }]`, typing `gh ` automatically
+shows `issues / prs` unless the trigger has an explicit Query Hint. Runtime
+commands participate too. Global `*` triggers do not aggregate suggestions.
+The empty preview shows at most three complete candidates and an ellipsis for
+the remainder, shrinking to fit the available width. Automatic command previews
+prefer shorter names; matching still uses the full list in declaration order.
+Tab completion of an automatic command appends a space and immediately activates
+that command's own Query Hint, if declared. Ordinary argument suggestions do not
+append a space. Existing registrations and `ChangeQuery` carry `Suggestions` without
+another API; omitted suggestions preserve ordinary placeholders.
+
+To disable automatic command hints, add `{ "Name": "disableAutoCommandHint" }`
+to the plugin metadata's `Features` array. Explicit Query Hints remain available.

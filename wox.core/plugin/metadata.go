@@ -35,6 +35,9 @@ const (
 	// by default, Wox will auto score results by the frequency of their actioned times
 	MetadataFeatureIgnoreAutoScore MetadataFeatureName = "ignoreAutoScore"
 
+	// Disable generated command candidates while retaining explicitly declared query hints.
+	MetadataFeatureDisableAutoCommandHint MetadataFeatureName = "disableAutoCommandHint"
+
 	// enable this feature to get query env in plugin
 	MetadataFeatureQueryEnv MetadataFeatureName = "queryEnv"
 

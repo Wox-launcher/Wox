@@ -32,6 +32,15 @@ type LauncherQueryCompletionChip struct {
 	X, Width float32
 }
 
+// LauncherQueryCompletionInsertion reserves paint space at an argument end without
+// inserting ghost text into the editable document or its accessibility value.
+type LauncherQueryCompletionInsertion struct {
+	Visible           bool
+	Line              int
+	X, Width          float32
+	Prefix, Remainder string
+}
+
 const (
 	launcherQueryTabHintSize = float32(14)
 	launcherQueryTabHintGap  = float32(4)
@@ -54,37 +63,38 @@ func LauncherQueryTabHintChrome(densityScale float32) (size, gap float32) {
 
 // LauncherQueryProps contains the prepared text and callbacks for the launcher query editor.
 type LauncherQueryProps struct {
-	TabFeedback      uint64
-	CaretShake       float32
-	CaretShaking     bool
-	Marks            []LauncherQueryMark
-	Label            string
-	Width            float32
-	Height           float32
-	LineHeight       float32
-	Style            woxui.TextStyle
-	State            woxui.TextEditingState
-	Lines            []LauncherQueryLine
-	CompletionSuffix string
-	CompletionChips  []LauncherQueryCompletionChip
-	CompletionOffset float32 // Logical offset from the last line's end for structured argument hints.
-	TabHint          LauncherQueryTabHint
-	CaretWidth       float32
-	CaretLine        int
-	CompositionWidth float32
-	CompositionX     float32
-	CompositionLine  int
-	TextWidth        float32
-	CaretHeight      float32
-	TextBaseline     float32
-	Focused          bool
-	Enabled          bool
-	Theme            woxcomponent.Theme
-	OnTapAt          func(woxui.Point) `boundary:"stable"`
-	OnDoubleTapAt    func(woxui.Point) `boundary:"stable"`
-	OnTripleTapAt    func(woxui.Point) `boundary:"stable"`
-	OnTapEnd         func()            `boundary:"stable"`
-	OnDragStart      func()            `boundary:"stable"`
+	TabFeedback         uint64
+	CaretShake          float32
+	CaretShaking        bool
+	Marks               []LauncherQueryMark
+	Label               string
+	Width               float32
+	Height              float32
+	LineHeight          float32
+	Style               woxui.TextStyle
+	State               woxui.TextEditingState
+	Lines               []LauncherQueryLine
+	CompletionSuffix    string
+	CompletionChips     []LauncherQueryCompletionChip
+	CompletionOffset    float32 // Logical offset from the last line's end for structured argument hints.
+	CompletionInsertion LauncherQueryCompletionInsertion
+	TabHint             LauncherQueryTabHint
+	CaretWidth          float32
+	CaretLine           int
+	CompositionWidth    float32
+	CompositionX        float32
+	CompositionLine     int
+	TextWidth           float32
+	CaretHeight         float32
+	TextBaseline        float32
+	Focused             bool
+	Enabled             bool
+	Theme               woxcomponent.Theme
+	OnTapAt             func(woxui.Point) `boundary:"stable"`
+	OnDoubleTapAt       func(woxui.Point) `boundary:"stable"`
+	OnTripleTapAt       func(woxui.Point) `boundary:"stable"`
+	OnTapEnd            func()            `boundary:"stable"`
+	OnDragStart         func()            `boundary:"stable"`
 	// OnSelectionStart begins a drag selection at the given editor-local point.
 	OnSelectionStart func(woxui.Point, woxui.KeyModifiers) `boundary:"stable"`
 	// OnSelectionExtend updates the active drag selection focus to the given editor-local point.
@@ -107,7 +117,7 @@ func (p LauncherQueryProps) Equal(other LauncherQueryProps) bool {
 	if p.TabFeedback != other.TabFeedback || p.CaretShake != other.CaretShake || p.CaretShaking != other.CaretShaking {
 		return false
 	}
-	if p.CompletionOffset != other.CompletionOffset || p.TabHint != other.TabHint {
+	if p.CompletionOffset != other.CompletionOffset || p.TabHint != other.TabHint || p.CompletionInsertion != other.CompletionInsertion {
 		return false
 	}
 	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.TextBaseline != other.TextBaseline || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) || len(p.CompletionChips) != len(other.CompletionChips) {
@@ -343,6 +353,7 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
 	contentPoint := func(position woxui.Point) woxui.Point {
 		position.X += launcherQueryHorizontalOffset(props)
+		position = launcherQueryDocumentPoint(props, position)
 		return position
 	}
 
@@ -518,6 +529,10 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			hintColor.A = 96
 			hintX := lastLine.TextWidth + props.CompletionOffset - offset
 			hintY := textTop + float32(len(lines)-1)*lineHeight
+			if insertion := props.CompletionInsertion; insertion.Visible {
+				hintX = insertion.X - offset
+				hintY = textTop + float32(insertion.Line)*lineHeight
+			}
 			if len(props.CompletionChips) > 0 {
 				chipColor := props.Theme.QueryText
 				chipColor.A = 18
@@ -535,7 +550,13 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			if focused && props.State.Composition == "" && line.Selected != "" {
 				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + line.PrefixWidth - offset, Y: lineY, Width: line.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
 			}
-			displayList.DrawText(line.Text, woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}, props.Style, props.Theme.QueryText)
+			if insertion := props.CompletionInsertion; insertion.Visible && insertion.Line == index {
+				displayList.DrawText(insertion.Prefix, woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}, props.Style, props.Theme.QueryText)
+				x := insertion.X + insertion.Width - offset
+				displayList.DrawText(insertion.Remainder, woxui.Rect{X: bounds.X + x, Y: lineY, Width: max(float32(0), bounds.Width-x), Height: lineHeight}, props.Style, props.Theme.QueryText)
+			} else {
+				displayList.DrawText(line.Text, woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}, props.Style, props.Theme.QueryText)
+			}
 			if focused && props.State.Composition == "" && line.Selected != "" {
 				displayList.DrawText(line.Selected, woxui.Rect{X: bounds.X + line.PrefixWidth - offset, Y: lineY, Width: line.SelectedWidth, Height: lineHeight}, props.Style, props.Theme.SelectionText)
 			}
@@ -562,6 +583,22 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			displayList.FillRect(woxui.Rect{X: bounds.X + props.CompositionX - offset, Y: compositionY + props.CaretHeight - 1, Width: props.CompositionWidth, Height: 1}, props.Theme.Cursor)
 		}
 	}}
+}
+
+// launcherQueryDocumentPoint removes suggestion-only paint space before native
+// text hit testing, including when later arguments already contain text.
+func launcherQueryDocumentPoint(props LauncherQueryProps, point woxui.Point) woxui.Point {
+	insertion := props.CompletionInsertion
+	if !insertion.Visible {
+		return point
+	}
+	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
+	textTop := max(float32(0), contentHeight-float32(len(lines))*lineHeight) / 2
+	line := min(max(int((point.Y-textTop)/lineHeight), 0), len(lines)-1)
+	if line == insertion.Line && point.X > insertion.X {
+		point.X = max(insertion.X, point.X-insertion.Width)
+	}
+	return point
 }
 
 // launcherQueryHorizontalOffset follows the caret while focused so long query

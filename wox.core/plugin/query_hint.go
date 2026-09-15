@@ -79,7 +79,24 @@ func MatchQueryHint(text string, instances []*Instance) (*common.QueryHint, *Ins
 			}
 			hint := instance.triggerQueryHint(keyword)
 			if hint == nil {
-				continue
+				if instance.Metadata.IsSupportFeature(MetadataFeatureDisableAutoCommandHint) {
+					continue
+				}
+				// Explicit templates own the input. Only otherwise expose the current
+				// command declarations, including runtime registrations, as suggestions.
+				var suggestions []string
+				seen := map[string]bool{}
+				for _, command := range instance.GetQueryCommands() {
+					key := strings.ToLower(command.Command)
+					if strings.TrimSpace(key) != "" && !seen[key] {
+						suggestions = append(suggestions, command.Command)
+						seen[key] = true
+					}
+				}
+				if len(suggestions) == 0 {
+					continue
+				}
+				hint = &common.QueryHint{CommandSuggestions: true, Elements: []common.QueryElement{{Id: "command-suggestion", Kind: common.QueryElementArgument, Suggestions: suggestions}}}
 			}
 			if hint.Validate() != nil {
 				return nil, nil
