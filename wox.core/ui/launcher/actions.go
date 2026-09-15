@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -507,21 +508,62 @@ func (a *App) selectFirstFilteredActionLocked() {
 	a.actionSelectionKey = entries[a.actionSelected].Key
 }
 
-// filteredActionIndices matches Flutter's fuzzy title filter while retaining unified source positions.
+// filteredActionIndices keeps source order for an empty filter. A nonempty query
+// ranks by fuzzy score so a prefix such as Uninstall beats a scattered hit like
+// Run as Administrator for "uninsta". Plugin actions stay above system actions
+// so the group divider still lands between the two sets.
 func filteredActionIndices(actions []actionPanelEntry, query string, translations map[string]string, usePinYin bool) []int {
 	query = strings.TrimSpace(query)
-	indices := make([]int, 0, len(actions))
+	if query == "" {
+		return actionPanelUnfilteredIndices(actions)
+	}
+	type rankedAction struct {
+		index  int
+		score  int64
+		system bool
+	}
+	matches := make([]rankedAction, 0, len(actions))
 	for index, action := range actions {
-		label := translatedActionLabel(action.Name, translations)
-		matched := query == "" || util.IsStringMatch(label, query, usePinYin)
-		for _, alias := range action.SearchAliases {
-			matched = matched || util.IsStringMatch(alias, query, usePinYin)
-		}
+		score, matched := actionFilterMatchScore(action, query, translations, usePinYin)
 		if matched {
-			indices = append(indices, index)
+			matches = append(matches, rankedAction{index: index, score: score, system: action.IsSystemAction})
 		}
 	}
+	sort.SliceStable(matches, func(left, right int) bool {
+		if matches[left].system != matches[right].system {
+			return !matches[left].system
+		}
+		if matches[left].score != matches[right].score {
+			return matches[left].score > matches[right].score
+		}
+		return matches[left].index < matches[right].index
+	})
+	indices := make([]int, len(matches))
+	for index, match := range matches {
+		indices[index] = match.index
+	}
 	return indices
+}
+
+// actionFilterMatchScore returns the best fuzzy score across the localized label and search aliases.
+func actionFilterMatchScore(action actionPanelEntry, query string, translations map[string]string, usePinYin bool) (int64, bool) {
+	best := int64(0)
+	matched := false
+	consider := func(text string) {
+		if text == "" {
+			return
+		}
+		ok, score := util.IsStringMatchScore(text, query, usePinYin)
+		if ok && (!matched || score > best) {
+			matched = true
+			best = score
+		}
+	}
+	consider(translatedActionLabel(action.Name, translations))
+	for _, alias := range action.SearchAliases {
+		consider(alias)
+	}
+	return best, matched
 }
 
 func translatedActionLabel(value string, translations map[string]string) string {

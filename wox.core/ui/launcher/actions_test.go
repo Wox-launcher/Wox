@@ -296,6 +296,30 @@ func TestFilteredActionIndicesMatchNameAndAliases(t *testing.T) {
 	}
 }
 
+func TestFilteredActionIndicesRanksPrefixAboveScatteredMatch(t *testing.T) {
+	actions := []actionPanelEntry{{Name: "Run as Administrator"}, {Name: "Uninstall"}}
+	matches := filteredActionIndices(actions, "uninsta", nil, false)
+	if len(matches) < 1 || matches[0] != 1 {
+		t.Fatalf("filtered order = %v, want Uninstall first", matches)
+	}
+}
+
+func TestFilteredActionIndicesEmptyQueryKeepsSourceOrder(t *testing.T) {
+	actions := []actionPanelEntry{{Name: "Run as Administrator"}, {Name: "Uninstall"}}
+	matches := filteredActionIndices(actions, "", nil, false)
+	if len(matches) != 2 || matches[0] != 0 || matches[1] != 1 {
+		t.Fatalf("empty filter order = %v, want source order", matches)
+	}
+}
+
+func TestFilteredActionIndicesKeepsSystemActionsAfterPluginMatches(t *testing.T) {
+	actions := []actionPanelEntry{{Name: "Pin", IsSystemAction: true}, {Name: "Uninstall"}}
+	matches := filteredActionIndices(actions, "in", nil, false)
+	if len(matches) != 2 || matches[0] != 1 || matches[1] != 0 {
+		t.Fatalf("grouped filter order = %v, want plugin then system", matches)
+	}
+}
+
 func TestOnResultActionHotkeyHandlesClosedPanel(t *testing.T) {
 	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Type: "local", Hotkey: "cmd+d"}}}}}
 	if !app.onResultActionHotkey(woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta, Down: true}) {
