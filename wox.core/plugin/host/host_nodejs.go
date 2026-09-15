@@ -285,6 +285,7 @@ func collectNodejsPathsForDarwin() []string {
 	}
 	paths = append(paths, collectNodejsPathsFromNvmUnix()...)
 	paths = append(paths, collectVoltaNodePaths()...)
+	paths = append(paths, collectMisePaths("node")...)
 	return util.UniqueStrings(paths)
 }
 
@@ -296,6 +297,7 @@ func collectNodejsPathsForLinux() []string {
 	}
 	paths = append(paths, collectNodejsPathsFromNvmUnix()...)
 	paths = append(paths, collectVoltaNodePaths()...)
+	paths = append(paths, collectMisePaths("node")...)
 	return util.UniqueStrings(paths)
 }
 
@@ -332,6 +334,7 @@ func collectNodejsPathsForWindows() []string {
 	}
 
 	candidates = append(candidates, collectVoltaNodePaths()...)
+	candidates = append(candidates, collectMisePaths("node")...)
 	return util.UniqueStrings(candidates)
 }
 
@@ -381,4 +384,35 @@ func collectVoltaNodePaths() []string {
 	}
 
 	return []string{filepath.Join(voltaHome, "bin", binaryName)}
+}
+
+// collectMisePaths scans installed versions and aliases without executing context-dependent mise shims.
+func collectMisePaths(tool string) []string {
+	dataDir := os.Getenv("MISE_DATA_DIR")
+	if dataDir == "" {
+		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
+			dataDir = filepath.Join(xdgDataHome, "mise")
+		} else if runtime.GOOS == "windows" {
+			if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+				dataDir = filepath.Join(localAppData, "mise")
+			}
+		} else if home, err := homedir.Dir(); err == nil {
+			dataDir = filepath.Join(home, ".local", "share", "mise")
+		}
+	}
+	if dataDir == "" {
+		return nil
+	}
+	binaries := []string{filepath.Join("bin", tool)}
+	if tool == "python" {
+		binaries = []string{filepath.Join("bin", "python3"), filepath.Join("bin", "python")}
+	}
+	if runtime.GOOS == "windows" {
+		binaries = []string{tool + ".exe"}
+		if tool == "python" {
+			binaries = append(binaries, "python3.exe")
+		}
+	}
+	// Keep alias paths intact so mise link entries continue to follow package-manager upgrades.
+	return util.CollectExecutables(filepath.Join(dataDir, "installs", tool), binaries, nil)
 }

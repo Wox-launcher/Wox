@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -71,7 +72,7 @@ func TestRuntimeStatusPillCentersLabel(t *testing.T) {
 	column := card.Child.(woxwidget.Flex)
 	header := column.Children[0].(woxwidget.Flex)
 	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	pill := title.Children[1].(woxwidget.Container)
+	pill := title.Children[1].(woxwidget.Flex).Children[0].(woxwidget.Container)
 	align := pill.Child.(woxwidget.Align)
 	if pill.Padding.Left != 8 || pill.Padding.Right != 8 {
 		t.Fatalf("status pill padding = %+v, want symmetric 8px insets", pill.Padding)
@@ -114,4 +115,80 @@ func runtimeCardButtonIDs(card woxwidget.Container) []string {
 		}
 	}
 	return ids
+}
+
+// TestRuntimeRunningHostOffersRestart verifies a healthy host can apply a saved path without restarting Wox.
+func TestRuntimeRunningHostOffersRestart(t *testing.T) {
+	calls := 0
+	status := RuntimeStatus{Runtime: "NODEJS", StatusCode: "running", RestartLabel: "Restart", OnRestart: func() { calls++ }}
+	if height := runtimeStatusGridHeight([]RuntimeStatus{status}, 800); height != 168 {
+		t.Fatalf("running host card height = %v, want compact running card", height)
+	}
+	for _, props := range []RuntimeSettingsProps{{}, {Editing: true}, {Saving: true}, {Restarting: true}, {Refreshing: true}} {
+		tooltip := ""
+		props.OnTooltip = func(inside bool, text string, _ woxui.Rect) {
+			if inside {
+				tooltip = text
+			} else {
+				tooltip = ""
+			}
+		}
+		card := runtimeStatusCard(props, status, 360, 168).(woxwidget.Container)
+		column := card.Child.(woxwidget.Flex)
+		header := column.Children[0].(woxwidget.Flex)
+		title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+		row := title.Children[1].(woxwidget.Flex)
+		button := row.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		if button.ID != "runtime-restart-NODEJS" {
+			t.Fatalf("unexpected action: %s", button.ID)
+		}
+		disabled := props.Editing || props.Saving || props.Restarting || props.Refreshing
+		if button.Disabled != disabled {
+			t.Fatalf("restart disabled = %v, want %v", button.Disabled, disabled)
+		}
+		button.OnHoverAt(true, woxui.Rect{})
+		if tooltip != "Restart" {
+			t.Fatalf("tooltip = %q", tooltip)
+		}
+		if !button.Disabled {
+			button.OnTap()
+			if tooltip != "" {
+				t.Fatal("restart should dismiss tooltip")
+			}
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("restart calls = %d, want only idle action enabled", calls)
+	}
+}
+
+// TestRuntimePathEditorOffersSave verifies editing replaces Clear with a keyboard-accessible save action.
+func TestRuntimePathEditorOffersSave(t *testing.T) {
+	saves, clears := 0, 0
+	var idleInputWidth float32
+	for _, editing := range []bool{false, true} {
+		row := runtimeExecutableSettingRow(RuntimeSettingsProps{Labels: RuntimeSettingsLabels{Save: "Save", Clear: "Clear"}}, RuntimeSettingRow{
+			ID: "node", Focused: editing, OnSave: func() { saves++ }, OnClear: func() { clears++ },
+		}, 800, 72).(woxwidget.Gesture)
+		field := row.Child.(woxwidget.Container).Child.(woxwidget.Container)
+		controls := field.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+		input := controls.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+		if !editing {
+			idleInputWidth = input.Width
+		} else if input.Width != idleInputWidth {
+			t.Fatalf("editing changed input width from %v to %v", idleInputWidth, input.Width)
+		}
+		button := controls.Children[2].(woxwidget.Semantics)
+		expected := "node-clear"
+		if editing {
+			expected = "node-save"
+		}
+		if button.AutomationID != expected {
+			t.Fatalf("action = %s, want %s", button.AutomationID, expected)
+		}
+		button.Child.(woxwidget.Focusable).OnKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true})
+	}
+	if saves != 1 || clears != 1 {
+		t.Fatalf("actions: save=%d clear=%d", saves, clears)
+	}
 }

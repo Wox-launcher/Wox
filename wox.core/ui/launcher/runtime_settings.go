@@ -79,17 +79,19 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		}
 		rows = append(rows, launcherview.RuntimeSettingRow{
 			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: a.runtimeExecutablePlaceholder(item.key),
-			State: state, Focused: focused, Disabled: snapshot.saving || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: a.settingsNativeWindow(),
+			State: state, Focused: focused, Disabled: snapshot.saving || snapshot.runtime.Restarting != "" || snapshot.runtime.Refreshing != "" || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: a.settingsNativeWindow(),
 			OnHover:   func() { a.selectSettingRow(index) },
 			OnFocus:   func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
 			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
 			OnBrowse: func() { a.selectSettingRow(index); a.browseRuntimeExecutable(item) },
+			OnSave:   a.submitBuiltInSettingEdit,
 			OnClear:  func() { a.selectSettingRow(index); a.saveRuntimeExecutablePath(item, "") },
 		})
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
 		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette, Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
 		Restarting: snapshot.runtime.Restarting != "", Refreshing: snapshot.runtime.Refreshing != "", Error: snapshot.runtime.Error,
+		Editing: snapshot.general.EditKey != "", Saving: snapshot.saving, OnTooltip: a.setSettingChoiceTooltip,
 		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})
 }
@@ -101,6 +103,8 @@ func (a *App) runtimeSettingsLabels() launcherview.RuntimeSettingsLabels {
 		Description:       a.translate("i18n:ui_runtime_settings_description"),
 		StatusSection:     a.translate("i18n:ui_runtime_status"),
 		ExecutableSection: a.translate("i18n:ui_runtime_executable_paths"),
+		ExecutableHelp:    a.translate("i18n:ui_runtime_executable_help"),
+		Save:              a.translate("i18n:ui_save"),
 		Browse:            a.translate("i18n:ui_runtime_browse"),
 		Clear:             a.translate("i18n:ui_runtime_clear"),
 		Empty:             a.translate("i18n:ui_runtime_status_empty"),

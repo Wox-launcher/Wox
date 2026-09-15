@@ -302,6 +302,7 @@ func collectPythonPathsForDarwin() []string {
 		"/usr/local/python3",
 	}
 	paths = append(paths, collectPythonPathsFromPyenvUnix()...)
+	paths = append(paths, collectMisePaths("python")...)
 	return util.UniqueStrings(paths)
 }
 
@@ -312,6 +313,7 @@ func collectPythonPathsForLinux() []string {
 		"/usr/local/python3",
 	}
 	paths = append(paths, collectPythonPathsFromPyenvUnix()...)
+	paths = append(paths, collectMisePaths("python")...)
 	return util.UniqueStrings(paths)
 }
 
@@ -342,6 +344,7 @@ func collectPythonPathsForWindows() []string {
 	}
 
 	candidates = append(candidates, collectPythonPathsFromPyenvWin()...)
+	candidates = append(candidates, collectMisePaths("python")...)
 	return util.UniqueStrings(candidates)
 }
 

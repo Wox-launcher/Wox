@@ -1202,6 +1202,19 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 		err = a.services.LogoutAccount(ctx, a.sessionID)
 	}
 	cancel()
+	if err == nil && (item.key == "CustomPythonPath" || item.key == "CustomNodejsPath") {
+		runtime := "NODEJS"
+		if item.key == "CustomPythonPath" {
+			runtime = "PYTHON"
+		}
+		// Persist first so the replacement host resolves the new path. A host failure
+		// must not turn a successful setting save into an unsaved edit.
+		restartCtx, restartCancel := context.WithTimeout(context.Background(), 20*time.Second)
+		if restartErr := a.services.RestartRuntime(restartCtx, a.sessionID, runtime); restartErr != nil {
+			util.GetLogger().Error(restartCtx, fmt.Sprintf("restart %s after saving executable path: %v", runtime, restartErr))
+		}
+		restartCancel()
+	}
 	if err == nil {
 		err = a.reloadSettings()
 	}
@@ -1242,8 +1255,13 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 			a.refreshGlance("settingsChanged", "", nil)
 		})
 	}
-	if err == nil && (item.key == "CustomPythonPath" || item.key == "CustomNodejsPath") {
-		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
+	if item.key == "CustomPythonPath" || item.key == "CustomNodejsPath" {
+		if err != nil {
+			a.runtimeSettings.SetError(err.Error())
+		} else {
+			a.runtimeSettings.SetError("")
+			util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
+		}
 	}
 	a.publishSettingsChanged(item.key)
 }

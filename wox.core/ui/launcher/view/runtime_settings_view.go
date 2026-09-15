@@ -12,6 +12,8 @@ type RuntimeSettingsLabels struct {
 	Description       string
 	StatusSection     string
 	ExecutableSection string
+	ExecutableHelp    string
+	Save              string
 	Browse            string
 	Clear             string
 	Empty             string
@@ -56,6 +58,7 @@ type RuntimeSettingRow struct {
 	OnChanged   func(string)
 	OnKey       func(woxui.KeyEvent) bool
 	OnBrowse    func()
+	OnSave      func()
 	OnClear     func()
 }
 
@@ -69,6 +72,9 @@ type RuntimeSettingsProps struct {
 	Loading          bool
 	Restarting       bool
 	Refreshing       bool
+	OnTooltip        func(bool, string, woxui.Rect)
+	Editing          bool
+	Saving           bool
 	Error            string
 	Selected         int
 	Statuses         []RuntimeStatus
@@ -109,6 +115,13 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 		woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Labels.ExecutableSection, Width: contentWidth, Theme: props.Theme}),
 	)
 	rowsTop := woxcomponent.PageHeaderHeight + 32 + messageHeight + statusHeight + woxcomponent.SectionHeaderLead + 43
+	if props.Labels.ExecutableHelp != "" {
+		children = append(children, woxwidget.Container{Width: contentWidth, Height: 44, Child: woxwidget.TextBlock{
+			Value: props.Labels.ExecutableHelp, Width: contentWidth, Height: 36, MaxLines: 2, LineHeight: 18,
+			Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.TextSecondary,
+		}})
+		rowsTop += 44
+	}
 	for _, row := range props.Settings {
 		children = append(children, runtimeExecutableSettingRow(props, row, contentWidth, settingRowHeight))
 	}
@@ -198,25 +211,47 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		icon = woxwidget.Image{Source: status.Icon, Width: 22, Height: 22}
 	}
 	pillWidth := runtimeLabelWidth(status.StatusLabel, 40, 150)
+	busy := props.Restarting || props.Refreshing || props.Editing || props.Saving
+	statusRow := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{
+			Width: max(float32(0), pillWidth-16), Height: 22, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
+				Value: status.StatusLabel, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize, Weight: woxui.FontWeightSemibold}, Color: statusColor,
+			},
+		}},
+	}}
+	if status.OnRestart != nil {
+		statusRow.Children = append(statusRow.Children, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel,
+			Icon:  woxwidget.Image{Source: status.RestartIcon, Width: 16, Height: 16},
+			Width: 32, Height: 32, Radius: 4, HoverBackground: runtimeWithAlpha(theme.Text, 20), FocusRingColor: theme.Focus,
+			Disabled: busy, OnTap: func() {
+				if props.OnTooltip != nil {
+					props.OnTooltip(false, "", woxui.Rect{})
+				}
+				status.OnRestart()
+			}, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				if props.OnTooltip != nil {
+					props.OnTooltip(inside, status.RestartLabel, bounds)
+				}
+			},
+		}))
+	}
+
 	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: 34, Height: 34, Radius: 8, Color: runtimeWithAlpha(theme.Text, 26), Child: woxwidget.Align{
 			Width: 34, Height: 34, Horizontal: 0.5, Vertical: 0.5, Child: icon,
 		}},
-		woxwidget.Expanded{Child: woxwidget.Container{Height: 48, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.Container{Height: 56, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Expanded{Child: woxwidget.Container{Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.Text}}},
 				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: theme.TextSecondary}},
 			}},
-			woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{
-				Width: max(float32(0), pillWidth-16), Height: 22, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-					Value: status.StatusLabel, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize, Weight: woxui.FontWeightSemibold}, Color: statusColor,
-				},
-			}},
+			statusRow,
 		}}}},
 	}}
 	children := []woxwidget.Widget{
 		header,
-		woxwidget.Container{Height: 12},
+		woxwidget.Container{Height: 4},
 		woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.TextBlock{
 			Value: status.Detail, Height: 40, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 17, Color: theme.TextSecondary,
 		}},
@@ -226,7 +261,6 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		}},
 	}
 	if status.Actionable {
-		busy := props.Restarting || props.Refreshing
 		buttons := make([]woxwidget.Widget, 0, 3)
 		if status.OnInstall != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
@@ -238,12 +272,6 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-refresh-" + status.Runtime, Label: status.RefreshLabel, Icon: status.RefreshIcon, IconSize: 14,
 				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonSecondary, OnTap: status.OnRefresh, Theme: theme,
-			}))
-		}
-		if status.OnRestart != nil {
-			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel, Icon: status.RestartIcon, IconSize: 14,
-				Radius: 4, Disabled: busy, Variant: woxcomponent.ButtonSecondary, OnTap: status.OnRestart, Theme: theme,
 			}))
 		}
 		children = append(children,
@@ -262,8 +290,9 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	labelWidth := min(float32(400), max(float32(220), width*0.48))
 	controlWidth := max(float32(220), width-labelWidth-32)
 	browseWidth := runtimeLabelWidth(props.Labels.Browse, 62, 96)
-	clearWidth := runtimeLabelWidth(props.Labels.Clear, 62, 96)
-	inputWidth := max(float32(80), controlWidth-browseWidth-clearWidth-20)
+	// Reserve the wider action label in both states so editing never shifts the row.
+	actionWidth := max(runtimeLabelWidth(props.Labels.Clear, 62, 96), runtimeLabelWidth(props.Labels.Save, 62, 96))
+	inputWidth := max(float32(80), controlWidth-browseWidth-actionWidth-20)
 	input := woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
 		ID: row.ID + "-input", Label: row.Title, Hint: row.Placeholder, Width: inputWidth,
 		Value: row.State.Text, Focused: row.Focused, Window: row.Window,
@@ -274,10 +303,15 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 			}
 		},
 	})
+	action := woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Width: actionWidth, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnClear, Theme: props.Theme}
+	if row.Focused {
+		// Keep saving visible without squeezing the path field with another button.
+		action.ID, action.Label, action.OnTap = row.ID+"-save", props.Labels.Save, row.OnSave
+	}
 	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		input,
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnBrowse, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnClear, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Width: browseWidth, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnBrowse, Theme: props.Theme}),
+		woxcomponent.WoxButton(action),
 	}}
 	field := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: row.Title, Description: row.Description, Width: width, Height: height, LabelWidth: labelWidth, Gap: 32,
