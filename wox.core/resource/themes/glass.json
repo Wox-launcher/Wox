@@ -7,6 +7,9 @@
   "ThemeAuthor": "Wox launcher",
   "Version": "1.0.0",
   "ThemeUrl": "https://www.github.com/wox-launcher/wox",
+  "BaseBackgroundColor": "#121216BF",
+  "BaseTextColor": "#F7F7F8FF",
+  "BaseAccentColor": "#F7F7F8FF",
   "AppBackgroundColor": "#16161A84",
   "AppPaddingLeft": 10,
   "AppPaddingTop": 10,
@@ -25,7 +28,7 @@
   "ResultItemSubTitleColor": "#A8A8B3FF",
   "ResultItemTailTextColor": "#B8B8C2FF",
   "ResultItemBorderLeftWidth": 0,
-  "ResultItemActiveBackgroundColor": "#FFFFFF23",
+  "ResultItemActiveBackgroundColor": "#FFFFFF19",
   "ResultItemActiveTitleColor": "#FFFFFFFF",
   "ResultItemActiveSubTitleColor": "#CBCBD3FF",
   "ResultItemActiveTailTextColor": "#D1D1D8FF",
@@ -37,7 +40,7 @@
   "QueryBoxCursorColor": "#F7F7F8FF",
   "QueryBoxTextSelectionBackgroundColor": "#FFFFFF3D",
   "QueryBoxTextSelectionColor": "#FFFFFFFF",
-  "ActionContainerBackgroundColor": "#252830D9",
+  "ActionContainerBackgroundColor": "#15151558",
   "ActionContainerBorderColor": "#FFFFFF28",
   "ActionContainerBorderWidth": 1,
   "ActionContainerBorderRadius": 8,
@@ -66,32 +69,28 @@
   "ToolbarPaddingRight": 10,
   "windows": {
     "AppBackgroundColor": "#121216BF",
-    "ResultItemActiveBackgroundColor": "#FFFFFF19",
-    "ActionContainerBackgroundColor": "#15151558",
     "ToolbarBackgroundColor": "#12121604",
     "variants": {
       "win10": {
         "AppBackgroundColor": "#12121663",
-        "BaseBackgroundColor": "#12121663"
-      }
-    },
-    "BaseBackgroundColor": "#121216BF",
-    "ResultItemHoverBackgroundColor": "#FFFFFF06"
-  },
-  "linux": {
-    "ActionContainerBackgroundColor": "#252830D9",
-    "variants": {
-      "hyprland": {
-        "AppBackgroundColor": "#16161AF9",
-        "BaseBackgroundColor": "#16161AF9"
+        "BaseBackgroundColor": "#12121663",
+        "ToolbarBackgroundColor": "#12121604"
       }
     }
   },
-  "BaseBackgroundColor": "#16161A84",
-  "BaseTextColor": "#F7F7F8FF",
-  "BaseAccentColor": "#F7F7F8FF",
+  "linux": {
+    "ActionContainerBackgroundColor": "#252830D9",
+    "ToolbarBackgroundColor": "#25283004",
+    "variants": {
+      "hyprland": {
+        "AppBackgroundColor": "#16161AF9",
+        "BaseBackgroundColor": "#16161AF9",
+        "ToolbarBackgroundColor": "#16161A04"
+      }
+    }
+  },
   "ActionContainerDividerColor": "#FFFFFF28",
-  "ResultItemHoverBackgroundColor": "#FFFFFF09",
+  "ResultItemHoverBackgroundColor": "#FFFFFF06",
   "PreviewBackgroundColor": "#EDEDF209",
   "PreviewBorderColor": "#FFFFFF73",
   "PreviewTagFontColor": "#E0E0E6E6",
