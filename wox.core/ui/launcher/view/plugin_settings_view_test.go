@@ -49,24 +49,24 @@ func TestPluginSettingsFilterPanelAlignsWithFilterButton(t *testing.T) {
 	}).(woxwidget.Stack)
 
 	positioned := page.Children[2]
-	if positioned.Left != 206 || positioned.Top != 64 {
-		t.Fatalf("filter panel position = (%v, %v), want (206, 64) at 8px below the filter action", positioned.Left, positioned.Top)
+	if positioned.Left != 236 || positioned.Top != 64 {
+		t.Fatalf("filter panel position = (%v, %v), want (236, 64) aligned to the trailing filter action", positioned.Left, positioned.Top)
 	}
 }
 
-func TestPluginSettingsFilterPanelUsesAvailableFlutterWidth(t *testing.T) {
+func TestPluginSettingsFilterPanelUsesAvailableWidth(t *testing.T) {
 	page := PluginSettingsPage(PluginSettingsPageProps{
 		Width: 600, Height: 700,
 		List:        PluginListProps{Width: 250, Height: 660, Theme: woxcomponent.ControlTheme{}},
 		Detail:      PluginDetailProps{Width: 289, Height: 660, Theme: woxcomponent.ControlTheme{}},
-		FilterPanel: &PluginFilterPanelProps{Width: 660, Theme: woxcomponent.ControlTheme{}},
+		FilterPanel: &PluginFilterPanelProps{Width: 360, Theme: woxcomponent.ControlTheme{}},
 		Theme:       woxcomponent.ControlTheme{},
 	}).(woxwidget.Stack)
 
 	positioned := page.Children[2]
 	panel := positioned.Child.(woxwidget.FocusScope).Child.(woxwidget.Container)
-	if positioned.Left != 206 || panel.Width != 382 {
-		t.Fatalf("filter panel geometry = left %v width %v, want trigger-aligned width clamped to the 12px edge", positioned.Left, panel.Width)
+	if positioned.Left != 228 || panel.Width != 360 {
+		t.Fatalf("filter panel geometry = left %v width %v, want a 360-wide panel shifted to the 12px edge", positioned.Left, panel.Width)
 	}
 }
 
@@ -136,34 +136,56 @@ func TestPluginDetailUsesCatalogEmptyState(t *testing.T) {
 	}
 }
 
-func TestPluginFilterPanelMatchesFlutterLayout(t *testing.T) {
+func TestPluginFilterPanelUsesLabeledDropdowns(t *testing.T) {
 	panel := PluginFilterPanel(PluginFilterPanelProps{
-		Width: 360, LabelWidth: 80, RuntimeTitle: "Runtime",
-		Options: []PluginFilterOption{
-			{ID: "disabled", Label: "Disabled"},
-			{ID: "enabled", Label: "Enabled"},
-			{ID: "upgradable", Label: "Upgradable"},
-			{ID: "third-party", Label: "Third party"},
+		Width: 360, LabelWidth: 80,
+		Fields: []PluginFilterField{
+			{ID: "enabled", Label: "Enabled Status", Value: "All"},
+			{ID: "upgrade", Label: "Upgrade Status", Value: "All"},
+			{ID: "type", Label: "Plugin Type", Value: "All"},
+			{ID: "runtime", Label: "Plugin Runtime", Value: "All"},
 		},
-		Runtimes: []PluginFilterOption{{ID: "nodejs", Label: "Node.js"}, {ID: "python", Label: "Python"}},
-		Theme:    woxcomponent.ControlTheme{Surface: woxui.Color{R: 10, G: 20, B: 30, A: 120}, Border: woxui.Color{R: 90, G: 90, B: 90, A: 255}},
-		OnToggle: func(string) {},
+		ResetLabel: "Reset", ResetEnabled: true,
+		Theme:  woxcomponent.ControlTheme{Surface: woxui.Color{R: 10, G: 20, B: 30, A: 120}, Border: woxui.Color{R: 90, G: 90, B: 90, A: 255}},
+		OnOpen: func(string, woxui.Rect) {}, OnReset: func() {},
 	}).(woxwidget.FocusScope).Child.(woxwidget.Container)
 
-	if !panel.Floating || panel.Color != (woxui.Color{R: 10, G: 20, B: 30, A: 120}) || panel.BorderWidth != 1 || panel.Height != 154 {
-		t.Fatalf("filter panel surface = floating %v color %#v border %v height %v, want a floating Surface surface with a hairline at 154px", panel.Floating, panel.Color, panel.BorderWidth, panel.Height)
+	if !panel.Floating || panel.Color != (woxui.Color{R: 10, G: 20, B: 30, A: 120}) || panel.BorderWidth != 1 || panel.Height != 240 {
+		t.Fatalf("filter panel surface = floating %v color %#v border %v height %v, want a floating Surface surface with a hairline at 240px", panel.Floating, panel.Color, panel.BorderWidth, panel.Height)
 	}
 	rows := panel.Child.(woxwidget.Flex)
-	if len(rows.Children) != 5 || rows.Gap != 10 {
-		t.Fatalf("filter panel rows = %d gap %v, want four status rows and one runtime row with 10px gaps", len(rows.Children), rows.Gap)
+	if len(rows.Children) != 5 || rows.Gap != 12 {
+		t.Fatalf("filter panel rows = %d gap %v, want four labeled dropdowns and a reset action with 12px gaps", len(rows.Children), rows.Gap)
 	}
-	status := rows.Children[0].(woxwidget.Flex)
-	if _, ok := status.Children[1].(woxwidget.Semantics); !ok {
-		t.Fatalf("status control = %T, want checkbox semantics", status.Children[1])
+	row := rows.Children[0].(woxwidget.Flex)
+	if row.CrossAxisAlignment != woxwidget.CrossAxisCenter || row.Gap != 12 {
+		t.Fatalf("filter row alignment/gap = %v/%v, want centered 12px label/control pairing", row.CrossAxisAlignment, row.Gap)
 	}
-	runtime := rows.Children[4].(woxwidget.Flex)
-	if _, ok := runtime.Children[1].(woxwidget.ScrollView); !ok {
-		t.Fatalf("runtime options = %T, want one horizontal row", runtime.Children[1])
+	if _, ok := row.Children[1].(woxwidget.Keyed); !ok {
+		t.Fatalf("filter control = %T, want a keyed dropdown anchor", row.Children[1])
+	}
+	reset := rows.Children[4].(woxwidget.Align)
+	if reset.Horizontal != 1 || reset.Vertical != 0.5 {
+		t.Fatalf("reset alignment = (%v, %v), want trailing and vertically centered", reset.Horizontal, reset.Vertical)
+	}
+	if focusedControlGesture(reset.Child).ID != "plugin-filter-reset" {
+		t.Fatal("filter panel must expose a trailing reset action")
+	}
+}
+
+func TestPluginListSearchHasFilterActionOnly(t *testing.T) {
+	list := PluginList(PluginListProps{
+		Width: 260, Height: 660, Placeholder: "Search 67 plugins", FilterLabel: "Filter", FilterIcon: &woxui.Image{},
+		OnFilter: func() {}, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	})
+	search := list.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	overlay := search.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Flex)
+	if len(overlay.Children) != 3 {
+		t.Fatalf("search overlay children = %d, want spacer, filter action, and trailing inset", len(overlay.Children))
+	}
+	action := overlay.Children[1].(woxwidget.Align).Child.(woxwidget.Stateful)
+	if action.Key != "plugin-filter" {
+		t.Fatalf("search action = %q, want only the filter button", action.Key)
 	}
 }
 

@@ -7,14 +7,15 @@ import (
 
 // SearchFieldAction describes one centered trailing search-field action.
 type SearchFieldAction struct {
-	ID       string
-	Label    string
-	Icon     *woxui.Image
-	Width    float32
-	IconSize float32
-	Active   bool
-	Disabled bool
-	OnTap    func()
+	ID        string
+	Label     string
+	Icon      *woxui.Image
+	Width     float32
+	IconSize  float32
+	Active    bool
+	Disabled  bool
+	OnTap     func()
+	OnHoverAt func(bool, woxui.Rect)
 }
 
 // SearchFieldProps describes the shared settings and catalog search control.
@@ -125,10 +126,19 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		if label == "" {
 			label = action.ID
 		}
+		onTap := action.OnTap
+		if action.OnHoverAt != nil && onTap != nil {
+			hover := action.OnHoverAt
+			tap := onTap
+			onTap = func() {
+				hover(false, woxui.Rect{})
+				tap()
+			}
+		}
 		buttonSize := min(width, float32(30))
 		overlayChildren = append(overlayChildren, woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: WoxIconButton(IconButtonProps{
 			ID: action.ID, Label: label, Icon: woxwidget.Image{Source: action.Icon, Width: iconSize, Height: iconSize}, Width: buttonSize, Height: buttonSize, Radius: buttonSize / 2,
-			Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, Disabled: action.Disabled, OnTap: action.OnTap,
+			Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, Disabled: action.Disabled, OnTap: onTap, OnHoverAt: action.OnHoverAt,
 		})})
 	}
 	if trailingInset > 0 {

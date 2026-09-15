@@ -60,24 +60,46 @@ type filteredPlugin struct {
 	plugin pluginSettingsPlugin
 }
 
+const (
+	pluginFilterAll = "all"
+
+	pluginFilterEnabled  = "enabled"
+	pluginFilterDisabled = "disabled"
+
+	pluginFilterUpgradable    = "upgradable"
+	pluginFilterNotUpgradable = "not-upgradable"
+
+	pluginFilterSystem     = "system"
+	pluginFilterThirdParty = "third-party"
+
+	pluginFilterInstalled   = "installed"
+	pluginFilterUninstalled = "uninstalled"
+
+	pluginFilterRuntimeNodeJS       = "nodejs"
+	pluginFilterRuntimePython       = "python"
+	pluginFilterRuntimeScript       = "script"
+	pluginFilterRuntimeScriptNodeJS = "script-nodejs"
+	pluginFilterRuntimeScriptPython = "script-python"
+)
+
+// pluginFilterState stores exclusive catalog dropdowns. Empty or "all" means no restriction.
 type pluginFilterState struct {
-	enabledOnly             bool
-	disabledOnly            bool
-	upgradableOnly          bool
-	uninstalledOnly         bool
-	thirdPartyOnly          bool
-	runtimeNodeJSOnly       bool
-	runtimePythonOnly       bool
-	runtimeScriptOnly       bool
-	runtimeScriptNodeJSOnly bool
-	runtimeScriptPythonOnly bool
+	enabledStatus string
+	upgradeStatus string
+	pluginType    string
+	runtime       string
+	installStatus string
+}
+
+func pluginFilterIsAll(value string) bool {
+	return value == "" || value == pluginFilterAll
 }
 
 func (filters pluginFilterState) applied(store bool) bool {
 	if store {
-		return filters.uninstalledOnly || filters.thirdPartyOnly || filters.runtimeNodeJSOnly || filters.runtimePythonOnly || filters.runtimeScriptOnly
+		return !pluginFilterIsAll(filters.installStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
 	}
-	return filters.enabledOnly || filters.disabledOnly || filters.upgradableOnly || filters.thirdPartyOnly || filters.runtimeNodeJSOnly || filters.runtimePythonOnly || filters.runtimeScriptNodeJSOnly || filters.runtimeScriptPythonOnly
+	return !pluginFilterIsAll(filters.enabledStatus) || !pluginFilterIsAll(filters.upgradeStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
 }
 
 // filterPlugins applies the same keyword and advanced-filter contract as the retired Flutter catalog.
@@ -113,39 +135,73 @@ func pluginSearchTexts(plugin pluginSettingsPlugin) []string {
 	return append(texts, plugin.TriggerKeywords...)
 }
 
-// pluginMatchesFilters keeps store and installed-only predicates from leaking into each other.
+// pluginMatchesFilters applies one exclusive value per dropdown, keeping store and installed catalogs separate.
 func pluginMatchesFilters(plugin pluginSettingsPlugin, filters pluginFilterState, store bool) bool {
 	if store {
-		if filters.uninstalledOnly && plugin.IsInstalled {
-			return false
+		switch filters.installStatus {
+		case pluginFilterInstalled:
+			if !plugin.IsInstalled {
+				return false
+			}
+		case pluginFilterUninstalled:
+			if plugin.IsInstalled {
+				return false
+			}
 		}
 	} else {
-		if filters.enabledOnly && plugin.IsDisable {
+		switch filters.enabledStatus {
+		case pluginFilterEnabled:
+			if plugin.IsDisable {
+				return false
+			}
+		case pluginFilterDisabled:
+			if !plugin.IsDisable {
+				return false
+			}
+		}
+		switch filters.upgradeStatus {
+		case pluginFilterUpgradable:
+			if !plugin.IsUpgradable {
+				return false
+			}
+		case pluginFilterNotUpgradable:
+			if plugin.IsUpgradable {
+				return false
+			}
+		}
+	}
+	switch filters.pluginType {
+	case pluginFilterSystem:
+		if !plugin.IsSystem {
 			return false
 		}
-		if filters.disabledOnly && !plugin.IsDisable {
-			return false
-		}
-		if filters.upgradableOnly && !plugin.IsUpgradable {
+	case pluginFilterThirdParty:
+		if plugin.IsSystem {
 			return false
 		}
 	}
-	if filters.thirdPartyOnly && plugin.IsSystem {
-		return false
-	}
+	return pluginMatchesRuntimeFilter(plugin, filters.runtime, store)
+}
 
-	runtimeNodeJS := filters.runtimeNodeJSOnly && strings.EqualFold(plugin.Runtime, "nodejs")
-	runtimePython := filters.runtimePythonOnly && strings.EqualFold(plugin.Runtime, "python")
-	runtimeScript := store && filters.runtimeScriptOnly && strings.EqualFold(plugin.Runtime, "script")
-	runtimeScriptNodeJS := !store && filters.runtimeScriptNodeJSOnly && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".js")
-	runtimeScriptPython := !store && filters.runtimeScriptPythonOnly && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".py")
-	runtimeFilterApplied := filters.runtimeNodeJSOnly || filters.runtimePythonOnly
-	if store {
-		runtimeFilterApplied = runtimeFilterApplied || filters.runtimeScriptOnly
-	} else {
-		runtimeFilterApplied = runtimeFilterApplied || filters.runtimeScriptNodeJSOnly || filters.runtimeScriptPythonOnly
+// pluginMatchesRuntimeFilter keeps store script and installed script-language filters exclusive.
+func pluginMatchesRuntimeFilter(plugin pluginSettingsPlugin, runtime string, store bool) bool {
+	if pluginFilterIsAll(runtime) {
+		return true
 	}
-	return !runtimeFilterApplied || runtimeNodeJS || runtimePython || runtimeScript || runtimeScriptNodeJS || runtimeScriptPython
+	switch runtime {
+	case pluginFilterRuntimeNodeJS:
+		return strings.EqualFold(plugin.Runtime, "nodejs")
+	case pluginFilterRuntimePython:
+		return strings.EqualFold(plugin.Runtime, "python")
+	case pluginFilterRuntimeScript:
+		return store && strings.EqualFold(plugin.Runtime, "script")
+	case pluginFilterRuntimeScriptNodeJS:
+		return !store && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".js")
+	case pluginFilterRuntimeScriptPython:
+		return !store && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".py")
+	default:
+		return true
+	}
 }
 
 type pluginGlance struct {
@@ -260,6 +316,7 @@ func (a *App) switchPluginList(store bool) {
 	a.pluginSettings.SetSearchFocused(true)
 	a.settingsSearch.SetFocused(false)
 	a.settingsSearch.SetPanel(false)
+	a.pluginSettings.SetFilters(pluginFilterState{})
 	a.pluginSettings.SetFilterOpen(false)
 	if store {
 		a.pluginSettings.SetDetailTab("description")
@@ -675,7 +732,11 @@ func (a *App) clearPluginSearch() {
 
 // togglePluginFilterPanel shows or hides the catalog's anchored advanced filters.
 func (a *App) togglePluginFilterPanel() {
-	a.pluginSettings.SetFilterOpen(!a.pluginSettings.FilterOpen())
+	if a.pluginSettings.FilterOpen() {
+		a.closePluginFilterPanel()
+		return
+	}
+	a.pluginSettings.SetFilterOpen(true)
 	a.pluginSettings.SetSearchFocused(false)
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
@@ -683,36 +744,63 @@ func (a *App) togglePluginFilterPanel() {
 
 func (a *App) closePluginFilterPanel() {
 	a.pluginSettings.SetFilterOpen(false)
+	if picker := a.generalSettings.ChoicePicker(); picker != nil && strings.HasPrefix(picker.item.key, "plugin-filter-") {
+		a.closeSettingChoicePicker()
+		return
+	}
 	a.invalidateSettingsWindow()
 }
 
-// togglePluginFilter updates one filter while keeping the current detail selected whenever possible.
-func (a *App) togglePluginFilter(id string) {
+// openPluginFilterChoice opens the shared settings dropdown for one catalog filter field.
+func (a *App) openPluginFilterChoice(id string, anchor woxui.Rect) {
+	item := a.pluginFilterChoiceItem(id)
+	if len(item.choices) == 0 {
+		return
+	}
+	if anchor.Width <= 0 || anchor.Height <= 0 {
+		if host := a.settingsHost; host != nil {
+			anchor, _ = host.BoundsForKey(woxwidget.Key("setting-choice-anchor-plugin-filter-" + id))
+		}
+	}
+	a.generalSettings.EndEdit()
+	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+		item: item, anchor: anchor,
+		onChoose: func(choice settingChoice) { a.setPluginFilter(id, choice.value) },
+	})
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
+}
+
+// setPluginFilter writes one exclusive dropdown value and keeps the current detail selected when it still matches.
+func (a *App) setPluginFilter(id, value string) {
+	if value == pluginFilterAll {
+		value = ""
+	}
 	filters := a.pluginSettings.Filters()
 	switch id {
 	case "enabled":
-		filters.enabledOnly = !filters.enabledOnly
-	case "disabled":
-		filters.disabledOnly = !filters.disabledOnly
-	case "upgradable":
-		filters.upgradableOnly = !filters.upgradableOnly
-	case "uninstalled":
-		filters.uninstalledOnly = !filters.uninstalledOnly
-	case "third-party":
-		filters.thirdPartyOnly = !filters.thirdPartyOnly
-	case "runtime-nodejs":
-		filters.runtimeNodeJSOnly = !filters.runtimeNodeJSOnly
-	case "runtime-python":
-		filters.runtimePythonOnly = !filters.runtimePythonOnly
-	case "runtime-script":
-		filters.runtimeScriptOnly = !filters.runtimeScriptOnly
-	case "runtime-script-nodejs":
-		filters.runtimeScriptNodeJSOnly = !filters.runtimeScriptNodeJSOnly
-	case "runtime-script-python":
-		filters.runtimeScriptPythonOnly = !filters.runtimeScriptPythonOnly
+		filters.enabledStatus = value
+	case "upgrade":
+		filters.upgradeStatus = value
+	case "type":
+		filters.pluginType = value
+	case "runtime":
+		filters.runtime = value
+	case "install":
+		filters.installStatus = value
 	default:
 		return
 	}
+	a.applyPluginFilters(filters)
+}
+
+// resetPluginFilters restores every catalog dropdown to All.
+func (a *App) resetPluginFilters() {
+	a.applyPluginFilters(pluginFilterState{})
+}
+
+// applyPluginFilters commits catalog filters and keeps the current plugin selected when it still matches.
+func (a *App) applyPluginFilters(filters pluginFilterState) {
 	a.pluginSettings.SetFilters(filters)
 	query := ""
 	if editor := a.pluginSettings.SearchEditor(); editor != nil {
@@ -733,26 +821,6 @@ func (a *App) togglePluginFilter(id string) {
 		a.setPluginSelectionLocked(filtered[0].index)
 	}
 	a.invalidateSettingsWindow()
-}
-
-// refreshPluginCatalog preserves the search and selection while reloading the current catalog.
-func (a *App) refreshPluginCatalog() {
-	if a.pluginSettings.PluginsLoading() || a.pluginSettings.Operation() != "" {
-		return
-	}
-	store := a.pluginSettings.PluginsStore()
-	plugins := a.pluginSettings.Plugins()
-	selected := a.pluginSettings.Selected()
-	preferredID := ""
-	if selected >= 0 && selected < len(plugins) {
-		preferredID = plugins[selected].ID
-	}
-	a.pluginSettings.SetFilterOpen(false)
-	util.Go(a.lifecycleCtx, "refresh plugin catalog", func() {
-		if err := a.reloadPlugins(store, preferredID); err != nil {
-			log.Printf("refresh plugin catalog: %v", err)
-		}
-	})
 }
 
 func (a *App) blurPluginSearch() {
@@ -847,6 +915,10 @@ func (a *App) selectPluginDetailTab(tab string) {
 
 // onPluginSettingsKey routes keys either to list navigation or the active shared field editor.
 func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
+	if event.Down && !event.Composing && event.Key == woxui.KeyEscape && a.pluginSettings.FilterOpen() {
+		a.closePluginFilterPanel()
+		return true
+	}
 	if a.onPluginSearchKey(event) {
 		return true
 	}

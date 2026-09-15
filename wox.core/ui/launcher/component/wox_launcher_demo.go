@@ -84,6 +84,13 @@ type LauncherDemoProps struct {
 	QueryAccessory         woxwidget.Widget
 	HighlightColor         woxui.Color
 	HighlightTarget        LauncherDemoHighlightTarget
+	QueryFontSize          float32
+	ResultTitleFontSize    float32
+	ResultSubtitleFontSize float32
+	QueryHeight            float32
+	RowHeight              float32
+	RowGap                 float32
+	ToolbarHeight          float32
 }
 
 // WoxLauncherDemo builds the complete query, results, preview, action panel, and toolbar demo.
@@ -97,12 +104,13 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	windowWidth := props.Width
 	contentBounds := LauncherContentBounds(props.Width, props.Height, props.Theme.AppContentInset)
 	props.Width, props.Height = contentBounds.Width, contentBounds.Height
-	const appPadding, queryHeight = float32(10), float32(55)
+	appPadding, queryHeight := demoAppPadding(props.Theme), demoQueryHeight(props)
 	windowRadius := float32(12)
 	if props.Theme.AppBorderRadius != nil {
 		windowRadius = float32(*props.Theme.AppBorderRadius)
 	}
-	const resultContainerTop, rowHeight, toolbarHeight = float32(8), float32(56), float32(40)
+	const resultContainerTop = float32(8)
+	rowHeight, rowGap, toolbarHeight := demoRowHeight(props), max(float32(0), props.RowGap), demoToolbarHeight(props)
 	resultTop := resultContainerTop
 	if props.ShowQuery {
 		resultTop += appPadding + queryHeight
@@ -118,7 +126,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		// the light blurred wallpaper between the query box and toolbar.
 		visibleResults *= min(max(float32(0), props.ResultsOpacity), 1)
 	}
-	listHeight := min(visibleResults*rowHeight, max(float32(0), props.Height-resultTop-footerHeight))
+	listHeight := min(demoResultListHeight(visibleResults, rowHeight, rowGap), max(float32(0), props.Height-resultTop-footerHeight))
 	renderHeight := props.Height
 	compactHeight := resultTop + listHeight + footerHeight
 	if props.ShowToolbar || !props.ShowQuery {
@@ -148,7 +156,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	children := []woxwidget.StackChild{}
 	if props.ShowQuery {
 		query := demoQuery(props, queryHeight, alpha)
-		children = append(children, woxwidget.StackChild{Left: appPadding, Top: appPadding, Right: appPadding, StretchWidth: true, Child: demoHighlight(query, props.Width-appPadding*2, queryHeight, 8, props.HighlightTarget == LauncherDemoHighlightQueryBackground, props.HighlightColor)})
+		children = append(children, woxwidget.StackChild{Left: appPadding, Top: appPadding, Right: appPadding, StretchWidth: true, Child: demoHighlight(query, props.Width-appPadding*2, queryHeight, demoQueryRadius(props.Theme), props.HighlightTarget == LauncherDemoHighlightQueryBackground, props.HighlightColor)})
 	}
 	for index, result := range props.Results {
 		resultAlpha := alpha
@@ -157,7 +165,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		}
 		rowWidth := max(float32(0), resultWidth-appPadding*2)
 		children = append(children, woxwidget.StackChild{
-			Left: appPadding, Top: resultTop + float32(index)*rowHeight, Right: max(appPadding, props.Width-resultWidth+appPadding), StretchWidth: true,
+			Left: appPadding, Top: resultTop + float32(index)*(rowHeight+rowGap), Right: max(appPadding, props.Width-resultWidth+appPadding), StretchWidth: true,
 			Child: demoResultRow(props, result, rowWidth, rowHeight, resultAlpha),
 		})
 	}
@@ -178,7 +186,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		if props.Theme.AppContentInset > 0 || props.Theme.AppContentBorderRadius > 0 {
 			footerRadius = props.Theme.AppContentBorderRadius
 		}
-		children = append(children, woxwidget.StackChild{Top: renderHeight - footerHeight, Child: demoToolbar(props, footerHeight, renderHeight, footerRadius, alpha)})
+		children = append(children, woxwidget.StackChild{Top: renderHeight - footerHeight, Child: demoToolbar(props, footerHeight, footerRadius, alpha)})
 	}
 	if props.ActionProgress > .01 {
 		panelWidth := min(float32(250), props.Width*.42)
@@ -218,8 +226,8 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 }
 
 func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.Widget {
-	const lineHeight = float32(34)
-	style := woxui.TextStyle{Size: QueryFontSize}
+	lineHeight := min(float32(34), max(float32(18), height-16))
+	style := woxui.TextStyle{Size: demoQueryFontSize(props)}
 	var query woxwidget.Widget
 	if len(props.QueryParts) > 0 {
 		parts := make([]woxwidget.Widget, 0, len(props.QueryParts))
@@ -250,16 +258,19 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 	}
 	// Live query chrome uses 8px left / 6px right so glance sits on the same edge.
 	borderColor, borderWidth := props.Theme.QueryBottomBorder()
-	return woxwidget.Container{BottomBorderColor: demoColorOpacity(borderColor, props.Opacity), BottomBorderWidth: borderWidth, Height: height, Radius: 8, Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
+	return woxwidget.Container{BottomBorderColor: demoColorOpacity(borderColor, props.Opacity), BottomBorderWidth: borderWidth, Height: height, Radius: demoQueryRadius(props.Theme), Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
 	}}
 }
 
 func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, height float32, alpha uint8) woxwidget.Widget {
-	const (
-		baseHeight, iconSize, iconGap = float32(50), float32(28), float32(10)
-		tailHeight, tailPadding       = float32(22), float32(8)
-	)
+	const tailHeight, tailPadding = float32(22), float32(8)
+	baseHeight := max(float32(28), height-6)
+	iconSize := min(float32(28), max(float32(18), baseHeight-8))
+	iconGap := float32(10)
+	if height < 50 {
+		iconGap = 8
+	}
 	background := woxui.Color{}
 	if result.Selected {
 		background = demoColorOpacity(props.Theme.SelectedBackground, float32(alpha)/255)
@@ -275,11 +286,15 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 		textWidth = max(float32(0), textWidth-iconGap-tailWidth)
 	}
 	highlightTitle := props.HighlightTarget == LauncherDemoHighlightResultTitle && !result.Selected || props.HighlightTarget == LauncherDemoHighlightSelectedTitle && result.Selected
-	title := woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: ResultTitleFontSize}, Color: withAlpha(demoResultColor(result.Selected, props.Theme.SelectedTitle, props.Theme.ResultTitle), alpha)}
-	labels := []woxwidget.Widget{demoInlineHighlight(title, 20, 3, highlightTitle, props.HighlightColor)}
+	titleLine, subtitleLine := float32(20), float32(16)
+	if height < 50 {
+		titleLine, subtitleLine = 18, 14
+	}
+	title := woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: demoResultTitleFontSize(props)}, Color: withAlpha(demoResultColor(result.Selected, props.Theme.SelectedTitle, props.Theme.ResultTitle), alpha)}
+	labels := []woxwidget.Widget{demoInlineHighlight(title, titleLine, 3, highlightTitle, props.HighlightColor)}
 	if result.Subtitle != "" {
-		subtitle := woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: ResultSubtitleFontSize}, Color: withAlpha(demoResultColor(result.Selected, props.Theme.SelectedSubtitle, props.Theme.ResultSubtitle), alpha)}
-		labels = append(labels, demoInlineHighlight(subtitle, 16, 3, props.HighlightTarget == LauncherDemoHighlightResultSubtitle && !result.Selected, props.HighlightColor))
+		subtitle := woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: demoResultSubtitleFontSize(props)}, Color: withAlpha(demoResultColor(result.Selected, props.Theme.SelectedSubtitle, props.Theme.ResultSubtitle), alpha)}
+		labels = append(labels, demoInlineHighlight(subtitle, subtitleLine, 3, props.HighlightTarget == LauncherDemoHighlightResultSubtitle && !result.Selected, props.HighlightColor))
 	}
 	children := []woxwidget.Widget{
 		woxwidget.Align{Width: iconSize, Height: baseHeight, Vertical: .5, Child: woxwidget.Container{Width: iconSize, Height: iconSize, Radius: 7, Color: withAlpha(result.GlyphColor, demoScaledAlpha(float32(alpha)/255, 54)), Child: woxwidget.Align{
@@ -304,7 +319,7 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 		highlightTail := props.HighlightTarget == LauncherDemoHighlightResultTail && !result.Selected || props.HighlightTarget == LauncherDemoHighlightSelectedTail && result.Selected
 		children = append(children, woxwidget.Align{Width: tailWidth, Height: baseHeight, Vertical: .5, Child: demoHighlight(tail, tailWidth, tailHeight, tailHeight/2, highlightTail, props.HighlightColor)})
 	}
-	row := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: 13, Top: 3, Right: 13, Bottom: 3}, Child: woxwidget.Flex{
+	row := woxwidget.Container{Width: width, Height: height, Radius: demoResultRadius(props.Theme), Color: background, Padding: woxwidget.Insets{Left: 13, Top: 3, Right: 13, Bottom: 3}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: iconGap, Children: children,
 	}}
 	if result.Selected {
@@ -318,7 +333,7 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 		row.LeftBorderWidth = max(float32(0), props.Theme.SelectedBorderLeftWidth)
 		row.LeftBorderColor = demoColorOpacity(props.Theme.SelectedBorderLeftColor, float32(alpha)/255)
 	}
-	return demoHighlight(row, width, height, 8, props.HighlightTarget == LauncherDemoHighlightSelectedBackground && result.Selected || props.HighlightTarget == LauncherDemoHighlightResultHover && result.Hovered && !result.Selected, props.HighlightColor)
+	return demoHighlight(row, width, height, demoResultRadius(props.Theme), props.HighlightTarget == LauncherDemoHighlightSelectedBackground && result.Selected || props.HighlightTarget == LauncherDemoHighlightResultHover && result.Hovered && !result.Selected, props.HighlightColor)
 }
 
 // demoResultTailTextWidth estimates tail text so CJK glyphs keep the same 8px inset as production tags.
@@ -334,7 +349,7 @@ func demoResultTailTextWidth(text string) float32 {
 	return width
 }
 
-func demoToolbar(props LauncherDemoProps, height, windowHeight, windowRadius float32, alpha uint8) woxwidget.Widget {
+func demoToolbar(props LauncherDemoProps, height, windowRadius float32, alpha uint8) woxwidget.Widget {
 	primary := props.PrimaryAction
 	if primary == "" {
 		primary = "Execute"
@@ -389,17 +404,17 @@ func demoToolbar(props LauncherDemoProps, height, windowHeight, windowRadius flo
 		woxwidget.Container{Width: 8}, demoInlineHighlight(woxwidget.Text{Value: more, Style: woxui.TextStyle{Size: 11}, Color: demoColorOpacity(props.Theme.ToolbarText, float32(alpha)/255)}, 20, 3, props.HighlightTarget == LauncherDemoHighlightToolbarText, props.HighlightColor),
 		keycap(modifier, 30, props.ToolbarPressed, false), keycap("J", 20, props.ToolbarPressed, false),
 	}})
-	// Clip a window-sized rounded fill to the footer. A square toolbar fill would
-	// paint into the window's bottom corner cutouts; the query box is inset, so
-	// the top corners never showed this.
+	// Live toolbar uses Floating material. A solid fill keeps Glass's near-clear
+	// tint as a hard band. Extend the rounded rect above the clip so only the
+	// window's bottom corners stay rounded — the same trick as LauncherToolbarView.
 	fill := woxwidget.Container{
-		Width: props.Width, Height: windowHeight, Radius: windowRadius,
-		Color: demoColorOpacity(props.Theme.ToolbarBackground, props.Opacity),
+		Width: props.Width, Height: height + windowRadius, Radius: windowRadius,
+		Color: demoColorOpacity(props.Theme.ToolbarBackground, props.Opacity), Floating: true,
 	}
 	toolbar := woxwidget.Container{Width: props.Width, Height: height, Child: woxwidget.Clip{
 		Width: props.Width, Height: height,
 		Child: woxwidget.Stack{Width: props.Width, Height: height, Children: []woxwidget.StackChild{
-			{Top: height - windowHeight, Child: fill},
+			{Top: -windowRadius, Child: fill},
 			{Child: woxwidget.Painter{Width: props.Width, Height: min(height, max(float32(0), props.Theme.ToolbarBorderWidth)), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 				if props.Theme.ToolbarBorderWidth > 0 {
 					displayList.FillRect(bounds, demoColorOpacity(props.Theme.ToolbarBorder, props.Opacity))
@@ -499,6 +514,78 @@ func demoActionPanelHeight() float32 {
 }
 
 func demoAlpha(opacity float32) uint8 { return demoScaledAlpha(opacity, 255) }
+
+// demoAppPadding uses the leading inset as the demo's uniform window padding.
+func demoAppPadding(theme Theme) float32 {
+	if theme.AppPadding.Left > 0 {
+		return theme.AppPadding.Left
+	}
+	return 10
+}
+
+// demoQueryRadius keeps the previous 8-unit default when a Theme literal omits QueryRadius.
+func demoQueryRadius(theme Theme) float32 {
+	if theme.QueryRadius > 0 {
+		return theme.QueryRadius
+	}
+	return 8
+}
+
+func demoResultRadius(theme Theme) float32 {
+	if theme.ResultItemRadius > 0 {
+		return theme.ResultItemRadius
+	}
+	return 8
+}
+
+func demoQueryFontSize(props LauncherDemoProps) float32 {
+	if props.QueryFontSize > 0 {
+		return props.QueryFontSize
+	}
+	return QueryFontSize
+}
+
+func demoResultTitleFontSize(props LauncherDemoProps) float32 {
+	if props.ResultTitleFontSize > 0 {
+		return props.ResultTitleFontSize
+	}
+	return ResultTitleFontSize
+}
+
+func demoResultSubtitleFontSize(props LauncherDemoProps) float32 {
+	if props.ResultSubtitleFontSize > 0 {
+		return props.ResultSubtitleFontSize
+	}
+	return ResultSubtitleFontSize
+}
+
+func demoQueryHeight(props LauncherDemoProps) float32 {
+	if props.QueryHeight > 0 {
+		return props.QueryHeight
+	}
+	return 55
+}
+
+func demoRowHeight(props LauncherDemoProps) float32 {
+	if props.RowHeight > 0 {
+		return props.RowHeight
+	}
+	return 56
+}
+
+func demoToolbarHeight(props LauncherDemoProps) float32 {
+	if props.ToolbarHeight > 0 {
+		return props.ToolbarHeight
+	}
+	return 40
+}
+
+func demoResultListHeight(count, rowHeight, rowGap float32) float32 {
+	if count <= 0 {
+		return 0
+	}
+	return count*rowHeight + max(float32(0), count-1)*rowGap
+}
 
 // demoWindowBorderMaxAlpha keeps opaque split colors as a quiet window edge.
 // Glass themes already author a hairline around 0.16; replacing that alpha

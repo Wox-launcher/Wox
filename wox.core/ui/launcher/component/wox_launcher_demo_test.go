@@ -11,7 +11,7 @@ import (
 func TestDemoToolbarHotkeyHighlight(t *testing.T) {
 	flash := woxui.Color{R: 255, A: 255}
 	for _, target := range []LauncherDemoHighlightTarget{LauncherDemoHighlightNone, LauncherDemoHighlightHotkey} {
-		toolbar := demoToolbar(LauncherDemoProps{Width: 600, HighlightTarget: target, HighlightColor: flash}, 40, 300, 12, 255).(woxwidget.Container)
+		toolbar := demoToolbar(LauncherDemoProps{Width: 600, HighlightTarget: target, HighlightColor: flash}, 40, 12, 255).(woxwidget.Container)
 		content := toolbar.Child.(woxwidget.Clip).Child.(woxwidget.Stack).Children[2].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 		for index, child := range content.Children {
 			keycap := index == 1 || index == 4 || index == 5
@@ -64,7 +64,7 @@ func TestDemoToolbarIndependentDivider(t *testing.T) {
 	for _, width := range []float32{0, 2} {
 		color := woxui.Color{R: 40, G: 100, B: 80, A: 80}
 		props := LauncherDemoProps{Width: 600, Opacity: 0.5, Theme: Theme{ToolbarBorder: color, ToolbarBorderWidth: width}}
-		toolbar := demoToolbar(props, 40, 300, 12, 128).(woxwidget.Container)
+		toolbar := demoToolbar(props, 40, 12, 128).(woxwidget.Container)
 		divider := toolbar.Child.(woxwidget.Clip).Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Painter)
 		if divider.Height != width {
 			t.Fatalf("divider height = %v, want %v", divider.Height, width)
@@ -114,11 +114,11 @@ func TestWoxLauncherDemoOwnsSharedWindowChrome(t *testing.T) {
 	}
 	toolbar := children[len(children)-2].Child.(woxwidget.Container).Child.(woxwidget.Clip)
 	fill := toolbar.Child.(woxwidget.Stack).Children[0]
-	if fill.Top != toolbar.Height-demo.Height {
-		t.Fatalf("toolbar fill top = %v, want window-sized rounded rect aligned to the demo", fill.Top)
+	if fill.Top != -12 {
+		t.Fatalf("toolbar fill top = %v, want the rounded material extended above the footer clip", fill.Top)
 	}
-	if box := fill.Child.(woxwidget.Container); box.Radius != 12 || box.Height != demo.Height {
-		t.Fatalf("toolbar fill = %#v, want the 12px window corners clipped to the footer", box)
+	if box := fill.Child.(woxwidget.Container); !box.Floating || box.Radius != 12 || box.Height != toolbar.Height+12 {
+		t.Fatalf("toolbar fill = %#v, want floating material clipped to the 12px window corners", box)
 	}
 }
 
@@ -230,6 +230,30 @@ func TestWoxLauncherDemoUsesProductionLauncherGeometry(t *testing.T) {
 
 	if query.Left != 10 || query.Top != 10 || result.Left != 10 || result.Top != 73 || result.Child.(woxwidget.Container).Height != 56 {
 		t.Fatalf("launcher geometry = query %.0f/%.0f result %.0f/%.0f/%.0f", query.Left, query.Top, result.Left, result.Top, result.Child.(woxwidget.Container).Height)
+	}
+}
+
+func TestWoxLauncherDemoUsesAuthoredQueryGeometry(t *testing.T) {
+	demo := WoxLauncherDemo(LauncherDemoProps{
+		Width: 600, Height: 320, Opacity: 1, ShowQuery: true, ShowToolbar: true,
+		Theme:   Theme{QueryRadius: 16, AppPadding: woxwidget.Insets{Left: 12, Top: 12, Right: 12, Bottom: 12}},
+		Results: []LauncherDemoResult{{Title: "Result"}},
+	}).(woxwidget.Clip)
+	children := demo.Child.(woxwidget.Stack).Children
+	query := children[2]
+	if query.Left != 12 || query.Top != 12 {
+		t.Fatalf("query inset = %.0f/%.0f, want authored AppPadding 12", query.Left, query.Top)
+	}
+	if box := query.Child.(woxwidget.Container); box.Radius != 16 {
+		t.Fatalf("query radius = %.0f, want authored QueryBoxBorderRadius 16", box.Radius)
+	}
+}
+
+func TestWoxLauncherDemoHonorsCatalogTypeOverrides(t *testing.T) {
+	query := demoQuery(LauncherDemoProps{Opacity: 1, Query: "Preview", QueryFontSize: 14}, 40, 255).(woxwidget.Container)
+	text := query.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if query.Height != 40 || text.Style.Size != 14 {
+		t.Fatalf("catalog query = height %.0f size %.0f, want compact 40/14", query.Height, text.Style.Size)
 	}
 }
 

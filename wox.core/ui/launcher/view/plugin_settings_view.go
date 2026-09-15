@@ -29,8 +29,8 @@ func PluginSettingsPage(props PluginSettingsPageProps) woxwidget.Widget {
 	if props.FilterPanel == nil {
 		return content
 	}
-	// Flutter anchors the panel before the two 30px search actions, 8px below the button, and shifts it only when the 360px minimum cannot fit.
-	panelLeft := 20 + max(float32(0), props.List.Width-64)
+	// Anchor to the trailing 30px filter action (plus the 4px search inset), 4px below the 40px search field.
+	panelLeft := 20 + max(float32(0), props.List.Width-34)
 	panelProps := *props.FilterPanel
 	panelProps.Width = min(panelProps.Width, max(float32(0), props.Width-panelLeft-12))
 	if panelProps.Width < 360 {
@@ -70,13 +70,10 @@ type PluginListProps struct {
 	Focused               bool
 	Window                *woxui.Window
 	FilterIcon            *woxui.Image
-	RefreshIcon           *woxui.Image
 	InstalledIcon         *woxui.Image
 	InstalledSelectedIcon *woxui.Image
 	FilterLabel           string
-	RefreshLabel          string
 	FilterActive          bool
-	Refreshing            bool
 	EmptyLabel            string
 	EmptyTitle            string
 	EmptyDescription      string
@@ -88,7 +85,6 @@ type PluginListProps struct {
 	OnSearchChanged       func(string)
 	OnSetSearchValue      func(string) error
 	OnFilter              func()
-	OnRefresh             func()
 }
 
 // PluginList builds the searchable plugin catalog.
@@ -145,7 +141,6 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, Value: props.Search.Text, Focused: props.Focused, Autofocus: props.Focused,
 		Actions: []woxcomponent.SearchFieldAction{
 			{ID: "plugin-filter", Label: props.FilterLabel, Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
-			{ID: "plugin-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, Disabled: props.Refreshing, OnTap: props.OnRefresh},
 		},
 		Window: props.Window, Theme: searchTheme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
 		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
@@ -208,62 +203,66 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 	})
 }
 
-// PluginFilterOption describes one advanced catalog filter.
-type PluginFilterOption struct {
+// PluginFilterField describes one exclusive catalog filter dropdown.
+type PluginFilterField struct {
 	ID    string
 	Label string
-	Value bool
+	Value string
 }
 
 // PluginFilterPanelProps contains the anchored advanced-filter surface.
 type PluginFilterPanelProps struct {
 	Width        float32
 	LabelWidth   float32
-	RuntimeTitle string
-	Options      []PluginFilterOption
-	Runtimes     []PluginFilterOption
+	Fields       []PluginFilterField
+	ResetLabel   string
+	ResetEnabled bool
 	Theme        woxcomponent.ControlTheme
-	OnToggle     func(string)
+	OnOpen       func(string, woxui.Rect)
+	OnReset      func()
 	OnDismiss    func()
 }
 
 // PluginFilterPanel builds the catalog filter popover above the split view.
 func PluginFilterPanel(props PluginFilterPanelProps) woxwidget.Widget {
-	const rowHeight = float32(18)
-	const rowGap = float32(10)
-	innerWidth := max(float32(0), props.Width-28)
-	labelWidth := min(max(float32(50), props.LabelWidth), float32(180))
-	rows := make([]woxwidget.Widget, 0, len(props.Options)+1)
-	for _, option := range props.Options {
-		rows = append(rows, pluginFilterRow(option, labelWidth, rowHeight, props))
+	const rowGap = float32(12)
+	const horizontalPadding = float32(16)
+	rowHeight := woxcomponent.SettingsControlHeight
+	innerWidth := max(float32(0), props.Width-horizontalPadding*2)
+	labelWidth := min(max(float32(50), props.LabelWidth), innerWidth-woxcomponent.SettingsChoiceControlWidth-12)
+	controlWidth := max(float32(120), innerWidth-labelWidth-12)
+	rows := make([]woxwidget.Widget, 0, len(props.Fields))
+	for _, field := range props.Fields {
+		rows = append(rows, pluginFilterSelectRow(field, labelWidth, controlWidth, rowHeight, props))
 	}
-	runtimeOptions := make([]woxwidget.Widget, 0, len(props.Runtimes))
-	for _, option := range props.Runtimes {
-		runtimeOptions = append(runtimeOptions, pluginRuntimeFilterOption(option, rowHeight, props))
+	if props.ResetLabel != "" || props.OnReset != nil {
+		rows = append(rows, woxwidget.Align{Width: innerWidth, Height: rowHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "plugin-filter-reset", Label: props.ResetLabel, Disabled: !props.ResetEnabled, Variant: woxcomponent.ButtonSecondary,
+			OnTap: props.OnReset, Theme: props.Theme,
+		})})
 	}
-	runtimeWidth := max(float32(0), innerWidth-labelWidth-10)
-	rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: labelWidth, Height: rowHeight, Child: woxwidget.Text{Value: props.RuntimeTitle, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text}},
-		woxwidget.ScrollView{Key: "plugin-filter-runtime-scroll", Width: runtimeWidth, Height: rowHeight, Horizontal: true, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 14, Children: runtimeOptions}},
-	}})
-	height := float32(24) + float32(len(rows))*rowHeight + float32(max(0, len(rows)-1))*rowGap
+	height := horizontalPadding*2 + float32(len(rows))*rowHeight + float32(max(0, len(rows)-1))*rowGap
 	return woxwidget.FocusScope{Key: "plugin-filter-panel", Modal: true, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: 8, Floating: true, Color: props.Theme.Surface, BorderColor: props.Theme.Border, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 14, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: rowGap, Children: rows},
+		Padding: woxwidget.UniformInsets(horizontalPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: rowGap, Children: rows},
 	}}
 }
 
-func pluginFilterRow(option PluginFilterOption, labelWidth, height float32, props PluginFilterPanelProps) woxwidget.Widget {
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: labelWidth, Height: height, Child: woxwidget.Text{Value: option.Label, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text}},
-		woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{ID: "plugin-filter-" + option.ID, Label: option.Label, Value: option.Value, OnChange: func(bool) { props.OnToggle(option.ID) }, Theme: props.Theme}),
-	}}
-}
-
-func pluginRuntimeFilterOption(option PluginFilterOption, height float32, props PluginFilterPanelProps) woxwidget.Widget {
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{ID: "plugin-filter-" + option.ID, Label: option.Label, Value: option.Value, OnChange: func(bool) { props.OnToggle(option.ID) }, Theme: props.Theme}),
-		woxwidget.Container{Height: height, Child: woxwidget.Text{Value: option.Label, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text}},
+func pluginFilterSelectRow(field PluginFilterField, labelWidth, controlWidth, height float32, props PluginFilterPanelProps) woxwidget.Widget {
+	id := field.ID
+	onOpen := func(anchor woxui.Rect) {
+		if props.OnOpen != nil {
+			props.OnOpen(id, anchor)
+		}
+	}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: labelWidth, Height: height, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{
+			Value: field.Label, Style: woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize}, Color: props.Theme.Text,
+		}}},
+		woxwidget.Keyed{Key: SettingChoiceAnchorKey("plugin-filter-" + field.ID), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
+			ID: "plugin-filter-" + field.ID, Label: field.Label, Value: field.Value, Width: controlWidth, Height: height,
+			Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary, Theme: props.Theme, OnTapBounds: onOpen,
+		})},
 	}}
 }
 

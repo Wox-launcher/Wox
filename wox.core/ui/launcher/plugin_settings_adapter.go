@@ -42,18 +42,15 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		Focused:               plugins.PluginSearchFocused,
 		Window:                a.settingsNativeWindow(),
 		FilterIcon:            a.imageForTint(settingControlIconSource("filter"), &iconTint, physicalImageSize(16, imageScale)),
-		RefreshIcon:           a.imageForTint(settingControlIconSource("refresh"), &iconTint, physicalImageSize(16, imageScale)),
 		InstalledIcon:         a.imageForTint(settingControlIconSource("check-circle"), &installedTint, physicalImageSize(20, imageScale)),
 		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, physicalImageSize(20, imageScale)),
 		FilterLabel:           a.translate("i18n:ui_filter_placeholder"),
-		RefreshLabel:          a.translate("i18n:ui_refresh"),
 		FilterActive:          plugins.PluginFilters.applied(plugins.PluginsStore),
-		Refreshing:            plugins.PluginsLoading,
 		Theme:                 snapshot.palette,
 		OnClear:               a.clearPluginSearch,
 		OnSearchKey:           a.onPluginSearchKey, OnSearchFocusChange: a.setPluginSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
-		OnFilter: a.togglePluginFilterPanel, OnRefresh: a.refreshPluginCatalog,
+		OnFilter: a.togglePluginFilterPanel,
 	}
 	if plugins.PluginsLoading && len(plugins.Plugins) == 0 {
 		props.Message = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
@@ -542,44 +539,109 @@ func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.Pl
 	if !plugins.PluginFilterOpen {
 		return nil
 	}
-	filters := plugins.PluginFilters
-	options := make([]launcherview.PluginFilterOption, 0, 4)
-	if plugins.PluginsStore {
-		options = append(options, launcherview.PluginFilterOption{ID: "uninstalled", Label: a.translate("i18n:ui_not_installed"), Value: filters.uninstalledOnly})
-	} else {
-		options = append(options,
-			launcherview.PluginFilterOption{ID: "disabled", Label: a.translate("i18n:ui_plugin_filter_disabled_only"), Value: filters.disabledOnly},
-			launcherview.PluginFilterOption{ID: "enabled", Label: a.translate("i18n:ui_plugin_filter_enabled_only"), Value: filters.enabledOnly},
-			launcherview.PluginFilterOption{ID: "upgradable", Label: a.translate("i18n:ui_plugin_filter_upgradable"), Value: filters.upgradableOnly},
-		)
-	}
-	options = append(options, launcherview.PluginFilterOption{ID: "third-party", Label: a.translate("i18n:ui_plugin_filter_third_party_only"), Value: filters.thirdPartyOnly})
-	runtimes := []launcherview.PluginFilterOption{
-		{ID: "runtime-nodejs", Label: a.translate("i18n:ui_runtime_name_nodejs"), Value: filters.runtimeNodeJSOnly},
-		{ID: "runtime-python", Label: a.translate("i18n:ui_runtime_name_python"), Value: filters.runtimePythonOnly},
-	}
-	if plugins.PluginsStore {
-		runtimes = append(runtimes, launcherview.PluginFilterOption{ID: "runtime-script", Label: a.translate("i18n:ui_runtime_name_script"), Value: filters.runtimeScriptOnly})
-	} else {
-		runtimes = append(runtimes,
-			launcherview.PluginFilterOption{ID: "runtime-script-nodejs", Label: a.translate("i18n:plugin_wpm_script_template_nodejs"), Value: filters.runtimeScriptNodeJSOnly},
-			launcherview.PluginFilterOption{ID: "runtime-script-python", Label: a.translate("i18n:plugin_wpm_script_template_python"), Value: filters.runtimeScriptPythonOnly},
-		)
-	}
-	labelWidth := float32(50)
+	fields := a.pluginFilterFields(plugins.PluginFilters, plugins.PluginsStore)
+	labelWidth := float32(80)
 	if window := a.settingsNativeWindow(); window != nil {
-		for _, option := range options {
-			if metrics, err := window.MeasureText(option.Label, woxui.TextStyle{Size: 13}); err == nil {
+		for _, field := range fields {
+			if metrics, err := window.MeasureText(field.Label, woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize}); err == nil {
 				labelWidth = max(labelWidth, metrics.Size.Width)
 			}
 		}
-		if metrics, err := window.MeasureText(a.translate("i18n:ui_runtime_status"), woxui.TextStyle{Size: 13}); err == nil {
-			labelWidth = max(labelWidth, metrics.Size.Width)
-		}
+	}
+	labelWidth = min(labelWidth, float32(160))
+	width := float32(32) + labelWidth + 12 + woxcomponent.SettingsChoiceControlWidth
+	if width < 360 {
+		width = 360
 	}
 	return &launcherview.PluginFilterPanelProps{
-		Width: 660, LabelWidth: min(labelWidth, float32(180)), RuntimeTitle: a.translate("i18n:ui_runtime_status"),
-		Options: options, Runtimes: runtimes, Theme: snapshot.palette, OnToggle: a.togglePluginFilter, OnDismiss: a.closePluginFilterPanel,
+		Width: width, LabelWidth: labelWidth, Fields: fields,
+		ResetLabel: a.translate("i18n:ui_plugin_filter_reset"), ResetEnabled: plugins.PluginFilters.applied(plugins.PluginsStore),
+		Theme: snapshot.palette, OnOpen: a.openPluginFilterChoice, OnReset: a.resetPluginFilters, OnDismiss: a.closePluginFilterPanel,
+	}
+}
+
+// pluginFilterFields builds the exclusive dropdown rows for the current catalog.
+func (a *App) pluginFilterFields(filters pluginFilterState, store bool) []launcherview.PluginFilterField {
+	fields := make([]launcherview.PluginFilterField, 0, 4)
+	if store {
+		fields = append(fields, launcherview.PluginFilterField{
+			ID: "install", Label: a.translate("i18n:ui_plugin_filter_install_status"), Value: a.pluginFilterChoiceLabel("install", filters.installStatus),
+		})
+	} else {
+		fields = append(fields,
+			launcherview.PluginFilterField{ID: "enabled", Label: a.translate("i18n:ui_plugin_filter_enabled_status"), Value: a.pluginFilterChoiceLabel("enabled", filters.enabledStatus)},
+			launcherview.PluginFilterField{ID: "upgrade", Label: a.translate("i18n:ui_plugin_filter_upgrade_status"), Value: a.pluginFilterChoiceLabel("upgrade", filters.upgradeStatus)},
+		)
+	}
+	fields = append(fields,
+		launcherview.PluginFilterField{ID: "type", Label: a.translate("i18n:ui_plugin_filter_plugin_type"), Value: a.pluginFilterChoiceLabel("type", filters.pluginType)},
+		launcherview.PluginFilterField{ID: "runtime", Label: a.translate("i18n:ui_plugin_filter_runtime"), Value: a.pluginFilterChoiceLabel("runtime", filters.runtime)},
+	)
+	return fields
+}
+
+// pluginFilterChoiceItem adapts one catalog filter dropdown to the shared settings picker.
+func (a *App) pluginFilterChoiceItem(id string) settingItem {
+	filters := a.pluginSettings.Filters()
+	store := a.pluginSettings.PluginsStore()
+	var value string
+	var title string
+	switch id {
+	case "enabled":
+		title, value = a.translate("i18n:ui_plugin_filter_enabled_status"), filters.enabledStatus
+	case "upgrade":
+		title, value = a.translate("i18n:ui_plugin_filter_upgrade_status"), filters.upgradeStatus
+	case "type":
+		title, value = a.translate("i18n:ui_plugin_filter_plugin_type"), filters.pluginType
+	case "runtime":
+		title, value = a.translate("i18n:ui_plugin_filter_runtime"), filters.runtime
+	case "install":
+		title, value = a.translate("i18n:ui_plugin_filter_install_status"), filters.installStatus
+	default:
+		return settingItem{}
+	}
+	if pluginFilterIsAll(value) {
+		value = pluginFilterAll
+	}
+	return settingItem{key: "plugin-filter-" + id, title: title, value: value, choices: a.pluginFilterChoices(id, store)}
+}
+
+// pluginFilterChoiceLabel returns the visible value for one exclusive filter dropdown.
+func (a *App) pluginFilterChoiceLabel(id, value string) string {
+	if pluginFilterIsAll(value) {
+		value = pluginFilterAll
+	}
+	for _, choice := range a.pluginFilterChoices(id, a.pluginSettings.PluginsStore()) {
+		if choice.value == value {
+			return choice.label
+		}
+	}
+	return a.translate("i18n:ui_all")
+}
+
+// pluginFilterChoices lists the exclusive options for one catalog filter dropdown.
+func (a *App) pluginFilterChoices(id string, store bool) []settingChoice {
+	all := settingChoice{value: pluginFilterAll, label: a.translate("i18n:ui_all")}
+	switch id {
+	case "enabled":
+		return []settingChoice{all, {value: pluginFilterEnabled, label: a.translate("i18n:ui_plugin_filter_enabled")}, {value: pluginFilterDisabled, label: a.translate("i18n:ui_plugin_filter_disabled")}}
+	case "upgrade":
+		return []settingChoice{all, {value: pluginFilterUpgradable, label: a.translate("i18n:ui_plugin_filter_upgradable")}, {value: pluginFilterNotUpgradable, label: a.translate("i18n:ui_plugin_filter_not_upgradable")}}
+	case "type":
+		return []settingChoice{all, {value: pluginFilterSystem, label: a.translate("i18n:ui_plugin_filter_system")}, {value: pluginFilterThirdParty, label: a.translate("i18n:ui_plugin_filter_third_party")}}
+	case "install":
+		return []settingChoice{all, {value: pluginFilterInstalled, label: a.translate("i18n:ui_plugin_filter_installed")}, {value: pluginFilterUninstalled, label: a.translate("i18n:ui_not_installed")}}
+	case "runtime":
+		choices := []settingChoice{all, {value: pluginFilterRuntimeNodeJS, label: a.translate("i18n:ui_runtime_name_nodejs")}, {value: pluginFilterRuntimePython, label: a.translate("i18n:ui_runtime_name_python")}}
+		if store {
+			return append(choices, settingChoice{value: pluginFilterRuntimeScript, label: a.translate("i18n:ui_runtime_name_script")})
+		}
+		return append(choices,
+			settingChoice{value: pluginFilterRuntimeScriptNodeJS, label: a.translate("i18n:ui_plugin_filter_runtime_script_nodejs")},
+			settingChoice{value: pluginFilterRuntimeScriptPython, label: a.translate("i18n:ui_plugin_filter_runtime_script_python")},
+		)
+	default:
+		return nil
 	}
 }
 

@@ -1,6 +1,9 @@
 package component
 
-import woxui "wox/ui/runtime"
+import (
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+)
 
 // Theme contains the semantic appearance shared by Wox launcher components.
 type Theme struct {
@@ -90,6 +93,10 @@ type Theme struct {
 	ToolbarBorderWidth      float32
 	SelectedBorderLeftColor woxui.Color
 	ToolbarBorder           woxui.Color
+
+	QueryRadius      float32
+	ResultItemRadius float32
+	AppPadding       woxwidget.Insets
 
 	Background             woxui.Color
 	QueryBackground        woxui.Color

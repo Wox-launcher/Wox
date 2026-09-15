@@ -63,7 +63,8 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), AppliedLabel: a.translate("i18n:ui_setting_theme_applied"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
 		PreviewLabel: a.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.translate("i18n:ui_setting_theme_description"), SystemLabel: a.translate("i18n:ui_setting_theme_system_tag"),
 		PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
-		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
+		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"),
+		PreviewMoreLabel: a.translate("i18n:toolbar_more_actions"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
 		LocateIcon: a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
 		Wallpaper:  themeSnap.ThemeWallpaperImage, WallpaperBlurred: themeSnap.ThemeWallpaperBlurred,
 		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale)), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, physicalImageSize(20, imageScale)),
@@ -72,7 +73,7 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		OnSearchKey:           a.onThemeSearchKey, OnSearchFocusChange: a.setThemeSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setThemeSearchValue(value) }, OnSetSearchValue: a.setThemeSearchValue,
 		OnClear:         func() { _ = a.setThemeSearchValue("") },
-		OnLocateCurrent: a.locateCurrentTheme, OnSelectDetailTab: a.selectThemeDetailTab,
+		OnLocateCurrent: a.locateCurrentTheme, OnTooltip: a.setSettingChoiceTooltip, OnSelectDetailTab: a.selectThemeDetailTab,
 		OnOpenWebsite: a.openSelectedThemeWebsite, OnOperation: a.runThemeOperation,
 	}
 	if themeSnap.ThemesLoading && len(themeSnap.Themes) == 0 {

@@ -8,6 +8,62 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestPluginMatchesFiltersExclusiveDropdowns(t *testing.T) {
+	enabled := pluginSettingsPlugin{ID: "a", Runtime: "nodejs"}
+	disabled := pluginSettingsPlugin{ID: "b", Runtime: "python", IsDisable: true}
+	upgradable := pluginSettingsPlugin{ID: "c", Runtime: "nodejs", IsUpgradable: true}
+	system := pluginSettingsPlugin{ID: "d", Runtime: "go", IsSystem: true}
+	script := pluginSettingsPlugin{ID: "e", Runtime: "script", Entry: "main.js"}
+	storeInstalled := pluginSettingsPlugin{ID: "f", Runtime: "python", IsInstalled: true}
+
+	if got := pluginMatchesFilters(disabled, pluginFilterState{enabledStatus: pluginFilterEnabled}, false); got {
+		t.Fatal("disabled plugin must not match enabled status")
+	}
+	if got := pluginMatchesFilters(enabled, pluginFilterState{enabledStatus: pluginFilterDisabled}, false); got {
+		t.Fatal("enabled plugin must not match disabled status")
+	}
+	if got := pluginMatchesFilters(enabled, pluginFilterState{upgradeStatus: pluginFilterUpgradable}, false); got {
+		t.Fatal("non-upgradable plugin must not match upgradable status")
+	}
+	if got := pluginMatchesFilters(upgradable, pluginFilterState{upgradeStatus: pluginFilterNotUpgradable}, false); got {
+		t.Fatal("upgradable plugin must not match not-upgradable status")
+	}
+	if got := pluginMatchesFilters(system, pluginFilterState{pluginType: pluginFilterThirdParty}, false); got {
+		t.Fatal("system plugin must not match third-party type")
+	}
+	if got := pluginMatchesFilters(enabled, pluginFilterState{pluginType: pluginFilterSystem}, false); got {
+		t.Fatal("third-party plugin must not match system type")
+	}
+	if got := pluginMatchesFilters(script, pluginFilterState{runtime: pluginFilterRuntimeScriptNodeJS}, false); !got {
+		t.Fatal("javascript script plugin must match the Node.js script runtime")
+	}
+	if got := pluginMatchesFilters(script, pluginFilterState{runtime: pluginFilterRuntimePython}, false); got {
+		t.Fatal("javascript script plugin must not match the Python runtime")
+	}
+	if got := pluginMatchesFilters(storeInstalled, pluginFilterState{installStatus: pluginFilterUninstalled}, true); got {
+		t.Fatal("installed store plugin must not match uninstalled status")
+	}
+	if got := pluginMatchesFilters(enabled, pluginFilterState{}, false); !got {
+		t.Fatal("empty filters must keep every plugin visible")
+	}
+}
+
+func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
+	app := &App{
+		pluginSettings:  newPluginSettingsController(CommonDeps{}),
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+	}
+	app.pluginSettings.SetFilters(pluginFilterState{
+		enabledStatus: pluginFilterDisabled,
+		pluginType:    pluginFilterThirdParty,
+		runtime:       pluginFilterRuntimePython,
+	})
+	app.resetPluginFilters()
+	if got := app.pluginSettings.Filters(); got != (pluginFilterState{}) {
+		t.Fatalf("reset filters = %+v, want empty All values", got)
+	}
+}
+
 func TestFilterPluginsMatchesPinyinAndEnglishName(t *testing.T) {
 	plugins := []pluginSettingsPlugin{{
 		ID:            "file-search",

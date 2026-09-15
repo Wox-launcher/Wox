@@ -56,6 +56,31 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 	}
 }
 
+func TestWoxSearchFieldActionForwardsHoverTooltip(t *testing.T) {
+	hovered := false
+	tapped := false
+	field := WoxSearchField(SearchFieldProps{
+		ID: "search", Label: "Search", Width: 200, Theme: ControlTheme{},
+		Actions: []SearchFieldAction{{
+			ID: "locate", Label: "Locate current theme", Width: 30,
+			OnTap:     func() { tapped = true },
+			OnHoverAt: func(inside bool, _ woxui.Rect) { hovered = inside },
+		}},
+	}).(woxwidget.Container)
+	action := field.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(IconButtonProps)
+	if action.OnHoverAt == nil || action.OnTap == nil {
+		t.Fatal("search action must keep hover and tap handlers")
+	}
+	action.OnHoverAt(true, woxui.Rect{Width: 30, Height: 30})
+	if !hovered {
+		t.Fatal("search action hover did not reach the tooltip callback")
+	}
+	action.OnTap()
+	if hovered || !tapped {
+		t.Fatalf("search action tap = hovered %v tapped %v, want the tooltip dismissed", hovered, tapped)
+	}
+}
+
 func TestWoxSearchFieldHoverSurfaceIncludesLeadingIcon(t *testing.T) {
 	field := WoxSearchField(SearchFieldProps{
 		ID: "search", Label: "Search", Width: 200, SearchIcon: &woxui.Image{}, Theme: ControlTheme{},

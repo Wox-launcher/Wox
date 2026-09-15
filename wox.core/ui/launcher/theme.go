@@ -365,6 +365,10 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		SelectedBorderLeftColor: palette.selectedBorderLeftColor,
 		ToolbarBorder:           palette.toolbarBorder,
 
+		QueryRadius:      palette.queryRadius,
+		ResultItemRadius: palette.resultItemRadius,
+		AppPadding:       palette.appPadding,
+
 		Background:             palette.background,
 		QueryBackground:        palette.queryBackground,
 		QueryText:              palette.queryText,

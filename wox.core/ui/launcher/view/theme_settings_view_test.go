@@ -39,6 +39,30 @@ func TestThemeListUsesSharedSearchFieldGeometry(t *testing.T) {
 	}
 }
 
+func TestThemeListLocateActionShowsTooltipOverlay(t *testing.T) {
+	var shown bool
+	var message string
+	anchor := woxui.Rect{X: 220, Y: 8, Width: 30, Height: 30}
+	list := themeList(ThemeSettingsProps{
+		Mode: "installed", LocateLabel: "Locate current theme", LocateIcon: &woxui.Image{},
+		OnTooltip: func(inside bool, text string, bounds woxui.Rect) {
+			shown, message = inside, text
+			if bounds != anchor {
+				t.Fatalf("locate tooltip anchor = %#v, want %#v", bounds, anchor)
+			}
+		},
+	}, 260, 400).(woxwidget.Flex)
+	search := list.Children[0].(woxwidget.Container)
+	action := search.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if action.ID != "theme-locate-current" || action.Label != "Locate current theme" || action.OnHoverAt == nil {
+		t.Fatalf("locate action = %#v, want a labeled hover tooltip", action)
+	}
+	action.OnHoverAt(true, anchor)
+	if !shown || message != "Locate current theme" {
+		t.Fatalf("locate tooltip = shown %v text %q, want the locate label overlay", shown, message)
+	}
+}
+
 func TestThemeListSearchUsesValueText(t *testing.T) {
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	list := themeList(ThemeSettingsProps{
@@ -128,16 +152,68 @@ func TestThemePreviewUsesWallpaperBackdrop(t *testing.T) {
 	blurred := &woxui.Image{}
 	preview := themePreviewTab(ThemeSettingsProps{Wallpaper: wallpaper, WallpaperBlurred: blurred}, ThemeCatalogItem{}, 600, 700).(woxwidget.Container)
 	stage := preview.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Stack)
-	window := stage.Children[2].Child.(woxwidget.Stack)
+	demo := themeCatalogPreviewWindow(stage.Children[2].Child)
 
 	stageWallpaper := stage.Children[1].Child.(woxwidget.Image)
-	windowWallpaper := window.Children[0].Child.(woxwidget.Image)
+	windowWallpaper := demo.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Image)
 	if stageWallpaper.Source != wallpaper || windowWallpaper.Source != blurred {
 		t.Fatal("theme preview did not reuse the loaded wallpaper layers")
 	}
 	expectedRadius := 29 * stage.Width / 1440
-	if stage.Height != stage.Width*420/900 || stage.Children[0].Child.(woxwidget.Container).Radius != expectedRadius || stage.Children[3].Child.(woxwidget.Container).Radius != expectedRadius || stageWallpaper.Radius != expectedRadius || windowWallpaper.Radius != 8 {
+	if stage.Height != stage.Width*620/900 || stage.Children[0].Child.(woxwidget.Container).Radius != expectedRadius || stage.Children[3].Child.(woxwidget.Container).Radius != expectedRadius || stageWallpaper.Radius != expectedRadius || windowWallpaper.Radius != 12 {
 		t.Fatal("theme preview wallpaper should preserve the cached image aspect ratio and rounded corners")
+	}
+	if stage.Children[2].Top != 20 {
+		t.Fatalf("theme preview top = %.0f, want a high 20-unit inset instead of a vertically centered card", stage.Children[2].Top)
+	}
+}
+
+func themeCatalogPreviewWindow(preview woxwidget.Widget) woxwidget.Clip {
+	return preview.(woxwidget.Align).Child.(woxwidget.Clip)
+}
+
+func TestThemeCatalogPreviewUsesV2WindowChrome(t *testing.T) {
+	radius, width, indicator, inset, markerRadius := 28, 3, 3, 10, 2
+	color := woxui.Color{R: 79, G: 174, B: 133, A: 255}
+	theme := woxcomponent.Theme{
+		AppBorderRadius: &radius, AppBorderWidth: &width, AppBorderColor: &color,
+		ResultItemActiveIndicatorWidth: &indicator, ResultItemActiveIndicatorInsetTop: &inset,
+		ResultItemActiveIndicatorInsetBottom: &inset, ResultItemActiveIndicatorBorderRadius: &markerRadius,
+		ResultItemActiveIndicatorColor: &color,
+		QueryRadius:                    16, AppPadding: woxwidget.Insets{Left: 12, Top: 12, Right: 12, Bottom: 12},
+		Background: woxui.Color{R: 28, G: 35, B: 37, A: 255}, QueryText: woxui.Color{A: 255}, ResultTitle: woxui.Color{A: 255},
+	}
+	demo := themeCatalogPreviewWindow(themeCatalogPreview(ThemeSettingsProps{
+		PreviewTitle: "Wox Theme Preview", PreviewTexts: []string{"One", "Two", "Three"},
+		PreviewOpenLabel: "Open", PreviewMoreLabel: "More Actions",
+	}, theme, 600, 360))
+	children := demo.Child.(woxwidget.Stack).Children
+	border := children[len(children)-1].Child.(woxwidget.Container)
+	if border.Radius != 28 || border.BorderWidth != 3 || border.BorderColor != color {
+		t.Fatalf("catalog preview chrome = radius %.0f width %.0f color %#v, want Jade outline", border.Radius, border.BorderWidth, border.BorderColor)
+	}
+	query := children[2]
+	if query.Left != 12 || query.Top != 12 || query.Child.(woxwidget.Container).Radius != 16 {
+		t.Fatalf("catalog preview query = inset %.0f/%.0f radius %.0f, want Jade padding and query corners", query.Left, query.Top, query.Child.(woxwidget.Container).Radius)
+	}
+	selected := children[4].Child.(woxwidget.Stack)
+	if _, ok := selected.Children[0].Child.(woxwidget.Stack); !ok {
+		t.Fatal("catalog preview selected row must paint the v2 active indicator")
+	}
+	queryBox := query.Child.(woxwidget.Container)
+	queryText := queryBox.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if queryBox.Height != 40 || queryText.Style.Size != 14 {
+		t.Fatalf("catalog preview query = height %.0f size %.0f, want compact 40/14 type", queryBox.Height, queryText.Style.Size)
+	}
+	if selected.Height != 48 {
+		t.Fatalf("catalog preview row height = %.0f, want compact 48", selected.Height)
+	}
+	if children[5].Top-children[4].Top != 52 {
+		t.Fatalf("catalog preview row pitch = %.0f, want 48-high rows with a 4-unit gap", children[5].Top-children[4].Top)
+	}
+	toolbarFill := children[len(children)-2].Child.(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	if !toolbarFill.Floating {
+		t.Fatal("catalog preview toolbar must use the live floating material")
 	}
 }
 
@@ -173,14 +249,25 @@ func TestThemeAutoPreviewUsesSplitVariantsWithoutDuplicateHelp(t *testing.T) {
 	stage := children[0].(woxwidget.Align).Child.(woxwidget.Stack)
 	autoPreview := stage.Children[2].Child.(woxwidget.Stack)
 
-	if len(stage.Children) != 4 || len(autoPreview.Children) != 3 {
-		t.Fatal("AUTO preview must retain its split background and content")
+	if len(stage.Children) != 4 || len(autoPreview.Children) != 4 {
+		t.Fatal("AUTO preview must retain its split background, content, and window chrome")
 	}
 	if stageWallpaper := stage.Children[1].Child.(woxwidget.Image); stageWallpaper.Source != wallpaper || stageWallpaper.Radius != 29*stage.Width/1440 {
 		t.Fatal("theme preview wallpaper should clip to the stage rounded corners")
 	}
-	if autoWallpaper := autoPreview.Children[0].Child.(woxwidget.Image); autoWallpaper.Source != blurred || autoWallpaper.Radius != 8 {
+	if autoWallpaper := autoPreview.Children[0].Child.(woxwidget.Image); autoWallpaper.Source != blurred || autoWallpaper.Radius != 12 {
 		t.Fatal("theme preview did not reuse the loaded wallpaper layers")
+	}
+}
+
+func TestThemeAutoPreviewUsesV2WindowChrome(t *testing.T) {
+	radius, width := 28, 3
+	color := woxui.Color{R: 79, G: 174, B: 133, A: 255}
+	dark := woxcomponent.Theme{AppBorderRadius: &radius, AppBorderWidth: &width, AppBorderColor: &color}
+	preview := themeAutoCatalogPreview(ThemeSettingsProps{}, woxcomponent.Theme{}, dark, 400, 240).(woxwidget.Stack)
+	border := preview.Children[len(preview.Children)-1].Child.(woxwidget.Container)
+	if border.Radius != 28 || border.BorderWidth != 3 || border.BorderColor != color {
+		t.Fatalf("AUTO preview chrome = radius %.0f width %.0f color %#v, want authored outline", border.Radius, border.BorderWidth, border.BorderColor)
 	}
 }
 
@@ -271,11 +358,17 @@ func TestThemeDetailShowsDescriptionAndPreviewTogether(t *testing.T) {
 		if len(view.Children) != 2 {
 			t.Fatal("theme detail must not include tabs")
 		}
-		scroll := view.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-		rows := scroll.Content.(woxwidget.Flex).Children
+		body := view.Children[1].(woxwidget.Container)
+		if _, isScroll := body.Child.(woxwidget.Stateful); isScroll {
+			t.Fatal("theme detail must not put the description in a scroll view")
+		}
+		rows := body.Child.(woxwidget.Flex).Children
 		description := rows[0].(woxwidget.Container).Child.(woxwidget.TextBlock)
 		if description.Value != detail.Description || description.MaxLines != 0 || len(rows) != 2 {
-			t.Fatal("description and preview must share one scroll surface")
+			t.Fatal("description must stay above the preview")
+		}
+		if _, ok := rows[1].(woxwidget.Expanded); !ok {
+			t.Fatal("preview must fill the leftover pane under the description")
 		}
 	}
 }
