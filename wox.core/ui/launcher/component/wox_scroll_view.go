@@ -163,7 +163,10 @@ func (s *scrollViewState) scheduleHide(context woxwidget.StateContext) {
 		return
 	}
 	s.hideAt = time.Now().Add(500 * time.Millisecond)
-	s.hideTimer = time.AfterFunc(500*time.Millisecond, context.Invalidate)
+	s.hideTimer = time.AfterFunc(500*time.Millisecond, func() {
+		// Invalidation reads the retained tree, which is owned by the UI thread.
+		_ = woxui.Call(context.Invalidate)
+	})
 }
 
 // setPointerInside tracks whether the pointer is over the surface without revealing the thumb.

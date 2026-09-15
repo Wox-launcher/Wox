@@ -35,7 +35,7 @@ func (a *App) setSettingsDemoHover(kind string, inside bool, anchor woxui.Rect) 
 				a.invalidateSettingsWindow()
 			}
 			if err := a.runOnUI("show settings demo", apply); err != nil {
-				apply()
+				util.GetLogger().Warn(a.lifecycleCtx, err.Error())
 			}
 		})
 		return

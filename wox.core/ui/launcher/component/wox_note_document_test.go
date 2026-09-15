@@ -124,6 +124,27 @@ func TestProjectNoteDocumentRendersEmptyParagraphsAsBlankLines(t *testing.T) {
 	}
 }
 
+func TestProjectNoteDocumentUsesSharedListGutters(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockBullet, Text: "bullet"},
+		{Type: common.NoteBlockOrdered, Text: "ordered"},
+	}}
+	_, runs, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, Theme{})
+	markers := make([]TextFieldRichRun, 0, 2)
+	for _, run := range runs {
+		if run.ListMarker != "" {
+			markers = append(markers, run.FieldRun())
+		}
+	}
+	if len(markers) != 2 {
+		t.Fatalf("list marker runs = %d, want 2", len(markers))
+	}
+	bullet, ordered := markers[0], markers[1]
+	if bullet.Advance != 16 || ordered.Advance != 24 || bullet.Paint == nil || ordered.Paint == nil {
+		t.Fatalf("list gutters = %v/%v, want painted 16/24", bullet.Advance, ordered.Advance)
+	}
+}
+
 func TestNoteTaskAtCaret(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{ID: "p", Type: common.NoteBlockParagraph, Text: "plain"},

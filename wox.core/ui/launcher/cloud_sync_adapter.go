@@ -167,7 +167,7 @@ func (a *App) setCloudPlanTooltip(inside bool, anchor woxui.Rect) {
 			a.invalidateSettingsWindow()
 		}
 		if err := a.runOnUI("show cloud plan tooltip", apply); err != nil {
-			apply()
+			util.GetLogger().Warn(a.lifecycleCtx, err.Error())
 		}
 	})
 }

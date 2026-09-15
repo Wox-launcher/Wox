@@ -812,19 +812,19 @@ func markdownCodeWidget(block markdownBlock, props MarkdownProps, width float32,
 	}
 }
 
-// markdownListMarkerWidth keeps the marker column wide enough for roman or multi-letter labels.
-func markdownListMarkerWidth(marker string) float32 {
-	if marker == "" {
-		return float32(28)
+// documentListMarkerWidth keeps list gutters consistent across Markdown and Notes.
+func documentListMarkerWidth(marker string) float32 {
+	if marker == "•" || marker == "" {
+		return 16
 	}
-	return max(float32(28), float32(len([]rune(marker)))*8+8)
+	return max(float32(24), float32(len([]rune(marker)))*8+8)
 }
 
 // markdownListWidget preserves nested blocks inside one row per list item.
 func markdownListWidget(block markdownBlock, props MarkdownProps, width float32, linkIndex, textIndex *int) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(block.items))
 	for _, item := range block.items {
-		markerWidth := markdownListMarkerWidth(item.marker)
+		markerWidth := documentListMarkerWidth(item.marker)
 		marker := woxwidget.Widget(woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: woxui.FontWeightSemibold}, Color: DocumentListMarkerColor})
 		itemProps := props
 		if item.task {

@@ -74,6 +74,23 @@ func TestMarkdownUsesSharedDocumentDecorations(t *testing.T) {
 	}
 }
 
+func TestMarkdownListUsesCompactNestedGutters(t *testing.T) {
+	document := ParseMarkdown("- parent\n  - child\n\n10. ordered")
+	list := renderMarkdownBlock(document.blocks[0], MarkdownProps{}, 300, new(int), new(int)).(woxwidget.Flex)
+	row := list.Children[0].(woxwidget.Flex)
+	if gutter := row.Children[0].(woxwidget.Container).Width; gutter != 16 {
+		t.Fatalf("bullet gutter = %v, want 16", gutter)
+	}
+	body := row.Children[1].(woxwidget.Container)
+	nested := body.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	if gutter := nested.Children[0].(woxwidget.Container).Width; gutter != 16 || body.Width != 284 {
+		t.Fatalf("nested gutter/body width = %v/%v, want 16/284", gutter, body.Width)
+	}
+	if documentListMarkerWidth("1.") != 24 || documentListMarkerWidth("100.") != 40 {
+		t.Fatal("ordered gutters must retain room for longer labels")
+	}
+}
+
 func TestParseMarkdownNestsUnderIndentedOrderedLists(t *testing.T) {
 	document := ParseMarkdown("Create an app:\n1. **App Name**: Wox\n2. **App description**: Wox spotify plugin\n3. **Website**: https://github.com/Wox-launcher/Wox\n4. **Redirect URIs**:\n  1. wox://plugin/aeb94d3d-9c39-4917-9cd0-a4cde95433a2?action=spotify-access-token\n  2. wox://plugin/aeb94d3d-9c39-4917-9cd0-a4cde95433a2?action=spotify-auth\n5. **Which API/SDKs are you planning to use**: Web API")
 	if len(document.blocks) != 2 || document.blocks[1].kind != markdownList {

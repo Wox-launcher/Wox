@@ -140,7 +140,8 @@ func (a *App) scheduleLinuxInlineTooltip(target linuxInlineTooltipTarget, inside
 			}
 		}
 		if err := a.runOnUI(job, apply); err != nil {
-			apply()
+			// A failed dispatch must not move UI-owned state work onto this worker.
+			util.GetLogger().Warn(a.lifecycleCtx, err.Error())
 		}
 	})
 }

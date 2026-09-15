@@ -283,6 +283,7 @@ Use shared `Wox*` components before primitive widgets. A page may use a primitiv
 - Settings choice menus may group long catalogs with 28-high section labels. Labels are chrome, not options.
 - Preserve image aspect ratio and use physical-pixel snapping only in the renderer or platform boundary.
 - Treat emoji and text glyphs as fallbacks, not substitutes for an existing product icon.
+- Markdown and editable Notes reserve 16 logical units for bullet markers and at least 24 for ordered markers, expanding for longer labels. Nested lists reuse the same compact gutter and hanging alignment.
 - Keep translated labels visible. Size text buttons to content, constrain fields by expected input length, and truncate secondary content before primary values.
 
 ## Layout and platform behavior

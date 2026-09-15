@@ -38,6 +38,8 @@ type NoteTextRun struct {
 	LeadingBar     bool
 	HorizontalRule bool
 	HangingIndent  bool
+	// ListMarker replaces the backing prefix with the shared fixed-width list gutter.
+	ListMarker string
 }
 
 type noteInlineStyle struct {
@@ -88,6 +90,14 @@ func (run NoteTextRun) FieldRun() TextFieldRichRun {
 	}
 	if run.HangingIndent {
 		field.HangingIndent = true
+	}
+	if run.ListMarker != "" {
+		marker, style, color := run.ListMarker, run.Style, run.Color
+		field.Advance = documentListMarkerWidth(marker)
+		field.HideText = true
+		field.Paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			displayList.DrawText(marker, bounds, style, color)
+		}
 	}
 	if run.LeadingBar {
 		size, color := run.Style.Size, run.Color
@@ -165,7 +175,7 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 		if block.Type == common.NoteBlockTask {
 			runs = append(runs, NoteTextRun{Start: marker, End: marker + 1, Style: base, Color: DocumentListMarkerColor, Checkbox: true, Checked: block.Checked})
 		} else if block.Type == common.NoteBlockBullet || block.Type == common.NoteBlockOrdered {
-			runs = append(runs, NoteTextRun{Start: marker, End: textStart, Style: base, Color: DocumentListMarkerColor, HangingIndent: true})
+			runs = append(runs, NoteTextRun{Start: marker, End: textStart, Style: base, Color: DocumentListMarkerColor, HangingIndent: true, ListMarker: strings.TrimSpace(prefix)})
 		}
 		if block.Type == common.NoteBlockQuote {
 			runs = append(runs, NoteTextRun{Start: start, End: textEnd, Style: base, Color: DocumentListMarkerColor, LeadingBar: true})
