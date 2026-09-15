@@ -165,6 +165,9 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{Name: plugin.MetadataFeatureDisableAutoCommandHint},
+		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
 				Type:  definition.PluginSettingDefinitionTypeDynamic,

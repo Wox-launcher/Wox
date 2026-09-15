@@ -546,6 +546,7 @@ func (a *App) showWindow(params showAppParams) error {
 		// every keystroke pinned to the previous selection query.
 		if params.ShowSource == string(common.ShowSourceDefault) && a.query.QueryType == "selection" {
 			a.query = newInputQuery("")
+			a.queryHintEditorState = queryHintEditor{}
 			a.queryContext = queryContext{IsGlobalQuery: true}
 			a.queryContextKnown = true
 			a.editor.SetText("", false)
@@ -833,6 +834,23 @@ func (a *App) beginQueryGenerationLocked() {
 }
 
 func (a *App) setQuery(query plainQuery) {
+	a.replaceQuery(query, true)
+}
+
+// resetQuery replaces the query without creating an undo step, used for session clears.
+func (a *App) resetQuery(query plainQuery) {
+	a.replaceQuery(query, false)
+}
+
+// replaceQuery installs a complete query. When rememberPrevious is set, Ctrl/Cmd+Z
+// restores the prior query box state, including plugin context from ChangeQuery.
+func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
+	var previous queryHintSnapshot
+	var previousUndo []queryHintSnapshot
+	if rememberPrevious {
+		previous = a.captureQuerySnapshot()
+		previousUndo = append([]queryHintSnapshot(nil), a.queryHintEditorState.undo...)
+	}
 	if query.QueryID == "" {
 		query.QueryID = newID()
 	}
@@ -851,10 +869,8 @@ func (a *App) setQuery(query plainQuery) {
 	if query.QueryHint != nil {
 		a.installQueryHint(query.QueryHint)
 	} else if !hasExplicitHint && query.QueryType == "input" {
-		// Actions such as Indicator enter a trigger through ChangeQuery rather
-		// than typing. Resolve the same guidance, without retaining replacement undo.
+		// Indicator and other ChangeQuery replacements resolve the same guidance as typing.
 		a.query.QueryText = a.updateQueryHintText(query.QueryText)
-		a.queryHintEditorState.undo = nil
 	}
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
@@ -883,6 +899,12 @@ func (a *App) setQuery(query plainQuery) {
 	a.triggerConflict = nil
 	a.resetChatPreview()
 	a.restoreQueryTextInput()
+	if rememberPrevious {
+		a.queryHintEditorState.undo = previousUndo
+		if !querySnapshotSameContent(previous, a.captureQuerySnapshot()) {
+			a.appendQueryUndo(previous)
+		}
+	}
 	_ = a.window.Invalidate()
 }
 
@@ -915,7 +937,7 @@ func (a *App) sendCurrentQuery() error {
 func (a *App) applyLaunchModeOnShowLocked() bool {
 	preserveQuery := a.shouldPreserveQueryOnShowLocked()
 	if a.show.LaunchMode == "fresh" && !preserveQuery {
-		a.setQuery(newInputQuery(""))
+		a.resetQuery(newInputQuery(""))
 	}
 	return preserveQuery
 }
@@ -1541,6 +1563,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	previousText := a.editor.State().Text
 	if event.Down && !event.Composing && event.Key == woxui.KeyBackspace && event.Modifiers == 0 &&
 		a.isPrimary && !a.show.HideQueryBox && previousText == "" && len(a.query.QueryScope.Plugins) > 0 {
+		a.rememberQueryHint()
 		a.clearQueryScopeLocked()
 		_ = a.window.Invalidate()
 		a.reconcileSelectedPreview()

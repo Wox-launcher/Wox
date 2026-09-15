@@ -52,6 +52,7 @@ func (a *App) acceptQueryCompletionHint() bool {
 		return false
 	}
 	hint := *a.completionHint
+	a.rememberQueryHint()
 	a.editor.SetText(hint.CompletionText, false)
 	a.applyQueryTextChangeLocked(hint.CompletionText)
 	a.completionHint = nil
@@ -75,6 +76,7 @@ func (a *App) autoCompleteQueryFromSelectedResult() {
 	if title == "" {
 		return
 	}
+	a.rememberQueryHint()
 	a.editor.SetText(title, false)
 	a.applyQueryTextChangeLocked(title)
 	a.reconcileSelectedPreview()

@@ -832,6 +832,7 @@ func (a *App) setQueryText(value string) error {
 	a.deactivateRequirementForm()
 	previousText := a.editor.State().Text
 	value = normalizeQueryNewlines(value)
+	a.rememberQueryHint()
 	a.editor.SetText(value, false)
 	a.applyQueryTextChangeLocked(value)
 	a.reconcileSelectedPreview()

@@ -318,7 +318,7 @@ func (a *App) ResetAutomationState() error {
 			resetErr = err
 			return
 		}
-		a.setQuery(plainQuery{})
+		a.resetQuery(plainQuery{})
 		a.queryHistories = nil
 		a.toolbarMsg = nil
 		a.toolbarFallbackMsg = nil

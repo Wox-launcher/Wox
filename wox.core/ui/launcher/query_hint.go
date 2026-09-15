@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"maps"
 	"reflect"
 	"strings"
 	"wox/common"
@@ -14,7 +15,7 @@ type queryHintResolver interface {
 	ResolveQueryHint(context.Context, string) *common.QueryHint
 }
 
-// queryHintEditor tracks semantic ranges and document-level undo for one continuous text editor.
+// queryHintEditor tracks semantic ranges and query-box undo for one continuous text editor.
 type queryHintEditor struct {
 	active      int
 	prefix      string
@@ -26,29 +27,115 @@ type queryHintEditor struct {
 	redo        []queryHintSnapshot
 }
 
+// queryHintSnapshot is one query-box undo entry: document, hint, caret, and routing.
 type queryHintSnapshot struct {
-	template *common.QueryHint
-	hint     *common.QueryHint
-	text     string
-	active   int
-	prefix   string
+	template    *common.QueryHint
+	hint        *common.QueryHint
+	text        string
+	active      int
+	prefix      string
+	queryType   string
+	scope       queryScope
+	selection   selection
+	refinements map[string]string
+	contextData map[string]string
+	caret       woxui.TextSelection
+}
+
+// captureQuerySnapshot records the query box document and routing state for undo.
+func (a *App) captureQuerySnapshot() queryHintSnapshot {
+	s := &a.queryHintEditorState
+	queryType := a.query.QueryType
+	if queryType == "" {
+		queryType = "input"
+	}
+	caret := woxui.TextSelection{}
+	if a.editor != nil {
+		state := a.editor.State()
+		if state.Text == a.query.QueryText {
+			caret = state.Selection
+		} else {
+			end := len([]rune(a.query.QueryText))
+			caret = woxui.TextSelection{Anchor: end, Focus: end}
+		}
+	}
+	return queryHintSnapshot{
+		template:    s.template.Clone(),
+		hint:        a.query.QueryHint.Clone(),
+		text:        a.query.QueryText,
+		active:      s.active,
+		prefix:      s.prefix,
+		queryType:   queryType,
+		scope:       cloneQueryScope(a.query.QueryScope),
+		selection:   cloneSelection(a.query.QuerySelection),
+		refinements: cloneStringMap(a.query.QueryRefinements),
+		contextData: cloneStringMap(a.query.ContextData),
+		caret:       caret,
+	}
+}
+
+// querySnapshotSameContent includes routing data because identical text can target different plugin state.
+func querySnapshotSameContent(left, right queryHintSnapshot) bool {
+	return left.text == right.text && left.active == right.active && left.prefix == right.prefix &&
+		left.queryType == right.queryType && reflect.DeepEqual(left.hint, right.hint) &&
+		reflect.DeepEqual(left.scope, right.scope) && reflect.DeepEqual(left.selection, right.selection) &&
+		maps.Equal(left.refinements, right.refinements) && maps.Equal(left.contextData, right.contextData)
+}
+
+// cloneQueryScope copies plugin scope so undo snapshots cannot alias live query state.
+func cloneQueryScope(scope queryScope) queryScope {
+	if len(scope.Plugins) == 0 {
+		return queryScope{}
+	}
+	plugins := make([]queryScopePlugin, len(scope.Plugins))
+	copy(plugins, scope.Plugins)
+	return queryScope{Plugins: plugins}
+}
+
+func cloneSelection(value selection) selection {
+	return selection{Type: value.Type, Text: value.Text, FilePaths: append([]string(nil), value.FilePaths...)}
 }
 
 // rememberQueryHint snapshots content before an element edit or a structural transition.
 func (a *App) rememberQueryHint() {
+	a.appendQueryUndo(a.captureQuerySnapshot())
+}
+
+// appendQueryUndo records one query-box snapshot and drops the oldest entry past the cap.
+func (a *App) appendQueryUndo(snapshot queryHintSnapshot) {
 	s := &a.queryHintEditorState
-	if len(s.undo) > 0 {
-		last := s.undo[len(s.undo)-1]
-		if last.text == a.query.QueryText && last.active == s.active && reflect.DeepEqual(last.hint, a.query.QueryHint) {
-			s.redo = nil
-			return
-		}
+	if len(s.undo) > 0 && querySnapshotSameContent(s.undo[len(s.undo)-1], snapshot) {
+		s.redo = nil
+		return
 	}
-	s.undo = append(s.undo, queryHintSnapshot{s.template.Clone(), a.query.QueryHint.Clone(), a.query.QueryText, s.active, s.prefix})
+	s.undo = append(s.undo, snapshot)
 	if len(s.undo) > 100 {
 		s.undo = s.undo[len(s.undo)-100:]
 	}
 	s.redo = nil
+}
+
+// applyQuerySnapshot restores one query-box undo or redo entry, including plugin scope.
+func (a *App) applyQuerySnapshot(snapshot queryHintSnapshot) {
+	s := &a.queryHintEditorState
+	s.template = snapshot.template.Clone()
+	a.query.QueryHint = snapshot.hint.Clone()
+	a.query.QueryText = snapshot.text
+	a.query.QueryType = snapshot.queryType
+	if a.query.QueryType == "" {
+		a.query.QueryType = "input"
+	}
+	a.query.QueryScope = cloneQueryScope(snapshot.scope)
+	a.query.QuerySelection = cloneSelection(snapshot.selection)
+	a.query.QueryRefinements = cloneStringMap(snapshot.refinements)
+	a.query.ContextData = cloneStringMap(snapshot.contextData)
+	s.active, s.prefix, s.allSelected, s.candidate = snapshot.active, snapshot.prefix, false, nil
+	if a.editor != nil {
+		a.editor.SetText(snapshot.text, false)
+		a.editor.SetSelection(snapshot.caret.Anchor, snapshot.caret.Focus)
+	}
+	s.suppressed = snapshot.text
+	a.queryHintChanged()
 }
 
 // installQueryHint installs semantic content without splitting the native text editor.
@@ -355,17 +442,10 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 		if len(*from) == 0 {
 			return true
 		}
-		*to = append(*to, queryHintSnapshot{s.template.Clone(), a.query.QueryHint.Clone(), a.query.QueryText, s.active, s.prefix})
+		*to = append(*to, a.captureQuerySnapshot())
 		snapshot := (*from)[len(*from)-1]
 		*from = (*from)[:len(*from)-1]
-		s.template = snapshot.template.Clone()
-		a.query.QueryHint = snapshot.hint.Clone()
-		a.query.QueryText = snapshot.text
-		s.active, s.prefix, s.allSelected, s.candidate = snapshot.active, snapshot.prefix, false, nil
-		text := snapshot.text
-		a.editor.SetText(text, false)
-		s.suppressed = snapshot.text
-		a.queryHintChanged()
+		a.applyQuerySnapshot(snapshot)
 		return true
 	}
 	hint := a.query.QueryHint
