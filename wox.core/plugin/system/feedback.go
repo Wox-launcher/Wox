@@ -54,6 +54,7 @@ func (p *FeedbackPlugin) GetMetadata() plugin.Metadata {
 		},
 		SupportedOS: []string{"Windows", "Macos", "Linux"},
 		Features: []plugin.MetadataFeature{
+			{Name: plugin.MetadataFeatureDisableAutoCommandHint},
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},

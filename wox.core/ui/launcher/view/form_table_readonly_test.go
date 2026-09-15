@@ -81,7 +81,7 @@ func TestFormTableCellSupportsCustomContent(t *testing.T) {
 	child := woxwidget.Text{Value: "Restore"}
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Child: child}, 220).(woxwidget.Container)
 	_, content, inner := formTableDataCellSlot(t, cell)
-	if content.Width != 206 || cell.Padding.Top != 0 || inner != child {
+	if content.Width != 196 || cell.Padding.Top != 0 || inner != child {
 		t.Fatalf("custom table cell alignment = %#v with padding top %.0f, want a full-height centered slot", cell.Child, cell.Padding.Top)
 	}
 }
@@ -121,7 +121,7 @@ func TestFormTableHeaderCellCentersLabel(t *testing.T) {
 		t.Fatalf("header alignment = %#v, want a full-height centered slot", cell.Child)
 	}
 	content := alignment.Child.(woxwidget.Flex)
-	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter || len(content.Children) != 1 {
 		t.Fatalf("header row alignment = %v, want vertical center", content.CrossAxisAlignment)
 	}
 	label := content.Children[0].(woxwidget.TextBlock)

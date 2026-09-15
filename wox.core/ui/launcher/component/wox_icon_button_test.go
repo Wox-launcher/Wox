@@ -109,3 +109,27 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		}
 	}
 }
+
+// TestWoxIconButtonIdleGlyphKeepsKeyboardAndDisabledStates checks that quiet
+// table actions brighten for both input methods without altering disabled icons.
+func TestWoxIconButtonIdleGlyphKeepsKeyboardAndDisabledStates(t *testing.T) {
+	active, idle := woxwidget.Text{Value: "active"}, woxwidget.Text{Value: "idle"}
+	for _, tc := range []struct {
+		name                                 string
+		hovered, focused, selected, disabled bool
+		want                                 string
+	}{
+		{name: "idle", want: "idle"}, {name: "hover", hovered: true, want: "active"},
+		{name: "focus", focused: true, want: "active"}, {name: "selected", selected: true, want: "active"},
+		{name: "disabled", disabled: true, want: "active"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &iconButtonState{hovered: tc.hovered, focused: tc.focused}
+			props := IconButtonProps{ID: "edit", Icon: active, IdleIcon: idle, Selected: tc.selected, Disabled: tc.disabled}
+			built := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+			if got := built.Child.(woxwidget.Align).Child.(woxwidget.Text).Value; got != tc.want {
+				t.Fatalf("glyph = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

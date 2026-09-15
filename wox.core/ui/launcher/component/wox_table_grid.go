@@ -43,3 +43,19 @@ func WoxTableGridCell(props TableGridCellProps) woxwidget.Container {
 	}
 	return cell
 }
+
+// WoxSettingsTableFrame paints continuous rounded surfaces behind transparent
+// cells, so header and scrolling body fills cannot square off the corners.
+func WoxSettingsTableFrame(width, height, headerHeight float32, border, header, body woxui.Color, child woxwidget.Widget) woxwidget.Widget {
+	const radius = float32(8)
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: woxwidget.Painter{Width: width, Height: height, Paint: func(list *woxui.DisplayList, bounds woxui.Rect) {
+			list.FillRoundedRect(bounds, radius, body)
+			list.PushClipRect(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: min(headerHeight, bounds.Height)})
+			list.FillRoundedRect(bounds, radius, header)
+			list.PopClipRect()
+		}}},
+		{Child: child},
+		{Child: woxwidget.Container{Width: width, Height: height, Radius: radius, BorderColor: border, BorderWidth: TableGridBorderWidth}},
+	}}
+}

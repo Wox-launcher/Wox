@@ -762,7 +762,7 @@ func TestFormTableColumnWidthsMatchFlutterAndDoNotScale(t *testing.T) {
 	}
 
 	widths := formTableColumnWidths(columns, 626)
-	want := []float32{110, 130, 150, 210, 70, 90, 130}
+	want := []float32{110, 110, 130, 190, 70, 70, 130}
 	if len(widths) != len(want) {
 		t.Fatalf("column width count = %d, want %d", len(widths), len(want))
 	}
@@ -793,8 +793,8 @@ func TestFormTablePinsOperationColumnBesideScrollableContent(t *testing.T) {
 	if !left.Horizontal {
 		t.Fatal("table content should scroll horizontally")
 	}
-	if left.Width != 496 || left.ContentWidth != 760 {
-		t.Fatalf("left table geometry = viewport %v, content %v; want 496 and 760", left.Width, left.ContentWidth)
+	if left.Width != 496 || left.ContentWidth != 680 {
+		t.Fatalf("left table geometry = viewport %v, content %v; want 496 and 680", left.Width, left.ContentWidth)
 	}
 	operationHeader := header.Children[1].(woxwidget.Container)
 	if operationHeader.Width != 130 {

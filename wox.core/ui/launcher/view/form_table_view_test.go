@@ -101,7 +101,7 @@ func formTableOperationIconButton(action woxwidget.Widget) woxcomponent.IconButt
 func TestFormTableDisabledBlocksMutatingActions(t *testing.T) {
 	props := FormTableFieldProps{ID: "commands", AddLabel: "Add", Disabled: true, Theme: woxcomponent.Theme{}}
 	add := formTableAddButton(props).(woxwidget.Semantics)
-	edit := formTableIconButton(props, "commands-row-0-edit", "Edit", nil, props.Disabled, func() {}).(woxwidget.Semantics)
+	edit := formTableIconButton(props, "commands-row-0-edit", "Edit", nil, nil, props.Disabled, func() {}).(woxwidget.Semantics)
 	if !add.Disabled || len(add.Actions) != 0 || !edit.Disabled || len(edit.Actions) != 0 {
 		t.Fatal("disabled table must not expose mutating actions")
 	}
@@ -589,9 +589,9 @@ func formTableGridFlex(t *testing.T, grid woxwidget.Widget) woxwidget.Flex {
 	if !ok || len(frame.Children) < 2 {
 		t.Fatalf("table grid = %T, want a stacked outer frame", grid)
 	}
-	body, ok := frame.Children[0].Child.(woxwidget.Flex)
+	body, ok := frame.Children[1].Child.(woxwidget.Flex)
 	if !ok {
-		t.Fatalf("table grid body = %T, want header/body flex", frame.Children[0].Child)
+		t.Fatalf("table grid body = %T, want header/body flex", frame.Children[1].Child)
 	}
 	return body
 }
@@ -615,7 +615,7 @@ func TestFormTableColumnTitleStaysRegular(t *testing.T) {
 	}
 }
 
-func TestFormTableUsesCollapsedGridLines(t *testing.T) {
+func TestFormTableUsesQuietHorizontalSeparators(t *testing.T) {
 	theme := woxcomponent.Theme{
 		PreviewSplit:   woxui.Color{R: 80, G: 90, B: 100, A: 200},
 		ResultTitle:    woxui.Color{R: 240, G: 240, B: 240, A: 255},
@@ -632,17 +632,17 @@ func TestFormTableUsesCollapsedGridLines(t *testing.T) {
 	}
 
 	frame := buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()).(woxwidget.Stack)
-	if len(frame.Children) != 2 {
-		t.Fatalf("table frame children = %d, want content plus one outer stroke", len(frame.Children))
+	if len(frame.Children) != 3 {
+		t.Fatalf("table frame children = %d, want background, content, and outer stroke", len(frame.Children))
 	}
-	outline := frame.Children[1].Child.(woxwidget.Container)
-	if outline.BorderWidth != tableSurfaceBorderWidth || outline.BorderColor != theme.PreviewSplit || outline.Color.A != 0 {
-		t.Fatalf("outer table stroke = %#v, want a single 1px PreviewSplit frame", outline)
+	outline := frame.Children[2].Child.(woxwidget.Container)
+	if outline.BorderWidth != tableSurfaceBorderWidth || outline.BorderColor != newTableSurfaceStyle(theme).border || outline.Radius != 8 || outline.Color.A != 0 {
+		t.Fatalf("outer table stroke = %#v, want a quiet rounded frame", outline)
 	}
 
 	headerCell := formTableHeaderCell(props, props.Columns[0], 130, 0).(woxwidget.Container)
-	if headerCell.BorderWidth != 0 || headerCell.RightBorderWidth != tableSurfaceBorderWidth || headerCell.BottomBorderWidth != tableSurfaceBorderWidth {
-		t.Fatalf("header separator = full %.0f right %.0f bottom %.0f, want collapsed right+bottom", headerCell.BorderWidth, headerCell.RightBorderWidth, headerCell.BottomBorderWidth)
+	if headerCell.BorderWidth != 0 || headerCell.RightBorderWidth != 0 || headerCell.BottomBorderWidth != tableSurfaceBorderWidth {
+		t.Fatalf("header separator = full %.0f right %.0f bottom %.0f, want bottom only", headerCell.BorderWidth, headerCell.RightBorderWidth, headerCell.BottomBorderWidth)
 	}
 	operationHeader := formTableHeaderCell(props, FormTableColumn{Label: "Operation"}, 130, len(props.Columns)).(woxwidget.Container)
 	if operationHeader.RightBorderWidth != 0 || operationHeader.BottomBorderWidth != tableSurfaceBorderWidth {
@@ -650,12 +650,12 @@ func TestFormTableUsesCollapsedGridLines(t *testing.T) {
 	}
 
 	firstBody := formTableDataCellAt(props, props.Rows[0], 0, 0, props.Rows[0].Cells[0], 130, false).(woxwidget.Container)
-	if firstBody.BorderWidth != 0 || firstBody.RightBorderWidth != tableSurfaceBorderWidth || firstBody.BottomBorderWidth != tableSurfaceBorderWidth {
-		t.Fatalf("body separator = full %.0f right %.0f bottom %.0f, want collapsed right+bottom", firstBody.BorderWidth, firstBody.RightBorderWidth, firstBody.BottomBorderWidth)
+	if firstBody.BottomBorderColor.A >= headerCell.BottomBorderColor.A || firstBody.BorderWidth != 0 || firstBody.RightBorderWidth != 0 || firstBody.BottomBorderWidth != tableSurfaceBorderWidth {
+		t.Fatalf("body separator = full %.0f right %.0f bottom %.0f, want bottom only", firstBody.BorderWidth, firstBody.RightBorderWidth, firstBody.BottomBorderWidth)
 	}
 	lastBody := formTableDataCellAt(props, props.Rows[1], 1, 1, props.Rows[1].Cells[1], 130, true).(woxwidget.Container)
-	if lastBody.RightBorderWidth != tableSurfaceBorderWidth || lastBody.BottomBorderWidth != 0 {
-		t.Fatalf("last data separator = right %.0f bottom %.0f, want trailing only before the operation column", lastBody.RightBorderWidth, lastBody.BottomBorderWidth)
+	if lastBody.RightBorderWidth != 0 || lastBody.BottomBorderWidth != 0 {
+		t.Fatalf("last data separator = right %.0f bottom %.0f, want no separators on the last row", lastBody.RightBorderWidth, lastBody.BottomBorderWidth)
 	}
 	lastOperation := formTableOperationCell(props, props.Rows[1], 130, true).(woxwidget.Container)
 	if lastOperation.BorderWidth != 0 || lastOperation.RightBorderWidth != 0 || lastOperation.BottomBorderWidth != 0 {
@@ -716,4 +716,19 @@ func queryVariablePickerDescription(t *testing.T, picker woxwidget.Widget) woxwi
 		t.Fatalf("picker description = %T, want wrapping TextBlock", column.Children[1])
 	}
 	return desc
+}
+
+// TestFormTableHeightShowsWholeRows covers empty, short, and scrolling tables
+// without changing the logical row size for display scaling.
+func TestFormTableHeightShowsWholeRows(t *testing.T) {
+	for _, tc := range []struct {
+		rows, maximum int
+		want          float32
+	}{
+		{0, 300, 0}, {1, 300, 76}, {6, 300, 276}, {7, 300, 276}, {20, 0, 276}, {20, 120, 116}, {20, 316, 316},
+	} {
+		if got := formTableGridHeight(tc.rows, tc.maximum); got != tc.want {
+			t.Fatalf("height(%d,%d) = %v, want %v", tc.rows, tc.maximum, got, tc.want)
+		}
+	}
 }

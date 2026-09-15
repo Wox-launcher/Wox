@@ -16,7 +16,6 @@ const (
 	formTableDefaultMaxHeight          = float32(300)
 	formTableOperationWidth            = float32(120)
 	formTableColumnSpacing             = float32(10)
-	formTableColumnTooltipWidth        = float32(20)
 	formTableHorizontalMargin          = float32(5)
 	formTableFlexibleColumnWidth       = float32(100)
 	formTableRowFieldGap               = float32(10)
@@ -172,6 +171,8 @@ func formTableGridHeight(rowCount, maximumHeight int) float32 {
 		maximum = formTableDefaultMaxHeight
 	}
 	maximum = max(float32(120), maximum)
+	// Reserve only complete rows at rest; pixel scrolling remains continuous.
+	maximum = tableSurfaceHeaderHeight + float32(int((maximum-tableSurfaceHeaderHeight)/tableSurfaceRowHeight))*tableSurfaceRowHeight
 	return min(maximum, tableSurfaceHeaderHeight+bodyHeight)
 }
 
@@ -504,19 +505,15 @@ func formTableColumnWidthsWithOperation(columns []FormTableColumn, tableWidth fl
 	widths[len(widths)-1] = operationWidth
 	zeroWidthColumns := 0
 	totalDeclaredWidth := float32(0)
-	totalTooltipWidth := float32(0)
 	for _, column := range columns {
 		totalDeclaredWidth += column.Width + formTableColumnSpacing
 		if column.Width == 0 {
 			zeroWidthColumns++
 		}
-		if column.Tooltip != "" {
-			totalTooltipWidth += formTableColumnTooltipWidth
-		}
 	}
 	flexibleWidth := formTableFlexibleColumnWidth
 	if zeroWidthColumns == 1 {
-		availableWidth := tableWidth - totalDeclaredWidth - operationWidth - totalTooltipWidth
+		availableWidth := tableWidth - totalDeclaredWidth - operationWidth
 		if availableWidth > 0 {
 			flexibleWidth = availableWidth
 		}
@@ -526,9 +523,6 @@ func formTableColumnWidthsWithOperation(columns []FormTableColumn, tableWidth fl
 		columnWidth := column.Width
 		if columnWidth == 0 {
 			columnWidth = flexibleWidth
-		}
-		if column.Tooltip != "" {
-			columnWidth += formTableColumnTooltipWidth
 		}
 		widths[index] = columnWidth + formTableColumnSpacing
 	}
@@ -553,7 +547,7 @@ func formTableExpandFlexibleColumn(columns []FormTableColumn, widths []float32, 
 
 func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, width float32, index int) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
-	contentWidth := max(float32(0), width-16)
+	contentWidth := max(float32(0), width-24)
 	// Keep the same 18px slot as body cells so the table shares one centerline.
 	// AlignmentY centers CJK fonts whose logical box is taller than that slot.
 	label := woxwidget.TextBlock{
@@ -561,20 +555,8 @@ func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, widt
 		Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightRegular}, Color: style.headerText,
 	}
 	children := []woxwidget.Widget{label}
-	if column.Tooltip != "" {
-		label.Width = max(float32(0), contentWidth-20)
-		children[0] = label
-		var icon woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
-		if props.InfoIcon != nil {
-			icon = woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}
-		}
-		children = append(children, woxwidget.Gesture{ID: fmt.Sprintf("%s-column-tooltip-%d", props.ID, index), OnHoverAt: func(inside bool, bounds woxui.Rect) {
-			if props.OnTooltip != nil {
-				props.OnTooltip(inside, column.Tooltip, bounds)
-			}
-		}, Child: icon})
-	}
-	return tableSurfaceCell(width, tableSurfaceHeaderHeight, style.headerBackground, style, formTableHasTrailingSeparator(props.ReadOnly, len(props.Columns), index), true, woxwidget.Insets{Left: 8, Right: 8}, woxwidget.Align{Width: contentWidth, Height: tableSurfaceHeaderHeight, Vertical: 0.5, Child: woxwidget.Flex{
+
+	return tableSurfaceCell(width, tableSurfaceHeaderHeight, style, true, woxwidget.Insets{Left: 12, Right: 12}, woxwidget.Align{Width: contentWidth, Height: tableSurfaceHeaderHeight, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
 	}})
 }
@@ -620,14 +602,14 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 	actions := make([]woxwidget.Widget, 0, 3+len(row.TrailingActions))
 	disabled := row.ReadOnly || props.Disabled
 	if !props.HideEditAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, disabled), disabled, func() {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, disabled), woxcomponent.EditGlyph(16, props.Theme.ResultSubtitle), disabled, func() {
 			if props.OnOpenRow != nil {
 				props.OnOpenRow(row.Index)
 			}
 		}))
 	}
 	if !props.HideCloneAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, disabled), disabled, func() {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, disabled), woxcomponent.CopyGlyph(16, props.Theme.ResultSubtitle), disabled, func() {
 			if props.OnCloneRow != nil {
 				props.OnCloneRow(row.Index)
 			}
@@ -645,10 +627,10 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		if actionID == "" {
 			actionID = fmt.Sprintf("trailing-%d", index)
 		}
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, props.Disabled, action.OnTap))
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, nil, props.Disabled, action.OnTap))
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
-	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, false, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})
+	return tableSurfaceCell(width, tableSurfaceRowHeight, style, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})
 }
 
 // formTableActionIcon uses the faded glyph on locked rows so disabled actions
@@ -663,15 +645,15 @@ func formTableActionIcon(icon, disabledIcon *woxui.Image, disabled bool) *woxui.
 // formTableDeleteButton delegates the shared confirmation interaction to the component.
 func formTableDeleteButton(props FormTableFieldProps, id, label, confirmLabel string, icon *woxui.Image, disabled bool, onDelete func()) woxwidget.Widget {
 	if disabled {
-		return formTableIconButton(props, id, label, icon, true, onDelete)
+		return formTableIconButton(props, id, label, icon, nil, true, onDelete)
 	}
 	if confirmLabel == "" {
 		confirmLabel = label
 	}
-	return woxcomponent.WoxConfirmIconButton(woxcomponent.ConfirmIconButtonProps{ID: id, Label: label, ConfirmLabel: confirmLabel, Icon: icon, Theme: props.Theme, OnDelete: onDelete})
+	return woxcomponent.WoxConfirmIconButton(woxcomponent.ConfirmIconButtonProps{ID: id, Label: label, ConfirmLabel: confirmLabel, Icon: icon, IdleIcon: woxcomponent.DeleteGlyph(16, props.Theme.ResultSubtitle), Theme: props.Theme, OnDelete: onDelete})
 }
 
-func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, disabled bool, onTap func()) woxwidget.Widget {
+func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, idleIcon woxwidget.Widget, disabled bool, onTap func()) woxwidget.Widget {
 	if disabled {
 		onTap = nil
 	}
@@ -682,7 +664,7 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 			hoverBackground = woxui.Color{}
 		}
 		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
+			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, IdleIcon: idleIcon, Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
 			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, Disabled: disabled, OnTap: onTap,
 		})
 	}
@@ -727,7 +709,7 @@ func formTableStatusLabel(status string, theme woxcomponent.Theme) woxwidget.Wid
 // formTableDataCellAt gives row-specific tooltip triggers stable table coordinates.
 func formTableDataCellAt(props FormTableFieldProps, row FormTableRow, rowIndex, columnIndex int, cell FormTableCell, width float32, lastRow bool) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
-	contentWidth := max(float32(0), width-14)
+	contentWidth := max(float32(0), width-24)
 	if cell.Tooltip != "" && props.InfoIcon != nil {
 		contentWidth = max(float32(0), contentWidth-20)
 	}
@@ -774,7 +756,7 @@ func formTableDataCellAt(props FormTableFieldProps, row FormTableRow, rowIndex, 
 	}
 	// Clip the cell, then center inside it. A full-height Clip as Align's
 	// child has the same size as the slot, so Vertical: 0.5 cannot move text.
-	return tableSurfaceCell(width, tableSurfaceRowHeight, style.bodyBackground, style, formTableHasTrailingSeparator(props.ReadOnly, len(props.Columns), columnIndex), !lastRow, woxwidget.Insets{Left: 8, Right: 6}, woxwidget.Clip{
+	return tableSurfaceCell(width, tableSurfaceRowHeight, style, !lastRow, woxwidget.Insets{Left: 12, Right: 12}, woxwidget.Clip{
 		Width: contentWidth, Height: tableSurfaceRowHeight, Child: woxwidget.Align{Width: contentWidth, Height: tableSurfaceRowHeight, Vertical: 0.5, Child: content},
 	})
 }

@@ -7,10 +7,10 @@ import (
 )
 
 func TestConfirmIconButtonGeometryAndCancellation(t *testing.T) {
-	props := ConfirmIconButtonProps{ID: "delete", Label: "Delete", ConfirmLabel: "Confirm delete", Theme: Theme{ErrorText: woxui.Color{R: 200, A: 255}}}
+	props := ConfirmIconButtonProps{ID: "delete", Label: "Delete", ConfirmLabel: "Confirm delete", IdleIcon: woxwidget.Text{Value: "idle"}, Theme: Theme{ErrorText: woxui.Color{R: 200, A: 255}}}
 	cancelled := false
 	button := confirmIconButtonWithState(props, true, func(inside bool) { cancelled = !inside }, nil).(woxwidget.Stateful).Widget.(IconButtonProps)
-	if button.Width != SettingsCompactControlHeight || button.Height != SettingsCompactControlHeight || button.Label != props.ConfirmLabel || button.Background != props.Theme.ErrorText {
+	if button.IdleIcon != nil || button.Width != SettingsCompactControlHeight || button.Height != SettingsCompactControlHeight || button.Label != props.ConfirmLabel || button.Background != props.Theme.ErrorText {
 		t.Fatalf("confirmation = %+v", button)
 	}
 	button.OnFocusChange(false)

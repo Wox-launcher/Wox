@@ -21,6 +21,7 @@ type ConfirmIconButtonProps struct {
 	Label        string
 	ConfirmLabel string
 	Icon         *woxui.Image
+	IdleIcon     woxwidget.Widget
 	Theme        Theme
 	OnDelete     func()
 }
@@ -75,14 +76,16 @@ func confirmIconButtonWithState(props ConfirmIconButtonProps, confirm bool, onHo
 	if props.Icon != nil {
 		icon = woxwidget.Image{Source: props.Icon, Width: 16, Height: 16}
 	}
+	idleIcon := props.IdleIcon
 	if confirm {
+		idleIcon = nil
 		label = props.ConfirmLabel
 		background = props.Theme.ErrorText
 		hoverBackground = props.Theme.ErrorText
 		icon = CheckGlyph(14, props.Theme.SelectedTitle)
 	}
 	return WoxIconButton(IconButtonProps{
-		ID: props.ID, Label: label, Icon: icon, Width: SettingsCompactControlHeight, Height: SettingsCompactControlHeight, Radius: radius,
+		ID: props.ID, Label: label, Icon: icon, IdleIcon: idleIcon, Width: SettingsCompactControlHeight, Height: SettingsCompactControlHeight, Radius: radius,
 		Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnFocusChange: func(focused bool) {
 			if !focused && onHover != nil {
 				onHover(false)

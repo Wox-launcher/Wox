@@ -7,9 +7,11 @@ import (
 
 // IconButtonProps describes a compact icon-only button with retained hover state.
 type IconButtonProps struct {
-	ID                 string
-	Label              string
-	Icon               woxwidget.Widget
+	ID    string
+	Label string
+	Icon  woxwidget.Widget
+	// IdleIcon is a quieter glyph replaced by Icon on hover, focus, or selection.
+	IdleIcon           woxwidget.Widget
 	Width              float32
 	Height             float32
 	Radius             float32
@@ -27,6 +29,7 @@ type IconButtonProps struct {
 
 type iconButtonState struct {
 	hovered bool
+	focused bool
 }
 
 // WoxIconButton builds an icon-only button with centered content and hover feedback.
@@ -52,6 +55,10 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 	} else if s.hovered && !props.Disabled {
 		background = props.HoverBackground
 	}
+	icon := props.Icon
+	if props.IdleIcon != nil && !props.Disabled && !s.hovered && !s.focused && !props.Selected {
+		icon = props.IdleIcon
+	}
 	onTap := props.OnTap
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
 	if props.Disabled {
@@ -68,11 +75,18 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 		}
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: props.Height, Radius: props.Radius, Color: background,
-		Child: woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: props.Icon},
+		Child: woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 	}}
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnFocusChange: props.OnFocusChange, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnFocusChange: func(focused bool) {
+			if focused != s.focused {
+				context.SetState(func() { s.focused = focused })
+			}
+			if props.OnFocusChange != nil {
+				props.OnFocusChange(focused)
+			}
+		}, OnKey: func(event woxui.KeyEvent) bool {
 			if props.OnKey != nil && props.OnKey(event) {
 				return true
 			}
