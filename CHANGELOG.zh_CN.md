@@ -1,5 +1,52 @@
 # Changelog
 
+## v2.4.4 - 2026-09-16
+
+此版本带来新的 Jade 系统主题，并在 macOS 26 上使用 Liquid Glass。设置窗口使用独立外观，主题不再影响设置窗口。
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme_jade.png)
+
+- Improve
+  - [`Theme`] 增加 Jade 主题，在 macOS 26+ 上使用 Liquid Glass，主题预览和实际启动器一致。主题还可以自定义窗口圆角、工具栏颜色和磨砂面板。
+  - [`Settings`] 设置和首次引导使用独立外观，启动器主题不再影响这些窗口，插件目录筛选改为一次只选一个下拉条件
+  - [`Query`] 命令可以提示补全并用 Tab 接受，可用 Ctrl/Cmd+Z 撤销查询改动，文件搜索、剪贴板和反馈不再显示多余的命令提示
+  - [`Clipboard`] 可用 `cb paste` 一条一条粘贴历史记录，可为图片收藏和改名，复制的链接会显示网站图标，并可打开文件所在文件夹 [参见视频](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/sequential_paste.mp4)
+  - [`Converter`] 能理解更多日常计算说法，可解码粘贴的 Base64 或把文本编码为 Base64，支持 `now` / `now in` 问时间，并更可靠地处理播放速度、四舍五入、计圈时间
+  ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/converter_now_in_JP.jpg)
+  - [`AI`] 支持将 SiliconFlow 作为聊天提供商
+  - [`AI Chat`] 可把文件和图片粘贴或拖进对话 [#4566](https://github.com/Wox-launcher/Wox/issues/4566)，模型和技能列表打开更快，弹出的聊天窗口可用 Escape 关闭，流式回复更顺畅
+  - [`File Search`] 文件名需要包含你输入的每个词才会匹配 [#4560](https://github.com/Wox-launcher/Wox/issues/4560)，并更可靠地搜索 PDF 里的文字 [#4564](https://github.com/Wox-launcher/Wox/issues/4564)
+  - [`App`] 能找到 Windows 商店和「应用」文件夹里的应用，并更快发现新安装的应用 [#4565](https://github.com/Wox-launcher/Wox/issues/4565)
+  - [`Web Search`] 支持在隐私/无痕窗口中打开搜索
+  - [`Plugin`] 打开 `.wox` 文件即可安装插件，能找到 mise 安装的 Node.js 和 Python 且不必重启 Wox [#4569](https://github.com/Wox-launcher/Wox/issues/4569)，从结果里拖出文件后启动器保持打开，Attention 未读数重新显示，并可从通知打开对应插件设置
+  - [`Notes`] 在预览和 Markdown 之间切换时不再跑掉光标，粘贴图片和文本更可靠，并显示字数
+  - [`Launcher`] 可用 Ctrl（macOS 上为 Option）加上下方向键在结果分组间跳转，列表滚动时仍能看到底部工具栏，收藏用星标、置顶用图钉，操作列表会先显示最匹配的项
+  - [`Hotkey`] Windows 上可以把 Win+Space 录成 Wox 热键
+  - [`Browser Bookmark`] 可用 `b` 搜索书签，在该命令下标题和网址匹配更宽松
+  - [`Folder`] 可从文件夹结果打开上一级文件夹
+  - [`Selection`] 更可靠地读取当前选中的文本和文件，包括 Wox 自己的窗口 [#4561](https://github.com/Wox-launcher/Wox/issues/4561) [#4558](https://github.com/Wox-launcher/Wox/issues/4558)
+  - [`Font`] 字体选择器能列出已安装的 Windows 字体 [#4554](https://github.com/Wox-launcher/Wox/issues/4554)
+  - [`Updater`] 更新预览显示中文发布说明，更新成功后播放彩纸
+
+- Fix
+  - [`File Search`] 修复新加入的文件夹搜不到
+  - [`IME`] 修复在微信输入法等中文输入法下，Windows 英文输入无效
+  - [`UI`] 修复透明窗口上光标不闪烁，以及模糊面板挡住结果列表
+  - [`Clipboard`] 修复粘贴目标显示很长的窗口标题，而不是应用名
+  - [`AI`] 修复无法选中 AI 回答
+  - [`Media Player`] 修复在 Windows 上打开媒体播放器要等很久
+  - [`Attention`] 修复一打字未读角标就消失
+  - [`Screenshot`] 修复录制快捷键被拆成多个按键，而不是一个组合
+
+- Store
+  - Plugin
+    - [锁定键盘](https://gist.github.com/qianlifeng/a46c95ef4bd0e5f782e873260ed72491) 锁定键盘，方便擦拭按键且不会误触快捷键 [@qianlifeng](https://github.com/qianlifeng)
+    - [Droppy](https://gist.github.com/qianlifeng/b27ea5c3cc3f78d2f526c9b481ad9c24) 随时打开的文件盒子：拖进去暂存，再到别处拖出去。 [@qianlifeng](https://github.com/qianlifeng)
+  - Theme
+    - [Omarchy](https://github.com/basecamp/omarchy) Omarchy 默认 Walker 菜单风格：炭灰卡片、米色描边、整行灰色选中，以及柔和青绿的激活图标。 [@qianlifeng](https://github.com/qianlifeng)
+    - Ocean Glass 蓝灰内容面板、原生材质边框和暖黄色强调色。 [@qianlifeng](https://github.com/qianlifeng)
+    - [Wox Saffron](https://github.com/Wox-launcher/Wox) 暖象牙色浅色主题，青绿文字，查询框底部有一条藏红花色下划线。 [@qianlifeng](https://github.com/qianlifeng)
+
 ## v2.4.3 - 2026-09-09
 
 此版本增加查询提示，让网页搜索等命令可以用 Tab 收集多个具名输入，而不再只有一个自由文本框。

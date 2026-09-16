@@ -1,5 +1,53 @@
 # Changelog
 
+## v2.4.4 - 2026-09-16
+
+This release brings a new Jade system theme, and uses Liquid Glass on macOS 26. Settings keep their own look, so themes no longer change the Settings window.
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme_jade.png)
+
+
+- Improve
+  - [`Theme`] Support the Jade theme, use Liquid Glass on macOS 26+, and make theme previews match the live launcher. Themes can also customize window corners, toolbar colors, and frosted panels.
+  - [`Settings`] Keep Settings and first-run setup on their own look so your launcher theme does not change them, and let plugin catalog filters use one dropdown at a time
+  - [`Query`] Suggest command completions you can accept with Tab, undo a query change with Ctrl/Cmd+Z, and hide extra command hints in File Search, Clipboard, and Feedback
+  - [`Clipboard`] Paste history one item at a time with `cb paste`, favorite and rename images, show website icons on copied links, and open the folder that contains a copied file [See video](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/sequential_paste.mp4)
+  - [`Converter`] Understand more everyday calculator phrases, decode pasted Base64 or encode text, answer `now` / `now in` time questions, and handle playback speed, rounding, and lap times more reliably
+  ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/converter_now_in_JP.jpg)
+  - [`AI`] Support SiliconFlow as a chat provider
+  - [`AI Chat`] Paste or drop files and images into a conversation [#4566](https://github.com/Wox-launcher/Wox/issues/4566), open model and skill lists faster, close a popped-out chat window with Escape, and make streaming replies feel smoother
+  - [`File Search`] Match filenames that contain every word you type [#4560](https://github.com/Wox-launcher/Wox/issues/4560), and read text inside PDFs more reliably [#4564](https://github.com/Wox-launcher/Wox/issues/4564)
+  - [`App`] Find Windows Store and Apps Folder apps, and pick up newly installed apps [#4565](https://github.com/Wox-launcher/Wox/issues/4565)
+  - [`Web Search`] Open a search in a private or incognito window
+  - [`Plugin`] Install a plugin by opening a `.wox` file, find Node.js and Python installed by mise without restarting Wox [#4569](https://github.com/Wox-launcher/Wox/issues/4569), keep the launcher open after dragging a file out of a result, and show Attention unread counts again with a shortcut to that plugin's settings
+  - [`Notes`] Keep your place when switching between preview and Markdown, paste images and text more reliably, and show a character count
+  - [`Launcher`] Jump between result groups with Ctrl (Option on macOS) plus Up/Down, keep the toolbar visible over the list, use a star for Favorites and a pin only for ranking, and show the best action-list matches first
+  - [`Hotkey`] Let Windows record Win+Space as a Wox hotkey
+  - [`Browser Bookmark`] Search bookmarks with `b`, and match titles and URLs more loosely in that command
+  - [`Folder`] Open the parent folder from a folder result
+  - [`Selection`] Read selected text and files more reliably, including from Wox's own windows [#4561](https://github.com/Wox-launcher/Wox/issues/4561) [#4558](https://github.com/Wox-launcher/Wox/issues/4558)
+  - [`Font`] Show installed Windows fonts in font pickers [#4554](https://github.com/Wox-launcher/Wox/issues/4554)
+  - [`Updater`] Show Chinese release notes in the update preview, and play confetti after a successful update
+
+- Fix
+  - [`File Search`] Fix newly added folders not showing up in search
+  - [`IME`] Fix English input on Windows when using Chinese IMEs such as WeChat IME
+  - [`UI`] Fix the cursor not blinking on transparent Windows windows, and blurred panels hiding the result list
+  - [`Clipboard`] Fix paste actions showing a long window title instead of the app name
+  - [`AI`] Fix being unable to select AI answers
+  - [`Media Player`] Fix a long wait when opening Media Player on Windows
+  - [`Attention`] Fix the unread badge disappearing while you type
+  - [`Screenshot`] Fix recording shortcuts showing as separate keys instead of one shortcut
+
+- Store
+  - Plugin
+    - [Lock Keybord](https://gist.github.com/qianlifeng/a46c95ef4bd0e5f782e873260ed72491) Lock the keyboard so you can wipe it without triggering shortcuts [@qianlifeng](https://github.com/qianlifeng)
+    - [Droppy](https://gist.github.com/qianlifeng/b27ea5c3cc3f78d2f526c9b481ad9c24) A stash box for files. Drop files in, then drag them out later. [@qianlifeng](https://github.com/qianlifeng)
+  - Theme
+    - [Omarchy](https://github.com/basecamp/omarchy) Omarchy's default Walker menu: charcoal card, cream outline, full-width gray selection, and muted teal active icons. [@qianlifeng](https://github.com/qianlifeng)
+    - Ocean Glass Blue-gray content panel, native-material rim, and warm yellow accents inspired by the supplied launcher screenshot. [@qianlifeng](https://github.com/qianlifeng)
+    - [Wox Saffron](https://github.com/Wox-launcher/Wox) Warm ivory surfaces, teal text, and a saffron query underline. A light theme showcasing the query bottom border. [@qianlifeng](https://github.com/qianlifeng)
+
 ## v2.4.3 - 2026-09-09
 
 This release adds query hints so Web Search and other commands can collect multiple named inputs with Tab instead of a single free-text box.

@@ -42,10 +42,12 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 
 - Preserve header pattern exactly (for example: `## v2.0.1 -`). Use the same heading, date, screenshots, issue links, and section keys in both files.
 - Keep section titles in English in both files: `- Add`, `- Improve`, `- Fix`, `- Store`. The client already localizes these labels.
-- Add a short highlight paragraph directly below every release heading you create or update, before screenshots and `Add`/`Improve`/`Fix`/`Store` sections. Follow the `v2.2.0` style: one concise, user-facing sentence or short paragraph that calls out the single biggest release highlight.
+- Add a short highlight paragraph directly below every release heading you create or update, before screenshots and `Add`/`Improve`/`Fix`/`Store` sections. Follow the `v2.4.4` style: one or two short everyday sentences about the visible change, not the implementation. Example: a new Jade theme and Liquid Glass on macOS 26; Settings keep their own look so themes no longer change that window.
+- Write for ordinary users, not developers or reviewers. Describe what someone sees or can do after updating. Do not explain schemas, APIs, caches, indexes, host restarts, platform variants, or other internals unless that is the user-facing name of the feature (for example Liquid Glass, `cb paste`, `.wox`).
+- Prefer plain words over implementation labels: say "Settings keep their own look" instead of "independent chrome", "every word must match" instead of "AND matching", "theme previews match the launcher" instead of "schema v2 sparse authoring".
 - Keep section order: `Add`, `Improve`, `Fix`, `Store`.
 - Use bullet nesting style already used in file.
-- Keep wording concise, user-facing, and factual.
+- Keep wording concise, everyday, and factual. If a sentence needs a term a typical user would not know, rewrite it or drop that detail.
 - Match wording to the bucket. English `Improve` entries should say "Improve", "Expand", "Support", or similar, not "Add", unless the entry is intentionally describing a small added option inside an improvement.
 - For new `Add` features, explain what the feature is for and why a user would use it. Do not reduce major features to one terse implementation phrase.
 - Keep the same feature in one bullet whenever possible. For example, combine Screenshot scrolling capture, pinning, and plugin API changes into one `[`Screenshot`]` bullet instead of splitting them into separate bullets.
@@ -78,7 +80,8 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 - Ensure no duplicate bullets.
 - Ensure every `Add`/`Improve`/`Fix` bullet maps to at least one commit in range.
 - Ensure every `Store` bullet maps to a plugin `Id` or theme `ThemeId` that is new since `last_release_tag`.
-- Ensure every release section you create or update has a biggest-highlight paragraph under the version heading in both files.
+- Ensure every release section you create or update has a biggest-highlight paragraph under the version heading in both files, written in everyday language a typical user can understand.
+- Reread new bullets as a user: drop leftover implementation terms such as schema, chrome, prefetch, incremental index, DirectWrite, overlay, conversion mode, or host restart unless they are the feature name.
 - Ensure English and Chinese newest sections have the same headings, screenshots, issue links, and bullet count.
 - If the latest stable heading is new or its date changed, ensure README contains `Latest: vX.Y.Z · Mon YYYY` matching it (`docs:build` fails if this line is missing).
 - Ensure markdown renders cleanly and section spacing matches nearby versions.

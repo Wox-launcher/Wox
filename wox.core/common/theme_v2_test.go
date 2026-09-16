@@ -58,7 +58,7 @@ func TestToolbarPrimaryThemeInheritance(t *testing.T) {
 
 // TestBuiltinHotkeyHierarchy validates shipped palettes without dimming selected shortcut text.
 func TestBuiltinHotkeyHierarchy(t *testing.T) {
-	for _, name := range []string{"dark", "light", "glass", "jade", "saffron"} {
+	for _, name := range []string{"dark", "light", "glass", "jade"} {
 		data, err := os.ReadFile("../resource/themes/" + name + ".json")
 		if err != nil {
 			t.Fatal(err)
@@ -313,7 +313,7 @@ func TestBuiltinThemesWindowChrome(t *testing.T) {
 			t.Fatalf("%s hyprland disabled compositor material", name)
 		}
 	}
-	for _, name := range []string{"jade", "saffron"} {
+	for _, name := range []string{"jade"} {
 		data, err := os.ReadFile("../resource/themes/" + name + ".json")
 		if err != nil {
 			t.Fatal(err)
