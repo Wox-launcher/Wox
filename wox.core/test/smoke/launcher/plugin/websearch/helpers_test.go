@@ -6,11 +6,13 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
@@ -26,11 +28,14 @@ const (
 	webSearchUrlsFieldID    = "form-table-row-field-3"
 	webSearchUrlsTrailingID = "form-table-row-field-3-trailing"
 	// Ungrouped editor fields are Icon, Keyword, Title, Urls, Browser, Disabled.
-	webSearchDisabledFieldID   = "form-table-row-field-5"
-	webSearchTitleErrorID      = "form-table-row-field-2-error"
-	webSearchQueryVariableID   = "query-variable-0"
-	webSearchQueryVariableMenu = "query-variable-picker"
-	webSearchWebViewPreviewID  = "launcher.preview.webview"
+	webSearchDisabledFieldID      = "form-table-row-field-5"
+	webSearchTitleErrorID         = "form-table-row-field-2-error"
+	webSearchQueryVariableID      = "query-variable-0"
+	webSearchQueryVariableMenu    = "query-variable-picker"
+	webSearchWebViewPreviewID     = "launcher.preview.webview"
+	webSearchWebViewGroupID       = "form-table-row-group-webview"
+	webSearchWebViewWidthFieldID  = "form-table-row-field-8"
+	webSearchWebViewHeightFieldID = "form-table-row-field-9"
 )
 
 func webSearchesRowEditID(index int) string {
@@ -114,17 +119,35 @@ func saveWebSearchRow(t *testing.T, ctx context.Context, client *automationdrive
 	}
 }
 
+func fillWebSearchRowEditor(t *testing.T, ctx context.Context, client *automationdriver.Client, keyword, title, urls string) {
+	t.Helper()
+	waitForWebSearchRowEditor(t, ctx, client)
+	setWebSearchRowText(t, ctx, client, webSearchKeywordFieldID, keyword)
+	setWebSearchRowText(t, ctx, client, webSearchTitleFieldID, title)
+	setWebSearchRowText(t, ctx, client, webSearchUrlsFieldID, urls)
+	ensureWebSearchRowNotDisabled(t, ctx, client)
+}
+
 func addWebSearchRow(t *testing.T, ctx context.Context, client *automationdriver.Client, keyword, title, urls string) {
 	t.Helper()
 	openWebSearchSettings(t, ctx, client)
 	if err := client.Perform(ctx, webSearchesTableAddID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("add Web Search row: %v", err)
 	}
-	waitForWebSearchRowEditor(t, ctx, client)
-	setWebSearchRowText(t, ctx, client, webSearchKeywordFieldID, keyword)
-	setWebSearchRowText(t, ctx, client, webSearchTitleFieldID, title)
-	setWebSearchRowText(t, ctx, client, webSearchUrlsFieldID, urls)
-	ensureWebSearchRowNotDisabled(t, ctx, client)
+	fillWebSearchRowEditor(t, ctx, client, keyword, title, urls)
+	saveWebSearchRow(t, ctx, client)
+	waitForWebSearchEditorClosed(t, ctx, client)
+	findWebSearchRow(t, ctx, client, keyword)
+}
+
+func addWebSearchRowWithPreviewSize(t *testing.T, ctx context.Context, client *automationdriver.Client, keyword, title, urls, width, height string) {
+	t.Helper()
+	openWebSearchSettings(t, ctx, client)
+	if err := client.Perform(ctx, webSearchesTableAddID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("add Web Search row: %v", err)
+	}
+	fillWebSearchRowEditor(t, ctx, client, keyword, title, urls)
+	setWebSearchWebViewSize(t, ctx, client, width, height)
 	saveWebSearchRow(t, ctx, client)
 	waitForWebSearchEditorClosed(t, ctx, client)
 	findWebSearchRow(t, ctx, client, keyword)
@@ -425,4 +448,104 @@ func exitWebSearchWebViewPreview(t *testing.T, ctx context.Context, client *auto
 		t.Fatalf("wait for Web Search results after leaving WebView: %v", err)
 	}
 	smoke.AssertNoDiagnostics(t, snapshot)
+}
+
+func expandWebSearchWebViewGroup(t *testing.T, ctx context.Context, client *automationdriver.Client) {
+	t.Helper()
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := automationdriver.Find(snapshot, webSearchWebViewGroupID)
+		return found
+	}); err != nil {
+		t.Fatalf("wait for Web Search WebView group: %v", err)
+	}
+	snapshot, err := client.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("read Web Search WebView group: %v", err)
+	}
+	group, found := automationdriver.Find(snapshot, webSearchWebViewGroupID)
+	if !found {
+		t.Fatal("Web Search WebView group was not found")
+	}
+	if !group.Expanded {
+		if err := client.Perform(ctx, webSearchWebViewGroupID, woxui.AccessibilityActionActivate, ""); err != nil {
+			t.Fatalf("expand Web Search WebView group: %v", err)
+		}
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		header, headerFound := automationdriver.Find(snapshot, webSearchWebViewGroupID)
+		_, widthFound := automationdriver.Find(snapshot, webSearchWebViewWidthFieldID)
+		_, heightFound := automationdriver.Find(snapshot, webSearchWebViewHeightFieldID)
+		return headerFound && header.Expanded && widthFound && heightFound
+	}); err != nil {
+		t.Fatalf("wait for Web Search WebView size fields: %v", err)
+	}
+}
+
+func setWebSearchWebViewSize(t *testing.T, ctx context.Context, client *automationdriver.Client, width, height string) {
+	t.Helper()
+	expandWebSearchWebViewGroup(t, ctx, client)
+	setWebSearchRowText(t, ctx, client, webSearchWebViewWidthFieldID, width)
+	setWebSearchRowText(t, ctx, client, webSearchWebViewHeightFieldID, height)
+}
+
+func confirmWebSearchRowPreviewSizePersisted(t *testing.T, ctx context.Context, client *automationdriver.Client, keyword, title, urls, width, height string) {
+	t.Helper()
+	if err := client.Hide(ctx); err != nil {
+		t.Fatalf("close Web Search settings after save: %v", err)
+	}
+	openWebSearchSettings(t, ctx, client)
+	index := findWebSearchRow(t, ctx, client, keyword)
+	if err := client.Perform(ctx, webSearchesRowEditID(index), woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("inspect persisted Web Search %q: %v", keyword, err)
+	}
+	waitForWebSearchRowEditor(t, ctx, client)
+	expandWebSearchWebViewGroup(t, ctx, client)
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		keywordField, keywordFound := automationdriver.Find(snapshot, webSearchKeywordFieldID)
+		titleField, titleFound := automationdriver.Find(snapshot, webSearchTitleFieldID)
+		urlsField, urlsFound := automationdriver.Find(snapshot, webSearchUrlsFieldID)
+		widthField, widthFound := automationdriver.Find(snapshot, webSearchWebViewWidthFieldID)
+		heightField, heightFound := automationdriver.Find(snapshot, webSearchWebViewHeightFieldID)
+		return keywordFound && keywordField.Value == keyword && titleFound && titleField.Value == title && urlsFound && urlsField.Value == urls &&
+			widthFound && widthField.Value == width && heightFound && heightField.Value == height
+	}); err != nil {
+		t.Fatalf("confirm persisted Web Search preview size for %q: %v", keyword, err)
+	}
+	if err := client.Perform(ctx, "form-table-row-cancel", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("close Web Search inspection: %v", err)
+	}
+	if err := client.Hide(ctx); err != nil {
+		t.Fatalf("close Web Search settings after inspection: %v", err)
+	}
+}
+
+func readLauncherBounds(t *testing.T, ctx context.Context, client *automationdriver.Client) woxui.Rect {
+	t.Helper()
+	bounds, err := client.Bounds(ctx)
+	if err != nil {
+		t.Fatalf("read launcher bounds: %v", err)
+	}
+	return bounds
+}
+
+func waitForWebSearchPreviewBounds(t *testing.T, ctx context.Context, client *automationdriver.Client, width, height float32) {
+	t.Helper()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var last woxui.Rect
+	for {
+		bounds, err := client.Bounds(ctx)
+		if err != nil {
+			t.Fatalf("read launcher bounds while waiting for preview size %.0fx%.0f: %v", width, height, err)
+		}
+		last = bounds
+		if math.Abs(float64(bounds.Width-width)) <= 1 && math.Abs(float64(bounds.Height-height)) <= 1 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for Web Search preview size %.0fx%.0f: last bounds %+v; %v", width, height, last, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
