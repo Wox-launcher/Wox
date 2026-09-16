@@ -79,6 +79,7 @@
     "ActionContainerBackgroundColor": "#F8FAFAE5",
     "variants": {
       "hyprland": {
+        "AppBorderRadius": null,
         "AppBackgroundColor": "#F1F5F5F9",
         "BaseBackgroundColor": "#F1F5F5F9"
       }

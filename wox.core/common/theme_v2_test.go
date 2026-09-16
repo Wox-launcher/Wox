@@ -236,6 +236,51 @@ func TestThemeV2CustomWindowChromeFollowsAuthoredOutline(t *testing.T) {
 	}
 }
 
+// TestThemeV2PlatformNullClearsInheritedWindowChrome lets a variant restore system
+// material after a parent AppBorder* outline. Explicit zero still selects custom chrome.
+func TestThemeV2PlatformNullClearsInheritedWindowChrome(t *testing.T) {
+	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"linux":{"AppBorderRadius":8,"AppPaddingLeft":18,"variants":{"hyprland":{"AppBorderRadius":null,"AppPaddingLeft":null}}}}`
+	var theme Theme
+	if err := json.Unmarshal([]byte(input), &theme); err != nil {
+		t.Fatal(err)
+	}
+	linux, err := theme.ResolveForTarget("linux", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !linux.UsesCustomWindowChrome() || linux.AppBorderRadius == nil || *linux.AppBorderRadius != 8 || linux.AppPaddingLeft != 18 {
+		t.Fatalf("linux should keep the authored outline: %#v", linux)
+	}
+	hyprland, err := theme.ResolveForTarget("linux", "hyprland")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hyprland.UsesCustomWindowChrome() || hyprland.AppBorderRadius != nil {
+		t.Fatal("hyprland null AppBorderRadius should restore system material")
+	}
+	if hyprland.AppPaddingLeft != 10 {
+		t.Fatalf("hyprland null AppPaddingLeft = %d, want default 10", hyprland.AppPaddingLeft)
+	}
+	encoded, err := json.Marshal(theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"AppBorderRadius":null`) {
+		t.Fatalf("save dropped the hyprland null chrome reset: %s", encoded)
+	}
+	zero := strings.TrimSuffix(minimalV2Theme, "}") + `,"linux":{"AppBorderRadius":8,"variants":{"hyprland":{"AppBorderRadius":0}}}}`
+	if err := json.Unmarshal([]byte(zero), &theme); err != nil {
+		t.Fatal(err)
+	}
+	hyprland, err = theme.ResolveForTarget("linux", "hyprland")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hyprland.UsesCustomWindowChrome() || hyprland.AppBorderRadius == nil || *hyprland.AppBorderRadius != 0 {
+		t.Fatal("explicit zero AppBorderRadius must keep custom chrome")
+	}
+}
+
 // TestBuiltinThemesWindowChrome keeps ordinary themes on system material and outline themes self-drawn.
 func TestBuiltinThemesWindowChrome(t *testing.T) {
 	for _, name := range []string{"auto", "dark", "light", "glass"} {
@@ -249,6 +294,23 @@ func TestBuiltinThemesWindowChrome(t *testing.T) {
 		}
 		if theme.UsesCustomWindowChrome() {
 			t.Fatalf("%s selected custom window chrome", name)
+		}
+		if name == "auto" {
+			continue
+		}
+		linux, err := theme.ResolveForTarget("linux", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !linux.UsesCustomWindowChrome() {
+			t.Fatalf("%s linux dropped the rounded fallback chrome", name)
+		}
+		hyprland, err := theme.ResolveForTarget("linux", "hyprland")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hyprland.UsesCustomWindowChrome() || hyprland.AppBorderRadius != nil {
+			t.Fatalf("%s hyprland disabled compositor material", name)
 		}
 	}
 	for _, name := range []string{"jade", "saffron"} {

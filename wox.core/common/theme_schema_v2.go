@@ -12,6 +12,7 @@ import (
 )
 
 // ThemeSchemaV2 is the complete v2 document. Nil styles inherit; zero and transparent are explicit overrides.
+// Platform and variant JSON null clears an inherited style instead of skipping it.
 type ThemeSchemaV2 struct {
 	SchemaVersion    int
 	MinWoxVersion    string `json:",omitempty"`
@@ -33,6 +34,7 @@ type ThemeSchemaV2 struct {
 
 	// Any authored AppBorder* field disables system window material on every
 	// platform (Acrylic, Liquid Glass, compositor blur) so Go UI can paint the outline.
+	// A later platform or variant may set these to JSON null to restore system material.
 	AppBorderColor  *string `json:",omitempty"`
 	AppBorderWidth  *int    `json:",omitempty"`
 	AppBorderRadius *int    `json:",omitempty"`
@@ -286,20 +288,13 @@ func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
 			return Theme{}, err
 		}
 	}
-	merge := func(fields map[string]json.RawMessage) {
-		for key, value := range fields {
-			if key != "variants" && string(value) != "null" {
-				raw[key] = value
-			}
-		}
-	}
-	merge(node)
+	mergeThemeV2OverrideFields(raw, node)
 	if data := node["variants"]; len(data) > 0 {
 		var variants map[string]map[string]json.RawMessage
 		if err := json.Unmarshal(data, &variants); err != nil {
 			return Theme{}, err
 		}
-		merge(variants[variant])
+		mergeThemeV2OverrideFields(raw, variants[variant])
 	}
 	delete(raw, "windows")
 	delete(raw, "macos")
@@ -322,6 +317,22 @@ func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
 
 func authoredAppWindowChrome(color *string, width *int, radius *int) bool {
 	return color != nil || width != nil || radius != nil
+}
+
+// mergeThemeV2OverrideFields applies one platform or variant layer. Omitted keys
+// inherit the parent. JSON null clears the inherited value so a child can restore
+// schema defaults, including system window material after a parent AppBorder* outline.
+func mergeThemeV2OverrideFields(raw, fields map[string]json.RawMessage) {
+	for key, value := range fields {
+		if key == "variants" {
+			continue
+		}
+		if string(value) == "null" {
+			delete(raw, key)
+			continue
+		}
+		raw[key] = value
+	}
 }
 
 func rawHasAppWindowChrome(raw map[string]json.RawMessage) bool {
@@ -386,11 +397,7 @@ func validateV2ThemePlatforms(raw map[string]json.RawMessage) error {
 				}
 			}
 			for _, overrides := range []map[string]json.RawMessage{node, fields} {
-				for key, value := range overrides {
-					if key != "variants" && string(value) != "null" {
-						merged[key] = value
-					}
-				}
+				mergeThemeV2OverrideFields(merged, overrides)
 			}
 			data, err := json.Marshal(merged)
 			if err != nil {

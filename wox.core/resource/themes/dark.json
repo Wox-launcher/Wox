@@ -79,7 +79,8 @@
     "variants": {
       "hyprland": {
         "AppBackgroundColor": "#232933F9",
-        "BaseBackgroundColor": "#232933F9"
+        "BaseBackgroundColor": "#232933F9",
+        "AppBorderRadius": null
       }
     }
   },

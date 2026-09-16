@@ -40,7 +40,9 @@ Group overrides by surface: window, query/Glance/Attention, result container/ite
 
 | Authored value | Meaning |
 | --- | --- |
-| Missing or `null` optional style | Inherit/default |
+| Missing optional style | Inherit parent, or schema default at the root |
+| `null` at the root | Same as omitted: schema default |
+| `null` on a platform or variant | Clear the inherited value and restore the schema default |
 | Integer `0` | Explicit zero; never substitute a default |
 | `transparent` or alpha zero | Explicit transparency |
 | Empty color, negative/fractional geometry | Invalid |
@@ -82,13 +84,13 @@ When creating, editing, or recommending a theme that authors any of `AppBorderCo
 
 Toolbar and Action Panel retain their application-rendered frosted-glass transparency independently of the native window material. When designing custom-chrome themes, consider modest transparency in `ToolbarBackgroundColor` and `ActionContainerBackgroundColor` (for example, alpha around 0.88–0.90), while keeping text readable. Do not make these surfaces opaque merely because custom window chrome is enabled. An opaque `AppBackgroundColor` can remain intentional: these panels reveal or blur underlying app content, not the desktop through that opaque background.
 
-An explicit zero (`AppBorderWidth: 0` or `AppBorderRadius: 0`) also selects this path. To restore system material, omit all three fields or set them to `null` at every applicable root/platform/variant level. Assigning a default-looking number does not restore the material. Background colors still need alpha below 1 to reveal anything underneath.
+An explicit zero (`AppBorderWidth: 0` or `AppBorderRadius: 0`) also selects this path. To restore system material, omit all three fields. A child platform or variant can restore material after a parent outline by setting those fields to `null`; that clears the inherited chrome instead of painting a square window. Assigning a default-looking number does not restore the material. Background colors still need alpha below 1 to reveal anything underneath.
 
-Suggested user-facing wording: “主题只要设置了 AppBorderColor、AppBorderWidth 或 AppBorderRadius 中的任意一项，所有平台都不会再使用系统窗口材质（Windows Acrylic、macOS Liquid Glass、Linux 合成器模糊）。窗口改用普通透明合成，透明程度由主题颜色的 Alpha 决定。Toolbar 和 Action Panel 的应用内磨玻璃效果仍保留，可以适度保留透明度。若要恢复系统材质，需要移除这三项配置。”
+Suggested user-facing wording: “主题只要设置了 AppBorderColor、AppBorderWidth 或 AppBorderRadius 中的任意一项，所有平台都不会再使用系统窗口材质（Windows Acrylic、macOS Liquid Glass、Linux 合成器模糊）。窗口改用普通透明合成，透明程度由主题颜色的 Alpha 决定。Toolbar 和 Action Panel 的应用内磨玻璃效果仍保留，可以适度保留透明度。若要恢复系统材质，需要移除这三项配置。子级平台或变体可以把这三项设为 null，用来取消父级圆角/描边并重新打开系统材质。”
 
 ## Platform overrides and compatibility
 
-Resolution order is root authored values, then `windows`/`macos`/`linux`, then that platform's matching `variants` entry, then defaults. Read `theme_platform.go` for supported variant names. Omitted or null platform fields inherit the parent; base colors may be overridden so dependent defaults derive from the effective palette. All platform variants are validated, including inactive ones.
+Resolution order is root authored values, then `windows`/`macos`/`linux`, then that platform's matching `variants` entry, then defaults. Read `theme_platform.go` for supported variant names. Omitted platform fields inherit the parent. JSON `null` on a platform or variant clears the inherited value so the schema default applies; this is how Hyprland can keep compositor blur after a shared Linux `AppBorderRadius`. Base colors may be overridden so dependent defaults derive from the effective palette. All platform variants are validated, including inactive ones.
 
 Preserve authored values and platform nodes when editing or saving. Never flatten a resolved platform theme into the source document. When explicitly converting v1, retain its effective appearance with explicit v2 overrides where defaults differ; verify zero values, aliases, and legacy contextual color behavior rather than only changing `SchemaVersion`.
 
