@@ -47,7 +47,8 @@ func GetProcessMemoryBytes(pid int) (uint64, error) {
 	}
 
 	// Keep Wox diagnostics on the native metric shown by the platform monitor:
-	// private working set on Windows and physical footprint on macOS.
+	// private working set on Windows, physical footprint on macOS, and GNOME
+	// System Monitor's Memory column on Linux.
 	return getProcessMemoryBytes(pid)
 }
 
