@@ -238,7 +238,11 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	}
 	bodyScroll := rendered.Children[1].(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	body := bodyScroll.Child.(woxwidget.Flex).Children[0].(woxwidget.ScrollView).Child.(woxwidget.Flex)
-	firstCommand := body.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Align).Child.(woxwidget.TextBlock).Value
+	firstCell := body.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Align).Child.(woxwidget.Semantics)
+	if firstCell.Role != woxui.AccessibilityRoleText || firstCell.Label != "fix" || firstCell.Value != "fix" {
+		t.Fatalf("first command semantics = %#v, want accessible command text", firstCell)
+	}
+	firstCommand := firstCell.Child.(woxwidget.TextBlock).Value
 	if firstCommand != "fix" {
 		t.Fatalf("first command = %q, want Flutter's command sort order", firstCommand)
 	}

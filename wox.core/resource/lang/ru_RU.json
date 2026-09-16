@@ -1,4 +1,7 @@
 {
+  "ui_hotkey_ignore_fullscreen": "Игнорировать горячие клавиши в полноэкранном режиме",
+  "ui_hotkey_ignore_fullscreen_tips": "Игнорировать горячие клавиши Wox, когда активное окно полноэкранное.",
+  "ui_hotkey_ignore_fullscreen_unavailable": "Определение полноэкранного режима недоступно. В Linux нужен xprop для X11 или hyprctl для Hyprland; другие среды Wayland не поддерживаются.",
   "ui_ai_cli_executable": "Путь к CLI (необязательно)",
   "ui_ai_cli_executable_tooltip": "Оставьте пустым для поиска команды или укажите абсолютный путь. Сначала войдите: claude auth login, codex login, opencode auth login или grok login. Wox использует этот вход и свои инструменты.",
   "ui_ai_cli_effort": "Уровень рассуждений",

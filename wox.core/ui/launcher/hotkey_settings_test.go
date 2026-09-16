@@ -2,9 +2,11 @@ package launcher
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 
 	"wox/setting"
+	"wox/ui/contract"
 )
 
 func TestQueryHotkeyPositionOptionsUseLocalizedNineGridWithIcons(t *testing.T) {
@@ -146,5 +148,32 @@ func TestOpenTrayQueryEditorIgnoresInvalidRow(t *testing.T) {
 	}
 	if app.settingsTableEditor.rowForm != nil {
 		t.Fatal("out-of-range row should not open a row editor")
+	}
+}
+
+func TestFullscreenHotkeySetting(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, supported := range []bool{false, true} {
+			data, err := settingsDataFromContract(contract.GeneralSettings{
+				IgnoreHotkeysOnFullscreen:    enabled,
+				FullscreenDetectionSupported: supported,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, item := range settingItems("general", data) {
+				if item.key != "IgnoreHotkeysOnFullscreen" {
+					continue
+				}
+				found = true
+				if item.value != strconv.FormatBool(enabled) || item.disabled == supported || len(item.choices) != 2 {
+					t.Fatalf("fullscreen switch lost its value or capability: %+v", item)
+				}
+			}
+			if !found {
+				t.Fatal("fullscreen setting missing")
+			}
+		}
 	}
 }

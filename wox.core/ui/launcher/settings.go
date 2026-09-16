@@ -45,6 +45,8 @@ type settingsData struct {
 	MainHotkey                         string
 	MainHotkeyRegistrationFailed       bool
 	SelectionHotkey                    string
+	IgnoreHotkeysOnFullscreen          bool
+	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  json.RawMessage
 	QueryHotkeys                       []queryHotkeySetting
 	QueryShortcuts                     []queryShortcutSetting
@@ -595,6 +597,8 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		MainHotkey:                         loaded.MainHotkey,
 		MainHotkeyRegistrationFailed:       loaded.MainHotkeyRegistrationFailed,
 		SelectionHotkey:                    loaded.SelectionHotkey,
+		IgnoreHotkeysOnFullscreen:          loaded.IgnoreHotkeysOnFullscreen,
+		FullscreenDetectionSupported:       loaded.FullscreenDetectionSupported,
 		IgnoredHotkeyApps:                  ignoredHotkeyApps,
 		QueryHotkeys:                       queryHotkeys,
 		QueryShortcuts:                     queryShortcuts,
@@ -1451,6 +1455,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "UsePinYin", title: "Pinyin search", description: "Match Chinese text with Pinyin", value: boolValue(data.UsePinYin), choices: boolChoices},
 			{key: "SwitchInputMethodABC", title: "Switch input method", description: "Use the Latin input source when Wox opens", value: boolValue(data.SwitchInputMethodABC), choices: boolChoices},
 			{key: "LangCode", title: "Language", description: "Language used by Wox", value: data.LangCode, choices: []settingChoice{{data.LangCode, data.LangCode}}},
+			{key: "IgnoreHotkeysOnFullscreen", value: boolValue(data.IgnoreHotkeysOnFullscreen), choices: boolChoices, disabled: !data.FullscreenDetectionSupported},
 		}
 	}
 }

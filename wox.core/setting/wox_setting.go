@@ -11,14 +11,15 @@ import (
 )
 
 type WoxSetting struct {
-	EnableAutostart      *PlatformValue[bool]
-	MainHotkey           *PlatformValue[string]
-	SelectionHotkey      *PlatformValue[string]
-	IgnoredHotkeyApps    *PlatformValue[[]IgnoredHotkeyApp]
-	LogLevel             *WoxSettingValue[string]
-	UsePinYin            *WoxSettingValue[bool]
-	SwitchInputMethodABC *WoxSettingValue[bool]
-	HideOnStart          *WoxSettingValue[bool]
+	EnableAutostart           *PlatformValue[bool]
+	MainHotkey                *PlatformValue[string]
+	SelectionHotkey           *PlatformValue[string]
+	IgnoreHotkeysOnFullscreen *PlatformValue[bool]
+	IgnoredHotkeyApps         *PlatformValue[[]IgnoredHotkeyApp]
+	LogLevel                  *WoxSettingValue[string]
+	UsePinYin                 *WoxSettingValue[bool]
+	SwitchInputMethodABC      *WoxSettingValue[bool]
+	HideOnStart               *WoxSettingValue[bool]
 	// OnboardingFinished records whether this user data directory has already
 	// seen the first-run guide. This is independent of account age because old
 	// users who never saw the guide should still get one skippable pass.
@@ -329,9 +330,10 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	}
 
 	return &WoxSetting{
-		MainHotkey:        NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
-		SelectionHotkey:   NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
-		IgnoredHotkeyApps: NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
+		MainHotkey:                NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
+		SelectionHotkey:           NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
+		IgnoreHotkeysOnFullscreen: NewPlatformValue(store, "IgnoreHotkeysOnFullscreen", false, false, false),
+		IgnoredHotkeyApps:         NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {
 			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
 		}),

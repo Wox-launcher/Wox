@@ -1,4 +1,7 @@
 {
+  "ui_hotkey_ignore_fullscreen": "全画面表示中はホットキーを無視",
+  "ui_hotkey_ignore_fullscreen_tips": "前面のウィンドウが全画面表示中は Wox のホットキーを無視します。",
+  "ui_hotkey_ignore_fullscreen_unavailable": "全画面表示を検出できません。Linux X11 には xprop、Hyprland には hyprctl が必要です。その他の Wayland デスクトップには未対応です。",
   "ui_ai_cli_executable": "CLI 実行ファイル（任意）",
   "ui_ai_cli_executable_tooltip": "空欄でインストール済みコマンドを検索するか、絶対パスを入力します。先に claude auth login、codex login、opencode auth login、または grok login でログインしてください。Wox はログイン状態を再利用し、独自のツールを提供します。",
   "ui_ai_cli_effort": "推論の強度",

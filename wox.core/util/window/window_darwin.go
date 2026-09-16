@@ -35,6 +35,7 @@ char* getWindowNameByPid(int pid);
 char* getProcessBundleIdentifier(int pid);
 int isProcessIdentityRunning(const char* identity);
 int getActiveWindowPid();
+int isActiveWindowFullscreen();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
 int listManagedWindowsForManagement(WoxManagedWindowC** outWindows, int* outCount);
@@ -545,4 +546,10 @@ func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId
 	cPath := C.CString(fullPath)
 	defer C.free(unsafe.Pointer(cPath))
 	return int(C.selectInFinder(cPath)) == 1
+}
+
+func SupportsActiveWindowFullscreen() bool { return true }
+
+func IsActiveWindowFullscreen() bool {
+	return C.isActiveWindowFullscreen() != 0
 }

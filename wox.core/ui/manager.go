@@ -1972,13 +1972,21 @@ func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapsh
 	m.activeWindowSnapshotMu.Unlock()
 }
 
+// shouldIgnoreHotkeyTrigger applies foreground restrictions before launcher activation.
 func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	// Check fullscreen before the Wayland app-identity fallback: compositor backends
+	// can expose fullscreen state even when process identity is unavailable.
+	if woxSetting.IgnoreHotkeysOnFullscreen.Get() && !m.isUIWindow(window.GetActiveWindowPid()) && window.IsActiveWindowFullscreen() {
+		util.GetLogger().Info(ctx, "ignore hotkey trigger for fullscreen foreground window")
+		return true
+	}
 	if util.IsLinuxWaylandSession() {
 		logger.Info(ctx, "skip ignored hotkey app check: active window identity is unavailable on Wayland")
 		return false
 	}
 
-	ignoredApps := setting.GetSettingManager().GetWoxSetting(ctx).IgnoredHotkeyApps.Get()
+	ignoredApps := woxSetting.IgnoredHotkeyApps.Get()
 	if len(ignoredApps) == 0 {
 		return false
 	}

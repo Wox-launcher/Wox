@@ -7,14 +7,15 @@ import (
 )
 
 type WoxSettingDto struct {
-	EnableAutostart      bool
-	MainHotkey           string
-	SelectionHotkey      string
-	IgnoredHotkeyApps    []setting.IgnoredHotkeyApp
-	LogLevel             string
-	UsePinYin            bool
-	SwitchInputMethodABC bool
-	HideOnStart          bool
+	EnableAutostart           bool
+	MainHotkey                string
+	SelectionHotkey           string
+	IgnoreHotkeysOnFullscreen bool
+	IgnoredHotkeyApps         []setting.IgnoredHotkeyApp
+	LogLevel                  string
+	UsePinYin                 bool
+	SwitchInputMethodABC      bool
+	HideOnStart               bool
 	// OnboardingFinished is sent with the regular settings DTO so UI can
 	// update the guide completion flag through the existing key-value API and
 	// avoid a separate first-run state endpoint.

@@ -1,4 +1,7 @@
 {
+  "ui_hotkey_ignore_fullscreen": "全屏时忽略快捷键",
+  "ui_hotkey_ignore_fullscreen_tips": "前台窗口全屏时，不响应启动器快捷键。",
+  "ui_hotkey_ignore_fullscreen_unavailable": "当前环境无法检测全屏。Linux X11 需要 xprop，Hyprland 需要 hyprctl；暂不支持其他 Wayland 桌面。",
   "ui_ai_cli_executable": "CLI 程序路径（可选）",
   "ui_ai_cli_executable_tooltip": "留空自动查找已安装的命令，或填写绝对路径。请先登录：claude auth login、codex login、opencode auth login 或 grok login。Wox 复用登录状态并提供自己的工具。",
   "ui_ai_cli_effort": "推理强度",

@@ -300,21 +300,29 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		snapshot.palette,
 	))
 	var keepVisibleKey woxwidget.Key
+	var fullscreenHotkeyRow woxwidget.Widget
 	currentSection := ""
 	for index, item := range items {
 		item = a.localizedSettingItem(item)
+		if index == snapshot.row {
+			keepVisibleKey = woxwidget.Key("setting-row-" + item.key)
+		}
+		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
+		target := woxwidget.Keyed{Key: woxwidget.Key("setting-row-" + item.key), Child: woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
+		})}
+		// Keep the built-in switch's save/search callbacks while placing it beside
+		// the app exclusions in the hotkey form.
+		if snapshot.tab == "general" && snapshot.hotkey.Form != nil && item.key == "IgnoreHotkeysOnFullscreen" {
+			fullscreenHotkeyRow = target
+			continue
+		}
 		section := a.settingsSectionLabel(snapshot.tab, item.key)
 		if section != currentSection {
 			currentSection = section
 			children = append(children, a.buildSettingsSectionHeader(section, contentWidth, snapshot.palette))
 		}
-		if index == snapshot.row {
-			keepVisibleKey = woxwidget.Key("setting-row-" + item.key)
-		}
-		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
-		children = append(children, woxwidget.Keyed{Key: woxwidget.Key("setting-row-" + item.key), Child: woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
-		})})
+		children = append(children, target)
 	}
 	if snapshot.tab == "general" && snapshot.hotkey.Form != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
@@ -325,6 +333,12 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
+			// On Wayland the app-exclusion table is absent; keep the switch before
+			// query hotkeys, immediately after the available hotkey recorders.
+			if definition.Type == "table" && fullscreenHotkeyRow != nil {
+				children = append(children, fullscreenHotkeyRow)
+				fullscreenHotkeyRow = nil
+			}
 			if hotkeyForm.active && index == hotkeyForm.focused {
 				keepVisibleKey = formFieldRowKey("settings-hotkey", index)
 			}
@@ -404,7 +418,8 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 	keys := map[string][2]string{
 		"EnableAutostart": {"ui_autostart", "ui_autostart_tips"}, "HideOnStart": {"ui_hide_on_start", "ui_hide_on_start_tips"},
 		"LaunchMode": {"ui_launch_mode", "ui_launch_mode_tips"}, "StartPage": {"ui_start_page", "ui_start_page_tips"},
-		"HideOnLostFocus": {"ui_hide_on_lost_focus", "ui_hide_on_lost_focus_tips"}, "UsePinYin": {"ui_use_pinyin", "ui_use_pinyin_tips"},
+		"IgnoreHotkeysOnFullscreen": {"ui_hotkey_ignore_fullscreen", "ui_hotkey_ignore_fullscreen_tips"},
+		"HideOnLostFocus":           {"ui_hide_on_lost_focus", "ui_hide_on_lost_focus_tips"}, "UsePinYin": {"ui_use_pinyin", "ui_use_pinyin_tips"},
 		"SwitchInputMethodABC": {"ui_switch_input_method_abc", "ui_switch_input_method_abc_tips"}, "LangCode": {"ui_lang", "ui_lang_tips"},
 		"ShowPosition": {"ui_show_position", "ui_show_position_tips"}, "ShowTray": {"ui_show_tray", "ui_show_tray_tips"},
 		"AppWidth": {"ui_app_width", "ui_app_width_tips"}, "UiDensity": {"ui_interface_size", "ui_interface_size_tips"},
@@ -424,6 +439,9 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 		if pair[1] != "" {
 			item.description = a.translate("i18n:" + pair[1])
 		}
+	}
+	if item.key == "IgnoreHotkeysOnFullscreen" && item.disabled {
+		item.description = a.translate("i18n:ui_hotkey_ignore_fullscreen_unavailable")
 	}
 	for index := range item.choices {
 		item.choices[index].label = a.localizedSettingChoiceLabel(item.key, item.choices[index])

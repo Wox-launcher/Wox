@@ -130,6 +130,8 @@ type GeneralSettings struct {
 	MainHotkey                         string
 	MainHotkeyRegistrationFailed       bool
 	SelectionHotkey                    string
+	IgnoreHotkeysOnFullscreen          bool
+	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  []setting.IgnoredHotkeyApp
 	LogLevel                           string
 	UsePinYin                          bool

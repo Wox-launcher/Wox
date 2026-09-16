@@ -16,6 +16,14 @@ There is also a **Selection hotkey**. It opens Wox against the current text or f
 
 On macOS, grant Accessibility if hotkey recording asks for it. On Linux Wayland, ordinary combinations such as `Ctrl + Space` use the desktop portal; double-modifier and CapsLock combos need extra input permissions. See the [Wayland FAQ](../faq.md#wayland-double-modifier-hotkeys).
 
+## Fullscreen Applications
+
+Enable **Settings -> General -> Ignore hotkeys in fullscreen** to suppress the main, selection and query hotkeys while the foreground window is fullscreen. It is off by default; ordinary maximized windows are unaffected. Dictation hotkeys are independent of this launcher setting.
+
+Detection supports Windows, macOS (Accessibility permission required), Linux X11 with `xprop`, and Hyprland with `hyprctl`. The switch is disabled on unsupported Wayland desktops or when the required Linux command is missing. Detection failures leave hotkeys enabled.
+
+This suppresses Wox actions without unregistering the shortcuts, so it does not guarantee that the foreground application receives those keys.
+
 ## Query Hotkeys
 
 A Query Hotkey binds a shortcut to a query. Instead of opening Wox and typing `webview x` or `window group Work`, the shortcut does that in one step.

@@ -1,4 +1,7 @@
 {
+  "ui_hotkey_ignore_fullscreen": "Ignorar atalhos em tela cheia",
+  "ui_hotkey_ignore_fullscreen_tips": "Ignorar atalhos do Wox quando a janela ativa estiver em tela cheia.",
+  "ui_hotkey_ignore_fullscreen_unavailable": "A detecção de tela cheia está indisponível. No Linux, é necessário xprop no X11 ou hyprctl no Hyprland; outros ambientes Wayland não são compatíveis.",
   "ui_ai_cli_executable": "Executável CLI (opcional)",
   "ui_ai_cli_executable_tooltip": "Deixe vazio para localizar o comando ou informe o caminho absoluto. Entre primeiro: claude auth login, codex login, opencode auth login ou grok login. O Wox reutiliza esse acesso e fornece suas ferramentas.",
   "ui_ai_cli_effort": "Esforço de raciocínio",

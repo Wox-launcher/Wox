@@ -21,6 +21,7 @@ import (
 	"wox/util/font"
 	"wox/util/keyboard"
 	"wox/util/permission"
+	"wox/util/window"
 )
 
 // GeneralSettings returns the core-owned settings snapshot used across embedded settings pages.
@@ -36,6 +37,8 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		MainHotkey:                         woxSetting.MainHotkey.Get(),
 		MainHotkeyRegistrationFailed:       GetUIManager().hasMainHotkeyToolbarWarning(),
 		SelectionHotkey:                    woxSetting.SelectionHotkey.Get(),
+		IgnoreHotkeysOnFullscreen:          woxSetting.IgnoreHotkeysOnFullscreen.Get(),
+		FullscreenDetectionSupported:       window.SupportsActiveWindowFullscreen(),
 		IgnoredHotkeyApps:                  append([]setting.IgnoredHotkeyApp(nil), woxSetting.IgnoredHotkeyApps.Get()...),
 		LogLevel:                           util.NormalizeLogLevel(woxSetting.LogLevel.Get()),
 		UsePinYin:                          woxSetting.UsePinYin.Get(),
@@ -175,6 +178,14 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 	switch key {
 	case "EnableAutostart":
 		woxSetting.EnableAutostart.Set(boolValue)
+	case "IgnoreHotkeysOnFullscreen":
+		ignored, err := strconv.ParseBool(value)
+		if err != nil {
+			return err
+		}
+		if err := woxSetting.IgnoreHotkeysOnFullscreen.Set(ignored); err != nil {
+			return err
+		}
 	case "IgnoredHotkeyApps":
 		var ignoredApps []setting.IgnoredHotkeyApp
 		if err := json.Unmarshal([]byte(value), &ignoredApps); err != nil {

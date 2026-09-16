@@ -2387,3 +2387,28 @@ int navigateInFinder(const char* path) {
         return 1;
     }
 }
+
+// Query the focused window's native fullscreen state, not its maximized geometry.
+int isActiveWindowFullscreen() {
+    @autoreleasepool {
+        NSRunningApplication *frontmost = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (!frontmost || [frontmost processIdentifier] == getpid()) {
+            return 0;
+        }
+        AXUIElementRef app = AXUIElementCreateApplication([frontmost processIdentifier]);
+        if (!app) {
+            return 0;
+        }
+        AXUIElementSetMessagingTimeout(app, 0.1);
+        AXUIElementRef window = copyFocusedWindowElement(app);
+        CFRelease(app);
+        if (!window) {
+            return 0;
+        }
+        BOOL fullscreen = NO;
+        AXUIElementSetMessagingTimeout(window, 0.1);
+        readAXWindowFullScreenState(window, &fullscreen);
+        CFRelease(window);
+        return fullscreen;
+    }
+}

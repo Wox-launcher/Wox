@@ -1,4 +1,7 @@
 {
+  "ui_hotkey_ignore_fullscreen": "전체 화면에서 단축키 무시",
+  "ui_hotkey_ignore_fullscreen_tips": "활성 창이 전체 화면이면 Wox 단축키를 무시합니다.",
+  "ui_hotkey_ignore_fullscreen_unavailable": "전체 화면을 감지할 수 없습니다. Linux X11에는 xprop, Hyprland에는 hyprctl이 필요하며 다른 Wayland 데스크톱은 지원되지 않습니다.",
   "ui_ai_cli_executable": "CLI 실행 파일 (선택)",
   "ui_ai_cli_executable_tooltip": "비워 두면 설치된 명령을 찾습니다. 또는 절대 경로를 입력하세요. 먼저 claude auth login, codex login, opencode auth login 또는 grok login으로 로그인하세요. Wox는 로그인 상태를 재사용하고 자체 도구를 제공합니다.",
   "ui_ai_cli_effort": "추론 강도",

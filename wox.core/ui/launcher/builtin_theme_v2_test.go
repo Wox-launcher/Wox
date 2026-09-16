@@ -9,7 +9,7 @@ import (
 	"wox/common"
 )
 
-// TestBuiltinThemesUseV2 preserves every previously authored style across the format conversion.
+// TestBuiltinThemesUseV2 preserves legacy styles except for intentional theme updates.
 func TestBuiltinThemesUseV2(t *testing.T) {
 	for _, name := range []string{"auto", "dark", "light", "glass"} {
 		data, err := os.ReadFile("../../resource/themes/" + name + ".json")
@@ -51,7 +51,15 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 			if oldIndicator != newIndicator {
 				t.Fatalf("%s: indicator appearance changed", name)
 			}
-			left, right := reflect.ValueOf(fromCoreTheme(before)), reflect.ValueOf(fromCoreTheme(after))
+			expected := fromCoreTheme(before)
+			if target[0] == "linux" && target[1] == "" {
+				// Ordinary Linux desktops now use rounded fallback chrome; Hyprland
+				// clears the override so its compositor keeps ownership of the material.
+				radius := 8
+				expected.AppWindowChrome = true
+				expected.AppBorderRadius = &radius
+			}
+			left, right := reflect.ValueOf(expected), reflect.ValueOf(fromCoreTheme(after))
 			for i := 0; i < left.NumField(); i++ {
 				field := left.Type().Field(i).Name
 				if strings.HasPrefix(field, "ResultItemActiveIndicator") || strings.HasPrefix(field, "ResultItemActiveBorderLeft") || strings.HasPrefix(field, "QueryBoxBorderBottom") {
@@ -62,16 +70,26 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 				}
 				if strings.HasSuffix(field, "Color") {
 					expected := left.Field(i).String()
-					// Glass now keeps its footer transparent and uses a quieter panel tint;
-					// these intentional material changes supersede the legacy conversion fixture.
+					// Glass material and selection updates supersede the legacy fixture.
 					if name == "glass" && field == "ToolbarBackgroundColor" {
 						expected = "#16161A04"
 						if target[0] == "windows" {
 							expected = "#12121604"
+						} else if target[0] == "linux" {
+							expected = "#0D0D0DA5"
+							if target[1] == "hyprland" {
+								expected = "#15151AB3"
+							}
 						}
 					}
 					if name == "glass" && field == "ActionContainerBackgroundColor" {
-						expected = "#252830D9"
+						expected = "#15151558"
+						if target[0] == "linux" {
+							expected = "#131518B2"
+						}
+					}
+					if name == "glass" && field == "ResultItemActiveBackgroundColor" {
+						expected = "#FFFFFF19"
 					}
 					if name == "glass" && field == "ToolbarFontColor" {
 						expected = "#A3A3A3FF"
@@ -79,10 +97,10 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 					want, ok := decodeThemeColor(expected)
 					got, valid := decodeThemeColor(right.Field(i).String())
 					if !ok || !valid || want != got {
-						t.Fatalf("%s/%v: %s color changed", name, target, field)
+						t.Errorf("%s/%v: %s = %q, want %q", name, target, field, right.Field(i).String(), expected)
 					}
 				} else if !reflect.DeepEqual(left.Field(i).Interface(), right.Field(i).Interface()) {
-					t.Fatalf("%s/%v: %s changed", name, target, field)
+					t.Errorf("%s/%v: %s = %v, want %v", name, target, field, right.Field(i).Interface(), left.Field(i).Interface())
 				}
 			}
 		}
