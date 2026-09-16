@@ -640,6 +640,26 @@ func TestConstrainLauncherHeightKeepsQueryChromeInWorkArea(t *testing.T) {
 	}
 }
 
+// TestLauncherHeightOnResolvedDisplay reproduces #4572's primary work-area clipping at mixed DPI.
+func TestLauncherHeightOnResolvedDisplay(t *testing.T) {
+	primary := screen.Display{ID: "main", Bounds: screen.Rect{Width: 2560, Height: 1440}, WorkArea: screen.Rect{Width: 2560, Height: 1392}, Scale: 1, Primary: true}
+	lower := screen.Display{ID: "lower", Bounds: screen.Rect{Y: 1152, Width: 2048, Height: 960}, WorkArea: screen.Rect{Y: 1152, Width: 2048, Height: 922}, Scale: 1.25}
+	// Both displays contain the logical anchor. The native display must remain authoritative.
+	if area, _ := launcherWorkAreaAt(1038, 1379.5, []screen.Display{primary, lower}); area != primary.WorkArea {
+		t.Fatal("fixture must reproduce ambiguous logical display selection")
+	}
+	for _, height := range []float32{75, 179, 571} {
+		y, gotHeight, _ := constrainLauncherHeightToWorkArea(false, 663, 1322, 750, height, min(height, 115), 0, []screen.Display{lower})
+		if y != 1322 || gotHeight != height {
+			t.Fatalf("lower display: y=%v height=%v, want 1322/%v", y, gotHeight, height)
+		}
+	}
+	y, height, anchor := constrainLauncherHeightToWorkArea(true, 663, 1322, 750, 571, 115, 1893, []screen.Display{lower})
+	if y != 1322 || height != 571 || anchor != 1893 {
+		t.Fatalf("bottom query: y=%v height=%v anchor=%v", y, height, anchor)
+	}
+}
+
 func TestLauncherBoundsEffectivelyEqualToleratesDPIRoundTrip(t *testing.T) {
 	current := woxui.Rect{X: 10, Y: 20.2, Width: 400.2, Height: 75.2}
 	target := woxui.Rect{X: 10, Y: 20, Width: 400, Height: 75}

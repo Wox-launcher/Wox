@@ -278,6 +278,37 @@ func (w *Window) SetBounds(bounds Rect) error {
 	return w.native.setBounds(bounds)
 }
 
+// SetBoundsOnDisplay preserves a resolved monitor when per-monitor logical desktops overlap.
+// Platforms with a unified logical desktop use the normal bounds path.
+func (w *Window) SetBoundsOnDisplay(bounds Rect, display screen.Display) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	if bounds.Width <= 0 || bounds.Height <= 0 {
+		return errors.New("window bounds must have a positive size")
+	}
+	if native, ok := any(w.native).(interface {
+		setBoundsOnDisplay(Rect, screen.Display) error
+	}); ok && display.Scale > 0 {
+		return native.setBoundsOnDisplay(bounds, display)
+	}
+	return w.SetBounds(bounds)
+}
+
+// BoundsDisplay resolves Windows' per-monitor coordinate ambiguity before layout clips a window.
+// current selects the actual native monitor after dragging; other platforms retain logical lookup.
+func (w *Window) BoundsDisplay(bounds Rect, current bool, displays []screen.Display) (screen.Display, error) {
+	if w == nil || w.native == nil {
+		return screen.Display{}, errors.New("window is not initialized")
+	}
+	if native, ok := any(w.native).(interface {
+		boundsDisplay(Rect, bool, []screen.Display) (screen.Display, error)
+	}); ok {
+		return native.boundsDisplay(bounds, current, displays)
+	}
+	return screen.Display{}, nil
+}
+
 // Bounds returns the current window rectangle in logical virtual-desktop coordinates.
 func (w *Window) Bounds() (Rect, error) {
 	if w == nil || w.native == nil {

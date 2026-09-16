@@ -9,7 +9,6 @@ import (
 	"image"
 	"math"
 	"runtime"
-	"runtime/cgo"
 	"sync"
 	"syscall"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"wox/util"
 	"wox/util/ime"
 	"wox/util/osvariant"
+	"wox/util/screen"
 
 	"github.com/lxn/win"
 )
@@ -80,9 +80,7 @@ var (
 	setThreadDPIAwarenessContext         = syscall.NewLazyDLL("user32.dll").NewProc("SetThreadDpiAwarenessContext")
 	setProcessDPIAware                   = syscall.NewLazyDLL("user32.dll").NewProc("SetProcessDPIAware")
 	getUpdateRect                        = syscall.NewLazyDLL("user32.dll").NewProc("GetUpdateRect")
-	enumDisplayMonitors                  = syscall.NewLazyDLL("user32.dll").NewProc("EnumDisplayMonitors")
 	getDPIForMonitor                     = syscall.NewLazyDLL("shcore.dll").NewProc("GetDpiForMonitor")
-	monitorBoundsCallback                = syscall.NewCallback(findMonitorForLogicalBounds)
 	immGetContext                        = syscall.NewLazyDLL("imm32.dll").NewProc("ImmGetContext")
 	immReleaseContext                    = syscall.NewLazyDLL("imm32.dll").NewProc("ImmReleaseContext")
 	immGetCompositionString              = syscall.NewLazyDLL("imm32.dll").NewProc("ImmGetCompositionStringW")
@@ -159,6 +157,7 @@ type windowCommand struct {
 
 	kind                        windowCommandKind
 	bounds                      Rect
+	displayScale                float32
 	size                        Size
 	hideOnBlur                  bool
 	topmost                     bool
@@ -291,12 +290,6 @@ type windowsCompositionAttributeData struct {
 	attribute uint32
 	data      uintptr
 	size      uintptr
-}
-
-type monitorBoundsSearch struct {
-	bounds   Rect
-	bestArea float64
-	scale    float32
 }
 
 func (w *platformWindow) capturePNG(path string) error {
@@ -537,6 +530,36 @@ func (w *platformWindow) hide() error {
 
 func (w *platformWindow) setBounds(bounds Rect) error {
 	return w.call(windowCommand{kind: windowCommandSetBounds, bounds: bounds}).err
+}
+
+func (w *platformWindow) setBoundsOnDisplay(bounds Rect, display screen.Display) error {
+	return w.call(windowCommand{kind: windowCommandSetBounds, bounds: bounds, displayScale: float32(display.Scale)}).err
+}
+
+// boundsDisplay uses the actual native monitor for resizes instead of ambiguous logical coordinates.
+func (w *platformWindow) boundsDisplay(bounds Rect, current bool, displays []screen.Display) (screen.Display, error) {
+	if !current {
+		return windowsDisplayForLogicalBounds(bounds, displays), nil
+	}
+	w.mu.Lock()
+	hwnd := w.hwnd
+	w.mu.Unlock()
+	if hwnd == 0 {
+		return screen.Display{}, errors.New("window is not initialized")
+	}
+	monitor := win.MonitorFromWindow(hwnd, win.MONITOR_DEFAULTTONEAREST)
+	var info win.MONITORINFO
+	info.CbSize = uint32(unsafe.Sizeof(info))
+	if monitor == 0 || !win.GetMonitorInfo(monitor, &info) {
+		return screen.Display{}, errors.New("failed to resolve window monitor")
+	}
+	pixels := screen.Rect{X: int(info.RcMonitor.Left), Y: int(info.RcMonitor.Top), Width: int(info.RcMonitor.Right - info.RcMonitor.Left), Height: int(info.RcMonitor.Bottom - info.RcMonitor.Top)}
+	for _, display := range displays {
+		if display.PixelBounds == pixels {
+			return display, nil
+		}
+	}
+	return screen.Display{}, errors.New("window monitor missing from display snapshot")
 }
 
 func (w *platformWindow) setPhysicalBounds(bounds Rect) error {
@@ -1883,7 +1906,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		w.hideNative()
 		return windowCommandResult{epoch: w.focus.epoch}
 	case windowCommandSetBounds:
-		return windowCommandResult{err: w.setBoundsNative(command.bounds)}
+		return windowCommandResult{err: w.setBoundsNative(command.bounds, command.displayScale)}
 	case windowCommandSetPhysicalBounds:
 		return windowCommandResult{err: w.setPhysicalBoundsNative(command.bounds)}
 	case windowCommandGetBounds:
@@ -2045,17 +2068,14 @@ func openExternalURLNative(hwnd win.HWND, rawURL string) error {
 }
 
 // setBoundsNative converts the core's per-monitor logical coordinate space back to Win32 pixels.
-func (w *platformWindow) setBoundsNative(bounds Rect) error {
-	search := monitorBoundsSearch{bounds: bounds}
-	if enumDisplayMonitors.Find() == nil {
-		handle := cgo.NewHandle(&search)
-		result, _, _ := enumDisplayMonitors.Call(0, 0, monitorBoundsCallback, uintptr(handle))
-		handle.Delete()
-		if result == 0 {
-			return errors.New("failed to enumerate Windows monitors")
+func (w *platformWindow) setBoundsNative(bounds Rect, scale float32) error {
+	if scale <= 0 {
+		displays, err := screen.ListDisplays()
+		if err != nil {
+			return err
 		}
+		scale = float32(windowsDisplayForLogicalBounds(bounds, displays).Scale)
 	}
-	scale := search.scale
 	if scale <= 0 {
 		scale = primaryDisplayScale()
 	}
@@ -2172,27 +2192,26 @@ func (w *platformWindow) syncScaleFromNativeWindow() {
 	w.mu.Unlock()
 }
 
-// findMonitorForLogicalBounds mirrors the logical monitor selection used by Wox core and the UI runner.
-func findMonitorForLogicalBounds(monitor win.HMONITOR, _ win.HDC, _ *win.RECT, parameter uintptr) uintptr {
-	search := cgo.Handle(parameter).Value().(*monitorBoundsSearch)
-	var info win.MONITORINFO
-	info.CbSize = uint32(unsafe.Sizeof(info))
-	if !win.GetMonitorInfo(monitor, &info) {
-		return 1
+// windowsDisplayForLogicalBounds shares native placement's physical-overlap rule with layout.
+// Comparing logical anchor points alone can incorrectly favor the primary display at mixed DPI.
+func windowsDisplayForLogicalBounds(bounds Rect, displays []screen.Display) screen.Display {
+	var best screen.Display
+	var bestArea float64
+	for _, display := range displays {
+		if display.Scale <= 0 || display.PixelBounds.IsEmpty() {
+			continue
+		}
+		scale := float32(display.Scale)
+		left, top := float64(bounds.X*scale), float64(bounds.Y*scale)
+		right, bottom := float64((bounds.X+bounds.Width)*scale), float64((bounds.Y+bounds.Height)*scale)
+		pixels := display.PixelBounds
+		overlapWidth := math.Max(0, math.Min(right, float64(pixels.Right()))-math.Max(left, float64(pixels.X)))
+		overlapHeight := math.Max(0, math.Min(bottom, float64(pixels.Bottom()))-math.Max(top, float64(pixels.Y)))
+		if area := overlapWidth * overlapHeight; area > bestArea {
+			bestArea, best = area, display
+		}
 	}
-	scale := monitorScale(monitor)
-	left := float64(search.bounds.X * scale)
-	top := float64(search.bounds.Y * scale)
-	right := float64((search.bounds.X + search.bounds.Width) * scale)
-	bottom := float64((search.bounds.Y + search.bounds.Height) * scale)
-	overlapWidth := math.Max(0, math.Min(right, float64(info.RcMonitor.Right))-math.Max(left, float64(info.RcMonitor.Left)))
-	overlapHeight := math.Max(0, math.Min(bottom, float64(info.RcMonitor.Bottom))-math.Max(top, float64(info.RcMonitor.Top)))
-	area := overlapWidth * overlapHeight
-	if area > search.bestArea {
-		search.bestArea = area
-		search.scale = scale
-	}
-	return 1
+	return best
 }
 
 // monitorScale returns the effective DPI scale for one monitor.

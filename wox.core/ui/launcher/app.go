@@ -1275,8 +1275,27 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	bottomAnchor := a.bottomAnchorY
 	targetHeight := float32(height)
 	x, y, nextAnchor := launcherWindowOrigin(params, current, targetHeight, useShowPosition, bottomAnchor)
-	if displays, listErr := screen.ListDisplays(); listErr == nil {
-		y, targetHeight, nextAnchor = constrainLauncherHeightToWorkArea(params.QueryBoxAtBottom, x, y, float32(width), targetHeight, float32(minimumHeight), nextAnchor, displays)
+	requested := woxui.Rect{X: x, Y: y, Width: float32(width), Height: targetHeight}
+	var targetDisplay screen.Display
+	displays, listErr := screen.ListDisplays()
+	if listErr == nil {
+		var displayErr error
+		targetDisplay, displayErr = a.window.BoundsDisplay(requested, !useShowPosition, displays)
+		if displayErr != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("launcher-display resolve failed: showPos=%t requested=%+v error=%v", useShowPosition, requested, displayErr))
+		}
+		layoutDisplays := displays
+		if targetDisplay.ID != "" {
+			// Keep clipping and native placement on the same display. Mixed-DPI logical
+			// rectangles can overlap even when the physical monitors do not (#4572).
+			layoutDisplays = []screen.Display{targetDisplay}
+		}
+		y, targetHeight, nextAnchor = constrainLauncherHeightToWorkArea(params.QueryBoxAtBottom, x, y, float32(width), targetHeight, float32(minimumHeight), nextAnchor, layoutDisplays)
+		if useShowPosition || y != requested.Y || targetHeight != requested.Height {
+			util.GetLogger().Info(context.Background(), fmt.Sprintf("launcher-display showPos=%t useNativeCurrent=%t requestedLogical=%+v minimumHeight=%.1f selected=%+v displays=%+v", useShowPosition, !useShowPosition, requested, float32(minimumHeight), targetDisplay, displays))
+		}
+	} else {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("launcher-display enumeration failed: %v", listErr))
 	}
 	target := woxui.Rect{
 		X:      x,
@@ -1292,7 +1311,13 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		bottomAnchor, nextAnchor,
 		current.X, current.Y, current.Width, current.Height,
 		target.X, target.Y, target.Width, target.Height))
-	if launcherBoundsEffectivelyEqual(current, target) {
+	sameDisplay := true
+	if useShowPosition && targetDisplay.ID != "" {
+		currentDisplay, displayErr := a.window.BoundsDisplay(current, true, displays)
+		// Equal logical bounds can still refer to different physical displays.
+		sameDisplay = displayErr == nil && currentDisplay.ID == targetDisplay.ID
+	}
+	if sameDisplay && launcherBoundsEffectivelyEqual(current, target) {
 		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
 			a.bottomAnchorY = nextAnchor
 		}
@@ -1301,7 +1326,14 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if params.QueryBoxAtBottom {
 		a.bottomAnchorY = nextAnchor
 	}
-	return a.window.SetBounds(target)
+	if err := a.window.SetBoundsOnDisplay(target, targetDisplay); err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("launcher-bounds apply failed: target=%+v display=%q error=%v", target, targetDisplay.ID, err))
+		return err
+	}
+	actual, boundsErr := a.window.Bounds()
+	actualDisplay, displayErr := a.window.BoundsDisplay(actual, true, displays)
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("launcher-bounds applied: display=%q scale=%.2f requestedLogical=%+v targetLogical=%+v actualLogical=%+v actualDisplay=%q actualScale=%.2f boundsError=%v displayError=%v", targetDisplay.ID, targetDisplay.Scale, requested, target, actual, actualDisplay.ID, actualDisplay.Scale, boundsErr, displayErr))
+	return nil
 }
 
 func launcherReservesFullPreviewHeight(params showAppParams, previewVisible bool) bool {
