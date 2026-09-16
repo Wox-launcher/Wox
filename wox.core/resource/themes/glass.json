@@ -79,8 +79,9 @@
     }
   },
   "linux": {
-    "ActionContainerBackgroundColor": "#252830D9",
-    "ToolbarBackgroundColor": "#25283004",
+    "AppBorderRadius": 8,
+    "ActionContainerBackgroundColor": "#131518B2",
+    "ToolbarBackgroundColor": "#0D0D0DA5",
     "variants": {
       "hyprland": {
         "AppBackgroundColor": "#16161AF9",

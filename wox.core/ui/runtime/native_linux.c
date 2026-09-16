@@ -2674,6 +2674,37 @@ static void linux_background_effect_info(const char *message) {
   }
 }
 
+// apply_linux_window_corner_shape matches the native silhouette to authored chrome.
+// Wayland composites through per-pixel alpha; X11 also uses the widget shape.
+// Opaque-region stays unset so the antialiased GL fringe can blend.
+static void apply_linux_window_corner_shape(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || window->window == NULL || !gtk_widget_get_realized(window->window)) {
+    return;
+  }
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window == NULL) {
+    return;
+  }
+  float radius = window->custom_window_chrome ? window->corner_radius : 0.0f;
+  if (radius <= 0.0f) {
+    if (!window->pointer_passthrough) {
+      gtk_widget_shape_combine_region(window->window, NULL);
+    }
+    gdk_window_set_opaque_region(gdk_window, NULL);
+    return;
+  }
+  int scale = gtk_widget_get_scale_factor(window->window);
+  if (scale < 1) {
+    scale = 1;
+  }
+  cairo_region_t *region = rounded_rect_region(gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window), radius * (float)scale);
+  if (!window->pointer_passthrough) {
+    gtk_widget_shape_combine_region(window->window, region);
+  }
+  gdk_window_set_opaque_region(gdk_window, NULL);
+  cairo_region_destroy(region);
+}
+
 // apply_linux_background_effect attaches ext-background-effect-v1 once to the
 // current toplevel wl_surface. GtkGLArea is a no-window widget, so a second
 // bind on the parent surface is a protocol error. GTK also recreates the
@@ -2682,9 +2713,11 @@ static void apply_linux_background_effect(WoxLinuxWindow *window) {
   if (window == NULL || window->closed || window->window == NULL || window->screenshot_window || window->custom_window_chrome) {
     if (window != NULL && window->custom_window_chrome) {
       destroy_linux_background_effect(window);
+      apply_linux_window_corner_shape(window);
     }
     return;
   }
+  apply_linux_window_corner_shape(window);
   if (!wox_linux_background_blur_available()) {
     return;
   }
@@ -2793,6 +2826,7 @@ static void apply_linux_window_size(WoxLinuxWindow *window, int width, int heigh
     gdk_x11_display_error_trap_pop_ignored(gdk_display);
   }
 #endif
+  apply_linux_window_corner_shape(window);
   trace_linux_window_geometry(window, "resize_after_request");
 }
 
@@ -3123,9 +3157,9 @@ static void on_linux_transparent_screen_changed(GtkWidget *widget, GdkScreen *pr
 }
 
 // Recording chrome and screenshot toolbars call Clear(Color{}) so the live
-// desktop shows through. Launcher windows stay opaque unless the compositor
-// advertises ext-background-effect-v1 blur, in which case the theme wash
-// keeps its alpha and the compositor blurs the desktop behind it.
+// desktop shows through. Utility windows (the launcher) also request an RGBA
+// surface so custom chrome can punch rounded corners after realize; application
+// windows stay opaque unless the compositor advertises ext-background-effect-v1.
 static void enable_linux_per_pixel_alpha(WoxLinuxWindow *window) {
   GtkCssProvider *provider = gtk_css_provider_new();
   gtk_css_provider_load_from_data(provider, "window, overlay { background-color: rgba(0,0,0,0); background-image: none; }", -1, NULL);
@@ -3176,6 +3210,13 @@ static void on_linux_pointer_passthrough_realize(GtkWidget *widget, gpointer dat
   apply_linux_pointer_passthrough(data);
 }
 
+// linux_window_uses_per_pixel_alpha is the create-time RGBA policy.
+// GtkGLArea has_alpha cannot change after realize, and Open applies chrome
+// afterward, so the launcher must request an alpha surface up front.
+static bool linux_window_uses_per_pixel_alpha(bool application, bool nonactivating, bool screenshot, bool blur_available) {
+  return nonactivating || screenshot || !application || blur_available;
+}
+
 // apply_window_geometry_hints keeps aspect and min-size constraints on the same GdkGeometry.
 static void apply_window_geometry_hints(WoxLinuxWindow *window) {
   if (window == NULL || window->window == NULL) {
@@ -3213,7 +3254,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->application_window = application_window;
   window->screenshot_window = window_role == WOX_WINDOW_ROLE_SCREENSHOT;
   window->nonactivating = nonactivating != 0;
-  window->per_pixel_alpha = window->nonactivating || window->screenshot_window || wox_linux_background_blur_available();
+  window->per_pixel_alpha = linux_window_uses_per_pixel_alpha(application_window, window->nonactivating, window->screenshot_window, wox_linux_background_blur_available() != 0);
   window->im_context = gtk_im_multicontext_new();
   window->pressed_keys = g_hash_table_new(g_direct_hash, g_direct_equal);
   window->web_view_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
@@ -3799,11 +3840,10 @@ static void set_window_chrome_main(void *data) {
   }
   call->window->custom_window_chrome = call->enabled;
   call->window->corner_radius = linux_custom_chrome_corner_radius(call->enabled, call->radius);
-  if (call->enabled) {
-    destroy_linux_background_effect(call->window);
-    return;
-  }
   apply_linux_background_effect(call->window);
+  if (call->window->gl_area != NULL) {
+    gtk_gl_area_queue_render(GTK_GL_AREA(call->window->gl_area));
+  }
 }
 
 int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom, float radius) {
@@ -5608,4 +5648,8 @@ int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screensh
 
 float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested) {
   return linux_custom_chrome_corner_radius(custom != 0, requested);
+}
+
+int32_t wox_linux_test_window_uses_per_pixel_alpha(int32_t application, int32_t nonactivating, int32_t screenshot, int32_t blur_available) {
+  return linux_window_uses_per_pixel_alpha(application != 0, nonactivating != 0, screenshot != 0, blur_available != 0) ? 1 : 0;
 }

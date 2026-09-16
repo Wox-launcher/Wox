@@ -8,8 +8,6 @@
   "Version": "1.0.0",
   "Description": "An opaque charcoal theme with a bold jade outline, generous window corners, and crisp jade selection markers.",
   "IsAutoAppearance": false,
-  "DarkThemeId": "",
-  "LightThemeId": "",
   "AppBorderColor": "#4FAE85FF",
   "AppBorderWidth": 3,
   "AppBorderRadius": 28,

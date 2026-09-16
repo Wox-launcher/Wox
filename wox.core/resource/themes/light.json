@@ -74,6 +74,7 @@
     }
   },
   "linux": {
+    "AppBorderRadius": 8,
     "AppBackgroundColor": "#F1F5F5FF",
     "ActionContainerBackgroundColor": "#F8FAFAE5",
     "variants": {

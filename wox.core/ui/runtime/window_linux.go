@@ -912,6 +912,26 @@ func testLinuxCustomChromeCornerRadius(custom bool, requested float32) float32 {
 	return float32(C.wox_linux_test_custom_chrome_corner_radius(nativeCustom, C.float(requested)))
 }
 
+func testLinuxWindowUsesPerPixelAlpha(application, nonactivating, screenshot, blurAvailable bool) bool {
+	nativeApplication := C.int32_t(0)
+	if application {
+		nativeApplication = 1
+	}
+	nativeNonactivating := C.int32_t(0)
+	if nonactivating {
+		nativeNonactivating = 1
+	}
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	nativeBlur := C.int32_t(0)
+	if blurAvailable {
+		nativeBlur = 1
+	}
+	return C.wox_linux_test_window_uses_per_pixel_alpha(nativeApplication, nativeNonactivating, nativeScreenshot, nativeBlur) != 0
+}
+
 func testLinuxLayerShellStackLayer(topmost, screenshot bool) int32 {
 	nativeTopmost := C.int32_t(0)
 	if topmost {

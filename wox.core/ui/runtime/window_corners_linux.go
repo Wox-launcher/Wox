@@ -12,6 +12,8 @@ import "C"
 // setWindowChrome turns compositor blur off so a self-drawn outline is not covered.
 // radius is the present clip. Linux used to ignore it, so full-width children could
 // paint into the transparent corner cutouts that Windows and macOS clip natively.
+// Utility windows request per-pixel alpha at create so this clip can punch the
+// framebuffer after realize; GtkGLArea has_alpha cannot be enabled later.
 func (w *platformWindow) setWindowChrome(custom bool, radius float32) error {
 	native, err := w.openNative()
 	if err != nil {

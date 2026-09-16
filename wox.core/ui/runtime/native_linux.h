@@ -68,5 +68,6 @@ int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t heigh
 int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot);
 int32_t wox_linux_test_window_requests_background_blur(int32_t screenshot, int32_t blur_available);
 float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested);
+int32_t wox_linux_test_window_uses_per_pixel_alpha(int32_t application, int32_t nonactivating, int32_t screenshot, int32_t blur_available);
 
 #endif

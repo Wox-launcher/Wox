@@ -18,3 +18,21 @@ func TestLinuxCustomChromeCornerRadiusClipsAuthoredShape(t *testing.T) {
 		t.Fatalf("explicit square custom chrome radius = %v, want 0", got)
 	}
 }
+
+func TestLinuxUtilityWindowsKeepPerPixelAlphaForCustomChrome(t *testing.T) {
+	if !testLinuxWindowUsesPerPixelAlpha(false, false, false, false) {
+		t.Fatal("launcher windows must request RGBA so Jade can punch rounded corners without compositor blur")
+	}
+	if testLinuxWindowUsesPerPixelAlpha(true, false, false, false) {
+		t.Fatal("application windows stay opaque when compositor blur is unavailable")
+	}
+	if !testLinuxWindowUsesPerPixelAlpha(true, false, false, true) {
+		t.Fatal("application windows request RGBA when compositor blur is available")
+	}
+	if !testLinuxWindowUsesPerPixelAlpha(true, true, false, false) {
+		t.Fatal("nonactivating windows request RGBA so overlays can be transparent")
+	}
+	if !testLinuxWindowUsesPerPixelAlpha(true, false, true, false) {
+		t.Fatal("screenshot windows request RGBA so the desktop shows through")
+	}
+}

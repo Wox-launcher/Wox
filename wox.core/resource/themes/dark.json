@@ -74,6 +74,7 @@
     }
   },
   "linux": {
+    "AppBorderRadius": 8,
     "ActionContainerBackgroundColor": "#2C344299",
     "variants": {
       "hyprland": {
