@@ -1446,7 +1446,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "EnableAnonymousUsageStats", title: "Anonymous usage stats", description: "Help improve Wox with anonymous telemetry", value: boolValue(data.EnableAnonymousUsageStats), choices: boolChoices},
 		}
 	default:
-		return []settingItem{
+		items := []settingItem{
 			{key: "EnableAutostart", title: "Start at login", description: "Launch Wox when the desktop session starts", value: boolValue(data.EnableAutostart), choices: boolChoices},
 			{key: "HideOnStart", title: "Start hidden", description: "Keep Wox hidden after startup", value: boolValue(data.HideOnStart), choices: boolChoices},
 			{key: "LaunchMode", title: "Launch mode", description: "Start fresh or continue the previous query", value: data.LaunchMode, choices: []settingChoice{{"fresh", "Fresh"}, {"continue", "Continue"}}},
@@ -1455,8 +1455,12 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "UsePinYin", title: "Pinyin search", description: "Match Chinese text with Pinyin", value: boolValue(data.UsePinYin), choices: boolChoices},
 			{key: "SwitchInputMethodABC", title: "Switch input method", description: "Use the Latin input source when Wox opens", value: boolValue(data.SwitchInputMethodABC), choices: boolChoices},
 			{key: "LangCode", title: "Language", description: "Language used by Wox", value: data.LangCode, choices: []settingChoice{{data.LangCode, data.LangCode}}},
-			{key: "IgnoreHotkeysOnFullscreen", value: boolValue(data.IgnoreHotkeysOnFullscreen), choices: boolChoices, disabled: !data.FullscreenDetectionSupported},
 		}
+		// Native fullscreen on macOS also covers everyday work, so this restriction is unsupported.
+		if !util.IsMacOS() {
+			items = append(items, settingItem{key: "IgnoreHotkeysOnFullscreen", value: boolValue(data.IgnoreHotkeysOnFullscreen), choices: boolChoices, disabled: !data.FullscreenDetectionSupported})
+		}
+		return items
 	}
 }
 

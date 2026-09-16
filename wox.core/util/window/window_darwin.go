@@ -35,7 +35,6 @@ char* getWindowNameByPid(int pid);
 char* getProcessBundleIdentifier(int pid);
 int isProcessIdentityRunning(const char* identity);
 int getActiveWindowPid();
-int isActiveWindowFullscreen();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
 int listManagedWindowsForManagement(WoxManagedWindowC** outWindows, int* outCount);
@@ -548,8 +547,8 @@ func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId
 	return int(C.selectInFinder(cPath)) == 1
 }
 
-func SupportsActiveWindowFullscreen() bool { return true }
+// macOS native fullscreen includes ordinary workspaces and cannot distinguish games
+// or fullscreen video. Suppressing hotkeys would also block everyday launcher use.
+func SupportsActiveWindowFullscreen() bool { return false }
 
-func IsActiveWindowFullscreen() bool {
-	return C.isActiveWindowFullscreen() != 0
-}
+func IsActiveWindowFullscreen() bool { return false }

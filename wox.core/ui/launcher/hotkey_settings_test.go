@@ -7,6 +7,7 @@ import (
 
 	"wox/setting"
 	"wox/ui/contract"
+	"wox/util"
 )
 
 func TestQueryHotkeyPositionOptionsUseLocalizedNineGridWithIcons(t *testing.T) {
@@ -171,8 +172,8 @@ func TestFullscreenHotkeySetting(t *testing.T) {
 					t.Fatalf("fullscreen switch lost its value or capability: %+v", item)
 				}
 			}
-			if !found {
-				t.Fatal("fullscreen setting missing")
+			if found == util.IsMacOS() {
+				t.Fatalf("fullscreen setting visibility = %t, macOS = %t", found, util.IsMacOS())
 			}
 		}
 	}
