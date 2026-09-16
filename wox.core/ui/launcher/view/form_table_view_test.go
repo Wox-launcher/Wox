@@ -580,7 +580,30 @@ func formTableDataCellSlot(t *testing.T, cell woxwidget.Widget) (woxwidget.Clip,
 func formTableDataCellContent(t *testing.T, cell woxwidget.Widget) woxwidget.Widget {
 	t.Helper()
 	_, _, content := formTableDataCellSlot(t, cell)
+	return formTableDataCellInner(content)
+}
+
+func formTableDataCellInner(content woxwidget.Widget) woxwidget.Widget {
+	if semantics, ok := content.(woxwidget.Semantics); ok {
+		return semantics.Child
+	}
 	return content
+}
+
+func TestFormTableDataCellExposesPathText(t *testing.T) {
+	full := `D:\dev\wox-plugin-demo`
+	visible := `D:\dev\wox-plugin-d…`
+	cell := formTableDataCellAt(FormTableFieldProps{
+		ID: "plugin-settings-field-1", Theme: woxcomponent.ControlTheme{},
+	}, FormTableRow{Index: 0}, 0, 0, FormTableCell{Text: visible, SearchText: full}, 220, false)
+	_, _, raw := formTableDataCellSlot(t, cell)
+	semantics, ok := raw.(woxwidget.Semantics)
+	if !ok {
+		t.Fatalf("path cell = %T, want Semantics exposing the stored path", raw)
+	}
+	if semantics.AutomationID != "plugin-settings-field-1-row-0-cell-0" || semantics.Role != woxui.AccessibilityRoleText || semantics.Label != visible || semantics.Value != full {
+		t.Fatalf("path cell semantics = %+v, want the compacted label and full path value", semantics)
+	}
 }
 
 func formTableGridFlex(t *testing.T, grid woxwidget.Widget) woxwidget.Flex {

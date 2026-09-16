@@ -469,8 +469,35 @@ func (a *App) moveFormTableSelection(delta int) {
 	a.invalidateFormTableWindow()
 }
 
+// formTableRowLookup reads a table cell by column key, then falls back to a
+// case-insensitive match so rows saved with Go's default JSON field names
+// (Path vs path) still render in the settings table.
+func formTableRowLookup(row map[string]any, key string) (any, bool) {
+	if row == nil {
+		return nil, false
+	}
+	if value, ok := row[key]; ok {
+		return value, true
+	}
+	for existingKey, value := range row {
+		if strings.EqualFold(existingKey, key) {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+// deleteFormTableRowKeyAliases drops case-variant keys after writing the canonical column key.
+func deleteFormTableRowKeyAliases(row map[string]any, key string) {
+	for existingKey := range row {
+		if existingKey != key && strings.EqualFold(existingKey, key) {
+			delete(row, existingKey)
+		}
+	}
+}
+
 func formTableColumnValue(column formTableColumn, row map[string]any) string {
-	value, ok := row[column.Key]
+	value, ok := formTableRowLookup(row, column.Key)
 	if !ok || value == nil {
 		return ""
 	}
@@ -553,7 +580,7 @@ func formTableRowFields(definition formDefinition, row map[string]any) (formFiel
 		if !editable {
 			continue
 		}
-		value, exists := row[column.Key]
+		value, exists := formTableRowLookup(row, column.Key)
 		if !exists {
 			switch column.Type {
 			case "checkbox":
@@ -888,6 +915,7 @@ func formTableRowFromFields(definition formDefinition, fields *formFieldsState, 
 			app, _ := parseFormTableApp(value)
 			row[column.Key] = app
 		}
+		deleteFormTableRowKeyAliases(row, column.Key)
 	}
 	normalizeEmptyAsZeroFieldValues(definition, fields.values)
 	for _, column := range definition.Value.Columns {

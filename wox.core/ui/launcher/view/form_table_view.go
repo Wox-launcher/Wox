@@ -754,6 +754,20 @@ func formTableDataCellAt(props FormTableFieldProps, row FormTableRow, rowIndex, 
 			}, Child: woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}},
 		}}
 	}
+	// Settings tables compact long paths in the painted label. SearchText keeps
+	// the full value so automation can assert the stored path, including the
+	// empty-cell case when JSON used Path instead of path.
+	value := cell.SearchText
+	if strings.TrimSpace(value) == "" {
+		value = cell.Text
+	}
+	content = woxwidget.Semantics{
+		AutomationID: fmt.Sprintf("%s-row-%d-cell-%d", props.ID, rowIndex, columnIndex),
+		Role:         woxui.AccessibilityRoleText,
+		Label:        cell.Text,
+		Value:        value,
+		Child:        content,
+	}
 	// Clip the cell, then center inside it. A full-height Clip as Align's
 	// child has the same size as the slot, so Vertical: 0.5 cannot move text.
 	return tableSurfaceCell(width, tableSurfaceRowHeight, style, !lastRow, woxwidget.Insets{Left: 12, Right: 12}, woxwidget.Clip{

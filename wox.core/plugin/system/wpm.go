@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	texttmpl "text/template"
@@ -79,8 +80,11 @@ var singleFilePluginTemplates = []pluginTemplate{
 	},
 }
 
+// LocalPlugin is the persisted settings-table row for local plugin directories.
+// The JSON key must stay "path" so the table column can read it; encoding/json
+// would otherwise write "Path" and the plugin manager would show blank cells.
 type LocalPlugin struct {
-	Path string
+	Path string `json:"path"`
 }
 
 func init() {
@@ -215,6 +219,12 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.api = initParams.API
 
 	w.reloadAllDevPlugins(ctx)
+	w.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
+		if key != localPluginDirectoriesKey {
+			return
+		}
+		w.applyLocalPluginDirectories(callbackCtx, value)
+	})
 
 	util.Go(ctx, "reload dev plugins in dist", func() {
 		// must delay reload, because host env is not ready when system plugin init
@@ -228,31 +238,84 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 }
 
 func (w *WPMPlugin) reloadAllDevPlugins(ctx context.Context) {
-	var localPluginDirs []LocalPlugin
-	unmarshalErr := json.Unmarshal([]byte(w.api.GetSetting(ctx, localPluginDirectoriesKey)), &localPluginDirs)
-	if unmarshalErr != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
+	w.applyLocalPluginDirectories(ctx, w.api.GetSetting(ctx, localPluginDirectoriesKey))
+}
+
+// applyLocalPluginDirectories keeps the in-memory local plugin list aligned with
+// the persisted settings table, including live edits that only write the setting.
+func (w *WPMPlugin) applyLocalPluginDirectories(ctx context.Context, raw string) {
+	localPluginDirs, err := parseLocalPluginDirectorySettings(raw)
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", err.Error()))
 		return
 	}
 
-	// remove invalid and duplicate directories
 	var pluginDirs []string
 	for _, pluginDir := range localPluginDirs {
-		if _, statErr := os.Stat(pluginDir.Path); statErr != nil {
-			w.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
-			os.RemoveAll(pluginDir.Path)
+		directory := strings.TrimSpace(pluginDir.Path)
+		if directory == "" {
 			continue
 		}
+		if _, statErr := os.Stat(directory); statErr != nil {
+			w.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
+			os.RemoveAll(directory)
+			continue
+		}
+		if !containsLocalPluginDirectory(pluginDirs, directory) {
+			pluginDirs = append(pluginDirs, directory)
+		}
+	}
 
-		if !lo.Contains(pluginDirs, pluginDir.Path) {
-			pluginDirs = append(pluginDirs, pluginDir.Path)
+	for _, lp := range append([]localPlugin(nil), w.localPlugins...) {
+		if !containsLocalPluginDirectory(pluginDirs, lp.metadata.Directory) {
+			w.unloadLocalPluginByDirectory(ctx, lp.metadata.Directory)
 		}
 	}
 
 	w.localPluginDirectories = pluginDirs
-	for _, directory := range w.localPluginDirectories {
-		w.loadDevPlugin(ctx, directory)
+	for _, directory := range pluginDirs {
+		if !w.hasLocalPluginDirectory(directory) {
+			w.loadDevPlugin(ctx, directory)
+		}
 	}
+}
+
+// parseLocalPluginDirectorySettings reads the settings-table JSON, including
+// legacy rows that used a capital Path key from Go's default field name.
+func parseLocalPluginDirectorySettings(raw string) ([]LocalPlugin, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "null" {
+		return nil, nil
+	}
+
+	var localPluginDirs []LocalPlugin
+	if err := json.Unmarshal([]byte(raw), &localPluginDirs); err != nil {
+		return nil, err
+	}
+	return localPluginDirs, nil
+}
+
+func containsLocalPluginDirectory(directories []string, candidate string) bool {
+	for _, directory := range directories {
+		if sameLocalPluginDirectory(directory, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameLocalPluginDirectory compares local plugin directories after cleaning,
+// and ignores case on Windows so picker paths and saved rows stay aligned.
+func sameLocalPluginDirectory(left string, right string) bool {
+	left = filepath.Clean(strings.TrimSpace(left))
+	right = filepath.Clean(strings.TrimSpace(right))
+	if left == right {
+		return true
+	}
+	if util.IsWindows() {
+		return strings.EqualFold(left, right)
+	}
+	return false
 }
 
 func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
@@ -274,13 +337,7 @@ func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
 	})
 	if exist {
 		w.api.Log(ctx, plugin.LogLevelInfo, "plugin already loaded, unload first")
-		if existingLocalPlugin.watcher != nil {
-			closeWatcherErr := existingLocalPlugin.watcher.Close()
-			if closeWatcherErr != nil {
-				w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to close watcher: %s", closeWatcherErr.Error()))
-			}
-		}
-
+		w.closeLocalPluginResources(ctx, existingLocalPlugin)
 		w.localPlugins = lo.Filter(w.localPlugins, func(lp localPlugin, _ int) bool {
 			return lp.metadata.Id != metadata.Id
 		})
@@ -1190,10 +1247,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 					Name: "i18n:plugin_wpm_remove",
 					Icon: icons.Get(icons.ActionHide),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
-							return directory != lp.metadata.Directory
-						})
-						w.saveLocalPluginDirectories(ctx)
+						w.removeLocalPluginDirectory(ctx, lp.metadata.Directory)
 					},
 				},
 				{
@@ -1206,10 +1260,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 							return
 						}
 
-						w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
-							return directory != lp.metadata.Directory
-						})
-						w.saveLocalPluginDirectories(ctx)
+						w.removeLocalPluginDirectory(ctx, lp.metadata.Directory)
 					},
 				},
 			},
@@ -1252,7 +1303,7 @@ func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plu
 
 	pluginDirectory := pluginDirectories[0]
 
-	if lo.Contains(w.localPluginDirectories, pluginDirectory) {
+	if containsLocalPluginDirectory(w.localPluginDirectories, pluginDirectory) {
 		w.api.Notify(ctx, "i18n:plugin_wpm_directory_already_added")
 		return []plugin.QueryResult{}
 	}
@@ -1271,15 +1322,12 @@ func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []
 	}
 
 	pluginDirectory := query.Search
-	if !lo.Contains(w.localPluginDirectories, pluginDirectory) {
+	if !containsLocalPluginDirectory(w.localPluginDirectories, pluginDirectory) {
 		w.api.Notify(ctx, "i18n:plugin_wpm_directory_not_found")
 		return []plugin.QueryResult{}
 	}
 
-	w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
-		return directory != pluginDirectory
-	})
-	w.saveLocalPluginDirectories(ctx)
+	w.removeLocalPluginDirectory(ctx, pluginDirectory)
 	return []plugin.QueryResult{}
 }
 
@@ -1388,6 +1436,73 @@ func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 		return
 	}
 	w.api.SaveSetting(ctx, localPluginDirectoriesKey, string(data), true)
+}
+
+// removeLocalPluginDirectory persists the remaining directories and drops the
+// in-memory local plugin so wpm dev.list matches the settings table immediately.
+func (w *WPMPlugin) removeLocalPluginDirectory(ctx context.Context, pluginDirectory string) {
+	w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+		return !sameLocalPluginDirectory(directory, pluginDirectory)
+	})
+	w.saveLocalPluginDirectories(ctx)
+	w.unloadLocalPluginByDirectory(ctx, pluginDirectory)
+}
+
+func (w *WPMPlugin) hasLocalPluginDirectory(directory string) bool {
+	for _, lp := range w.localPlugins {
+		if sameLocalPluginDirectory(lp.metadata.Directory, directory) {
+			return true
+		}
+	}
+	return false
+}
+
+// unloadLocalPluginByDirectory stops watching a removed local plugin directory
+// and unloads the matching dev plugin instance if it is currently running.
+func (w *WPMPlugin) unloadLocalPluginByDirectory(ctx context.Context, directory string) {
+	remaining := make([]localPlugin, 0, len(w.localPlugins))
+	for _, lp := range w.localPlugins {
+		if !sameLocalPluginDirectory(lp.metadata.Directory, directory) {
+			remaining = append(remaining, lp)
+			continue
+		}
+		w.closeLocalPluginResources(ctx, lp)
+		w.unloadLoadedDevPluginInstance(ctx, directory)
+	}
+	w.localPlugins = remaining
+}
+
+// closeLocalPluginResources releases the directory watcher and pending reload timer.
+func (w *WPMPlugin) closeLocalPluginResources(ctx context.Context, lp localPlugin) {
+	if lp.watcher != nil {
+		if err := lp.watcher.Close(); err != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to close watcher: %s", err.Error()))
+		}
+	}
+	if w.reloadPluginTimers == nil || lp.metadata.Id == "" {
+		return
+	}
+	if timer, ok := w.reloadPluginTimers.Load(lp.metadata.Id); ok && timer != nil {
+		timer.Stop()
+	}
+	w.reloadPluginTimers.Delete(lp.metadata.Id)
+}
+
+// unloadLoadedDevPluginInstance unloads a running plugin that was loaded from
+// this local development directory.
+func (w *WPMPlugin) unloadLoadedDevPluginInstance(ctx context.Context, directory string) {
+	manager := plugin.GetPluginManager()
+	if manager == nil {
+		return
+	}
+	for _, instance := range manager.GetPluginInstances() {
+		if instance == nil || !instance.IsDevPlugin {
+			continue
+		}
+		if sameLocalPluginDirectory(instance.DevPluginDirectory, directory) {
+			manager.UnloadPlugin(ctx, instance)
+		}
+	}
 }
 
 func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.Metadata, reason string) error {

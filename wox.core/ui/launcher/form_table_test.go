@@ -1291,3 +1291,33 @@ func TestAISkillsDirectDeleteDoesNotRenderOverlay(t *testing.T) {
 		t.Fatalf("discovered skill table = %s, want an empty table after delete", value)
 	}
 }
+
+func TestFormTableColumnValueReadsLegacyJSONFieldName(t *testing.T) {
+	column := formTableColumn{Key: "path", Type: "dirPath"}
+	if got := formTableColumnValue(column, map[string]any{"Path": `D:\dev\plugin`}); got != `D:\dev\plugin` {
+		t.Fatalf("legacy Path cell = %q, want the stored directory", got)
+	}
+	if got := formTableColumnValue(column, map[string]any{"path": `D:\dev\plugin`}); got != `D:\dev\plugin` {
+		t.Fatalf("canonical path cell = %q, want the stored directory", got)
+	}
+}
+
+func TestFormTableRowFieldsReadLegacyJSONFieldName(t *testing.T) {
+	definition := formDefinition{Value: formDefinitionValue{Columns: []formTableColumn{{Key: "path", Type: "dirPath"}}}}
+	fields, _ := formTableRowFields(definition, map[string]any{"Path": `D:\dev\plugin`})
+	if fields.values["path"] != `D:\dev\plugin` {
+		t.Fatalf("row editor path = %q, want the stored directory", fields.values["path"])
+	}
+}
+
+func TestFormTableRowFromFieldsDropsLegacyJSONFieldName(t *testing.T) {
+	definition := formDefinition{Value: formDefinitionValue{Columns: []formTableColumn{{Key: "path", Type: "dirPath"}}}}
+	fields := newFormFieldsState([]formDefinition{{Type: "dirPath", Value: formDefinitionValue{Key: "path"}}}, map[string]string{"path": `D:\dev\plugin`}, true)
+	row := formTableRowFromFields(definition, &fields, map[string]any{"Path": `C:\old`})
+	if row["path"] != `D:\dev\plugin` {
+		t.Fatalf("saved path = %#v, want the edited directory", row["path"])
+	}
+	if _, exists := row["Path"]; exists {
+		t.Fatalf("legacy Path key was kept: %#v", row)
+	}
+}

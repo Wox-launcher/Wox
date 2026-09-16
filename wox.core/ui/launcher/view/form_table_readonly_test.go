@@ -57,7 +57,7 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	icon := &woxui.Image{}
 	cell := formTableDataCellAt(FormTableFieldProps{ID: "notes", InfoIcon: icon, Theme: woxcomponent.ControlTheme{}}, FormTableRow{}, 2, 1, FormTableCell{Text: "Platform sync", Tooltip: "Per platform"}, 220, false)
 	_, alignment, raw := formTableDataCellSlot(t, cell)
-	content := raw.(woxwidget.Flex)
+	content := formTableDataCellInner(raw).(woxwidget.Flex)
 	if len(content.Children) != 2 {
 		t.Fatalf("tooltip cell children = %d, want text and shared tooltip trigger", len(content.Children))
 	}
@@ -81,7 +81,7 @@ func TestFormTableCellSupportsCustomContent(t *testing.T) {
 	child := woxwidget.Text{Value: "Restore"}
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.ControlTheme{}}, FormTableCell{Child: child}, 220).(woxwidget.Container)
 	_, content, inner := formTableDataCellSlot(t, cell)
-	if content.Width != 196 || cell.Padding.Top != 0 || inner != child {
+	if content.Width != 196 || cell.Padding.Top != 0 || formTableDataCellInner(inner) != child {
 		t.Fatalf("custom table cell alignment = %#v with padding top %.0f, want a full-height centered slot", cell.Child, cell.Padding.Top)
 	}
 }
@@ -89,7 +89,7 @@ func TestFormTableCellSupportsCustomContent(t *testing.T) {
 func TestFormTableCellUsesRequestedIconSize(t *testing.T) {
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.ControlTheme{}}, FormTableCell{Icon: &woxui.Image{}, IconSize: 24}, 120).(woxwidget.Container)
 	_, alignment, raw := formTableDataCellSlot(t, cell)
-	content := raw.(woxwidget.Flex)
+	content := formTableDataCellInner(raw).(woxwidget.Flex)
 	icon := content.Children[0].(woxwidget.Image)
 
 	if icon.Width != 24 || icon.Height != 24 || cell.Padding.Top != 0 || alignment.Height != tableSurfaceRowHeight || alignment.Vertical != 0.5 {
