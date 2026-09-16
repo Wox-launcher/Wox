@@ -89,14 +89,20 @@ func TestActionPanelTintsThemeAdaptiveSVGOnly(t *testing.T) {
 func TestWebViewLocalActionPanelEntries(t *testing.T) {
 	results := []queryResult{{ID: "webview", Preview: queryPreview{PreviewType: "webview"}}}
 	entries := webViewLocalActionPanelEntries(results, 0, "windows")
-	if len(entries) != 2 {
-		t.Fatalf("webview local actions = %d, want 2", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("webview local actions = %d, want 4", len(entries))
 	}
 	if entries[0].ID != localActionWebViewReloadID || entries[0].Hotkey != primaryHotkey("r") {
 		t.Fatalf("reload action = %+v", entries[0])
 	}
-	if entries[1].ID != localActionWebViewOpenDevToolsID || entries[1].Hotkey != "" {
-		t.Fatalf("developer tools action = %+v", entries[1])
+	if entries[1].ID != localActionWebViewGoBackID || entries[1].Hotkey != primaryHotkey("[") {
+		t.Fatalf("back action = %+v", entries[1])
+	}
+	if entries[2].ID != localActionWebViewGoForwardID || entries[2].Hotkey != primaryHotkey("]") {
+		t.Fatalf("forward action = %+v", entries[2])
+	}
+	if entries[3].ID != localActionWebViewOpenDevToolsID || entries[3].Hotkey != "" {
+		t.Fatalf("developer tools action = %+v", entries[3])
 	}
 	if unsupported := webViewLocalActionPanelEntries(results, 0, "linux"); len(unsupported) != 0 {
 		t.Fatalf("linux webview local actions = %d, want 0", len(unsupported))
@@ -112,7 +118,7 @@ func TestUnifiedActionsReserveWebViewReloadHotkey(t *testing.T) {
 		Actions: []resultAction{{ID: "plugin-reload", Hotkey: primaryHotkey("r")}},
 	}}
 	entries := unifiedActionPanelEntries(results, 0, nil)
-	if len(entries) != 3 || entries[0].ID != localActionWebViewReloadID || entries[2].Hotkey != "" {
+	if len(entries) != 5 || entries[0].ID != localActionWebViewReloadID || entries[4].Hotkey != "" {
 		t.Fatalf("unified webview actions = %+v", entries)
 	}
 }

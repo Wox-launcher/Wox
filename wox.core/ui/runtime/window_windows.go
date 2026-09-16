@@ -142,6 +142,7 @@ const (
 	windowCommandWebViewOpenDevTools
 	windowCommandWebViewOpenInBrowser
 	windowCommandWebViewNavigationState
+	windowCommandFocusWebView
 	windowCommandShowNativeFilePreview
 	windowCommandHideNativeFilePreview
 	windowCommandSetNativeFilePreviewOcclusion
@@ -245,9 +246,11 @@ type platformWindow struct {
 	pointerCursor      PointerCursor
 	pointerPassthrough bool
 	// webViewCursorKnown distinguishes an intentional CSS cursor:none from a cursor not reported yet.
-	webViewCursor         win.HCURSOR
-	webViewCursorKnown    bool
-	webViewPointerOver    bool
+	webViewCursor      win.HCURSOR
+	webViewCursorKnown bool
+	webViewPointerOver bool
+	// webViewFocusPending keeps a programmatic page-focus request until Show creates the controller.
+	webViewFocusPending   bool
 	inputHighSurrogate    uint16
 	inputComposing        bool
 	pointerInside         bool
@@ -1779,6 +1782,10 @@ func windowsKey(virtualKey uintptr) Key {
 		return KeyArrowDown
 	case win.VK_DELETE:
 		return KeyDelete
+	case 0xDB: // VK_OEM_4, '[' on US keyboards
+		return Key("[")
+	case 0xDD: // VK_OEM_6, ']' on US keyboards
+		return Key("]")
 	case win.VK_MENU, win.VK_LMENU, win.VK_RMENU:
 		return KeyAlt
 	case win.VK_LWIN, win.VK_RWIN:

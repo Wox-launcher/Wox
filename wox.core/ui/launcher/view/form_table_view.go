@@ -1480,6 +1480,56 @@ type FormTableRowEditorProps struct {
 // FormTableRowEditorFooterHeight reserves the shared action row without duplicating the dialog's bottom padding.
 const FormTableRowEditorFooterHeight = SettingsDialogActionsHeight
 
+// FormTableRowGroupHeaderHeight is the disclosure row for a table row-editor group.
+const FormTableRowGroupHeaderHeight = woxcomponent.SettingsControlHeight
+
+// FormTableRowGroupHeaderProps describes one collapsible section title in a row editor.
+type FormTableRowGroupHeaderProps struct {
+	ID        string
+	Width     float32
+	Title     string
+	Tooltip   string
+	Collapsed bool
+	Theme     woxcomponent.ControlTheme
+	OnTap     func()
+}
+
+// FormTableRowGroupHeader renders a full-width disclosure label above grouped fields.
+func FormTableRowGroupHeader(props FormTableRowGroupHeaderProps) woxwidget.Widget {
+	chevronColor := formTableAlpha(props.Theme.Text, 200)
+	var chevron woxwidget.Widget
+	if props.Collapsed {
+		chevron = woxcomponent.KeyboardArrowRightGlyph(16, chevronColor)
+	} else {
+		chevron = woxcomponent.KeyboardArrowDownGlyph(16, chevronColor)
+	}
+	title := props.Title
+	if title == "" {
+		title = props.Tooltip
+	}
+	return woxwidget.Semantics{
+		AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: title, Description: props.Tooltip,
+		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, Expanded: !props.Collapsed,
+		OnAction: func(action woxui.AccessibilityAction, _ string) error {
+			if action == woxui.AccessibilityActionActivate && props.OnTap != nil {
+				props.OnTap()
+			}
+			return nil
+		},
+		// Host supplies Enter/Space activation through the semantics above.
+		Child: woxwidget.Focusable{Key: woxwidget.Key(props.ID), FocusRingColor: props.Theme.Focus, FocusRingRadius: 4, Child: woxwidget.Gesture{
+			OnTap: props.OnTap,
+			Child: woxwidget.Container{Width: props.Width, Height: FormTableRowGroupHeaderHeight, Child: woxwidget.Flex{
+				Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter,
+				Children: []woxwidget.Widget{
+					woxwidget.Align{Width: 16, Height: FormTableRowGroupHeaderHeight, Vertical: 0.5, Child: chevron},
+					woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+				},
+			}},
+		}},
+	}
+}
+
 // FormTableRowEditor builds the add, edit, or clone row form.
 func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 	titleHeight := float32(0)

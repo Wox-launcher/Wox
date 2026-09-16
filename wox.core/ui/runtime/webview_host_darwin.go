@@ -148,6 +148,17 @@ func (d *darwinWebViewDriver) Pointer(event webviewruntime.PointerEvent) bool {
 	return err == nil && C.wox_darwin_window_forward_embedded_surface_pointer(native, C.uint8_t(event.Kind)) == 0
 }
 
+func (d *darwinWebViewDriver) Focus() error {
+	native, err := d.window.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_focus_webview(native) != 0 {
+		return errors.New("woxui: failed to focus macOS WebView")
+	}
+	return nil
+}
+
 func (*darwinWebViewDriver) Close() {}
 
 // woxGoDarwinWebViewEscapeDiagnostic records the page decision and native focus handoff.

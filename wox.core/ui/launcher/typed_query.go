@@ -246,6 +246,7 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 		IsSystemAction:         action.IsSystemAction,
 		Tail:                   action.Tail,
 		TailIcon:               fromCoreImage(action.TailIcon),
+		ContextData:            cloneStringMap(action.ContextData),
 	}
 }
 
@@ -314,17 +315,26 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 	case *definition.PluginSettingValueTable:
 		columns := make([]formTableColumn, len(value.Columns))
 		for index, column := range value.Columns {
+			validators := fromCoreValidators(column.Validators)
+			if column.EmptyAsZero {
+				validators = optionalIntegerValidatorsForEmptyAsZero(validators)
+			}
 			columns[index] = formTableColumn{
 				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type,
-				Validators: fromCoreValidators(column.Validators), SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
+				Validators: validators, SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
 				HideInTable: column.HideInTable, HideInUpdate: column.HideInUpdate, AllowedHotkeyKinds: append([]string(nil), column.AllowedHotkeyKinds...),
 				PreviewMatchedApps: column.PreviewMatchedApps, QueryVariableKind: column.QueryVariableKind,
+				Group: column.Group, EmptyAsZero: column.EmptyAsZero,
 			}
+		}
+		groups := make([]formTableGroup, len(value.Groups))
+		for index, group := range value.Groups {
+			groups[index] = formTableGroup{Key: group.Key, Title: group.Title, Tooltip: group.Tooltip, CollapsedByDefault: group.CollapsedByDefault}
 		}
 		converted.Value = formDefinitionValue{
 			Key: value.Key, DefaultValue: value.DefaultValue, Title: value.Title, Tooltip: value.Tooltip, Columns: columns,
 			SortColumnKey: value.SortColumnKey, SortOrder: value.SortOrder, SearchColumnKey: value.SearchColumnKey,
-			MaxHeight: value.MaxHeight, InlineTable: value.InlineTable, EnableSearch: value.EnableSearch,
+			MaxHeight: value.MaxHeight, InlineTable: value.InlineTable, EnableSearch: value.EnableSearch, Groups: groups,
 		}
 	case *definition.PluginSettingValueDictationHotkey:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue}
@@ -379,6 +389,19 @@ func fromCoreValidators(validators []validator.PluginSettingValidator) []formVal
 		}
 	}
 	return converted
+}
+
+// optionalIntegerValidatorsForEmptyAsZero keeps blank values valid for integer table columns.
+func optionalIntegerValidatorsForEmptyAsZero(validators []formValidator) []formValidator {
+	for index, item := range validators {
+		if item.Type == "is_number" {
+			item.Value.Optional = true
+			item.Value.IsInteger = true
+			validators[index] = item
+			return validators
+		}
+	}
+	return append(validators, optionalIntegerValidators(false, 0, 0, "")...)
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

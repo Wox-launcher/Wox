@@ -21,9 +21,12 @@ g Wox Launcher
 | Title | Wox 中显示的结果标题 |
 | URL(s) | 搜索 URL 模板 |
 | Browser | 打开该搜索的浏览器 |
-| Incognito | 在浏览器支持时用无痕/隐私窗口打开。默认不勾选。 |
-| Enabled | 是否显示该搜索引擎 |
-| Default | 是否用于 fallback 搜索 |
+| Incognito | 在浏览器支持时用无痕/隐私窗口打开。默认不勾选。放在「高级」分组。 |
+| Disabled | 勾选后隐藏该搜索引擎。新建行默认启用。 |
+| Default | 是否用于 fallback 搜索。放在「高级」分组。 |
+| 预览宽度 | 可选。**在 WebView 中打开** 时启动器窗口的像素宽度。放在 WebView 分组。 |
+| 预览高度 | 可选。**在 WebView 中打开** 时启动器窗口的像素高度。放在 WebView 分组。 |
+| 注入 CSS | 可选，注入到该搜索应用内 WebView 预览。放在 WebView 分组。 |
 
 ## URL 变量
 
@@ -41,6 +44,8 @@ https://www.google.com/search?q={wox:parameter?name=query}
 ```
 
 如果一个搜索引擎配置了多个 URL，Wox 会按顺序打开。
+
+在 Windows 和 macOS 上，完整的搜索结果还会提供 **在 WebView 中打开**。Enter 仍然打开浏览器。`Ctrl+Enter`（macOS 上为 `Cmd+Enter`）会把结果列表替换成第一条 URL 的应用内预览，并保留查询框。按 Escape 把焦点交回查询框并销毁这次预览。预览的操作面板包含刷新（`Ctrl+R` / `Cmd+R`）、后退（`Ctrl+[` / `Cmd+[`）和前进（`Ctrl+]` / `Cmd+]`）。每条搜索都可以在行编辑器默认折叠的 WebView 分组里单独设置预览宽度、高度和注入 CSS。Linux 目前没有 WebView 预览，因此不会显示这个操作。
 
 已有标题和 URL 中的 `{query}`、`{lower_query}`、`{upper_query}` 会自动迁移为
 `{wox:parameter?name=query}` 以及带 `case=lower` / `case=upper` 的形式。

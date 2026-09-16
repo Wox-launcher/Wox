@@ -152,3 +152,11 @@ func (w *Window) ForwardEmbeddedSurfacePointer(event PointerEvent) bool {
 	}
 	return w.native.forwardEmbeddedSurfacePointer(event)
 }
+
+// FocusWebView gives the embedded page keyboard input so arrow keys can scroll without a click.
+func (w *Window) FocusWebView() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.focusWebView()
+}

@@ -295,6 +295,11 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 		}
 		return
 	case floatingMaterialRendered:
+		// WebView already moved later paint onto the overlay, which has no page
+		// pixels to blur. Drop the theme's backdrop alpha so the card stays solid.
+		if d.overlayBegun {
+			tint = opaqueFloatingMaterialTint(tint)
+		}
 		if d.shouldRecord(rect) {
 			d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge})
 		}

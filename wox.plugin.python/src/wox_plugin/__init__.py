@@ -108,6 +108,7 @@ Methods for interacting with Wox:
 - `PluginSettingDefinitionItem`: Setting definition
 - `PluginSettingDefinitionType`: HEAD, TEXTBOX, CHECKBOX, SELECT, LABEL, NEWLINE, TABLE, DYNAMIC
 - `PluginSettingValueStyle`: Visual styling options
+- `PluginSettingValueTable`, `PluginSettingValueTableColumn`, `PluginSettingValueTableGroup`: editable tables with optional collapsed row-editor groups
 - Helper functions: `create_textbox_setting()`, `create_checkbox_setting()`, `create_label_setting()`
 
 #### AI Models (`models/ai.py`)
@@ -288,6 +289,9 @@ from .models.setting import (
     PluginSettingValueCheckBox,
     PluginSettingValueLabel,
     PluginSettingValueStyle,
+    PluginSettingValueTable,
+    PluginSettingValueTableColumn,
+    PluginSettingValueTableGroup,
     PluginSettingValueTextBox,
     create_checkbox_setting,
     create_label_setting,
@@ -405,6 +409,9 @@ __all__: List[str] = [
     "PluginSettingValueTextBox",
     "PluginSettingValueCheckBox",
     "PluginSettingValueLabel",
+    "PluginSettingValueTable",
+    "PluginSettingValueTableColumn",
+    "PluginSettingValueTableGroup",
     "create_textbox_setting",
     "create_checkbox_setting",
     "create_label_setting",

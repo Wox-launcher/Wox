@@ -4217,6 +4217,23 @@ int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window) {
   return run_on_main_sync(reset_webview_main, &call) ? call.result : -1;
 }
 
+static void focus_webview_main(void *data) {
+  WoxWindowCall *call = data;
+  if (call->window->closed || call->window->active_web_view == NULL) {
+    call->result = -1;
+    return;
+  }
+  gtk_widget_grab_focus(call->window->active_web_view);
+}
+
+int32_t wox_linux_window_focus_webview(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxWindowCall call = {.window = window};
+  return run_on_main_sync(focus_webview_main, &call) ? call.result : -1;
+}
+
 int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, uint8_t kind, float x, float y) {
   if (window == NULL || window->closed || window->active_web_view == NULL || window->dispatching_pointer_event == NULL) {
     return -1;
@@ -5273,8 +5290,10 @@ static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x,
 
 // wox_linux_window_floating_material realises DisplayList.FloatingMaterial on Linux: blur
 // the main surface under the rounded rectangle in place, then paint the theme tint and
-// hairline edge over it. The overlay surface holds nothing beneath the panel to sample,
-// and software GL would convolve on the CPU every repaint, so both keep the flat tint.
+// hairline edge over it. The overlay surface holds nothing beneath the panel to sample
+// (WebView pixels are a sibling compositor layer), so overlay tints drop transparency.
+// Software GL would convolve on the CPU every repaint and keeps the authored alpha over
+// the unblurred Go pixels already in the buffer.
 int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
@@ -5285,6 +5304,9 @@ int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, floa
   WoxLinuxRenderer *renderer = window->active_renderer;
   if (renderer == &window->renderer && !renderer->software_gl && blur_sigma > 0.0f) {
     blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin);
+  }
+  if (window->embedded_surface_overlay_active && tint_alpha != 0) {
+    tint_alpha = 255;
   }
   if (tint_alpha != 0) {
     int32_t result = wox_linux_window_fill_rounded_rect(window, x, y, width, height, radius, tint_red, tint_green, tint_blue, tint_alpha);

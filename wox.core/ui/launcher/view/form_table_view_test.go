@@ -444,6 +444,61 @@ func TestFormTableRowMarkdownDescriptionReservesWrappedHeight(t *testing.T) {
 	}
 }
 
+func TestFormTableRowGroupHeaderUsesDisclosureChevron(t *testing.T) {
+	collapsed := FormTableRowGroupHeader(FormTableRowGroupHeaderProps{
+		Width: 500, Title: "WebView", Collapsed: true, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	})
+	expanded := FormTableRowGroupHeader(FormTableRowGroupHeaderProps{
+		Width: 500, Title: "WebView", Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	})
+	if FormTableRowGroupHeaderHeight != woxcomponent.SettingsControlHeight {
+		t.Fatalf("group header height = %.0f, want ordinary settings control %.0f", FormTableRowGroupHeaderHeight, woxcomponent.SettingsControlHeight)
+	}
+	collapsedSemantics := collapsed.(woxwidget.Semantics)
+	if collapsedSemantics.Role != woxui.AccessibilityRoleButton || collapsedSemantics.Label != "WebView" {
+		t.Fatalf("header semantics = %#v", collapsedSemantics)
+	}
+	if collapsed.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Height != FormTableRowGroupHeaderHeight {
+		t.Fatal("collapsed header should keep the ordinary control height")
+	}
+	if expanded.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Height != FormTableRowGroupHeaderHeight {
+		t.Fatal("expanded header should keep the ordinary control height")
+	}
+}
+
+// TestFormTableRowGroupKeyboardActivation exercises the same focus and semantic dispatch as the dialog.
+func TestFormTableRowGroupKeyboardActivation(t *testing.T) {
+	collapsed := true
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+			woxwidget.Focusable{Key: "before", Child: woxwidget.Container{Width: 100, Height: 30}},
+			FormTableRowGroupHeader(FormTableRowGroupHeaderProps{
+				ID: "group", Width: 200, Title: "Advanced", Collapsed: collapsed,
+				OnTap: func() { collapsed = !collapsed },
+			}),
+			woxwidget.Focusable{Key: "after", Child: woxwidget.Container{Width: 100, Height: 30}},
+		}}
+	})
+	host.AttachServices(actionSearchHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 120}, PixelSize: woxui.PixelSize{Width: 200, Height: 120}, Scale: 1}
+	displayList := woxui.DisplayList{}
+	host.Frame(&displayList, frame)
+	host.RequestFocus("before")
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("group") {
+		t.Fatal("Tab must reach the collapsed group header")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || collapsed {
+		t.Fatal("Enter must expand the group")
+	}
+	host.Frame(&displayList, frame)
+	if !host.HasFocus("group") || !host.Key(woxui.KeyEvent{Key: woxui.KeySpace, Down: true}) || !collapsed {
+		t.Fatal("the header must retain focus and collapse on Space")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("after") {
+		t.Fatal("Tab must leave the group header")
+	}
+}
+
 func TestFormTableRowEditorUsesFlutterFieldGap(t *testing.T) {
 	editor := FormTableRowEditor(FormTableRowEditorProps{
 		Width: 500, Height: 320, Title: "Add",

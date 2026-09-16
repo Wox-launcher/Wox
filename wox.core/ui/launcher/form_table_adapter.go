@@ -437,7 +437,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette w
 		contentWidth := a.formTableRowEditorContentWidth(snapshot.definition, labelWidth)
 		panelWidth = max(float32(0), min(contentWidth+48, width-64))
 		innerWidth = max(float32(0), panelWidth-48)
-		contentHeight := a.formTableRowContentHeightForWidth(snapshot.rowForm.definitions, snapshot.fieldErrors, max(float32(0), innerWidth-20), labelWidth)
+		contentHeight := a.formTableRowEditorContentHeight(snapshot, max(float32(0), innerWidth-20), labelWidth)
 		if snapshot.patternPreview != nil {
 			contentWidth = max(contentWidth, 640)
 			panelWidth = max(float32(0), min(contentWidth+48, width-64))
@@ -544,6 +544,50 @@ func (a *App) formTableRowContentHeight(definitions []formDefinition, fieldError
 	return a.formTableRowContentHeightForWidth(definitions, fieldErrors, 0, 0)
 }
 
+func (a *App) formTableRowEditorVisible(snapshot *formTableEditorSnapshot) func(formDefinition) bool {
+	if snapshot == nil || snapshot.definition.Value.Key != "QueryHotkeys" {
+		return nil
+	}
+	editing := snapshot.rowIndex >= 0
+	preset := snapshot.queryPreset
+	return func(field formDefinition) bool {
+		return queryHotkeyFieldVisible(preset, field.Value.Key, editing)
+	}
+}
+
+func (a *App) formTableRowEditorSections(snapshot *formTableEditorSnapshot) []formTableRowEditorSection {
+	if snapshot == nil || snapshot.rowForm == nil {
+		return nil
+	}
+	return formTableRowEditorSections(snapshot.definition, snapshot.rowForm.definitions, snapshot.collapsedGroups, a.formTableRowEditorVisible(snapshot))
+}
+
+// formTableRowEditorContentHeight sizes headers and visible fields, including collapsed groups.
+func (a *App) formTableRowEditorContentHeight(snapshot *formTableEditorSnapshot, fieldWidth, labelWidth float32) float32 {
+	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
+	height := float32(0)
+	visible := 0
+	for _, section := range a.formTableRowEditorSections(snapshot) {
+		if section.Group.Key != "" {
+			visible++
+			height += launcherview.FormTableRowGroupHeaderHeight
+			if section.Collapsed {
+				continue
+			}
+		}
+		for _, field := range section.Fields {
+			visible++
+			definition := field.Definition
+			markdown := formTableRowFieldMarkdown(definition)
+			height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), snapshot.fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
+		}
+	}
+	if visible > 1 {
+		height += float32(visible-1) * 10
+	}
+	return height
+}
+
 // formTableRowContentHeightForWidth sizes the scroll content with Flutter's field gap and wrapped markdown tips.
 func (a *App) formTableRowContentHeightForWidth(definitions []formDefinition, fieldErrors map[string]string, fieldWidth, labelWidth float32) float32 {
 	height := float32(0)
@@ -608,21 +652,39 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 	rows := make([]woxwidget.Widget, 0, len(rowForm.definitions))
 	contentHeight := float32(0)
 	var keepVisible *woxwidget.ScrollRange
-	for index, definition := range rowForm.definitions {
-		if snapshot.definition.Value.Key == "QueryHotkeys" && !queryHotkeyFieldVisible(snapshot.queryPreset, definition.Value.Key, snapshot.rowIndex >= 0) {
-			continue
+	for _, section := range a.formTableRowEditorSections(snapshot) {
+		if section.Group.Key != "" {
+			if len(rows) > 0 {
+				contentHeight += 10
+			}
+			headerHeight := launcherview.FormTableRowGroupHeaderHeight
+			contentHeight += headerHeight
+			groupKey := section.Group.Key
+			rows = append(rows, launcherview.FormTableRowGroupHeader(launcherview.FormTableRowGroupHeaderProps{
+				ID:    "form-table-row-group-" + groupKey,
+				Width: fieldWidth, Title: a.translate(section.Group.Title), Tooltip: a.translate(section.Group.Tooltip),
+				Collapsed: section.Collapsed, Theme: palette,
+				OnTap: func() { a.toggleFormTableRowGroup(groupKey) },
+			}))
+			if section.Collapsed {
+				continue
+			}
 		}
-		fieldError := snapshot.fieldErrors[definition.Value.Key]
-		markdown := formTableRowFieldMarkdown(definition)
-		fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
-		if len(rows) > 0 {
-			contentHeight += 10
+		for _, field := range section.Fields {
+			index := field.Index
+			definition := field.Definition
+			fieldError := snapshot.fieldErrors[definition.Value.Key]
+			markdown := formTableRowFieldMarkdown(definition)
+			fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
+			if len(rows) > 0 {
+				contentHeight += 10
+			}
+			if rowForm.focused == index {
+				keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + fieldHeight}
+			}
+			contentHeight += fieldHeight
+			rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
 		}
-		if rowForm.focused == index {
-			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + fieldHeight}
-		}
-		contentHeight += fieldHeight
-		rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
 	}
 	if snapshot.patternPreview != nil {
 		if len(rows) > 0 {

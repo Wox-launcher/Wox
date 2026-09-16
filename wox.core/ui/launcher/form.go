@@ -511,6 +511,9 @@ func (a *App) syncFormEditorLocked() {
 }
 
 func (a *App) updateFormTextInput(enabled bool) {
+	if a.window == nil {
+		return
+	}
 	state := woxui.TextInputState{}
 	if enabled {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 240, Y: 180, Width: 1, Height: 24}}

@@ -33,7 +33,7 @@ func (a *webSearchParametersTestAPI) ChangeQuery(_ context.Context, query common
 // TestWebSearchParameters exercises multi-slot input, paste recovery, encoding and compatibility at plugin boundaries.
 func TestWebSearchParameters(t *testing.T) {
 	ctx := context.Background()
-	search := webSearch{Keyword: "tr", Enabled: true, Title: "{wox:parameter?name=text} → {wox:parameter?name=language}", Urls: []string{
+	search := webSearch{Keyword: "tr", Title: "{wox:parameter?name=text} → {wox:parameter?name=language}", Urls: []string{
 		"https://example.com/?text={wox:parameter?name=text}&lang={wox:parameter?name=language}",
 		"https://example.org/{wox:parameter?name=language}?q={wox:parameter?name=text}",
 	}}
@@ -134,11 +134,11 @@ func TestWebSearchParameters(t *testing.T) {
 // TestWebSearchLegacyFallback keeps load from rewriting stored settings; placeholder upgrades belong to migrations.
 func TestWebSearchLegacyFallback(t *testing.T) {
 	ctx := context.Background()
-	old, _ := json.Marshal([]webSearch{{Keyword: "g", Enabled: true, IsFallback: true, Browser: "default", Title: "{wox:parameter?name=query}", Urls: []string{"https://example.com/?q={wox:parameter?name=query}&lower={wox:parameter?name=query&case=lower}"}}})
-	api := &webSearchParametersTestAPI{settings: map[string]string{webSearchesSettingKey: string(old)}}
+	old := `[{"Keyword":"g","Enabled":true,"IsFallback":true,"Browser":"default","Title":"{wox:parameter?name=query}","Urls":["https://example.com/?q={wox:parameter?name=query}&lower={wox:parameter?name=query&case=lower}"]}]`
+	api := &webSearchParametersTestAPI{settings: map[string]string{webSearchesSettingKey: old}}
 	p := &WebSearchPlugin{api: api}
 	p.webSearches = p.loadWebSearches(ctx)
-	if api.writes != 0 || api.settings[webSearchesSettingKey] != string(old) {
+	if api.writes != 0 || api.settings[webSearchesSettingKey] != old {
 		t.Fatal("loading settings rewrote legacy data")
 	}
 	p.webSearches = p.loadWebSearches(ctx)
@@ -146,8 +146,8 @@ func TestWebSearchLegacyFallback(t *testing.T) {
 		t.Fatal("reloading settings wrote data")
 	}
 	p.webSearches = append(p.webSearches,
-		webSearch{Enabled: true, IsFallback: true, Urls: []string{"https://example.com/"}},
-		webSearch{Enabled: true, IsFallback: true, Urls: []string{"https://example.com/?a={wox:parameter?name=a}&b={wox:parameter?name=b}"}},
+		webSearch{IsFallback: true, Urls: []string{"https://example.com/"}},
+		webSearch{IsFallback: true, Urls: []string{"https://example.com/?a={wox:parameter?name=a}&b={wox:parameter?name=b}"}},
 	)
 	query := plugin.Query{RawQuery: "hello world", Type: plugin.QueryTypeSelection, Selection: selection.Selection{Type: selection.SelectionTypeText, Text: "chosen words"}}
 	if got := p.QueryFallback(ctx, query); len(got) != 1 || got[0].Title != "hello world" {
@@ -164,7 +164,7 @@ func TestWebSearchLegacyFallback(t *testing.T) {
 	environment := map[string]string{plugin.QueryVariableClipboardText: "clip", plugin.QueryVariableSelectedText: "selected"}
 	result := p.searchResult(ctx, search, map[string]string{}, environment, nil)
 	environment[plugin.QueryVariableClipboardText] = "changed"
-	if result.Title != "clip selected" || len(result.Actions) != 1 {
+	if result.Title != "clip selected" || len(result.Actions) == 0 {
 		t.Fatal("environment not bound to result")
 	}
 	if got := p.searchResult(ctx, search, map[string]string{}, nil, nil); len(got.Actions) != 0 {

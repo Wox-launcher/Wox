@@ -55,8 +55,20 @@ type PluginSettingValueTable struct {
 	MaxHeight       int    // Max table height in px, <= 0 means use UI default
 	InlineTable     bool   // Render the table directly in settings instead of behind a separate editor row.
 	EnableSearch    bool   // Show a search icon before Add that expands a row filter
+	// Groups names collapsible sections in the add/edit row dialog. Columns
+	// reference a group by Key; empty Group stays ungrouped at the top.
+	Groups []PluginSettingValueTableGroup
 
 	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
+}
+
+// PluginSettingValueTableGroup is a row-editor section. Title and collapse live
+// here so they are not duplicated on every column in the group.
+type PluginSettingValueTableGroup struct {
+	Key                string
+	Title              string
+	Tooltip            string
+	CollapsedByDefault bool
 }
 
 type PluginSettingValueTableColumn struct {
@@ -74,6 +86,10 @@ type PluginSettingValueTableColumn struct {
 	PreviewMatchedApps bool                               // Show a live indexed-app preview under this text column
 	// QueryVariableKind selects the {wox:...} picker set for queryVariable columns.
 	QueryVariableKind string
+	// Group is a PluginSettingValueTableGroup.Key. Empty keeps the field ungrouped.
+	Group string
+	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
+	EmptyAsZero bool
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {
@@ -92,6 +108,12 @@ func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context,
 	copy := *p
 	copy.Title = translator(context.Background(), p.Title)
 	copy.Tooltip = translator(context.Background(), p.Tooltip)
+	copy.Groups = make([]PluginSettingValueTableGroup, len(p.Groups))
+	for i := range p.Groups {
+		copy.Groups[i] = p.Groups[i]
+		copy.Groups[i].Title = translator(context.Background(), p.Groups[i].Title)
+		copy.Groups[i].Tooltip = translator(context.Background(), p.Groups[i].Tooltip)
+	}
 	// Deep copy Columns
 	copy.Columns = make([]PluginSettingValueTableColumn, len(p.Columns))
 	for i := range p.Columns {

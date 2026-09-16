@@ -179,6 +179,29 @@ func TestFloatingMaterialRecordsNativeMaterialOrPaintsSurface(t *testing.T) {
 	}
 }
 
+func TestFloatingMaterialOverEmbeddedOverlayDropsTransparency(t *testing.T) {
+	if nativeFloatingMaterialMode() != floatingMaterialRendered {
+		t.Skip("only a renderer blur loses the page pixels once paint moves onto the overlay")
+	}
+	displayList := &DisplayList{}
+	tint := Color{R: 22, G: 22, B: 26, A: 56}
+	edge := Color{R: 255, G: 255, B: 255, A: 40}
+	bounds := Rect{X: 20, Y: 30, Width: 200, Height: 100}
+	displayList.FloatingMaterial(bounds, 9, tint, edge)
+	if displayList.commands[0].color != tint {
+		t.Fatalf("main-surface material = %+v, want the authored translucent tint", displayList.commands[0])
+	}
+	displayList.BeginEmbeddedSurfaceOverlay(Rect{Width: 400, Height: 400})
+	displayList.FloatingMaterial(bounds, 9, tint, edge)
+	if len(displayList.commands) != 3 || displayList.commands[2].kind != displayCommandFloatingMaterial {
+		t.Fatalf("commands = %+v, want overlay then an opaque material", displayList.commands)
+	}
+	material := displayList.commands[2]
+	if material.color != (Color{R: 22, G: 22, B: 26, A: 255}) || material.edge != edge {
+		t.Fatalf("overlay material = %+v, want the authored tint at full opacity", material)
+	}
+}
+
 func TestFloatingMaterialCoversSurfaceStackedOverAnother(t *testing.T) {
 	if nativeFloatingMaterialMode() != floatingMaterialOverlay {
 		t.Skip("only an overlay material cannot sample another floating surface; painted tints are opaque and a renderer blur samples everything beneath")

@@ -132,6 +132,10 @@ func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error
 	return WebViewNavigationState{}, ErrPlatformUnsupported
 }
 
+func (w *platformWindow) focusWebView() error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) writeClipboardText(text string) error {
 	return ErrPlatformUnsupported
 }

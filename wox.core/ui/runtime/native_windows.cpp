@@ -25,6 +25,7 @@
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
 extern "C" int32_t woxGoWindowsWebViewActionPanel(uintptr_t owner);
+extern "C" int32_t woxGoWindowsWebViewReservedHotkey(uintptr_t owner, const char *key);
 extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
 extern "C" void woxGoWindowsWebViewCursorChanged(uintptr_t owner, uintptr_t cursor);
 
@@ -1127,15 +1128,41 @@ struct WoxWindowsWebView {
     using GetUInt32 = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, uint32_t *);
     HRESULT kind_result = webview_method<GetInt32>(args, 3)(args, &kind);
     HRESULT key_result = webview_method<GetUInt32>(args, 4)(args, &virtual_key);
-    bool primary_j = SUCCEEDED(kind_result) && SUCCEEDED(key_result) && kind == 0 && virtual_key == 'J' &&
-                     (GetKeyState(VK_CONTROL) & 0x8000) != 0 && (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
-    if (!primary_j) {
+    if (FAILED(kind_result) || FAILED(key_result) || kind != 0) {
+      return;
+    }
+    const bool no_alt_shift = (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
+    const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    const char *reserved_key = nullptr;
+    if (control && no_alt_shift) {
+      if (virtual_key == 'J') {
+        reserved_key = "j";
+      } else if (virtual_key == 'R') {
+        reserved_key = "r";
+      } else if (virtual_key == VK_OEM_4) {
+        reserved_key = "[";
+      } else if (virtual_key == VK_OEM_6) {
+        reserved_key = "]";
+      }
+    }
+    // Programmatic page focus is launcher chrome: Google-like pages mutate on Escape and
+    // the document script then treats it as page-owned, so the query box never comes back.
+    const bool host_escape = reserve_host_escape && virtual_key == VK_ESCAPE && !control && no_alt_shift;
+    if (reserved_key == nullptr && !host_escape) {
       return;
     }
     using PutHandled = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
     webview_method<PutHandled>(args, 8)(args, TRUE);
-    SetFocus(owner);
-    woxGoWindowsWebViewActionPanel(reinterpret_cast<uintptr_t>(owner));
+    // Navigation shortcuts keep page focus; only launcher chrome needs the host.
+    if (host_escape || virtual_key == 'J') {
+      SetFocus(owner);
+    }
+    if (reserved_key != nullptr) {
+      woxGoWindowsWebViewReservedHotkey(reinterpret_cast<uintptr_t>(owner), reserved_key);
+      return;
+    }
+    woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), "host-reserved-escape");
+    woxGoWindowsWebViewEscape(reinterpret_cast<uintptr_t>(owner));
   }
 
   void notify_navigation_changed(WoxWindowsWebViewSession *session) {
@@ -1270,9 +1297,7 @@ struct WoxWindowsWebView {
       if (button == 2) event_kind = down ? 0x0204 : 0x0205;
       if (button == 3) event_kind = down ? 0x0207 : 0x0208;
       if (down) {
-        // Focus belongs to ICoreWebView2Controller; the composition interface only accepts visual and pointer input.
-        using MoveFocus = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int32_t);
-        webview_method<MoveFocus>(active->controller, kControllerMoveFocusMethod)(active->controller, 0);
+        move_keyboard_focus();
       }
     } else if (kind == 5) {
       event_kind = scroll_x != 0 ? 0x020E : 0x020A;
@@ -1360,6 +1385,9 @@ struct WoxWindowsWebView {
     if (FAILED(result)) {
       session->error = result;
       return;
+    }
+    if (session->visible) {
+      apply_keyboard_focus();
     }
     if (!session->visible || session->loaded_content_key == session->content_key) {
       return;
@@ -1496,7 +1524,37 @@ struct WoxWindowsWebView {
     return session->error;
   }
 
+  // Composition-hosted WebView2 only receives keyboard after MoveFocus. Clicks already
+  // do this; a programmatic preview open must queue the same handoff until the controller exists.
+  HRESULT focus() {
+    if (closing) {
+      return E_FAIL;
+    }
+    pending_keyboard_focus = true;
+    reserve_host_escape = true;
+    apply_keyboard_focus();
+    return S_OK;
+  }
+
+  void apply_keyboard_focus() {
+    if (!pending_keyboard_focus || active == nullptr || active->controller == nullptr || !active->visible) {
+      return;
+    }
+    move_keyboard_focus();
+    pending_keyboard_focus = false;
+  }
+
+  void move_keyboard_focus() {
+    if (active == nullptr || active->controller == nullptr) {
+      return;
+    }
+    using MoveFocus = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int32_t);
+    webview_method<MoveFocus>(active->controller, kControllerMoveFocusMethod)(active->controller, 0);
+  }
+
   HRESULT hide() {
+    pending_keyboard_focus = false;
+    reserve_host_escape = false;
     if (active == nullptr) {
       return S_OK;
     }
@@ -1552,6 +1610,8 @@ struct WoxWindowsWebView {
   WoxWindowsWebViewSession *active = nullptr;
   HRESULT fatal_error = S_OK;
   bool closing = false;
+  bool pending_keyboard_focus = false;
+  bool reserve_host_escape = false;
 };
 
 static HRESULT callback_query_interface(IUnknown *self, REFIID iid, REFIID supported_iid, void **object) {
@@ -1827,6 +1887,10 @@ extern "C" int32_t wox_windows_webview_pointer(WoxWindowsWebView *webview, int32
     return E_INVALIDARG;
   }
   return webview->pointer(kind, POINT{x, y}, button, scroll_x, scroll_y, modifiers);
+}
+
+extern "C" int32_t wox_windows_webview_focus(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->focus() : E_INVALIDARG;
 }
 
 extern "C" void wox_windows_webview_destroy(WoxWindowsWebView *webview) {

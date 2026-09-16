@@ -183,6 +183,21 @@ const settings: PluginSettingDefinitionItem[] = [
     } as PluginSettingValueCheckBox,
     DisabledInPlatforms: [],
     IsPlatformSpecific: false
+  },
+  {
+    Type: "table",
+    Value: {
+      Key: "sites",
+      Title: "Sites",
+      DefaultValue: "[]",
+      Groups: [{ Key: "advanced", Title: "Advanced", CollapsedByDefault: true }],
+      Columns: [
+        { Key: "name", Label: "Name", Type: "text" },
+        { Key: "injectCss", Label: "Inject CSS", Type: "text", HideInTable: true, Group: "advanced" }
+      ]
+    } as PluginSettingValueTable,
+    DisabledInPlatforms: [],
+    IsPlatformSpecific: false
   }
 ]
 ```

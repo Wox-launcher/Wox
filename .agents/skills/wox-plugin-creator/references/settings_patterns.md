@@ -140,6 +140,9 @@ Use tables when a plugin needs a list of structured items.
     "SortColumnKey": "name",
     "SortOrder": "asc",
     "MaxHeight": 420,
+    "Groups": [
+      { "Key": "advanced", "Title": "Advanced", "CollapsedByDefault": true }
+    ],
     "Columns": [
       {
         "Key": "name",
@@ -159,6 +162,13 @@ Use tables when a plugin needs a list of structured items.
         "Label": "Model",
         "Type": "selectAIModel",
         "Width": 130
+      },
+      {
+        "Key": "notes",
+        "Label": "Notes",
+        "Type": "text",
+        "HideInTable": true,
+        "Group": "advanced"
       }
     ]
   }
@@ -171,6 +181,8 @@ Useful table column options:
 - `SelectOptions`: option list for `select` columns
 - `HideInTable`: keep field in the edit dialog only
 - `HideInUpdate`: show field in the table only
+- `EmptyAsZero`: blank integer editor values persist as `0`
+- `Groups` / `Group`: collapsible add/edit sections; empty `Group` stays ungrouped at the top
 
 ## Pattern 5: Dynamic Setting
 

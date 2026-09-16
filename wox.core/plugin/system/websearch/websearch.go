@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"wox/common"
@@ -23,6 +25,16 @@ const (
 
 	webSearchBrowserSystem     = "system"  // follow the system default browser
 	webSearchBrowserUseDefault = "default" // follow the default browser setting of the plugin, which is webSearchBrowserSystem or a specific browser
+
+	// webSearchOpenWebViewActionID is intercepted by the launcher, matching AI Chat's
+	// enter-chat action: the plugin callback is empty and the UI owns fullscreen state.
+	webSearchOpenWebViewActionID     = "__wox_internal_open_webview_preview__"
+	webSearchOpenWebViewURLKey       = "url"
+	webSearchOpenWebViewInjectCSSKey = "injectCss"
+	webSearchOpenWebViewWidthKey     = "width"
+	webSearchOpenWebViewHeightKey    = "height"
+	webSearchTableGroupAdvanced      = "advanced"
+	webSearchTableGroupWebView       = "webview"
 )
 
 var webSearchesSettingKey = "webSearches"
@@ -43,8 +55,35 @@ type webSearch struct {
 	OpenInPrivate     bool // open the resolved browser's private/incognito window when supported
 	IsFallback        bool //if true, this search will be used when no other search is matched
 	Icon              common.WoxImage
-	Enabled           bool
+	Disabled          bool // checked to hide the search; new rows stay on
+	WebViewWidth      int
+	WebViewHeight     int
+	InjectCSS         string
 	triggerRegistered bool
+}
+
+// UnmarshalJSON keeps leftover Enabled flags readable without rewriting stored settings.
+func (s *webSearch) UnmarshalJSON(data []byte) error {
+	type rawSearch webSearch
+	aux := struct {
+		Enabled *bool `json:"Enabled"`
+		*rawSearch
+	}{rawSearch: (*rawSearch)(s)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.Enabled == nil {
+		return nil
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+	if _, exists := keys["Disabled"]; exists {
+		return nil
+	}
+	s.Disabled = !*aux.Enabled
+	return nil
 }
 
 type WebSearchPlugin struct {
@@ -98,6 +137,10 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 					SortColumnKey: "Keyword",
 					SortOrder:     definition.PluginSettingValueTableSortOrderAsc,
 					MaxHeight:     500,
+					Groups: []definition.PluginSettingValueTableGroup{
+						{Key: webSearchTableGroupAdvanced, Title: "i18n:plugin_websearch_group_advanced", CollapsedByDefault: true},
+						{Key: webSearchTableGroupWebView, Title: "i18n:plugin_websearch_group_webview", CollapsedByDefault: true},
+					},
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:   "Icon",
@@ -116,7 +159,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
 							},
-							Width: 60,
+							Width: 70,
 						},
 						{
 							Key:               "Title",
@@ -150,29 +193,62 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Key:           "Browser",
 							Label:         "i18n:plugin_websearch_browser",
 							Tooltip:       "i18n:plugin_websearch_browser_tooltip",
+							HideInTable:   true,
 							Type:          definition.PluginSettingValueTableColumnTypeSelect,
 							Width:         100,
 							SelectOptions: r.getWebSearchItemBrowserOptions(),
 						},
 						{
-							Key:     "OpenInPrivate",
-							Label:   "i18n:plugin_websearch_open_in_private",
-							Tooltip: "i18n:plugin_websearch_open_in_private_tooltip",
-							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width:   80,
-						},
-						{
-							Key:   "Enabled",
-							Label: "i18n:plugin_websearch_enabled",
-							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width: 60,
-						},
-						{
-							Key:     "IsFallback",
-							Label:   "i18n:plugin_websearch_is_fallback",
-							Tooltip: "i18n:plugin_websearch_is_fallback_tooltip",
+							Key:     "Disabled",
+							Label:   "i18n:ui_disabled",
+							Tooltip: "i18n:ui_disabled_tooltip",
 							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
 							Width:   60,
+						},
+						{
+							Key:         "OpenInPrivate",
+							Label:       "i18n:plugin_websearch_open_in_private",
+							Tooltip:     "i18n:plugin_websearch_open_in_private_tooltip",
+							HideInTable: true,
+							Type:        definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width:       80,
+							Group:       webSearchTableGroupAdvanced,
+						},
+						{
+							Key:         "IsFallback",
+							Label:       "i18n:plugin_websearch_is_fallback",
+							Tooltip:     "i18n:plugin_websearch_is_fallback_tooltip",
+							HideInTable: true,
+							Type:        definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width:       60,
+							Group:       webSearchTableGroupAdvanced,
+						},
+						{
+							Key:         "WebViewWidth",
+							Label:       "i18n:plugin_websearch_webview_width",
+							Tooltip:     "i18n:plugin_websearch_webview_width_tooltip",
+							Type:        definition.PluginSettingValueTableColumnTypeText,
+							HideInTable: true,
+							EmptyAsZero: true,
+							Group:       webSearchTableGroupWebView,
+						},
+						{
+							Key:         "WebViewHeight",
+							Label:       "i18n:plugin_websearch_webview_height",
+							Tooltip:     "i18n:plugin_websearch_webview_height_tooltip",
+							Type:        definition.PluginSettingValueTableColumnTypeText,
+							HideInTable: true,
+							EmptyAsZero: true,
+							Group:       webSearchTableGroupWebView,
+						},
+						{
+							Key:          "InjectCSS",
+							Label:        "i18n:plugin_websearch_inject_css",
+							Tooltip:      "i18n:plugin_websearch_inject_css_tooltip",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							TextMaxLines: 8,
+							HideInTable:  true,
+							Group:        webSearchTableGroupWebView,
 						},
 					},
 				},
@@ -208,7 +284,7 @@ func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 	for i := range r.webSearches {
 		search := &r.webSearches[i]
 		search.triggerRegistered = false
-		if search.Enabled {
+		if !search.Disabled {
 			names, err := search.parameters()
 			if err != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("invalid web search %q: %v", search.Keyword, err))
@@ -289,13 +365,13 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 		if defaultAdded == "" {
 			webSearches = []webSearch{
 				{
-					Urls:       []string{"https://www.google.com/search?q={wox:parameter?name=query}"},
-					Title:      "Search Google for {wox:parameter?name=query}",
-					Keyword:    "g",
-					Browser:    webSearchBrowserSystem,
-					IsFallback: true,
-					Enabled:    true,
-					Icon:       icons.Get(icons.BrandGoogle),
+					Urls:          []string{"https://www.google.com/search?q={wox:parameter?name=query}"},
+					Title:         "Search Google for {wox:parameter?name=query}",
+					Keyword:       "g",
+					Browser:       webSearchBrowserSystem,
+					IsFallback:    true,
+					WebViewHeight: 720,
+					Icon:          icons.Get(icons.BrandGoogle),
 				},
 			}
 			if marshal, err := json.Marshal(webSearches); err == nil {
@@ -322,7 +398,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 	var results []plugin.QueryResult
 	for _, search := range r.webSearches {
-		if !search.Enabled || !search.triggerRegistered || query.TriggerKeyword != search.Keyword {
+		if search.Disabled || !search.triggerRegistered || query.TriggerKeyword != search.Keyword {
 			continue
 		}
 		names, err := search.parameters()
@@ -373,7 +449,7 @@ func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query
 func (r *WebSearchPlugin) singleParameterResults(ctx context.Context, text string, environment map[string]string, selectedText *string) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, search := range r.webSearches {
-		if !search.Enabled || !search.IsFallback {
+		if search.Disabled || !search.IsFallback {
 			continue
 		}
 		names, err := search.parameters()
@@ -401,14 +477,65 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 			values[variable] = value
 		}
 	}
-	return plugin.QueryResult{
-		Title: renderWebSearchTemplate(search.Title, values, false), Score: 100, Icon: search.Icon,
-		Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_websearch_search", Icon: icons.Get(icons.ActionSearch),
-			Action: func(ctx context.Context, _ plugin.ActionContext) {
-				util.Go(ctx, "open web search urls", func() { r.openSearchUrls(ctx, search, values) })
+	actions := []plugin.QueryResultAction{{
+		Name: "i18n:plugin_websearch_search", Icon: icons.Get(icons.ActionSearch), IsDefault: true,
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			util.Go(ctx, "open web search urls", func() { r.openSearchUrls(ctx, search, values) })
+		},
+	}}
+	if previewURL := firstWebViewSearchURL(search, values); previewURL != "" && supportsWebViewPreview() {
+		actions = append(actions, plugin.QueryResultAction{
+			Id: webSearchOpenWebViewActionID, Name: "i18n:plugin_websearch_open_in_webview",
+			Icon: icons.Get(icons.ActionPreview), Hotkey: util.PrimaryHotkey("enter"),
+			PreventHideAfterAction: true, ContextData: webViewPreviewContextData(search, previewURL),
+			Action: func(context.Context, plugin.ActionContext) {
+				// UI handles this internal action locally because opening the
+				// in-launcher WebView preview is UI-only state.
 			},
-		}},
+		})
 	}
+	return plugin.QueryResult{
+		Title: renderWebSearchTemplate(search.Title, values, false), Score: 100, Icon: search.Icon, Actions: actions,
+	}
+}
+
+func supportsWebViewPreview() bool {
+	return util.IsWindows() || util.IsMacOS()
+}
+
+// webViewPreviewContextData carries the first URL plus optional per-search preview chrome.
+func webViewPreviewContextData(search webSearch, previewURL string) map[string]string {
+	data := map[string]string{webSearchOpenWebViewURLKey: previewURL}
+	if css := strings.TrimSpace(search.InjectCSS); css != "" {
+		data[webSearchOpenWebViewInjectCSSKey] = css
+	}
+	if search.WebViewWidth > 0 {
+		data[webSearchOpenWebViewWidthKey] = strconv.Itoa(search.WebViewWidth)
+	}
+	if search.WebViewHeight > 0 {
+		data[webSearchOpenWebViewHeightKey] = strconv.Itoa(search.WebViewHeight)
+	}
+	return data
+}
+
+// firstWebViewSearchURL returns the first resolved http(s) URL, which is the
+// only page the in-launcher preview can show when a search opens several tabs.
+func firstWebViewSearchURL(search webSearch, values map[string]string) string {
+	for _, template := range search.Urls {
+		resolved := renderWebSearchTemplate(template, values, true)
+		if isWebViewSearchURL(resolved) {
+			return resolved
+		}
+	}
+	return ""
+}
+
+func isWebViewSearchURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
 }
 
 // openSearchUrls encodes substituted values for their URL component, never the template itself.

@@ -492,6 +492,151 @@ class PluginSettingValueLabel(PluginSettingDefinitionValue):
 
 
 @dataclass
+class PluginSettingValueTableGroup:
+    """
+    A collapsible section in the table add/edit dialog.
+
+    Columns reference this group by ``key``. Title and collapse live here so
+    they are not duplicated on every column.
+    """
+
+    key: str
+    title: str = ""
+    tooltip: str = ""
+    collapsed_by_default: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "Key": self.key,
+            "Title": self.title,
+            "Tooltip": self.tooltip,
+            "CollapsedByDefault": self.collapsed_by_default,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PluginSettingValueTableGroup":
+        return cls(
+            key=data.get("Key", ""),
+            title=data.get("Title", ""),
+            tooltip=data.get("Tooltip", ""),
+            collapsed_by_default=data.get("CollapsedByDefault", False),
+        )
+
+
+@dataclass
+class PluginSettingValueTableColumn:
+    """
+    One column in an editable settings table.
+
+    ``group`` is a ``PluginSettingValueTableGroup.key``. Empty keeps the field
+    ungrouped at the top of the add/edit dialog.
+    """
+
+    key: str
+    label: str = ""
+    tooltip: str = ""
+    width: int = 0
+    type: str = "text"
+    validators: List[Dict[str, Any]] = field(default_factory=list)
+    select_options: List[Dict[str, Any]] = field(default_factory=list)
+    text_max_lines: int = 0
+    hide_in_table: bool = False
+    hide_in_update: bool = False
+    query_variable_kind: str = ""
+    group: str = ""
+    empty_as_zero: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "Key": self.key,
+            "Label": self.label,
+            "Tooltip": self.tooltip,
+            "Width": self.width,
+            "Type": self.type,
+            "Validators": self.validators,
+            "SelectOptions": self.select_options,
+            "TextMaxLines": self.text_max_lines,
+            "HideInTable": self.hide_in_table,
+            "HideInUpdate": self.hide_in_update,
+            "QueryVariableKind": self.query_variable_kind,
+            "Group": self.group,
+            "EmptyAsZero": self.empty_as_zero,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PluginSettingValueTableColumn":
+        return cls(
+            key=data.get("Key", ""),
+            label=data.get("Label", ""),
+            tooltip=data.get("Tooltip", ""),
+            width=data.get("Width", 0),
+            type=data.get("Type", "text"),
+            validators=data.get("Validators", []),
+            select_options=data.get("SelectOptions", []),
+            text_max_lines=data.get("TextMaxLines", 0),
+            hide_in_table=data.get("HideInTable", False),
+            hide_in_update=data.get("HideInUpdate", False),
+            query_variable_kind=data.get("QueryVariableKind", ""),
+            group=data.get("Group", ""),
+            empty_as_zero=data.get("EmptyAsZero", False),
+        )
+
+
+@dataclass
+class PluginSettingValueTable(PluginSettingDefinitionValue):
+    """
+    Editable table of structured rows.
+
+    Ungrouped columns stay at the top of the add/edit dialog. Declared
+    ``groups`` appear below in list order and can start collapsed.
+    """
+
+    title: str = ""
+    tooltip: str = ""
+    columns: List[PluginSettingValueTableColumn] = field(default_factory=list)
+    groups: List[PluginSettingValueTableGroup] = field(default_factory=list)
+    sort_column_key: str = ""
+    sort_order: str = ""
+    search_column_key: str = ""
+    max_height: int = 0
+    inline_table: bool = False
+    enable_search: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "Key": self.key,
+            "DefaultValue": self.default_value,
+            "Title": self.title,
+            "Tooltip": self.tooltip,
+            "Columns": [column.to_dict() for column in self.columns],
+            "Groups": [group.to_dict() for group in self.groups],
+            "SortColumnKey": self.sort_column_key,
+            "SortOrder": self.sort_order,
+            "SearchColumnKey": self.search_column_key,
+            "MaxHeight": self.max_height,
+            "InlineTable": self.inline_table,
+            "EnableSearch": self.enable_search,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PluginSettingValueTable":
+        return cls(
+            key=data.get("Key", ""),
+            default_value=data.get("DefaultValue", ""),
+            title=data.get("Title", ""),
+            tooltip=data.get("Tooltip", ""),
+            columns=[PluginSettingValueTableColumn.from_dict(column) for column in data.get("Columns", [])],
+            groups=[PluginSettingValueTableGroup.from_dict(group) for group in data.get("Groups", [])],
+            sort_column_key=data.get("SortColumnKey", ""),
+            sort_order=data.get("SortOrder", ""),
+            search_column_key=data.get("SearchColumnKey", ""),
+            max_height=data.get("MaxHeight", 0),
+            inline_table=data.get("InlineTable", False),
+            enable_search=data.get("EnableSearch", False),
+        )
+
+
+@dataclass
 class PluginSettingDefinitionItem:
     """
     A complete plugin setting definition item.
@@ -629,6 +774,8 @@ class PluginSettingDefinitionItem:
                 content=value_data.get("Content", ""),
                 tooltip=value_data.get("Tooltip", ""),
             )
+        elif setting_type == PluginSettingDefinitionType.TABLE:
+            value = PluginSettingValueTable.from_dict(value_data)
         else:
             # Default to basic value
             value = PluginSettingDefinitionValue(key=value_data.get("Key", ""), default_value=value_data.get("DefaultValue", ""))

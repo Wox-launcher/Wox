@@ -64,6 +64,9 @@ type Driver interface {
 	OpenInBrowser() error
 	NavigationState() (NavigationState, error)
 	Pointer(event PointerEvent) bool
+	// Focus moves keyboard input to the native page. A first-show controller may
+	// still be creating; implementations may queue the request until it is ready.
+	Focus() error
 	Close()
 }
 
@@ -196,6 +199,14 @@ func (c *Controller) NavigationState() (NavigationState, error) {
 // Pointer forwards host-tested, surface-local input to the native browser.
 func (c *Controller) Pointer(event PointerEvent) bool {
 	return c != nil && c.driver != nil && c.driver.Pointer(event)
+}
+
+// Focus asks the native browser to take keyboard input for scrolling and page shortcuts.
+func (c *Controller) Focus() error {
+	if c == nil || c.driver == nil {
+		return ErrUnavailable
+	}
+	return c.driver.Focus()
 }
 
 // Visible reports whether the controller currently contributes a native composition surface.

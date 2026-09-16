@@ -137,22 +137,31 @@ type App struct {
 	nativeFilePreviewManualPath  string
 	nativeFilePreviewError       string
 	chatFullscreen               bool
-	chatWindowFocused            bool
-	chatWindowMaximized          bool
-	chatWindowRestoreFrame       woxui.Rect
-	chatWindowGeneration         uint64
-	chatImportQueue              []chatAttachmentImportJob
-	chatImportRunning            bool
-	chatImportEpoch              uint64
-	terminalFullscreen           bool
-	actionPanel                  bool
-	actionSelected               int
-	actionSelectionKey           string
-	actionsSectionRevision       uint64
-	actionSectionState           actionSectionRevisionState
-	actionFilter                 *woxui.TextEditor
-	visible                      bool
-	show                         showAppParams
+	webViewFullscreen            bool
+	webViewFullscreenResultID    string
+	webViewFullscreenRestore     queryPreview
+	// webViewPreviewWidth and webViewPreviewHeight temporarily size the launcher
+	// window in logical pixels for an in-launcher WebView preview.
+	webViewPreviewWidth  int
+	webViewPreviewHeight int
+	// webViewWantKeyboardFocus retries native page focus until the embedded surface exists.
+	webViewWantKeyboardFocus bool
+	chatWindowFocused        bool
+	chatWindowMaximized      bool
+	chatWindowRestoreFrame   woxui.Rect
+	chatWindowGeneration     uint64
+	chatImportQueue          []chatAttachmentImportJob
+	chatImportRunning        bool
+	chatImportEpoch          uint64
+	terminalFullscreen       bool
+	actionPanel              bool
+	actionSelected           int
+	actionSelectionKey       string
+	actionsSectionRevision   uint64
+	actionSectionState       actionSectionRevisionState
+	actionFilter             *woxui.TextEditor
+	visible                  bool
+	show                     showAppParams
 	// bottomAnchorY keeps QueryBoxAtBottom windows from drifting when DPI
 	// round-trips make Bounds().Height slightly larger than the logical height
 	// we last requested.
@@ -671,6 +680,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.requirementForm = nil
 		a.triggerConflict = nil
 		a.resetChatPreview()
+		a.clearWebViewPreviewModeLocked()
 		if launcher != nil {
 			hideErr = launcher.Hide()
 		}
@@ -773,6 +783,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 			_ = launcher.Hide()
 		}
 		a.resetChatPreview()
+		a.clearWebViewPreviewModeLocked()
 	}
 	util.Go(a.lifecycleCtx, "notify launcher focus change", func() {
 		if hideOnBlur {
@@ -897,6 +908,7 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.resetChatPreview()
+	a.clearWebViewPreviewModeLocked()
 	a.restoreQueryTextInput()
 	if rememberPrevious {
 		a.queryHintEditorState.undo = previousUndo
@@ -991,6 +1003,7 @@ func (a *App) requestMRU() error {
 		a.requirementForm = nil
 		a.triggerConflict = nil
 		a.resetChatPreview()
+		a.clearWebViewPreviewModeLocked()
 	}); err != nil {
 		return err
 	}
@@ -1026,6 +1039,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	a.queryComplete = complete
 	a.hoveredResult = -1
 	enterChatMode := layout != nil && layout.ChatMode
+	a.clearWebViewPreviewModeLocked()
 	if layout != nil {
 		a.layout = *layout
 		if !layout.ChatMode {
@@ -1138,7 +1152,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	}
 	toolbarMessageVisible := a.effectiveToolbarMessage() != nil
 	chatFullscreen := a.chatFullscreen
-	previewFullscreen := chatFullscreen || a.terminalFullscreen
+	previewFullscreen := a.isPreviewFullscreen()
 	actionListHeight := 0
 	if actionPanel {
 		entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
@@ -1159,6 +1173,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if maxResults <= 0 {
 		maxResults = defaultMaxResult
 	}
+	if a.webViewFullscreen && a.webViewPreviewWidth > 0 {
+		width = a.webViewPreviewWidth
+	}
 	visibleResults := min(resultCount, maxResults)
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
@@ -1172,7 +1189,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		resultBottomInset = int(palette.appPadding.Bottom)
 	}
 	toolbarHasContent := resultCount > 0 || toolbarMessageVisible
-	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen)
+	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webViewFullscreen)
 	height := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight
@@ -1268,6 +1285,10 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	// Keep the requested result capacity inside the panel; the material rim is additional window chrome.
 	height += int(2 * palette.AppContentInset)
 	minimumHeight += int(2 * palette.AppContentInset)
+	if a.webViewFullscreen && a.webViewPreviewHeight > 0 {
+		// Width is the launcher window width; height uses the same logical-pixel window size.
+		height = max(a.webViewPreviewHeight, minimumHeight)
+	}
 	current, err := a.window.Bounds()
 	if err != nil {
 		return err
@@ -1475,6 +1496,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if a.onChatPreviewKey(event) {
+		return true
+	}
+	if a.onWebViewPreviewModeKey(event) {
 		return true
 	}
 	if a.onTerminalPreviewKey(event) {
@@ -1792,6 +1816,7 @@ func (a *App) moveSelection(delta int) {
 		a.actionSelectionKey = ""
 		a.actionFilter = nil
 		a.chatFullscreen = false
+		a.clearWebViewPreviewModeLocked()
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
@@ -1815,6 +1840,7 @@ func (a *App) moveSelectionByGroup(direction int) {
 		a.actionSelectionKey = ""
 		a.actionFilter = nil
 		a.chatFullscreen = false
+		a.clearWebViewPreviewModeLocked()
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
@@ -1835,6 +1861,7 @@ func (a *App) selectResult(index int) {
 		if changed {
 			a.resultScrollDetached = false
 			a.chatFullscreen = false
+			a.clearWebViewPreviewModeLocked()
 		}
 	}
 	if valid {
@@ -2196,18 +2223,19 @@ type previewTag struct {
 }
 
 type resultAction struct {
-	ID                     string           `json:"Id"`
-	Type                   string           `json:"Type"`
-	Name                   string           `json:"Name"`
-	SearchAliases          []string         `json:"SearchAliases"`
-	Icon                   woxImage         `json:"Icon"`
-	IsDefault              bool             `json:"IsDefault"`
-	PreventHideAfterAction bool             `json:"PreventHideAfterAction"`
-	Hotkey                 string           `json:"Hotkey"`
-	Form                   []formDefinition `json:"Form"`
-	IsSystemAction         bool             `json:"IsSystemAction"`
-	Tail                   string           `json:"Tail"`
-	TailIcon               woxImage         `json:"TailIcon"`
+	ID                     string            `json:"Id"`
+	Type                   string            `json:"Type"`
+	Name                   string            `json:"Name"`
+	SearchAliases          []string          `json:"SearchAliases"`
+	Icon                   woxImage          `json:"Icon"`
+	IsDefault              bool              `json:"IsDefault"`
+	PreventHideAfterAction bool              `json:"PreventHideAfterAction"`
+	Hotkey                 string            `json:"Hotkey"`
+	Form                   []formDefinition  `json:"Form"`
+	IsSystemAction         bool              `json:"IsSystemAction"`
+	Tail                   string            `json:"Tail"`
+	TailIcon               woxImage          `json:"TailIcon"`
+	ContextData            map[string]string `json:"ContextData"`
 }
 
 type formDefinition struct {
@@ -2230,27 +2258,30 @@ type formDefinitionValue struct {
 	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
 	QueryVariableKind string `json:"QueryVariableKind"`
 	// QueryTest shows the test button that runs this field's value as a launcher query.
-	QueryTest         bool                `json:"QueryTest"`
-	Content           string              `json:"Content"`
-	MaxLines          int                 `json:"MaxLines"`
-	IsMulti           bool                `json:"IsMulti"`
-	Options           []formOption        `json:"Options"`
-	Validators        []formValidator     `json:"Validators"`
-	Columns           []formTableColumn   `json:"Columns"`
-	SortColumnKey     string              `json:"SortColumnKey"`
-	SortOrder         string              `json:"SortOrder"`
-	MaxHeight         int                 `json:"MaxHeight"`
-	InlineTable       bool                `json:"InlineTable"`
-	MinimumRowCount   int                 `json:"MinimumRowCount"`
-	MinimumRowMessage string              `json:"MinimumRowMessage"`
-	UpdateDialogWidth int                 `json:"UpdateDialogWidth"`
-	EnableSearch      bool                `json:"EnableSearch"`
-	SearchColumnKey   string              `json:"SearchColumnKey"`
-	Rows              []formStatsRow      `json:"Rows"`
-	Description       string              `json:"Description"`
-	Status            string              `json:"Status"`
-	Detail            string              `json:"Detail"`
-	Actions           []formServiceAction `json:"Actions"`
+	QueryTest         bool              `json:"QueryTest"`
+	Content           string            `json:"Content"`
+	MaxLines          int               `json:"MaxLines"`
+	IsMulti           bool              `json:"IsMulti"`
+	Options           []formOption      `json:"Options"`
+	Validators        []formValidator   `json:"Validators"`
+	Columns           []formTableColumn `json:"Columns"`
+	SortColumnKey     string            `json:"SortColumnKey"`
+	SortOrder         string            `json:"SortOrder"`
+	MaxHeight         int               `json:"MaxHeight"`
+	InlineTable       bool              `json:"InlineTable"`
+	MinimumRowCount   int               `json:"MinimumRowCount"`
+	MinimumRowMessage string            `json:"MinimumRowMessage"`
+	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
+	EnableSearch      bool              `json:"EnableSearch"`
+	SearchColumnKey   string            `json:"SearchColumnKey"`
+	Groups            []formTableGroup  `json:"Groups"`
+	// Group is the row-editor section this field belongs to after a table column is mapped.
+	Group       string              `json:"Group"`
+	Rows        []formStatsRow      `json:"Rows"`
+	Description string              `json:"Description"`
+	Status      string              `json:"Status"`
+	Detail      string              `json:"Detail"`
+	Actions     []formServiceAction `json:"Actions"`
 }
 
 type formServiceAction struct {
@@ -2290,6 +2321,16 @@ type formTableColumn struct {
 	QueryVariableKind string `json:"QueryVariableKind"`
 	// QueryTest shows the test button that runs this column's value as a launcher query.
 	QueryTest bool `json:"QueryTest"`
+	// Group is a formTableGroup.Key. Empty keeps the field ungrouped at the top.
+	Group string `json:"Group"`
+}
+
+// formTableGroup names a collapsible section in the add/edit row dialog.
+type formTableGroup struct {
+	Key                string `json:"Key"`
+	Title              string `json:"Title"`
+	Tooltip            string `json:"Tooltip"`
+	CollapsedByDefault bool   `json:"CollapsedByDefault"`
 }
 
 // formTableColumnVisibleWhen shows a row-editor field only when another field has one of Values.

@@ -1,7 +1,11 @@
 package launcher
 
 import (
+	"strings"
 	"testing"
+
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 func TestWebViewPreviewURLChanged(t *testing.T) {
@@ -33,6 +37,34 @@ func TestWebViewPreviewContentPreservesUserAgent(t *testing.T) {
 	}
 	if content := data.content(); content.UserAgent != "ExampleBrowser/1.0" {
 		t.Fatalf("WebView User-Agent = %q", content.UserAgent)
+	}
+}
+
+func TestBuildWebViewPreviewExposesAutomationStatus(t *testing.T) {
+	const previewURL = "https://example.com/search?q=wox"
+	payload := `{"url":"` + previewURL + `"}`
+	app := &App{}
+
+	loading, ok := app.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
+	if !ok || loading.AutomationID != webViewPreviewAutomationID || loading.Value != "loading" || loading.LiveRegion != woxui.AccessibilityLiveRegionPolite {
+		t.Fatalf("loading preview semantics = %#v", loading)
+	}
+
+	app.webViewPreviewData = payload
+	ready, ok := app.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
+	if !ok || ready.AutomationID != webViewPreviewAutomationID || ready.Value != previewURL {
+		t.Fatalf("ready preview semantics = %#v", ready)
+	}
+
+	app.webViewPreviewError = "webview missing"
+	failed, ok := app.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
+	if !ok || failed.AutomationID != webViewPreviewAutomationID || !strings.HasPrefix(failed.Value, "error:") || !strings.Contains(failed.Value, "webview missing") {
+		t.Fatalf("error preview semantics = %#v", failed)
+	}
+
+	invalid, ok := app.buildWebViewPreview("{", uiPalette{}, 120, 80).(woxwidget.Semantics)
+	if !ok || invalid.AutomationID != webViewPreviewAutomationID || !strings.HasPrefix(invalid.Value, "error:") {
+		t.Fatalf("invalid preview semantics = %#v", invalid)
 	}
 }
 

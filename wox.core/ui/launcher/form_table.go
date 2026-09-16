@@ -50,6 +50,8 @@ type formTableEditorState struct {
 	patternPreview    *formTablePatternPreviewState
 	// queryVariableEdit is the parameter placeholder currently expanded for renaming.
 	queryVariableEdit queryVariableToken
+	// collapsedGroups is the current add/edit disclosure state, keyed by group.
+	collapsedGroups map[string]bool
 }
 
 type formTableEditorSnapshot struct {
@@ -73,6 +75,7 @@ type formTableEditorSnapshot struct {
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorSnapshot
 	patternPreview    *formTablePatternPreviewSnapshot
+	collapsedGroups   map[string]bool
 }
 
 type queryHotkeyPreset string
@@ -345,6 +348,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		queryPreset:       state.queryPreset,
 		windowGroupEditor: snapshotWindowGroupEditorLocked(state.windowGroupEditor),
 		patternPreview:    snapshotFormTablePatternPreviewLocked(state.patternPreview),
+		collapsedGroups:   cloneFormTableCollapsedGroups(state.collapsedGroups),
 	}
 }
 
@@ -531,7 +535,7 @@ func formTableColumnValue(column formTableColumn, row map[string]any) string {
 }
 
 func formTableColumnDefinition(column formTableColumn, row map[string]any) (formDefinition, bool) {
-	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, QueryTest: column.QueryTest}
+	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, QueryTest: column.QueryTest, Group: column.Group}
 	switch column.Type {
 	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable":
 		value.MaxLines = max(1, column.TextMaxLines)
@@ -665,10 +669,10 @@ func applyFormTableRowVisibleFieldsLocked(state *formTableEditorState) {
 	state.rowForm.definitions = formTableVisibleRowDefinitions(state.definition, state.rowForm.values)
 	focused := -1
 	for index, field := range state.rowForm.definitions {
-		if focused < 0 && formDefinitionFocusable(field) {
+		if focused < 0 && formDefinitionFocusable(field) && !formTableRowFieldCollapsed(state.definition, field, state.collapsedGroups) {
 			focused = index
 		}
-		if field.Value.Key == focusedKey {
+		if field.Value.Key == focusedKey && !formTableRowFieldCollapsed(state.definition, field, state.collapsedGroups) {
 			focused = index
 			break
 		}
@@ -755,11 +759,14 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 		index = -1
 	}
 	fields, _ := formTableRowFields(state.definition, base)
+	state.collapsedGroups = defaultFormTableCollapsedGroups(state.definition)
 	if state.definition.Value.Key == "QueryHotkeys" {
 		state.queryPreset = inferQueryHotkeyPreset(fields.values)
 	}
-	if models := a.aiSettings.Models(); len(models) > 0 {
-		applyAIModelOptionsLocked(&fields, models)
+	if a.aiSettings != nil {
+		if models := a.aiSettings.Models(); len(models) > 0 {
+			applyAIModelOptionsLocked(&fields, models)
+		}
 	}
 	state.rowForm = &fields
 	state.appPicker = nil
@@ -774,10 +781,12 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 	clearFormTableRowValidationLocked(state)
 	state.deletePending = -1
 	state.deleteDirect = false
-	applyAIProviderDefaultHostLocked(state, false, a.aiSettings.ProviderCatalog())
-	requestModels = hasFormDefinitionType(fields.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
-	if requestModels {
-		a.aiSettings.SetModelsLoading(true)
+	if a.aiSettings != nil {
+		applyAIProviderDefaultHostLocked(state, false, a.aiSettings.ProviderCatalog())
+		requestModels = hasFormDefinitionType(fields.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+		if requestModels {
+			a.aiSettings.SetModelsLoading(true)
+		}
 	}
 	textInput := fields.editor != nil
 	a.updateFormTableTextInput(textInput)
@@ -872,6 +881,7 @@ func (a *App) cancelFormTableRowEdit() {
 		state.appPicker = nil
 		state.queryVariable = nil
 		state.patternPreview = nil
+		state.collapsedGroups = nil
 		state.status = ""
 	}
 	a.updateFormTableTextInput(false)
@@ -1087,23 +1097,27 @@ func (a *App) saveFormTableRowEdit() {
 	clearFormTableRowValidationLocked(state)
 	if validationMessage := a.validatePluginTriggerKeywordTableRow(state); validationMessage != "" {
 		state.fieldErrors = map[string]string{"keyword": validationMessage}
+		expandFormTableGroupsForErrors(state)
 		a.invalidateFormTableWindow()
 		return
 	}
 	if fieldErrors := validateFormTableRow(state.definition, state.rowForm, state.rows, state.rowIndex); len(fieldErrors) > 0 {
 		if a.activeFormTableEditor() == state {
 			state.fieldErrors = a.translateFormTableFieldErrors(fieldErrors)
+			expandFormTableGroupsForErrors(state)
 		}
 		a.invalidateFormTableWindow()
 		return
 	}
 	if fieldErrors := validateAISettingsTableRow(state.definition, state.rowForm); len(fieldErrors) > 0 {
 		state.fieldErrors = fieldErrors
+		expandFormTableGroupsForErrors(state)
 		a.invalidateFormTableWindow()
 		return
 	}
 	if fieldErrors := a.validateWebSearchTableRow(state.definition, state.rowForm); len(fieldErrors) > 0 {
 		state.fieldErrors = fieldErrors
+		expandFormTableGroupsForErrors(state)
 		a.invalidateFormTableWindow()
 		return
 	}
@@ -1293,6 +1307,44 @@ func (a *App) commitFormTableRowsLocked(state *formTableEditorState) error {
 	return nil
 }
 
+func (a *App) toggleFormTableRowGroup(key string) {
+	state := a.activeFormTableEditor()
+	if state == nil || state.rowForm == nil || key == "" {
+		return
+	}
+	if _, ok := formTableGroupByKey(state.definition, key); !ok {
+		return
+	}
+	if state.collapsedGroups == nil {
+		state.collapsedGroups = map[string]bool{}
+	}
+	state.collapsedGroups[key] = !state.collapsedGroups[key]
+	a.ensureFormTableRowFocusVisibleLocked(state)
+	textInput := state.rowForm.editor != nil
+	a.updateFormTableTextInput(textInput)
+	a.invalidateFormTableWindow()
+}
+
+func (a *App) ensureFormTableRowFocusVisibleLocked(state *formTableEditorState) {
+	if state == nil || state.rowForm == nil || len(state.rowForm.definitions) == 0 {
+		return
+	}
+	index := state.rowForm.focused
+	if index >= 0 && index < len(state.rowForm.definitions) &&
+		formDefinitionFocusable(state.rowForm.definitions[index]) &&
+		!formTableRowFieldCollapsed(state.definition, state.rowForm.definitions[index], state.collapsedGroups) {
+		return
+	}
+	for candidate, field := range state.rowForm.definitions {
+		if formDefinitionFocusable(field) && !formTableRowFieldCollapsed(state.definition, field, state.collapsedGroups) {
+			setFormFieldsFocusLocked(state.rowForm, candidate)
+			return
+		}
+	}
+	state.rowForm.focused = -1
+	state.rowForm.editor = nil
+}
+
 func (a *App) focusFormTableRowField(index int) {
 	var target *formFieldsState
 	if state := a.activeFormTableEditor(); state != nil {
@@ -1301,6 +1353,9 @@ func (a *App) focusFormTableRowField(index int) {
 	a.stopHotkeyRecordingForDifferentField(target, index)
 	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || !formDefinitionFocusable(state.rowForm.definitions[index]) {
+		return
+	}
+	if formTableRowFieldCollapsed(state.definition, state.rowForm.definitions[index], state.collapsedGroups) {
 		return
 	}
 	syncFormFieldsEditorLocked(state.rowForm)
@@ -1322,7 +1377,7 @@ func (a *App) moveFormTableRowFocus(delta int) {
 	index := state.rowForm.focused
 	for step := 0; step < len(state.rowForm.definitions); step++ {
 		index = (index + delta + len(state.rowForm.definitions)) % len(state.rowForm.definitions)
-		if formDefinitionFocusable(state.rowForm.definitions[index]) {
+		if formDefinitionFocusable(state.rowForm.definitions[index]) && !formTableRowFieldCollapsed(state.definition, state.rowForm.definitions[index], state.collapsedGroups) {
 			setFormFieldsFocusLocked(state.rowForm, index)
 			break
 		}

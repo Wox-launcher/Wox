@@ -29,6 +29,8 @@ const (
 
 const (
 	localActionWebViewReloadID       = "webview-reload"
+	localActionWebViewGoBackID       = "webview-go-back"
+	localActionWebViewGoForwardID    = "webview-go-forward"
 	localActionWebViewOpenDevToolsID = "webview-open-dev-tools"
 )
 
@@ -64,6 +66,14 @@ func webViewLocalActionPanelEntries(results []queryResult, selected int, goos st
 		{
 			Key: "local:webview:reload", ID: localActionWebViewReloadID, Name: "i18n:ui_action_webview_refresh",
 			Icon: settingControlIconSource("refresh"), Hotkey: primaryHotkey("r"), Source: actionPanelSourceLocal,
+		},
+		{
+			Key: "local:webview:go-back", ID: localActionWebViewGoBackID, Name: "i18n:ui_action_webview_go_back",
+			Icon: settingControlIconSource("arrow-left"), Hotkey: primaryHotkey("["), Source: actionPanelSourceLocal,
+		},
+		{
+			Key: "local:webview:go-forward", ID: localActionWebViewGoForwardID, Name: "i18n:ui_action_webview_go_forward",
+			Icon: settingControlIconSource("arrow-right"), Hotkey: primaryHotkey("]"), Source: actionPanelSourceLocal,
 		},
 		{
 			Key: "local:webview:open-dev-tools", ID: localActionWebViewOpenDevToolsID, Name: "i18n:ui_action_webview_open_inspector",
@@ -617,6 +627,10 @@ func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
 	switch entry.ID {
 	case localActionWebViewReloadID:
 		err = a.window.WebViewReload()
+	case localActionWebViewGoBackID:
+		err = a.window.WebViewGoBack()
+	case localActionWebViewGoForwardID:
+		err = a.window.WebViewGoForward()
 	case localActionWebViewOpenDevToolsID:
 		err = a.window.WebViewOpenDevTools()
 	default:
@@ -659,6 +673,11 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	if action.ID == enterChatModeActionID {
 		a.hideActionPanel()
 		a.enterChatMode()
+		return
+	}
+	if action.ID == openWebViewPreviewActionID {
+		a.hideActionPanel()
+		a.enterWebViewPreviewMode(resultIndex, action.ContextData)
 		return
 	}
 	if action.Type == "form" {

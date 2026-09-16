@@ -179,6 +179,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.chatFullscreen = false
+	a.clearWebViewPreviewModeLocked()
 }
 
 // shouldPreservePluginLayoutLocked keeps confirmed plugin chrome stable while the same scope remains active.
@@ -418,6 +419,7 @@ func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.chatFullscreen = false
+	a.clearWebViewPreviewModeLocked()
 	a.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after refinement change: %v", err)

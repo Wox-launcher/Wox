@@ -35,6 +35,7 @@ int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, c
 int32_t wox_linux_window_hide_webview(WoxLinuxWindow *window);
 int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window);
 int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, uint8_t kind, float x, float y);
+int32_t wox_linux_window_focus_webview(WoxLinuxWindow *window);
 void wox_linux_free_string(char *value);
 int32_t wox_linux_window_write_clipboard_text(WoxLinuxWindow *window, const char *text);
 int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);

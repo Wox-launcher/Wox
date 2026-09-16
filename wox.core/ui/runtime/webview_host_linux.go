@@ -103,6 +103,17 @@ func (d *linuxWebViewDriver) Pointer(event webviewruntime.PointerEvent) bool {
 	return err == nil && C.wox_linux_window_forward_embedded_surface_pointer(native, C.uint8_t(event.Kind), C.float(event.Position.X), C.float(event.Position.Y)) == 0
 }
 
+func (d *linuxWebViewDriver) Focus() error {
+	native, err := d.window.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_focus_webview(native) != 0 {
+		return errors.New("woxui: failed to focus Linux WebView")
+	}
+	return nil
+}
+
 func (*linuxWebViewDriver) Close() {}
 
 // woxGoLinuxWebViewEscapeDiagnostic records the page decision and native focus handoff.

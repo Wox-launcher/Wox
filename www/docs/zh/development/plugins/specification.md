@@ -89,11 +89,13 @@
 | `checkbox`      | 布尔开关                       | `Key`、`Label`、`DefaultValue`、`Tooltip`、`Style`                               |
 | `select`        | 下拉选择                       | `Key`、`Label`、`DefaultValue`、`Options[] { Label, Value }`、`Tooltip`、`Style` |
 | `selectAIModel` | AI 模型下拉（由 Wox 动态填充） | `Key`、`Label`、`DefaultValue`、`Tooltip`、`Style`                               |
-| `table`         | 可编辑表格                     | `Key`、`Columns`、`DefaultValue`、`Tooltip`、`Style`                             |
+| `table`         | 可编辑表格                     | `Key`、`Columns`、可选 `Groups[] { Key, Title, Tooltip, CollapsedByDefault }`、`DefaultValue`、`Tooltip`、`Style` |
 | `dynamic`       | 由插件运行时动态替换           | 仅 `Key`                                                                         |
 | `newline`       | 视觉分隔                       | 无                                                                               |
 
 `Style` 支持 `PaddingLeft/Top/Right/Bottom`、`Width`。设置值会在初始化参数传入插件，并在脚本插件中以 `WOX_SETTING_<KEY>` 环境变量提供。
+
+表格列可以用 `Group` 指向某个 `Groups[].Key`。未分组的字段留在添加/编辑对话框顶部；声明的分组按 `Groups` 顺序出现在下面，并可用 `CollapsedByDefault` 默认折叠。
 
 ### SettingDefinitions 示例
 

@@ -32,9 +32,9 @@ func (a *webSearchTriggerTestAPI) UnregisterTriggerKeyword(_ context.Context, op
 func TestWebSearchTriggerKeywords(t *testing.T) {
 	api := &webSearchTriggerTestAPI{}
 	search := &WebSearchPlugin{api: api, webSearches: []webSearch{
-		{Keyword: "g", Enabled: true},
-		{Keyword: "b", Enabled: false},
-		{Keyword: "occupied", Enabled: true},
+		{Keyword: "g"},
+		{Keyword: "b", Disabled: true},
+		{Keyword: "occupied"},
 	}}
 	search.registerTriggerKeywords(context.Background())
 	if !slices.Equal(api.keywords, []string{"g"}) {
@@ -54,8 +54,8 @@ func TestWebSearchTriggerKeywords(t *testing.T) {
 	if len(search.Query(context.Background(), plugin.Query{RawQuery: "g test", TriggerKeyword: "g"}).Results) != 1 {
 		t.Fatal("successful registration did not produce a search result")
 	}
-	search.webSearches[0].Enabled = false
-	search.webSearches[1].Enabled = true
+	search.webSearches[0].Disabled = true
+	search.webSearches[1].Disabled = false
 	search.webSearches[1].Keyword = "bing"
 	search.registerTriggerKeywords(context.Background())
 	if !slices.Equal(api.keywords, []string{"bing"}) {

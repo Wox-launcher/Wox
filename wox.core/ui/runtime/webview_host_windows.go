@@ -55,6 +55,10 @@ func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error
 	return result.navigation, result.err
 }
 
+func (w *platformWindow) focusWebView() error {
+	return w.call(windowCommand{kind: windowCommandFocusWebView}).err
+}
+
 func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
 	if w.webView == nil {
 		return false
@@ -95,14 +99,20 @@ func (w *platformWindow) executeWebViewCommand(command windowCommand) (windowCom
 			}
 			w.webView = webviewruntime.New(driver)
 		}
-		return windowCommandResult{err: w.webView.Show(toWebViewContent(command.webView), toWebViewRect(command.webViewBounds), w.scale)}, true
+		err := w.webView.Show(toWebViewContent(command.webView), toWebViewRect(command.webViewBounds), w.scale)
+		if err == nil {
+			err = w.applyPendingWebViewFocus()
+		}
+		return windowCommandResult{err: err}, true
 	case windowCommandHideWebView:
+		w.webViewFocusPending = false
 		w.clearWebViewPointerState()
 		if w.webView == nil {
 			return windowCommandResult{}, true
 		}
 		return windowCommandResult{err: w.webView.Hide()}, true
 	case windowCommandResetWebView:
+		w.webViewFocusPending = false
 		w.clearWebViewPointerState()
 		if w.webView == nil {
 			return windowCommandResult{}, true
@@ -139,9 +149,35 @@ func (w *platformWindow) executeWebViewCommand(command windowCommand) (windowCom
 		}
 		state, err := w.webView.NavigationState()
 		return windowCommandResult{navigation: fromWebViewNavigationState(state), err: err}, true
+	case windowCommandFocusWebView:
+		return windowCommandResult{err: w.focusEmbeddedWebView()}, true
 	default:
 		return windowCommandResult{}, false
 	}
+}
+
+// focusEmbeddedWebView queues keyboard focus when the composition controller is not created yet.
+func (w *platformWindow) focusEmbeddedWebView() error {
+	if w.webView == nil {
+		w.webViewFocusPending = true
+		return nil
+	}
+	if err := w.webView.Focus(); err != nil {
+		return err
+	}
+	w.webViewFocusPending = false
+	return nil
+}
+
+func (w *platformWindow) applyPendingWebViewFocus() error {
+	if !w.webViewFocusPending || w.webView == nil {
+		return nil
+	}
+	if err := w.webView.Focus(); err != nil {
+		return err
+	}
+	w.webViewFocusPending = false
+	return nil
 }
 
 type windowsWebViewDriver struct {
@@ -221,6 +257,17 @@ func (w *windowsWebViewDriver) Show(content webviewruntime.Content, bounds webvi
 	)
 	if result < 0 {
 		return webViewHRESULT("show WebView2", result)
+	}
+	return nil
+}
+
+func (w *windowsWebViewDriver) Focus() error {
+	if w == nil || w.handle == nil {
+		return webviewruntime.ErrUnavailable
+	}
+	result := C.wox_windows_webview_focus(w.handle)
+	if result < 0 {
+		return webViewHRESULT("focus WebView2", result)
 	}
 	return nil
 }
@@ -382,16 +429,28 @@ func woxGoWindowsWebViewEscape(owner C.uintptr_t) C.int32_t {
 	return 0
 }
 
-// woxGoWindowsWebViewActionPanel forwards the launcher-reserved shortcut from focused WebView content.
+// woxGoWindowsWebViewActionPanel forwards Ctrl+J from focused WebView content.
 //
 //export woxGoWindowsWebViewActionPanel
 func woxGoWindowsWebViewActionPanel(owner C.uintptr_t) C.int32_t {
+	return dispatchWindowsWebViewReservedHotkey(owner, "j")
+}
+
+// woxGoWindowsWebViewReservedHotkey forwards a launcher-owned Ctrl+key from focused WebView content.
+//
+//export woxGoWindowsWebViewReservedHotkey
+func woxGoWindowsWebViewReservedHotkey(owner C.uintptr_t, key *C.char) C.int32_t {
+	return dispatchWindowsWebViewReservedHotkey(owner, C.GoString(key))
+}
+
+// dispatchWindowsWebViewReservedHotkey delivers one launcher-owned Ctrl+key from the focused WebView.
+func dispatchWindowsWebViewReservedHotkey(owner C.uintptr_t, key string) C.int32_t {
 	value, ok := nativeWindows.Load(uintptr(owner))
 	if !ok {
 		return 0
 	}
 	window := value.(*platformWindow)
-	if window.options.OnKey != nil && window.options.OnKey(KeyEvent{Key: Key("j"), Modifiers: KeyModifierControl, Down: true}) {
+	if window.options.OnKey != nil && window.options.OnKey(KeyEvent{Key: Key(key), Modifiers: KeyModifierControl, Down: true}) {
 		return 1
 	}
 	return 0

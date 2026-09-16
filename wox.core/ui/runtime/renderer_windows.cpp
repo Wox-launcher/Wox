@@ -1241,7 +1241,9 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
 // edge over it. It must run after the content beneath the surface and before the surface
 // content, which is the order the display list records. The blur is skipped on WARP, where
 // it would be a CPU convolution every repaint, and on the overlay surface, which holds
-// nothing beneath the panel to sample; both keep the flat tint that was the previous look.
+// nothing beneath the panel to sample (WebView pixels live in a sibling visual). Overlay
+// tints drop transparency so the card does not wash out over the page; WARP still uses
+// the authored alpha over the unblurred Go pixels that are already in the buffer.
 extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
   if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->target_bitmap == nullptr) {
     return E_UNEXPECTED;
@@ -1256,6 +1258,9 @@ extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x
     if (FAILED(result) && FAILED(renderer->device->GetDeviceRemovedReason())) {
       return result;
     }
+  }
+  if (renderer->overlay_active && tint_alpha != 0) {
+    tint_alpha = 255;
   }
   if (tint_alpha != 0) {
     const int32_t result = wox_renderer_fill_rounded_rect(renderer, x, y, width, height, radius, tint_red, tint_green, tint_blue, tint_alpha);

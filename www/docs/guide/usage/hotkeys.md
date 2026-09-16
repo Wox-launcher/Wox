@@ -62,6 +62,7 @@ This is useful for a dashboard, a WebView site, clipboard history (`cb`), or not
 
 | Feature | Where |
 | --- | --- |
+| Open a Web Search in WebView | Result action `Ctrl+Enter` (`Cmd+Enter` on macOS); the query box stays visible; Escape returns focus to the query |
 | Dictation press / double-press / hold | **Settings -> Plugins -> Dictation** |
 | Screenshot capture | **Settings -> Plugins -> Screenshot**, or query `screenshot` |
 | Hotkey overview | Query `hotkeys` to list registered shortcuts |

@@ -299,6 +299,9 @@ Examples:
     "SortColumnKey": "name",
     "SortOrder": "asc",
     "MaxHeight": 500,
+    "Groups": [
+      { "Key": "advanced", "Title": "Advanced", "CollapsedByDefault": true }
+    ],
     "Columns": [
       {
         "Label": "Name",
@@ -313,6 +316,13 @@ Examples:
         "Key": "model",
         "Type": "selectAIModel",
         "Width": 120
+      },
+      {
+        "Label": "Notes",
+        "Key": "notes",
+        "Type": "text",
+        "HideInTable": true,
+        "Group": "advanced"
       }
     ],
     "Style": {}
@@ -343,6 +353,9 @@ Table column notes:
 - `QueryVariableKind` selects the `{wox:...}` picker set for `queryVariable` and `queryVariableList` (`queryHotkey`, `aiCommand`, `dictation`, `webSearch`). Those fields show variable chips and open the picker when the user types `{`.
 - `HideInTable` hides the column in the list but keeps it in the edit dialog.
 - `HideInUpdate` hides the column in the edit dialog but keeps it in the list.
+- `EmptyAsZero` maps blank integer editor text to persisted `0`.
+- `Groups` names collapsible sections in the add/edit dialog (`Key`, `Title`, optional `Tooltip`, `CollapsedByDefault`).
+- `Group` on a column is a `Groups[].Key`. Empty `Group` fields stay ungrouped at the top. Declared groups appear below in `Groups` order.
 
 #### 6. Dynamic
 

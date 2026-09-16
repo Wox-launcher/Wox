@@ -42,3 +42,10 @@ func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error
 	state, err := w.webView.NavigationState()
 	return fromWebViewNavigationState(state), err
 }
+
+func (w *platformWindow) focusWebView() error {
+	if w.webView == nil {
+		return ErrWebViewUnavailable
+	}
+	return w.webView.Focus()
+}

@@ -26,7 +26,7 @@ func Test004LauncherWebsearchTitleValidation(t *testing.T) {
 		setWebSearchRowText(t, ctx, client, webSearchKeywordFieldID, "woxsmokebad")
 		setWebSearchRowText(t, ctx, client, webSearchTitleFieldID, "Search "+plugin.ParameterQueryVariable("missing"))
 		setWebSearchRowText(t, ctx, client, webSearchUrlsFieldID, "https://example.com/")
-		enableWebSearchRow(t, ctx, client)
+		ensureWebSearchRowNotDisabled(t, ctx, client)
 		saveWebSearchRow(t, ctx, client)
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			errorNode, errorFound := automationdriver.Find(snapshot, webSearchTitleErrorID)

@@ -461,6 +461,179 @@ export interface PluginSettingValueSelectOption {
 }
 
 /**
+ * Column type for an editable settings table.
+ */
+export type PluginSettingValueTableColumnType =
+  | "text"
+  | "textList"
+  | "queryVariable"
+  | "queryVariableList"
+  | "checkbox"
+  | "dirPath"
+  | "hotkey"
+  | "select"
+  | "selectAIModel"
+  | "woxImage"
+
+/**
+ * A collapsible section in the table add/edit dialog.
+ *
+ * Columns reference this group by `Key`. Title and collapse live here so they
+ * are not duplicated on every column.
+ */
+export interface PluginSettingValueTableGroup {
+  /**
+   * Group id referenced by `PluginSettingValueTableColumn.Group`.
+   */
+  Key: string
+  /**
+   * Section title. Supports i18n keys.
+   */
+  Title: string
+  /**
+   * Optional help text for the section header.
+   */
+  Tooltip?: string
+  /**
+   * When true, the section starts collapsed in the add/edit dialog.
+   */
+  CollapsedByDefault?: boolean
+}
+
+/**
+ * One column in an editable settings table.
+ */
+export interface PluginSettingValueTableColumn {
+  /**
+   * Row-object field name stored for this column.
+   */
+  Key: string
+  /**
+   * Column and editor label. Supports i18n keys.
+   */
+  Label: string
+  /**
+   * Optional help text in the add/edit dialog.
+   */
+  Tooltip?: string
+  /**
+   * Preferred list-column width in pixels.
+   */
+  Width?: number
+  /**
+   * Editor control type for this column.
+   */
+  Type: PluginSettingValueTableColumnType
+  /**
+   * Validation rules for the add/edit dialog.
+   */
+  Validators?: PluginSettingValidator[]
+  /**
+   * Options for `select` columns.
+   */
+  SelectOptions?: PluginSettingValueSelectOption[]
+  /**
+   * Maximum lines for text-like columns.
+   */
+  TextMaxLines?: number
+  /**
+   * Hide this column in the table list, but keep it in the add/edit dialog.
+   */
+  HideInTable?: boolean
+  /**
+   * Hide this column in the add/edit dialog, but keep it in the table list.
+   */
+  HideInUpdate?: boolean
+  /**
+   * `{wox:...}` picker set for `queryVariable` and `queryVariableList`.
+   */
+  QueryVariableKind?: string
+  /**
+   * `PluginSettingValueTableGroup.Key`. Empty keeps the field ungrouped at the top.
+   */
+  Group?: string
+  /**
+   * Map blank editor text to persisted integer 0, and the reverse on load.
+   */
+  EmptyAsZero?: boolean
+}
+
+/**
+ * Editable table of structured rows.
+ *
+ * Ungrouped columns stay at the top of the add/edit dialog. Declared `Groups`
+ * appear below in array order and can start collapsed.
+ *
+ * @example
+ * ```typescript
+ * const table: PluginSettingValueTable = {
+ *   Key: "sites",
+ *   Title: "Sites",
+ *   DefaultValue: "[]",
+ *   Groups: [{ Key: "advanced", Title: "Advanced", CollapsedByDefault: true }],
+ *   Columns: [
+ *     { Key: "name", Label: "Name", Type: "text" },
+ *     { Key: "injectCss", Label: "Inject CSS", Type: "text", HideInTable: true, Group: "advanced" }
+ *   ]
+ * }
+ * ```
+ */
+export interface PluginSettingValueTable extends PluginSettingDefinitionValue {
+  /**
+   * Unique key for storing the JSON row list.
+   */
+  Key: string
+  /**
+   * Default JSON array of rows.
+   */
+  DefaultValue?: string
+  /**
+   * Table title. Supports i18n keys.
+   */
+  Title?: string
+  /**
+   * Optional help text for the table.
+   */
+  Tooltip?: string
+  /**
+   * Column definitions, including editor-only fields.
+   */
+  Columns: PluginSettingValueTableColumn[]
+  /**
+   * Named collapsible sections in the add/edit dialog.
+   */
+  Groups?: PluginSettingValueTableGroup[]
+  /**
+   * Column key used for the default sort.
+   */
+  SortColumnKey?: string
+  /**
+   * Default sort direction.
+   */
+  SortOrder?: "asc" | "desc"
+  /**
+   * Optional column used when table search is open.
+   */
+  SearchColumnKey?: string
+  /**
+   * Max table height in pixels. `<= 0` uses the UI default.
+   */
+  MaxHeight?: number
+  /**
+   * Render the table directly in settings instead of behind a separate editor row.
+   */
+  InlineTable?: boolean
+  /**
+   * Show a search control that filters rows.
+   */
+  EnableSearch?: boolean
+  /**
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
+   */
+  Style?: PluginSettingValueStyle
+}
+
+/**
  * Type of setting validator.
  *
  * - `is_number`: Validates that the value is a number

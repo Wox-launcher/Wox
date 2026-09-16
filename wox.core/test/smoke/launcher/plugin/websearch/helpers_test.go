@@ -5,6 +5,10 @@ package websearch
 import (
 	"context"
 	"fmt"
+	"html"
+	"net/http"
+	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -21,11 +25,12 @@ const (
 	webSearchTitleFieldID   = "form-table-row-field-2"
 	webSearchUrlsFieldID    = "form-table-row-field-3"
 	webSearchUrlsTrailingID = "form-table-row-field-3-trailing"
-	// Editor fields are Icon, Keyword, Title, Urls, Browser, OpenInPrivate, Enabled.
-	webSearchEnabledFieldID    = "form-table-row-field-6"
+	// Ungrouped editor fields are Icon, Keyword, Title, Urls, Browser, Disabled.
+	webSearchDisabledFieldID   = "form-table-row-field-5"
 	webSearchTitleErrorID      = "form-table-row-field-2-error"
 	webSearchQueryVariableID   = "query-variable-0"
 	webSearchQueryVariableMenu = "query-variable-picker"
+	webSearchWebViewPreviewID  = "launcher.preview.webview"
 )
 
 func webSearchesRowEditID(index int) string {
@@ -73,32 +78,32 @@ func setWebSearchRowText(t *testing.T, ctx context.Context, client *automationdr
 	}
 }
 
-func enableWebSearchRow(t *testing.T, ctx context.Context, client *automationdriver.Client) {
+func ensureWebSearchRowNotDisabled(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	t.Helper()
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, webSearchEnabledFieldID)
+		_, found := automationdriver.Find(snapshot, webSearchDisabledFieldID)
 		return found
 	}); err != nil {
-		t.Fatalf("wait for Web Search enabled field: %v", err)
+		t.Fatalf("wait for Web Search disabled field: %v", err)
 	}
 	snapshot, err := client.Snapshot(ctx)
 	if err != nil {
-		t.Fatalf("read Web Search enabled field: %v", err)
+		t.Fatalf("read Web Search disabled field: %v", err)
 	}
-	enabled, found := automationdriver.Find(snapshot, webSearchEnabledFieldID)
+	disabled, found := automationdriver.Find(snapshot, webSearchDisabledFieldID)
 	if !found {
-		t.Fatal("Web Search enabled field was not found")
+		t.Fatal("Web Search disabled field was not found")
 	}
-	if !enabled.Checked {
-		if err := client.Perform(ctx, webSearchEnabledFieldID, woxui.AccessibilityActionToggle, ""); err != nil {
+	if disabled.Checked {
+		if err := client.Perform(ctx, webSearchDisabledFieldID, woxui.AccessibilityActionToggle, ""); err != nil {
 			t.Fatalf("enable Web Search row: %v", err)
 		}
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		field, found := automationdriver.Find(snapshot, webSearchEnabledFieldID)
-		return found && field.Checked
+		field, found := automationdriver.Find(snapshot, webSearchDisabledFieldID)
+		return found && !field.Checked
 	}); err != nil {
-		t.Fatalf("wait for Web Search row to be enabled: %v", err)
+		t.Fatalf("wait for Web Search row to stay enabled: %v", err)
 	}
 }
 
@@ -119,7 +124,7 @@ func addWebSearchRow(t *testing.T, ctx context.Context, client *automationdriver
 	setWebSearchRowText(t, ctx, client, webSearchKeywordFieldID, keyword)
 	setWebSearchRowText(t, ctx, client, webSearchTitleFieldID, title)
 	setWebSearchRowText(t, ctx, client, webSearchUrlsFieldID, urls)
-	enableWebSearchRow(t, ctx, client)
+	ensureWebSearchRowNotDisabled(t, ctx, client)
 	saveWebSearchRow(t, ctx, client)
 	waitForWebSearchEditorClosed(t, ctx, client)
 	findWebSearchRow(t, ctx, client, keyword)
@@ -140,8 +145,8 @@ func confirmWebSearchRowPersisted(t *testing.T, ctx context.Context, client *aut
 		keywordField, keywordFound := automationdriver.Find(snapshot, webSearchKeywordFieldID)
 		titleField, titleFound := automationdriver.Find(snapshot, webSearchTitleFieldID)
 		urlsField, urlsFound := automationdriver.Find(snapshot, webSearchUrlsFieldID)
-		enabled, enabledFound := automationdriver.Find(snapshot, webSearchEnabledFieldID)
-		return keywordFound && keywordField.Value == keyword && titleFound && titleField.Value == title && urlsFound && urlsField.Value == urls && enabledFound && enabled.Checked
+		disabled, disabledFound := automationdriver.Find(snapshot, webSearchDisabledFieldID)
+		return keywordFound && keywordField.Value == keyword && titleFound && titleField.Value == title && urlsFound && urlsField.Value == urls && disabledFound && !disabled.Checked
 	}); err != nil {
 		t.Fatalf("confirm persisted Web Search %q: %v", keyword, err)
 	}
@@ -343,6 +348,81 @@ func waitForWebSearchResult(t *testing.T, ctx context.Context, client *automatio
 	})
 	if err != nil {
 		t.Fatalf("wait for Web Search result %q: %v", title, err)
+	}
+	smoke.AssertNoDiagnostics(t, snapshot)
+}
+
+func skipWebSearchWebViewIfUnavailable(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+		t.Skip("Web Search in-launcher WebView preview is only available on Windows and macOS")
+	}
+}
+
+func webSearchPrimaryModifier() woxui.KeyModifiers {
+	if runtime.GOOS == "darwin" {
+		return woxui.KeyModifierMeta
+	}
+	return woxui.KeyModifierControl
+}
+
+// startWebSearchPreviewServer serves a local search page so the preview never needs the public internet.
+func startWebSearchPreviewServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, "<!doctype html><html><body><h1>wox-websearch-preview</h1><p>%s</p></body></html>", html.EscapeString(r.URL.Query().Get("q")))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func openWebSearchWebViewPreview(t *testing.T, ctx context.Context, client *automationdriver.Client, query, previewURL string) {
+	t.Helper()
+	if err := client.PressKey(ctx, woxui.KeyEnter, webSearchPrimaryModifier()); err != nil {
+		t.Fatalf("open Web Search WebView preview: %v", err)
+	}
+	waitForWebSearchWebViewPreview(t, ctx, client, query, previewURL)
+}
+
+func waitForWebSearchWebViewPreview(t *testing.T, ctx context.Context, client *automationdriver.Client, query, previewURL string) {
+	t.Helper()
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		preview, previewFound := automationdriver.Find(snapshot, webSearchWebViewPreviewID)
+		if previewFound && strings.HasPrefix(preview.Value, "error:") {
+			return true
+		}
+		input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+		results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
+		return previewFound && preview.Value == previewURL && inputFound && input.Value == query && resultsFound && results.Value == "complete"
+	})
+	if err != nil {
+		t.Fatalf("wait for Web Search WebView preview %q: %v", previewURL, err)
+	}
+	preview, found := automationdriver.Find(snapshot, webSearchWebViewPreviewID)
+	if !found {
+		t.Fatal("Web Search WebView preview node was missing after wait")
+	}
+	if strings.HasPrefix(preview.Value, "error:") {
+		t.Fatalf("Web Search WebView preview failed: %s", preview.Value)
+	}
+	smoke.AssertNoDiagnostics(t, snapshot)
+}
+
+func exitWebSearchWebViewPreview(t *testing.T, ctx context.Context, client *automationdriver.Client, query, title string) {
+	t.Helper()
+	if err := client.PressKey(ctx, woxui.KeyEscape, 0); err != nil {
+		t.Fatalf("leave Web Search WebView preview: %v", err)
+	}
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, previewFound := automationdriver.Find(snapshot, webSearchWebViewPreviewID)
+		input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+		results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
+		_, resultFound := smoke.FindLauncherResult(snapshot, title)
+		return !previewFound && inputFound && input.Value == query && input.Focused && resultsFound && results.Value == "complete" && resultFound
+	})
+	if err != nil {
+		t.Fatalf("wait for Web Search results after leaving WebView: %v", err)
 	}
 	smoke.AssertNoDiagnostics(t, snapshot)
 }

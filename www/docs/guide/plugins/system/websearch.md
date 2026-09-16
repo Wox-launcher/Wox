@@ -21,9 +21,12 @@ The default configuration includes Google with the `g` keyword. Add more engines
 | Title | Result label shown in Wox |
 | URL(s) | Search URL templates |
 | Browser | Browser that opens this search |
-| Incognito | Open the search in a private/incognito window when the browser supports it. Off by default. |
-| Enabled | Whether the engine appears |
-| Default | Whether the engine is used for fallback searches |
+| Incognito | Open the search in a private/incognito window when the browser supports it. Off by default. Grouped under Advanced. |
+| Disabled | Check to hide the engine. New rows stay on. |
+| Default | Whether the engine is used for fallback searches. Grouped under Advanced. |
+| Preview Width | Optional launcher width in pixels for **Open in WebView**. Grouped under WebView. |
+| Preview Height | Optional launcher height in pixels for **Open in WebView**. Grouped under WebView. |
+| Inject CSS | Optional CSS injected into that search's in-launcher WebView. Grouped under WebView. |
 
 ## URL Variables
 
@@ -41,6 +44,8 @@ https://www.google.com/search?q={wox:parameter?name=query}
 ```
 
 If an engine has multiple URLs, Wox opens each URL in order.
+
+On Windows and macOS, a completed search also offers **Open in WebView**. Enter still opens the browser. `Ctrl+Enter` (`Cmd+Enter` on macOS) replaces the result list with an in-launcher preview of the first URL and keeps the query box. Escape returns focus to the query and destroys that preview. The preview action panel includes Refresh (`Ctrl+R` / `Cmd+R`), Go Back (`Ctrl+[` / `Cmd+[`), and Go Forward (`Ctrl+]` / `Cmd+]`). Each search can set its own preview width, height, and injected CSS in the collapsed WebView group of the row editor. Linux does not include this action because Wox has no WebView preview there yet.
 
 Existing `{query}`, `{lower_query}` and `{upper_query}` placeholders in URLs
 and titles migrate automatically to `{wox:parameter?name=query}` and

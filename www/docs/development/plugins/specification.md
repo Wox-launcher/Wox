@@ -89,11 +89,13 @@ Settings are rendered in the Wox settings UI and passed to the plugin host:
 | `checkbox`      | Boolean                                                        | `Key`, `Label`, `DefaultValue`, `Tooltip`, `Style`                               |
 | `select`        | Dropdown                                                       | `Key`, `Label`, `DefaultValue`, `Options[] { Label, Value }`, `Tooltip`, `Style` |
 | `selectAIModel` | Dropdown of available AI models (populated dynamically by Wox) | `Key`, `Label`, `DefaultValue`, `Tooltip`, `Style`                               |
-| `table`         | Editable table rows                                            | `Key`, `Columns`, `DefaultValue`, `Tooltip`, `Style`                             |
+| `table`         | Editable table rows                                            | `Key`, `Columns`, optional `Groups[] { Key, Title, Tooltip, CollapsedByDefault }`, `DefaultValue`, `Tooltip`, `Style` |
 | `dynamic`       | Placeholder that will be filled by the plugin via API          | `Key` only                                                                       |
 | `newline`       | Visual separator                                               | (no value)                                                                       |
 
 `Style` supports `PaddingLeft/Top/Right/Bottom` and `Width`. Settings are provided to plugins as part of init parameters and (for script plugins) as `WOX_SETTING_<KEY>` environment variables.
+
+Table columns may set `Group` to a `Groups[].Key`. Empty `Group` fields stay ungrouped at the top of the add/edit dialog. Declared groups appear below in `Groups` order and can start collapsed with `CollapsedByDefault`.
 
 ### SettingDefinitions examples
 

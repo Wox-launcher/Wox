@@ -26,9 +26,12 @@ package woxui
 //     authored tint without changing sampled alpha, then paints the tint and edge.
 //     Everything drawn before the material this frame, including other floating
 //     surfaces, is part of the sampled backdrop, so stacking needs no cover.
+//     An overlay over a native WebView cannot sample that page, so the same tint
+//     is painted opaque (see opaqueFloatingMaterialTint).
 //   - Linux does the same with its OpenGL back buffer. Compositor blur
 //     (ext-background-effect-v1) is a whole-window desktop backdrop and cannot
-//     sample Go content underneath a panel.
+//     sample Go content underneath a panel. Overlay-over-WebView uses the same
+//     opaque fallback as Windows.
 
 // floatingMaterialMode is how the current platform realises a floating material.
 type floatingMaterialMode uint8
@@ -55,6 +58,16 @@ const floatingMaterialBlurSigma float32 = 12
 // edge blends with real neighbours instead of transparent padding. Damage covering uses
 // this halo to resample a surface without joining adjacent cards into one rectangle.
 const FloatingMaterialBlurMargin = 3 * floatingMaterialBlurSigma
+
+// opaqueFloatingMaterialTint keeps the authored colour when a floating surface
+// cannot sample the pixels underneath. Theme tints are written for a blurred
+// backdrop; without one, only full opacity still reads as a card.
+func opaqueFloatingMaterialTint(tint Color) Color {
+	if tint.A != 0 {
+		tint.A = 255
+	}
+	return tint
+}
 
 // floatingMaterial is one material declared by a frame, in logical client coordinates.
 type floatingMaterial struct {

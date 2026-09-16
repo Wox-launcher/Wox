@@ -114,6 +114,7 @@ struct WoxDarwinWindow {
   NSString *active_web_view_signature;
   NSString *active_web_view_content_key;
   bool active_web_view_transient;
+  bool reserve_host_escape;
   // Materials behind floating surfaces, reused by index across frames and kept
   // hidden when a frame declares fewer, so reopening a panel does not rebuild
   // its material view every time.
@@ -2361,8 +2362,15 @@ static NSString *web_view_cursor_script(void) {
     int32_t handled = woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
     woxGoDarwinWebViewEscapeDiagnostic(owner->context, handled != 0 ? "host-dispatch handled=true" : "host-dispatch handled=false");
   } else if ([message.name isEqualToString:@"woxWebViewActionPanel"]) {
-    [owner->window makeFirstResponder:owner->view];
-    woxGoDarwinKey(owner->context, "j", WOX_KEY_MODIFIER_META, 1, 0, 0);
+    NSString *key = [message.body isKindOfClass:[NSString class]] ? message.body : @"j";
+    if ([key isEqualToString:@"action-panel"]) {
+      key = @"j";
+    }
+    // Navigation shortcuts must leave keyboard scrolling on the page.
+    if ([key isEqualToString:@"j"]) {
+      [owner->window makeFirstResponder:owner->view];
+    }
+    woxGoDarwinKey(owner->context, key.UTF8String, WOX_KEY_MODIFIER_META, 1, 0, 0);
   } else if ([message.name isEqualToString:@"woxWebViewCursor"] && message.webView == owner->active_web_view && [message.body isKindOfClass:[NSString class]]) {
     NSCursor *cursor = darwin_web_view_cursor(message.body);
     if (cursor != owner->web_view_cursor) {
@@ -2403,6 +2411,11 @@ static NSString *web_view_cursor_script(void) {
 
 - (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation {
   (void)navigation;
+  // Each navigation creates a new JavaScript global, including the initial load
+  // that may commit after FocusWebView has already run.
+  if (_owner != NULL && !_owner->closed && webView == _owner->active_web_view) {
+    [webView evaluateJavaScript:_owner->reserve_host_escape ? @"window.__woxReserveHostEscape=true" : @"window.__woxReserveHostEscape=false" completionHandler:nil];
+  }
   notify_darwin_webview_navigation(_owner, webView);
 }
 
@@ -2414,10 +2427,12 @@ static NSString *web_view_cursor_script(void) {
 
 static NSString *web_view_shortcut_script(void) {
   // Global page routers may always prevent Escape, so only an observable page transition claims it.
+  // Programmatic page focus reserves Escape for the launcher chrome instead of the document.
   return @"(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
-          "document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){"
-          "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
-          "if(e.key!=='Escape')return;const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;"
+          "document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey){const k=e.key.length===1?e.key.toLowerCase():e.key;"
+          "if(k==='j'||k==='r'||k==='['||k===']'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}}"
+          "if(e.key!=='Escape')return;if(window.__woxReserveHostEscape){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape');return}"
+          "const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;"
           "const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();"
           "const a=document.activeElement;const r=(f&&f!==a)?'page-focus-changed':m?'page-dom-changed':e.defaultPrevented?'page-prevented-no-change-forwarded':'page-forwarded';"
           "window.webkit.messageHandlers.woxWebViewEscapeDiagnostic.postMessage(r+' before='+d(f)+' after='+d(a));if(r==='page-forwarded'||r==='page-prevented-no-change-forwarded')window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
@@ -2464,6 +2479,8 @@ static void clear_active_web_view(WoxDarwinWindow *window, bool discard_transien
     [window->web_view_toolbar removeFromSuperview];
   }
   if (window->active_web_view != nil) {
+    // Cached documents must not retain the previous focus owner's Escape policy.
+    [window->active_web_view evaluateJavaScript:@"window.__woxReserveHostEscape=false" completionHandler:nil];
     [window->active_web_view removeFromSuperview];
     if (window->active_web_view_transient && discard_transient) {
       [window->active_web_view stopLoading];
@@ -2479,6 +2496,7 @@ static void clear_active_web_view(WoxDarwinWindow *window, bool discard_transien
   window->active_web_view_signature = nil;
   window->active_web_view_content_key = nil;
   window->pointer_over_web_view = false;
+  window->reserve_host_escape = false;
   [window->web_view_cursor release];
   window->web_view_cursor = nil;
   apply_darwin_pointer_cursor(window);
@@ -4232,6 +4250,23 @@ int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
     [window->web_view_cache removeAllObjects];
     [window->web_view_signatures removeAllObjects];
     [window->web_view_content_keys removeAllObjects];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_focus_webview(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->active_web_view == nil) {
+      result = -1;
+      return;
+    }
+    window->reserve_host_escape = true;
+    [window->active_web_view evaluateJavaScript:@"window.__woxReserveHostEscape=true" completionHandler:nil];
+    [window->window makeFirstResponder:window->active_web_view];
   });
   return result;
 }

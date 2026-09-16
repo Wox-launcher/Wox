@@ -83,6 +83,7 @@ type viewSnapshot struct {
 	queryFocused          bool
 	queryEnabled          bool
 	chatFullscreen        bool
+	webViewFullscreen     bool
 	terminalFullscreen    bool
 	actionPanel           bool
 	actionSelected        int
@@ -181,6 +182,7 @@ func (a *App) snapshot() viewSnapshot {
 		queryFocused:          a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey),
 		queryEnabled:          a.queryCanFocus(),
 		chatFullscreen:        a.chatFullscreen,
+		webViewFullscreen:     a.webViewFullscreen,
 		terminalFullscreen:    a.terminalFullscreen,
 		actionPanel:           a.actionPanel,
 		actionSelected:        a.actionSelected,
@@ -214,10 +216,11 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	contentBounds := woxcomponent.LauncherContentBounds(frame.Size.Width, frame.Size.Height, snapshot.palette.AppContentInset)
 	width, height := contentBounds.Width, contentBounds.Height
 	queryHeight := float32(0)
-	previewFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
+	chromeFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
+	previewFullscreen := chromeFullscreen || snapshot.webViewFullscreen
 	queryLineHeight := a.queryLineHeight(snapshot.densityMetrics)
 	queryAtBottom := snapshot.show.QueryBoxAtBottom
-	if !snapshot.show.HideQueryBox && !previewFullscreen {
+	if !snapshot.show.HideQueryBox && !chromeFullscreen {
 		queryBoxHeight := snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text, queryLineHeight)
 		// Flutter kept app padding around the launcher column. With a bottom
 		// query box that means bottom padding stays under the query chrome;
@@ -226,7 +229,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		queryHeight, _ = launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, queryAtBottom)
 	}
 	toolbarHeight := float32(0)
-	if !snapshot.show.HideToolbar && !previewFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
+	if !snapshot.show.HideToolbar && !chromeFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
 		toolbarHeight = snapshot.densityMetrics.toolbarHeight
 	}
 	refinementHeight := float32(0)
@@ -421,7 +424,7 @@ func launcherPreviewOnly(snapshot viewSnapshot) bool {
 	preview := snapshot.results[snapshot.selected].Preview
 	return (launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) || snapshot.terminalFullscreen) &&
 		launcherPreviewVisible(snapshot.layout, preview) &&
-		launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen) == 0
+		launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.webViewFullscreen || snapshot.terminalFullscreen) == 0
 }
 
 // launcherPreviewTitleBarVisible limits the opt-in title bar to chrome-free previews.
@@ -941,7 +944,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, und
 	if !previewVisible {
 		return a.buildResults(snapshot, width, height, imageScale, underlayHeight)
 	}
-	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
+	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.webViewFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
 		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
@@ -991,7 +994,7 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" {
 		return child
 	}
-	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.translationsRevision.Load(), a.imagesRevision.Load()}
+	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.translationsRevision.Load(), a.imagesRevision.Load()}
 	switch resolved.PreviewType {
 	case "query_requirement_settings":
 		if a.requirementForm != nil {

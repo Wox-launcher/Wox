@@ -53,6 +53,7 @@ func TestWebViewRetainsHiddenRenderer(t *testing.T) {
 type webViewNavigationDriver struct {
 	backCalls    int
 	forwardCalls int
+	focusCalled  bool
 }
 
 func (*webViewNavigationDriver) Show(webviewruntime.Content, webviewruntime.Rect, float32) error {
@@ -75,7 +76,11 @@ func (*webViewNavigationDriver) NavigationState() (webviewruntime.NavigationStat
 	return webviewruntime.NavigationState{}, nil
 }
 func (*webViewNavigationDriver) Pointer(webviewruntime.PointerEvent) bool { return true }
-func (*webViewNavigationDriver) Close()                                   {}
+func (d *webViewNavigationDriver) Focus() error {
+	d.focusCalled = true
+	return nil
+}
+func (*webViewNavigationDriver) Close() {}
 
 func TestWebViewCursorOverridesHostOnlyWhilePointerIsOverSurface(t *testing.T) {
 	const webViewCursor = win.HCURSOR(123)
@@ -104,6 +109,25 @@ func TestWebViewCursorOverridesHostOnlyWhilePointerIsOverSurface(t *testing.T) {
 	window.clearWebViewPointerState()
 	if actual := window.resolvedPointerCursor(); actual == webViewCursor {
 		t.Fatal("WebView cursor remained active after clearing the embedded surface state")
+	}
+}
+
+func TestFocusWebViewQueuesUntilControllerExists(t *testing.T) {
+	window := &platformWindow{}
+	result, handled := window.executeWebViewCommand(windowCommand{kind: windowCommandFocusWebView})
+	if !handled || result.err != nil || !window.webViewFocusPending {
+		t.Fatalf("queued focus = handled %t err %v pending %t", handled, result.err, window.webViewFocusPending)
+	}
+
+	driver := &webViewNavigationDriver{}
+	window.webView = webviewruntime.New(driver)
+	result, handled = window.executeWebViewCommand(windowCommand{
+		kind:          windowCommandShowWebView,
+		webView:       WebViewContent{URL: "https://example.com"},
+		webViewBounds: Rect{Width: 100, Height: 80},
+	})
+	if !handled || result.err != nil || !driver.focusCalled || window.webViewFocusPending {
+		t.Fatalf("show applied focus = handled %t err %v focusCalled %t pending %t", handled, result.err, driver.focusCalled, window.webViewFocusPending)
 	}
 }
 

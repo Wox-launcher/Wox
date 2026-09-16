@@ -381,6 +381,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.generalSettings.SetChoicePicker(nil)
 		a.deactivateTerminalPreview()
 		a.resetChatPreview()
+		a.clearWebViewPreviewModeLocked()
 	}); err != nil {
 		return err
 	}

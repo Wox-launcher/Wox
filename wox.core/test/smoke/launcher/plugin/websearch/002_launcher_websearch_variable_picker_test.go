@@ -32,7 +32,7 @@ func Test002LauncherWebsearchVariablePicker(t *testing.T) {
 		setWebSearchRowText(t, ctx, client, webSearchTitleFieldID, title)
 		setWebSearchRowText(t, ctx, client, webSearchUrlsFieldID, urlPrefix)
 		insertWebSearchParameterFromPicker(t, ctx, client)
-		enableWebSearchRow(t, ctx, client)
+		ensureWebSearchRowNotDisabled(t, ctx, client)
 		saveWebSearchRow(t, ctx, client)
 		waitForWebSearchEditorClosed(t, ctx, client)
 		confirmWebSearchRowPersisted(t, ctx, client, keyword, title, urls)
