@@ -4643,6 +4643,12 @@ static GtkWidget *accessibility_widget(const char *role, const char *value, uint
   } else {
     widget = gtk_event_box_new();
   }
+  // GtkEntry is a default text/uri-list dest and inserts dropped files as
+  // query text through accessibility set_value. Leave DND to the window dest
+  // so a drop on the query box starts the same selection query as elsewhere.
+  if (widget != NULL) {
+    gtk_drag_dest_unset(widget);
+  }
   return widget;
 }
 
