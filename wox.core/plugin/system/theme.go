@@ -93,6 +93,8 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	uiManager := plugin.GetPluginManager().GetUI()
 	installedThemes := uiManager.GetAllThemes(ctx)
+	storeThemes := ui.GetStoreManager().GetThemes()
+	iconCatalog := append(append([]common.Theme{}, installedThemes...), storeThemes...)
 	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
 	uninstallThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_theme")
 	currentGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_current")
@@ -110,7 +112,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			result := plugin.QueryResult{
 				Title:    theme.ThemeName,
 				SubTitle: theme.Description,
-				Icon:     common.NewWoxImageTheme(theme),
+				Icon:     themeResultIcon(theme, iconCatalog),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   changeThemeText,
@@ -159,8 +161,6 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		}
 	})
 
-	// Add store themes
-	storeThemes := ui.GetStoreManager().GetThemes()
 	installedThemeIds := lo.Map(installedThemes, func(t common.Theme, _ int) string { return t.ThemeId })
 
 	storeResults := lo.FilterMap(storeThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
@@ -174,7 +174,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			result := plugin.QueryResult{
 				Title:      theme.ThemeName,
 				SubTitle:   theme.Description,
-				Icon:       common.NewWoxImageTheme(theme),
+				Icon:       themeResultIcon(theme, iconCatalog),
 				Group:      storeGroup,
 				GroupScore: 0,
 				Actions: []plugin.QueryResultAction{
@@ -463,6 +463,37 @@ func extractJsonObject(raw string) string {
 		}
 	}
 	return ""
+}
+
+// themeResultIcon reuses the Settings catalog swatch, including AUTO's split variants.
+func themeResultIcon(theme common.Theme, catalog []common.Theme) common.WoxImage {
+	if !theme.IsAutoAppearance {
+		return common.NewWoxImageTheme(theme)
+	}
+	return common.NewWoxImageThemeAuto(
+		themeSwatchVariant(catalog, theme.LightThemeId, true),
+		themeSwatchVariant(catalog, theme.DarkThemeId, false),
+	)
+}
+
+func themeSwatchVariant(catalog []common.Theme, id string, light bool) common.Theme {
+	for _, theme := range catalog {
+		if theme.ThemeId == id {
+			return theme
+		}
+	}
+	if light {
+		return common.Theme{
+			AppBackgroundColor:              "#F5F5F5",
+			QueryBoxBackgroundColor:         "#E8E8E8",
+			ResultItemActiveBackgroundColor: "#D8D8D8",
+		}
+	}
+	return common.Theme{
+		AppBackgroundColor:              "#2B2B2B",
+		QueryBoxBackgroundColor:         "#3D3D3D",
+		ResultItemActiveBackgroundColor: "#4A4A4A",
+	}
 }
 
 // installedThemeListGroup places the active theme first, then remaining system

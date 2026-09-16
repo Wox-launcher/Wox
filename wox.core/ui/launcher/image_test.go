@@ -382,6 +382,23 @@ func TestSVGWoxThemeIconColorFollowsAppearance(t *testing.T) {
 	}
 }
 
+func TestDecodeThemeImageUsesRoundedSettingsSwatch(t *testing.T) {
+	decoded, err := decodeWoxImageWithTint(woxImage{
+		ImageType: "theme",
+		ImageData: `{"AppBackgroundColor":"#112233","QueryBoxBackgroundColor":"#445566","ResultItemActiveBackgroundColor":"#778899"}`,
+	}, nil, 128)
+	if err != nil {
+		t.Fatalf("decode theme image: %v", err)
+	}
+	if corner := decoded.RGBAAt(0, 0); corner.A != 0 {
+		t.Fatalf("corner = %+v, want a transparent rounded catalog swatch", corner)
+	}
+	center := decoded.RGBAAt(64, 40)
+	if center.A == 0 || center.R < 0x10 {
+		t.Fatalf("swatch body = %+v, want the theme background or query bar", center)
+	}
+}
+
 func TestImageCacheSeparatesAppearance(t *testing.T) {
 	source := woxImage{ImageType: "svg", ImageData: `<svg fill="var(--wox-theme-icon-color)"/>`}
 	key := imageKey(source) + "-svg-18"

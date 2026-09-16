@@ -8,9 +8,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"image"
 	"image/color"
-	"image/draw"
 	"log"
 	"math"
 	"os"
@@ -520,26 +518,21 @@ func decodeSVGImage(data string, width, height int, tint *woxui.Color, dark bool
 }
 
 func decodeThemeImage(data string) (*woxui.Image, error) {
-	var theme struct {
-		AppBackgroundColor              string
-		QueryBoxBackgroundColor         string
-		ResultItemActiveBackgroundColor string
-		PreviewFontColor                string
-	}
+	var theme common.Theme
 	if err := json.Unmarshal([]byte(data), &theme); err != nil {
-		return nil, err
+		var legacy struct {
+			AppBackgroundColor              string
+			QueryBoxBackgroundColor         string
+			ResultItemActiveBackgroundColor string
+		}
+		if legacyErr := json.Unmarshal([]byte(data), &legacy); legacyErr != nil {
+			return nil, err
+		}
+		theme.AppBackgroundColor = legacy.AppBackgroundColor
+		theme.QueryBoxBackgroundColor = legacy.QueryBoxBackgroundColor
+		theme.ResultItemActiveBackgroundColor = legacy.ResultItemActiveBackgroundColor
 	}
-	const size = 128
-	rgba := image.NewRGBA(image.Rect(0, 0, size, size))
-	draw.Draw(rgba, rgba.Bounds(), image.NewUniform(themeRasterColor(parseThemeColor(theme.AppBackgroundColor, defaultPalette().background))), image.Point{}, draw.Src)
-	draw.Draw(rgba, image.Rect(14, 17, 114, 43), image.NewUniform(themeRasterColor(parseThemeColor(theme.QueryBoxBackgroundColor, defaultPalette().queryBackground))), image.Point{}, draw.Src)
-	draw.Draw(rgba, image.Rect(14, 54, 114, 88), image.NewUniform(themeRasterColor(parseThemeColor(theme.ResultItemActiveBackgroundColor, defaultPalette().selectedBackground))), image.Point{}, draw.Src)
-	draw.Draw(rgba, image.Rect(23, 102, 105, 108), image.NewUniform(themeRasterColor(parseThemeColor(theme.PreviewFontColor, defaultPalette().previewText))), image.Point{}, draw.Src)
-	return woxui.NewImage(rgba)
-}
-
-func themeRasterColor(value woxui.Color) color.NRGBA {
-	return color.NRGBA{R: value.R, G: value.G, B: value.B, A: value.A}
+	return decodeSVGImage(common.ThemeSwatchSVG(theme), 128, 128, nil, false)
 }
 
 func imageKey(source woxImage) string {

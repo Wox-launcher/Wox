@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -282,9 +283,30 @@ func TestThemeDiagonalRectPolygonSplitsFullBounds(t *testing.T) {
 }
 
 func TestThemeAutoSwatchUsesRoundedOutline(t *testing.T) {
-	points := themeRoundedRectPoints(woxui.Rect{Width: 32, Height: 32}, 8)
+	points := themeRoundedRectPoints(woxui.Rect{Width: common.ThemeSwatchSize, Height: common.ThemeSwatchSize}, common.ThemeSwatchRadius)
 	if len(points) != 16 || points[0] == (woxui.Point{X: 32}) || points[15] == (woxui.Point{}) {
 		t.Fatalf("rounded swatch points = %#v, want curved corners without square vertices", points)
+	}
+}
+
+func TestThemeSwatchPaintsAuthoredWindowBorder(t *testing.T) {
+	width := 3
+	color := woxui.Color{R: 0x4F, G: 0xAE, B: 0x85, A: 255}
+	swatch := themeSwatch(woxcomponent.Theme{
+		Background:      woxui.Color{R: 28, G: 35, B: 37, A: 255},
+		AppWindowChrome: true,
+		AppBorderWidth:  &width,
+		AppBorderColor:  &color,
+	}, common.ThemeSwatchSize).(woxwidget.Container)
+	if swatch.BorderWidth != common.ThemeSwatchOutlineWidth(3) || swatch.BorderColor != color {
+		t.Fatalf("swatch chrome = width %v color %#v, want Jade's authored outline", swatch.BorderWidth, swatch.BorderColor)
+	}
+}
+
+func TestThemeSwatchSkipsDefaultWindowChrome(t *testing.T) {
+	swatch := themeSwatch(woxcomponent.Theme{Background: woxui.Color{A: 255}, AppWindowChrome: true}, common.ThemeSwatchSize).(woxwidget.Container)
+	if swatch.BorderWidth != 0 {
+		t.Fatalf("swatch border width = %v, want no default divider outline", swatch.BorderWidth)
 	}
 }
 

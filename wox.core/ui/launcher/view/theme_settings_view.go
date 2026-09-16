@@ -3,6 +3,7 @@ package view
 import (
 	"strings"
 
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -197,9 +198,9 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 	}
 	trailing, _ := themeListTrailing(props, item)
 	status := strings.TrimSpace(item.Version + "  " + item.Author)
-	var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
+	var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, common.ThemeSwatchSize)
 	if item.IsAuto {
-		swatch = themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, 32)
+		swatch = themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, common.ThemeSwatchSize)
 	}
 	rowChildren := []woxwidget.Widget{
 		swatch,
@@ -496,12 +497,17 @@ func themeCatalogRowHeight(available float32, count int) float32 {
 // themeAutoSwatch mirrors Flutter's compact diagonal AUTO theme icon.
 func themeAutoSwatch(light, dark woxcomponent.Theme, size float32) woxwidget.Widget {
 	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		fillThemeDiagonalPolygon(displayList, themeRoundedRectPoints(bounds, 8), bounds, light.Background, dark.Background)
-		query := woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 5, Width: max(float32(0), bounds.Width-8), Height: 10}
-		result := woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 19, Width: max(float32(0), bounds.Width-8), Height: 5}
+		fillThemeDiagonalPolygon(displayList, themeRoundedRectPoints(bounds, common.ThemeSwatchRadius), bounds, light.Background, dark.Background)
+		query := woxui.Rect{X: bounds.X + common.ThemeSwatchInset, Y: bounds.Y + common.ThemeSwatchAutoQueryTop, Width: max(float32(0), bounds.Width-common.ThemeSwatchInset*2), Height: common.ThemeSwatchQueryHeight}
+		result := woxui.Rect{X: bounds.X + common.ThemeSwatchInset, Y: bounds.Y + common.ThemeSwatchAutoQueryTop + common.ThemeSwatchQueryHeight + common.ThemeSwatchGap, Width: max(float32(0), bounds.Width-common.ThemeSwatchInset*2), Height: common.ThemeSwatchResultHeight}
 		fillThemeDiagonalRect(displayList, query, bounds, light.QueryBackground, dark.QueryBackground)
 		fillThemeDiagonalRect(displayList, result, bounds, light.SelectedBackground, dark.SelectedBackground)
-		drawThemeDiagonalLine(displayList, bounds, 1.5)
+		drawThemeDiagonalLine(displayList, bounds, common.ThemeSwatchAutoLineWidth)
+		if color, width := themeSwatchOutline(dark); width > 0 {
+			displayList.StrokeRoundedRect(bounds, common.ThemeSwatchRadius, width, color)
+		} else if color, width := themeSwatchOutline(light); width > 0 {
+			displayList.StrokeRoundedRect(bounds, common.ThemeSwatchRadius, width, color)
+		}
 	}}
 }
 
@@ -648,11 +654,29 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 }
 
 func themeSwatch(theme woxcomponent.Theme, size float32) woxwidget.Widget {
-	innerWidth := max(float32(0), size-8)
-	return woxwidget.Container{Width: size, Height: size, Radius: 8, Color: theme.Background, Padding: woxwidget.Insets{Left: 4, Right: 4}, Child: woxwidget.Align{Height: size, Vertical: 0.5, Child: woxwidget.Flex{
-		Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: innerWidth, Height: 10, Radius: 4, Color: theme.QueryBackground},
-			woxwidget.Container{Width: innerWidth, Height: 5, Radius: 2, Color: theme.SelectedBackground},
+	innerWidth := max(float32(0), size-common.ThemeSwatchInset*2)
+	borderColor, borderWidth := themeSwatchOutline(theme)
+	return woxwidget.Container{Width: size, Height: size, Radius: common.ThemeSwatchRadius, Color: theme.Background, BorderColor: borderColor, BorderWidth: borderWidth, Padding: woxwidget.Insets{Left: common.ThemeSwatchInset, Right: common.ThemeSwatchInset}, Child: woxwidget.Align{Height: size, Vertical: 0.5, Child: woxwidget.Flex{
+		Axis: woxwidget.Vertical, Gap: common.ThemeSwatchGap, Children: []woxwidget.Widget{
+			woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchQueryHeight, Radius: common.ThemeSwatchQueryRadius, Color: theme.QueryBackground},
+			woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchResultHeight, Radius: common.ThemeSwatchResultRadius, Color: theme.SelectedBackground},
 		},
 	}}}
+}
+
+func themeSwatchOutline(theme woxcomponent.Theme) (woxui.Color, float32) {
+	if !theme.AppWindowChrome || theme.AppBorderColor == nil || theme.AppBorderColor.A == 0 {
+		return woxui.Color{}, 0
+	}
+	if theme.AppBorderWidth != nil && *theme.AppBorderWidth <= 0 {
+		return woxui.Color{}, 0
+	}
+	if theme.AppBorderWidth == nil && theme.AppBorderColor.A < 200 {
+		return woxui.Color{}, 0
+	}
+	width := common.ThemeSwatchOutlineWidthDefault
+	if theme.AppBorderWidth != nil {
+		width = common.ThemeSwatchOutlineWidth(*theme.AppBorderWidth)
+	}
+	return *theme.AppBorderColor, width
 }

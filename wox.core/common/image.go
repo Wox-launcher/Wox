@@ -718,18 +718,6 @@ func NewWoxImageEmoji(emoji string) WoxImage {
 	}
 }
 
-func NewWoxImageTheme(theme Theme) WoxImage {
-	themeJson, err := json.Marshal(theme)
-	if err != nil {
-		return WoxImage{}
-	}
-
-	return WoxImage{
-		ImageType: WoxImageTypeTheme,
-		ImageData: string(themeJson),
-	}
-}
-
 func NewWoxImageLazyLoad(token string, cacheKey string, placeholder WoxImage, targetSize int) WoxImage {
 	// LazyLoad is an internal image type: core serializes the placeholder and
 	// token together so UI can render immediately, then ask core for the
