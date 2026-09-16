@@ -587,6 +587,11 @@ func pluginPackageInstallShowContext() common.ShowContext {
 	return common.ShowContext{ShowSource: common.ShowSourceSelection, HideOnBlur: false}
 }
 
+// deeplinkQueryShowContext keeps a wox://query payload visible under Fresh launch mode.
+func deeplinkQueryShowContext() common.ShowContext {
+	return common.ShowContext{ShowSource: common.ShowSourceDeeplink}
+}
+
 // openSecondaryInstance preserves the primary launcher while opening a session-owned query window.
 func (m *Manager) openSecondaryInstance(ctx context.Context, instanceName string, query common.PlainQuery, showContext common.ShowContext) {
 	if query.QueryId == "" {
@@ -2069,7 +2074,7 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 				QueryType: plugin.QueryTypeInput,
 				QueryText: query,
 			})
-			m.ui.ShowApp(ctx, common.ShowContext{})
+			m.ui.ShowApp(ctx, deeplinkQueryShowContext())
 		}
 	}
 

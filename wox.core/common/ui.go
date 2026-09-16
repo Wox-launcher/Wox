@@ -13,6 +13,9 @@ const (
 	ShowSourceSelection   ShowSource = "selection"
 	ShowSourceTrayQuery   ShowSource = "tray_query"
 	ShowSourceQuickJump   ShowSource = "quickjump"
+	// ShowSourceDeeplink marks a query injected by a wox:// URL so Fresh launch
+	// mode cannot wipe it and replace it with the empty-query start page.
+	ShowSourceDeeplink ShowSource = "deeplink"
 )
 
 type PlainQuery struct {

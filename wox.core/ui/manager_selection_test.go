@@ -6,6 +6,13 @@ import (
 	"wox/common"
 )
 
+func TestDeeplinkQueryShowContextPreservesInjectedQuery(t *testing.T) {
+	showContext := deeplinkQueryShowContext()
+	if showContext.ShowSource != common.ShowSourceDeeplink {
+		t.Fatalf("show source = %q, want deeplink", showContext.ShowSource)
+	}
+}
+
 func TestPluginPackageInstallShowContextStaysVisible(t *testing.T) {
 	showContext := pluginPackageInstallShowContext()
 	if showContext.ShowSource != common.ShowSourceSelection {

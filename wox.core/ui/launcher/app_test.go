@@ -1119,6 +1119,7 @@ func TestShouldPreserveQueryOnShowLocked(t *testing.T) {
 		{name: "query hotkey show source", query: selectionQuery, show: showAppParams{ShowSource: "query_hotkey"}, want: true},
 		{name: "tray query show source", query: selectionQuery, show: showAppParams{ShowSource: "tray_query"}, want: true},
 		{name: "quick jump show source", query: selectionQuery, show: showAppParams{ShowSource: "quickjump"}, want: true},
+		{name: "deeplink show source", query: newInputQuery("theme Saffron"), show: showAppParams{ShowSource: "deeplink"}, want: true},
 		{name: "continue selection query", query: selectionQuery, show: showAppParams{LaunchMode: "continue"}, want: true},
 		{name: "continue input query with text", query: newInputQuery("abc"), show: showAppParams{LaunchMode: "continue"}, want: true},
 		{name: "continue empty input query", query: newInputQuery(""), show: showAppParams{LaunchMode: "continue"}, want: false},
@@ -1143,6 +1144,7 @@ func TestApplyLaunchModeOnShowLocked(t *testing.T) {
 	}{
 		{name: "fresh clears stale default query", show: showAppParams{LaunchMode: "fresh", ShowSource: "default"}, wantQueryText: "", wantResultCount: 0},
 		{name: "fresh preserves injected query", show: showAppParams{LaunchMode: "fresh", ShowSource: "query_hotkey"}, wantPreserved: true, wantQueryText: "stale", wantResultCount: 1},
+		{name: "fresh preserves deeplink query", show: showAppParams{LaunchMode: "fresh", ShowSource: "deeplink"}, wantPreserved: true, wantQueryText: "stale", wantResultCount: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

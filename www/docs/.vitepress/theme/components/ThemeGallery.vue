@@ -16,6 +16,10 @@ onMounted(async () => {
 const filteredThemes = computed(() => {
   return themes.value.filter((t) => t.ThemeName.toLowerCase().includes(searchQuery.value.toLowerCase()) || t.Description.toLowerCase().includes(searchQuery.value.toLowerCase()));
 });
+
+function installHref(themeName) {
+  return `wox://query?q=${encodeURIComponent(`theme ${themeName}`)}`;
+}
 </script>
 
 <template>
@@ -77,7 +81,7 @@ const filteredThemes = computed(() => {
               <div class="color-swatch" :style="{ backgroundColor: theme.ResultItemTitleColor }" title="Text"></div>
               <div class="color-swatch" :style="{ backgroundColor: theme.QueryBoxBackgroundColor }" title="Query Box"></div>
             </div>
-            <a :href="`wox://query?q=theme ${theme.ThemeName}`" class="install-btn" @click.stop>Install</a>
+            <a :href="installHref(theme.ThemeName)" class="install-btn" @click.stop>Install</a>
           </div>
         </div>
       </div>
