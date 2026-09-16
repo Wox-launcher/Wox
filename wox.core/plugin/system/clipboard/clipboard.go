@@ -90,8 +90,9 @@ const (
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
-		maxHistoryCount: 5000,
-		imageCache:      util.NewHashMap[string, *ImageCacheEntry](),
+		maxHistoryCount:       5000,
+		imageCache:            util.NewHashMap[string, *ImageCacheEntry](),
+		faviconFetchAttempted: util.NewHashMap[string, bool](),
 	})
 }
 
@@ -146,6 +147,9 @@ type ClipboardPlugin struct {
 	backgroundTasks sync.WaitGroup
 	// Cache for generated preview and icon images to avoid regeneration
 	imageCache *util.HashMap[string, *ImageCacheEntry]
+	// faviconFetchAttempted remembers hosts already requested this session so a
+	// missing or failed favicon is not retried until Wox restarts.
+	faviconFetchAttempted *util.HashMap[string, bool]
 
 	pasteMu sync.Mutex
 	// pasteCursorID is the history record shown by `cb paste`. Empty means newest.
@@ -315,6 +319,9 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	c.backgroundTasks = sync.WaitGroup{}
 	if c.imageCache == nil {
 		c.imageCache = util.NewHashMap[string, *ImageCacheEntry]()
+	}
+	if c.faviconFetchAttempted == nil {
+		c.faviconFetchAttempted = util.NewHashMap[string, bool]()
 	}
 	c.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		if key != clipboardOCRModelSettingKey || !c.isImageTextRecognitionEnabled(ctx) {
@@ -594,6 +601,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	}
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard %s to database", data.GetType()))
+	c.scheduleLinkFaviconPrefetch(ctx, []ClipboardRecord{record})
 }
 
 func (c *ClipboardPlugin) newClipboardQueryResponse(results []plugin.QueryResult) plugin.QueryResponse {
@@ -748,7 +756,12 @@ func clipboardSearchCandidateMatches(ctx context.Context, candidate string, sear
 
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
+	var iconRecords []ClipboardRecord
 	selectedType := c.getSelectedClipboardType(query)
+	addResult := func(record ClipboardRecord) {
+		iconRecords = append(iconRecords, record)
+		results = append(results, c.convertRecordToResult(ctx, record, query))
+	}
 
 	if query.Command == clipboardPasteCommand {
 		return c.querySequentialPaste(ctx, query)
@@ -772,9 +785,9 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 				continue
 			}
 			record := c.convertFavoriteToRecord(favoriteItem)
-			results = append(results, c.convertRecordToResult(ctx, record, query))
+			addResult(record)
 		}
-		return c.newClipboardQueryResponse(results)
+		return c.clipboardQueryResponse(ctx, results, iconRecords)
 	}
 
 	if query.Search == "" {
@@ -791,7 +804,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 						continue
 					}
 					record := c.convertFavoriteToRecord(favoriteItem)
-					results = append(results, c.convertRecordToResult(ctx, record, query))
+					addResult(record)
 				}
 			}
 		}
@@ -816,11 +829,11 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 					continue
 				}
 				// All records in database are non-favorite now
-				results = append(results, c.convertRecordToResult(ctx, record, query))
+				addResult(record)
 			}
 		}
 
-		return c.newClipboardQueryResponse(results)
+		return c.clipboardQueryResponse(ctx, results, iconRecords)
 	}
 
 	// Search historical content. All matches text records and image OCR text.
@@ -851,10 +864,10 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
 			continue
 		}
-		results = append(results, c.convertRecordToResult(ctx, record, query))
+		addResult(record)
 	}
 
-	return c.newClipboardQueryResponse(results)
+	return c.clipboardQueryResponse(ctx, results, iconRecords)
 }
 
 func (c *ClipboardPlugin) searchClipboardRecords(ctx context.Context, search string, selectedType string, limit int) ([]ClipboardRecord, error) {
@@ -1651,14 +1664,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	})
 
 	group, groupScore := c.getResultGroup(ctx, record)
-
-	// Use stored icon data if available, otherwise use default text icon
-	icon := c.getDefaultTextIcon()
-	if record.IconData != nil && *record.IconData != "" {
-		if iconImage, err := common.ParseWoxImage(*record.IconData); err == nil {
-			icon = iconImage
-		}
-	}
+	icon := c.resolveTextRecordIcon(ctx, record, normalizedLink)
 
 	// Determine title: use alias if set, otherwise use content
 	var title string

@@ -18,6 +18,8 @@ cb fav
 
 Press `Enter` to run the configured primary action: copy the item back to the clipboard or paste it into the active app, including images and emoji.
 
+Copied links show the site favicon on the result row, using the same local cache as Bookmarks and URL.
+
 ## Actions
 
 Open the Action Panel to favorite an item, edit its alias, delete it, open a copied path, or choose copy/paste explicitly.

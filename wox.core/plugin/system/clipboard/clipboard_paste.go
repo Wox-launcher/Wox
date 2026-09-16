@@ -153,6 +153,7 @@ func (c *ClipboardPlugin) querySequentialPaste(ctx context.Context, query plugin
 	if next, ok := nextPasteRecord(records, resolvedCursorID); ok {
 		result.SubTitle = fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_clipboard_paste_next"), clipboardRecordDescription(next))
 	}
+	c.scheduleLinkFaviconPrefetch(ctx, []ClipboardRecord{record})
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
 }
 
