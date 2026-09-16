@@ -55,33 +55,26 @@ func WoxDropdown(props DropdownProps) woxwidget.Widget {
 func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 	const horizontalPadding = float32(8)
 	const indicatorWidth = float32(24)
-	contentWidth := max(float32(0), props.Width-horizontalPadding*2-indicatorWidth)
-	children := make([]woxwidget.Widget, 0, 5)
+	children := make([]woxwidget.Widget, 0, 6)
 	if props.Leading != nil {
 		children = append(children,
 			woxwidget.Align{Width: 18, Height: props.Height, Vertical: 0.5, Child: woxwidget.Image{Source: props.Leading, Width: 18, Height: 18}},
 			woxwidget.Container{Width: 8, Height: props.Height},
 		)
-		contentWidth = max(float32(0), contentWidth-26)
 	}
-	trailingWidth := float32(0)
+	// Keep the trailer on its measured text width. A reserved 80-unit column
+	// clipped labels such as "Stable channel" next to a short version like v2.4.4.
+	children = append(children, woxwidget.Expanded{Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: woxwidget.TextBlock{
+		Value: props.Value, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Foreground,
+	}}})
 	if props.Trailing != "" {
-		trailingWidth = min(float32(80), max(float32(0), contentWidth-60))
-		contentWidth = max(float32(0), contentWidth-trailingWidth-10)
-	}
-	children = append(children, woxwidget.Align{Width: contentWidth, Height: props.Height, Vertical: 0.5, Child: woxwidget.TextBlock{
-		Value: props.Value, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Foreground,
-	}})
-	if trailingWidth > 0 {
 		secondary := props.Secondary
 		if secondary.A == 0 {
 			secondary = props.Foreground
 		}
 		children = append(children,
 			woxwidget.Container{Width: 10, Height: props.Height},
-			woxwidget.Align{Width: trailingWidth, Height: props.Height, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Trailing, Style: woxui.TextStyle{Size: SettingsSecondaryFontSize}, Color: secondary,
-			}},
+			woxwidget.Text{Value: props.Trailing, Style: woxui.TextStyle{Size: SettingsSecondaryFontSize}, Color: secondary},
 		)
 	}
 	children = append(children, WoxDropdownIndicator(indicatorWidth, props.Height, props.Foreground))
@@ -97,7 +90,7 @@ func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, 
 	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, OnHoverAt: onHoverAt, Child: woxwidget.Container{
 		Width: props.Width, Height: props.Height, Radius: 4, Color: background, BorderColor: outline, BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
-		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
+		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
 	}}
 }
 

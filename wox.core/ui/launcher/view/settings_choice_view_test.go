@@ -172,7 +172,7 @@ func TestSettingsChoiceTrailingUsesRowTextColor(t *testing.T) {
 	menuContent := menuScope.Child.(woxwidget.Semantics).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	scroll := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
-	trailing := row.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Text)
+	trailing := settingsChoiceRowTrailing(row)
 	if trailing.Value != "AC" || trailing.Color != title {
 		t.Fatalf("choice trailing = %q %#v, want row Text so TextSecondary cannot restyle Glance values", trailing.Value, trailing.Color)
 	}
@@ -313,4 +313,55 @@ func TestSettingsChoiceIdleRowsShareMenuBackground(t *testing.T) {
 	if background.Color != surface || row.Children[0].Child.(woxwidget.Container).Color.A != 0 {
 		t.Fatal("idle rows must inherit the menu fill without a second translucent layer")
 	}
+}
+
+func TestSettingsChoiceMenuGrowsBeyondAnchorForTrailersAndTooltips(t *testing.T) {
+	props := SettingsChoiceProps{
+		ID: "channel", Width: 800, Height: 600, Anchor: woxui.Rect{X: 500, Y: 80, Width: woxcomponent.SettingsChoiceControlWidth, Height: 32},
+		Choices: []SettingsChoice{
+			{Value: "stable", Label: "Stable channel", Trailing: "v2.4.4", Tooltip: "More stable releases, but updates may arrive later"},
+			{Value: "beta", Label: "Beta channel", Trailing: "v2.4.4", Tooltip: "Try the newest Wox features early"},
+		},
+	}
+	menu := settingsChoiceBuiltMenu(t, props)
+	if menu.Width <= woxcomponent.SettingsChoiceControlWidth {
+		t.Fatalf("menu width = %.0f, want wider than the %.0f trigger so channel labels are not clipped", menu.Width, woxcomponent.SettingsChoiceControlWidth)
+	}
+	if menu.Width > settingsChoiceMenuMaxWidth {
+		t.Fatalf("menu width = %.0f, want at most %.0f", menu.Width, settingsChoiceMenuMaxWidth)
+	}
+}
+
+func TestSettingsChoiceMenuKeepsAnchorWidthWhenContentFits(t *testing.T) {
+	props := SettingsChoiceProps{
+		ID: "mode", Width: 800, Height: 600, Anchor: woxui.Rect{X: 500, Y: 80, Width: woxcomponent.SettingsChoiceControlWidth, Height: 32},
+		Choices: []SettingsChoice{{Value: "fresh", Label: "Fresh"}, {Value: "continue", Label: "Continue"}},
+	}
+	menu := settingsChoiceBuiltMenu(t, props)
+	if menu.Width != woxcomponent.SettingsChoiceControlWidth {
+		t.Fatalf("menu width = %.0f, want the trigger width %.0f when labels fit", menu.Width, woxcomponent.SettingsChoiceControlWidth)
+	}
+}
+
+func settingsChoiceBuiltMenu(t *testing.T, props SettingsChoiceProps) woxwidget.Stack {
+	t.Helper()
+	state := &settingsChoiceState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Stack)
+	scope := stack.Children[1].Child.(woxwidget.FocusScope)
+	surface := scope.Child
+	if focusable, ok := surface.(woxwidget.Focusable); ok {
+		surface = focusable.Child
+	}
+	return surface.(woxwidget.Semantics).Child.(woxwidget.Stack)
+}
+
+func settingsChoiceRowTrailing(row woxwidget.Stack) woxwidget.Text {
+	flex := row.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	for _, child := range flex.Children {
+		if text, ok := child.(woxwidget.Text); ok {
+			return text
+		}
+	}
+	return woxwidget.Text{}
 }

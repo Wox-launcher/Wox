@@ -154,6 +154,7 @@ Do not use size to distinguish primary and secondary actions. Keep adjacent acti
 | Switch | Preserve approximately 36 by 24 visible geometry inside a 32-high alignment slot. Off tracks use a stronger text-alpha wash than disabled so they stay visible on glass |
 | Settings row | 64 minimum; descriptions wrap and increase height with content |
 | Settings choice or switch slot | 200 wide; right-align the control inside the slot |
+| Settings choice menu | At least the trigger width; grow up to 360 to fit labels, trailers, and info icons |
 | Settings form column | Fill the available width after the shared 40-unit page insets, including ordinary form pages |
 | Settings catalog list | 220–250 wide; 30% of the inset catalog content width. Plugin and theme catalogs share this column |
 | Settings runtime status cards | Three columns at the default 800-wide Settings content row |

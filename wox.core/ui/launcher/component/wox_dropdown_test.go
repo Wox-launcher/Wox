@@ -47,3 +47,19 @@ func TestWoxDropdownDefaultsToStandardControlHeight(t *testing.T) {
 		t.Fatalf("dropdown default height = %.0f, want %.0f", trigger.Height, SettingsControlHeight)
 	}
 }
+
+func TestWoxDropdownGivesLabelRemainingSpaceAfterTrailing(t *testing.T) {
+	dropdown := WoxDropdown(DropdownProps{
+		ID: "channel", Label: "Update channel", Value: "Stable channel", Trailing: "v2.4.4",
+		Width: SettingsChoiceControlWidth, OnTap: func() {},
+	}).(woxwidget.Semantics)
+	trigger := buildHoverable(dropdown.Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
+	flex := trigger.Child.(woxwidget.Flex)
+	if _, ok := flex.Children[0].(woxwidget.Expanded); !ok {
+		t.Fatalf("label child = %T, want Expanded so a short version trailer cannot reserve a fixed column", flex.Children[0])
+	}
+	trailing, ok := flex.Children[2].(woxwidget.Text)
+	if !ok || trailing.Value != "v2.4.4" {
+		t.Fatalf("trailing child = %#v, want intrinsic version text", flex.Children[2])
+	}
+}

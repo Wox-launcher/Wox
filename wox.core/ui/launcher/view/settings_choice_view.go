@@ -16,6 +16,7 @@ const (
 	settingsChoiceMenuPadding  = float32(8)
 	settingsChoiceMenuMargin   = float32(12)
 	settingsChoiceMaxHeight    = float32(360)
+	settingsChoiceMenuMaxWidth = float32(360)
 )
 
 // SettingsChoice is one value displayed by the settings dropdown.
@@ -134,7 +135,7 @@ func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoic
 		anchor.X = max(settingsChoiceMenuMargin, props.Width-anchor.Width-settingsChoiceMenuMargin)
 		anchor.Y = 72
 	}
-	menuWidth := min(anchor.Width, max(float32(1), props.Width-settingsChoiceMenuMargin*2))
+	menuWidth := settingsChoicePreferredMenuWidth(props, visible, anchor)
 	menuLeft := min(max(settingsChoiceMenuMargin, anchor.X), max(settingsChoiceMenuMargin, props.Width-menuWidth-settingsChoiceMenuMargin))
 	searchHeight := float32(0)
 	menuPadding := settingsChoiceMenuPadding
@@ -239,6 +240,52 @@ func settingsChoiceMatches(choice SettingsChoice, query string) bool {
 		strings.Contains(strings.ToLower(choice.Group), query)
 }
 
+// settingsChoicePreferredMenuWidth grows past the 200-wide Settings trigger when
+// labels, version trailers, and info icons would otherwise clip inside that slot.
+func settingsChoicePreferredMenuWidth(props SettingsChoiceProps, visible []visibleSettingsChoice, anchor woxui.Rect) float32 {
+	maxAllowed := min(settingsChoiceMenuMaxWidth, max(float32(1), props.Width-settingsChoiceMenuMargin*2))
+	width := max(float32(190), anchor.Width)
+	for _, item := range visible {
+		width = max(width, settingsChoiceRowPreferredWidth(item, props))
+	}
+	return min(maxAllowed, width)
+}
+
+func settingsChoiceRowPreferredWidth(item visibleSettingsChoice, props SettingsChoiceProps) float32 {
+	const inset = float32(24)
+	if item.header {
+		width := inset + settingsChoiceEstimateTextWidth(item.choice.Label, woxcomponent.SettingsSectionTitleFontSize)
+		if item.choice.GroupTooltip != "" && props.InfoIcon != nil {
+			width += 28
+		}
+		return width
+	}
+	width := inset
+	if item.choice.Leading != nil {
+		width += 26
+	}
+	width += settingsChoiceEstimateTextWidth(item.choice.Label, 13)
+	if item.choice.Trailing != "" {
+		width += 12 + settingsChoiceEstimateTextWidth(item.choice.Trailing, 12)
+	}
+	if item.choice.Tooltip != "" {
+		width += 28
+	}
+	return width
+}
+
+func settingsChoiceEstimateTextWidth(text string, size float32) float32 {
+	width := float32(0)
+	for _, r := range text {
+		if r <= 0x7F {
+			width += size * 0.6
+			continue
+		}
+		width += size
+	}
+	return width
+}
+
 func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHeight, listHeight float32) float32 {
 	if props.Filterable {
 		top := anchor.Y + anchor.Height
@@ -277,20 +324,8 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			background = props.Theme.SelectionBackground
 			background.A = uint8(float32(background.A)*0.25 + 0.5)
 		}
-		contentWidth := max(float32(0), width-32)
-		leadingWidth := float32(0)
-		if choice.Leading != nil {
-			leadingWidth = 26
-			contentWidth = max(float32(0), contentWidth-leadingWidth)
-		}
-		trailingWidth := float32(0)
-		if choice.Trailing != "" {
-			trailingWidth = min(float32(80), max(float32(0), contentWidth-80))
-			contentWidth = max(float32(0), contentWidth-trailingWidth-12)
-		}
 		var tooltip woxwidget.Widget = woxwidget.Painter{}
 		if choice.Tooltip != "" {
-			contentWidth = max(float32(0), contentWidth-28)
 			tooltip = woxwidget.Gesture{ID: fmt.Sprintf("setting-choice-tooltip-%d", index), OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				if props.OnTooltip != nil {
 					props.OnTooltip(inside, choice.Tooltip, bounds)
@@ -314,21 +349,19 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 				woxwidget.Container{Width: 8, Height: settingsChoiceRowHeight},
 			)
 		}
-		rowChildren = append(rowChildren, woxwidget.Align{Width: contentWidth, Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.Text{
-			Value: choice.Label, Style: woxui.TextStyle{Size: 13}, Color: foreground,
-		}})
-		if trailingWidth > 0 {
+		rowChildren = append(rowChildren, woxwidget.Expanded{Child: woxwidget.Align{Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.TextBlock{
+			Value: choice.Label, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: foreground,
+		}}})
+		if choice.Trailing != "" {
 			rowChildren = append(rowChildren,
 				woxwidget.Container{Width: 12, Height: settingsChoiceRowHeight},
-				woxwidget.Align{Width: trailingWidth, Height: settingsChoiceRowHeight, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
-					Value: choice.Trailing, Style: woxui.TextStyle{Size: 12}, Color: foreground,
-				}},
+				woxwidget.Text{Value: choice.Trailing, Style: woxui.TextStyle{Size: 12}, Color: foreground},
 			)
 		}
 		rowChildren = append(rowChildren, tooltip)
 		rowContent := woxwidget.Container{
-			Width: width, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 16},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: rowChildren},
+			Width: width, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 16, Right: 8},
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren},
 		}
 		var rowBackground woxwidget.Widget = woxwidget.Container{Width: width, Height: settingsChoiceRowHeight, Color: background}
 		if menuPadding == 0 && index == len(visible)-1 {
