@@ -139,6 +139,10 @@ func TestValidatePluginTriggerKeywordTableRowAllowsGlobalAndRejectsInstalledConf
 
 func TestPluginSettingKeepVisibleUsesMeasuredRowKey(t *testing.T) {
 	fields := formFieldsSnapshot{definitions: []formDefinition{{}, {}, {}}, focused: 2}
+	if got := pluginSettingKeepVisibleKey(fields, 0); got != "" {
+		t.Fatalf("inactive plugin form scroll target = %q, want no automatic scrolling", got)
+	}
+	fields.active = true
 	if got := pluginSettingKeepVisibleKey(fields, 1); got != woxwidget.Key("plugin-setting-row-2") {
 		t.Fatalf("keep-visible key = %q, want measured third row", got)
 	}
@@ -219,14 +223,17 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	}
 	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 
-	if props.Editor == nil || props.Editor.Form == nil || props.Editor.Form.Intro != "" || len(props.Editor.Form.Rows) != 1 {
+	if props.Editor == nil || props.Editor.Form == nil || props.Editor.Keywords == nil || props.Editor.Metadata == nil || props.Editor.DescriptionDetail == nil {
+		t.Fatal("all installed plugin sections must be built regardless of the previous tab selection")
+	}
+	if props.Editor == nil || props.Editor.Commands == nil || props.Editor.Commands.Intro != "" || len(props.Editor.Commands.Rows) != 1 {
 		t.Fatalf("command form = %#v, want one shared table without a separate hint box", props.Editor)
 	}
-	table := props.Editor.Form.Rows[0].(woxwidget.Keyed).Child.(woxwidget.Container)
+	table := props.Editor.Commands.Rows[0].(woxwidget.Keyed).Child.(woxwidget.Container)
 	tableRows := table.Child.(woxwidget.Flex).Children
 	titleBlock := tableRows[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	if titleBlock.Children[0].(woxwidget.Container).Child.(woxwidget.Text).Value != "Commands" || titleBlock.Children[1].(woxwidget.TextBlock).Value != "Command help" {
-		t.Fatal("command table must include its localized title and description")
+	if props.Editor.Commands.SectionLabel != "Commands" || len(titleBlock.Children) != 1 || titleBlock.Children[0].(woxwidget.TextBlock).Value != "Command help" {
+		t.Fatal("command group must own the title, with only description above the table")
 	}
 	grid := tableRows[1].(woxwidget.Stateful)
 	state := grid.CreateState()
@@ -306,5 +313,26 @@ func TestPreparePluginSettingSaveValuesTracksDictationDerivedFields(t *testing.T
 	state.values[dictationDefaultHotkeyKey] = "cmd+x"
 	if !pluginFormDirty(state.definitions, state.values, state.initial) {
 		t.Fatal("a newer hotkey edit should remain dirty after the previous save completes")
+	}
+}
+
+func TestPluginWebsiteButtonsCoverGitHubGistAndOtherSites(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.translations = map[string]string{"ui_plugin_website": "Website"}
+	for _, test := range []struct{ website, label string }{
+		{"https://github.com/example/plugin", "GitHub"},
+		{"https://gist.github.com/example/123", "GitHub"},
+		{"https://example.com/plugin", "Website"},
+		{"https://example.com/github.com", "Website"},
+		{"", ""},
+	} {
+		props := a.pluginStoreDetailProps(settingsSnapshot{}, pluginSettingsPlugin{Website: test.website}, 600, 1)
+		if props.WebsiteChipLabel != test.label {
+			t.Fatalf("website %q label = %q, want %q", test.website, props.WebsiteChipLabel, test.label)
+		}
+		if (props.OnWebsite != nil) != (test.website != "") {
+			t.Fatalf("website %q has incorrect button availability", test.website)
+		}
 	}
 }

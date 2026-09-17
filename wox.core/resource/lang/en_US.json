@@ -2917,7 +2917,7 @@
   "ui_hotkey_overview_webview_inspector": "Open webview inspector",
 
   "plugin_dictation_plugin_name": "Dictation",
-  "plugin_dictation_plugin_description": "Voice-to-text dictation using local speech recognition. Speak into the microphone and the recognized text is typed into the focused window.",
+  "plugin_dictation_plugin_description": "Turn speech into text in the focused window.",
   "plugin_dictation_settings_head": "Dictation Settings",
   "plugin_dictation_hotkey": "Hotkey",
   "plugin_dictation_hotkey_tooltip": "Supports pressing a modifier key once or holding a modifier key to record.",

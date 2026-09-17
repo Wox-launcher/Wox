@@ -306,6 +306,7 @@ type PluginMetadataProps struct {
 
 // PluginFormProps contains the shared form rows and scroll actions.
 type PluginFormProps struct {
+	SectionLabel     string
 	Rows             []woxwidget.Widget
 	KeepVisibleKey   woxwidget.Key
 	Intro            string
@@ -318,12 +319,13 @@ type PluginFormProps struct {
 // PluginEditorProps contains the selected plugin detail and editable state.
 type PluginEditorProps struct {
 	Header            PluginHeaderProps
-	ActiveTab         string
-	Tabs              []PluginTab
+	ScrollID          string
+	Error             string
 	DescriptionDetail *PluginStoreDetailProps
 	Metadata          *PluginMetadataProps
 	Form              *PluginFormProps
-	OnSelectTab       func(string)
+	Keywords          *PluginFormProps
+	Commands          *PluginFormProps
 }
 
 // PluginStoreDetailProps contains the store-only plugin detail page.
@@ -337,20 +339,20 @@ type PluginStoreDetailProps struct {
 	WebsiteChipLabel  string
 	Icon              *woxui.Image
 	ExternalIcon      *woxui.Image
+	OnRuntimeHover    func(bool, woxui.Rect)
 	RuntimeIcon       *woxui.Image
 	WebsiteIcon       *woxui.Image
 	FallbackColor     woxui.Color
 	Management        []PluginAction
-	ActiveTab         string
-	Tabs              []PluginTab
-	TabForm           *PluginFormProps
+	ScrollID          string
+	Keywords          *PluginFormProps
+	Commands          *PluginFormProps
 	Metadata          *PluginMetadataProps
 	Screenshot        *woxui.Image
 	ScreenshotLoading bool
 	Error             string
 	OnWebsite         func()
 	OnScreenshot      func()
-	OnSelectTab       func(string)
 }
 
 // PluginDetailProps selects the empty, store, or editable detail view.
@@ -385,71 +387,73 @@ func PluginDetail(props PluginDetailProps) woxwidget.Widget {
 	})
 }
 
-// PluginDetailTabBodyProps selects the shared description, form, or metadata body for one plugin tab.
-type PluginDetailTabBodyProps struct {
-	ActiveTab   string
-	Description *PluginStoreDetailProps
-	Form        *PluginFormProps
-	Metadata    *PluginMetadataProps
-	Width       float32
-	Height      float32
-	ScrollID    string
-	Theme       woxcomponent.ControlTheme
-}
-
-// pluginDetailTabBody renders one plugin detail tab through the shared form or metadata surfaces.
-func pluginDetailTabBody(props PluginDetailTabBodyProps) woxwidget.Widget {
-	if props.ActiveTab == "description" && props.Description != nil {
-		// Keep description flush with trigger-keyword/form tabs; the outer plugin detail
-		// already owns the shared 16px inset, so an extra 24px horizontal pad only skewed this tab.
-		return pluginStoreDescription(*props.Description, props.Width, props.Height, props.Theme)
-	}
-	if props.Form != nil {
-		return pluginFormTabBody(props.Form, props.Width, props.Height, props.ScrollID, props.Theme)
-	}
-	if props.Metadata != nil {
-		return pluginMetadataTab(*props.Metadata, props.Width, props.Height, props.ScrollID, props.Theme)
-	}
-	return nil
-}
-
-// pluginEditor composes the shared identity, tabs, metadata, and auto-saving form body.
+// pluginEditor shares the description-first layout between installed plugins and the store.
 func pluginEditor(props PluginEditorProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
-	innerHeight := height
-	const headerHeight = float32(80)
-	const tabHeight = float32(44)
-	header := pluginDetailHeader(props.Header, innerWidth, headerHeight, theme)
-	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
-	children := []woxwidget.Widget{header, tabs}
-	bodyHeight := max(float32(48), innerHeight-headerHeight-tabHeight)
-	children = append(children, pluginDetailTabBody(PluginDetailTabBodyProps{
-		ActiveTab: props.ActiveTab, Description: props.DescriptionDetail, Form: props.Form, Metadata: props.Metadata,
-		Width: innerWidth, Height: bodyHeight, ScrollID: "plugin-detail-" + props.ActiveTab, Theme: theme,
-	}))
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 16, Right: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	content := []woxwidget.Widget{}
+	var trailingScreenshot woxwidget.Widget
+	if props.DescriptionDetail != nil {
+		description := *props.DescriptionDetail
+		// Installed forms prioritize configuration; store previews stay beside the description.
+		if props.Form != nil {
+			trailingScreenshot = pluginStoreScreenshot(description, innerWidth, theme)
+			description.Screenshot = nil
+			description.ScreenshotLoading = false
+		}
+		content = append(content, pluginStoreDescriptionContent(description, innerWidth, theme))
+	}
+	for _, form := range []*PluginFormProps{props.Form, props.Keywords, props.Commands} {
+		if form == nil || len(form.Rows) == 0 {
+			continue
+		}
+		content = append(content, woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: form.SectionLabel, Width: innerWidth, Theme: theme}), pluginFormContent(form, innerWidth, theme))
+	}
+	if props.Metadata != nil {
+		metadata := props.Metadata
+		rows := []woxwidget.Widget{}
+		if metadata.EmptyTitle != "" {
+			rows = append(rows, pluginDetailCopy(metadata.EmptyTitle, innerWidth, theme))
+		}
+		for _, item := range metadata.Items {
+			rows = append(rows, pluginMetadataRow(item, innerWidth, theme))
+		}
+		content = append(content, woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: metadata.Header, Width: innerWidth, Theme: theme}), woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: rows})
+	}
+	if props.Error != "" {
+		content = append(content, woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: theme.Error})
+	}
+	if trailingScreenshot != nil {
+		content = append(content, trailingScreenshot)
+	}
+	var keepVisible woxwidget.Key
+	if props.Form != nil {
+		keepVisible = props.Form.KeepVisibleKey
+	}
+	// Keep the scrollbar and its pointer target in the right inset, clear of tables and actions.
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		pluginDetailHeader(props.Header, innerWidth, 80, theme),
+		woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: woxwidget.Key(props.ScrollID), Width: max(float32(0), width-16), Height: max(float32(1), height-80), KeepVisibleKey: keepVisible,
+			Content: woxwidget.Container{Width: innerWidth, Padding: woxwidget.Insets{Top: 8, Bottom: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: content}}, Theme: theme, ThumbColor: theme.Text}),
+	}}}
 }
 
-// pluginFormTabBody renders the shared hint box and scrollable form rows used by plugin detail tabs.
-func pluginFormTabBody(form *PluginFormProps, width, height float32, scrollID string, theme woxcomponent.ControlTheme) woxwidget.Widget {
+func pluginDetailCopy(text string, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	return woxwidget.TextBlock{Value: text, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: theme.TextSecondary}
+}
+
+// pluginFormContent lets sections grow naturally inside the page's shared scroll surface.
+func pluginFormContent(form *PluginFormProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	if form == nil {
 		return nil
 	}
 	if len(form.Rows) == 0 {
-		return pluginEmptySettings(form.EmptyTitle, form.EmptyDescription, width, height, theme)
+		return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{pluginDetailCopy(form.EmptyTitle, width, theme), pluginDetailCopy(form.EmptyDescription, width, theme)}}
 	}
-	formRows := form.Rows
+	rows := form.Rows
 	if form.Intro != "" {
-		intro := woxcomponent.WoxHintBox(woxcomponent.HintBoxProps{
-			Text: form.Intro, Width: width, MaxLines: 2, Icon: form.IntroIcon, Accent: form.IntroAccent, Theme: theme,
-		})
-		formRows = append([]woxwidget.Widget{intro, woxwidget.Container{Height: 6}}, formRows...)
+		rows = append([]woxwidget.Widget{woxcomponent.WoxHintBox(woxcomponent.HintBoxProps{Text: form.Intro, Width: width, Icon: form.IntroIcon, Accent: form.IntroAccent, Theme: theme})}, rows...)
 	}
-	return woxwidget.ScrollView{
-		Key: woxwidget.Key(scrollID), ID: scrollID, Width: width, Height: height,
-		KeepVisibleKey: form.KeepVisibleKey,
-		Child:          woxwidget.Container{Width: width, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: formRows}},
-	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}
 }
 
 func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
@@ -475,142 +479,6 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 	}}}
 }
 
-// pluginEmptySettings matches Flutter's centered empty-state hierarchy without
-// coupling the plugin view to a platform icon.
-func pluginEmptySettings(title, description string, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	contentWidth := min(float32(430), max(float32(0), width-32))
-	children := []woxwidget.Widget{
-		catalogCenteredText(contentWidth, title, woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, theme.Text),
-	}
-	if description != "" {
-		children = append(children, woxwidget.TextBlock{
-			Value: description, Width: contentWidth, MaxLines: 2, LineHeight: 19, Centered: true,
-			Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary,
-		})
-	}
-	content := woxwidget.Container{
-		Width: contentWidth,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
-	}
-	return woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.45, Child: content}
-}
-
-// PluginTab contains one plugin detail destination.
-type PluginTab struct {
-	ID    string
-	Label string
-	Width float32
-}
-
-// PluginTabsProps contains the available tabs and selection action.
-type PluginTabsProps struct {
-	Width    float32
-	Height   float32
-	Active   string
-	Tabs     []PluginTab
-	Theme    woxcomponent.ControlTheme
-	OnSelect func(string)
-}
-
-type pluginDetailTabProps struct {
-	ID             string
-	Label          string
-	Width          float32
-	Height         float32
-	IndicatorWidth float32
-	TextColor      woxui.Color
-	Underline      woxui.Color
-	HoverUnderline woxui.Color
-	Selected       bool
-	OnTap          func()
-}
-
-type pluginDetailTabState struct {
-	hovered bool
-}
-
-// pluginDetailTab builds one tab with retained hover state.
-func pluginDetailTab(props pluginDetailTabProps) woxwidget.Widget {
-	return woxwidget.Stateful{
-		Key: woxwidget.Key(props.ID), Type: (*pluginDetailTabState)(nil), Widget: props,
-		CreateState: func() woxwidget.State { return &pluginDetailTabState{} },
-	}
-}
-
-func (s *pluginDetailTabState) InitState(_ woxwidget.StateContext, _ any) {}
-
-func (s *pluginDetailTabState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
-
-func (s *pluginDetailTabState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
-	props := widget.(pluginDetailTabProps)
-	underline := props.Underline
-	if s.hovered && !props.Selected {
-		underline = props.HoverUnderline
-	}
-	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnHoverAt: func(inside bool, _ woxui.Rect) {
-		if inside != s.hovered {
-			context.SetState(func() { s.hovered = inside })
-		}
-	}, Child: woxwidget.Container{Width: props.Width, Height: props.Height - 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Align{Width: props.Width, Height: props.Height - 3, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 14}, Color: props.TextColor}},
-		woxwidget.Align{Width: props.Width, Height: 2, Horizontal: 0.5, Child: woxwidget.Container{Width: props.IndicatorWidth, Height: 2, Color: underline}},
-	}}}}
-}
-
-func (s *pluginDetailTabState) Dispose() {}
-
-// PluginTabs builds the plugin detail tab strip.
-func PluginTabs(props PluginTabsProps) woxwidget.Widget {
-	children := make([]woxwidget.Widget, 0, len(props.Tabs))
-	for _, tab := range props.Tabs {
-		underline := woxui.Color{}
-		color := props.Theme.Text
-		if tab.ID == props.Active {
-			underline = props.Theme.Focus
-			color = props.Theme.InputText
-		}
-		indicatorWidth := max(float32(32), tab.Width-24)
-		hoverUnderline := props.Theme.Focus
-		hoverUnderline.A /= 2
-		tabID := tab.ID
-		children = append(children, pluginDetailTab(pluginDetailTabProps{
-			ID: "plugin-detail-tab-" + tab.ID, Label: tab.Label, Width: tab.Width, Height: props.Height,
-			IndicatorWidth: indicatorWidth, TextColor: color, Underline: underline,
-			HoverUnderline: hoverUnderline, Selected: tab.ID == props.Active,
-			OnTap: func() {
-				if props.OnSelect != nil {
-					props.OnSelect(tabID)
-				}
-			},
-		}))
-	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
-		woxwidget.Container{Width: props.Width, Height: 1, Color: props.Theme.Border},
-	}}}
-}
-
-// pluginMetadataTab renders description, empty, or tabular metadata in one scroll surface.
-func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollID string, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	rows := make([]woxwidget.Widget, 0, len(props.Items)+1)
-	if props.DescriptionOnly {
-		rows = append(rows, woxwidget.TextBlock{Value: props.Description, Width: width, Height: max(float32(100), height-30), MaxLines: 20, Style: woxui.TextStyle{Size: 13}, LineHeight: 21, Color: theme.TextSecondary})
-	} else if props.EmptyTitle != "" {
-		return pluginEmptySettings(props.EmptyTitle, props.EmptyDescription, width, height, theme)
-	} else {
-		if props.Header != "" {
-			rows = append(rows, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Bottom: 8}, Child: woxwidget.TextBlock{Value: props.Header, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}})
-		}
-		for _, item := range props.Items {
-			rows = append(rows, pluginMetadataRow(item, width, theme))
-		}
-	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 18}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key(scrollID), FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: theme, ThumbColor: theme.Text,
-	})}
-}
-
 // pluginMetadataRow keeps access names and explanations readable at narrow detail widths.
 func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	border := theme.Border
@@ -624,49 +492,29 @@ func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponen
 	}}}
 }
 
-// pluginStoreDetail mirrors the identity, actions, tabs, and content hierarchy of the Flutter store route.
+// pluginStoreDetail supplies read-only content to the same detail surface as installed plugins.
 func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	innerWidth := max(float32(0), width-32)
-	innerHeight := max(float32(0), height-24)
-	const headerHeight = float32(80)
-	const tabHeight = float32(44)
-	header := pluginDetailHeader(PluginHeaderProps{
-		Name: props.Name, Version: props.Version, Author: props.Author, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management,
-	}, innerWidth, headerHeight, theme)
-	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
-	bodyHeight := max(float32(1), innerHeight-headerHeight-tabHeight)
-	description := (*PluginStoreDetailProps)(nil)
-	if props.ActiveTab == "description" {
-		description = &props
-	}
-	body := pluginDetailTabBody(PluginDetailTabBodyProps{
-		ActiveTab: props.ActiveTab, Description: description, Form: props.TabForm, Metadata: props.Metadata,
-		Width: innerWidth, Height: bodyHeight, ScrollID: "plugin-detail-" + props.ActiveTab, Theme: theme,
-	})
-	children := []woxwidget.Widget{header, tabs, body}
-	if props.Error != "" {
-		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: theme.Error})
-	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 16, Right: 16, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	return pluginEditor(PluginEditorProps{
+		Header:   PluginHeaderProps{Name: props.Name, Version: props.Version, Author: props.Author, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management},
+		ScrollID: props.ScrollID, DescriptionDetail: &props, Keywords: props.Keywords, Commands: props.Commands, Metadata: props.Metadata, Error: props.Error,
+	}, width, height, theme)
 }
 
-// pluginStoreDescription renders the description metadata and the first manifest screenshot.
-func pluginStoreDescription(props PluginStoreDetailProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	const topPadding = float32(16)
-	children := []woxwidget.Widget{
-		woxwidget.TextBlock{Value: props.Description, Width: width, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.Text},
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			pluginStoreChip(props.Runtime, props.RuntimeIcon, nil, theme),
-			pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
-		}},
-	}
+// pluginStoreDescriptionContent shares intrinsic description layout with the installed page.
+func pluginStoreDescriptionContent(props PluginStoreDetailProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	metadata := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Gesture{ID: "plugin-runtime", OnHoverAt: props.OnRuntimeHover, Child: pluginStoreChip(props.Runtime, props.RuntimeIcon, nil, theme)},
+		pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
+	}}
+	children := []woxwidget.Widget{woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			return woxwidget.TextBlock{Value: props.Description, Width: size.Width, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.Text}
+		}}}, metadata,
+	}}}
 	if shot := pluginStoreScreenshot(props, width, theme); shot != nil {
 		children = append(children, shot)
 	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "plugin-store-description-scroll", FillWidth: true, FillHeight: true,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: children}, Theme: theme, ThumbColor: theme.Text,
-	})}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: children}
 }
 
 // pluginStoreScreenshot sizes the manifest preview to the description width so URL images keep their aspect ratio.
@@ -704,7 +552,7 @@ func pluginStoreChip(label string, icon *woxui.Image, onTap func(), theme woxcom
 	}
 	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary})
 	return woxwidget.Gesture{ID: "plugin-store-chip-" + label, OnTap: onTap, Child: woxwidget.Container{
-		Width: width, Height: 28, Radius: 7, Color: theme.Surface,
+		Width: width, Height: 32, Radius: 4,
 		Padding: woxwidget.Insets{Left: 10, Right: 8}, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
 	}}
 }

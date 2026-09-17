@@ -46,9 +46,35 @@ func (a *App) reloadTranslations() error {
 		}
 	}
 	a.translationsMu.Lock()
+	languageChanged := a.translationsLanguage != "" && a.translationsLanguage != string(langCode)
+	a.translationsLanguage = string(langCode)
 	a.translations = translations
 	a.translationsMu.Unlock()
 	a.translationsRevision.Add(1)
+	if languageChanged {
+		var reload, store bool
+		if err := a.runOnUI("invalidate translated plugin catalogs", func() {
+			// Catalog entries contain already translated metadata, unlike ordinary UI labels.
+			a.pluginSettings.memoryRevision++
+			a.pluginSettings.invalidateCachedPlugins(false)
+			a.pluginSettings.invalidateCachedPlugins(true)
+			a.pluginSettings.SetPluginsLoaded(false)
+			a.pluginSettings.SetPluginsLoading(false)
+			a.settingsSearch.revision++
+			a.settingsSearch.SetPlugins(nil)
+			a.settingsSearch.SetLoaded(false)
+			a.settingsSearch.SetLoading(false)
+			reload = a.settingsOpen && a.settingTab == "plugins"
+			store = a.pluginSettings.PluginsStore()
+		}); err != nil {
+			return err
+		}
+		if reload {
+			if err := a.reloadPlugins(store, ""); err != nil {
+				return err
+			}
+		}
+	}
 	a.invalidateAllWindows()
 	return nil
 }

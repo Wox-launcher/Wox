@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -130,15 +131,10 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	}
 
 	form := plugins.PluginForm
-	detailTab := plugins.PluginDetailTab
-	if detailTab == "" {
-		detailTab = "settings"
-	}
 	editor := &launcherview.PluginEditorProps{
-		Header:      a.pluginHeaderProps(snapshot, plugin, imageScale),
-		ActiveTab:   detailTab,
-		Tabs:        a.pluginDetailTabs(),
-		OnSelectTab: a.selectPluginDetailTab,
+		Header:   a.pluginHeaderProps(snapshot, plugin, imageScale),
+		ScrollID: "plugin-detail-" + plugin.ID,
+		Error:    plugins.PluginOperationError,
 	}
 	callbacks := formFieldCallbacks{
 		idPrefix:          "plugin-settings",
@@ -163,48 +159,34 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	if form.statusError {
 		callbacks.serviceError = form.status
 	}
-	if detailTab == "description" {
-		editor.DescriptionDetail = a.pluginStoreDetailProps(snapshot, plugin, max(float32(0), width-80), imageScale)
-		props.Editor = editor
-		return props
-	}
-	if detailTab == "keywords" {
-		keywordDefinition := form.definitions[0]
-		innerWidth := max(float32(0), width-32)
-		keywordTable := a.formTableFieldProps(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)
-		keywordTable.Title = a.translate("i18n:ui_plugin_tab_trigger_keywords")
-		keywordTable.Description = a.translate("i18n:ui_plugin_trigger_keywords_tip")
-		for index := range keywordTable.Rows {
-			if len(keywordTable.Rows[index].Cells) > 0 && keywordTable.Rows[index].Cells[0].Text == "*" {
-				keywordTable.Rows[index].Cells[0].Text = a.translate("i18n:ui_plugin_trigger_keyword_global")
-			}
-		}
-		accent := snapshot.palette.Info
-		editor.Form = a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
-			woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
-		}, accent)
-		editor.Form.KeepVisibleKey = pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 0)
-		props.Editor = editor
-		return props
-	}
-	if detailTab == "commands" {
-		innerWidth := max(float32(0), width-32)
-		editor.Form = a.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true)
-		props.Editor = editor
-		return props
-	}
-	if detailTab != "settings" {
-		metadata := a.pluginMetadataProps(plugin, detailTab)
-		editor.Metadata = &metadata
-		props.Editor = editor
-		return props
-	}
-
+	editor.DescriptionDetail = a.pluginStoreDetailProps(snapshot, plugin, width, imageScale)
+	metadata := a.pluginMetadataProps(plugin, "privacy")
+	editor.Metadata = &metadata
+	keywordDefinition := form.definitions[0]
 	innerWidth := max(float32(0), width-32)
+	keywordTable := a.formTableFieldProps(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)
+	keywordTable.Title = ""
+	keywordTable.Description = a.translate("i18n:ui_plugin_trigger_keywords_tip")
+	for index := range keywordTable.Rows {
+		if len(keywordTable.Rows[index].Cells) > 0 && keywordTable.Rows[index].Cells[0].Text == "*" {
+			keywordTable.Rows[index].Cells[0].Text = a.translate("i18n:ui_plugin_trigger_keyword_global")
+		}
+	}
+	accent := snapshot.palette.Info
+	editor.Keywords = a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
+		woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
+	}, accent)
+	editor.Keywords.SectionLabel = a.translate("i18n:ui_plugin_tab_trigger_keywords")
+	editor.Commands = a.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true)
+
+	keepVisibleKey := pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 0)
 	settingDefinitions := form.definitions[1:]
 	rows := make([]woxwidget.Widget, 0, len(settingDefinitions))
 	for index, definition := range settingDefinitions {
 		formIndex := index + 1
+		if snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key {
+			keepVisibleKey = pluginSettingRowKey(formIndex)
+		}
 		field := a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, 0)
 		target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 			Width: innerWidth, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette,
@@ -212,7 +194,8 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		rows = append(rows, woxwidget.Keyed{Key: pluginSettingRowKey(formIndex), Child: target})
 	}
 	editor.Form = &launcherview.PluginFormProps{
-		Rows: rows, KeepVisibleKey: pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 1),
+		SectionLabel: a.translate("i18n:ui_plugin_tab_settings"),
+		Rows:         rows, KeepVisibleKey: keepVisibleKey,
 		EmptyTitle: a.translate("i18n:ui_plugin_no_settings"), EmptyDescription: a.translate("i18n:ui_plugin_no_settings_subtitle"),
 	}
 	props.Editor = editor
@@ -243,9 +226,11 @@ func pluginSettingRowKey(index int) woxwidget.Key {
 	return woxwidget.Key(fmt.Sprintf("plugin-setting-row-%d", index))
 }
 
-// pluginSettingKeepVisibleKey maps form focus to a measured row on the active plugin tab.
+// pluginSettingKeepVisibleKey maps form focus to a measured row in the plugin detail page.
 func pluginSettingKeepVisibleKey(fields formFieldsSnapshot, firstVisible int) woxwidget.Key {
-	if fields.focused < firstVisible || fields.focused >= len(fields.definitions) {
+	// A newly selected plugin preselects a field without activating it. Scrolling to
+	// that field would skip the description and jump again when screenshots load.
+	if !fields.active || fields.focused < firstVisible || fields.focused >= len(fields.definitions) {
 		return ""
 	}
 	return pluginSettingRowKey(fields.focused)
@@ -259,54 +244,12 @@ func (a *App) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettings
 	}
 }
 
-func (a *App) pluginDetailTabs() []launcherview.PluginTab {
-	return []launcherview.PluginTab{
-		a.resolvedPluginTab("settings", a.translate("i18n:ui_plugin_tab_settings")),
-		a.resolvedPluginTab("description", a.translate("i18n:ui_plugin_tab_description")),
-		a.resolvedPluginTab("keywords", a.translate("i18n:ui_plugin_tab_trigger_keywords")),
-		a.resolvedPluginTab("commands", a.translate("i18n:ui_plugin_tab_commands")),
-		a.resolvedPluginTab("privacy", a.translate("i18n:ui_plugin_tab_privacy")),
-	}
-}
-
-func (a *App) pluginStoreDetailTabs() []launcherview.PluginTab {
-	return []launcherview.PluginTab{
-		a.resolvedPluginTab("description", a.translate("i18n:ui_plugin_tab_description")),
-		a.resolvedPluginTab("keywords", a.translate("i18n:ui_plugin_tab_trigger_keywords")),
-		a.resolvedPluginTab("commands", a.translate("i18n:ui_plugin_tab_commands")),
-		a.resolvedPluginTab("privacy", a.translate("i18n:ui_plugin_tab_privacy")),
-	}
-}
-
-// resolvedPluginTab sizes localized labels like Flutter's scrollable content-width tabs.
-func (a *App) resolvedPluginTab(id, label string) launcherview.PluginTab {
-	width := float32(56)
-	if window := a.settingsNativeWindow(); window != nil {
-		if metrics, err := window.MeasureText(label, woxui.TextStyle{Size: 13}); err == nil {
-			width = max(width, metrics.Size.Width+24)
-		}
-	}
-	return launcherview.PluginTab{ID: id, Label: label, Width: width}
-}
-
 func (a *App) pluginDetailIntroFormProps(snapshot settingsSnapshot, imageScale float32, intro string, rows []woxwidget.Widget, accent woxui.Color) *launcherview.PluginFormProps {
 	return &launcherview.PluginFormProps{
 		Rows:        rows,
 		Intro:       intro,
 		IntroIcon:   a.imageForTint(settingNavIconSource("about"), &accent, physicalImageSize(16, imageScale)),
 		IntroAccent: accent,
-	}
-}
-
-// pluginDetailTabFormProps builds the shared hint box and readonly table used by store and installed plugin tabs.
-func (a *App) pluginDetailTabFormProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, tab string, width, imageScale float32, readOnly bool) *launcherview.PluginFormProps {
-	switch tab {
-	case "keywords":
-		return a.pluginKeywordsFormProps(snapshot, plugin, width, imageScale, readOnly)
-	case "commands":
-		return a.pluginCommandsFormProps(snapshot, plugin, width, imageScale, readOnly)
-	default:
-		return nil
 	}
 }
 
@@ -332,7 +275,6 @@ func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-keywords", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: readOnly,
-		Title:       a.translate("i18n:ui_plugin_tab_trigger_keywords"),
 		Description: a.translate("i18n:ui_plugin_trigger_keywords_tip"),
 		Columns: []launcherview.FormTableColumn{
 			{Label: a.translate("i18n:ui_plugin_trigger_keyword_column"), Tooltip: a.translate("i18n:ui_plugin_trigger_keyword_tooltip")},
@@ -340,9 +282,11 @@ func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSe
 		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_trigger_keywords"), Theme: snapshot.palette,
 	}
 	accent := snapshot.palette.Info
-	return a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
+	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-keyword-table", Child: launcherview.FormTableField(table)},
 	}, accent)
+	form.SectionLabel = a.translate("i18n:ui_plugin_tab_trigger_keywords")
+	return form
 }
 
 func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width, imageScale float32, readOnly bool) *launcherview.PluginFormProps {
@@ -357,7 +301,6 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-commands", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: readOnly,
-		Title:       a.translate("i18n:ui_plugin_tab_commands"),
 		Description: a.translate("i18n:ui_plugin_commands_tip"),
 		Columns: []launcherview.FormTableColumn{
 			{Label: a.translate("i18n:ui_plugin_command_name_column"), Width: 120},
@@ -366,9 +309,11 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), Theme: snapshot.palette,
 	}
 	accent := snapshot.palette.Info
-	return a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
+	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-command-table", Child: launcherview.FormTableField(table)},
 	}, accent)
+	form.SectionLabel = a.translate("i18n:ui_plugin_tab_commands")
+	return form
 }
 
 // pluginMetadataProps restores Flutter's non-editing plugin detail tabs from core metadata.
@@ -379,13 +324,13 @@ func (a *App) pluginMetadataProps(plugin pluginSettingsPlugin, tab string) launc
 		props.DescriptionOnly = true
 		props.Description = plugin.Description
 	case "privacy":
+		props.Header = a.translate("i18n:ui_plugin_tab_privacy")
 		accesses := pluginPrivacyAccesses(plugin.Features)
 		if len(accesses) == 0 {
 			props.EmptyTitle = a.translate("i18n:ui_plugin_no_data_access")
 			props.EmptyDescription = a.translate("i18n:ui_plugin_no_data_access_subtitle")
 			break
 		}
-		props.Header = a.translate("i18n:ui_plugin_data_access_title")
 		for _, access := range accesses {
 			props.Items = append(props.Items, launcherview.PluginMetadataItem{Title: pluginPrivacyTitle(a, access), Description: pluginPrivacyDescription(a, access)})
 		}
@@ -476,10 +421,6 @@ func pluginPrivacyTitle(a *App, access string) string {
 
 func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width, imageScale float32) *launcherview.PluginStoreDetailProps {
 	plugins := snapshot.plugins
-	activeTab := plugins.PluginDetailTab
-	if activeTab == "" || activeTab == "settings" {
-		activeTab = "description"
-	}
 	websiteLabel := ""
 	websiteChipLabel := ""
 	var onWebsite func()
@@ -487,12 +428,14 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 	var websiteIcon *woxui.Image
 	if strings.TrimSpace(plugin.Website) != "" {
 		websiteLabel = a.translate("i18n:ui_plugin_website")
-		websiteChipLabel = websiteLabel + " ↗"
+		websiteChipLabel = websiteLabel
 		onWebsite = a.openSelectedPluginWebsite
 		iconTint := snapshot.palette.Text
 		externalIcon = a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale))
-		if strings.Contains(strings.ToLower(plugin.Website), "github.com") {
-			websiteChipLabel = "GitHub ↗"
+		websiteIcon = externalIcon
+		websiteURL, _ := url.Parse(strings.TrimSpace(plugin.Website))
+		if websiteURL != nil && (strings.EqualFold(websiteURL.Hostname(), "github.com") || strings.EqualFold(websiteURL.Hostname(), "gist.github.com") || strings.EqualFold(websiteURL.Hostname(), "www.github.com")) {
+			websiteChipLabel = "GitHub"
 			websiteIcon = a.imageForTint(pluginMetadataIconSource("github"), &iconTint, physicalImageSize(14, imageScale))
 		}
 	}
@@ -504,7 +447,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 	var screenshot *woxui.Image
 	screenshotLoading := false
 	var onScreenshot func()
-	if activeTab == "description" && len(plugin.ScreenshotURLs) > 0 {
+	if len(plugin.ScreenshotURLs) > 0 {
 		source := woxImage{ImageType: "url", ImageData: plugin.ScreenshotURLs[0]}
 		// Request a high-res decode from the detail width. Display height is derived later from
 		// the description content width so store padding cannot stretch the aspect ratio.
@@ -515,22 +458,19 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		onScreenshot = func() { a.openPreviewImageOverlay(source) }
 	}
 	contentWidth := max(float32(0), width-32)
-	var tabForm *launcherview.PluginFormProps
-	var metadata *launcherview.PluginMetadataProps
-	switch activeTab {
-	case "keywords", "commands":
-		tabForm = a.pluginDetailTabFormProps(snapshot, plugin, activeTab, contentWidth, imageScale, true)
-	case "privacy":
-		meta := a.pluginMetadataProps(plugin, activeTab)
-		metadata = &meta
-	}
+	metadata := a.pluginMetadataProps(plugin, "privacy")
 	return &launcherview.PluginStoreDetailProps{
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel,
 		WebsiteLabel: websiteLabel, WebsiteChipLabel: websiteChipLabel,
 		Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
+		OnRuntimeHover: func(inside bool, anchor woxui.Rect) {
+			a.setSettingChoiceTooltip(inside, a.translate("i18n:ui_plugin_filter_runtime")+": "+runtimeLabel, anchor)
+		},
 		FallbackColor: resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
-		ActiveTab: activeTab, Tabs: a.pluginStoreDetailTabs(), TabForm: tabForm, Metadata: metadata,
-		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot, OnSelectTab: a.selectPluginDetailTab,
+		ScrollID: "plugin-detail-" + plugin.ID, Metadata: &metadata,
+		Keywords:   a.pluginKeywordsFormProps(snapshot, plugin, contentWidth, imageScale, true),
+		Commands:   a.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true),
+		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot,
 	}
 }
 

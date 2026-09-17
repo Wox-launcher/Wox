@@ -42,6 +42,7 @@ type App struct {
 	queryTabFeedback     uint64
 	// These narrow locks protect the few resources intentionally accessed outside the UI thread.
 	translationsMu         sync.RWMutex
+	translationsLanguage   string
 	terminalSubscriptionMu sync.Mutex
 	unsubscribersMu        sync.Mutex
 	tooltipMu              sync.Mutex

@@ -27,6 +27,9 @@ func runtimeIconSource(runtime string) woxImage {
 }
 
 func pluginMetadataIconSource(kind string) woxImage {
+	if kind == "go" {
+		return fromCoreImage(icons.Get(icons.ControlCode))
+	}
 	if kind == "nodejs" || kind == "python" {
 		return runtimeIconSource(kind)
 	}

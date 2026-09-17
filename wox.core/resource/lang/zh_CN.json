@@ -2914,7 +2914,7 @@
   "ui_hotkey_overview_webview_open_in_browser": "在系统浏览器中打开 Webview 预览",
   "ui_hotkey_overview_webview_inspector": "打开 Webview 检查器",
   "plugin_dictation_plugin_name": "听写",
-  "plugin_dictation_plugin_description": "使用本地语音识别将语音转为文字。对着麦克风说话，识别出的文字会自动输入到当前焦点窗口。",
+  "plugin_dictation_plugin_description": "将语音转为文字并输入当前窗口。",
   "plugin_dictation_settings_head": "听写设置",
   "plugin_dictation_hotkey": "快捷键",
   "plugin_dictation_hotkey_tooltip": "支持按一次修饰键或者按住修饰键录音",

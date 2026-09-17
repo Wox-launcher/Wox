@@ -2913,7 +2913,7 @@
   "ui_hotkey_overview_webview_open_in_browser": "웹뷰 미리 보기를 브라우저에서 열기",
   "ui_hotkey_overview_webview_inspector": "웹뷰 인스펙터 열기",
   "plugin_dictation_plugin_name": "받아쓰기",
-  "plugin_dictation_plugin_description": "로컬 음성 인식을 사용한 음성-텍스트 받아쓰기입니다. 마이크에 말하면 인식된 텍스트가 포커스된 창에 입력됩니다.",
+  "plugin_dictation_plugin_description": "음성을 텍스트로 변환하여 현재 창에 입력합니다.",
   "plugin_dictation_settings_head": "받아쓰기 설정",
   "plugin_dictation_hotkey": "단축키",
   "plugin_dictation_hotkey_tooltip": "보조 키를 한 번 누르거나 길게 눌러 녹음하는 방식을 지원합니다.",

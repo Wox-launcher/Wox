@@ -70,55 +70,6 @@ func TestPluginSettingsFilterPanelUsesAvailableWidth(t *testing.T) {
 	}
 }
 
-func TestPluginTabsProvideHoverFeedback(t *testing.T) {
-	theme := woxcomponent.ControlTheme{Focus: woxui.Color{R: 80, G: 90, B: 100, A: 255}, Text: woxui.Color{A: 255}}
-	tabs := PluginTabs(PluginTabsProps{
-		Width: 240, Height: 44, Active: "description", Theme: theme,
-		Tabs: []PluginTab{{ID: "description", Label: "Description", Width: 120}, {ID: "commands", Label: "Commands", Width: 96}},
-	}).(woxwidget.Container)
-	row := tabs.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	stateful := row.Children[1].(woxwidget.Stateful)
-	state := stateful.CreateState().(*pluginDetailTabState)
-	gesture := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
-	state.hovered = true
-	hovered := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
-	wantHover := theme.Focus
-	wantHover.A /= 2
-
-	if gesture.ID != "plugin-detail-tab-commands" || gesture.OnTap == nil || gesture.OnHoverAt == nil {
-		t.Fatalf("tab gesture = id %q tap %v hover %v, want hoverable tab", gesture.ID, gesture.OnTap != nil, gesture.OnHoverAt != nil)
-	}
-	hoveredContainer := hovered.Child.(woxwidget.Container)
-	hoveredIndicator := hoveredContainer.Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Container)
-	if hoveredContainer.Color != (woxui.Color{}) || hoveredIndicator.Color != wantHover {
-		t.Fatalf("hovered tab = background %#v underline %#v, want no background and underline %#v", hoveredContainer.Color, hoveredIndicator.Color, wantHover)
-	}
-}
-
-func TestPluginTabsUseRegularLabelWeight(t *testing.T) {
-	tabs := PluginTabs(PluginTabsProps{
-		Width: 240, Height: 44, Active: "settings", Theme: woxcomponent.ControlTheme{},
-		Tabs: []PluginTab{{ID: "settings", Label: "Settings", Width: 120}, {ID: "commands", Label: "Commands", Width: 96}},
-	}).(woxwidget.Container)
-	row := tabs.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-
-	selected := pluginTabLabel(t, row.Children[0])
-	idle := pluginTabLabel(t, row.Children[1])
-	if selected.Style.Size != 14 || selected.Style.Weight != woxui.FontWeightRegular {
-		t.Fatalf("selected tab label = %+v, want 14 regular", selected.Style)
-	}
-	if idle.Style.Size != 14 || idle.Style.Weight != woxui.FontWeightRegular {
-		t.Fatalf("idle tab label = %+v, want the same 14 regular weight as the selected tab", idle.Style)
-	}
-}
-
-func pluginTabLabel(t *testing.T, tab woxwidget.Widget) woxwidget.Text {
-	t.Helper()
-	stateful := tab.(woxwidget.Stateful)
-	gesture := stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
-	return gesture.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Text)
-}
-
 func TestPluginListLoadingUsesCenteredIndicator(t *testing.T) {
 	loading := PluginList(PluginListProps{Width: 260, Height: 660, Message: "Loading"}).(woxwidget.Align)
 	if loading.Width != 260 || loading.Height != 660 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
@@ -383,199 +334,75 @@ func TestPluginStoreHeaderCentersActionsWithoutDuplicateWebsite(t *testing.T) {
 	}
 }
 
-func TestPluginStoreDetailTabsMatchInstalledEditorMetrics(t *testing.T) {
-	tabs := []PluginTab{{ID: "description", Label: "Description", Width: 96}, {ID: "keywords", Label: "Keywords", Width: 88}}
-	store := pluginStoreDetail(PluginStoreDetailProps{
-		Name: "Shell", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "description", Tabs: tabs,
-	}, 800, 600, woxcomponent.ControlTheme{})
-
-	container := store.(woxwidget.Container)
-	if container.Padding.Left != 16 || container.Padding.Right != 16 {
-		t.Fatalf("store detail padding = %+v, want the installed editor's 16px inset", container.Padding)
-	}
-	storeTabs := container.Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
-
-	editor := pluginEditor(PluginEditorProps{
-		ActiveTab: "settings",
-		Tabs:      []PluginTab{{ID: "settings", Label: "Settings", Width: 80}, {ID: "keywords", Label: "Keywords", Width: 88}},
-	}, 800, 600, woxcomponent.ControlTheme{})
-	editorTabs := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
-
-	if storeTabs.Height != editorTabs.Height || storeTabs.Width != editorTabs.Width {
-		t.Fatalf("store tab strip %vx%v != installed %vx%v", storeTabs.Width, storeTabs.Height, editorTabs.Width, editorTabs.Height)
-	}
-	if storeTabs.Height != 44 {
-		t.Fatalf("store detail tab strip height = %v, want the installed editor's 44", storeTabs.Height)
-	}
-}
-
-func TestPluginStoreKeywordsUseSharedFormTabBody(t *testing.T) {
-	accent := woxui.Color{R: 33, G: 150, B: 243, A: 255}
-	table := FormTableField(FormTableFieldProps{
-		ID: "plugin-keywords", Width: 720, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
-		Columns: []FormTableColumn{{Label: "Keyword", Tooltip: "The keyword that triggers this plugin."}},
-		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "awake"}}}},
-		Theme:   woxcomponent.ControlTheme{},
-	})
-	store := pluginStoreDetail(PluginStoreDetailProps{
-		Name: "Awake", Version: "0.0.4", Author: "qianlifeng", Runtime: "NodeJS", ActiveTab: "keywords",
-		Tabs: []PluginTab{{ID: "keywords", Label: "Keywords", Width: 88}},
-		TabForm: &PluginFormProps{
-			Intro:       "Trigger keywords are prefixes you type in Wox to activate this plugin.",
-			Rows:        []woxwidget.Widget{table},
-			IntroAccent: accent,
-		},
-	}, 800, 600, woxcomponent.ControlTheme{Background: woxui.Color{R: 30, G: 30, B: 30, A: 255}})
-
-	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
-	rows := body.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
-	if len(rows) != 3 {
-		t.Fatalf("store keyword body rows = %d, want hint box, spacer, and keyword table", len(rows))
-	}
-	if _, ok := rows[0].(woxwidget.Container); !ok {
-		t.Fatalf("store keyword intro = %T, want hint box container", rows[0])
-	}
-	if _, ok := rows[2].(woxwidget.Container); !ok {
-		t.Fatalf("store keyword table = %T, want readonly form table", rows[2])
-	}
-}
-
-func TestPluginStoreCommandsUseSharedFormTabBody(t *testing.T) {
-	table := FormTableField(FormTableFieldProps{
-		ID: "plugin-commands", Width: 720, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
-		Columns: []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Description"}},
-		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "fix"}, {Text: "Fix selection"}}}},
-		Theme:   woxcomponent.ControlTheme{},
-	})
-	store := pluginStoreDetail(PluginStoreDetailProps{
-		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "commands",
-		Tabs:    []PluginTab{{ID: "commands", Label: "Commands", Width: 96}},
-		TabForm: &PluginFormProps{Intro: "Commands are subcommands after the trigger keyword.", Rows: []woxwidget.Widget{table}},
-	}, 800, 600, woxcomponent.ControlTheme{})
-
-	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
-	if got := body.ID; got != "plugin-detail-commands" {
-		t.Fatalf("store commands scroll id = %q, want shared plugin detail body id", got)
+func TestPluginDetailsShareDescriptionFirstLayout(t *testing.T) {
+	form := &PluginFormProps{SectionLabel: "Settings", Rows: []woxwidget.Widget{woxwidget.Keyed{Key: "plugin-setting-row-1", Child: woxwidget.Container{Height: 800}}}, KeepVisibleKey: "plugin-setting-row-1"}
+	keywords := &PluginFormProps{Rows: []woxwidget.Widget{woxwidget.Text{Value: "Keywords"}}}
+	commands := &PluginFormProps{Rows: []woxwidget.Widget{woxwidget.Text{Value: "Commands"}}}
+	metadata := &PluginMetadataProps{EmptyTitle: "No data access", EmptyDescription: "Redundant explanation"}
+	description := PluginStoreDetailProps{ScrollID: "plugin-detail-example", Description: "Run shell commands", Runtime: "Go", Keywords: keywords, Commands: commands, Metadata: metadata, Error: "Operation failed"}
+	for _, width := range []float32{340, 800} {
+		for _, installed := range []bool{false, true} {
+			props := PluginDetailProps{Width: width, Height: 500, Store: &description}
+			if installed {
+				props.Store = nil
+				props.Editor = &PluginEditorProps{ScrollID: description.ScrollID, Form: form, DescriptionDetail: &description, Keywords: keywords, Commands: commands, Metadata: metadata, Error: description.Error}
+			}
+			page := PluginDetail(props).(woxwidget.Container)
+			children := page.Child.(woxwidget.Flex).Children
+			if len(children) != 2 {
+				t.Fatal("want header and shared scroll without tabs")
+			}
+			scroll := children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+			if scroll.Key != "plugin-detail-example" || scroll.Height != 420 || scroll.Width != width-16 {
+				t.Fatal("incorrect shared viewport")
+			}
+			if installed && scroll.KeepVisibleKey != form.KeepVisibleKey {
+				t.Fatal("lost settings focus target")
+			}
+			if scroll.Width-scroll.Content.(woxwidget.Container).Width != 16 {
+				t.Fatal("scrollbar must have a 16-unit gutter outside the content")
+			}
+			content := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
+			privacy := content[len(content)-2].(woxwidget.Flex)
+			if len(privacy.Children) != 1 {
+				t.Fatal("no-access privacy copy must be a single sentence")
+			}
+			intro := content[0].(woxwidget.Flex)
+			if intro.Children[0].(woxwidget.Flex).CrossAxisAlignment != woxwidget.CrossAxisCenter {
+				t.Fatal("description and tags must be vertically centered")
+			}
+			if intro.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 120}).(woxwidget.TextBlock).Value != description.Description {
+				t.Fatal("description must appear first without a group heading")
+			}
+			want := 8
+			if installed {
+				want = 10
+			}
+			if len(content) != want {
+				t.Fatalf("got %d content items, want %d", len(content), want)
+			}
+			if installed {
+				header := content[1].(woxwidget.Container)
+				if header.Height != 43 {
+					t.Fatal("plugin groups must use the shared settings section header")
+				}
+				if content[2].(woxwidget.Flex).Children[0].(woxwidget.Keyed).Key != "plugin-setting-row-1" {
+					t.Fatal("settings must immediately follow description")
+				}
+			}
+			if content[len(content)-1].(woxwidget.TextBlock).Value != description.Error {
+				t.Fatal("operation error must remain visible")
+			}
+		}
 	}
 }
 
-func TestPluginStorePrivacyUsesSharedMetadataTabBody(t *testing.T) {
-	metadata := PluginMetadataProps{
-		Header: "Data Access",
-		Items: []PluginMetadataItem{
-			{Title: "Active window name", Description: "Reads the active window title."},
-		},
+func TestPluginDetailOmitsEmptySettingsAndCommands(t *testing.T) {
+	page := pluginEditor(PluginEditorProps{Form: &PluginFormProps{EmptyTitle: "No settings"}, Commands: &PluginFormProps{EmptyTitle: "No commands"}, DescriptionDetail: &PluginStoreDetailProps{Description: "Description"}}, 600, 500, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	scroll := page.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if len(scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children) != 1 {
+		t.Fatal("empty settings and commands must not create placeholder groups")
 	}
-	store := pluginStoreDetail(PluginStoreDetailProps{
-		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "privacy",
-		Tabs: []PluginTab{{ID: "privacy", Label: "Privacy", Width: 80}}, Metadata: &metadata,
-	}, 800, 600, woxcomponent.ControlTheme{})
-
-	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
-	if body.Padding.Top != 18 {
-		t.Fatalf("store privacy body padding = %+v, want metadata tab top inset", body.Padding)
-	}
-}
-
-func TestPluginDetailEmptyStateUsesCenteredTitleAndSubtitle(t *testing.T) {
-	body := pluginMetadataTab(PluginMetadataProps{
-		EmptyTitle:       "This plugin requires no data access",
-		EmptyDescription: "This plugin does not request sensitive data such as the active window, browser URL, or AI model access.",
-	}, 600, 400, "plugin-detail-privacy", woxcomponent.ControlTheme{}).(woxwidget.Align)
-
-	content := body.Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	title := content.Children[0].(woxwidget.Align).Child.(woxwidget.Text)
-	description := content.Children[1].(woxwidget.TextBlock)
-	if body.Vertical != 0.45 || title.Style.Size != 18 || description.Style.Size != 12 || !description.Centered {
-		t.Fatalf("empty privacy body = vertical %v title %v subtitle %v centered %v, want centered 18px/12px copy", body.Vertical, title.Style.Size, description.Style.Size, description.Centered)
-	}
-}
-
-func TestPluginStoreCommandsEmptyStateUsesCenteredCopy(t *testing.T) {
-	store := pluginStoreDetail(PluginStoreDetailProps{
-		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "commands",
-		Tabs: []PluginTab{{ID: "commands", Label: "Commands", Width: 96}},
-		TabForm: &PluginFormProps{
-			EmptyTitle:       "This plugin has no command",
-			EmptyDescription: "This plugin does not provide subcommands after its trigger keyword. Use the trigger keyword directly.",
-		},
-	}, 800, 600, woxcomponent.ControlTheme{})
-
-	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align)
-	title := body.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Text)
-	if title.Value != "This plugin has no command" {
-		t.Fatalf("empty commands title = %q", title.Value)
-	}
-}
-
-func TestPluginEditorAutoSavingFormHasNoFooter(t *testing.T) {
-	editor := pluginEditor(PluginEditorProps{
-		Header:    PluginHeaderProps{},
-		ActiveTab: "settings",
-		Form: &PluginFormProps{
-			Rows: []woxwidget.Widget{woxwidget.Container{Width: 400, Height: 40}},
-		},
-	}, 600, 500, woxcomponent.ControlTheme{})
-
-	children := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children
-	if len(children) != 3 {
-		t.Fatalf("plugin editor child count = %d, want header, tabs, and form only", len(children))
-	}
-	if _, ok := children[2].(woxwidget.ScrollView); !ok {
-		t.Fatalf("plugin editor body type = %T, want scroll view without a save footer", children[2])
-	}
-	scroll := children[2].(woxwidget.ScrollView)
-	content := scroll.Child.(woxwidget.Container)
-	if scroll.ContentHeight != 0 || content.Height != 0 {
-		t.Fatalf("plugin form height hints = scroll %.0f content %.0f, want intrinsic child measurement", scroll.ContentHeight, content.Height)
-	}
-}
-
-func TestPluginEditorIntroUsesFlutterHintBoxStyle(t *testing.T) {
-	accent := woxui.Color{R: 33, G: 150, B: 243, A: 255}
-	icon := &woxui.Image{}
-	editor := pluginEditor(PluginEditorProps{
-		Form: &PluginFormProps{Intro: "Trigger keyword help", IntroIcon: icon, IntroAccent: accent, Rows: []woxwidget.Widget{woxwidget.Container{Height: 40}}},
-	}, 600, 500, woxcomponent.ControlTheme{Background: woxui.Color{R: 250, G: 250, B: 250, A: 255}})
-
-	scroll := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
-	rows := scroll.Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	hint := rows.Children[0].(woxwidget.Container)
-	content := hint.Child.(woxwidget.Flex)
-	if hint.Radius != 10 || hint.BorderWidth != 1 || hint.Color.A != 26 || hint.BorderColor.A != 77 {
-		t.Fatalf("hint box style = radius %v border %v colors %#v/%#v", hint.Radius, hint.BorderWidth, hint.Color, hint.BorderColor)
-	}
-	if len(content.Children) != 2 || content.Children[0].(woxwidget.Image).Source != icon {
-		t.Fatal("hint box should show the tinted info icon before its text")
-	}
-	if text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.TextBlock); text.Style.Size != 13 {
-		t.Fatalf("hint text size = %v, want Flutter 13px", text.Style.Size)
-	}
-}
-
-func TestPluginEditorDescriptionUsesSharedDetailView(t *testing.T) {
-	editor := pluginEditor(PluginEditorProps{
-		ActiveTab: "description",
-		DescriptionDetail: &PluginStoreDetailProps{
-			Name: "Shell", Description: "Run shell commands", Author: "Wox Launcher", Version: "1.0.0", Runtime: "Go", WebsiteChipLabel: "Website ↗",
-		},
-	}, 800, 600, woxcomponent.ControlTheme{})
-
-	body := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
-	if body.Padding.Left != 0 || body.Padding.Right != 0 {
-		t.Fatalf("description padding = %+v, want flush alignment with trigger-keyword/form tabs", body.Padding)
-	}
-	if body.Width != 768 {
-		t.Fatalf("description width = %v, want the shared inner detail width without an extra inset", body.Width)
-	}
-	props := body.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: body.Width, Height: body.Height - body.Padding.Top}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	detail := props.Content.(woxwidget.Flex)
-	description := detail.Children[0].(woxwidget.TextBlock)
-	metadata := detail.Children[1].(woxwidget.Flex)
-	if description.Value != "Run shell commands" || len(metadata.Children) != 2 || detail.Gap != 16 {
-		t.Fatal("description must show original text, runtime/source metadata, and consistent spacing")
-	}
-
 }
 
 func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {
@@ -1013,28 +840,49 @@ func TestPluginStoreScreenshotShowsLoadingIndicatorBeforeImageArrives(t *testing
 }
 
 func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testing.T) {
-	body := pluginStoreDescription(PluginStoreDetailProps{
+	body := pluginStoreDescriptionContent(PluginStoreDetailProps{
 		Name: "Strava", Description: "Workouts", Author: "Wox-launcher", Version: "0.0.1", Runtime: "Python",
 		ScreenshotLoading: true,
-	}, 580, 400, woxcomponent.ControlTheme{Focus: woxui.Color{A: 255}}).(woxwidget.Container)
-
-	scroll := body.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 580, Height: 400})
-	var children []woxwidget.Widget
-	switch content := scroll.(type) {
-	case woxwidget.Stateful:
-		children = content.Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
-	default:
-		// Non-overflowing content may collapse to a plain scroll body without state.
-		t.Fatalf("description scroll = %T, want resolved WoxScrollView", scroll)
-	}
-	if len(children) != 3 {
+	}, 580, woxcomponent.ControlTheme{Focus: woxui.Color{A: 255}}).(woxwidget.Flex)
+	children := body.Children
+	if len(children) != 2 {
 		t.Fatalf("description children = %d, want description, metadata, and loading placeholder", len(children))
 	}
-	if description := children[0].(woxwidget.TextBlock); description.Value != "Workouts" || description.MaxLines != 0 {
+	if description := children[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 200}).(woxwidget.TextBlock); description.Value != "Workouts" || description.MaxLines != 0 {
 		t.Fatal("description must retain the plugin text without repeating its name or author")
 	}
-	if _, ok := children[2].(woxwidget.Align); !ok {
+	if _, ok := children[1].(woxwidget.Align); !ok {
 		t.Fatal("expected compact loading placeholder")
 	}
 
+}
+
+func TestPluginScreenshotFollowsInstalledSettingsButStaysAboveStoreDetails(t *testing.T) {
+	for _, loading := range []bool{false, true} {
+		for _, installed := range []bool{false, true} {
+			description := PluginStoreDetailProps{Description: "Description", ScreenshotLoading: loading}
+			if !loading {
+				description.Screenshot = &woxui.Image{Width: 640, Height: 480}
+			}
+			props := PluginDetailProps{Width: 600, Height: 500, Store: &description}
+			if installed {
+				props.Store = nil
+				props.Editor = &PluginEditorProps{DescriptionDetail: &description, Form: &PluginFormProps{Rows: []woxwidget.Widget{woxwidget.Text{Value: "Setting"}}}}
+			}
+			page := PluginDetail(props).(woxwidget.Container)
+			scroll := page.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+			content := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
+			intro := content[0].(woxwidget.Flex)
+			if installed {
+				if len(intro.Children) != 1 || len(content) != 4 {
+					t.Fatal("installed screenshot must follow the settings")
+				}
+			} else if len(intro.Children) != 2 || len(content) != 1 {
+				t.Fatal("store screenshot must remain with the description")
+			}
+			if description.ScreenshotLoading != loading || (!loading && description.Screenshot == nil) {
+				t.Fatal("layout must not mutate source props")
+			}
+		}
+	}
 }

@@ -2915,7 +2915,7 @@
   "ui_hotkey_overview_webview_inspector": "WebView インスペクターを開く",
 
   "plugin_dictation_plugin_name": "ディクテーション",
-  "plugin_dictation_plugin_description": "ローカル音声認識を使用した音声テキスト変換。マイクに向かって話すと、認識されたテキストがフォーカスされたウィンドウに入力されます。",
+  "plugin_dictation_plugin_description": "音声を文字に変換し、現在のウィンドウに入力します。",
   "plugin_dictation_settings_head": "ディクテーション設定",
   "plugin_dictation_hotkey": "ホットキー",
   "plugin_dictation_hotkey_tooltip": "修飾キーの 1回押しまたは長押しでの記録をサポートします。",
