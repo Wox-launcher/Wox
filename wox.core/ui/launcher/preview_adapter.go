@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/common/icons"
 	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
@@ -106,6 +107,8 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return a.buildNativeFilePreview(file.NativeFilePath, file.NativeFileAutoLoad, palette, width, height)
 		case "large", "too_large":
 			return a.buildLargeFilePreview(file, palette, width, height)
+		case "folder":
+			return a.buildFolderPreview(file, palette, width, height, imageScale)
 		default:
 			// File contents are structured reader data, so keep them top-left aligned instead of using the centered quote treatment for standalone text previews.
 			return content(a.filePreviewDisplayText(file), previewColorWithOpacity(palette.previewText, 0.86))
@@ -279,11 +282,90 @@ func (a *App) buildLargeFilePreview(file filePreviewContent, palette uiPalette, 
 	})
 }
 
+// buildFolderPreview maps inspected directory metadata into the dedicated folder preview.
+func (a *App) buildFolderPreview(file filePreviewContent, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	folder := file.Folder
+	metadata := make([]string, 0, 2)
+	if modified := formatFolderPreviewTime(folder.Modified); modified != "" {
+		metadata = append(metadata, modified)
+	}
+	if items := a.folderPreviewItemsValue(folder); items != "" {
+		metadata = append(metadata, items)
+	}
+	entries := make([]previewview.FolderPreviewEntry, 0, len(folder.Entries))
+	for _, entry := range folder.Entries {
+		item := previewview.FolderPreviewEntry{Name: entry.Name, IsDir: entry.IsDir}
+		if !entry.IsDir && entry.HasSize {
+			item.Size = formatFileSize(entry.Size)
+		}
+		entries = append(entries, item)
+	}
+	more := ""
+	if remaining := folderPreviewMoreCount(folder); remaining > 0 {
+		more = strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_more_entries_not_shown"), "{count}", strconv.Itoa(remaining))
+	}
+	errorText := ""
+	if folder.Error != "" {
+		errorText = a.translate("i18n:ui_file_preview_folder_read_failed")
+	}
+	folderIcon := fromCoreImage(icons.Get(icons.PluginFolder))
+	fileIcon := fromCoreImage(icons.Get(icons.PluginFile))
+	return previewview.FolderPreviewView(previewview.FolderPreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(),
+		Path: folder.Path, Name: folder.Name, Metadata: strings.Join(metadata, "  ·  "),
+		Icon:       a.imageForSize(folderIcon, physicalImageSize(32, imageScale)),
+		FolderIcon: a.imageForSize(folderIcon, physicalImageSize(20, imageScale)),
+		FileIcon:   a.imageForSize(fileIcon, physicalImageSize(20, imageScale)),
+		Entries:    entries, More: more,
+		Empty: a.translate("i18n:ui_file_preview_folder_empty"), Error: errorText,
+	})
+}
+
+// folderPreviewItemsValue joins the shallow folder/file counts, omitting empty and unreadable folders.
+func (a *App) folderPreviewItemsValue(folder folderPreviewContent) string {
+	if folder.Error != "" || (folder.FolderCount == 0 && folder.FileCount == 0) {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if folder.FolderCount > 0 {
+		parts = append(parts, strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_folders_count"), "{count}", strconv.Itoa(folder.FolderCount)))
+	}
+	if folder.FileCount > 0 {
+		parts = append(parts, strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_files_count"), "{count}", strconv.Itoa(folder.FileCount)))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// folderPreviewTags replaces the generic FILE/size chips with folder identity and item count.
+func (a *App) folderPreviewTags(folder folderPreviewContent) []previewTag {
+	tags := []previewTag{{
+		Label:   a.translate("i18n:ui_file_preview_type_folder"),
+		Tooltip: a.translate("i18n:ui_file_preview_property_type"),
+	}}
+	total := folder.FolderCount + folder.FileCount
+	if folder.Error != "" || total == 0 {
+		return tags
+	}
+	key := "i18n:ui_file_preview_folder_items_count"
+	if !folder.CountedAll {
+		key = "i18n:ui_file_preview_folder_items_count_limited"
+	}
+	tags = append(tags, previewTag{
+		Label:   strings.ReplaceAll(a.translate(key), "{count}", strconv.Itoa(total)),
+		Tooltip: a.translate("i18n:ui_file_preview_property_items"),
+	})
+	return tags
+}
+
 // previewBodyTags resolves metadata before the body is built at its final tagged height.
 func (a *App) previewBodyTags(preview queryPreview) []previewTag {
 	switch preview.PreviewType {
 	case "file":
-		return a.filePreviewFor(preview.PreviewData).Tags
+		file := a.filePreviewFor(preview.PreviewData)
+		if file.Kind == "folder" {
+			return a.folderPreviewTags(file.Folder)
+		}
+		return file.Tags
 	case "ai_stream":
 		data, err := decodeStructuredPreview[aiStreamPreviewData](preview.PreviewData)
 		if err == nil {

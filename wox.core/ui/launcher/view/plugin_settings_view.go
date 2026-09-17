@@ -502,10 +502,14 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 
 // pluginStoreDescriptionContent shares intrinsic description layout with the installed page.
 func pluginStoreDescriptionContent(props PluginStoreDetailProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	metadata := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Gesture{ID: "plugin-runtime", OnHoverAt: props.OnRuntimeHover, Child: pluginStoreChip(props.Runtime, props.RuntimeIcon, nil, theme)},
-		pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
-	}}
+	chips := make([]woxwidget.Widget, 0, 2)
+	if props.Runtime != "" {
+		chips = append(chips, woxwidget.Gesture{ID: "plugin-runtime", OnHoverAt: props.OnRuntimeHover, Child: pluginStoreChip(props.Runtime, props.RuntimeIcon, nil, theme)})
+	}
+	if chip := pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme); chip != nil {
+		chips = append(chips, chip)
+	}
+	metadata := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: chips}
 	children := []woxwidget.Widget{woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 			return woxwidget.TextBlock{Value: props.Description, Width: size.Width, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.Text}

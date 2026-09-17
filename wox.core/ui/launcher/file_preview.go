@@ -46,6 +46,27 @@ type filePreviewContent struct {
 	TypeLabel          string
 	Limited            bool
 	DisplayLines       int
+	Folder             folderPreviewContent
+}
+
+// folderPreviewContent is a shallow directory peek used by the folder file-preview kind.
+type folderPreviewContent struct {
+	Name        string
+	Path        string
+	Modified    time.Time
+	FolderCount int
+	FileCount   int
+	CountedAll  bool
+	Entries     []folderPreviewEntry
+	Error       string
+}
+
+// folderPreviewEntry is one child shown in the folder preview list.
+type folderPreviewEntry struct {
+	Name    string
+	IsDir   bool
+	Size    int64
+	HasSize bool
 }
 
 // filePreviewFor returns cached file content without starting I/O from the frame builder.
@@ -58,8 +79,8 @@ func (a *App) filePreviewFor(path string) filePreviewContent {
 		return filePreviewContent{Kind: "info", Text: "Remote file previews require the platform web surface.\n\n" + path}
 	}
 	extension := strings.ToLower(filepath.Ext(path))
-	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
-		return filePreviewContent{Kind: "image", Image: woxImage{ImageType: "absolute", ImageData: path}, Tags: []previewTag{{Label: strings.TrimPrefix(strings.ToUpper(extension), ".")}}}
+	if isImagePreviewExtension(extension) {
+		return inspectImagePreview(path, extension)
 	}
 	if content, ok := a.filePreviews[path]; ok {
 		return content
@@ -75,7 +96,7 @@ func (a *App) prepareFilePreview(path string) {
 		return
 	}
 	extension := strings.ToLower(filepath.Ext(path))
-	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
+	if isImagePreviewExtension(extension) {
 		a.cancelScheduledFilePreview()
 		return
 	}
@@ -204,13 +225,11 @@ func inspectPreviewFile(path, extension string, forceLoad bool) filePreviewConte
 	if err != nil {
 		return filePreviewContent{Kind: "error", Text: fmt.Sprintf("Unable to inspect file:\n%s\n\n%v", path, err)}
 	}
+	if info.IsDir() {
+		return inspectFolderPreview(path, info)
+	}
 	typeLabel, tags := previewFileTypeAndTags(extension, info.Size())
 	base := filePreviewMetadata(path, typeLabel, info, tags)
-	if info.IsDir() {
-		base.Kind = "info"
-		base.Text = fmt.Sprintf("Folder\n\n%s\n\nModified %s", path, info.ModTime().Format(time.RFC1123))
-		return base
-	}
 	if !forceLoad {
 		if deferred, ok := deferredFilePreview(base, extension, info.Size()); ok {
 			return deferred
@@ -388,6 +407,21 @@ func isTooLargeFilePreview(extension string, size int64) bool {
 	return size > tooLargePreviewBytes
 }
 
+// inspectImagePreview keeps decode on the image pipeline and only stats the file for type/size tags.
+func inspectImagePreview(path, extension string) filePreviewContent {
+	image := woxImage{ImageType: "absolute", ImageData: path}
+	info, err := os.Stat(path)
+	if err != nil {
+		typeLabel := strings.TrimPrefix(strings.ToUpper(extension), ".")
+		return filePreviewContent{Kind: "image", Image: image, TypeLabel: typeLabel, Tags: []previewTag{{Label: typeLabel}}}
+	}
+	typeLabel, tags := previewFileTypeAndTags(extension, info.Size())
+	content := filePreviewMetadata(path, typeLabel, info, tags)
+	content.Kind = "image"
+	content.Image = image
+	return content
+}
+
 func previewFileTypeAndTags(extension string, size int64) (string, []previewTag) {
 	typeLabel := strings.TrimPrefix(strings.ToUpper(extension), ".")
 	if typeLabel == "" {
@@ -398,6 +432,16 @@ func previewFileTypeAndTags(extension string, size int64) (string, []previewTag)
 
 func filePreviewMetadata(path, typeLabel string, info os.FileInfo, tags []previewTag) filePreviewContent {
 	return filePreviewContent{Path: path, Size: info.Size(), Modified: info.ModTime(), TypeLabel: typeLabel, Tags: tags}
+}
+
+// isImagePreviewExtension identifies still images decoded by the launcher image pipeline.
+func isImagePreviewExtension(extension string) bool {
+	switch strings.ToLower(extension) {
+	case ".png", ".jpg", ".jpeg", ".gif":
+		return true
+	default:
+		return false
+	}
 }
 
 // isVideoPreviewExtension identifies the formats rendered by the Flutter file-preview contract.

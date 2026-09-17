@@ -24,6 +24,37 @@ func TestFilePreviewForUsesLoadingKindBeforeContentArrives(t *testing.T) {
 	}
 }
 
+func TestFilePreviewForImageIncludesSizeTag(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "preview.jpeg")
+	payload := bytes.Repeat([]byte{0x11}, 4096)
+	if err := os.WriteFile(filePath, payload, 0o600); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+
+	content := (&App{}).filePreviewFor(filePath)
+	wantSize := formatFileSize(int64(len(payload)))
+	if content.Kind != "image" || len(content.Tags) != 2 || content.Tags[0].Label != "JPEG" || content.Tags[1].Label != wantSize {
+		t.Fatalf("image preview = %#v, want JPEG and %s", content, wantSize)
+	}
+}
+
+func TestInspectImagePreviewAddsTypeAndSizeTags(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "theme.jpg")
+	payload := bytes.Repeat([]byte{0xFF}, 2048)
+	if err := os.WriteFile(filePath, payload, 0o600); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+
+	content := inspectImagePreview(filePath, ".jpg")
+	if content.Kind != "image" || content.Image.ImageData != filePath {
+		t.Fatalf("image preview = %#v, want the still-image path", content)
+	}
+	wantSize := formatFileSize(int64(len(payload)))
+	if len(content.Tags) != 2 || content.Tags[0].Label != "JPG" || content.Tags[1].Label != wantSize {
+		t.Fatalf("image tags = %#v, want JPG and %s", content.Tags, wantSize)
+	}
+}
+
 func TestInspectPreviewFileUsesWebViewForMP4(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "clip.mp4")

@@ -441,8 +441,14 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 	}
 	runtimeLabel := pluginRuntimeLabel(plugin.Runtime)
 	var runtimeIcon *woxui.Image
-	if source := pluginMetadataIconSource(strings.ToLower(plugin.Runtime)); source.ImageData != "" {
-		runtimeIcon = a.imageForSurface(source, 256, settingsPalette().Background)
+	var onRuntimeHover func(bool, woxui.Rect)
+	if runtimeLabel != "" {
+		if source := pluginMetadataIconSource(strings.ToLower(plugin.Runtime)); source.ImageData != "" {
+			runtimeIcon = a.imageForSurface(source, 256, settingsPalette().Background)
+		}
+		onRuntimeHover = func(inside bool, anchor woxui.Rect) {
+			a.setSettingChoiceTooltip(inside, a.translate("i18n:ui_plugin_filter_runtime")+": "+runtimeLabel, anchor)
+		}
 	}
 	var screenshot *woxui.Image
 	screenshotLoading := false
@@ -463,10 +469,8 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel,
 		WebsiteLabel: websiteLabel, WebsiteChipLabel: websiteChipLabel,
 		Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
-		OnRuntimeHover: func(inside bool, anchor woxui.Rect) {
-			a.setSettingChoiceTooltip(inside, a.translate("i18n:ui_plugin_filter_runtime")+": "+runtimeLabel, anchor)
-		},
-		FallbackColor: resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
+		OnRuntimeHover: onRuntimeHover,
+		FallbackColor:  resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
 		ScrollID: "plugin-detail-" + plugin.ID, Metadata: &metadata,
 		Keywords:   a.pluginKeywordsFormProps(snapshot, plugin, contentWidth, imageScale, true),
 		Commands:   a.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true),
@@ -585,7 +589,8 @@ func (a *App) pluginFilterChoices(id string, store bool) []settingChoice {
 	}
 }
 
-// pluginRuntimeLabel normalizes manifest runtime names for the compact metadata chip.
+// pluginRuntimeLabel normalizes host runtimes for the detail chip. Go is omitted
+// because it is the native plugin host and the tag adds no useful distinction.
 func pluginRuntimeLabel(runtime string) string {
 	switch strings.ToLower(strings.TrimSpace(runtime)) {
 	case "nodejs":
@@ -595,7 +600,7 @@ func pluginRuntimeLabel(runtime string) string {
 	case "script":
 		return "Script"
 	case "go":
-		return "Go"
+		return ""
 	default:
 		return runtime
 	}

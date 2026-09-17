@@ -1214,6 +1214,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			Hotkey: util.PrimaryHotkey("enter"),
 		})
 	}
+	actions = append(actions, c.buildCopyPathAction(item.Path), c.buildCopyNameAction(item))
 	actions = append(actions, c.buildExecuteCommandAtLocationAction(item))
 	actions = append(actions, notesplugin.CreateNoteAction(c.api, "", "", item.Path))
 
@@ -1262,6 +1263,42 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	}
 
 	return actions
+}
+
+// buildCopyPathAction copies the result path for both files and folders.
+func (c *FileSearchPlugin) buildCopyPathAction(path string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name: "i18n:plugin_file_copy_path",
+		Icon: icons.Get(icons.ActionCopy),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.api.Copy(ctx, plugin.CopyParams{Type: plugin.CopyTypePlainText, Text: path})
+		},
+	}
+}
+
+// buildCopyNameAction copies the leaf name, including volume roots that have no extra path segment.
+func (c *FileSearchPlugin) buildCopyNameAction(item filesearch.SearchResult) plugin.QueryResultAction {
+	name := fileSearchCopyName(item)
+	return plugin.QueryResultAction{
+		Name: "i18n:plugin_file_copy_name",
+		Icon: icons.Get(icons.ActionCopy),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.api.Copy(ctx, plugin.CopyParams{Type: plugin.CopyTypePlainText, Text: name})
+		},
+	}
+}
+
+// fileSearchCopyName prefers the indexed name and keeps volume roots readable.
+func fileSearchCopyName(item filesearch.SearchResult) string {
+	if name := strings.TrimSpace(item.Name); name != "" && name != "." && name != string(os.PathSeparator) {
+		return name
+	}
+	clean := filepath.Clean(strings.TrimSpace(item.Path))
+	name := filepath.Base(clean)
+	if name == "" || name == "." || name == string(os.PathSeparator) {
+		return clean
+	}
+	return name
 }
 
 // buildExecuteCommandAtLocationAction hands the selected filesystem location to Shell without exposing it in the visible query.

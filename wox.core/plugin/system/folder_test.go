@@ -16,6 +16,8 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	assertFolderActionIDs(t, pathActions, []string{
 		folderOpenActionID,
 		folderEnterActionID,
+		folderCopyPathActionID,
+		folderCopyNameActionID,
 		folderExecuteCommandHereActionID,
 		"add_folder_favorite",
 		folderToggleHiddenFilesActionID,
@@ -25,6 +27,8 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	assertFolderActionIDs(t, fileActions, []string{
 		folderOpenActionID,
 		folderOpenContainingFolderActionID,
+		folderCopyPathActionID,
+		folderCopyNameActionID,
 		folderExecuteCommandHereActionID,
 		folderToggleHiddenFilesActionID,
 	})
@@ -33,11 +37,25 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	assertFolderActionIDs(t, favoriteActions, []string{
 		folderOpenActionID,
 		folderEnterActionID,
+		folderCopyPathActionID,
+		folderCopyNameActionID,
 		folderExecuteCommandHereActionID,
 		"edit_folder_favorite",
 		"delete_folder_favorite",
 		folderToggleHiddenFilesActionID,
 	})
+}
+
+func TestFolderCopyNamePrefersTitleAndVolumeRoot(t *testing.T) {
+	if got := folderCopyName("Droppy", `C:\Users\qianl\Droppy`); got != "Droppy" {
+		t.Fatalf("folder name = %q, want Droppy", got)
+	}
+	if got := folderCopyName("", `C:\Users\qianl\notes.txt`); got != "notes.txt" {
+		t.Fatalf("file name = %q, want notes.txt", got)
+	}
+	if got := folderCopyName("Projects", `D:\dev\Wox`); got != "Projects" {
+		t.Fatalf("favorite name = %q, want Projects", got)
+	}
 }
 
 func TestResolveFolderBrowsePathUsesDirectoryOrParent(t *testing.T) {

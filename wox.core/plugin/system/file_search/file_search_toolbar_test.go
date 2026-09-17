@@ -129,6 +129,8 @@ func TestFileSearchResultActionsIncludeNotesAndShell(t *testing.T) {
 	})
 
 	want := map[string]bool{
+		"i18n:plugin_file_copy_path":            false,
+		"i18n:plugin_file_copy_name":            false,
 		"i18n:plugin_file_execute_command_here": false,
 		"i18n:plugin_notes_action_save":         false,
 	}
@@ -142,6 +144,35 @@ func TestFileSearchResultActionsIncludeNotesAndShell(t *testing.T) {
 			t.Fatalf("missing file search action %s in %#v", name, actions)
 		}
 	}
+}
+
+func TestFileSearchCopyActionsWorkForFilesAndFolders(t *testing.T) {
+	api := &fileSearchStatusCopyAPI{}
+	fileSearchPlugin := &FileSearchPlugin{api: api}
+
+	fileItem := filesearch.SearchResult{Path: `/Users/demo/main.go`, Name: "main.go", IsDir: false}
+	folderItem := filesearch.SearchResult{Path: `C:\Users\qianl\Droppy`, Name: "Droppy", IsDir: true}
+
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), fileItem), "i18n:plugin_file_copy_path", fileItem.Path)
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), fileItem), "i18n:plugin_file_copy_name", "main.go")
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), folderItem), "i18n:plugin_file_copy_path", folderItem.Path)
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), folderItem), "i18n:plugin_file_copy_name", "Droppy")
+}
+
+func assertFileSearchCopyAction(t *testing.T, api *fileSearchStatusCopyAPI, actions []plugin.QueryResultAction, name, want string) {
+	t.Helper()
+	for _, action := range actions {
+		if action.Name != name {
+			continue
+		}
+		api.copiedText = ""
+		action.Action(context.Background(), plugin.ActionContext{})
+		if api.copiedText != want {
+			t.Fatalf("%s copied %q, want %q", name, api.copiedText, want)
+		}
+		return
+	}
+	t.Fatalf("missing action %s in %#v", name, actions)
 }
 
 func (a fileSearchToolbarTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {

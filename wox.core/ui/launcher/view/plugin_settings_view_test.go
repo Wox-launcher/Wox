@@ -839,6 +839,26 @@ func TestPluginStoreScreenshotShowsLoadingIndicatorBeforeImageArrives(t *testing
 	}
 }
 
+func TestPluginStoreDescriptionOmitsEmptyRuntimeChip(t *testing.T) {
+	body := pluginStoreDescriptionContent(PluginStoreDetailProps{
+		Description: "View cloud sync status", WebsiteChipLabel: "GitHub",
+	}, 580, woxcomponent.ControlTheme{}).(woxwidget.Flex)
+	chips := body.Children[0].(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	if len(chips.Children) != 1 {
+		t.Fatalf("metadata chips = %#v, want only the website chip for native Go plugins", chips.Children)
+	}
+}
+
+func TestPluginStoreDescriptionKeepsHostRuntimeChip(t *testing.T) {
+	body := pluginStoreDescriptionContent(PluginStoreDetailProps{
+		Description: "Workouts", Runtime: "Python", WebsiteChipLabel: "GitHub",
+	}, 580, woxcomponent.ControlTheme{}).(woxwidget.Flex)
+	chips := body.Children[0].(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	if len(chips.Children) != 2 || chips.Children[0].(woxwidget.Gesture).ID != "plugin-runtime" {
+		t.Fatalf("metadata chips = %#v, want the Python runtime chip", chips.Children)
+	}
+}
+
 func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testing.T) {
 	body := pluginStoreDescriptionContent(PluginStoreDetailProps{
 		Name: "Strava", Description: "Workouts", Author: "Wox-launcher", Version: "0.0.1", Runtime: "Python",

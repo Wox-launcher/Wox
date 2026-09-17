@@ -31,6 +31,8 @@ const (
 	folderOpenActionID                 = "open_folder"
 	folderEnterActionID                = "enter_folder"
 	folderOpenContainingFolderActionID = "open_containing_folder"
+	folderCopyPathActionID             = "copy_path"
+	folderCopyNameActionID             = "copy_name"
 	folderExecuteCommandHereActionID   = "execute_command_here"
 	folderToggleHiddenFilesActionID    = "toggle_hidden_files"
 
@@ -384,6 +386,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 				}
 			},
 		})
+		actions = append(actions, p.buildCopyPathAction(path), p.buildCopyNameAction("", path))
 		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, true))
 		if favoriteMatch != nil {
 			actions = append(actions, p.buildEditFavoriteAction(favoriteMatch.Name, favoriteMatch.Path, favoriteMatch.Index), p.buildDeleteFavoriteAction(favoriteMatch.Name, favoriteMatch.Path, favoriteMatch.Index))
@@ -401,6 +404,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 				}
 			},
 		})
+		actions = append(actions, p.buildCopyPathAction(path), p.buildCopyNameAction("", path))
 		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, false))
 	}
 
@@ -435,6 +439,8 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 				}
 			},
 		},
+		p.buildCopyPathAction(path),
+		p.buildCopyNameAction(name, path),
 		p.buildExecuteCommandAtLocationAction(path, true),
 		p.buildEditFavoriteAction(name, path, favoriteIndex),
 		p.buildDeleteFavoriteAction(name, path, favoriteIndex),
@@ -442,6 +448,48 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 
 	actions = append(actions, p.buildToggleHiddenFilesAction())
 	return actions
+}
+
+// buildCopyPathAction copies the result path for files, folders, and favorites.
+func (p *FolderPlugin) buildCopyPathAction(path string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:   folderCopyPathActionID,
+		Name: "i18n:plugin_folder_copy_path",
+		Icon: icons.Get(icons.ActionCopy),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if p.api != nil {
+				p.api.Copy(ctx, plugin.CopyParams{Type: plugin.CopyTypePlainText, Text: path})
+			}
+		},
+	}
+}
+
+// buildCopyNameAction copies the visible name, falling back to the leaf path for volume roots.
+func (p *FolderPlugin) buildCopyNameAction(name string, path string) plugin.QueryResultAction {
+	copiedName := folderCopyName(name, path)
+	return plugin.QueryResultAction{
+		Id:   folderCopyNameActionID,
+		Name: "i18n:plugin_folder_copy_name",
+		Icon: icons.Get(icons.ActionCopy),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if p.api != nil {
+				p.api.Copy(ctx, plugin.CopyParams{Type: plugin.CopyTypePlainText, Text: copiedName})
+			}
+		},
+	}
+}
+
+// folderCopyName prefers the result title and keeps volume roots readable.
+func folderCopyName(name string, path string) string {
+	if trimmed := strings.TrimSpace(name); trimmed != "" && trimmed != "." && trimmed != string(os.PathSeparator) {
+		return trimmed
+	}
+	clean := filepath.Clean(strings.TrimSpace(path))
+	base := filepath.Base(clean)
+	if base == "" || base == "." || base == string(os.PathSeparator) {
+		return clean
+	}
+	return base
 }
 
 // buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
