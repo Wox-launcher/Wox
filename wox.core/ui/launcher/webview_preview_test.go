@@ -79,3 +79,9 @@ func TestWebViewURLFormValidation(t *testing.T) {
 		t.Fatalf("absolute URL validation errors = %#v", errors)
 	}
 }
+
+func TestSyncWebViewActionHotkeyNilSafe(t *testing.T) {
+	var app *App
+	app.syncWebViewActionHotkey()
+	(&App{}).syncWebViewActionHotkey()
+}

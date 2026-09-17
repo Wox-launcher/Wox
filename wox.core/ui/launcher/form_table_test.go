@@ -771,16 +771,18 @@ func TestReplaceQueryHotkeyVariablesForTestUsesSampleValues(t *testing.T) {
 // TestQueryValuedColumnsOfferQueryTest guards the shared test button that query hotkeys,
 // query shortcuts and tray queries all rely on to preview the edited query.
 func TestQueryValuedColumnsOfferQueryTest(t *testing.T) {
-	form := newHotkeySettingsForm(settingsData{})
+	forms := []formFieldsState{newHotkeySettingsForm(settingsData{}), newGeneralQuerySettingsForm(settingsData{})}
 	tables := map[string]bool{"QueryHotkeys": false, "QueryShortcuts": false, "TrayQueries": false}
-	for _, definition := range form.definitions {
-		if _, tracked := tables[definition.Value.Key]; !tracked {
-			continue
-		}
-		fields, _ := formTableRowFields(definition, nil)
-		for _, field := range fields.definitions {
-			if field.Value.Key == "Query" {
-				tables[definition.Value.Key] = field.Value.QueryTest
+	for _, form := range forms {
+		for _, definition := range form.definitions {
+			if _, tracked := tables[definition.Value.Key]; !tracked {
+				continue
+			}
+			fields, _ := formTableRowFields(definition, nil)
+			for _, field := range fields.definitions {
+				if field.Value.Key == "Query" {
+					tables[definition.Value.Key] = field.Value.QueryTest
+				}
 			}
 		}
 	}
@@ -812,7 +814,7 @@ func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 	hotkeys := newHotkeySettingsController(deps)
 	hotkeys.SetForm(&target)
 	app := &App{
-		settingsOpen: true, settingTab: "general", hotkeySettings: hotkeys,
+		settingsOpen: true, settingTab: "hotkey", hotkeySettings: hotkeys,
 		aiSettings: newAISettingsController(deps), pluginSettings: newPluginSettingsController(deps),
 		settingsTableEditor: &formTableEditorState{target: &target, definition: definition, rowForm: &fields, rowIndex: -1, deletePending: -1, queryPreset: queryHotkeyPresetNormal},
 		lifecycleCtx:        context.Background(), images: map[string]*woxui.Image{}, imageRequested: map[string]string{}, imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
@@ -1139,7 +1141,7 @@ func TestDirectFormTableDeleteRemovesRowImmediately(t *testing.T) {
 	hotkeys.SetForm(&target)
 	app := &App{
 		settingsOpen:   true,
-		settingTab:     "general",
+		settingTab:     "hotkey",
 		aiSettings:     newAISettingsController(deps),
 		pluginSettings: newPluginSettingsController(deps),
 		hotkeySettings: hotkeys,

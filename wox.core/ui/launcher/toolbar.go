@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/setting"
 	woxui "wox/ui/runtime"
 	"wox/util"
 )
@@ -16,6 +17,16 @@ func primaryHotkey(key string) string {
 		return "command+" + key
 	}
 	return "control+" + key
+}
+
+// actionPanelHotkey returns the configured Action Hotkey, falling back to the new default.
+func (a *App) actionPanelHotkey() string {
+	if a != nil && a.generalSettings != nil {
+		if hotkey := strings.TrimSpace(a.generalSettings.Data().ActionPanelHotkey); hotkey != "" {
+			return hotkey
+		}
+	}
+	return setting.DefaultActionPanelHotkey()
 }
 
 func normalizeToolbarHotkey(hotkey string) string {

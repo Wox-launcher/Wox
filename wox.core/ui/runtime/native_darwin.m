@@ -115,6 +115,9 @@ struct WoxDarwinWindow {
   NSString *active_web_view_content_key;
   bool active_web_view_transient;
   bool reserve_host_escape;
+  NSString *action_hotkey_js;
+  char action_hotkey_key[32];
+  uint8_t action_hotkey_modifiers;
   // Materials behind floating surfaces, reused by index across frames and kept
   // hidden when a frame declares fewer, so reopening a panel does not rebuild
   // its material view every time.
@@ -2278,6 +2281,15 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
 
 static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view);
 
+static void inject_darwin_webview_host_state(WoxDarwinWindow *window, WKWebView *webView) {
+  if (window == NULL || webView == nil) {
+    return;
+  }
+  [webView evaluateJavaScript:window->reserve_host_escape ? @"window.__woxReserveHostEscape=true" : @"window.__woxReserveHostEscape=false" completionHandler:nil];
+  NSString *action = window->action_hotkey_js;
+  [webView evaluateJavaScript:(action.length > 0 ? action : @"window.__woxActionHotkey=null") completionHandler:nil];
+}
+
 // darwin_web_view_cursor maps the page's normalized CSS cursor to the closest AppKit cursor.
 static NSCursor *darwin_web_view_cursor(NSString *value) {
   if ([value isEqualToString:@"text"]) return [NSCursor IBeamCursor];
@@ -2362,14 +2374,16 @@ static NSString *web_view_cursor_script(void) {
     int32_t handled = woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
     woxGoDarwinWebViewEscapeDiagnostic(owner->context, handled != 0 ? "host-dispatch handled=true" : "host-dispatch handled=false");
   } else if ([message.name isEqualToString:@"woxWebViewActionPanel"]) {
-    NSString *key = [message.body isKindOfClass:[NSString class]] ? message.body : @"j";
-    if ([key isEqualToString:@"action-panel"]) {
-      key = @"j";
-    }
-    // Navigation shortcuts must leave keyboard scrolling on the page.
-    if ([key isEqualToString:@"j"]) {
+    NSString *key = [message.body isKindOfClass:[NSString class]] ? message.body : nil;
+    if (key == nil || [key isEqualToString:@"action-panel"]) {
+      if (owner->action_hotkey_key[0] == '\0') {
+        return;
+      }
       [owner->window makeFirstResponder:owner->view];
+      woxGoDarwinKey(owner->context, owner->action_hotkey_key, owner->action_hotkey_modifiers, 1, 0, 0);
+      return;
     }
+    // Preview navigation shortcuts must leave keyboard scrolling on the page.
     woxGoDarwinKey(owner->context, key.UTF8String, WOX_KEY_MODIFIER_META, 1, 0, 0);
   } else if ([message.name isEqualToString:@"woxWebViewCursor"] && message.webView == owner->active_web_view && [message.body isKindOfClass:[NSString class]]) {
     NSCursor *cursor = darwin_web_view_cursor(message.body);
@@ -2414,7 +2428,7 @@ static NSString *web_view_cursor_script(void) {
   // Each navigation creates a new JavaScript global, including the initial load
   // that may commit after FocusWebView has already run.
   if (_owner != NULL && !_owner->closed && webView == _owner->active_web_view) {
-    [webView evaluateJavaScript:_owner->reserve_host_escape ? @"window.__woxReserveHostEscape=true" : @"window.__woxReserveHostEscape=false" completionHandler:nil];
+    inject_darwin_webview_host_state(_owner, webView);
   }
   notify_darwin_webview_navigation(_owner, webView);
 }
@@ -2428,9 +2442,17 @@ static NSString *web_view_cursor_script(void) {
 static NSString *web_view_shortcut_script(void) {
   // Global page routers may always prevent Escape, so only an observable page transition claims it.
   // Programmatic page focus reserves Escape for the launcher chrome instead of the document.
+  // Action Hotkey comes from window.__woxActionHotkey; r/o/[ /] stay preview navigation.
   return @"(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
-          "document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey){const k=e.key.length===1?e.key.toLowerCase():e.key;"
-          "if(k==='j'||k==='r'||k==='o'||k==='['||k===']'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}}"
+          "const woxKey=e=>{if(e.key===' ')return'space';const k=e.key.length===1?e.key.toLowerCase():e.key.toLowerCase();"
+          "if(k==='arrowup')return'arrow-up';if(k==='arrowdown')return'arrow-down';if(k==='arrowleft')return'arrow-left';"
+          "if(k==='arrowright')return'arrow-right';if(k==='pageup')return'page-up';if(k==='pagedown')return'page-down';"
+          "if(k==='esc')return'escape';return k};"
+          "document.addEventListener('keydown',e=>{if(e.repeat)return;const k=woxKey(e);const a=window.__woxActionHotkey;"
+          "if(a&&a.key&&k===a.key&&!!e.ctrlKey===!!a.ctrl&&!!e.metaKey===!!a.meta&&!!e.altKey===!!a.alt&&!!e.shiftKey===!!a.shift){"
+          "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
+          "if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&(k==='r'||k==='o'||k==='['||k===']')){"
+          "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}"
           "if(e.key!=='Escape')return;if(window.__woxReserveHostEscape){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape');return}"
           "const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;"
           "const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();"
@@ -4265,8 +4287,34 @@ int32_t wox_darwin_window_focus_webview(WoxDarwinWindow *window) {
       return;
     }
     window->reserve_host_escape = true;
-    [window->active_web_view evaluateJavaScript:@"window.__woxReserveHostEscape=true" completionHandler:nil];
+    inject_darwin_webview_host_state(window, window->active_web_view);
     [window->window makeFirstResponder:window->active_web_view];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_set_webview_action_hotkey(WoxDarwinWindow *window, const char *js, const char *key, uint8_t modifiers) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    [window->action_hotkey_js release];
+    window->action_hotkey_js = js != NULL ? [[NSString alloc] initWithUTF8String:js] : nil;
+    if (key != NULL) {
+      strncpy(window->action_hotkey_key, key, sizeof(window->action_hotkey_key) - 1);
+      window->action_hotkey_key[sizeof(window->action_hotkey_key) - 1] = '\0';
+    } else {
+      window->action_hotkey_key[0] = '\0';
+    }
+    window->action_hotkey_modifiers = modifiers;
+    if (window->active_web_view != nil) {
+      inject_darwin_webview_host_state(window, window->active_web_view);
+    }
   });
   return result;
 }
@@ -4787,6 +4835,8 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     [window->web_view_cache release];
     [window->web_view_signatures release];
     [window->web_view_content_keys release];
+    [window->action_hotkey_js release];
+    window->action_hotkey_js = nil;
     [window->accessibility_elements release];
     [window->accessibility_child_ids release];
     [window->accessibility_roots release];

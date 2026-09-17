@@ -17,6 +17,8 @@ type generalSettingsSnapshot struct {
 	ChoicePicker *settingChoicePickerSnapshot
 	Languages    []settingChoice
 	Data         settingsData
+	Form         *formFieldsSnapshot
+	FormFocused  bool
 }
 
 // generalSettingsController owns the General tab state and the single shared built-in
@@ -32,6 +34,10 @@ type generalSettingsController struct {
 	dataMu    sync.RWMutex
 	data      settingsData
 	languages []settingChoice
+
+	// Query Shortcuts and Tray Queries live on General, not Hotkey.
+	form        *formFieldsState
+	formFocused bool
 }
 
 func newGeneralSettingsController(deps CommonDeps, shared *sharedEditState) *generalSettingsController {
@@ -64,6 +70,29 @@ func (c *generalSettingsController) SetLanguages(languages []settingChoice) {
 // Languages returns a copy of the language choice list.
 func (c *generalSettingsController) Languages() []settingChoice {
 	return append([]settingChoice(nil), c.languages...)
+}
+
+// SetForm installs the General query-tables form. Passing nil clears it.
+func (c *generalSettingsController) SetForm(form *formFieldsState) {
+	c.form = form
+	if form == nil {
+		c.formFocused = false
+	}
+}
+
+// Form returns the live General query-tables form pointer.
+func (c *generalSettingsController) Form() *formFieldsState {
+	return c.form
+}
+
+// FormFocused reports whether the General query tables currently hold focus.
+func (c *generalSettingsController) FormFocused() bool {
+	return c.formFocused
+}
+
+// SetFormFocused records whether the General query tables hold focus.
+func (c *generalSettingsController) SetFormFocused(focused bool) {
+	c.formFocused = focused
 }
 
 // BeginEdit claims the shared built-in editor for one owner/key. Returns whether the
@@ -152,13 +181,22 @@ func (c *generalSettingsController) Update(fn func(data *settingsData)) {
 // Snapshot returns a copy of the general tab state for the view layer.
 func (c *generalSettingsController) Snapshot() generalSettingsSnapshot {
 	c.dataMu.RLock()
-	defer c.dataMu.RUnlock()
+	data := c.data
+	languages := append([]settingChoice(nil), c.languages...)
+	c.dataMu.RUnlock()
 	editKey, editing, choicePicker := c.shared.State()
+	var form *formFieldsSnapshot
+	if c.form != nil {
+		snap := snapshotFormFieldsLocked(c.form)
+		form = &snap
+	}
 	return generalSettingsSnapshot{
 		EditKey:      editKey,
 		Editing:      editing,
 		ChoicePicker: choicePicker,
-		Languages:    append([]settingChoice(nil), c.languages...),
-		Data:         c.data,
+		Languages:    languages,
+		Data:         data,
+		Form:         form,
+		FormFocused:  c.formFocused,
 	}
 }

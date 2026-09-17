@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -81,11 +82,75 @@ func TestSettingsSearchSelectedBuiltInIconUsesSelectedTextColor(t *testing.T) {
 	}
 }
 
+func TestSettingNavPlacesHotkeyAboveAI(t *testing.T) {
+	var ids []string
+	for _, spec := range settingNavSpecs(false) {
+		ids = append(ids, spec.id)
+	}
+	hotkey := -1
+	ai := -1
+	for index, id := range ids {
+		if id == "hotkey" {
+			hotkey = index
+		}
+		if id == "ai" {
+			ai = index
+		}
+		if id == "network" {
+			t.Fatal("network should not remain in the settings sidebar after proxy moved to General")
+		}
+	}
+	if hotkey < 0 || ai < 0 || hotkey != ai-1 {
+		t.Fatalf("sidebar order = %v, want hotkey immediately above AI", ids)
+	}
+	if settingTabForPath("/hotkeys") != "hotkey" {
+		t.Fatalf("hotkeys path = %q, want hotkey", settingTabForPath("/hotkeys"))
+	}
+	if settingTabForPath("/network") != "general" {
+		t.Fatalf("legacy network path = %q, want general", settingTabForPath("/network"))
+	}
+}
+
+func TestGeneralSettingsEndWithProxy(t *testing.T) {
+	items := settingItems("general", settingsData{HttpProxyEnabled: true, HttpProxyURL: "http://localhost:7890"})
+	if len(items) < 2 {
+		t.Fatalf("general items = %d, want proxy settings at the end", len(items))
+	}
+	enabled := items[len(items)-2]
+	url := items[len(items)-1]
+	if enabled.key != "HttpProxyEnabled" || enabled.value != "true" {
+		t.Fatalf("general proxy switch = %+v, want HttpProxyEnabled=true at the end", enabled)
+	}
+	if url.key != "HttpProxyUrl" || url.value != "http://localhost:7890" || url.disabled {
+		t.Fatalf("general proxy URL = %+v, want enabled HttpProxyUrl at the end", url)
+	}
+	for _, item := range items {
+		if item.key == "IgnoreHotkeysOnFullscreen" {
+			t.Fatal("fullscreen hotkey switch should live on the Hotkey page")
+		}
+		if item.key == "LangCode" {
+			t.Fatal("language should live on the UI page")
+		}
+	}
+}
+
+func TestUISettingsStartWithLanguage(t *testing.T) {
+	items := settingItems("appearance", settingsData{LangCode: "zh_CN"})
+	if len(items) == 0 || items[0].key != "LangCode" || items[0].value != "zh_CN" {
+		t.Fatalf("appearance first item = %+v, want LangCode=zh_CN", items)
+	}
+	app := &App{translations: map[string]string{"ui_general_section_language": "Language"}}
+	if got := app.settingsSectionLabel("appearance", "LangCode"); got != "Language" {
+		t.Fatalf("appearance language section = %q, want Language", got)
+	}
+}
+
 func TestSettingsSectionLabelMatchesFlutterGrouping(t *testing.T) {
 	app := &App{translations: map[string]string{"ui_update_section_updates": "Updates"}}
 
-	if got := app.settingsSectionLabel("network", "HttpProxyEnabled"); got != "" {
-		t.Fatalf("network section label = %q, want no group header", got)
+	app.translations["ui_network"] = "Network"
+	if got := app.settingsSectionLabel("general", "HttpProxyEnabled"); got != "Network" {
+		t.Fatalf("general proxy section label = %q, want Network", got)
 	}
 	if got := app.settingsSectionLabel("debug", "ShowScoreTail"); got != "" {
 		t.Fatalf("debug section label = %q, want no group header", got)
@@ -95,7 +160,7 @@ func TestSettingsSectionLabelMatchesFlutterGrouping(t *testing.T) {
 	}
 }
 
-func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
+func TestHotkeySettingsTablesKeepFlutterOuterGap(t *testing.T) {
 	windows := woxui.NewWindowManager()
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
@@ -106,7 +171,7 @@ func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 	form := newHotkeySettingsForm(settingsData{MainHotkey: "Alt+Space", SelectionHotkey: "Alt+Shift+Space", IsLinuxWaylandSession: false})
 	app.hotkeySettings.SetForm(&form)
 
-	page := app.buildSettingsPage(settingsSnapshot{tab: "general", hotkey: app.hotkeySettings.Snapshot(), palette: settingsPalette()}, nil, 800, 600, 1)
+	page := app.buildSettingsPage(settingsSnapshot{tab: "hotkey", hotkey: app.hotkeySettings.Snapshot(), palette: settingsPalette()}, nil, 800, 600, 1)
 	container := page.(woxwidget.Container)
 	scroll := container.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
@@ -129,11 +194,67 @@ func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 		tableSpacers++
 		lastTableSpacer = spacer
 	}
-	if tableSpacers != 4 {
-		t.Fatalf("general table spacers = %d, want IgnoredHotkeyApps, QueryHotkeys, QueryShortcuts, TrayQueries", tableSpacers)
+	if tableSpacers != 2 {
+		t.Fatalf("hotkey table spacers = %d, want IgnoredHotkeyApps, QueryHotkeys", tableSpacers)
 	}
 	if lastTableSpacer.Padding.Bottom != 24 {
 		t.Fatalf("last table outer bottom gap = %v, want Flutter's 24px", lastTableSpacer.Padding.Bottom)
+	}
+}
+
+func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
+	windows := woxui.NewWindowManager()
+	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
+	form := newGeneralQuerySettingsForm(settingsData{IsLinuxWaylandSession: false})
+	app.generalSettings.SetForm(&form)
+
+	page := app.buildSettingsPage(settingsSnapshot{tab: "general", general: app.generalSettings.Snapshot(), palette: settingsPalette()}, settingItems("general", settingsData{}), 800, 600, 1)
+	container := page.(woxwidget.Container)
+	scroll := container.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
+
+	tableSpacers := 0
+	var lastTableSpacer woxwidget.Container
+	for _, row := range rows {
+		keyed, ok := row.(woxwidget.Keyed)
+		if !ok {
+			continue
+		}
+		target, ok := keyed.Child.(woxwidget.Container)
+		if !ok {
+			continue
+		}
+		spacer, ok := target.Child.(woxwidget.Container)
+		if !ok || spacer.Padding.Bottom != 24 {
+			continue
+		}
+		tableSpacers++
+		lastTableSpacer = spacer
+	}
+	if tableSpacers != 2 {
+		t.Fatalf("general table spacers = %d, want QueryShortcuts, TrayQueries", tableSpacers)
+	}
+	if lastTableSpacer.Padding.Bottom != 24 {
+		t.Fatalf("last table outer bottom gap = %v, want Flutter's 24px", lastTableSpacer.Padding.Bottom)
+	}
+
+	var lastSettingRow string
+	for _, row := range rows {
+		keyed, ok := row.(woxwidget.Keyed)
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(string(keyed.Key), "setting-row-") {
+			lastSettingRow = string(keyed.Key)
+		}
+	}
+	if lastSettingRow != "setting-row-HttpProxyUrl" {
+		t.Fatalf("general page last built-in row = %q, want Network proxy URL at the bottom", lastSettingRow)
 	}
 }
 

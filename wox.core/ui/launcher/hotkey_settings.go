@@ -40,7 +40,7 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 	})
 }
 
-// newHotkeySettingsForm maps global bindings and query launchers onto the shared form/table engine.
+// newHotkeySettingsForm maps global bindings and query hotkeys onto the shared form/table engine.
 func newHotkeySettingsForm(data settingsData) formFieldsState {
 	definitions := []formDefinition{
 		{Type: "hotkey", Value: formDefinitionValue{Key: "MainHotkey", Label: "i18n:ui_hotkey", Tooltip: "i18n:ui_hotkey_tips"}},
@@ -48,37 +48,50 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 	if !data.IsLinuxWaylandSession {
 		definitions = append(definitions,
 			formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "SelectionHotkey", Label: "i18n:ui_selection_hotkey", Tooltip: "i18n:ui_selection_hotkey_tips"}},
-			formDefinition{Type: "table", Value: formDefinitionValue{
-				Key: "IgnoredHotkeyApps", Title: "i18n:ui_hotkey_ignore_apps", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", MaxHeight: 220, InlineTable: true,
-				Columns: []formTableColumn{{Key: "App", Label: "i18n:ui_hotkey_ignore_apps_app", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", Width: 420, Type: "app", Validators: []formValidator{{Type: "not_empty"}}}},
-			}},
 		)
 	}
-	definitions = append(definitions,
-		formDefinition{Type: "table", Value: formDefinitionValue{
-			Key: "QueryHotkeys", Title: "i18n:ui_query_hotkeys", Tooltip: "i18n:ui_query_hotkeys_tips", SortColumnKey: "Query", InlineTable: true, UpdateDialogWidth: 700,
-			Columns: []formTableColumn{
-				{Key: "Name", Label: "i18n:ui_query_hotkeys_name", Tooltip: "i18n:ui_query_hotkeys_name_tooltip", Width: 140, Type: "text"},
-				{Key: "Hotkey", Label: "i18n:ui_query_hotkeys_hotkey", Tooltip: "i18n:ui_query_hotkeys_hotkey_tooltip", Width: 120, Type: "hotkey", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Query", Label: "i18n:ui_query_hotkeys_query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip", Type: "queryHotkeyQuery", QueryTest: true, Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Position", Label: "i18n:ui_query_hotkeys_position", Tooltip: "i18n:ui_query_hotkeys_position_tooltip", Width: 120, Type: "select", HideInTable: true, SelectOptions: queryHotkeyPositionOptions()},
-				{Key: "HideQueryBox", Label: "i18n:ui_query_hotkeys_hide_query_box", Tooltip: "i18n:ui_query_hotkeys_hide_query_box_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
-				{Key: "HideToolbar", Label: "i18n:ui_query_hotkeys_hide_toolbar", Tooltip: "i18n:ui_query_hotkeys_hide_toolbar_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
-				{Key: "Width", Label: "i18n:ui_query_hotkeys_width", Tooltip: "i18n:ui_query_hotkeys_width_tooltip", Width: 50, Type: "text", HideInTable: true, EmptyAsZero: true, Validators: optionalIntegerValidators(false, 0, 0, "")},
-				{Key: "MaxResultCount", Label: "i18n:ui_query_hotkeys_max_result_count", Tooltip: "i18n:ui_query_hotkeys_max_result_count_tooltip", Width: 90, Type: "text", HideInTable: true, EmptyAsZero: true, Validators: optionalIntegerValidators(true, 5, 15, "i18n:ui_query_hotkeys_max_result_count_range_error")},
-				{Key: "IsSilentExecution", Label: "i18n:ui_query_hotkeys_silent", Tooltip: "i18n:ui_query_hotkeys_silent_tooltip", Width: 40, Type: "checkbox", HideInTable: true},
-				{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
-			},
-		}},
-		formDefinition{Type: "table", Value: formDefinitionValue{
-			Key: "QueryShortcuts", Title: "i18n:ui_query_shortcuts", Tooltip: "i18n:ui_query_shortcuts_tips", SortColumnKey: "Query", InlineTable: true,
-			Columns: []formTableColumn{
-				{Key: "Shortcut", Label: "i18n:ui_query_shortcuts_shortcut", Tooltip: "i18n:ui_query_shortcuts_shortcut_tooltip", Width: 120, Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Query", Label: "i18n:ui_query_shortcuts_query", Tooltip: "i18n:ui_query_shortcuts_query_tooltip", Type: "text", QueryTest: true, Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
-			},
-		}},
-	)
+	definitions = append(definitions, formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "ActionPanelHotkey", Label: "i18n:ui_action_panel_hotkey", Tooltip: "i18n:ui_action_panel_hotkey_tips"}})
+	if !data.IsLinuxWaylandSession {
+		definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
+			Key: "IgnoredHotkeyApps", Title: "i18n:ui_hotkey_ignore_apps", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", MaxHeight: 220, InlineTable: true,
+			Columns: []formTableColumn{{Key: "App", Label: "i18n:ui_hotkey_ignore_apps_app", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", Width: 420, Type: "app", Validators: []formValidator{{Type: "not_empty"}}}},
+		}})
+	}
+	definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
+		Key: "QueryHotkeys", Title: "i18n:ui_query_hotkeys", Tooltip: "i18n:ui_query_hotkeys_tips", SortColumnKey: "Query", InlineTable: true, UpdateDialogWidth: 700,
+		Columns: []formTableColumn{
+			{Key: "Name", Label: "i18n:ui_query_hotkeys_name", Tooltip: "i18n:ui_query_hotkeys_name_tooltip", Width: 140, Type: "text"},
+			{Key: "Hotkey", Label: "i18n:ui_query_hotkeys_hotkey", Tooltip: "i18n:ui_query_hotkeys_hotkey_tooltip", Width: 120, Type: "hotkey", Validators: []formValidator{{Type: "not_empty"}}},
+			{Key: "Query", Label: "i18n:ui_query_hotkeys_query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip", Type: "queryHotkeyQuery", QueryTest: true, Validators: []formValidator{{Type: "not_empty"}}},
+			{Key: "Position", Label: "i18n:ui_query_hotkeys_position", Tooltip: "i18n:ui_query_hotkeys_position_tooltip", Width: 120, Type: "select", HideInTable: true, SelectOptions: queryHotkeyPositionOptions()},
+			{Key: "HideQueryBox", Label: "i18n:ui_query_hotkeys_hide_query_box", Tooltip: "i18n:ui_query_hotkeys_hide_query_box_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
+			{Key: "HideToolbar", Label: "i18n:ui_query_hotkeys_hide_toolbar", Tooltip: "i18n:ui_query_hotkeys_hide_toolbar_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
+			{Key: "Width", Label: "i18n:ui_query_hotkeys_width", Tooltip: "i18n:ui_query_hotkeys_width_tooltip", Width: 50, Type: "text", HideInTable: true, EmptyAsZero: true, Validators: optionalIntegerValidators(false, 0, 0, "")},
+			{Key: "MaxResultCount", Label: "i18n:ui_query_hotkeys_max_result_count", Tooltip: "i18n:ui_query_hotkeys_max_result_count_tooltip", Width: 90, Type: "text", HideInTable: true, EmptyAsZero: true, Validators: optionalIntegerValidators(true, 5, 15, "i18n:ui_query_hotkeys_max_result_count_range_error")},
+			{Key: "IsSilentExecution", Label: "i18n:ui_query_hotkeys_silent", Tooltip: "i18n:ui_query_hotkeys_silent_tooltip", Width: 40, Type: "checkbox", HideInTable: true},
+			{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
+		},
+	}})
+	values := map[string]string{
+		"MainHotkey":        data.MainHotkey,
+		"SelectionHotkey":   data.SelectionHotkey,
+		"ActionPanelHotkey": data.ActionPanelHotkey,
+		"IgnoredHotkeyApps": settingsIgnoredHotkeyAppRowsJSON(data.IgnoredHotkeyApps),
+		"QueryHotkeys":      settingsRowsJSON(data.QueryHotkeys),
+	}
+	return newFormFieldsState(definitions, values, true)
+}
+
+// newGeneralQuerySettingsForm maps query aliases and tray launchers onto General.
+func newGeneralQuerySettingsForm(data settingsData) formFieldsState {
+	definitions := []formDefinition{{Type: "table", Value: formDefinitionValue{
+		Key: "QueryShortcuts", Title: "i18n:ui_query_shortcuts", Tooltip: "i18n:ui_query_shortcuts_tips", SortColumnKey: "Query", InlineTable: true,
+		Columns: []formTableColumn{
+			{Key: "Shortcut", Label: "i18n:ui_query_shortcuts_shortcut", Tooltip: "i18n:ui_query_shortcuts_shortcut_tooltip", Width: 120, Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+			{Key: "Query", Label: "i18n:ui_query_shortcuts_query", Tooltip: "i18n:ui_query_shortcuts_query_tooltip", Type: "text", QueryTest: true, Validators: []formValidator{{Type: "not_empty"}}},
+			{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
+		},
+	}}}
 	if !data.IsLinuxWaylandSession {
 		definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
 			Key: "TrayQueries", Title: "i18n:ui_tray_queries", Tooltip: "i18n:ui_tray_queries_tips", InlineTable: true,
@@ -94,12 +107,8 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 		}})
 	}
 	values := map[string]string{
-		"MainHotkey":        data.MainHotkey,
-		"SelectionHotkey":   data.SelectionHotkey,
-		"IgnoredHotkeyApps": settingsIgnoredHotkeyAppRowsJSON(data.IgnoredHotkeyApps),
-		"QueryHotkeys":      settingsRowsJSON(data.QueryHotkeys),
-		"QueryShortcuts":    settingsRowsJSON(data.QueryShortcuts),
-		"TrayQueries":       settingsJSONArray(data.TrayQueries),
+		"QueryShortcuts": settingsRowsJSON(data.QueryShortcuts),
+		"TrayQueries":    settingsJSONArray(data.TrayQueries),
 	}
 	return newFormFieldsState(definitions, values, true)
 }
@@ -177,7 +186,7 @@ func optionalIntegerValidators(hasRange bool, min, max int, errorKey string) []f
 
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsOpen && a.settingTab == "general" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.settingsTableEditor == nil
+	active := a.settingsOpen && a.settingTab == "hotkey" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.settingsTableEditor == nil
 	if !active {
 		return false
 	}
@@ -246,7 +255,45 @@ func (a *App) recordHotkeySettingsField(index int) {
 }
 
 func (a *App) openHotkeySettingsTable(index int) {
-	if form := a.hotkeySettings.Form(); a.settingsOpen && a.settingTab == "general" && form != nil {
+	if form := a.hotkeySettings.Form(); a.settingsOpen && a.settingTab == "hotkey" && form != nil {
+		a.settingRow = index
+		a.openFormTableLocked(form, index)
+	}
+	a.finishOpeningFormTable()
+}
+
+// onGeneralQuerySettingsKey routes navigation to the focused query table instead of a built-in row.
+func (a *App) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
+	fields := a.generalSettings.Form()
+	if !a.settingsOpen || a.settingTab != "general" || !a.generalSettings.FormFocused() || fields == nil || len(fields.definitions) == 0 || a.settingsTableEditor != nil {
+		return false
+	}
+	switch event.Key {
+	case woxui.KeyArrowUp:
+		a.focusGeneralQuerySettingsField((fields.focused - 1 + len(fields.definitions)) % len(fields.definitions))
+	case woxui.KeyArrowDown:
+		a.focusGeneralQuerySettingsField((fields.focused + 1) % len(fields.definitions))
+	case woxui.KeyEnter, woxui.KeySpace, woxui.KeyArrowRight:
+		a.openGeneralQuerySettingsTable(fields.focused)
+	default:
+		return false
+	}
+	return true
+}
+
+// focusGeneralQuerySettingsField keeps one General query table visible for search and tray edit.
+func (a *App) focusGeneralQuerySettingsField(index int) {
+	if fields := a.generalSettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
+		setFormFieldsFocusLocked(fields, index)
+		a.settingRow = index
+		a.generalSettings.SetFormFocused(true)
+	}
+	a.invalidateSettingsWindow()
+}
+
+// openGeneralQuerySettingsTable opens a General query table when that page is current.
+func (a *App) openGeneralQuerySettingsTable(index int) {
+	if form := a.generalSettings.Form(); a.settingsOpen && a.settingTab == "general" && form != nil {
 		a.settingRow = index
 		a.openFormTableLocked(form, index)
 	}
@@ -270,7 +317,7 @@ func trayQueryRowIndexFromParam(param string) (int, bool) {
 // openTrayQueryEditor opens the settings form table and starts editing one tray query row,
 // mirroring the inline table's edit button flow.
 func (a *App) openTrayQueryEditor(rowIndex int) {
-	fields := a.hotkeySettings.Form()
+	fields := a.generalSettings.Form()
 	if !a.settingsOpen || a.settingTab != "general" || fields == nil || rowIndex < 0 {
 		return
 	}
@@ -286,8 +333,8 @@ func (a *App) openTrayQueryEditor(rowIndex int) {
 	}
 	// Focus the field first so the settings page keeps the TrayQueries table visible
 	// while the row editor opens, mirroring the inline table's edit button flow.
-	a.focusHotkeySettingsField(index)
-	a.openHotkeySettingsTable(index)
+	a.focusGeneralQuerySettingsField(index)
+	a.openGeneralQuerySettingsTable(index)
 	state := a.activeFormTableEditor()
 	if state == nil || state.invalid || rowIndex >= len(state.rows) {
 		return

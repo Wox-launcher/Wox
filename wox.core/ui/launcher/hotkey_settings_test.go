@@ -7,6 +7,7 @@ import (
 
 	"wox/setting"
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 	"wox/util"
 )
 
@@ -61,23 +62,22 @@ func TestTrayQueryRowIndexFromParam(t *testing.T) {
 
 func TestOpenTrayQueryEditorOpensSelectedRow(t *testing.T) {
 	deps := CommonDeps{}
-	form := newHotkeySettingsForm(settingsData{
-		MainHotkey:            "Alt+Space",
-		SelectionHotkey:       "Alt+Shift+Space",
+	form := newGeneralQuerySettingsForm(settingsData{
 		TrayQueries:           json.RawMessage(`[{"Icon":{"ImageType":"emoji","ImageData":"📋"},"Query":"clipboard"},{"Icon":{"ImageType":"emoji","ImageData":"🎵"},"Query":"music"}]`),
 		IsLinuxWaylandSession: false,
 	})
-	hotkeys := newHotkeySettingsController(deps)
-	hotkeys.SetForm(&form)
+	general := newGeneralSettingsController(deps, newSharedEditState())
+	general.SetForm(&form)
 	app := &App{
-		settingsOpen:   true,
-		settingTab:     "general",
-		hotkeySettings: hotkeys,
-		aiSettings:     newAISettingsController(deps),
-		pluginSettings: newPluginSettingsController(deps),
-		settingsSearch: newSettingsSearchController(deps),
-		themeSettings:  newThemeSettingsController(deps),
-		sharedEdit:     newSharedEditState(),
+		settingsOpen:    true,
+		settingTab:      "general",
+		generalSettings: general,
+		hotkeySettings:  newHotkeySettingsController(deps),
+		aiSettings:      newAISettingsController(deps),
+		pluginSettings:  newPluginSettingsController(deps),
+		settingsSearch:  newSettingsSearchController(deps),
+		themeSettings:   newThemeSettingsController(deps),
+		sharedEdit:      newSharedEditState(),
 	}
 
 	app.openTrayQueryEditor(1)
@@ -101,13 +101,13 @@ func TestOpenTrayQueryEditorOpensSelectedRow(t *testing.T) {
 	if value := state.rowForm.values["Query"]; value != "music" {
 		t.Fatalf("editing Query = %q, want music", value)
 	}
-	// The hotkey form must be marked focused so the settings page scrolls the
+	// The General query form must be marked focused so the settings page scrolls the
 	// TrayQueries field into view while the row editor is open.
-	if !app.hotkeySettings.Focused() {
-		t.Fatal("hotkey settings should be focused so the page keeps the tray query table visible")
+	if !app.generalSettings.FormFocused() {
+		t.Fatal("general query settings should be focused so the page keeps the tray query table visible")
 	}
-	if form := app.hotkeySettings.Form(); form == nil || form.focused != trayQueryDefinitionIndex(form) {
-		t.Fatalf("hotkey form focus = %d, want the TrayQueries field", form.focused)
+	if form := app.generalSettings.Form(); form == nil || form.focused != trayQueryDefinitionIndex(form) {
+		t.Fatalf("general form focus = %d, want the TrayQueries field", form.focused)
 	}
 }
 
@@ -123,23 +123,22 @@ func trayQueryDefinitionIndex(form *formFieldsState) int {
 
 func TestOpenTrayQueryEditorIgnoresInvalidRow(t *testing.T) {
 	deps := CommonDeps{}
-	form := newHotkeySettingsForm(settingsData{
-		MainHotkey:            "Alt+Space",
-		SelectionHotkey:       "Alt+Shift+Space",
+	form := newGeneralQuerySettingsForm(settingsData{
 		TrayQueries:           json.RawMessage(`[{"Query":"clipboard"}]`),
 		IsLinuxWaylandSession: false,
 	})
-	hotkeys := newHotkeySettingsController(deps)
-	hotkeys.SetForm(&form)
+	general := newGeneralSettingsController(deps, newSharedEditState())
+	general.SetForm(&form)
 	app := &App{
-		settingsOpen:   true,
-		settingTab:     "general",
-		hotkeySettings: hotkeys,
-		aiSettings:     newAISettingsController(deps),
-		pluginSettings: newPluginSettingsController(deps),
-		settingsSearch: newSettingsSearchController(deps),
-		themeSettings:  newThemeSettingsController(deps),
-		sharedEdit:     newSharedEditState(),
+		settingsOpen:    true,
+		settingTab:      "general",
+		generalSettings: general,
+		hotkeySettings:  newHotkeySettingsController(deps),
+		aiSettings:      newAISettingsController(deps),
+		pluginSettings:  newPluginSettingsController(deps),
+		settingsSearch:  newSettingsSearchController(deps),
+		themeSettings:   newThemeSettingsController(deps),
+		sharedEdit:      newSharedEditState(),
 	}
 
 	app.openTrayQueryEditor(5)
@@ -163,7 +162,7 @@ func TestFullscreenHotkeySetting(t *testing.T) {
 				t.Fatal(err)
 			}
 			found := false
-			for _, item := range settingItems("general", data) {
+			for _, item := range settingItems("hotkey", data) {
 				if item.key != "IgnoreHotkeysOnFullscreen" {
 					continue
 				}
@@ -176,5 +175,35 @@ func TestFullscreenHotkeySetting(t *testing.T) {
 				t.Fatalf("fullscreen setting visibility = %t, macOS = %t", found, util.IsMacOS())
 			}
 		}
+	}
+}
+
+func TestGeneralQueryTablesKeyboardNavigation(t *testing.T) {
+	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.settingsOpen = true
+	app.settingTab = "general"
+	form := newGeneralQuerySettingsForm(settingsData{})
+	app.generalSettings.SetForm(&form)
+	app.focusBuiltInSettingsSearchTarget("general", "QueryShortcuts")
+	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || form.focused != 1 {
+		t.Fatal("search-focused query table did not navigate to TrayQueries")
+	}
+	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.settingsTableEditor == nil || app.settingsTableEditor.definition.Value.Key != "TrayQueries" {
+		t.Fatal("Enter did not open the focused query table")
+	}
+	app.settingsTableEditor = nil
+	app.selectSettingRow(0)
+	if app.generalSettings.FormFocused() || app.onGeneralQuerySettingsKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) {
+		t.Fatal("query table retained keyboard ownership after selecting a built-in row")
+	}
+}
+
+func TestLauncherHotkeyUsesRecordedAliases(t *testing.T) {
+	if !hotkeyMatches("win+k", woxui.KeyEvent{Key: "k", Modifiers: woxui.KeyModifierMeta, Down: true}) || hotkeyMatches("win+k", woxui.KeyEvent{Key: "k", Down: true}) {
+		t.Fatal("Win modifier was lost when matching a recorded shortcut")
+	}
+	if !hotkeyMatches("ctrl+left", woxui.KeyEvent{Key: woxui.KeyArrowLeft, Modifiers: woxui.KeyModifierControl, Down: true}) {
+		t.Fatal("recorded direction key did not match")
 	}
 }

@@ -160,27 +160,26 @@ func TestFormTableEmojiPickerSearchAcceptsCommittedText(t *testing.T) {
 func trayQueryEditorTestApp(t *testing.T) *App {
 	t.Helper()
 	deps := CommonDeps{}
-	form := newHotkeySettingsForm(settingsData{
-		MainHotkey:            "Alt+Space",
-		SelectionHotkey:       "Alt+Shift+Space",
+	form := newGeneralQuerySettingsForm(settingsData{
 		TrayQueries:           json.RawMessage(`[{"Icon":{"ImageType":"emoji","ImageData":"📋"},"Query":"clipboard"}]`),
 		IsLinuxWaylandSession: false,
 	})
-	hotkeys := newHotkeySettingsController(deps)
-	hotkeys.SetForm(&form)
+	general := newGeneralSettingsController(deps, newSharedEditState())
+	general.SetForm(&form)
 	app := &App{
-		settingsOpen:   true,
-		settingTab:     "general",
-		hotkeySettings: hotkeys,
-		aiSettings:     newAISettingsController(deps),
-		pluginSettings: newPluginSettingsController(deps),
-		settingsSearch: newSettingsSearchController(deps),
-		themeSettings:  newThemeSettingsController(deps),
-		sharedEdit:     newSharedEditState(),
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
+		settingsOpen:    true,
+		settingTab:      "general",
+		generalSettings: general,
+		hotkeySettings:  newHotkeySettingsController(deps),
+		aiSettings:      newAISettingsController(deps),
+		pluginSettings:  newPluginSettingsController(deps),
+		settingsSearch:  newSettingsSearchController(deps),
+		themeSettings:   newThemeSettingsController(deps),
+		sharedEdit:      newSharedEditState(),
+		images:          map[string]*woxui.Image{},
+		imageRequested:  map[string]string{},
+		imageLastUsed:   map[string]uint64{},
+		imageErrors:     map[string]string{},
 	}
 	app.openTrayQueryEditor(0)
 	if app.settingsTableEditor == nil || app.settingsTableEditor.rowForm == nil {

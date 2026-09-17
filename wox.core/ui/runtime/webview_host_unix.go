@@ -2,8 +2,13 @@
 
 package woxui
 
+import "strings"
+
 func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error {
-	return w.webView.Show(toWebViewContent(content), toWebViewRect(bounds), 1)
+	if err := w.webView.Show(toWebViewContent(content), toWebViewRect(bounds), 1); err != nil {
+		return err
+	}
+	return w.applyWebViewActionHotkey()
 }
 
 func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
@@ -47,5 +52,13 @@ func (w *platformWindow) focusWebView() error {
 	if w.webView == nil {
 		return ErrWebViewUnavailable
 	}
+	if err := w.applyWebViewActionHotkey(); err != nil {
+		return err
+	}
 	return w.webView.Focus()
+}
+
+func (w *platformWindow) setWebViewActionHotkey(hotkey string) error {
+	w.webViewActionHotkey = strings.TrimSpace(hotkey)
+	return w.applyWebViewActionHotkey()
 }

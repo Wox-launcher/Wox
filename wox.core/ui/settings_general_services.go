@@ -37,6 +37,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		MainHotkey:                         woxSetting.MainHotkey.Get(),
 		MainHotkeyRegistrationFailed:       GetUIManager().hasMainHotkeyToolbarWarning(),
 		SelectionHotkey:                    woxSetting.SelectionHotkey.Get(),
+		ActionPanelHotkey:                  woxSetting.ActionPanelHotkey.Get(),
 		IgnoreHotkeysOnFullscreen:          woxSetting.IgnoreHotkeysOnFullscreen.Get(),
 		FullscreenDetectionSupported:       window.SupportsActiveWindowFullscreen(),
 		IgnoredHotkeyApps:                  append([]setting.IgnoredHotkeyApp(nil), woxSetting.IgnoredHotkeyApps.Get()...),
@@ -160,6 +161,9 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			}
 		}
 		woxSetting.SelectionHotkey.Set(value)
+		return privacy.RefreshPreservedSettings(woxSetting)
+	case "ActionPanelHotkey":
+		woxSetting.ActionPanelHotkey.Set(value)
 		return privacy.RefreshPreservedSettings(woxSetting)
 	case "QueryHotkeys":
 		queryHotkeys, err := parseQueryHotkeysSettingValue(value)

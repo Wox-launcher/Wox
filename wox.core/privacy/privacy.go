@@ -35,6 +35,7 @@ type PreservedSettings struct {
 	LangCode                  string             `json:"lang_code"`
 	MainHotkey                string             `json:"main_hotkey"`
 	SelectionHotkey           string             `json:"selection_hotkey"`
+	ActionPanelHotkey         string             `json:"action_panel_hotkey,omitempty"`
 	UiDensity                 string             `json:"ui_density"`
 	EnableAnonymousUsageStats bool               `json:"enable_anonymous_usage_stats"`
 	EnableGlance              *bool              `json:"enable_glance,omitempty"`
@@ -143,6 +144,9 @@ func ApplyPreservedSettings(woxSetting *setting.WoxSetting) error {
 	if preserved.SelectionHotkey != "" {
 		applyErrors = appendIfError(applyErrors, woxSetting.SelectionHotkey.SetFromString(preserved.SelectionHotkey))
 	}
+	if preserved.ActionPanelHotkey != "" {
+		applyErrors = appendIfError(applyErrors, woxSetting.ActionPanelHotkey.SetFromString(preserved.ActionPanelHotkey))
+	}
 	if preserved.UiDensity != "" {
 		applyErrors = appendIfError(applyErrors, woxSetting.UiDensity.SetFromString(preserved.UiDensity))
 	}
@@ -232,6 +236,7 @@ func captureSettings(woxSetting *setting.WoxSetting) PreservedSettings {
 		LangCode:                  string(woxSetting.LangCode.Get()),
 		MainHotkey:                woxSetting.MainHotkey.Get(),
 		SelectionHotkey:           woxSetting.SelectionHotkey.Get(),
+		ActionPanelHotkey:         woxSetting.ActionPanelHotkey.Get(),
 		UiDensity:                 string(woxSetting.UiDensity.Get()),
 		EnableAnonymousUsageStats: woxSetting.EnableAnonymousUsageStats.Get(),
 		EnableGlance:              &enableGlance,

@@ -12,31 +12,8 @@ func hotkeyMatches(hotkey string, event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing || event.Key == woxui.KeyUnknown || strings.TrimSpace(hotkey) == "" {
 		return false
 	}
-	parts := strings.Split(strings.ToLower(strings.TrimSpace(hotkey)), "+")
-	if len(parts) == 0 {
-		return false
-	}
-	key := strings.TrimSpace(parts[len(parts)-1])
-	if key == "return" {
-		key = string(woxui.KeyEnter)
-	}
-	if key != string(event.Key) {
-		return false
-	}
-	var expected woxui.KeyModifiers
-	for _, modifier := range parts[:len(parts)-1] {
-		switch strings.TrimSpace(modifier) {
-		case "ctrl", "control":
-			expected |= woxui.KeyModifierControl
-		case "cmd", "command", "meta":
-			expected |= woxui.KeyModifierMeta
-		case "alt", "option":
-			expected |= woxui.KeyModifierAlt
-		case "shift":
-			expected |= woxui.KeyModifierShift
-		}
-	}
-	return event.Modifiers == expected
+	parsed, ok := woxui.ParseHotkey(hotkey)
+	return ok && parsed.Matches(event.Key, event.Modifiers)
 }
 
 // formatHotkeyLabels applies platform labels while keeping each physical key separate.

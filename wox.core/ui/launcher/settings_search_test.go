@@ -140,8 +140,8 @@ func TestSettingsSearchMatchesThemeEditor(t *testing.T) {
 
 func TestSettingsSearchMatchesLocalizedBuiltInSetting(t *testing.T) {
 	app := &App{translations: map[string]string{
-		"ui_general": "通用",
-		"ui_lang":    "语言",
+		"ui_ui":   "界面",
+		"ui_lang": "语言",
 	}}
 	results := app.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "语言"}},
@@ -149,8 +149,8 @@ func TestSettingsSearchMatchesLocalizedBuiltInSetting(t *testing.T) {
 
 	for _, result := range results {
 		if result.kind == settingsSearchSetting && result.settingKey == "LangCode" {
-			if result.title != "语言" || result.subtitle != "通用" {
-				t.Fatalf("localized language result = %#v, want title 语言 and subtitle 通用", result)
+			if result.title != "语言" || result.subtitle != "界面" {
+				t.Fatalf("localized language result = %#v, want title 语言 and subtitle 界面", result)
 			}
 			return
 		}

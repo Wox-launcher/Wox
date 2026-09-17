@@ -587,7 +587,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		} else {
 			if state.target == a.aiSettings.Form() {
 				a.applyAISettingsRawLocked(key, value)
-			} else if state.target == a.hotkeySettings.Form() {
+			} else if state.target == a.hotkeySettings.Form() || state.target == a.generalQuerySettingsForm() {
 				a.applyHotkeySettingsRawLocked(key, coreValue)
 			}
 			if a.settingsTableEditor == state {

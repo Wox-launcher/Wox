@@ -101,6 +101,30 @@ func TestGeneralControllerLanguages(t *testing.T) {
 	}
 }
 
+func TestGeneralControllerForm(t *testing.T) {
+	c := newGeneralControllerForTest()
+	if c.Form() != nil {
+		t.Fatalf("Form should be nil initially")
+	}
+	form := newFormFieldsState(
+		[]formDefinition{{Type: "table", Value: formDefinitionValue{Key: "QueryShortcuts"}}},
+		map[string]string{"QueryShortcuts": "[]"}, true,
+	)
+	c.SetForm(&form)
+	got := c.Form()
+	if got == nil || got.values["QueryShortcuts"] != "[]" {
+		t.Fatalf("Form() should return the installed form, got %+v", got)
+	}
+	c.SetFormFocused(true)
+	if !c.FormFocused() {
+		t.Fatalf("FormFocused should be true after SetFormFocused(true)")
+	}
+	c.SetForm(nil)
+	if c.Form() != nil || c.FormFocused() {
+		t.Fatalf("SetForm(nil) should clear the form and its focus")
+	}
+}
+
 func TestGeneralControllerSetChoicePicker(t *testing.T) {
 	c := newGeneralControllerForTest()
 	state := &settingChoicePickerState{item: settingItem{key: "LangCode"}, anchor: woxui.Rect{X: 1, Y: 2}}

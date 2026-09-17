@@ -295,7 +295,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	if hotkeyMatches(primaryHotkey("j"), event) {
+	if hotkeyMatches(a.actionPanelHotkey(), event) {
 		a.toggleActionPanel()
 		return true
 	}

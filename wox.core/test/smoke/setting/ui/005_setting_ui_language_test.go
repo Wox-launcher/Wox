@@ -1,6 +1,6 @@
 //go:build wox_ui_smoke
 
-package general
+package ui
 
 import (
 	"context"
@@ -12,22 +12,22 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-// Test004SettingGeneralLanguage verifies that changing the General language setting immediately localizes Settings.
-// Flow: open General settings -> select a different supported language -> observe the rebuilt Settings navigation and control.
-// Evidence: the real Settings UI exposes the target-language General and Language labels while retaining the selected language.
-func Test004SettingGeneralLanguage(t *testing.T) {
+// Test005SettingUILanguage verifies that changing the UI language setting immediately localizes Settings.
+// Flow: open UI settings -> select a different supported language -> observe the rebuilt Settings navigation and control.
+// Evidence: the real Settings UI exposes the target-language UI and Language labels while retaining the selected language.
+func Test005SettingUILanguage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		previousLanguage := smoke.OpenGeneralSettingsAndReadChoice(t, ctx, client, "LangCode")
+		previousLanguage := smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode")
 		targetLanguage := "English"
-		expectedGeneralLabel := "General"
+		expectedUILabel := "UI"
 		expectedLanguageLabel := "Language"
 		if previousLanguage == targetLanguage {
 			targetLanguage = "简体中文"
-			expectedGeneralLabel = "通用"
+			expectedUILabel = "界面"
 			expectedLanguageLabel = "语言"
 		}
 		t.Cleanup(func() {
-			smoke.RestoreGeneralSettingChoice(t, client, "LangCode", previousLanguage)
+			smoke.RestoreSettingChoice(t, client, "/appearance", "LangCode", previousLanguage)
 		})
 
 		smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-LangCode", targetLanguage)
@@ -35,16 +35,16 @@ func Test004SettingGeneralLanguage(t *testing.T) {
 		// Diagnostics list here instead made a stuck rebuild report a bare
 		// deadline, so diagnostics stay an explicit assertion below.
 		snapshot, err := client.WaitForReason(ctx, func(snapshot woxwidget.AutomationSnapshot) (bool, string) {
-			generalNav, generalFound := automationdriver.Find(snapshot, "settings-nav-general")
+			uiNav, uiFound := automationdriver.Find(snapshot, "settings-nav-ui")
 			languageChoice, languageFound := automationdriver.Find(snapshot, "setting-choice-LangCode")
-			localized := generalFound && generalNav.Label == expectedGeneralLabel &&
+			localized := uiFound && uiNav.Label == expectedUILabel &&
 				languageFound && languageChoice.Label == expectedLanguageLabel && languageChoice.Value == targetLanguage
 			if localized {
 				return true, ""
 			}
 			return false, fmt.Sprintf("want nav %q, language label %q, language value %q; got %s",
-				expectedGeneralLabel, expectedLanguageLabel, targetLanguage,
-				automationdriver.DescribeNodes(snapshot, "settings-nav-general", "setting-choice-LangCode"))
+				expectedUILabel, expectedLanguageLabel, targetLanguage,
+				automationdriver.DescribeNodes(snapshot, "settings-nav-ui", "setting-choice-LangCode"))
 		})
 		if err != nil {
 			t.Fatalf("wait for Settings to switch to %q: %v", targetLanguage, err)

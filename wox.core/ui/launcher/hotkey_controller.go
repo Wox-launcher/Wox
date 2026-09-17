@@ -23,9 +23,9 @@ type hotkeySettingsSnapshot struct {
 }
 
 // hotkeySettingsController owns the Hotkey tab state: the inline hotkey settings form
-// (main/selection hotkeys, ignored apps, query hotkeys/shortcuts, tray queries), the
-// focus flag used by the general-tab key handler, the active hotkey recording state
-// machine, and the ignored-app picker candidate catalog. The controller is free of any
+// (main/selection hotkeys, ignored apps, query hotkeys), the focus flag used by the
+// hotkey-tab key handler, the active hotkey recording state machine, and the
+// ignored-app picker candidate catalog. The controller is free of any
 // *App back-dependency; callers wire App-side side effects through the deps.Invalidate
 // callback. Cross-domain readers (hotkeyRecordingTargetCurrentLocked, form_table helpers)
 // read the live form pointer through Form().

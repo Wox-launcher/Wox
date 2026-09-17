@@ -266,7 +266,7 @@ func (a *App) formTableUsesSettingsWindow() bool {
 
 func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
-	return target != nil && ((pluginForm != nil && target == &pluginForm.formFieldsState) || target == a.aiSettings.Form() || target == a.hotkeySettings.Form())
+	return target != nil && ((pluginForm != nil && target == &pluginForm.formFieldsState) || target == a.aiSettings.Form() || target == a.hotkeySettings.Form() || target == a.generalQuerySettingsForm())
 }
 
 func (a *App) formTableNativeWindow() *woxui.Window {
@@ -440,6 +440,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.settingsTableEditor = nil
 	a.aiSettings.SetForm(nil)
 	a.aiSettings.SetModelManager(nil)
+	a.generalSettings.SetForm(nil)
 	if !a.onboardingOpen {
 		a.hotkeySettings.ReleaseWindowMemory()
 	} else {

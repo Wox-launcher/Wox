@@ -114,6 +114,34 @@ func (d *linuxWebViewDriver) Focus() error {
 	return nil
 }
 
+// applyWebViewActionHotkey pushes the configured Action Hotkey into the WebKitGTK page script.
+func (w *platformWindow) applyWebViewActionHotkey() error {
+	if w == nil {
+		return nil
+	}
+	native, err := w.openNative()
+	if err != nil {
+		return nil
+	}
+	parsed, ok := ParseHotkey(w.webViewActionHotkey)
+	js := C.CString(webViewActionHotkeyJS(w.webViewActionHotkey))
+	defer C.free(unsafe.Pointer(js))
+	key := ""
+	if ok {
+		key = string(parsed.Key)
+	}
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	var modifiers C.uint8_t
+	if ok {
+		modifiers = C.uint8_t(parsed.Modifiers)
+	}
+	if C.wox_linux_window_set_webview_action_hotkey(native, js, cKey, modifiers) != 0 {
+		return errors.New("woxui: failed to set Linux WebView action hotkey")
+	}
+	return nil
+}
+
 func (*linuxWebViewDriver) Close() {}
 
 // woxGoLinuxWebViewEscapeDiagnostic records the page decision and native focus handoff.

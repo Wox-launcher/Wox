@@ -45,6 +45,7 @@ type settingsData struct {
 	MainHotkey                         string
 	MainHotkeyRegistrationFailed       bool
 	SelectionHotkey                    string
+	ActionPanelHotkey                  string
 	IgnoreHotkeysOnFullscreen          bool
 	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  json.RawMessage
@@ -174,7 +175,7 @@ type settingTab struct {
 var baseSettingTabs = []settingTab{
 	{id: "general", label: "General"},
 	{id: "appearance", label: "Appearance"},
-	{id: "network", label: "Network"},
+	{id: "hotkey", label: "Hotkey"},
 	{id: "data", label: "Data & backup"},
 	{id: "cloud", label: "Cloud Sync"},
 	{id: "runtime", label: "Runtime"},
@@ -217,8 +218,8 @@ func settingNavSpecs(isDev bool) []settingNavSpec {
 	specs := []settingNavSpec{
 		{id: "general", tab: "general", labelKey: "ui_general", fallback: "General", icon: "⚙"},
 		{id: "ui", tab: "appearance", labelKey: "ui_ui", fallback: "Interface", icon: "◉"},
+		{id: "hotkey", tab: "hotkey", labelKey: "ui_hotkeys", fallback: "Hotkey", icon: "⌘"},
 		{id: "ai", tab: "ai", labelKey: "ui_ai", fallback: "AI", icon: "◇"},
-		{id: "network", tab: "network", labelKey: "ui_network", fallback: "Network", icon: "●"},
 		{id: "data", labelKey: "ui_data", fallback: "Data", icon: "□", parent: true},
 		{id: "data.backup", tab: "data", labelKey: "ui_data_backup_restore_nav", fallback: "Backup & Logs", icon: "☁", depth: 1},
 		{id: "data.cloudsync", tab: "cloud", labelKey: "ui_cloud_sync", fallback: "Cloud Sync", icon: "☁", depth: 1},
@@ -358,6 +359,9 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 			a.themeSettings.SetThemeEditor(nil)
 		}
 		if form := a.hotkeySettings.Form(); form != nil {
+			form.active = tab == "hotkey"
+		}
+		if form := a.generalSettings.Form(); form != nil {
 			form.active = tab == "general"
 		}
 		if form := a.aiSettings.Form(); form != nil {
@@ -513,11 +517,14 @@ func (a *App) reloadSettings() error {
 	if err := a.runOnUI("apply general settings snapshot", func() {
 		aiForm := newAISettingsForm(data)
 		hotkeyForm := newHotkeySettingsForm(data)
+		generalForm := newGeneralQuerySettingsForm(data)
 		applyAIProviderCatalogLocked(&aiForm, a.aiSettings.ProviderCatalog())
 		aiForm.active = a.settingsOpen && a.settingTab == "ai"
-		hotkeyForm.active = a.settingsOpen && a.settingTab == "general"
+		hotkeyForm.active = a.settingsOpen && a.settingTab == "hotkey"
+		generalForm.active = a.settingsOpen && a.settingTab == "general"
 		a.aiSettings.SetForm(&aiForm)
 		a.hotkeySettings.SetForm(&hotkeyForm)
+		a.generalSettings.SetForm(&generalForm)
 
 		nextDensityMetrics := launcherDensityMetricsFor(data.UIDensity)
 		densityChanged = a.densityMetrics != nextDensityMetrics
@@ -526,6 +533,7 @@ func (a *App) reloadSettings() error {
 		a.generalSettings.ApplyData(data)
 		a.generalSettings.SetLanguages(languageChoices)
 		a.networkSettings.ApplyData(data.HttpProxyEnabled, data.HttpProxyURL)
+		a.syncWebViewActionHotkey()
 		if a.window != nil {
 			if err := a.window.SetFontFamily(data.AppFontFamily); err != nil {
 				applyErr = fmt.Errorf("apply Wox UI font: %w", err)
@@ -602,6 +610,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		MainHotkey:                         loaded.MainHotkey,
 		MainHotkeyRegistrationFailed:       loaded.MainHotkeyRegistrationFailed,
 		SelectionHotkey:                    loaded.SelectionHotkey,
+		ActionPanelHotkey:                  loaded.ActionPanelHotkey,
 		IgnoreHotkeysOnFullscreen:          loaded.IgnoreHotkeysOnFullscreen,
 		FullscreenDetectionSupported:       loaded.FullscreenDetectionSupported,
 		IgnoredHotkeyApps:                  ignoredHotkeyApps,
@@ -710,7 +719,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onPluginSettingsKey(event) {
 		return true
 	}
-	if a.onHotkeySettingsKey(event) {
+	if a.onHotkeySettingsKey(event) || a.onGeneralQuerySettingsKey(event) {
 		return true
 	}
 	if a.onThemeSettingsKey(event) {
@@ -769,9 +778,10 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	pluginForm := a.pluginSettings.Form()
 	aiForm := a.aiSettings.Form()
 	hotkeyForm := a.hotkeySettings.Form()
+	generalForm := a.generalQuerySettingsForm()
 
 	var tableEditor *formTableEditorSnapshot
-	if a.settingsTableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.settingsTableEditor.target, pluginForm, aiForm, hotkeyForm) {
+	if a.settingsTableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.settingsTableEditor.target, pluginForm, aiForm, hotkeyForm, generalForm) {
 		tableEditor = snapshotFormTableEditorLocked(a.settingsTableEditor)
 	}
 	return settingsSnapshot{
@@ -866,9 +876,15 @@ func (a *App) selectSettingTab(tab string) {
 		}
 	}
 	if hotkeyForm := a.hotkeySettings.Form(); hotkeyForm != nil {
-		hotkeyForm.active = tab == "general"
-		if tab == "general" {
+		hotkeyForm.active = tab == "hotkey"
+		if tab == "hotkey" {
 			setFormFieldsFocusLocked(hotkeyForm, max(0, hotkeyForm.focused))
+		}
+	}
+	if generalForm := a.generalSettings.Form(); generalForm != nil {
+		generalForm.active = tab == "general"
+		if tab != "general" {
+			a.generalSettings.SetFormFocused(false)
 		}
 	}
 	if tab == "theme" && a.themeSettings.ThemesMode() == "" {
@@ -1045,6 +1061,7 @@ func (a *App) selectSettingRow(index int) {
 		return
 	}
 	a.settingRow = index
+	a.generalSettings.SetFormFocused(false)
 	a.hotkeySettings.SetFocused(false)
 	// Pointer-selected rows are already visible; moving the viewport here would invalidate popup anchors captured by the same click.
 	a.updateSettingsTextInput(false)
@@ -1281,10 +1298,10 @@ func settingTabForPath(path string) string {
 		return "general"
 	case "/ui", "/appearance":
 		return "appearance"
-	case "/hotkeys", "hotkeys", "/query/hotkeys":
-		return "general"
+	case "/hotkeys", "hotkeys", "/query/hotkeys", "/hotkey":
+		return "hotkey"
 	case "/network":
-		return "network"
+		return "general"
 	case "/data", "/data/backup", "/data.backup", "data", "data.backup":
 		return "data"
 	case "/data/cloudsync", "/cloud", "/cloud-sync", "data.cloudsync":
@@ -1334,21 +1351,32 @@ func settingItemsForSnapshot(snapshot settingsSnapshot) []settingItem {
 			}
 		}
 	}
-	if snapshot.tab == "general" && len(snapshot.general.Languages) > 0 {
-		for index := range items {
-			if items[index].key == "LangCode" {
-				items[index].choices = append([]settingChoice(nil), snapshot.general.Languages...)
-				break
+	if snapshot.tab == "appearance" {
+		if len(snapshot.general.Languages) > 0 {
+			for index := range items {
+				if items[index].key == "LangCode" {
+					items[index].choices = append([]settingChoice(nil), snapshot.general.Languages...)
+					break
+				}
 			}
 		}
-	}
-	if snapshot.tab == "appearance" {
 		font := systemFontSettingItem(snapshot)
-		insertAt := min(4, len(items))
+		insertAt := appearanceFontInsertIndex(items)
 		items = append(items[:insertAt], append([]settingItem{font}, items[insertAt:]...)...)
 		items = append(items, primaryGlanceSettingItem(snapshot))
 	}
 	return items
+}
+
+// appearanceFontInsertIndex keeps the font picker after the launcher size controls
+// even when language is the first appearance row.
+func appearanceFontInsertIndex(items []settingItem) int {
+	for index, item := range items {
+		if item.key == "EnableQueryCompletionHint" {
+			return index
+		}
+	}
+	return min(5, len(items))
 }
 
 func primaryGlanceSettingItem(snapshot settingsSnapshot) settingItem {
@@ -1410,6 +1438,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 			resultChoices = append(resultChoices, settingChoice{value: fmt.Sprintf("%d", count), label: fmt.Sprintf("%d", count)})
 		}
 		return []settingItem{
+			{key: "LangCode", title: "Language", description: "Language used by Wox", value: data.LangCode, choices: []settingChoice{{data.LangCode, data.LangCode}}},
 			{key: "ShowPosition", title: "Window position", description: "Display used when Wox opens", value: data.ShowPosition, choices: []settingChoice{{"mouse_screen", "Mouse display"}, {"active_screen", "Active display"}, {"last_location", "Last location"}}},
 			{key: "ShowTray", title: "Tray icon", description: "Show Wox in the system tray or menu bar", value: boolValue(data.ShowTray), choices: boolChoices},
 			{key: "AppWidth", title: "Launcher width", description: "Logical width of the query and result window", value: fmt.Sprintf("%d", data.AppWidth), choices: widthChoices},
@@ -1419,11 +1448,13 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "EnableGlance", title: "Glance", description: "Show glance content beside the query", value: boolValue(data.EnableGlance), choices: boolChoices},
 			{key: "HideGlanceIcon", title: "Hide glance icon", description: "Keep the query box visually minimal", value: boolValue(data.HideGlanceIcon), choices: boolChoices},
 		}
-	case "network":
-		return []settingItem{
-			{key: "HttpProxyEnabled", title: "HTTP proxy", value: boolValue(data.HttpProxyEnabled), choices: boolChoices},
-			{key: "HttpProxyUrl", title: "Proxy URL", value: data.HttpProxyURL, text: true, controlWidth: 300, disabled: !data.HttpProxyEnabled},
+	case "hotkey":
+		var items []settingItem
+		// Native fullscreen on macOS also covers everyday work, so this restriction is unsupported.
+		if !util.IsMacOS() {
+			items = append(items, settingItem{key: "IgnoreHotkeysOnFullscreen", value: boolValue(data.IgnoreHotkeysOnFullscreen), choices: boolChoices, disabled: !data.FullscreenDetectionSupported})
 		}
+		return items
 	case "runtime":
 		return []settingItem{
 			{key: "CustomPythonPath", title: "Python executable", description: "Optional Python 3.10 or newer executable", value: data.CustomPythonPath, text: true, browseFile: true},
@@ -1459,11 +1490,8 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "HideOnLostFocus", title: "Hide on focus loss", description: "Dismiss the launcher when focus moves away", value: boolValue(data.HideOnLostFocus), choices: boolChoices},
 			{key: "UsePinYin", title: "Pinyin search", description: "Match Chinese text with Pinyin", value: boolValue(data.UsePinYin), choices: boolChoices},
 			{key: "SwitchInputMethodABC", title: "Switch input method", description: "Use the Latin input source when Wox opens", value: boolValue(data.SwitchInputMethodABC), choices: boolChoices},
-			{key: "LangCode", title: "Language", description: "Language used by Wox", value: data.LangCode, choices: []settingChoice{{data.LangCode, data.LangCode}}},
-		}
-		// Native fullscreen on macOS also covers everyday work, so this restriction is unsupported.
-		if !util.IsMacOS() {
-			items = append(items, settingItem{key: "IgnoreHotkeysOnFullscreen", value: boolValue(data.IgnoreHotkeysOnFullscreen), choices: boolChoices, disabled: !data.FullscreenDetectionSupported})
+			{key: "HttpProxyEnabled", title: "HTTP proxy", value: boolValue(data.HttpProxyEnabled), choices: boolChoices},
+			{key: "HttpProxyUrl", title: "Proxy URL", value: data.HttpProxyURL, text: true, controlWidth: 300, disabled: !data.HttpProxyEnabled},
 		}
 		return items
 	}

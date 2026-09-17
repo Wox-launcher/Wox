@@ -14,6 +14,7 @@ type WoxSetting struct {
 	EnableAutostart           *PlatformValue[bool]
 	MainHotkey                *PlatformValue[string]
 	SelectionHotkey           *PlatformValue[string]
+	ActionPanelHotkey         *PlatformValue[string] // Action Hotkey; new default primary+K, existing users keep J via migration.
 	IgnoreHotkeysOnFullscreen *PlatformValue[bool]
 	IgnoredHotkeyApps         *PlatformValue[[]IgnoredHotkeyApp]
 	LogLevel                  *WoxSettingValue[string]
@@ -136,6 +137,49 @@ const (
 const (
 	DefaultThemeId = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
 )
+
+const (
+	DefaultActionPanelHotkeyWindows = "ctrl+k"
+	DefaultActionPanelHotkeyMac     = "command+k"
+	DefaultActionPanelHotkeyLinux   = "ctrl+k"
+	LegacyActionPanelHotkeyWindows  = "ctrl+j"
+	LegacyActionPanelHotkeyMac      = "command+j"
+	LegacyActionPanelHotkeyLinux    = "ctrl+j"
+)
+
+// DefaultActionPanelHotkey is the Action Hotkey for new installs.
+func DefaultActionPanelHotkey() string {
+	if util.IsWindows() {
+		return DefaultActionPanelHotkeyWindows
+	}
+	if util.IsMacOS() {
+		return DefaultActionPanelHotkeyMac
+	}
+	return DefaultActionPanelHotkeyLinux
+}
+
+// LegacyActionPanelHotkey is the pre-customization Action Hotkey.
+func LegacyActionPanelHotkey() string {
+	if util.IsWindows() {
+		return LegacyActionPanelHotkeyWindows
+	}
+	if util.IsMacOS() {
+		return LegacyActionPanelHotkeyMac
+	}
+	return LegacyActionPanelHotkeyLinux
+}
+
+// LegacyActionPanelHotkeyForPlatform returns the pre-customization shortcut for one OS.
+func LegacyActionPanelHotkeyForPlatform(platform string) string {
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case util.PlatformMacOS:
+		return LegacyActionPanelHotkeyMac
+	case util.PlatformLinux:
+		return LegacyActionPanelHotkeyLinux
+	default:
+		return LegacyActionPanelHotkeyWindows
+	}
+}
 
 const (
 	LogLevelInfo  = "INFO"
@@ -332,6 +376,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	return &WoxSetting{
 		MainHotkey:                NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
 		SelectionHotkey:           NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
+		ActionPanelHotkey:         NewPlatformValue(store, "ActionPanelHotkey", DefaultActionPanelHotkeyWindows, DefaultActionPanelHotkeyMac, DefaultActionPanelHotkeyLinux),
 		IgnoreHotkeysOnFullscreen: NewPlatformValue(store, "IgnoreHotkeysOnFullscreen", false, false, false),
 		IgnoredHotkeyApps:         NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {

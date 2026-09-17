@@ -10,6 +10,7 @@ type WoxSettingDto struct {
 	EnableAutostart           bool
 	MainHotkey                string
 	SelectionHotkey           string
+	ActionPanelHotkey         string
 	IgnoreHotkeysOnFullscreen bool
 	IgnoredHotkeyApps         []setting.IgnoredHotkeyApp
 	LogLevel                  string

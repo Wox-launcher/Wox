@@ -7,6 +7,7 @@
 #include <shlobj.h>
 #include <shellapi.h>
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
@@ -24,7 +25,8 @@
 
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
-extern "C" int32_t woxGoWindowsWebViewActionPanel(uintptr_t owner);
+extern "C" int32_t woxGoWindowsWebViewActionHotkeyMatches(uintptr_t owner, uint32_t virtual_key, uint8_t modifiers);
+extern "C" int32_t woxGoWindowsWebViewActionHotkey(uintptr_t owner);
 extern "C" int32_t woxGoWindowsWebViewReservedHotkey(uintptr_t owner, const char *key);
 extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
 extern "C" void woxGoWindowsWebViewCursorChanged(uintptr_t owner, uintptr_t cursor);
@@ -1133,11 +1135,23 @@ struct WoxWindowsWebView {
     }
     const bool no_alt_shift = (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
     const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    uint8_t modifiers = 0;
+    if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
+      modifiers |= 1 << 0;
+    }
+    if (control) {
+      modifiers |= 1 << 1;
+    }
+    if ((GetKeyState(VK_MENU) & 0x8000) != 0) {
+      modifiers |= 1 << 2;
+    }
+    if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0) {
+      modifiers |= 1 << 3;
+    }
+    const bool action_hotkey = woxGoWindowsWebViewActionHotkeyMatches(reinterpret_cast<uintptr_t>(owner), virtual_key, modifiers) != 0;
     const char *reserved_key = nullptr;
-    if (control && no_alt_shift) {
-      if (virtual_key == 'J') {
-        reserved_key = "j";
-      } else if (virtual_key == 'R') {
+    if (!action_hotkey && control && no_alt_shift) {
+      if (virtual_key == 'R') {
         reserved_key = "r";
       } else if (virtual_key == 'O') {
         reserved_key = "o";
@@ -1150,14 +1164,18 @@ struct WoxWindowsWebView {
     // Programmatic page focus is launcher chrome: Google-like pages mutate on Escape and
     // the document script then treats it as page-owned, so the query box never comes back.
     const bool host_escape = reserve_host_escape && virtual_key == VK_ESCAPE && !control && no_alt_shift;
-    if (reserved_key == nullptr && !host_escape) {
+    if (!action_hotkey && reserved_key == nullptr && !host_escape) {
       return;
     }
     using PutHandled = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
     webview_method<PutHandled>(args, 8)(args, TRUE);
-    // Navigation shortcuts keep page focus; only launcher chrome needs the host.
-    if (host_escape || virtual_key == 'J') {
+    // Navigation shortcuts keep page focus; Action Hotkey and Escape return to the host.
+    if (action_hotkey || host_escape) {
       SetFocus(owner);
+    }
+    if (action_hotkey) {
+      woxGoWindowsWebViewActionHotkey(reinterpret_cast<uintptr_t>(owner));
+      return;
     }
     if (reserved_key != nullptr) {
       woxGoWindowsWebViewReservedHotkey(reinterpret_cast<uintptr_t>(owner), reserved_key);

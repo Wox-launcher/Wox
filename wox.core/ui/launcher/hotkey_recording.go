@@ -47,6 +47,10 @@ type recordedHotkeyPayload struct {
 
 // startHotkeyRecording asks core for the strongest recorder available on the current platform.
 func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string) {
+	// Action panel shortcuts are local key events, so global special triggers cannot fire them.
+	if persistKey == "ActionPanelHotkey" {
+		allowedKinds = []string{"normalCombo"}
+	}
 	if len(allowedKinds) == 0 {
 		allowedKinds = defaultHotkeyRecordingKinds
 	}
@@ -129,7 +133,7 @@ func containsString(values []string, target string) bool {
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
 	tableEditor := a.activeFormTableEditor()
-	return target != nil && (((a.onboardingOpen || (a.settingsOpen && a.settingTab == "general")) && target == a.hotkeySettings.Form()) ||
+	return target != nil && (((a.onboardingOpen || (a.settingsOpen && a.settingTab == "hotkey")) && target == a.hotkeySettings.Form()) ||
 		(a.onboardingOpen && a.onboardingQueryHotkey != nil && target == &a.onboardingQueryHotkey.form) ||
 		(tableEditor != nil && tableEditor.rowForm == target) ||
 		(a.form != nil && target == &a.form.formFieldsState) ||
@@ -317,6 +321,9 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 				})
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
+			case "ActionPanelHotkey":
+				a.generalSettings.Update(func(d *settingsData) { d.ActionPanelHotkey = value })
+				a.syncWebViewActionHotkey()
 			}
 		}
 		a.invalidateHotkeyWindows()

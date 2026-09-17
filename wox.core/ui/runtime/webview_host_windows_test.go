@@ -112,6 +112,16 @@ func TestWebViewCursorOverridesHostOnlyWhilePointerIsOverSurface(t *testing.T) {
 	}
 }
 
+func TestWindowsWebViewActionHotkeyMatchesConfiguredKeyOnly(t *testing.T) {
+	window := &platformWindow{webViewActionHotkey: "ctrl+k"}
+	if !window.matchesWebViewActionHotkey('K', KeyModifierControl) {
+		t.Fatal("configured ctrl+k should match")
+	}
+	if window.matchesWebViewActionHotkey('J', KeyModifierControl) {
+		t.Fatal("WebView must not reserve J when Action Hotkey is K")
+	}
+}
+
 func TestFocusWebViewQueuesUntilControllerExists(t *testing.T) {
 	window := &platformWindow{}
 	result, handled := window.executeWebViewCommand(windowCommand{kind: windowCommandFocusWebView})

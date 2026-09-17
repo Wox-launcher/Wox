@@ -40,25 +40,26 @@ var darwinRuntime struct {
 }
 
 type platformWindow struct {
-	mu              sync.Mutex
-	renderMu        sync.Mutex
-	native          *C.WoxDarwinWindow
-	options         WindowOptions
-	handle          cgo.Handle
-	closing         bool
-	closed          bool
-	renderErr       error
-	fontFamily      string
-	renderWake      chan struct{}
-	renderStop      chan struct{}
-	renderDone      chan struct{}
-	renderStopped   bool
-	renderErrLogged bool
-	pendingFrame    *darwinRenderFrame
-	pendingDamage   Rect
-	damagePending   bool
-	fullDamage      bool
-	webView         *webviewruntime.Controller
+	mu                  sync.Mutex
+	renderMu            sync.Mutex
+	native              *C.WoxDarwinWindow
+	options             WindowOptions
+	handle              cgo.Handle
+	closing             bool
+	closed              bool
+	renderErr           error
+	fontFamily          string
+	renderWake          chan struct{}
+	renderStop          chan struct{}
+	renderDone          chan struct{}
+	renderStopped       bool
+	renderErrLogged     bool
+	pendingFrame        *darwinRenderFrame
+	pendingDamage       Rect
+	damagePending       bool
+	fullDamage          bool
+	webView             *webviewruntime.Controller
+	webViewActionHotkey string
 	// floatingMaterials mirrors what the native window currently shows, so frames
 	// that declare the same materials skip the main-thread update.
 	floatingMaterials []floatingMaterial

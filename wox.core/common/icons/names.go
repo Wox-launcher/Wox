@@ -115,6 +115,7 @@ const (
 	SettingsGeneral            = "settings.general"
 	SettingsUi                 = "settings.ui"
 	SettingsAi                 = "settings.ai"
+	SettingsHotkey             = "settings.hotkey"
 	SettingsNetwork            = "settings.network"
 	SettingsData               = "settings.data"
 	SettingsDataBackup         = "settings.data.backup"

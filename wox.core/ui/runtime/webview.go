@@ -160,3 +160,11 @@ func (w *Window) FocusWebView() error {
 	}
 	return w.native.focusWebView()
 }
+
+// SetWebViewActionHotkey tells the embedded preview which Action Hotkey to reserve.
+func (w *Window) SetWebViewActionHotkey(hotkey string) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.setWebViewActionHotkey(hotkey)
+}

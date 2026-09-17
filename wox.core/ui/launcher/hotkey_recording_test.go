@@ -120,3 +120,38 @@ func TestFallbackHotkeyStringIgnoresPureModifiers(t *testing.T) {
 		t.Fatalf("normal combination changed: %q", got)
 	}
 }
+
+// actionRecordingTestServices captures the kinds requested from the native recorder.
+type actionRecordingTestServices struct {
+	contract.Services
+	kinds chan []string
+}
+
+func (s *actionRecordingTestServices) StartHotkeyRecording(_ context.Context, _ string, _ string, kinds []string) (contract.HotkeyRecordingCapability, error) {
+	s.kinds <- kinds
+	return contract.HotkeyRecordingCapability{}, nil
+}
+
+func TestActionHotkeyRecordingOnlyAllowsNormalCombos(t *testing.T) {
+	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
+	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.settingsOpen = true
+	app.settingTab = "hotkey"
+	form := newHotkeySettingsForm(settingsData{})
+	app.hotkeySettings.SetForm(&form)
+	for index, definition := range form.definitions {
+		if definition.Value.Key == "ActionPanelHotkey" {
+			app.recordHotkeySettingsField(index)
+			break
+		}
+	}
+	select {
+	case kinds := <-services.kinds:
+		if len(kinds) != 1 || kinds[0] != "normalCombo" {
+			t.Fatalf("action shortcut recording kinds = %v", kinds)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("recorder did not start")
+	}
+}

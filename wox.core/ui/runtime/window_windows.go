@@ -250,7 +250,9 @@ type platformWindow struct {
 	webViewCursorKnown bool
 	webViewPointerOver bool
 	// webViewFocusPending keeps a programmatic page-focus request until Show creates the controller.
-	webViewFocusPending   bool
+	webViewFocusPending bool
+	// webViewActionHotkey is the configured Action Hotkey reserved while preview has keyboard focus.
+	webViewActionHotkey   string
 	inputHighSurrogate    uint16
 	inputComposing        bool
 	pointerInside         bool

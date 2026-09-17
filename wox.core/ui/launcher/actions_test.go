@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"wox/common/icons"
+	"wox/setting"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -200,6 +201,24 @@ func TestActionPanelEntryForHotkeyIgnoresKeyUp(t *testing.T) {
 	entries := []actionPanelEntry{{ID: "result-delete-0", Hotkey: "cmd+d", Source: actionPanelSourceResult}}
 	if _, matched := actionPanelEntryForHotkey(entries, woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta}); matched {
 		t.Fatal("key-up unexpectedly matched Cmd+D")
+	}
+}
+
+func TestActionPanelHotkeyUsesConfiguredShortcut(t *testing.T) {
+	app := &App{generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState())}
+	if got := app.actionPanelHotkey(); got != setting.DefaultActionPanelHotkey() {
+		t.Fatalf("empty setting = %q, want default %q", got, setting.DefaultActionPanelHotkey())
+	}
+	app.generalSettings.ApplyData(settingsData{ActionPanelHotkey: setting.LegacyActionPanelHotkey()})
+	if got := app.actionPanelHotkey(); got != setting.LegacyActionPanelHotkey() {
+		t.Fatalf("configured setting = %q, want legacy %q", got, setting.LegacyActionPanelHotkey())
+	}
+	event := woxui.KeyEvent{Key: "j", Modifiers: woxui.KeyModifierControl, Down: true}
+	if runtime.GOOS == "darwin" {
+		event.Modifiers = woxui.KeyModifierMeta
+	}
+	if !hotkeyMatches(app.actionPanelHotkey(), event) {
+		t.Fatal("configured primary+J should still toggle the action panel")
 	}
 }
 

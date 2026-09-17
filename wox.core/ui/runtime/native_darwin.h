@@ -68,6 +68,7 @@ int32_t wox_darwin_window_webview_open_in_browser(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_navigation_state(WoxDarwinWindow *window, char **url, int32_t *can_go_back, int32_t *can_go_forward);
 int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window, uint8_t kind);
 int32_t wox_darwin_window_focus_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_set_webview_action_hotkey(WoxDarwinWindow *window, const char *js, const char *key, uint8_t modifiers);
 int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text);
 int32_t wox_darwin_window_write_clipboard_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
 int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window);

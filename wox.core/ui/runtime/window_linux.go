@@ -57,18 +57,19 @@ var linuxRuntime struct {
 }
 
 type platformWindow struct {
-	mu            sync.Mutex
-	native        *C.WoxLinuxWindow
-	options       WindowOptions
-	handle        cgo.Handle
-	closing       bool
-	closed        bool
-	renderErr     error
-	fontFamily    string
-	pendingDamage Rect
-	damagePending bool
-	fullDamage    bool
-	webView       *webviewruntime.Controller
+	mu                  sync.Mutex
+	native              *C.WoxLinuxWindow
+	options             WindowOptions
+	handle              cgo.Handle
+	closing             bool
+	closed              bool
+	renderErr           error
+	fontFamily          string
+	pendingDamage       Rect
+	damagePending       bool
+	fullDamage          bool
+	webView             *webviewruntime.Controller
+	webViewActionHotkey string
 }
 
 // GTK and its OpenGL context stay on the process main thread for the runtime lifetime.

@@ -276,6 +276,9 @@ struct WoxLinuxWindow {
   // would otherwise flicker the host cursor between text and default.
   bool updating_accessibility;
   char *web_view_cursor_name;
+  char *action_hotkey_js;
+  char action_hotkey_key[32];
+  uint8_t action_hotkey_modifiers;
   bool has_preferred_position;
   bool presenting;
   bool rendering;
@@ -394,6 +397,7 @@ typedef gpointer (*WoxWebKitViewGetUserContentManager)(gpointer web_view);
 typedef void (*WoxWebKitSettingsSetUserAgent)(gpointer settings, const gchar *user_agent);
 typedef gpointer (*WoxWebKitJavascriptResultGetJSValue)(gpointer javascript_result);
 typedef gchar *(*WoxJSCValueToString)(gpointer value);
+typedef void (*WoxWebKitViewRunJavaScript)(gpointer web_view, const gchar *script, gpointer cancellable, gpointer callback, gpointer user_data);
 
 typedef struct {
   void *library;
@@ -414,6 +418,7 @@ typedef struct {
   WoxWebKitSettingsSetUserAgent set_user_agent;
   WoxWebKitJavascriptResultGetJSValue javascript_result_get_js_value;
   WoxJSCValueToString jsc_value_to_string;
+  WoxWebKitViewRunJavaScript run_javascript;
   bool initialized;
   bool available;
 } WoxWebKitRuntime;
@@ -454,6 +459,7 @@ static bool ensure_webkit(void) {
   wox_webkit.set_user_agent = (WoxWebKitSettingsSetUserAgent)load_webkit_symbol("webkit_settings_set_user_agent");
   wox_webkit.javascript_result_get_js_value = (WoxWebKitJavascriptResultGetJSValue)load_webkit_symbol("webkit_javascript_result_get_js_value");
   wox_webkit.jsc_value_to_string = (WoxJSCValueToString)load_webkit_symbol("jsc_value_to_string");
+  wox_webkit.run_javascript = (WoxWebKitViewRunJavaScript)load_webkit_symbol("webkit_web_view_run_javascript");
   wox_webkit.available = wox_webkit.view_new != NULL && wox_webkit.load_uri != NULL && wox_webkit.load_html != NULL &&
                          wox_webkit.get_settings != NULL && wox_webkit.set_user_agent != NULL;
   if (!wox_webkit.available) {
@@ -636,10 +642,11 @@ static void on_webview_action_panel_message(gpointer manager, gpointer javascrip
   (void)manager;
   (void)javascript_result;
   WoxLinuxWindow *window = data;
-  if (window != NULL && !window->closed && window->context != 0) {
-    gtk_widget_grab_focus(window->gl_area);
-    woxGoLinuxKey(window->context, "j", WOX_KEY_MODIFIER_CONTROL, 1, 0, 0);
+  if (window == NULL || window->closed || window->context == 0 || window->action_hotkey_key[0] == '\0') {
+    return;
   }
+  gtk_widget_grab_focus(window->gl_area);
+  woxGoLinuxKey(window->context, window->action_hotkey_key, window->action_hotkey_modifiers, 1, 0, 0);
 }
 
 static const char *const wox_webview_radius_key = "wox-webview-corner-radius";
@@ -724,6 +731,38 @@ static void on_web_view_size_allocate(GtkWidget *web_view, GtkAllocation *alloca
   apply_web_view_corner_radius(web_view);
 }
 
+static void inject_linux_webview_action_hotkey(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || window->active_web_view == NULL || wox_webkit.run_javascript == NULL) {
+    return;
+  }
+  const char *script = window->action_hotkey_js != NULL && window->action_hotkey_js[0] != '\0' ? window->action_hotkey_js : "window.__woxActionHotkey=null";
+  wox_webkit.run_javascript(window->active_web_view, script, NULL, NULL, NULL);
+}
+
+static void on_web_view_load_changed(GtkWidget *web_view, int load_event, gpointer data) {
+  (void)web_view;
+  if (load_event != 2) {
+    return;
+  }
+  inject_linux_webview_action_hotkey(data);
+}
+
+static const char *linux_webview_shortcut_script(void) {
+  return "(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
+         "const woxKey=e=>{if(e.key===' ')return'space';const k=e.key.length===1?e.key.toLowerCase():e.key.toLowerCase();"
+         "if(k==='arrowup')return'arrow-up';if(k==='arrowdown')return'arrow-down';if(k==='arrowleft')return'arrow-left';"
+         "if(k==='arrowright')return'arrow-right';if(k==='pageup')return'page-up';if(k==='pagedown')return'page-down';"
+         "if(k==='esc')return'escape';return k};"
+         "document.addEventListener('keydown',e=>{if(e.repeat)return;const a=window.__woxActionHotkey;const k=woxKey(e);"
+         "if(a&&a.key&&k===a.key&&!!e.ctrlKey===!!a.ctrl&&!!e.metaKey===!!a.meta&&!!e.altKey===!!a.alt&&!!e.shiftKey===!!a.shift){"
+         "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
+         "if(e.key!=='Escape')return;const f=document.activeElement;let m=false;const o=new MutationObserver(()=>{m=true});"
+         "if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});"
+         "setTimeout(()=>{o.disconnect();const r=(f&&f!==document.activeElement)?'FocusChanged':m?'DomChanged':e.defaultPrevented?'PreventedNoChangeForwarded':'Forwarded';"
+         "window.webkit.messageHandlers['woxWebViewEscape'+r].postMessage(r);if(r==='Forwarded'||r==='PreventedNoChangeForwarded')"
+         "window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
+}
+
 static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css, const char *user_agent) {
   GtkWidget *web_view = NULL;
   bool supports_manager = wox_webkit.manager_new != NULL && wox_webkit.view_new_with_manager != NULL;
@@ -750,8 +789,7 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
                                  wox_webkit.register_script_message_handler(manager, "woxWebViewEscapeForwarded");
       if (handlers_registered) {
         // Global page routers may always prevent Escape, so only an observable page transition claims it.
-        const char *shortcut_script = "(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}if(e.key!=='Escape')return;const f=document.activeElement;let m=false;const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();const r=(f&&f!==document.activeElement)?'FocusChanged':m?'DomChanged':e.defaultPrevented?'PreventedNoChangeForwarded':'Forwarded';window.webkit.messageHandlers['woxWebViewEscape'+r].postMessage(r);if(r==='Forwarded'||r==='PreventedNoChangeForwarded')window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
-        gpointer script = wox_webkit.script_new(shortcut_script, 0, 0, NULL, NULL);
+        gpointer script = wox_webkit.script_new(linux_webview_shortcut_script(), 0, 0, NULL, NULL);
         if (script != NULL) {
           wox_webkit.manager_add_script(manager, script);
           wox_webkit.script_unref(script);
@@ -793,6 +831,7 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
     gtk_widget_set_valign(web_view, GTK_ALIGN_START);
     g_signal_connect(web_view, "realize", G_CALLBACK(on_web_view_realize), NULL);
     g_signal_connect(web_view, "size-allocate", G_CALLBACK(on_web_view_size_allocate), NULL);
+    g_signal_connect(web_view, "load-changed", G_CALLBACK(on_web_view_load_changed), window);
   }
   return web_view;
 }
@@ -3079,6 +3118,7 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
     window->invalidate_idle = 0;
   }
   clear_active_web_view(window, false);
+  g_clear_pointer(&window->action_hotkey_js, g_free);
   g_hash_table_destroy(window->web_view_cache);
   g_hash_table_destroy(window->web_view_signatures);
   g_hash_table_destroy(window->web_view_content_keys);
@@ -4155,6 +4195,7 @@ static void show_webview_main(void *data) {
       wox_webkit.load_uri(web_view, call->url);
     }
   }
+  inject_linux_webview_action_hotkey(window);
   g_free(content_key);
   g_free(signature);
 }
@@ -4224,6 +4265,7 @@ static void focus_webview_main(void *data) {
     return;
   }
   gtk_widget_grab_focus(call->window->active_web_view);
+  inject_linux_webview_action_hotkey(call->window);
 }
 
 int32_t wox_linux_window_focus_webview(WoxLinuxWindow *window) {
@@ -4232,6 +4274,36 @@ int32_t wox_linux_window_focus_webview(WoxLinuxWindow *window) {
   }
   WoxWindowCall call = {.window = window};
   return run_on_main_sync(focus_webview_main, &call) ? call.result : -1;
+}
+
+typedef struct {
+  WoxLinuxWindow *window;
+  const char *js;
+  const char *key;
+  uint8_t modifiers;
+  int32_t result;
+} WoxWebViewActionHotkeyCall;
+
+static void set_webview_action_hotkey_main(void *data) {
+  WoxWebViewActionHotkeyCall *call = data;
+  WoxLinuxWindow *window = call->window;
+  if (window->closed) {
+    call->result = -1;
+    return;
+  }
+  g_free(window->action_hotkey_js);
+  window->action_hotkey_js = g_strdup(call->js != NULL ? call->js : "");
+  g_strlcpy(window->action_hotkey_key, call->key != NULL ? call->key : "", sizeof(window->action_hotkey_key));
+  window->action_hotkey_modifiers = call->modifiers;
+  inject_linux_webview_action_hotkey(window);
+}
+
+int32_t wox_linux_window_set_webview_action_hotkey(WoxLinuxWindow *window, const char *js, const char *key, uint8_t modifiers) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxWebViewActionHotkeyCall call = {.window = window, .js = js, .key = key, .modifiers = modifiers};
+  return run_on_main_sync(set_webview_action_hotkey_main, &call) ? call.result : -1;
 }
 
 int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, uint8_t kind, float x, float y) {

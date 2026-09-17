@@ -86,6 +86,7 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		if a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
 			return
 		}
+		a.syncWebViewActionHotkey()
 		if err := a.window.ShowWebView(content, bounds); err != nil {
 			a.setWebViewPreviewError(err)
 			return
@@ -343,6 +344,7 @@ func (a *App) requestWebViewKeyboardFocus() {
 	if a.window == nil {
 		return
 	}
+	a.syncWebViewActionHotkey()
 	if err := a.window.FocusWebView(); err != nil {
 		return
 	}
@@ -413,6 +415,14 @@ func (a *App) openWebViewInSystemBrowser() {
 	if err := a.hideWindow(true); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("hide launcher after open webview in browser: %v", err))
 	}
+}
+
+// syncWebViewActionHotkey pushes the configured Action Hotkey into the embedded preview.
+func (a *App) syncWebViewActionHotkey() {
+	if a == nil || a.window == nil {
+		return
+	}
+	_ = a.window.SetWebViewActionHotkey(a.actionPanelHotkey())
 }
 
 func isWebViewPreviewURL(rawURL string) bool {

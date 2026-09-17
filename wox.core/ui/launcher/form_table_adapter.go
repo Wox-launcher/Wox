@@ -171,7 +171,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		}
 	}
 	onTooltip := (func(bool, string, woxui.Rect))(nil)
-	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "plugin-settings" || callbacks.idPrefix == "ai-settings" {
+	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "general-settings" || callbacks.idPrefix == "plugin-settings" || callbacks.idPrefix == "ai-settings" {
 		onTooltip = a.setSettingChoiceTooltip
 	}
 	openTable := func() {
@@ -186,7 +186,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	var secondaryIcon *woxui.Image
 	var onSecondary func()
 	demoKind := ""
-	if callbacks.idPrefix == "hotkey-settings" {
+	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "general-settings" {
 		switch definition.Value.Key {
 		case "QueryHotkeys":
 			demoKind = "query-hotkeys"

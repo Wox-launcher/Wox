@@ -301,6 +301,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 	))
 	var keepVisibleKey woxwidget.Key
 	var fullscreenHotkeyRow woxwidget.Widget
+	var networkRows []woxwidget.Widget
 	currentSection := ""
 	for index, item := range items {
 		item = a.localizedSettingItem(item)
@@ -313,8 +314,14 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		})}
 		// Keep the built-in switch's save/search callbacks while placing it beside
 		// the app exclusions in the hotkey form.
-		if snapshot.tab == "general" && snapshot.hotkey.Form != nil && item.key == "IgnoreHotkeysOnFullscreen" {
+		if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil && item.key == "IgnoreHotkeysOnFullscreen" {
 			fullscreenHotkeyRow = target
+			continue
+		}
+		// Query Shortcuts and Tray Queries sit above Network, so proxy rows wait
+		// until those tables have been appended.
+		if snapshot.tab == "general" && (item.key == "HttpProxyEnabled" || item.key == "HttpProxyUrl") {
+			networkRows = append(networkRows, target)
 			continue
 		}
 		section := a.settingsSectionLabel(snapshot.tab, item.key)
@@ -324,7 +331,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 		children = append(children, target)
 	}
-	if snapshot.tab == "general" && snapshot.hotkey.Form != nil {
+	if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
 		hotkeyForm := *snapshot.hotkey.Form
 		hotkeyForm.active = snapshot.hotkey.Focused
@@ -354,6 +361,33 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-hotkey", index), Child: target})
 		}
 	}
+	if snapshot.tab == "general" && snapshot.general.Form != nil {
+		generalForm := *snapshot.general.Form
+		generalForm.active = snapshot.general.FormFocused
+		callbacks := formFieldCallbacks{
+			idPrefix: "general-settings", labelWidth: 550, settingsLayout: true, imageScale: imageScale,
+			focus: a.focusGeneralQuerySettingsField, openTable: a.openGeneralQuerySettingsTable,
+		}
+		for index, definition := range generalForm.definitions {
+			if generalForm.active && index == generalForm.focused {
+				keepVisibleKey = formFieldRowKey("settings-general", index)
+			}
+			field := a.buildFormField(generalForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
+			if definition.Type == "table" {
+				// Flutter wraps built-in setting tables in a 24px outer bottom gap so
+				// adjacent tables keep the same breathing room as the settings form.
+				field = woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: field}
+			}
+			target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+				Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette,
+			})
+			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-general", index), Child: target})
+		}
+	}
+	if len(networkRows) > 0 {
+		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_network"), contentWidth, snapshot.palette))
+		children = append(children, networkRows...)
+	}
 	return launcherview.SettingsPage(launcherview.SettingsPageProps{Theme: snapshot.palette,
 		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, KeepVisibleKey: keepVisibleKey,
 	})
@@ -372,8 +406,8 @@ func (a *App) settingsPageDescription(tab string) string {
 		return a.translate("i18n:ui_general_description")
 	case "appearance":
 		return a.translate("i18n:ui_ui_description")
-	case "network":
-		return a.translate("i18n:ui_network_description")
+	case "hotkey":
+		return a.translate("i18n:ui_hotkeys_description")
 	case "debug":
 		return a.translate("i18n:ui_debug_description")
 	case "updates":
@@ -392,14 +426,16 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 		switch key {
 		case "EnableAutostart", "HideOnStart":
 			return a.translate("i18n:ui_general_section_startup")
-		case "LangCode":
-			return a.translate("i18n:ui_general_section_language")
+		case "HttpProxyEnabled", "HttpProxyUrl":
+			return a.translate("i18n:ui_network")
 		default:
 			return a.translate("i18n:ui_general_section_launch")
 		}
 	}
 	if tab == "appearance" {
 		switch key {
+		case "LangCode":
+			return a.translate("i18n:ui_general_section_language")
 		case "MaxResultCount":
 			return a.translate("i18n:ui_ui_section_results")
 		case "EnableGlance", "HideGlanceIcon", "PrimaryGlance":

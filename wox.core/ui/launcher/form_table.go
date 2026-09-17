@@ -362,7 +362,29 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 
 func (a *App) formTableTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
-	return a.formTableTargetCurrentWithFormsLocked(target, pluginForm, a.aiSettings.Form(), a.hotkeySettings.Form())
+	return a.formTableTargetCurrentWithFormsLocked(target, pluginForm, a.aiSettings.Form(), a.hotkeySettings.Form(), a.generalQuerySettingsForm())
+}
+
+// generalQuerySettingsForm returns the General query-tables form when that controller exists.
+func (a *App) generalQuerySettingsForm() *formFieldsState {
+	if a.generalSettings == nil {
+		return nil
+	}
+	return a.generalSettings.Form()
+}
+
+// settingsOwnedTableTarget reports whether a table belongs to a built-in settings form that persists immediately.
+func (a *App) settingsOwnedTableTarget(target *formFieldsState) bool {
+	if target == nil {
+		return false
+	}
+	if a.aiSettings != nil && target == a.aiSettings.Form() {
+		return true
+	}
+	if a.hotkeySettings != nil && target == a.hotkeySettings.Form() {
+		return true
+	}
+	return target == a.generalQuerySettingsForm()
 }
 
 // activeFormTableEditor returns the settings flow first because its modal state remains independent when the launcher is activated.
@@ -374,12 +396,13 @@ func (a *App) activeFormTableEditor() *formTableEditorState {
 }
 
 // formTableTargetCurrentWithFormsLocked compares one table target using controller pointers captured for the UI-thread snapshot.
-func (a *App) formTableTargetCurrentWithFormsLocked(target *formFieldsState, pluginForm *pluginSettingsFormState, aiForm *formFieldsState, hotkeyForm *formFieldsState) bool {
+func (a *App) formTableTargetCurrentWithFormsLocked(target *formFieldsState, pluginForm *pluginSettingsFormState, aiForm *formFieldsState, hotkeyForm *formFieldsState, generalForm *formFieldsState) bool {
 	return target != nil && ((a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
 		(pluginForm != nil && target == &pluginForm.formFieldsState) ||
 		(a.settingsOpen && a.settingTab == "ai" && target == aiForm) ||
-		(a.settingsOpen && a.settingTab == "general" && target == hotkeyForm))
+		(a.settingsOpen && a.settingTab == "hotkey" && target == hotkeyForm) ||
+		(a.settingsOpen && a.settingTab == "general" && target == generalForm))
 }
 
 func (a *App) openActionFormTable(index int) {
@@ -1140,7 +1163,7 @@ func (a *App) saveFormTableRowEdit() {
 	}
 	pluginForm := a.pluginSettings.Form()
 	pluginTarget := pluginForm != nil && state.target == &pluginForm.formFieldsState
-	persist := state.target == a.aiSettings.Form() || state.target == a.hotkeySettings.Form()
+	persist := a.settingsOwnedTableTarget(state.target)
 	closeEditor := state.rowEditorOnly
 	key := state.definition.Value.Key
 	value := state.target.values[key]
@@ -1260,7 +1283,7 @@ func (a *App) confirmFormTableRowDelete() {
 		state.status = err.Error()
 	} else {
 		state.status = ""
-		persist = state.target == a.aiSettings.Form() || state.target == a.hotkeySettings.Form()
+		persist = a.settingsOwnedTableTarget(state.target)
 		pluginForm := a.pluginSettings.Form()
 		pluginTarget = pluginForm != nil && state.target == &pluginForm.formFieldsState
 		value = state.target.values[key]

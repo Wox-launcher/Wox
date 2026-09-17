@@ -11,6 +11,7 @@ import "C"
 
 import (
 	"fmt"
+	"strings"
 	"unsafe"
 
 	"github.com/lxn/win"
@@ -57,6 +58,20 @@ func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error
 
 func (w *platformWindow) focusWebView() error {
 	return w.call(windowCommand{kind: windowCommandFocusWebView}).err
+}
+
+func (w *platformWindow) setWebViewActionHotkey(hotkey string) error {
+	w.webViewActionHotkey = strings.TrimSpace(hotkey)
+	return nil
+}
+
+// matchesWebViewActionHotkey reports whether a WebView2 accelerator is the configured Action Hotkey.
+func (w *platformWindow) matchesWebViewActionHotkey(virtualKey uint32, modifiers KeyModifiers) bool {
+	if w == nil {
+		return false
+	}
+	parsed, ok := ParseHotkey(w.webViewActionHotkey)
+	return ok && parsed.Matches(windowsKey(uintptr(virtualKey)), modifiers)
 }
 
 func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
@@ -429,11 +444,38 @@ func woxGoWindowsWebViewEscape(owner C.uintptr_t) C.int32_t {
 	return 0
 }
 
-// woxGoWindowsWebViewActionPanel forwards Ctrl+J from focused WebView content.
+// woxGoWindowsWebViewActionHotkeyMatches reports whether a WebView2 accelerator is the Action Hotkey.
 //
-//export woxGoWindowsWebViewActionPanel
-func woxGoWindowsWebViewActionPanel(owner C.uintptr_t) C.int32_t {
-	return dispatchWindowsWebViewReservedHotkey(owner, "j")
+//export woxGoWindowsWebViewActionHotkeyMatches
+func woxGoWindowsWebViewActionHotkeyMatches(owner C.uintptr_t, virtualKey C.uint32_t, modifiers C.uint8_t) C.int32_t {
+	value, ok := nativeWindows.Load(uintptr(owner))
+	if !ok {
+		return 0
+	}
+	window := value.(*platformWindow)
+	if window.matchesWebViewActionHotkey(uint32(virtualKey), KeyModifiers(modifiers)) {
+		return 1
+	}
+	return 0
+}
+
+// woxGoWindowsWebViewActionHotkey synthesizes the configured Action Hotkey after WebView2 is handled.
+//
+//export woxGoWindowsWebViewActionHotkey
+func woxGoWindowsWebViewActionHotkey(owner C.uintptr_t) C.int32_t {
+	value, ok := nativeWindows.Load(uintptr(owner))
+	if !ok {
+		return 0
+	}
+	window := value.(*platformWindow)
+	parsed, parsedOK := ParseHotkey(window.webViewActionHotkey)
+	if !parsedOK {
+		return 0
+	}
+	if window.options.OnKey != nil && window.options.OnKey(KeyEvent{Key: parsed.Key, Modifiers: parsed.Modifiers, Down: true}) {
+		return 1
+	}
+	return 0
 }
 
 // woxGoWindowsWebViewReservedHotkey forwards a launcher-owned Ctrl+key from focused WebView content.

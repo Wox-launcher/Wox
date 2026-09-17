@@ -39,6 +39,7 @@ type settingsSearchResult struct {
 
 var builtInSettingSearchAliases = map[string][]string{
 	"MainHotkey":                {"shortcut", "main hotkey"},
+	"ActionPanelHotkey":         {"action hotkey", "more actions", "action panel"},
 	"UsePinYin":                 {"pinyin"},
 	"LangCode":                  {"language"},
 	"ShowPosition":              {"position"},
@@ -103,7 +104,8 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 			})
 		}
 	}
-	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.hotkey.Form, "general", "General")...)
+	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.hotkey.Form, "hotkey", "Hotkey")...)
+	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.general.Form, "general", "General")...)
 	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.ai.Form, "ai", "AI")...)
 
 	plugins := snapshot.search.Plugins
@@ -460,14 +462,19 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 	for index, item := range items {
 		if item.key == settingKey {
 			a.settingRow = index
+			if tab == "general" {
+				a.generalSettings.SetFormFocused(false)
+			}
 			return
 		}
 	}
 	var fields *formFieldsState
-	if tab == "general" {
+	if tab == "hotkey" {
 		fields = a.hotkeySettings.Form()
 	} else if tab == "ai" {
 		fields = a.aiSettings.Form()
+	} else if tab == "general" {
+		fields = a.generalSettings.Form()
 	}
 	if fields == nil {
 		return
@@ -475,7 +482,8 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 	for index, definition := range fields.definitions {
 		if definition.Value.Key == settingKey {
 			fields.focused = index
-			a.hotkeySettings.SetFocused(tab == "general")
+			a.hotkeySettings.SetFocused(tab == "hotkey")
+			a.generalSettings.SetFormFocused(tab == "general")
 			return
 		}
 	}

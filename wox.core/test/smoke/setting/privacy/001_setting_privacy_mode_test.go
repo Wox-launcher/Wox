@@ -58,7 +58,7 @@ func Test001SettingPrivacyMode(t *testing.T) {
 // startPrivateSession records the baseline, enables private mode, and exits after representative changes.
 func startPrivateSession(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	state := lifecycleState{
-		OriginalLanguage: smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode"),
+		OriginalLanguage: smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode"),
 		OriginalMaximum:  smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount"),
 	}
 	state.PrivateLanguage = differentLanguage(state.OriginalLanguage)
@@ -68,7 +68,7 @@ func startPrivateSession(t *testing.T, ctx context.Context, client *automationdr
 
 	openPrivacySettings(t, ctx, client)
 	setPrivacyMode(t, ctx, client, true)
-	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode")
+	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode")
 	smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-LangCode", state.PrivateLanguage)
 	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount")
 	smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-MaxResultCount", state.ChangedMaximum)
@@ -82,13 +82,13 @@ func verifyPrivateSessionAndStartNormalSession(t *testing.T, ctx context.Context
 	if !openPrivacySettings(t, ctx, client) {
 		t.Fatal("private mode was disabled after the private restart")
 	}
-	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode"), state.PrivateLanguage, "preserved language")
+	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode"), state.PrivateLanguage, "preserved language")
 	assertChoiceChanged(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount"), state.ChangedMaximum, "private result limit")
 	assertQueryHistory(t, ctx, client, false)
 
 	openPrivacySettings(t, ctx, client)
 	setPrivacyMode(t, ctx, client, false)
-	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode")
+	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode")
 	smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-LangCode", state.NormalLanguage)
 	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount")
 	smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-MaxResultCount", state.ChangedMaximum)
@@ -102,7 +102,7 @@ func verifyNormalSessionAndStartCleanup(t *testing.T, ctx context.Context, clien
 	if openPrivacySettings(t, ctx, client) {
 		t.Fatal("private mode was enabled after the normal restart")
 	}
-	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode"), state.NormalLanguage, "normal language")
+	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode"), state.NormalLanguage, "normal language")
 	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount"), state.ChangedMaximum, "normal result limit")
 	assertQueryHistory(t, ctx, client, true)
 
@@ -117,13 +117,13 @@ func verifyCleanupAndRestore(t *testing.T, ctx context.Context, client *automati
 	if !openPrivacySettings(t, ctx, client) {
 		t.Fatal("private mode was disabled before final cleanup verification")
 	}
-	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode"), state.NormalLanguage, "cleanup language")
+	assertChoice(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode"), state.NormalLanguage, "cleanup language")
 	assertChoiceChanged(t, smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount"), state.ChangedMaximum, "cleanup result limit")
 	assertQueryHistory(t, ctx, client, false)
 
 	openPrivacySettings(t, ctx, client)
 	setPrivacyMode(t, ctx, client, false)
-	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/general", "LangCode")
+	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "LangCode")
 	smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-LangCode", state.OriginalLanguage)
 	smoke.OpenSettingsAndReadChoice(t, ctx, client, "/appearance", "MaxResultCount")
 	smoke.SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-MaxResultCount", state.OriginalMaximum)

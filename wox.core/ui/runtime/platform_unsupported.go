@@ -136,6 +136,10 @@ func (w *platformWindow) focusWebView() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) setWebViewActionHotkey(hotkey string) error {
+	return nil
+}
+
 func (w *platformWindow) writeClipboardText(text string) error {
 	return ErrPlatformUnsupported
 }
