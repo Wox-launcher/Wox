@@ -42,6 +42,7 @@ type formTableEditorState struct {
 	appPicker         *formTableAppPickerState
 	choicePicker      *formTableChoicePickerState
 	queryVariable     *formTableQueryVariablePickerState
+	favicon           *formTableFaviconState
 	emojiPicker       *formTableEmojiPickerState
 	skillAdd          *formTableSkillAddState
 	mcpJSONImport     *formTableMCPJSONImportState
@@ -69,6 +70,7 @@ type formTableEditorSnapshot struct {
 	appPicker         *formTableAppPickerSnapshot
 	choicePicker      *formTableChoicePickerSnapshot
 	queryVariable     *formTableQueryVariablePickerSnapshot
+	favicon           *formTableFaviconState
 	emojiPicker       *formTableEmojiPickerSnapshot
 	skillAdd          *formTableSkillAddSnapshot
 	mcpJSONImport     *formTableMCPJSONImportSnapshot
@@ -313,6 +315,11 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 			kind: formTableQueryVariableKindForField(state, picker.fieldIndex),
 		}
 	}
+	var favicon *formTableFaviconState
+	if state.favicon != nil {
+		copy := *state.favicon
+		favicon = &copy
+	}
 	var emojiPicker *formTableEmojiPickerSnapshot
 	if picker := state.emojiPicker; picker != nil {
 		emojiPicker = &formTableEmojiPickerSnapshot{fieldIndex: picker.fieldIndex, initialEmoji: picker.initialEmoji}
@@ -342,6 +349,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		appPicker:         appPicker,
 		choicePicker:      choicePicker,
 		queryVariable:     queryVariable,
+		favicon:           favicon,
 		emojiPicker:       emojiPicker,
 		skillAdd:          skillAdd,
 		mcpJSONImport:     mcpJSONImport,
@@ -2098,6 +2106,14 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	if event.Composing {
 		return false
 	}
+	if state.favicon != nil {
+		if event.Key == woxui.KeyEscape {
+			a.closeFormTableFavicon()
+			return true
+		}
+		return false
+	}
+
 	if state.skillAdd != nil {
 		// The add-skill dialog owns Enter and Escape; printable keys continue into
 		// the focused text field for normal editing.
@@ -2290,5 +2306,5 @@ func (a *App) onFormTableTextInput(_ woxui.TextInputEvent) bool {
 	if state == nil || !a.formTableTargetCurrentLocked(state.target) {
 		return false
 	}
-	return state.appPicker == nil && state.emojiPicker == nil && !formTableChoicePickerFilterable(state)
+	return state.favicon == nil && state.appPicker == nil && state.emojiPicker == nil && !formTableChoicePickerFilterable(state)
 }

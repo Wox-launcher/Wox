@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"net/url"
 	"strings"
 
 	aitool "wox/ai/builtintool/wox"
@@ -15,6 +16,7 @@ import (
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/tooltip"
+	"wox/util/websiteicon"
 
 	"github.com/disintegration/imaging"
 )
@@ -209,4 +211,22 @@ func (s *CoreServices) AnswerAIQuestion(ctx context.Context, sessionID string, q
 	logger.Info(ctx, fmt.Sprintf("AI: resolving question answer for questionId=%s", questionID))
 	aitool.ResolveAIQuestionAnswer(questionID, answer)
 	return nil
+}
+
+// FetchWebsiteIcon embeds the fetched image so saved settings survive cache cleanup and sync.
+func (s *CoreServices) FetchWebsiteIcon(ctx context.Context, sessionID string, websiteURL string) (common.WoxImage, error) {
+	parsed, err := url.Parse(websiteURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
+		return common.WoxImage{}, errors.New("invalid website URL")
+	}
+	ctx = uiServiceContext(ctx, sessionID)
+	icon, err := websiteicon.Fetch(ctx, websiteURL)
+	if err != nil {
+		return common.WoxImage{}, err
+	}
+	decoded, err := icon.ToImageWithContext(ctx)
+	if err != nil {
+		return common.WoxImage{}, err
+	}
+	return common.NewWoxImage(decoded)
 }

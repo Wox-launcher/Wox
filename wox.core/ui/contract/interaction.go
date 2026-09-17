@@ -37,6 +37,7 @@ type InteractionServices interface {
 	GlanceItems(ctx context.Context, sessionID string, keys []plugin.GlanceKey, reason plugin.GlanceRefreshReason) ([]plugin.GlanceItemUI, error)
 	ExecuteGlanceAction(ctx context.Context, sessionID string, pluginID string, glanceID string, actionID string) error
 	LoadLazyResultImage(ctx context.Context, sessionID string, token string) (common.WoxImage, error)
+	FetchWebsiteIcon(ctx context.Context, sessionID string, websiteURL string) (common.WoxImage, error)
 	ResolveImage(ctx context.Context, sessionID string, image common.WoxImage, size int) (common.WoxImage, error)
 	ResultPreview(ctx context.Context, sessionID string, querySessionID string, queryID string, resultID string) (plugin.WoxPreview, error)
 	ShowPreviewImage(ctx context.Context, sessionID string, image common.WoxImage) error

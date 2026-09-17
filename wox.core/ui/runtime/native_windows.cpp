@@ -1139,6 +1139,8 @@ struct WoxWindowsWebView {
         reserved_key = "j";
       } else if (virtual_key == 'R') {
         reserved_key = "r";
+      } else if (virtual_key == 'O') {
+        reserved_key = "o";
       } else if (virtual_key == VK_OEM_4) {
         reserved_key = "[";
       } else if (virtual_key == VK_OEM_6) {

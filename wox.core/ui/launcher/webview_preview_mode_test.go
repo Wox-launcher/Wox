@@ -4,7 +4,10 @@ import (
 	"testing"
 	"wox/plugin"
 
+	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
@@ -168,6 +171,101 @@ func TestOnWebViewPreviewModeKeyLeavesOnEscape(t *testing.T) {
 	}
 	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.webViewFullscreen {
 		t.Fatal("escape should consume the key and exit webview fullscreen")
+	}
+}
+
+func TestGlobalWebViewPreviewRequestsKeyboardFocus(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	preview := `{"url":"https://gemini.google.com"}`
+	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
+	app.selected = 0
+	if app.activateWebViewPreview(preview) {
+		t.Fatal("first activation should not reset a missing session")
+	}
+	if !app.webViewWantKeyboardFocus {
+		t.Fatal("a result-owned webview preview should request page focus")
+	}
+
+	app.webViewWantKeyboardFocus = false
+	if app.activateWebViewPreview(preview) {
+		t.Fatal("same preview should not reset")
+	}
+	if app.webViewWantKeyboardFocus {
+		t.Fatal("same session should not steal focus back")
+	}
+
+	if !app.activateWebViewPreview(`{"url":"https://x.com"}`) {
+		t.Fatal("a new URL should replace the previous session")
+	}
+	if !app.webViewWantKeyboardFocus {
+		t.Fatal("switching result-owned webview pages should request page focus again")
+	}
+}
+
+func TestHotkeyShowKeepsQueryFocusOnGlobalWebViewPreview(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	preview := `{"url":"https://gemini.google.com"}`
+	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
+	app.selected = 0
+	app.keepQueryFocusOnWebViewActivate = true
+	if app.activateWebViewPreview(preview); app.webViewWantKeyboardFocus {
+		t.Fatal("hotkey show should keep the selected query box focused")
+	}
+
+	app.keepQueryFocusOnWebViewActivate = false
+	app.webViewPreviewData = ""
+	if app.activateWebViewPreview(preview); !app.webViewWantKeyboardFocus {
+		t.Fatal("a live webview query should still request page focus")
+	}
+}
+
+func TestRestoreQueryFocusAfterShowCancelsWebViewFocus(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	app.webViewWantKeyboardFocus = true
+	if app.restoreQueryFocusAfterShow() {
+		t.Fatal("query restore should no-op without a host")
+	}
+	if app.webViewWantKeyboardFocus {
+		t.Fatal("hotkey show must cancel pending webview page focus")
+	}
+}
+
+func TestFileWebViewPreviewKeepsQueryFocus(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	app.results = []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: "notes.md"}}}
+	app.selected = 0
+	if app.activateWebViewPreview(`{"url":"https://example.com"}`); app.webViewWantKeyboardFocus {
+		t.Fatal("a file preview that happens to use a webview should leave the query box focused")
+	}
+}
+
+func TestGlobalWebViewPreviewMovesHostFocusOffQuery(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+			woxwidget.EditableText{Key: launcherview.LauncherQueryInputKey, Autofocus: true, Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: previewview.WebViewPreviewFocusKey, Child: woxwidget.Container{Width: 100, Height: 30}},
+		}}
+	})
+	host.AttachServices(formTableHostServices{})
+	defer host.Dispose()
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 30}, PixelSize: woxui.PixelSize{Width: 200, Height: 30}, Scale: 1})
+	if !host.HasFocus(launcherview.LauncherQueryInputKey) {
+		t.Fatal("query input should start focused")
+	}
+
+	app := New(false, nil)
+	defer app.cancel()
+	app.host = host
+	preview := `{"url":"https://gemini.google.com"}`
+	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
+	app.selected = 0
+	app.activateWebViewPreview(preview)
+	if !host.HasFocus(previewview.WebViewPreviewFocusKey) {
+		t.Fatalf("focused key = %q, want the webview preview so the query caret stops blinking", host.FocusedKey())
 	}
 }
 

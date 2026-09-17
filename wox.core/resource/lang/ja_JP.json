@@ -1103,6 +1103,10 @@
   "ui_about_github": "GitHub",
   "ui_about_description": "Wox は Windows、macOS、Linux 向けのランチャーで、シンプルに動作します。",
   "ui_image_editor_emoji": "絵文字",
+  "ui_image_editor_from_url": "URL から取得",
+  "ui_image_editor_url_invalid": "有効なウェブサイトの URL を入力してください。",
+  "ui_image_editor_url_failed": "サイトアイコンを取得できませんでした。再試行してください。",
+  "ui_image_editor_url_confirm": "確認",
   "ui_image_editor_upload_image": "画像をアップロード",
   "ui_select_emoji": "絵文字を選択",
   "ui_select_emoji_search": "絵文字を検索",
@@ -2906,6 +2910,7 @@
   "ui_hotkey_overview_webview_refresh": "WebView プレビューを更新",
   "ui_hotkey_overview_webview_back": "WebView プレビューで戻る",
   "ui_hotkey_overview_webview_forward": "WebView プレビューで進む",
+  "ui_hotkey_overview_webview_open_in_browser": "WebView プレビューをブラウザで開く",
   "ui_hotkey_overview_webview_inspector": "WebView インスペクターを開く",
 
   "plugin_dictation_plugin_name": "ディクテーション",

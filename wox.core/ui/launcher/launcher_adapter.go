@@ -357,11 +357,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 					_ = a.window.WebViewReload()
 				}
 			},
-			OnOpenInBrowser: func() {
-				if a.window != nil {
-					_ = a.window.WebViewOpenInBrowser()
-				}
-			},
+			OnOpenInBrowser: a.openWebViewInSystemBrowser,
 		})
 	}
 	preview := a.resolvePreview(snapshot.results[snapshot.selected].Preview)

@@ -471,6 +471,9 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette w
 	if snapshot.choicePicker != nil {
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height, imageScale)})
 	}
+	if snapshot.favicon != nil {
+		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableFavicon(snapshot.favicon, palette, width, height)})
+	}
 	if snapshot.emojiPicker != nil {
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height, imageScale)})
 	}
@@ -903,10 +906,10 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		iconTint := palette.Text
 		props.EmojiIcon = a.imageForTint(settingControlIconSource("emoji"), &iconTint, physicalImageSize(16, callbacks.imageScale))
 		props.UploadIcon = a.imageForTint(settingControlIconSource("upload"), &iconTint, physicalImageSize(16, callbacks.imageScale))
-		props.EmojiWidth = a.formTableImageButtonWidth(props.EmojiLabel)
-		props.UploadWidth = a.formTableImageButtonWidth(props.UploadLabel)
 		props.OnEmoji = func() { a.openFormTableEmojiPicker(index) }
 		props.OnUpload = func() { a.pickFormTableRowImage(index) }
+		props.URLLabel = a.translate("i18n:ui_image_editor_from_url")
+		props.OnURL = func() { a.openFormTableFavicon(index) }
 	case "label":
 		props.Value = a.translate(value.Content)
 	default:

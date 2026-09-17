@@ -89,8 +89,8 @@ func TestActionPanelTintsThemeAdaptiveSVGOnly(t *testing.T) {
 func TestWebViewLocalActionPanelEntries(t *testing.T) {
 	results := []queryResult{{ID: "webview", Preview: queryPreview{PreviewType: "webview"}}}
 	entries := webViewLocalActionPanelEntries(results, 0, "windows")
-	if len(entries) != 4 {
-		t.Fatalf("webview local actions = %d, want 4", len(entries))
+	if len(entries) != 5 {
+		t.Fatalf("webview local actions = %d, want 5", len(entries))
 	}
 	if entries[0].ID != localActionWebViewReloadID || entries[0].Hotkey != primaryHotkey("r") {
 		t.Fatalf("reload action = %+v", entries[0])
@@ -101,11 +101,30 @@ func TestWebViewLocalActionPanelEntries(t *testing.T) {
 	if entries[2].ID != localActionWebViewGoForwardID || entries[2].Hotkey != primaryHotkey("]") {
 		t.Fatalf("forward action = %+v", entries[2])
 	}
-	if entries[3].ID != localActionWebViewOpenDevToolsID || entries[3].Hotkey != "" {
-		t.Fatalf("developer tools action = %+v", entries[3])
+	if entries[3].ID != localActionWebViewOpenInBrowserID || entries[3].Hotkey != primaryHotkey("o") {
+		t.Fatalf("open in browser action = %+v", entries[3])
+	}
+	if entries[4].ID != localActionWebViewOpenDevToolsID || entries[4].Hotkey != "" {
+		t.Fatalf("developer tools action = %+v", entries[4])
 	}
 	if unsupported := webViewLocalActionPanelEntries(results, 0, "linux"); len(unsupported) != 0 {
 		t.Fatalf("linux webview local actions = %d, want 0", len(unsupported))
+	}
+}
+
+func TestActionPanelEntryForHotkeyOpensWebViewInBrowser(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("webview local actions are available on macOS and Windows")
+	}
+	results := []queryResult{{ID: "webview", Preview: queryPreview{PreviewType: "webview"}}}
+	entries := unifiedActionPanelEntries(results, 0, nil)
+	modifiers := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		modifiers = woxui.KeyModifierMeta
+	}
+	entry, matched := actionPanelEntryForHotkey(entries, woxui.KeyEvent{Key: "o", Modifiers: modifiers, Down: true})
+	if !matched || entry.ID != localActionWebViewOpenInBrowserID {
+		t.Fatalf("Ctrl/Cmd+O = matched=%v entry=%+v, want open in browser", matched, entry)
 	}
 }
 
@@ -118,7 +137,7 @@ func TestUnifiedActionsReserveWebViewReloadHotkey(t *testing.T) {
 		Actions: []resultAction{{ID: "plugin-reload", Hotkey: primaryHotkey("r")}},
 	}}
 	entries := unifiedActionPanelEntries(results, 0, nil)
-	if len(entries) != 5 || entries[0].ID != localActionWebViewReloadID || entries[4].Hotkey != "" {
+	if len(entries) != 6 || entries[0].ID != localActionWebViewReloadID || entries[5].Hotkey != "" {
 		t.Fatalf("unified webview actions = %+v", entries)
 	}
 }

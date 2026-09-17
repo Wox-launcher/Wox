@@ -28,10 +28,11 @@ const (
 )
 
 const (
-	localActionWebViewReloadID       = "webview-reload"
-	localActionWebViewGoBackID       = "webview-go-back"
-	localActionWebViewGoForwardID    = "webview-go-forward"
-	localActionWebViewOpenDevToolsID = "webview-open-dev-tools"
+	localActionWebViewReloadID        = "webview-reload"
+	localActionWebViewGoBackID        = "webview-go-back"
+	localActionWebViewGoForwardID     = "webview-go-forward"
+	localActionWebViewOpenInBrowserID = "webview-open-in-browser"
+	localActionWebViewOpenDevToolsID  = "webview-open-dev-tools"
 )
 
 // actionPanelEntry keeps the unified picker presentation tied to its original execution target.
@@ -74,6 +75,10 @@ func webViewLocalActionPanelEntries(results []queryResult, selected int, goos st
 		{
 			Key: "local:webview:go-forward", ID: localActionWebViewGoForwardID, Name: "i18n:ui_action_webview_go_forward",
 			Icon: settingControlIconSource("arrow-right"), Hotkey: primaryHotkey("]"), Source: actionPanelSourceLocal,
+		},
+		{
+			Key: "local:webview:open-in-browser", ID: localActionWebViewOpenInBrowserID, Name: "i18n:ui_action_webview_open_in_browser",
+			Icon: settingControlIconSource("external"), Hotkey: primaryHotkey("o"), Source: actionPanelSourceLocal,
 		},
 		{
 			Key: "local:webview:open-dev-tools", ID: localActionWebViewOpenDevToolsID, Name: "i18n:ui_action_webview_open_inspector",
@@ -631,6 +636,9 @@ func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
 		err = a.window.WebViewGoBack()
 	case localActionWebViewGoForwardID:
 		err = a.window.WebViewGoForward()
+	case localActionWebViewOpenInBrowserID:
+		a.openWebViewInSystemBrowser()
+		return
 	case localActionWebViewOpenDevToolsID:
 		err = a.window.WebViewOpenDevTools()
 	default:

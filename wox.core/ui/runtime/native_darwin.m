@@ -2430,7 +2430,7 @@ static NSString *web_view_shortcut_script(void) {
   // Programmatic page focus reserves Escape for the launcher chrome instead of the document.
   return @"(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
           "document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey){const k=e.key.length===1?e.key.toLowerCase():e.key;"
-          "if(k==='j'||k==='r'||k==='['||k===']'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}}"
+          "if(k==='j'||k==='r'||k==='o'||k==='['||k===']'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}}"
           "if(e.key!=='Escape')return;if(window.__woxReserveHostEscape){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape');return}"
           "const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;"
           "const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();"

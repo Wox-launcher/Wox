@@ -984,10 +984,10 @@ type FormTableRowFieldProps struct {
 	ImageEmoji          string
 	EmojiLabel          string
 	UploadLabel         string
+	URLLabel            string
+	OnURL               func()
 	BrowseLabel         string
 	SelectLabel         string
-	EmojiWidth          float32
-	UploadWidth         float32
 	SelectWidth         float32
 	EmojiIcon           *woxui.Image
 	UploadIcon          *woxui.Image
@@ -1221,7 +1221,7 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 	case "checkbox":
 		return formTableRowCheckboxControl(props)
 	case "woxImage":
-		return formTableRowImageControl(props, height)
+		return formTableRowImageControl(props, width, height)
 	case "app":
 		return formTableRowAppControl(props, width, height)
 	case "select", "selectAIModel":
@@ -1349,10 +1349,10 @@ func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget 
 	})
 }
 
-// formTableRowImageControl restores Flutter's preview plus emoji and upload actions.
+// formTableRowImageControl wraps image-source actions beside the preview.
 // The icon is a display surface (like Flutter's WoxImageSelector preview); it never
 // becomes a text field, so no caret can appear inside it.
-func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxwidget.Widget {
+func formTableRowImageControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	var preview woxwidget.Widget
 	if props.Image != nil {
 		preview = woxwidget.Align{Width: 80, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.Image, Width: 64, Height: 64}}
@@ -1366,18 +1366,16 @@ func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxw
 	previewBox := woxwidget.Gesture{ID: props.ID + "-preview", OnTap: props.OnEmoji, Child: woxwidget.Container{
 		Width: 80, Height: height, Radius: 8, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Child: preview,
 	}}
-	buttonWidth := max(float32(98), props.EmojiWidth)
-	uploadWidth := max(float32(98), props.UploadWidth)
-	buttonsWidth := buttonWidth + 8 + uploadWidth
+	buttons := []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, OnTap: props.OnEmoji, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, OnTap: props.OnUpload, Theme: props.Theme}),
+	}
+	if props.OnURL != nil {
+		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-url", Label: props.URLLabel, OnTap: props.OnURL, Theme: props.Theme}))
+	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
 		previewBox,
-		woxwidget.Container{
-			Width: buttonsWidth, Height: height, Padding: woxwidget.Insets{Top: 27},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, IconSize: 14, IconGap: 6, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonSecondary, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnEmoji, Theme: props.Theme}),
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, IconSize: 14, IconGap: 6, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonSecondary, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnUpload, Theme: props.Theme}),
-			}},
-		},
+		woxwidget.Align{Width: max(float32(0), width-96), Height: height, Vertical: .5, Child: woxwidget.Wrap{Gap: 8, RunGap: 8, Children: buttons}},
 	}}
 }
 

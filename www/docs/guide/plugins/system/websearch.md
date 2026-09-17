@@ -45,7 +45,7 @@ https://www.google.com/search?q={wox:parameter?name=query}
 
 If an engine has multiple URLs, Wox opens each URL in order.
 
-On Windows and macOS, a completed search also offers **Open in WebView**. Enter still opens the browser. `Ctrl+Enter` (`Cmd+Enter` on macOS) replaces the result list with an in-launcher preview of the first URL and keeps the query box. Escape returns focus to the query and destroys that preview. The preview action panel includes Refresh (`Ctrl+R` / `Cmd+R`), Go Back (`Ctrl+[` / `Cmd+[`), and Go Forward (`Ctrl+]` / `Cmd+]`). Each search can set its own preview width, height, and injected CSS in the collapsed WebView group of the row editor. Linux does not include this action because Wox has no WebView preview there yet.
+On Windows and macOS, a completed search also offers **Open in WebView**. Enter still opens the browser. `Ctrl+Enter` (`Cmd+Enter` on macOS) replaces the result list with an in-launcher preview of the first URL and keeps the query box. Escape returns focus to the query and destroys that preview. The preview action panel includes Refresh (`Ctrl+R` / `Cmd+R`), Go Back (`Ctrl+[` / `Cmd+[`), Go Forward (`Ctrl+]` / `Cmd+]`), and Open in Browser (`Ctrl+O` / `Cmd+O`), which hides Wox. Each search can set its own preview width, height, and injected CSS in the collapsed WebView group of the row editor. Linux does not include this action because Wox has no WebView preview there yet.
 
 Existing `{query}`, `{lower_query}` and `{upper_query}` placeholders in URLs
 and titles migrate automatically to `{wox:parameter?name=query}` and

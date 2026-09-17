@@ -146,22 +146,25 @@ type App struct {
 	webViewPreviewHeight int
 	// webViewWantKeyboardFocus retries native page focus until the embedded surface exists.
 	webViewWantKeyboardFocus bool
-	chatWindowFocused        bool
-	chatWindowMaximized      bool
-	chatWindowRestoreFrame   woxui.Rect
-	chatWindowGeneration     uint64
-	chatImportQueue          []chatAttachmentImportJob
-	chatImportRunning        bool
-	chatImportEpoch          uint64
-	terminalFullscreen       bool
-	actionPanel              bool
-	actionSelected           int
-	actionSelectionKey       string
-	actionsSectionRevision   uint64
-	actionSectionState       actionSectionRevisionState
-	actionFilter             *woxui.TextEditor
-	visible                  bool
-	show                     showAppParams
+	// keepQueryFocusOnWebViewActivate skips page focus when a hotkey show restores
+	// an existing WebView result and has already selected the query box.
+	keepQueryFocusOnWebViewActivate bool
+	chatWindowFocused               bool
+	chatWindowMaximized             bool
+	chatWindowRestoreFrame          woxui.Rect
+	chatWindowGeneration            uint64
+	chatImportQueue                 []chatAttachmentImportJob
+	chatImportRunning               bool
+	chatImportEpoch                 uint64
+	terminalFullscreen              bool
+	actionPanel                     bool
+	actionSelected                  int
+	actionSelectionKey              string
+	actionsSectionRevision          uint64
+	actionSectionState              actionSectionRevisionState
+	actionFilter                    *woxui.TextEditor
+	visible                         bool
+	show                            showAppParams
 	// bottomAnchorY keeps QueryBoxAtBottom windows from drifting when DPI
 	// round-trips make Bounds().Height slightly larger than the logical height
 	// we last requested.
@@ -579,7 +582,9 @@ func (a *App) showWindow(params showAppParams) error {
 		a.visible = true
 		queryEmpty = a.query.QueryText == ""
 		launcher = a.launcher
+		a.keepQueryFocusOnWebViewActivate = true
 		a.reconcileSelectedPreview()
+		a.keepQueryFocusOnWebViewActivate = false
 		a.restoreQueryTextInput()
 	}); err != nil {
 		return err
@@ -623,6 +628,8 @@ func (a *App) showWindow(params showAppParams) error {
 
 // restoreQueryFocusAfterShow resets retained preview focus once the visible query tree is mounted.
 func (a *App) restoreQueryFocusAfterShow() bool {
+	// A restored WebView must not retry page focus after the query box is selected.
+	a.webViewWantKeyboardFocus = false
 	if a.host == nil || !a.queryCanFocus() {
 		return false
 	}

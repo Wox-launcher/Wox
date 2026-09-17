@@ -810,3 +810,24 @@ func TestFormTableHeightShowsWholeRows(t *testing.T) {
 		}
 	}
 }
+
+// TestFormTableImageActionsFitTranslatedLabels checks wrapping at narrow logical widths and scaled displays.
+func TestFormTableImageActionsFitTranslatedLabels(t *testing.T) {
+	for _, width := range []float32{360, 600} {
+		for _, scale := range []float32{1, 1.5, 2} {
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				return formTableRowImageControl(FormTableRowFieldProps{
+					ID: "icon", EmojiLabel: "Emoji", UploadLabel: "Загрузить изображение", URLLabel: "从 URL 获取", OnURL: func() {},
+				}, width, 88)
+			})
+			host.AttachServices(translatedLabelHostServices{})
+			if err := host.SetRepaintDebugMode(woxwidget.RepaintDebugVerify); err != nil {
+				t.Fatal(err)
+			}
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 88}, PixelSize: woxui.PixelSize{Width: int(width * scale), Height: int(88 * scale)}, Scale: scale})
+			if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) != 0 {
+				t.Fatalf("width %v scale %v: %v", width, scale, diagnostics)
+			}
+		}
+	}
+}

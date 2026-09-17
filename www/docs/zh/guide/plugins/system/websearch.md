@@ -45,7 +45,7 @@ https://www.google.com/search?q={wox:parameter?name=query}
 
 如果一个搜索引擎配置了多个 URL，Wox 会按顺序打开。
 
-在 Windows 和 macOS 上，完整的搜索结果还会提供 **在 WebView 中打开**。Enter 仍然打开浏览器。`Ctrl+Enter`（macOS 上为 `Cmd+Enter`）会把结果列表替换成第一条 URL 的应用内预览，并保留查询框。按 Escape 把焦点交回查询框并销毁这次预览。预览的操作面板包含刷新（`Ctrl+R` / `Cmd+R`）、后退（`Ctrl+[` / `Cmd+[`）和前进（`Ctrl+]` / `Cmd+]`）。每条搜索都可以在行编辑器默认折叠的 WebView 分组里单独设置预览宽度、高度和注入 CSS。Linux 目前没有 WebView 预览，因此不会显示这个操作。
+在 Windows 和 macOS 上，完整的搜索结果还会提供 **在 WebView 中打开**。Enter 仍然打开浏览器。`Ctrl+Enter`（macOS 上为 `Cmd+Enter`）会把结果列表替换成第一条 URL 的应用内预览，并保留查询框。按 Escape 把焦点交回查询框并销毁这次预览。预览的操作面板包含刷新（`Ctrl+R` / `Cmd+R`）、后退（`Ctrl+[` / `Cmd+[`）、前进（`Ctrl+]` / `Cmd+]`）和在系统浏览器中打开（`Ctrl+O` / `Cmd+O`，打开后隐藏 Wox）。每条搜索都可以在行编辑器默认折叠的 WebView 分组里单独设置预览宽度、高度和注入 CSS。Linux 目前没有 WebView 预览，因此不会显示这个操作。
 
 已有标题和 URL 中的 `{query}`、`{lower_query}`、`{upper_query}` 会自动迁移为
 `{wox:parameter?name=query}` 以及带 `case=lower` / `case=upper` 的形式。

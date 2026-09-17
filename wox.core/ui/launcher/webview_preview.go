@@ -119,6 +119,7 @@ func (a *App) handleWebViewFallbackEscape() {
 		a.exitWebViewPreviewMode()
 		return
 	}
+	a.webViewWantKeyboardFocus = false
 	queryVisible := !a.show.HideQueryBox
 	queryCanFocus := a.queryCanFocus()
 	focusedKeyBefore := woxwidget.Key("")
@@ -171,6 +172,9 @@ func (a *App) activateWebViewPreview(previewData string) bool {
 		a.webViewPreviewData = previewData
 		a.webViewPreviewError = ""
 		a.webViewNavigation = woxui.WebViewNavigationState{}
+		if a.isGlobalWebViewPreview() && !a.keepQueryFocusOnWebViewActivate {
+			a.beginWebViewKeyboardFocus()
+		}
 	}
 	if strings.TrimSpace(a.webViewNavigation.URL) == "" {
 		if data, err := decodeWebViewPreview(previewData); err == nil {
@@ -242,8 +246,8 @@ func (a *App) onWebViewPreviewModeKey(event woxui.KeyEvent) bool {
 	if a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey) {
 		return false
 	}
-	// Page focus swallows ordinary launcher keys, but refresh/back/forward still
-	// need to run when the reserved WebView accelerators are forwarded here.
+	// Page focus swallows ordinary launcher keys, but reserved WebView
+	// accelerators still need to run refresh/back/forward/open-in-browser.
 	if a.onResultActionHotkey(event) {
 		return true
 	}
@@ -284,17 +288,29 @@ func (a *App) enterWebViewPreviewMode(resultIndex int, contextData map[string]st
 	a.webViewFullscreen = true
 	a.webViewPreviewWidth = parseOptionalPositiveInt(contextData[webViewPreviewWidthContextKey])
 	a.webViewPreviewHeight = parseOptionalPositiveInt(contextData[webViewPreviewHeightContextKey])
-	a.webViewWantKeyboardFocus = true
 	a.restoreQueryTextInput()
 	a.reconcileSelectedPreview()
 	_ = a.applyWindowBounds()
-	if a.host != nil {
-		a.host.RequestFocus(previewview.WebViewPreviewFocusKey)
-	}
-	a.requestWebViewKeyboardFocus()
+	a.beginWebViewKeyboardFocus()
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
+}
+
+// isGlobalWebViewPreview reports a result-owned WebView page, such as `webview g`
+// or Web Search's in-launcher preview. File previews that happen to render as a
+// WebView stay on the query box.
+func (a *App) isGlobalWebViewPreview() bool {
+	if a.selected < 0 || a.selected >= len(a.results) {
+		return false
+	}
+	return a.results[a.selected].Preview.PreviewType == "webview"
+}
+
+// beginWebViewKeyboardFocus asks the Host and the native page for keyboard input.
+func (a *App) beginWebViewKeyboardFocus() {
+	a.webViewWantKeyboardFocus = true
+	a.requestWebViewKeyboardFocus()
 }
 
 func parseOptionalPositiveInt(value string) int {
@@ -306,16 +322,33 @@ func parseOptionalPositiveInt(value string) int {
 }
 
 // requestWebViewKeyboardFocus moves keyboard input onto the native page. Host
-// RequestFocus only updates Go widgets; composition WebView2 and WKWebView need
-// a separate native handoff, and the first Show may still be creating the controller.
+// RequestFocus takes the query-box caret; composition WebView2 and WKWebView
+// still need a separate native handoff, and the first Show may still be creating
+// the controller. OnBounds retries until both succeed so plugin pages such as
+// `webview g` match Web Search's Ctrl+Enter focus.
 func (a *App) requestWebViewKeyboardFocus() {
-	if !a.webViewWantKeyboardFocus || a.window == nil {
+	if !a.webViewWantKeyboardFocus {
+		return
+	}
+	hostFocused := a.host == nil
+	if a.host != nil {
+		hostFocused = a.host.HasFocus(previewview.WebViewPreviewFocusKey)
+		if !hostFocused {
+			hostFocused = a.host.RequestFocus(previewview.WebViewPreviewFocusKey)
+		}
+		if hostFocused && a.window != nil {
+			a.restoreQueryTextInput()
+		}
+	}
+	if a.window == nil {
 		return
 	}
 	if err := a.window.FocusWebView(); err != nil {
 		return
 	}
-	a.webViewWantKeyboardFocus = false
+	if hostFocused {
+		a.webViewWantKeyboardFocus = false
+	}
 }
 
 // exitWebViewPreviewMode restores the query box without destroying the current search.
@@ -361,6 +394,24 @@ func (a *App) restoreWebViewPreviewResultLocked() {
 			a.results[index].Preview = a.webViewFullscreenRestore
 			return
 		}
+	}
+}
+
+// openWebViewInSystemBrowser opens the current page in the OS browser and hides Wox.
+func (a *App) openWebViewInSystemBrowser() {
+	if a.window == nil {
+		return
+	}
+	if err := a.window.WebViewOpenInBrowser(); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open webview in browser: %v", err))
+		a.hideActionPanel()
+		return
+	}
+	// Opening the system browser leaves this preview; drop the session so the next
+	// Ctrl+Enter cannot resume the same scroll position after Hide.
+	a.resetWebView()
+	if err := a.hideWindow(true); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("hide launcher after open webview in browser: %v", err))
 	}
 }
 
