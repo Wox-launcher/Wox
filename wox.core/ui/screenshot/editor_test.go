@@ -1321,6 +1321,147 @@ func TestScreenshotEditorTextFrameSeparatesEditingAndDragging(t *testing.T) {
 	}
 }
 
+func TestScreenshotEditorTextToolDragsFromDashedFrame(t *testing.T) {
+	annotation := screenshotEditorAnnotation{
+		tool: screenshotEditorToolText, start: Point{X: 50, Y: 40}, text: "Wox", color: screenshotEditorAnnotationColor, fontSize: 20,
+	}
+	state := &screenshotEditorOverlayState{
+		frameSize: Size{Width: 240, Height: 140}, selection: Rect{Width: 240, Height: 140}, hasSelection: true,
+		activeTool: screenshotEditorToolText, annotations: []screenshotEditorAnnotation{annotation}, uiScale: 1,
+	}
+	frame := screenshotEditorTextFrame(annotation, 1)
+	borderPoint := Point{X: frame.X + frame.Width/2, Y: frame.Y}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: borderPoint})
+	if !state.hasHoveredMark || state.pointerCursor != PointerCursorMove {
+		t.Fatalf("text-tool border hover = hovered:%t cursor:%d, want move", state.hasHoveredMark, state.pointerCursor)
+	}
+
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: borderPoint})
+	if state.textEditing || state.editMode != screenshotEditorEditMoveAnnotation {
+		t.Fatalf("text-tool border press = editing:%t mode:%d, want move", state.textEditing, state.editMode)
+	}
+	movedPoint := Point{X: borderPoint.X + 20, Y: borderPoint.Y + 10}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: movedPoint})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: movedPoint})
+	if got := state.annotations[0].start; got != (Point{X: 70, Y: 50}) {
+		t.Fatalf("text-tool dragged start = %+v, want {70 50}", got)
+	}
+	if state.textDraft != "" || len(state.annotations) != 1 {
+		t.Fatalf("text-tool drag created a new label: draft=%q annotations=%d", state.textDraft, len(state.annotations))
+	}
+}
+
+func screenshotEditorPrimaryModifier() KeyModifiers {
+	if runtime.GOOS == "darwin" {
+		return KeyModifierMeta
+	}
+	return KeyModifierControl
+}
+
+func TestScreenshotEditorTextEditingSupportsSelectionShortcutsAndMultiClick(t *testing.T) {
+	annotation := screenshotEditorAnnotation{
+		tool: screenshotEditorToolText, start: Point{X: 30, Y: 30}, text: "Hello World", color: screenshotEditorAnnotationColor, fontSize: 20,
+	}
+	state := &screenshotEditorOverlayState{
+		frameSize: Size{Width: 320, Height: 160}, selection: Rect{Width: 320, Height: 160}, hasSelection: true,
+		activeTool: screenshotEditorToolSelect, annotations: []screenshotEditorAnnotation{annotation}, uiScale: 1,
+	}
+	click := Point{X: 45, Y: 40}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: click})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: click})
+	if !state.textEditing || state.textDraft != "Hello World" {
+		t.Fatalf("edit start = editing:%t draft:%q", state.textEditing, state.textDraft)
+	}
+
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: click})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: click})
+	if got := state.textEditor.SelectedText(); got != "Hello" {
+		t.Fatalf("double-click selected %q, want Hello", got)
+	}
+
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: click})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: click})
+	if got := state.textEditor.SelectedText(); got != "Hello World" {
+		t.Fatalf("triple-click selected %q, want Hello World", got)
+	}
+
+	state.textEditor.SetCaret(5)
+	state.syncTextEditorLocked()
+	if !state.key(KeyEvent{Key: Key("a"), Down: true, Modifiers: screenshotEditorPrimaryModifier()}) {
+		t.Fatal("select-all shortcut was not handled")
+	}
+	if got := state.textEditor.SelectedText(); got != "Hello World" {
+		t.Fatalf("Ctrl+A selected %q, want Hello World", got)
+	}
+
+	state.textEditor.SetCaret(11)
+	state.syncTextEditorLocked()
+	state.textInput(TextInputEvent{Kind: TextInputCommit, Text: "!"})
+	if state.textDraft != "Hello World!" {
+		t.Fatalf("typed draft = %q", state.textDraft)
+	}
+	if !state.key(KeyEvent{Key: Key("z"), Down: true, Modifiers: screenshotEditorPrimaryModifier()}) {
+		t.Fatal("undo shortcut was not handled")
+	}
+	if state.textDraft != "Hello World" {
+		t.Fatalf("undo draft = %q, want Hello World", state.textDraft)
+	}
+}
+
+func TestScreenshotEditorAnnotationDirtyRectCoversMove(t *testing.T) {
+	annotation := screenshotEditorAnnotation{
+		tool: screenshotEditorToolText, start: Point{X: 50, Y: 40}, text: "Wox", fontSize: 20,
+		textSize: Size{Width: 40, Height: 24}, measuredSize: 20,
+	}
+	before := screenshotEditorAnnotationDirtyRect(annotation, 1)
+	moved := annotation
+	moved.start = Point{X: 70, Y: 50}
+	after := screenshotEditorAnnotationDirtyRect(moved, 1)
+	combined := unionScreenshotEditorRects(before, after)
+	if combined.X > before.X || combined.Y > before.Y || combined.X+combined.Width < after.X+after.Width {
+		t.Fatalf("move dirty rect = %+v, before=%+v after=%+v", combined, before, after)
+	}
+}
+
+func TestScreenshotEditorExportCropsBeforeAnnotating(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 800, 400))
+	draw.Draw(source, source.Bounds(), image.NewUniform(color.RGBA{R: 20, G: 30, B: 40, A: 255}), image.Point{}, draw.Src)
+	source.SetRGBA(500, 250, color.RGBA{R: 9, G: 8, B: 7, A: 255})
+	selection := Rect{X: 400, Y: 200, Width: 200, Height: 100}
+	frame := Size{Width: 800, Height: 400}
+	output, err := renderScreenshotEditorAnnotations(source, []screenshotEditorAnnotation{{
+		tool: screenshotEditorToolRect, rect: Rect{X: 450, Y: 220, Width: 40, Height: 20}, color: screenshotEditorAnnotationColor,
+	}}, selection, frame, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Bounds() != image.Rect(400, 200, 600, 300) {
+		t.Fatalf("export bounds = %v, want cropped selection", output.Bounds())
+	}
+	if got := output.RGBAAt(500, 250); got.R != 9 || got.G != 8 || got.B != 7 {
+		t.Fatalf("cropped source pixel = %+v, want 9,8,7", got)
+	}
+	if got := output.RGBAAt(470, 220); got.R != screenshotEditorAnnotationColor.R || got.G != screenshotEditorAnnotationColor.G || got.B != screenshotEditorAnnotationColor.B {
+		t.Fatalf("cropped annotation pixel = %+v", got)
+	}
+	if output.Stride != output.Rect.Dx()*4 || len(output.Pix) < output.Rect.Dy()*output.Stride {
+		t.Fatalf("cropped buffer stride = %d pix=%d, want tightly packed RGBA", output.Stride, len(output.Pix))
+	}
+
+	cursor := Point{X: 500, Y: 250}
+	cursorRaster := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	cursorRaster.SetRGBA(0, 0, color.RGBA{R: 200, G: 30, B: 20, A: 255})
+	exported, err := exportScreenshotSelection(source, nil, selection, frame, 1, &cursor, true, &screenshotEditorCapturedCursor{
+		raster: cursorRaster, hotspot: Point{},
+	})
+	if err != nil {
+		t.Fatalf("export crop with cursor: %v", err)
+	}
+	if got := exported.RGBAAt(500, 250); got.R != 200 || got.G != 30 || got.B != 20 {
+		t.Fatalf("cropped cursor pixel = %+v", got)
+	}
+}
+
 func TestScreenshotEditorArrowShaftStopsInsideHead(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 120, 80))
 	draw.Draw(source, source.Bounds(), image.NewUniform(color.RGBA{R: 255, G: 255, B: 255, A: 255}), image.Point{}, draw.Src)

@@ -115,16 +115,16 @@ ifeq ($(PLATFORM),windows)
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
 	# Keep Go symbols and DWARF data so crash minidumps can be symbolized against the exact release executable.
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 
 ifeq ($(PLATFORM),linux)
 	# Keep symbols in release binaries so native crash reports retain actionable stack information.
-	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
 endif
 ifeq ($(PLATFORM),macos)
 	# Keep symbols in release binaries so macOS diagnostic reports can be symbolized with the shipped executable.
-	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0 -Wl,-no_warn_duplicate_libraries" go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0 -Wl,-no_warn_duplicate_libraries" go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
 endif
 
 WINDOW_HOOK_SOURCE := util/windowhook/hook/window_hook.c

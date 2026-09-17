@@ -302,6 +302,9 @@ type CaptureScreenshotResult struct {
 	// desktop overlay. The previous completed result only described file/clipboard output, so Go had
 	// no way to distinguish a normal confirmation from a toolbar pin action.
 	PinToScreen bool `json:"pinToScreen,omitempty"`
+	// PinOverlayShown is set when UI already opened the pinned desktop window from
+	// the composited pixels. Go then skips a second file-backed overlay open.
+	PinOverlayShown bool `json:"pinOverlayShown,omitempty"`
 	// ClipboardWriteSucceeded stays explicit instead of overloading Status so export-success plus
 	// clipboard-failure can still return a completed screenshot together with a warning.
 	ClipboardWriteSucceeded bool   `json:"clipboardWriteSucceeded"`

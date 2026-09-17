@@ -283,6 +283,33 @@ func screenshotEditorAnnotationBounds(annotation screenshotEditorAnnotation, uiS
 	}
 }
 
+// screenshotEditorAnnotationDirtyRect includes the dashed text frame or handle padding so a move can repaint only that region.
+func screenshotEditorAnnotationDirtyRect(annotation screenshotEditorAnnotation, uiScale float32) Rect {
+	scale := max(float32(1), uiScale)
+	bounds := screenshotEditorAnnotationBounds(annotation, uiScale)
+	if annotation.tool == screenshotEditorToolText {
+		bounds = screenshotEditorTextFrame(annotation, uiScale)
+	}
+	padding := 12 * scale
+	return Rect{X: bounds.X - padding, Y: bounds.Y - padding, Width: bounds.Width + 2*padding, Height: bounds.Height + 2*padding}
+}
+
+func unionScreenshotEditorRects(left, right Rect) Rect {
+	if left.Width <= 0 || left.Height <= 0 {
+		return right
+	}
+	if right.Width <= 0 || right.Height <= 0 {
+		return left
+	}
+	x := min(left.X, right.X)
+	y := min(left.Y, right.Y)
+	return Rect{
+		X: x, Y: y,
+		Width:  max(left.X+left.Width, right.X+right.Width) - x,
+		Height: max(left.Y+left.Height, right.Y+right.Height) - y,
+	}
+}
+
 func screenshotEditorAnnotationTextSize(annotation screenshotEditorAnnotation, renderedFontSize float32) Size {
 	if annotation.textSize.Width > 0 && annotation.textSize.Height > 0 && math.Abs(float64(annotation.measuredSize-renderedFontSize)) < 0.01 {
 		return annotation.textSize
@@ -377,11 +404,17 @@ func drawScreenshotEditorMosaicPreview(displayList *DisplayList, points []Point,
 	}
 }
 
-// renderScreenshotEditorAnnotations composites editor marks into the captured desktop pixels.
+// renderScreenshotEditorAnnotations composites editor marks into the selected crop only.
+// The returned RGBA keeps the source-pixel rectangle so annotation and cursor coordinates
+// stay in capture space without a second full-desktop copy.
 func renderScreenshotEditorAnnotations(source image.Image, annotations []screenshotEditorAnnotation, selection Rect, frame Size, uiScale float32) (*image.RGBA, error) {
 	bounds := source.Bounds()
-	output := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-	draw.Draw(output, output.Bounds(), source, bounds.Min, draw.Src)
+	clip, err := screenshotEditorPixelSelection(bounds, selection, frame)
+	if err != nil {
+		return nil, err
+	}
+	output := image.NewRGBA(clip)
+	copyScreenshotCapture(output, source, clip.Min)
 	if len(annotations) == 0 {
 		return output, nil
 	}
@@ -389,10 +422,6 @@ func renderScreenshotEditorAnnotations(source image.Image, annotations []screens
 	scaleY := float32(bounds.Dy()) / frame.Height
 	previewScale := max(float32(1), uiScale)
 	strokeWidth := screenshotEditorAnnotationStroke * previewScale * scaleX
-	clip, err := screenshotEditorPixelSelection(bounds, selection, frame)
-	if err != nil {
-		return nil, err
-	}
 	for _, annotation := range annotations {
 		drawColor := screenshotEditorAnnotationDrawColor(annotation)
 		pixelColor := color.RGBA{R: drawColor.R, G: drawColor.G, B: drawColor.B, A: drawColor.A}
@@ -461,11 +490,19 @@ func renderScreenshotEditorCursor(target *image.RGBA, cursorPixel Point, selecti
 	if target == nil || frame.Width <= 0 || frame.Height <= 0 {
 		return nil
 	}
-	scaleX := float32(target.Bounds().Dx()) / frame.Width
-	scaleY := float32(target.Bounds().Dy()) / frame.Height
 	clip, err := screenshotEditorPixelSelection(target.Bounds(), selection, frame)
 	if err != nil {
 		return err
+	}
+	scaleX := float32(target.Bounds().Dx()) / frame.Width
+	scaleY := float32(target.Bounds().Dy()) / frame.Height
+	return paintScreenshotEditorCursor(target, clip, cursorPixel, scaleX, scaleY, captured)
+}
+
+// paintScreenshotEditorCursor draws the pointer in source-pixel space using an explicit clip.
+func paintScreenshotEditorCursor(target *image.RGBA, clip image.Rectangle, cursorPixel Point, scaleX, scaleY float32, captured *screenshotEditorCapturedCursor) error {
+	if target == nil {
+		return nil
 	}
 	width := max(1, int(math.Round(float64(screenshotEditorCursorWidth*scaleX))))
 	height := max(1, int(math.Round(float64(screenshotEditorCursorHeight*scaleY))))
@@ -493,6 +530,20 @@ func renderScreenshotEditorCursor(target *image.RGBA, cursorPixel Point, selecti
 	}
 	draw.Draw(target, destination, cursor, image.Pt(destination.Min.X-left, destination.Min.Y-top), draw.Over)
 	return nil
+}
+
+// copyScreenshotCapture fills dst from origin using a packed BGRA fast path when available.
+func copyScreenshotCapture(dst *image.RGBA, src image.Image, origin image.Point) {
+	if dst == nil || src == nil {
+		return
+	}
+	if writer, ok := src.(interface {
+		WriteRGBA(dst *image.RGBA, origin image.Point)
+	}); ok {
+		writer.WriteRGBA(dst, origin)
+		return
+	}
+	draw.Draw(dst, dst.Bounds(), src, origin, draw.Src)
 }
 
 func screenshotEditorScalePoint(point Point, scaleX, scaleY float32) image.Point {

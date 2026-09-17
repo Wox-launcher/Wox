@@ -475,7 +475,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 	return common.CaptureScreenshotResult{
 		Status: common.CaptureScreenshotStatusCompleted, ArtifactKind: artifactKind, ArtifactPath: artifactPath,
 		ScreenshotPath: result.ScreenshotPath, LogicalSelectionRect: &selection,
-		PinToScreen: result.PinToScreen, ClipboardWriteSucceeded: result.ClipboardWriteSucceeded, ClipboardWarningMessage: result.ClipboardWarningMessage,
+		PinToScreen: result.PinToScreen, PinOverlayShown: result.PinOverlayShown, ClipboardWriteSucceeded: result.ClipboardWriteSucceeded, ClipboardWarningMessage: result.ClipboardWarningMessage,
 	}, nil
 }
 

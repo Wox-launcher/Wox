@@ -1,6 +1,8 @@
 package imageoverlay
 
 import (
+	"image"
+	"image/color"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -169,6 +171,22 @@ func TestImageOverlayDefaultPositionUsesMouseScreenCenter(t *testing.T) {
 	}
 	if _, _, ok = imageOverlayDefaultPosition(screen.Size{}); ok {
 		t.Fatal("empty screen should not produce a default position")
+	}
+}
+
+func TestNewRuntimeOverlayImageRetainsPackedRGBA(t *testing.T) {
+	source := image.NewRGBA(image.Rect(10, 20, 12, 21))
+	source.SetRGBA(10, 20, color.RGBA{R: 1, G: 2, B: 3, A: 255})
+	got, err := newRuntimeOverlayImage(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Width != 2 || got.Height != 1 {
+		t.Fatalf("runtime image size = %dx%d, want 2x1", got.Width, got.Height)
+	}
+	source.SetRGBA(11, 20, color.RGBA{R: 9, G: 8, B: 7, A: 255})
+	if pixel := got.RGBAAt(1, 0); pixel.R != 9 || pixel.G != 8 || pixel.B != 7 {
+		t.Fatalf("retained pixel = %+v, want the composited buffer", pixel)
 	}
 }
 

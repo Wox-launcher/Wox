@@ -129,3 +129,19 @@ func TestWindowsPackedBGRAPreservesNativePixels(t *testing.T) {
 		t.Fatal("renderer image did not retain the BGRA capture")
 	}
 }
+
+func TestWindowsPackedBGRAWriteRGBACopiesCrop(t *testing.T) {
+	pixels := []byte{
+		1, 2, 3, 0, 4, 5, 6, 0, 7, 8, 9, 0, 10, 11, 12, 0,
+		13, 14, 15, 0, 16, 17, 18, 0, 19, 20, 21, 0, 22, 23, 24, 0,
+	}
+	source := &PackedBGRA{Pix: pixels, Stride: 16, Rect: image.Rect(0, 0, 4, 2)}
+	dst := image.NewRGBA(image.Rect(1, 1, 3, 2))
+	source.WriteRGBA(dst, image.Pt(1, 1))
+	if got := dst.RGBAAt(1, 1); got.R != 18 || got.G != 17 || got.B != 16 || got.A != 255 {
+		t.Fatalf("cropped BGRA pixel = %+v, want RGB 18,17,16", got)
+	}
+	if pixels[20] != 16 {
+		t.Fatalf("source pixels were modified: %v", pixels)
+	}
+}

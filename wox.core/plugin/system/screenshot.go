@@ -23,7 +23,6 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/ocr"
-	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/shell"
 
@@ -855,23 +854,13 @@ func (p *ScreenshotPlugin) pinScreenshotToScreen(ctx context.Context, screenshot
 	}
 
 	name := screenshotPinnedOverlayPrefix + util.Md5([]byte(fmt.Sprintf("%s:%d", screenshotPath, time.Now().UnixNano())))
-	// Refactor: pinned screenshots now use the same file-backed image overlay helper as preview
-	// overlays. The helper validates the file and reads header dimensions when UI does not
-	// provide a logical selection size, keeping screenshot pinning and image preview on one path.
-	err := imageoverlay.Show(ctx, imageoverlay.Options{
-		ID:            name,
-		Image:         common.NewWoxImageAbsolutePath(screenshotPath),
-		Width:         width,
-		Height:        height,
-		Movable:       true,
-		CloseOnEscape: true,
-		// Bug fix: Windows native overlays normally position screen overlays relative to the
-		// primary work area. Screenshot selections are already desktop-absolute, so pinning must
-		// bypass that notification-style anchoring to stay on the selected monitor.
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorTopLeft,
-		OffsetX:          offsetX,
-		OffsetY:          offsetY,
+	err := imageoverlay.ShowPin(ctx, imageoverlay.PinOptions{
+		ID:      name,
+		Path:    screenshotPath,
+		Width:   width,
+		Height:  height,
+		OffsetX: offsetX,
+		OffsetY: offsetY,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to show pinned screenshot overlay: %w", err)
@@ -938,12 +927,13 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		})
 		p.scheduleScreenshotOCR(result.ScreenshotPath)
 		if result.PinToScreen {
-			// UI owns final image composition, but the pinned desktop window belongs in Go because
-			// util/overlay is already the native surface abstraction used by core. Branching on the
-			// explicit result flag avoids overloading normal clipboard confirmation with pin behavior.
-			if err := p.pinScreenshotToScreen(ctx, result.ScreenshotPath, result.LogicalSelectionRect); err != nil {
-				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to pin screenshot: path=%s err=%s", result.ScreenshotPath, err.Error()))
-				p.api.Notify(ctx, "plugin_screenshot_pin_failed")
+			// Capture pin now opens the overlay from the composited pixels before the JPEG
+			// write returns. Retry from the saved file only when that in-memory show failed.
+			if !result.PinOverlayShown {
+				if err := p.pinScreenshotToScreen(ctx, result.ScreenshotPath, result.LogicalSelectionRect); err != nil {
+					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to pin screenshot: path=%s err=%s", result.ScreenshotPath, err.Error()))
+					p.api.Notify(ctx, "plugin_screenshot_pin_failed")
+				}
 			}
 			return
 		}

@@ -48,6 +48,51 @@ func (source *PackedBGRA) SubImage(bounds image.Rectangle) image.Image {
 	return &PackedBGRA{Pix: source.Pix[offset:], Stride: source.Stride, Rect: bounds}
 }
 
+// WriteRGBA copies origin..origin+dst.Size from the BGRX capture into dst as packed RGBA.
+// Screenshot export uses this instead of image/draw so a selected crop does not walk every
+// virtual-desktop pixel through At().
+func (source *PackedBGRA) WriteRGBA(dst *image.RGBA, origin image.Point) {
+	if source == nil || dst == nil {
+		return
+	}
+	width, height := dst.Rect.Dx(), dst.Rect.Dy()
+	if width <= 0 || height <= 0 {
+		return
+	}
+	for y := 0; y < height; y++ {
+		srcY := origin.Y + y
+		if srcY < source.Rect.Min.Y || srcY >= source.Rect.Max.Y {
+			continue
+		}
+		srcX := origin.X
+		count := width
+		if srcX < source.Rect.Min.X {
+			skip := source.Rect.Min.X - srcX
+			srcX += skip
+			count -= skip
+		}
+		if srcX+count > source.Rect.Max.X {
+			count = source.Rect.Max.X - srcX
+		}
+		if count <= 0 {
+			continue
+		}
+		srcOff := (srcY-source.Rect.Min.Y)*source.Stride + (srcX-source.Rect.Min.X)*4
+		dstOff := y*dst.Stride + (srcX-origin.X)*4
+		for x := 0; x < count; x++ {
+			si := srcOff + x*4
+			di := dstOff + x*4
+			if si+3 >= len(source.Pix) || di+3 >= len(dst.Pix) {
+				break
+			}
+			dst.Pix[di+0] = source.Pix[si+2]
+			dst.Pix[di+1] = source.Pix[si+1]
+			dst.Pix[di+2] = source.Pix[si+0]
+			dst.Pix[di+3] = 255
+		}
+	}
+}
+
 // RetainedRendererImage lets the screenshot editor upload Windows' native BGRA pixels directly.
 func (source *PackedBGRA) RetainedRendererImage() (*Image, error) {
 	if source == nil {

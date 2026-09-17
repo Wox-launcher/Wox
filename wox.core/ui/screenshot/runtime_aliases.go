@@ -3,28 +3,31 @@ package screenshot
 import woxui "wox/ui/runtime"
 
 type (
-	Color           = woxui.Color
-	DisplayList     = woxui.DisplayList
-	FrameInfo       = woxui.FrameInfo
-	Image           = woxui.Image
-	Key             = woxui.Key
-	KeyEvent        = woxui.KeyEvent
-	KeyModifiers    = woxui.KeyModifiers
-	ManagedWindow   = woxui.ManagedWindow
-	Point           = woxui.Point
-	PointerEvent    = woxui.PointerEvent
-	PointerCursor   = woxui.PointerCursor
-	Rect            = woxui.Rect
-	SaveFileOptions = woxui.SaveFileOptions
-	Size            = woxui.Size
-	TextInputEvent  = woxui.TextInputEvent
-	TextInputState  = woxui.TextInputState
-	TextStyle       = woxui.TextStyle
-	Window          = woxui.Window
-	WindowID        = woxui.WindowID
-	WindowLifecycle = woxui.WindowLifecycle
-	WindowManager   = woxui.WindowManager
-	WindowOptions   = woxui.WindowOptions
+	Color            = woxui.Color
+	DisplayList      = woxui.DisplayList
+	FrameInfo        = woxui.FrameInfo
+	Image            = woxui.Image
+	Key              = woxui.Key
+	KeyEvent         = woxui.KeyEvent
+	KeyModifiers     = woxui.KeyModifiers
+	ManagedWindow    = woxui.ManagedWindow
+	Point            = woxui.Point
+	PointerEvent     = woxui.PointerEvent
+	PointerCursor    = woxui.PointerCursor
+	Rect             = woxui.Rect
+	SaveFileOptions  = woxui.SaveFileOptions
+	Size             = woxui.Size
+	TextEditingState = woxui.TextEditingState
+	TextEditor       = woxui.TextEditor
+	TextInputEvent   = woxui.TextInputEvent
+	TextInputState   = woxui.TextInputState
+	TextSelection    = woxui.TextSelection
+	TextStyle        = woxui.TextStyle
+	Window           = woxui.Window
+	WindowID         = woxui.WindowID
+	WindowLifecycle  = woxui.WindowLifecycle
+	WindowManager    = woxui.WindowManager
+	WindowOptions    = woxui.WindowOptions
 )
 
 const (
@@ -66,9 +69,11 @@ const (
 )
 
 var (
-	Call                   = woxui.Call
-	ErrPlatformUnsupported = woxui.ErrPlatformUnsupported
-	NewImage               = woxui.NewImage
-	NewImageFromPackedRGBA = woxui.NewImageFromPackedRGBA
-	NewWindowManager       = woxui.NewWindowManager
+	Call                     = woxui.Call
+	ErrPlatformUnsupported   = woxui.ErrPlatformUnsupported
+	FilterSingleLineNewlines = woxui.FilterSingleLineNewlines
+	NewImage                 = woxui.NewImage
+	NewImageFromPackedRGBA   = woxui.NewImageFromPackedRGBA
+	NewTextEditor            = woxui.NewTextEditor
+	NewWindowManager         = woxui.NewWindowManager
 )

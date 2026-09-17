@@ -199,6 +199,9 @@ type Options struct {
 	CloseOnEscape    bool
 	Closable         bool
 	Title            string
+	// Decoded is an already-composited raster. When set, Show skips file/URL
+	// loading so screenshot pin can reuse the pixels the editor just exported.
+	Decoded image.Image
 }
 
 // Show prepares the image source and displays it as a runtime overlay. It keeps
@@ -206,17 +209,29 @@ type Options struct {
 // sizing in one place for image preview, screenshot pinning, and future overlay image consumers.
 func Show(ctx context.Context, opts Options) error {
 	opts = normalizeImageOverlayOptions(opts)
-	showLoading := opts.Image.ImageType == common.WoxImageTypeUrl
+	showLoading := opts.Decoded == nil && opts.Image.ImageType == common.WoxImageTypeUrl
 	if showLoading {
 		showImageOverlayLoadingOverlay(ctx, opts)
 	}
 
-	overlayImage, sourceWidth, sourceHeight, err := prepareImageOverlay(ctx, opts.Image)
-	if err != nil {
-		if showLoading {
-			showImageOverlayErrorOverlay(ctx, opts)
+	var overlayImage overlayImage
+	var sourceWidth, sourceHeight float64
+	var err error
+	if opts.Decoded != nil {
+		bounds := opts.Decoded.Bounds()
+		if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+			return fmt.Errorf("image overlay source has invalid size")
 		}
-		return err
+		overlayImage = newImageOverlaySource(opts.Decoded)
+		sourceWidth, sourceHeight = float64(bounds.Dx()), float64(bounds.Dy())
+	} else {
+		overlayImage, sourceWidth, sourceHeight, err = prepareImageOverlay(ctx, opts.Image)
+		if err != nil {
+			if showLoading {
+				showImageOverlayErrorOverlay(ctx, opts)
+			}
+			return err
+		}
 	}
 
 	width := opts.Width
@@ -238,7 +253,7 @@ func Show(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	runtimeImage, err := woxui.NewImage(decoded)
+	runtimeImage, err := newRuntimeOverlayImage(decoded)
 	if err != nil {
 		return fmt.Errorf("failed to create runtime image overlay: %w", err)
 	}
@@ -294,6 +309,46 @@ func Show(ctx context.Context, opts Options) error {
 		overlay.ScaleWindow(opts.ID, min(max(factor, 0.8), 1.25), imageOverlayMinWidth, imageOverlayMinHeight)
 	}})
 	return nil
+}
+
+// ShowPin opens a movable desktop overlay for a screenshot selection.
+func ShowPin(ctx context.Context, opts PinOptions) error {
+	if opts.ID == "" {
+		opts.ID = "wox_screenshot_pin_" + util.Md5([]byte(fmt.Sprintf("%s:%d", opts.Path, time.Now().UnixNano())))
+	}
+	return Show(ctx, Options{
+		ID:               opts.ID,
+		Image:            common.NewWoxImageAbsolutePath(opts.Path),
+		Decoded:          opts.Image,
+		Width:            opts.Width,
+		Height:           opts.Height,
+		Movable:          true,
+		CloseOnEscape:    true,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorTopLeft,
+		OffsetX:          opts.OffsetX,
+		OffsetY:          opts.OffsetY,
+	})
+}
+
+// PinOptions describes one screenshot pin request. Image is optional; when it
+// is missing the overlay decodes Path like a normal file preview.
+type PinOptions struct {
+	ID      string
+	Path    string
+	Image   image.Image
+	Width   float64
+	Height  float64
+	OffsetX float64
+	OffsetY float64
+}
+
+// newRuntimeOverlayImage keeps tightly packed RGBA buffers without a second copy.
+func newRuntimeOverlayImage(decoded image.Image) (*woxui.Image, error) {
+	if rgba, ok := decoded.(*image.RGBA); ok && rgba.Stride == rgba.Rect.Dx()*4 {
+		return woxui.NewImageFromPackedRGBA(rgba)
+	}
+	return woxui.NewImage(decoded)
 }
 
 // imageOverlayTitleBarProps carries the per-frame image overlay chrome state.

@@ -79,11 +79,14 @@ const ScreenshotWindowID WindowID = "wox.screenshot"
 
 // ScreenshotResult reports the exported image and its logical desktop selection.
 type ScreenshotResult struct {
-	Cancelled               bool
-	ArtifactKind            string
-	ArtifactPath            string
-	CopiedColor             string
-	PinToScreen             bool
+	Cancelled    bool
+	ArtifactKind string
+	ArtifactPath string
+	CopiedColor  string
+	PinToScreen  bool
+	// PinOverlayShown is true when the editor already opened the pinned window
+	// from in-memory pixels. The plugin then skips a second file-backed overlay.
+	PinOverlayShown         bool
 	ScreenshotPath          string
 	LogicalSelection        woxui.Rect
 	ClipboardWriteSucceeded bool
