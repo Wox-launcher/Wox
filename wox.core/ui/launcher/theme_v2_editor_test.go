@@ -2,11 +2,60 @@ package launcher
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"wox/common"
 	"wox/util"
 	"wox/util/osvariant"
 )
+
+// TestThemeEditorGeometryRoundTrip exercises actual schema parsing rather than string-only form state.
+func TestThemeEditorGeometryRoundTrip(t *testing.T) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(`{"SchemaVersion":2,"ThemeId":"geometry","ThemeName":"Geometry","BaseBackgroundColor":"#182020","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6","AppBorderRadius":28}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	platform := util.GetCurrentPlatform()
+	raw[platform] = map[string]any{"AppBorderRadius": nil, "ToolbarBorderWidth": float64(2)}
+	_, values := themeEditorForm(raw)
+	if values["AppBorderRadius"] != "" {
+		t.Fatal("null must clear the parent's radius")
+	}
+	if merged := mergeThemeEditorDraft(raw, values); !reflect.DeepEqual(raw, merged) {
+		t.Fatal("opening and saving changed the source")
+	}
+	for _, key := range []string{"AppBorderWidth", "QueryBoxBorderRadius", "ResultItemBorderRadius", "PreviewBorderRadius", "ToolbarBorderWidth"} {
+		for _, value := range []string{"0", "12", ""} {
+			values[key] = value
+			if _, err := themeEditorDraftTheme(raw, values); err != nil {
+				t.Fatalf("%s=%q: %v", key, value, err)
+			}
+		}
+		for _, value := range []string{"-1", "1.5", "abc", "999999999999999999999999999"} {
+			values[key] = value
+			if _, err := themeEditorDraftTheme(raw, values); err == nil {
+				t.Fatalf("accepted invalid %s=%q", key, value)
+			}
+		}
+		values[key] = ""
+	}
+	values["ToolbarBorderWidth"] = "0"
+	merged := mergeThemeEditorDraft(raw, values)
+	if merged[platform].(map[string]any)["ToolbarBorderWidth"] != 0 {
+		t.Fatal("explicit zero must remain numeric on the active layer")
+	}
+	if _, ok := merged[platform].(map[string]any)["AppBorderRadius"]; !ok {
+		t.Fatal("unrelated null override was lost")
+	}
+	values["AppBorderRadius"] = "0"
+	preview, err := themeEditorDraftTheme(raw, values)
+	if err != nil || preview.AppBorderRadius == nil || *preview.AppBorderRadius != 0 {
+		t.Fatal("editing a null override did not affect the preview")
+	}
+	if raw[platform].(map[string]any)["AppBorderRadius"] != nil {
+		t.Fatal("draft mutated original source")
+	}
+}
 
 // TestThemeEditorActiveOverride keeps the picker, preview and saved document on the same authored layer.
 func TestThemeEditorActiveOverride(t *testing.T) {

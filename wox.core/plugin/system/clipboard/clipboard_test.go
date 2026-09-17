@@ -2,11 +2,14 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"wox/database"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -313,6 +316,161 @@ func TestClipboardSearchCandidatesIncludeImageOCRInAllSearch(t *testing.T) {
 		t.Fatalf("Image search candidates = %v, want cache path and OCR text", imageCandidates)
 	}
 }
+
+func TestClipboardFavQueryHintExposesSearchArgument(t *testing.T) {
+	commands := (&ClipboardPlugin{}).GetMetadata().Commands
+	for _, command := range commands {
+		if command.Command != "fav" {
+			continue
+		}
+		if command.QueryHint == nil || command.QueryHint.Argument("search") != "" {
+			t.Fatalf("fav QueryHint = %+v, want an empty search argument", command.QueryHint)
+		}
+		if got := command.QueryHint.Elements[0].Placeholder; got != "i18n:plugin_clipboard_command_fav_search_placeholder" {
+			t.Fatalf("fav search placeholder = %q", got)
+		}
+		return
+	}
+	t.Fatal("fav command missing")
+}
+
+func TestClipboardFavoriteVisibleInFavQuery(t *testing.T) {
+	text := FavoriteClipboardItem{Type: string(clipboard.ClipboardTypeText), Content: "pypi token"}
+	file := FavoriteClipboardItem{
+		Type:      string(clipboard.ClipboardTypeFile),
+		Content:   "notes.txt",
+		FilePaths: []string{`C:\tmp\notes.txt`},
+	}
+	ctx := context.Background()
+
+	if !clipboardFavoriteVisibleInFavQuery(ctx, text, "", clipboardTypeRefinementAll) {
+		t.Fatal("empty fav search must keep text favorites")
+	}
+	if !clipboardFavoriteVisibleInFavQuery(ctx, file, "", clipboardTypeRefinementAll) {
+		t.Fatal("empty fav search must keep file favorites in All")
+	}
+	if clipboardFavoriteVisibleInFavQuery(ctx, text, "", string(clipboard.ClipboardTypeImage)) {
+		t.Fatal("empty fav search must still honor the Image refinement")
+	}
+	if clipboardFavoriteVisibleInFavQuery(ctx, file, "notes", clipboardTypeRefinementAll) {
+		t.Fatal("fav search in All must not leak file path fragments")
+	}
+}
+
+func TestClipboardFavQueryFiltersBySearch(t *testing.T) {
+	if os.Getenv("WOX_CLIPBOARD_FAV_SEARCH_TEST_CHILD") == "" {
+		t.Setenv(util.TestWoxDataDirEnv, t.TempDir())
+		t.Setenv(util.TestUserDataDirEnv, t.TempDir())
+		t.Setenv("WOX_CLIPBOARD_FAV_SEARCH_TEST_CHILD", "1")
+		command := exec.Command(os.Args[0], "-test.run=^TestClipboardFavQueryFiltersBySearch$")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("fav search check: %v\n%s", err, output)
+		}
+		return
+	}
+	if err := util.GetLocation().Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.GetDB().DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	favorites, err := json.Marshal([]FavoriteClipboardItem{
+		{ID: "pypi", Type: string(clipboard.ClipboardTypeText), Content: "pypi token", Timestamp: 2},
+		{ID: "wox", Type: string(clipboard.ClipboardTypeText), Content: "Another option is Wox Launcher.", Timestamp: 1},
+	})
+	if err != nil {
+		t.Fatalf("marshal favorites: %v", err)
+	}
+
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{favoritesSettingKey: string(favorites)}}
+	c := &ClipboardPlugin{api: api, db: clipboardQueryTestDB{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+
+	listed := c.Query(context.Background(), plugin.Query{Command: "fav"})
+	if got := clipboardResultTitles(listed.Results); len(got) != 2 {
+		t.Fatalf("cb fav titles = %v, want both favorites", got)
+	}
+
+	filtered := c.Query(context.Background(), plugin.Query{Command: "fav", Search: "pypi"})
+	titles := clipboardResultTitles(filtered.Results)
+	if len(titles) != 1 || titles[0] != "pypi token" {
+		t.Fatalf("cb fav pypi titles = %v, want [pypi token]", titles)
+	}
+
+	unmatched := c.Query(context.Background(), plugin.Query{Command: "fav", Search: "sdf"})
+	if got := clipboardResultTitles(unmatched.Results); len(got) != 0 {
+		t.Fatalf("cb fav sdf titles = %v, want none", got)
+	}
+}
+
+func clipboardResultTitles(results []plugin.QueryResult) []string {
+	titles := make([]string, 0, len(results))
+	for _, result := range results {
+		titles = append(titles, result.Title)
+	}
+	return titles
+}
+
+type clipboardFavoritesTestAPI struct {
+	imagePasteFailureAPI
+	settings map[string]string
+}
+
+func (a *clipboardFavoritesTestAPI) GetSetting(_ context.Context, key string) string {
+	return a.settings[key]
+}
+
+type clipboardQueryTestDB struct{}
+
+func (clipboardQueryTestDB) Insert(context.Context, ClipboardRecord) error {
+	return nil
+}
+func (clipboardQueryTestDB) Update(context.Context, ClipboardRecord) error {
+	return nil
+}
+func (clipboardQueryTestDB) UpdateTimestamp(context.Context, string, int64) error {
+	return nil
+}
+func (clipboardQueryTestDB) UpdateContent(context.Context, string, string) error {
+	return nil
+}
+func (clipboardQueryTestDB) UpdateAlias(context.Context, string, *string) error {
+	return nil
+}
+func (clipboardQueryTestDB) UpdateOCRText(context.Context, string, *string) error {
+	return nil
+}
+func (clipboardQueryTestDB) Delete(context.Context, string) error { return nil }
+func (clipboardQueryTestDB) GetRecent(context.Context, int, int) ([]ClipboardRecord, error) {
+	return nil, nil
+}
+func (clipboardQueryTestDB) GetRecentByType(context.Context, string, int, int) ([]ClipboardRecord, error) {
+	return nil, nil
+}
+func (clipboardQueryTestDB) SearchText(context.Context, string, int) ([]ClipboardRecord, error) {
+	return nil, nil
+}
+func (clipboardQueryTestDB) SearchByType(context.Context, string, string, int) ([]ClipboardRecord, error) {
+	return nil, nil
+}
+func (clipboardQueryTestDB) GetByID(context.Context, string) (*ClipboardRecord, error) {
+	return nil, nil
+}
+func (clipboardQueryTestDB) DeleteExpired(context.Context, int, int) (int64, error) {
+	return 0, nil
+}
+func (clipboardQueryTestDB) EnforceMaxCount(context.Context, int) (int64, error) {
+	return 0, nil
+}
+func (clipboardQueryTestDB) GetStats(context.Context) (map[string]int, error) {
+	return map[string]int{}, nil
+}
+func (clipboardQueryTestDB) Close() error { return nil }
 
 func TestClipboardSearchCandidatesKeepTypedRefinementsScoped(t *testing.T) {
 	text := clipboardSearchItem{Type: string(clipboard.ClipboardTypeText), Content: "hello world"}

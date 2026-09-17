@@ -7,6 +7,10 @@ description: Design, create, and refine Wox theme JSON files, including schema v
 
 Create a deliberately designed theme with a coherent palette, readable states, and a valid authored JSON document. Prefer schema v2 for new themes. Preserve the requested output location and existing theme identity when editing; generate a fresh UUID for a new theme.
 
+## Embedded theme editor
+
+When invoked by Wox's theme editor, work on the supplied current draft and editable property list. These are the authoritative available fields. Apply the design guidance below; return only the requested JSON patch of changed properties, preserving unrelated values and theme identity. Do not require repository access, filesystem tools, or a new theme file. The editor validates the patch and handles preview, undo, and saving. A normal AI Chat or repository authoring session continues to use the document workflow below.
+
 ## Source of truth
 
 Paths below are relative to the Wox repository root. Read the current implementation before choosing fields; do not invent theme tokens or copy resolved runtime values into a new theme.

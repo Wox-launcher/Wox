@@ -203,6 +203,9 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			{
 				Command:     "fav",
 				Description: "i18n:plugin_clipboard_command_fav_description",
+				QueryHint: &common.QueryHint{Elements: []common.QueryElement{
+					{Id: "search", Kind: common.QueryElementArgument, Placeholder: "i18n:plugin_clipboard_command_fav_search_placeholder"},
+				}},
 			},
 			{
 				Command:     clipboardPasteCommand,
@@ -685,6 +688,16 @@ func clipboardFavoriteMatchesSearch(ctx context.Context, favoriteItem FavoriteCl
 	}, search, selectedType)
 }
 
+// clipboardFavoriteVisibleInFavQuery decides whether a favorite belongs in `cb fav`.
+// An empty search keeps the type-only listing, including file favorites in All.
+// A non-empty search reuses the shared matcher used by `cb <keyword>`.
+func clipboardFavoriteVisibleInFavQuery(ctx context.Context, favoriteItem FavoriteClipboardItem, search string, selectedType string) bool {
+	if strings.TrimSpace(search) == "" {
+		return clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType)
+	}
+	return clipboardFavoriteMatchesSearch(ctx, favoriteItem, search, selectedType)
+}
+
 func clipboardRecordMatchesSearch(ctx context.Context, record ClipboardRecord, search string, selectedType string) bool {
 	return clipboardItemMatchesSearch(ctx, clipboardSearchItem{
 		Type:      record.Type,
@@ -781,7 +794,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		}
 
 		for _, favoriteItem := range favorites {
-			if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
+			if !clipboardFavoriteVisibleInFavQuery(ctx, favoriteItem, query.Search, selectedType) {
 				continue
 			}
 			record := c.convertFavoriteToRecord(favoriteItem)

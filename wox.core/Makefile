@@ -97,6 +97,9 @@ sync-ai-skills:
 	mkdir -p $(dir $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION))
 	cp -R $(WOX_PLUGIN_CREATOR_SKILL_SOURCE) $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)
 	rm -rf $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)/scripts/__pycache__
+	test -f ../.agents/skills/wox-theme-creator/SKILL.md
+	mkdir -p resource/ai/skills/wox-theme-creator
+	cp ../.agents/skills/wox-theme-creator/SKILL.md resource/ai/skills/wox-theme-creator/SKILL.md
 
 build: clean sync-ai-skills
 	$(MAKE) woxmr-build

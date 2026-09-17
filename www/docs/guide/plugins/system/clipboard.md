@@ -8,6 +8,7 @@ Clipboard keeps recent text and image clipboard items so you can reuse them with
 cb
 cb invoice
 cb fav
+cb fav invoice
 ```
 
 | Query | Result |
@@ -15,6 +16,7 @@ cb fav
 | `cb` | Show recent clipboard history |
 | `cb <keyword>` | Filter by text, alias, or image OCR text |
 | `cb fav` | Show favorites |
+| `cb fav <keyword>` | Filter favorites by text, alias, or image OCR text |
 
 Press `Enter` to run the configured primary action: copy the item back to the clipboard or paste it into the active app, including images and emoji.
 

@@ -1,34 +1,17 @@
-# 主题生成
+# AI 辅助主题编辑
 
-AI 主题生成会根据一小段描述创建 Wox 主题。先完成 [AI 设置](./settings.md)。
+先完成 [AI 设置](./settings.md)，然后打开 **设置 → 主题编辑器 → AI 辅助**。
 
-不使用 AI 也可以浏览和应用已有主题。运行 `theme` 可以查看当前主题、系统主题和商店主题。
+选择模型，用自然语言描述希望对当前主题做的调整，例如：
 
-![在启动器中浏览 Wox 主题](/images/theme-jade.png)
+- 背景改为深石墨色，强调色改为青绿色。
+- 保持配色，把窗口圆角调小一些。
+- 提高选中项和普通结果之间的对比度。
 
-## 生成主题
+点击“发送”后，AI 会修改当前草稿，左侧预览随之更新。可以继续描述调整，也可以取消生成或撤销上一轮 AI 修改。输入无效时不会应用部分修改。
 
-打开 Wox 并运行：
+确认文本、选中项、快捷键和预览内容都清晰可读后，点击 **Save** 或 **Save as** 保存。系统主题只能另存为新主题。AI 不会自动安装或覆盖主题。
 
-```text
-theme ai dark graphite with teal accents
-```
+原来的 `theme ai` 命令已移除；`theme` 仍用于浏览和应用主题。
 
-提示词尽量写清对比、氛围和强调色：
-
-```text
-theme ai light theme, warm background, blue accent, low contrast borders
-theme ai high contrast black theme with orange selection
-theme ai macOS style translucent gray with green accent
-```
-
-## 留下之前先检查
-
-AI 生成的主题可能接近目标，但仍需要判断。检查：
-
-- 普通状态和选中状态下的搜索文本都清晰可读。
-- 选中结果足够明显。
-- 副标题、尾部和动作标签有足够对比。
-- 在你平时使用的窗口尺寸下仍然好用。
-
-如果生成结果不对，再用更具体的颜色和对比说明重新生成。
+AI 辅助会在右侧编辑区域打开，左侧保留实时预览。通过右侧顶部的「属性 / AI 辅助」切换可返回属性面板，再次打开 AI 辅助会保留对话。Wox 内置 `wox-theme-creator` 技能，主题编辑器的每次 AI 请求都会自动包含其指导。

@@ -52,6 +52,8 @@ Settings and onboarding management surfaces construct `ControlTheme` directly in
 
 Theme catalog previews and the editor draft preview retain the theme being previewed while their surrounding Settings chrome uses the fixed palette.
 
+The theme editor places save actions above a persistent preview and a 340-unit property inspector. Below 760 logical units of content width, stack the preview above the inspector. Properties use one vertical scroll region, searchable collapsible surface groups, standard-height controls, and per-property reset. Equal four-sided padding may be linked; asymmetric authored values remain independent until the user links them. Effective preview values must never replace omitted or null authored fields on save. Editor demos honor resolved logical spacing and explicit zero corners; native backdrop and shadow behavior still require platform validation.
+
 Do not create a second button, text field, dropdown, checkbox, switch, list item, panel, or dialog treatment in a view.
 
 ### Special product surfaces

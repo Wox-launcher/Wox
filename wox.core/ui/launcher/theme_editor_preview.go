@@ -63,6 +63,7 @@ var themeEditorColorGroups = []themeColorGroup{
 }
 
 type themeEditorPreviewState struct {
+	ai themeEditorAIState
 	formFieldsState
 	key            string
 	raw            map[string]any
@@ -83,6 +84,7 @@ type themeEditorPreviewState struct {
 }
 
 type themeEditorPreviewSnapshot struct {
+	ai themeEditorAIState
 	formFieldsSnapshot
 	raw         map[string]any
 	key         string
@@ -173,6 +175,20 @@ func newThemeEditorState(key string, raw map[string]any) *themeEditorPreviewStat
 
 // loadSettingsThemeEditor opens the applied theme as the Settings theme editor draft.
 func (a *App) loadSettingsThemeEditor() error {
+	retained := false
+	if err := a.runOnUI("resume settings theme editor", func() {
+		state := a.themeSettings.ThemeEditor()
+		retained = state != nil && (state.saving || themeEditorDirtyLocked(state))
+		if retained {
+			a.preloadThemeEditorModels()
+		}
+	}); err != nil {
+		return err
+	}
+	// CurrentTheme contains the saved source, not the unsaved palette already being previewed.
+	if retained {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	theme, err := a.services.CurrentTheme(ctx, a.sessionID)
@@ -194,6 +210,7 @@ func (a *App) loadSettingsThemeEditor() error {
 	hash := sha256.Sum256(encoded)
 	return a.runOnUI("apply settings theme editor", func() {
 		a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
+		a.preloadThemeEditorModels()
 		a.preloadDemoWallpaper(true)
 		a.invalidateThemeEditorWindow()
 	})
@@ -206,6 +223,7 @@ func snapshotThemeEditorPreviewLocked(state *themeEditorPreviewState) *themeEdit
 	}
 	return &themeEditorPreviewSnapshot{
 		formFieldsSnapshot: snapshotFormFieldsLocked(&state.formFieldsState),
+		ai:                 state.ai,
 		raw:                copyThemeMap(state.raw),
 		key:                state.key,
 		initial:            copyStringMap(state.initial),

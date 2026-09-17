@@ -198,7 +198,7 @@ func TestChatPreviewUpdatesPreserveLocalState(t *testing.T) {
 			app.chatFullscreen = fullscreen
 			state := app.chatPreview
 			state.editor = woxui.NewTextEditor("unsent draft")
-			state.scroll, state.autoFollow = 42, false
+			state.scroll.Scroll(-158, 200)
 			state.expandedRounds["round"] = true
 			question := &aiQuestion{QuestionID: "pending"}
 			state.question = question
@@ -210,7 +210,7 @@ func TestChatPreviewUpdatesPreserveLocalState(t *testing.T) {
 				if err := app.activateChatPreview(result, preview); err != nil {
 					t.Fatal(err)
 				}
-				if app.chatPreview != state || state.editor.State().Text != "unsent draft" || state.scroll != 42 || state.autoFollow || !state.expandedRounds["round"] {
+				if app.chatPreview != state || state.editor.State().Text != "unsent draft" || state.scroll.Position(200) != 42 || !state.expandedRounds["round"] {
 					t.Fatal("stream update discarded local interaction state")
 				}
 				if state.question != question || state.questionEditor.State().Text != "partial answer" || len(state.attachments) != 1 || state.attachments[0].ID != "draft-attachment" {

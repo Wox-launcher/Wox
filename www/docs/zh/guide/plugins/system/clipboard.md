@@ -8,6 +8,7 @@
 cb
 cb invoice
 cb fav
+cb fav invoice
 ```
 
 | 查询 | 结果 |
@@ -15,6 +16,7 @@ cb fav
 | `cb` | 显示最近剪贴板历史 |
 | `cb <keyword>` | 按文本、别名或图片 OCR 文字过滤 |
 | `cb fav` | 显示收藏项 |
+| `cb fav <keyword>` | 按文本、别名或图片 OCR 文字过滤收藏项 |
 
 按 `Enter` 执行配置的主要动作：复制回剪贴板，或粘贴到当前应用，包括图片和 Emoji。
 

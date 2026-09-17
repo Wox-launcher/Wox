@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"regexp"
 	"slices"
 	"sort"
@@ -16,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	chatview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	"wox/util"
 )
@@ -179,8 +179,7 @@ type chatPreviewState struct {
 	chats          []chatData
 	editor         *woxui.TextEditor
 	active         bool
-	scroll         float32
-	autoFollow     bool
+	scroll         chatview.ChatScrollState
 	loading        bool
 	sending        bool
 	error          string
@@ -212,7 +211,7 @@ type chatPreviewSnapshot struct {
 	chat             chatData
 	editing          woxui.TextEditingState
 	active           bool
-	scroll           float32
+	scroll           chatview.ChatScrollState
 	loading          bool
 	sending          bool
 	error            string
@@ -551,9 +550,6 @@ func (a *App) activateChatPreview(result queryResult, preview queryPreview) erro
 					state.chat.Model = *state.nextModel
 				}
 				state.loading = false
-				if state.autoFollow {
-					state.scroll = float32(math.MaxFloat32)
-				}
 			}
 		}
 		return nil
@@ -571,15 +567,14 @@ func (a *App) activateChatPreview(result queryResult, preview queryPreview) erro
 	loadChatID := ""
 	if a.chatPreview == nil || a.chatPreview.key != key {
 		a.chatPreview = &chatPreviewState{
-			key:            key,
-			queryID:        result.QueryID,
-			resultID:       result.ID,
-			chat:           cloneChatData(data.ActiveChat),
-			chats:          append([]chatData(nil), data.Chats...),
-			editor:         woxui.NewTextEditor(""),
-			active:         a.chatFullscreen,
-			autoFollow:     true,
-			scroll:         float32(math.MaxFloat32),
+			key:      key,
+			queryID:  result.QueryID,
+			resultID: result.ID,
+			chat:     cloneChatData(data.ActiveChat),
+			chats:    append([]chatData(nil), data.Chats...),
+			editor:   woxui.NewTextEditor(""),
+			active:   a.chatFullscreen,
+
 			expandedRounds: make(map[string]bool),
 			attachments:    slices.Clone(data.InitialAttachments),
 		}
@@ -673,9 +668,6 @@ func (a *App) loadChatPreview(key, chatID string, revision uint64) {
 						state.chat.Model = *state.nextModel
 					}
 					state.error = ""
-					if state.autoFollow {
-						state.scroll = float32(math.MaxFloat32)
-					}
 				}
 			}
 		}
@@ -707,9 +699,6 @@ func (a *App) applyChatResponse(chat chatData) {
 		state.loading = false
 		state.sending = false
 		state.error = ""
-		if state.autoFollow {
-			state.scroll = float32(math.MaxFloat32)
-		}
 	}
 	a.invalidateChatSurfaces()
 }
@@ -889,8 +878,7 @@ func (a *App) startNewChat() {
 	state.question = nil
 	state.questionEditor = nil
 	clear(state.expandedRounds)
-	state.autoFollow = true
-	state.scroll = float32(math.MaxFloat32)
+	state.scroll.FollowLatest()
 	state.revision++
 	key := state.key
 	revision := state.revision
@@ -999,8 +987,7 @@ func (a *App) selectChatHistory(chatID string) {
 	keepChatHistoryPanelLocked(state, chatID)
 	state.question = nil
 	state.questionEditor = nil
-	state.autoFollow = true
-	state.scroll = float32(math.MaxFloat32)
+	state.scroll.FollowLatest()
 	state.revision++
 	key := state.key
 	revision := state.revision
@@ -1488,8 +1475,7 @@ func beginChatRequestLocked(state *chatPreviewState) (string, uint64, chatData) 
 	upsertChatSummaryLocked(state, state.chat)
 	state.sending = true
 	state.error = ""
-	state.autoFollow = true
-	state.scroll = float32(math.MaxFloat32)
+	state.scroll.FollowLatest()
 	state.revision++
 	return state.key, state.revision, cloneChatData(state.chat)
 }
@@ -1535,19 +1521,30 @@ func (a *App) postChatRequest(key string, revision uint64, chat chatData) {
 // sendChatMessage appends the local user turn before core begins pushing authoritative snapshots.
 func (a *App) sendChatMessage() {
 	state := a.chatPreview
-	if state == nil || state.editor == nil || state.loading || state.sending || state.importing || state.chat.IsStreaming || state.question != nil {
+	if state == nil || state.editor == nil {
 		return
 	}
-	text := strings.TrimSpace(state.editor.State().Text)
+	chatview.SubmitChatMessage(state.editor.State().Text, a.submitChatMessage, func() {
+		state.editor.SetText("", false)
+		a.invalidateChatSurfaces()
+	})
+}
+
+// submitChatMessage validates and commits a turn; the shared submission flow clears the draft.
+func (a *App) submitChatMessage(text string) bool {
+	state := a.chatPreview
+	if state == nil || state.editor == nil || state.loading || state.sending || state.importing || state.chat.IsStreaming || state.question != nil {
+		return false
+	}
 	if text == "" {
 		state.error = "Enter a message first."
 		a.invalidateChatSurfaces()
-		return
+		return false
 	}
 	if strings.TrimSpace(state.chat.Model.Name) == "" {
 		state.error = "Select an AI model in Wox settings first."
 		a.invalidateChatSurfaces()
-		return
+		return false
 	}
 	hasSkillTags := chatSkillTagPattern.MatchString(text)
 	if hasSkillTags && !a.aiSettings.SkillsLoaded() {
@@ -1560,7 +1557,7 @@ func (a *App) sendChatMessage() {
 			util.Go(a.lifecycleCtx, "load AI skills before chat send", a.loadAISkills)
 		}
 		a.invalidateChatSurfaces()
-		return
+		return false
 	}
 	now := time.Now().UnixMilli()
 	skills := a.aiSettings.Skills()
@@ -1568,15 +1565,15 @@ func (a *App) sendChatMessage() {
 	if unresolved := unresolvedChatSkillTag(text, skills); unresolved != "" {
 		state.error = fmt.Sprintf("Unknown or disabled skill: %s", unresolved)
 		a.invalidateChatSurfaces()
-		return
+		return false
 	}
 	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, Attachments: slices.Clone(state.attachments), SkillRefs: skillRefs, Timestamp: now})
 	state.chat.UpdatedAt = now
-	state.editor.SetText("", false)
 	state.attachments = nil
 	key, revision, chat := beginChatRequestLocked(state)
 	a.invalidateChatSurfaces()
 	a.postChatRequest(key, revision, chat)
+	return true
 }
 
 // stopChatMessage cancels the active core stream while leaving its last snapshot visible.
@@ -1658,8 +1655,7 @@ func (a *App) editChatConversation(messageID string) {
 	state.editor.SetText(text, false)
 	state.panel = ""
 	state.active = true
-	state.autoFollow = true
-	state.scroll = float32(math.MaxFloat32)
+	state.scroll.FollowLatest()
 	state.error = ""
 	a.updateChatTextInput(true)
 	a.invalidateChatSurfaces()
@@ -1767,25 +1763,7 @@ func (a *App) handleChatKey(event woxui.KeyEvent, dedicated bool) bool {
 	// A persistent history drawer does not own composer keys. Its rows and
 	// delete buttons handle activation through their own retained focus nodes.
 	if panel != "" && panel != "history" {
-		switch event.Key {
-		case woxui.KeyEscape:
-			a.closeChatPanel()
-			return true
-		case woxui.KeyArrowUp:
-			a.moveChatPanelSelection(-1)
-			return true
-		case woxui.KeyArrowDown, woxui.KeyTab:
-			delta := 1
-			if event.Key == woxui.KeyTab && event.Modifiers&woxui.KeyModifierShift != 0 {
-				delta = -1
-			}
-			a.moveChatPanelSelection(delta)
-			return true
-		case woxui.KeyEnter:
-			a.activateChatPanelSelection()
-			return true
-		}
-		return false
+		return chatview.ChatCatalogKey(event, a.moveChatPanelSelection, a.activateChatPanelSelection, a.closeChatPanel)
 	}
 	if !active {
 		return false
@@ -1841,19 +1819,10 @@ func (a *App) handleChatKey(event woxui.KeyEvent, dedicated bool) bool {
 		}
 		return true
 	}
-	if event.Key == woxui.KeyEnter && event.Modifiers&woxui.KeyModifierShift == 0 {
-		a.sendChatMessage()
-		return true
-	}
-	if event.Key == woxui.KeyPageUp || event.Key == woxui.KeyPageDown {
-		delta := float32(-240)
-		if event.Key == woxui.KeyPageDown {
-			delta = 240
-		}
-		a.scrollChatPreview(delta, float32(math.MaxFloat32))
-		return true
-	}
-	return false
+	return chatview.ChatComposerKey(event, state.chat.IsStreaming || state.sending, state.importing, a.sendChatMessage, func(delta float32) {
+		state.scroll.ScrollPage(delta)
+		a.invalidateChatSurfaces()
+	})
 }
 
 // onChatPreviewTextInput routes committed and composing text to the currently visible chat editor.
@@ -2053,11 +2022,10 @@ func (a *App) updateChatTextInput(enabled bool) {
 	}
 }
 
-// clampChatPreviewScroll records whether future stream updates should keep following the bottom.
+// clampChatPreviewScroll updates the shared component's keyboard-scroll bounds.
 func (a *App) clampChatPreviewScroll(maxOffset float32) {
 	if state := a.chatPreview; state != nil {
-		state.scroll = min(max(float32(0), state.scroll), maxOffset)
-		state.autoFollow = maxOffset-state.scroll <= 36
+		state.scroll.SetExtent(maxOffset)
 	}
 }
 
@@ -2067,8 +2035,7 @@ func (a *App) scrollChatPreview(delta, maxOffset float32) {
 		return
 	}
 	if state := a.chatPreview; state != nil {
-		state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
-		state.autoFollow = maxOffset-state.scroll <= 36
+		state.scroll.Scroll(delta, maxOffset)
 	}
 	a.invalidateChatSurfaces()
 }

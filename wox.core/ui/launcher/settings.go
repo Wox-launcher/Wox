@@ -353,7 +353,10 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.requirementForm = nil
 		a.launcherTableEditor = nil
 		a.triggerConflict = nil
-		a.themeSettings.SetThemeEditor(nil)
+		// A live draft must survive reopening Settings together with its applied preview.
+		if editor := a.themeSettings.ThemeEditor(); editor == nil || (!editor.saving && !themeEditorDirtyLocked(editor)) {
+			a.themeSettings.SetThemeEditor(nil)
+		}
 		if form := a.hotkeySettings.Form(); form != nil {
 			form.active = tab == "general"
 		}
@@ -386,6 +389,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		return err
 	}
 	if tab == "theme" && themeMode == "editor" {
+		a.preloadDemoWallpaper(true)
 		if err := a.loadSettingsThemeEditor(); err != nil {
 			_ = a.runOnUI("apply theme editor load error", func() {
 				a.themeSettings.SetThemesError(err.Error())

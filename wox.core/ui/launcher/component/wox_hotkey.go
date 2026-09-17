@@ -69,7 +69,11 @@ func WoxHotkey(props HotkeyProps) (woxwidget.Widget, float32) {
 	children := make([]woxwidget.Widget, 0, len(props.Labels))
 	totalWidth := float32(0)
 	for _, label := range props.Labels {
-		metrics, _ := props.Window.MeasureText(label, style)
+		metrics, err := props.Window.MeasureText(label, style)
+		if err != nil {
+			// Demo surfaces can be built before a native text measurer is available.
+			metrics.Size.Width = float32(len([]rune(label))) * fontSize * .6
+		}
 		width := max(minWidth, metrics.Size.Width+horizontalInset)
 		children = append(children, woxwidget.Stack{Width: width, Height: keyHeight, Children: []woxwidget.StackChild{
 			{Child: woxwidget.Container{Width: width, Height: keyHeight, Radius: 4, Color: props.Background}},

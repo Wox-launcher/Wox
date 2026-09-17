@@ -1,34 +1,17 @@
-# Theme Generation
+# AI-Assisted Theme Editing
 
-AI theme generation creates a Wox theme from a short description. Configure [AI Settings](./settings.md) first.
+Configure [AI Settings](./settings.md), then open **Settings → Theme editor → AI assistance**.
 
-You can also browse and apply existing themes without AI. Run `theme` to see the current theme, system themes, and store themes.
+Select a model and describe how to adjust the current theme, for example:
 
-![Browsing Wox themes in the launcher](/images/theme-jade.png)
+- Use a dark graphite background with teal accents.
+- Keep the colors, but make the window corners less rounded.
+- Increase contrast between selected and unselected results.
 
-## Generate a Theme
+Click **Send** to update the draft and its live preview. Continue describing changes, cancel generation, or undo the last AI edit. Invalid responses are rejected without partially updating the draft.
 
-Open Wox and run:
+Check text, selection, shortcuts, and preview readability, then use **Save** or **Save as**. System themes can only be saved as a new theme. AI never installs or overwrites a theme automatically.
 
-```text
-theme ai dark graphite with teal accents
-```
+The former `theme ai` command has been removed. Use `theme` to browse and apply themes.
 
-Try prompts that describe contrast, mood, and accent colors:
-
-```text
-theme ai light theme, warm background, blue accent, low contrast borders
-theme ai high contrast black theme with orange selection
-theme ai macOS style translucent gray with green accent
-```
-
-## Review Before Keeping
-
-AI-generated themes can be close but still need judgment. Check:
-
-- Search text is readable in normal and selected states.
-- The selected result is obvious.
-- Subtitles, tails, and action labels have enough contrast.
-- The theme still works in the window size you normally use.
-
-If the generated theme is not right, run another prompt with more concrete color and contrast instructions.
+AI assistance opens in the right-hand editing pane, keeping the live preview visible. Use the **Properties / AI assistance** switch at the top of the right pane to return to properties; the conversation stays available when you reopen assistance. Wox bundles the `wox-theme-creator` skill and automatically includes its guidance in every theme-editor AI request.

@@ -7,6 +7,46 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestDemoEditorGeometry keeps explicit zero corners and asymmetric spacing visible in the editor.
+func TestDemoEditorGeometry(t *testing.T) {
+	zero := 0
+	geometry := &LauncherDemoGeometry{AppPadding: woxwidget.Insets{Left: 2, Top: 4, Right: 6, Bottom: 8}, ResultPadding: woxwidget.Insets{Left: 3, Top: 5, Right: 7}, ItemPadding: woxwidget.Insets{Left: 9, Top: 2, Right: 11, Bottom: 4}, ActionPadding: woxwidget.Insets{Left: 2, Top: 3, Right: 4, Bottom: 5}, ToolbarPadding: woxwidget.Insets{Left: 7, Right: 9}}
+	props := LauncherDemoProps{Width: 600, Height: 400, Opacity: 1, ShowQuery: true, ShowToolbar: true, Geometry: geometry, Theme: Theme{QueryBoxBorderBottomWidth: &zero, ResultItemActiveIndicatorWidth: &zero}, Results: []LauncherDemoResult{{Title: "Result"}}}
+	demo := WoxLauncherDemo(props).(woxwidget.Clip).Child.(woxwidget.Stack)
+	query := demo.Children[2]
+	if query.Left != 2 || query.Top != 4 || query.Right != 6 || query.Child.(woxwidget.Container).Radius != 0 {
+		t.Fatal("query lost zero corners or asymmetric window padding")
+	}
+	rowSlot := demo.Children[3]
+	row := rowSlot.Child.(woxwidget.Container)
+	if rowSlot.Left != 5 || rowSlot.Right != 13 || rowSlot.Top != 64 || row.Padding != geometry.ItemPadding || row.Radius != 0 {
+		t.Fatal("result lost edited spacing or zero corners")
+	}
+	panel := demoActionPanel(props, 300, 220, 255).(woxwidget.Container)
+	if panel.Padding != geometry.ActionPadding {
+		t.Fatal("action padding ignored")
+	}
+	children := panel.Child.(woxwidget.Flex).Children
+	actionQuery := children[len(children)-1].(woxwidget.Container).Child.(woxwidget.Container)
+	if actionQuery.Radius != 0 {
+		t.Fatal("action query zero corners ignored")
+	}
+	toolbar := demoToolbar(props, 40, 12, 255).(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Stack)
+	if toolbar.Children[2].Child.(woxwidget.Container).Padding != geometry.ToolbarPadding {
+		t.Fatal("toolbar padding ignored")
+	}
+}
+
+func TestDemoCustomChromePreservesAlpha(t *testing.T) {
+	for _, alpha := range []uint8{0, 128, 255} {
+		background := woxui.Color{R: 23, G: 42, B: 61, A: alpha}
+		demo := WoxLauncherDemo(LauncherDemoProps{Width: 600, Height: 400, Opacity: 1, Background: background, Theme: Theme{AppWindowChrome: true, Background: background}}).(woxwidget.Clip).Child.(woxwidget.Stack)
+		if tint := demo.Children[1].Child.(woxwidget.Container).Color; tint != background {
+			t.Fatalf("custom chrome tint = %+v, want %+v", tint, background)
+		}
+	}
+}
+
 // TestDemoToolbarHotkeyHighlight confines locator overlays to individual keycaps.
 func TestDemoToolbarHotkeyHighlight(t *testing.T) {
 	flash := woxui.Color{R: 255, A: 255}
@@ -50,6 +90,9 @@ func TestDemoActionPanelBorder(t *testing.T) {
 	for _, width := range []float32{0, 1, 2} {
 		panel := demoActionPanel(LauncherDemoProps{Theme: Theme{ActionBorder: color, ActionBorderWidth: width, ActionContainerRadius: 12, ActionItemRadius: 6}}, 300, 200, 128).(woxwidget.Container)
 		row := panel.Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
+		if !panel.Floating {
+			t.Fatal("action preview must use the live panel's frosted material")
+		}
 		if panel.Radius != 12 || row.Radius != 6 {
 			t.Fatalf("preview radii = %v/%v", panel.Radius, row.Radius)
 		}
@@ -406,5 +449,20 @@ func TestWoxLauncherDemoHidesPreviewUntilTypedQueryResultsFadeIn(t *testing.T) {
 	}
 	if _, ok := children[len(children)-3].Child.(woxwidget.Clip); !ok {
 		t.Fatal("typed-query demo dropped the preview after results appeared")
+	}
+}
+
+func TestDemoCornerLocatorKeepsContentAndUsesUnfilledPainter(t *testing.T) {
+	child := woxwidget.Container{Width: 100, Height: 40}
+	for _, radius := range []float32{0, 8, 100} {
+		result := demoHighlight(child, 100, 40, radius, true, woxui.Color{R: 255, A: 255}, true).(woxwidget.Stack)
+		if len(result.Children) != 2 {
+			t.Fatal("locator must preserve content and add one overlay")
+		}
+		painter, ok := result.Children[1].Child.(woxwidget.Painter)
+		if !ok || painter.Width != 100 || painter.Height != 40 {
+			t.Fatal("corner locator must not use a filled rectangle")
+		}
+		painter.Paint(&woxui.DisplayList{}, woxui.Rect{X: 10, Y: 20, Width: 100, Height: 40})
 	}
 }

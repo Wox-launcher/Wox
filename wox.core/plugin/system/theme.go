@@ -2,22 +2,17 @@ package system
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/resource"
 	"wox/setting"
-	"wox/setting/definition"
 	"wox/ui"
 	"wox/util"
 	"wox/util/shell"
 
-	"github.com/google/uuid"
 	"github.com/samber/lo"
 )
 
@@ -48,27 +43,8 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 		},
 		Commands: []plugin.MetadataCommand{
 			{
-				Command:     "ai",
-				Description: "i18n:plugin_theme_ai_command_description",
-			},
-			{
 				Command:     "restore",
 				Description: "i18n:plugin_theme_restore_command_description",
-			},
-		},
-		SettingDefinitions: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
-				Value: &definition.PluginSettingValueSelectAIModel{
-					Key:     "model",
-					Label:   "i18n:plugin_theme_setting_ai_model_label",
-					Tooltip: `i18n:plugin_theme_setting_ai_model_tooltip`,
-				},
-			},
-		},
-		Features: []plugin.MetadataFeature{
-			{
-				Name: plugin.MetadataFeatureAI,
 			},
 		},
 		SupportedOS: []string{
@@ -84,9 +60,6 @@ func (c *ThemePlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 }
 
 func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	if query.Command == "ai" {
-		return plugin.NewQueryResponse(c.queryAI(ctx, query))
-	}
 	if query.Command == "restore" {
 		return plugin.NewQueryResponse(c.queryRestore(ctx, query))
 	}
@@ -196,215 +169,6 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	return plugin.NewQueryResponse(append(results, storeResults...))
 }
 
-func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	modelStr := c.api.GetSetting(ctx, "model")
-	if modelStr == "" {
-		metadata := c.GetMetadata()
-		return []plugin.QueryResult{
-			{
-				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_select_model"),
-				Icon:  themeIcon,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_setting"),
-						Icon:                   icons.Get(icons.ActionSettings),
-						PreventHideAfterAction: true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
-								Path:  "/plugin/setting",
-								Param: metadata.Id,
-							})
-						},
-					},
-				},
-			},
-		}
-	}
-	var aiModel common.Model
-	unmarshalErr := json.Unmarshal([]byte(modelStr), &aiModel)
-	if unmarshalErr != nil {
-		c.api.Notify(ctx, unmarshalErr.Error())
-		return []plugin.QueryResult{
-			{
-				Title:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_unmarshal_failed"),
-				SubTitle: unmarshalErr.Error(),
-				Icon:     themeIcon,
-			},
-		}
-	}
-
-	if query.Search == "" {
-		return []plugin.QueryResult{
-			{
-				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_input_hint"),
-				Icon:  themeIcon,
-			},
-		}
-	}
-
-	embedThemes := resource.GetEmbedThemes(ctx)
-	if len(embedThemes) == 0 {
-		return []plugin.QueryResult{
-			{
-				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_no_embed_theme"),
-				Icon:  themeIcon,
-			},
-		}
-	}
-
-	// Use the Wox Dark theme as the example for AI generation, because it contains
-	// all the visual properties (colors, paddings, etc.) that the AI needs to see.
-	// The Auto theme only has metadata fields (no visual properties), so using it as
-	// the example would cause the AI to generate themes without any visual properties.
-	// We also strip platform-specific overrides (windows/macos/linux) from the
-	// example so the AI doesn't copy nested objects that would break JSON extraction.
-	darkThemeId := "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
-	exampleThemeJson := embedThemes[0]
-	for _, themeJson := range embedThemes {
-		var theme common.Theme
-		if err := json.Unmarshal([]byte(themeJson), &theme); err == nil {
-			if theme.ThemeId == darkThemeId {
-				theme.Windows = nil
-				theme.MacOS = nil
-				theme.Linux = nil
-				if cleanJson, err := json.MarshalIndent(theme, "", "  "); err == nil {
-					exampleThemeJson = string(cleanJson)
-				}
-				break
-			}
-		}
-	}
-
-	var conversations []common.Conversation
-	conversations = append(conversations, common.Conversation{
-		Role: common.ConversationRoleUser,
-		Text: fmt.Sprintf(`
-I am developing theme configuration functionality for the Wox application. Theme configurations are defined in JSON format and contain visual elements such as colors, fonts, spacing, and so on.
-
-Refer to the example format:
-%s
-
-Please generate a new theme configuration based on the above JSON structure, theme requirements: %s
-
-Generation rules:
-1. **Output format**: must return a valid JSON object, starting with { and ending with }, without any explanatory text, comments, or block tags.
-2. **Theme naming**: choose a meaningful and descriptive name for the theme that reflects the visual character or style of the theme
-3. **Color contrast**: ensure good visual readability
-   - There must be sufficient contrast between the background color and the foreground text color.
-   - The colors of the selected and unselected states should be clearly differentiated.
-   - Avoid using similar color values to ensure that users can clearly distinguish between different UI states.
-4. **Completeness**: Include all required fields and attributes in the example.
-5. **Consistency**: the color scheme should be coordinated and consistent with the overall design style.
-
-Please directly output the JSON configuration, do not add any other content.
-	`, exampleThemeJson, query.Search)})
-
-	result := plugin.QueryResult{
-		Id:       uuid.NewString(),
-		Title:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_generate_title"),
-		SubTitle: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_generate_subtitle"),
-		Icon:     themeIcon,
-		Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_preview_hint")},
-		Actions: []plugin.QueryResultAction{
-			{
-				Name:                   i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_apply"),
-				Icon:                   icons.Get(icons.ActionRun),
-				PreventHideAfterAction: true,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					util.Go(ctx, "theme ai stream", func() {
-						// Show preparing state
-						if updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-							subTitle := "i18n:plugin_theme_ai_contacting"
-							previewData := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_waiting")
-							preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: previewData}
-							updatable.SubTitle = &subTitle
-							updatable.Preview = &preview
-							if !c.api.UpdateResult(ctx, *updatable) {
-								return
-							}
-						}
-
-						// Start streaming
-						err := c.api.AIChatStream(ctx, aiModel, conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
-							updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId)
-							if updatable == nil {
-								return
-							}
-
-							switch streamResult.Status {
-							case common.ChatStreamStatusStreaming:
-								subTitle := "i18n:plugin_theme_ai_generating"
-								preview := plugin.WoxPreview{
-									PreviewType:    plugin.WoxPreviewTypeMarkdown,
-									PreviewData:    streamResult.ToMarkdown(),
-									ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
-								}
-								updatable.SubTitle = &subTitle
-								updatable.Preview = &preview
-								c.api.UpdateResult(ctx, *updatable)
-
-							case common.ChatStreamStatusFinished:
-								subTitle := "i18n:plugin_theme_ai_generated"
-								preview := plugin.WoxPreview{
-									PreviewType:    plugin.WoxPreviewTypeMarkdown,
-									PreviewData:    streamResult.ToMarkdown(),
-									ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
-								}
-								updatable.SubTitle = &subTitle
-								updatable.Preview = &preview
-								c.api.UpdateResult(ctx, *updatable)
-
-								// Extract and install theme
-								themeJson := streamResult.Data
-								util.Go(ctx, "theme generated", func() {
-									jsonTheme := extractJsonObject(themeJson)
-									if jsonTheme == "" {
-										c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_extract_failed"))
-										return
-									}
-									var theme common.Theme
-									unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
-									if unmarshalErr != nil {
-										c.api.Notify(ctx, unmarshalErr.Error())
-										return
-									}
-
-									theme.ThemeId = uuid.NewString()
-									theme.ThemeAuthor = "Wox launcher AI"
-									theme.ThemeUrl = "https://www.github.com/wox-launcher/wox"
-									theme.Version = "1.0.0"
-									theme.IsSystem = false
-									plugin.GetPluginManager().GetUI().InstallTheme(ctx, theme)
-								})
-
-							case common.ChatStreamStatusError:
-								if updatable.Preview != nil {
-									previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", streamResult.Data)
-									preview := *updatable.Preview
-									preview.PreviewData = previewData
-									updatable.Preview = &preview
-									c.api.UpdateResult(ctx, *updatable)
-								}
-							}
-						})
-
-						if err != nil {
-							if updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil && updatable.Preview != nil {
-								previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", err.Error())
-								preview := *updatable.Preview
-								preview.PreviewData = previewData
-								updatable.Preview = &preview
-								c.api.UpdateResult(ctx, *updatable)
-							}
-						}
-					})
-				},
-			},
-		},
-	}
-	return []plugin.QueryResult{result}
-}
-
 func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	return []plugin.QueryResult{
 		{
@@ -422,47 +186,6 @@ func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []pl
 			},
 		},
 	}
-}
-
-// extractJsonObject finds the first complete JSON object in raw by matching
-// balanced braces. This handles nested objects correctly, unlike a simple
-// non-greedy regex which would stop at the first closing brace.
-func extractJsonObject(raw string) string {
-	start := strings.Index(raw, "{")
-	if start == -1 {
-		return ""
-	}
-
-	depth := 0
-	inString := false
-	escape := false
-	for i := start; i < len(raw); i++ {
-		ch := raw[i]
-		if escape {
-			escape = false
-			continue
-		}
-		if ch == '\\' {
-			escape = true
-			continue
-		}
-		if ch == '"' {
-			inString = !inString
-			continue
-		}
-		if inString {
-			continue
-		}
-		if ch == '{' {
-			depth++
-		} else if ch == '}' {
-			depth--
-			if depth == 0 {
-				return raw[start : i+1]
-			}
-		}
-	}
-	return ""
 }
 
 // themeResultIcon reuses the Settings catalog swatch, including AUTO's split variants.

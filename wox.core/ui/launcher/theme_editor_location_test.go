@@ -9,6 +9,16 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestThemeEditorFieldsUseSettingsWindow prevents fields from borrowing a dormant launcher window.
+func TestThemeEditorFieldsUseSettingsWindow(t *testing.T) {
+	app := &App{window: &woxui.Window{}, settingsView: &woxui.ManagedWindow{}}
+	for _, prefix := range []string{"theme-editor", "theme-editor-dialog"} {
+		if got := app.formFieldNativeWindow(prefix); got != app.settingsView.Window() {
+			t.Fatalf("%s uses the launcher window instead of its settings window", prefix)
+		}
+	}
+}
+
 // TestThemeEditorEveryLocatorPaints checks actual preview trees for every exposed v1/v2 token.
 func TestThemeEditorEveryLocatorPaints(t *testing.T) {
 	flash := woxui.Color{R: 244, G: 63, B: 94, A: 230}
@@ -46,11 +56,16 @@ func TestThemeEditorEveryLocatorPaints(t *testing.T) {
 		}
 		for index, group := range themeEditorGroups(raw) {
 			for _, token := range group.tokens {
+				if themeEditorNumericToken(token.key) {
+					continue
+				}
 				t.Run(token.key+"/"+themeMapString(raw, "SchemaVersion"), func(t *testing.T) {
 					tree := launcherview.ThemeEditorSettingsView(launcherview.ThemeEditorSettingsProps{
 						Width: 1000, Height: 650, DraftTheme: theme, ActiveGroup: index, FlashToken: token.key,
 						PreviewResultTitle: "Theme", PreviewResultState: "Current", QueryBoxLabel: "Query", ResultsLabel: "Results", PropertyLabel: "Size",
 					})
+					retained := tree.(woxwidget.Stateful)
+					tree = retained.CreateState().Build(woxwidget.StateContext{}, retained.Widget)
 					want := 1
 					switch token.key {
 					case "BaseTextColor", "PreviewFontColor", "ResultItemTitleColor", "ResultItemSubTitleColor", "ToolbarFontColor":

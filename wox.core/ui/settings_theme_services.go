@@ -2,8 +2,13 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"wox/ai"
+	"wox/plugin"
+	"wox/resource"
 
 	"wox/common"
 	"wox/ui/contract"
@@ -135,4 +140,64 @@ func (s *CoreServices) SaveTheme(ctx context.Context, sessionID string, name str
 		return common.Theme{}, fmt.Errorf("save theme: %w", err)
 	}
 	return theme, nil
+}
+
+// SuggestThemeEdits runs a text-only request through the configured AI provider without persisting themes.
+func (s *CoreServices) SuggestThemeEdits(ctx context.Context, sessionID string, model common.Model, conversations []common.Conversation, onProgress common.ChatStreamFunc) (string, error) {
+	ctx = uiServiceContext(ctx, sessionID)
+	provider, err := plugin.GetPluginManager().GetAIProvider(ctx, model.Provider, model.ProviderAlias)
+	if err != nil {
+		return "", err
+	}
+	// Load the shipped skill directly: the draft editor has no filesystem tools and must not depend on skill discovery or user configuration.
+	skill, err := resource.AIFS.ReadFile("ai/skills/wox-theme-creator/SKILL.md")
+	if err != nil {
+		return "", fmt.Errorf("load theme creator skill: %w", err)
+	}
+	messages := []common.Conversation{{Role: common.ConversationRoleSystem, Text: string(skill) + "\nYou are embedded in the theme editor. Apply this skill's design guidance to the supplied editable properties. Repository inspection, file creation and publishing are unavailable. The following editor instructions define the JSON patch output format."}}
+	messages = append(messages, conversations...)
+	stream, err := provider.ChatStream(ctx, model, messages, common.EmptyChatOptions)
+	if err != nil {
+		return "", err
+	}
+	return readThemeSuggestion(ctx, stream, onProgress)
+}
+
+// readThemeSuggestion follows the same no-content sentinel contract as AI Chat.
+func readThemeSuggestion(ctx context.Context, stream ai.ChatStream, onProgress common.ChatStreamFunc) (string, error) {
+	result := ""
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		chunk, err := stream.Receive(ctx)
+		if errors.Is(err, ai.ChatStreamNoContentErr) {
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if chunk.Data != "" {
+			result = chunk.Data
+		}
+		if len(result) > 128*1024 || len(chunk.Reasoning) > 128*1024 {
+			return "", fmt.Errorf("theme response exceeds size limit")
+		}
+		if chunk.Status == common.ChatStreamStatusError {
+			return "", fmt.Errorf("%s", chunk.Data)
+		}
+		if onProgress != nil {
+			onProgress(chunk)
+		}
+		if chunk.Status == common.ChatStreamStatusFinished || chunk.Status == common.ChatStreamStatusStreamed {
+			break
+		}
+	}
+	if strings.TrimSpace(result) == "" {
+		return "", fmt.Errorf("empty theme response")
+	}
+	return result, nil
 }

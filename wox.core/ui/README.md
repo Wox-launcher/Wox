@@ -77,3 +77,12 @@ Forcing WARP (`WOX_WINDOWS_FORCE_WARP=1`) was 10 MB lower when hidden and about 
 SVG icons can use `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"` to follow Wox appearance: white in dark themes and black in light themes. Fixed colors remain unchanged, including in SVGs that mix brand colors with this variable. This applies to inline, file, and Base64 SVGs in the shared launcher image pipeline. Controls that explicitly tint an entire icon retain that behavior.
 
 Standard SVG `currentColor` keeps its normal meaning and defaults to black; it is not the Wox theme variable.
+
+
+## Embedding chat
+
+Use `preview.ChatConversation` for launcher, dedicated-window, and business-specific chat surfaces. It owns message/composer layout, empty-state alignment, floating catalog sizing, and the common composer keyboard behavior. `ChatInput` owns the model selector and the entire composer toolbar, including Send/Stop; add general toolbar controls there once so every host receives them. Hosts must not build alternate input toolbars or calculate composer/model-chip sizes.
+
+Supply conversation data, model/catalog entries, the native host window, theme, localized labels, and request callbacks through `ChatConversationProps`. Optional header, history, tool questions, debug panes, and a business footer are extension points. `PrepareMessages` allows AI Chat to reuse its cached rich-message/tool-round preparation at the size chosen by the component. Simple hosts can supply message data directly. Use `ChatScrollState`, `ChatCatalogKey`, and `ChatComposerKey` for retained scroll and keyboard handling, including host-level keyboard dispatch outside the text field.
+
+Provider requests, persistence, skill context, and applying generated theme patches stay in their business controllers. These intentionally differ; the shared component does not send requests or save drafts by itself.

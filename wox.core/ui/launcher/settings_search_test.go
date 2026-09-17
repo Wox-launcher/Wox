@@ -81,6 +81,63 @@ func TestSettingsSearchMatchesPluginEnglishName(t *testing.T) {
 	t.Fatalf("english plugin name missing from results: %#v", results)
 }
 
+func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
+	deps, _ := newSearchControllerDeps()
+	shared := newSharedEditState()
+	app := &App{
+		settingsSearch:     newSettingsSearchController(deps),
+		pluginSettings:     newPluginSettingsController(deps),
+		themeSettings:      newThemeSettingsController(deps),
+		hotkeySettings:     newHotkeySettingsController(deps),
+		aiSettings:         newAISettingsController(deps),
+		generalSettings:    newGeneralSettingsController(deps, shared),
+		cloudSettings:      newCloudSettingsController(deps),
+		usageSettings:      newUsageSettingsController(deps),
+		aboutSettings:      newAboutSettingsController(deps),
+		appearanceSettings: newAppearanceSettingsController(deps),
+		dataSettings:       newDataSettingsController(deps),
+		runtimeSettings:    newRuntimeSettingsController(deps),
+		updateSettings:     newUpdateSettingsController(deps),
+		sharedEdit:         shared,
+		settingTab:         "general",
+	}
+	app.themeSettings.SetThemeEditor(&themeEditorPreviewState{key: "settings-theme|test"})
+	app.themeSettings.SetThemeWallpaperLoading(true)
+
+	app.activateSettingsSearchResult(settingsSearchResult{
+		kind: settingsSearchSection, title: "Theme Editor", tab: "theme", mode: "editor", navID: "themes.edit",
+	})
+	if app.settingTab != "theme" || app.themeSettings.ThemesMode() != "editor" {
+		t.Fatalf("activated destination = %s/%s, want theme/editor", app.settingTab, app.themeSettings.ThemesMode())
+	}
+}
+
+func TestSettingsSearchMatchesThemeEditor(t *testing.T) {
+	app := &App{}
+	for _, query := range []string{"Theme Editor", "themeeditor"} {
+		results := app.settingsSearchResults(settingsSnapshot{
+			search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: query}},
+		})
+		found := false
+		for _, result := range results {
+			if result.kind == settingsSearchSection && result.navID == "themes.edit" {
+				if result.title != "Theme Editor" || result.tab != "theme" || result.mode != "editor" {
+					t.Fatalf("query %q theme editor result = %#v, want Theme Editor on the editor route", query, result)
+				}
+				item := settingsSearchNavItem(result)
+				if item.tab != "theme" || item.mode != "editor" {
+					t.Fatalf("query %q theme editor nav = %#v, want theme editor", query, item)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("query %q missing Theme Editor: %#v", query, results)
+		}
+	}
+}
+
 func TestSettingsSearchMatchesLocalizedBuiltInSetting(t *testing.T) {
 	app := &App{translations: map[string]string{
 		"ui_general": "通用",

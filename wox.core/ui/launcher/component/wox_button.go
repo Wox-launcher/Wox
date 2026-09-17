@@ -33,9 +33,11 @@ type ButtonProps struct {
 	// keep the flag for call sites that want the intent to be explicit.
 	IntrinsicWidth bool
 	Width          float32
-	Radius         float32
-	Padding        woxwidget.Insets
-	FontSize       float32
+	// AlignLeading is for full-width disclosure rows; ordinary actions stay centered.
+	AlignLeading bool
+	Radius       float32
+	Padding      woxwidget.Insets
+	FontSize     float32
 	// FontWeight overrides the default regular button label. Leave zero unless
 	// a specific surface needs extra emphasis.
 	FontWeight        woxui.FontWeight
@@ -151,6 +153,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	// would otherwise expand to the Flex parent's full available width and clip or stretch labels.
 	intrinsicWidth := props.IntrinsicWidth || props.Width <= 0
 	var alignedChild woxwidget.Widget = woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child}
+	if props.AlignLeading {
+		alignedChild = woxwidget.Align{Vertical: 0.5, Child: child}
+	}
 	buttonWidth := props.Width
 	if intrinsicWidth {
 		if padding.Top == 0 && padding.Bottom == 0 {

@@ -452,6 +452,7 @@ const (
 
 // ThemeOperationSettingsServices exposes theme lifecycle changes.
 type ThemeOperationSettingsServices interface {
+	SuggestThemeEdits(ctx context.Context, sessionID string, model common.Model, conversations []common.Conversation, onProgress common.ChatStreamFunc) (string, error)
 	OperateTheme(ctx context.Context, sessionID string, themeID string, operation ThemeOperation) error
 	SaveTheme(ctx context.Context, sessionID string, name string, theme common.Theme, overwrite bool) (common.Theme, error)
 }

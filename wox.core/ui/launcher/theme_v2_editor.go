@@ -3,6 +3,7 @@ package launcher
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"wox/common"
 	"wox/util"
@@ -33,18 +34,23 @@ func (t *themeData) UnmarshalJSON(data []byte) error {
 
 func isV2Theme(raw map[string]any) bool { return fmt.Sprint(raw["SchemaVersion"]) == "2" }
 
-// themeEditorGroups keeps the legacy editor unchanged and adds required base colors to the v2 window group.
+// themeEditorGroups keeps stable surface indices for preview scenes and adds v2-only properties.
 func themeEditorGroups(raw map[string]any) []themeColorGroup {
 	if !isV2Theme(raw) {
 		return themeEditorColorGroups
 	}
 	groups := append([]themeColorGroup(nil), themeEditorColorGroups...)
-	groups[0].tokens = append([]themeColorToken{
+	groups = append(groups, themeColorGroup{label: "i18n:ui_theme_editor_group_base", tokens: []themeColorToken{
 		{key: "BaseBackgroundColor", label: "i18n:ui_theme_base_background"},
 		{key: "BaseTextColor", label: "i18n:ui_theme_base_text"},
 		{key: "BaseAccentColor", label: "i18n:ui_theme_base_accent"},
-	}, groups[0].tokens...)
+	}})
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppContentBackgroundColor", label: "i18n:ui_theme_editor_token_app_content_background"})
+	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppBorderColor", label: "i18n:ui_theme_editor_window_border"})
+	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), themeColorToken{key: "QueryBoxBorderBottomColor", label: "i18n:ui_theme_editor_bottom_border"})
+	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), themeColorToken{key: "ResultItemActiveIndicatorColor", label: "i18n:ui_theme_editor_indicator"})
+	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), themeColorToken{key: "ActionContainerBorderColor", label: "i18n:ui_theme_editor_token_action_border"})
+	groups[5].tokens = append(append([]themeColorToken(nil), groups[5].tokens...), themeColorToken{key: "ToolbarBorderColor", label: "i18n:ui_theme_editor_bottom_border"})
 	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), []themeColorToken{{key: "ResultItemHoverBackgroundColor", label: "i18n:ui_theme_editor_token_result_hover_background"}}...)
 	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), []themeColorToken{{key: "ActionContainerDividerColor", label: "i18n:ui_theme_editor_token_action_divider"}}...)
 	groups[5].tokens = append(append([]themeColorToken(nil), groups[5].tokens...), []themeColorToken{{key: "ToolbarHotkeyFontColor", label: "i18n:ui_theme_editor_token_hotkey_text"}, {key: "ToolbarHotkeyBackgroundColor", label: "i18n:ui_theme_editor_token_hotkey_background"}, {key: "ToolbarHotkeyBorderColor", label: "i18n:ui_theme_editor_token_hotkey_border"}}...)
@@ -77,6 +83,9 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 			groups[3].tokens[i].label = "i18n:ui_theme_editor_token_preview_property_value"
 		}
 	}
+	for index, tokens := range themeEditorGeometryGroups {
+		groups[index].tokens = append(groups[index].tokens, tokens...)
+	}
 	return groups
 }
 
@@ -88,10 +97,10 @@ func themeEditorTokenSource(raw map[string]any, key, platform, variant string) m
 	platformNode, _ := raw[platform].(map[string]any)
 	variants, _ := platformNode["variants"].(map[string]any)
 	variantNode, _ := variants[variant].(map[string]any)
-	if variantNode[key] != nil {
+	if _, exists := variantNode[key]; exists {
 		return variantNode
 	}
-	if platformNode[key] != nil {
+	if _, exists := platformNode[key]; exists {
 		return platformNode
 	}
 	return raw
@@ -104,9 +113,20 @@ func mergeThemeEditorDraft(raw map[string]any, values map[string]string) map[str
 		source := themeEditorTokenSource(draft, key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
 		if isV2Theme(raw) {
 			value = strings.TrimSpace(value)
+			// Leave untouched authored values (including null and numeric types) intact.
+			if value == themeMapString(source, key) {
+				continue
+			}
 		}
 		if isV2Theme(raw) && value == "" && key != "ThemeName" && !strings.HasPrefix(key, "Base") {
 			delete(source, key)
+		} else if isV2Theme(raw) && themeEditorNumericToken(key) {
+			// Invalid input stays invalid so the schema rejects preview/save without losing the edit.
+			if number, err := strconv.Atoi(value); err == nil && number >= 0 {
+				source[key] = number
+			} else {
+				source[key] = value
+			}
 		} else {
 			source[key] = value
 		}
@@ -142,7 +162,12 @@ func themeEditorColorValue(raw map[string]any, values map[string]string, key str
 		return value
 	}
 	if value == "" {
-		value = themeMapString(themeEditorResolvedColors(raw, values), key)
+		resolved := themeEditorResolvedColors(raw, values)
+		value = themeMapString(resolved, key)
+		// Native window outlines have no authored color; use the demo's divider palette for picking only.
+		if key == "AppBorderColor" && value == "" {
+			value = themeMapString(resolved, "PreviewSplitLineColor")
+		}
 	}
 	if c, ok := common.ParseThemeColor(value); ok {
 		return fmt.Sprintf("#%02X%02X%02X%02X", c.R, c.G, c.B, c.A)

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -8,6 +9,159 @@ import (
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+// TestThemeEditorSharedChatSendStaysVisible covers the shared composer at narrow widths and multiple lines.
+func TestThemeEditorSharedChatSendStaysVisible(t *testing.T) {
+	for _, width := range []float32{500, 800} {
+		for _, prompt := range []string{"Round the corners", "one\ntwo\nthree\nfour\nfive"} {
+			paneWidth, paneHeight := ThemeEditorInspectorSize(width, 640, false)
+			inputHeight := previewview.ChatComposerHeightForLines(0, previewview.ChatComposerVisibleLines(prompt, paneWidth-20, nil, nil))
+			chatProps := previewview.ChatPreviewProps{Key: "theme-editor-ai", Width: paneWidth, Height: paneHeight - 40,
+				Messages: previewview.ChatMessagesProps{Width: paneWidth - 20, Height: paneHeight - 40 - inputHeight - 14},
+				Input:    previewview.ChatInputProps{Key: "theme-editor-ai", Width: paneWidth - 20, Height: inputHeight, Editing: woxui.TextEditingState{Text: prompt}, Model: "Model", ModelWidth: 120, ActionLabel: "Send"}}
+			props := ThemeEditorSettingsProps{Width: width, Height: 640, AIExpanded: true,
+				AIAssistant: previewview.ChatConversation(previewview.ChatConversationProps{ChatPreviewProps: chatProps})}
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ThemeEditorSettingsView(props) })
+			host.AttachServices(settingsWindowHostServices{})
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 640}, Scale: 1.5, PixelSize: woxui.PixelSize{Width: int(width * 1.5), Height: 960}})
+			bounds, ok := host.BoundsForKey("chat-send-theme-editor-ai")
+			if !ok || bounds.Y+bounds.Height > 640 || bounds.X+bounds.Width > width || (width >= 760 && bounds.X < width-340) {
+				t.Fatalf("send outside pane: width=%v bounds=%+v", width, bounds)
+			}
+			if _, visible := host.BoundsForKey("theme-editor-search"); visible {
+				t.Fatal("property search must be hidden while chatting")
+			}
+			modeBounds, modeVisible := host.BoundsForKey("theme-editor-mode-1")
+			if !modeVisible {
+				t.Fatal("AI mode switch must remain visible in chat")
+			}
+			props.AIExpanded = false
+			props.AIAssistant = nil
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 640}, Scale: 1.5, PixelSize: woxui.PixelSize{Width: int(width * 1.5), Height: 960}})
+			if _, visible := host.BoundsForKey("theme-editor-search"); visible {
+				t.Fatal("property search must remain removed in editing mode")
+			}
+			if bounds, visible := host.BoundsForKey("theme-editor-mode-1"); !visible || bounds != modeBounds {
+				t.Fatal("mode switch moved when returning to properties")
+			}
+			host.Dispose()
+		}
+	}
+}
+
+// TestThemeEditorFieldErrorPlacement keeps validation beside the value that needs correction.
+func TestThemeEditorFieldErrorPlacement(t *testing.T) {
+	row := themeEditorPropertyRow(ThemeEditorSettingsProps{}, ThemeEditorColorToken{Key: "AppBorderRadius", Numeric: true, Value: "bad", Error: "Enter a non-negative whole number."}, 324).(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(row.Children) != 3 || row.Children[2].(woxwidget.TextBlock).Value != "Enter a non-negative whole number." {
+		t.Fatal("validation must follow the input controls")
+	}
+}
+
+// TestThemeEditorStickyHeader checks the transition without replacing the retained scroll subtree.
+func TestThemeEditorStickyHeader(t *testing.T) {
+	props := ThemeEditorSettingsProps{Groups: []ThemeEditorColorGroup{
+		{Label: "Window", Tokens: []ThemeEditorColorToken{{Key: "AppBackgroundColor"}}},
+		{Label: "Query", Tokens: []ThemeEditorColorToken{{Key: "QueryBoxBackgroundColor"}}},
+	}}
+	state := themeEditorSettingsState{expanded: map[int]bool{1: true}}
+	for _, offset := range []float32{0, 48, 49, 200} {
+		state.scrollOffset = offset
+		pane := state.inspector(woxwidget.StateContext{}, props, 340, 500).(woxwidget.Flex).Children[0].(woxwidget.Stack)
+		if _, ok := pane.Children[0].Child.(woxwidget.Stateful); !ok {
+			t.Fatal("scroll subtree changed identity")
+		}
+		if (len(pane.Children) == 2) != (offset > 48) {
+			t.Fatalf("incorrect sticky header at offset %v", offset)
+		}
+		if len(pane.Children) == 2 && pane.Children[1].Child.(woxwidget.Container).Color.A != 255 {
+			t.Fatal("sticky header must hide the scrolling labels beneath it")
+		}
+	}
+	row := themeEditorPropertyRow(props, props.Groups[0].Tokens[0], 324).(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(row.Children) != 2 {
+		t.Fatal("background must only show label and color controls")
+	}
+}
+
+func TestThemeEditorColorSwatchOpensPicker(t *testing.T) {
+	selected := ""
+	props := ThemeEditorSettingsProps{OnEditToken: func(key string) { selected = key }}
+	row := themeEditorPropertyRow(props, ThemeEditorColorToken{Key: "AppBackgroundColor"}, 324).(woxwidget.Container).Child.(woxwidget.Flex)
+	controls := row.Children[1].(woxwidget.Flex)
+	swatch := controls.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	swatch.OnTap()
+	if selected != "AppBackgroundColor" {
+		t.Fatal("swatch did not open its color picker")
+	}
+}
+
+// TestThemeEditorInlineControls measures the mounted tree in logical units at multiple display scales.
+func TestThemeEditorInlineControls(t *testing.T) {
+	for _, width := range []float32{500, 800} {
+		for _, scale := range []float32{1, 1.5, 2} {
+			t.Run(fmt.Sprintf("%g/%g", width, scale), func(t *testing.T) {
+				token := ThemeEditorColorToken{Key: "AppBorderWidth", Label: "Window border width", Numeric: true, Optional: true, Value: "2", Effective: "2"}
+				props := ThemeEditorSettingsProps{Width: width, Height: 640, Title: "Theme", DefaultLabel: "Default", ResetLabel: "Reset", Groups: []ThemeEditorColorGroup{{Label: "Window", Tokens: []ThemeEditorColorToken{token}}}}
+				props.OnChangeToken = func(key, value string) { props.Groups[0].Tokens[0].Value = value }
+				host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ThemeEditorSettingsView(props) })
+				host.AttachServices(settingsWindowHostServices{})
+				defer host.Dispose()
+				frame := woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 640}, PixelSize: woxui.PixelSize{Width: int(width * scale), Height: int(640 * scale)}, Scale: scale}
+				host.Frame(&woxui.DisplayList{}, frame)
+				save, saveOK := host.BoundsForKey("theme-editor-save-as")
+				search, searchOK := host.BoundsForKey("theme-editor-group-0")
+				if !saveOK || !searchOK || save.X+save.Width != search.X+search.Width {
+					t.Fatalf("save and group right edges differ: %+v, %+v", save, search)
+				}
+				bounds, ok := host.BoundsForKey("theme-editor-value-AppBorderWidth")
+				if !ok || bounds.Width <= 0 || bounds.X < 0 || bounds.X+bounds.Width > width || bounds.Y+bounds.Height > 640 {
+					t.Fatalf("field is outside inspector: %+v", bounds)
+				}
+				for _, edit := range []struct {
+					id          string
+					action      woxui.AccessibilityAction
+					value, want string
+				}{
+					{"theme-editor-value-AppBorderWidth", woxui.AccessibilityActionSetValue, "0", "0"},
+					{"theme-editor-step-AppBorderWidth+", woxui.AccessibilityActionActivate, "", "1"},
+					{"theme-editor-reset-AppBorderWidth", woxui.AccessibilityActionActivate, "", ""},
+				} {
+					control, exists := host.BoundsForKey(woxwidget.Key(edit.id))
+					if !exists {
+						t.Fatalf("missing control %s", edit.id)
+					}
+					if control.Height != 32 || control.Y != bounds.Y {
+						t.Fatalf("control %s is not aligned with the 32-unit input: %+v, input %+v", edit.id, control, bounds)
+					}
+					point := woxui.Point{X: control.X + control.Width/2, Y: control.Y + control.Height/2}
+					host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+					host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+					if edit.action == woxui.AccessibilityActionSetValue {
+						host.Key(woxui.KeyEvent{Key: woxui.Key("a"), Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true})
+						host.TextInput(woxui.TextInputEvent{Text: edit.value})
+					}
+					if got := props.Groups[0].Tokens[0].Value; got != edit.want {
+						t.Fatalf("%s produced %q, want %q", edit.id, got, edit.want)
+					}
+					host.Frame(&woxui.DisplayList{}, frame)
+				}
+			})
+		}
+	}
+}
+
+func TestThemeEditorSaveActions(t *testing.T) {
+	for _, editable := range []bool{false, true} {
+		row := themeEditorActions(ThemeEditorSettingsProps{CanOverwrite: editable}, 324, 32).(woxwidget.Flex)
+		want := 2
+		if editable {
+			want = 3
+		}
+		if len(row.Children) != want {
+			t.Fatalf("editable %v: got %d actions, want %d", editable, len(row.Children), want)
+		}
+	}
+}
 
 // TestThemeEditorPreviewLocatorBounds follows the same body and tag geometry as PreviewView.
 func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
@@ -31,6 +185,9 @@ func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
 					}
 					body := slots[0].Child.(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 					property := body.Children[2].(woxwidget.Flex)
+					if property.Axis != woxwidget.Horizontal || property.Gap != 10 {
+						t.Fatal("metadata must match the label/value row in file previews")
+					}
 					index := 0
 					if token == "PreviewPropertyContentColor" {
 						index = 1
@@ -55,100 +212,67 @@ func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
 	}
 }
 
-func TestThemeEditorTokensUseHorizontalScroll(t *testing.T) {
-	tokens := make([]ThemeEditorColorToken, 5)
-	for index := range tokens {
-		tokens[index] = ThemeEditorColorToken{Key: string(rune('a' + index))}
-	}
-	props, content := themeEditorScroll(t, themeEditorTokens(ThemeEditorSettingsProps{
-		ActiveGroup: 0,
-		Groups:      []ThemeEditorColorGroup{{Tokens: tokens}},
-	}, 500, 58))
-
-	if !props.Horizontal || props.AlwaysShowScrollbar {
-		t.Fatalf("theme token scroll = %#v, want a hover-revealed horizontal strip", props)
-	}
-	if props.ContentWidth <= props.Width {
-		t.Fatalf("theme token content width = %v, want greater than viewport %v", props.ContentWidth, props.Width)
-	}
-	card := content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	if card.Height != 44 {
-		t.Fatalf("theme token height = %v, want Flutter height 44", card.Height)
-	}
-	label := card.Child.(woxwidget.Flex).Children[0].(woxwidget.Clip).Child.(woxwidget.Align)
-	if label.Vertical != 0.5 {
-		t.Fatalf("theme token label vertical alignment = %v, want centered", label.Vertical)
-	}
-}
-
-func themeEditorScroll(t *testing.T, view woxwidget.Widget) (woxcomponent.ScrollViewProps, woxwidget.Widget) {
-	t.Helper()
-	switch typed := view.(type) {
-	case woxwidget.Stateful:
-		props := typed.Widget.(woxcomponent.ScrollViewProps)
-		return props, props.Content
-	case woxwidget.Gesture:
-		scroll := typed.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-		return woxcomponent.ScrollViewProps{Width: scroll.Width, ContentWidth: scroll.ContentWidth, Horizontal: scroll.Horizontal}, scroll.Child
-	default:
-		t.Fatalf("theme editor scroll = %T, want WoxScrollView", view)
-		return woxcomponent.ScrollViewProps{}, nil
+// TestThemeEditorInspectorLayout checks both responsive modes and vertical property overflow.
+func TestThemeEditorInspectorLayout(t *testing.T) {
+	for _, width := range []float32{500, 759, 760, 1000} {
+		props := ThemeEditorSettingsProps{Width: width, Height: 640, Groups: []ThemeEditorColorGroup{{Label: "Window", Tokens: []ThemeEditorColorToken{{Key: "AppBorderWidth", Numeric: true, Value: "0"}}}}}
+		state := themeEditorSettingsState{expanded: map[int]bool{0: true}}
+		tree := state.Build(woxwidget.StateContext{}, props).(woxwidget.Flex)
+		body := tree.Children[len(tree.Children)-1].(woxwidget.Flex)
+		want := woxwidget.Vertical
+		if width >= 760 {
+			want = woxwidget.Horizontal
+		}
+		if body.Axis != want {
+			t.Fatalf("width %v: axis %v, want %v", width, body.Axis, want)
+		}
+		inspector := body.Children[1].(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+		scroll := inspector.Children[0].(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+		if scroll.Horizontal || scroll.Height <= 140 {
+			t.Fatalf("inspector has no usable vertical viewport: %#v", scroll)
+		}
+		content := scroll.Content.(woxwidget.Flex)
+		if content.Axis != woxwidget.Vertical || len(content.Children) != 3 {
+			t.Fatal("expected header, property and divider")
+		}
 	}
 }
 
-func TestThemeEditorGroupUsesMeasuredFlutterWidth(t *testing.T) {
-	_, content := themeEditorScroll(t, themeEditorGroupSelector(ThemeEditorSettingsProps{
-		ActiveGroup: 0,
-		Groups:      []ThemeEditorColorGroup{{Label: "操作面板", LabelWidth: 48}},
-	}, 500, 40))
-	semantic := content.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
-	stateful := semantic.Child.(woxwidget.Stateful)
-	chip := (&themeEditorGroupChipState{}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture).Child.(woxwidget.Container)
-	if chip.Width != 72 {
-		t.Fatalf("theme group width = %v, want measured label width plus Flutter padding 72", chip.Width)
-	}
-	if !semantic.Selected {
-		t.Fatal("active theme group is not exposed as selected")
-	}
-}
-
-func TestThemeEditorGroupAddsHoverSurface(t *testing.T) {
-	_, content := themeEditorScroll(t, themeEditorGroupSelector(ThemeEditorSettingsProps{
-		Groups: []ThemeEditorColorGroup{{Label: "Window"}, {Label: "Query box"}},
-	}, 500, 40))
-	semantic := content.(woxwidget.Flex).Children[1].(woxwidget.Semantics)
-	stateful := semantic.Child.(woxwidget.Stateful)
-	normal := (&themeEditorGroupChipState{}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
-	hovered := (&themeEditorGroupChipState{hovered: true}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
-
-	if normal.OnHoverAt == nil {
-		t.Fatal("theme editor group does not retain hover input")
-	}
-	if normal.Child.(woxwidget.Container).Color.A != 0 || hovered.Child.(woxwidget.Container).Color.A == 0 {
-		t.Fatalf("theme editor group hover colors = %#v/%#v, want transparent/visible", normal.Child.(woxwidget.Container).Color, hovered.Child.(woxwidget.Container).Color)
-	}
-}
-
-func TestThemeEditorGroupSelectorScrollsNarrowViewport(t *testing.T) {
-	groups := make([]ThemeEditorColorGroup, 5)
-	for index := range groups {
-		groups[index] = ThemeEditorColorGroup{Label: "Group", LabelWidth: 54}
-	}
-	props, _ := themeEditorScroll(t, themeEditorGroupSelector(ThemeEditorSettingsProps{Groups: groups}, 300, 40))
-	if !props.Horizontal || props.AlwaysShowScrollbar || props.ContentWidth <= props.Width {
-		t.Fatalf("theme group selector = %#v, want hover-revealed horizontal overflow", props)
-	}
-}
-
-func TestThemeEditorControlPaneReservesActionButtonWidth(t *testing.T) {
-	pane := themeEditorControlPane(ThemeEditorSettingsProps{
-		DiscardLabel: "Discard", OverwriteLabel: "Overwrite", SaveAsLabel: "Save as",
-		DiscardIcon: &woxui.Image{}, OverwriteIcon: &woxui.Image{}, SaveAsIcon: &woxui.Image{},
-	}, 716, themeEditorControlPaneHeight).(woxwidget.Stack)
-	actions := pane.Children[2].Child.(woxwidget.Flex)
-	button := focusedControlGesture(actions.Children[1]).Child.(woxwidget.Container)
-	if button.Width != 100 || button.Padding.Left != 10 || button.Padding.Right != 10 {
-		t.Fatalf("narrow theme action button width/padding = %.0f/%v, want 100/10px horizontal", button.Width, button.Padding)
+// TestThemeEditorLinkedPadding preserves asymmetric drafts until linking is explicitly requested.
+func TestThemeEditorLinkedPadding(t *testing.T) {
+	for _, asymmetric := range []bool{false, true} {
+		tokens := []ThemeEditorColorToken{}
+		for _, side := range []string{"Left", "Top", "Right", "Bottom"} {
+			value := "10"
+			if asymmetric && side == "Top" {
+				value = "20"
+			}
+			tokens = append(tokens, ThemeEditorColorToken{Key: "AppPadding" + side, Label: side, Numeric: true, Optional: true, Value: value, Effective: value})
+		}
+		var edit map[string]string
+		props := ThemeEditorSettingsProps{Groups: []ThemeEditorColorGroup{{Tokens: tokens}}, OnChangeTokens: func(values map[string]string) { edit = values }}
+		state := themeEditorSettingsState{expanded: map[int]bool{0: true}}
+		inspector := state.inspector(woxwidget.StateContext{}, props, 340, 500).(woxwidget.Flex)
+		rows := inspector.Children[0].(woxwidget.Stack).Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+		want := 4
+		if asymmetric {
+			want = 7
+		}
+		if len(rows) != want || edit != nil {
+			t.Fatal("building padding controls changed values or hid asymmetric sides")
+		}
+		if !asymmetric {
+			field := rows[2].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Flex).Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+			field.OnChanged("0")
+			if len(edit) != 4 {
+				t.Fatal("linked edit did not update all four sides atomically")
+			}
+			for _, value := range edit {
+				if value != "0" {
+					t.Fatal("linked edit lost explicit zero")
+				}
+			}
+		}
 	}
 }
 
@@ -210,6 +334,22 @@ func TestThemeEditorMapsTokensToSemanticDemoHighlights(t *testing.T) {
 	for token, want := range tests {
 		if got := themeEditorDemoHighlightTarget(token); got != want {
 			t.Fatalf("highlight target for %s = %v, want %v", token, got, want)
+		}
+	}
+}
+
+func TestThemeEditorPropertyLabelOmitsVisibleScope(t *testing.T) {
+	for _, test := range []struct{ label, group, section, want string }{
+		{"Content panel background", "Window", "Content panel", "Background"},
+		{"Content panel · inset", "Window", "Content panel", "Inset"},
+		{"Content panel · corner radius", "Window", "Content panel", "Corner radius"},
+		{"内容面板背景", "窗口", "内容面板", "背景"},
+		{"Glance hover background", "Query box", "Glance", "Hover background"},
+		{"Action panel · border width", "Action panel", "Appearance", "Border width"},
+		{"Selected keycap text", "Action panel", "Rows and selection", "Selected keycap text"},
+	} {
+		if got := themeEditorPropertyLabel(test.label, test.group, test.section); got != test.want {
+			t.Errorf("%q: got %q, want %q", test.label, got, test.want)
 		}
 	}
 }

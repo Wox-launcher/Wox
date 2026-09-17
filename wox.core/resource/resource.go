@@ -66,13 +66,15 @@ func Extract(ctx context.Context) error {
 		return othersErr
 	}
 
-	// AI skill assets used by WPM must be available in installed builds, not only in the source tree.
-	if _, err := AIFS.ReadFile("ai/skills/wox-plugin-creator/SKILL.md"); err != nil {
-		return fmt.Errorf("embedded wox-plugin-creator skill is missing; run make sync-ai-skills: %w", err)
-	}
-	builtinSkillDirectory := path.Join(util.GetLocation().GetAISkillsDirectory(), "wox-plugin-creator")
-	if err := os.RemoveAll(builtinSkillDirectory); err != nil {
-		return err
+	// Built-in skills must be available in installed builds, not only in the source tree.
+	for _, name := range []string{"wox-plugin-creator", "wox-theme-creator"} {
+		if _, err := AIFS.ReadFile("ai/skills/" + name + "/SKILL.md"); err != nil {
+			return fmt.Errorf("embedded %s skill is missing; run make sync-ai-skills: %w", name, err)
+		}
+		builtinSkillDirectory := path.Join(util.GetLocation().GetAISkillsDirectory(), name)
+		if err := os.RemoveAll(builtinSkillDirectory); err != nil {
+			return err
+		}
 	}
 	aiErr := extractFiles(ctx, AIFS, filepath.Dir(util.GetLocation().GetAISkillsDirectory()), "ai", true)
 	if aiErr != nil {

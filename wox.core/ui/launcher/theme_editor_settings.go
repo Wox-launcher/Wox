@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"wox/common/icons"
 
 	"github.com/disintegration/imaging"
 	woxcomponent "wox/ui/launcher/component"
@@ -34,20 +35,16 @@ const (
 	demoWallpaperCornerRadius  = 8
 )
 
-// buildThemeEditorSettingsSurface adapts the shared draft controller to Flutter's settings-only editor layout.
+// buildThemeEditorSettingsSurface adapts the authored draft to the preview and property inspector.
 func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	groups := make([]launcherview.ThemeEditorColorGroup, 0, len(themeEditorColorGroups))
+	formError := state.error
 	var resolvedColors map[string]any
 	if isV2Theme(state.raw) {
 		resolvedColors = themeEditorResolvedColors(state.raw, state.values)
 	}
 	for _, group := range themeEditorGroups(state.raw) {
 		label := a.translate(group.label)
-		labelWidth := float32(0)
-		if a.window != nil {
-			metrics, _ := a.window.MeasureText(label, woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold})
-			labelWidth = metrics.Size.Width
-		}
 		tokens := make([]launcherview.ThemeEditorColorToken, 0, len(group.tokens))
 		for _, token := range group.tokens {
 			value := state.values[token.key]
@@ -56,17 +53,33 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 			} else {
 				value = themeEditorColorValue(state.raw, state.values, token.key)
 			}
+			if token.key == "AppBorderColor" && value == "" {
+				value = themeEditorColorValue(state.raw, state.values, token.key)
+			}
+			numeric := isV2Theme(state.raw) && themeEditorNumericToken(token.key)
 			color, ok := decodeThemeColor(value)
 			if !ok {
 				color = palette.Error
 			}
 			tokenLabel := a.translate(token.label)
-			if isV2Theme(state.raw) && state.values[token.key] == "" {
-				tokenLabel += " · " + a.translate("i18n:ui_theme_inherited")
+			fieldError := ""
+			if numeric && strings.TrimSpace(state.values[token.key]) != "" {
+				if number, err := strconv.Atoi(strings.TrimSpace(state.values[token.key])); err != nil || number < 0 {
+					fieldError = a.translate("i18n:ui_theme_editor_invalid_geometry")
+					// Numeric validation belongs to the field; keep save/service failures at page level.
+					if formError == fieldError {
+						formError = ""
+					}
+				}
 			}
-			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: tokenLabel, Color: color})
+			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: tokenLabel, Color: color,
+				Error:    fieldError,
+				Subgroup: a.translate(themeEditorTokenSection(token.key)),
+				Numeric:  numeric, Value: state.values[token.key], Effective: value,
+				Optional: isV2Theme(state.raw) && !strings.HasPrefix(token.key, "Base"),
+			})
 		}
-		groups = append(groups, launcherview.ThemeEditorColorGroup{Label: label, LabelWidth: labelWidth, Tokens: tokens})
+		groups = append(groups, launcherview.ThemeEditorColorGroup{Label: label, Tokens: tokens})
 	}
 
 	foreground := palette.Text
@@ -78,25 +91,76 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	wallpaperImage := a.themeSettings.ThemeWallpaperImage()
 	wallpaperBlurred := a.themeSettings.ThemeWallpaperBlurred()
 	draftPalette := themeEditorDraftPalette(state.raw, state.values)
+	var geometry *woxcomponent.LauncherDemoGeometry
+	if isV2Theme(state.raw) {
+		geometry = &woxcomponent.LauncherDemoGeometry{AppPadding: draftPalette.appPadding, ResultPadding: draftPalette.resultContainerPadding, ItemPadding: draftPalette.resultItemPadding, ActionPadding: draftPalette.actionPadding, ToolbarPadding: draftPalette.toolbarPadding, ActionQueryRadius: draftPalette.actionQueryRadius}
+	}
 
+	assistantWidth, assistantHeight := launcherview.ThemeEditorInspectorSize(width, height, formError != "")
 	dirty := themeEditorSnapshotDirty(state)
 	return launcherview.ThemeEditorSettingsView(launcherview.ThemeEditorSettingsProps{
 		Width: width, Height: height, Theme: palette, DraftTheme: draftPalette.componentTheme(),
-		Groups: groups, ActiveGroup: state.activeGroup, Dirty: dirty, Saving: state.saving, CanOverwrite: !state.isSystem && !state.isAuto && state.sourceID != "", Error: state.error,
+		Geometry:  geometry,
+		ModeLabel: a.translate("i18n:ui_theme_editor_properties"), AILabel: a.translate("i18n:ui_theme_editor_ai"),
+		AIIcon: a.imageForTint(fromCoreImage(icons.Get(icons.ControlSparkles)), &palette.Text, physicalImageSize(16, imageScale)),
+		OnSelectAI: func(open bool) {
+			if current := a.themeSettings.ThemeEditor(); current != nil && current.ai.open != open {
+				a.toggleThemeEditorAI()
+			}
+		},
+		AIAssistant: a.buildThemeEditorAI(state, palette, assistantWidth, assistantHeight, imageScale),
+		AIExpanded:  state.ai.open,
+		Key:         state.key, Title: state.sourceName,
+		DefaultLabel: a.translate("i18n:ui_theme_inherited"), ResetLabel: a.translate("i18n:ui_theme_restore_default"),
+		LinkPaddingLabel: a.translate("i18n:ui_theme_editor_link_padding"), PaddingLabel: a.translate("i18n:ui_theme_editor_padding"),
+		NoPropertiesLabel: a.translate("i18n:ui_theme_editor_no_properties"),
+		ChromeHelp:        a.translate("i18n:ui_theme_editor_chrome_help"), ShowChromeHelp: isV2Theme(state.raw),
+		OpacityLabel:   a.translate("i18n:ui_theme_editor_background_opacity"),
+		OnChangeToken:  a.changeThemeEditorToken,
+		OnChangeTokens: a.changeThemeEditorTokens,
+		Groups:         groups, ActiveGroup: state.activeGroup, Dirty: dirty, Saving: state.saving, AIBusy: state.ai.busy, CanOverwrite: !state.isSystem && !state.isAuto && state.sourceID != "", Error: formError,
 		Wallpaper: wallpaperImage, WallpaperBlurred: wallpaperBlurred,
 		FlashToken: state.flashToken,
 		LocateIcon: locateIcon, DiscardIcon: discardIcon, OverwriteIcon: overwriteIcon, SaveAsIcon: saveAsIcon,
 		LocateLabel:  a.translate("i18n:ui_theme_editor_locate_token"),
-		DiscardLabel: a.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.translate("i18n:ui_theme_editor_overwrite"), SaveAsLabel: a.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.translate("i18n:ui_theme_editor_saving"),
+		DiscardLabel: a.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.translate("i18n:ui_save"), SaveAsLabel: a.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.translate("i18n:ui_theme_editor_saving"),
 		PreviewResultTitle: a.translate("i18n:ui_theme_editor_preview_result_theme"), PreviewResultState: a.translate("i18n:ui_theme_editor_preview_result_current"),
 		PropertyLabel: a.translate("i18n:ui_file_preview_property_size"),
-		Window:        a.window,
+		Window:        a.themeEditorNativeWindow(),
 		QueryBoxLabel: a.translate("i18n:ui_theme_editor_preview_result_query"), ResultsLabel: a.translate("i18n:ui_theme_editor_group_results"),
 		ToolbarCopyLabel: a.translate("i18n:ui_theme_editor_toolbar_copy"), ToolbarMoreLabel: a.translate("i18n:ui_theme_editor_toolbar_more"),
 		Dialog:        a.buildThemeEditorSettingsDialog(state, palette, width, height),
 		OnSelectGroup: a.selectThemeEditorGroup, OnEditToken: a.openThemeEditorTokenDialog, OnLocateToken: a.locateThemeEditorToken,
 		OnDiscard: a.discardThemeEditorDraft, OnOverwrite: a.overwriteThemeEditorDraft, OnSaveAs: a.openThemeEditorSaveAsDialog,
 	})
+}
+
+// changeThemeEditorToken shares draft validation and persistence with the color dialog.
+func (a *App) changeThemeEditorToken(key, value string) {
+	a.changeThemeEditorTokens(map[string]string{key: value})
+}
+
+// changeThemeEditorTokens commits linked padding as one edit so the preview never sees partial sides.
+func (a *App) changeThemeEditorTokens(values map[string]string) {
+	state := a.themeSettings.ThemeEditor()
+	if state == nil || state.saving {
+		return
+	}
+	for key, value := range values {
+		index := themeEditorDefinitionIndex(state.definitions, key)
+		if index < 0 {
+			continue
+		}
+		setFormFieldsTextLocked(&state.formFieldsState, index, value)
+		state.activeGroup = themeEditorGroupForToken(state.raw, key)
+	}
+	state.error = ""
+	if _, err := themeEditorDraftTheme(state.raw, state.values); err != nil {
+		state.error = a.translate("i18n:ui_theme_editor_invalid_geometry")
+	} else {
+		a.applySettingsThemeEditorDraft()
+	}
+	a.invalidateThemeEditorWindow()
 }
 
 // preloadDemoWallpaper loads the shared desktop image only while a preview-owning window is open.
@@ -661,6 +725,8 @@ func (a *App) discardThemeEditorDraft() {
 	}
 	definitions := append([]formDefinition(nil), state.definitions...)
 	state.formFieldsState = newFormFieldsState(definitions, state.initial, false)
+	state.ai.undo = nil
+	state.ai.history = nil
 	state.dialogMode = ""
 	state.dialogToken = ""
 	state.dialogOriginal = ""

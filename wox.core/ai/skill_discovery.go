@@ -156,7 +156,7 @@ func discoverSkillRoots(ctx context.Context) []skillDiscoveryRoot {
 // builtinSkillRoot identifies the immutable skill bundle shipped with Wox.
 func builtinSkillRoot() skillDiscoveryRoot {
 	return skillDiscoveryRoot{
-		Path:       filepath.Join(util.GetLocation().GetAISkillsDirectory(), "wox-plugin-creator"),
+		Path:       util.GetLocation().GetAISkillsDirectory(),
 		Source:     "builtin",
 		SourceName: "Wox",
 		Builtin:    true,
@@ -168,7 +168,7 @@ func SanitizeUserSkills(skills []common.Skill) []common.Skill {
 	builtinPath := filepath.Clean(builtinSkillRoot().Path)
 	userSkills := make([]common.Skill, 0, len(skills))
 	for _, skill := range skills {
-		if skill.Builtin || strings.EqualFold(filepath.Clean(skill.Path), builtinPath) {
+		if skill.Builtin || isPathInside(builtinPath, skill.Path) {
 			continue
 		}
 		userSkills = append(userSkills, skill)

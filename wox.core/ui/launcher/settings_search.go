@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -28,6 +29,8 @@ type settingsSearchResult struct {
 	subtitle    string
 	icon        woxImage
 	tab         string
+	mode        string
+	navID       string
 	settingKey  string
 	pluginID    string
 	searchTexts []string
@@ -74,12 +77,21 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 	}
 
 	candidates := make([]settingsSearchResult, 0, 96)
+	navSpecs := settingNavSpecs(snapshot.isDev)
+	for _, spec := range navSpecs {
+		if spec.parent || spec.tab == "" {
+			continue
+		}
+		title := a.settingNavLabel(spec)
+		subtitle := a.settingsSearchNavSubtitle(spec, navSpecs)
+		texts := []string{spec.id, spec.fallback, title, subtitle, compactSettingsSearchText(spec.fallback), compactSettingsSearchText(title)}
+		candidates = append(candidates, settingsSearchResult{
+			kind: settingsSearchSection, title: title, subtitle: subtitle, tab: spec.tab, mode: spec.mode, navID: spec.id,
+			searchTexts: normalizeSettingsSearchTexts(texts),
+		})
+	}
 	for _, tab := range settingTabs(snapshot.isDev) {
 		tabLabel := a.settingsSearchTabLabel(tab, snapshot.isDev)
-		candidates = append(candidates, settingsSearchResult{
-			kind: settingsSearchSection, title: tabLabel, subtitle: "Settings section", tab: tab.id,
-			searchTexts: []string{tab.id, tabLabel},
-		})
 		tabSnapshot := snapshot
 		tabSnapshot.tab = tab.id
 		for _, item := range settingItemsForSnapshot(tabSnapshot) {
@@ -154,6 +166,41 @@ func (a *App) settingsSearchTabLabel(tab settingTab, isDev bool) string {
 		}
 	}
 	return tab.label
+}
+
+// settingsSearchNavSubtitle uses the parent group for nested pages so Theme Editor ranks under Themes.
+func (a *App) settingsSearchNavSubtitle(spec settingNavSpec, specs []settingNavSpec) string {
+	if spec.depth == 0 {
+		return "Settings section"
+	}
+	parentID, _, found := strings.Cut(spec.id, ".")
+	if !found {
+		return "Settings section"
+	}
+	for _, candidate := range specs {
+		if candidate.id == parentID {
+			return a.settingNavLabel(candidate)
+		}
+	}
+	return "Settings section"
+}
+
+// settingsSearchNavItem reconstructs the sidebar destination stored on a section result.
+func settingsSearchNavItem(result settingsSearchResult) settingNavSpec {
+	return settingNavSpec{id: result.navID, tab: result.tab, mode: result.mode}
+}
+
+// compactSettingsSearchText lets "themeeditor" match labels such as Theme Editor.
+func compactSettingsSearchText(value string) string {
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for _, r := range value {
+		if unicode.IsSpace(r) || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String()
 }
 
 func (a *App) settingsFormSearchCandidates(form *formFieldsSnapshot, tab, subtitle string) []settingsSearchResult {
@@ -391,6 +438,11 @@ func (a *App) activateSettingsSearchResult(result settingsSearchResult) {
 	a.settingsSearch.SetPanel(false)
 	if result.kind == settingsSearchPlugin || result.kind == settingsSearchPluginSetting {
 		a.activateSettingsPluginSearchResult(result)
+		return
+	}
+	if result.kind == settingsSearchSection {
+		a.selectSettingsNavItem(settingsSearchNavItem(result))
+		a.invalidateSettingsWindow()
 		return
 	}
 

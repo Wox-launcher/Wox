@@ -331,7 +331,7 @@ func (a *App) formFieldNativeWindow(idPrefix string) *woxui.Window {
 		return a.settingsNativeWindow()
 	case "plugin-settings", "ai-settings", "cloud-form":
 		return a.settingsNativeWindow()
-	case "theme-editor":
+	case "theme-editor", "theme-editor-dialog":
 		return a.themeEditorNativeWindow()
 	case "form-table-row":
 		return a.formTableNativeWindow()
@@ -458,6 +458,13 @@ func (a *App) onSettingsWindowClosed() {
 		form.active = false
 	}
 	if themeEditor := a.themeSettings.ThemeEditor(); themeEditor != nil {
+		if themeEditor.ai.cancel != nil {
+			themeEditor.ai.cancel()
+			themeEditor.ai.cancel = nil
+			themeEditor.ai.busy = false
+			themeEditor.ai.request++
+			themeEditor.ai.status = ""
+		}
 		themeEditor.active = false
 	}
 	launcherVisible := a.visible

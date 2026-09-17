@@ -33,6 +33,14 @@ func TestWoxButtonCentersContentInsideSymmetricPadding(t *testing.T) {
 	}
 }
 
+func TestWoxButtonLeadingAlignment(t *testing.T) {
+	button := WoxButton(ButtonProps{ID: "group", Label: "Window", Width: 300, AlignLeading: true})
+	content := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align)
+	if content.Horizontal != 0 || content.Vertical != .5 {
+		t.Fatalf("disclosure alignment = %+v", content)
+	}
+}
+
 func TestWoxButtonLabelWeightIsConfigurable(t *testing.T) {
 	regular := WoxButton(ButtonProps{ID: "disable", Label: "Disable"})
 	regularLabel := buildHoverable(regular.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.TextBlock)

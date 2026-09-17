@@ -13,6 +13,8 @@ import (
 // ChatHistoryRowHeight keeps drawer layout and controller scrolling in logical units.
 const ChatHistoryRowHeight = float32(38)
 
+const chatMessageGap = float32(12)
+
 const chatCopyFeedbackDuration = 1200 * time.Millisecond
 
 const (
@@ -99,18 +101,19 @@ func chatAttachmentIsTile(attachment ChatAttachmentProps) bool {
 
 // ChatPreviewProps contains the typed chat panes and optional catalog drawer.
 type ChatPreviewProps struct {
-	Width     float32
-	Height    float32
-	Key       string
-	Panel     string
-	Header    *ChatHeaderProps
-	Messages  ChatMessagesProps
-	Debug     *ChatDebugProps
-	Question  *ChatQuestionProps
-	Input     ChatInputProps
-	History   *ChatCatalogProps
-	Catalog   *ChatCatalogProps
-	OnDismiss func()
+	FlushHorizontal bool
+	Width           float32
+	Height          float32
+	Key             string
+	Panel           string
+	Header          *ChatHeaderProps
+	Messages        ChatMessagesProps
+	Debug           *ChatDebugProps
+	Question        *ChatQuestionProps
+	Input           ChatInputProps
+	History         *ChatCatalogProps
+	Catalog         *ChatCatalogProps
+	OnDismiss       func()
 }
 
 // ChatPreview builds the chat reading flow and floating catalog layers.
@@ -120,7 +123,11 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 	if inputHeight <= 0 {
 		inputHeight = ChatComposerHeightForAttachments(props.Input.Attachments, ChatComposerVisibleLines(props.Input.Editing.Text, props.Input.Width, props.Input.Window, props.Input.RichRuns))
 	}
-	innerWidth := max(float32(0), props.Width-20)
+	inset := float32(10)
+	if props.FlushHorizontal {
+		inset = 0
+	}
+	innerWidth := max(float32(0), props.Width-2*inset)
 	innerHeight := max(float32(0), props.Height-14)
 	children := make([]woxwidget.Widget, 0, 5)
 	if props.Header != nil {
@@ -144,13 +151,13 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 	}
 	if history != nil {
 		contentWidth := max(float32(0), props.Width-history.Width)
-		content := woxwidget.Container{Width: contentWidth, Height: props.Height, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+		content := woxwidget.Container{Width: contentWidth, Height: props.Height, Padding: woxwidget.Insets{Left: inset, Top: 6, Right: inset, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 		if overlay == nil {
 			return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{ChatCatalog(*history), content}}
 		}
-		contentInnerWidth := max(float32(0), contentWidth-20)
+		contentInnerWidth := max(float32(0), contentWidth-2*inset)
 		contentInnerHeight := max(float32(0), props.Height-14)
-		left := 10 + (contentInnerWidth-overlay.Width)/2
+		left := inset + (contentInnerWidth-overlay.Width)/2
 		top := 6 + max(headerHeight, contentInnerHeight-inputHeight-overlay.Height-6)
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			ChatCatalog(*history),
@@ -161,10 +168,10 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 			}},
 		}}
 	}
-	layers := []woxwidget.StackChild{{Left: 10, Top: 6, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}}
+	layers := []woxwidget.StackChild{{Left: inset, Top: 6, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}}
 	if overlay != nil {
 		layers = append(layers, woxwidget.StackChild{Child: woxwidget.Gesture{ID: "chat-panel-dismiss-" + props.Key, OnTap: props.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}})
-		left := 10 + (innerWidth-overlay.Width)/2
+		left := inset + (innerWidth-overlay.Width)/2
 		top := 6 + max(headerHeight, innerHeight-inputHeight-overlay.Height-6)
 		layers = append(layers, woxwidget.StackChild{Left: left, Top: top, Child: ChatCatalog(*overlay)})
 	}
@@ -714,6 +721,7 @@ type ChatMessageProps struct {
 	Tools            []ChatToolCallProps
 	Text             string
 	ContentWidth     float32
+	TextTrailing     woxwidget.Widget // Optional 32-unit action beside the message text.
 	TextLayout       woxwidget.TextBlockLayout
 	Markdown         *woxcomponent.MarkdownProps
 	Reasoning        string
@@ -746,9 +754,12 @@ type ChatMessagesProps struct {
 	EmptyMessage    string
 	EmptyTextWidth  float32
 	EmptyTextHeight float32
+	EmptyTextLayout *woxwidget.TextBlockLayout
+	EmptyTextStyle  woxui.TextStyle
+	EmptyLineHeight float32
 	ContentHeight   float32
 	ExtentRevision  uint64
-	Scroll          float32
+	Scroll          ChatScrollState
 	Theme           woxcomponent.Theme
 	OnScroll        func(float32, float32)
 }
@@ -759,12 +770,21 @@ func ChatMessagesContentHeight(messages []ChatMessageProps, viewportHeight float
 	return height
 }
 
+// chatMessageExtent includes inter-message space in both virtualization and scroll metrics.
+func chatMessageExtent(messages []ChatMessageProps, index int) float32 {
+	height := chatMessageHeight(messages[index])
+	if index < len(messages)-1 {
+		height += chatMessageGap
+	}
+	return height
+}
+
 // ChatMessagesScrollMetrics walks messages once for scroll extent and a trusted prefix revision.
 func ChatMessagesScrollMetrics(messages []ChatMessageProps, viewportHeight float32) (float32, uint64) {
 	height := float32(0)
 	revision := uint64(len(messages)) + 1
-	for _, message := range messages {
-		item := chatMessageHeight(message)
+	for index := range messages {
+		item := chatMessageExtent(messages, index)
 		height += item
 		revision = revision*16777619 ^ uint64(math.Float32bits(item))
 	}
@@ -778,10 +798,19 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 	if len(props.Messages) == 0 {
 		color := props.Theme.ResultTitle
 		color.A = uint8(float32(color.A) * 0.59)
-		textWidth := min(max(float32(0), innerWidth-48), props.EmptyTextWidth)
+		textWidth := min(max(float32(0), innerWidth), props.EmptyTextWidth)
+		var empty woxwidget.Widget = woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}, Color: color}
+		if props.EmptyTextLayout != nil {
+			style, lineHeight := props.EmptyTextStyle, props.EmptyLineHeight
+			if style.Size == 0 {
+				style = woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}
+				lineHeight = 36
+			}
+			empty = woxwidget.TextBlock{Value: props.EmptyMessage, Width: textWidth, Height: props.EmptyTextHeight, Centered: true, Style: style, LineHeight: lineHeight, Layout: props.EmptyTextLayout, Color: color}
+		}
 		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: woxwidget.Align{
 			Width: innerWidth, Height: innerHeight, Horizontal: 0.5, Vertical: 0.5,
-			Child: woxwidget.Container{Width: textWidth, Height: props.EmptyTextHeight, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}, Color: color}},
+			Child: woxwidget.Container{Width: textWidth, Height: props.EmptyTextHeight, Child: empty},
 		}}
 	}
 	messages := props.Messages
@@ -789,12 +818,14 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 	maxOffset := max(float32(0), contentHeight-innerHeight)
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-message-scroll-" + props.Key), Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
-		Offset: min(max(float32(0), props.Scroll), maxOffset), Content: woxwidget.LazyList{
+		Offset: props.Scroll.Position(maxOffset), Content: woxwidget.LazyList{
 			Key: woxwidget.Key("chat-messages-" + props.Key), Width: innerWidth, Viewport: innerHeight, ItemCount: len(messages),
 			ExtentRevision: props.ExtentRevision,
-			ItemExtentAt:   func(index int) float32 { return chatMessageHeight(messages[index]) },
+			ItemExtentAt:   func(index int) float32 { return chatMessageExtent(messages, index) },
 			ItemKey:        func(index int) woxwidget.Key { return woxwidget.Key(messages[index].Key) },
-			ItemBuilder:    func(index int) woxwidget.Widget { return ChatMessage(messages[index], innerWidth) },
+			ItemBuilder: func(index int) woxwidget.Widget {
+				return woxwidget.Container{Width: innerWidth, Height: chatMessageExtent(messages, index), Child: ChatMessage(messages[index], innerWidth)}
+			},
 		},
 		Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: func(delta float32) {
 			if props.OnScroll != nil {
@@ -979,7 +1010,15 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 			if props.Markdown != nil {
 				children = append(children, woxcomponent.WoxMarkdown(*props.Markdown))
 			} else {
-				children = append(children, woxwidget.TextBlock{Value: props.Text, Width: innerWidth, Height: props.TextLayout.Size.Height, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: textColor, Layout: &props.TextLayout})
+				textWidth := innerWidth
+				if props.TextTrailing != nil {
+					textWidth = max(float32(0), textWidth-38)
+				}
+				body := woxwidget.Widget(woxwidget.TextBlock{Value: props.Text, Width: textWidth, Height: props.TextLayout.Size.Height, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: textColor, Layout: &props.TextLayout})
+				if props.TextTrailing != nil {
+					body = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{woxwidget.Expanded{Child: body}, props.TextTrailing}}
+				}
+				children = append(children, body)
 			}
 		}
 	}
@@ -1283,7 +1322,11 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 			}
 		}
 		if props.Text != "" {
-			add(props.TextLayout.Size.Height)
+			textHeight := props.TextLayout.Size.Height
+			if props.TextTrailing != nil {
+				textHeight = max(float32(32), textHeight)
+			}
+			add(textHeight)
 		}
 	}
 	if props.Skills != "" {
@@ -1304,6 +1347,7 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 
 // ChatInputProps contains the committed input value and toolbar state.
 type ChatInputProps struct {
+	Disabled            bool
 	Width               float32
 	Height              float32
 	Key                 string
@@ -1316,6 +1360,9 @@ type ChatInputProps struct {
 	Status              string
 	StatusColor         woxui.Color
 	ActionLabel         string
+	SendLabel           string
+	StopLabel           string
+	OnStop              func()
 	Sending             bool
 	Importing           bool
 	Attachments         []ChatAttachmentProps
@@ -1391,6 +1438,17 @@ func (s *chatModelSelectorState) Dispose() {}
 
 // ChatInput builds the multiline editor card and send toolbar.
 func ChatInput(props ChatInputProps) woxwidget.Widget {
+	if props.SendLabel != "" {
+		props.ActionLabel = props.SendLabel
+	}
+	if props.Sending && props.OnStop != nil {
+		props.OnSend = props.OnStop
+		props.ActionLabel = props.StopLabel
+	}
+	if props.ModelWidth <= 0 {
+		metrics, _ := props.Window.MeasureText(props.Model, woxui.TextStyle{Size: 11})
+		props.ModelWidth = min(float32(267), metrics.Size.Width+47, max(float32(0), props.Width-100))
+	}
 	quoteHeight := chatComposerAttachmentsExtent(props.Attachments)
 	style := woxui.TextStyle{Size: 13}
 	innerWidth := max(float32(0), props.Width-chatComposerEditorPaddingX*2)
@@ -1409,7 +1467,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 		ID: "chat-input-" + props.Key, Label: props.Hint, Hint: props.Hint, Width: props.Width, Height: fieldHeight,
 		Padding: woxwidget.Insets{Left: chatComposerEditorPaddingX, Top: chatComposerEditorPaddingTop, Right: chatComposerEditorPaddingX, Bottom: chatComposerEditorPaddingBottom}, Background: props.Theme.QueryBackground,
 		Style: style, LineHeight: chatComposerLineHeight, Value: props.Editing.Text, Focused: props.Focused, MaxLines: maxLines, Window: props.Window, Theme: props.Theme.Controls,
-		RichRuns: props.RichRuns, AtomicTokens: props.AtomicTokens, OnPaste: props.OnPaste,
+		RichRuns: props.RichRuns, AtomicTokens: props.AtomicTokens, OnPaste: props.OnPaste, Disabled: props.Disabled,
 		OnChanged: props.OnChanged, OnKey: props.OnKey, OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {
 				props.OnFocus()

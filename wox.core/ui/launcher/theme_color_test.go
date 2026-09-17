@@ -75,3 +75,27 @@ func TestSettingsThemeEditorAppliesAndCancelsLiveColor(t *testing.T) {
 		t.Fatalf("cancelled background = %#v, want black", app.palette.background)
 	}
 }
+
+// TestThemeEditorReloadKeepsLiveDraft covers reopening without replacing edits with the saved theme.
+func TestThemeEditorReloadKeepsLiveDraft(t *testing.T) {
+	raw := map[string]any{"ThemeName": "Test"}
+	for _, token := range themeEditorTokens() {
+		raw[token.key] = "#000000"
+	}
+	state := newThemeEditorState("settings-theme|test", raw)
+	controller := newThemeSettingsController(CommonDeps{})
+	controller.SetThemeEditor(state)
+	app := &App{themeSettings: controller}
+	app.changeThemeEditorToken("AppBackgroundColor", "#FF0000")
+	state.active = false
+	if err := app.loadSettingsThemeEditor(); err != nil {
+		t.Fatal(err)
+	}
+	if controller.ThemeEditor() != state || state.values["AppBackgroundColor"] != "#FF0000" || !themeEditorDirtyLocked(state) || app.palette.background != (woxui.Color{R: 255, A: 255}) {
+		t.Fatal("reopening lost the draft or its live preview")
+	}
+	app.discardThemeEditorDraft()
+	if themeEditorDirtyLocked(state) || app.palette.background != (woxui.Color{A: 255}) {
+		t.Fatal("discard did not restore the original theme after reopening")
+	}
+}

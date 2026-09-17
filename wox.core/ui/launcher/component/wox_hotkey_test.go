@@ -6,6 +6,14 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxHotkeyFallbackFitsLongLabels(t *testing.T) {
+	_, enter := WoxHotkey(HotkeyProps{Theme: &Theme{}, Labels: []string{"Enter"}})
+	_, single := WoxHotkey(HotkeyProps{Theme: &Theme{}, Labels: []string{"J"}})
+	if enter <= single || enter < 35 {
+		t.Fatalf("unmeasured keycaps collapsed to the same width: Enter=%v J=%v", enter, single)
+	}
+}
+
 // TestPrimaryHotkeyPalette isolates primary toolbar styling from other keys and preserves transparent paint.
 func TestPrimaryHotkeyPalette(t *testing.T) {
 	normal, primary, transparent := woxui.Color{R: 90, A: 255}, woxui.Color{G: 180, A: 160}, woxui.Color{}
