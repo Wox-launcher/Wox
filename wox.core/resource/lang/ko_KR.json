@@ -1941,6 +1941,8 @@
   "plugin_shell_delete": "삭제",
   "plugin_shell_execute_background": "백그라운드에서 실행",
   "plugin_shell_execute_background_started": "명령이 백그라운드에서 시작되었습니다",
+  "plugin_shell_open_in_system_terminal": "시스템 터미널에서 열기",
+  "plugin_shell_open_in_system_terminal_failed": "시스템 터미널에서 열지 못했습니다: %s",
   "plugin_shell_execute_as_administrator": "관리자로 실행",
   "plugin_shell_execute_as_administrator_started": "명령이 관리자 권한으로 시작되었습니다",
   "plugin_shell_execute_as_administrator_cancelled": "관리자 권한 상승이 취소되었습니다",

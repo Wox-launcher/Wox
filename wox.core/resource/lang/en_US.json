@@ -1944,6 +1944,8 @@
   "plugin_shell_delete": "Delete",
   "plugin_shell_execute_background": "Execute in Background",
   "plugin_shell_execute_background_started": "Command started in background",
+  "plugin_shell_open_in_system_terminal": "Open in System Terminal",
+  "plugin_shell_open_in_system_terminal_failed": "Failed to open in system terminal: %s",
   "plugin_shell_execute_as_administrator": "Run as Administrator",
   "plugin_shell_execute_as_administrator_started": "Command started with administrator privileges",
   "plugin_shell_execute_as_administrator_cancelled": "Administrator elevation was cancelled",

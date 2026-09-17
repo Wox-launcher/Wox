@@ -1942,6 +1942,8 @@
   "plugin_shell_delete": "削除",
   "plugin_shell_execute_background": "バックグラウンドで実行",
   "plugin_shell_execute_background_started": "コマンドをバックグラウンドで開始しました",
+  "plugin_shell_open_in_system_terminal": "システムターミナルで開く",
+  "plugin_shell_open_in_system_terminal_failed": "システムターミナルで開けませんでした: %s",
   "plugin_shell_execute_as_administrator": "管理者として実行",
   "plugin_shell_execute_as_administrator_started": "管理者権限でコマンドを開始しました",
   "plugin_shell_execute_as_administrator_cancelled": "管理者昇格がキャンセルされました",

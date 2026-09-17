@@ -414,6 +414,7 @@ func (s *ShellPlugin) buildEmptyCommandResultWithTrigger(ctx context.Context, in
 				PreventHideAfterAction: true,
 				Action:                 func(context.Context, plugin.ActionContext) {},
 			},
+			s.buildOpenInSystemTerminalAction(data),
 			s.buildChangeWorkingDirectoryAction(data, triggerKeyword),
 		},
 	}
@@ -1314,7 +1315,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 			},
 		})
 		actions = s.appendExecuteAsAdministratorAction(actions, historyContextData)
-		actions = append(actions, s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData), s.buildChangeWorkingDirectoryAction(historyContextData, triggerKeyword))
+		actions = append(actions, s.buildOpenInSystemTerminalAction(historyContextData), s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData), s.buildChangeWorkingDirectoryAction(historyContextData, triggerKeyword))
 
 		// Only add stop action if command is still running
 		if history.Status == "running" {
@@ -1444,6 +1445,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		},
 	}
 	actions = s.appendExecuteAsAdministratorAction(actions, contextData)
+	actions = append(actions, s.buildOpenInSystemTerminalAction(contextData))
 	actions = append(actions, plugin.QueryResultAction{
 		Id:                     "stop",
 		Name:                   "i18n:plugin_shell_stop",
@@ -1636,7 +1638,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 			}
 		}
 		actions = s.appendExecuteAsAdministratorAction(actions, contextData)
-		actions = append(actions, s.buildEditCommandAction(savedCommandData), s.buildDeleteConfiguredCommandAction(savedCommandData), s.buildRunWithInterpreterAction(contextData))
+		actions = append(actions, s.buildOpenInSystemTerminalAction(contextData), s.buildEditCommandAction(savedCommandData), s.buildDeleteConfiguredCommandAction(savedCommandData), s.buildRunWithInterpreterAction(contextData))
 
 		result := plugin.QueryResult{
 			Title:    cmd.Alias,

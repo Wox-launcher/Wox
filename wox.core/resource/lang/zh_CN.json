@@ -1943,6 +1943,8 @@
   "plugin_shell_delete": "删除",
   "plugin_shell_execute_background": "后台执行",
   "plugin_shell_execute_background_started": "命令已在后台启动",
+  "plugin_shell_open_in_system_terminal": "在系统终端中打开",
+  "plugin_shell_open_in_system_terminal_failed": "在系统终端中打开失败：%s",
   "plugin_shell_execute_as_administrator": "以管理员身份运行",
   "plugin_shell_execute_as_administrator_started": "命令已使用管理员权限启动",
   "plugin_shell_execute_as_administrator_cancelled": "已取消管理员权限提升",
