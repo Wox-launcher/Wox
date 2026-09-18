@@ -68,6 +68,14 @@ func TestWoxButtonCentersIntrinsicContentVertically(t *testing.T) {
 	}
 }
 
+func TestWoxButtonHeightFillsExplicitSlot(t *testing.T) {
+	button := WoxButton(ButtonProps{ID: "create", Label: "New Auto theme", Width: 240, Height: 40})
+	container := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
+	if container.Width != 240 || container.Height != 40 {
+		t.Fatalf("explicit button slot = %.0fx%.0f, want 240x40", container.Width, container.Height)
+	}
+}
+
 func TestWoxButtonUsesSharedGeometry(t *testing.T) {
 	button := WoxButton(ButtonProps{ID: "add", Label: "Add"})
 	container := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)

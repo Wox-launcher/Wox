@@ -135,7 +135,10 @@ const (
 )
 
 const (
-	DefaultThemeId = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
+	DefaultThemeId      = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
+	DefaultAutoThemeId  = "532238bc-6eda-4011-a080-c365b67486fc"
+	DefaultLightThemeId = "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860"
+	DefaultDarkThemeId  = "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
 )
 
 const (

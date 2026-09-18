@@ -867,6 +867,7 @@ func (a *App) selectSettingTab(tab string) {
 		}
 		if tab != "theme" {
 			a.themeSettings.SetThemeSearchFocused(false)
+			a.themeSettings.SetAutoEditor(nil)
 		}
 	}
 	if form := a.aiSettings.Form(); form != nil {

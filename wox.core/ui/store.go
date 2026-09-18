@@ -121,6 +121,11 @@ func (s *Store) Install(ctx context.Context, theme common.Theme) error {
 	return s.install(ctx, theme, true, true)
 }
 
+// PersistInstalled writes a user theme without selecting it as the active theme.
+func (s *Store) PersistInstalled(ctx context.Context, theme common.Theme) error {
+	return s.install(ctx, theme, true, false)
+}
+
 // InstallLocal installs a theme from cloud sync without selecting it as the
 // active theme; ThemeId sync owns the active-theme choice.
 func (s *Store) InstallLocal(ctx context.Context, theme common.Theme) error {

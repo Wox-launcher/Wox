@@ -29,6 +29,7 @@ type themeSettingsSnapshot struct {
 	ThemeWallpaperBlurred *woxui.Image
 	ThemeWallpaperLoading bool
 	ThemeEditor           *themeEditorPreviewSnapshot
+	AutoEditor            *autoThemeEditorSnapshot
 }
 
 // themeSettingsController owns the Theme tab state: catalog list, selection, search,
@@ -55,6 +56,7 @@ type themeSettingsController struct {
 	themeWallpaperLoading bool
 	themeWallpaperLoadID  uint64
 	themeEditor           *themeEditorPreviewState
+	autoEditor            *autoThemeEditorState
 }
 
 func newThemeSettingsController(deps CommonDeps) *themeSettingsController {
@@ -197,6 +199,14 @@ func (c *themeSettingsController) SetThemeEditor(editor *themeEditorPreviewState
 	c.themeEditor = editor
 }
 
+func (c *themeSettingsController) AutoEditor() *autoThemeEditorState {
+	return c.autoEditor
+}
+
+func (c *themeSettingsController) SetAutoEditor(editor *autoThemeEditorState) {
+	c.autoEditor = editor
+}
+
 // ReloadThemes fetches one catalog while retaining the full resolved palette for local preview.
 // preferredID, when non-empty, selects which theme becomes ThemeSelected after the load.
 func (c *themeSettingsController) ReloadThemes(ctx context.Context, service contract.ThemeCatalogSettingsServices, sessionID string, mode, preferredID, fallbackID string) error {
@@ -254,21 +264,37 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 		if c.themeDetailTab == "" {
 			c.themeDetailTab = "preview"
 		}
-		selected := 0
-		for index, theme := range themes {
-			if theme.ID == preferredID {
-				selected = index
-				break
-			}
-		}
-		if len(themes) == 0 {
-			c.themeSelected = -1
-		} else {
-			c.themeSelected = selected
-		}
+		c.themeSelected = themeCatalogSelection(themes, preferredID, fallbackID)
 		c.deps.Invalidate()
 	})
 	return nil
+}
+
+// themeCatalogSelection keeps the list on the requested theme, then the applied
+// theme, instead of the first row when an uninstalled id is gone.
+func themeCatalogSelection(themes []themeSettingsTheme, preferredID, fallbackID string) int {
+	if len(themes) == 0 {
+		return -1
+	}
+	if index := indexOfThemeID(themes, preferredID); index >= 0 {
+		return index
+	}
+	if index := indexOfThemeID(themes, fallbackID); index >= 0 {
+		return index
+	}
+	return 0
+}
+
+func indexOfThemeID(themes []themeSettingsTheme, id string) int {
+	if id == "" {
+		return -1
+	}
+	for index, theme := range themes {
+		if theme.ID == id {
+			return index
+		}
+	}
+	return -1
 }
 
 // finishThemeLoadError releases the loading gate on both transport and decode failures.
@@ -305,5 +331,49 @@ func (c *themeSettingsController) Snapshot() themeSettingsSnapshot {
 		ThemeWallpaperBlurred: c.themeWallpaperBlurred,
 		ThemeWallpaperLoading: c.themeWallpaperLoading,
 		ThemeEditor:           snapshotThemeEditorPreviewLocked(c.themeEditor),
+		AutoEditor:            snapshotAutoThemeEditor(c.autoEditor),
+	}
+}
+
+type autoThemeEditorState struct {
+	active       bool
+	overwrite    bool
+	sourceID     string
+	nameEditor   *woxui.TextEditor
+	nameFocused  bool
+	lightThemeID string
+	darkThemeID  string
+	hoverSlot    string
+	pickerSlot   string
+	error        string
+	saving       bool
+}
+
+type autoThemeEditorSnapshot struct {
+	Active       bool
+	Overwrite    bool
+	SourceID     string
+	Name         woxui.TextEditingState
+	NameFocused  bool
+	LightThemeID string
+	DarkThemeID  string
+	HoverSlot    string
+	PickerSlot   string
+	Error        string
+	Saving       bool
+}
+
+func snapshotAutoThemeEditor(state *autoThemeEditorState) *autoThemeEditorSnapshot {
+	if state == nil || !state.active {
+		return nil
+	}
+	var name woxui.TextEditingState
+	if state.nameEditor != nil {
+		name = state.nameEditor.State()
+	}
+	return &autoThemeEditorSnapshot{
+		Active: state.active, Overwrite: state.overwrite, SourceID: state.sourceID,
+		Name: name, NameFocused: state.nameFocused, LightThemeID: state.lightThemeID, DarkThemeID: state.darkThemeID,
+		HoverSlot: state.hoverSlot, PickerSlot: state.pickerSlot, Error: state.error, Saving: state.saving,
 	}
 }

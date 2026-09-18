@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"wox/common"
+	"wox/setting"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
@@ -161,6 +162,30 @@ func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 	}
 }
 
+func TestThemeAutoPickerItemsSkipAutoThemes(t *testing.T) {
+	items := themeAutoPickerItems([]themeSettingsTheme{
+		{ID: "auto", Name: "Wox Auto", IsAuto: true, LightThemeID: "light", DarkThemeID: "dark"},
+		{ID: "light", Name: "Wox Light"},
+	}, settingsSnapshot{})
+	if len(items) != 1 || items[0].ID != "light" || items[0].IsAuto {
+		t.Fatalf("picker items = %#v, want only non-auto themes", items)
+	}
+}
+
+func TestAutoThemeEditorSnapshotRequiresActiveDraft(t *testing.T) {
+	if snapshotAutoThemeEditor(nil) != nil || snapshotAutoThemeEditor(&autoThemeEditorState{}) != nil {
+		t.Fatal("inactive auto editor should not appear in the catalog snapshot")
+	}
+	state := &autoThemeEditorState{
+		active: true, overwrite: true, sourceID: "user-auto", nameEditor: woxui.NewTextEditor("Evening"),
+		lightThemeID: "light", darkThemeID: "dark", hoverSlot: "light", pickerSlot: "dark",
+	}
+	got := snapshotAutoThemeEditor(state)
+	if got == nil || !got.Active || got.Name.Text != "Evening" || got.LightThemeID != "light" || got.PickerSlot != "dark" {
+		t.Fatalf("auto editor snapshot = %#v", got)
+	}
+}
+
 func TestThemeControllerRetainsAutoAppearanceVariantIDs(t *testing.T) {
 	deps, _ := newThemeControllerDeps()
 	c := newThemeSettingsController(deps)
@@ -194,6 +219,45 @@ func TestThemeControllerReloadThemesError(t *testing.T) {
 	}
 	if snap.ThemesLoading {
 		t.Fatalf("ThemesLoading should be false after error")
+	}
+}
+
+func TestThemeCatalogSelectionFallsBackToAppliedTheme(t *testing.T) {
+	themes := []themeSettingsTheme{
+		{ID: "auto", Name: "Wox Auto"},
+		{ID: "dark", Name: "Wox Dark"},
+		{ID: setting.DefaultThemeId, Name: "Wox Glass"},
+		{ID: "light", Name: "Wox Light"},
+	}
+	if got := themeCatalogSelection(themes, "removed-user-theme", setting.DefaultThemeId); got != 2 {
+		t.Fatalf("selection after uninstall = %d, want Glass at index 2", got)
+	}
+	if got := themeCatalogSelection(themes, setting.DefaultThemeId, "unused"); got != 2 {
+		t.Fatalf("selection of Glass = %d, want 2", got)
+	}
+	if got := themeCatalogSelection(nil, "removed-user-theme", setting.DefaultThemeId); got != -1 {
+		t.Fatalf("empty catalog selection = %d, want -1", got)
+	}
+}
+
+func TestThemeControllerSelectsGlassWhenUninstalledThemeIsGone(t *testing.T) {
+	deps, _ := newThemeControllerDeps()
+	c := newThemeSettingsController(deps)
+	c.SetThemesMode("installed")
+	c.SetThemes([]themeSettingsTheme{{ID: "removed-user-theme", Name: "Custom"}, {ID: setting.DefaultThemeId, Name: "Wox Glass"}})
+	c.SetThemeSelected(0)
+	service := &themeFakeService{themes: map[contract.ThemeCatalog][]contract.ThemeCatalogItem{
+		contract.ThemeCatalogInstalled: {
+			{Theme: common.Theme{ThemeId: "auto", ThemeName: "Wox Auto", IsSystem: true}},
+			{Theme: common.Theme{ThemeId: setting.DefaultThemeId, ThemeName: "Wox Glass", IsSystem: true}},
+			{Theme: common.Theme{ThemeId: "dark", ThemeName: "Wox Dark", IsSystem: true}},
+		},
+	}}
+	if err := c.ReloadThemes(context.Background(), service, "session", "installed", "removed-user-theme", setting.DefaultThemeId); err != nil {
+		t.Fatalf("ReloadThemes error: %v", err)
+	}
+	if got := c.Snapshot().Themes[c.ThemeSelected()].ID; got != setting.DefaultThemeId {
+		t.Fatalf("selected after uninstall = %q, want Glass %q", got, setting.DefaultThemeId)
 	}
 }
 

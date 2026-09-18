@@ -41,6 +41,20 @@ type ThemeCatalogItem struct {
 	DarkPreviewTheme  woxcomponent.Theme
 }
 
+// AutoThemeEditorState is the installed-catalog create/edit canvas for one Auto theme.
+type AutoThemeEditorState struct {
+	Active       bool
+	Overwrite    bool
+	Name         woxui.TextEditingState
+	NameFocused  bool
+	LightThemeID string
+	DarkThemeID  string
+	HoverSlot    string
+	PickerSlot   string
+	Error        string
+	Saving       bool
+}
+
 // ThemeSettingsProps contains theme catalog state, localized labels, and actions.
 type ThemeSettingsProps struct {
 	Width                 float32
@@ -95,6 +109,31 @@ type ThemeSettingsProps struct {
 	OnSelectDetailTab     func(string)
 	OnOpenWebsite         func()
 	OnOperation           func(string)
+	CreateAutoLabel       string
+	CreateAutoIcon        *woxui.Image
+	EditAutoLabel         string
+	ModifyAutoLabel       string
+	AutoNamePlaceholder   string
+	SaveAutoLabel         string
+	CancelAutoLabel       string
+	PickLightTitle        string
+	PickDarkTitle         string
+	AutoEditor            *AutoThemeEditorState
+	AutoPickerThemes      []ThemeCatalogItem
+	OnCreateAuto          func()
+	OnEditAuto            func()
+	OnCancelAuto          func()
+	OnSaveAuto            func()
+	OnAutoNameChanged     func(string)
+	OnSetAutoName         func(string) error
+	OnAutoNameFocusChange func(bool)
+	OnAutoEditSlot        func(string)
+	OnAutoPickTheme       func(string)
+	OnCancelAutoPicker    func()
+	// OverlayWidth and OverlayHeight size the Auto editor against the settings
+	// window. The catalog page is narrower than the window because of the rail.
+	OverlayWidth  float32
+	OverlayHeight float32
 }
 
 // ThemeSettingsView uses the shared catalog column, divider, and expanded detail pane.
@@ -109,10 +148,38 @@ func ThemeSettingsView(props ThemeSettingsProps) woxwidget.Widget {
 	}}
 }
 
+func themeAutoOverlaySize(props ThemeSettingsProps) (float32, float32) {
+	width, height := props.OverlayWidth, props.OverlayHeight
+	if width <= 0 {
+		width = props.Width
+	}
+	if height <= 0 {
+		height = props.Height
+	}
+	return width, height
+}
+
+// ThemeAutoEditorOverlay centers the Auto editor on the settings window.
+func ThemeAutoEditorOverlay(props ThemeSettingsProps) woxwidget.Widget {
+	overlayWidth, overlayHeight := themeAutoOverlaySize(props)
+	layers := []woxwidget.StackChild{{Child: themeAutoEditorDialog(props, overlayWidth, overlayHeight)}}
+	if props.AutoEditor != nil && props.AutoEditor.PickerSlot != "" {
+		layers = append(layers, woxwidget.StackChild{Child: themeAutoPickerDialog(props, overlayWidth, overlayHeight)})
+	}
+	return woxwidget.Stack{Width: overlayWidth, Height: overlayHeight, Children: layers}
+}
+
 func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget {
 	const searchHeight = woxcomponent.SettingsSearchHeight
 	const searchGap = float32(20)
-	viewportHeight := max(float32(0), height-searchHeight-searchGap)
+	createHeight := float32(0)
+	gaps := searchGap
+	if themeListShowsCreateAuto(props) {
+		createHeight = themeCreateAutoRowHeight + themeCreateAutoBottomGap
+		// The pinned create row is a third flex child, so it adds a second gap.
+		gaps += searchGap
+	}
+	viewportHeight := max(float32(0), height-searchHeight-gaps-createHeight)
 	items := props.Items
 
 	var list woxwidget.Widget
@@ -161,7 +228,28 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		Actions: actions, Window: props.Window, Theme: searchTheme, OnClear: props.OnClear,
 		OnKey: props.OnSearchKey, OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
-	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: []woxwidget.Widget{searchField, list}}
+	children := []woxwidget.Widget{searchField, list}
+	if themeListShowsCreateAuto(props) {
+		children = append(children, themeCreateAutoRow(props, width))
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: children}
+}
+
+func themeListShowsCreateAuto(props ThemeSettingsProps) bool {
+	return props.Mode == "installed" && props.OnCreateAuto != nil
+}
+
+const (
+	themeCreateAutoRowHeight = woxcomponent.SettingsSearchHeight
+	themeCreateAutoBottomGap = float32(8)
+)
+
+func themeCreateAutoRow(props ThemeSettingsProps, width float32) woxwidget.Widget {
+	// Lift the full-width create action above the native window resize grip.
+	return woxwidget.Container{Width: width, Height: themeCreateAutoRowHeight + themeCreateAutoBottomGap, Padding: woxwidget.Insets{Bottom: themeCreateAutoBottomGap}, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: "theme-create-auto", Label: props.CreateAutoLabel, Width: width, Height: themeCreateAutoRowHeight, Icon: props.CreateAutoIcon, IconSize: 16, IconGap: 8,
+		AlignLeading: true, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnCreateAuto, Theme: props.Theme,
+	})}
 }
 
 // themeLocateTooltip shows the shared settings overlay so the icon-only locate action has a label.
@@ -260,11 +348,13 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 	}
 	header := woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: 20, Right: 20}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.InputText},
-				woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
+			woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+				return woxwidget.Clip{Width: size.Width, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+					woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.InputText},
+					woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
+				}}}
 			}}},
-			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: themeActions(props, theme)},
+			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: themeActions(props, theme)},
 		}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Expanded{Child: woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}}},
@@ -322,6 +412,11 @@ func themePreviewTab(props ThemeSettingsProps, theme ThemeCatalogItem, width, he
 	preview := themeCatalogPreview(props, theme.PreviewTheme, previewWidth, previewHeight)
 	if theme.IsAuto {
 		preview = themeAutoCatalogPreview(props, theme.LightPreviewTheme, theme.DarkPreviewTheme, previewWidth, previewHeight)
+		inEditor := props.AutoEditor != nil && props.AutoEditor.Active
+		onEditorCanvas := inEditor && theme.ID == ""
+		if !theme.IsSystem && props.OnAutoEditSlot != nil && onEditorCanvas == inEditor {
+			preview = themeAutoSlotEditOverlay(props, preview, previewWidth, previewHeight, theme.LightPreviewTheme, theme.DarkPreviewTheme)
+		}
 	}
 	stageChildren := []woxwidget.StackChild{{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: stageRadius, Color: props.Theme.InputBackground}}}
 	if props.Wallpaper != nil {
@@ -625,7 +720,7 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 		if operation == "install" || operation == "apply" || operation == "upgrade" {
 			variant = woxcomponent.ButtonPrimary
 		}
-		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, IntrinsicWidth: true, Disabled: busy || disabled, Variant: variant, OnTap: func() {
+		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, IntrinsicWidth: true, Height: woxcomponent.SettingsControlHeight, Disabled: busy || disabled, Variant: variant, OnTap: func() {
 			if props.OnOperation != nil {
 				props.OnOperation(operation)
 			}
@@ -643,6 +738,12 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 		label = props.AppliedLabel
 	}
 	buttons = append(buttons, button("theme-apply", label, "apply", theme.Active))
+	if theme.IsAuto && !theme.IsSystem && props.OnEditAuto != nil {
+		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "theme-edit-auto", Label: props.EditAutoLabel, IntrinsicWidth: true, Height: woxcomponent.SettingsControlHeight, Disabled: busy,
+			Variant: woxcomponent.ButtonSecondary, OnTap: props.OnEditAuto, Theme: props.Theme,
+		}))
+	}
 	if !theme.IsSystem {
 		label := props.UninstallLabel
 		if props.UninstallArmed == theme.ID {
@@ -679,4 +780,141 @@ func themeSwatchOutline(theme woxcomponent.Theme) (woxui.Color, float32) {
 		width = common.ThemeSwatchOutlineWidth(*theme.AppBorderWidth)
 	}
 	return *theme.AppBorderColor, width
+}
+
+func themeAutoEditorDialog(props ThemeSettingsProps, overlayWidth, overlayHeight float32) woxwidget.Widget {
+	panelWidth := min(float32(720), max(float32(0), overlayWidth-64))
+	panelHeight := min(float32(640), max(float32(0), overlayHeight-56))
+	title := props.CreateAutoLabel
+	if props.AutoEditor != nil && props.AutoEditor.Overwrite {
+		title = props.EditAutoLabel
+	}
+	innerWidth := max(float32(0), panelWidth-48)
+	innerHeight := max(float32(0), panelHeight-48)
+	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
+		ID: "theme-auto-editor-dialog", Label: title, Width: panelWidth, Height: panelHeight,
+		OverlayWidth: overlayWidth, OverlayHeight: overlayHeight, BackdropID: "theme-auto-editor-backdrop", BackdropAlpha: 210,
+		Solid: true, Radius: 16, Padding: woxwidget.UniformInsets(24), Theme: props.Theme, InitialFocus: "theme-auto-name", OnEscape: props.OnCancelAuto,
+		Child: themeAutoEditor(props, innerWidth, innerHeight),
+	})
+}
+
+func themeAutoEditor(props ThemeSettingsProps, width, height float32) woxwidget.Widget {
+	editor := props.AutoEditor
+	const headerHeight = float32(80)
+	innerWidth := max(float32(0), width-40)
+	name := woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
+		ID: "theme-auto-name", Label: props.AutoNamePlaceholder, Hint: props.AutoNamePlaceholder, Width: max(float32(0), innerWidth-180),
+		Value: editor.Name.Text, Focused: editor.NameFocused, Window: props.Window, Theme: props.Theme,
+		OnChanged: props.OnAutoNameChanged, OnSetValue: props.OnSetAutoName, OnFocusChange: props.OnAutoNameFocusChange,
+	})
+	busy := editor.Saving || props.Operation != ""
+	actions := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-auto-cancel", Label: props.CancelAutoLabel, IntrinsicWidth: true, Disabled: editor.Saving, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnCancelAuto, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-auto-save", Label: props.SaveAutoLabel, IntrinsicWidth: true, Disabled: busy, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSaveAuto, Theme: props.Theme}),
+	}}
+	header := woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: 20, Right: 20}, Child: woxwidget.Align{Height: headerHeight, Vertical: 0.5, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Expanded{Child: name},
+			actions,
+		},
+	}}}
+	bodyHeight := max(float32(0), height-headerHeight)
+	light := themeAutoEditorVariant(props, editor.LightThemeID, true)
+	dark := themeAutoEditorVariant(props, editor.DarkThemeID, false)
+	preview := themePreviewTab(props, ThemeCatalogItem{IsAuto: true, LightPreviewTheme: light, DarkPreviewTheme: dark}, width, bodyHeight)
+	var body woxwidget.Widget = preview
+	if editor.Error != "" {
+		body = woxwidget.Stack{Width: width, Height: bodyHeight, Children: []woxwidget.StackChild{
+			{Child: body},
+			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: editor.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error}},
+		}}
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, woxwidget.Container{Width: width, Height: bodyHeight, Child: body}}}
+}
+
+func themeAutoEditorVariant(props ThemeSettingsProps, id string, light bool) woxcomponent.Theme {
+	for _, item := range props.Items {
+		if item.ID == id {
+			if item.IsAuto {
+				break
+			}
+			return item.PreviewTheme
+		}
+	}
+	for _, item := range props.AutoPickerThemes {
+		if item.ID == id {
+			return item.PreviewTheme
+		}
+	}
+	if light {
+		return woxcomponent.Theme{Background: woxui.Color{R: 245, G: 245, B: 245, A: 255}, QueryBackground: woxui.Color{R: 232, G: 232, B: 232, A: 255}, QueryText: woxui.Color{A: 255}, ResultTitle: woxui.Color{A: 255}}
+	}
+	return woxcomponent.Theme{Background: woxui.Color{R: 43, G: 43, B: 43, A: 255}, QueryBackground: woxui.Color{R: 61, G: 61, B: 61, A: 255}, QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}, ResultTitle: woxui.Color{R: 255, G: 255, B: 255, A: 255}}
+}
+
+func themeAutoSlotEditOverlay(props ThemeSettingsProps, preview woxwidget.Widget, width, height float32, lightTheme, darkTheme woxcomponent.Theme) woxwidget.Widget {
+	busy := props.AutoEditor != nil && props.AutoEditor.Saving
+	button := func(id string, horizontal, vertical float32, slot string, previewTheme woxcomponent.Theme) woxwidget.StackChild {
+		return woxwidget.StackChild{Child: woxwidget.Align{Width: width, Height: height, Horizontal: horizontal, Vertical: vertical, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: id, Label: props.ModifyAutoLabel, IntrinsicWidth: true, Disabled: busy, FontWeight: woxui.FontWeightSemibold,
+			Variant: woxcomponent.ButtonOutlinedSurface, OnTap: func() {
+				if props.OnAutoEditSlot != nil {
+					props.OnAutoEditSlot(slot)
+				}
+			}, Theme: themeAutoEditButtonTheme(previewTheme, props.Theme),
+		})}}
+	}
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: preview},
+		button("theme-auto-edit-light", 0.22, 0.22, "light", lightTheme),
+		button("theme-auto-edit-dark", 0.78, 0.78, "dark", darkTheme),
+	}}
+}
+
+// themeAutoEditButtonTheme paints a solid Modify chip with a hairline in that half's text color.
+func themeAutoEditButtonTheme(preview woxcomponent.Theme, base woxcomponent.ControlTheme) woxcomponent.ControlTheme {
+	theme := base
+	fill := preview.Background
+	if fill.A == 0 {
+		fill = preview.QueryBackground
+	}
+	fill.A = 255
+	text := preview.ResultTitle
+	if text.A == 0 {
+		text = preview.QueryText
+	}
+	if text.A == 0 {
+		text = woxui.Color{A: 255}
+	}
+	text.A = 255
+	theme.Surface = fill
+	theme.BodyText = text
+	theme.InputBackground = fill
+	theme.Text = text
+	theme.ControlText = text
+	return theme
+}
+
+func themeAutoSlotAt(point woxui.Point, size woxui.Size) string {
+	if size.Width <= 0 || size.Height <= 0 {
+		return ""
+	}
+	value := point.X*size.Height + point.Y*size.Width - size.Width*size.Height
+	if value <= 0 {
+		return "light"
+	}
+	return "dark"
+}
+
+func themeAutoPickerDialog(props ThemeSettingsProps, overlayWidth, overlayHeight float32) woxwidget.Widget {
+	title := props.PickLightTitle
+	if props.AutoEditor != nil && props.AutoEditor.PickerSlot == "dark" {
+		title = props.PickDarkTitle
+	}
+	return ThemeAutoPickerView(ThemeAutoPickerProps{
+		OverlayWidth: overlayWidth, OverlayHeight: overlayHeight, Window: props.Window, Theme: props.Theme,
+		Title: title, SearchPlaceholder: props.SearchPlaceholder, CancelLabel: props.CancelAutoLabel,
+		Themes: props.AutoPickerThemes, OnChoose: props.OnAutoPickTheme, OnCancel: props.OnCancelAutoPicker,
+	})
 }

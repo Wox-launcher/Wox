@@ -11,6 +11,7 @@ import (
 	"wox/resource"
 
 	"wox/common"
+	"wox/setting"
 	"wox/ui/contract"
 
 	"github.com/google/uuid"
@@ -77,10 +78,20 @@ func (s *CoreServices) OperateTheme(ctx context.Context, sessionID string, theme
 		if !exists {
 			return fmt.Errorf("theme %q is not installed", themeID)
 		}
+		currentThemeID := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId.Get()
 		if err := GetStoreManager().Uninstall(ctx, theme); err != nil {
 			return fmt.Errorf("uninstall theme %q: %w", themeID, err)
 		}
-		GetUIManager().ChangeToDefaultTheme(ctx)
+		if currentThemeID == themeID {
+			GetUIManager().ChangeToDefaultTheme(ctx)
+			return nil
+		}
+		if err := resetAutoThemeEndpoints(ctx, themeID); err != nil {
+			return err
+		}
+		if current := GetUIManager().GetThemeById(currentThemeID); current.IsAutoAppearance {
+			GetUIManager().ApplyCurrentTheme(ctx)
+		}
 		return nil
 	case contract.ThemeOperationApply:
 		theme, exists := lo.Find(GetUIManager().GetAllThemes(ctx), func(item common.Theme) bool {
@@ -140,6 +151,140 @@ func (s *CoreServices) SaveTheme(ctx context.Context, sessionID string, name str
 		return common.Theme{}, fmt.Errorf("save theme: %w", err)
 	}
 	return theme, nil
+}
+
+// SaveAutoTheme persists one user Auto theme document without applying it.
+func (s *CoreServices) SaveAutoTheme(ctx context.Context, sessionID string, name string, lightThemeID string, darkThemeID string, themeID string, overwrite bool) (common.Theme, error) {
+	ctx = uiServiceContext(ctx, sessionID)
+	installed := installedThemeIndex(ctx)
+	if err := validateAutoThemeDraft(name, lightThemeID, darkThemeID, installed); err != nil {
+		return common.Theme{}, err
+	}
+	template := autoThemeTemplate(ctx)
+	if overwrite {
+		if strings.TrimSpace(themeID) == "" {
+			return common.Theme{}, fmt.Errorf("theme id is empty")
+		}
+		if GetUIManager().IsSystemTheme(themeID) {
+			return common.Theme{}, fmt.Errorf("can't overwrite system theme")
+		}
+		existing := GetUIManager().GetThemeById(themeID)
+		if existing.ThemeId == "" {
+			return common.Theme{}, fmt.Errorf("theme %q is not installed", themeID)
+		}
+		if !existing.IsAutoAppearance {
+			return common.Theme{}, fmt.Errorf("theme %q is not an auto theme", themeID)
+		}
+		template = existing
+	} else {
+		themeID = uuid.NewString()
+	}
+	theme := composeUserAutoTheme(themeID, name, template, lightThemeID, darkThemeID)
+	if err := GetStoreManager().PersistInstalled(ctx, theme); err != nil {
+		return common.Theme{}, fmt.Errorf("save auto theme: %w", err)
+	}
+	return theme, nil
+}
+
+func installedThemeIndex(ctx context.Context) map[string]common.Theme {
+	themes := map[string]common.Theme{}
+	for _, theme := range GetUIManager().GetAllThemes(ctx) {
+		themes[theme.ThemeId] = theme
+	}
+	return themes
+}
+
+func autoThemeTemplate(ctx context.Context) common.Theme {
+	if theme := GetUIManager().GetThemeById(setting.DefaultAutoThemeId); theme.ThemeId != "" {
+		return theme
+	}
+	return common.Theme{SchemaVersion: 2, MinWoxVersion: "2.4.3", AppBackgroundColor: "#232933BF"}
+}
+
+// validateAutoThemeDraft checks the name and light/dark endpoints for one Auto theme.
+func validateAutoThemeDraft(name, lightThemeID, darkThemeID string, themes map[string]common.Theme) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("theme name is empty")
+	}
+	if err := validateAutoThemeEndpoint(lightThemeID, themes); err != nil {
+		return err
+	}
+	return validateAutoThemeEndpoint(darkThemeID, themes)
+}
+
+func validateAutoThemeEndpoint(themeID string, themes map[string]common.Theme) error {
+	themeID = strings.TrimSpace(themeID)
+	if themeID == "" {
+		return fmt.Errorf("auto theme endpoint is empty")
+	}
+	theme, ok := themes[themeID]
+	if !ok {
+		return fmt.Errorf("theme %q is not installed", themeID)
+	}
+	if theme.IsAutoAppearance {
+		return fmt.Errorf("auto themes cannot be used as light or dark variants")
+	}
+	return nil
+}
+
+// composeUserAutoTheme builds a persistable Auto document from a system template.
+func composeUserAutoTheme(id, name string, template common.Theme, lightThemeID, darkThemeID string) common.Theme {
+	theme := template
+	theme.ThemeId = id
+	theme.ThemeName = strings.TrimSpace(name)
+	theme.IsSystem = false
+	theme.IsInstalled = true
+	theme.IsAutoAppearance = true
+	theme.LightThemeId = lightThemeID
+	theme.DarkThemeId = darkThemeID
+	if strings.TrimSpace(theme.ThemeAuthor) == "" {
+		theme.ThemeAuthor = "Wox Launcher"
+	}
+	if strings.TrimSpace(theme.ThemeUrl) == "" {
+		theme.ThemeUrl = "https://github.com/Wox-launcher/Wox"
+	}
+	if strings.TrimSpace(theme.Version) == "" {
+		theme.Version = "1.0.0"
+	}
+	if theme.SchemaVersion == 0 {
+		theme.SchemaVersion = 2
+	}
+	theme.Windows = nil
+	theme.MacOS = nil
+	theme.Linux = nil
+	return theme
+}
+
+func resetAutoThemeEndpoints(ctx context.Context, removedThemeID string) error {
+	for _, theme := range GetUIManager().GetAllThemes(ctx) {
+		if !theme.IsAutoAppearance || GetUIManager().IsSystemTheme(theme.ThemeId) {
+			continue
+		}
+		stored := GetUIManager().GetThemeById(theme.ThemeId)
+		lightID, darkID, changed := replaceRemovedAutoEndpoints(removedThemeID, stored.LightThemeId, stored.DarkThemeId)
+		if !changed {
+			continue
+		}
+		stored.LightThemeId = lightID
+		stored.DarkThemeId = darkID
+		if err := GetStoreManager().PersistInstalled(ctx, stored); err != nil {
+			return fmt.Errorf("update auto theme %q: %w", stored.ThemeId, err)
+		}
+	}
+	return nil
+}
+
+func replaceRemovedAutoEndpoints(removedID, lightID, darkID string) (string, string, bool) {
+	changed := false
+	if lightID == removedID {
+		lightID = setting.DefaultLightThemeId
+		changed = true
+	}
+	if darkID == removedID {
+		darkID = setting.DefaultDarkThemeId
+		changed = true
+	}
+	return lightID, darkID, changed
 }
 
 // SuggestThemeEdits runs a text-only request through the configured AI provider without persisting themes.

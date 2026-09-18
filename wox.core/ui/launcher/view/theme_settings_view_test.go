@@ -10,6 +10,162 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestThemeListPinsCreateAutoAtBottom(t *testing.T) {
+	var created bool
+	list := themeList(ThemeSettingsProps{
+		Mode: "installed", CreateAutoLabel: "New Auto theme", OnCreateAuto: func() { created = true },
+		Items: []ThemeCatalogItem{{ID: "one", Name: "One"}},
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, 260, 400).(woxwidget.Flex)
+	if len(list.Children) != 3 {
+		t.Fatalf("installed list children = %d, want search, catalog, and pinned create row", len(list.Children))
+	}
+	create := list.Children[2].(woxwidget.Container)
+	button := focusedControlGesture(create.Child)
+	if create.Height != themeCreateAutoRowHeight+themeCreateAutoBottomGap || create.Padding.Bottom != themeCreateAutoBottomGap || button.ID != "theme-create-auto" {
+		t.Fatalf("create row = height %.0f inset %.0f id %q", create.Height, create.Padding.Bottom, button.ID)
+	}
+	if button.Child.(woxwidget.Container).Height != themeCreateAutoRowHeight || button.Child.(woxwidget.Container).Width != 260 {
+		t.Fatalf("create button = %#v, want a full-width %.0f-high action", button.Child, themeCreateAutoRowHeight)
+	}
+	catalog := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	used := woxcomponent.SettingsSearchHeight + list.Gap + catalog.Height + list.Gap + create.Height
+	if used != 400 {
+		t.Fatalf("installed list used height = %.0f, want 400 so the pinned create row stays inside the catalog", used)
+	}
+	button.OnTap()
+	if !created {
+		t.Fatal("create row should start a new Auto theme")
+	}
+	store := themeList(ThemeSettingsProps{Mode: "store", CreateAutoLabel: "New Auto theme", OnCreateAuto: func() {}}, 260, 400).(woxwidget.Flex)
+	if len(store.Children) != 2 {
+		t.Fatalf("store list children = %d, want no create row", len(store.Children))
+	}
+}
+
+func TestThemeAutoSlotFollowsDiagonal(t *testing.T) {
+	size := woxui.Size{Width: 100, Height: 60}
+	if slot := themeAutoSlotAt(woxui.Point{X: 10, Y: 10}, size); slot != "light" {
+		t.Fatalf("top-left slot = %q, want light", slot)
+	}
+	if slot := themeAutoSlotAt(woxui.Point{X: 90, Y: 50}, size); slot != "dark" {
+		t.Fatalf("bottom-right slot = %q, want dark", slot)
+	}
+}
+
+func TestThemeActionsKeepSystemAutoReadOnly(t *testing.T) {
+	var edit bool
+	system := themeActions(ThemeSettingsProps{
+		ApplyLabel: "Apply", Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, ThemeCatalogItem{IsInstalled: true, IsSystem: true, IsAuto: true})
+	if len(system) != 1 || focusedControlGesture(system[0]).ID != "theme-apply" {
+		t.Fatalf("system auto actions = %#v, want only apply", system)
+	}
+	user := themeActions(ThemeSettingsProps{
+		ApplyLabel: "Apply", EditAutoLabel: "Edit", UninstallLabel: "Uninstall", OnEditAuto: func() { edit = true },
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, ThemeCatalogItem{IsInstalled: true, IsAuto: true})
+	if len(user) != 3 {
+		t.Fatalf("user auto actions = %d, want apply, edit, uninstall", len(user))
+	}
+	focusedControlGesture(user[1]).OnTap()
+	if !edit {
+		t.Fatal("user auto actions should open edit")
+	}
+}
+
+func TestThemeAutoEditorExposesStableAutomationIDs(t *testing.T) {
+	editor := themeAutoEditor(ThemeSettingsProps{
+		AutoNamePlaceholder: "Name",
+		SaveAutoLabel:       "Save",
+		CancelAutoLabel:     "Cancel",
+		AutoEditor:          &AutoThemeEditorState{Active: true, Name: woxui.TextEditingState{Text: "Smoke Auto"}},
+		Theme:               woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, 640, 400).(woxwidget.Flex)
+	header := editor.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	name := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Stateful)
+	if string(name.Key) != "theme-auto-name" {
+		t.Fatalf("auto name field key = %q, want theme-auto-name", name.Key)
+	}
+	field := name.Widget.(woxcomponent.TextFieldProps)
+	if field.Height != woxcomponent.SettingsControlHeight || field.Padding.Top != 6 || field.Padding.Bottom != 6 || field.MaxLines != 1 {
+		t.Fatalf("auto name field geometry = height %.0f padding %+v maxLines %d, want WoxSettingTextField", field.Height, field.Padding, field.MaxLines)
+	}
+	actions := header.Children[1].(woxwidget.Flex)
+	if focusedControlGesture(actions.Children[0]).ID != "theme-auto-cancel" {
+		t.Fatal("auto editor should expose theme-auto-cancel")
+	}
+	if focusedControlGesture(actions.Children[1]).ID != "theme-auto-save" {
+		t.Fatal("auto editor should expose theme-auto-save")
+	}
+	user := themeActions(ThemeSettingsProps{
+		ApplyLabel: "Apply", EditAutoLabel: "Edit", UninstallLabel: "Uninstall",
+		OnEditAuto: func() {}, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, ThemeCatalogItem{IsInstalled: true, IsAuto: true})
+	if focusedControlGesture(user[0]).ID != "theme-apply" || focusedControlGesture(user[2]).ID != "theme-uninstall" {
+		t.Fatal("user auto actions should expose theme-apply and theme-uninstall")
+	}
+}
+
+func TestThemeAutoPreviewShowsEditButtons(t *testing.T) {
+	var slot string
+	overlay := themeAutoSlotEditOverlay(ThemeSettingsProps{
+		ModifyAutoLabel: "Modify",
+		OnAutoEditSlot:  func(value string) { slot = value },
+		Theme:           woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, woxwidget.Container{Width: 200, Height: 120}, 200, 120,
+		woxcomponent.Theme{Background: woxui.Color{R: 245, G: 245, B: 245, A: 120}, ResultTitle: woxui.Color{A: 180}},
+		woxcomponent.Theme{Background: woxui.Color{R: 43, G: 43, B: 43, A: 90}, ResultTitle: woxui.Color{R: 255, G: 255, B: 255, A: 160}},
+	).(woxwidget.Stack)
+	if len(overlay.Children) != 3 {
+		t.Fatalf("auto edit overlay children = %d, want preview and two edit actions", len(overlay.Children))
+	}
+	light := focusedControlGesture(overlay.Children[1].Child.(woxwidget.Align).Child)
+	dark := focusedControlGesture(overlay.Children[2].Child.(woxwidget.Align).Child)
+	if light.ID != "theme-auto-edit-light" || dark.ID != "theme-auto-edit-dark" {
+		t.Fatalf("auto edit ids = %q %q", light.ID, dark.ID)
+	}
+	lightChip := light.Child.(woxwidget.Container)
+	darkChip := dark.Child.(woxwidget.Container)
+	if lightChip.Color != (woxui.Color{R: 245, G: 245, B: 245, A: 255}) || darkChip.Color != (woxui.Color{R: 43, G: 43, B: 43, A: 255}) {
+		t.Fatalf("auto edit should be an opaque fill for each preview half, light %#v dark %#v", lightChip.Color, darkChip.Color)
+	}
+	if lightChip.BorderWidth != 1 || lightChip.BorderColor != (woxui.Color{A: 255}) || darkChip.BorderWidth != 1 || darkChip.BorderColor != (woxui.Color{R: 255, G: 255, B: 255, A: 255}) {
+		t.Fatalf("auto edit should keep a hairline, light %#v/%.0f dark %#v/%.0f", lightChip.BorderColor, lightChip.BorderWidth, darkChip.BorderColor, darkChip.BorderWidth)
+	}
+	light.OnTap()
+	if slot != "light" {
+		t.Fatalf("light edit slot = %q, want light", slot)
+	}
+}
+
+func TestThemeAutoEditorIsDialogOverlay(t *testing.T) {
+	page := ThemeSettingsView(ThemeSettingsProps{
+		Width: 840, Height: 700, CreateAutoLabel: "New Auto theme", EditAutoLabel: "Edit",
+		AutoEditor: &AutoThemeEditorState{Active: true, Name: woxui.TextEditingState{Text: "Office"}},
+		Theme:      woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}).(woxwidget.Flex)
+	if len(page.Children) != 3 {
+		t.Fatal("catalog should stay a list and detail pane while the editor overlay is hosted on the window")
+	}
+	overlay := ThemeAutoEditorOverlay(ThemeSettingsProps{
+		Width: 840, Height: 700, OverlayWidth: 1100, OverlayHeight: 760, CreateAutoLabel: "New Auto theme",
+		AutoEditor: &AutoThemeEditorState{Active: true, Name: woxui.TextEditingState{Text: "Office"}},
+		Theme:      woxcomponent.ControlTheme{Text: woxui.Color{A: 255}, Surface: woxui.Color{R: 32, G: 32, B: 32, A: 180}},
+	}).(woxwidget.Stack)
+	if overlay.Width != 1100 || overlay.Height != 760 {
+		t.Fatalf("auto editor overlay = %.0fx%.0f, want the settings window", overlay.Width, overlay.Height)
+	}
+	dialog := overlay.Children[0].Child.(woxwidget.Stateful)
+	if string(dialog.Key) != "theme-auto-editor-dialog" {
+		t.Fatalf("auto editor overlay key = %q, want theme-auto-editor-dialog", dialog.Key)
+	}
+	props := dialog.Widget.(woxcomponent.DialogProps)
+	if !props.Solid || props.OverlayWidth != 1100 || props.OverlayHeight != 760 {
+		t.Fatalf("auto editor dialog = solid %v overlay %.0fx%.0f, want a solid window-centered panel", props.Solid, props.OverlayWidth, props.OverlayHeight)
+	}
+}
+
 func TestThemeSettingsViewUsesSharedCatalogListWidth(t *testing.T) {
 	const contentWidth = float32(840)
 	page := ThemeSettingsView(ThemeSettingsProps{Width: contentWidth, Height: 700, Theme: woxcomponent.ControlTheme{}}).(woxwidget.Flex)
@@ -82,12 +238,35 @@ func TestThemeListSearchUsesValueText(t *testing.T) {
 	}
 }
 
-func TestThemeApplyUsesIntrinsicSecondaryButton(t *testing.T) {
-	actions := themeActions(ThemeSettingsProps{ApplyLabel: "应用", Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}}, ThemeCatalogItem{IsInstalled: true, IsSystem: true})
-	button := focusedControlGesture(actions[0]).Child.(woxwidget.Container)
-
-	if button.Width != 0 || button.Height != 32 || button.Color.A != 0 || button.BorderColor.A != 0 {
-		t.Fatalf("apply button = width %v height %v background alpha %v border %v, want intrinsic shared secondary button", button.Width, button.Height, button.Color.A, button.BorderWidth)
+func TestThemeActionsShareControlHeight(t *testing.T) {
+	actions := themeActions(ThemeSettingsProps{
+		ApplyLabel: "Apply", EditAutoLabel: "Edit", UninstallLabel: "Uninstall", OnEditAuto: func() {},
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, ThemeCatalogItem{IsInstalled: true, IsAuto: true})
+	if len(actions) != 3 {
+		t.Fatalf("user auto actions = %d, want apply, edit, uninstall", len(actions))
+	}
+	for _, action := range actions {
+		button := focusedControlGesture(action).Child.(woxwidget.Container)
+		if button.Height != woxcomponent.SettingsControlHeight {
+			t.Fatalf("%s height = %.0f, want %.0f", focusedControlGesture(action).ID, button.Height, woxcomponent.SettingsControlHeight)
+		}
+	}
+	detail := themeDetail(ThemeSettingsProps{
+		Detail:     &ThemeCatalogItem{Name: "Auto Theme", Version: "1.0.0", IsInstalled: true, IsAuto: true},
+		ApplyLabel: "Apply", EditAutoLabel: "Edit", UninstallLabel: "Uninstall", OnEditAuto: func() {},
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}, 600, 700).(woxwidget.Flex)
+	titleRow := detail.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(titleRow.Children) != 2 {
+		t.Fatal("theme title row should keep the name beside the actions")
+	}
+	name := titleRow.Children[0].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 200, Height: 40}).(woxwidget.Clip).Child.(woxwidget.Flex)
+	if name.Children[0].(woxwidget.Text).Value != "Auto Theme" {
+		t.Fatalf("theme title = %q, want Auto Theme", name.Children[0].(woxwidget.Text).Value)
+	}
+	if _, ok := titleRow.Children[1].(woxwidget.Flex); !ok {
+		t.Fatal("theme actions should shrink-wrap beside the title")
 	}
 }
 
@@ -106,7 +285,7 @@ func TestThemeDetailKeepsVersionBesideTitle(t *testing.T) {
 	if len(header.Children) != 2 || view.Children[0].(woxwidget.Container).Height != 80 {
 		t.Fatal("theme header must use two compact rows")
 	}
-	titleRow := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	titleRow := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 200, Height: 40}).(woxwidget.Clip).Child.(woxwidget.Flex)
 	author := header.Children[1].(woxwidget.Flex).Children[0]
 
 	if titleRow.Gap != 10 || titleRow.CrossAxisAlignment != woxwidget.CrossAxisCenter || titleRow.Children[0].(woxwidget.Text).Value != "Aquarium" || titleRow.Children[1].(woxwidget.Text).Value != "1.1.0" {

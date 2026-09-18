@@ -16,14 +16,17 @@ type DialogProps struct {
 	BackdropID    string
 	BackdropColor woxui.Color
 	BackdropAlpha uint8
-	Radius        float32
-	Padding       woxwidget.Insets
-	BorderColor   woxui.Color
-	BorderWidth   float32
-	InitialFocus  woxwidget.Key
-	OnEscape      func()
-	Child         woxwidget.Widget
-	Theme         ControlTheme
+	// Solid paints an opaque panel instead of floating material so the blur
+	// kernel does not spill outside the dialog.
+	Solid        bool
+	Radius       float32
+	Padding      woxwidget.Insets
+	BorderColor  woxui.Color
+	BorderWidth  float32
+	InitialFocus woxwidget.Key
+	OnEscape     func()
+	Child        woxwidget.Widget
+	Theme        ControlTheme
 }
 
 // WoxDialog builds shared modal chrome, focus trapping, and dialog semantics.
@@ -79,6 +82,13 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	if borderColor.A == 0 || borderWidth <= 0 {
 		borderColor, borderWidth = props.Theme.Border, 1
 	}
+	fill := props.Theme.Surface
+	if props.Solid {
+		if fill.A == 0 {
+			fill = props.Theme.Background
+		}
+		fill.A = 255
+	}
 	key := woxwidget.Key(props.ID)
 	dialog := woxwidget.FocusScope{Key: key, Modal: true, OnKey: func(event woxui.KeyEvent) bool {
 		if !event.Down || event.Composing || event.Key != woxui.KeyEscape || props.OnEscape == nil {
@@ -89,7 +99,7 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	}, Child: woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleDialog, Label: props.Label,
 		Child: woxwidget.Container{
-			Width: props.Width, Height: props.Height, Radius: radius, Floating: true, Color: props.Theme.Surface, Padding: props.Padding,
+			Width: props.Width, Height: props.Height, Radius: radius, Floating: !props.Solid, Color: fill, Padding: props.Padding,
 			BorderColor: borderColor, BorderWidth: borderWidth, Child: props.Child,
 		},
 	}}

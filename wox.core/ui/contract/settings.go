@@ -456,6 +456,7 @@ type ThemeOperationSettingsServices interface {
 	SuggestThemeEdits(ctx context.Context, sessionID string, model common.Model, conversations []common.Conversation, onProgress common.ChatStreamFunc) (string, error)
 	OperateTheme(ctx context.Context, sessionID string, themeID string, operation ThemeOperation) error
 	SaveTheme(ctx context.Context, sessionID string, name string, theme common.Theme, overwrite bool) (common.Theme, error)
+	SaveAutoTheme(ctx context.Context, sessionID string, name string, lightThemeID string, darkThemeID string, themeID string, overwrite bool) (common.Theme, error)
 }
 
 // CloudSettingsServices exposes account, sync, device, billing, and exclusion metadata.

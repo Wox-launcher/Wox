@@ -33,6 +33,8 @@ type ButtonProps struct {
 	// keep the flag for call sites that want the intent to be explicit.
 	IntrinsicWidth bool
 	Width          float32
+	// Height overrides the ordinary 32-unit action when a catalog row must fill its slot.
+	Height float32
 	// AlignLeading is for full-width disclosure rows; ordinary actions stay centered.
 	AlignLeading bool
 	Radius       float32
@@ -52,6 +54,9 @@ type ButtonProps struct {
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
 func WoxButton(props ButtonProps) woxwidget.Widget {
 	height := float32(32)
+	if props.Height > 0 {
+		height = props.Height
+	}
 	radius := float32(4)
 	padding := woxwidget.Insets{Left: 12, Right: 12}
 	fontSize := CompactButtonFontSize
