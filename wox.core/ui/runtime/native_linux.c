@@ -35,6 +35,7 @@ extern void woxGoLinuxCall(uintptr_t context);
 extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoLinuxRenderTrace(const char *message);
 extern void woxGoLinuxInfo(const char *message);
+extern int32_t woxGoLinuxCosmicUsesLayerShell(void);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
@@ -2116,6 +2117,9 @@ static WoxLayerSetMonitor layer_set_monitor;
 static WoxLayerSetMargin layer_set_margin;
 
 static bool compositor_uses_layer_shell(void) {
+  if (woxGoLinuxCosmicUsesLayerShell()) {
+    return true;
+  }
   const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
   if (desktop == NULL || desktop[0] == '\0') {
     desktop = g_getenv("XDG_SESSION_DESKTOP");
@@ -5454,11 +5458,11 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   pango_font_description_set_style(font, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
   pango_layout_set_font_description(layout, font);
   pango_layout_set_text(layout, text, -1);
-  pango_layout_set_width(layout, pixel_width * PANGO_SCALE);
   pango_layout_set_single_paragraph_mode(layout, TRUE);
-  // Do not set a positive layout height. CJK fonts can report a line box taller
-  // than the destination slot, and Pango then omits the only line. The cairo
-  // image already clips overflow to pixel_height.
+  // DrawText is one non-wrapping line. A Pango width wraps on any measure/draw
+  // mismatch, so a tight 18px SVG badge keeps "5H" / "Week" and clips "100%" / "2%".
+  // The cairo surface already clips overflow to the destination slot.
+  pango_layout_set_width(layout, -1);
   pango_cairo_show_layout(cairo, layout);
   cairo_surface_flush(surface);
 

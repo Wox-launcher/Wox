@@ -227,6 +227,11 @@ ifeq ($(PLATFORM),linux)
 	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
 	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
+	# dlopen dependencies are not discovered from the Wox ELF; bundle layer-shell for COSMIC resizing.
+	mkdir -p $(APPIMAGE_DIR)/usr/lib
+	@layer_shell=$$(ldconfig -p | awk '$$1 == "libgtk-layer-shell.so.0" { print $$NF; exit }'); \
+		test -f "$$layer_shell" || { echo "libgtk-layer-shell0 is required to build the AppImage" >&2; exit 1; }; \
+		cp -L "$$layer_shell" $(APPIMAGE_DIR)/usr/lib/libgtk-layer-shell.so.0
 	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/$(APPIMAGE_DESKTOP_FILE)
 	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/$(APPIMAGE_DESKTOP_FILE)
 	cp assets/linux/$(LINUX_METAINFO_FILE) $(APPIMAGE_DIR)/usr/share/metainfo/$(LINUX_METAINFO_FILE)
@@ -265,7 +270,7 @@ ifeq ($(PLATFORM),linux)
 	cp $(LINUX_ICON_STAGING)/128x128/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/icons/hicolor/128x128/apps/$(DEB_ICON_FILE)
 	cp $(LINUX_ICON_STAGING)/256x256/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/icons/hicolor/256x256/apps/$(DEB_ICON_FILE)
 	cp $(LINUX_ICON_STAGING)/128x128/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/pixmaps/$(DEB_ICON_FILE)
-	# Hard-linked GTK/X11 libs are required at process start; optional features stay in Recommends.
+	# Layer-shell is required for live launcher resizing on COSMIC; optional media/web features stay in Recommends.
 	@{ \
 		installed_size=$$(du -sk $(DEB_DIR)/usr | awk '{print $$1}'); \
 		printf '%s\n' \
@@ -277,8 +282,8 @@ ifeq ($(PLATFORM),linux)
 			'Maintainer: Wox Contributors <wox-launcher@users.noreply.github.com>' \
 			'Homepage: https://github.com/Wox-launcher/Wox' \
 			"Installed-Size: $$installed_size" \
-			'Depends: libgtk-3-0, libepoxy0, libx11-6, libxtst6' \
-			'Recommends: libgtk-layer-shell0, libpipewire-0.3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37' \
+			'Depends: libgtk-3-0, libepoxy0, libx11-6, libxtst6, libgtk-layer-shell0' \
+			'Recommends: libpipewire-0.3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37' \
 			'Description: A launcher that stays out of your way' \
 			' Wox is a fully native open-source launcher for Linux with GPU rendering,' \
 			' local search, keyboard-first actions, and an extensible plugin system.' \
@@ -329,7 +334,7 @@ ifeq ($(PLATFORM),linux)
 			'Requires: libepoxy.so.0()(64bit)' \
 			'Requires: libX11.so.6()(64bit)' \
 			'Requires: libXtst.so.6()(64bit)' \
-			'Recommends: libgtk-layer-shell.so.0()(64bit)' \
+			'Requires: libgtk-layer-shell.so.0()(64bit)' \
 			'Recommends: libpipewire-0.3.so.0()(64bit)' \
 			'Recommends: libwebkit2gtk-4.1.so.0()(64bit)' \
 			'' \

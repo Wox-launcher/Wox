@@ -1,4 +1,6 @@
 #!/bin/sh
 set -e
 HERE="$(dirname "$(readlink -f "$0")")"
+# Include the dlopen-only layer-shell backend even when the host has not installed it.
+export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$HERE/usr/bin/wox" "$@"

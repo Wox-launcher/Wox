@@ -77,6 +77,46 @@ func TestCenteredSVGTextExtractsBadgeLabel(t *testing.T) {
 	}
 }
 
+func TestCenteredSVGTextExtractsAIQuotaProgressLabels(t *testing.T) {
+	tests := []struct {
+		name  string
+		svg   string
+		label string
+	}{
+		{
+			name:  "session",
+			label: "5H 100%",
+			svg: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="18" viewBox="0 0 96 18">
+  <rect x="0" y="0" width="96" height="18" rx="9" fill="#687084"/>
+  <rect x="1" y="1" width="94" height="16" rx="8" fill="#ffffff"/>
+  <path d="M 9 1 H 87 A 8 8 0 0 1 87 17 H 9 A 8 8 0 0 1 9 1 Z" fill="#9bc27d"/>
+  <text x="48" y="12.4" text-anchor="middle" font-family="Arial, sans-serif" font-size="9.5" fill="#1f2937">5H 100%</text>
+</svg>`,
+		},
+		{
+			name:  "week",
+			label: "Week 2%",
+			svg: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="18" viewBox="0 0 96 18">
+  <rect x="0" y="0" width="96" height="18" rx="9" fill="#687084"/>
+  <rect x="1" y="1" width="94" height="16" rx="8" fill="#ffffff"/>
+  <path d="M 3 3.71 L 3 14.29 A 8 8 0 0 1 3 3.71 Z" fill="#d95c5c"/>
+  <text x="48" y="12.4" text-anchor="middle" font-family="Arial, sans-serif" font-size="9.5" fill="#1f2937">Week 2%</text>
+</svg>`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			text, ok := centeredSVGText(woxImage{ImageType: "svg", ImageData: test.svg}, 96, 18)
+			if !ok {
+				t.Fatal("expected centered SVG badge text")
+			}
+			if text.Value != test.label || text.Size != 9.5 || text.Color != (woxui.Color{R: 31, G: 41, B: 55, A: 255}) {
+				t.Fatalf("centered SVG text = %+v, want %q", text, test.label)
+			}
+		})
+	}
+}
+
 func TestPhysicalImageSizeUsesBackingScale(t *testing.T) {
 	tests := []struct {
 		name    string
