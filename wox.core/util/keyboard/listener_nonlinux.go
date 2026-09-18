@@ -21,6 +21,9 @@ func CheckUinputAccess() UinputAccessStatus { return UinputAccessNotInGroup }
 // The real implementation is in listener_linux_gnome.go.
 func InvokeGnomeHotkeyCallback(id string) {}
 
+// InvokeCosmicHotkeyCallback is a no-op outside Linux.
+func InvokeCosmicHotkeyCallback(binding string) {}
+
 func registerGlobalHotkeysLinuxHyprland(specs []GlobalHotkeySpec) (HotkeyRegistration, bool, error) {
 	return nil, false, nil
 }

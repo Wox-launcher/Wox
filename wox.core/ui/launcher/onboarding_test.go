@@ -1,13 +1,46 @@
 package launcher
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"runtime"
 	"testing"
 
 	"wox/resource"
+	"wox/ui/contract"
+	"wox/util/keyboard"
 )
+
+type onboardingHotkeyTestServices struct {
+	contract.Services
+	err error
+}
+
+func (s *onboardingHotkeyTestServices) UpdateGeneralSetting(context.Context, string, string, string) error {
+	return s.err
+}
+
+func TestOnboardingRetainsHotkeySaveFailureAfterRecorderCloses(t *testing.T) {
+	services := &onboardingHotkeyTestServices{err: fmt.Errorf("portal: %w", keyboard.ErrGlobalHotkeysUnavailable)}
+	app := &App{
+		services: services, onboardingOpen: true,
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		translations:    map[string]string{"ui_hotkey_registration_unsupported": "Registration unavailable"},
+	}
+	form := newFormFieldsState(nil, map[string]string{"MainHotkey": "Alt+K"}, true)
+	state := &hotkeyRecordingState{diagnosticCtx: context.Background(), target: &form, persistKey: "MainHotkey"}
+	app.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
+	if app.onboardingError != "Registration unavailable" || form.values["MainHotkey"] != "Ctrl+Space" {
+		t.Fatalf("failed save: error=%q hotkey=%q", app.onboardingError, form.values["MainHotkey"])
+	}
+	services.err = nil
+	app.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
+	if app.onboardingError != "" || app.generalSettings.Data().MainHotkey != "Alt+K" {
+		t.Fatalf("successful retry: error=%q hotkey=%q", app.onboardingError, app.generalSettings.Data().MainHotkey)
+	}
+}
 
 func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testing.T) {
 	steps := (&App{}).onboardingSteps()

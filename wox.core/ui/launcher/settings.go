@@ -44,6 +44,7 @@ type settingsData struct {
 	LogLevel                           string
 	MainHotkey                         string
 	MainHotkeyRegistrationFailed       bool
+	MainHotkeyRegistrationError        string
 	SelectionHotkey                    string
 	ActionPanelHotkey                  string
 	IgnoreHotkeysOnFullscreen          bool
@@ -609,6 +610,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		LogLevel:                           loaded.LogLevel,
 		MainHotkey:                         loaded.MainHotkey,
 		MainHotkeyRegistrationFailed:       loaded.MainHotkeyRegistrationFailed,
+		MainHotkeyRegistrationError:        loaded.MainHotkeyRegistrationError,
 		SelectionHotkey:                    loaded.SelectionHotkey,
 		ActionPanelHotkey:                  loaded.ActionPanelHotkey,
 		IgnoreHotkeysOnFullscreen:          loaded.IgnoreHotkeysOnFullscreen,

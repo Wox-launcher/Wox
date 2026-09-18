@@ -240,7 +240,7 @@ func ensureWaylandPortalReady() (*dbus.Conn, error) {
 	// If we already probed and the portal was not available, skip the expensive
 	// D-Bus round-trip and return the cached error immediately.
 	if waylandPortalUnavailable {
-		return nil, fmt.Errorf("wayland global shortcuts portal is not available on this system")
+		return nil, ErrGlobalHotkeysUnavailable
 	}
 
 	conn, err := dbus.ConnectSessionBus()
@@ -278,7 +278,7 @@ func ensureWaylandPortalReady() (*dbus.Conn, error) {
 		_ = conn.Close()
 		// Mark the portal as permanently unavailable so we do not re-probe.
 		waylandPortalUnavailable = true
-		return nil, fmt.Errorf("wayland global shortcuts portal is not available: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrGlobalHotkeysUnavailable, err)
 	}
 
 	version, ok := versionVariant.Value().(uint32)

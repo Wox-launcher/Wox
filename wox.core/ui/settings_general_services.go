@@ -36,6 +36,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		EnableAutostart:                    woxSetting.EnableAutostart.Get(),
 		MainHotkey:                         woxSetting.MainHotkey.Get(),
 		MainHotkeyRegistrationFailed:       GetUIManager().hasMainHotkeyToolbarWarning(),
+		MainHotkeyRegistrationError:        GetUIManager().mainHotkeyRegistrationErrorKey(),
 		SelectionHotkey:                    woxSetting.SelectionHotkey.Get(),
 		ActionPanelHotkey:                  woxSetting.ActionPanelHotkey.Get(),
 		IgnoreHotkeysOnFullscreen:          woxSetting.IgnoreHotkeysOnFullscreen.Get(),

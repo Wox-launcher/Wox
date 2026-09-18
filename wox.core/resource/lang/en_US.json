@@ -49,6 +49,8 @@
   "ui_hotkey_conflict_selection": "This hotkey is already used by the selection hotkey.",
   "ui_hotkey_conflict_query": "This hotkey is already used by Query Hotkey: {query}",
   "ui_hotkey_conflict_system": "This hotkey is already used by another app or the system.",
+  "ui_hotkey_registration_unsupported": "Global hotkey registration is unavailable in this desktop session. Set up a shortcut in system settings.",
+  "ui_hotkey_registration_failed": "Could not register this hotkey. Check permissions and desktop support.",
   "ui_hotkey_unavailable": "This hotkey is unavailable.",
   "ui_main_hotkey_registration_failed": "Main hotkey {hotkey} could not be registered. Change it in Settings.",
   "ui_hotkey_wayland_evdev_hint": "Double-modifier hotkeys (e.g. double Ctrl) and CapsLock combos require additional setup on Wayland. See the guide to enable them.",

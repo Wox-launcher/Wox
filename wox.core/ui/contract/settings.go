@@ -129,6 +129,7 @@ type GeneralSettings struct {
 	EnableAutostart                    bool
 	MainHotkey                         string
 	MainHotkeyRegistrationFailed       bool
+	MainHotkeyRegistrationError        string
 	SelectionHotkey                    string
 	ActionPanelHotkey                  string
 	IgnoreHotkeysOnFullscreen          bool

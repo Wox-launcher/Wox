@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	corehotkey "wox/hotkey"
 	woxui "wox/ui/runtime"
 	"wox/util"
 )
@@ -251,6 +252,10 @@ func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 
 func (a *App) hotkeyConflictMessage(kind, value string) string {
 	switch kind {
+	case "unsupported":
+		return a.translate("i18n:ui_hotkey_registration_unsupported")
+	case "registration_failed":
+		return a.translate("i18n:ui_hotkey_registration_failed")
 	case "main":
 		return a.translate("i18n:ui_hotkey_conflict_main")
 	case "selection":
@@ -312,12 +317,24 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			state.display = previous
 			state.status = err.Error()
 			state.statusError = true
+			if state.persistKey == "MainHotkey" || state.persistKey == "SelectionHotkey" {
+				state.status = a.translate(corehotkey.RegistrationErrorKey(err))
+			}
+			// Onboarding closes the recorder before the asynchronous save finishes.
+			// Keep its error on the page instead of losing it with the recorder state.
+			if a.onboardingOpen && state.persistKey == "MainHotkey" {
+				a.onboardingError = state.status
+			}
 		} else {
+			if a.onboardingOpen && state.persistKey == "MainHotkey" {
+				a.onboardingError = ""
+			}
 			switch state.persistKey {
 			case "MainHotkey":
 				a.generalSettings.Update(func(d *settingsData) {
 					d.MainHotkey = value
 					d.MainHotkeyRegistrationFailed = false
+					d.MainHotkeyRegistrationError = ""
 				})
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })

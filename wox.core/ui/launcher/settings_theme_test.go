@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"math"
 	"reflect"
+	"runtime"
 	"testing"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -21,8 +22,12 @@ func TestSettingsPaletteIgnoresLauncherTheme(t *testing.T) {
 	previousAppearance := woxui.DefaultAppearanceIsDark()
 	t.Cleanup(func() { woxui.SetDefaultAppearance(previousAppearance) })
 	want := settingsPalette()
-	if (want.Background.A == 0 || want.Background.A == 255) || (want.Surface.A == 0 || want.Surface.A == 255) || !themeColorIsDark(want.Background) {
-		t.Fatal("Settings must own translucent dark window and popup tints")
+	wantAlpha := uint8(191)
+	if runtime.GOOS == "linux" {
+		wantAlpha = 255
+	}
+	if want.Background.A != wantAlpha || (want.Surface.A == 0 || want.Surface.A == 255) || !themeColorIsDark(want.Background) {
+		t.Fatal("Settings must own a dark window tint, opaque on Linux, with translucent popup tints")
 	}
 	for _, color := range []string{"#FFFFFFFF", "#FF0000FF", "#00000000"} {
 		app.applyTheme(themeData{AppBackgroundColor: color, ResultItemTitleColor: color, PreviewSplitLineColor: color})

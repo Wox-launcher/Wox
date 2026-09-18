@@ -49,6 +49,8 @@
   "ui_hotkey_conflict_selection": "このホットキーは選択ホットキーですでに使用されています。",
   "ui_hotkey_conflict_query": "このホットキーはクエリホットキーですでに使用されています : {query}",
   "ui_hotkey_conflict_system": "このホットキーは別のアプリまたはシステムですでに使用されています。",
+  "ui_hotkey_registration_unsupported": "現在のデスクトップセッションではグローバルホットキーを登録できません。システム設定でショートカットを設定してください。",
+  "ui_hotkey_registration_failed": "このホットキーを登録できませんでした。権限とデスクトップ環境の対応状況を確認してください。",
   "ui_hotkey_unavailable": "このホットキーは使用できません。",
   "ui_main_hotkey_registration_failed": "メインホットキー {hotkey} を登録できませんでした。設定で変更してください。",
   "ui_hotkey_wayland_evdev_hint": "ダブル修飾キーホットキー (例 : ダブルCtrl)と CapsLock コンボは Wayland で追加設定が必要です。有効にするにはガイドを参照してください。",

@@ -79,14 +79,15 @@ type Manager struct {
 	hyprlandToggleMu   sync.Mutex
 	hyprlandToggleLast time.Time
 
-	activeWindowSnapshot    common.ActiveWindowSnapshot // cached active window snapshot
-	activeWindowSnapshotMu  sync.RWMutex
-	activeWindowSnapshotSeq uint64
-	pendingStartupNotify    *common.NotifyMsg
-	mainHotkeyWarningMu     sync.RWMutex
-	mainHotkeyWarning       string
-	trayEmojiWarmMu         sync.Mutex
-	trayEmojiWarmInFlight   map[string]struct{}
+	activeWindowSnapshot        common.ActiveWindowSnapshot // cached active window snapshot
+	activeWindowSnapshotMu      sync.RWMutex
+	activeWindowSnapshotSeq     uint64
+	pendingStartupNotify        *common.NotifyMsg
+	mainHotkeyWarningMu         sync.RWMutex
+	mainHotkeyWarning           string
+	mainHotkeyRegistrationError string
+	trayEmojiWarmMu             sync.Mutex
+	trayEmojiWarmInFlight       map[string]struct{}
 }
 
 func GetUIManager() *Manager {
@@ -273,7 +274,7 @@ func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *sett
 func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
 	err := m.hotkeyService.RegisterAll(ctx)
 	mainHotkey := setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
-	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey)
+	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey, err)
 	return err
 }
 
@@ -653,12 +654,12 @@ func (m *Manager) registerWoxHotkeys(ctx context.Context, config corehotkey.WoxC
 	if err != nil {
 		mainHotkey = setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
 	}
-	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey)
+	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey, err)
 	return err
 }
 
 // syncMainHotkeyToolbarWarning tracks registration health and updates an attached launcher immediately.
-func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey string) {
+func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey string, registerErr error) {
 	mainHotkey = strings.TrimSpace(mainHotkey)
 	if mainHotkey != "" && m.hotkeyService.IsRegistered(corehotkey.SourceMain, "main") {
 		mainHotkey = ""
@@ -666,6 +667,10 @@ func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey s
 
 	m.mainHotkeyWarningMu.Lock()
 	m.mainHotkeyWarning = mainHotkey
+	m.mainHotkeyRegistrationError = ""
+	if mainHotkey != "" {
+		m.mainHotkeyRegistrationError = corehotkey.RegistrationErrorKey(registerErr)
+	}
 	m.mainHotkeyWarningMu.Unlock()
 
 	if m.getView() == nil {
@@ -682,6 +687,7 @@ func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey s
 func (m *Manager) showMainHotkeyToolbarWarning(ctx context.Context) {
 	m.mainHotkeyWarningMu.RLock()
 	mainHotkey := m.mainHotkeyWarning
+	registrationError := m.mainHotkeyRegistrationError
 	m.mainHotkeyWarningMu.RUnlock()
 	if mainHotkey == "" {
 		return
@@ -689,6 +695,9 @@ func (m *Manager) showMainHotkeyToolbarWarning(ctx context.Context) {
 
 	title := i18n.GetI18nManager().TranslateWox(ctx, "i18n:ui_main_hotkey_registration_failed")
 	title = strings.ReplaceAll(title, "{hotkey}", mainHotkey)
+	if registrationError == "i18n:ui_hotkey_registration_unsupported" {
+		title = i18n.GetI18nManager().TranslateWox(ctx, registrationError)
+	}
 	m.ui.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
 		Id:       mainHotkeyRegistrationToolbarMessageID,
 		Title:    title,
@@ -701,6 +710,12 @@ func (m *Manager) hasMainHotkeyToolbarWarning() bool {
 	m.mainHotkeyWarningMu.RLock()
 	defer m.mainHotkeyWarningMu.RUnlock()
 	return m.mainHotkeyWarning != ""
+}
+
+func (m *Manager) mainHotkeyRegistrationErrorKey() string {
+	m.mainHotkeyWarningMu.RLock()
+	defer m.mainHotkeyWarningMu.RUnlock()
+	return m.mainHotkeyRegistrationError
 }
 
 type HotkeyAvailability struct {
@@ -724,7 +739,15 @@ func (m *Manager) CheckHotkeyAvailability(ctx context.Context, hotkeyStr string)
 		return conflict
 	}
 
-	isAvailable := utilhotkey.IsHotkeyAvailable(ctx, hotkeyStr)
+	isAvailable, err := utilhotkey.CheckHotkeyAvailability(ctx, hotkeyStr)
+	if err != nil && !errors.Is(err, keyboard.ErrHotkeyConflict) {
+		logger.Warn(ctx, fmt.Sprintf("hotkey availability check failed: hotkey=%s err=%v", hotkeyStr, err))
+		kind := "registration_failed"
+		if errors.Is(err, keyboard.ErrGlobalHotkeysUnavailable) {
+			kind = "unsupported"
+		}
+		return HotkeyAvailability{ConflictType: kind}
+	}
 	logger.Info(ctx, fmt.Sprintf("hotkey availability check: hotkey=%s available=%t reason=platform_probe", hotkeyStr, isAvailable))
 	if !isAvailable {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSystem}
@@ -2120,6 +2143,11 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		if binding != "" {
 			keyboard.InvokeGnomeHotkeyCallback(binding)
 		}
+	}
+
+	// COSMIC custom shortcuts forward through the same single-instance deeplink route.
+	if command == "cosmic-hotkey" {
+		keyboard.InvokeCosmicHotkeyCallback(arguments["binding"])
 	}
 
 	// wox://hyprland-hotkey?key=<url-encoded-key>

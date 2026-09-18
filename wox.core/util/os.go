@@ -54,6 +54,11 @@ func IsGnomeDesktopSession() bool {
 	return currentDesktopSessionContains("gnome") || os.Getenv("GNOME_DESKTOP_SESSION_ID") != ""
 }
 
+// IsCosmicDesktopSession identifies the native COSMIC desktop, not legacy Pop GNOME sessions.
+func IsCosmicDesktopSession() bool {
+	return currentDesktopSessionContains("cosmic")
+}
+
 // IsHyprlandSession reports whether the current desktop session is Hyprland.
 // Used to select the native Hyprland hotkey backend (hl.bind + wox:// deeplink)
 // instead of the portal backend, and for diagnostics.

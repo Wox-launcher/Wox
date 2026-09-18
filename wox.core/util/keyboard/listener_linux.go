@@ -15,6 +15,9 @@ func init() {
 
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
 	if IsWaylandSession() {
+		if util.IsCosmicDesktopSession() {
+			return registerGlobalHotkeysLinuxCosmic([]GlobalHotkeySpec{{Modifiers: modifiers, Key: key, Callback: callback}})
+		}
 		// On Hyprland, the portal backend cannot deliver key events without
 		// manual compositor-side bind configuration. Use the native Hyprland
 		// Lua bind backend instead, which auto-registers via hyprctl.
@@ -45,6 +48,10 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 func registerGlobalHotkeysLinux(specs []GlobalHotkeySpec) (HotkeyRegistration, bool, error) {
 	if !IsWaylandSession() {
 		return nil, false, nil
+	}
+	if util.IsCosmicDesktopSession() {
+		registration, err := registerGlobalHotkeysLinuxCosmic(specs)
+		return registration, true, err
 	}
 
 	// On Hyprland, prefer the native Lua bind backend over the portal backend.

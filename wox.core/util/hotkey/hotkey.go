@@ -16,7 +16,7 @@ import (
 // fundamentally different hotkey model (e.g. Wayland's portal-based registration)
 // should set this in their init() to avoid incorrect or harmful probe behaviour.
 var (
-	platformHotkeyAvailableCheck func(ctx context.Context, hotkeyStr string) (available bool, handled bool)
+	platformHotkeyAvailableCheck func(ctx context.Context, hotkeyStr string) (available bool, handled bool, err error)
 	availabilityProbeMu          sync.Mutex
 	addRawKeyListener            = keyboard.AddRawKeyListener
 	registerGlobalHotkey         = keyboard.RegisterGlobalHotkey
@@ -314,14 +314,21 @@ func (h *Hotkey) unregister(ctx context.Context) error {
 	return nil
 }
 
-func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) (isAvailable bool) {
+// IsHotkeyAvailable preserves the bool API for callers that do not display failure reasons.
+func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) bool {
+	available, _ := CheckHotkeyAvailability(ctx, hotkeyStr)
+	return available
+}
+
+// CheckHotkeyAvailability preserves backend errors so unreadable configuration is not a conflict.
+func CheckHotkeyAvailability(ctx context.Context, hotkeyStr string) (bool, error) {
 	// Allow platforms to override the availability check with their own logic.
 	// On Wayland the XDG GlobalShortcuts portal does not have a "is this key
 	// taken" concept, so we cannot probe availability the same way we do on X11
 	// or macOS/Windows.
 	if platformHotkeyAvailableCheck != nil {
-		if available, handled := platformHotkeyAvailableCheck(ctx, hotkeyStr); handled {
-			return available
+		if available, handled, err := platformHotkeyAvailableCheck(ctx, hotkeyStr); handled {
+			return available, err
 		}
 	}
 
@@ -338,12 +345,12 @@ func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) (isAvailable bool)
 		if registerErr == nil {
 			if unregisterErr := hk.unregister(ctx); unregisterErr != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("hotkey availability probe failed to unregister: hotkey=%s err=%s", hotkeyStr, unregisterErr.Error()))
-				return false
+				return false, nil
 			}
 			if attempt > 1 {
 				util.GetLogger().Info(ctx, fmt.Sprintf("hotkey availability probe recovered after retry: hotkey=%s attempt=%d", hotkeyStr, attempt))
 			}
-			return true
+			return true, nil
 		}
 
 		lastRegisterErr = registerErr
@@ -356,5 +363,5 @@ func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) (isAvailable bool)
 	if lastRegisterErr != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("hotkey availability probe unavailable after retries: hotkey=%s attempts=%d err=%s", hotkeyStr, availabilityProbeMaxAttempts, lastRegisterErr.Error()))
 	}
-	return false
+	return false, nil
 }

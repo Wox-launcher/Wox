@@ -265,7 +265,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			hotkeyBlocked = presentation.Error || (snapshot.general.Data.MainHotkeyRegistrationFailed && presentation.Value == snapshot.general.Data.MainHotkey)
 			hotkeyRecording = true
 		} else if hotkeyError {
-			hotkeyStatus = a.translate("i18n:ui_hotkey_conflict_system")
+			hotkeyStatus = a.translate(firstNonEmpty(snapshot.general.Data.MainHotkeyRegistrationError, "i18n:ui_hotkey_registration_failed"))
 		}
 		mainHotkeyLabels = formatHotkeyLabels(mainHotkey)
 		selectionHotkeyLabels = formatHotkeyLabels(snapshot.hotkey.Form.values["SelectionHotkey"])

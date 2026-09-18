@@ -49,6 +49,8 @@
   "ui_hotkey_conflict_selection": "이 단축키는 이미 선택 단축키로 사용 중입니다.",
   "ui_hotkey_conflict_query": "이 단축키는 이미 쿼리 단축키에서 사용 중입니다: {query}",
   "ui_hotkey_conflict_system": "이 단축키는 이미 다른 앱이나 시스템에서 사용 중입니다.",
+  "ui_hotkey_registration_unsupported": "현재 데스크톱 세션에서는 전역 단축키를 등록할 수 없습니다. 시스템 설정에서 단축키를 설정하세요.",
+  "ui_hotkey_registration_failed": "이 단축키를 등록하지 못했습니다. 권한과 데스크톱 환경의 지원 여부를 확인하세요.",
   "ui_hotkey_unavailable": "이 단축키는 사용할 수 없습니다.",
   "ui_main_hotkey_registration_failed": "기본 단축키 {hotkey}를 등록할 수 없습니다. 설정에서 변경하세요.",
   "ui_hotkey_wayland_evdev_hint": "보조 키 두 번 누르기 단축키(예: Ctrl 두 번 누르기)와 CapsLock 조합은 Wayland에서 추가 설정이 필요합니다. 가이드를 참조하여 활성화하세요.",

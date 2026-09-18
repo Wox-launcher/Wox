@@ -1,9 +1,16 @@
 package keyboard
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
+
+// ErrGlobalHotkeysUnavailable distinguishes a missing registration backend from a key conflict.
+var ErrGlobalHotkeysUnavailable = errors.New("global hotkey registration is unavailable in this desktop session")
+
+// ErrHotkeyConflict indicates a confirmed existing binding, rather than a backend failure.
+var ErrHotkeyConflict = errors.New("hotkey is already configured")
 
 // RawKeyboardDiagnostics snapshots backend health without collecting typed text.
 // Native counters are cumulative; compare snapshots around a recording session.
@@ -500,6 +507,16 @@ type GlobalHotkeySpec struct {
 var registerGlobalHotkeysPlatform func(specs []GlobalHotkeySpec) (registration HotkeyRegistration, handled bool, err error)
 var isWaylandGlobalShortcutsPortalAvailablePlatform func() bool
 var isHyprlandGlobalHotkeyAvailablePlatform func(modifiers Modifier, key Key) (bool, error)
+
+var isCosmicGlobalHotkeyAvailablePlatform func(modifiers Modifier, key Key) (bool, error)
+
+// IsCosmicGlobalHotkeyAvailable checks the COSMIC desktop's effective shortcut configuration.
+func IsCosmicGlobalHotkeyAvailable(modifiers Modifier, key Key) (bool, error) {
+	if isCosmicGlobalHotkeyAvailablePlatform == nil {
+		return false, ErrGlobalHotkeysUnavailable
+	}
+	return isCosmicGlobalHotkeyAvailablePlatform(modifiers, key)
+}
 
 type globalHotkeyGroupRegistration struct {
 	registrations []HotkeyRegistration

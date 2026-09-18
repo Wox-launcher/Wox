@@ -1,17 +1,25 @@
 package launcher
 
 import (
+	"runtime"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 )
 
 // settingsPalette owns fixed dark colors independently of launcher themes.
-// Translucent window and popup tints reveal their existing blur materials.
+// Settings and onboarding share this window background and popup palette.
 func settingsPalette() woxcomponent.ControlTheme {
 	text := woxui.Color{R: 245, G: 245, B: 247, A: 255}
 	white := woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	background := woxui.Color{R: 22, G: 22, B: 26, A: 191}
+	if runtime.GOOS == "linux" {
+		// Linux compositors can advertise blur without rendering it reliably.
+		// Keep Settings and onboarding opaque even when the protocol is available.
+		background.A = 255
+	}
 	return woxcomponent.ControlTheme{
-		Background:  woxui.Color{R: 22, G: 22, B: 26, A: 191},
+		Background:  background,
 		Surface:     woxui.Color{R: 22, G: 22, B: 26, A: 88},
 		ControlText: text, BodyText: text, ChromeText: woxui.Color{R: 168, G: 168, B: 179, A: 255},
 		Text: text, TextSecondary: woxui.Color{R: 168, G: 168, B: 179, A: 255},
