@@ -5,13 +5,11 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
-	"os"
 	"strconv"
 	"sync"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
@@ -41,7 +39,7 @@ var (
 
 var (
 	screenshotEditorFontOnce sync.Once
-	screenshotEditorFont     *opentype.Font
+	screenshotEditorFonts    []*opentype.Font
 	recordingKeycapFontOnce  sync.Once
 	recordingKeycapFont      *opentype.Font
 )
@@ -623,7 +621,7 @@ func drawScreenshotEditorPixelTriangle(target *image.RGBA, clip image.Rectangle,
 }
 
 func drawScreenshotEditorPixelText(target *image.RGBA, clip image.Rectangle, text string, position image.Point, size float32, color color.RGBA) {
-	drawScreenshotEditorPixelTextWithFont(target, clip, text, position, size, color, screenshotEditorExportFont())
+	drawScreenshotEditorPixelTextWithFonts(target, clip, text, position, size, color, screenshotEditorExportFonts())
 }
 
 // drawScreenshotEditorPixelTextWithFont lets encoded overlays choose a video-friendly weight.
@@ -650,17 +648,6 @@ func recordingKeycapExportFont() *opentype.Font {
 		recordingKeycapFont, _ = opentype.Parse(gobold.TTF)
 	})
 	return recordingKeycapFont
-}
-
-func screenshotEditorExportFont() *opentype.Font {
-	screenshotEditorFontOnce.Do(func() {
-		data, err := os.ReadFile("/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
-		if err != nil {
-			data = goregular.TTF
-		}
-		screenshotEditorFont, _ = opentype.Parse(data)
-	})
-	return screenshotEditorFont
 }
 
 func drawScreenshotEditorPixelMosaic(target *image.RGBA, clip image.Rectangle, points []Point, logicalRadius, scaleX, scaleY float32) {

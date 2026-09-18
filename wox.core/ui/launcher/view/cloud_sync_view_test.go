@@ -16,16 +16,17 @@ func TestCloudAccountPlanTooltipForwardsHover(t *testing.T) {
 		LoggedIn:   true,
 		LabelWidth: 520,
 		PlanLabel:  "Plan",
+		PlanTips:   "Free supports up to 2 devices and manual sync only. Pro allows unlimited devices and automatic sync.",
 		InfoIcon:   icon,
 		OnPlanTooltip: func(inside bool, bounds woxui.Rect) {
 			gotInside = inside
 			gotBounds = bounds
 		},
-	}, 830, 162, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	}, 830, 0, woxcomponent.ControlTheme{}).(woxwidget.Container)
 
 	column := card.Child.(woxwidget.Flex)
 	planRow := column.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
-	planLabel := planRow.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	planLabel := planRow.Children[0].(woxwidget.Container).Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	heading := planLabel.Children[0].(woxwidget.Flex)
 	tooltip := heading.Children[1].(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	bounds := woxui.Rect{X: 12, Y: 18, Width: 14, Height: 14}
@@ -36,12 +37,54 @@ func TestCloudAccountPlanTooltipForwardsHover(t *testing.T) {
 	}
 }
 
+func TestCloudAccountHelpTextWrapsInsteadOfClipping(t *testing.T) {
+	const planTips = "Free supports up to 2 devices and manual sync only. Pro allows unlimited devices and automatic sync."
+	const billingTips = "For any billing issue, email billing@woxlauncher.com and we will help resolve it."
+	card := cloudAccountCard(CloudAccountProps{
+		LoggedIn:     true,
+		LabelWidth:   520,
+		PlanLabel:    "Plan",
+		PlanTips:     planTips,
+		BillingLabel: "Billing Help",
+		BillingTips:  billingTips,
+		SupportLabel: "Contact Support",
+	}, 830, 0, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	if card.Height != 0 {
+		t.Fatalf("account card height = %v, want intrinsic height so wrapped tips are not clipped", card.Height)
+	}
+
+	column := card.Child.(woxwidget.Flex)
+	assertWrappingHelp := func(name string, field woxwidget.Widget, want string, labelWidth float32) {
+		t.Helper()
+		row := field.(woxwidget.Container)
+		if row.Height != 0 {
+			t.Fatalf("%s row height = %v, want intrinsic wrap", name, row.Height)
+		}
+		if row.Padding.Bottom != cloudHelpRowBottom {
+			t.Fatalf("%s bottom gap = %v, want %v so wrapped copy does not sit on the next title", name, row.Padding.Bottom, cloudHelpRowBottom)
+		}
+		label := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
+		tips := label.Children[1].(woxwidget.TextBlock)
+		if tips.Value != want || tips.Width != labelWidth || tips.Height != 0 {
+			t.Fatalf("%s tips = %q width %v height %v, want wrapping TextBlock", name, tips.Value, tips.Width, tips.Height)
+		}
+	}
+	assertWrappingHelp("plan", column.Children[1], planTips, 520)
+	assertWrappingHelp("billing", column.Children[2], billingTips, 520)
+
+	const deviceTips = "Pro plan has no synced device limit."
+	deviceHeader := cloudDeviceHeader(CloudDevicesProps{
+		LabelWidth: 520, SectionLabel: "Devices", Tips: deviceTips, RefreshLabel: "Refresh",
+	}, 830, woxcomponent.ControlTheme{})
+	assertWrappingHelp("devices", deviceHeader, deviceTips, 520)
+}
+
 func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	const width = float32(830)
 	const labelWidth = float32(520)
 	const gap = float32(32)
 
-	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{}}, width, 162, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{}}, width, 0, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	accountColumn := accountCard.Child.(woxwidget.Flex)
 	billingRow := accountColumn.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
 	supportValue := billingRow.Children[1].(woxwidget.Align)
@@ -94,7 +137,7 @@ func TestCloudSettingsActionsUseSharedButtonHeight(t *testing.T) {
 
 	account := cloudAccountCard(CloudAccountProps{
 		LoggedIn: true, LabelWidth: 520, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{},
-	}, 830, 162, theme).(woxwidget.Container)
+	}, 830, 0, theme).(woxwidget.Container)
 	accountRows := account.Child.(woxwidget.Flex)
 	billingRow := accountRows.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
 	if got := buttonHeight(billingRow.Children[1].(woxwidget.Align).Child); got != 32 {

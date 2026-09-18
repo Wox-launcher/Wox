@@ -17,8 +17,10 @@ type SettingFieldProps struct {
 	Background          woxui.Color
 	Padding             woxwidget.Insets
 	DescriptionMaxLines int
-	Child               woxwidget.Widget
-	Theme               ControlTheme
+	// LabelAccessory sits beside the title, such as a help icon. It does not replace the label.
+	LabelAccessory woxwidget.Widget
+	Child          woxwidget.Widget
+	Theme          ControlTheme
 }
 
 // WoxSettingField builds the shared horizontal settings field layout.
@@ -33,7 +35,13 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 	}
 	labelHeight := max(float32(0), height-props.Padding.Top-props.Padding.Bottom)
 	labelText := woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
-	var label woxwidget.Widget = woxwidget.Container{Width: props.LabelWidth, Height: labelHeight, Padding: woxwidget.Insets{Top: 6}, Child: labelText}
+	heading := woxwidget.Widget(labelText)
+	if props.LabelAccessory != nil {
+		heading = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			labelText, props.LabelAccessory,
+		}}
+	}
+	var label woxwidget.Widget = woxwidget.Container{Width: props.LabelWidth, Height: labelHeight, Padding: woxwidget.Insets{Top: 6}, Child: heading}
 	if props.Description != "" {
 		// Let help text determine row height; fixed single-line labels clipped translations.
 		description := woxwidget.TextBlock{
@@ -41,7 +49,7 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 			Style: woxui.TextStyle{Size: SettingsHelpFontSize}, LineHeight: 16, Color: props.Theme.TextSecondary,
 		}
 		label = woxwidget.Container{Width: props.LabelWidth, Child: woxwidget.Constrained{MinHeight: labelHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			labelText, description,
+			heading, description,
 		}}}}
 		height = 0
 	}

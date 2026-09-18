@@ -200,6 +200,9 @@ const CloudPluginExclusionDialogHeight = float32(164)
 
 const cloudSyncCardHeight = float32(66)
 
+// cloudHelpRowBottom keeps wrapped help copy from sitting on the next title or list row.
+const cloudHelpRowBottom = float32(16)
+
 // CloudSettingsPage builds the complete scrollable cloud settings route.
 func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
@@ -216,7 +219,8 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 	appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Account.SectionLabel, Width: contentWidth, Theme: props.Theme}))
 	accountHeight := float32(62)
 	if props.Account.LoggedIn {
-		accountHeight = 162
+		// Signed-in plan/billing copy wraps; a fixed 162-high card clipped the last word.
+		accountHeight = 0
 	}
 	appendChild(cloudAccountCard(props.Account, contentWidth, accountHeight, props.Theme))
 
@@ -438,6 +442,7 @@ func cloudAlpha(color woxui.Color, alpha uint8) woxui.Color {
 }
 
 // cloudAccountCard switches between account entry points and signed-in details.
+// height sizes the signed-out action row. Signed-in plan and billing copy wraps, so that card is measured from its fields.
 func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	if !props.LoggedIn {
 		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 2, Top: 10, Right: 2, Bottom: 10}, Child: woxwidget.Flex{
@@ -459,38 +464,30 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 		labelWidth = max(float32(220), width-390)
 	}
 	valueWidth := max(float32(220), availableWidth-labelWidth-labelGap)
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+	planHelp := woxwidget.Semantics{
+		Key: "cloud-plan-tooltip-key", AutomationID: "cloud-plan-tooltip", Role: woxui.AccessibilityRoleImage, Label: props.PlanLabel,
+		Child: woxwidget.Gesture{ID: "cloud-plan-tooltip-hover", OnHoverAt: func(inside bool, bounds woxui.Rect) {
+			if props.OnPlanTooltip != nil {
+				props.OnPlanTooltip(inside, bounds)
+			}
+		}, Child: woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}},
+	}
+	return woxwidget.Container{Width: width, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: availableWidth, Height: 34, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: props.EmailLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
 			cloudValueAction("cloud-account-action", props.Email, valueWidth, props.OnOpenAccountMenu, theme),
 		}}},
-		woxwidget.Container{Width: availableWidth, Height: 61, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: labelWidth, Height: 61, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-				woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: props.PlanLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
-					woxwidget.Semantics{
-						Key: "cloud-plan-tooltip-key", AutomationID: "cloud-plan-tooltip", Role: woxui.AccessibilityRoleImage, Label: props.PlanLabel,
-						Child: woxwidget.Gesture{ID: "cloud-plan-tooltip-hover", OnHoverAt: func(inside bool, bounds woxui.Rect) {
-							if props.OnPlanTooltip != nil {
-								props.OnPlanTooltip(inside, bounds)
-							}
-						}, Child: woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}},
-					},
-				}},
-				woxwidget.Text{Value: props.PlanTips, Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary},
-			}}},
-			cloudValueAction("cloud-plan-action", props.PlanStatus, valueWidth, props.OnOpenSubscriptionMenu, theme),
-		}}},
-		woxwidget.Container{Width: availableWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: labelWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.BillingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
-				woxwidget.Text{Value: props.BillingTips, Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary},
-			}}},
-			woxwidget.Align{Width: valueWidth, Height: 57, Horizontal: 1, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		cloudHelpField(woxcomponent.SettingFieldProps{
+			Label: props.PlanLabel, Description: props.PlanTips, Width: availableWidth, LabelWidth: labelWidth, Gap: labelGap,
+			LabelAccessory: planHelp, Child: cloudValueAction("cloud-plan-action", props.PlanStatus, valueWidth, props.OnOpenSubscriptionMenu, theme), Theme: theme,
+		}),
+		cloudHelpField(woxcomponent.SettingFieldProps{
+			Label: props.BillingLabel, Description: props.BillingTips, Width: availableWidth, LabelWidth: labelWidth, Gap: labelGap,
+			Child: woxwidget.Align{Width: valueWidth, Height: 34, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16,
 				Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnSupport, Theme: theme,
-			})},
-		}}},
+			})}, Theme: theme,
+		}),
 	}}}
 }
 
@@ -571,15 +568,17 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 		ID: "cloud-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, IconSize: 16,
 		Disabled: !props.RefreshEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnRefresh, Theme: theme,
 	})
-	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: labelWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Text},
-				woxwidget.TextBlock{Value: props.Tips, Width: labelWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.TextSecondary},
-			}}},
-			woxwidget.Align{Width: valueWidth, Height: 50, Horizontal: 1, Child: refresh},
-		},
-	}}
+	return cloudHelpField(woxcomponent.SettingFieldProps{
+		Label: props.SectionLabel, Description: props.Tips, Width: width, LabelWidth: labelWidth, Gap: labelGap,
+		DescriptionMaxLines: 2, Child: woxwidget.Align{Width: valueWidth, Height: 34, Horizontal: 1, Vertical: 0.5, Child: refresh}, Theme: theme,
+	})
+}
+
+// cloudHelpField is a settings row whose help text wraps and keeps a gap before the next title.
+func cloudHelpField(props woxcomponent.SettingFieldProps) woxwidget.Widget {
+	props.Height = woxcomponent.SettingsRowHeight
+	props.Padding = woxwidget.Insets{Bottom: cloudHelpRowBottom}
+	return woxcomponent.WoxSettingField(props)
 }
 
 // cloudDeviceCard renders device activity and optional revoke actions.
