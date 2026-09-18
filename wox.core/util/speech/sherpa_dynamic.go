@@ -567,7 +567,7 @@ func (r *sherpaOnlineRecognizer) GetResult() PartialResult {
 		return PartialResult{}
 	}
 	defer C.wox_sherpa_destroy_online_recognizer_result(result)
-	return PartialResult{Text: C.GoString(result.text)}
+	return PartialResult{Text: cleanRecognizerText(C.GoString(result.text))}
 }
 
 func (r *sherpaOnlineRecognizer) IsReady() bool {
@@ -608,6 +608,7 @@ func (r *sherpaOnlineRecognizer) Close() {
 type sherpaOfflineRecognizer struct {
 	config     RecognizerConfig
 	recognizer *C.struct_SherpaOnnxOfflineRecognizer
+	decodeMu   sync.Mutex
 }
 
 func newOfflineRecognizer(ctx context.Context, config RecognizerConfig) (Recognizer, error) {
@@ -695,6 +696,10 @@ func (r *sherpaOfflineRecognizer) DecodeSamples(samples []float32) string {
 	if len(samples) == 0 {
 		return ""
 	}
+
+	// The ONNX decoder is not safe to run on overlapping streams.
+	r.decodeMu.Lock()
+	defer r.decodeMu.Unlock()
 
 	stream := C.wox_sherpa_create_offline_stream(r.recognizer)
 	if stream == nil {

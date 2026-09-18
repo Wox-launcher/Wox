@@ -39,7 +39,8 @@ func IsKeyPressed(key Key) bool {
 
 // SimulateType types text into the currently focused window via the platform
 // input system. On macOS and Windows this uses native Unicode keyboard events
-// so the clipboard is not touched. On Linux it falls back to clipboard + paste
+// so the clipboard is not touched. Windows rejects multiline text; callers
+// must paste it to avoid submitting chat messages. On Linux it uses clipboard + paste
 // because uinput does not support direct Unicode injection.
 func SimulateType(text string) error {
 	return simulateType(text)

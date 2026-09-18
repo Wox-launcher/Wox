@@ -92,9 +92,7 @@ const char* setCapsLockState(int enabled) {
 }
 
 // simulateType sends Unicode text via SendInput with KEYEVENTF_UNICODE.
-// Each UTF-16 code unit is sent as a key press+release pair, which lets
-// the OS insert arbitrary Unicode text into the focused window without
-// touching the clipboard.
+// Multiline dictation is pasted by the caller; Return keys can submit messages.
 const char* simulateType(const unsigned short* codepoints, int count) {
     for (int i = 0; i < count; i++) {
         unsigned short cp = codepoints[i];
@@ -122,6 +120,7 @@ const char* simulateType(const unsigned short* codepoints, int count) {
 import "C"
 import (
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf16"
 )
@@ -199,6 +198,10 @@ func simulateType(text string) error {
 	if text == "" {
 		return nil
 	}
+	if strings.ContainsAny(text, "\r\n") {
+		return fmt.Errorf("multiline text requires clipboard paste on Windows")
+	}
+	waitModifiersRelease()
 	// Convert UTF-8 string to UTF-16 code units for KEYEVENTF_UNICODE.
 	codepoints := utf16.Encode([]rune(text))
 	if len(codepoints) == 0 {

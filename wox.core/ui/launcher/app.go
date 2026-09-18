@@ -272,6 +272,7 @@ type App struct {
 	terminalLayout                            textLayoutCache
 	previewLayouts                            map[string]*textLayoutCache
 	dictationAudio                            *dictationPreviewAudioState
+	dictationCompare                          *dictationModelCompareState
 	terminalPreview                           *terminalPreviewState
 
 	// queryFocusNotifiedInActiveWindow prevents the initial native activation

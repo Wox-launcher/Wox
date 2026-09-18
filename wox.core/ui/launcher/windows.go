@@ -439,7 +439,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.cloudSettings.SetPluginDialog(nil)
 	a.settingsTableEditor = nil
 	a.aiSettings.SetForm(nil)
-	a.aiSettings.SetModelManager(nil)
+	a.abandonModelManager()
 	a.generalSettings.SetForm(nil)
 	if !a.onboardingOpen {
 		a.hotkeySettings.ReleaseWindowMemory()

@@ -43,6 +43,36 @@ type DictationHistoryPreviewProps struct {
 	PlayLabel             string
 	PauseLabel            string
 	OnPlayDiagnosticAudio func(string)
+	CompareLabel          string
+	CompareAllLabel       string
+	CompareRunLabel       string
+	CompareRunningLabel   string
+	CompareEmptyLabel     string
+	CompareModels         []DictationModelCompareResult
+	CompareBusy           bool
+	OnCompareModel        func(string)
+	OnCompareAll          func()
+}
+
+// DictationModelCompareStatus is the decode lifecycle for one local model.
+type DictationModelCompareStatus string
+
+const (
+	DictationModelCompareIdle    DictationModelCompareStatus = ""
+	DictationModelCompareRunning DictationModelCompareStatus = "running"
+	DictationModelCompareDone    DictationModelCompareStatus = "done"
+	DictationModelCompareError   DictationModelCompareStatus = "error"
+)
+
+// DictationModelCompareResult is one model's decode of the raw diagnostic recording.
+type DictationModelCompareResult struct {
+	ID       string
+	Name     string
+	Status   DictationModelCompareStatus
+	Error    string
+	Text     string
+	Duration string
+	Layout   woxwidget.TextBlockLayout
 }
 
 // DictationHistoryPreviewView builds the Flutter-aligned transcript comparison surface.
@@ -87,6 +117,14 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
 			dictationAudioTrack("processed", props.ProcessedAudioLabel, props.ProcessedAudioPath, props.PlayLabel, props.PauseLabel, props.ProcessedPlayback, innerWidth, scaled, props.Theme, muted, props.OnPlayDiagnosticAudio),
 		)
+		if props.CompareModels != nil {
+			children = append(children,
+				dictationDivider(innerWidth, scaled, props.Theme.PreviewSplit),
+				dictationModelCompareHeader(props, innerWidth, scaled, muted),
+				woxwidget.Container{Width: innerWidth, Height: scaled(14)},
+				dictationModelCompareBody(props, innerWidth, scaled, muted),
+			)
+		}
 	}
 
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
@@ -199,6 +237,80 @@ func dictationAudioTrack(id, label, path, playLabel, pauseLabel string, playback
 func formatDictationPlaybackTime(value time.Duration) string {
 	seconds := max(0, int(value.Round(time.Second)/time.Second))
 	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
+}
+
+func dictationModelCompareHeader(props DictationHistoryPreviewProps, width float32, scaled func(float32) float32, muted woxui.Color) woxwidget.Widget {
+	header := dictationSectionHeader(props.CompareLabel, "", false, woxcomponent.ModelTrainingGlyph(scaled(16), dictationColorAlpha(muted, 0.7)), width, 0, scaled, muted)
+	if strings.TrimSpace(props.CompareAllLabel) == "" || len(props.CompareModels) == 0 {
+		return header
+	}
+	button := dictationCompareButton("dictation-compare-all", props.CompareAllLabel, props.CompareBusy, props.OnCompareAll, scaled, props.Theme)
+	return woxwidget.Container{Width: width, Height: scaled(28), Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaled(10), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: header},
+		button,
+	}}}
+}
+
+func dictationModelCompareBody(props DictationHistoryPreviewProps, width float32, scaled func(float32) float32, muted woxui.Color) woxwidget.Widget {
+	if len(props.CompareModels) == 0 {
+		return woxwidget.TextBlock{Value: props.CompareEmptyLabel, Width: width, Height: scaled(18), MaxLines: 2, Style: woxui.TextStyle{Size: scaled(12)}, LineHeight: scaled(18), Color: dictationColorAlpha(muted, 0.68)}
+	}
+	children := make([]woxwidget.Widget, 0, len(props.CompareModels)*2-1)
+	for i, model := range props.CompareModels {
+		if i > 0 {
+			children = append(children, woxwidget.Container{Width: width, Height: scaled(10)})
+		}
+		children = append(children, dictationModelCompareCard(model, props, width, scaled))
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
+}
+
+func dictationModelCompareCard(model DictationModelCompareResult, props DictationHistoryPreviewProps, width float32, scaled func(float32) float32) woxwidget.Widget {
+	innerWidth := max(float32(0), width-scaled(28))
+	runLabel := strings.TrimSpace(props.CompareRunLabel)
+	if model.Status == DictationModelCompareRunning {
+		runLabel = strings.TrimSpace(props.CompareRunningLabel)
+	}
+	if runLabel == "" {
+		runLabel = model.Name
+	}
+	title := model.Name
+	if strings.TrimSpace(model.Duration) != "" {
+		title = title + " · " + model.Duration
+	}
+	header := woxwidget.Container{Width: innerWidth, Height: scaled(28), Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaled(10), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: scaled(12), Weight: woxui.FontWeightSemibold}, Color: dictationColorAlpha(props.Theme.PreviewText, 0.88)}},
+		dictationCompareButton("dictation-compare-"+model.ID, runLabel, props.CompareBusy, func() {
+			if props.OnCompareModel != nil {
+				props.OnCompareModel(model.ID)
+			}
+		}, scaled, props.Theme),
+	}}}
+	children := []woxwidget.Widget{header}
+	if text := strings.TrimSpace(model.Error); text != "" {
+		errorColor := props.Theme.ErrorText
+		if errorColor.A == 0 {
+			errorColor = dictationColorAlpha(props.Theme.PreviewText, 0.72)
+		}
+		children = append(children, woxwidget.TextBlock{Value: text, Width: innerWidth, Height: scaled(36), MaxLines: 2, Style: woxui.TextStyle{Size: scaled(12)}, LineHeight: scaled(18), Color: errorColor})
+	}
+	if model.Status == DictationModelCompareDone || strings.TrimSpace(model.Text) != "" {
+		textHeight := max(scaled(22), model.Layout.Size.Height)
+		children = append(children, woxwidget.TextBlock{Value: model.Text, Width: innerWidth, Height: textHeight, Style: woxui.TextStyle{Size: scaled(14)}, LineHeight: scaled(22), Color: dictationColorAlpha(props.Theme.PreviewText, 0.86), Layout: &model.Layout})
+	}
+	return woxwidget.Container{
+		Width: width, Radius: scaled(12), Color: dictationColorAlpha(props.Theme.PreviewText, 0.025), BorderColor: dictationColorAlpha(props.Theme.PreviewSplit, 0.32), BorderWidth: 1,
+		Padding: woxwidget.Insets{Left: scaled(14), Top: scaled(12), Right: scaled(14), Bottom: scaled(12)},
+		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Gap: scaled(8), Children: children},
+	}
+}
+
+func dictationCompareButton(id, label string, disabled bool, onTap func(), scaled func(float32) float32, theme woxcomponent.Theme) woxwidget.Widget {
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: id, Label: label, IntrinsicWidth: true, Height: scaled(28), Radius: scaled(7), FontSize: scaled(11),
+		Padding: woxwidget.Insets{Left: scaled(10), Right: scaled(10)}, Variant: woxcomponent.ButtonOutline,
+		Disabled: disabled || onTap == nil, OnTap: onTap, Theme: theme.Controls,
+	})
 }
 
 func dictationColorAlpha(color woxui.Color, opacity float32) woxui.Color {

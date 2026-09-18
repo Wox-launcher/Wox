@@ -9,17 +9,13 @@ const (
 	audioSampleRate       = 16000
 	initialNoiseFloorDBFS = -60.0
 	voiceMarginDB         = 6.0
-	targetQuietSpeechDBFS = -24.0
-	maximumAdaptiveGainDB = 24.0
-	processorPeakLimit    = 0.95
-	processorSampleClamp  = 0.98
 	noiseFloorQuietTime   = time.Second
 	noiseFloorActiveTime  = 30 * time.Second
-	gainRiseTime          = 250 * time.Millisecond
-	gainFallTime          = 50 * time.Millisecond
+	previewPeakLimit      = 0.99
+	previewRMSTarget      = 0.40
 )
 
-// AudioProcessingStats describes cumulative level and gain measurements for a session.
+// AudioProcessingStats describes cumulative level measurements for a session.
 type AudioProcessingStats struct {
 	InputRMSDBFS      float64
 	InputPeakDBFS     float64
@@ -36,18 +32,14 @@ type audioCandidateRange struct {
 	EndSample   int
 }
 
-// AdaptiveAudioProcessor raises quiet speech while preserving normal-volume input.
+// AdaptiveAudioProcessor watches raw microphone levels for offline fallback.
+// It never rewrites recognition audio.
 type AdaptiveAudioProcessor struct {
-	noiseFloorDBFS float64
-	currentGainDB  float64
+	candidateFloorDBFS float64
 
-	inputSquares  float64
-	outputSquares float64
-	inputPeak     float64
-	outputPeak    float64
-	gainDBSamples float64
-	maximumGainDB float64
-	totalSamples  int64
+	inputSquares float64
+	inputPeak    float64
+	totalSamples int64
 
 	processedSamples int
 	candidateSamples int
@@ -56,11 +48,40 @@ type AdaptiveAudioProcessor struct {
 
 // NewAdaptiveAudioProcessor creates a processor with a conservative initial noise floor.
 func NewAdaptiveAudioProcessor() *AdaptiveAudioProcessor {
-	return &AdaptiveAudioProcessor{noiseFloorDBFS: initialNoiseFloorDBFS}
+	return &AdaptiveAudioProcessor{candidateFloorDBFS: initialNoiseFloorDBFS}
 }
 
-// Process enhances samples in place and updates session-level measurements.
-func (p *AdaptiveAudioProcessor) Process(samples []float32) {
+// applyPreviewVolume raises a copy of the waveform so preview playback is
+// audible. Isolated peaks may clip so quiet speech reaches the RMS target.
+func applyPreviewVolume(samples []float32) ([]float32, float64) {
+	out := append([]float32(nil), samples...)
+	peak := waveformPeak(out)
+	if peak <= 0 {
+		return out, 0
+	}
+	gain := previewPeakLimit / peak
+	if rms := waveformRMS(out); rms > 0 {
+		if rmsGain := previewRMSTarget / rms; rmsGain > gain {
+			gain = rmsGain
+		}
+	}
+	if gain <= 1 {
+		return out, 0
+	}
+	for i, sample := range out {
+		value := float64(sample) * gain
+		if value > previewPeakLimit {
+			value = previewPeakLimit
+		} else if value < -previewPeakLimit {
+			value = -previewPeakLimit
+		}
+		out[i] = float32(value)
+	}
+	return out, 20 * math.Log10(gain)
+}
+
+// Observe records raw levels and speech-like ranges without changing samples.
+func (p *AdaptiveAudioProcessor) Observe(samples []float32) {
 	if len(samples) == 0 {
 		return
 	}
@@ -75,76 +96,26 @@ func (p *AdaptiveAudioProcessor) Process(samples []float32) {
 		}
 	}
 
-	inputRMS := math.Sqrt(inputSquares / float64(len(samples)))
-	inputRMSDBFS := amplitudeToDBFS(inputRMS)
-	noiseBeforeUpdate := p.noiseFloorDBFS
-	isCandidate := inputRMSDBFS >= noiseBeforeUpdate+voiceMarginDB
+	inputRMSDBFS := amplitudeToDBFS(math.Sqrt(inputSquares / float64(len(samples))))
+	isCandidate := inputRMSDBFS >= p.candidateFloorDBFS+voiceMarginDB
 	chunkDuration := time.Duration(float64(time.Second) * float64(len(samples)) / audioSampleRate)
-
-	noiseTime := noiseFloorActiveTime
-	if !isCandidate {
-		noiseTime = noiseFloorQuietTime
-	}
-	noiseAlpha := smoothingAlpha(chunkDuration, noiseTime)
-	p.noiseFloorDBFS += noiseAlpha * (inputRMSDBFS - p.noiseFloorDBFS)
+	p.updateCandidateFloor(isCandidate, inputRMSDBFS, chunkDuration)
 	p.trackCandidateRange(isCandidate, len(samples))
 
-	desiredGainDB := 0.0
-	if isCandidate && inputRMSDBFS < targetQuietSpeechDBFS {
-		desiredGainDB = math.Min(targetQuietSpeechDBFS-inputRMSDBFS, maximumAdaptiveGainDB)
-	}
-	if inputPeak > 0 {
-		peakSafeGainDB := 20 * math.Log10(processorPeakLimit/inputPeak)
-		desiredGainDB = math.Min(desiredGainDB, math.Max(0, peakSafeGainDB))
-	}
-
-	startGainDB := p.currentGainDB
-	gainTime := gainFallTime
-	if desiredGainDB > startGainDB {
-		gainTime = gainRiseTime
-	}
-	p.currentGainDB += smoothingAlpha(chunkDuration, gainTime) * (desiredGainDB - p.currentGainDB)
-	endGainDB := p.currentGainDB
-
-	var outputSquares float64
-	var outputPeak float64
-	for i, sample := range samples {
-		progress := float64(i+1) / float64(len(samples))
-		gainDB := startGainDB + (endGainDB-startGainDB)*progress
-		value := float64(sample) * math.Pow(10, gainDB/20)
-		if value > processorPeakLimit {
-			value = processorPeakLimit
-		} else if value < -processorPeakLimit {
-			value = -processorPeakLimit
-		}
-		value = math.Max(-processorSampleClamp, math.Min(processorSampleClamp, value))
-		samples[i] = float32(value)
-		absolute := math.Abs(value)
-		outputSquares += absolute * absolute
-		if absolute > outputPeak {
-			outputPeak = absolute
-		}
-	}
-
 	p.inputSquares += inputSquares
-	p.outputSquares += outputSquares
 	p.inputPeak = math.Max(p.inputPeak, inputPeak)
-	p.outputPeak = math.Max(p.outputPeak, outputPeak)
-	p.gainDBSamples += ((startGainDB + endGainDB) / 2) * float64(len(samples))
-	p.maximumGainDB = math.Max(p.maximumGainDB, math.Max(startGainDB, endGainDB))
 	p.totalSamples += int64(len(samples))
 	p.processedSamples += len(samples)
 }
 
-// Stats returns cumulative processor measurements for logging and diagnostics.
+// Stats returns cumulative microphone measurements for logging and diagnostics.
 func (p *AdaptiveAudioProcessor) Stats() AudioProcessingStats {
 	stats := AudioProcessingStats{
 		InputRMSDBFS:      -120,
 		InputPeakDBFS:     -120,
 		OutputRMSDBFS:     -120,
 		OutputPeakDBFS:    -120,
-		NoiseFloorDBFS:    p.noiseFloorDBFS,
-		MaximumGainDB:     p.maximumGainDB,
+		NoiseFloorDBFS:    p.candidateFloorDBFS,
 		CandidateDuration: time.Duration(float64(time.Second) * float64(p.candidateSamples) / audioSampleRate),
 	}
 	if p.totalSamples == 0 {
@@ -152,31 +123,71 @@ func (p *AdaptiveAudioProcessor) Stats() AudioProcessingStats {
 	}
 	stats.InputRMSDBFS = amplitudeToDBFS(math.Sqrt(p.inputSquares / float64(p.totalSamples)))
 	stats.InputPeakDBFS = amplitudeToDBFS(p.inputPeak)
-	stats.OutputRMSDBFS = amplitudeToDBFS(math.Sqrt(p.outputSquares / float64(p.totalSamples)))
-	stats.OutputPeakDBFS = amplitudeToDBFS(p.outputPeak)
-	stats.AverageGainDB = p.gainDBSamples / float64(p.totalSamples)
 	return stats
 }
 
-// CandidateRanges returns speech-like intervals using processed sample offsets.
+// CandidateRanges returns speech-like intervals using raw sample offsets.
 func (p *AdaptiveAudioProcessor) CandidateRanges() []audioCandidateRange {
 	ranges := make([]audioCandidateRange, len(p.candidateRanges))
 	copy(ranges, p.candidateRanges)
 	return ranges
 }
 
-// trackCandidateRange merges adjacent candidate chunks into stable fallback regions.
+func (p *AdaptiveAudioProcessor) updateCandidateFloor(isCandidate bool, inputRMSDBFS float64, chunkDuration time.Duration) {
+	noiseTime := noiseFloorActiveTime
+	if !isCandidate {
+		noiseTime = noiseFloorQuietTime
+	}
+	p.candidateFloorDBFS += smoothingAlpha(chunkDuration, noiseTime) * (inputRMSDBFS - p.candidateFloorDBFS)
+}
+
 func (p *AdaptiveAudioProcessor) trackCandidateRange(candidate bool, sampleCount int) {
 	start := p.processedSamples
 	end := start + sampleCount
-	if candidate {
-		p.candidateSamples += sampleCount
-		if len(p.candidateRanges) > 0 && p.candidateRanges[len(p.candidateRanges)-1].EndSample == start {
-			p.candidateRanges[len(p.candidateRanges)-1].EndSample = end
-			return
-		}
-		p.candidateRanges = append(p.candidateRanges, audioCandidateRange{StartSample: start, EndSample: end})
+	if !candidate {
+		return
 	}
+	p.candidateSamples += sampleCount
+	if len(p.candidateRanges) > 0 && p.candidateRanges[len(p.candidateRanges)-1].EndSample == start {
+		p.candidateRanges[len(p.candidateRanges)-1].EndSample = end
+		return
+	}
+	p.candidateRanges = append(p.candidateRanges, audioCandidateRange{StartSample: start, EndSample: end})
+}
+
+// previewVolumeStats fills dump metadata for the constant preview gain.
+func previewVolumeStats(stats AudioProcessingStats, boosted []float32, gainDB float64) AudioProcessingStats {
+	stats.AverageGainDB = gainDB
+	stats.MaximumGainDB = gainDB
+	if len(boosted) == 0 {
+		return stats
+	}
+	stats.OutputRMSDBFS = amplitudeToDBFS(waveformRMS(boosted))
+	stats.OutputPeakDBFS = amplitudeToDBFS(waveformPeak(boosted))
+	return stats
+}
+
+func waveformPeak(samples []float32) float64 {
+	var peak float64
+	for _, sample := range samples {
+		value := math.Abs(float64(sample))
+		if value > peak {
+			peak = value
+		}
+	}
+	return peak
+}
+
+func waveformRMS(samples []float32) float64 {
+	if len(samples) == 0 {
+		return 0
+	}
+	var squares float64
+	for _, sample := range samples {
+		value := float64(sample)
+		squares += value * value
+	}
+	return math.Sqrt(squares / float64(len(samples)))
 }
 
 func smoothingAlpha(duration time.Duration, timeConstant time.Duration) float64 {

@@ -44,8 +44,58 @@ func TestDictationModelManagerHidesUnknownEngineStatus(t *testing.T) {
 	stack := overlay.(woxwidget.Stack)
 	menuStack := stack.Children[1].Child.(woxwidget.FocusScope).Child.(woxwidget.Stack)
 	content := menuStack.Children[0].Child.(woxwidget.Container)
-	if content.Height != ModelManagerRowHeight {
-		t.Fatalf("unknown engine menu height = %.0f, want model-only height %.0f", content.Height, ModelManagerRowHeight)
+	if content.Height != ModelManagerDropdownRowHeight {
+		t.Fatalf("unknown engine menu height = %.0f, want model-only height %.0f", content.Height, ModelManagerDropdownRowHeight)
+	}
+}
+
+func TestDictationModelManagerDropdownShowsLanguagesOnly(t *testing.T) {
+	detail := modelManagerDropdownDetail(ModelManagerOption{
+		Name: "Qwen3-ASR 0.6B", Languages: "Chinese, English, Japanese, Korean, Cantonese + 24 more", Description: "Alibaba Qwen3-ASR 0.6B. Offline recognition with VAD segmentation.",
+	}, []woxwidget.Widget{woxwidget.Text{Value: "Qwen3-ASR 0.6B"}}, woxcomponent.ControlTheme{})
+	children := detail.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(children) != 2 {
+		t.Fatalf("dropdown detail children = %d, want title and languages only", len(children))
+	}
+	languages := children[1].(woxwidget.TextBlock)
+	if languages.Value != "Chinese, English, Japanese, Korean, Cantonese + 24 more" || languages.MaxLines != 1 {
+		t.Fatalf("dropdown languages = %+v, want a single language line", languages)
+	}
+	for _, child := range children {
+		if text, ok := child.(woxwidget.TextBlock); ok && text.Value == "Alibaba Qwen3-ASR 0.6B. Offline recognition with VAD segmentation." {
+			t.Fatal("dropdown should not show the long model description")
+		}
+	}
+}
+
+func TestModelManagerTrailingBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, modelManagerTrailingProps{
+		Index: 1, State: "not_downloaded", Progress: 10, ActionLabel: "Download", ActionEnabled: true, DeleteLabel: "Delete", Width: 96,
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}, DownloadIcon: &woxui.Image{Width: 14, Height: 14}, DeleteIcon: &woxui.Image{Width: 16, Height: 16}, ErrorIcon: &woxui.Image{Width: 14, Height: 14},
+		OnAction: func() {}, OnDelete: func() {},
+	})
+}
+
+func TestModelManagerTrailingKeepsDownloadButtonWhenSiblingProgressChanges(t *testing.T) {
+	idle := modelManagerTrailingProps{Index: 2, State: "not_downloaded", ActionLabel: "Download", ActionEnabled: true, Width: 96}
+	if !idle.Equal(idle) {
+		t.Fatal("unchanged download trailing should stay equal across sibling progress ticks")
+	}
+	downloading := idle
+	downloading.Index = 1
+	downloading.State = "downloading"
+	downloading.Progress = 55
+	downloading.ActionLabel = "55%"
+	if idle.Equal(downloading) {
+		t.Fatal("downloading trailing must not reuse an idle download button")
+	}
+	button := modelManagerTrailing(idle).(woxwidget.Semantics)
+	if button.AutomationID != "model-action-2" || button.Label != "Download" || button.Role != woxui.AccessibilityRoleButton {
+		t.Fatalf("idle trailing = %+v, want an enabled download button", button)
+	}
+	progress := modelManagerTrailing(downloading).(woxwidget.Semantics)
+	if progress.AutomationID != "model-progress-1" || progress.Role != woxui.AccessibilityRoleProgressBar || progress.Value != "55%" {
+		t.Fatalf("downloading trailing = %+v, want a progress control", progress)
 	}
 }
 

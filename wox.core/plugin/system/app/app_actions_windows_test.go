@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"testing"
 	"wox/util"
 )
@@ -58,5 +59,41 @@ func TestBuildAppActionsOmitsFileActionsForAppsFolderEntries(t *testing.T) {
 		if action.Name == "i18n:plugin_app_open_containing_folder" || action.Name == "i18n:plugin_file_show_context_menu" {
 			t.Fatalf("unexpected file action %q", action.Name)
 		}
+	}
+}
+
+func TestBuildAppActionsIncludesCopyName(t *testing.T) {
+	actions := (&ApplicationPlugin{}).buildAppActions(appInfo{Name: "Notes", Path: `C:\Apps\Notes.exe`}, "Notes", nil)
+	hasCopyPath := false
+	hasCopyName := false
+	for _, action := range actions {
+		if action.Name == "i18n:plugin_app_copy_path" {
+			hasCopyPath = true
+		}
+		if action.Name == "i18n:plugin_app_copy_name" {
+			hasCopyName = true
+		}
+	}
+	if !hasCopyPath {
+		t.Fatal("expected copy path action")
+	}
+	if !hasCopyName {
+		t.Fatal("expected copy name action")
+	}
+}
+
+func TestAppCopyNamePrefersDisplayName(t *testing.T) {
+	info := appInfo{Name: "Code", Path: filepath.Join("Apps", "Code.exe")}
+	if got := appCopyName("Visual Studio Code", info); got != "Visual Studio Code" {
+		t.Fatalf("display name = %q, want Visual Studio Code", got)
+	}
+	if got := appCopyName("", info); got != "Code" {
+		t.Fatalf("indexed name = %q, want Code", got)
+	}
+	if got := appCopyName("", appInfo{Name: "i18n:plugin_app_windows_settings_system_display", Path: "ms-settings:display"}); got != "ms-settings:display" {
+		t.Fatalf("i18n fallback = %q, want ms-settings:display", got)
+	}
+	if got := appCopyName("", appInfo{Path: filepath.Join("Apps", "Notes.exe")}); got != "Notes.exe" {
+		t.Fatalf("path leaf = %q, want Notes.exe", got)
 	}
 }

@@ -342,7 +342,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 			a.pluginSettings.SetSearchFocused(false)
 		}
 		a.hotkeySettings.SetFocused(false)
-		a.aiSettings.SetModelManager(nil)
+		a.abandonModelManager()
 		a.cloudSettings.SetForm(nil)
 		a.cloudPlanTooltip = nil
 		a.cloudPlanTooltipRevision.Add(1)
@@ -860,7 +860,7 @@ func (a *App) selectSettingTab(tab string) {
 		a.settingsDemo = nil
 		a.settingsDemoRevision.Add(1)
 		if tab != "plugins" {
-			a.aiSettings.SetModelManager(nil)
+			a.abandonModelManager()
 		}
 		if themeEditor := a.themeSettings.ThemeEditor(); themeEditor != nil {
 			themeEditor.active = false

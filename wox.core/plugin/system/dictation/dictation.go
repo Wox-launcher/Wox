@@ -55,7 +55,9 @@ const (
 
 	// AI refinement timeout. Picked to cover a normal model response for a
 	// short dictation transcript while keeping the wait perceptible.
-	aiRefineTimeout = 5 * time.Second
+	aiRefineTimeout = 15 * time.Second
+	// Keep capturing briefly after release for trailing speech and device buffering.
+	dictationTailDuration = 250 * time.Millisecond
 
 	// Custom actions can ask the model to explain or transform selected text,
 	// so they get a longer timeout than default dictation cleanup.
@@ -139,6 +141,8 @@ type DictationPlugin struct {
 	sessionMu   sync.Mutex
 	session     *speech.Session
 	isRecording bool
+	// pendingOutput claims a session during tail capture without blocking cancellation.
+	pendingOutput *speech.Session
 	// isStarting tracks that startRecording is in progress (model loading,
 	// audio init). When the user releases the hotkey during this window,
 	// StopDictation sets pendingStop so startRecording can stop immediately
@@ -1418,25 +1422,19 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 // rewritten by the selected AI model; on failure or timeout it falls back to
 // the raw transcript and notifies the user.
 func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
-	// Restore system audio volume as early as possible.
-	p.stopVolumeDucking(ctx)
-
-	p.sessionMu.Lock()
-	session := p.session
-	action := p.activeAction
-	inputContext := p.activeInputContext
-	p.session = nil
-	p.isRecording = false
-	p.activeAction = dictationAction{}
-	p.activeInputContext = dictationActionInputContext{}
-	p.sessionMu.Unlock()
-
+	session, action, inputContext := p.takeRecordingForOutput(ctx, dictationTailDuration)
 	if session == nil {
 		return
 	}
 	p.setVoiceOverlayVisible(false)
 	p.showProcessingOverlay(ctx)
 
+	// Stop the mic first, then restore media immediately. Stop() still runs
+	// ASR after this and must not keep other apps muted.
+	if err := session.StopCapture(); err != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to stop dictation capture: %s", err.Error()))
+	}
+	p.stopVolumeDucking(ctx)
 	text, err := session.Stop()
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to stop dictation session: %s", err.Error()))
@@ -1472,6 +1470,10 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	p.closeDictationOverlay()
 	p.playSoundIfEnabled(ctx, soundStop)
 
+	if strings.TrimSpace(outputText) == "" {
+		return
+	}
+
 	// Wait briefly for the overlay to close and focus to return to the
 	// previously focused window.
 	time.Sleep(100 * time.Millisecond)
@@ -1479,6 +1481,40 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to output dictation action %s: %s", action.ID, err.Error()))
 		p.api.Notify(ctx, err.Error())
 	}
+}
+
+// takeRecordingForOutput keeps capture alive for the tail, then atomically
+// detaches the same session. Cancellation/unload can still remove it while waiting.
+func (p *DictationPlugin) takeRecordingForOutput(ctx context.Context, tail time.Duration) (*speech.Session, dictationAction, dictationActionInputContext) {
+	p.sessionMu.Lock()
+	session := p.session
+	if session == nil || p.pendingOutput == session {
+		p.sessionMu.Unlock()
+		return nil, dictationAction{}, dictationActionInputContext{}
+	}
+	p.pendingOutput = session
+	p.sessionMu.Unlock()
+
+	timer := time.NewTimer(tail)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	p.sessionMu.Lock()
+	defer p.sessionMu.Unlock()
+	if p.pendingOutput == session {
+		p.pendingOutput = nil
+	}
+	if ctx.Err() != nil || p.session != session {
+		return nil, dictationAction{}, dictationActionInputContext{}
+	}
+	action, inputContext := p.activeAction, p.activeInputContext
+	p.session = nil
+	p.isRecording = false
+	p.activeAction = dictationAction{}
+	p.activeInputContext = dictationActionInputContext{}
+	return session, action, inputContext
 }
 
 func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictationAction, rawText string, inputContext dictationActionInputContext) (outputText string, historyText string, usedAI bool, ok bool) {
@@ -1552,10 +1588,15 @@ func (p *DictationPlugin) prepareDefaultActionOutput(ctx context.Context, action
 // whether refinement succeeded. On failure or when no model is selected it
 // notifies the user and returns the original text unchanged.
 func (p *DictationPlugin) refineTranscript(ctx context.Context, action dictationAction, rawText string) (string, bool) {
+	cleaned, skip := prepareDictationRefineInput(rawText)
+	if skip {
+		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: skip AI refine for empty or decoder-junk transcript")
+		return "", false
+	}
 	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
 	if !modelOk {
 		p.api.Notify(ctx, "plugin_dictation_ai_no_model")
-		return rawText, false
+		return cleaned, false
 	}
 	recentCtx := p.history.recentContext(util.GetSystemTimestamp())
 	p.showRefiningOverlay(ctx)
@@ -1563,7 +1604,7 @@ func (p *DictationPlugin) refineTranscript(ctx context.Context, action dictation
 	if p.dictionary != nil {
 		phrases = p.dictionary.activePhrases()
 	}
-	refined, refineErr := p.refineWithAI(ctx, model, rawText, recentCtx, phrases)
+	refined, refineErr := p.refineWithAI(ctx, model, cleaned, recentCtx, phrases)
 	if refineErr != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
 		if strings.Contains(refineErr.Error(), "timeout") {
@@ -1571,12 +1612,14 @@ func (p *DictationPlugin) refineTranscript(ctx context.Context, action dictation
 		} else {
 			p.api.Notify(ctx, "plugin_dictation_ai_failed")
 		}
-		return rawText, false
+		return cleaned, false
 	}
-	if strings.TrimSpace(refined) == "" {
-		return rawText, false
+	refined = sanitizeDictationRefineOutput(cleaned, refined)
+	if refined == "" {
+		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: dropped AI refine reply that was empty or not a transcript")
+		return cleaned, false
 	}
-	return strings.TrimSpace(refined), true
+	return refined, true
 }
 
 // parseActionAIModel parses the JSON-encoded common.Model stored in an action.
@@ -1604,7 +1647,19 @@ func (p *DictationPlugin) executeActionOutput(ctx context.Context, action dictat
 	case dictationActionOutputChat:
 		return p.openActionChat(ctx, action, rawText, inputContext)
 	default:
-		if err := keyboard.SimulateType(outputText); err != nil {
+		var err error
+		if runtime.GOOS == "windows" && strings.ContainsAny(outputText, "\r\n") {
+			// Paste the whole message: Enter (and sometimes Shift+Enter) can
+			// submit a chat message instead of inserting a line break.
+			text := strings.ReplaceAll(strings.ReplaceAll(outputText, "\r\n", "\n"), "\r", "\n")
+			err = clipboard.WriteText(strings.ReplaceAll(text, "\n", "\r\n"))
+			if err == nil {
+				err = keyboard.SimulatePaste()
+			}
+		} else {
+			err = keyboard.SimulateType(outputText)
+		}
+		if err != nil {
 			// On Linux, SimulateType writes to the clipboard and injects
 			// Ctrl+V via uinput. Some compositors silently swallow injected
 			// key events, so the recognized text would be lost. Fall back to
@@ -1791,62 +1846,18 @@ func (p *DictationPlugin) showProcessingOverlay(ctx context.Context) {
 // the refined text. It blocks until the stream finishes, fails, or the
 // timeout elapses; on timeout it returns an error mentioning "timeout" so the
 // caller can surface a dedicated message.
-//
-// recentContext carries the finalized transcripts from the last few minutes
-// (oldest-first). It lets the model understand pronouns, tense, and topic
-// continuity across consecutive dictations. The current utterance is the only
-// text that should be output; context is provided for reference only.
-//
-// phrases is the user's dictionary: words/phrases the AI should recognize and
-// spell correctly in the refined output.
 func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string, recentContext []string, phrases []string) (string, error) {
 	refineCtx, cancel := context.WithTimeout(ctx, aiRefineTimeout)
 	defer cancel()
 
-	systemPrompt := strings.Join([]string{
-		"You are a transcription editor. Turn the user's voice-dictation transcript into fluent, coherent, easy-to-understand text while preserving the intended meaning, language, and register.",
-		"First correct likely speech-recognition errors, including homophones, near-homophones, wrong word boundaries, missing or extra words or characters, and malformed domain terms. Infer the intended wording from the full sentence, previous dictation context, and user dictionary.",
-		"If the literal transcript is nonsensical, ungrammatical, or contradicts its surrounding context, do not preserve it mechanically; replace it with the most contextually plausible wording that expresses the user's evident intent.",
-		"Do not translate. Keep the user's tone, formality, slang, profanity, placeholders, proper nouns, identifiers, numbers, URLs, and code terms when they make sense in context. Latin letters alone do not prove that a nearby nonsensical phrase is an identifier or code term.",
-		"Remove filler words (um, uh, like, you know), obvious stutters, repeated words, disfluencies, sentence fragments, and false starts.",
-		"Apply capitalization, punctuation, and paragraph breaks based on grammar and meaning, not speech pauses. Merge fragments that belong to the same sentence, and remove punctuation that splits a natural phrase or clause.",
-		"Apply explicit self-corrections, and drop content the user clearly retracted.",
-		"Examples of intended correction behavior: in a discussion about AI text refinement, '后AI用色没有多大的效果' should become '然后，AI润色没有多大效果'; '改为单击就可以，更正' should become '改为单击就可以更正'. These are examples only; never repeat them unless they are the user's actual text.",
-		"Use numbered or bulleted lists only when the dictation clearly signals an enumeration; otherwise keep plain paragraphs.",
-		"Before answering, silently verify that every sentence is grammatically and semantically coherent. Return the transcript unchanged only when it is already natural and unambiguous.",
-		"Do not add new facts, commands, explanations, quotes, or unrelated formatting. Output only the refined text.",
-	}, " ")
-
-	var userPrompt string
-	if len(recentContext) > 0 || len(phrases) > 0 {
-		var ctxBuf strings.Builder
-		if len(phrases) > 0 {
-			ctxBuf.WriteString("User dictionary (authoritative spelling; normalize likely phonetic or ASR variants to these forms): ")
-			ctxBuf.WriteString(strings.Join(phrases, ", "))
-			ctxBuf.WriteString("\n\n")
-		}
-		if len(recentContext) > 0 {
-			ctxBuf.WriteString("Previous dictation context (use it to disambiguate recurring terms and intended meaning; do not repeat or rewrite these):\n")
-			for i, c := range recentContext {
-				ctxBuf.WriteString(fmt.Sprintf("%d. %s\n", i+1, c))
-			}
-			ctxBuf.WriteString("\n")
-		}
-		ctxBuf.WriteString("Now refine the following new dictation:\n")
-		ctxBuf.WriteString(rawText)
-		userPrompt = ctxBuf.String()
-	} else {
-		userPrompt = rawText
-	}
-
 	conversations := []common.Conversation{
 		{
 			Role: common.ConversationRoleSystem,
-			Text: systemPrompt,
+			Text: dictationRefineSystemPrompt,
 		},
 		{
 			Role: common.ConversationRoleUser,
-			Text: userPrompt,
+			Text: buildDictationRefineUserPrompt(rawText, recentContext, phrases),
 		},
 	}
 

@@ -446,6 +446,55 @@ func (m *ModelManager) ModelsDir() string {
 	return m.modelsDir
 }
 
+// ModelDisplayName returns the catalog label when the local model is a known
+// download, otherwise the on-disk directory name.
+func ModelDisplayName(model LocalModel) string {
+	for _, rec := range RecommendedModels {
+		if rec.ID == model.ID {
+			return rec.DisplayName
+		}
+	}
+	if name := strings.TrimSpace(model.DisplayName); name != "" {
+		return name
+	}
+	return model.ID
+}
+
+// ListOfflineLocalModels returns downloaded non-streaming recognizers, catalog
+// models first so comparison UI matches the model manager order.
+func ListOfflineLocalModels(modelsDir string) ([]LocalModel, error) {
+	manager, err := NewModelManager(modelsDir)
+	if err != nil {
+		return nil, err
+	}
+	models, err := manager.ListLocalModels()
+	if err != nil {
+		return nil, err
+	}
+	return orderOfflineLocalModels(models), nil
+}
+
+func orderOfflineLocalModels(models []LocalModel) []LocalModel {
+	ordered := make([]LocalModel, 0, len(models))
+	seen := make(map[string]bool, len(models))
+	for _, rec := range RecommendedModels {
+		for _, model := range models {
+			if model.ID != rec.ID || IsStreamingModelType(model.ModelType) {
+				continue
+			}
+			ordered = append(ordered, model)
+			seen[model.ID] = true
+		}
+	}
+	for _, model := range models {
+		if seen[model.ID] || IsStreamingModelType(model.ModelType) {
+			continue
+		}
+		ordered = append(ordered, model)
+	}
+	return ordered
+}
+
 // InspectModelDir checks whether a directory contains a valid model and
 // returns its info. Returns (info, false) if not valid.
 func (m *ModelManager) InspectModelDir(dir string) (LocalModel, bool) {

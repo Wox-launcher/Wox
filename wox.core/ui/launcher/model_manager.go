@@ -31,10 +31,13 @@ type modelManagerState struct {
 	selectedRow int
 	engine      modelEngineStatus
 	loading     bool
-	busy        string
-	error       string
-	anchor      woxui.Rect
-	anchored    bool
+	// refreshing is an in-flight status fetch. It must not be treated as UI
+	// loading, or progress polls disable sibling Download buttons and make them flash.
+	refreshing bool
+	busy       string
+	error      string
+	anchor     woxui.Rect
+	anchored   bool
 }
 
 type modelManagerSnapshot struct {
@@ -84,10 +87,10 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 			case "failed":
 				engineLabel = "Engine failed"
 				engineButtonLabel = "Retry engine"
-				engineEnabled = snapshot.busy == "" && !snapshot.loading
+				engineEnabled = snapshot.busy == ""
 			default:
 				engineLabel = "Inference engine is not installed"
-				engineEnabled = snapshot.busy == "" && !snapshot.loading
+				engineEnabled = snapshot.busy == ""
 			}
 		}
 	}
@@ -98,7 +101,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 	for index, option := range snapshot.options {
 		selected := modelOptionID(option) == snapshot.selected
 		usable := modelOptionUsable(snapshot.kind, option)
-		actionState := resolveModelManagerOptionAction(snapshot.kind, option, selected, snapshot.busy != "" || snapshot.loading, downloadLabel, retryLabel, extractingLabel, finalizingLabel)
+		actionState := resolveModelManagerOptionAction(snapshot.kind, option, selected, snapshot.busy != "", downloadLabel, retryLabel, extractingLabel, finalizingLabel)
 		action := func() { a.runModelManagerAction(actionState.operation, index) }
 		if actionState.operation == "select" {
 			action = func() { a.chooseManagedModel(index) }
@@ -286,14 +289,11 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	shouldLoad := false
 	kind := ""
 	if err := a.runOnUI("start refreshing model manager", func() {
-		if !a.modelManagerCurrentLocked(state) || state.loading {
+		if !a.modelManagerCurrentLocked(state) || !beginModelManagerRefresh(state) {
 			return
 		}
-		state.loading = true
-		state.error = ""
 		kind = state.kind
 		shouldLoad = true
-		a.invalidateSettingsWindow()
 	}); err != nil || !shouldLoad {
 		return
 	}
@@ -319,25 +319,32 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	engine.Known = engineErr == nil
 
 	_ = a.runOnUI("apply model manager refresh", func() {
+		// Always drop the latch, even when the user left Plugins mid-fetch.
+		// Otherwise later Refresh clicks see refreshing=true and do nothing.
+		finishModelManagerRefresh(state)
 		if !a.modelManagerCurrentLocked(state) {
 			return
 		}
-		state.loading = false
+		changed := false
 		if statusErr == nil {
-			mergeModelStatuses(state.options, statuses)
+			if mergeModelStatuses(state.options, statuses) {
+				changed = true
+			}
 			if state.selected == "" {
 				for _, option := range state.options {
 					if modelOptionUsable(state.kind, option) {
 						state.selected = modelOptionID(option)
 						key := state.target.definitions[state.fieldIndex].Value.Key
 						state.target.values[key] = state.selected
+						changed = true
 						break
 					}
 				}
 			}
 		}
-		if engineErr == nil {
+		if engineErr == nil && state.engine != engine {
 			state.engine = engine
+			changed = true
 		}
 		errors := make([]string, 0, 2)
 		if statusErr != nil {
@@ -346,10 +353,15 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 		if engineErr != nil {
 			errors = append(errors, "engine: "+engineErr.Error())
 		}
-		state.error = strings.Join(errors, " · ")
-		state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
+		if nextError := strings.Join(errors, " · "); state.error != nextError {
+			state.error = nextError
+			changed = true
+		}
+		if changed {
+			state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
+			a.invalidateSettingsWindow()
+		}
 		poll := modelManagerNeedsPoll(state)
-		a.invalidateSettingsWindow()
 		if poll {
 			time.AfterFunc(time.Second, func() {
 				util.Go(a.lifecycleCtx, "poll model manager", func() {
@@ -360,19 +372,40 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	})
 }
 
-func mergeModelStatuses(options []formOption, statuses []formOption) {
+func mergeModelStatuses(options []formOption, statuses []formOption) bool {
+	changed := false
 	for _, status := range statuses {
 		id := modelOptionID(status)
 		for index := range options {
 			if modelOptionID(options[index]) != id {
 				continue
 			}
-			options[index].Status = status.Status
-			options[index].DownloadProgress = status.DownloadProgress
-			options[index].SizeMB = status.SizeMB
-			options[index].Error = status.Error
+			if options[index].Status != status.Status || options[index].DownloadProgress != status.DownloadProgress || options[index].SizeMB != status.SizeMB || options[index].Error != status.Error {
+				options[index].Status = status.Status
+				options[index].DownloadProgress = status.DownloadProgress
+				options[index].SizeMB = status.SizeMB
+				options[index].Error = status.Error
+				changed = true
+			}
 			break
 		}
+	}
+	return changed
+}
+
+// beginModelManagerRefresh claims the in-flight fetch without disabling row actions.
+func beginModelManagerRefresh(state *modelManagerState) bool {
+	if state == nil || state.refreshing {
+		return false
+	}
+	state.refreshing = true
+	return true
+}
+
+// finishModelManagerRefresh clears the in-flight fetch so the next poll can start.
+func finishModelManagerRefresh(state *modelManagerState) {
+	if state != nil {
+		state.refreshing = false
 	}
 }
 
@@ -381,6 +414,7 @@ func (a *App) closeModelManager() {
 	if state == nil {
 		return
 	}
+	finishModelManagerRefresh(state)
 	pluginForm := a.pluginSettings.Form()
 	if pluginForm != nil && state.target == &pluginForm.formFieldsState {
 		pluginForm.active = true
@@ -388,6 +422,18 @@ func (a *App) closeModelManager() {
 	}
 	a.aiSettings.SetModelManager(nil)
 	a.invalidateSettingsWindow()
+}
+
+// abandonModelManager closes the overlay and clears an in-flight refresh latch
+// so leaving Plugins cannot permanently disable Refresh.
+func (a *App) abandonModelManager() {
+	if a.aiSettings == nil {
+		return
+	}
+	if state := a.aiSettings.ModelManager(); state != nil {
+		finishModelManagerRefresh(state)
+		a.aiSettings.SetModelManager(nil)
+	}
 }
 
 func (a *App) selectModelManagerRow(index int) {
@@ -450,6 +496,7 @@ func (a *App) runModelManagerAction(action string, index int) {
 		cancel()
 		_ = a.runOnUI("apply model manager action", func() {
 			if !a.modelManagerCurrentLocked(state) {
+				state.busy = ""
 				return
 			}
 			state.busy = ""

@@ -32,7 +32,10 @@ func DefaultVadConfig(modelPath string) VadConfig {
 		MinSilenceDuration: 0.5,
 		MinSpeechDuration:  0.15,
 		WindowSize:         512,
-		MaxSpeechDuration:  5.0,
-		NumThreads:         1,
+		// Offline ASR treats each VAD segment as a complete utterance.
+		// A 5s cut in the middle of a sentence makes Qwen3 hallucinate
+		// control tokens and decoder fragments.
+		MaxSpeechDuration: 20.0,
+		NumThreads:        1,
 	}
 }

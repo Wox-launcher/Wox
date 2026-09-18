@@ -906,6 +906,18 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 	})
 
 	actions = append(actions, plugin.QueryResultAction{
+		Name:        "i18n:plugin_app_copy_name",
+		Icon:        icons.Get(icons.ActionCopy),
+		ContextData: contextData,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if err := clipboard.WriteText(appCopyName(displayName, info)); err != nil {
+				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error copying app name: %s", err.Error()))
+				a.api.Notify(ctx, err.Error())
+			}
+		},
+	})
+
+	actions = append(actions, plugin.QueryResultAction{
 		Name:        "i18n:plugin_app_hide",
 		Icon:        icons.Get(icons.ActionHide),
 		ContextData: contextData,
@@ -944,6 +956,22 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 	actions = append(actions, a.buildIndexAppsAction())
 
 	return actions
+}
+
+// appCopyName prefers the visible result title and falls back to the path leaf.
+func appCopyName(displayName string, info appInfo) string {
+	if trimmed := strings.TrimSpace(displayName); trimmed != "" {
+		return trimmed
+	}
+	if trimmed := strings.TrimSpace(info.Name); trimmed != "" && !strings.HasPrefix(trimmed, "i18n:") {
+		return trimmed
+	}
+	clean := filepath.Clean(strings.TrimSpace(info.Path))
+	base := filepath.Base(clean)
+	if base == "" || base == "." || base == string(os.PathSeparator) {
+		return clean
+	}
+	return base
 }
 
 // buildIndexAppsAction exposes the shared full-index operation on each app result.

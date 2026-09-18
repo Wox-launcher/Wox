@@ -51,8 +51,8 @@ body:
     id: wox_version
     attributes:
       label: Wox Version
-      description: You can find it in Wox Settings -> About
-      placeholder: v2.0.0
+      description: In Wox, type `copy version` to copy the current version. You can also find it in Settings -> About.
+      placeholder: 2.4.4
     validations:
       required: false
 

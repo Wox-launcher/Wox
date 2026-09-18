@@ -1006,6 +1006,9 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 		if a.dictationAudio != nil {
 			state = append(state, a.dictationAudio.revision, a.dictationAudio.path, a.dictationAudio.snapshot)
 		}
+		if a.dictationCompare != nil {
+			state = append(state, a.dictationCompare.revision, a.dictationCompare.sessionKey, a.dictationCompare.busy, a.dictationCompare.models)
+		}
 	case "file":
 		filePreview := a.filePreviewFor(resolved.PreviewData)
 		state = append(state, filePreview)

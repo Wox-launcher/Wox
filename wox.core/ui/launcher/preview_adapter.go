@@ -390,7 +390,7 @@ func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHisto
 		metrics, _ := a.window.MeasureText(status, woxui.TextStyle{Size: scaled(11)})
 		statusWidth = scaled(17) + metrics.Size.Width
 	}
-	return previewview.DictationHistoryPreviewView(previewview.DictationHistoryPreviewProps{
+	props := previewview.DictationHistoryPreviewProps{
 		ID: scrollKey, Width: width, Height: height, Scale: scale, Theme: palette.componentTheme(),
 		RefinedText: data.RefinedText, OriginalText: data.OriginalText, RefinedLabel: data.RefinedLabel, OriginalLabel: data.OriginalLabel,
 		StatusLabel: data.StatusLabel, IsChanged: data.IsChanged, RefinedLayout: refinedLayout, OriginalLayout: originalLayout, StatusWidth: statusWidth,
@@ -398,7 +398,21 @@ func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHisto
 		ProcessedAudioLabel: data.ProcessedAudioLabel, ProcessedAudioPath: data.ProcessedAudioPath,
 		RawPlayback: dictationPlaybackProps(a.dictationAudioSnapshot(data.RawAudioPath)), ProcessedPlayback: dictationPlaybackProps(a.dictationAudioSnapshot(data.ProcessedAudioPath)),
 		PlayLabel: a.translate("i18n:plugin_mediaplayer_play"), PauseLabel: a.translate("i18n:plugin_mediaplayer_pause"), OnPlayDiagnosticAudio: a.toggleDictationAudio,
-	})
+	}
+	if a.isDev && strings.TrimSpace(data.RawAudioPath) != "" && strings.TrimSpace(data.ProcessedAudioPath) != "" {
+		compare := a.ensureDictationModelCompare(data.RawAudioPath)
+		compareTextWidth := max(float32(0), innerWidth-scaled(28))
+		props.CompareLabel = a.translate("i18n:plugin_dictation_history_model_compare")
+		props.CompareAllLabel = a.translate("i18n:plugin_dictation_history_model_compare_run_all")
+		props.CompareRunLabel = a.translate("i18n:plugin_dictation_history_model_compare_run")
+		props.CompareRunningLabel = a.translate("i18n:plugin_dictation_history_model_compare_running")
+		props.CompareEmptyLabel = a.translate("i18n:plugin_dictation_history_model_compare_empty")
+		props.CompareModels = a.dictationModelCompareProps(compare, scrollKey, a.translate("i18n:plugin_dictation_history_model_compare_empty_result"), originalStyle, compareTextWidth, scaled(22))
+		props.CompareBusy = compare.busy
+		props.OnCompareModel = a.compareDictationModel
+		props.OnCompareAll = a.compareAllDictationModels
+	}
+	return previewview.DictationHistoryPreviewView(props)
 }
 
 func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {

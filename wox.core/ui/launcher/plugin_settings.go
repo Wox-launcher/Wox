@@ -549,7 +549,7 @@ func (a *App) setPluginSelectionLocked(index int) {
 			return
 		}
 	}
-	a.aiSettings.SetModelManager(nil)
+	a.abandonModelManager()
 	// Only a change of plugin resets the detail tab. Catalog reloads and post-save
 	// definition refreshes re-run this for the already selected plugin, and jumping
 	// back to Settings there loses the Trigger Keywords tab the user just edited in.
