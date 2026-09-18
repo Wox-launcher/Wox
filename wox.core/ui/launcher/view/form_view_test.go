@@ -254,6 +254,34 @@ func TestFormHotkeyFieldShrinksSettingsLabelToKeepRecorderVisible(t *testing.T) 
 	}
 }
 
+func TestFormAIModelFieldOffersAISettingsWhenNoModelSelected(t *testing.T) {
+	opened := false
+	field := FormAIModelField(FormAIModelFieldProps{
+		ID: "default-model", Label: "AI model", Provider: "Not selected", Model: "",
+		ModelsAvailable: false, ManageLabel: "Open AI settings", OnManageModels: func() { opened = true },
+		Width: 920, Height: 44, LabelWidth: 180, Theme: woxcomponent.ControlTheme{},
+	})
+	stateful := field.(woxwidget.Stateful)
+	state := &formAIModelFieldState{}
+	state.InitState(woxwidget.StateContext{}, stateful.Widget)
+	built := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Container)
+	row := built.Child.(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	controls := controlColumn.Children[0].(woxwidget.Flex)
+	action := controls.Children[2].(woxwidget.Stateful)
+	if action.Key != "default-model-manage" {
+		t.Fatalf("empty AI model action key = %q, want the AI settings link", action.Key)
+	}
+	props := action.Widget.(woxcomponent.IconButtonProps)
+	if props.Disabled || props.OnTap == nil {
+		t.Fatal("AI settings link should stay enabled when no model is selected")
+	}
+	props.OnTap()
+	if !opened {
+		t.Fatal("AI settings link should invoke OnManageModels")
+	}
+}
+
 func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 	field := FormAIModelField(FormAIModelFieldProps{
 		ID: "default-model", Label: "Default model", Provider: "deepseek", Model: "deepseek-v4-flash",

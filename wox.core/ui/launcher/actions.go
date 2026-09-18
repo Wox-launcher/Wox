@@ -32,6 +32,8 @@ const (
 	localActionWebViewGoBackID        = "webview-go-back"
 	localActionWebViewGoForwardID     = "webview-go-forward"
 	localActionWebViewOpenInBrowserID = "webview-open-in-browser"
+	localActionWebViewHidePageID      = "webview-hide-page"
+	localActionWebViewClosePageID     = "webview-close-page"
 	localActionWebViewOpenDevToolsID  = "webview-open-dev-tools"
 )
 
@@ -59,11 +61,11 @@ func actionPanelBaseHeightForPalette(palette uiPalette) float32 {
 }
 
 // webViewLocalActionPanelEntries exposes preview-owned browser commands without adding them to plugin results.
-func webViewLocalActionPanelEntries(results []queryResult, selected int, goos string) []actionPanelEntry {
+func webViewLocalActionPanelEntries(results []queryResult, selected int, goos string, hidePage bool) []actionPanelEntry {
 	if (goos != "darwin" && goos != "windows") || selected < 0 || selected >= len(results) || results[selected].IsGroup || results[selected].Preview.PreviewType != "webview" {
 		return nil
 	}
-	return []actionPanelEntry{
+	entries := []actionPanelEntry{
 		{
 			Key: "local:webview:reload", ID: localActionWebViewReloadID, Name: "i18n:ui_action_webview_refresh",
 			Icon: settingControlIconSource("refresh"), Hotkey: primaryHotkey("r"), Source: actionPanelSourceLocal,
@@ -80,11 +82,23 @@ func webViewLocalActionPanelEntries(results []queryResult, selected int, goos st
 			Key: "local:webview:open-in-browser", ID: localActionWebViewOpenInBrowserID, Name: "i18n:ui_action_webview_open_in_browser",
 			Icon: settingControlIconSource("external"), Hotkey: primaryHotkey("o"), Source: actionPanelSourceLocal,
 		},
-		{
+	}
+	if hidePage {
+		entries = append(entries, actionPanelEntry{
+			Key: "local:webview:hide-page", ID: localActionWebViewHidePageID, Name: "i18n:ui_action_webview_hide_page",
+			Icon: settingControlIconSource("window-minimize"), Hotkey: primaryHotkey("h"), Source: actionPanelSourceLocal,
+		})
+	}
+	return append(entries,
+		actionPanelEntry{
+			Key: "local:webview:close-page", ID: localActionWebViewClosePageID, Name: "i18n:ui_action_webview_close_page",
+			Icon: settingControlIconSource("close"), Hotkey: primaryHotkey("w"), Source: actionPanelSourceLocal,
+		},
+		actionPanelEntry{
 			Key: "local:webview:open-dev-tools", ID: localActionWebViewOpenDevToolsID, Name: "i18n:ui_action_webview_open_inspector",
 			Icon: settingControlIconSource("build"), Source: actionPanelSourceLocal,
 		},
-	}
+	)
 }
 
 // toolbarActionEntries selects the shortcut chips shown on the launcher footer.
@@ -119,9 +133,19 @@ func isBareEnterHotkey(hotkey string) bool {
 	return key == "enter" || key == "return"
 }
 
+// currentActionPanelEntries includes Hide Webpage only for cacheable full-preview windows.
+func (a *App) currentActionPanelEntries() []actionPanelEntry {
+	return unifiedActionPanelEntriesWithHide(a.results, a.selected, a.toolbarMsg, a.canHideWebViewPage())
+}
+
 // unifiedActionPanelEntries mirrors Flutter's local-and-toolbar-before-plugin ordering and hotkey conflict handling.
 func unifiedActionPanelEntries(results []queryResult, selected int, message *toolbarMessage) []actionPanelEntry {
-	localEntries := webViewLocalActionPanelEntries(results, selected, runtime.GOOS)
+	return unifiedActionPanelEntriesWithHide(results, selected, message, false)
+}
+
+// unifiedActionPanelEntriesWithHide builds the picker and optionally includes Hide Webpage.
+func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, message *toolbarMessage, hidePage bool) []actionPanelEntry {
+	localEntries := webViewLocalActionPanelEntries(results, selected, runtime.GOOS, hidePage)
 	toolbarCount := 0
 	if message != nil {
 		toolbarCount = len(message.Actions)
@@ -336,7 +360,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 	if !a.actionPanel || a.actionFilter == nil {
 		return false
 	}
-	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	entries := a.currentActionPanelEntries()
 	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	for _, index := range indices {
 		if hotkeyMatches(entries[index].Hotkey, event) {
@@ -360,7 +384,7 @@ func (a *App) onResultActionHotkey(event woxui.KeyEvent) bool {
 			return false
 		}
 	}
-	entry, matched := actionPanelEntryForHotkey(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), event)
+	entry, matched := actionPanelEntryForHotkey(a.currentActionPanelEntries(), event)
 	if !matched {
 		return false
 	}
@@ -385,7 +409,7 @@ func (a *App) toggleActionPanel() {
 		return
 	}
 
-	if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+	if len(a.currentActionPanelEntries()) == 0 {
 		return
 	}
 	a.stopQuickSelectLocked()
@@ -435,7 +459,7 @@ func (a *App) moveActionSelection(delta int) {
 	if !a.actionPanel || a.actionFilter == nil {
 		return
 	}
-	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	entries := a.currentActionPanelEntries()
 	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		return
@@ -485,7 +509,7 @@ func (a *App) normalizeActionSelectionLocked() {
 	if !a.actionPanel || a.actionFilter == nil {
 		return
 	}
-	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	entries := a.currentActionPanelEntries()
 	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
@@ -512,7 +536,7 @@ func (a *App) normalizeActionSelectionLocked() {
 }
 
 func (a *App) selectFirstFilteredActionLocked() {
-	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	entries := a.currentActionPanelEntries()
 	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
@@ -593,7 +617,7 @@ func translatedActionLabel(value string, translations map[string]string) string 
 }
 
 func (a *App) selectAction(index int) {
-	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	entries := a.currentActionPanelEntries()
 	if a.actionPanel && index >= 0 && index < len(entries) {
 		a.actionSelected = index
 		a.actionSelectionKey = entries[index].Key
@@ -602,7 +626,7 @@ func (a *App) selectAction(index int) {
 }
 
 func (a *App) activateSelectedAction() {
-	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	entries := a.currentActionPanelEntries()
 	selected := a.actionSelected
 	if selected < 0 || selected >= len(entries) {
 		return
@@ -625,6 +649,14 @@ func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
 
 // activateLocalActionPanelEntry dispatches preview-owned actions without crossing the plugin action API.
 func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
+	if entry.ID == localActionWebViewClosePageID {
+		a.closeWebViewPage()
+		return
+	}
+	if entry.ID == localActionWebViewHidePageID {
+		a.hideWebViewPage()
+		return
+	}
 	if a.window == nil {
 		return
 	}

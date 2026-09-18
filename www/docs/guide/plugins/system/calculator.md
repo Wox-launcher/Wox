@@ -12,6 +12,14 @@ Calculator evaluates expressions directly in the launcher. It listens globally, 
 
 Press `Enter` to copy or use the result, depending on the current action. Open the Action Panel to copy either the raw value or the formatted value.
 
+To continue calculating from the current result, select it and press `Shift+Tab`. Wox replaces the query with that result so you can type another operator:
+
+```text
+100 + 200
+Shift+Tab
+300 * 2
+```
+
 ## Explicit Mode
 
 Use `calculator` when you want calculator history or when another global plugin is competing with the same query:

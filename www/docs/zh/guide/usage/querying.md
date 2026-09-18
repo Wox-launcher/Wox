@@ -74,6 +74,7 @@ wpm install browser
 | Windows/Linux: `Ctrl + J`；macOS: `Command + J` | 打开操作面板 |
 | Windows/Linux: 按住 `Alt` 再按 `1`-`9`；macOS: 按住 `Command` 再按 `1`-`9` | 按序号执行当前可见结果 |
 | `Tab` | 补全建议查询，或跳到下一个查询提示 |
+| `Shift+Tab` | 用选中结果的标题替换查询，例如把计算结果填回输入框，或跳到上一个查询提示 |
 | `Space` | 在结果支持预览时打开预览 |
 
 主热键、选中热键、快捷键查询和托盘查询见 [快捷键](./hotkeys.md)。

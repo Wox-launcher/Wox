@@ -138,7 +138,7 @@ func (a *App) snapshot() viewSnapshot {
 	var actionIndices []int
 	if a.actionPanel && a.actionFilter != nil {
 		actionFilter = a.actionFilter.State().Text
-		actionEntries = unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+		actionEntries = a.currentActionPanelEntries()
 		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translationSnapshot(), a.usePinYin())
 	}
 	actionState := actionSectionRevisionState{Open: a.actionPanel, Selected: a.actionSelected, Filter: actionFilter, ResultsRevision: a.resultsSectionRevision, ToolbarRevision: a.toolbarRevision}
@@ -1349,7 +1349,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 		}
 	}
 	actions := make([]launcherview.LauncherToolbarAction, 0)
-	entries := unifiedActionPanelEntries(snapshot.results, snapshot.selected, snapshot.toolbarMsg)
+	entries := unifiedActionPanelEntriesWithHide(snapshot.results, snapshot.selected, snapshot.toolbarMsg, a.canHideWebViewPage())
 	for _, entry := range toolbarActionEntries(entries, snapshot.toolbarMsg != nil) {
 		label := a.translate(entry.Name)
 		if strings.TrimSpace(label) == "" {

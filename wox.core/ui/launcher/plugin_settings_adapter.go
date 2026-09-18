@@ -66,15 +66,20 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore, snapshot.general.Data.UsePinYin)
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
 	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
-	props.Items = make([]launcherview.PluginListItem, 0, len(filtered))
-	for visibleIndex, entry := range filtered {
+	props.Entries = a.pluginListEntries(snapshot, filtered)
+	return props
+}
+
+// pluginListEntries builds catalog rows, grouping installed plugins by enabled state.
+func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPlugin) []launcherview.PluginListEntry {
+	plugins := snapshot.plugins
+	visibleIndex := 0
+	appendItem := func(entries []launcherview.PluginListEntry, entry filteredPlugin) []launcherview.PluginListEntry {
 		index := entry.index
 		plugin := entry.plugin
 		status := strings.TrimSpace(plugin.Version + "  " + plugin.Author)
 		if plugin.IsUpgradable {
 			status = a.translate("i18n:ui_update") + "  " + status
-		} else if plugin.IsDisable {
-			status = a.translate("i18n:ui_disabled") + "  " + status
 		}
 		badge := ""
 		if plugin.IsSystem {
@@ -84,14 +89,38 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		} else if strings.EqualFold(plugin.Runtime, "script") {
 			badge = a.translate("i18n:ui_setting_plugin_script_tag")
 		}
-		props.Items = append(props.Items, launcherview.PluginListItem{
-			ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge, ShowInstalledIcon: plugins.PluginsStore && plugin.IsInstalled,
-			Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[visibleIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
-			Highlighted: snapshot.highlight == "plugin:"+plugin.ID,
-			OnSelect:    func() { a.selectPlugin(index) },
+		itemIndex := visibleIndex
+		visibleIndex++
+		return append(entries, launcherview.PluginListEntry{
+			ID: plugin.ID,
+			Item: launcherview.PluginListItem{
+				ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge, ShowInstalledIcon: plugins.PluginsStore && plugin.IsInstalled,
+				Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[itemIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
+				Highlighted: snapshot.highlight == "plugin:"+plugin.ID, Disabled: plugin.IsDisable,
+				OnSelect: func() { a.selectPlugin(index) },
+			},
 		})
 	}
-	return props
+	if plugins.PluginsStore {
+		entries := make([]launcherview.PluginListEntry, 0, len(filtered))
+		for _, entry := range filtered {
+			entries = appendItem(entries, entry)
+		}
+		return entries
+	}
+	sections := groupInstalledPlugins(filtered)
+	entries := make([]launcherview.PluginListEntry, 0, len(filtered)+len(sections))
+	for _, section := range sections {
+		label := a.translate("i18n:ui_setting_plugin_section_enabled")
+		if section.ID == pluginSectionDisabled {
+			label = a.translate("i18n:ui_setting_plugin_section_disabled")
+		}
+		entries = append(entries, launcherview.PluginListEntry{ID: section.ID, Header: label})
+		for _, entry := range section.Plugins {
+			entries = appendItem(entries, entry)
+		}
+	}
+	return entries
 }
 
 func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, plugins pluginSettingsSnapshot, filtered []filteredPlugin, iconTint woxui.Color, imageScale float32) {
@@ -150,6 +179,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		openAIModelChoice: a.openPluginAIModelChoice,
 		setAIModelName:    a.setPluginAIModelName,
 		finishAIModelEdit: a.finishPluginAIModelEdit,
+		openAISettings:    a.openPluginAISettings,
 		openModel:         a.openPluginModelManager,
 		recordKey:         a.recordPluginFormHotkey,
 		runServiceAction:  a.runPluginServiceAction,

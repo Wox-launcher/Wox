@@ -64,6 +64,45 @@ func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
 	}
 }
 
+func TestGroupInstalledPluginsPutsEnabledFirstAndOmitsEmptySections(t *testing.T) {
+	filtered := []filteredPlugin{
+		{index: 0, plugin: pluginSettingsPlugin{ID: "disabled-system", Name: "Zebra", IsSystem: true, IsDisable: true}},
+		{index: 1, plugin: pluginSettingsPlugin{ID: "enabled-third", Name: "Beta"}},
+		{index: 2, plugin: pluginSettingsPlugin{ID: "enabled-system", Name: "Alpha", IsSystem: true}},
+		{index: 3, plugin: pluginSettingsPlugin{ID: "disabled-third", Name: "Apple", IsDisable: true}},
+	}
+	got := groupInstalledPlugins(filtered)
+	if len(got) != 2 || got[0].ID != pluginSectionEnabled || got[1].ID != pluginSectionDisabled {
+		t.Fatalf("sections = %#v", got)
+	}
+	if ids := installedSectionPluginIDs(got[0]); !reflect.DeepEqual(ids, []string{"enabled-system", "enabled-third"}) {
+		t.Fatalf("enabled order = %v, want name order without system first", ids)
+	}
+	if ids := installedSectionPluginIDs(got[1]); !reflect.DeepEqual(ids, []string{"disabled-third", "disabled-system"}) {
+		t.Fatalf("disabled order = %v, want name order without system first", ids)
+	}
+
+	onlyEnabled := groupInstalledPlugins(filtered[1:3])
+	if len(onlyEnabled) != 1 || onlyEnabled[0].ID != pluginSectionEnabled {
+		t.Fatalf("single enabled section = %#v", onlyEnabled)
+	}
+	onlyDisabled := groupInstalledPlugins([]filteredPlugin{filtered[0], filtered[3]})
+	if len(onlyDisabled) != 1 || onlyDisabled[0].ID != pluginSectionDisabled {
+		t.Fatalf("single disabled section = %#v", onlyDisabled)
+	}
+	if got := groupInstalledPlugins(nil); len(got) != 0 {
+		t.Fatalf("empty filter = %#v", got)
+	}
+}
+
+func installedSectionPluginIDs(section installedPluginSection) []string {
+	ids := make([]string, len(section.Plugins))
+	for index, entry := range section.Plugins {
+		ids[index] = entry.plugin.ID
+	}
+	return ids
+}
+
 func TestFilterPluginsMatchesPinyinAndEnglishName(t *testing.T) {
 	plugins := []pluginSettingsPlugin{{
 		ID:            "file-search",
@@ -271,6 +310,75 @@ func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
 	a.setPluginSelectionLocked(1)
 	if tab := a.pluginSettings.DetailTab(); tab != "settings" {
 		t.Fatalf("detail tab after selecting another plugin = %q, want settings", tab)
+	}
+}
+
+func TestSetPluginSelectionAppliesCachedAIModels(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.aiSettings.SetModels([]aiModel{{Name: "deepseek-chat", Provider: "deepseek"}})
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: dictationPluginID,
+		SettingDefinitions: []formDefinition{{
+			Type: "selectAIModel", Value: formDefinitionValue{Key: dictationDefaultAIModelKey, Label: "AI model"},
+		}},
+		Setting: pluginSettingsData{Settings: map[string]string{
+			dictationActionsKey: `[{"id":"default","type":"default","name":"default","hotkey":"","output":"input","aiRefineEnabled":true}]`,
+		}},
+	}})
+	a.setPluginSelectionLocked(0)
+
+	form := a.pluginSettings.Form()
+	if form == nil {
+		t.Fatal("plugin form should be built")
+	}
+	found := false
+	for _, definition := range form.definitions {
+		if definition.Type != "selectAIModel" {
+			continue
+		}
+		found = true
+		if len(definition.Value.Options) == 0 {
+			t.Fatal("selectAIModel options should be filled from the cached catalog")
+		}
+	}
+	if !found {
+		t.Fatal("dictation form should keep the AI model field")
+	}
+	if form.values[dictationDefaultAIRefineKey] != "true" {
+		t.Fatalf("AI Polish checkbox = %q, want true from persisted actions", form.values[dictationDefaultAIRefineKey])
+	}
+}
+
+func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.translations = map[string]string{
+		"ui_ai_model_selector_no_models_title":  "No AI provider configured",
+		"ui_ai_model_selector_open_ai_settings": "Open AI settings",
+		"ui_ai_model_selector_no_models_desc":   "Configure a provider first.",
+	}
+	definition := formDefinition{Type: "selectAIModel", Value: formDefinitionValue{Key: dictationDefaultAIModelKey, Label: "AI model"}}
+	a.pluginSettings.SetForm(&pluginSettingsFormState{
+		pluginID:        dictationPluginID,
+		formFieldsState: formFieldsState{definitions: []formDefinition{definition}, values: map[string]string{dictationDefaultAIModelKey: ""}, focused: 0, active: true},
+		initial:         map[string]string{dictationDefaultAIModelKey: ""},
+	})
+
+	a.aiSettings.SetModels([]aiModel{{Name: "deepseek-chat", Provider: "deepseek"}})
+	a.openPluginAIModelChoice(0, true, woxui.Rect{Width: 40, Height: 24})
+	picker := a.generalSettings.ChoicePicker()
+	if picker == nil || len(picker.item.choices) != 1 || picker.item.choices[0].label != "deepseek" {
+		t.Fatalf("cached catalog picker = %#v, want one deepseek provider", picker)
+	}
+
+	a.generalSettings.SetChoicePicker(nil)
+	a.aiSettings.SetModels(nil)
+	a.pluginSettings.Form().definitions[0].Value.Options = nil
+	a.openPluginAIModelChoice(0, true, woxui.Rect{Width: 40, Height: 24})
+	picker = a.generalSettings.ChoicePicker()
+	if picker == nil || len(picker.item.choices) != 1 || picker.item.choices[0].value != pluginAIModelOpenSettingsValue {
+		t.Fatalf("empty picker = %#v, want an Open AI settings action", picker)
 	}
 }
 

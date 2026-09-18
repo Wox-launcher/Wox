@@ -55,14 +55,22 @@ type PluginListItem struct {
 	FallbackColor     woxui.Color
 	Selected          bool
 	Highlighted       bool
+	Disabled          bool
 	OnSelect          func()
+}
+
+// PluginListEntry is a catalog section header or one plugin row.
+type PluginListEntry struct {
+	ID     string
+	Header string
+	Item   PluginListItem
 }
 
 // PluginListProps contains plugin catalog data and search state.
 type PluginListProps struct {
 	Width                 float32
 	Height                float32
-	Items                 []PluginListItem
+	Entries               []PluginListEntry
 	Message               string
 	MessageError          bool
 	Placeholder           string
@@ -99,12 +107,11 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	}
 
 	const headerHeight = float32(62)
-	const rowHeight = float32(62)
 	viewportHeight := max(float32(0), props.Height-headerHeight)
-	items := props.Items
+	entries := props.Entries
 
 	var list woxwidget.Widget
-	if len(items) == 0 {
+	if len(entries) == 0 {
 		title := props.EmptyTitle
 		description := props.EmptyDescription
 		if title == "" && description == "" {
@@ -115,21 +122,19 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			Icon: props.EmptyIcon, Window: props.Window, Theme: props.Theme,
 		})
 	} else {
-		var keepVisible *woxwidget.ScrollRange
-		for index, item := range items {
-			if item.Selected {
-				start := float32(index) * rowHeight
-				keepVisible = &woxwidget.ScrollRange{Start: start, End: start + rowHeight}
-				break
-			}
+		catalog := woxwidget.LazyList{
+			Width: props.Width, Viewport: viewportHeight, ItemCount: len(entries), ItemExtent: pluginListRowHeight,
+			ItemKey: func(index int) woxwidget.Key { return pluginListEntryKey(entries[index]) },
+			ItemBuilder: func(index int) woxwidget.Widget {
+				return pluginListEntry(entries[index], pluginListSectionHasLead(entries, index), props)
+			},
+		}
+		if pluginListHasSectionHeader(entries) {
+			catalog.ItemExtentAt = func(index int) float32 { return pluginListEntryExtent(entries, index) }
 		}
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "plugin-list-scroll", Content: woxwidget.LazyList{
-				Width: props.Width, Viewport: viewportHeight, ItemCount: len(items), ItemExtent: rowHeight,
-				ItemKey:     func(index int) woxwidget.Key { return woxwidget.Key("plugin-list-" + items[index].ID) },
-				ItemBuilder: func(index int) woxwidget.Widget { return pluginListRow(items[index], props, rowHeight) },
-			}, Width: props.Width, Height: viewportHeight,
-			KeepVisible: keepVisible, Theme: props.Theme, ThumbColor: props.Theme.Text,
+			Key: "plugin-list-scroll", Content: catalog, Width: props.Width, Height: viewportHeight,
+			KeepVisible: pluginListSelectedRange(entries), Theme: props.Theme, ThumbColor: props.Theme.Text,
 		})
 	}
 	searchFieldWidth := max(float32(80), props.Width)
@@ -148,15 +153,102 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 20, Children: []woxwidget.Widget{searchField, list}}}
 }
 
+const pluginListRowHeight = float32(62)
+
+func pluginListEntryKey(entry PluginListEntry) woxwidget.Key {
+	if entry.Header != "" {
+		return woxwidget.Key("plugin-list-section-" + entry.ID)
+	}
+	return woxwidget.Key("plugin-list-" + entry.Item.ID)
+}
+
+func pluginListHasSectionHeader(entries []PluginListEntry) bool {
+	for _, entry := range entries {
+		if entry.Header != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func pluginListSectionHasLead(entries []PluginListEntry, index int) bool {
+	for i := 0; i < index; i++ {
+		if entries[i].Header != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// pluginListEntryExtent keeps section headers shorter than plugin rows, and adds
+// lead only before a following group so the first header sits flush under search.
+func pluginListEntryExtent(entries []PluginListEntry, index int) float32 {
+	if index < 0 || index >= len(entries) || entries[index].Header == "" {
+		return pluginListRowHeight
+	}
+	height := woxcomponent.SettingsNavGroupHeight
+	if pluginListSectionHasLead(entries, index) {
+		height += woxcomponent.SettingsNavGroupLead
+	}
+	return height
+}
+
+// pluginListSelectedRange accounts for mixed header and row heights when revealing the selection.
+func pluginListSelectedRange(entries []PluginListEntry) *woxwidget.ScrollRange {
+	var offset float32
+	for index, entry := range entries {
+		extent := pluginListEntryExtent(entries, index)
+		if entry.Header == "" && entry.Item.Selected {
+			return &woxwidget.ScrollRange{Start: offset, End: offset + extent}
+		}
+		offset += extent
+	}
+	return nil
+}
+
+func pluginListEntry(entry PluginListEntry, lead bool, props PluginListProps) woxwidget.Widget {
+	if entry.Header != "" {
+		return pluginListSectionHeader(entry, lead, props)
+	}
+	return pluginListRow(entry.Item, props, pluginListRowHeight)
+}
+
+// pluginListSectionHeader uses the compact Settings rail group chrome, not the wide page divider.
+func pluginListSectionHeader(entry PluginListEntry, lead bool, props PluginListProps) woxwidget.Widget {
+	label, size := woxcomponent.SettingsChromeLabel(entry.Header)
+	row := woxwidget.Container{
+		Width: props.Width, Height: woxcomponent.SettingsNavGroupHeight, Padding: woxwidget.Insets{Left: 6, Right: 6},
+		Child: woxwidget.Align{Height: woxcomponent.SettingsNavGroupHeight, Vertical: 0.5, Child: woxwidget.Text{
+			Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
+		}},
+	}
+	if lead {
+		row = woxwidget.Container{Width: props.Width, Padding: woxwidget.Insets{Top: woxcomponent.SettingsNavGroupLead}, Child: row}
+	}
+	return woxwidget.Semantics{
+		Key: pluginListEntryKey(entry), AutomationID: string(pluginListEntryKey(entry)),
+		Role: woxui.AccessibilityRoleGroup, Label: entry.Header, Child: row,
+	}
+}
+
+// pluginListRowTextColors keeps disabled names on secondary text so the inactive
+// group stays gray even while the row is selected and still tappable.
+func pluginListRowTextColors(item PluginListItem, theme woxcomponent.ControlTheme) (title, subtitle woxui.Color) {
+	if item.Disabled {
+		return theme.TextSecondary, theme.TextSecondary
+	}
+	if item.Selected {
+		return theme.SelectionText, theme.SelectionText
+	}
+	return theme.Text, theme.TextSecondary
+}
+
 // pluginListRow builds one catalog entry so LazyList can materialize only the visible slice.
 func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32) woxwidget.Widget {
 	background := woxui.Color{}
-	titleColor := props.Theme.Text
-	subtitleColor := props.Theme.TextSecondary
+	titleColor, subtitleColor := pluginListRowTextColors(item, props.Theme)
 	if item.Selected {
 		background = props.Theme.SelectionBackground
-		titleColor = props.Theme.SelectionText
-		subtitleColor = props.Theme.SelectionText
 	}
 	border := woxui.Color{}
 	if item.Highlighted {

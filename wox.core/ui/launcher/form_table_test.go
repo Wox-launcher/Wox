@@ -117,8 +117,8 @@ func TestFormTableDisabledColumnBecomesRowStatus(t *testing.T) {
 	if !formTableIsRowStatusColumn(formTableColumn{Key: "disabled", Type: "checkbox"}) {
 		t.Fatal("disabled checkbox should be a row status")
 	}
-	if formTableIsRowStatusColumn(formTableColumn{Key: "CacheDisabled", Type: "checkbox"}) {
-		t.Fatal("CacheDisabled must stay a visible checkbox column")
+	if formTableIsRowStatusColumn(formTableColumn{Key: "KeepInBackground", Type: "checkbox"}) {
+		t.Fatal("KeepInBackground must not become a hidden row-status column")
 	}
 	if formTableIsRowStatusColumn(formTableColumn{Key: "Disabled", Type: "text"}) {
 		t.Fatal("non-checkbox Disabled fields are not row status")

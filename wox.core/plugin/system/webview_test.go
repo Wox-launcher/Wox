@@ -58,6 +58,36 @@ func TestResolveWebviewUserAgent(t *testing.T) {
 	}
 }
 
+func TestParseWebviewSitesMapsLegacyCacheDisabled(t *testing.T) {
+	sites, err := parseWebviewSites(`[{"Keyword":"x","CacheDisabled":false},{"Keyword":"fresh","CacheDisabled":true},{"Keyword":"legacy"},{"Keyword":"kept","KeepInBackground":false,"CacheDisabled":true}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) != 4 {
+		t.Fatalf("sites = %d, want 4", len(sites))
+	}
+	if !sites[0].KeepInBackground || sites[1].KeepInBackground || !sites[2].KeepInBackground || sites[3].KeepInBackground {
+		t.Fatalf("KeepInBackground = %+v", []bool{sites[0].KeepInBackground, sites[1].KeepInBackground, sites[2].KeepInBackground, sites[3].KeepInBackground})
+	}
+}
+
+func TestWebViewKeepInBackgroundSettingIsAvailable(t *testing.T) {
+	metadata := (&WebViewPlugin{}).GetMetadata()
+	table := metadata.SettingDefinitions[0].Value.(*definition.PluginSettingValueTable)
+	for _, column := range table.Columns {
+		if column.Key == "KeepInBackground" {
+			if column.Type != definition.PluginSettingValueTableColumnTypeCheckbox || !column.HideInTable {
+				t.Fatalf("KeepInBackground column = %+v", column)
+			}
+			return
+		}
+		if column.Key == "CacheDisabled" {
+			t.Fatal("CacheDisabled must be replaced by KeepInBackground")
+		}
+	}
+	t.Fatal("KeepInBackground setting column is missing")
+}
+
 func TestWebViewUserAgentSettingIsAvailable(t *testing.T) {
 	metadata := (&WebViewPlugin{}).GetMetadata()
 	table := metadata.SettingDefinitions[0].Value.(*definition.PluginSettingValueTable)

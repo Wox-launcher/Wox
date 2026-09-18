@@ -863,18 +863,16 @@ func (p *DictationPlugin) buildModelSetting(ctx context.Context) definition.Plug
 	}
 }
 
-// buildDefaultAIModelSetting hides the AI model picker until default dictation AI refinement is enabled.
-func (p *DictationPlugin) buildDefaultAIModelSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
-	defaultAction := defaultDictationActionFromSetting(p.api.GetSetting(ctx, settingKeyActions))
-	if !defaultAction.AIRefineEnabled {
-		return definition.PluginSettingDefinitionItem{}
-	}
-
+// buildDefaultAIModelSetting always exposes the AI model picker. Hiding it
+// behind AI Polish prevented the settings page from loading the model catalog,
+// so the dropdowns stayed empty after the user enabled polish.
+func (p *DictationPlugin) buildDefaultAIModelSetting(_ context.Context) definition.PluginSettingDefinitionItem {
 	return definition.PluginSettingDefinitionItem{
 		Type: definition.PluginSettingDefinitionTypeSelectAIModel,
 		Value: &definition.PluginSettingValueSelectAIModel{
-			Key:   settingKeyDefaultAIModel,
-			Label: "i18n:plugin_dictation_ai_model",
+			Key:     settingKeyDefaultAIModel,
+			Label:   "i18n:plugin_dictation_ai_model",
+			Tooltip: "i18n:plugin_dictation_ai_model_tooltip",
 		},
 	}
 }

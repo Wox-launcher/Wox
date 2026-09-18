@@ -436,6 +436,77 @@ func TestHasCacheableWebViewPreviewIgnoresDisabledCache(t *testing.T) {
 	}
 }
 
+func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
+	app := &App{
+		visible:            true,
+		editor:             woxui.NewTextEditor("webview ig"),
+		query:              newInputQuery("webview ig"),
+		webViewPreviewData: `{"url":"https://www.instagram.com","cacheDisabled":false}`,
+	}
+	app.closeWebViewPage()
+	if app.webViewPreviewData != "" {
+		t.Fatal("close must drop the cached preview session")
+	}
+	if app.hasCacheableWebViewPreviewLocked() {
+		t.Fatal("closed WebView must not stay retained in the background")
+	}
+	if app.query.QueryText != webViewPluginQuery || app.editor.State().Text != webViewPluginQuery {
+		t.Fatalf("query = %q editor = %q, want %q so the next show cannot reload the site", app.query.QueryText, app.editor.State().Text, webViewPluginQuery)
+	}
+	if !app.visible {
+		t.Fatal("close must keep Wox visible after destroying the page")
+	}
+}
+
+func TestCloseWebViewPageDestroysFullPreviewWithoutRewritingQuery(t *testing.T) {
+	app := &App{
+		isPrimary:          false,
+		visible:            true,
+		editor:             woxui.NewTextEditor("webview x"),
+		query:              newInputQuery("webview x"),
+		webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`,
+		show:               showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
+	}
+	app.destroyOnce.Do(func() {})
+	app.closeWebViewPage()
+	if app.webViewPreviewData != "" {
+		t.Fatal("full-preview close must destroy the page")
+	}
+	if app.query.QueryText != "webview x" || app.editor.State().Text != "webview x" {
+		t.Fatalf("full-preview query = %q editor = %q, want the original hotkey query", app.query.QueryText, app.editor.State().Text)
+	}
+}
+
+func TestHideWebViewPageKeepsCacheableFullPreview(t *testing.T) {
+	app := &App{
+		isPrimary:          false,
+		visible:            false,
+		webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`,
+		show:               showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
+	}
+	if !app.canHideWebViewPage() {
+		t.Fatal("Run in background full-preview windows must offer Hide Webpage")
+	}
+	app.hideWebViewPage()
+	if app.webViewPreviewData == "" || app.destroyed.Load() {
+		t.Fatal("hide must keep the page and the secondary window")
+	}
+}
+
+func TestCanHideWebViewPageRequiresBackgroundFullPreview(t *testing.T) {
+	inline := &App{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`}
+	if inline.canHideWebViewPage() {
+		t.Fatal("typed WebView queries should not offer Hide Webpage")
+	}
+	disabled := &App{
+		webViewPreviewData: `{"url":"https://x.com","cacheDisabled":true}`,
+		show:               showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
+	}
+	if disabled.canHideWebViewPage() {
+		t.Fatal("Hide Webpage requires Run in background")
+	}
+}
+
 func TestSecondaryLauncherIgnoresGlobalFocusLoss(t *testing.T) {
 	if err := (&App{}).notifyFocusLost(); err != nil {
 		t.Fatalf("secondary launcher should ignore global focus loss: %v", err)

@@ -90,7 +90,7 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 	panelVisible := a.actionPanel
 	panelClosed := false
 	if panelVisible {
-		if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+		if len(a.currentActionPanelEntries()) == 0 {
 			panelClosed = a.resetActionPanelLocked()
 		} else {
 			a.normalizeActionSelectionLocked()
@@ -129,7 +129,7 @@ func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 		a.toolbarRevision++
 		changed = true
 		if a.actionPanel {
-			if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+			if len(a.currentActionPanelEntries()) == 0 {
 				panelClosed = a.resetActionPanelLocked()
 			} else {
 				a.normalizeActionSelectionLocked()

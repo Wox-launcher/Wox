@@ -22,6 +22,7 @@ const (
 	webViewPreviewWidthContextKey     = "width"
 	webViewPreviewHeightContextKey    = "height"
 	webViewPreviewAutomationID        = "launcher.preview.webview"
+	webViewPluginQuery                = "webview"
 )
 
 type webViewPreviewData struct {
@@ -396,6 +397,49 @@ func (a *App) restoreWebViewPreviewResultLocked() {
 			a.results[index].Preview = a.webViewFullscreenRestore
 			return
 		}
+	}
+}
+
+// isWebViewFullPreviewWindow reports a query-hotkey preview panel with no query box.
+func (a *App) isWebViewFullPreviewWindow() bool {
+	return a.show.ShowPreviewTitleBar && a.show.HideQueryBox && a.show.HideToolbar
+}
+
+// canHideWebViewPage reports a full-preview window that opted into Run in background.
+func (a *App) canHideWebViewPage() bool {
+	return a.isWebViewFullPreviewWindow() && a.hasCacheableWebViewPreviewLocked()
+}
+
+// closeWebViewPage destroys the native browser. Full-preview hotkey windows close
+// immediately; typed queries stay open on `webview` so the next show cannot reload the site.
+func (a *App) closeWebViewPage() {
+	a.resetWebView()
+	a.deactivateWebViewPreview()
+	if a.isWebViewFullPreviewWindow() {
+		if err := a.hideWindow(true); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("close full-preview webview page: %v", err))
+		}
+		return
+	}
+	a.show.HideQueryBox = false
+	a.show.HideToolbar = false
+	a.show.ShowPreviewTitleBar = false
+	a.setQuery(newInputQuery(webViewPluginQuery))
+	if a.host != nil {
+		a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+	}
+	if a.services != nil {
+		if err := a.sendCurrentQuery(); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("query webview after close page: %v", err))
+		}
+	}
+	_ = a.applyWindowBounds()
+}
+
+// hideWebViewPage hides a cacheable full-preview window without destroying the page.
+func (a *App) hideWebViewPage() {
+	if err := a.hideWindow(true); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("hide webview page: %v", err))
 	}
 }
 

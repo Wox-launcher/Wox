@@ -475,6 +475,8 @@ type FormAIModelFieldProps struct {
 	ModelIcon          *woxui.Image
 	EditIcon           *woxui.Image
 	ListIcon           *woxui.Image
+	ManageIcon         *woxui.Image
+	ManageLabel        string
 	ModelsAvailable    bool
 	Width              float32
 	Height             float32
@@ -487,6 +489,7 @@ type FormAIModelFieldProps struct {
 	OnModelNameChanged func(string)
 	OnFinishEdit       func(string)
 	OnEditModeChanged  func(bool)
+	OnManageModels     func()
 	OnOpenLink         func(string)
 }
 
@@ -549,29 +552,44 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 		})
 	}
 
-	icon := props.EditIcon
-	buttonLabel := "Edit model name"
-	if s.editing {
-		icon = props.ListIcon
-		buttonLabel = "Choose a configured model"
-	}
-	toggleEditing := func() {
-		if s.editing && props.OnFinishEdit != nil {
-			props.OnFinishEdit(s.controller.Text())
-		}
-		if props.OnEditModeChanged != nil {
-			props.OnEditModeChanged(!s.editing)
-		}
-		context.SetState(func() { s.editing = !s.editing })
-	}
 	hoverBackground := props.Theme.TextSecondary
 	hoverBackground.A = 26
-	toggle := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-		ID: props.ID + "-edit", Label: buttonLabel, Icon: woxwidget.Image{Source: icon, Width: 18, Height: 18},
-		Width: editWidth, Height: formAIModelControlHeight, Radius: 4, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus,
-		Disabled: !props.ModelsAvailable || props.Model == "", OnTap: toggleEditing,
-	})
-	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, toggle}}
+	var action woxwidget.Widget
+	// With no selected model the edit-name control is dead. Offer AI settings instead
+	// so the paperclip/link next to "Not selected" actually does something.
+	if props.OnManageModels != nil && !s.editing && (props.Model == "" || !props.ModelsAvailable) {
+		label := props.ManageLabel
+		if label == "" {
+			label = "Open AI settings"
+		}
+		action = woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: props.ID + "-manage", Label: label, Icon: woxwidget.Image{Source: props.ManageIcon, Width: 18, Height: 18},
+			Width: editWidth, Height: formAIModelControlHeight, Radius: 4, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus,
+			OnTap: props.OnManageModels,
+		})
+	} else {
+		icon := props.EditIcon
+		buttonLabel := "Edit model name"
+		if s.editing {
+			icon = props.ListIcon
+			buttonLabel = "Choose a configured model"
+		}
+		toggleEditing := func() {
+			if s.editing && props.OnFinishEdit != nil {
+				props.OnFinishEdit(s.controller.Text())
+			}
+			if props.OnEditModeChanged != nil {
+				props.OnEditModeChanged(!s.editing)
+			}
+			context.SetState(func() { s.editing = !s.editing })
+		}
+		action = woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: props.ID + "-edit", Label: buttonLabel, Icon: woxwidget.Image{Source: icon, Width: 18, Height: 18},
+			Width: editWidth, Height: formAIModelControlHeight, Radius: 4, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus,
+			Disabled: !props.ModelsAvailable || props.Model == "", OnTap: toggleEditing,
+		})
+	}
+	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, action}}
 	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, formAIModelControlHeight, props.Theme, props.OnOpenLink, props.Window)
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -114,6 +115,47 @@ func filterPlugins(plugins []pluginSettingsPlugin, query string, filters pluginF
 		}
 	}
 	return filtered
+}
+
+const (
+	pluginSectionEnabled  = pluginFilterEnabled
+	pluginSectionDisabled = pluginFilterDisabled
+)
+
+type installedPluginSection struct {
+	ID      string
+	Plugins []filteredPlugin
+}
+
+// groupInstalledPlugins splits the visible installed catalog into Enabled, then Disabled.
+// Empty groups are omitted so search and filters can leave a single section.
+func groupInstalledPlugins(filtered []filteredPlugin) []installedPluginSection {
+	enabled := make([]filteredPlugin, 0, len(filtered))
+	disabled := make([]filteredPlugin, 0, len(filtered))
+	for _, entry := range filtered {
+		if entry.plugin.IsDisable {
+			disabled = append(disabled, entry)
+			continue
+		}
+		enabled = append(enabled, entry)
+	}
+	sections := make([]installedPluginSection, 0, 2)
+	if len(enabled) > 0 {
+		sortInstalledPluginsByName(enabled)
+		sections = append(sections, installedPluginSection{ID: pluginSectionEnabled, Plugins: enabled})
+	}
+	if len(disabled) > 0 {
+		sortInstalledPluginsByName(disabled)
+		sections = append(sections, installedPluginSection{ID: pluginSectionDisabled, Plugins: disabled})
+	}
+	return sections
+}
+
+// sortInstalledPluginsByName keeps each section alphabetical, including system plugins.
+func sortInstalledPluginsByName(plugins []filteredPlugin) {
+	sort.SliceStable(plugins, func(i, j int) bool {
+		return strings.ToLower(plugins[i].plugin.Name) < strings.ToLower(plugins[j].plugin.Name)
+	})
 }
 
 // pluginMatchesQuery keeps catalog search aligned with action-panel matching.
@@ -261,22 +303,12 @@ func (a *App) reloadPlugins(store bool, preferredID string) error {
 		if selected >= 0 && selected < len(plugins) {
 			a.setPluginSelectionLocked(selected)
 		}
-		form := a.pluginSettings.Form()
-		requestProviders = form != nil && hasFormDefinitionType(form.definitions, "selectAIModel")
-		requestModels = requestProviders && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
-		if requestModels {
-			a.aiSettings.SetModelsLoading(true)
-		}
+		requestModels, requestProviders = a.queuePluginFormAIModelsLocked()
 		a.invalidateSettingsWindow()
 	}); err != nil {
 		return err
 	}
-	if requestModels {
-		util.Go(a.lifecycleCtx, "load AI models for plugin settings", a.loadAIModels)
-	}
-	if requestProviders {
-		util.Go(a.lifecycleCtx, "load AI provider icons for plugin settings", a.loadAIProviderCatalog)
-	}
+	a.startPluginFormAIModelLoads(requestModels, requestProviders)
 	return nil
 }
 
@@ -664,20 +696,39 @@ func (a *App) selectPlugin(index int) {
 		}
 	}
 	a.setPluginSelectionLocked(index)
-	form = a.pluginSettings.Form()
-	requestProviders := form != nil && hasFormDefinitionType(form.definitions, "selectAIModel")
-	requestModels := requestProviders && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
-	if requestModels {
-		a.aiSettings.SetModelsLoading(true)
-	}
+	requestModels, requestProviders := a.queuePluginFormAIModelsLocked()
 	a.updateSettingsTextInput(false)
+	a.startPluginFormAIModelLoads(requestModels, requestProviders)
+	a.invalidateSettingsWindow()
+}
+
+// queuePluginFormAIModelsLocked applies any cached catalog to selectAIModel fields
+// and reports whether a fetch is still needed. Callers start the async load after
+// finishing other UI-thread work so the helper stays free of goroutine launches.
+func (a *App) queuePluginFormAIModelsLocked() (requestModels, requestProviders bool) {
+	form := a.pluginSettings.Form()
+	if form == nil || !hasFormDefinitionType(form.definitions, "selectAIModel") {
+		return false, false
+	}
+	if models := a.aiSettings.Models(); len(models) > 0 {
+		applyAIModelOptionsLocked(&form.formFieldsState, models)
+	}
+	if !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading() {
+		a.aiSettings.SetModelsLoading(true)
+		requestModels = true
+	}
+	return requestModels, true
+}
+
+// startPluginFormAIModelLoads fetches the shared model catalog and provider icons
+// after a plugin form that contains selectAIModel has been built or rebuilt.
+func (a *App) startPluginFormAIModelLoads(requestModels, requestProviders bool) {
 	if requestModels {
-		util.Go(a.lifecycleCtx, "load AI models for selected plugin", a.loadAIModels)
+		util.Go(a.lifecycleCtx, "load AI models for plugin settings", a.loadAIModels)
 	}
 	if requestProviders {
-		util.Go(a.lifecycleCtx, "load AI provider icons for selected plugin", a.loadAIProviderCatalog)
+		util.Go(a.lifecycleCtx, "load AI provider icons for plugin settings", a.loadAIProviderCatalog)
 	}
-	a.invalidateSettingsWindow()
 }
 
 func (a *App) movePluginSelection(delta int) {
@@ -1268,6 +1319,13 @@ func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor wox
 	}
 	models := aiModelsFromOptions(definition.Value.Options)
 	if len(models) == 0 {
+		if cached := a.aiSettings.Models(); len(cached) > 0 {
+			applyAIModelOptionsLocked(&state.formFieldsState, cached)
+			models = aiModelsFromOptions(state.definitions[index].Value.Options)
+		}
+	}
+	if len(models) == 0 {
+		a.openPluginAIModelEmptyChoice(index, anchor)
 		return
 	}
 	var selected aiModel
@@ -1345,6 +1403,49 @@ func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor wox
 	state.status = ""
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
+}
+
+const pluginAIModelOpenSettingsValue = "open-ai-settings"
+
+// openPluginAIModelEmptyChoice keeps an empty picker usable by offering a jump to AI settings.
+func (a *App) openPluginAIModelEmptyChoice(index int, anchor woxui.Rect) {
+	state := a.pluginSettings.Form()
+	if state == nil || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	if anchor.Width <= 0 || anchor.Height <= 0 {
+		if host := a.settingsHost; host != nil {
+			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d-provider", index)))
+		}
+	}
+	syncFormFieldsEditorLocked(&state.formFieldsState)
+	setFormFieldsFocusLocked(&state.formFieldsState, index)
+	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+		item: settingItem{
+			key:   "plugin-ai-model-empty:" + state.definitions[index].Value.Key,
+			title: a.translate("i18n:ui_ai_model_selector_no_models_title"),
+			choices: []settingChoice{{
+				value: pluginAIModelOpenSettingsValue,
+				label: a.translate("i18n:ui_ai_model_selector_open_ai_settings"),
+			}},
+		},
+		anchor:   anchor,
+		onChoose: func(settingChoice) { a.openPluginAISettings() },
+	})
+	state.status = a.translate("i18n:ui_ai_model_selector_no_models_desc")
+	state.statusError = false
+	if !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading() {
+		a.aiSettings.SetModelsLoading(true)
+		util.Go(a.lifecycleCtx, "load AI models for empty plugin picker", a.loadAIModels)
+	}
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
+}
+
+// openPluginAISettings leaves the plugin form so the user can add a provider.
+func (a *App) openPluginAISettings() {
+	a.generalSettings.SetChoicePicker(nil)
+	a.selectSettingTab("ai")
 }
 
 func (a *App) setPluginAIModelProvider(index int, providerKey string) {
@@ -1635,6 +1736,8 @@ func (a *App) refreshPluginFormDefinitions(pluginID string) {
 		log.Printf("refresh plugin form definitions: %v", err)
 		return
 	}
+	requestModels := false
+	requestProviders := false
 	_ = a.runOnUI("refresh plugin form definitions", func() {
 		current := a.pluginSettings.Plugins()
 		for index := range current {
@@ -1654,11 +1757,13 @@ func (a *App) refreshPluginFormDefinitions(pluginID string) {
 			a.settingsSearch.SetPlugins(current)
 			if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
 				a.setPluginSelectionLocked(a.pluginSettings.Selected())
+				requestModels, requestProviders = a.queuePluginFormAIModelsLocked()
 			}
 			break
 		}
 		a.invalidateSettingsWindow()
 	})
+	a.startPluginFormAIModelLoads(requestModels, requestProviders)
 }
 
 // applySavedPluginSettingValues keeps the local catalog consistent until its next normal refresh.

@@ -31,13 +31,13 @@ const (
 )
 
 type webviewSite struct {
-	Keyword       string
-	Url           string
-	UserAgent     string
-	InjectCss     string
-	CacheDisabled bool
-	Icon          common.WoxImage
-	Disabled      bool
+	Keyword          string
+	Url              string
+	UserAgent        string
+	InjectCss        string
+	KeepInBackground bool
+	Icon             common.WoxImage
+	Disabled         bool
 }
 
 type WebViewPlugin struct {
@@ -138,11 +138,11 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 							Tooltip:      "i18n:plugin_webview_inject_css_tooltip",
 						},
 						{
-							Key:     "CacheDisabled",
-							Label:   "i18n:plugin_webview_cache_disabled",
-							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width:   60,
-							Tooltip: "i18n:plugin_webview_cache_tooltip",
+							Key:         "KeepInBackground",
+							Label:       "i18n:plugin_webview_keep_in_background",
+							Type:        definition.PluginSettingValueTableColumnTypeCheckbox,
+							HideInTable: true,
+							Tooltip:     "i18n:plugin_webview_keep_in_background_tooltip",
 						},
 						{
 							Key:   "Disabled",
@@ -234,7 +234,7 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 			Url:           site.Url,
 			InjectCss:     currentSite.InjectCss,
 			UserAgent:     resolveWebviewUserAgent(currentSite.UserAgent),
-			CacheDisabled: currentSite.CacheDisabled,
+			CacheDisabled: !currentSite.KeepInBackground,
 		})
 		if marshalErr != nil {
 			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to marshal webview payload for %s: %s", site.Url, marshalErr.Error()))
@@ -321,10 +321,49 @@ func (p *WebViewPlugin) loadSites(ctx context.Context) []webviewSite {
 		return nil
 	}
 
-	var sites []webviewSite
-	if err := json.Unmarshal([]byte(sitesJSON), &sites); err != nil {
+	sites, err := parseWebviewSites(sitesJSON)
+	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal web preview sites: %s", err.Error()))
 		return nil
 	}
 	return sites
+}
+
+// parseWebviewSites accepts the current KeepInBackground field and the legacy CacheDisabled flag.
+func parseWebviewSites(sitesJSON string) ([]webviewSite, error) {
+	var rawSites []json.RawMessage
+	if err := json.Unmarshal([]byte(sitesJSON), &rawSites); err != nil {
+		return nil, err
+	}
+	sites := make([]webviewSite, 0, len(rawSites))
+	for _, raw := range rawSites {
+		site, err := parseWebviewSite(raw)
+		if err != nil {
+			return nil, err
+		}
+		sites = append(sites, site)
+	}
+	return sites, nil
+}
+
+// parseWebviewSite maps a stored site row onto KeepInBackground, including pre-migration CacheDisabled rows.
+func parseWebviewSite(raw json.RawMessage) (webviewSite, error) {
+	var site webviewSite
+	if err := json.Unmarshal(raw, &site); err != nil {
+		return webviewSite{}, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return webviewSite{}, err
+	}
+	if _, exists := fields["KeepInBackground"]; exists {
+		return site, nil
+	}
+	cacheDisabled := false
+	if rawCache, exists := fields["CacheDisabled"]; exists {
+		_ = json.Unmarshal(rawCache, &cacheDisabled)
+	}
+	// Legacy rows without CacheDisabled kept the page alive; invert that into KeepInBackground.
+	site.KeepInBackground = !cacheDisabled
+	return site, nil
 }

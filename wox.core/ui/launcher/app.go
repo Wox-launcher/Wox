@@ -1081,7 +1081,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.resultScrollDetached = false
 	}
 	closedActionPanel := false
-	if a.actionPanel && len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+	if a.actionPanel && len(a.currentActionPanelEntries()) == 0 {
 		closedActionPanel = a.resetActionPanelLocked()
 	} else if a.actionPanel {
 		a.normalizeActionSelectionLocked()
@@ -1163,7 +1163,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	previewFullscreen := a.isPreviewFullscreen()
 	actionListHeight := 0
 	if actionPanel {
-		entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+		entries := a.currentActionPanelEntries()
 		actionListHeight = int(actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries)))
 	}
 	guidanceFormPreview, previewVisible := false, false

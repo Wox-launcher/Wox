@@ -164,10 +164,10 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660,
-		Items: []PluginListItem{
-			{ID: "clipboard", Name: "Clipboard", Status: "1.0.0", Badge: "System", Selected: true},
-			{ID: "shell", Name: "Shell", Status: "1.0.0", Badge: "System"},
-		},
+		Entries: pluginListEntries(
+			PluginListItem{ID: "clipboard", Name: "Clipboard", Status: "1.0.0", Badge: "System", Selected: true},
+			PluginListItem{ID: "shell", Name: "Shell", Status: "1.0.0", Badge: "System"},
+		),
 		Theme: woxcomponent.ControlTheme{SelectionText: activeColor, AccentText: woxui.Color{A: 255}, TextSecondary: inactiveColor, Text: title},
 	})
 
@@ -219,10 +219,10 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 	selectedInstalledIcon := &woxui.Image{}
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660, InstalledIcon: installedIcon, InstalledSelectedIcon: selectedInstalledIcon,
-		Items: []PluginListItem{
-			{ID: "awake", Name: "Awake", ShowInstalledIcon: true, Selected: true},
-			{ID: "arc", Name: "Arc", ShowInstalledIcon: true},
-		},
+		Entries: pluginListEntries(
+			PluginListItem{ID: "awake", Name: "Awake", ShowInstalledIcon: true, Selected: true},
+			PluginListItem{ID: "arc", Name: "Arc", ShowInstalledIcon: true},
+		),
 		Theme: woxcomponent.ControlTheme{},
 	})
 
@@ -243,8 +243,8 @@ func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 	selected := woxui.Color{R: 60, G: 80, B: 100, A: 255}
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660,
-		Items: []PluginListItem{{ID: "clipboard", Name: "Clipboard", Selected: true, Highlighted: true}},
-		Theme: woxcomponent.ControlTheme{SelectionBackground: selected},
+		Entries: pluginListEntries(PluginListItem{ID: "clipboard", Name: "Clipboard", Selected: true, Highlighted: true}),
+		Theme:   woxcomponent.ControlTheme{SelectionBackground: selected},
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -263,7 +263,7 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	for index := range items {
 		items[index] = PluginListItem{ID: fmt.Sprint(index), Name: fmt.Sprint(index)}
 	}
-	list := PluginList(PluginListProps{Width: 260, Height: 300, Items: items, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}})
+	list := PluginList(PluginListProps{Width: 260, Height: 300, Entries: pluginListEntries(items...), Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}}})
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	scrollbar := column.Children[1].(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
@@ -905,4 +905,126 @@ func TestPluginScreenshotFollowsInstalledSettingsButStaysAboveStoreDetails(t *te
 			}
 		}
 	}
+}
+
+func pluginListEntries(items ...PluginListItem) []PluginListEntry {
+	entries := make([]PluginListEntry, len(items))
+	for index, item := range items {
+		entries[index] = PluginListEntry{ID: item.ID, Item: item}
+	}
+	return entries
+}
+
+func pluginListScroll(list woxwidget.Widget) woxcomponent.ScrollViewProps {
+	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
+	return column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+}
+
+func pluginListLazyList(list woxwidget.Widget) woxwidget.LazyList {
+	switch content := pluginListScroll(list).Content.(type) {
+	case woxwidget.LazyList:
+		return content
+	case woxwidget.Stateful:
+		return content.Widget.(woxwidget.LazyList)
+	default:
+		panic(fmt.Sprintf("plugin list content = %T", content))
+	}
+}
+
+func TestPluginListSectionsUseCompactHeadersAndVariableExtent(t *testing.T) {
+	secondary := woxui.Color{R: 120, G: 130, B: 140, A: 255}
+	entries := []PluginListEntry{
+		{ID: "enabled", Header: "Enabled"},
+		{ID: "clipboard", Item: PluginListItem{ID: "clipboard", Name: "Clipboard"}},
+		{ID: "disabled", Header: "Disabled"},
+		{ID: "shell", Item: PluginListItem{ID: "shell", Name: "Shell", Selected: true}},
+	}
+	list := PluginList(PluginListProps{
+		Width: 260, Height: 660, Entries: entries,
+		Theme: woxcomponent.ControlTheme{TextSecondary: secondary},
+	})
+	rows := pluginListLazyList(list)
+	if rows.ItemCount != 4 || rows.ItemExtentAt == nil {
+		t.Fatalf("grouped list = count %d extentAt %v", rows.ItemCount, rows.ItemExtentAt != nil)
+	}
+	if got := rows.ItemExtentAt(0); got != woxcomponent.SettingsNavGroupHeight {
+		t.Fatalf("first header extent = %v, want %v", got, woxcomponent.SettingsNavGroupHeight)
+	}
+	if got := rows.ItemExtentAt(1); got != pluginListRowHeight {
+		t.Fatalf("plugin row extent = %v, want %v", got, pluginListRowHeight)
+	}
+	wantDisabled := woxcomponent.SettingsNavGroupHeight + woxcomponent.SettingsNavGroupLead
+	if got := rows.ItemExtentAt(2); got != wantDisabled {
+		t.Fatalf("following header extent = %v, want %v", got, wantDisabled)
+	}
+
+	header := rows.ItemBuilder(0).(woxwidget.Semantics)
+	if header.Role != woxui.AccessibilityRoleGroup || header.Label != "Enabled" || header.AutomationID != "plugin-list-section-enabled" {
+		t.Fatalf("enabled header = %#v", header)
+	}
+	label := header.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if label.Value != "ENABLED" || label.Style.Size != woxcomponent.SettingsSectionTitleFontSize || label.Style.Weight != woxui.FontWeightSemibold || label.Color != secondary {
+		t.Fatalf("enabled header label = %#v", label)
+	}
+	follow := rows.ItemBuilder(2).(woxwidget.Semantics).Child.(woxwidget.Container)
+	if follow.Padding.Top != woxcomponent.SettingsNavGroupLead {
+		t.Fatalf("disabled header lead = %v, want %v", follow.Padding.Top, woxcomponent.SettingsNavGroupLead)
+	}
+}
+
+func TestPluginListKeepVisibleAccountsForSectionHeaders(t *testing.T) {
+	list := PluginList(PluginListProps{
+		Width: 260, Height: 660,
+		Entries: []PluginListEntry{
+			{ID: "enabled", Header: "Enabled"},
+			{ID: "clipboard", Item: PluginListItem{ID: "clipboard", Name: "Clipboard"}},
+			{ID: "disabled", Header: "Disabled"},
+			{ID: "shell", Item: PluginListItem{ID: "shell", Name: "Shell", Selected: true}},
+		},
+		Theme: woxcomponent.ControlTheme{},
+	})
+	scroll := pluginListScroll(list)
+	start := woxcomponent.SettingsNavGroupHeight + pluginListRowHeight + woxcomponent.SettingsNavGroupHeight + woxcomponent.SettingsNavGroupLead
+	if scroll.KeepVisible == nil || scroll.KeepVisible.Start != start || scroll.KeepVisible.End != start+pluginListRowHeight {
+		t.Fatalf("keep visible = %#v, want [%v, %v]", scroll.KeepVisible, start, start+pluginListRowHeight)
+	}
+}
+
+func TestPluginListOmitsVariableExtentWithoutSectionHeaders(t *testing.T) {
+	rows := pluginListLazyList(PluginList(PluginListProps{
+		Width: 260, Height: 660,
+		Entries: pluginListEntries(PluginListItem{ID: "store", Name: "Store"}),
+		Theme:   woxcomponent.ControlTheme{},
+	}))
+	if rows.ItemExtentAt != nil {
+		t.Fatal("store catalog must keep a fixed-extent LazyList")
+	}
+}
+
+func TestPluginListDisabledRowsUseSecondaryText(t *testing.T) {
+	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
+	secondary := woxui.Color{R: 120, G: 130, B: 140, A: 255}
+	selected := woxui.Color{R: 90, G: 100, B: 110, A: 255}
+	rows := pluginListLazyList(PluginList(PluginListProps{
+		Width: 260, Height: 660,
+		Entries: pluginListEntries(
+			PluginListItem{ID: "on", Name: "On", Status: "1.0.0", Selected: true},
+			PluginListItem{ID: "off", Name: "Off", Status: "1.0.0", Disabled: true, Selected: true},
+		),
+		Theme: woxcomponent.ControlTheme{Text: title, TextSecondary: secondary, SelectionText: selected},
+	}))
+	enabledName, enabledStatus := pluginListRowTexts(rows.ItemBuilder(0))
+	if enabledName.Color != selected || enabledStatus.Color != selected {
+		t.Fatalf("enabled selected colors = %#v %#v, want selection text", enabledName.Color, enabledStatus.Color)
+	}
+	disabledName, disabledStatus := pluginListRowTexts(rows.ItemBuilder(1))
+	if disabledName.Color != secondary || disabledStatus.Color != secondary {
+		t.Fatalf("disabled selected colors = %#v %#v, want secondary text so the name stays gray", disabledName.Color, disabledStatus.Color)
+	}
+}
+
+func pluginListRowTexts(row woxwidget.Widget) (woxwidget.Text, woxwidget.Text) {
+	content := focusedControlGesture(row).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	texts := content.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	return texts.Children[0].(woxwidget.Text), texts.Children[1].(woxwidget.Text)
 }

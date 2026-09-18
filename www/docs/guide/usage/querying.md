@@ -74,6 +74,7 @@ Use a keyword when fallback results are noisy or when you know exactly which plu
 | Windows/Linux: `Ctrl + J`; macOS: `Command + J` | Open the Action Panel |
 | Windows/Linux: hold `Alt` then `1`-`9`; macOS: hold `Command` then `1`-`9` | Run a visible result by its number |
 | `Tab` | Complete a suggested query, or move to the next query hint |
+| `Shift+Tab` | Replace the query with the selected result title, such as a calculator result, or move to the previous query hint |
 | `Space` | Preview the selected result when preview is available |
 
 The main hotkey, selection hotkey, query hotkeys, and tray queries are covered in [Hotkeys](./hotkeys.md).

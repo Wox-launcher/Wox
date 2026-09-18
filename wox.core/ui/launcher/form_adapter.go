@@ -27,6 +27,7 @@ type formFieldCallbacks struct {
 	openAIModelChoice func(index int, provider bool, anchor woxui.Rect)
 	setAIModelName    func(index int, value string)
 	finishAIModelEdit func(index int, value string)
+	openAISettings    func()
 	pickDir           func(index int)
 	pickApp           func(index int)
 	recordKey         func(index int)
@@ -190,11 +191,14 @@ func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFie
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
 		Provider: providerLabel, Model: modelLabel, ProviderIcon: providerIcon, ModelIcon: providerIcon, ModelsAvailable: len(models) > 0,
 		ModelNameHint: a.translate("i18n:ui_ai_model_selector_model_name"),
+		ManageLabel:   a.translate("i18n:ui_ai_model_selector_open_ai_settings"),
 		Width:         width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index,
-		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(18, callbacks.imageScale)),
-		ListIcon: a.imageForTint(settingControlIconSource("list"), &foreground, physicalImageSize(18, callbacks.imageScale)),
-		Window:   a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette,
+		EditIcon:   a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(18, callbacks.imageScale)),
+		ListIcon:   a.imageForTint(settingControlIconSource("list"), &foreground, physicalImageSize(18, callbacks.imageScale)),
+		ManageIcon: a.imageForTint(settingControlIconSource("link"), &foreground, physicalImageSize(18, callbacks.imageScale)),
+		Window:     a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette,
 		OnOpenLink:         callbacks.openLink,
+		OnManageModels:     callbacks.openAISettings,
 		OnProviderTap:      func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, true, anchor) },
 		OnModelTap:         func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, false, anchor) },
 		OnModelNameChanged: func(value string) { callbacks.setAIModelName(index, value) },
