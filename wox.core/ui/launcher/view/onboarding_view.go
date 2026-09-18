@@ -309,7 +309,8 @@ func onboardingMainHotkeyVisual(props OnboardingProps, width float32, accent wox
 		Child: woxwidget.Focusable{
 			Key: "onboarding-main-hotkey", FocusRingColor: props.Theme.Focus, FocusRingRadius: 7,
 			OnKey: func(event woxui.KeyEvent) bool {
-				if event.Down && (event.Key == woxui.KeyEnter || event.Key == woxui.KeySpace) && props.OnRecordHotkey != nil {
+				// Modified keys and active recording belong to the recorder, not button activation.
+				if event.Down && !event.Composing && event.Modifiers == 0 && !props.HotkeyRecording && (event.Key == woxui.KeyEnter || event.Key == woxui.KeySpace) && props.OnRecordHotkey != nil {
 					props.OnRecordHotkey()
 					return true
 				}

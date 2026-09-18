@@ -134,6 +134,25 @@ func TestOnboardingQueryPreviewUsesConfiguredGlance(t *testing.T) {
 	}
 }
 
+func TestOnboardingHotkeyButtonDoesNotConsumeRecordedCombos(t *testing.T) {
+	for _, recording := range []bool{false, true} {
+		activated := false
+		visual := onboardingMainHotkeyVisual(OnboardingProps{
+			MainHotkeyLabels: []string{"Alt", "Space"}, HotkeyRecording: recording,
+			OnRecordHotkey: func() { activated = true },
+		}, 660, woxui.Color{}).(woxwidget.Flex)
+		button := visual.Children[0].(woxwidget.Align).Child.(woxwidget.Semantics).Child.(woxwidget.Focusable)
+		for _, key := range []woxui.Key{woxui.KeySpace, woxui.KeyEnter} {
+			if button.OnKey(woxui.KeyEvent{Key: key, Down: true, Modifiers: woxui.KeyModifierAlt}) || activated {
+				t.Fatalf("button consumed Alt+%s while recording=%v", key, recording)
+			}
+		}
+		if handled := button.OnKey(woxui.KeyEvent{Key: woxui.KeySpace, Down: true}); handled != !recording || activated != !recording {
+			t.Fatalf("plain Space activation while recording=%v: handled=%v activated=%v", recording, handled, activated)
+		}
+	}
+}
+
 func TestOnboardingHotkeyConflictDisablesNext(t *testing.T) {
 	footer := onboardingFooter(OnboardingProps{
 		Width: 1040, NextDisabled: true, Steps: []OnboardingStep{{ID: "mainHotkey", Title: "Hotkey"}, {ID: "finish", Title: "Finish"}},

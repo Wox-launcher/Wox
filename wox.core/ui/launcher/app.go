@@ -435,6 +435,9 @@ func (a *App) start() error {
 			if event.Down {
 				a.releaseResultFileDragHold()
 			}
+			if event.Down && !event.Composing && !a.hotkeyRecordingUsesSettingsWindow() && !a.hotkeyRecordingUsesOnboardingWindow() && a.onHotkeyRecordingKey(event) {
+				return true
+			}
 			if host.Key(event) {
 				return true
 			}

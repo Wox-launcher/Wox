@@ -3142,6 +3142,22 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
   // ponytail: Keep this small closed handle alive so concurrent Go calls cannot observe freed memory; add reference counting if repeated window creation becomes measurable.
 }
 
+typedef struct {
+  uintptr_t context;
+  int32_t result;
+} WoxLinuxStart;
+
+// Start inside the event loop so background catalog loads can dispatch UI callbacks immediately.
+// Starting before gtk_main rejected those callbacks and left onboarding stuck in its loading state.
+static gboolean start_linux_runtime(gpointer data) {
+  WoxLinuxStart *start = data;
+  start->result = woxGoLinuxStart(start->context);
+  if (start->result != 0 || g_atomic_int_get(&wox_linux_window_count) == 0) {
+    gtk_main_quit();
+  }
+  return G_SOURCE_REMOVE;
+}
+
 int32_t wox_linux_run(uintptr_t context) {
   if (context == 0 || g_atomic_int_get(&wox_linux_runtime_running) != 0) {
     return -1;
@@ -3160,14 +3176,13 @@ int32_t wox_linux_run(uintptr_t context) {
   wox_linux_background_effect_probe(gdk_display_get_default());
   wox_linux_main_thread = pthread_self();
   g_atomic_int_set(&wox_linux_runtime_running, 1);
-  int32_t start_result = woxGoLinuxStart(context);
-  if (start_result == 0 && g_atomic_int_get(&wox_linux_window_count) > 0) {
-    g_atomic_int_set(&wox_linux_loop_active, 1);
-    gtk_main();
-    g_atomic_int_set(&wox_linux_loop_active, 0);
-  }
+  WoxLinuxStart start = {.context = context, .result = -1};
+  g_idle_add(start_linux_runtime, &start);
+  g_atomic_int_set(&wox_linux_loop_active, 1);
+  gtk_main();
+  g_atomic_int_set(&wox_linux_loop_active, 0);
   g_atomic_int_set(&wox_linux_runtime_running, 0);
-  return start_result == 0 ? 0 : -1;
+  return start.result == 0 ? 0 : -1;
 }
 
 static void apply_linux_rgba_visual(GtkWidget *widget) {

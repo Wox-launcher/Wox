@@ -36,6 +36,10 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 				host.SetWindowFocused(event.Active)
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
+				// Recording captures combos before focused buttons can consume Space or Enter.
+				if a.hotkeyRecordingUsesSettingsWindow() && a.onSettingsWindowKey(event) {
+					return true
+				}
 				if host.Key(event) {
 					return true
 				}
@@ -118,6 +122,9 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 				a.onOnboardingWindowFocus(event)
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
+				if a.hotkeyRecordingUsesOnboardingWindow() && a.onOnboardingWindowKey(event) {
+					return true
+				}
 				if host.Key(event) {
 					return true
 				}

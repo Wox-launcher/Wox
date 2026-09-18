@@ -66,6 +66,9 @@ func TestHotkeyRecordingFocusKeysMatchFlutter(t *testing.T) {
 }
 
 func TestFallbackHotkeyStringAllowsStandaloneFunctionKeys(t *testing.T) {
+	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.KeySpace, Down: true, Modifiers: woxui.KeyModifierAlt}); got != "alt+space" {
+		t.Fatalf("Alt+Space = %q", got)
+	}
 	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.Key("f12"), Down: true}); got != "f12" {
 		t.Fatalf("standalone F12 = %q, want f12", got)
 	}

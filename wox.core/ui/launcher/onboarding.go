@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"runtime"
 	"strconv"
@@ -817,8 +818,9 @@ func (a *App) loadOnboardingThemes() {
 	a.onboardingTheme.error = ""
 	a.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "load onboarding themes", func() {
+		util.GetLogger().Info(a.lifecycleCtx, "loading onboarding system themes")
 		err := a.reloadThemes("installed", onboardingGlassID)
-		_ = a.runOnUI("apply onboarding themes", func() {
+		if applyErr := a.runOnUI("apply onboarding themes", func() {
 			a.onboardingTheme.loading = false
 			if err != nil {
 				a.onboardingTheme.error = err.Error()
@@ -833,8 +835,11 @@ func (a *App) loadOnboardingThemes() {
 					a.onboardingTheme.selectedID = themes[0].ID
 				}
 			}
+			util.GetLogger().Info(a.lifecycleCtx, fmt.Sprintf("onboarding system themes loaded: count=%d error=%v", len(onboardingSystemThemes(a.themeSettings.Themes())), err))
 			a.invalidateOnboardingWindow()
-		})
+		}); applyErr != nil {
+			util.GetLogger().Error(a.lifecycleCtx, applyErr.Error())
+		}
 	})
 }
 
