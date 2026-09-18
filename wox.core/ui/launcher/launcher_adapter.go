@@ -496,7 +496,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 	}
 	var attention woxwidget.Widget
 	if snapshot.attentionVisible {
-		attention = a.buildAttentionUnread(snapshot.attentionUnreadCount, snapshot.palette, attentionWidth, scale, snapshot.densityMetrics)
+		attention = a.buildAttentionUnread(snapshot.attentionUnreadCount, snapshot.palette, attentionWidth, snapshot.densityMetrics)
 	}
 	var glance woxwidget.Widget
 	if !snapshot.queryLoading && snapshot.glance != nil {

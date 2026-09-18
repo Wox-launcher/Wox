@@ -41,7 +41,6 @@ func AttentionUnreadWidth(countTextWidth, densityScale float32) float32 {
 // AttentionUnreadProps contains the display state and actions for unread attention items.
 type AttentionUnreadProps struct {
 	Width        float32
-	Icon         *woxui.Image
 	Tooltip      string
 	CountText    string
 	UnreadCount  int
@@ -53,7 +52,7 @@ type AttentionUnreadProps struct {
 
 // Equal compares every render dependency for the unread-attention badge.
 func (p AttentionUnreadProps) Equal(other AttentionUnreadProps) bool {
-	return p.Width == other.Width && p.Icon == other.Icon && p.Tooltip == other.Tooltip && p.CountText == other.CountText && p.UnreadCount == other.UnreadCount && p.Theme == other.Theme && p.DensityScale == other.DensityScale
+	return p.Width == other.Width && p.Tooltip == other.Tooltip && p.CountText == other.CountText && p.UnreadCount == other.UnreadCount && p.Theme == other.Theme && p.DensityScale == other.DensityScale
 }
 
 type attentionUnreadViewState struct {
@@ -84,7 +83,7 @@ func (s *attentionUnreadViewState) InitState(_ woxwidget.StateContext, _ any) {
 // DidUpdateWidget preserves hover while immutable unread content is refreshed.
 func (s *attentionUnreadViewState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
 
-// Build composes the inbox accessory with locally owned hover state.
+// Build composes the notification accessory with locally owned hover state.
 func (s *attentionUnreadViewState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(AttentionUnreadProps)
 	width := props.Width
@@ -95,18 +94,19 @@ func (s *attentionUnreadViewState) Build(context woxwidget.StateContext, widget 
 	iconSize := scaledLauncherSize(attentionUnreadIconSize, props.DensityScale)
 	padding := scaledLauncherSize(attentionUnreadPadding, props.DensityScale)
 	gap := scaledLauncherSize(attentionUnreadIconGap, props.DensityScale)
-	_, labelColor, background, border := props.Theme.AttentionBadgeColors(s.hovered)
+	iconColor, labelColor, background, border := props.Theme.AttentionBadgeColors(s.hovered)
 	countText := props.CountText
 	if countText == "" {
 		countText = AttentionUnreadCountText(props.UnreadCount)
 	}
-	children := make([]woxwidget.Widget, 0, 2)
-	if props.Icon != nil {
-		children = append(children, woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize})
+	// Paint the chrome glyph here so the badge matches the theme editor and
+	// does not wait on async launcher image decode, which can leave only the count.
+	children := []woxwidget.Widget{
+		woxcomponent.NotificationGlyph(iconSize, iconColor),
+		woxwidget.Text{
+			Value: countText, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.AttentionBadgeFontSize, props.DensityScale)}, Color: labelColor,
+		},
 	}
-	children = append(children, woxwidget.Text{
-		Value: countText, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.AttentionBadgeFontSize, props.DensityScale)}, Color: labelColor,
-	})
 	borderWidth := float32(0)
 	if border.A > 0 {
 		borderWidth = scaledLauncherSize(1, props.DensityScale)

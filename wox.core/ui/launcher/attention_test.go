@@ -44,13 +44,8 @@ func TestAttentionUnreadTooltipUsesPlatformHotkey(t *testing.T) {
 }
 
 func TestBuildAttentionUnreadExposesInboxTap(t *testing.T) {
-	app := &App{
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-	}
-	widget := app.buildAttentionUnread(2, defaultPalette(), 30, 1, launcherDensityMetricsFor(""))
+	app := &App{}
+	widget := app.buildAttentionUnread(2, defaultPalette(), 30, launcherDensityMetricsFor(""))
 	boundary, ok := widget.(woxwidget.Boundary[launcherview.AttentionUnreadProps])
 	if !ok {
 		t.Fatalf("attention widget = %T, want boundary", widget)

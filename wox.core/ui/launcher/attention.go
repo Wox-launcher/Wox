@@ -4,7 +4,6 @@ import (
 	"log"
 	"strings"
 
-	"wox/common/icons"
 	"wox/plugin"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -15,14 +14,11 @@ import (
 // Tests replace this so eligibility can be checked without a plugin manager instance.
 var attentionPluginDisabled = plugin.IsAttentionPluginDisabled
 
-// buildAttentionUnread tints the inbox glyph and sizes the query-box accessory beside Glance.
-func (a *App) buildAttentionUnread(unreadCount int, palette uiPalette, width, imageScale float32, densityMetrics launcherDensityMetrics) woxwidget.Widget {
-	theme := palette.componentTheme()
-	iconTint, _, _, _ := theme.AttentionBadgeColors(false)
-	icon := a.imageForTint(fromCoreImage(icons.Get(icons.ControlNotification)), &iconTint, physicalImageSize(int(densityMetrics.scaled(15)), imageScale))
+// buildAttentionUnread sizes the query-box accessory beside Glance.
+func (a *App) buildAttentionUnread(unreadCount int, palette uiPalette, width float32, densityMetrics launcherDensityMetrics) woxwidget.Widget {
 	return launcherview.AttentionUnreadBoundary(launcherview.AttentionUnreadProps{
-		Width: width, Icon: icon, Tooltip: a.attentionUnreadTooltip(), CountText: launcherview.AttentionUnreadCountText(unreadCount), UnreadCount: unreadCount,
-		Theme: theme, DensityScale: densityMetrics.scale,
+		Width: width, Tooltip: a.attentionUnreadTooltip(), CountText: launcherview.AttentionUnreadCountText(unreadCount), UnreadCount: unreadCount,
+		Theme: palette.componentTheme(), DensityScale: densityMetrics.scale,
 		OnTap: func() { a.activateAttentionUnread() }, OnHover: a.setAttentionUnreadHover,
 	})
 }

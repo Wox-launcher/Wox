@@ -84,7 +84,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlStore:             newMonochromeUIIcon(`<path d="M4 9h16M5 9l1-5h12l1 5M6 9v11h12V9"/><path d="M9 20v-6h6v6"/>`),
 	ControlFilter:            newMonochromeUIIcon(`<path d="M4 5h16l-6 7v6l-4 2v-8z"/>`),
 	ControlInbox:             newMonochromeUIIcon(`<path d="M4 4h16v13a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4z"/><path d="M4 13h3l3 3h4l3-3h3"/>`),
-	ControlNotification:      newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>`),
+	ControlNotification:      newMonochromeUIIcon(`<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>`),
 	ControlEdit:              newMonochromeUIIcon(`<path d="M13.5 6.5l4 4M4 20h4l10.5-10.5a2.83 2.83 0 1 0-4-4L4 16v4z"/>`),
 	ControlList:              newMonochromeUIIcon(`<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>`),
 	ControlCopy:              newMonochromeUIIcon(`<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>`),

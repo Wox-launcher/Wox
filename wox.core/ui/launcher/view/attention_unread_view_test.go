@@ -30,11 +30,10 @@ func TestAttentionUnreadWidthClampsGlanceAccessoryRange(t *testing.T) {
 }
 
 func TestAttentionUnreadViewRendersInboxCountBadge(t *testing.T) {
-	icon := &woxui.Image{}
 	theme := woxcomponent.Theme{QueryText: woxui.Color{R: 240, A: 255}, Cursor: woxui.Color{R: 80, G: 160, B: 255, A: 255}}
 	state := &attentionUnreadViewState{}
 	built := state.Build(woxwidget.StateContext{}, AttentionUnreadProps{
-		Width: 50, Icon: icon, Tooltip: "Attention items (Ctrl+U)", CountText: "2", UnreadCount: 2, Theme: theme, DensityScale: 1,
+		Width: 50, Tooltip: "Attention items (Ctrl+U)", CountText: "2", UnreadCount: 2, Theme: theme, DensityScale: 1,
 	}).(woxwidget.Semantics)
 	if built.AutomationID != "launcher.query.attention" || built.Role != woxui.AccessibilityRoleButton || built.Label != "Attention items (Ctrl+U)" || built.Value != "2" {
 		t.Fatalf("attention unread semantics = %#v", built)
@@ -43,7 +42,7 @@ func TestAttentionUnreadViewRendersInboxCountBadge(t *testing.T) {
 		t.Fatalf("attention unread actions = %#v, want activate", built)
 	}
 	slot := built.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	_, wantLabel, wantBackground, wantBorder := theme.AttentionBadgeColors(false)
+	wantIconColor, wantLabel, wantBackground, wantBorder := theme.AttentionBadgeColors(false)
 	if slot.Width != 50 || slot.Height != 30 || slot.Radius != 5 || slot.BorderWidth != 0 || slot.Color != wantBackground || slot.BorderColor != wantBorder {
 		t.Fatalf("attention unread badge = %#v", slot)
 	}
@@ -51,9 +50,13 @@ func TestAttentionUnreadViewRendersInboxCountBadge(t *testing.T) {
 	if row.Gap != 5 || len(row.Children) != 2 {
 		t.Fatalf("attention unread row = %#v, want icon plus count", row)
 	}
+	wantIcon, ok := woxcomponent.NotificationGlyph(16, wantIconColor).(woxwidget.Image)
+	if !ok || wantIcon.Source == nil {
+		t.Fatal("notification glyph should rasterize a visible icon")
+	}
 	image, ok := row.Children[0].(woxwidget.Image)
-	if !ok || image.Source != icon || image.Width != 16 || image.Height != 16 {
-		t.Fatalf("attention unread icon = %#v, want 16px inbox", row.Children[0])
+	if !ok || image.Source != wantIcon.Source || image.Width != 16 || image.Height != 16 {
+		t.Fatalf("attention unread icon = %#v, want 16px notification glyph", row.Children[0])
 	}
 	label, ok := row.Children[1].(woxwidget.Text)
 	if !ok || label.Value != "2" || label.Style.Size != woxcomponent.AttentionBadgeFontSize || label.Style.Weight != woxui.FontWeightRegular || label.Color != wantLabel {
