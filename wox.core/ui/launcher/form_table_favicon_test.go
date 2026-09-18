@@ -7,7 +7,10 @@ import (
 	"time"
 	"wox/common"
 	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type faviconTestServices struct {
@@ -21,12 +24,42 @@ func (s *faviconTestServices) FetchWebsiteIcon(context.Context, string, string) 
 	return common.WoxImage{ImageType: common.WoxImageTypeBase64, ImageData: "data:image/png;base64,fixture"}, s.err
 }
 
+func TestFormTableFaviconShowsURLHint(t *testing.T) {
+	app := trayQueryEditorTestApp(t)
+	app.translations = map[string]string{
+		"ui_image_editor_url_hint": "Paste an image URL or a website URL.",
+	}
+	app.openFormTableFavicon(0)
+	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
+		t.Fatal("idle dialog must explain image and website URLs")
+	}
+	app.settingsTableEditor.favicon.error = "bad url"
+	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
+		t.Fatal("errors must replace the URL hint")
+	}
+}
+
+func TestFormTableURLFetchError(t *testing.T) {
+	app := trayQueryEditorTestApp(t)
+	app.translations = map[string]string{
+		"ui_image_editor_url_failed":      "generic-fail",
+		"ui_image_editor_url_unavailable": "expired-or-private",
+	}
+	if got := formTableURLFetchError(app, errors.New("network down")); got != "generic-fail" {
+		t.Fatalf("generic error = %q", got)
+	}
+	if got := formTableURLFetchError(app, &util.HTTPStatusError{StatusCode: 404, URL: "https://example.com/a.png"}); got != "expired-or-private" {
+		t.Fatalf("404 error = %q", got)
+	}
+}
+
 func TestNormalizeFaviconURL(t *testing.T) {
 	for input, want := range map[string]string{
 		" example.com/path ":          "https://example.com/path",
 		"http://localhost:8080/path":  "http://localhost:8080/path",
 		"https://example.com?q=hello": "https://example.com?q=hello",
-		"":                            "", "https://": "", "file:///tmp/icon": "", "javascript:alert(1)": "",
+		"https://private-user-images.githubusercontent.com/1/a.png?jwt=a.b.c": "https://private-user-images.githubusercontent.com/1/a.png?jwt=a.b.c",
+		"": "", "https://": "", "file:///tmp/icon": "", "javascript:alert(1)": "",
 		"https://user:password@example.com": "", "https://bad host": "",
 	} {
 		if got := normalizeFaviconURL(input); got != want {
@@ -98,4 +131,32 @@ func TestFormTableFaviconLifecycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func formTableFaviconContainsText(widget woxwidget.Widget, want string) bool {
+	stateful, ok := widget.(woxwidget.Stateful)
+	if !ok {
+		return false
+	}
+	props, ok := stateful.Widget.(woxcomponent.DialogProps)
+	if !ok {
+		return false
+	}
+	flex, ok := props.Child.(woxwidget.Flex)
+	if !ok {
+		return false
+	}
+	for _, child := range flex.Children {
+		switch node := child.(type) {
+		case woxwidget.Text:
+			if node.Value == want {
+				return true
+			}
+		case woxwidget.TextBlock:
+			if node.Value == want {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -811,6 +811,23 @@ func TestFormTableHeightShowsWholeRows(t *testing.T) {
 	}
 }
 
+func TestFormTableImagePreviewDoesNotOpenEmojiPicker(t *testing.T) {
+	opened := false
+	control := formTableRowImageControl(FormTableRowFieldProps{
+		ID: "icon", ImageEmoji: "🤖", EmojiLabel: "Emoji", OnEmoji: func() { opened = true },
+	}, 600, 88)
+	flex, ok := control.(woxwidget.Flex)
+	if !ok || len(flex.Children) == 0 {
+		t.Fatalf("image control = %#v, want a preview beside actions", control)
+	}
+	if gesture, isGesture := flex.Children[0].(woxwidget.Gesture); isGesture && gesture.OnTap != nil {
+		t.Fatal("icon preview must not open the emoji picker")
+	}
+	if opened {
+		t.Fatal("emoji picker opened without tapping the Emoji button")
+	}
+}
+
 // TestFormTableImageActionsFitTranslatedLabels checks wrapping at narrow logical widths and scaled displays.
 func TestFormTableImageActionsFitTranslatedLabels(t *testing.T) {
 	for _, width := range []float32{360, 600} {

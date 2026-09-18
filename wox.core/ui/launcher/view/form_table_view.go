@@ -1350,8 +1350,7 @@ func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget 
 }
 
 // formTableRowImageControl wraps image-source actions beside the preview.
-// The icon is a display surface (like Flutter's WoxImageSelector preview); it never
-// becomes a text field, so no caret can appear inside it.
+// The icon is a display surface only: it is not tappable and does not open the emoji picker.
 func formTableRowImageControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	var preview woxwidget.Widget
 	if props.Image != nil {
@@ -1363,9 +1362,9 @@ func formTableRowImageControl(props FormTableRowFieldProps, width, height float3
 	} else {
 		preview = woxwidget.Container{Width: 80, Height: height}
 	}
-	previewBox := woxwidget.Gesture{ID: props.ID + "-preview", OnTap: props.OnEmoji, Child: woxwidget.Container{
+	previewBox := woxwidget.Container{
 		Width: 80, Height: height, Radius: 8, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Child: preview,
-	}}
+	}
 	buttons := []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, OnTap: props.OnEmoji, Theme: props.Theme}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, OnTap: props.OnUpload, Theme: props.Theme}),

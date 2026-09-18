@@ -69,6 +69,52 @@ func HttpGet(ctx context.Context, url string) ([]byte, error) {
 	return doRequest(req)
 }
 
+// HTTPStatusError is a completed HTTP response with a non-success status.
+type HTTPStatusError struct {
+	Method     string
+	URL        string
+	StatusCode int
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("http %s %s failed, status code: %d", e.Method, redactURLQuery(e.URL), e.StatusCode)
+}
+
+func redactURLQuery(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+// HttpOpen performs a GET and returns the response so callers can sniff before reading the body.
+func HttpOpen(ctx context.Context, rawURL string) (*http.Response, error) {
+	return HttpOpenWithHeaders(ctx, rawURL, nil)
+}
+
+// HttpOpenWithHeaders performs a GET with extra headers. Caller must close Body.
+func HttpOpenWithHeaders(ctx context.Context, rawURL string, headers map[string]string) (*http.Response, error) {
+	req, err := newRequest(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := doRequestWithClient(req, getClient(), true)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		_ = resp.Body.Close()
+		return nil, &HTTPStatusError{Method: http.MethodGet, URL: rawURL, StatusCode: resp.StatusCode}
+	}
+	return resp, nil
+}
+
 func HttpGetWithHeaders(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
 	req, err := newRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
