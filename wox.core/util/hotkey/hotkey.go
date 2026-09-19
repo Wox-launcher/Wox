@@ -39,6 +39,9 @@ type Hotkey struct {
 type Spec struct {
 	CombineKey string
 	Callback   func() // onPress; required
+	// CanTriggerBeforeRelease opts safe Windows Caps callbacks out of the synthetic-input release guard.
+	// It runs on the callback goroutine, never on the keyboard hook thread.
+	CanTriggerBeforeRelease func() bool
 	// OnRelease, when non-nil, marks this spec as hold-mode: Callback fires on
 	// press and OnRelease fires on release. Only meaningful for special hotkeys
 	// (modifier chords) that go through the evdev path; normal combos always use
@@ -125,7 +128,7 @@ func (h *Hotkey) register(ctx context.Context, combineKey string, onPress func()
 	case hotkeyKindCapsLockCombo:
 		util.GetLogger().Info(ctx, fmt.Sprintf("register caps lock hotkey: %s", combineKey))
 		h.key = spec.key
-		return registerCapsLockComboHotKey(spec.key, onPress)
+		return registerCapsLockComboHotKey(spec.key, onPress, options.canTriggerBeforeRelease)
 	}
 
 	registration, err := registerGlobalHotkey(spec.modifiers, spec.key, onPress)
@@ -188,7 +191,7 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 				// chord is resolved as a press trigger, not a normal combo.
 				err = hk.RegisterWithModifierPress(ctx, spec.CombineKey, spec.Callback)
 			} else {
-				err = hk.Register(ctx, spec.CombineKey, spec.Callback)
+				err = hk.register(ctx, spec.CombineKey, spec.Callback, nil, registerOptions{canTriggerBeforeRelease: spec.CanTriggerBeforeRelease})
 			}
 			if err != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("skip special hotkey in group, register failed: %s: %s", spec.CombineKey, err.Error()))

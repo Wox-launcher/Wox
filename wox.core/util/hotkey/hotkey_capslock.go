@@ -329,8 +329,10 @@ func (t *capsLockComboTracker) restoreDarwinCapsLockState(allowCapsLockStateUpda
 
 func setCapsLockStateAsync(targetState bool, reason string) {
 	util.Go(util.NewTraceContext(), "set Caps Lock state after Caps Lock combo", func() {
+		ctx := util.NewTraceContext()
+		util.GetLogger().Debug(ctx, fmt.Sprintf("caps-lock state update: current=%t target=%t reason=%s", keyboard.IsCapsLockEnabled(), targetState, reason))
 		if err := keyboard.SetCapsLockState(targetState); err != nil {
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to set Caps Lock state: targetState=%t reason=%s err=%s", targetState, reason, err.Error()))
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to set Caps Lock state: targetState=%t reason=%s err=%s", targetState, reason, err.Error()))
 		}
 	})
 }
@@ -352,18 +354,23 @@ func shouldReplayCapsLockPress(comboTriggered bool) bool {
 
 var (
 	capsLockComboMu        sync.Mutex
-	capsLockComboCallbacks = map[keyboard.Key]func(){}
+	capsLockComboCallbacks = map[keyboard.Key]capsLockComboCallback{}
 	capsLockComboListener  keyboard.RawKeySubscription
 	capsLockComboState     = newCapsLockComboTracker()
 )
 
-func registerCapsLockComboHotKey(key keyboard.Key, callback func()) error {
+type capsLockComboCallback struct {
+	callback                func()
+	canTriggerBeforeRelease func() bool
+}
+
+func registerCapsLockComboHotKey(key keyboard.Key, callback func(), canTriggerBeforeRelease func() bool) error {
 	capsLockComboMu.Lock()
 	if _, exists := capsLockComboCallbacks[key]; exists {
 		capsLockComboMu.Unlock()
 		return fmt.Errorf("caps lock hotkey already registered for key: %s", key.Character())
 	}
-	capsLockComboCallbacks[key] = callback
+	capsLockComboCallbacks[key] = capsLockComboCallback{callback: callback, canTriggerBeforeRelease: canTriggerBeforeRelease}
 	capsLockComboMu.Unlock()
 
 	if err := ensureCapsLockComboListener(); err != nil {
@@ -394,9 +401,16 @@ func ensureCapsLockComboListener() error {
 		capsLockComboMu.Lock()
 		callback := capsLockComboCallbacks[triggeredKey]
 		capsLockComboMu.Unlock()
-		if callback != nil {
+		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("caps-lock combo matched: hotkey=%s callbackRegistered=%t", capsLockComboToHotkeyString(triggeredKey), callback.callback != nil))
+		if callback.callback != nil {
 			util.Go(util.NewTraceContext(), "caps lock hotkey callback", func() {
-				waitForCapsLockComboRelease(triggeredKey)
+				// Other platforms retain their release/replay ordering. Windows can start
+				// capture while Caps is held, provided the action does not inject keys.
+				if runtime.GOOS == "windows" && callback.canTriggerBeforeRelease != nil && callback.canTriggerBeforeRelease() {
+					util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("caps-lock callback triggered before release: hotkey=%s", capsLockComboToHotkeyString(triggeredKey)))
+				} else {
+					waitForCapsLockComboRelease(triggeredKey)
+				}
 				// On Linux/Wayland, the system sees the combo key (e.g. 'A')
 				// because evdev is read-only, so it types a stray character
 				// into the focused input field. Inject a Backspace via uinput
@@ -407,7 +421,7 @@ func ensureCapsLockComboListener() error {
 							"failed to delete stray combo character: %s", err.Error()))
 					}
 				}
-				callback()
+				callback.callback()
 			})
 		}
 
@@ -457,29 +471,49 @@ func unregisterCapsLockComboHotKey(key keyboard.Key) {
 
 func handleCapsLockComboEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
 	capsLockComboMu.Lock()
-	defer capsLockComboMu.Unlock()
-	return capsLockComboState.HandleEvent(event, true)
+	pressedBefore := capsLockComboState.capsPressed
+	comboBefore := capsLockComboState.comboTriggered
+	repeatedKey := capsLockComboState.pressedKeys[event.Key]
+	triggeredKey, consume := capsLockComboState.HandleEvent(event, true)
+	pressedAfter := capsLockComboState.capsPressed
+	comboAfter := capsLockComboState.comboTriggered
+	capsLockComboMu.Unlock()
+	// Log only Caps sequences, not ordinary typing, and keep logger I/O outside the state lock.
+	if event.Key == keyboard.KeyCapsLock || pressedBefore || pressedAfter {
+		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+			"caps-lock event: key=%s nativeKey=%d type=%v modifiers=%d pressed=%t->%t combo=%t->%t repeatedKey=%t triggered=%s consume=%t",
+			rawKeyLogLabel(event.Key), event.NativeKeyCode, event.Type, event.Modifiers, pressedBefore, pressedAfter, comboBefore, comboAfter, repeatedKey, capsLockComboToHotkeyString(triggeredKey), consume))
+	}
+	return triggeredKey, consume
 }
 
 // waitForCapsLockComboRelease keeps synthetic keyboard input from being swallowed by the active Caps Lock raw-key sequence.
 func waitForCapsLockComboRelease(triggeredKey keyboard.Key) {
-	deadline := time.Now().Add(capsLockComboCallbackReleaseMaxWait)
+	started := time.Now()
+	ctx := util.NewTraceContext()
+	util.GetLogger().Debug(ctx, fmt.Sprintf("caps-lock callback waiting for release: hotkey=%s", capsLockComboToHotkeyString(triggeredKey)))
+	deadline := started.Add(capsLockComboCallbackReleaseMaxWait)
+	var hookPressed, capsPressed, keyPressed bool
 	for time.Now().Before(deadline) {
 		// Windows suppresses consumed keys before GetAsyncKeyState sees them.
 		// Wait for our hook's key-up state too, or it will swallow synthetic Copy.
-		hookPressed := false
+		hookPressed = false
 		if runtime.GOOS == "windows" {
 			capsLockComboMu.Lock()
 			hookPressed = capsLockComboState.capsPressed
 			capsLockComboMu.Unlock()
 		}
-		if !hookPressed && !keyboard.IsKeyPressed(keyboard.KeyCapsLock) && (triggeredKey == keyboard.KeyUnknown || !keyboard.IsKeyPressed(triggeredKey)) {
+		capsPressed = keyboard.IsKeyPressed(keyboard.KeyCapsLock)
+		keyPressed = triggeredKey != keyboard.KeyUnknown && keyboard.IsKeyPressed(triggeredKey)
+		if !hookPressed && !capsPressed && !keyPressed {
 			time.Sleep(capsLockComboCallbackReleaseSettleDelay)
+			util.GetLogger().Debug(ctx, fmt.Sprintf("caps-lock callback release ready: hotkey=%s waitedMs=%d", capsLockComboToHotkeyString(triggeredKey), time.Since(started).Milliseconds()))
 			return
 		}
 
 		time.Sleep(capsLockComboCallbackReleasePollDelay)
 	}
+	util.GetLogger().Warn(ctx, fmt.Sprintf("caps-lock callback release timed out, continuing: hotkey=%s waitedMs=%d hookPressed=%t nativeCapsPressed=%t nativeKeyPressed=%t", capsLockComboToHotkeyString(triggeredKey), time.Since(started).Milliseconds(), hookPressed, capsPressed, keyPressed))
 }
 
 func capsLockComboToHotkeyString(key keyboard.Key) string {

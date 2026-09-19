@@ -7,6 +7,20 @@ import (
 	"wox/util/selection"
 )
 
+// TestQueryVariablesRequireSelection follows runtime declarations without reading the clipboard or selection.
+func TestQueryVariablesRequireSelection(t *testing.T) {
+	instance := &Instance{}
+	manager := &Manager{instances: []*Instance{instance}}
+	for _, variable := range []string{QueryVariableClipboardText, QueryVariableSelectedText, QueryVariableClipboardText} {
+		if !manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "g", QueryVariables: []string{variable}}) {
+			t.Fatal("failed to register runtime query variable")
+		}
+		if got := manager.QueryVariablesRequireSelection(); got != (variable == QueryVariableSelectedText) {
+			t.Fatalf("variable %q requires selection = %t", variable, got)
+		}
+	}
+}
+
 // TestTextQueryVariableCapture protects clipboard-before-selection ordering and on-demand reads.
 func TestTextQueryVariableCapture(t *testing.T) {
 	text := "original clipboard"

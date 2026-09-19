@@ -103,6 +103,7 @@ func GetUIManager() *Manager {
 			OnQuery: func(combineKey string, queryHotkey setting.QueryHotkey) {
 				managerInstance.handleQueryHotkeyTrigger(combineKey, queryHotkey)
 			},
+			QueryCanTriggerBeforeRelease: queryCanTriggerBeforeRelease,
 			OnDictationHoldPress: func(ctx context.Context, actionID string) {
 				managerInstance.handleDictationHotkeyPress(ctx, actionID)
 			},
@@ -503,6 +504,14 @@ func (m *Manager) handleSelectionHotkeyTrigger(combineKey string) {
 		return
 	}
 	m.QuerySelection(triggerCtx)
+}
+
+// queryCanTriggerBeforeRelease waits only when query setup needs the current selection.
+// Selection capture may simulate Ctrl+C, which the Caps hook swallows until Caps is released.
+func queryCanTriggerBeforeRelease(queryHotkey setting.QueryHotkey) bool {
+	return !strings.Contains(queryHotkey.Query, plugin.QueryVariableSelectedText) &&
+		!strings.Contains(queryHotkey.Query, plugin.QueryVariableSelectedFile) &&
+		!plugin.GetPluginManager().QueryVariablesRequireSelection()
 }
 
 // handleQueryHotkeyTrigger runs a query shortcut callback shared by native and

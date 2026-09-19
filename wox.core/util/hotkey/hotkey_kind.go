@@ -14,7 +14,8 @@ const (
 )
 
 type registerOptions struct {
-	allowModifierPress bool
+	allowModifierPress      bool
+	canTriggerBeforeRelease func() bool
 }
 
 // resolveHotkeyKind turns a parsed hotkey shape into the runtime behavior

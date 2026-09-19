@@ -12,12 +12,13 @@ import (
 
 // Callbacks routes Wox-owned hotkey triggers back to their owning subsystem.
 type Callbacks struct {
-	OnMain                 func(combineKey string)
-	OnSelection            func(combineKey string)
-	OnQuery                func(combineKey string, queryHotkey setting.QueryHotkey)
-	OnDictationHoldPress   func(ctx context.Context, actionID string)
-	OnDictationHoldRelease func(ctx context.Context, actionID string)
-	OnDictationPressAction func(ctx context.Context, actionID string)
+	OnMain                       func(combineKey string)
+	OnSelection                  func(combineKey string)
+	OnQuery                      func(combineKey string, queryHotkey setting.QueryHotkey)
+	QueryCanTriggerBeforeRelease func(queryHotkey setting.QueryHotkey) bool
+	OnDictationHoldPress         func(ctx context.Context, actionID string)
+	OnDictationHoldRelease       func(ctx context.Context, actionID string)
+	OnDictationPressAction       func(ctx context.Context, actionID string)
 }
 
 // WoxConfig is the hotkey subset of Wox settings used by the service.
@@ -178,8 +179,9 @@ func buildHotkeySpecs(entries []Entry) ([]utilhotkey.Spec, error) {
 		}
 
 		spec := utilhotkey.Spec{
-			CombineKey: parsed.CombineKey,
-			Callback:   e.OnPress,
+			CombineKey:              parsed.CombineKey,
+			Callback:                e.OnPress,
+			CanTriggerBeforeRelease: e.CanTriggerBeforeRelease,
 		}
 		if parsed.Trigger == utilhotkey.TriggerHold {
 			if !utilhotkey.IsModifierChordHotkeyString(parsed.CombineKey) {
@@ -303,6 +305,9 @@ func (s *Service) collectWoxConfig(ctx context.Context, config WoxConfig) {
 		queryEntries = append(queryEntries, Entry{
 			ID:         combineKey,
 			CombineKey: combineKey,
+			CanTriggerBeforeRelease: func() bool {
+				return s.callbacks.QueryCanTriggerBeforeRelease != nil && s.callbacks.QueryCanTriggerBeforeRelease(queryHotkey)
+			},
 			OnPress: func() {
 				s.callbacks.OnQuery(combineKey, queryHotkey)
 			},

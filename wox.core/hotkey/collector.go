@@ -12,11 +12,12 @@ const (
 
 // Entry describes one Wox-owned hotkey before it is bound to the platform.
 type Entry struct {
-	Source     EntrySource
-	ID         string
-	CombineKey string
-	OnPress    func()
-	OnRelease  func() // nil = press mode; non-nil = hold mode
+	Source                  EntrySource
+	ID                      string
+	CombineKey              string
+	OnPress                 func()
+	OnRelease               func() // nil = press mode; non-nil = hold mode
+	CanTriggerBeforeRelease func() bool
 }
 
 type collector struct {

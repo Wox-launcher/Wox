@@ -51,6 +51,20 @@ func resolveTextQueryVariables(ctx context.Context, template string, readClipboa
 
 // CaptureQueryVariables captures only context requested by enabled runtime triggers before launcher activation.
 func (m *Manager) CaptureQueryVariables(ctx context.Context) map[string]string {
+	variables := m.requestedQueryVariables()
+	if len(variables) == 0 {
+		return nil
+	}
+	return ResolveTextQueryVariables(ctx, strings.Join(variables, ""))
+}
+
+// QueryVariablesRequireSelection includes implicit selection reads requested by runtime triggers.
+func (m *Manager) QueryVariablesRequireSelection() bool {
+	return slices.Contains(m.requestedQueryVariables(), QueryVariableSelectedText)
+}
+
+// requestedQueryVariables shares the enabled-trigger snapshot between capture and its release guard.
+func (m *Manager) requestedQueryVariables() []string {
 	var variables []string
 	for _, instance := range m.pluginInstancesSnapshot() {
 		if instance == nil || (instance.Setting != nil && instance.Setting.Disabled.Get()) {
@@ -66,8 +80,5 @@ func (m *Manager) CaptureQueryVariables(ctx context.Context) map[string]string {
 		}
 		instance.runtimeTriggerKeywordsMu.RUnlock()
 	}
-	if len(variables) == 0 {
-		return nil
-	}
-	return ResolveTextQueryVariables(ctx, strings.Join(variables, ""))
+	return variables
 }
