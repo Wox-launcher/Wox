@@ -100,6 +100,26 @@ func hyprlandKeyName(key Key) string {
 		return "CAPSLOCK"
 	case KeyBackquote:
 		return "GRAVE"
+	case KeyMinus:
+		return "MINUS"
+	case KeyEqual:
+		return "EQUAL"
+	case KeyLeftBracket:
+		return "BRACKETLEFT"
+	case KeyRightBracket:
+		return "BRACKETRIGHT"
+	case KeyBackslash:
+		return "BACKSLASH"
+	case KeySemicolon:
+		return "SEMICOLON"
+	case KeyApostrophe:
+		return "APOSTROPHE"
+	case KeyComma:
+		return "COMMA"
+	case KeyPeriod:
+		return "PERIOD"
+	case KeySlash:
+		return "SLASH"
 	default:
 		if key >= KeyA && key <= KeyZ {
 			return string(rune('A' + (key - KeyA)))

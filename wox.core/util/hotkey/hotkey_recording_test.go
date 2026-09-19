@@ -140,6 +140,47 @@ func TestRecordingSessionCapturesModifiedFunctionKeys(t *testing.T) {
 	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "ctrl+f12", Kind: hotkeyKindNormalCombo})
 }
 
+func TestRecordingSessionCapturesPunctuationCombos(t *testing.T) {
+	var rawHandler keyboard.RawKeyHandler
+	restore := replaceRawKeyListenerForTest(t, func(handler keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error) {
+		rawHandler = handler
+		return noopRawKeySubscription{}, nil
+	})
+	defer restore()
+
+	recorded := make(chan recordedHotkey, 1)
+	manager := newHotkeyRecordingSessionManager()
+	if _, err := manager.Start(recordingSessionOptions{
+		allowedKinds: []hotkeyKind{hotkeyKindNormalCombo},
+		onRecorded:   func(result recordedHotkey) { recorded <- result },
+	}); err != nil {
+		t.Fatalf("start recording session: %v", err)
+	}
+	defer manager.Stop()
+
+	rawHandler(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftCtrl))
+	for _, tc := range []struct {
+		key    keyboard.Key
+		hotkey string
+	}{
+		{keyboard.KeyComma, "ctrl+,"},
+		{keyboard.KeyPeriod, "ctrl+."},
+		{keyboard.KeySlash, "ctrl+/"},
+		{keyboard.KeySemicolon, "ctrl+;"},
+		{keyboard.KeyApostrophe, "ctrl+'"},
+		{keyboard.KeyLeftBracket, "ctrl+["},
+		{keyboard.KeyRightBracket, "ctrl+]"},
+		{keyboard.KeyBackslash, "ctrl+\\"},
+		{keyboard.KeyMinus, "ctrl+-"},
+		{keyboard.KeyEqual, "ctrl+="},
+	} {
+		if consumed := rawHandler(rawModifierEvent(keyboard.EventTypeKeyDown, tc.key)); !consumed {
+			t.Fatalf("recorded %s should be consumed", tc.hotkey)
+		}
+		assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: tc.hotkey, Kind: hotkeyKindNormalCombo})
+	}
+}
+
 func TestRecordingSessionCapturesStandaloneFunctionKeys(t *testing.T) {
 	var rawHandler keyboard.RawKeyHandler
 	restore := replaceRawKeyListenerForTest(t, func(handler keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error) {

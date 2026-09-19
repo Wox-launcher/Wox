@@ -132,6 +132,17 @@ const (
 	KeyRightAlt
 	KeyLeftSuper
 	KeyRightSuper
+	// Punctuation keys use the unshifted US-layout character as their identity.
+	KeyMinus
+	KeyEqual
+	KeyLeftBracket
+	KeyRightBracket
+	KeyBackslash
+	KeySemicolon
+	KeyApostrophe
+	KeyComma
+	KeyPeriod
+	KeySlash
 )
 
 func ParseKey(token string) (Key, error) {
@@ -278,6 +289,26 @@ func ParseKey(token string) (Key, error) {
 		return KeyCapsLock, nil
 	case "backquote", "tilde", "~", "`":
 		return KeyBackquote, nil
+	case "-":
+		return KeyMinus, nil
+	case "=":
+		return KeyEqual, nil
+	case "[":
+		return KeyLeftBracket, nil
+	case "]":
+		return KeyRightBracket, nil
+	case "\\":
+		return KeyBackslash, nil
+	case ";":
+		return KeySemicolon, nil
+	case "'":
+		return KeyApostrophe, nil
+	case ",":
+		return KeyComma, nil
+	case ".":
+		return KeyPeriod, nil
+	case "/":
+		return KeySlash, nil
 	case "left_ctrl", "left control", "left_control":
 		return KeyLeftCtrl, nil
 	case "right_ctrl", "right control", "right_control":
@@ -423,6 +454,26 @@ func (k Key) Character() string {
 		return "f24"
 	case KeyBackquote:
 		return "~"
+	case KeyMinus:
+		return "-"
+	case KeyEqual:
+		return "="
+	case KeyLeftBracket:
+		return "["
+	case KeyRightBracket:
+		return "]"
+	case KeyBackslash:
+		return "\\"
+	case KeySemicolon:
+		return ";"
+	case KeyApostrophe:
+		return "'"
+	case KeyComma:
+		return ","
+	case KeyPeriod:
+		return "."
+	case KeySlash:
+		return "/"
 	case KeyLeftCtrl:
 		return "left_ctrl"
 	case KeyRightCtrl:

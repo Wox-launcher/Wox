@@ -1784,10 +1784,28 @@ func windowsKey(virtualKey uintptr) Key {
 		return KeyArrowDown
 	case win.VK_DELETE:
 		return KeyDelete
+	case 0xBD: // VK_OEM_MINUS, '-' on US keyboards
+		return Key("-")
+	case 0xBB: // VK_OEM_PLUS, '=' on US keyboards
+		return Key("=")
 	case 0xDB: // VK_OEM_4, '[' on US keyboards
 		return Key("[")
 	case 0xDD: // VK_OEM_6, ']' on US keyboards
 		return Key("]")
+	case 0xDC: // VK_OEM_5, '\' on US keyboards
+		return Key("\\")
+	case 0xBA: // VK_OEM_1, ';' on US keyboards
+		return Key(";")
+	case 0xDE: // VK_OEM_7, '\'' on US keyboards
+		return Key("'")
+	case 0xBC: // VK_OEM_COMMA, ',' on US keyboards
+		return Key(",")
+	case 0xBE: // VK_OEM_PERIOD, '.' on US keyboards
+		return Key(".")
+	case 0xBF: // VK_OEM_2, '/' on US keyboards
+		return Key("/")
+	case 0xC0: // VK_OEM_3, '`' on US keyboards
+		return Key("`")
 	case win.VK_MENU, win.VK_LMENU, win.VK_RMENU:
 		return KeyAlt
 	case win.VK_LWIN, win.VK_RWIN:

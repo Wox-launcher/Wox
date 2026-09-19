@@ -176,6 +176,30 @@ func evdevCodeToKey(code uint16) Key {
 	case 88:
 		return KeyF12
 
+	// Punctuation (unshifted US-layout)
+	case 12: // KEY_MINUS
+		return KeyMinus
+	case 13: // KEY_EQUAL
+		return KeyEqual
+	case 26: // KEY_LEFTBRACE
+		return KeyLeftBracket
+	case 27: // KEY_RIGHTBRACE
+		return KeyRightBracket
+	case 43: // KEY_BACKSLASH
+		return KeyBackslash
+	case 39: // KEY_SEMICOLON
+		return KeySemicolon
+	case 40: // KEY_APOSTROPHE
+		return KeyApostrophe
+	case 41: // KEY_GRAVE
+		return KeyBackquote
+	case 51: // KEY_COMMA
+		return KeyComma
+	case 52: // KEY_DOT
+		return KeyPeriod
+	case 53: // KEY_SLASH
+		return KeySlash
+
 	default:
 		return KeyUnknown
 	}

@@ -328,7 +328,27 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 	case KeyCapsLock:
 		return 58, nil
 	case KeyBackquote:
-		return 87, nil
+		return 41, nil
+	case KeyMinus:
+		return 12, nil
+	case KeyEqual:
+		return 13, nil
+	case KeyLeftBracket:
+		return 26, nil
+	case KeyRightBracket:
+		return 27, nil
+	case KeyBackslash:
+		return 43, nil
+	case KeySemicolon:
+		return 39, nil
+	case KeyApostrophe:
+		return 40, nil
+	case KeyComma:
+		return 51, nil
+	case KeyPeriod:
+		return 52, nil
+	case KeySlash:
+		return 53, nil
 	default:
 		return 0, fmt.Errorf("no evdev key code for key: %d", key)
 	}

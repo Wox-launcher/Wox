@@ -437,6 +437,26 @@ func keyToDarwinKeyCode(key Key) (uint32, error) {
 		return 57, nil
 	case KeyBackquote:
 		return 50, nil
+	case KeyMinus:
+		return 27, nil
+	case KeyEqual:
+		return 24, nil
+	case KeyLeftBracket:
+		return 33, nil
+	case KeyRightBracket:
+		return 30, nil
+	case KeyBackslash:
+		return 42, nil
+	case KeySemicolon:
+		return 41, nil
+	case KeyApostrophe:
+		return 39, nil
+	case KeyComma:
+		return 43, nil
+	case KeyPeriod:
+		return 47, nil
+	case KeySlash:
+		return 44, nil
 	default:
 		return 0, fmt.Errorf("unsupported macOS hotkey key: %d", key)
 	}
@@ -578,6 +598,26 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 		return KeyRightCtrl
 	case 50:
 		return KeyBackquote
+	case 27:
+		return KeyMinus
+	case 24:
+		return KeyEqual
+	case 33:
+		return KeyLeftBracket
+	case 30:
+		return KeyRightBracket
+	case 42:
+		return KeyBackslash
+	case 41:
+		return KeySemicolon
+	case 39:
+		return KeyApostrophe
+	case 43:
+		return KeyComma
+	case 47:
+		return KeyPeriod
+	case 44:
+		return KeySlash
 	default:
 		return KeyUnknown
 	}

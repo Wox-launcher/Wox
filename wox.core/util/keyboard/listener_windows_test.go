@@ -52,6 +52,35 @@ func TestWindowsModifierVirtualKeyMapping(t *testing.T) {
 	}
 }
 
+func TestWindowsPunctuationVirtualKeyMapping(t *testing.T) {
+	for _, expected := range []struct {
+		key Key
+		vk  uint32
+	}{
+		{key: KeyMinus, vk: 0xBD},
+		{key: KeyEqual, vk: 0xBB},
+		{key: KeyLeftBracket, vk: 0xDB},
+		{key: KeyRightBracket, vk: 0xDD},
+		{key: KeyBackslash, vk: 0xDC},
+		{key: KeySemicolon, vk: 0xBA},
+		{key: KeyApostrophe, vk: 0xDE},
+		{key: KeyComma, vk: 0xBC},
+		{key: KeyPeriod, vk: 0xBE},
+		{key: KeySlash, vk: 0xBF},
+	} {
+		actualVK, err := keyToWindowsVK(expected.key)
+		if err != nil {
+			t.Fatalf("virtual key for %s: %v", expected.key.Character(), err)
+		}
+		if actualVK != expected.vk {
+			t.Fatalf("virtual key for %s = %#x, want %#x", expected.key.Character(), actualVK, expected.vk)
+		}
+		if actualKey := windowsVKToKey(expected.vk); actualKey != expected.key {
+			t.Fatalf("key for virtual key %#x = %v, want %v", expected.vk, actualKey, expected.key)
+		}
+	}
+}
+
 func TestWindowsFunctionKeyVirtualKeyMappingThroughF24(t *testing.T) {
 	for _, expected := range []struct {
 		key Key

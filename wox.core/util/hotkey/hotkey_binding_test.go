@@ -50,6 +50,11 @@ func TestBindingKeyUsesNativeChordIdentity(t *testing.T) {
 	if left == right {
 		t.Fatal("left and right modifiers were collapsed")
 	}
+	for _, hotkey := range []string{"ctrl+,", "ctrl+.", "ctrl+/", "ctrl+;", "ctrl+'", "ctrl+[", "ctrl+]", "ctrl+\\", "ctrl+-", "ctrl+="} {
+		if _, err := BindingKey(hotkey); err != nil {
+			t.Fatalf("punctuation binding %q: %v", hotkey, err)
+		}
+	}
 	if _, err := BindingKey("ctrl+not-a-key"); err == nil {
 		t.Fatal("invalid key accepted")
 	}

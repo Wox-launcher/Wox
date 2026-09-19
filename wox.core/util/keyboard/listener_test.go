@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestParseKeyAndCharacterSupportPunctuationKeys(t *testing.T) {
+	for _, expected := range []struct {
+		token string
+		key   Key
+	}{
+		{token: "-", key: KeyMinus},
+		{token: "=", key: KeyEqual},
+		{token: "[", key: KeyLeftBracket},
+		{token: "]", key: KeyRightBracket},
+		{token: "\\", key: KeyBackslash},
+		{token: ";", key: KeySemicolon},
+		{token: "'", key: KeyApostrophe},
+		{token: ",", key: KeyComma},
+		{token: ".", key: KeyPeriod},
+		{token: "/", key: KeySlash},
+	} {
+		actual, err := ParseKey(expected.token)
+		if err != nil {
+			t.Fatalf("parse %q: %v", expected.token, err)
+		}
+		if actual != expected.key {
+			t.Fatalf("parse %q = %v, want %v", expected.token, actual, expected.key)
+		}
+		if actual.Character() != expected.token {
+			t.Fatalf("character for %q = %q, want %q", expected.token, actual.Character(), expected.token)
+		}
+	}
+}
+
 func TestParseKeyAndCharacterSupportFunctionKeysThroughF24(t *testing.T) {
 	for _, expected := range []struct {
 		token string

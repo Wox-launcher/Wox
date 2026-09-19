@@ -56,6 +56,16 @@ func TestHotkeyRecordedAliasesAndInvalidModifiers(t *testing.T) {
 		{"ctrl+down", KeyArrowDown, KeyModifierControl},
 		{"ctrl+pageup", KeyPageUp, KeyModifierControl},
 		{"option+return", KeyEnter, KeyModifierAlt},
+		{"ctrl+,", ",", KeyModifierControl},
+		{"ctrl+.", ".", KeyModifierControl},
+		{"ctrl+/", "/", KeyModifierControl},
+		{"ctrl+;", ";", KeyModifierControl},
+		{"ctrl+'", "'", KeyModifierControl},
+		{"ctrl+[", "[", KeyModifierControl},
+		{"ctrl+]", "]", KeyModifierControl},
+		{"ctrl+\\", "\\", KeyModifierControl},
+		{"ctrl+-", "-", KeyModifierControl},
+		{"ctrl+=", "=", KeyModifierControl},
 	} {
 		parsed, ok := ParseHotkey(tt.text)
 		if !ok || !parsed.Matches(tt.key, tt.modifiers) || parsed.Matches(tt.key, 0) {

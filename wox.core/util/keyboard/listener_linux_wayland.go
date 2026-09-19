@@ -751,6 +751,26 @@ func keyToWaylandTriggerName(key Key) (string, error) {
 		return "Caps_Lock", nil
 	case KeyBackquote:
 		return "grave", nil
+	case KeyMinus:
+		return "minus", nil
+	case KeyEqual:
+		return "equal", nil
+	case KeyLeftBracket:
+		return "bracketleft", nil
+	case KeyRightBracket:
+		return "bracketright", nil
+	case KeyBackslash:
+		return "backslash", nil
+	case KeySemicolon:
+		return "semicolon", nil
+	case KeyApostrophe:
+		return "apostrophe", nil
+	case KeyComma:
+		return "comma", nil
+	case KeyPeriod:
+		return "period", nil
+	case KeySlash:
+		return "slash", nil
 	default:
 		return "", fmt.Errorf("unsupported Wayland hotkey key: %d", key)
 	}

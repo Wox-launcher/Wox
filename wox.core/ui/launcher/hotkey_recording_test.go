@@ -65,6 +65,28 @@ func TestHotkeyRecordingFocusKeysMatchFlutter(t *testing.T) {
 	}
 }
 
+func TestFallbackHotkeyStringRecordsPunctuationCombos(t *testing.T) {
+	for _, tc := range []struct {
+		key    woxui.Key
+		hotkey string
+	}{
+		{woxui.Key(","), "ctrl+,"},
+		{woxui.Key("."), "ctrl+."},
+		{woxui.Key("/"), "ctrl+/"},
+		{woxui.Key(";"), "ctrl+;"},
+		{woxui.Key("'"), "ctrl+'"},
+		{woxui.Key("["), "ctrl+["},
+		{woxui.Key("]"), "ctrl+]"},
+		{woxui.Key("\\"), "ctrl+\\"},
+		{woxui.Key("-"), "ctrl+-"},
+		{woxui.Key("="), "ctrl+="},
+	} {
+		if got := fallbackHotkeyString(woxui.KeyEvent{Key: tc.key, Down: true, Modifiers: woxui.KeyModifierControl}); got != tc.hotkey {
+			t.Fatalf("%s = %q, want %q", tc.key, got, tc.hotkey)
+		}
+	}
+}
+
 func TestFallbackHotkeyStringAllowsStandaloneFunctionKeys(t *testing.T) {
 	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.KeySpace, Down: true, Modifiers: woxui.KeyModifierAlt}); got != "alt+space" {
 		t.Fatalf("Alt+Space = %q", got)

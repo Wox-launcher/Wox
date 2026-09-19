@@ -32,6 +32,8 @@ func TestResolveHotkeyKindForModifierChordByRegistrationIntent(t *testing.T) {
 func TestResolveHotkeyKindRejectsReleaseForNonModifierChord(t *testing.T) {
 	cases := []string{
 		"ctrl+space",
+		"ctrl+,",
+		"ctrl+.",
 		"ctrl+ctrl",
 		"capslock+e",
 	}

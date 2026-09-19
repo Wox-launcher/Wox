@@ -64,6 +64,28 @@ func TestHyprlandBindingConflictsIgnoreWoxAndSubmaps(t *testing.T) {
 	}
 }
 
+func TestHyprlandKeyNameUsesXkbPunctuationNames(t *testing.T) {
+	for _, expected := range []struct {
+		key  Key
+		name string
+	}{
+		{KeyComma, "COMMA"},
+		{KeyPeriod, "PERIOD"},
+		{KeySlash, "SLASH"},
+		{KeySemicolon, "SEMICOLON"},
+		{KeyApostrophe, "APOSTROPHE"},
+		{KeyLeftBracket, "BRACKETLEFT"},
+		{KeyRightBracket, "BRACKETRIGHT"},
+		{KeyBackslash, "BACKSLASH"},
+		{KeyMinus, "MINUS"},
+		{KeyEqual, "EQUAL"},
+	} {
+		if got := hyprlandKeyName(expected.key); got != expected.name {
+			t.Fatalf("hyprland key name for %s = %q, want %q", expected.key.Character(), got, expected.name)
+		}
+	}
+}
+
 func TestHyprlandKeyToModMask(t *testing.T) {
 	modifiers := ModifierCtrl | ModifierAlt | ModifierShift | ModifierSuper
 	if got := hyprlandKeyToModMask(modifiers); got != 77 {
