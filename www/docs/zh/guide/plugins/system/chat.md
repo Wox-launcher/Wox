@@ -2,6 +2,8 @@
 
 对话会在 Wox 里打开一次 AI 会话。使用前先配置 AI provider。
 
+![对话插件](/images/plugin_chat.jpg)
+
 ## 快速开始
 
 ```text

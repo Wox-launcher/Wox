@@ -2,6 +2,8 @@
 
 Update checks for Wox releases and applies them. Triggers are `update` and `upgrade`.
 
+![The Update plugin](/images/plugin_update.jpg)
+
 ## Quick Start
 
 ```text

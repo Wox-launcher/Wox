@@ -62,6 +62,7 @@ Wox 有一个主启动热键，也可以再为准备好的查询绑定快捷键�
 
 | 功能 | 位置 |
 | --- | --- |
+| 打开操作面板 | 默认 `Ctrl+K`（macOS 上为 `Cmd+K`）；可在 **设置 -> 常规** 中修改 |
 | 在 WebView 中打开网页搜索 | 结果操作 `Ctrl+Enter`（macOS 上为 `Cmd+Enter`）；查询框保持可见；Escape 把焦点交回查询框 |
 | 关闭当前 WebView 网页 | 操作面板 `Ctrl+W`（macOS 上为 `Cmd+W`）；销毁页面以释放内存 |
 | 隐藏后台 WebView 网页 | 操作面板 `Ctrl+H`（macOS 上为 `Cmd+H`）；仅在启用了后台运行的快捷键全预览窗口中出现 |

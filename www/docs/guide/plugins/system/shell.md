@@ -2,6 +2,8 @@
 
 Shell runs commands from Wox and keeps command history. Use `>` for an explicit shell query. Wox can also detect some commands globally.
 
+![The Shell plugin](/images/plugin_shell.jpg)
+
 ## Quick Start
 
 ```text

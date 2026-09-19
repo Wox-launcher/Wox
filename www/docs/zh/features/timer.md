@@ -9,7 +9,7 @@ description: "从 Wox 开始倒计时，钉到桌面上，并在重启后继续�
 
 Wox 内置倒计时，可以在打开应用的同一个窗口里开始计时。
 
-![从 Wox 开始一个 1 小时 5 分钟的计时器](/images/timer.png)
+![从 Wox 开始一个 1 小时 5 分钟的计时器](/images/plugin_timer.png)
 
 ## 它是什么
 

@@ -2,6 +2,8 @@
 
 Configure [AI Settings](./settings.md), then open **Settings → Theme editor → AI assistance**.
 
+![AI-assisted theme editing](/images/theme_ai_generate.jpg)
+
 Select a model and describe how to adjust the current theme, for example:
 
 - Use a dark graphite background with teal accents.

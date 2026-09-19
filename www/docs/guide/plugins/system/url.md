@@ -2,6 +2,8 @@
 
 URL opens web addresses from the launcher. Paste or type a URL; Wox can open it in the browser and remember recent addresses.
 
+![The URL plugin](/images/plugin_url.png)
+
 ## Quick Start
 
 ```text

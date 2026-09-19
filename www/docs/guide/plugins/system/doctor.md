@@ -2,6 +2,8 @@
 
 Doctor checks common setup problems: permissions, runtimes, update state, and platform-specific requirements.
 
+![The Doctor plugin](/images/plugin_doctor.jpg)
+
 ## Quick Start
 
 ```text

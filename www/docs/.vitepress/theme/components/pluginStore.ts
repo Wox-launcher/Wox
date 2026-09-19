@@ -59,6 +59,10 @@ export function localizePlugin(plugin: StorePluginManifest, lang: string): Local
   };
 }
 
+export function englishPluginName(plugin: StorePluginManifest): string {
+  return translatePluginValue(plugin, plugin.Name, "en-US");
+}
+
 export function normalizeOsLabel(os: string) {
   if (os === "Darwin") return "macOS";
   return os;

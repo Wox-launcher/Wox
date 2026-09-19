@@ -301,7 +301,6 @@ Set either `html` or `url`. Optional JSON fields are `injectCss`, `userAgent`, `
 Declare a suffix template in `MetadataCommand.QueryHint` (static `Commands`
 or `RegisterQueryCommands`), read `query.QueryHint.Elements` by element ID,
 and pass a complete instance to `ChangeQuery`. Existing text queries stay valid.
-See the [query model and TypeScript examples](../www/docs/development/plugins/query-model.md#structured-queries).
 This is a development-build capability; verify release and SDK support before
 setting a distributable plugin's minimum versions.
 

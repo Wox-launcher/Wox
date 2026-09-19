@@ -1,3 +1,7 @@
+html {
+  scrollbar-gutter: stable;
+}
+
 :root {
   --vp-c-brand-1: #242424;
   --vp-c-brand-2: #444444;
@@ -44,9 +48,51 @@
   padding-bottom: 64px;
 }
 
-.VPNav .VPNavBar.home {
+.VPNav .VPNavBar {
   background: var(--vp-c-bg);
   border-bottom: 1px solid var(--wox-home-border);
+}
+
+.vp-doc .header-anchor {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  body .VPSidebar.VPSidebar {
+    top: var(--vp-nav-height);
+    padding-top: 32px;
+  }
+
+  body .VPSidebar .curtain {
+    display: none;
+  }
+
+  body .VPNavBar.has-sidebar .wrapper.wrapper {
+    padding: 0 32px;
+  }
+
+  body .VPNavBar.has-sidebar .container.container {
+    max-width: calc(var(--vp-layout-max-width) - 64px);
+  }
+
+  body .VPNavBar.has-sidebar .title.title {
+    position: relative;
+    top: auto;
+    left: auto;
+    z-index: auto;
+    width: auto;
+    padding: 0;
+    background-color: var(--vp-c-bg);
+  }
+
+  body .VPNavBar.has-sidebar .content.content {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  body .VPNavBar.has-sidebar .divider.divider {
+    padding-left: 0;
+  }
 }
 
 /* The homepage owns its gutters; document padding would shrink mobile content twice. */
@@ -378,17 +424,19 @@
 }
 
 @media (min-width: 960px) {
-  body.plugin-detail-page .VPDoc:not(.has-sidebar) .container {
-    max-width: min(1480px, calc(100vw - 64px));
-  }
-
-  body.plugin-detail-page .VPDoc:not(.has-sidebar) .content {
-    max-width: none;
+  /* Beat VPDoc scoped max-width so no-sidebar pages match the homepage column. */
+  body .VPDoc:not(.has-sidebar) .container.container,
+  body .VPDoc:not(.has-sidebar) .content.content,
+  body .VPDoc:not(.has-sidebar) .content-container.content-container {
+    max-width: min(1180px, calc(100vw - 48px));
     width: 100%;
+    margin-inline: auto;
   }
 
-  body.plugin-detail-page .VPDoc .content-container {
-    max-width: none;
+  body.plugin-detail-page .VPDoc:not(.has-sidebar) .container.container,
+  body.plugin-detail-page .VPDoc:not(.has-sidebar) .content.content,
+  body.plugin-detail-page .VPDoc:not(.has-sidebar) .content-container.content-container {
+    max-width: min(1480px, calc(100vw - 64px));
   }
 }
 

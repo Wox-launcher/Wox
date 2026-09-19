@@ -9,7 +9,7 @@ description: "Wox 在 Windows、macOS 和 Linux 上索引你选择的文件夹�
 
 Wox 可以在启动器里搜索本地文件，支持 Windows、macOS 和 Linux。根目录由你选择。结果和应用、剪贴板项出现在同一份列表里。
 
-![文件搜索插件设置中的 Fast Indexing](/images/file-search.png)
+![文件插件](/images/plugin_file.png)
 
 ## 它是什么
 

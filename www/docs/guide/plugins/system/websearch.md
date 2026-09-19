@@ -2,6 +2,8 @@
 
 WebSearch opens search URLs from Wox. It can work as a fallback result for normal text or through explicit engine keywords.
 
+![Filling named web search parameters with query hints](/images/plugin_websearch.jpg)
+
 ## Quick Start
 
 ```text
@@ -10,8 +12,6 @@ g Wox Launcher
 ```
 
 The default configuration includes Google with the `g` keyword. Add more engines in plugin settings.
-
-![Filling named web search parameters with query hints](/images/query-hint.jpg)
 
 ## Engine Settings
 

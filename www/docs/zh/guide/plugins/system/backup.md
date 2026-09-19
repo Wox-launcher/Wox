@@ -2,6 +2,8 @@
 
 备份插件可以导出 Wox 设置，并在之后恢复。触发关键字是 `backup` 和 `restore`。
 
+![备份插件](/images/plugin_backup.jpg)
+
 ## 快速开始
 
 ```text

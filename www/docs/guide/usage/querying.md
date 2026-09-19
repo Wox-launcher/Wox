@@ -2,6 +2,8 @@
 
 Open Wox, type what you want, then act on the selected result. You do not need every plugin keyword, but keywords are useful when you want one plugin to handle the query.
 
+![Querying in Wox](/images/query.jpg)
+
 ## Query Types
 
 | Type | Example | Notes |
@@ -17,14 +19,14 @@ Open Wox, type what you want, then act on the selected result. You do not need e
 A keyword is the first word in the query. If it matches a plugin trigger, Wox sends the rest of the query to that plugin.
 
 ```text
-wpm install browser
+wpm install everything
 ```
 
 | Part | Meaning |
 | --- | --- |
 | `wpm` | Plugin Manager trigger |
 | `install` | Plugin Manager command |
-| `browser` | Search term passed to the command |
+| `everything` | Search term passed to the command |
 
 Common built-in keywords:
 
@@ -55,12 +57,6 @@ Some commands collect more than one value. After you type the keyword and a spac
 
 Web Search templates can also insert selected text or clipboard text captured before Wox takes focus. See [Web Search](../plugins/system/websearch.md).
 
-## Fallback Results
-
-Some plugins listen to normal text without a keyword. That is why typing `Chrome`, `100 + 20`, `1km to m`, or a web search can produce useful results immediately.
-
-Use a keyword when fallback results are noisy or when you know exactly which plugin should answer.
-
 ## Shortcuts
 
 | Shortcut | Description |
@@ -71,10 +67,9 @@ Use a keyword when fallback results are noisy or when you know exactly which plu
 | `Esc` | Hide Wox or go back from a nested view |
 | `Up` / `Down` | Move through results |
 | `Enter` | Run the selected result's primary action |
-| Windows/Linux: `Ctrl + J`; macOS: `Command + J` | Open the Action Panel |
+| Windows/Linux: `Ctrl + K`; macOS: `Command + K` | Open the Action Panel. Change this in Settings. |
 | Windows/Linux: hold `Alt` then `1`-`9`; macOS: hold `Command` then `1`-`9` | Run a visible result by its number |
 | `Tab` | Complete a suggested query, or move to the next query hint |
 | `Shift+Tab` | Replace the query with the selected result title, such as a calculator result, or move to the previous query hint |
-| `Space` | Preview the selected result when preview is available |
 
 The main hotkey, selection hotkey, query hotkeys, and tray queries are covered in [Hotkeys](./hotkeys.md).

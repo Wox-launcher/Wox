@@ -2,10 +2,12 @@
 
 The Action Panel is the second step for a result. `Enter` runs the primary action; the Action Panel shows the other actions the plugin attached to that result.
 
+![The Action Panel](/images/action_panel.jpg)
+
 ## Open It
 
 1. Highlight a result.
-2. Press `Ctrl + J` on Windows/Linux or `Command + J` on macOS.
+2. Press `Ctrl + K` on Windows/Linux or `Command + K` on macOS. Change this in **Settings -> General**.
 3. Pick an action with the keyboard and press `Enter`.
 
 You can type in the Action Panel to filter actions. Localized action names also match English aliases, so `copy`, `open`, or `delete` still find the right command.

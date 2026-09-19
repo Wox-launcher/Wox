@@ -2,6 +2,8 @@
 
 Converter handles units, currencies, crypto prices, number bases, dates, time zones, and simple math with typed values.
 
+![Converting a duration expression in Wox](/images/plugin_converter.png)
+
 ## Quick Start
 
 ```text
@@ -15,8 +17,6 @@ Converter handles units, currencies, crypto prices, number bases, dates, time zo
 ```
 
 Converter listens globally. Use `calculator` as an explicit keyword if another global result is taking priority.
-
-![Converting a duration expression in Wox](/images/converter.png)
 
 ## Supported Work
 

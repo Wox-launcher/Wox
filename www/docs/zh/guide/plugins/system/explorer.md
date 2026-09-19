@@ -4,6 +4,8 @@
 
 目前支持 Windows 和 macOS。Linux 没有这个插件。
 
+![快速跳转插件](/images/plugin_quickjump.png)
+
 ## 在文件管理器中
 
 当 File Explorer 或 Finder 聚焦时打开 Wox，输入当前目录下子文件夹或文件名的一部分：

@@ -4,7 +4,9 @@
 
 ## 从结果列表预览
 
-选中支持预览的结果后按 `Space`。预览会显示在列表旁边，或按结果类型占满可用空间。
+选中支持预览的结果后，预览会自动显示在列表旁边，或按结果类型占满可用空间，不需要再按键。
+
+![剪贴板历史的自动预览](/images/plugin_clipboard.png)
 
 常见预览来源：
 
@@ -21,6 +23,8 @@
 ## Windows 上的空格 Quick Look
 
 在 Windows 上，选区插件可以预览已经在资源管理器或打开/保存对话框中选中的文件。
+
+![Windows 上的空格 Quick Look](/images/plugin_selection_quicklook.jpg)
 
 1. 打开 **设置 -> 插件 -> 选区**。
 2. 启用 **空格 Quick Look**。

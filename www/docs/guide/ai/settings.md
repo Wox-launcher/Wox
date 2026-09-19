@@ -2,6 +2,8 @@
 
 AI features are optional. Configure a provider only if you want AI Chat, AI Commands, AI-assisted emoji search, AI-refined dictation, or AI theme generation.
 
+![AI provider settings](/images/ai_provider.jpg)
+
 ## Add a Provider
 
 1. Open **Settings -> AI**.

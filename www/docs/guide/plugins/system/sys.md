@@ -2,6 +2,8 @@
 
 System Commands runs power, volume, settings, and other system actions. It listens globally, so you can type `lock`, `sleep`, or `shutdown` without a keyword.
 
+![The System Commands plugin](/images/plugin_sys.jpg)
+
 ## Quick Start
 
 ```text

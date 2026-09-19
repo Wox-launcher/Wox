@@ -9,7 +9,7 @@ description: "Start countdown timers from Wox, pin them on the desktop, and keep
 
 Wox includes countdown timers you can start from the same window you use to open apps.
 
-![Starting a 1 hour 5 minute timer from Wox](/images/timer.png)
+![Starting a 1 hour 5 minute timer from Wox](/images/plugin_timer.png)
 
 ## What it is
 

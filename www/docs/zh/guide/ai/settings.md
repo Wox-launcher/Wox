@@ -2,6 +2,8 @@
 
 AI 功能是可选的。只有在你需要 AI 对话、AI 命令、AI 辅助 Emoji 搜索、听写润色或 AI 生成主题时，才需要配置 provider。
 
+![AI provider 设置](/images/ai_provider.jpg)
+
 ## 添加 Provider
 
 1. 打开 **设置 -> AI**。

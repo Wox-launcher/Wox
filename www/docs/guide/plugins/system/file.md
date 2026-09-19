@@ -2,6 +2,8 @@
 
 The File plugin searches files and folders from configured roots. Use the `f` keyword when you want file results instead of global app, web, or calculator results.
 
+![The File plugin](/images/plugin_file.png)
+
 ## Quick Start
 
 ```text
@@ -26,7 +28,7 @@ Use a small, deliberate root list for best results:
 
 On Windows, File Search can use optional Fast Indexing. Open **Settings -> Plugins -> File** and install the Wox NTFS service. The service reads the volume MFT and USN journal so large NTFS drives stay current without a full crawl. Installing it requires administrator access.
 
-![Fast Indexing in File Search settings](/images/file-search.png)
+![Fast Indexing in File Search settings](/images/plugin_filesearch.png)
 
 Fast Indexing is Windows-only. macOS and Linux keep using the regular root-based index. Content-search directories are configured separately from filename-search roots.
 

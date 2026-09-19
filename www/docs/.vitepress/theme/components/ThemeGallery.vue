@@ -1,8 +1,28 @@
 <script setup>
 import { computed, ref, onMounted } from "vue";
+import { useData } from "vitepress";
 
 const themes = ref([]);
 const searchQuery = ref("");
+const { lang } = useData();
+
+const uiText = computed(() => {
+  const normalizedLang = (lang.value || "").toLowerCase();
+
+  if (normalizedLang.startsWith("zh")) {
+    return {
+      searchPlaceholder: "搜索主题...",
+      by: "作者",
+      install: "安装",
+    };
+  }
+
+  return {
+    searchPlaceholder: "Search themes...",
+    by: "by",
+    install: "Install",
+  };
+});
 
 onMounted(async () => {
   try {
@@ -25,7 +45,7 @@ function installHref(themeName) {
 <template>
   <div class="gallery-container">
     <div class="search-bar">
-      <input v-model="searchQuery" type="text" placeholder="Search themes..." class="search-input" />
+      <input v-model="searchQuery" type="text" :placeholder="uiText.searchPlaceholder" class="search-input" />
     </div>
 
     <div class="grid">
@@ -72,7 +92,7 @@ function installHref(themeName) {
             <h3 class="name">{{ theme.ThemeName }}</h3>
             <span class="version">v{{ theme.Version }}</span>
           </div>
-          <p class="author">by {{ theme.ThemeAuthor }}</p>
+          <p class="author">{{ uiText.by }} {{ theme.ThemeAuthor }}</p>
           <p class="description">{{ theme.Description }}</p>
           <div class="color-palette">
             <div class="swatches">
@@ -81,7 +101,7 @@ function installHref(themeName) {
               <div class="color-swatch" :style="{ backgroundColor: theme.ResultItemTitleColor }" title="Text"></div>
               <div class="color-swatch" :style="{ backgroundColor: theme.QueryBoxBackgroundColor }" title="Query Box"></div>
             </div>
-            <a :href="installHref(theme.ThemeName)" class="install-btn" @click.stop>Install</a>
+            <a :href="installHref(theme.ThemeName)" class="primary-btn" @click.stop>{{ uiText.install }}</a>
           </div>
         </div>
       </div>
@@ -222,19 +242,27 @@ function installHref(themeName) {
   gap: 8px;
 }
 
-.install-btn {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--vp-c-brand);
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--vp-c-brand-1);
+  color: var(--vp-c-bg);
   text-decoration: none;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background-color: var(--vp-c-brand-dimm);
-  transition: background-color 0.2s;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    transform 0.2s,
+    background-color 0.2s;
 }
 
-.install-btn:hover {
-  background-color: var(--vp-c-brand-soft);
+.primary-btn:hover {
+  background: var(--vp-c-brand-2);
+  color: var(--vp-c-bg);
+  transform: translateY(-1px);
 }
 
 .name {

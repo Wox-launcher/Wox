@@ -4,6 +4,8 @@ Quick Jump was previously called Explorer. It is contextual: it helps you move b
 
 Windows and macOS are supported. Linux does not have this plugin.
 
+![The Quick Jump plugin](/images/plugin_quickjump.png)
+
 ## In File Explorer or Finder
 
 Open Wox while the file manager is focused and type part of a child folder or file name:

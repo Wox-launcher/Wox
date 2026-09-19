@@ -2,6 +2,8 @@
 
 Backup exports Wox settings and restores them later. Triggers are `backup` and `restore`.
 
+![The Backup plugin](/images/plugin_backup.jpg)
+
 ## Quick Start
 
 ```text

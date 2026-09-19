@@ -2,6 +2,8 @@
 
 云同步可以登录账号，并在多台设备之间同步设置。
 
+![云同步插件](/images/plugin_cloudsync.jpg)
+
 ## 快速开始
 
 ```text

@@ -4,6 +4,8 @@ AI 命令把一段保存好的 prompt 变成可重复使用的 Wox 命令。适�
 
 先完成 [AI 设置](./settings.md)。
 
+![Wox AI 命令](/images/plugin_aicommand.jpg)
+
 ## 创建命令
 
 1. 打开 **设置 -> 插件 -> AI 命令**。

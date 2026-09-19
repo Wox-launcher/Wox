@@ -122,7 +122,6 @@ template in `MetadataCommand.query_hint`, read
 `query.query_hint.elements`, and use `ChangeQueryParam(query_type=QueryType.INPUT,
 query_hint=...)` for a complete instance. When structure is absent, retain
 the existing `query.search` parsing path.
-See the [query model and Python examples](../www/docs/development/plugins/query-model.md#structured-queries).
 This is a development-build capability; verify release and SDK support before
 setting a distributable plugin's minimum versions.
 

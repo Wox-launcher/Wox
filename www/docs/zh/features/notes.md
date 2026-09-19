@@ -9,7 +9,7 @@ description: "用 Wox 笔记记录文本、表格和图片。不用离开键盘�
 
 Wox 内置浮动笔记，不用切换到其他笔记应用就能记下内容。
 
-![包含清单、表格和引用的 Wox 笔记](/images/notes.png)
+![包含清单、表格和引用的 Wox 笔记](/images/plugin_notes.png)
 
 ## 它是什么
 

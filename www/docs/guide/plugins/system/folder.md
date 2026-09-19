@@ -2,6 +2,8 @@
 
 Folder completes directory paths as you type. It listens globally, so a path such as `~/Documents` or `%LOCALAPPDATA%` can become a folder result without a keyword.
 
+![The Folder plugin](/images/plugin_folder.png)
+
 ## Quick Start
 
 ```text

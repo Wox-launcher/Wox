@@ -17,39 +17,27 @@ wox://install?path=<url-encoded-file>
 
 打开插件管理器安装查询：
 
-```text
-wox://query?q=wpm%20install
-```
+<WoxRunQuery query="wpm install " />
 
 打开文件搜索：
 
-```text
-wox://query?q=f%20invoice
-```
+<WoxRunQuery query="f invoice" />
 
 执行计算：
 
-```text
-wox://query?q=100%20%2B%2020
-```
+<WoxRunQuery query="100 + 20" />
 
 启动 AI 对话：
 
-```text
-wox://query?q=chat%20summarize%20this
-```
+<WoxRunQuery query="chat summarize this" />
 
 新建笔记：
 
-```text
-wox://query?q=note%20new
-```
+<WoxRunQuery query="note new " />
 
 打开已下载的插件包安装界面：
 
-```text
-wox://install?path=/Users/demo/Downloads/wox.plugin.example.wox
-```
+<WoxRunQuery href="wox://install?path=/Users/demo/Downloads/wox.plugin.example.wox" />
 
 ## 在脚本中使用
 

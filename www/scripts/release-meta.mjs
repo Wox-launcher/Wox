@@ -285,10 +285,6 @@ lastUpdated: ${latest.date}
 
 # Changelog
 
-Latest stable release: **${latest.tag}** (${latest.dateLongEn}).
-
-These pages are generated from \`CHANGELOG.md\`. Each version also has a [GitHub Release](https://github.com/Wox-launcher/Wox/releases).
-
 ${items}
 `;
 }
@@ -313,10 +309,6 @@ lastUpdated: ${latest.date}
 <!-- Generated from CHANGELOG.md and CHANGELOG.zh_CN.md. Do not edit. -->
 
 # 更新日志
-
-最新正式版 **${latest.tag}**（${latest.dateLongZh}）。
-
-这些页面由 \`CHANGELOG.zh_CN.md\` 生成。尚未翻译的版本会链到[英文版本页](/changelog/)。
 
 ${items}
 `;

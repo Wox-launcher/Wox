@@ -11,7 +11,7 @@ The core app stays small. Built-in plugins cover daily work; the store and SDKs 
 - **Opening things quickly**: apps, folders, files, bookmarks, URLs, and system actions.
 - **Finishing the next step**: every result can expose actions such as copy, reveal, paste, save to Notes, or open in another tool.
 - **Keeping local workflows close**: clipboard history, calculator, converter, file search, notes, screenshots, timers, dictation, and window layouts are built in.
-- **Letting plugins do the custom work**: install community plugins, write script plugins, or build full plugins with the Node.js and Python SDKs.
+- **Letting plugins do the custom work**: install community plugins, or ask an AI agent to [create one](/development/).
 - **Staying portable**: Wox stores user data under `~/.wox` on macOS/Linux and `%USERPROFILE%\.wox` on Windows.
 
 ## How queries work

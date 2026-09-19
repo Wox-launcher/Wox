@@ -9,6 +9,8 @@ description: "Capture, annotate, pin, and search screenshots from the Wox launch
 
 The Screenshot plugin captures the screen, lets you annotate the image, and keeps a searchable history in the launcher.
 
+![Screenshot capture in Wox](/images/plugin_screenshot.png)
+
 ## What it is
 
 Query `screenshot` or `截图` to browse history. Use `screenshot new` to start a capture.

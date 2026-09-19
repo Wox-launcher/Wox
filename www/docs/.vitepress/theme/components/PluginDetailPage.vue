@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useData, withBase } from "vitepress";
-import { fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, type LocalizedStorePluginManifest } from "./pluginStore";
+import { englishPluginName, fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, type LocalizedStorePluginManifest } from "./pluginStore";
 
 const { lang } = useData();
 const plugins = ref<LocalizedStorePluginManifest[]>([]);
@@ -144,8 +144,8 @@ function pluginDetailHref(pluginId: string) {
   return withBase(`${prefix}?id=${encodeURIComponent(pluginId)}`);
 }
 
-function installHref(pluginName: string) {
-  return `wox://query?q=${encodeURIComponent(`wpm install ${pluginName}`)}`;
+function installHref(plugin: LocalizedStorePluginManifest) {
+  return `wox://query?q=${encodeURIComponent(`wpm install ${englishPluginName(plugin)}`)}`;
 }
 
 function platformIconPath(osKey: string) {
@@ -267,7 +267,7 @@ onUnmounted(() => {
         </div>
 
         <div class="hero-actions">
-          <a :href="installHref(plugin.LocalizedName)" class="primary-action">
+          <a :href="installHref(plugin)" class="primary-action">
             <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
               <path
                 d="M12 2.5a1 1 0 0 1 1 1v8.1l2.6-2.6a1 1 0 1 1 1.4 1.4l-4.3 4.3a1 1 0 0 1-1.4 0L7 10.4a1 1 0 0 1 1.4-1.4l2.6 2.6V3.5a1 1 0 0 1 1-1ZM5 15.5a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-2.5a1 1 0 0 1 1-1Z"

@@ -2,6 +2,8 @@
 
 Cloud Sync signs in and synchronizes settings across machines.
 
+![The Cloud Sync plugin](/images/plugin_cloudsync.jpg)
+
 ## Quick Start
 
 ```text

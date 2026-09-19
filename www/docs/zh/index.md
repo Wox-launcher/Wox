@@ -38,7 +38,7 @@ description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
       </article>
       <article class="wox-feature-card">
         <h3>安装插件，扩展功能</h3>
-        <p>使用社区插件，或用 Python 和 Node.js 编写自己的插件。</p>
+        <p>使用社区插件，或让 AI agent 按官方 skill 创建插件。</p>
       </article>
     </div>
   </section>
@@ -53,8 +53,8 @@ description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
     <div>
       <p class="wox-home-label">插件开发</p>
       <h2>把自己的工具接入 Wox。</h2>
-      <p>用 Python、Node.js 或脚本添加命令，让 Wox 搜索项目、调用服务，或执行常用操作。</p>
-      <a class="wox-button" href="./development/plugins/overview">开发插件</a>
+      <p>让 AI agent 按官方 skill 创建插件。搜索项目、调用服务，或执行常用操作。</p>
+      <a class="wox-button" href="./development/">开发插件</a>
     </div>
     <figure class="wox-feature-shot wox-feature-shot-plugin">
       <img src="/images/plugin_setting.png" alt="Wox 插件设置" loading="lazy" />

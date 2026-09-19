@@ -7,6 +7,8 @@ import ThemeGallery from "./components/ThemeGallery.vue";
 import HomeHeroNote from "./components/HomeHeroNote.vue";
 import HomeQuotes from "./components/HomeQuotes.vue";
 import ReleaseStamp from "./components/ReleaseStamp.vue";
+import WoxCreatePluginQuery from "./components/WoxCreatePluginQuery.vue";
+import WoxRunQuery from "./components/WoxRunQuery.vue";
 import "./style.css";
 
 export default {
@@ -20,5 +22,7 @@ export default {
     app.component("HomeHeroNote", HomeHeroNote);
     app.component("HomeQuotes", HomeQuotes);
     app.component("ReleaseStamp", ReleaseStamp);
+    app.component("WoxCreatePluginQuery", WoxCreatePluginQuery);
+    app.component("WoxRunQuery", WoxRunQuery);
   },
 };

@@ -2,6 +2,8 @@
 
 更新插件检查并安装 Wox 新版本。触发关键字是 `update` 和 `upgrade`。
 
+![更新插件](/images/plugin_update.jpg)
+
 ## 快速开始
 
 ```text

@@ -2,6 +2,8 @@
 
 Media Player controls the app that is currently playing audio or video. It can appear globally when something is playing, or through the `media` keyword.
 
+![The Media Player plugin](/images/plugin_media.jpg)
+
 ## Quick Start
 
 ```text

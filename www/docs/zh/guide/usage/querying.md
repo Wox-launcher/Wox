@@ -2,6 +2,8 @@
 
 打开 Wox，输入你要找的东西，然后对选中的结果执行动作。你不需要记住所有插件关键字，但关键字能让某个插件明确接管这次查询。
 
+![在 Wox 中查询](/images/query.jpg)
+
 ## 查询类型
 
 | 类型 | 示例 | 说明 |
@@ -17,14 +19,14 @@
 关键字是查询的第一个词。它匹配插件触发关键字后，Wox 会把剩余内容传给该插件。
 
 ```text
-wpm install browser
+wpm install everything
 ```
 
 | 部分 | 含义 |
 | --- | --- |
 | `wpm` | 插件管理器触发关键字 |
 | `install` | 插件管理器命令 |
-| `browser` | 传给命令的搜索词 |
+| `everything` | 传给命令的搜索词 |
 
 常见内置关键字：
 
@@ -55,12 +57,6 @@ wpm install browser
 
 网页搜索模板还可以插入 Wox 获得焦点前捕获的选中文本或剪贴板文本。详见 [网页搜索](../plugins/system/websearch.md)。
 
-## Fallback 结果
-
-有些插件会监听普通文本，所以直接输入 `Chrome`、`100 + 20`、`1km to m` 或一段网页搜索词也会返回结果。
-
-如果结果太杂，或者你明确知道要用哪个插件，就使用插件关键字。
-
 ## 快捷键
 
 | 快捷键 | 说明 |
@@ -71,10 +67,9 @@ wpm install browser
 | `Esc` | 隐藏 Wox，或从嵌套视图返回 |
 | `Up` / `Down` | 在结果中移动 |
 | `Enter` | 执行选中结果的主要动作 |
-| Windows/Linux: `Ctrl + J`；macOS: `Command + J` | 打开操作面板 |
+| Windows/Linux: `Ctrl + K`；macOS: `Command + K` | 打开操作面板，可在设置中修改 |
 | Windows/Linux: 按住 `Alt` 再按 `1`-`9`；macOS: 按住 `Command` 再按 `1`-`9` | 按序号执行当前可见结果 |
 | `Tab` | 补全建议查询，或跳到下一个查询提示 |
 | `Shift+Tab` | 用选中结果的标题替换查询，例如把计算结果填回输入框，或跳到上一个查询提示 |
-| `Space` | 在结果支持预览时打开预览 |
 
 主热键、选中热键、快捷键查询和托盘查询见 [快捷键](./hotkeys.md)。

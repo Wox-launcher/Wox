@@ -38,7 +38,7 @@ description: "A native, open-source Raycast / Alfred alternative for Windows, ma
       </article>
       <article class="wox-feature-card">
         <h3>Add the tools you need</h3>
-        <p>Install community plugins, or write your own with Python and Node.js.</p>
+        <p>Install community plugins, or ask an AI agent to create one.</p>
       </article>
     </div>
   </section>
@@ -53,8 +53,8 @@ description: "A native, open-source Raycast / Alfred alternative for Windows, ma
     <div>
       <p class="wox-home-label">For developers</p>
       <h2>Bring your own tools.</h2>
-      <p>Write a plugin in Python, Node.js, or a script. Search your projects, call a service, or run a command you use every day.</p>
-      <a class="wox-button" href="./development/plugins/overview">Build a plugin</a>
+      <p>Ask an AI agent to create a plugin. Search your projects, call a service, or run a command you use every day.</p>
+      <a class="wox-button" href="./development/">Build a plugin</a>
     </div>
     <figure class="wox-feature-shot wox-feature-shot-plugin">
       <img src="/images/plugin_setting.png" alt="Plugin settings in Wox" loading="lazy" />

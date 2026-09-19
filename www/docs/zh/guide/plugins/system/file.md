@@ -2,6 +2,8 @@
 
 文件插件会搜索配置根目录中的文件和文件夹。明确想要文件结果时，使用 `f` 关键字，避免和应用、网页、计算等全局结果混在一起。
 
+![文件插件](/images/plugin_file.png)
+
 ## 快速开始
 
 ```text
@@ -26,7 +28,7 @@ f .pdf
 
 在 Windows 上，文件搜索可以使用可选的快速索引。打开 **设置 -> 插件 -> 文件**，安装 Wox 的 NTFS 服务。该服务通过卷的 MFT 和 USN 保持大容量 NTFS 磁盘更新，而不必整盘爬取。安装服务需要管理员权限。
 
-![文件搜索设置中的 Fast Indexing](/images/file-search.png)
+![文件搜索设置中的 Fast Indexing](/images/plugin_filesearch.png)
 
 快速索引只在 Windows 上提供。macOS 和 Linux 仍使用常规的根目录索引。内容搜索目录和文件名根目录是分开配置的。
 

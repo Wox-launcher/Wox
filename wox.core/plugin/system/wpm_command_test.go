@@ -26,7 +26,7 @@ func TestWPMCreateAIPrompt(t *testing.T) {
 			require.NoError(t, err)
 			var translations map[string]string
 			require.NoError(t, json.Unmarshal(data, &translations))
-			for _, key := range []string{"create_with_ai", "create_with_ai_description", "copy_ai_prompt", "ai_prompt_copied", "copy_ai_prompt_failed"} {
+			for _, key := range []string{"create_with_ai", "create_with_ai_description", "create_with_ai_recommended", "copy_ai_prompt", "ai_prompt_copied", "copy_ai_prompt_failed"} {
 				require.NotEmpty(t, translations["plugin_wpm_"+key])
 			}
 			format := translations["plugin_wpm_ai_prompt"]
@@ -113,4 +113,13 @@ func TestWPMCommandDiscovery(t *testing.T) {
 	response := w.Query(ctx, plugin.Query{Type: plugin.QueryTypeInput, TriggerKeyword: "store", Command: "create"})
 	require.Len(t, response.Results, 1)
 	require.Equal(t, "i18n:plugin_wpm_enter_plugin_name", response.Results[0].Title)
+
+	createResults := w.createCommand(ctx, plugin.Query{TriggerKeyword: "wpm", Search: "demo"})
+	require.Len(t, createResults, 5)
+	require.Equal(t, "i18n:plugin_wpm_create_with_ai", createResults[0].Title)
+	require.Equal(t, []plugin.QueryResultTail{plugin.NewQueryResultTailText("i18n:plugin_wpm_create_with_ai_recommended")}, createResults[0].Tails)
+	for _, result := range createResults {
+		require.NotContains(t, result.Title, "script_template")
+		require.NotContains(t, result.Group, "group_script_plugins")
+	}
 }

@@ -2,6 +2,8 @@
 
 剪贴板插件会保存最近的文本和图片剪贴板记录，让你不用切到单独的剪贴板管理器也能复用内容。功能概览见[剪贴板历史启动器](/zh/features/clipboard-history)。
 
+![剪贴板插件](/images/plugin_clipboard.png)
+
 ## 快速开始
 
 ```text

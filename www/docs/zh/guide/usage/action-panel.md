@@ -2,10 +2,12 @@
 
 操作面板是结果的第二步。`Enter` 执行主要动作；操作面板展示插件附加在该结果上的其他动作。
 
+![操作面板](/images/action_panel.jpg)
+
 ## 打开方式
 
 1. 选中一个结果。
-2. Windows/Linux 按 `Ctrl + J`，macOS 按 `Command + J`。
+2. Windows/Linux 默认按 `Ctrl + K`，macOS 按 `Command + K`。可在 **设置 -> 常规** 中修改。
 3. 用键盘选择动作并按 `Enter`。
 
 可以在操作面板里输入文字过滤动作。本地化动作名也支持英文别名，所以 `copy`、`open`、`delete` 仍然能找到对应命令。

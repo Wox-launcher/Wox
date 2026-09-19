@@ -2,6 +2,8 @@
 
 网页搜索插件会从 Wox 打开搜索 URL。它可以作为普通文本的 fallback 结果，也可以通过明确的搜索引擎关键字触发。
 
+![用查询提示填写网页搜索的具名参数](/images/plugin_websearch.jpg)
+
 ## 快速开始
 
 ```text
@@ -10,8 +12,6 @@ g Wox Launcher
 ```
 
 默认配置包含 Google，关键字为 `g`。你可以在插件设置中添加更多搜索引擎。
-
-![用查询提示填写网页搜索的具名参数](/images/query-hint.jpg)
 
 ## 搜索引擎设置
 

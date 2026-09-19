@@ -1,28 +1,10 @@
 import { defineConfig } from "vitepress";
-import { generateChangelogPages, getChineseReleases, getLatestRelease, getStableReleases } from "../../scripts/release-meta.mjs";
+import { generateChangelogPages, getLatestRelease } from "../../scripts/release-meta.mjs";
 import { applySeo } from "./seo";
 
 generateChangelogPages();
 
 const latestRelease = getLatestRelease();
-const stableReleases = getStableReleases();
-const changelogSidebarItems = [
-  { text: "All releases", link: "/changelog/" },
-  ...stableReleases.map((release) => ({
-    text: `v${release.version}`,
-    link: `/changelog/${release.version}`,
-  })),
-];
-const chineseReleaseVersions = new Set(getChineseReleases().map((release) => release.version));
-const chineseChangelogSidebarItems = [
-  { text: "全部版本", link: "/zh/changelog/" },
-  ...stableReleases.map((release) => ({
-    text: `v${release.version}`,
-    link: chineseReleaseVersions.has(release.version)
-      ? `/zh/changelog/${release.version}`
-      : `/changelog/${release.version}`,
-  })),
-];
 
 export default defineConfig({
   // Custom domain https://www.woxlauncher.com/ serves this project site at the
@@ -32,12 +14,21 @@ export default defineConfig({
   title: "Wox",
   titleTemplate: ":title | Wox",
   description: "A native, open-source launcher for Windows, macOS, and Linux.",
-  lastUpdated: true,
+  lastUpdated: false,
+  markdown: {
+    anchor: {
+      permalink: false,
+    },
+  },
   sitemap: {
     hostname: "https://www.woxlauncher.com",
   },
   transformPageData(pageData) {
     applySeo(pageData);
+    if (!keepsGuideChrome(pageData.relativePath)) {
+      pageData.frontmatter.aside = false;
+      pageData.frontmatter.outline = false;
+    }
   },
   vite: {
     define: {
@@ -56,7 +47,7 @@ export default defineConfig({
           { text: "Home", link: "/" },
           { text: "Guide", link: "/guide/introduction" },
           { text: "Changelog", link: "/changelog/" },
-          { text: "Development", link: "/development/setup" },
+          { text: "Development", link: "/development/" },
           { text: "Blog", link: "/blog/" },
           { text: "Plugin Store", link: "/store/plugins" },
           { text: "Theme Store", link: "/store/themes" },
@@ -65,56 +56,6 @@ export default defineConfig({
           "/guide/": englishGuideSidebar(),
           "/compare/": englishGuideSidebar(),
           "/features/": englishGuideSidebar(),
-          "/changelog/": [
-            {
-              text: "Changelog",
-              items: changelogSidebarItems,
-            },
-          ],
-          "/development/": [
-            {
-              text: "Development",
-              items: [
-                { text: "Setup", link: "/development/setup" },
-                { text: "Architecture", link: "/development/architecture" },
-                { text: "Contributing", link: "/development/contributing" },
-              ],
-            },
-            {
-              text: "Plugin Development",
-              items: [
-                { text: "Overview", link: "/development/plugins/overview" },
-                { text: "AI skills", link: "/development/plugins/ai-skills" },
-                { text: "Specification", link: "/development/plugins/specification" },
-                { text: "Query Model", link: "/development/plugins/query-model" },
-                { text: "Script Plugin", link: "/development/plugins/script-plugin" },
-                { text: "Single-file SDK Plugin", link: "/development/plugins/single-file-plugin" },
-                { text: "Full-featured Plugin", link: "/development/plugins/full-featured-plugin" },
-              ],
-            },
-          ],
-          "/blog/": [
-            {
-              text: "Blog",
-              items: [
-                { text: "Overview", link: "/blog/" },
-                { text: "Did You Know: Wox Can Restore Your Workspace Layout", link: "/blog/did-you-know-wox-workspace-layouts" },
-                { text: "Did You Know: Wox Can Preview Files with the Space Key", link: "/blog/did-you-know-selection-space-quick-look" },
-                { text: "Did You Know: Wox Can Bring Back a Launchpad-Style App Grid", link: "/blog/did-you-know-wox-app-launchpad" },
-                { text: "Did You Know: Wox Can Translate Selected Text Silently", link: "/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
-                { text: "Did You Know: Wox Can Browse Websites with Query Hotkeys", link: "/blog/did-you-know-wox-query-hotkey-webview" },
-              ],
-            },
-          ],
-          "/store/": [
-            {
-              text: "Store",
-              items: [
-                { text: "Plugins", link: "/store/plugins" },
-                { text: "Themes", link: "/store/themes" },
-              ],
-            },
-          ],
         },
         footer: {
           message: "Released under the GPL-3.0 License.",
@@ -133,7 +74,7 @@ export default defineConfig({
           { text: "首页", link: "/zh/" },
           { text: "指南", link: "/zh/guide/introduction" },
           { text: "更新日志", link: "/zh/changelog/" },
-          { text: "开发", link: "/zh/development/setup" },
+          { text: "开发", link: "/zh/development/" },
           { text: "博客", link: "/zh/blog/" },
           { text: "插件商店", link: "/zh/store/plugins" },
           { text: "主题商店", link: "/zh/store/themes" },
@@ -142,56 +83,6 @@ export default defineConfig({
           "/zh/guide/": chineseGuideSidebar(),
           "/zh/compare/": chineseGuideSidebar(),
           "/zh/features/": chineseGuideSidebar(),
-          "/zh/changelog/": [
-            {
-              text: "更新日志",
-              items: chineseChangelogSidebarItems,
-            },
-          ],
-          "/zh/development/": [
-            {
-              text: "开发",
-              items: [
-                { text: "环境搭建", link: "/zh/development/setup" },
-                { text: "架构", link: "/zh/development/architecture" },
-                { text: "贡献指南", link: "/zh/development/contributing" },
-              ],
-            },
-            {
-              text: "插件开发",
-              items: [
-                { text: "概览", link: "/zh/development/plugins/overview" },
-                { text: "AI 技能", link: "/zh/development/plugins/ai-skills" },
-                { text: "规范", link: "/zh/development/plugins/specification" },
-                { text: "查询模型", link: "/zh/development/plugins/query-model" },
-                { text: "脚本插件", link: "/zh/development/plugins/script-plugin" },
-                { text: "单文件 SDK 插件", link: "/zh/development/plugins/single-file-plugin" },
-                { text: "全功能插件", link: "/zh/development/plugins/full-featured-plugin" },
-              ],
-            },
-          ],
-          "/zh/blog/": [
-            {
-              text: "博客",
-              items: [
-                { text: "总览", link: "/zh/blog/" },
-                { text: "你知道吗：Wox 可以一键恢复工作区布局", link: "/zh/blog/did-you-know-wox-workspace-layouts" },
-                { text: "你知道吗：Wox 可以用空格键快速预览文件", link: "/zh/blog/did-you-know-selection-space-quick-look" },
-                { text: "你知道吗：Wox 可以找回类似 Launchpad 的应用网格", link: "/zh/blog/did-you-know-wox-app-launchpad" },
-                { text: "你知道吗：Wox 可以用快捷键静默翻译选中文本", link: "/zh/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
-                { text: "你知道吗：Wox 可以用快捷键查询快速浏览网页", link: "/zh/blog/did-you-know-wox-query-hotkey-webview" },
-              ],
-            },
-          ],
-          "/zh/store/": [
-            {
-              text: "商店",
-              items: [
-                { text: "插件", link: "/zh/store/plugins" },
-                { text: "主题", link: "/zh/store/themes" },
-              ],
-            },
-          ],
         },
         footer: {
           message: "基于 GPL-3.0 许可发布",
@@ -203,13 +94,6 @@ export default defineConfig({
         },
         outline: {
           label: "页面导航",
-        },
-        lastUpdated: {
-          text: "最后更新于",
-          formatOptions: {
-            dateStyle: "short",
-            timeStyle: "medium",
-          },
         },
         langMenuLabel: "多语言",
         returnToTopLabel: "回到顶部",
@@ -283,7 +167,6 @@ function englishGuideSidebar() {
             { text: "Browser Bookmark", link: "/guide/plugins/system/browser-bookmark" },
             { text: "Browser", link: "/guide/plugins/system/browser" },
             { text: "Quick Jump", link: "/guide/plugins/system/explorer" },
-            { text: "Selection", link: "/guide/plugins/system/selection" },
             { text: "Emoji", link: "/guide/plugins/system/emoji" },
             { text: "Color", link: "/guide/plugins/system/color" },
             { text: "Media Player", link: "/guide/plugins/system/mediaplayer" },
@@ -293,9 +176,7 @@ function englishGuideSidebar() {
             { text: "Shell", link: "/guide/plugins/system/shell" },
             { text: "System Commands", link: "/guide/plugins/system/sys" },
             { text: "Query History", link: "/guide/plugins/system/query-history" },
-            { text: "Glance", link: "/guide/plugins/system/glance" },
             { text: "Hotkeys", link: "/guide/plugins/system/hotkey-overview" },
-            { text: "macOS Menus", link: "/guide/plugins/system/menus" },
             { text: "Doctor", link: "/guide/plugins/system/doctor" },
             { text: "Feedback", link: "/guide/plugins/system/feedback" },
             { text: "Update", link: "/guide/plugins/system/update" },
@@ -360,7 +241,6 @@ function chineseGuideSidebar() {
             { text: "浏览器书签", link: "/zh/guide/plugins/system/browser-bookmark" },
             { text: "浏览器", link: "/zh/guide/plugins/system/browser" },
             { text: "快速跳转", link: "/zh/guide/plugins/system/explorer" },
-            { text: "选中内容", link: "/zh/guide/plugins/system/selection" },
             { text: "Emoji", link: "/zh/guide/plugins/system/emoji" },
             { text: "颜色", link: "/zh/guide/plugins/system/color" },
             { text: "媒体播放器", link: "/zh/guide/plugins/system/mediaplayer" },
@@ -370,9 +250,7 @@ function chineseGuideSidebar() {
             { text: "Shell", link: "/zh/guide/plugins/system/shell" },
             { text: "系统命令", link: "/zh/guide/plugins/system/sys" },
             { text: "查询历史", link: "/zh/guide/plugins/system/query-history" },
-            { text: "系统速览", link: "/zh/guide/plugins/system/glance" },
             { text: "快捷键", link: "/zh/guide/plugins/system/hotkey-overview" },
-            { text: "macOS 菜单", link: "/zh/guide/plugins/system/menus" },
             { text: "诊断", link: "/zh/guide/plugins/system/doctor" },
             { text: "反馈", link: "/zh/guide/plugins/system/feedback" },
             { text: "更新", link: "/zh/guide/plugins/system/update" },
@@ -392,4 +270,9 @@ function chineseGuideSidebar() {
       ],
     },
   ];
+}
+
+function keepsGuideChrome(relativePath: string): boolean {
+  const pagePath = relativePath.startsWith("zh/") ? relativePath.slice(3) : relativePath;
+  return pagePath.startsWith("guide/") || pagePath.startsWith("compare/") || pagePath.startsWith("features/");
 }

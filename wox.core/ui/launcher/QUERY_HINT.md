@@ -58,6 +58,6 @@ replace it with a more specific command template. Preserve typed whitespace and
 selection through this transition. Existing query generations retain isolated
 copies, including suggestion arrays. No persisted-data migration is needed.
 
-See the [plugin query model](../../../www/docs/development/plugins/query-model.md#candidate-suggestions)
-for declarations and compatibility, and the focused Query Hint unit and native
-smoke tests for editing and paint invariants.
+See the QueryHint section in [wox-plugin-creator](../../../.agents/skills/wox-plugin-creator/SKILL.md)
+for declarations, and the focused Query Hint unit and native smoke tests for
+editing and paint invariants.

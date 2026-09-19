@@ -17,39 +17,27 @@ The `q` value is the exact query text Wox should place into the launcher. URL-en
 
 Open Plugin Manager with an install query:
 
-```text
-wox://query?q=wpm%20install
-```
+<WoxRunQuery query="wpm install " />
 
 Open file search:
 
-```text
-wox://query?q=f%20invoice
-```
+<WoxRunQuery query="f invoice" />
 
 Run a calculation:
 
-```text
-wox://query?q=100%20%2B%2020
-```
+<WoxRunQuery query="100 + 20" />
 
 Start an AI chat:
 
-```text
-wox://query?q=chat%20summarize%20this
-```
+<WoxRunQuery query="chat summarize this" />
 
 Create a note:
 
-```text
-wox://query?q=note%20new
-```
+<WoxRunQuery query="note new " />
 
 Open a downloaded plugin package in the installer:
 
-```text
-wox://install?path=/Users/demo/Downloads/wox.plugin.example.wox
-```
+<WoxRunQuery href="wox://install?path=/Users/demo/Downloads/wox.plugin.example.wox" />
 
 ## From Scripts
 
