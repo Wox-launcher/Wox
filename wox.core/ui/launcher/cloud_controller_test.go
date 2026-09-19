@@ -307,14 +307,20 @@ func TestCloudControllerReloadBillingPlan(t *testing.T) {
 	c := newCloudSettingsController(deps)
 	amount := 300
 	service := &cloudFakeService{plan: account.BillingPlan{
-		Pro: account.BillingPlanTier{Price: account.BillingPlanPrice{Formatted: "$3/month", Currency: "usd", UnitAmount: &amount, Interval: "month"}},
+		Pro: account.BillingPlanTier{
+			Price: account.BillingPlanPrice{Formatted: "$1.99/month", Currency: "usd", UnitAmount: &amount, Interval: "month"},
+			Trial: &account.BillingPlanTrial{Days: 30, Interval: "month", IntervalCount: 1, Formatted: "1 month free"},
+		},
 	}}
 	c.ReloadBillingPlan(context.Background(), service, "session")
 	if !c.BillingLoaded() {
 		t.Fatal("BillingLoaded should be true after a successful plan fetch")
 	}
-	if got := c.BillingPlan().Pro.Price.Formatted; got != "$3/month" {
-		t.Fatalf("Pro price = %q, want $3/month", got)
+	if got := c.BillingPlan().Pro.Price.Formatted; got != "$1.99/month" {
+		t.Fatalf("Pro price = %q, want $1.99/month", got)
+	}
+	if trial := c.BillingPlan().Pro.Trial; trial == nil || trial.Formatted != "1 month free" || trial.IntervalCount != 1 {
+		t.Fatalf("Pro trial = %#v, want 1 month free", trial)
 	}
 	if *invalidateCalled < 1 {
 		t.Fatalf("Invalidate should be called after billing reload, got %d", *invalidateCalled)

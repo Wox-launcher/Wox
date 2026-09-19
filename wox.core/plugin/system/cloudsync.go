@@ -497,17 +497,7 @@ func (p *CloudSyncPlugin) historyDetailTails(ctx context.Context, detail cloudsy
 
 // historyPluginLabel resolves IDs from both installed plugins and store manifests so failed install rows stay readable.
 func (p *CloudSyncPlugin) historyPluginLabel(ctx context.Context, pluginID string) string {
-	if instance := plugin.GetPluginManager().GetPluginInstanceById(pluginID); instance != nil {
-		if name := strings.TrimSpace(instance.GetName(ctx)); name != "" {
-			return name
-		}
-	}
-	if manifest, err := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginID); err == nil {
-		if name := strings.TrimSpace(manifest.GetName(ctx)); name != "" {
-			return name
-		}
-	}
-	return pluginID
+	return plugin.ResolvePluginDisplayName(ctx, pluginID)
 }
 
 // historyReasonLabel maps internal trigger reasons to labels a normal user can understand.

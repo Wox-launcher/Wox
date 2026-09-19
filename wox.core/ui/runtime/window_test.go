@@ -8,6 +8,7 @@ func TestParseExternalURL(t *testing.T) {
 		valid bool
 	}{
 		{url: "https://woxlauncher.com", valid: true},
+		{url: "https://checkout.stripe.com/c/pay/cs_live_abc#fidkUnmodified", valid: true},
 		{url: "mailto:billing@woxlauncher.com?subject=Billing+help", valid: true},
 		{url: "javascript:alert(1)", valid: false},
 		{url: "https:///missing-host", valid: false},

@@ -9,6 +9,7 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 
 	"wox/cloudsync"
+	"wox/plugin"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -51,14 +52,7 @@ func (a *App) cloudIntroViewProps(snapshot settingsSnapshot, imageScale float32)
 	if freePrice == "" {
 		freePrice = "$0/month"
 	}
-	proPrice := cloudBillingPriceText(snapshot.cloud.BillingPlan.Pro.Price)
-	if proPrice == "" {
-		if snapshot.cloud.BillingLoaded {
-			proPrice = a.translate("i18n:ui_cloud_sync_plan_price_unavailable")
-		} else {
-			proPrice = a.translate("i18n:ui_cloud_sync_plan_price_loading")
-		}
-	}
+	proPrice := cloudBillingPriceWithTrial(a, snapshot.cloud.BillingPlan.Pro.Price, snapshot.cloud.BillingPlan.Pro.Trial, snapshot.cloud.BillingLoaded)
 	return launcherview.CloudIntroProps{
 		SectionLabel: a.translate("i18n:ui_cloud_sync_intro_title"),
 		Headline:     a.translate("i18n:ui_cloud_sync_intro_headline"),
@@ -80,6 +74,38 @@ func (a *App) cloudIntroViewProps(snapshot settingsSnapshot, imageScale float32)
 			{Label: a.translate("i18n:ui_cloud_sync_plan_row_scope"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_scope_free"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_everything_free")},
 		},
 	}
+}
+
+// cloudBillingPriceWithTrial appends the localized free-trial hint to the Pro price.
+func cloudBillingPriceWithTrial(a *App, price cloudBillingPlanPrice, trial *cloudBillingPlanTrial, loaded bool) string {
+	proPrice := cloudBillingPriceText(price)
+	if proPrice == "" {
+		if loaded {
+			return a.translate("i18n:ui_cloud_sync_plan_price_unavailable")
+		}
+		return a.translate("i18n:ui_cloud_sync_plan_price_loading")
+	}
+	trialText := cloudBillingTrialText(a, trial)
+	if trialText == "" {
+		return proPrice
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_plan_price_with_trial"), "{price}", proPrice), "{trial}", trialText)
+}
+
+func cloudBillingTrialText(a *App, trial *cloudBillingPlanTrial) string {
+	if trial == nil {
+		return ""
+	}
+	if strings.EqualFold(trial.Interval, "month") && trial.IntervalCount == 1 {
+		return a.translate("i18n:ui_cloud_sync_plan_trial_one_month")
+	}
+	if strings.EqualFold(trial.Interval, "month") && trial.IntervalCount > 1 {
+		return strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_plan_trial_months"), "{count}", fmt.Sprint(trial.IntervalCount))
+	}
+	if trial.Days > 0 {
+		return strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_plan_trial_days"), "{days}", fmt.Sprint(trial.Days))
+	}
+	return strings.TrimSpace(trial.Formatted)
 }
 
 // cloudBillingPriceText preserves server formatting and reconstructs a readable fallback when needed.
@@ -309,21 +335,20 @@ func (a *App) cloudSyncProgressPluginName(pluginID string) string {
 	if pluginID == "" {
 		return ""
 	}
-	if a.pluginSettings == nil {
-		return pluginID
-	}
-	for _, catalog := range []bool{false, true} {
-		plugins, _ := a.pluginSettings.CachedPlugins(catalog)
-		for _, plugin := range plugins {
-			if plugin.ID != pluginID {
-				continue
-			}
-			if name := strings.TrimSpace(plugin.Name); name != "" {
-				return name
+	if a.pluginSettings != nil {
+		for _, catalog := range []bool{false, true} {
+			plugins, _ := a.pluginSettings.CachedPlugins(catalog)
+			for _, item := range plugins {
+				if item.ID != pluginID {
+					continue
+				}
+				if name := strings.TrimSpace(item.Name); name != "" {
+					return name
+				}
 			}
 		}
 	}
-	return pluginID
+	return plugin.ResolvePluginDisplayName(context.Background(), pluginID)
 }
 
 func cloudStateTimestamp(state *cloudSyncState, pull bool) int64 {

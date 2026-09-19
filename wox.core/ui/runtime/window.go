@@ -605,11 +605,12 @@ func (w *Window) OpenExternalURL(rawURL string) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
-	parsed, err := parseExternalURL(rawURL)
-	if err != nil {
+	if _, err := parseExternalURL(rawURL); err != nil {
 		return fmt.Errorf("unsupported external URL %q", rawURL)
 	}
-	return w.native.openExternalURL(parsed.String())
+	// Keep the original string. Reassembling with url.URL.String() can encode
+	// Stripe checkout fragments and Windows then opens an incomplete hosted link.
+	return w.native.openExternalURL(rawURL)
 }
 
 // parseExternalURL limits native URL dispatch to the schemes used by Wox-owned actions.

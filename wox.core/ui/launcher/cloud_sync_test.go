@@ -101,6 +101,54 @@ func TestCloudBillingPriceTextPrefersFormattedServerPrice(t *testing.T) {
 	}
 }
 
+func TestCloudBillingPriceWithTrial(t *testing.T) {
+	app := &App{
+		translations: map[string]string{
+			"ui_cloud_sync_plan_trial_one_month":  "1 month free trial",
+			"ui_cloud_sync_plan_trial_months":     "{count} months free trial",
+			"ui_cloud_sync_plan_trial_days":       "{days}-day free trial",
+			"ui_cloud_sync_plan_price_with_trial": "{price} · {trial}",
+			"ui_cloud_sync_plan_price_loading":    "Loading...",
+		},
+	}
+	price := cloudBillingPlanPrice{Formatted: "$1.99/month"}
+	monthTrial := &cloudBillingPlanTrial{Days: 30, Interval: "month", IntervalCount: 1, Formatted: "1 month free"}
+	if got := cloudBillingPriceWithTrial(app, price, monthTrial, true); got != "$1.99/month · 1 month free trial" {
+		t.Fatalf("month trial = %q", got)
+	}
+	if got := cloudBillingPriceWithTrial(app, price, nil, true); got != "$1.99/month" {
+		t.Fatalf("no trial = %q", got)
+	}
+	if got := cloudBillingPriceWithTrial(app, cloudBillingPlanPrice{}, nil, false); got != "Loading..." {
+		t.Fatalf("loading price = %q", got)
+	}
+}
+
+func TestFormatCloudSyncProgressUsesCachedPluginName(t *testing.T) {
+	app := &App{
+		translations: map[string]string{
+			"ui_cloud_sync_progress_count":     " ({count} items processed)",
+			"ui_cloud_sync_progress_restoring": "Restoring {target}{count}",
+			"ui_cloud_sync_progress_plugin":    "plugin {plugin}",
+		},
+		pluginSettings: newPluginSettingsController(CommonDeps{}),
+	}
+	app.pluginSettings.cachePlugins(false, []pluginSettingsPlugin{{
+		ID:   "ea521bb8-4414-44be-bf42-4b2851ae32ad",
+		Name: "DeepL",
+	}})
+	detail := app.formatCloudSyncProgress(&cloudSyncProgress{
+		Active:     true,
+		Operation:  cloudsync.CloudSyncProgressOperationRestore,
+		EntityType: cloudsync.EntityInstalledPlugin,
+		PluginID:   "ea521bb8-4414-44be-bf42-4b2851ae32ad",
+		Current:    100,
+	}, false)
+	if detail != "Restoring plugin DeepL (100 items processed)" {
+		t.Fatalf("restore detail = %q, want plugin display name", detail)
+	}
+}
+
 func TestFormatCloudSyncProgressUsesPushTargetAndTotal(t *testing.T) {
 	app := &App{
 		translations: map[string]string{

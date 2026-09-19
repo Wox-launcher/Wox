@@ -37,7 +37,8 @@ type cloudBillingPlan struct {
 }
 
 type cloudBillingPlanTier struct {
-	Price cloudBillingPlanPrice `json:"price"`
+	Price cloudBillingPlanPrice  `json:"price"`
+	Trial *cloudBillingPlanTrial `json:"trial,omitempty"`
 }
 
 type cloudBillingPlanPrice struct {
@@ -45,6 +46,13 @@ type cloudBillingPlanPrice struct {
 	UnitAmount *int   `json:"unit_amount"`
 	Interval   string `json:"interval"`
 	Formatted  string `json:"formatted"`
+}
+
+type cloudBillingPlanTrial struct {
+	Days          int    `json:"days"`
+	Interval      string `json:"interval"`
+	IntervalCount int    `json:"interval_count"`
+	Formatted     string `json:"formatted"`
 }
 
 type cloudSyncStatus struct {

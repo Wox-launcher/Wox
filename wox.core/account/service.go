@@ -95,7 +95,8 @@ type BillingPlan struct {
 }
 
 type BillingPlanTier struct {
-	Price BillingPlanPrice `json:"price"`
+	Price BillingPlanPrice  `json:"price"`
+	Trial *BillingPlanTrial `json:"trial,omitempty"`
 }
 
 type BillingPlanPrice struct {
@@ -103,6 +104,13 @@ type BillingPlanPrice struct {
 	UnitAmount *int   `json:"unit_amount"`
 	Interval   string `json:"interval"`
 	Formatted  string `json:"formatted"`
+}
+
+type BillingPlanTrial struct {
+	Days          int    `json:"days"`
+	Interval      string `json:"interval"`
+	IntervalCount int    `json:"interval_count"`
+	Formatted     string `json:"formatted"`
 }
 
 type emailVerificationRequired struct {

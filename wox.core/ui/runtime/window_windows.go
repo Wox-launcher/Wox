@@ -9,6 +9,7 @@ import (
 	"image"
 	"math"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util"
+	"wox/util/browser"
 	"wox/util/ime"
 	"wox/util/osvariant"
 	"wox/util/screen"
@@ -2077,8 +2079,17 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	}
 }
 
-// openExternalURLNative keeps ShellExecute and its Win32 error convention behind the shared URL contract.
+// openExternalURLNative prefers launching the default browser with the raw URL.
+// ShellExecuteW truncates long Stripe Checkout URLs and drops the #fragment,
+// which Stripe then shows as "This link is incomplete".
 func openExternalURLNative(hwnd win.HWND, rawURL string) error {
+	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
+		if browserID := browser.DefaultBrowserID(); browserID != "" {
+			if err := browser.OpenURL(rawURL, browserID); err == nil {
+				return nil
+			}
+		}
+	}
 	operation, err := syscall.UTF16PtrFromString("open")
 	if err != nil {
 		return err

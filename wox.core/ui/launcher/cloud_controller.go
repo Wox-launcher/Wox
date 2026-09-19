@@ -398,15 +398,28 @@ func cloudDeviceListFromContract(source cloudsync.CloudSyncDeviceListResponse) c
 	return result
 }
 
+func cloudBillingTrialFromContract(trial *account.BillingPlanTrial) *cloudBillingPlanTrial {
+	if trial == nil || (trial.Days <= 0 && strings.TrimSpace(trial.Formatted) == "") {
+		return nil
+	}
+	copied := cloudBillingPlanTrial{
+		Days: trial.Days, Interval: trial.Interval, IntervalCount: trial.IntervalCount, Formatted: trial.Formatted,
+	}
+	return &copied
+}
+
 // cloudBillingPlanFromContract adapts display pricing to launcher-owned state.
 func cloudBillingPlanFromContract(plan account.BillingPlan) cloudBillingPlan {
 	return cloudBillingPlan{
 		Free: cloudBillingPlanTier{Price: cloudBillingPlanPrice{
 			Currency: plan.Free.Price.Currency, UnitAmount: plan.Free.Price.UnitAmount, Interval: plan.Free.Price.Interval, Formatted: plan.Free.Price.Formatted,
 		}},
-		Pro: cloudBillingPlanTier{Price: cloudBillingPlanPrice{
-			Currency: plan.Pro.Price.Currency, UnitAmount: plan.Pro.Price.UnitAmount, Interval: plan.Pro.Price.Interval, Formatted: plan.Pro.Price.Formatted,
-		}},
+		Pro: cloudBillingPlanTier{
+			Price: cloudBillingPlanPrice{
+				Currency: plan.Pro.Price.Currency, UnitAmount: plan.Pro.Price.UnitAmount, Interval: plan.Pro.Price.Interval, Formatted: plan.Pro.Price.Formatted,
+			},
+			Trial: cloudBillingTrialFromContract(plan.Pro.Trial),
+		},
 	}
 }
 
