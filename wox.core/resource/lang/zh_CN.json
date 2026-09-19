@@ -653,6 +653,8 @@
   "ui_plugin_commands_tip": "命令是触发关键词后面的子命令。输入 \"<触发关键词> <命令> \"（注意末尾空格）进入命令模式。",
   "ui_plugin_command_name_column": "名称",
   "ui_plugin_command_desc_column": "描述",
+  "ui_plugin_test_keyword": "测试此关键词",
+  "ui_plugin_test_command": "测试此命令",
   "ui_setting_plugin_system_tag": "系统",
   "ui_setting_plugin_script_tag": "脚本",
   "ui_setting_plugin_empty_data": "暂无插件",

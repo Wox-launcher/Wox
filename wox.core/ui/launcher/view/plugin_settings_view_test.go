@@ -732,6 +732,99 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 	}
 }
 
+func TestFormTableOperationCellPutsLeadingActionsFirst(t *testing.T) {
+	icon := &woxui.Image{}
+	tapped := false
+	props := FormTableFieldProps{
+		ID: "keywords", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	}
+	row := FormTableRow{
+		Index: 0,
+		LeadingActions: []FormTableRowAction{{
+			ID: "test-query", Label: "Test this keyword", Icon: icon, OnTap: func() { tapped = true },
+		}},
+	}
+
+	cell := formTableOperationCell(props, row, 142, false).(woxwidget.Container)
+	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(actions.Children) != 4 {
+		t.Fatalf("keyword operation count = %d, want test, edit, clone, and delete", len(actions.Children))
+	}
+	testButton := formTableOperationIconButton(actions.Children[0])
+	if testButton.ID != "keywords-row-0-test-query" || testButton.Label != "Test this keyword" || testButton.OnTap == nil {
+		t.Fatalf("leading test action = %+v", testButton)
+	}
+	testButton.OnTap()
+	if !tapped {
+		t.Fatal("leading test action should keep its tap")
+	}
+	if formTableOperationIconButton(actions.Children[1]).ID != "keywords-row-0-edit" {
+		t.Fatal("edit should stay after the leading test action")
+	}
+}
+
+func TestReadonlyFormTableShowsLeadingActionsWithoutMutatingControls(t *testing.T) {
+	icon := &woxui.Image{}
+	props := FormTableFieldProps{
+		ID: "plugin-commands", ReadOnly: true, OperationLabel: "Operation",
+		EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+		Columns: []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Description"}},
+		Rows: []FormTableRow{{
+			Index: 0, Cells: []FormTableCell{{Text: "fav"}, {Text: "Favorites"}},
+			LeadingActions: []FormTableRowAction{{ID: "test-query", Label: "Test this command", Icon: icon, OnTap: func() {}}},
+		}},
+	}
+	if !formTableShowsOperations(props) {
+		t.Fatal("read-only command table with a test action should keep the operation column")
+	}
+	if got := formTableOperationColumnWidth(props); got < formTableOperationWidth+formTableHorizontalMargin*2 {
+		t.Fatalf("command operation width = %.0f, want room for the Operation header", got)
+	}
+
+	cell := formTableOperationCell(props, props.Rows[0], formTableOperationColumnWidth(props), false).(woxwidget.Container)
+	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(actions.Children) != 1 {
+		t.Fatalf("command operation count = %d, want only the test action", len(actions.Children))
+	}
+	testButton := formTableOperationIconButton(actions.Children[0])
+	if testButton.ID != "plugin-commands-row-0-test-query" || testButton.Disabled || testButton.OnTap == nil {
+		t.Fatalf("command test action = %+v", testButton)
+	}
+
+	grid := formTableGridFlex(t, buildFormTableGrid(props, 626, 118, newFormTableGridState()))
+	header := grid.Children[0].(woxwidget.Flex)
+	if len(header.Children) != 2 {
+		t.Fatalf("command header children = %d, want data columns and operations", len(header.Children))
+	}
+	operation := header.Children[1].(woxwidget.Container)
+	if operation.Width != formTableOperationWidth+formTableHorizontalMargin*2 {
+		t.Fatalf("command operation header width = %v, want the standard Operation column", operation.Width)
+	}
+}
+
+func TestFormTableOperationColumnGrowsForLeadingActions(t *testing.T) {
+	icon := &woxui.Image{}
+	props := FormTableFieldProps{
+		ID: "keywords", Width: 626, Height: 118, OperationLabel: "Operation", Theme: woxcomponent.ControlTheme{},
+		Columns: []FormTableColumn{{Label: "Keyword"}},
+		Rows: []FormTableRow{{
+			Index: 0, Cells: []FormTableCell{{Text: "cb"}},
+			LeadingActions: []FormTableRowAction{{ID: "test-query", Label: "Test this keyword", Icon: icon, OnTap: func() {}}},
+		}},
+	}
+	want := formTableOperationColumnWidth(props)
+	if want <= formTableOperationWidth+formTableHorizontalMargin*2 {
+		t.Fatalf("operation width = %.0f, want more than the standard 3-action cluster", want)
+	}
+	grid := formTableGridFlex(t, buildFormTableGrid(props, props.Width, props.Height, newFormTableGridState()))
+	operation := grid.Children[0].(woxwidget.Flex).Children[1].(woxwidget.Container)
+	if operation.Width != want {
+		t.Fatalf("pinned operation width = %v, want %v", operation.Width, want)
+	}
+}
+
 func TestFormTableDataCellDoesNotOpenEditor(t *testing.T) {
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.ControlTheme{}}, FormTableCell{Text: "value"}, 120)
 	if _, interactive := cell.(woxwidget.Gesture); interactive {

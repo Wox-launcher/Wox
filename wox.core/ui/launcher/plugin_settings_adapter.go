@@ -202,12 +202,13 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 			keywordTable.Rows[index].Cells[0].Text = a.translate("i18n:ui_plugin_trigger_keyword_global")
 		}
 	}
+	a.addPluginKeywordQueryTests(&keywordTable, plugin.ID, form.values["TriggerKeywords"], imageScale)
 	accent := snapshot.palette.Info
 	editor.Keywords = a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
 	}, accent)
 	editor.Keywords.SectionLabel = a.translate("i18n:ui_plugin_tab_trigger_keywords")
-	editor.Commands = a.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true)
+	editor.Commands = a.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true, true, pluginFormTriggerKeywords(plugin, form.values))
 
 	keepVisibleKey := pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 0)
 	settingDefinitions := form.definitions[1:]
@@ -319,7 +320,7 @@ func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	return form
 }
 
-func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width, imageScale float32, readOnly bool) *launcherview.PluginFormProps {
+func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width, imageScale float32, readOnly, testable bool, testTriggers []string) *launcherview.PluginFormProps {
 	if len(plugin.Commands) == 0 {
 		return a.pluginDetailEmptyFormProps("i18n:ui_plugin_no_commands", "i18n:ui_plugin_no_commands_subtitle")
 	}
@@ -336,7 +337,11 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 			{Label: a.translate("i18n:ui_plugin_command_name_column"), Width: 120},
 			{Label: a.translate("i18n:ui_plugin_command_desc_column")},
 		},
-		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), Theme: snapshot.palette,
+		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), OperationLabel: a.translate("i18n:ui_operation"),
+		OnTooltip: a.setSettingChoiceTooltip, Theme: snapshot.palette,
+	}
+	if testable {
+		a.addPluginCommandQueryTests(&table, commands, testTriggers, imageScale)
 	}
 	accent := snapshot.palette.Info
 	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
@@ -344,6 +349,75 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}, accent)
 	form.SectionLabel = a.translate("i18n:ui_plugin_tab_commands")
 	return form
+}
+
+// addPluginKeywordQueryTests puts a launcher test action first in each keyword row's operation column.
+// Global "*" keywords are skipped because they have no typed prefix to preview.
+func (a *App) addPluginKeywordQueryTests(table *launcherview.FormTableFieldProps, pluginID, value string, imageScale float32) {
+	rows, err := decodeFormTableRows(value)
+	if err != nil {
+		return
+	}
+	for viewIndex := range table.Rows {
+		sourceIndex := table.Rows[viewIndex].Index
+		if sourceIndex < 0 || sourceIndex >= len(rows) {
+			continue
+		}
+		keyword := strings.TrimSpace(fmt.Sprint(rows[sourceIndex]["keyword"]))
+		if keyword == "*" {
+			continue
+		}
+		table.Rows[viewIndex].LeadingActions = append(table.Rows[viewIndex].LeadingActions, a.pluginQueryTestAction(table.Theme, imageScale, a.translate("i18n:ui_plugin_test_keyword"), func() {
+			a.runPluginKeywordQueryTest(pluginID, keyword)
+		}))
+	}
+}
+
+// addPluginCommandQueryTests puts a launcher test action first in each command row's operation column.
+func (a *App) addPluginCommandQueryTests(table *launcherview.FormTableFieldProps, commands []pluginCommand, triggers []string, imageScale float32) {
+	for viewIndex := range table.Rows {
+		sourceIndex := table.Rows[viewIndex].Index
+		if sourceIndex < 0 || sourceIndex >= len(commands) {
+			continue
+		}
+		command := commands[sourceIndex].Command
+		table.Rows[viewIndex].LeadingActions = append(table.Rows[viewIndex].LeadingActions, a.pluginQueryTestAction(table.Theme, imageScale, a.translate("i18n:ui_plugin_test_command"), func() {
+			a.runPluginCommandQueryTest(triggers, command)
+		}))
+	}
+}
+
+// pluginQueryTestAction is the shared bolt icon used by keyword and command test buttons.
+func (a *App) pluginQueryTestAction(theme woxcomponent.ControlTheme, imageScale float32, label string, onTap func()) launcherview.FormTableRowAction {
+	tint := theme.TextSecondary
+	return launcherview.FormTableRowAction{
+		ID: "test-query", Label: label, Icon: a.imageForTint(settingControlIconSource("bolt"), &tint, physicalImageSize(16, imageScale)),
+		OnTap: onTap,
+		OnHover: func(inside bool, anchor woxui.Rect) {
+			a.setSettingChoiceTooltip(inside, label, anchor)
+		},
+	}
+}
+
+// runPluginKeywordQueryTest opens the launcher as if the user typed this trigger keyword.
+func (a *App) runPluginKeywordQueryTest(pluginID, keyword string) {
+	if queryText := pluginKeywordQueryText(keyword); queryText != "" {
+		a.runLauncherQueryTest(newInputQuery(queryText))
+		return
+	}
+	if strings.TrimSpace(keyword) != "*" || strings.TrimSpace(pluginID) == "" {
+		return
+	}
+	query := newInputQuery("")
+	query.QueryScope = queryScope{Plugins: []queryScopePlugin{{PluginID: pluginID}}}
+	a.runLauncherQueryTest(query)
+}
+
+// runPluginCommandQueryTest opens the launcher as if the user entered this plugin command.
+func (a *App) runPluginCommandQueryTest(triggerKeywords []string, command string) {
+	if queryText := pluginCommandQueryText(triggerKeywords, command); queryText != "" {
+		a.runLauncherQueryTest(newInputQuery(queryText))
+	}
 }
 
 // pluginMetadataProps restores Flutter's non-editing plugin detail tabs from core metadata.
@@ -503,7 +577,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		FallbackColor:  resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
 		ScrollID: "plugin-detail-" + plugin.ID, Metadata: &metadata,
 		Keywords:   a.pluginKeywordsFormProps(snapshot, plugin, contentWidth, imageScale, true),
-		Commands:   a.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true),
+		Commands:   a.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true, false, nil),
 		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot,
 	}
 }

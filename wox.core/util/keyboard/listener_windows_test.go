@@ -7,6 +7,51 @@ import (
 	"time"
 )
 
+func TestRefineWindowsModifierKeyUsesScanCodeAndExtendedFlag(t *testing.T) {
+	if got := refineWindowsModifierKey(KeyShift, 0x10, 0x2A, 0); got != KeyLeftShift {
+		t.Fatalf("left shift scan = %v, want left shift", got)
+	}
+	if got := refineWindowsModifierKey(KeyShift, 0x10, 0x36, 0); got != KeyRightShift {
+		t.Fatalf("right shift scan = %v, want right shift", got)
+	}
+	if got := refineWindowsModifierKey(KeyCtrl, 0x11, 0x1D, 0); got != KeyLeftCtrl {
+		t.Fatalf("left ctrl = %v, want left ctrl", got)
+	}
+	if got := refineWindowsModifierKey(KeyCtrl, 0x11, 0x1D, 0x01); got != KeyRightCtrl {
+		t.Fatalf("extended ctrl = %v, want right ctrl", got)
+	}
+	if got := refineWindowsModifierKey(KeyLeftShift, 0xA0, 0x2A, 0); got != KeyLeftShift {
+		t.Fatalf("specific left shift should stay %v", got)
+	}
+}
+
+func TestWindowsModifierVirtualKeyMapping(t *testing.T) {
+	for _, expected := range []struct {
+		key Key
+		vk  uint32
+	}{
+		{key: KeyCtrl, vk: 0x11},
+		{key: KeyShift, vk: 0x10},
+		{key: KeyAlt, vk: 0x12},
+		{key: KeyLeftCtrl, vk: 0xA2},
+		{key: KeyRightCtrl, vk: 0xA3},
+		{key: KeyLeftShift, vk: 0xA0},
+		{key: KeyRightShift, vk: 0xA1},
+		{key: KeyLeftAlt, vk: 0xA4},
+		{key: KeyRightAlt, vk: 0xA5},
+		{key: KeyLeftSuper, vk: 0x5B},
+		{key: KeyRightSuper, vk: 0x5C},
+	} {
+		actualVK, err := keyToWindowsVK(expected.key)
+		if err != nil {
+			t.Fatalf("virtual key for %s: %v", expected.key.Character(), err)
+		}
+		if actualVK != expected.vk {
+			t.Fatalf("virtual key for %s = %#x, want %#x", expected.key.Character(), actualVK, expected.vk)
+		}
+	}
+}
+
 func TestWindowsFunctionKeyVirtualKeyMappingThroughF24(t *testing.T) {
 	for _, expected := range []struct {
 		key Key

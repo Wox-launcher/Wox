@@ -635,6 +635,8 @@
   "ui_plugin_commands_tip": "Команды — это подкоманды после ключевого слова запуска. Введите \"<триггер> <команда> \" (обратите внимание на пробел в конце), чтобы перейти в режим команд.",
   "ui_plugin_command_name_column": "Название",
   "ui_plugin_command_desc_column": "Описание",
+  "ui_plugin_test_keyword": "Проверить это ключевое слово",
+  "ui_plugin_test_command": "Проверить эту команду",
   "ui_setting_plugin_system_tag": "Система",
   "ui_setting_plugin_script_tag": "Скрипт",
   "ui_setting_plugin_empty_data": "Плагинов пока нет",

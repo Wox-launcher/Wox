@@ -653,6 +653,8 @@
   "ui_plugin_commands_tip": "Commands are sub-commands after the trigger keyword. Type \"<trigger> <command> \" (note the trailing space) to enter command mode.",
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
+  "ui_plugin_test_keyword": "Test this keyword",
+  "ui_plugin_test_command": "Test this command",
   "ui_setting_plugin_system_tag": "System",
   "ui_setting_plugin_script_tag": "Script",
   "ui_setting_plugin_empty_data": "No plugins yet",

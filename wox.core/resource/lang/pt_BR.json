@@ -635,6 +635,8 @@
   "ui_plugin_commands_tip": "Os comandos são subcomandos após a palavra-chave de gatilho. Digite \"<gatilho> <comando> \" (observe o espaço final) para entrar no modo de comando.",
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
+  "ui_plugin_test_keyword": "Testar esta palavra-chave",
+  "ui_plugin_test_command": "Testar este comando",
   "ui_setting_plugin_system_tag": "Sistema",
   "ui_setting_plugin_script_tag": "Script",
   "ui_setting_plugin_empty_data": "Nenhum plugin disponível",

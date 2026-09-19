@@ -295,8 +295,8 @@ func keyboardHotkeyTriggeredCGO(id C.int) {
 }
 
 //export keyboardHookEventCGO
-func keyboardHookEventCGO(eventKind C.int, vkCode C.uint, modifiers C.uint) C.int {
-	key := windowsVKToKey(uint32(vkCode))
+func keyboardHookEventCGO(eventKind C.int, vkCode C.uint, modifiers C.uint, scanCode C.uint, flags C.uint) C.int {
+	key := refineWindowsModifierKey(windowsVKToKey(uint32(vkCode)), uint32(vkCode), uint32(scanCode), uint32(flags))
 	event := RawKeyEvent{
 		Key:           key,
 		Character:     key.Character(),
@@ -471,6 +471,30 @@ func keyToWindowsVK(key Key) (uint32, error) {
 		return 0x87, nil
 	case KeyCapsLock:
 		return 0x14, nil
+	case KeyCtrl:
+		return 0x11, nil
+	case KeyShift:
+		return 0x10, nil
+	case KeyAlt:
+		return 0x12, nil
+	case KeySuper:
+		return 0x5B, nil
+	case KeyLeftCtrl:
+		return 0xA2, nil
+	case KeyRightCtrl:
+		return 0xA3, nil
+	case KeyLeftShift:
+		return 0xA0, nil
+	case KeyRightShift:
+		return 0xA1, nil
+	case KeyLeftAlt:
+		return 0xA4, nil
+	case KeyRightAlt:
+		return 0xA5, nil
+	case KeyLeftSuper:
+		return 0x5B, nil
+	case KeyRightSuper:
+		return 0x5C, nil
 	case KeyBackquote:
 		return 0xC0, nil
 	default:
@@ -646,5 +670,38 @@ func windowsVKToKey(vkCode uint32) Key {
 		return KeyBackquote
 	default:
 		return KeyUnknown
+	}
+}
+
+const (
+	windowsVKShift        = 0x10
+	windowsVKControl      = 0x11
+	windowsVKMenu         = 0x12
+	windowsScanRightShift = 0x36
+	windowsLLKHFExtended  = 0x01
+)
+
+// refineWindowsModifierKey maps generic VK_SHIFT/CONTROL/MENU to the physical
+// left or right key. The low-level hook often reports 0x10 on Shift down and
+// VK_LSHIFT only on Shift up, which would otherwise break hold chords.
+func refineWindowsModifierKey(key Key, vkCode uint32, scanCode uint32, flags uint32) Key {
+	switch vkCode {
+	case windowsVKShift:
+		if scanCode == windowsScanRightShift {
+			return KeyRightShift
+		}
+		return KeyLeftShift
+	case windowsVKControl:
+		if flags&windowsLLKHFExtended != 0 {
+			return KeyRightCtrl
+		}
+		return KeyLeftCtrl
+	case windowsVKMenu:
+		if flags&windowsLLKHFExtended != 0 {
+			return KeyRightAlt
+		}
+		return KeyLeftAlt
+	default:
+		return key
 	}
 }

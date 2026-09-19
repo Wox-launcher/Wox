@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -292,6 +293,235 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	if firstCommand != "fix" {
 		t.Fatalf("first command = %q, want Flutter's command sort order", firstCommand)
 	}
+}
+
+func TestPluginKeywordAndCommandQueryText(t *testing.T) {
+	if got := pluginKeywordQueryText("cb"); got != "cb " {
+		t.Fatalf("keyword query = %q, want a trailing space so the plugin activates", got)
+	}
+	if got := pluginKeywordQueryText("*"); got != "" {
+		t.Fatalf("global keyword query = %q, want empty so the launcher can scope the plugin", got)
+	}
+	if got := pluginCommandQueryText([]string{"cb"}, "fav"); got != "cb fav " {
+		t.Fatalf("command query = %q, want trigger, command, and trailing space", got)
+	}
+	if got := pluginCommandQueryText([]string{"*"}, "set-volume"); got != "set-volume " {
+		t.Fatalf("global command query = %q, want the command with a trailing space", got)
+	}
+}
+
+func TestPluginInstalledTablesOfferQueryTest(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugin := pluginSettingsPlugin{
+		ID: "clipboard", Name: "Clipboard", TriggerKeywords: []string{"cb"},
+		Commands: []pluginCommand{{Command: "fav", Description: "Favorites"}, {Command: "paste", Description: "Paste"}},
+		Setting:  pluginSettingsData{TriggerKeywords: []string{"cb"}},
+	}
+	plugins.SetPlugins([]pluginSettingsPlugin{plugin})
+	plugins.SetSelected(0)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: newFormFieldsState(
+		[]formDefinition{pluginTriggerKeywordDefinition()},
+		map[string]string{"TriggerKeywords": encodePluginTriggerKeywordRows([]string{"cb"})},
+		true,
+	)})
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_commands_tip":           "Command help",
+		"ui_plugin_command_name_column":    "Name",
+		"ui_plugin_command_desc_column":    "Description",
+		"ui_plugin_no_commands":            "No commands",
+		"ui_plugin_tab_commands":           "Commands",
+		"ui_plugin_tab_settings":           "Settings",
+		"ui_plugin_tab_description":        "Description",
+		"ui_plugin_tab_trigger_keywords":   "Keywords",
+		"ui_plugin_tab_privacy":            "Privacy",
+		"ui_plugin_trigger_keywords_tip":   "Keyword help",
+		"ui_plugin_trigger_keyword_column": "Keyword",
+		"ui_plugin_test_keyword":           "Test this keyword",
+		"ui_plugin_test_command":           "Test this command",
+		"ui_operation":                     "Operation",
+		"ui_add":                           "Add",
+		"ui_setting_theme_edit":            "Edit",
+		"ui_clone_row":                     "Clone",
+		"ui_delete":                        "Delete",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Editor == nil || props.Editor.Keywords == nil || props.Editor.Commands == nil {
+		t.Fatal("installed plugin detail should include keyword and command tables")
+	}
+
+	keywordOps := pluginTableOperationButtons(t, props.Editor.Keywords.Rows[0])
+	if len(keywordOps) != 4 || keywordOps[0].ID != "plugin-settings-field-0-row-0-test-query" || keywordOps[0].Label != "Test this keyword" || keywordOps[0].OnTap == nil {
+		t.Fatalf("keyword operations = %+v, want a leading test action", keywordOps)
+	}
+
+	commandOps := pluginTableOperationButtons(t, props.Editor.Commands.Rows[0])
+	if len(commandOps) != 1 || commandOps[0].ID != "plugin-commands-row-0-test-query" || commandOps[0].Label != "Test this command" || commandOps[0].OnTap == nil {
+		t.Fatalf("command operations = %+v, want only a test action", commandOps)
+	}
+}
+
+func TestPluginGlobalTriggerKeywordOmitsQueryTest(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugin := pluginSettingsPlugin{
+		ID: "sys", Name: "System", TriggerKeywords: []string{"*"},
+		Setting: pluginSettingsData{TriggerKeywords: []string{"*"}},
+	}
+	plugins.SetPlugins([]pluginSettingsPlugin{plugin})
+	plugins.SetSelected(0)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: newFormFieldsState(
+		[]formDefinition{pluginTriggerKeywordDefinition()},
+		map[string]string{"TriggerKeywords": encodePluginTriggerKeywordRows([]string{"*"})},
+		true,
+	)})
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_tab_trigger_keywords":   "Keywords",
+		"ui_plugin_tab_settings":           "Settings",
+		"ui_plugin_tab_description":        "Description",
+		"ui_plugin_tab_privacy":            "Privacy",
+		"ui_plugin_tab_commands":           "Commands",
+		"ui_plugin_trigger_keywords_tip":   "Keyword help",
+		"ui_plugin_trigger_keyword_column": "Keyword",
+		"ui_plugin_trigger_keyword_global": "Global trigger",
+		"ui_plugin_test_keyword":           "Test this keyword",
+		"ui_add":                           "Add",
+		"ui_setting_theme_edit":            "Edit",
+		"ui_clone_row":                     "Clone",
+		"ui_delete":                        "Delete",
+		"ui_operation":                     "Operation",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Editor == nil || props.Editor.Keywords == nil {
+		t.Fatal("installed plugin detail should include the keyword table")
+	}
+	ops := pluginTableOperationButtons(t, props.Editor.Keywords.Rows[0])
+	if len(ops) != 3 {
+		t.Fatalf("global keyword operations = %+v, want edit, clone, and delete without a test action", ops)
+	}
+	for _, op := range ops {
+		if op.ID == "plugin-settings-field-0-row-0-test-query" {
+			t.Fatal("global trigger keywords should not expose a query test action")
+		}
+	}
+}
+
+func TestPluginStoreTablesOmitQueryTest(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugins.SetPlugins([]pluginSettingsPlugin{{
+		ID: "clipboard", Name: "Clipboard", IsInstalled: true, TriggerKeywords: []string{"cb"},
+		Commands: []pluginCommand{{Command: "fav", Description: "Favorites"}},
+	}})
+	plugins.SetSelected(0)
+	plugins.SetPluginsStore(true)
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_commands_tip":            "Command help",
+		"ui_plugin_command_name_column":     "Name",
+		"ui_plugin_command_desc_column":     "Description",
+		"ui_plugin_no_commands":             "No commands",
+		"ui_plugin_tab_commands":            "Commands",
+		"ui_plugin_trigger_keywords_tip":    "Keyword help",
+		"ui_plugin_trigger_keyword_column":  "Keyword",
+		"ui_plugin_trigger_keyword_tooltip": "Keyword tip",
+		"ui_plugin_no_trigger_keywords":     "No keywords",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Store == nil || props.Store.Keywords == nil || props.Store.Commands == nil {
+		t.Fatal("store plugin detail should include keyword and command tables")
+	}
+	if ops := pluginTableOperationButtons(t, props.Store.Keywords.Rows[0]); len(ops) != 0 {
+		t.Fatalf("store keyword operations = %+v, want none", ops)
+	}
+	if ops := pluginTableOperationButtons(t, props.Store.Commands.Rows[0]); len(ops) != 0 {
+		t.Fatalf("store command operations = %+v, want none", ops)
+	}
+}
+
+func pluginTableOperationButtons(t *testing.T, tableWidget woxwidget.Widget) []woxcomponent.IconButtonProps {
+	t.Helper()
+	table := tableWidget.(woxwidget.Keyed).Child.(woxwidget.Container)
+	children := table.Child.(woxwidget.Flex).Children
+	grid, ok := children[len(children)-1].(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("table grid = %T, want stateful grid", children[len(children)-1])
+	}
+	state := grid.CreateState()
+	state.InitState(woxwidget.StateContext{}, grid.Widget)
+	rendered := state.Build(woxwidget.StateContext{}, grid.Widget).(woxwidget.Stack).Children[1].Child.(woxwidget.Flex)
+	bodyContent := pluginTableScrollContent(t, rendered.Children[1])
+	body, ok := bodyContent.(woxwidget.Flex)
+	if !ok {
+		t.Fatalf("table body = %T, want a horizontal row of columns and operations", bodyContent)
+	}
+	if len(body.Children) < 2 {
+		return nil
+	}
+	operationRows, ok := body.Children[1].(woxwidget.Flex)
+	if !ok || len(operationRows.Children) == 0 {
+		return nil
+	}
+	actions := operationRows.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	buttons := make([]woxcomponent.IconButtonProps, 0, len(actions.Children))
+	for _, action := range actions.Children {
+		buttons = append(buttons, pluginTableOperationIconButton(t, action))
+	}
+	return buttons
+}
+
+func pluginTableScrollContent(t *testing.T, body woxwidget.Widget) woxwidget.Widget {
+	t.Helper()
+	switch typed := body.(type) {
+	case woxwidget.Stateful:
+		state := typed.CreateState()
+		state.InitState(woxwidget.StateContext{}, typed.Widget)
+		return pluginTableScrollContent(t, state.Build(woxwidget.StateContext{}, typed.Widget))
+	case woxwidget.Gesture:
+		return pluginTableScrollContent(t, typed.Child)
+	case woxwidget.Stack:
+		if len(typed.Children) == 0 {
+			t.Fatal("scroll stack is empty")
+		}
+		return pluginTableScrollContent(t, typed.Children[0].Child)
+	case woxwidget.ScrollView:
+		return typed.Child
+	default:
+		t.Fatalf("table scroll body = %T", body)
+		return nil
+	}
+}
+
+func pluginTableOperationIconButton(t *testing.T, action woxwidget.Widget) woxcomponent.IconButtonProps {
+	t.Helper()
+	stateful, ok := action.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("operation action = %T, want icon button", action)
+	}
+	if props, ok := stateful.Widget.(woxcomponent.IconButtonProps); ok {
+		return props
+	}
+	built := stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget)
+	if nested, ok := built.(woxwidget.Stateful); ok {
+		if props, ok := nested.Widget.(woxcomponent.IconButtonProps); ok {
+			return props
+		}
+	}
+	t.Fatalf("operation action widget = %T, want icon button props", stateful.Widget)
+	return woxcomponent.IconButtonProps{}
 }
 
 func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {

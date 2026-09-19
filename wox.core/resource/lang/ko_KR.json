@@ -653,6 +653,8 @@
   "ui_plugin_commands_tip": "명령은 트리거 키워드 뒤의 하위 명령입니다. \"<trigger> <command> \"(뒤의 공백 포함)를 입력하여 명령 모드로 들어갑니다.",
   "ui_plugin_command_name_column": "이름",
   "ui_plugin_command_desc_column": "설명",
+  "ui_plugin_test_keyword": "이 키워드 테스트",
+  "ui_plugin_test_command": "이 명령 테스트",
   "ui_setting_plugin_system_tag": "시스템",
   "ui_setting_plugin_script_tag": "스크립트",
   "ui_setting_plugin_empty_data": "아직 플러그인이 없습니다",

@@ -2,6 +2,8 @@ package hotkey
 
 import (
 	"fmt"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -59,6 +61,10 @@ var (
 	holdModifierPressed   = map[keyboard.Key]bool{}
 	holdKeyListener       keyboard.RawKeySubscription
 	holdTrackerMu         sync.Mutex
+	// isHoldModifierPhysicallyPressed lets tests stub OS key state. Production
+	// uses the platform query so a lost key-up (Win+L lock, sleep) cannot keep
+	// a modifier stuck down in holdModifierPressed forever.
+	isHoldModifierPhysicallyPressed = keyboard.IsKeyPressed
 )
 
 // ensureHoldKeyListener creates the shared raw key listener if it is not
@@ -75,16 +81,28 @@ func ensureHoldKeyListener() error {
 		holdTrackerMu.Lock()
 
 		if event.Type == keyboard.EventTypeKeyDown {
-			if holdModifierRecorderKeys[event.Key] {
-				holdModifierPressed[event.Key] = true
+			reconcileStuckHoldModifiers(event.Key)
+			setHoldModifierPressed(event.Key, true)
+			if _, isModifier := holdModifierFamily(event.Key); !isModifier && holdModifierAnyRecorderPressed() {
+				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+					"hold-modifier external keyDown: event=%s pressed=%s",
+					rawKeyLogLabel(event.Key), holdModifierPressedDebugString()))
 			}
 			releases := cancelHoldModifierPressesForExternalKey(event.Key)
 			callbacks := holdModifierCallbacksForKey(event.Key)
 			for _, mcb := range callbacks {
-				if mcb == nil || !holdModifierExactKeysPressed(mcb.keys) {
+				if mcb == nil {
 					continue
 				}
-				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyDown: combo=%s timer=%v fired=%v", mcb.combo, mcb.pressTimer != nil, mcb.pressFired))
+				if !holdModifierExactKeysPressed(mcb.keys) {
+					if holdModifierChordHasOtherKeyDown(mcb.keys, event.Key) {
+						util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+							"hold-modifier keyDown skipped: combo=%s event=%s pressed=%s",
+							mcb.combo, modifierKeyLogLabel(event.Key), holdModifierPressedDebugString()))
+					}
+					continue
+				}
+				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyDown: combo=%s event=%s timer=%v fired=%v", mcb.combo, modifierKeyLogLabel(event.Key), mcb.pressTimer != nil, mcb.pressFired))
 				armHoldModifierPress(mcb)
 			}
 			holdTrackerMu.Unlock()
@@ -93,9 +111,7 @@ func ensureHoldKeyListener() error {
 		}
 
 		if event.Type == keyboard.EventTypeKeyUp {
-			if holdModifierRecorderKeys[event.Key] {
-				holdModifierPressed[event.Key] = false
-			}
+			setHoldModifierPressed(event.Key, false)
 			// Check hold-modifier callbacks first (press + release mode).
 			releases := releaseHoldModifierPressesForKey(event.Key)
 			if releases != nil {
@@ -182,7 +198,7 @@ func cancelHoldModifierPressesForExternalKey(key keyboard.Key) []holdModifierRel
 		if mcb == nil {
 			return true
 		}
-		if key != keyboard.KeyUnknown && containsHoldModifierKey(mcb.keys, key) {
+		if key != keyboard.KeyUnknown && containsRelatedHoldModifierKey(mcb.keys, key) {
 			return true
 		}
 		releases = append(releases, resetHoldModifierCallback(mcb)...)
@@ -200,11 +216,11 @@ func releaseHoldModifierPressesForKey(key keyboard.Key) []holdModifierRelease {
 	matched := false
 
 	holdModifierCallbacks.Range(func(_ string, mcb *holdModifierCallback) bool {
-		if mcb == nil || !containsHoldModifierKey(mcb.keys, key) {
+		if mcb == nil || !containsRelatedHoldModifierKey(mcb.keys, key) {
 			return true
 		}
 		matched = true
-		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyUp: combo=%s timer=%v fired=%v", mcb.combo, mcb.pressTimer != nil, mcb.pressFired))
+		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyUp: combo=%s event=%s timer=%v fired=%v", mcb.combo, modifierKeyLogLabel(key), mcb.pressTimer != nil, mcb.pressFired))
 		releases = append(releases, resetHoldModifierCallback(mcb)...)
 		return true
 	})
@@ -240,7 +256,7 @@ func resetHoldModifierCallback(mcb *holdModifierCallback) []holdModifierRelease 
 func holdModifierCallbacksForKey(key keyboard.Key) []*holdModifierCallback {
 	callbacks := []*holdModifierCallback{}
 	holdModifierCallbacks.Range(func(_ string, mcb *holdModifierCallback) bool {
-		if mcb != nil && containsHoldModifierKey(mcb.keys, key) {
+		if mcb != nil && containsRelatedHoldModifierKey(mcb.keys, key) {
 			callbacks = append(callbacks, mcb)
 		}
 		return true
@@ -269,19 +285,167 @@ func holdModifierExactKeysPressed(keys []keyboard.Key) bool {
 		return false
 	}
 	for _, key := range keys {
-		if !holdModifierPressed[key] {
+		if !holdModifierKeyDown(key) {
 			return false
 		}
 	}
 	for key := range holdModifierRecorderKeys {
-		if containsHoldModifierKey(keys, key) {
+		if containsRelatedHoldModifierKey(keys, key) {
 			continue
 		}
 		if holdModifierPressed[key] {
 			return false
 		}
 	}
+	for _, generic := range []keyboard.Key{keyboard.KeyCtrl, keyboard.KeyShift, keyboard.KeyAlt, keyboard.KeySuper} {
+		if !holdModifierPressed[generic] || containsRelatedHoldModifierKey(keys, generic) {
+			continue
+		}
+		return false
+	}
 	return true
+}
+
+func holdModifierChordHasOtherKeyDown(keys []keyboard.Key, eventKey keyboard.Key) bool {
+	for _, key := range keys {
+		if holdModifierKeysRelated(key, eventKey) {
+			continue
+		}
+		if holdModifierKeyDown(key) {
+			return true
+		}
+	}
+	return false
+}
+
+func holdModifierPressedDebugString() string {
+	parts := make([]string, 0, 8)
+	for _, key := range orderedHoldModifierRecorderKeys() {
+		if holdModifierPressed[key] {
+			parts = append(parts, modifierKeyLogLabel(key))
+		}
+	}
+	for _, generic := range []keyboard.Key{keyboard.KeyCtrl, keyboard.KeyShift, keyboard.KeyAlt, keyboard.KeySuper} {
+		if holdModifierPressed[generic] {
+			parts = append(parts, modifierKeyLogLabel(generic))
+		}
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, ",")
+}
+
+func holdModifierAnyRecorderPressed() bool {
+	for key := range holdModifierRecorderKeys {
+		if holdModifierPressed[key] {
+			return true
+		}
+	}
+	for _, generic := range []keyboard.Key{keyboard.KeyCtrl, keyboard.KeyShift, keyboard.KeyAlt, keyboard.KeySuper} {
+		if holdModifierPressed[generic] {
+			return true
+		}
+	}
+	return false
+}
+
+func rawKeyLogLabel(key keyboard.Key) string {
+	if label := modifierKeyLogLabel(key); label != "" {
+		return label
+	}
+	if label := key.Character(); label != "" {
+		return label
+	}
+	return fmt.Sprintf("key:%d", int(key))
+}
+
+// setHoldModifierPressed records a raw modifier event. Generic VK_SHIFT-style
+// keys are stored as the generic family so a left/right chord can still match.
+// The caller must hold holdTrackerMu.
+func setHoldModifierPressed(key keyboard.Key, down bool) {
+	if holdModifierRecorderKeys[key] {
+		holdModifierPressed[key] = down
+		if down {
+			return
+		}
+	}
+	family, ok := holdModifierFamily(key)
+	if !ok {
+		return
+	}
+	if down {
+		if !holdModifierRecorderKeys[key] {
+			holdModifierPressed[family] = true
+		}
+		return
+	}
+	holdModifierPressed[family] = false
+	if !holdModifierRecorderKeys[key] {
+		for _, side := range specificHoldModifierKeys(family) {
+			holdModifierPressed[side] = false
+		}
+	}
+}
+
+func specificHoldModifierKeys(family keyboard.Key) []keyboard.Key {
+	switch family {
+	case keyboard.KeyCtrl:
+		return []keyboard.Key{keyboard.KeyLeftCtrl, keyboard.KeyRightCtrl}
+	case keyboard.KeyShift:
+		return []keyboard.Key{keyboard.KeyLeftShift, keyboard.KeyRightShift}
+	case keyboard.KeyAlt:
+		return []keyboard.Key{keyboard.KeyLeftAlt, keyboard.KeyRightAlt}
+	case keyboard.KeySuper:
+		return []keyboard.Key{keyboard.KeyLeftSuper, keyboard.KeyRightSuper}
+	default:
+		return nil
+	}
+}
+
+// holdModifierKeyDown reports whether a chord key is currently down, including
+// when Windows delivered only the generic family key.
+func holdModifierKeyDown(key keyboard.Key) bool {
+	if holdModifierPressed[key] {
+		return true
+	}
+	if family, ok := holdModifierFamily(key); ok {
+		return holdModifierPressed[family]
+	}
+	return false
+}
+
+// reconcileStuckHoldModifiers drops modifiers that our map still thinks are
+// down after the OS has already released them. Win+L and sleep commonly lose
+// the Win key-up, which would otherwise block every later hold chord.
+// currentKey is skipped because GetAsyncKeyState can still report the previous
+// state for the key that produced this hook event.
+func reconcileStuckHoldModifiers(currentKey keyboard.Key) {
+	// Linux queries only one evdev device, so its result cannot invalidate raw
+	// events from other keyboards. Keep this recovery specific to Windows.
+	if runtime.GOOS != "windows" {
+		return
+	}
+	for key := range holdModifierRecorderKeys {
+		if !holdModifierPressed[key] || holdModifierKeysRelated(key, currentKey) {
+			continue
+		}
+		if isHoldModifierPhysicallyPressed(key) {
+			continue
+		}
+		holdModifierPressed[key] = false
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("hold-modifier cleared stuck key: %s", modifierKeyLogLabel(key)))
+	}
+	for _, generic := range []keyboard.Key{keyboard.KeyCtrl, keyboard.KeyShift, keyboard.KeyAlt, keyboard.KeySuper} {
+		if !holdModifierPressed[generic] || holdModifierKeysRelated(generic, currentKey) {
+			continue
+		}
+		if isHoldModifierPhysicallyPressed(generic) {
+			continue
+		}
+		holdModifierPressed[generic] = false
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("hold-modifier cleared stuck key: %s", modifierKeyLogLabel(generic)))
+	}
 }
 
 // startHoldTracking begins watching for the release of the given key. When the

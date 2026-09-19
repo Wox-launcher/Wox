@@ -206,9 +206,17 @@ func (a *App) runFormTableQueryTest(index int) {
 	if strings.TrimSpace(queryText) == "" {
 		return
 	}
-	resolved := replaceQueryHotkeyVariablesForTest(queryText)
-	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.closeFormTableQueryVariablePicker()
+	a.runLauncherQueryTest(newInputQuery(replaceQueryHotkeyVariablesForTest(queryText)))
+}
+
+// runLauncherQueryTest shows the launcher with the supplied query so the user can
+// see the live result of a settings-side test action.
+func (a *App) runLauncherQueryTest(query plainQuery) {
+	if strings.TrimSpace(query.QueryText) == "" && len(query.QueryScope.Plugins) == 0 {
+		return
+	}
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 
 	params := a.show
 	params.SelectAll = false
@@ -220,7 +228,7 @@ func (a *App) runFormTableQueryTest(index int) {
 			params.Position = position{Type: "last_location", X: int(bounds.X), Y: int(bounds.Y)}
 		}
 	}
-	a.setQuery(newInputQuery(resolved))
+	a.setQuery(query)
 	util.Go(a.lifecycleCtx, "show launcher for query test", func() {
 		if err := a.showWindow(params); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, "show launcher for query test: "+err.Error())

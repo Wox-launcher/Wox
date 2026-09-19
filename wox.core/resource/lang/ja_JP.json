@@ -653,6 +653,8 @@
   "ui_plugin_commands_tip": "コマンドはトリガーキーワード後のサブコマンドです。「<トリガー> <コマンド> 」(末尾のスペースに注意)と入力してコマンドモードに入ります。",
   "ui_plugin_command_name_column": "名前",
   "ui_plugin_command_desc_column": "説明",
+  "ui_plugin_test_keyword": "このキーワードをテスト",
+  "ui_plugin_test_command": "このコマンドをテスト",
   "ui_setting_plugin_system_tag": "システム",
   "ui_setting_plugin_script_tag": "スクリプト",
   "ui_setting_plugin_empty_data": "プラグインがありません",

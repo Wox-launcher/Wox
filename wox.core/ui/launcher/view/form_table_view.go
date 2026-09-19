@@ -55,19 +55,23 @@ type FormTableCell struct {
 	Child          woxwidget.Widget
 }
 
-// FormTableRowAction describes a table-specific icon action appended after the standard actions.
+// FormTableRowAction describes a table-specific icon action around the standard edit/clone/delete cluster.
 type FormTableRowAction struct {
-	ID    string
-	Label string
-	Icon  *woxui.Image
-	OnTap func()
+	ID      string
+	Label   string
+	Icon    *woxui.Image
+	OnTap   func()
+	OnHover func(bool, woxui.Rect)
 }
 
 // FormTableRow keeps display ordering tied to the source row used by the editor.
 type FormTableRow struct {
-	Index           int
-	ReadOnly        bool
-	Cells           []FormTableCell
+	Index    int
+	ReadOnly bool
+	Cells    []FormTableCell
+	// LeadingActions appear first in the operation column, before edit/clone/delete.
+	LeadingActions []FormTableRowAction
+	// TrailingActions appear after the standard mutating actions.
 	TrailingActions []FormTableRowAction
 	// Status is a quiet non-interactive label such as Disabled. The matching
 	// checkbox stays in the row editor so the grid never looks toggleable.
@@ -423,7 +427,8 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	if len(props.Rows) == 0 {
 		return formTableEmptyState(props, width, height)
 	}
-	widths := formTableColumnWidthsWithOperation(props.Columns, width, !props.ReadOnly)
+	showsOperations := formTableShowsOperations(props)
+	widths := formTableColumnWidthsForOperation(props.Columns, width, formTableOperationColumnWidth(props))
 	operationWidth := min(width, widths[len(widths)-1])
 	leftViewportWidth := max(float32(0), width-operationWidth)
 	leftContentWidth := float32(0)
@@ -444,7 +449,7 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	leftContentWidth = max(leftViewportWidth, leftContentWidth)
 	leftHeader := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: headerCells}
 	var operationHeader woxwidget.Widget
-	if !props.ReadOnly {
+	if showsOperations {
 		operationHeader = formTableHeaderCell(props, FormTableColumn{Label: props.OperationLabel}, operationWidth, len(props.Columns))
 	}
 	bodyHeight := max(float32(0), height-tableSurfaceHeaderHeight)
@@ -454,7 +459,7 @@ func buildFormTableGrid(props FormTableFieldProps, width, height float32, state 
 	for index, row := range props.Rows {
 		lastRow := index == len(props.Rows)-1
 		leftRows = append(leftRows, formTableDataRowCells(props, row, widths[:len(props.Columns)], leftContentWidth, lastRow))
-		if !props.ReadOnly {
+		if showsOperations {
 			operationRows = append(operationRows, formTableOperationCell(props, row, operationWidth, lastRow))
 		}
 	}
@@ -497,11 +502,16 @@ func formTableColumnWidths(columns []FormTableColumn, tableWidth float32) []floa
 
 // formTableColumnWidthsWithOperation lets read-only tables use the full surface without an empty action column.
 func formTableColumnWidthsWithOperation(columns []FormTableColumn, tableWidth float32, includeOperation bool) []float32 {
-	widths := make([]float32, len(columns)+1)
 	operationWidth := float32(0)
 	if includeOperation {
 		operationWidth = formTableOperationWidth + formTableHorizontalMargin*2
 	}
+	return formTableColumnWidthsForOperation(columns, tableWidth, operationWidth)
+}
+
+// formTableColumnWidthsForOperation keeps leftover space on data columns after the pinned action width.
+func formTableColumnWidthsForOperation(columns []FormTableColumn, tableWidth, operationWidth float32) []float32 {
+	widths := make([]float32, len(columns)+1)
 	widths[len(widths)-1] = operationWidth
 	zeroWidthColumns := 0
 	totalDeclaredWidth := float32(0)
@@ -596,38 +606,96 @@ func formTableDataRowCells(props FormTableFieldProps, row FormTableRow, widths [
 	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}}
 }
 
+// formTableShowsOperations keeps the pinned action column when rows can be edited
+// or when a specialized leading/trailing action still needs a home.
+func formTableShowsOperations(props FormTableFieldProps) bool {
+	if !props.ReadOnly {
+		return true
+	}
+	for _, row := range props.Rows {
+		if len(row.LeadingActions) > 0 || len(row.TrailingActions) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// formTableOperationActionCount is the visible icon count used to size the pinned column.
+func formTableOperationActionCount(props FormTableFieldProps, row FormTableRow) int {
+	count := len(row.LeadingActions) + len(row.TrailingActions)
+	if props.ReadOnly {
+		return count
+	}
+	if !props.HideEditAction {
+		count++
+	}
+	if !props.HideCloneAction {
+		count++
+	}
+	return count + 1
+}
+
+// formTableMaxOperationActionCount sizes the column from the busiest row, including empty editable tables.
+func formTableMaxOperationActionCount(props FormTableFieldProps) int {
+	maxCount := 0
+	for _, row := range props.Rows {
+		if count := formTableOperationActionCount(props, row); count > maxCount {
+			maxCount = count
+		}
+	}
+	if maxCount == 0 && !props.ReadOnly {
+		maxCount = formTableOperationActionCount(props, FormTableRow{})
+	}
+	return maxCount
+}
+
+// formTableOperationColumnWidth sizes the pinned actions to the visible icon cluster.
+// Read-only tables still keep the standard width so the Operation header remains readable.
+func formTableOperationColumnWidth(props FormTableFieldProps) float32 {
+	if !formTableShowsOperations(props) {
+		return 0
+	}
+	count := formTableMaxOperationActionCount(props)
+	if count <= 0 {
+		return 0
+	}
+	inner := float32(count)*woxcomponent.SettingsCompactControlHeight + float32(max(count-1, 0))*4 + 8
+	return max(formTableOperationWidth, inner) + formTableHorizontalMargin*2
+}
+
 // formTableOperationCell builds the pinned action portion of one row.
 func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width float32, lastRow bool) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
-	actions := make([]woxwidget.Widget, 0, 3+len(row.TrailingActions))
+	actions := make([]woxwidget.Widget, 0, 3+len(row.LeadingActions)+len(row.TrailingActions))
 	disabled := row.ReadOnly || props.Disabled
-	if !props.HideEditAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, disabled), woxcomponent.EditGlyph(16, props.Theme.TextSecondary), disabled, func() {
-			if props.OnOpenRow != nil {
-				props.OnOpenRow(row.Index)
-			}
-		}))
+	for index, action := range row.LeadingActions {
+		actions = append(actions, formTableRowActionButton(props, row, action, index, "leading"))
 	}
-	if !props.HideCloneAction {
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, disabled), woxcomponent.CopyGlyph(16, props.Theme.TextSecondary), disabled, func() {
-			if props.OnCloneRow != nil {
-				props.OnCloneRow(row.Index)
-			}
-		}))
-	}
-	actions = append(actions,
-		formTableDeleteButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, props.ConfirmDeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, disabled), disabled, func() {
-			if props.OnDeleteRow != nil {
-				props.OnDeleteRow(row.Index)
-			}
-		}),
-	)
-	for index, action := range row.TrailingActions {
-		actionID := action.ID
-		if actionID == "" {
-			actionID = fmt.Sprintf("trailing-%d", index)
+	if !props.ReadOnly {
+		if !props.HideEditAction {
+			actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, formTableActionIcon(props.EditIcon, props.DisabledEditIcon, disabled), woxcomponent.EditGlyph(16, props.Theme.TextSecondary), disabled, func() {
+				if props.OnOpenRow != nil {
+					props.OnOpenRow(row.Index)
+				}
+			}))
 		}
-		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, nil, props.Disabled, action.OnTap))
+		if !props.HideCloneAction {
+			actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, formTableActionIcon(props.CloneIcon, props.DisabledCloneIcon, disabled), woxcomponent.CopyGlyph(16, props.Theme.TextSecondary), disabled, func() {
+				if props.OnCloneRow != nil {
+					props.OnCloneRow(row.Index)
+				}
+			}))
+		}
+		actions = append(actions,
+			formTableDeleteButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, props.ConfirmDeleteLabel, formTableActionIcon(props.DeleteIcon, props.DisabledDeleteIcon, disabled), disabled, func() {
+				if props.OnDeleteRow != nil {
+					props.OnDeleteRow(row.Index)
+				}
+			}),
+		)
+	}
+	for index, action := range row.TrailingActions {
+		actions = append(actions, formTableRowActionButton(props, row, action, index, "trailing"))
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
 	return tableSurfaceCell(width, tableSurfaceRowHeight, style, !lastRow, woxwidget.Insets{Left: 4, Right: 4}, woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation})
@@ -653,19 +721,44 @@ func formTableDeleteButton(props FormTableFieldProps, id, label, confirmLabel st
 	return woxcomponent.WoxConfirmIconButton(woxcomponent.ConfirmIconButtonProps{ID: id, Label: label, ConfirmLabel: confirmLabel, Icon: icon, IdleIcon: woxcomponent.DeleteGlyph(16, props.Theme.TextSecondary), Theme: props.Theme, OnDelete: onDelete})
 }
 
+// formTableRowActionButton renders one specialized leading or trailing table action.
+func formTableRowActionButton(props FormTableFieldProps, row FormTableRow, action FormTableRowAction, index int, kind string) woxwidget.Widget {
+	actionID := action.ID
+	if actionID == "" {
+		actionID = fmt.Sprintf("%s-%d", kind, index)
+	}
+	var idle woxwidget.Widget
+	if action.Icon == nil {
+		idle = woxcomponent.PlayArrowGlyph(16, props.Theme.TextSecondary)
+	}
+	return formTableIconButtonHover(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, idle, props.Disabled, action.OnTap, action.OnHover)
+}
+
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, idleIcon woxwidget.Widget, disabled bool, onTap func()) woxwidget.Widget {
+	return formTableIconButtonHover(props, id, label, icon, idleIcon, disabled, onTap, nil)
+}
+
+// formTableIconButtonHover is the compact table action button with an optional tooltip hover.
+func formTableIconButtonHover(props FormTableFieldProps, id, label string, icon *woxui.Image, idleIcon woxwidget.Widget, disabled bool, onTap func(), onHover func(bool, woxui.Rect)) woxwidget.Widget {
 	if disabled {
 		onTap = nil
+		onHover = nil
 	}
-	if icon != nil {
+	if icon != nil || idleIcon != nil {
 		hoverBackground := props.Theme.Text
 		hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
 		if disabled {
 			hoverBackground = woxui.Color{}
 		}
+		buttonIcon := idleIcon
+		idle := woxwidget.Widget(nil)
+		if icon != nil {
+			buttonIcon = woxwidget.Image{Source: icon, Width: 16, Height: 16}
+			idle = idleIcon
+		}
 		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, IdleIcon: idleIcon, Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
-			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, Disabled: disabled, OnTap: onTap,
+			ID: id, Label: label, Icon: buttonIcon, IdleIcon: idle, Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus, Disabled: disabled, OnTap: onTap, OnHoverAt: onHover,
 		})
 	}
 	theme := props.Theme

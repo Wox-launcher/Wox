@@ -634,6 +634,49 @@ func encodePluginTriggerKeywordRows(keywords []string) string {
 	return string(encoded)
 }
 
+// pluginKeywordQueryText is the query a user types to activate this trigger keyword.
+func pluginKeywordQueryText(keyword string) string {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" || keyword == "*" {
+		return ""
+	}
+	return keyword + " "
+}
+
+// pluginCommandQueryText is the query a user types to enter this command, including the trailing space.
+func pluginCommandQueryText(triggerKeywords []string, command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	if trigger := primaryPluginTriggerKeyword(triggerKeywords); trigger != "" {
+		return trigger + " " + command + " "
+	}
+	return command + " "
+}
+
+// primaryPluginTriggerKeyword skips "*" because command queries need a typed prefix.
+func primaryPluginTriggerKeyword(keywords []string) string {
+	for _, keyword := range keywords {
+		keyword = strings.TrimSpace(keyword)
+		if keyword != "" && keyword != "*" {
+			return keyword
+		}
+	}
+	return ""
+}
+
+// pluginFormTriggerKeywords prefers unsaved keyword editor values so command tests match the table.
+func pluginFormTriggerKeywords(plugin pluginSettingsPlugin, values map[string]string) []string {
+	if keywords, err := decodePluginTriggerKeywordRows(values["TriggerKeywords"]); err == nil && len(keywords) > 0 {
+		return keywords
+	}
+	if len(plugin.Setting.TriggerKeywords) > 0 {
+		return plugin.Setting.TriggerKeywords
+	}
+	return plugin.TriggerKeywords
+}
+
 // decodePluginTriggerKeywordRows adapts table rows back to core's normalized string list.
 func decodePluginTriggerKeywordRows(value string) ([]string, error) {
 	rows, err := decodeFormTableRows(value)
