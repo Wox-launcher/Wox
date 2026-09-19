@@ -19,6 +19,7 @@ type HotkeyRecorderProps struct {
 	Window        *woxui.Window
 	Theme         ControlTheme
 	OnFocusChange func(bool)
+	OnKey         func(woxui.KeyEvent) bool
 }
 
 // WoxHotkeyRecorder matches Flutter's outlined recorder with platform-labelled keycaps.
@@ -110,8 +111,11 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 	}
 	return woxwidget.Focusable{
 		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Focus, FocusRingRadius: 4,
-		// Keep recorder navigation local so Enter and Escape cannot fall through to page actions.
+		// Ask the parent first. If it handles the event, do not record or unfocus.
 		OnKey: func(event woxui.KeyEvent) bool {
+			if config.Props.OnKey != nil && config.Props.OnKey(event) {
+				return true
+			}
 			if event.Down && !event.Composing && (event.Key == woxui.KeyEscape || (event.Key == woxui.KeyEnter && event.Modifiers == 0)) {
 				s.focusNode.Unfocus()
 				return true

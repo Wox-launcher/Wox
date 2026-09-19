@@ -43,6 +43,14 @@ func launcherSectionSignature(values ...any) string {
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
+func (a *App) launcherFormSectionSignature(snapshot viewSnapshot, panelWidth float32) string {
+	return launcherSectionSignature(snapshot.form, snapshot.palette, snapshot.densityMetrics, panelWidth, a.hotkeyRecordingSectionSignature())
+}
+
+func (a *App) launcherTableOverlaySectionSignature(snapshot viewSnapshot, width, height, scale float32) string {
+	return launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, scale, a.hotkeyRecordingSectionSignature())
+}
+
 var resultColors = []woxui.Color{
 	{R: 61, G: 205, B: 175, A: 255},
 	{R: 255, G: 119, B: 81, A: 255},
@@ -273,7 +281,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	nativePreviewOcclusion := woxui.Rect{}
 	if snapshot.form != nil {
 		panel, panelWidth, _ := a.buildFormPanel(snapshot, width)
-		panel = launcherPreparedSection("launcher-form-section", "form", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.form, snapshot.palette, snapshot.densityMetrics, panelWidth), Width: panelWidth, Height: height, Child: panel})
+		panel = launcherPreparedSection("launcher-form-section", "form", launcherPreparedSectionProps{Signature: a.launcherFormSectionSignature(snapshot, panelWidth), Width: panelWidth, Height: height, Child: panel})
 		floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(float32(14), width-panelWidth-14), Bottom: toolbarHeight + 12, AnchorBottom: true}
 	} else if snapshot.actionPanel {
 		queryChromeHeight := queryHeight + refinementHeight
@@ -291,7 +299,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette.componentTheme().Controls, width, height, frame.Scale)
-		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
+		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: a.launcherTableOverlaySectionSignature(snapshot, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 		nativePreviewOcclusion = woxui.Rect{Width: width, Height: height}
 	}
 	if nativePreviewOcclusion.Width > 0 && nativePreviewOcclusion.Height > 0 {

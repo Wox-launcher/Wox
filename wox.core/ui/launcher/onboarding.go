@@ -565,7 +565,7 @@ func (a *App) recordOnboardingQueryHotkey() {
 		return
 	}
 	state.error = ""
-	a.startHotkeyRecording("onboarding-query-hotkey", &state.form, 0, "", defaultHotkeyRecordingKinds)
+	a.startHotkeyRecording("onboarding-query-hotkey", &state.form, 0, "", defaultHotkeyRecordingKinds, nil)
 }
 
 func (a *App) saveOnboardingQueryHotkey(hotkey string) {

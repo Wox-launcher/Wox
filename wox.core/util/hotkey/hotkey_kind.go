@@ -16,6 +16,9 @@ const (
 type registerOptions struct {
 	allowModifierPress      bool
 	canTriggerBeforeRelease func() bool
+	// probe uses a single registration attempt so a taken combo is not retried
+	// as if the previous availability check had just released it.
+	probe bool
 }
 
 // resolveHotkeyKind turns a parsed hotkey shape into the runtime behavior

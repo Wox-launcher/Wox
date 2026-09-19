@@ -303,6 +303,17 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 	}}}
 }
 
+// HotkeyStatusPlacement puts recording/conflict text relative to the recorder.
+type HotkeyStatusPlacement uint8
+
+const (
+	// HotkeyStatusAuto keeps the side hint: left in Settings, right in ordinary forms.
+	HotkeyStatusAuto HotkeyStatusPlacement = iota
+	HotkeyStatusLeft
+	HotkeyStatusRight
+	HotkeyStatusBelow
+)
+
 // FormHotkeyFieldProps contains one Flutter-parity hotkey recorder row.
 type FormHotkeyFieldProps struct {
 	ID                 string
@@ -312,6 +323,7 @@ type FormHotkeyFieldProps struct {
 	Labels             []string
 	Placeholder        string
 	Status             string
+	StatusPlacement    HotkeyStatusPlacement
 	Width              float32
 	Height             float32
 	LabelWidth         float32
@@ -325,6 +337,7 @@ type FormHotkeyFieldProps struct {
 	Theme              woxcomponent.ControlTheme
 	OnTap              func()
 	OnFocusChange      func(bool)
+	OnKey              func(woxui.KeyEvent) bool
 	OnOpenLink         func(string)
 }
 
@@ -336,7 +349,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	}
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
 		ID: props.ID, Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
-		Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange,
+		Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange, OnKey: props.OnKey,
 	})
 	recorder = woxwidget.Semantics{
 		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Description: description,
@@ -359,6 +372,8 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	}
 	controlChildren := []woxwidget.StackChild{recorderChild}
 	settingsLabelWidth := props.LabelWidth
+	showStatus := (props.Recording || props.Error) && props.Status != ""
+	placement := resolveHotkeyStatusPlacement(props)
 	if props.SettingsLayout {
 		const (
 			gap                   = float32(32)
@@ -377,12 +392,9 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		controlWidth = max(float32(0), props.Width-settingsLabelWidth-gap-edgeInset*2)
 		controlChildren[0] = woxwidget.StackChild{Right: edgeInset, AnchorRight: true, Child: recorderSlot}
 	}
-	if (props.Recording || props.Error) && props.Status != "" && controlWidth > recorderWidth+statusGap {
-		statusColor := props.Theme.TextSecondary
-		if props.Error {
-			statusColor = props.Theme.Error
-		}
-		if props.SettingsLayout {
+	if showStatus && placement != HotkeyStatusBelow && controlWidth > recorderWidth+statusGap {
+		statusColor := hotkeyStatusColor(props)
+		if props.SettingsLayout && placement == HotkeyStatusLeft {
 			const labelGap = float32(32)
 			recorderLeft := controlWidth - 2 - recorderWidth
 			hintLeft := -settingsLabelWidth - labelGap
@@ -393,7 +405,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 					Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
 				}},
 			}}})
-		} else if props.AlignRecorderRight {
+		} else if placement == HotkeyStatusLeft {
 			hintWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: 0, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
 				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor},
@@ -405,7 +417,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			}}})
 		}
 	}
-	control := woxwidget.Stack{Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Children: controlChildren}
+	var control woxwidget.Widget = woxwidget.Stack{Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Children: controlChildren}
 	if props.SettingsLayout {
 		const gap = float32(32)
 		return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
@@ -414,7 +426,34 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			Child:   control, Theme: props.Theme,
 		})
 	}
+	if showStatus && placement == HotkeyStatusBelow {
+		control = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
+			control,
+			woxwidget.TextBlock{
+				Value: props.Status, Width: controlWidth, LineHeight: 18, MaxLines: 3,
+				Style: woxui.TextStyle{Size: 12}, Color: hotkeyStatusColor(props),
+			},
+		}}
+	}
 	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, props.Window)
+}
+
+// resolveHotkeyStatusPlacement maps Auto onto the legacy Settings-left / form-right hint.
+func resolveHotkeyStatusPlacement(props FormHotkeyFieldProps) HotkeyStatusPlacement {
+	if props.StatusPlacement != HotkeyStatusAuto {
+		return props.StatusPlacement
+	}
+	if props.SettingsLayout || props.AlignRecorderRight {
+		return HotkeyStatusLeft
+	}
+	return HotkeyStatusRight
+}
+
+func hotkeyStatusColor(props FormHotkeyFieldProps) woxui.Color {
+	if props.Error {
+		return props.Theme.Error
+	}
+	return props.Theme.TextSecondary
 }
 
 // FormSwitchFieldProps contains one Flutter-style plugin boolean row.

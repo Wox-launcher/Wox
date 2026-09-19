@@ -17,25 +17,32 @@ import (
 )
 
 const (
-	smokeAutomationTrigger            = "wox-smoke"
-	smokeAutomationSlowCommand        = "slow"
-	smokeAutomationStreamingCommand   = "streaming-preview"
-	smokeAutomationToolbarCommand     = "toolbar"
-	smokeAutomationToolbarLongCommand = "toolbar-long"
-	smokeAutomationAttentionCommand   = "attention"
-	smokeAutomationQuickSelectCommand = "quick-select"
-	smokeAutomationPinRankingCommand  = "pin-ranking"
-	smokeAutomationGroupJumpCommand   = "group-jump"
-	smokeAutomationTooltipCommand     = "tooltip"
-	smokeAutomationToolbarMessageID   = "wox-smoke-toolbar-message"
-	smokeAutomationKeepOpenAction     = "keep-open"
-	smokeAutomationClearAction        = "clear"
-	smokeAutomationResultAction       = "hide-launcher"
-	smokeAutomationSecondaryAction    = "open-folder"
-	smokeAutomationLongToolbarTitle   = "Indexing file contents across every configured search root: 18365 files are already processed and the catalog is still updating with additional paths that must remain visible in the launcher status"
-	smokeAutomationAttentionKey       = "attention-smoke-item"
-	smokeAutomationAttentionTitle     = "Attention smoke item"
-	smokeAutomationAttentionQuery     = "1+1"
+	smokeAutomationTrigger                 = "wox-smoke"
+	smokeAutomationSlowCommand             = "slow"
+	smokeAutomationStreamingCommand        = "streaming-preview"
+	smokeAutomationToolbarCommand          = "toolbar"
+	smokeAutomationToolbarLongCommand      = "toolbar-long"
+	smokeAutomationAttentionCommand        = "attention"
+	smokeAutomationQuickSelectCommand      = "quick-select"
+	smokeAutomationPinRankingCommand       = "pin-ranking"
+	smokeAutomationGroupJumpCommand        = "group-jump"
+	smokeAutomationTooltipCommand          = "tooltip"
+	smokeAutomationToolbarMessageID        = "wox-smoke-toolbar-message"
+	smokeAutomationKeepOpenAction          = "keep-open"
+	smokeAutomationClearAction             = "clear"
+	smokeAutomationResultAction            = "hide-launcher"
+	smokeAutomationSecondaryAction         = "open-folder"
+	smokeAutomationLongToolbarTitle        = "Indexing file contents across every configured search root: 18365 files are already processed and the catalog is still updating with additional paths that must remain visible in the launcher status"
+	smokeAutomationAttentionKey            = "attention-smoke-item"
+	smokeAutomationAttentionTitle          = "Attention smoke item"
+	smokeAutomationAttentionQuery          = "1+1"
+	smokeAutomationResultBindingCommand    = "result-binding"
+	smokeAutomationResultBindingID         = "result-binding-fixture"
+	smokeAutomationResultBindingTitle      = "Result binding fixture"
+	smokeAutomationResultBindingAction     = "run-result-binding"
+	smokeAutomationResultBindingContextKey = "fixture"
+	smokeAutomationResultBindingMarker     = "result-binding"
+	smokeAutomationResultBindingLog        = "result binding fixture executed"
 )
 
 func init() {
@@ -53,7 +60,10 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id: "0cb0d21c-45ce-4fe0-987e-24d645eca58c", Name: "Smoke Test Fixture", Runtime: "Go", Version: "1.0.0",
 		TriggerKeywords: []string{smokeAutomationTrigger},
-		Features:        []plugin.MetadataFeature{{Name: plugin.MetadataFeatureQuerySelection}},
+		Features: []plugin.MetadataFeature{
+			{Name: plugin.MetadataFeatureQuerySelection},
+			{Name: plugin.MetadataFeatureMRU},
+		},
 		Commands: []plugin.MetadataCommand{
 			{Command: "query-hint", QueryHint: &common.QueryHint{Elements: []common.QueryElement{
 				{Id: "filter", Kind: common.QueryElementArgument, Suggestions: []string{"created", "assigned", "search"}},
@@ -68,6 +78,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
 			{Command: smokeAutomationGroupJumpCommand, Description: "Two named groups for Option/Ctrl-arrow group jumps"},
 			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
+			{Command: smokeAutomationResultBindingCommand, Description: "Result hotkey and alias fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
 			{Command: smokeAutomationGridCommand, Description: "500 grid results with group headers"},
 			{Command: smokeAutomationChatCommand, Description: "200 chat messages with streaming updates"},
@@ -77,9 +88,10 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 	}
 }
 
-func (p *smokeAutomationPlugin) Init(_ context.Context, initParams plugin.InitParams) {
+func (p *smokeAutomationPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
 	p.api.OnDragOut(context.Background(), plugin.DragOutListenOption{Callback: p.recordSmokeDrag})
+	p.api.OnMRURestore(ctx, p.restoreResultBindingFixture)
 }
 
 // Query dispatches the deterministic native smoke behaviors by metadata command.
@@ -105,6 +117,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return queryGroupJump()
 	case smokeAutomationTooltipCommand:
 		return queryTooltipPreview()
+	case smokeAutomationResultBindingCommand:
+		return p.queryResultBinding()
 	case smokeAutomationListCommand:
 		response := queryListFixture()
 		if query.Search == "preview" {
@@ -122,6 +136,41 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return queryWarmCacheFixture()
 	default:
 		return plugin.QueryResponse{}
+	}
+}
+
+// queryResultBinding returns one restorable executable result for alias and hotkey bindings.
+func (p *smokeAutomationPlugin) queryResultBinding() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{p.resultBindingFixture()})
+}
+
+// restoreResultBindingFixture rebuilds only the result-binding fixture from saved MRU identity.
+func (p *smokeAutomationPlugin) restoreResultBindingFixture(_ context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	if mruData.Title != smokeAutomationResultBindingTitle || mruData.ContextData[smokeAutomationResultBindingContextKey] != smokeAutomationResultBindingMarker {
+		return nil, fmt.Errorf("unsupported smoke MRU restore")
+	}
+	result := p.resultBindingFixture()
+	return &result, nil
+}
+
+// resultBindingFixture is the stable executable row stored by result alias and hotkey bindings.
+func (p *smokeAutomationPlugin) resultBindingFixture() plugin.QueryResult {
+	return plugin.QueryResult{
+		Id:    smokeAutomationResultBindingID,
+		Title: smokeAutomationResultBindingTitle,
+		Icon:  icons.Get(icons.PluginApp),
+		Actions: []plugin.QueryResultAction{{
+			Id:        smokeAutomationResultBindingAction,
+			Name:      "Run binding fixture",
+			Icon:      icons.Get(icons.ActionRun),
+			IsDefault: true,
+			ContextData: common.ContextData{
+				smokeAutomationResultBindingContextKey: smokeAutomationResultBindingMarker,
+			},
+			Action: func(ctx context.Context, _ plugin.ActionContext) {
+				p.api.Log(ctx, plugin.LogLevelInfo, smokeAutomationResultBindingLog)
+			},
+		}},
 	}
 }
 

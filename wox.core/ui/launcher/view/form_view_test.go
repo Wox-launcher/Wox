@@ -191,18 +191,36 @@ func TestFormHotkeyFieldCanAlignRecorderToTheRightOfItsControlColumn(t *testing.
 func TestFormHotkeyFieldShowsRegistrationErrorWhenNotRecording(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "onboarding-hotkey", Label: "Hotkey", Description: "Show or hide Wox", Labels: []string{"Alt", "Space"},
-		Status: "Used by another application", Error: true, Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.ControlTheme{},
+		Status: "Used by another application", StatusPlacement: HotkeyStatusBelow, Error: true, Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.ControlTheme{},
 	})
 	container := field.(woxwidget.Container)
 	row := container.Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
-	control := controlColumn.Children[0].(woxwidget.Stack)
-	if len(control.Children) != 2 {
-		t.Fatalf("hotkey control children = %d, want recorder and registration error", len(control.Children))
+	control := controlColumn.Children[0].(woxwidget.Flex)
+	if control.Axis != woxwidget.Vertical || len(control.Children) != 2 {
+		t.Fatalf("hotkey control = %#v, want recorder above status", control)
 	}
-	status := control.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Clip).Child.(woxwidget.Text)
+	status := control.Children[1].(woxwidget.TextBlock)
 	if status.Value != "Used by another application" {
 		t.Fatalf("hotkey registration error = %q", status.Value)
+	}
+	if controlColumn.Children[1].(woxwidget.TextBlock).Value != "Show or hide Wox" {
+		t.Fatalf("hotkey description should stay below the status line")
+	}
+}
+
+func TestFormHotkeyFieldStatusPlacementBelowUsesControlColumn(t *testing.T) {
+	field := FormHotkeyField(FormHotkeyFieldProps{
+		ID: "action-hotkey", Label: "Hotkey", Description: "Restore this result",
+		Status: "Press any key", StatusPlacement: HotkeyStatusBelow, Recording: true, Width: 420, LabelWidth: 80, Theme: woxcomponent.ControlTheme{},
+	})
+	controlColumn := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	control := controlColumn.Children[0].(woxwidget.Flex)
+	if control.Axis != woxwidget.Vertical {
+		t.Fatalf("below placement axis = %v, want vertical", control.Axis)
+	}
+	if status := control.Children[1].(woxwidget.TextBlock); status.Value != "Press any key" {
+		t.Fatalf("below placement status = %q", status.Value)
 	}
 }
 

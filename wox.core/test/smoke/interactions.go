@@ -299,7 +299,8 @@ func OpenResultActionPanel(t *testing.T, ctx context.Context, client *automation
 	if runtime.GOOS == "darwin" {
 		modifier = woxui.KeyModifierMeta
 	}
-	if err := client.PressKey(ctx, woxui.Key("j"), modifier); err != nil {
+	// Fresh installs use primary+K. primary+J remains only for migrated settings.
+	if err := client.PressKey(ctx, woxui.Key("k"), modifier); err != nil {
 		t.Fatalf("open launcher result actions: %v", err)
 	}
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {

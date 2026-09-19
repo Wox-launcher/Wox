@@ -318,6 +318,7 @@ func (a *App) submitFormAction() {
 		return
 	}
 	a.syncFormEditorLocked()
+	a.commitHotkeyRecordingValue()
 	state := a.form
 	values := make(map[string]string, len(state.values))
 	for key, value := range state.values {
@@ -358,6 +359,10 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 	if event.Key == woxui.KeyEnter && event.Modifiers.HasPrimary() {
 		a.submitFormAction()
 		return true
+	}
+	if fieldType == "hotkey" || fieldType == "dictationHotkey" {
+		// Leave recordable combos to the recorder after Save has had a chance.
+		return false
 	}
 	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
 	if textEditable {
@@ -419,7 +424,11 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 		} else if fieldType == "table" {
 			a.openActionFormTable(focused)
 		} else if fieldType == "hotkey" || fieldType == "dictationHotkey" {
-			a.recordActionFormHotkey(focused)
+			// Enter finishes an active recorder; do not treat a follow-up Enter as
+			// "start recording again" or the first confirmation appears to do nothing.
+			if event.Key == woxui.KeySpace {
+				a.recordActionFormHotkey(focused)
+			}
 		} else if fieldType == "checkbox" || fieldType == "select" || fieldType == "selectAIModel" {
 			a.changeFormChoice(focused, 1)
 		}
@@ -505,7 +514,7 @@ func (a *App) recordActionFormHotkey(index int) {
 	if definition.Type == "dictationHotkey" {
 		kinds = dictationHotkeyRecordingKinds
 	}
-	a.startHotkeyRecording("action-form", &a.form.formFieldsState, index, "", kinds)
+	a.startHotkeyRecording("action-form", &a.form.formFieldsState, index, "", kinds, a.onFormKey)
 }
 
 func (a *App) focusFormField(index int) {

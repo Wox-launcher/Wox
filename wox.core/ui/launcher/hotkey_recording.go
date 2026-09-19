@@ -32,6 +32,8 @@ type hotkeyRecordingState struct {
 	hint            string
 	display         string
 	statusError     bool
+	// onKey is an optional parent hook. If it handles the event, the combo is not recorded.
+	onKey func(woxui.KeyEvent) bool
 }
 
 type hotkeyRecordingPresentation struct {
@@ -47,7 +49,8 @@ type recordedHotkeyPayload struct {
 }
 
 // startHotkeyRecording asks core for the strongest recorder available on the current platform.
-func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string) {
+// onKey, when set, is asked before a captured combo is stored.
+func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string, onKey func(woxui.KeyEvent) bool) {
 	// Action panel shortcuts are local key events, so global special triggers cannot fire them.
 	if persistKey == "ActionPanelHotkey" {
 		allowedKinds = []string{"normalCombo"}
@@ -71,7 +74,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	state := &hotkeyRecordingState{
 		diagnosticCtx: util.NewTraceContext(),
 		target:        target, fieldIndex: index, idPrefix: idPrefix, persistKey: persistKey, allowed: allowed,
-		status: hint, hint: hint, display: target.values[key],
+		status: hint, hint: hint, display: target.values[key], onKey: onKey,
 	}
 	a.hotkeySettings.SetRecording(state)
 	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI start: session=%s target=%s field=%d persistKey=%s allowed=%v", a.sessionID, idPrefix, index, persistKey, allowedKinds))
@@ -150,12 +153,47 @@ func (a *App) hotkeyRecordingFieldStatus(idPrefix string, index int) hotkeyRecor
 	return hotkeyRecordingPresentation{Active: true, Status: state.status, Value: state.display, Error: state.statusError}
 }
 
+// hotkeyRecordingSectionSignature is part of launcher form/table Boundary keys.
+// Recording lives outside the form snapshot, so omitting it keeps the cached
+// "Recording..." tree after Escape/Enter have already stopped capture.
+func (a *App) hotkeyRecordingSectionSignature() any {
+	state := a.hotkeySettings.Recording()
+	if state == nil {
+		return ""
+	}
+	return struct {
+		Prefix   string
+		Field    int
+		Value    string
+		Status   string
+		Error    bool
+		Ready    bool
+		Checking bool
+	}{state.idPrefix, state.fieldIndex, state.display, state.status, state.statusError, state.ready, state.checking}
+}
+
 func (a *App) stopHotkeyRecordingForDifferentField(target *formFieldsState, index int) {
 	state := a.hotkeySettings.Recording()
 	stop := state != nil && (state.target != target || state.fieldIndex != index)
 	if stop {
 		a.stopHotkeyRecording()
 	}
+}
+
+// commitHotkeyRecordingValue copies the last shown combo into the field before Save.
+// Availability still lives on recording.display until accept, so submitting without
+// this flush would persist the previous value.
+func (a *App) commitHotkeyRecordingValue() {
+	state := a.hotkeySettings.Recording()
+	if state == nil || state.target == nil || state.fieldIndex < 0 || state.fieldIndex >= len(state.target.definitions) {
+		return
+	}
+	value := strings.TrimSpace(state.display)
+	if value == "" {
+		return
+	}
+	key := state.target.definitions[state.fieldIndex].Value.Key
+	state.target.values[key] = value
 }
 
 // stopHotkeyRecording releases both the local field and core's process-wide raw recorder.
@@ -191,11 +229,18 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 		return nil
 	}
 	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI candidate: hotkey=%s kind=%s checking=%t kindAllowed=%t targetCurrent=%t", payload.Hotkey, payload.Kind, state.checking, payload.Kind == "" || state.allowed[payload.Kind], a.hotkeyRecordingTargetCurrentLocked(state.target)))
-	if state.checking || (payload.Kind != "" && !state.allowed[payload.Kind]) || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
+	if !a.hotkeyRecordingTargetCurrentLocked(state.target) {
 		return nil
 	}
 	canonical := canonicalRecordedHotkey(payload)
-	if canonical == state.display {
+	if event, ok := recordedHotkeyEvent(canonical); ok && state.onKey != nil && state.onKey(event) {
+		util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI candidate handled by parent: hotkey=%s", canonical))
+		return nil
+	}
+	if state.checking || (payload.Kind != "" && !state.allowed[payload.Kind]) {
+		return nil
+	}
+	if canonical == state.display && !state.statusError {
 		util.GetLogger().Info(state.diagnosticCtx, "hotkey UI candidate ignored: reason=unchanged")
 		return nil
 	}
@@ -203,7 +248,14 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 		a.acceptRecordedHotkey(state, canonical)
 		return nil
 	}
+	// Show the combination immediately. Availability probes a real OS
+	// registration and a taken combo (for example Ctrl+Shift+P) can take
+	// hundreds of milliseconds; waiting hid the keycaps until the error arrived.
+	state.display = canonical
+	state.status = state.hint
+	state.statusError = false
 	state.checking = true
+	a.invalidateHotkeyWindows()
 	util.Go(a.lifecycleCtx, "check recorded hotkey", func() {
 		a.checkRecordedHotkey(state, canonical)
 	})
@@ -347,6 +399,15 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 	})
 }
 
+// recordedHotkeyEvent rebuilds the key event for a raw recorder candidate so OnKey can decide.
+func recordedHotkeyEvent(hotkey string) (woxui.KeyEvent, bool) {
+	parsed, ok := woxui.ParseHotkey(hotkey)
+	if !ok {
+		return woxui.KeyEvent{}, false
+	}
+	return woxui.KeyEvent{Key: parsed.Key, Down: true, Modifiers: parsed.Modifiers}, true
+}
+
 // onHotkeyRecordingKey supplements raw recording with local normal-combo candidates.
 func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	state := a.hotkeySettings.Recording()
@@ -363,6 +424,9 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	}
 	if hotkeyRecordingStops(event) {
 		a.stopHotkeyRecording()
+		return true
+	}
+	if event.Down && !event.Repeat && state.onKey != nil && state.onKey(event) {
 		return true
 	}
 	if !state.ready || !state.fallback || state.checking {
@@ -476,5 +540,5 @@ func (a *App) recordFormTableRowHotkey(index int) {
 			break
 		}
 	}
-	a.startHotkeyRecording("form-table-row", target, index, "", allowed)
+	a.startHotkeyRecording("form-table-row", target, index, "", allowed, a.onFormTableKey)
 }

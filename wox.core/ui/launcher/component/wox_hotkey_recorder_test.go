@@ -1,6 +1,7 @@
 package component
 
 import (
+	"runtime"
 	"testing"
 
 	woxui "wox/ui/runtime"
@@ -131,6 +132,46 @@ func TestWoxHotkeyRecorderHandlesSpecialFocusKeys(t *testing.T) {
 	host.RequestFocus("hotkey")
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("next") {
 		t.Fatal("Tab should leave recording and move focus to the next control")
+	}
+}
+
+func TestWoxHotkeyRecorderAsksOnKeyBeforeConsuming(t *testing.T) {
+	var handled []woxui.KeyEvent
+	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
+		recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{
+			ID: "hotkey", Focused: true, Placeholder: "Record", Theme: ControlTheme{},
+			OnKey: func(event woxui.KeyEvent) bool {
+				handled = append(handled, event)
+				return event.Key == woxui.KeyEnter && event.Modifiers.HasPrimary()
+			},
+		})
+		return recorder
+	})
+	host.AttachServices(&hotkeyRecorderHostServices{})
+	displayList := woxui.DisplayList{}
+	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 80}, PixelSize: woxui.PixelSize{Width: 200, Height: 80}, Scale: 1})
+
+	primary := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		primary = woxui.KeyModifierMeta
+	}
+	save := woxui.KeyEvent{Key: woxui.KeyEnter, Down: true, Modifiers: primary}
+	if !host.Key(save) {
+		t.Fatal("OnKey should be able to consume a parent shortcut")
+	}
+	if !host.HasFocus("hotkey") {
+		t.Fatal("a handled parent shortcut must not unfocus the recorder")
+	}
+
+	escape := woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}
+	if !host.Key(escape) {
+		t.Fatal("unhandled Escape should still leave the recorder")
+	}
+	if host.HasFocus("hotkey") {
+		t.Fatal("unhandled Escape should unfocus the recorder")
+	}
+	if len(handled) != 2 || handled[0] != save || handled[1] != escape {
+		t.Fatalf("OnKey events = %+v, want save then escape", handled)
 	}
 }
 

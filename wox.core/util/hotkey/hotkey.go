@@ -20,6 +20,7 @@ var (
 	availabilityProbeMu          sync.Mutex
 	addRawKeyListener            = keyboard.AddRawKeyListener
 	registerGlobalHotkey         = keyboard.RegisterGlobalHotkey
+	tryRegisterGlobalHotkey      = keyboard.TryRegisterGlobalHotkey
 )
 
 const (
@@ -131,7 +132,11 @@ func (h *Hotkey) register(ctx context.Context, combineKey string, onPress func()
 		return registerCapsLockComboHotKey(spec.key, onPress, options.canTriggerBeforeRelease)
 	}
 
-	registration, err := registerGlobalHotkey(spec.modifiers, spec.key, onPress)
+	registerFn := registerGlobalHotkey
+	if options.probe {
+		registerFn = tryRegisterGlobalHotkey
+	}
+	registration, err := registerFn(spec.modifiers, spec.key, onPress)
 	if err != nil {
 		return err
 	}
@@ -335,16 +340,18 @@ func CheckHotkeyAvailability(ctx context.Context, hotkeyStr string) (bool, error
 		}
 	}
 
-	// The probe uses real global registration. Serialize and retry briefly so
-	// rapid recorder validation cannot observe a hotkey that the previous probe
-	// has just released but the OS has not made available yet.
+	// The probe uses a single-attempt registration. Windows RegisterHotKey
+	// otherwise retries a taken combo (Ctrl+Shift+P, etc.) as if Wox had just
+	// released it, which delayed the recorder error by more than a second.
+	// Serialize and retry the one-shot probe briefly so rapid validation cannot
+	// observe a hotkey the previous probe has just released.
 	availabilityProbeMu.Lock()
 	defer availabilityProbeMu.Unlock()
 
 	var lastRegisterErr error
 	for attempt := 1; attempt <= availabilityProbeMaxAttempts; attempt++ {
 		hk := Hotkey{}
-		registerErr := hk.Register(ctx, hotkeyStr, func() {})
+		registerErr := hk.register(ctx, hotkeyStr, func() {}, nil, registerOptions{probe: true})
 		if registerErr == nil {
 			if unregisterErr := hk.unregister(ctx); unregisterErr != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("hotkey availability probe failed to unregister: hotkey=%s err=%s", hotkeyStr, unregisterErr.Error()))

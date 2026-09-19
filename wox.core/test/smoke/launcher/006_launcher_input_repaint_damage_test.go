@@ -34,20 +34,7 @@ func Test006LauncherInputRepaintDamage(t *testing.T) {
 		snapshot := smoke.ReplaceLauncherQuery(t, ctx, client, "1+1")
 		assertIdleInputDamage(t, ctx, client, snapshot, "launcher.query.input", woxui.Rect{}, false)
 
-		modifier := woxui.KeyModifierControl
-		if runtime.GOOS == "darwin" {
-			modifier = woxui.KeyModifierMeta
-		}
-		if err := client.PressKey(ctx, woxui.Key("j"), modifier); err != nil {
-			t.Fatalf("open launcher action panel: %v", err)
-		}
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			input, found := automationdriver.Find(snapshot, "action-search")
-			return found && input.Focused
-		})
-		if err != nil {
-			t.Fatalf("wait for focused action filter: %v", err)
-		}
+		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
 		var surface woxui.Rect
 		if runtime.GOOS == "linux" {
 			// The renderer-blurred floating material samples the back buffer under the panel, so
@@ -66,7 +53,7 @@ func Test006LauncherInputRepaintDamage(t *testing.T) {
 			if err := client.SimulateRendererDeviceRemoved(ctx); err != nil {
 				t.Fatal(err)
 			}
-			snapshot, err = client.Snapshot(ctx)
+			snapshot, err := client.Snapshot(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

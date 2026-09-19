@@ -1127,6 +1127,7 @@ func parseFormTableApp(value string) (map[string]any, error) {
 }
 
 func (a *App) saveFormTableRowEdit() {
+	a.commitHotkeyRecordingValue()
 	a.stopHotkeyRecording()
 	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.invalid || state.saving || !a.formTableTargetCurrentLocked(state.target) {
@@ -2265,6 +2266,9 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	if event.Modifiers.HasPrimary() && (event.Key == woxui.KeyEnter || event.Key == woxui.Key("s")) {
 		a.saveFormTableRowEdit()
 		return true
+	}
+	if fieldType == "hotkey" || fieldType == "dictationHotkey" {
+		return false
 	}
 	if textEditable {
 		if formTableQueryVariableKindForField(state, focused) != "" && a.handleFormTableQueryVariableEditorKey(event) {

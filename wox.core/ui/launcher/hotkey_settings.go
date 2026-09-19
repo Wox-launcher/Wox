@@ -260,7 +260,7 @@ func (a *App) recordHotkeySettingsField(index int) {
 		return
 	}
 	key := fields.definitions[index].Value.Key
-	a.startHotkeyRecording("hotkey-settings", fields, index, key, nil)
+	a.startHotkeyRecording("hotkey-settings", fields, index, key, nil, nil)
 }
 
 func (a *App) openHotkeySettingsTable(index int) {

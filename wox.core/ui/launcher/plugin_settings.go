@@ -1197,7 +1197,7 @@ func (a *App) recordPluginFormHotkey(index int) {
 		return
 	}
 	target := &state.formFieldsState
-	a.startHotkeyRecording("plugin-settings", target, index, "", dictationHotkeyRecordingKinds)
+	a.startHotkeyRecording("plugin-settings", target, index, "", dictationHotkeyRecordingKinds, nil)
 }
 
 // activatePluginForm transfers keyboard and IME ownership from the plugin list to its first field.

@@ -47,6 +47,16 @@ var (
 )
 
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
+	return registerGlobalHotkey(modifiers, key, callback, hotkeyRegistrationMaxAttempts)
+}
+
+// TryRegisterGlobalHotkey probes a combination once. Availability checks use
+// this so a combo already owned by another app is not retried as a stale release.
+func TryRegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
+	return registerGlobalHotkey(modifiers, key, callback, 1)
+}
+
+func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttempts int) (HotkeyRegistration, error) {
 	vkCode, err := keyToWindowsVK(key)
 	if err != nil {
 		return nil, err
@@ -62,16 +72,19 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 	}
 
 	shellReserved := isWindowsShellReservedCombo(modifiers, key)
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
 
 	var errCode C.ulong
 	registered := false
-	for attempt := 1; attempt <= hotkeyRegistrationMaxAttempts; attempt++ {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		ok := C.woxKeyboardRegisterHotkey(C.int(id), C.uint(modifiers), C.uint(vkCode), &errCode)
 		if ok != 0 {
 			registered = true
 			break
 		}
-		if uint32(errCode) != windowsErrorHotkeyAlreadyRegistered || attempt == hotkeyRegistrationMaxAttempts {
+		if uint32(errCode) != windowsErrorHotkeyAlreadyRegistered || attempt == maxAttempts {
 			break
 		}
 		// Shell-reserved combos are held by Explorer permanently, so retrying only

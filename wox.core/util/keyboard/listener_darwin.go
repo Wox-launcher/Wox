@@ -66,6 +66,10 @@ func rawKeyboardDiagnosticsDarwin() string {
 	return fmt.Sprintf("%s listeners=%d enabled=%t deferred=%t accessKnown=%t accessGranted=%t", snapshot, len(rawKeyListeners), rawHookIsEnabled, rawHookIsDeferred, rawHookAccessKnown, rawHookAccessGranted)
 }
 
+func TryRegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
+	return RegisterGlobalHotkey(modifiers, key, callback)
+}
+
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
 	keyCode, err := keyToDarwinKeyCode(key)
 	if err != nil {
