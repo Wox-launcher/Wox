@@ -186,10 +186,10 @@ func (suite *ConfigBlackboxTestSuite) testLoadWoxSettingBlackbox(t *testing.T) {
 			name: "ValidComplexArrays",
 			setupDB: func(db *gorm.DB) error {
 				// Insert valid array data
-				queryShortcuts := `[{"Shortcut":"g","Query":"google {0}"},{"Shortcut":"gh","Query":"github {0}"}]`
+				queryAliases := `[{"Shortcut":"g","Query":"google {0}"},{"Shortcut":"gh","Query":"github {0}"}]`
 				return db.Create(&database.WoxSetting{
-					Key:   "QueryShortcuts",
-					Value: queryShortcuts,
+					Key:   "QueryAliases",
+					Value: queryAliases,
 				}).Error
 			},
 			expectError:    false,
@@ -238,10 +238,10 @@ func (suite *ConfigBlackboxTestSuite) testLoadWoxSettingBlackbox(t *testing.T) {
 			name: "UnicodeContent",
 			setupDB: func(db *gorm.DB) error {
 				// Insert unicode content
-				queryShortcuts := `[{"Shortcut":"测试","Query":"test 中文"}]`
+				queryAliases := `[{"Shortcut":"测试","Query":"test 中文"}]`
 				return db.Create(&database.WoxSetting{
-					Key:   "QueryShortcuts",
-					Value: queryShortcuts,
+					Key:   "QueryAliases",
+					Value: queryAliases,
 				}).Error
 			},
 			expectError:    false,

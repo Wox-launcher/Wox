@@ -18,7 +18,10 @@ func TestSettingsDataFromContract(t *testing.T) {
 		QueryHotkeys: []setting.QueryHotkey{{
 			Name: "Docs", Hotkey: "Ctrl+D", Query: "docs", Position: setting.QueryHotkeyPositionTopCenter, MaxResultCount: 8,
 		}},
-		QueryShortcuts:           []setting.QueryShortcut{{Shortcut: "g", Query: "google {0}"}},
+		ResultBindings: []setting.ResultBinding{{
+			Hash: "h1", PluginID: "app", Title: "Chrome", Alias: "ch",
+		}},
+		QueryAliases:             []setting.QueryAlias{{Alias: "g", Query: "google {0}"}},
 		TrayQueries:              []setting.TrayQuery{{Query: "clipboard", HideQueryBox: true}},
 		CloudSyncDisabledPlugins: []string{"plugin-a"},
 		PrimaryGlance:            setting.GlanceRef{PluginId: "plugin-a", GlanceId: "weather"},
@@ -44,6 +47,9 @@ func TestSettingsDataFromContract(t *testing.T) {
 	}
 	if len(data.QueryHotkeys) != 1 || data.QueryHotkeys[0].Position != "top_center" || data.QueryHotkeys[0].MaxResultCount != 8 {
 		t.Fatalf("query hotkeys = %+v", data.QueryHotkeys)
+	}
+	if len(data.ResultBindings) != 1 || data.ResultBindings[0].Alias != "ch" {
+		t.Fatalf("result bindings = %+v", data.ResultBindings)
 	}
 	if data.PrimaryGlance.PluginID != "plugin-a" || data.PrimaryGlance.GlanceID != "weather" {
 		t.Fatalf("primary glance = %+v", data.PrimaryGlance)

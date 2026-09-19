@@ -100,6 +100,7 @@ type FormTableFieldProps struct {
 	SecondaryLabel  string
 	HideEditAction  bool
 	HideCloneAction bool
+	HideAddAction   bool
 	AddLabel        string
 	EditLabel       string
 	CloneLabel      string
@@ -307,7 +308,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 			Disabled: props.Invalid || props.Disabled, OnTap: props.OnSecondary, Theme: props.Theme,
 		}))
 	}
-	if !props.ReadOnly {
+	if !props.ReadOnly && !props.HideAddAction {
 		actions = append(actions, formTableAddButton(props))
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: actions}
@@ -318,7 +319,7 @@ func formTableToolbarActions(props FormTableFieldProps) woxwidget.Widget {
 	if formTableSearchVisible(props) {
 		actions = append(actions, formTableSearchButton(props))
 	}
-	if !props.ReadOnly {
+	if !props.ReadOnly && !props.HideAddAction {
 		actions = append(actions, formTableAddButton(props))
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: actions}

@@ -190,8 +190,8 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		switch definition.Value.Key {
 		case "QueryHotkeys":
 			demoKind = "query-hotkeys"
-		case "QueryShortcuts":
-			demoKind = "query-shortcuts"
+		case "QueryAliases":
+			demoKind = "query-aliases"
 		case "TrayQueries":
 			demoKind = "tray-queries"
 		}
@@ -206,8 +206,20 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		onSecondary = func() { a.openAICommandTemplatePicker(index) }
 	}
 	hideCloneAction := false
+	hideAddAction := false
 	if callbacks.idPrefix == "plugin-settings" && isWindowManagerGroupsTable(definition) && a.selectedPluginID() == windowManagerPluginID {
 		hideCloneAction = true
+	}
+	if definition.Value.Key == "ResultBindings" {
+		hideAddAction = true
+		hideCloneAction = true
+	}
+	onAdd := func() {
+		openTable()
+		a.beginAddFormTableRowDirect()
+	}
+	if hideAddAction {
+		onAdd = nil
 	}
 	return launcherview.FormTableFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
@@ -217,17 +229,14 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		StateKey:    callbacks.idPrefix + ":" + a.selectedPluginID() + ":" + definition.Value.Key,
 		SearchLabel: a.translate("i18n:ui_table_search"), SearchPlaceholder: a.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: a.settingsNativeWindow(),
-		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.translate("i18n:ui_delete_row_confirm"),
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideAddAction: hideAddAction, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.translate("i18n:ui_delete_row_confirm"),
 		OperationLabel: a.translate("i18n:ui_operation"),
 		InfoIcon:       a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
 		DisabledEditIcon: a.imageForTint(settingControlIconSource("edit"), &disabledForeground, rowIconRasterSize), DisabledCloneIcon: a.imageForTint(settingControlIconSource("copy"), &disabledForeground, rowIconRasterSize), DisabledDeleteIcon: a.imageForTint(settingControlIconSource("delete"), &disabledForeground, rowIconRasterSize),
 		EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
 		Theme:     theme, OnTooltip: onTooltip, OnDemoHover: a.setSettingsDemoHover, OnSecondary: onSecondary,
-		OnAdd: func() {
-			openTable()
-			a.beginAddFormTableRowDirect()
-		},
+		OnAdd: onAdd,
 		OnOpenRow: func(rowIndex int) {
 			if rowIndex < 0 || rowIndex >= len(rows) {
 				return
@@ -622,15 +631,20 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette woxc
 	canDelete := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && !selectedReadOnly
 	addLabel := "Add row"
 	onAdd := a.beginAddFormTableRow
+	canAdd := !snapshot.invalid && !snapshot.saving
 	if snapshot.definition.Value.Key == "AISkills" {
 		// The skills list shares Flutter's tabbed local/remote add dialog.
 		addLabel = a.translate("i18n:ui_ai_skill_add")
 		onAdd = a.openFormTableSkillAdd
 	}
+	if snapshot.definition.Value.Key == "ResultBindings" {
+		canAdd = false
+		onAdd = nil
+	}
 	return launcherview.FormTableList(launcherview.FormTableListProps{
 		Width: width, Height: height, Rows: rows, Selected: snapshot.selected,
 		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: a.translate("i18n:ui_delete"), CloseLabel: a.translate("i18n:ui_close"),
-		CanAdd: !snapshot.invalid && !snapshot.saving, CanEdit: canEdit, CanDelete: canDelete, Theme: palette,
+		CanAdd: canAdd, CanEdit: canEdit, CanDelete: canDelete, Theme: palette,
 		OnSelect: a.selectFormTableRow,
 		OnAdd:    onAdd, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClose: a.closeFormTableEditor,
 	})

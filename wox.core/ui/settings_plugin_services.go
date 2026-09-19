@@ -8,6 +8,7 @@ import (
 
 	"wox/common"
 	"wox/plugin"
+	"wox/setting"
 	"wox/ui/contract"
 	"wox/ui/dto"
 
@@ -129,7 +130,14 @@ func (s *CoreServices) UpdatePluginSettings(ctx context.Context, sessionID strin
 				return fmt.Errorf("update plugin setting %q: %w", key, err)
 			}
 		case "TriggerKeywords":
-			instance.Setting.TriggerKeywords.Set(strings.Split(value, ","))
+			keywords := strings.Split(value, ",")
+			woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+			if woxSetting != nil && woxSetting.ResultBindings != nil {
+				if err := plugin.ValidateTriggerKeywordsAgainstAliases(keywords, woxSetting.ResultBindings.Get()); err != nil {
+					return err
+				}
+			}
+			instance.Setting.TriggerKeywords.Set(keywords)
 		default:
 			isPlatformSpecific := false
 			for _, settingDefinition := range instance.Metadata.SettingDefinitions {

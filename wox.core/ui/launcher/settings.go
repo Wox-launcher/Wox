@@ -10,6 +10,7 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 
 	"wox/common"
+	"wox/setting"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -51,7 +52,8 @@ type settingsData struct {
 	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  json.RawMessage
 	QueryHotkeys                       []queryHotkeySetting
-	QueryShortcuts                     []queryShortcutSetting
+	ResultBindings                     []setting.ResultBinding
+	QueryAliases                       []queryAliasSetting
 	TrayQueries                        json.RawMessage
 	IsLinuxWaylandSession              bool
 	UsePinYin                          bool
@@ -110,8 +112,8 @@ type queryHotkeySetting struct {
 	Disabled          bool
 }
 
-type queryShortcutSetting struct {
-	Shortcut string
+type queryAliasSetting struct {
+	Alias    string `json:"Shortcut"`
 	Query    string
 	Disabled bool
 }
@@ -601,9 +603,9 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 			MaxResultCount: item.MaxResultCount, Position: string(item.Position), Disabled: item.Disabled,
 		}
 	}
-	queryShortcuts := make([]queryShortcutSetting, len(loaded.QueryShortcuts))
-	for index, item := range loaded.QueryShortcuts {
-		queryShortcuts[index] = queryShortcutSetting{Shortcut: item.Shortcut, Query: item.Query, Disabled: item.Disabled}
+	queryAliases := make([]queryAliasSetting, len(loaded.QueryAliases))
+	for index, item := range loaded.QueryAliases {
+		queryAliases[index] = queryAliasSetting{Alias: item.Alias, Query: item.Query, Disabled: item.Disabled}
 	}
 	return settingsData{
 		EnableAutostart:                    loaded.EnableAutostart,
@@ -617,7 +619,8 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		FullscreenDetectionSupported:       loaded.FullscreenDetectionSupported,
 		IgnoredHotkeyApps:                  ignoredHotkeyApps,
 		QueryHotkeys:                       queryHotkeys,
-		QueryShortcuts:                     queryShortcuts,
+		ResultBindings:                     setting.CloneResultBindings(loaded.ResultBindings),
+		QueryAliases:                       queryAliases,
 		TrayQueries:                        trayQueries,
 		IsLinuxWaylandSession:              loaded.IsLinuxWaylandSession,
 		UsePinYin:                          loaded.UsePinYin,

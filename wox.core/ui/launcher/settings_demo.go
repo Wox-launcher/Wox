@@ -86,8 +86,8 @@ func (a *App) buildSettingsDemoOverlay(snapshot settingsSnapshot, width, height 
 		step = launcherview.OnboardingStep{ID: "queryHotkeysWebPanel", Title: a.translate("i18n:ui_query_hotkeys_preset_web_panel"), Accent: woxui.Color{R: 244, G: 63, B: 94, A: 255}}
 	case "query-hotkey-preset-silent":
 		step = launcherview.OnboardingStep{ID: "queryHotkeysSilent", Title: a.translate("i18n:ui_query_hotkeys_preset_silent"), Accent: woxui.Color{R: 34, G: 197, B: 94, A: 255}}
-	case "query-shortcuts":
-		step = launcherview.OnboardingStep{ID: "queryShortcuts", Title: a.translate("i18n:ui_query_shortcuts"), Accent: woxui.Color{R: 167, G: 139, B: 250, A: 255}}
+	case "query-aliases":
+		step = launcherview.OnboardingStep{ID: "queryAliases", Title: a.translate("i18n:ui_query_shortcuts"), Accent: woxui.Color{R: 167, G: 139, B: 250, A: 255}}
 	case "tray-queries":
 		step = launcherview.OnboardingStep{ID: "trayQueries", Title: a.translate("i18n:ui_tray_queries"), Accent: woxui.Color{R: 34, G: 197, B: 94, A: 255}}
 	}

@@ -60,6 +60,36 @@ func parseQueryHotkeysSettingValue(value string) ([]setting.QueryHotkey, error) 
 	return queryHotkeys, nil
 }
 
+// resultBindingsFromWoxSetting copies stored bindings when the platform value exists.
+func resultBindingsFromWoxSetting(woxSetting *setting.WoxSetting) []setting.ResultBinding {
+	if woxSetting == nil || woxSetting.ResultBindings == nil {
+		return nil
+	}
+	return setting.CloneResultBindings(woxSetting.ResultBindings.Get())
+}
+
+// parseResultBindingsSettingValue decodes the settings-table JSON for result bindings.
+func parseResultBindingsSettingValue(value string) ([]setting.ResultBinding, error) {
+	var bindings []setting.ResultBinding
+	if err := json.Unmarshal([]byte(value), &bindings); err != nil {
+		return nil, err
+	}
+	normalized := make([]setting.ResultBinding, 0, len(bindings))
+	for _, binding := range bindings {
+		binding.Hash = strings.TrimSpace(binding.Hash)
+		binding.PluginID = strings.TrimSpace(binding.PluginID)
+		binding.Title = strings.TrimSpace(binding.Title)
+		binding.SubTitle = strings.TrimSpace(binding.SubTitle)
+		binding.Hotkey = strings.TrimSpace(binding.Hotkey)
+		binding.Alias = strings.TrimSpace(binding.Alias)
+		if binding.Hash == "" && binding.PluginID == "" && binding.Hotkey == "" && binding.Alias == "" {
+			continue
+		}
+		normalized = append(normalized, binding)
+	}
+	return normalized, nil
+}
+
 // updateWoxSettingValue handles shared setting writes that require normalization.
 func updateWoxSettingValue(_ context.Context, woxSetting *setting.WoxSetting, key string, value string) (string, error) {
 	switch key {

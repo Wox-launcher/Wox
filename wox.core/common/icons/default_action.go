@@ -18,7 +18,7 @@ var defaultActionIcons = map[string]common.WoxImage{
 	ActionPin:                  newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
 	ActionUnpin:                newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6M5 5l14 14"/>`),
 	ActionRevertRanking:        newActionIcon(`<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`),
-	ActionQueryShortcut:        newActionIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6"/>`),
+	ActionQueryAlias:           newActionIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6"/>`),
 	ActionOpenContainingFolder: newActionIcon(`<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>`),
 	ActionContextMenu:          newActionIcon(`<path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/>`),
 	ActionPreview:              newActionIcon(`<path d="M3 12s3-6.5 9-6.5 9 6.5 9 6.5-3 6.5-9 6.5S3 12 3 12z"/><circle cx="12" cy="12" r="3"/>`),

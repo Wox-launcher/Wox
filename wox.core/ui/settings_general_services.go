@@ -51,7 +51,8 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		ShowTray:                           woxSetting.ShowTray.Get(),
 		LangCode:                           woxSetting.LangCode.Get(),
 		QueryHotkeys:                       append([]setting.QueryHotkey(nil), woxSetting.QueryHotkeys.Get()...),
-		QueryShortcuts:                     append([]setting.QueryShortcut(nil), woxSetting.QueryShortcuts.Get()...),
+		ResultBindings:                     resultBindingsFromWoxSetting(woxSetting),
+		QueryAliases:                       append([]setting.QueryAlias(nil), woxSetting.QueryAliases.Get()...),
 		TrayQueries:                        append([]setting.TrayQuery(nil), woxSetting.TrayQueries.Get()...),
 		LaunchMode:                         woxSetting.LaunchMode.Get(),
 		StartPage:                          woxSetting.StartPage.Get(),
@@ -171,6 +172,9 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		if err != nil {
 			return err
 		}
+		if err := plugin.ValidateQueryHotkeysAgainstBindings(queryHotkeys, resultBindingsFromWoxSetting(woxSetting)); err != nil {
+			return err
+		}
 		config := corehotkey.WoxConfigFromSetting(woxSetting)
 		config.QueryHotkeys = queryHotkeys
 		if err := GetUIManager().registerWoxHotkeys(ctx, config, true); err != nil {
@@ -178,6 +182,12 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		}
 		woxSetting.QueryHotkeys.Set(queryHotkeys)
 		return nil
+	case "ResultBindings":
+		bindings, err := parseResultBindingsSettingValue(value)
+		if err != nil {
+			return err
+		}
+		return GetUIManager().applyResultBindings(ctx, bindings)
 	}
 
 	switch key {
@@ -216,12 +226,17 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		woxSetting.ShowTray.Set(boolValue)
 	case "LangCode":
 		woxSetting.LangCode.Set(i18n.LangCode(value))
-	case "QueryShortcuts":
-		var shortcuts []setting.QueryShortcut
-		if err := json.Unmarshal([]byte(value), &shortcuts); err != nil {
+	case "QueryAliases":
+		var aliases []setting.QueryAlias
+		if err := json.Unmarshal([]byte(value), &aliases); err != nil {
 			return err
 		}
-		woxSetting.QueryShortcuts.Set(shortcuts)
+		for _, alias := range aliases {
+			if err := plugin.ValidateQueryAliasAgainstResultAliases(alias, resultBindingsFromWoxSetting(woxSetting)); err != nil {
+				return err
+			}
+		}
+		woxSetting.QueryAliases.Set(aliases)
 	case "CloudSyncServerUrl":
 		serverURL := strings.TrimSpace(value)
 		woxSetting.CloudSyncServerUrl.Set(serverURL)

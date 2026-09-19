@@ -2168,17 +2168,18 @@ type queryRefinementOption struct {
 }
 
 type queryResult struct {
-	QueryID  string               `json:"QueryId"`
-	ID       string               `json:"Id"`
-	Title    string               `json:"Title"`
-	SubTitle string               `json:"SubTitle"`
-	Icon     woxImage             `json:"Icon"`
-	Preview  queryPreview         `json:"Preview"`
-	Tails    []resultTail         `json:"Tails"`
-	Actions  []resultAction       `json:"Actions"`
-	DragData *queryResultDragData `json:"DragData"`
-	IsGroup  bool                 `json:"IsGroup"`
-	Revision uint64               `json:"-"`
+	QueryID   string               `json:"QueryId"`
+	ID        string               `json:"Id"`
+	Title     string               `json:"Title"`
+	SubTitle  string               `json:"SubTitle"`
+	Icon      woxImage             `json:"Icon"`
+	Preview   queryPreview         `json:"Preview"`
+	TitleTags []resultTitleTag     `json:"TitleTags"`
+	Tails     []resultTail         `json:"Tails"`
+	Actions   []resultAction       `json:"Actions"`
+	DragData  *queryResultDragData `json:"DragData"`
+	IsGroup   bool                 `json:"IsGroup"`
+	Revision  uint64               `json:"-"`
 }
 
 type queryResultDragData struct {
@@ -2189,6 +2190,13 @@ type queryResultDragData struct {
 
 func (d *queryResultDragData) isFiles() bool {
 	return d != nil && d.Type == "files" && len(d.Files) > 0
+}
+
+type resultTitleTag struct {
+	Text    string   `json:"Text"`
+	Kind    string   `json:"Kind"`
+	Labels  []string `json:"Labels"`
+	Tooltip string   `json:"Tooltip"`
 }
 
 type resultTail struct {

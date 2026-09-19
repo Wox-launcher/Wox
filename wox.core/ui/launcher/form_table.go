@@ -192,7 +192,7 @@ func replaceQueryHotkeyVariablesForTest(query string) string {
 
 // runFormTableQueryTest opens the launcher with the edited query so the user can verify it
 // without leaving the row editor. Query hotkeys carry {wox:...} variables that are replaced
-// with sample values; fields without them, such as query shortcuts, pass through unchanged.
+// with sample values; fields without them, such as query aliases, pass through unchanged.
 func (a *App) runFormTableQueryTest(index int) {
 	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || !state.rowForm.definitions[index].Value.QueryTest {

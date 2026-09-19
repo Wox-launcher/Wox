@@ -756,6 +756,9 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 		if result.Tails != nil {
 			a.results[index].Tails = fromCoreTails(*result.Tails)
 		}
+		if result.TitleTags != nil {
+			a.results[index].TitleTags = fromCoreTitleTags(*result.TitleTags)
+		}
 		if result.Actions != nil {
 			queryResult := plugin.QueryResult{Actions: *result.Actions}
 			uiActions := queryResult.ToUI().Actions
@@ -842,6 +845,22 @@ func fromCorePreview(preview plugin.WoxPreview) queryPreview {
 		PreviewType: preview.PreviewType, PreviewData: preview.PreviewData, PreviewOverlayData: preview.PreviewOverlayData,
 		PreviewTags: tags, PreviewProperties: cloneStringMap(preview.PreviewProperties), ScrollPosition: preview.ScrollPosition,
 	}
+}
+
+func fromCoreTitleTag(tag plugin.QueryResultTitleTag) resultTitleTag {
+	converted := resultTitleTag{Text: tag.Text, Kind: tag.Kind, Tooltip: tag.Tooltip}
+	if tag.Kind == plugin.QueryResultTitleTagKindHotkey {
+		converted.Labels = formatHotkeyLabels(tag.Text)
+	}
+	return converted
+}
+
+func fromCoreTitleTags(tags []plugin.QueryResultTitleTag) []resultTitleTag {
+	converted := make([]resultTitleTag, len(tags))
+	for index, tag := range tags {
+		converted[index] = fromCoreTitleTag(tag)
+	}
+	return converted
 }
 
 func fromCoreTails(tails []plugin.QueryResultTail) []resultTail {

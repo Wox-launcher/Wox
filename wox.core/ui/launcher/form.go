@@ -290,6 +290,14 @@ func (a *App) openFormAction(result queryResult, action resultAction) {
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.updateFormTextInput(state.editor != nil)
+	// A hotkey-only form should start recording immediately so the first
+	// keypress is captured without clicking the recorder.
+	if state.focused >= 0 && state.focused < len(state.definitions) {
+		switch state.definitions[state.focused].Type {
+		case "hotkey", "dictationHotkey":
+			a.recordActionFormHotkey(state.focused)
+		}
+	}
 	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }
@@ -298,6 +306,7 @@ func (a *App) closeFormAction() {
 	if a.form == nil {
 		return
 	}
+	a.stopHotkeyRecording()
 	a.form = nil
 	a.restoreQueryTextInput()
 	_ = a.applyWindowBounds()
@@ -314,6 +323,7 @@ func (a *App) submitFormAction() {
 	for key, value := range state.values {
 		values[key] = value
 	}
+	a.stopHotkeyRecording()
 	a.form = nil
 	if err := a.services.SubmitFormAction(context.Background(), a.sessionID, state.queryID, state.resultID, state.action.ID, values); err != nil {
 		log.Printf("submit form action: %v", err)
@@ -408,6 +418,8 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 			a.editFormKey(event)
 		} else if fieldType == "table" {
 			a.openActionFormTable(focused)
+		} else if fieldType == "hotkey" || fieldType == "dictationHotkey" {
+			a.recordActionFormHotkey(focused)
 		} else if fieldType == "checkbox" || fieldType == "select" || fieldType == "selectAIModel" {
 			a.changeFormChoice(focused, 1)
 		}
@@ -478,6 +490,22 @@ func (a *App) moveFormFocus(delta int) {
 	textInput := a.form.editor != nil
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
+}
+
+// recordActionFormHotkey starts the shared recorder for an action-form hotkey field.
+func (a *App) recordActionFormHotkey(index int) {
+	if a.form == nil || index < 0 || index >= len(a.form.definitions) {
+		return
+	}
+	definition := a.form.definitions[index]
+	if definition.Type != "hotkey" && definition.Type != "dictationHotkey" {
+		return
+	}
+	kinds := defaultHotkeyRecordingKinds
+	if definition.Type == "dictationHotkey" {
+		kinds = dictationHotkeyRecordingKinds
+	}
+	a.startHotkeyRecording("action-form", &a.form.formFieldsState, index, "", kinds)
 }
 
 func (a *App) focusFormField(index int) {

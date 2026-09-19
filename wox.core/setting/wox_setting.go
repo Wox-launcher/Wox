@@ -24,12 +24,17 @@ type WoxSetting struct {
 	// OnboardingFinished records whether this user data directory has already
 	// seen the first-run guide. This is independent of account age because old
 	// users who never saw the guide should still get one skippable pass.
-	OnboardingFinished     *WoxSettingValue[bool]
-	HideOnLostFocus        *WoxSettingValue[bool]
-	ShowTray               *WoxSettingValue[bool]
-	LangCode               *WoxSettingValue[i18n.LangCode]
-	QueryHotkeys           *PlatformValue[[]QueryHotkey]
-	QueryShortcuts         *WoxSettingValue[[]QueryShortcut]
+	OnboardingFinished *WoxSettingValue[bool]
+	HideOnLostFocus    *WoxSettingValue[bool]
+	ShowTray           *WoxSettingValue[bool]
+	LangCode           *WoxSettingValue[i18n.LangCode]
+	QueryHotkeys       *PlatformValue[[]QueryHotkey]
+	// ResultBindings stores result-level hotkeys and aliases independently of
+	// homepage MRU. PlatformValue keeps same-OS Cloud Sync. Sync apply must
+	// persist the payload as-is and must not restore-validate or drop failed
+	// bindings.
+	ResultBindings         *PlatformValue[[]ResultBinding]
+	QueryAliases           *WoxSettingValue[[]QueryAlias]
 	TrayQueries            *WoxSettingValue[[]TrayQuery]
 	LaunchMode             *WoxSettingValue[LaunchMode]
 	StartPage              *WoxSettingValue[StartPage]
@@ -189,8 +194,9 @@ const (
 	LogLevelDebug = "DEBUG"
 )
 
-type QueryShortcut struct {
-	Shortcut string // support index placeholder, e.g. shortcut "wi" => "wpm install {0} to {1}", when user input "wi 1 2", the query will be "wpm install 1 to 2"
+type QueryAlias struct {
+	// Alias is stored as "Shortcut" so existing settings and Cloud Sync payloads stay readable.
+	Alias    string `json:"Shortcut"` // first-token expansion, e.g. "wi" => "wpm install {0} to {1}"
 	Query    string
 	Disabled bool
 }
@@ -202,11 +208,11 @@ type IgnoredHotkeyApp struct {
 	Icon     common.WoxImage
 }
 
-func (q *QueryShortcut) HasPlaceholder() bool {
+func (q *QueryAlias) HasPlaceholder() bool {
 	return strings.Contains(q.Query, "{0}")
 }
 
-func (q *QueryShortcut) PlaceholderCount() int {
+func (q *QueryAlias) PlaceholderCount() int {
 	return len(regexp.MustCompile(`(?m){\d}`).FindAllString(q.Query, -1))
 }
 
@@ -425,7 +431,8 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LastWindowX:                        NewWoxSettingValue(store, "LastWindowX", -1),
 		LastWindowY:                        NewWoxSettingValue(store, "LastWindowY", -1),
 		QueryHotkeys:                       NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
-		QueryShortcuts:                     NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
+		ResultBindings:                     NewPlatformValue(store, "ResultBindings", []ResultBinding{}, []ResultBinding{}, []ResultBinding{}),
+		QueryAliases:                       NewWoxSettingValue(store, "QueryAliases", []QueryAlias{}),
 		TrayQueries:                        NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		AIMCPServers:                       NewWoxSettingValue(store, "AIMCPServers", []common.AIChatMCPServerConfig{}),

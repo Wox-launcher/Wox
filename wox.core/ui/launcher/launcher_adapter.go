@@ -1109,7 +1109,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: icon, Loading: loading, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
+			Icon: icon, Loading: loading, TitleTags: fromCoreResultTitleTags(result.TitleTags), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
 			OnHover:           func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
 			OnDragStart: func() { a.startResultDrag(index) }, OnTooltip: a.setResultTailTooltip,
@@ -1118,10 +1118,18 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
 		Width: width, Height: height, UnderlayHeight: underlayHeight, ContentHeight: contentHeight, Offset: offset, StartIndex: start, StartOffset: startOffset, RowHeight: rowHeight, GroupRowHeight: groupHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
-		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
+		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Window: a.window, Items: items,
 		Complete: snapshot.queryComplete, ScrollDetached: snapshot.resultScrollDetached,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
+}
+
+func fromCoreResultTitleTags(tags []resultTitleTag) []launcherview.LauncherResultTitleTag {
+	converted := make([]launcherview.LauncherResultTitleTag, len(tags))
+	for index, tag := range tags {
+		converted[index] = launcherview.LauncherResultTitleTag{Text: tag.Text, Kind: tag.Kind, Labels: append([]string(nil), tag.Labels...), Tooltip: tag.Tooltip}
+	}
+	return converted
 }
 
 // resultTailViewProps resolves tail images and bounds their measured widths before rendering.

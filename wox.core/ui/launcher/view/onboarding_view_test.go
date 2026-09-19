@@ -625,8 +625,8 @@ func TestOnboardingTypedQueryDemosShowResultsAfterQuery(t *testing.T) {
 		{"welcome", "wpm install everything", .28, onboardingDemoDuration("welcome"), func(progress float32) woxwidget.Clip {
 			return onboardingWelcomeDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "welcome"}, 640, 360, progress).(woxwidget.Clip)
 		}},
-		{"queryShortcuts", "gh repo", .18, onboardingDemoDuration("queryShortcuts"), func(progress float32) woxwidget.Clip {
-			return onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: labels}, OnboardingStep{ID: "queryShortcuts"}, 640, 360, progress).(woxwidget.Clip)
+		{"queryAliases", "gh repo", .18, onboardingDemoDuration("queryAliases"), func(progress float32) woxwidget.Clip {
+			return onboardingQueryAliasesDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: labels}, OnboardingStep{ID: "queryAliases"}, 640, 360, progress).(woxwidget.Clip)
 		}},
 		{"wpmInstall", "wpm install", .50, onboardingDemoDuration("wpmInstall"), func(progress float32) woxwidget.Clip {
 			return onboardingPluginStoreDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{ID: "wpmInstall"}, 640, 360, progress).(woxwidget.Clip)
@@ -814,7 +814,7 @@ func TestOnboardingLauncherDemosShareCenteredDownwardSlot(t *testing.T) {
 	demos := []woxwidget.Clip{
 		onboardingPermissionsDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}}, OnboardingStep{}, 640, 360).(woxwidget.Clip),
 		onboardingFinishDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
-		onboardingQueryShortcutsDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
+		onboardingQueryAliasesDemo(OnboardingProps{Theme: woxcomponent.ControlTheme{}, Labels: map[string]string{}}, OnboardingStep{}, 640, 360, 1).(woxwidget.Clip),
 	}
 	for _, demo := range demos {
 		slot, frame, window := onboardingPlacedLauncherSlot(demo)

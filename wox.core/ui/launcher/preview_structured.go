@@ -243,13 +243,13 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 		queryHotkeys.Entries = append(queryHotkeys.Entries, entry(item.Hotkey, action, queryHotkeys.Title, userSource, detail, true))
 	}
 	sections = append(sections, queryHotkeys)
-	queryShortcuts := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_shortcuts")}
-	for _, item := range settings.QueryShortcuts {
-		if !item.Disabled && strings.TrimSpace(item.Shortcut) != "" && strings.TrimSpace(item.Query) != "" {
-			queryShortcuts.Entries = append(queryShortcuts.Entries, entry(item.Shortcut, item.Query, queryShortcuts.Title, userSource, "", false))
+	queryAliases := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_shortcuts")}
+	for _, item := range settings.QueryAliases {
+		if !item.Disabled && strings.TrimSpace(item.Alias) != "" && strings.TrimSpace(item.Query) != "" {
+			queryAliases.Entries = append(queryAliases.Entries, entry(item.Alias, item.Query, queryAliases.Title, userSource, "", false))
 		}
 	}
-	sections = append(sections, queryShortcuts)
+	sections = append(sections, queryAliases)
 	return previewview.HotkeyOverviewPreviewView(previewview.HotkeyOverviewPreviewProps{
 		Width: width, Height: height, Scale: a.densityMetrics.normalized().scale, Search: data.Search,
 		Title: a.translate("i18n:ui_hotkey_overview_title"), Subtitle: a.translate("i18n:ui_hotkey_overview_subtitle"),

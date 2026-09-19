@@ -352,6 +352,110 @@ func TestLauncherResultUsesIndependentUpdateBoundaries(t *testing.T) {
 	}
 }
 
+func TestLauncherResultTitleTagsStayVisibleWhenTitleIsLong(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 260, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+		Items: []LauncherResultItem{{
+			ID: "bound", Title: "Open a very long settings result title that would otherwise hide trailing chips",
+			TitleTags: []LauncherResultTitleTag{
+				{Text: "sz", Kind: LauncherResultTitleTagKindAlias, Tooltip: "Result alias"},
+				{Text: "ctrl+alt+s", Kind: LauncherResultTitleTagKindHotkey, Labels: []string{"Ctrl", "Alt", "S"}, Tooltip: "Result hotkey"},
+			},
+			TailWidth: 40, Tails: []LauncherResultTail{{Text: "tail", Width: 40, Height: 22}},
+		}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	if row.Description != "sz ctrl+alt+s" {
+		t.Fatalf("row description = %q, want title tags to stay readable", row.Description)
+	}
+	content := launcherResultRowContent(row)
+	viewport := content.Children[1].(woxwidget.Clip)
+	label := viewport.Child.(woxwidget.Container)
+	if viewport.Width != label.Width {
+		t.Fatalf("tagged label widths = viewport %.0f content %.0f, want the title clip to reserve the same width as the visible label", viewport.Width, label.Width)
+	}
+	labels := label.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	titleRow := labels.Children[0].(woxwidget.Flex)
+	if len(titleRow.Children) != 3 {
+		t.Fatalf("title row children = %d, want clipped title plus alias and hotkey chips", len(titleRow.Children))
+	}
+	flexible, ok := titleRow.Children[0].(woxwidget.Flexible)
+	if !ok {
+		t.Fatal("long titles must shrink before title tags")
+	}
+	built := flexible.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 180, Height: 50})
+	constrained, ok := built.(woxwidget.Constrained)
+	if !ok || constrained.MaxWidth != 180 || constrained.FillWidth {
+		t.Fatalf("title constraint = %#v, want a shrink-wrapped max width so tags follow the text", built)
+	}
+	aliasCaps := titleRow.Children[1].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	if len(aliasCaps) != 1 || launcherResultHotkeyKeycapLabel(aliasCaps[0]) != "SZ" {
+		t.Fatalf("alias keycaps = %v, want one SZ chip matching hotkey glyph case", aliasCaps)
+	}
+	hotkeyCaps := titleRow.Children[2].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+	if len(hotkeyCaps) != 3 {
+		t.Fatalf("hotkey keycaps = %d, want Ctrl, Alt, and S", len(hotkeyCaps))
+	}
+	if got := launcherResultHotkeyKeycapLabel(hotkeyCaps[0]); got != "Ctrl" {
+		t.Fatalf("first hotkey keycap = %q, want Ctrl", got)
+	}
+	if got := launcherResultHotkeyKeycapLabel(hotkeyCaps[2]); got != "S" {
+		t.Fatalf("last hotkey keycap = %q, want S", got)
+	}
+	aliasStyle := launcherResultHotkeyKeycapText(aliasCaps[0]).Style
+	hotkeyStyle := launcherResultHotkeyKeycapText(hotkeyCaps[0]).Style
+	if aliasStyle != hotkeyStyle || aliasStyle.Size != woxcomponent.ResultTitleTagFontSize {
+		t.Fatalf("title tag text style = alias %+v hotkey %+v, want the same smaller keycap type", aliasStyle, hotkeyStyle)
+	}
+	if aliasCaps[0].(woxwidget.Stack).Height != 16 || hotkeyCaps[0].(woxwidget.Stack).Height != 16 {
+		t.Fatalf("title tag keycap height = alias %.0f hotkey %.0f, want dense 16", aliasCaps[0].(woxwidget.Stack).Height, hotkeyCaps[0].(woxwidget.Stack).Height)
+	}
+
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return LauncherResultsView(LauncherResultsProps{
+			Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+			Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+			Items: []LauncherResultItem{{
+				ID: "bound", Title: "Open Wox Settings",
+				TitleTags: []LauncherResultTitleTag{{
+					Text: "ctrl+shift+s", Kind: LauncherResultTitleTagKindHotkey, Labels: []string{"Ctrl", "Shift", "S"}, Tooltip: "Result hotkey",
+				}},
+				OnTooltip: func(bool, string, woxui.Rect) {},
+			}},
+		})
+	})
+	host.AttachServices(actionSearchHostServices{})
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 50}, PixelSize: woxui.PixelSize{Width: 320, Height: 50}, Scale: 1})
+	var laidOutRow, tag woxui.AccessibilityNode
+	for _, node := range host.Snapshot().Tree.Nodes {
+		switch node.AutomationID {
+		case "launcher.result.bound":
+			laidOutRow = node
+		case "result-title-tag-bound-ctrl+shift+s":
+			tag = node
+		}
+	}
+	if laidOutRow.AutomationID == "" || tag.AutomationID == "" {
+		t.Fatal("laid-out result and title tag were missing from the host snapshot")
+	}
+	if tag.Bounds.X < laidOutRow.Bounds.X+80 || tag.Bounds.X > laidOutRow.Bounds.X+laidOutRow.Bounds.Width*0.7 {
+		t.Fatalf("title tag bounds = %#v in row %#v, want the chip immediately after the title", tag.Bounds, laidOutRow.Bounds)
+	}
+	if tag.Bounds.Height > 16 {
+		t.Fatalf("title tag height = %.0f, want dense keycaps that sit on the title line", tag.Bounds.Height)
+	}
+}
+
+func launcherResultHotkeyKeycapLabel(child woxwidget.Widget) string {
+	return launcherResultHotkeyKeycapText(child).Value
+}
+
+func launcherResultHotkeyKeycapText(child woxwidget.Widget) woxwidget.Text {
+	return child.(woxwidget.Stack).Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
+}
+
 func TestLauncherResultTailWidthDoesNotChangeLabelBoundaryConstraints(t *testing.T) {
 	labelGeometry := func(tailWidth float32) (float32, float32) {
 		result := LauncherResultsView(LauncherResultsProps{

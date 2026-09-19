@@ -14,7 +14,7 @@ func TestHotkeyOverviewFiltersEmptyEntriesAndNormalizedSearch(t *testing.T) {
 		Entries: []HotkeyOverviewPreviewEntry{
 			{RawShortcut: "", Action: "Hidden"},
 			{RawShortcut: "control+shift+f", Labels: []string{"Ctrl", "Shift", "F"}, Action: "Search in preview", Scope: "Preview", Source: "Built-in"},
-			{RawShortcut: "g", Labels: []string{"G"}, Action: "Google", Scope: "Query Shortcuts", Source: "User"},
+			{RawShortcut: "g", Labels: []string{"G"}, Action: "Google", Scope: "Query Aliases", Source: "User"},
 		},
 	}}, "Ctrl Shift F")
 

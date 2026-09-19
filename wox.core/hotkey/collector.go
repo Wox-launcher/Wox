@@ -7,6 +7,7 @@ const (
 	SourceMain      EntrySource = "main"
 	SourceSelection EntrySource = "selection"
 	SourceQuery     EntrySource = "query"
+	SourceResult    EntrySource = "result"
 	SourceDictation EntrySource = "dictation"
 )
 

@@ -68,6 +68,17 @@ func TestLauncherHotkeyDensity(t *testing.T) {
 	}
 }
 
+// TestWoxHotkeyDenseTitleTags keeps result alias/hotkey chips smaller than toolbar keys.
+func TestWoxHotkeyDenseTitleTags(t *testing.T) {
+	built, _ := WoxHotkey(HotkeyProps{Theme: &Theme{}, Compact: true, Dense: true, FontSize: ResultTitleTagFontSize, Labels: []string{"SZ", "S"}})
+	container := built.(woxwidget.Container)
+	first := container.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	label := first.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if container.Height != 16 || first.Height != 16 || label.Style.Size != ResultTitleTagFontSize {
+		t.Fatalf("dense title keycap = height %.0f/%.0f size %.0f, want 16/16/%.0f", container.Height, first.Height, label.Style.Size, ResultTitleTagFontSize)
+	}
+}
+
 // TestHotkeyThemeColors checks actual glyph, fill and stroke, including a transparent border.
 func TestHotkeyThemeColors(t *testing.T) {
 	foreground := woxui.Color{R: 12, G: 34, B: 56, A: 100}
@@ -153,5 +164,15 @@ func TestHotkeySurfaceStates(t *testing.T) {
 		if err := actual.Compare(expected); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestDenseHotkeyScalesWithLauncherDensity(t *testing.T) {
+	built, _ := WoxHotkey(HotkeyProps{Theme: &Theme{}, Dense: true, Compact: true, DensityScale: 1.5, FontSize: ResultTitleTagFontSize * 1.5, Labels: []string{"Ctrl", "K"}})
+	outer := built.(woxwidget.Container)
+	row := outer.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	cap := row.Children[0].(woxwidget.Stack)
+	if outer.Height != 24 || cap.Height != 24 || row.Gap != 6 {
+		t.Fatalf("dense keycap geometry did not scale: outer=%v key=%v gap=%v", outer.Height, cap.Height, row.Gap)
 	}
 }

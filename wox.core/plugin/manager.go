@@ -90,6 +90,8 @@ type queryPluginJob struct {
 	debounced bool
 	// intervalMs is only used for debounced jobs and stores the timer delay.
 	intervalMs int
+	// aliasRestore is the core job that restores result-alias matches.
+	aliasRestore bool
 }
 
 // QueryExecution exposes one planned query run to the UI pipeline without leaking scheduler internals.
@@ -147,6 +149,8 @@ type queryTracker struct {
 }
 
 type QueryResultSet struct {
+	// storeMu makes alias precedence atomic when plugin responses arrive concurrently.
+	storeMu   sync.Mutex
 	Query     Query
 	StartedAt int64
 	Results   *util.HashMap[string, *QueryResultCache]
@@ -162,6 +166,9 @@ func newQueryResultSet(query Query) *QueryResultSet {
 }
 
 type Manager struct {
+	// resultBindingRestores bounds callbacks that outlive their query cancellation.
+	resultBindingRestores        sync.Map
+	applyResultBindings          ResultBindingApplier
 	runtimeTriggerRegistrationMu sync.Mutex
 	instances                    []*Instance
 	instancesMu                  sync.RWMutex
@@ -229,11 +236,14 @@ const (
 	systemActionPinInQueryID        = "__system_pin_in_query__"
 	systemActionUnpinInQueryID      = "__system_unpin_in_query__"
 	systemActionResetRankingID      = "__system_reset_ranking__"
-	systemActionAddQueryShortcutID  = "__system_add_query_shortcut__"
+	systemActionAddQueryAliasID     = "__system_add_query_alias__"
 	systemActionOpenPluginSettingID = "__system_open_plugin_setting__"
+	systemActionRemoveFromMRUID     = "__system_remove_from_mru__"
+	systemActionSetResultHotkeyID   = "__system_set_result_hotkey__"
+	systemActionSetResultAliasID    = "__system_set_result_alias__"
 
-	queryShortcutFormShortcutKey = "shortcut"
-	queryShortcutFormQueryKey    = "query"
+	queryAliasFormAliasKey = "alias"
+	queryAliasFormQueryKey = "query"
 )
 
 func GetPluginManager() *Manager {
@@ -1722,7 +1732,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		resultTimingStart := time.Now()
 		defaultActionsStart := util.GetSystemTimestamp()
 		defaultActionsTimingStart := time.Now()
-		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle, response.Results[i].ScoreKey, openPluginSettingAction)
+		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i], "", openPluginSettingAction)
 		defaultActionsCost := util.GetSystemTimestamp() - defaultActionsStart
 		defaultActionsCostUs := time.Since(defaultActionsTimingStart).Microseconds()
 		totalDefaultActionsCost += defaultActionsCost
@@ -1731,7 +1741,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		polishStart := util.GetSystemTimestamp()
 		polishTimingStart := time.Now()
 		var polishTiming timetracking.ResultPolishTiming
-		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming, actionIconCache)
+		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming, actionIconCache, "", aliasMatchNone)
 		polishCost := util.GetSystemTimestamp() - polishStart
 		polishCostUs := time.Since(polishTimingStart).Microseconds()
 		totalPolishCost += polishCost
@@ -1845,11 +1855,14 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	}
 }
 
-func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle, scoreKey string) (defaultActions []QueryResultAction) {
-	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, title, subTitle, scoreKey, m.newOpenPluginSettingAction(ctx, pluginInstance))
+func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string) (defaultActions []QueryResultAction) {
+	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, result, sourceHash, m.newOpenPluginSettingAction(ctx, pluginInstance))
 }
 
-func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle, scoreKey string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
+func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
+	title := result.Title
+	subTitle := result.SubTitle
+	scoreKey := result.ScoreKey
 	resultHash := setting.NewResultHashFromParts(pluginInstance.Metadata.Id, title, subTitle, scoreKey)
 	settingManager := setting.GetSettingManager()
 	// Declare both actions first
@@ -1940,19 +1953,20 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		Action:                 resetRankingAction,
 	})
 
-	if queryText, ok := newQueryShortcutText(query, settingManager.GetWoxSetting(ctx).QueryShortcuts.Get()); ok {
-		defaultActions = append(defaultActions, m.newAddQueryShortcutAction(pluginInstance, queryText))
+	if queryText, ok := newQueryAliasText(query, settingManager.GetWoxSetting(ctx).QueryAliases.Get()); ok {
+		defaultActions = append(defaultActions, m.newAddQueryAliasAction(pluginInstance, queryText))
 	}
 
 	defaultActions = append(defaultActions, openPluginSettingAction)
+	defaultActions = append(defaultActions, m.newResultBindingActions(ctx, pluginInstance, query, result, sourceHash)...)
 
 	return defaultActions
 }
 
-// newQueryShortcutText returns the query text that can become a new shortcut.
-// Only typed queries qualify, and a query that already is a shortcut target is
+// newQueryAliasText returns the query text that can become a new query alias.
+// Only typed queries qualify, and a query that already is an alias target is
 // skipped because aliasing it again would just duplicate the existing entry.
-func newQueryShortcutText(query Query, existingShortcuts []setting.QueryShortcut) (string, bool) {
+func newQueryAliasText(query Query, existingAliases []setting.QueryAlias) (string, bool) {
 	if query.Type != QueryTypeInput {
 		return "", false
 	}
@@ -1960,22 +1974,22 @@ func newQueryShortcutText(query Query, existingShortcuts []setting.QueryShortcut
 	if queryText == "" {
 		return "", false
 	}
-	for _, shortcut := range existingShortcuts {
-		if shortcut.Query == queryText {
+	for _, alias := range existingAliases {
+		if alias.Query == queryText {
 			return "", false
 		}
 	}
 	return queryText, true
 }
 
-// newAddQueryShortcutAction saves the current query as a shortcut from an inline
+// newAddQueryAliasAction saves the current query as a query alias from an inline
 // action form. Naming an alias is a single-field edit, so it stays in the launcher
 // instead of sending the user to the settings window.
-func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText string) QueryResultAction {
+func (m *Manager) newAddQueryAliasAction(pluginInstance *Instance, queryText string) QueryResultAction {
 	return QueryResultAction{
-		Id:                     systemActionAddQueryShortcutID,
+		Id:                     systemActionAddQueryAliasID,
 		Name:                   "i18n:plugin_manager_add_query_shortcut",
-		Icon:                   icons.Get(icons.ActionQueryShortcut),
+		Icon:                   icons.Get(icons.ActionQueryAlias),
 		Type:                   QueryResultActionTypeForm,
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
@@ -1983,7 +1997,7 @@ func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText 
 			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
-					Key:        queryShortcutFormShortcutKey,
+					Key:        queryAliasFormAliasKey,
 					Label:      "i18n:plugin_manager_add_query_shortcut_shortcut",
 					Tooltip:    "i18n:plugin_manager_add_query_shortcut_shortcut_tooltip",
 					Validators: []validator.PluginSettingValidator{{Type: validator.PluginSettingValidatorTypeNotEmpty, Value: &validator.PluginSettingValidatorNotEmpty{}}},
@@ -1992,7 +2006,7 @@ func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText 
 			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
-					Key:          queryShortcutFormQueryKey,
+					Key:          queryAliasFormQueryKey,
 					Label:        "i18n:plugin_manager_add_query_shortcut_query",
 					DefaultValue: queryText,
 					Validators:   []validator.PluginSettingValidator{{Type: validator.PluginSettingValidatorTypeNotEmpty, Value: &validator.PluginSettingValidatorNotEmpty{}}},
@@ -2001,26 +2015,34 @@ func (m *Manager) newAddQueryShortcutAction(pluginInstance *Instance, queryText 
 		},
 		OnSubmit: func(ctx context.Context, actionContext FormActionContext) {
 			api := NewAPI(pluginInstance)
-			shortcut := setting.QueryShortcut{
-				Shortcut: strings.TrimSpace(actionContext.Values[queryShortcutFormShortcutKey]),
-				Query:    strings.TrimSpace(actionContext.Values[queryShortcutFormQueryKey]),
+			alias := setting.QueryAlias{
+				Alias: strings.TrimSpace(actionContext.Values[queryAliasFormAliasKey]),
+				Query: strings.TrimSpace(actionContext.Values[queryAliasFormQueryKey]),
 			}
-			if shortcut.Shortcut == "" || shortcut.Query == "" {
+			if alias.Alias == "" || alias.Query == "" {
 				return
 			}
 
-			shortcutSetting := setting.GetSettingManager().GetWoxSetting(ctx).QueryShortcuts
-			existing := shortcutSetting.Get()
+			aliasSetting := setting.GetSettingManager().GetWoxSetting(ctx).QueryAliases
+			existing := aliasSetting.Get()
 			for _, saved := range existing {
-				if strings.EqualFold(saved.Shortcut, shortcut.Shortcut) {
+				if strings.EqualFold(saved.Alias, alias.Alias) {
 					api.Notify(ctx, "i18n:plugin_manager_add_query_shortcut_duplicated")
 					return
 				}
 			}
 
-			shortcutSetting.Set(append(append([]setting.QueryShortcut(nil), existing...), shortcut))
+			if err := ValidateQueryAliasAgainstResultAliases(alias, currentResultBindings()); err != nil {
+				api.Notify(ctx, err.Error())
+				return
+			}
+			if err := aliasSetting.Set(append(append([]setting.QueryAlias(nil), existing...), alias)); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("save query alias: %v", err))
+				api.Notify(ctx, "i18n:plugin_manager_result_binding_save_failed")
+				return
+			}
 			// The settings window reads Wox settings once when it opens, so it must be
-			// told about a shortcut added from the launcher.
+			// told about an alias added from the launcher.
 			m.ui.ReloadSetting(ctx)
 			api.Notify(ctx, "i18n:plugin_manager_add_query_shortcut_success")
 		},
@@ -2380,7 +2402,7 @@ func (m *Manager) getQueryResultSetForQuery(query Query) (*QueryResultSet, bool)
 	return m.getQueryResultSet(query.SessionId, query.Id)
 }
 
-func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultOriginal QueryResult) {
+func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultOriginal QueryResult, sourceHash string, match aliasMatchKind) {
 	if query.Id == "" {
 		logger.Warn(ctx, "query id is empty, skip result cache")
 		return
@@ -2395,12 +2417,22 @@ func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance
 		return
 	}
 
-	set.Results.Store(resultOriginal.Id, &QueryResultCache{
+	set.storeMu.Lock()
+	defer set.storeMu.Unlock()
+	// A plugin can return the same stable result ID after its alias restore.
+	// Keep the restored row and its priority regardless of completion order.
+	if existing, found := set.Results.Load(resultOriginal.Id); found && existing != nil && existing.AliasMatchKind != aliasMatchNone && match == aliasMatchNone {
+		return
+	}
+	cache := &QueryResultCache{
 		Result:         resultOriginal,
 		PluginInstance: pluginInstance,
 		Query:          query,
 		Layout:         layout,
-	})
+	}
+	cache.SourceMRUHash = sourceHash
+	cache.AliasMatchKind = match
+	set.Results.Store(resultOriginal.Id, cache)
 
 }
 
@@ -2961,6 +2993,12 @@ func normalizeQueryResultDragData(dragData *QueryResultDragData) *QueryResultDra
 
 // Equal scores must still produce a deterministic order because the result cache is backed by a map.
 func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache) int {
+	if a.AliasMatchKind != b.AliasMatchKind {
+		if a.AliasMatchKind > b.AliasMatchKind {
+			return -1
+		}
+		return 1
+	}
 	switch {
 	case a.Result.Score > b.Result.Score:
 		return -1
@@ -3044,6 +3082,30 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 		return []QueryResultUI{}
 	}
 
+	var aliasResults []*QueryResultCache
+	var ordinaryResults []*QueryResultCache
+	for _, resultCache := range resultCaches {
+		if resultCache.AliasMatchKind != aliasMatchNone {
+			aliasResults = append(aliasResults, resultCache)
+			continue
+		}
+		ordinaryResults = append(ordinaryResults, resultCache)
+	}
+	sort.SliceStable(aliasResults, func(i, j int) bool {
+		return compareQueryResultCachesForDisplay(aliasResults[i], aliasResults[j]) < 0
+	})
+	aliasResults = dedupeResultBindingCaches(aliasResults)
+	ordinaryResults = dropResultCachesDuplicateOfAlias(aliasResults, ordinaryResults)
+
+	resultCaches = ordinaryResults
+	if len(resultCaches) == 0 && len(aliasResults) > 0 {
+		finalResults := make([]QueryResultUI, 0, len(aliasResults))
+		for _, resultCache := range aliasResults {
+			finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
+		}
+		return finalResults
+	}
+
 	groupScores := map[string]int64{}
 	for _, resultCache := range resultCaches {
 		result := resultCache.Result
@@ -3079,7 +3141,10 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 		groupedResults[group] = groupResults
 	}
 
-	finalResults := make([]QueryResultUI, 0, len(resultCaches)+len(groups))
+	finalResults := make([]QueryResultUI, 0, len(aliasResults)+len(resultCaches)+len(groups))
+	for _, resultCache := range aliasResults {
+		finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
+	}
 	for _, group := range groups {
 		groupResults := groupedResults[group]
 		if len(groupResults) == 0 {
@@ -3110,12 +3175,17 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 }
 
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult) QueryResult {
-	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false, nil)
+	return m.polishResultWithSource(ctx, pluginInstance, query, layout, result, "", aliasMatchNone)
+}
+
+// polishResultWithSource publishes restore identity together with the cached result.
+func (m *Manager) polishResultWithSource(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, sourceHash string, match aliasMatchKind) QueryResult {
+	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false, nil, sourceHash, match)
 	m.logPolishResultTiming(ctx, query, queryDiagnosticPluginLabel(pluginInstance), result, timing)
 	return result
 }
 
-func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool, actionIconCache map[common.WoxImage]common.WoxImage) (QueryResult, timetracking.ResultPolishTiming) {
+func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool, actionIconCache map[common.WoxImage]common.WoxImage, sourceHash string, match aliasMatchKind) (QueryResult, timetracking.ResultPolishTiming) {
 	polishStart := util.GetSystemTimestamp()
 	polishTimingStart := time.Now()
 	var IconConversion timetracking.IconConversionTimingSummary
@@ -3413,6 +3483,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	devScoreTailStart := util.GetSystemTimestamp()
 	devScoreTailTimingStart := time.Now()
 	result.Tails = m.appendDevScoreTail(ctx, result.Tails, result.Score)
+	sourceHash = resolveResultSourceHash(pluginInstance, query, result, sourceHash)
+	m.applyResultBindingTitleTags(ctx, pluginInstance, query, &result, sourceHash)
 	DevScoreTailCost := util.GetSystemTimestamp() - devScoreTailStart
 	DevScoreTailCostUs := time.Since(devScoreTailTimingStart).Microseconds()
 	ScoreCost := util.GetSystemTimestamp() - scoreStart
@@ -3425,7 +3497,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	// Because we may have replaced preview with remote preview
 	// we need to restore the original preview in the cache
 	resultCopy.Preview = originalPreview
-	m.storeQueryResult(ctx, pluginInstance, query, layout, resultCopy)
+	m.storeQueryResult(ctx, pluginInstance, query, layout, resultCopy, sourceHash, match)
 	CacheCost := util.GetSystemTimestamp() - cacheStart
 	CacheCostUs := time.Since(cacheTimingStart).Microseconds()
 	polishCost := util.GetSystemTimestamp() - polishStart
@@ -3699,17 +3771,20 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			return actions[i].IsDefault
 		})
 
+		bindingResult := resultCache.Result
+		bindingResult.Actions = actions
 		if resultCache.Query.Env.IsMRU {
 			// MRU restore owns its system actions, including the removal callback's
 			// captured item hash. Reuse them after GetUpdatableResult filters them out.
 			for _, action := range resultCache.Result.Actions {
-				if action.IsSystemAction {
+				if action.IsSystemAction && action.Id != systemActionSetResultHotkeyID && action.Id != systemActionSetResultAliasID {
 					actions = append(actions, action)
 				}
 			}
+			actions = append(actions, m.newResultBindingActions(ctx, pluginInstance, resultCache.Query, bindingResult, resultCache.SourceMRUHash)...)
 		} else {
 			// Regular queries regenerate system actions to reflect pin/unpin changes.
-			actions = append(actions, m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Result.ScoreKey)...)
+			actions = append(actions, m.getDefaultActions(ctx, pluginInstance, resultCache.Query, bindingResult, resultCache.SourceMRUHash)...)
 		}
 
 		// Translate action names
@@ -3839,6 +3914,10 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 		resultCache.Result.DragData = dragData
 	}
 
+	m.applyResultBindingTitleTags(ctx, pluginInstance, resultCache.Query, &resultCache.Result, resultCache.SourceMRUHash)
+	titleTags := append([]QueryResultTitleTag(nil), resultCache.Result.TitleTags...)
+	result.TitleTags = &titleTags
+
 	// Update icon in cache if present
 	if result.Icon != nil {
 		// GetUpdatableResult returns the current icon as a non-nil field, and
@@ -3949,15 +4028,17 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 		}
 	}
 
+	titleTags := append([]QueryResultTitleTag(nil), resultCache.Result.TitleTags...)
 	return &UpdatableResult{
-		Id:       resultId,
-		Title:    &title,
-		SubTitle: &subTitle,
-		Icon:     &icon,
-		Preview:  &preview,
-		Tails:    &tails,
-		Actions:  &actions,
-		DragData: dragData,
+		Id:        resultId,
+		Title:     &title,
+		SubTitle:  &subTitle,
+		Icon:      &icon,
+		Preview:   &preview,
+		Tails:     &tails,
+		TitleTags: &titleTags,
+		Actions:   &actions,
+		DragData:  dragData,
 	}
 }
 
@@ -4087,11 +4168,16 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 		}
 	} else {
 		instances := m.pluginInstancesSnapshot()
-		jobs = make([]queryPluginJob, 0, len(instances))
+		jobs = make([]queryPluginJob, 0, len(instances)+1)
 		checkedCount = len(instances)
 		for _, pluginInstance := range instances {
 			appendJob(pluginInstance)
 		}
+	}
+
+	if query.IsGlobalQuery() && strings.TrimSpace(query.Search) != "" && m.hasResultAliases() {
+		jobs = append([]queryPluginJob{{aliasRestore: true}}, jobs...)
+		immediateCount++
 	}
 
 	if tracker := timetracking.New("query_plan"); tracker.Enabled() {
@@ -4111,6 +4197,10 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 }
 
 func (e *queryExecution) startPluginJob(job queryPluginJob) {
+	if job.aliasRestore {
+		e.manager.runResultAliasJob(e, job)
+		return
+	}
 	pluginLabel := queryDiagnosticPluginLabel(job.pluginInstance)
 	if job.debounced {
 		if tracker := timetracking.New("start_plugin_job"); tracker.Enabled() {
@@ -4472,7 +4562,7 @@ func (m *Manager) getQueryFirstFlushDeadlineMs(jobs []queryPluginJob, planElapse
 	var maxDeliveryMs float64
 	hasDeliveryHistory := false
 	for _, job := range jobs {
-		if job.debounced {
+		if job.aliasRestore || job.debounced || job.pluginInstance == nil {
 			continue
 		}
 		if ewma, ok := m.pluginResultDeliveryLatency.Load(job.pluginInstance.Metadata.Id); ok {
@@ -4558,11 +4648,11 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		if len(woxSetting.QueryShortcuts.Get()) > 0 {
+		if len(woxSetting.QueryAliases.Get()) > 0 {
 			originQuery := plainQuery.QueryText
-			expandedQuery := m.expandQueryShortcut(ctx, plainQuery.QueryText, woxSetting.QueryShortcuts.Get())
+			expandedQuery := m.expandQueryAlias(ctx, plainQuery.QueryText, woxSetting.QueryAliases.Get())
 			if originQuery != expandedQuery {
-				logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, expandedQuery))
+				logger.Info(ctx, fmt.Sprintf("expand query alias: %s -> %s", originQuery, expandedQuery))
 				newQuery = expandedQuery
 			}
 		}
@@ -4623,32 +4713,31 @@ func (m *Manager) getActiveFileExplorerPath(ctx context.Context) string {
 	return window.GetActiveFileExplorerPath()
 }
 
-func (m *Manager) expandQueryShortcut(ctx context.Context, query string, queryShorts []setting.QueryShortcut) (newQuery string) {
+func (m *Manager) expandQueryAlias(ctx context.Context, query string, queryAliases []setting.QueryAlias) (newQuery string) {
 	newQuery = query
 
-	//sort query shorts by shortcut length, we will expand the longest shortcut first
-	slices.SortFunc(queryShorts, func(i, j setting.QueryShortcut) int {
-		return len(j.Shortcut) - len(i.Shortcut)
+	// Expand the longest alias first so "wix" wins over "wi".
+	slices.SortFunc(queryAliases, func(i, j setting.QueryAlias) int {
+		return len(j.Alias) - len(i.Alias)
 	})
 
-	for _, shortcut := range queryShorts {
-		if shortcut.Disabled {
+	for _, alias := range queryAliases {
+		if alias.Disabled {
 			continue
 		}
 
-		// Query shortcuts are command-style aliases for the first query token. Plain
-		// prefix matching made short aliases such as "th" rewrite normal queries like
-		// "theme xx", so the shortcut must end at the query boundary while still
-		// supporting "th args".
-		if query == shortcut.Shortcut || strings.HasPrefix(query, shortcut.Shortcut+" ") {
-			if !shortcut.HasPlaceholder() {
-				newQuery = strings.Replace(query, shortcut.Shortcut, shortcut.Query, 1)
+		// Query aliases rewrite only the first token. Plain prefix matching made
+		// short aliases such as "th" rewrite normal queries like "theme xx", so
+		// the alias must end at the query boundary while still supporting "th args".
+		if query == alias.Alias || strings.HasPrefix(query, alias.Alias+" ") {
+			if !alias.HasPlaceholder() {
+				newQuery = strings.Replace(query, alias.Alias, alias.Query, 1)
 				break
 			} else {
-				queryWithoutShortcut := strings.Replace(query, shortcut.Shortcut, "", 1)
-				queryWithoutShortcut = strings.TrimLeft(queryWithoutShortcut, " ")
-				parameters := strings.Split(queryWithoutShortcut, " ")
-				placeholderCount := shortcut.PlaceholderCount()
+				queryWithoutAlias := strings.Replace(query, alias.Alias, "", 1)
+				queryWithoutAlias = strings.TrimLeft(queryWithoutAlias, " ")
+				parameters := strings.Split(queryWithoutAlias, " ")
+				placeholderCount := alias.PlaceholderCount()
 				var paramsCount = 0
 
 				var params []any
@@ -4661,7 +4750,7 @@ func (m *Manager) expandQueryShortcut(ctx context.Context, query string, querySh
 						nonPrams += " " + param
 					}
 				}
-				newQuery = stringFormatter.Format(shortcut.Query, params...) + nonPrams
+				newQuery = stringFormatter.Format(alias.Query, params...) + nonPrams
 				break
 			}
 		}
@@ -4753,13 +4842,14 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 
 func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, actionId string, contextData map[string]string) {
 	meta := resultCache.PluginInstance.Metadata
+	if isResultBindingMaintenanceAction(actionId) {
+		return
+	}
+
 	// Ranking history describes how often a result is used, so maintenance actions
 	// that only change Wox configuration must not boost the result they were run from.
-	if actionId != systemActionResetRankingID && actionId != systemActionAddQueryShortcutID {
-		// Add actioned result for statistics
-		scoreHash := resultScoreHash(meta.Id, resultCache.Result)
-		setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
-	}
+	scoreHash := resultScoreHash(meta.Id, resultCache.Result)
+	setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
 
 	// Add to MRU if plugin supports it
 	if meta.IsSupportFeature(MetadataFeatureMRU) {
@@ -4770,32 +4860,7 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 			Icon:        resultCache.Result.Icon,
 			ContextData: contextData,
 		}
-
-		// Decide MRU identity hash based on plugin metadata feature params
-		hashTitle := mruItem.Title
-		hashSubTitle := mruItem.SubTitle
-		if params, err := meta.GetFeatureParamsForMRU(); err == nil {
-			switch params.HashBy {
-			case "rawquery":
-				if resultCache.Query.RawQuery != "" {
-					hashTitle = resultCache.Query.RawQuery
-					hashSubTitle = ""
-				}
-			case "search":
-				if resultCache.Query.Search != "" {
-					hashTitle = resultCache.Query.Search
-					hashSubTitle = ""
-				}
-			case "scorekey":
-				if resultCache.Result.ScoreKey != "" {
-					hashTitle = resultCache.Result.ScoreKey
-					hashSubTitle = ""
-				}
-			default:
-				// "title" or unknown: keep default Title/SubTitle based hash
-			}
-		}
-		mruItem.Hash = string(setting.NewResultHash(meta.Id, hashTitle, hashSubTitle))
+		mruItem.Hash = resolveResultSourceHash(resultCache.PluginInstance, resultCache.Query, resultCache.Result, resultCache.SourceMRUHash)
 		if err := setting.GetSettingManager().AddMRUItem(ctx, mruItem); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to add MRU item: %s", err.Error()))
 		}
@@ -5072,10 +5137,11 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 			// Keep the core-owned plugin settings action consistent with regular query results.
 			restored.Actions = append(restored.Actions, m.newOpenPluginSettingAction(ctx, pluginInstance))
+			restored.Actions = append(restored.Actions, m.newResultBindingActions(ctx, pluginInstance, query, *restored, item.Hash)...)
 
 			// Add "Remove from MRU" action to each MRU result
 			removeMRUAction := QueryResultAction{
-				Id:             uuid.NewString(),
+				Id:             systemActionRemoveFromMRUID,
 				Name:           i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
 				Icon:           icons.Get(icons.ActionDelete),
 				IsSystemAction: true,
@@ -5092,7 +5158,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			restored.Actions = append(restored.Actions, removeMRUAction)
 			restored.Score = item.Score
 
-			polishedResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, *restored)
+			polishedResult := m.polishResultWithSource(ctx, pluginInstance, query, QueryLayout{}, *restored, item.Hash, aliasMatchNone)
 			results = append(results, polishedResult.ToUI())
 		}
 	}

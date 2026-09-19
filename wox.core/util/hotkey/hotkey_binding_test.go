@@ -30,3 +30,27 @@ func TestParseBindingRejectsInvalidPrefixedBinding(t *testing.T) {
 		t.Fatalf("expected empty hold binding to be rejected")
 	}
 }
+
+func TestBindingKeyUsesNativeChordIdentity(t *testing.T) {
+	for _, pair := range [][2]string{{"ctrl+alt+k", "Alt+Ctrl+K"}, {"win+k", "command+k"}, {"hold:left_alt", "left_alt"}, {"left_ctrl+left_alt", "left_alt+left_ctrl"}} {
+		left, err := BindingKey(pair[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		right, err := BindingKey(pair[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if left != right {
+			t.Fatalf("equivalent keys differ: %v", pair)
+		}
+	}
+	left, _ := BindingKey("left_alt")
+	right, _ := BindingKey("right_alt")
+	if left == right {
+		t.Fatal("left and right modifiers were collapsed")
+	}
+	if _, err := BindingKey("ctrl+not-a-key"); err == nil {
+		t.Fatal("invalid key accepted")
+	}
+}

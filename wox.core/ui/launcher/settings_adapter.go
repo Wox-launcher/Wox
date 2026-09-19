@@ -320,7 +320,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			fullscreenHotkeyRow = target
 			continue
 		}
-		// Query Shortcuts and Tray Queries sit above Network, so proxy rows wait
+		// Query Aliases and Tray Queries sit above Network, so proxy rows wait
 		// until those tables have been appended.
 		if snapshot.tab == "general" && (item.key == "HttpProxyEnabled" || item.key == "HttpProxyUrl") {
 			networkRows = append(networkRows, target)

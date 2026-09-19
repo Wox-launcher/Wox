@@ -47,7 +47,7 @@ func onboardingDemoDuration(stepID string) time.Duration {
 		return 9200 * time.Millisecond
 	case "queryHotkeysNormal", "queryHotkeysWebPanel", "queryHotkeysSilent":
 		return 4600 * time.Millisecond
-	case "queryShortcuts":
+	case "queryAliases":
 		return 4400 * time.Millisecond
 	case "trayQueries":
 		return 5000 * time.Millisecond
@@ -84,8 +84,8 @@ func onboardingDemoScene(props OnboardingProps, step OnboardingStep, width, heig
 		return onboardingQueryHotkeysDemo(props, step, width, height, .50+progress*.44)
 	case "queryHotkeysSilent":
 		return onboardingQueryHotkeySilentDemo(props, step, width, height, progress)
-	case "queryShortcuts":
-		return onboardingQueryShortcutsDemo(props, step, width, height, progress)
+	case "queryAliases":
+		return onboardingQueryAliasesDemo(props, step, width, height, progress)
 	case "trayQueries":
 		return onboardingTrayQueriesDemo(props, step, width, height, progress)
 	case "wpmInstall":
@@ -865,8 +865,8 @@ func onboardingColorFlag(color woxui.Color) woxwidget.Widget {
 	return woxwidget.Container{Width: 8, Height: 28, Radius: 2, Color: color}
 }
 
-// onboardingQueryShortcutsDemo shows that the visible alias stays unchanged while its provider query expands.
-func onboardingQueryShortcutsDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
+// onboardingQueryAliasesDemo shows that the visible alias stays unchanged while its provider query expands.
+func onboardingQueryAliasesDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
 	query, resultsOpacity := demoTypedQueryScene("gh repo", progress, .18, onboardingDemoDuration(step.ID))
 	expanded := progress >= .68 && progress < .94
 	contentLeft := float32(48)
@@ -874,8 +874,8 @@ func onboardingQueryShortcutsDemo(props OnboardingProps, step OnboardingStep, wi
 	contentWidth := width - 100
 	windowTop := contentTop + 70
 	windowHeight := max(float32(180), height-windowTop-36)
-	subtitle := props.Labels["queryShortcuts.body"]
-	tail := props.Labels["queryShortcuts.title"]
+	subtitle := props.Labels["queryAliases.body"]
+	tail := props.Labels["queryAliases.title"]
 	if expanded {
 		subtitle = "github repo"
 		tail = "gh"

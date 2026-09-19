@@ -2,6 +2,7 @@ package hotkey
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ type Callbacks struct {
 	OnSelection                  func(combineKey string)
 	OnQuery                      func(combineKey string, queryHotkey setting.QueryHotkey)
 	QueryCanTriggerBeforeRelease func(queryHotkey setting.QueryHotkey) bool
+	OnResult                     func(combineKey string, binding setting.ResultBinding)
 	OnDictationHoldPress         func(ctx context.Context, actionID string)
 	OnDictationHoldRelease       func(ctx context.Context, actionID string)
 	OnDictationPressAction       func(ctx context.Context, actionID string)
@@ -26,6 +28,7 @@ type WoxConfig struct {
 	MainHotkey      string
 	SelectionHotkey string
 	QueryHotkeys    []setting.QueryHotkey
+	ResultBindings  []setting.ResultBinding
 }
 
 // DictationBinding is the runtime hotkey binding for one dictation action.
@@ -59,6 +62,7 @@ func WoxConfigFromSetting(woxSetting *setting.WoxSetting) WoxConfig {
 		MainHotkey:      woxSetting.MainHotkey.Get(),
 		SelectionHotkey: woxSetting.SelectionHotkey.Get(),
 		QueryHotkeys:    cloneQueryHotkeys(woxSetting.QueryHotkeys.Get()),
+		ResultBindings:  resultBindingsFromSetting(woxSetting),
 	}
 }
 
@@ -83,6 +87,12 @@ func (s *Service) UpdateWoxConfig(ctx context.Context, config WoxConfig, restore
 
 	previousEntries := s.collector.snapshot()
 	s.collectWoxConfig(ctx, config)
+	if restoreCollectorOnFailure {
+		if err := validateResultHotkeyConflicts(s.collector.snapshot()); err != nil {
+			s.collector.restore(previousEntries)
+			return err
+		}
+	}
 	if err := s.registerAllLocked(ctx); err != nil {
 		if restoreCollectorOnFailure {
 			s.collector.restore(previousEntries)
@@ -104,6 +114,10 @@ func (s *Service) UpdateDictationBindings(ctx context.Context, bindings []Dictat
 		return err
 	}
 	if registerNow {
+		if err := validateResultHotkeyConflicts(s.collector.snapshot()); err != nil {
+			s.collector.restore(previousEntries)
+			return err
+		}
 		if err := s.registerAllLocked(ctx); err != nil {
 			s.collector.restore(previousEntries)
 			return err
@@ -149,7 +163,7 @@ func EffectiveSelectionHotkeyForRuntime(selectionHotkey string) string {
 }
 
 func (s *Service) registerAllLocked(ctx context.Context) error {
-	entries := s.collector.snapshot()
+	entries := usableResultHotkeys(ctx, s.collector.snapshot())
 	specs, specsErr := buildHotkeySpecs(entries)
 	if specsErr != nil {
 		return specsErr
@@ -314,6 +328,8 @@ func (s *Service) collectWoxConfig(ctx context.Context, config WoxConfig) {
 		})
 	}
 	s.collector.replaceSource(SourceQuery, queryEntries)
+
+	s.collectResultBindings(config.ResultBindings)
 }
 
 func (s *Service) collectDictationBindings(ctx context.Context, bindings []DictationBinding) error {
@@ -361,4 +377,144 @@ func cloneQueryHotkeys(queryHotkeys []setting.QueryHotkey) []setting.QueryHotkey
 		return nil
 	}
 	return append([]setting.QueryHotkey(nil), queryHotkeys...)
+}
+
+// resultBindingsFromSetting copies platform bindings when the setting exists.
+func resultBindingsFromSetting(woxSetting *setting.WoxSetting) []setting.ResultBinding {
+	if woxSetting == nil || woxSetting.ResultBindings == nil {
+		return nil
+	}
+	return setting.CloneResultBindings(woxSetting.ResultBindings.Get())
+}
+
+// validateResultHotkeyConflicts checks all owners, including dictation, before
+// native registration can silently skip or overwrite a duplicate result chord.
+func validateResultHotkeyConflicts(entries []Entry) error {
+	seen := make(map[string]Entry, len(entries))
+	for _, entry := range entries {
+		key, err := utilhotkey.BindingKey(entry.CombineKey)
+		if err != nil {
+			if entry.Source == SourceResult {
+				return err
+			}
+			continue
+		}
+		if key == "" {
+			continue
+		}
+		if previous, found := seen[key]; found && (entry.Source == SourceResult || previous.Source == SourceResult) {
+			return fmt.Errorf("i18n:plugin_manager_result_hotkey_conflict")
+		}
+		seen[key] = entry
+	}
+	return nil
+}
+
+// missingResultHotkey checks actual native ownership, not just group success.
+func missingResultHotkey(entries, registered []Entry) error {
+	for _, entry := range entries {
+		if entry.Source != SourceResult {
+			continue
+		}
+		found := false
+		for _, active := range registered {
+			if active.Source == SourceResult && active.ID == entry.ID && active.CombineKey == entry.CombineKey {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("result hotkey was not registered: %s (%s)", entry.CombineKey, entry.ID)
+		}
+	}
+	return nil
+}
+
+// ResultBindingRegistrationError reports partial registrations after startup or sync.
+func (s *Service) ResultBindingRegistrationError() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return missingResultHotkey(s.collector.snapshot(), s.registered)
+}
+
+// ApplyResultBindings keeps registration and persistence in one serialized change.
+// Existing unrelated unavailable hotkeys retain the service's partial-success policy.
+func (s *Service) ApplyResultBindings(ctx context.Context, bindings []setting.ResultBinding, persist func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previousEntries := s.collector.snapshot()
+	previousSpecs := cloneHotkeySpecs(s.registeredSpecs)
+	previousRegistered := cloneEntries(s.registered)
+	s.collectResultBindings(bindings)
+	pending := s.collector.snapshot()
+	if err := validateResultHotkeyConflicts(pending); err != nil {
+		s.collector.restore(previousEntries)
+		return err
+	}
+	specs, err := buildHotkeySpecs(pending)
+	if err != nil {
+		s.collector.restore(previousEntries)
+		return err
+	}
+	err = s.registerSpecsLocked(ctx, pending, specs)
+	if err == nil {
+		err = missingResultHotkey(s.collector.snapshot(), s.registered)
+	}
+	if err == nil {
+		err = persist()
+	}
+	if err == nil {
+		return nil
+	}
+	s.collector.restore(previousEntries)
+	// Restore the exact previously active registrations, not unavailable saved keys.
+	rollbackErr := s.registerSpecsLocked(ctx, previousRegistered, previousSpecs)
+	if rollbackErr != nil {
+		return errors.Join(err, fmt.Errorf("restore previous hotkeys: %w", rollbackErr))
+	}
+	return err
+}
+
+// collectResultBindings snapshots callback data for the registered hotkeys.
+func (s *Service) collectResultBindings(bindings []setting.ResultBinding) {
+	entries := make([]Entry, 0, len(bindings))
+	for _, binding := range setting.CloneResultBindings(bindings) {
+		if strings.TrimSpace(binding.Hotkey) == "" {
+			continue
+		}
+		entries = append(entries, Entry{ID: binding.Hash, CombineKey: strings.TrimSpace(binding.Hotkey), OnPress: func() {
+			if s.callbacks.OnResult != nil {
+				s.callbacks.OnResult(binding.Hotkey, binding)
+			}
+		}})
+	}
+	s.collector.replaceSource(SourceResult, entries)
+}
+
+// usableResultHotkeys isolates invalid or conflicting synced bindings so they
+// cannot disable main, selection, query, or dictation hotkeys on this device.
+func usableResultHotkeys(ctx context.Context, entries []Entry) []Entry {
+	used := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if entry.Source != SourceResult {
+			key, _ := utilhotkey.BindingKey(entry.CombineKey)
+			if key != "" {
+				used[key] = true
+			}
+		}
+	}
+	usable := entries[:0]
+	for _, entry := range entries {
+		if entry.Source == SourceResult {
+			key, err := utilhotkey.BindingKey(entry.CombineKey)
+			_, specErr := buildHotkeySpecs([]Entry{entry})
+			if err != nil || specErr != nil || key == "" || used[key] {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("skip unavailable result hotkey: %s (%s)", entry.CombineKey, entry.ID))
+				continue
+			}
+			used[key] = true
+		}
+		usable = append(usable, entry)
+	}
+	return usable
 }

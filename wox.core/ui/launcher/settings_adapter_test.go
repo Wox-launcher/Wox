@@ -194,8 +194,8 @@ func TestHotkeySettingsTablesKeepFlutterOuterGap(t *testing.T) {
 		tableSpacers++
 		lastTableSpacer = spacer
 	}
-	if tableSpacers != 2 {
-		t.Fatalf("hotkey table spacers = %d, want IgnoredHotkeyApps, QueryHotkeys", tableSpacers)
+	if tableSpacers != 3 {
+		t.Fatalf("hotkey table spacers = %d, want IgnoredHotkeyApps, ResultBindings, QueryHotkeys", tableSpacers)
 	}
 	if lastTableSpacer.Padding.Bottom != 24 {
 		t.Fatalf("last table outer bottom gap = %v, want Flutter's 24px", lastTableSpacer.Padding.Bottom)
@@ -237,7 +237,7 @@ func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 		lastTableSpacer = spacer
 	}
 	if tableSpacers != 2 {
-		t.Fatalf("general table spacers = %d, want QueryShortcuts, TrayQueries", tableSpacers)
+		t.Fatalf("general table spacers = %d, want QueryAliases, TrayQueries", tableSpacers)
 	}
 	if lastTableSpacer.Padding.Bottom != 24 {
 		t.Fatalf("last table outer bottom gap = %v, want Flutter's 24px", lastTableSpacer.Padding.Bottom)

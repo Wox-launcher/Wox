@@ -36,6 +36,19 @@ func LauncherResultTailsBoundaryKey(id string) woxwidget.Key {
 	return woxwidget.Key(launcherResultBoundaryKeyPrefix + id + "-tails")
 }
 
+const (
+	LauncherResultTitleTagKindAlias  = "alias"
+	LauncherResultTitleTagKindHotkey = "hotkey"
+)
+
+// LauncherResultTitleTag is one chip rendered immediately after the result title.
+type LauncherResultTitleTag struct {
+	Text    string
+	Kind    string
+	Labels  []string
+	Tooltip string
+}
+
 // LauncherResultTail contains one resolved result-tail visual and its measured width.
 type LauncherResultTail struct {
 	Text           string
@@ -59,6 +72,7 @@ type LauncherResultItem struct {
 	Hovered            bool
 	Icon               *woxui.Image
 	Loading            bool
+	TitleTags          []LauncherResultTitleTag
 	Tails              []LauncherResultTail
 	TailWidth          float32
 	TailHeight         float32
@@ -90,6 +104,7 @@ type LauncherResultsProps struct {
 	SelectedTailColor woxui.Color
 	Theme             woxcomponent.Theme
 	DensityScale      float32
+	Window            *woxui.Window
 	Complete          bool
 	ScrollDetached    bool
 	Items             []LauncherResultItem
@@ -111,6 +126,7 @@ type launcherResultRowProps struct {
 	SelectedTailColor woxui.Color
 	Theme             woxcomponent.Theme
 	DensityScale      float32
+	Window            *woxui.Window
 	TitleStyle        woxui.TextStyle
 	SubtitleStyle     woxui.TextStyle
 }
@@ -228,7 +244,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 			Item: item, RowWidth: rowWidth, RowHeight: props.RowHeight, GroupRowHeight: props.GroupRowHeight, InnerRowWidth: innerRowWidth,
 			BaseHeight: baseHeight, IconSize: iconSize, IconGap: iconGap, ItemPadding: props.ItemPadding, ItemRadius: props.ItemRadius,
 			TailColor: props.TailColor, SelectedTailColor: props.SelectedTailColor, Theme: props.Theme, DensityScale: props.DensityScale,
-			TitleStyle: titleStyle, SubtitleStyle: subtitleStyle,
+			Window: props.Window, TitleStyle: titleStyle, SubtitleStyle: subtitleStyle,
 		}
 		rows = append(rows, launcherResultRow(rowProps))
 	}
@@ -343,7 +359,24 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	labelContentWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-scaledLauncherSize(20, props.DensityScale))
 	labelWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-trailingWidth-props.IconGap*float32(gapCount))
 	titleProps := launcherResultTextProps{Value: titleValue, Style: props.TitleStyle, Color: title}
-	labelChildren := []woxwidget.Widget{launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)}
+	titleText := launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)
+	titleWidget := titleText
+	titleTags := launcherResultVisibleTitleTags(item.TitleTags)
+	if len(titleTags) > 0 {
+		// Cap the title to leftover width so chips stay visible, but shrink-wrap
+		// the text so tags sit immediately after it instead of the row's tail edge.
+		// Capture titleText, not titleWidget: the later Flex assignment would
+		// otherwise make this builder clip itself and overflow the stack.
+		labelContentWidth = labelWidth
+		titleChildren := []woxwidget.Widget{woxwidget.Flexible{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			return woxwidget.Constrained{MaxWidth: max(float32(0), size.Width), Child: titleText}
+		}}}}
+		for _, tag := range titleTags {
+			titleChildren = append(titleChildren, launcherResultTitleTag(item, tag, tailColor, props.Theme, props.Window, props.DensityScale))
+		}
+		titleWidget = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(6, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: titleChildren}
+	}
+	labelChildren := []woxwidget.Widget{titleWidget}
 	subtitleValue := launcherResultSingleLineText(item.Subtitle)
 	labelGap := float32(0)
 	if subtitleValue != "" {
@@ -401,7 +434,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID)), AutomationID: "launcher.result." + item.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: titleValue, Description: subtitleValue, Value: item.QuickSelectNumber, Selected: item.Selected, Hovered: item.Hovered,
+		Label: titleValue, Description: launcherResultSemanticsDescription(subtitleValue, item.TitleTags), Value: item.QuickSelectNumber, Selected: item.Selected, Hovered: item.Hovered,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {
@@ -415,6 +448,81 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 			return nil
 		},
 		Child: resultControl,
+	}
+}
+
+func launcherResultVisibleTitleTags(tags []LauncherResultTitleTag) []LauncherResultTitleTag {
+	visible := make([]LauncherResultTitleTag, 0, len(tags))
+	for _, tag := range tags {
+		if strings.TrimSpace(tag.Text) == "" {
+			continue
+		}
+		visible = append(visible, tag)
+	}
+	return visible
+}
+
+func launcherResultSemanticsDescription(subtitle string, tags []LauncherResultTitleTag) string {
+	parts := make([]string, 0, 1+len(tags))
+	if subtitle != "" {
+		parts = append(parts, subtitle)
+	}
+	for _, tag := range tags {
+		if text := strings.TrimSpace(tag.Text); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// launcherResultTitleTag draws alias and hotkey chips with the shared keycap chrome.
+func launcherResultTitleTag(item LauncherResultItem, tag LauncherResultTitleTag, foreground woxui.Color, theme woxcomponent.Theme, window *woxui.Window, densityScale float32) woxwidget.Widget {
+	labels := tag.Labels
+	if len(labels) == 0 {
+		labels = []string{tag.Text}
+	} else {
+		labels = append([]string(nil), labels...)
+	}
+	// Hotkey keys are already title-cased / uppercased. Keep alias on that
+	// same glyph size so "sz" does not sit next to "S" at a smaller x-height.
+	if tag.Kind != LauncherResultTitleTagKindHotkey {
+		for index, label := range labels {
+			labels[index] = strings.ToUpper(label)
+		}
+	}
+	content, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Theme: &theme, Selected: item.Selected, Labels: labels, Foreground: foreground,
+		FontSize: scaledLauncherSize(woxcomponent.ResultTitleTagFontSize, densityScale), Compact: true, Dense: true, DensityScale: densityScale, Window: window,
+	})
+	if tooltip := strings.TrimSpace(tag.Tooltip); tooltip != "" && item.OnTooltip != nil {
+		return launcherResultTitleTagHover(item, tag, tooltip, content)
+	}
+	return content
+}
+
+// launcherResultTitleTagHover keeps row activation on the title chip because a
+// nested hover target would otherwise swallow select, actions, and drag.
+func launcherResultTitleTagHover(item LauncherResultItem, tag LauncherResultTitleTag, tooltip string, content woxwidget.Widget) woxwidget.Widget {
+	id := fmt.Sprintf("result-title-tag-%s-%s", item.ID, tag.Text)
+	onPointer, onHover := hoverEnterOnPointerMove(item.OnHover)
+	return woxwidget.Semantics{
+		Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleText, Label: tag.Text, Description: tooltip,
+		Child: woxwidget.Gesture{
+			ID: id, OnPointer: onPointer, OnHover: onHover, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				item.OnTooltip(inside, tooltip, bounds)
+			}, OnTap: item.OnSelect, OnSecondaryTapDown: func(woxui.Point) {
+				if item.OnSecondaryTapDown != nil {
+					item.OnSecondaryTapDown()
+				}
+			}, OnDragStart: item.OnDragStart, OnDoubleTap: func() {
+				if item.OnSelect != nil {
+					item.OnSelect()
+				}
+				if item.OnActivate != nil {
+					item.OnActivate()
+				}
+			}, Child: content,
+		},
 	}
 }
 

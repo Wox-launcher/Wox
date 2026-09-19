@@ -43,7 +43,7 @@ const (
 	ActionPin                  = "action.pin"
 	ActionUnpin                = "action.unpin"
 	ActionRevertRanking        = "action.revert-ranking"
-	ActionQueryShortcut        = "action.query-shortcut"
+	ActionQueryAlias           = "action.query-alias"
 	ActionOpenContainingFolder = "action.open-containing-folder"
 	ActionContextMenu          = "action.context-menu"
 	ActionPreview              = "action.preview"

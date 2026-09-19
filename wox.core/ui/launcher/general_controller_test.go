@@ -107,12 +107,12 @@ func TestGeneralControllerForm(t *testing.T) {
 		t.Fatalf("Form should be nil initially")
 	}
 	form := newFormFieldsState(
-		[]formDefinition{{Type: "table", Value: formDefinitionValue{Key: "QueryShortcuts"}}},
-		map[string]string{"QueryShortcuts": "[]"}, true,
+		[]formDefinition{{Type: "table", Value: formDefinitionValue{Key: "QueryAliases"}}},
+		map[string]string{"QueryAliases": "[]"}, true,
 	)
 	c.SetForm(&form)
 	got := c.Form()
-	if got == nil || got.values["QueryShortcuts"] != "[]" {
+	if got == nil || got.values["QueryAliases"] != "[]" {
 		t.Fatalf("Form() should return the installed form, got %+v", got)
 	}
 	c.SetFormFocused(true)

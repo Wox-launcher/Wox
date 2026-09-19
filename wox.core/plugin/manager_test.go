@@ -133,63 +133,63 @@ func TestLargeChatAndTerminalPreviewsBypassRemoteWrapping(t *testing.T) {
 	}
 }
 
-func Test_QueryShortcut(t *testing.T) {
-	shortcuts := []setting.QueryShortcut{
+func Test_QueryAlias(t *testing.T) {
+	aliases := []setting.QueryAlias{
 		{
-			Shortcut: "wi",
-			Query:    "wpm install",
+			Alias: "wi",
+			Query: "wpm install",
 		},
 		{
-			Shortcut: "wix",
-			Query:    "wpm install {0} x {1}",
+			Alias: "wix",
+			Query: "wpm install {0} x {1}",
 		},
 	}
 
-	query := GetPluginManager().expandQueryShortcut(util.NewTraceContext(), "wi 1 2", shortcuts)
+	query := GetPluginManager().expandQueryAlias(util.NewTraceContext(), "wi 1 2", aliases)
 	assert.Equal(t, "wpm install 1 2", query)
 
-	query = GetPluginManager().expandQueryShortcut(util.NewTraceContext(), "wi wi 1 2", shortcuts)
+	query = GetPluginManager().expandQueryAlias(util.NewTraceContext(), "wi wi 1 2", aliases)
 	assert.Equal(t, "wpm install wi 1 2", query)
 
-	query = GetPluginManager().expandQueryShortcut(util.NewTraceContext(), "wix 1 2", shortcuts)
+	query = GetPluginManager().expandQueryAlias(util.NewTraceContext(), "wix 1 2", aliases)
 	assert.Equal(t, "wpm install 1 x 2", query)
 
-	query = GetPluginManager().expandQueryShortcut(util.NewTraceContext(), "wix 1 2 3 4", shortcuts)
+	query = GetPluginManager().expandQueryAlias(util.NewTraceContext(), "wix 1 2 3 4", aliases)
 	assert.Equal(t, "wpm install 1 x 2 3 4", query)
 
-	query = GetPluginManager().expandQueryShortcut(util.NewTraceContext(), "wix 1", shortcuts)
+	query = GetPluginManager().expandQueryAlias(util.NewTraceContext(), "wix 1", aliases)
 	assert.Equal(t, "wpm install 1 x {1}", query)
 }
 
-func TestNewQueryShortcutText(t *testing.T) {
-	existing := []setting.QueryShortcut{{Shortcut: "tr", Query: "chatgpt translate"}}
+func TestNewQueryAliasText(t *testing.T) {
+	existing := []setting.QueryAlias{{Alias: "tr", Query: "chatgpt translate"}}
 
-	queryText, ok := newQueryShortcutText(Query{Type: QueryTypeInput, RawQuery: "  google wox  "}, existing)
+	queryText, ok := newQueryAliasText(Query{Type: QueryTypeInput, RawQuery: "  google wox  "}, existing)
 	assert.True(t, ok)
 	assert.Equal(t, "google wox", queryText)
 
-	// A query that a shortcut already expands to would only duplicate that entry.
-	_, ok = newQueryShortcutText(Query{Type: QueryTypeInput, RawQuery: "chatgpt translate"}, existing)
+	// A query that an alias already expands to would only duplicate that entry.
+	_, ok = newQueryAliasText(Query{Type: QueryTypeInput, RawQuery: "chatgpt translate"}, existing)
 	assert.False(t, ok)
 
-	_, ok = newQueryShortcutText(Query{Type: QueryTypeInput, RawQuery: "   "}, existing)
+	_, ok = newQueryAliasText(Query{Type: QueryTypeInput, RawQuery: "   "}, existing)
 	assert.False(t, ok)
 
-	_, ok = newQueryShortcutText(Query{Type: QueryTypeSelection, RawQuery: "google wox"}, existing)
+	_, ok = newQueryAliasText(Query{Type: QueryTypeSelection, RawQuery: "google wox"}, existing)
 	assert.False(t, ok)
 }
 
-func TestAddQueryShortcutActionUsesInlineForm(t *testing.T) {
-	action := (&Manager{}).newAddQueryShortcutAction(&Instance{Metadata: Metadata{Id: "wox"}}, "google wox")
+func TestAddQueryAliasActionUsesInlineForm(t *testing.T) {
+	action := (&Manager{}).newAddQueryAliasAction(&Instance{Metadata: Metadata{Id: "wox"}}, "google wox")
 
 	assert.Equal(t, QueryResultActionTypeForm, action.Type)
 	assert.True(t, action.IsSystemAction)
 	assert.True(t, action.PreventHideAfterAction)
 	assert.NotNil(t, action.OnSubmit)
 	require.Len(t, action.Form, 2)
-	assert.Equal(t, queryShortcutFormShortcutKey, action.Form[0].Value.GetKey())
+	assert.Equal(t, queryAliasFormAliasKey, action.Form[0].Value.GetKey())
 	assert.Empty(t, action.Form[0].Value.GetDefaultValue())
-	assert.Equal(t, queryShortcutFormQueryKey, action.Form[1].Value.GetKey())
+	assert.Equal(t, queryAliasFormQueryKey, action.Form[1].Value.GetKey())
 	assert.Equal(t, "google wox", action.Form[1].Value.GetDefaultValue())
 }
 

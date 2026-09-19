@@ -58,6 +58,14 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 		}})
 	}
 	definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
+		Key: "ResultBindings", Title: "i18n:ui_result_bindings", Tooltip: "i18n:ui_result_bindings_tips", SortColumnKey: "Title", InlineTable: true,
+		Columns: []formTableColumn{
+			{Key: "Title", Label: "i18n:ui_result_bindings_title", Tooltip: "i18n:ui_result_bindings_title_tooltip", Width: 220, Type: "text", HideInUpdate: true},
+			{Key: "Hotkey", Label: "i18n:ui_result_bindings_hotkey", Tooltip: "i18n:ui_result_bindings_hotkey_tooltip", Width: 140, Type: "hotkey"},
+			{Key: "Alias", Label: "i18n:ui_result_bindings_alias", Tooltip: "i18n:ui_result_bindings_alias_tooltip", Width: 140, Type: "text"},
+		},
+	}})
+	definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
 		Key: "QueryHotkeys", Title: "i18n:ui_query_hotkeys", Tooltip: "i18n:ui_query_hotkeys_tips", SortColumnKey: "Query", InlineTable: true, UpdateDialogWidth: 700,
 		Columns: []formTableColumn{
 			{Key: "Name", Label: "i18n:ui_query_hotkeys_name", Tooltip: "i18n:ui_query_hotkeys_name_tooltip", Width: 140, Type: "text"},
@@ -77,6 +85,7 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 		"SelectionHotkey":   data.SelectionHotkey,
 		"ActionPanelHotkey": data.ActionPanelHotkey,
 		"IgnoredHotkeyApps": settingsIgnoredHotkeyAppRowsJSON(data.IgnoredHotkeyApps),
+		"ResultBindings":    settingsRowsJSON(data.ResultBindings),
 		"QueryHotkeys":      settingsRowsJSON(data.QueryHotkeys),
 	}
 	return newFormFieldsState(definitions, values, true)
@@ -85,7 +94,7 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 // newGeneralQuerySettingsForm maps query aliases and tray launchers onto General.
 func newGeneralQuerySettingsForm(data settingsData) formFieldsState {
 	definitions := []formDefinition{{Type: "table", Value: formDefinitionValue{
-		Key: "QueryShortcuts", Title: "i18n:ui_query_shortcuts", Tooltip: "i18n:ui_query_shortcuts_tips", SortColumnKey: "Query", InlineTable: true,
+		Key: "QueryAliases", Title: "i18n:ui_query_shortcuts", Tooltip: "i18n:ui_query_shortcuts_tips", SortColumnKey: "Query", InlineTable: true,
 		Columns: []formTableColumn{
 			{Key: "Shortcut", Label: "i18n:ui_query_shortcuts_shortcut", Tooltip: "i18n:ui_query_shortcuts_shortcut_tooltip", Width: 120, Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
 			{Key: "Query", Label: "i18n:ui_query_shortcuts_query", Tooltip: "i18n:ui_query_shortcuts_query_tooltip", Type: "text", QueryTest: true, Validators: []formValidator{{Type: "not_empty"}}},
@@ -107,8 +116,8 @@ func newGeneralQuerySettingsForm(data settingsData) formFieldsState {
 		}})
 	}
 	values := map[string]string{
-		"QueryShortcuts": settingsRowsJSON(data.QueryShortcuts),
-		"TrayQueries":    settingsJSONArray(data.TrayQueries),
+		"QueryAliases": settingsRowsJSON(data.QueryAliases),
+		"TrayQueries":  settingsJSONArray(data.TrayQueries),
 	}
 	return newFormFieldsState(definitions, values, true)
 }
@@ -348,10 +357,12 @@ func (a *App) applyHotkeySettingsRawLocked(key, value string) {
 	switch key {
 	case "QueryHotkeys":
 		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryHotkeys) })
+	case "ResultBindings":
+		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.ResultBindings) })
 	case "IgnoredHotkeyApps":
 		a.generalSettings.Update(func(d *settingsData) { d.IgnoredHotkeyApps = raw })
-	case "QueryShortcuts":
-		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryShortcuts) })
+	case "QueryAliases":
+		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryAliases) })
 	case "TrayQueries":
 		a.generalSettings.Update(func(d *settingsData) { d.TrayQueries = raw })
 	}

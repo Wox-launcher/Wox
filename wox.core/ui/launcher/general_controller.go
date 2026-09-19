@@ -35,7 +35,7 @@ type generalSettingsController struct {
 	data      settingsData
 	languages []settingChoice
 
-	// Query Shortcuts and Tray Queries live on General, not Hotkey.
+	// Query Aliases and Tray Queries live on General, not Hotkey.
 	form        *formFieldsState
 	formFocused bool
 }

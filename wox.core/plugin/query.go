@@ -278,11 +278,26 @@ type QueryResult struct {
 	Group string
 	// Score of the group, the higher the score, the more relevant the group is, more likely to be displayed on top
 	GroupScore int64
+	// TitleTags are core-owned chips shown immediately after the title, such as
+	// a bound result hotkey or alias. Plugins should leave this empty.
+	TitleTags []QueryResultTitleTag
 	// Tails are additional results associate with this result, can be displayed in result detail view
 	Tails   []QueryResultTail
 	Actions []QueryResultAction
 	// DragData declares what can be dragged out of Wox for this result.
 	DragData *QueryResultDragData
+}
+
+const (
+	QueryResultTitleTagKindAlias  = "alias"
+	QueryResultTitleTagKindHotkey = "hotkey"
+)
+
+// QueryResultTitleTag is one compact chip rendered after a result title.
+type QueryResultTitleTag struct {
+	Text    string
+	Kind    string
+	Tooltip string
 }
 
 type QueryResultTail struct {
@@ -396,6 +411,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Score:      q.Score,
 		Group:      q.Group,
 		GroupScore: q.GroupScore,
+		TitleTags:  append([]QueryResultTitleTag(nil), q.TitleTags...),
 		Tails:      q.Tails,
 		DragData:   q.DragData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
@@ -443,6 +459,7 @@ type QueryResultUI struct {
 	Score      int64
 	Group      string
 	GroupScore int64
+	TitleTags  []QueryResultTitleTag
 	Tails      []QueryResultTail
 	Actions    []QueryResultActionUI
 	DragData   *QueryResultDragData
@@ -516,13 +533,14 @@ type UpdatableResult struct {
 	Id string
 
 	// Optional fields - only non-nil fields will be updated
-	Title    *string
-	SubTitle *string
-	Icon     *common.WoxImage
-	Preview  *WoxPreview
-	Tails    *[]QueryResultTail
-	Actions  *[]QueryResultAction
-	DragData *QueryResultDragData
+	Title     *string
+	SubTitle  *string
+	Icon      *common.WoxImage
+	Preview   *WoxPreview
+	Tails     *[]QueryResultTail
+	TitleTags *[]QueryResultTitleTag
+	Actions   *[]QueryResultAction
+	DragData  *QueryResultDragData
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
@@ -542,6 +560,11 @@ type QueryResultCache struct {
 	// PluginQueryElapsed is only the raw Plugin.Query duration, excluding manager polish and UI conversion.
 	PluginQueryElapsed    int64
 	PluginQueryElapsedSet bool
+	// SourceMRUHash is the MRU identity fixed when the result is cached.
+	// Restored rows retain their saved identity instead of hashing the alias query.
+	SourceMRUHash string
+	// AliasMatchKind ranks alias-restored rows above ordinary plugin results.
+	AliasMatchKind aliasMatchKind
 }
 
 func newQueryInputWithPlugins(query string, pluginInstances []*Instance) (Query, *Instance) {

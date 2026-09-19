@@ -135,6 +135,68 @@ func (s *actionRecordingTestServices) StartHotkeyRecording(_ context.Context, _ 
 	return contract.HotkeyRecordingCapability{}, nil
 }
 
+func (s *actionRecordingTestServices) StopHotkeyRecording(context.Context, string) error {
+	return nil
+}
+
+// newActionFormHotkeyTestApp builds a launcher app that can open action forms without a native loop.
+func newActionFormHotkeyTestApp(services contract.Services) *App {
+	deps := CommonDeps{}
+	return &App{
+		hotkeySettings: newHotkeySettingsController(deps),
+		pluginSettings: newPluginSettingsController(deps),
+		services:       services,
+		lifecycleCtx:   context.Background(),
+		window:         &woxui.Window{},
+		editor:         woxui.NewTextEditor(""),
+		translations:   map[string]string{},
+		palette:        defaultPalette(),
+		densityMetrics: launcherDensityMetricsFor(""),
+		show:           showAppParams{WindowWidth: 800, MaxResultCount: 8},
+	}
+}
+
+// TestOpenFormActionStartsHotkeyRecording starts capture as soon as a hotkey form opens.
+func TestOpenFormActionStartsHotkeyRecording(t *testing.T) {
+	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
+	app := newActionFormHotkeyTestApp(services)
+	app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+		ID:   "__system_set_result_hotkey__",
+		Form: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
+	})
+	recording := app.hotkeySettings.Recording()
+	if recording == nil || recording.idPrefix != "action-form" || recording.fieldIndex != 0 {
+		t.Fatalf("recording = %+v, want action-form field 0", recording)
+	}
+	select {
+	case <-services.kinds:
+	case <-time.After(time.Second):
+		t.Fatal("opening a hotkey form did not start the recorder")
+	}
+	app.closeFormAction()
+	if app.hotkeySettings.Recording() != nil {
+		t.Fatal("closing the form must stop recording")
+	}
+}
+
+// TestOpenFormActionSkipsRecordingForTextFields keeps alias and other text forms on the editor.
+func TestOpenFormActionSkipsRecordingForTextFields(t *testing.T) {
+	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
+	app := newActionFormHotkeyTestApp(services)
+	app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+		ID:   "__system_set_result_alias__",
+		Form: []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "alias"}}},
+	})
+	if app.hotkeySettings.Recording() != nil {
+		t.Fatal("alias form must not start the hotkey recorder")
+	}
+	select {
+	case <-services.kinds:
+		t.Fatal("textbox form started the recorder")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestActionHotkeyRecordingOnlyAllowsNormalCombos(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)

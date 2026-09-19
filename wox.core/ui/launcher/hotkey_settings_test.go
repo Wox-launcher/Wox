@@ -185,7 +185,7 @@ func TestGeneralQueryTablesKeyboardNavigation(t *testing.T) {
 	app.settingTab = "general"
 	form := newGeneralQuerySettingsForm(settingsData{})
 	app.generalSettings.SetForm(&form)
-	app.focusBuiltInSettingsSearchTarget("general", "QueryShortcuts")
+	app.focusBuiltInSettingsSearchTarget("general", "QueryAliases")
 	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || form.focused != 1 {
 		t.Fatal("search-focused query table did not navigate to TrayQueries")
 	}

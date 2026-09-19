@@ -199,6 +199,10 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 	for index := range result.Preview.PreviewTags {
 		tags[index] = previewTag{Label: result.Preview.PreviewTags[index].Label, Tooltip: result.Preview.PreviewTags[index].Tooltip}
 	}
+	titleTags := make([]resultTitleTag, len(result.TitleTags))
+	for index := range result.TitleTags {
+		titleTags[index] = fromCoreTitleTag(result.TitleTags[index])
+	}
 	return queryResult{
 		QueryID:  result.QueryId,
 		ID:       result.Id,
@@ -213,8 +217,9 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 			PreviewProperties:  cloneStringMap(result.Preview.PreviewProperties),
 			ScrollPosition:     result.Preview.ScrollPosition,
 		},
-		Tails:   tails,
-		Actions: actions,
+		TitleTags: titleTags,
+		Tails:     tails,
+		Actions:   actions,
 		DragData: func() *queryResultDragData {
 			if result.DragData == nil {
 				return nil
@@ -336,6 +341,8 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 			SortColumnKey: value.SortColumnKey, SortOrder: value.SortOrder, SearchColumnKey: value.SearchColumnKey,
 			MaxHeight: value.MaxHeight, InlineTable: value.InlineTable, EnableSearch: value.EnableSearch, Groups: groups,
 		}
+	case *definition.PluginSettingValueHotkey:
+		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue}
 	case *definition.PluginSettingValueDictationHotkey:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue}
 	case *definition.PluginSettingValueDictationModel:

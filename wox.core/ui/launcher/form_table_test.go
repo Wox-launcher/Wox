@@ -769,10 +769,10 @@ func TestReplaceQueryHotkeyVariablesForTestUsesSampleValues(t *testing.T) {
 }
 
 // TestQueryValuedColumnsOfferQueryTest guards the shared test button that query hotkeys,
-// query shortcuts and tray queries all rely on to preview the edited query.
+// query aliases and tray queries all rely on to preview the edited query.
 func TestQueryValuedColumnsOfferQueryTest(t *testing.T) {
 	forms := []formFieldsState{newHotkeySettingsForm(settingsData{}), newGeneralQuerySettingsForm(settingsData{})}
-	tables := map[string]bool{"QueryHotkeys": false, "QueryShortcuts": false, "TrayQueries": false}
+	tables := map[string]bool{"QueryHotkeys": false, "QueryAliases": false, "TrayQueries": false}
 	for _, form := range forms {
 		for _, definition := range form.definitions {
 			if _, tracked := tables[definition.Value.Key]; !tracked {
@@ -790,6 +790,27 @@ func TestQueryValuedColumnsOfferQueryTest(t *testing.T) {
 		if !enabled {
 			t.Fatalf("%s query field should expose the query test button", table)
 		}
+	}
+}
+
+func TestResultBindingsTableIsEditOnly(t *testing.T) {
+	form := newHotkeySettingsForm(settingsData{})
+	var definition formDefinition
+	for _, candidate := range form.definitions {
+		if candidate.Value.Key == "ResultBindings" {
+			definition = candidate
+			break
+		}
+	}
+	if definition.Value.Key != "ResultBindings" {
+		t.Fatal("hotkey settings must include the Result Bindings table")
+	}
+	keys := map[string]bool{}
+	for _, column := range definition.Value.Columns {
+		keys[column.Key] = true
+	}
+	if !keys["Title"] || !keys["Hotkey"] || !keys["Alias"] {
+		t.Fatalf("result binding columns = %+v", definition.Value.Columns)
 	}
 }
 

@@ -51,7 +51,7 @@ func main() {
 func buildPreview(width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	contentWidth := width - 56
 	queryHotkeysHeight := launcherview.FormTableFieldHeight(true, "通过快捷键快速触发预定义的查询。支持使用变量来构建动态查询，还可以设置静默执行模式自动执行单一结果。", 0, 300)
-	queryShortcutsHeight := launcherview.FormTableFieldHeight(true, "为常用查询设置简短的别名。只有当缩写是查询的第一个完整单词时才会展开。", 0, 300)
+	queryAliasesHeight := launcherview.FormTableFieldHeight(true, "为常用查询设置简短的别名。只有当缩写是查询的第一个完整单词时才会展开。", 0, 300)
 	return woxwidget.Container{
 		Width: width, Height: height, Color: theme.Background,
 		Padding: woxwidget.Insets{Left: 28, Top: 30, Right: 28, Bottom: 30},
@@ -63,9 +63,9 @@ func buildPreview(width, height float32, theme woxcomponent.Theme) woxwidget.Wid
 				AddLabel: "添加", EditLabel: "编辑", OperationLabel: "操作", EmptyLabel: "暂无数据", Theme: theme,
 			}),
 			launcherview.FormTableField(launcherview.FormTableFieldProps{
-				ID: "query-shortcuts", Title: "查询缩写", Description: "为常用查询设置简短的别名。只有当缩写是查询的第一个完整单词时才会展开。",
-				Width: contentWidth, Height: queryShortcutsHeight, MaxHeight: 300, InlineTitle: true,
-				Columns:  []launcherview.FormTableColumn{{Label: "快捷键", Tooltip: "查询缩写", Width: 120}, {Label: "查询", Tooltip: "查询内容"}, {Label: "禁用", Tooltip: "是否禁用", Width: 60}},
+				ID: "query-aliases", Title: "查询别名", Description: "为常用查询设置简短的别名。只有当别名是查询的第一个完整单词时才会展开。",
+				Width: contentWidth, Height: queryAliasesHeight, MaxHeight: 300, InlineTitle: true,
+				Columns:  []launcherview.FormTableColumn{{Label: "别名", Tooltip: "查询别名", Width: 120}, {Label: "查询", Tooltip: "查询内容"}, {Label: "禁用", Tooltip: "是否禁用", Width: 60}},
 				AddLabel: "添加", EditLabel: "编辑", OperationLabel: "操作", EmptyLabel: "暂无数据", Theme: theme,
 			}),
 		}},

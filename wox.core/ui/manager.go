@@ -103,6 +103,9 @@ func GetUIManager() *Manager {
 			OnQuery: func(combineKey string, queryHotkey setting.QueryHotkey) {
 				managerInstance.handleQueryHotkeyTrigger(combineKey, queryHotkey)
 			},
+			OnResult: func(combineKey string, binding setting.ResultBinding) {
+				managerInstance.handleResultBindingHotkeyTrigger(combineKey, binding)
+			},
 			QueryCanTriggerBeforeRelease: queryCanTriggerBeforeRelease,
 			OnDictationHoldPress: func(ctx context.Context, actionID string) {
 				managerInstance.handleDictationHotkeyPress(ctx, actionID)
@@ -131,6 +134,7 @@ func GetUIManager() *Manager {
 		// Inject the UI Manager as the dictation hotkey registrar to break the
 		// import cycle between ui and plugin/system/dictation.
 		dictationplugin.SetHotkeyRegistrar(managerInstance)
+		plugin.GetPluginManager().SetResultBindingApplier(managerInstance.applyResultBindings)
 		selection.SetInternalSelectedTextProvider(woxui.SelectedTextFromFocusedWindow)
 	})
 	return managerInstance
@@ -274,6 +278,10 @@ func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *sett
 // (Wox settings + dictation plugin) have populated the collector.
 func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
 	err := m.hotkeyService.RegisterAll(ctx)
+	if bindingErr := m.hotkeyService.ResultBindingRegistrationError(); bindingErr != nil {
+		util.GetLogger().Warn(ctx, bindingErr.Error())
+		m.ui.Notify(ctx, common.NotifyMsg{Text: i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_result_hotkey_registration_failed"), DisplaySeconds: 5})
+	}
 	mainHotkey := setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
 	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey, err)
 	return err
@@ -528,6 +536,36 @@ func (m *Manager) handleQueryHotkeyTrigger(combineKey string, queryHotkey settin
 	if err := m.triggerQueryHotkey(queryCtx, queryHotkey); err != nil {
 		logger.Error(queryCtx, fmt.Sprintf("failed to trigger query hotkey: %s", err.Error()))
 	}
+}
+
+// handleResultBindingHotkeyTrigger restores one bound result and executes it without showing Wox.
+func (m *Manager) handleResultBindingHotkeyTrigger(combineKey string, binding setting.ResultBinding) {
+	queryCtx := util.WithCoreSessionContext(util.NewTraceContext())
+	util.GetLogger().Info(queryCtx, fmt.Sprintf("result binding hotkey callback received: hotkey=%s hash=%s", combineKey, binding.Hash))
+	if m.recordHotkeyIfRecording(queryCtx, combineKey) {
+		return
+	}
+	if m.shouldIgnoreHotkeyTrigger(queryCtx) {
+		return
+	}
+	m.RefreshActiveWindowSnapshotBlocking(queryCtx)
+	if err := plugin.GetPluginManager().ExecuteResultBindingHotkey(queryCtx, binding); err != nil {
+		util.GetLogger().Error(queryCtx, fmt.Sprintf("failed to trigger result binding hotkey: %s", err.Error()))
+	}
+}
+
+// applyResultBindings registers result hotkeys first and persists only after registration succeeds.
+func (m *Manager) applyResultBindings(ctx context.Context, bindings []setting.ResultBinding) error {
+	if err := plugin.GetPluginManager().ValidateResultBindings(ctx, bindings); err != nil {
+		return err
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	bindings = setting.CloneResultBindings(bindings)
+	if err := m.hotkeyService.ApplyResultBindings(ctx, bindings, func() error { return woxSetting.ResultBindings.Set(bindings) }); err != nil {
+		return err
+	}
+	m.ui.ReloadSetting(ctx)
+	return nil
 }
 
 // QuerySelection captures the current text selection and opens a Wox query for it.
@@ -1364,6 +1402,16 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 		if err := m.registerWoxHotkeys(ctx, corehotkey.WoxConfigFromSetting(woxSetting), false); err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to update query hotkeys: %s", err.Error()))
+		}
+	case "ResultBindings":
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		err := m.registerWoxHotkeys(ctx, corehotkey.WoxConfigFromSetting(woxSetting), false)
+		if err == nil {
+			err = m.hotkeyService.ResultBindingRegistrationError()
+		}
+		if err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to update result bindings: %v", err))
+			m.ui.Notify(ctx, common.NotifyMsg{Text: i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_result_hotkey_registration_failed"), DisplaySeconds: 5})
 		}
 	case "TrayQueries":
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)

@@ -42,3 +42,17 @@ func ParseBinding(value string) (Binding, error) {
 	}
 	return Binding{Trigger: TriggerPress, CombineKey: trimmed}, nil
 }
+
+// BindingKey identifies the physical chord using the native registration parser.
+// Press and hold share one chord and must not be assigned to different owners.
+func BindingKey(value string) (string, error) {
+	binding, err := ParseBinding(value)
+	if err != nil || binding.CombineKey == "" {
+		return "", err
+	}
+	spec, err := (&Hotkey{}).parseCombineKey(binding.CombineKey)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%t:%d:%d:%d:%v", spec.capsLock, spec.modifiers, spec.key, spec.doubleModifierKey, spec.modifierChordKeys), nil
+}

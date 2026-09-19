@@ -66,7 +66,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 }
 
 func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, labelWidth, height float32) woxwidget.Widget {
-	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable, pickDir: a.pickFormActionDirectory}
+	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable, pickDir: a.pickFormActionDirectory, recordKey: a.recordActionFormHotkey}
 	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette.componentTheme().Controls, index, definition, width, height)
 }
 

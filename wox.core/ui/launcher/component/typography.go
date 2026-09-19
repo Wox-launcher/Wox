@@ -7,6 +7,7 @@ const (
 	AttentionBadgeFontSize = float32(15)
 	ResultTitleFontSize    = float32(15)
 	ResultSubtitleFontSize = float32(12)
+	ResultTitleTagFontSize = float32(9)
 	TailFontSize           = float32(11)
 	ListEmptyFontSize      = float32(13)
 	ActionHeaderFontSize   = float32(13)

@@ -144,7 +144,8 @@ type GeneralSettings struct {
 	ShowTray                           bool
 	LangCode                           i18n.LangCode
 	QueryHotkeys                       []setting.QueryHotkey
-	QueryShortcuts                     []setting.QueryShortcut
+	ResultBindings                     []setting.ResultBinding
+	QueryAliases                       []setting.QueryAlias
 	TrayQueries                        []setting.TrayQuery
 	LaunchMode                         setting.LaunchMode
 	StartPage                          setting.StartPage
