@@ -29,6 +29,8 @@ var aiChatsSettingKey = "ai_chats"
 const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
 const aiChatAttachmentsContextKey = "ai_chat_attachments"
 
+const PluginCommandAttachFiles = "attach_files"
+
 const (
 	aiChatCompactionTriggerEstimatedTokens = 24000
 	aiChatCompactionRecentTargetTokens     = 12000
@@ -60,7 +62,7 @@ type aiChatRuntimeContext struct {
 
 func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:              "a9cfd85a-6e53-415c-9d44-68777aa6323d",
+		Id:              common.AIChatPluginID,
 		Name:            "i18n:plugin_ai_chat_plugin_name",
 		Author:          "Wox Launcher",
 		Website:         "https://github.com/Wox-launcher/Wox",
@@ -139,6 +141,7 @@ func (r *AIChatPlugin) configurePluginBuiltinToolHooks() {
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
+	r.api.OnHandlePluginCommand(ctx, r.handlePluginCommand)
 	r.mcpServers = []common.AIChatMCPServerConfig{}
 
 	// Configure hooks that let builtin tools call back into the plugin manager.
@@ -1213,6 +1216,37 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	response := plugin.NewQueryResponse([]plugin.QueryResult{r.getChatPreviewData(ctx, activeChatId, attachments)})
 	response.Layout = plugin.QueryLayout{ChatMode: true}
 	return response
+}
+
+// handlePluginCommand imports files from another plugin into the AI Chat composer and shows the launcher.
+func (r *AIChatPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
+	if request.Command != PluginCommandAttachFiles {
+		return plugin.PluginCommandResult{Handled: false}
+	}
+	if r.api == nil {
+		return plugin.PluginCommandResult{Handled: true, Message: "AI chat plugin is not initialized"}
+	}
+
+	path := strings.TrimSpace(request.Data[PluginCommandDataPath])
+	if path == "" {
+		return plugin.PluginCommandResult{Handled: true, Message: "path is required"}
+	}
+
+	imported, err := common.ImportChatAttachments([]string{path})
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	data, err := json.Marshal(imported)
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	r.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType:   plugin.QueryTypeInput,
+		QueryText:   "chat ",
+		ContextData: common.ContextData{aiChatAttachmentsContextKey: string(data)},
+	})
+	r.api.ShowApp(ctx)
+	return plugin.PluginCommandResult{Handled: true}
 }
 
 // querySelection offers chat for text or files; importing happens only when the action is chosen.

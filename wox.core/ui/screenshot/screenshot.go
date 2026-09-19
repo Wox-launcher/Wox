@@ -1,6 +1,7 @@
 package screenshot
 
 import (
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 )
@@ -12,6 +13,7 @@ type ScreenshotOptions struct {
 	HideAnnotationToolbar bool
 	AutoConfirm           bool
 	AllowVideoRecording   bool
+	ExtraActions          []common.ScreenshotExtraAction
 	RecordingDefaults     RecordingDefaults
 	WindowManager         *woxui.WindowManager
 	AnnotationTooltips    ScreenshotAnnotationTooltips
@@ -91,6 +93,8 @@ type ScreenshotResult struct {
 	LogicalSelection        woxui.Rect
 	ClipboardWriteSucceeded bool
 	ClipboardWarningMessage string
+	// ExtraActionID is set when a caller-owned toolbar button completed the capture.
+	ExtraActionID string
 }
 
 // CaptureScreenshot runs the native desktop capture and Go-rendered selection surface.

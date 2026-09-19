@@ -266,6 +266,16 @@ type CaptureScreenshotRequest struct {
 	// carry caller identity, so UI could not visually distinguish a third-party capture from the
 	// built-in Wox screenshot flow; passing the already-resolved icon keeps that decision in Go.
 	CallerIcon *WoxImage `json:"callerIcon,omitempty"`
+	// ExtraActions adds caller-owned buttons between the built-in record control and Cancel.
+	// The editor treats them as complete actions and returns ExtraActionID; it does not interpret IDs.
+	ExtraActions []ScreenshotExtraAction `json:"extraActions,omitempty"`
+}
+
+// ScreenshotExtraAction is one caller-owned button on the screenshot editor toolbar.
+type ScreenshotExtraAction struct {
+	ID      string `json:"id,omitempty"`
+	Icon    string `json:"icon,omitempty"`
+	Tooltip string `json:"tooltip,omitempty"`
 }
 
 // CaptureArtifactKind distinguishes the image compatibility path from saved video artifacts.
@@ -313,6 +323,8 @@ type CaptureScreenshotResult struct {
 	CopiedColor  string `json:"copiedColor,omitempty"`
 	ErrorCode    string `json:"errorCode,omitempty"`
 	ErrorMessage string `json:"errorMessage,omitempty"`
+	// ExtraActionID is set when a caller-owned toolbar button completed the capture.
+	ExtraActionID string `json:"extraActionId,omitempty"`
 }
 
 func DefaultCaptureScreenshotRequest() CaptureScreenshotRequest {

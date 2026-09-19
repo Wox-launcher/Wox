@@ -4952,7 +4952,7 @@ func (m *Manager) IsTriggerKeywordAIChat(ctx context.Context, triggerKeyword str
 func (m *Manager) GetAIChatPluginInstance(ctx context.Context) *Instance {
 	aiChatPlugin := m.GetPluginInstances()
 	aiChatPluginInstance, exist := lo.Find(aiChatPlugin, func(item *Instance) bool {
-		return item.Metadata.Id == "a9cfd85a-6e53-415c-9d44-68777aa6323d"
+		return item.Metadata.Id == common.AIChatPluginID
 	})
 	if exist {
 		return aiChatPluginInstance

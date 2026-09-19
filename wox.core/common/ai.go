@@ -10,6 +10,9 @@ import (
 	"github.com/tmc/langchaingo/jsonschema"
 )
 
+// AIChatPluginID is the stable identity of the built-in AI Chat plugin.
+const AIChatPluginID = "a9cfd85a-6e53-415c-9d44-68777aa6323d"
+
 type ConversationRole string
 type ProviderName string
 

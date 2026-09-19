@@ -413,6 +413,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
+		ExtraActions:      request.ExtraActions,
 		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 30, ShowPointer: true}, WindowManager: a.windows,
 		Theme: a.palette.componentTheme().Controls, FontFamily: a.generalSettings.Data().AppFontFamily,
 		SizeLabels: woxscreenshot.ScreenshotSizeLabels{
@@ -476,6 +477,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		Status: common.CaptureScreenshotStatusCompleted, ArtifactKind: artifactKind, ArtifactPath: artifactPath,
 		ScreenshotPath: result.ScreenshotPath, LogicalSelectionRect: &selection,
 		PinToScreen: result.PinToScreen, PinOverlayShown: result.PinOverlayShown, ClipboardWriteSucceeded: result.ClipboardWriteSucceeded, ClipboardWarningMessage: result.ClipboardWarningMessage,
+		ExtraActionID: result.ExtraActionID,
 	}, nil
 }
 

@@ -35,6 +35,8 @@ type screenshotEditorOverlayOutcome struct {
 	// saveAsPath is set when the user asked to download the image to a chosen file.
 	// Confirm still copies to the clipboard; save keeps that path as an extra export.
 	saveAsPath string
+	// extraActionID is set when a caller-owned toolbar button completed the capture.
+	extraActionID string
 }
 
 type screenshotEditorTool uint8
@@ -156,6 +158,9 @@ type screenshotEditorOverlayState struct {
 	scrollRect              Rect
 	cursorRect              Rect
 	recordRect              Rect
+	extraActions            []common.ScreenshotExtraAction
+	extraActionRects        []Rect
+	hoveredExtraIndex       int
 	toolbarRect             Rect
 	toolRects               [screenshotEditorToolCount]Rect
 	tooltips                [screenshotEditorToolCount]string
@@ -285,6 +290,8 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		autoConfirm:         options.AutoConfirm,
 		hideTools:           options.HideAnnotationToolbar,
 		allowVideoRecording: options.AllowVideoRecording,
+		extraActions:        append([]common.ScreenshotExtraAction(nil), options.ExtraActions...),
+		hoveredExtraIndex:   -1,
 		annotationColor:     screenshotEditorAnnotationColor,
 		mosaicRadius:        screenshotEditorMosaicRadius,
 		textFontSize:        screenshotEditorTextFontSize,
@@ -480,6 +487,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		ScreenshotPath:          exportPath,
 		ClipboardWriteSucceeded: outcome.pinned || outcome.saveAsPath != "" || !options.CopyToClipboard,
 		LogicalSelection:        logicalSelection,
+		ExtraActionID:           outcome.extraActionID,
 	}
 	if options.CopyToClipboard && !outcome.pinned && outcome.saveAsPath == "" {
 		if err := overlay.WriteClipboardImage(exportedImage); err != nil {
@@ -641,6 +649,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	tooltips := state.tooltips
 	hoveredAction := state.hoveredAction
 	hasHoveredAction := state.hasHoveredAction
+	hoveredExtraIndex := state.hoveredExtraIndex
 	actionTooltips := state.actionTooltips
 	if state.draft != nil {
 		annotations = append(annotations, *state.draft)
@@ -725,6 +734,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 				toolbarWidth += scaled(54)
 			}
 		}
+		toolbarWidth += scaled(54) * float32(len(state.extraActions))
 		toolbarHeight := scaled(60)
 		toolbarStackHeight := toolbarHeight
 		if !hideTools {
@@ -779,6 +789,11 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			slotLeft += scaled(48)
 		}
 	}
+	extraActionRects := make([]Rect, len(state.extraActions))
+	for index := range extraActionRects {
+		extraActionRects[index] = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+		slotLeft += scaled(54)
+	}
 	cancelRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
 	slotLeft += scaled(48)
 	saveRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
@@ -792,6 +807,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.scrollRect = scrollRect
 	state.cursorRect = cursorRect
 	state.recordRect = recordRect
+	state.extraActionRects = extraActionRects
 	state.cancelRect = cancelRect
 	state.saveRect = saveRect
 	state.confirmRect = confirmRect
@@ -836,6 +852,13 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			drawScreenshotEditorToolbarIcon(displayList, "screenshot.video-camera", recordRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 		}
 	}
+	for index, rect := range extraActionRects {
+		iconName := strings.TrimSpace(state.extraActions[index].Icon)
+		if iconName == "" {
+			iconName = icons.ControlSparkles
+		}
+		drawScreenshotEditorToolbarIcon(displayList, iconName, rect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
+	}
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.download", saveRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirmRect, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
@@ -854,6 +877,12 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	if hasHoveredTool {
 		tooltip := screenshotEditorToolTooltip(hoveredTool, tooltips)
 		drawScreenshotEditorToolTooltip(displayList, frame.Size, toolRects[hoveredTool], selection, tooltip, uiScale)
+	} else if hoveredExtraIndex >= 0 && hoveredExtraIndex < len(extraActionRects) {
+		tooltip := strings.TrimSpace(state.extraActions[hoveredExtraIndex].Tooltip)
+		if tooltip == "" {
+			tooltip = state.extraActions[hoveredExtraIndex].ID
+		}
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, extraActionRects[hoveredExtraIndex], selection, tooltip, uiScale)
 	} else if hasHoveredAction {
 		anchor, tooltip := screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, recordRect, cancelRect, saveRect, confirmRect)
 		drawScreenshotEditorToolTooltip(displayList, frame.Size, anchor, selection, tooltip, uiScale)
@@ -1507,6 +1536,16 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		cancel := state.hasSelection && screenshotEditorRectContains(state.cancelRect, event.Position)
 		pin := state.hasSelection && screenshotEditorRectContains(state.pinRect, event.Position)
 		record := state.hasSelection && screenshotEditorRectContains(state.recordRect, event.Position)
+		extraActionID := ""
+		if state.hasSelection {
+			for index, rect := range state.extraActionRects {
+				if index >= len(state.extraActions) || !screenshotEditorRectContains(rect, event.Position) {
+					continue
+				}
+				extraActionID = strings.TrimSpace(state.extraActions[index].ID)
+				break
+			}
+		}
 		scroll := state.hasSelection && !state.scrolling && !state.scrollingStarting && screenshotEditorRectContains(state.scrollRect, event.Position)
 		cursor := state.hasSelection && state.cursorPixel != nil && screenshotEditorRectContains(state.cursorRect, event.Position)
 		if cursor {
@@ -1631,6 +1670,9 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		} else if record {
 			state.commitText()
 			state.completeRecord()
+		} else if extraActionID != "" {
+			state.commitText()
+			state.completeExtra(extraActionID)
 		} else if cursor || editChanged || toolChanged || undo || (!toolbar && !editBar) {
 			state.setTextInputEnabled(textEditing)
 			state.invalidate()
@@ -2335,6 +2377,13 @@ func (state *screenshotEditorOverlayState) activeRecordingUI() *recordingToolbar
 	return state.recordingUI
 }
 
+// completeExtra finishes the overlay after a caller-owned toolbar button is pressed.
+func (state *screenshotEditorOverlayState) completeExtra(id string) {
+	state.once.Do(func() {
+		state.result <- screenshotEditorOverlayOutcome{extraActionID: id}
+	})
+}
+
 func (state *screenshotEditorOverlayState) completePin() {
 	state.hideEditorWindow()
 	state.once.Do(func() {
@@ -2582,20 +2631,22 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 	previousHasHoveredTool := state.hasHoveredTool
 	previousHoveredAction := state.hoveredAction
 	previousHasHoveredAction := state.hasHoveredAction
+	previousHoveredExtra := state.hoveredExtraIndex
 	previousCursor := state.pointerCursor
 	state.hasHoveredMark = false
 	state.hasHoveredTool = false
 	state.hasHoveredAction = false
+	state.hoveredExtraIndex = -1
 	state.pointerCursor = PointerCursorDefault
 	if screenshotEditorRectContains(state.sizeLabelRect, point) {
 		state.pointerCursor = PointerCursorHand
-		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousCursor != PointerCursorHand
+		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0 || previousCursor != PointerCursorHand
 	}
 	for index := 1; index < len(state.toolRects); index++ {
 		if screenshotEditorRectContains(state.toolRects[index], point) {
 			state.hoveredTool = index
 			state.hasHoveredTool = true
-			return previousHasHoveredMark || previousHasHoveredAction || !previousHasHoveredTool || previousHoveredTool != index || previousCursor != PointerCursorDefault
+			return previousHasHoveredMark || previousHasHoveredAction || previousHoveredExtra >= 0 || !previousHasHoveredTool || previousHoveredTool != index || previousCursor != PointerCursorDefault
 		}
 	}
 	for _, target := range []struct {
@@ -2614,10 +2665,17 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 		if screenshotEditorRectContains(target.rect, point) {
 			state.hoveredAction = target.action
 			state.hasHoveredAction = true
-			return previousHasHoveredMark || previousHasHoveredTool || !previousHasHoveredAction || previousHoveredAction != target.action || previousCursor != PointerCursorDefault
+			return previousHasHoveredMark || previousHasHoveredTool || !previousHasHoveredAction || previousHoveredAction != target.action || previousHoveredExtra >= 0 || previousCursor != PointerCursorDefault
 		}
 	}
-	toolHoverChanged := previousHasHoveredTool || previousHasHoveredAction
+	for index, rect := range state.extraActionRects {
+		if !screenshotEditorRectContains(rect, point) {
+			continue
+		}
+		state.hoveredExtraIndex = index
+		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra != index || previousCursor != PointerCursorDefault
+	}
+	toolHoverChanged := previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0
 	if state.activeTool == screenshotEditorToolText && screenshotEditorRectContains(state.selection, point) {
 		if index, found := screenshotEditorTextAnnotationAt(state.annotations, point, state.uiScale); found {
 			state.hoveredAnnotation = index

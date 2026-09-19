@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"wox/common"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -699,6 +700,44 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.pinRect.X + 20, Y: state.pinRect.Y + 20}})
 	if outcome := <-state.result; !outcome.pinned || outcome.cancelled {
 		t.Fatalf("pin outcome = %+v", outcome)
+	}
+}
+
+func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testing.T) {
+	action := common.ScreenshotExtraAction{ID: "ai", Icon: "control.sparkles", Tooltip: "Send to AI Chat"}
+	state := newScreenshotEditorOverlayState(ScreenshotOptions{
+		AllowVideoRecording: true,
+		ExtraActions:        []common.ScreenshotExtraAction{action},
+	}, testScreenshotImage(t, 10, 10), screenshotEditorPlatform{})
+	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
+	state.hasSelection = true
+	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
+	if state.toolbarRect.Width != 794 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
+		t.Fatalf("toolbar=%+v extra=%+v", state.toolbarRect, state.extraActionRects)
+	}
+	if state.extraActionRects[0].X <= state.recordRect.X || state.extraActionRects[0].X >= state.cancelRect.X {
+		t.Fatalf("extra=%+v should sit between record=%+v and cancel=%+v", state.extraActionRects[0], state.recordRect, state.cancelRect)
+	}
+
+	imageOnly := newScreenshotEditorOverlayState(ScreenshotOptions{ExtraActions: []common.ScreenshotExtraAction{action}}, testScreenshotImage(t, 10, 10), screenshotEditorPlatform{})
+	imageOnly.selection = state.selection
+	imageOnly.hasSelection = true
+	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
+	if imageOnly.toolbarRect.Width != 740 || imageOnly.recordRect != (Rect{}) {
+		t.Fatalf("image-only extra toolbar=%+v record=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
+	}
+	if imageOnly.extraActionRects[0].X <= imageOnly.pinRect.X || imageOnly.extraActionRects[0].X >= imageOnly.cancelRect.X {
+		t.Fatalf("image-only extra=%+v should sit between pin=%+v and cancel=%+v", imageOnly.extraActionRects[0], imageOnly.pinRect, imageOnly.cancelRect)
+	}
+
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: state.extraActionRects[0].X + 20, Y: state.extraActionRects[0].Y + 20}})
+	if state.hoveredExtraIndex != 0 {
+		t.Fatalf("hovered extra = %d, want 0", state.hoveredExtraIndex)
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.extraActionRects[0].X + 20, Y: state.extraActionRects[0].Y + 20}})
+	outcome := <-state.result
+	if outcome.extraActionID != "ai" || outcome.cancelled || outcome.pinned {
+		t.Fatalf("extra outcome = %+v", outcome)
 	}
 }
 

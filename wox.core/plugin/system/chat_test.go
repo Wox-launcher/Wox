@@ -3,6 +3,8 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +20,7 @@ type chatTestAPI struct {
 	emptyChatAPI
 	translations map[string]string
 	changed      common.PlainQuery
+	shown        bool
 }
 
 type chatTitleTestAPI struct {
@@ -61,6 +64,10 @@ func (a *chatTestAPI) GetTranslation(ctx context.Context, key string) string {
 
 func (a *chatTestAPI) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 	a.changed = query
+}
+
+func (a *chatTestAPI) ShowApp(context.Context) {
+	a.shown = true
 }
 
 type emptyChatAPI struct{}
@@ -274,6 +281,56 @@ func TestAIChatSelectionForMultipleFilesUsesPathsOnly(t *testing.T) {
 	message := withMessageAttachments(common.Conversation{Role: common.ConversationRoleUser, Text: "Compare", Attachments: attachments})
 	if !strings.Contains(message.Text, paths[0]) || !strings.Contains(message.Text, paths[1]) || strings.Contains(message.Text, "secret file contents") {
 		t.Fatalf("runtime message = %+v", message)
+	}
+}
+
+func TestAIChatAttachFilesCommandSeedsComposer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "shot.png")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	api := &chatTestAPI{}
+	result := (&AIChatPlugin{api: api}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: PluginCommandAttachFiles,
+		Data:    common.ContextData{PluginCommandDataPath: path},
+	})
+	if !result.Handled || result.Message != "" {
+		t.Fatalf("attach files command = %#v", result)
+	}
+	if !api.shown || api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "chat " {
+		t.Fatalf("opened chat = shown:%t query:%+v", api.shown, api.changed)
+	}
+	var attachments []common.AIChatAttachment
+	if err := json.Unmarshal([]byte(api.changed.ContextData[aiChatAttachmentsContextKey]), &attachments); err != nil {
+		t.Fatal(err)
+	}
+	if len(attachments) != 1 || attachments[0].Kind != common.AIChatAttachmentImage {
+		t.Fatalf("attachments = %+v", attachments)
+	}
+}
+
+func TestAIChatAttachFilesCommandRequiresPath(t *testing.T) {
+	result := (&AIChatPlugin{api: &chatTestAPI{}}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: PluginCommandAttachFiles,
+	})
+	if !result.Handled || result.Message != "path is required" {
+		t.Fatalf("empty attach files command = %#v", result)
+	}
+
+	unknown := (&AIChatPlugin{api: &chatTestAPI{}}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
+		Command: "unknown",
+	})
+	if unknown.Handled {
+		t.Fatalf("unknown command = %#v", unknown)
 	}
 }
 
