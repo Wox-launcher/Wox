@@ -42,17 +42,11 @@ func testMainHotkeyRecording(t *testing.T, ctx context.Context, client *automati
 
 func openMainHotkeySettings(t *testing.T, ctx context.Context, client *automationdriver.Client) string {
 	t.Helper()
-	if err := client.OpenSettings(ctx, "/general"); err != nil {
-		t.Fatalf("open General settings: %v", err)
-	}
-	if err := client.Perform(ctx, "settings-search-field", woxui.AccessibilityActionSetValue, "main hotkey"); err != nil {
-		t.Fatalf("search for the main hotkey setting: %v", err)
-	}
-	if err := client.PressKey(ctx, woxui.KeyEnter, 0); err != nil {
-		t.Fatalf("open the main hotkey setting from search: %v", err)
+	if err := client.OpenSettings(ctx, "/hotkeys"); err != nil {
+		t.Fatalf("open Hotkey settings: %v", err)
 	}
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
+		_, pageFound := automationdriver.Find(snapshot, "settings.page.hotkey")
 		field, fieldFound := automationdriver.Find(snapshot, mainHotkeyFieldID)
 		return pageFound && fieldFound && field.Value != ""
 	})

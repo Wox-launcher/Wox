@@ -114,7 +114,15 @@ func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automation
 			}
 			lastFrameID = sample.FrameID
 			observed = append(observed, sample)
-			local := sample.LogicalDamage.Width > 0 && sample.LogicalDamage.Height > 0 && containsRect(allowed, sample.LogicalDamage)
+			if sample.LogicalDamage.Width <= 0 || sample.LogicalDamage.Height <= 0 {
+				continue
+			}
+			// Query chrome can still paint while the action-panel filter is focused.
+			// Ignore damage that does not touch the input under test.
+			if !rectsIntersect(allowed, sample.LogicalDamage) {
+				continue
+			}
+			local := containsRect(allowed, sample.LogicalDamage)
 			if runtime.GOOS == "windows" {
 				local = local && sample.LogicalDamage.Width <= 2
 				if !highlights {
@@ -189,8 +197,14 @@ func assertCaretPixelChanges(t *testing.T, ctx context.Context, client *automati
 			}
 			sx := float64(current.Bounds().Dx()) / float64(bounds.Width)
 			sy := float64(current.Bounds().Dy()) / float64(bounds.Height)
-			allowed := image.Rect(int(math.Floor(float64(caret.X)*sx))-1, int(math.Floor(float64(caret.Y)*sy))-1,
-				int(math.Ceil(float64(caret.X+caret.Width)*sx))+1, int(math.Ceil(float64(caret.Y+caret.Height)*sy))+1)
+			// Host caret paints include a 4px outset and stroke antialiasing. A
+			// 1px physical pad is not enough at 150%+ scaling.
+			pad := int(math.Ceil(max(sx, sy)))
+			if pad < 1 {
+				pad = 1
+			}
+			allowed := image.Rect(int(math.Floor(float64(caret.X)*sx))-pad, int(math.Floor(float64(caret.Y)*sy))-pad,
+				int(math.Ceil(float64(caret.X+caret.Width)*sx))+pad, int(math.Ceil(float64(caret.Y+caret.Height)*sy))+pad)
 			changed := false
 			// Desktop capture includes live pixels behind the translucent window.
 			// Check the caret and adjacent pixels, allowing two levels of compositor rounding.
@@ -258,4 +272,8 @@ func unionRect(left, right woxui.Rect) woxui.Rect {
 
 func containsRect(outer, inner woxui.Rect) bool {
 	return inner.X >= outer.X && inner.Y >= outer.Y && inner.X+inner.Width <= outer.X+outer.Width && inner.Y+inner.Height <= outer.Y+outer.Height
+}
+
+func rectsIntersect(left, right woxui.Rect) bool {
+	return left.X < right.X+right.Width && right.X < left.X+left.Width && left.Y < right.Y+right.Height && right.Y < left.Y+left.Height
 }

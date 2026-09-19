@@ -22,10 +22,10 @@ func Test003SettingHotkeyFullscreen(t *testing.T) {
 		const key = "IgnoreHotkeysOnFullscreen"
 		const hotkey = "ctrl+f12"
 		ensureMainHotkey(t, ctx, client, hotkey)
-		previous := smoke.OpenGeneralSettingsAndReadSwitch(t, ctx, client, key)
-		t.Cleanup(func() { smoke.RestoreGeneralSettingSwitch(t, client, key, previous) })
+		previous := smoke.OpenSettingsAndReadSwitch(t, ctx, client, "/hotkey", key)
+		t.Cleanup(func() { smoke.RestoreSettingSwitch(t, client, "/hotkey", key, previous) })
 		smoke.SetSettingSwitch(t, ctx, client, key, true)
-		if !smoke.OpenGeneralSettingsAndReadSwitch(t, ctx, client, key) {
+		if !smoke.OpenSettingsAndReadSwitch(t, ctx, client, "/hotkey", key) {
 			t.Fatal("fullscreen suppression did not persist")
 		}
 		target := newFullscreenHotkeyTarget(t)
@@ -39,9 +39,9 @@ func Test003SettingHotkeyFullscreen(t *testing.T) {
 			{"disabled in fullscreen", true, false},
 		} {
 			if step.name == "disabled in fullscreen" {
-				smoke.OpenGeneralSettingsAndReadSwitch(t, ctx, client, key)
+				smoke.OpenSettingsAndReadSwitch(t, ctx, client, "/hotkey", key)
 				smoke.SetSettingSwitch(t, ctx, client, key, false)
-				if smoke.OpenGeneralSettingsAndReadSwitch(t, ctx, client, key) {
+				if smoke.OpenSettingsAndReadSwitch(t, ctx, client, "/hotkey", key) {
 					t.Fatal("disabling fullscreen suppression did not persist")
 				}
 			}

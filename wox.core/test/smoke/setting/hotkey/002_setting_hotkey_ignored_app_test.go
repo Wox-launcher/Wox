@@ -11,11 +11,11 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
-	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-const ignoredHotkeyAppsFieldID = "hotkey-settings-field-2"
+// MainHotkey, SelectionHotkey, and ActionPanelHotkey occupy fields 0-2 on Windows and macOS.
+const ignoredHotkeyAppsFieldID = "hotkey-settings-field-3"
 
 // Test002SettingHotkeyIgnoredApp verifies that a configured foreground system editor suppresses the registered main hotkey.
 // Flow: bind a dedicated main hotkey -> select the platform editor in Ignore Hotkey Apps -> focus a new editor process -> press that hotkey.
@@ -59,17 +59,11 @@ func addIgnoredHotkeyApp(t *testing.T, ctx context.Context, client *automationdr
 // openIgnoredHotkeyApps navigates to the inline table through the localized Settings search.
 func openIgnoredHotkeyApps(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	t.Helper()
-	if err := client.OpenSettings(ctx, "/general"); err != nil {
-		t.Fatalf("open General settings: %v", err)
-	}
-	if err := client.Perform(ctx, "settings-search-field", woxui.AccessibilityActionSetValue, "IgnoredHotkeyApps"); err != nil {
-		t.Fatalf("search for Ignore Hotkey Apps: %v", err)
-	}
-	if err := client.PressKey(ctx, woxui.KeyEnter, 0); err != nil {
-		t.Fatalf("open Ignore Hotkey Apps from search: %v", err)
+	if err := client.OpenSettings(ctx, "/hotkeys"); err != nil {
+		t.Fatalf("open Hotkey settings: %v", err)
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
+		_, pageFound := automationdriver.Find(snapshot, "settings.page.hotkey")
 		_, addFound := automationdriver.Find(snapshot, ignoredHotkeyAppsFieldID+"-add")
 		return pageFound && addFound
 	}); err != nil {

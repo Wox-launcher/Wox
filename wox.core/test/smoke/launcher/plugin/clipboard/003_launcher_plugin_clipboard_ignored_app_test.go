@@ -18,7 +18,11 @@ import (
 	woxclipboard "wox/util/clipboard"
 )
 
-const clipboardPluginID = "5f815d98-27f5-488d-a756-c317ea39935b"
+// Field 0 is the shared trigger-keywords table prepended to every plugin form.
+const (
+	clipboardPluginID                   = "5f815d98-27f5-488d-a756-c317ea39935b"
+	clipboardIgnoredApplicationsFieldID = "plugin-settings-field-9"
+)
 
 // Test003LauncherPluginClipboardIgnoredApp verifies ignored applications bypass Clipboard history.
 // Flow: add the platform editor to Clipboard privacy settings -> copy unique text in that editor -> query Clipboard.
@@ -85,21 +89,13 @@ func queryClipboardWithoutMarker(t *testing.T, ctx context.Context, client *auto
 func openClipboardIgnoredApplications(t *testing.T, ctx context.Context, client *automationdriver.Client) string {
 	t.Helper()
 	smoke.OpenInstalledPluginSettings(t, ctx, client, clipboardPluginID)
-	fieldID := ""
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		fieldID = ""
-		count := 0
-		for _, node := range snapshot.Tree.Nodes {
-			if strings.HasPrefix(node.AutomationID, "plugin-settings-field-") && strings.HasSuffix(node.AutomationID, "-add") {
-				fieldID = strings.TrimSuffix(node.AutomationID, "-add")
-				count++
-			}
-		}
-		return count == 1
+		_, found := automationdriver.Find(snapshot, clipboardIgnoredApplicationsFieldID+"-add")
+		return found
 	}); err != nil {
 		t.Fatalf("wait for Clipboard ignored applications table: %v", err)
 	}
-	return fieldID
+	return clipboardIgnoredApplicationsFieldID
 }
 
 // removeIgnoredClipboardApp removes the row created by this case through the real Settings UI.
