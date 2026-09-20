@@ -14,6 +14,7 @@ void WriteClipboardFiles(const char **filePaths, int count);
 void WriteClipboardImage(const char *imageData, int length);
 void WriteClipboardAnimatedGIF(const char *filePath, const unsigned char *gifData, int gifLen);
 _Bool hasClipboardChanged();
+long long GetClipboardChangeCount();
 int GetClipboardContentType();
 */
 import "C"
@@ -178,6 +179,14 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 
 func isClipboardChanged() bool {
 	return bool(C.hasClipboardChanged())
+}
+
+func readClipboardSequenceNumber() uint64 {
+	count := C.GetClipboardChangeCount()
+	if count < 0 {
+		return 0
+	}
+	return uint64(count)
 }
 
 func buildWatchSnapshot() string {

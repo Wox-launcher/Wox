@@ -79,7 +79,6 @@ type aiCommandFinalResult struct {
 
 type aiCommandStreamOptions struct {
 	updateVisibleResult bool
-	onStreamingStarted  func(ctx context.Context)
 	onStreamResult      func(ctx context.Context, streamResult common.ChatStreamData)
 }
 
@@ -392,15 +391,7 @@ func buildAICommandLoadingOptions(name string, position mouse.Point, message str
 }
 
 func (c *Plugin) showAICommandLoadingOverlay(ctx context.Context, name string) bool {
-	position, ok := mouse.CurrentPosition()
-	if !ok {
-		// Best-effort UI: loading feedback must never block the paste action.
-		// Platforms without a pointer-position backend keep the existing error
-		// notifications and simply skip the transient progress overlay.
-		c.api.Log(ctx, plugin.LogLevelDebug, "skip ai command loading overlay: mouse position is unavailable")
-		return false
-	}
-
+	position := c.currentAICommandOverlayPosition(ctx)
 	message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_thinking")
 	opts := buildAICommandLoadingOptions(name, position, message)
 	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("show ai command loading overlay: name=%s mouse=(%.1f,%.1f) offset=(%.1f,%.1f)", name, position.X, position.Y, opts.Window.OffsetX, opts.Window.OffsetY))
@@ -526,7 +517,6 @@ func (c *Plugin) startAICommandStream(ctx context.Context, command commandSettin
 	util.Go(ctx, "ai command stream", func() {
 		startAnsweringTime := util.GetSystemTimestamp()
 		var finalOnce sync.Once
-		var streamingStartedOnce sync.Once
 		sendFinal := func(final aiCommandFinalResult) {
 			finalOnce.Do(func() {
 				finalCh <- final
@@ -551,15 +541,6 @@ func (c *Plugin) startAICommandStream(ctx context.Context, command commandSettin
 		}
 
 		err := c.api.AIChatStream(ctx, command.AIModel(), conversations, common.ChatOptions{ThinkingMode: command.NormalizedThinkingMode()}, func(streamResult common.ChatStreamData) {
-			if streamResult.Status == common.ChatStreamStatusStreaming && options.onStreamingStarted != nil {
-				// UX fix: silent Run And Paste hides the launcher while the model is
-				// working. Start progress feedback only after the first streaming
-				// event so the UI reflects real model activity without a premature
-				// success signal.
-				streamingStartedOnce.Do(func() {
-					options.onStreamingStarted(ctx)
-				})
-			}
 			if options.onStreamResult != nil {
 				options.onStreamResult(ctx, streamResult)
 			}
@@ -680,15 +661,11 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 				util.Go(ctx, "ai command run and paste", func() {
 					overlayName := fmt.Sprintf("ai_command_run_and_paste_loading_%s", actionContext.ResultId)
 					defer aiCommandCloseOverlay(overlayName)
-					// Feature addition: Run And Paste is a first-class action instead
-					// of a hidden query-hotkey mode. Silent query hotkeys simply execute
-					// this default action and wait here for the final model answer before
-					// touching the clipboard, so no empty or partial text is pasted.
-					final := <-c.startAICommandStream(ctx, command, conversations, modelLabel, actionContext.ResultId, aiCommandStreamOptions{
-						onStreamingStarted: func(ctx context.Context) {
-							c.showAICommandLoadingOverlay(ctx, overlayName)
-						},
-					})
+					// Silent query hotkeys hide the launcher immediately. Show the
+					// thinking overlay before the model request so the first token
+					// cannot delay progress feedback.
+					c.showAICommandLoadingOverlay(ctx, overlayName)
+					final := <-c.startAICommandStream(ctx, command, conversations, modelLabel, actionContext.ResultId, aiCommandStreamOptions{})
 					if final.Err != nil {
 						// Error handling stays in the hidden action worker because the
 						// launcher has already closed in silent mode; every failed stream,

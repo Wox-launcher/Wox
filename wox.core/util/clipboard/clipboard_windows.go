@@ -443,6 +443,10 @@ func isClipboardChanged() bool {
 	return false
 }
 
+func readClipboardSequenceNumber() uint64 {
+	return uint64(C.clipboardGetSequenceNumber())
+}
+
 func buildWatchSnapshot() string {
 	buf := make([]byte, 1024)
 	n := C.clipboardGetDiagnosticInfo((*C.char)(unsafe.Pointer(&buf[0])), C.int(len(buf)))

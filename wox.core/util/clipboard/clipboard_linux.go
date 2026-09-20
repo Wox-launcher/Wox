@@ -170,6 +170,10 @@ func isClipboardChanged() bool {
 	return linuxClipboardBackend().isChanged()
 }
 
+func readClipboardSequenceNumber() uint64 {
+	return 0
+}
+
 func buildWatchSnapshot() string {
 	return linuxClipboardBackend().watchSnapshot()
 }

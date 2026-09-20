@@ -3,6 +3,10 @@
 
 static NSInteger lastChangeCount = 0;
 
+long long GetClipboardChangeCount() {
+    return (long long)[[NSPasteboard generalPasteboard] changeCount];
+}
+
 _Bool hasClipboardChanged() {
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     NSInteger currentChangeCount = [pasteboard changeCount];

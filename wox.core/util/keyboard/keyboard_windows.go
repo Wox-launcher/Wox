@@ -11,6 +11,45 @@ int isCapsLockEnabled() {
     return (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
 }
 
+static INPUT modifierKeyUp(WORD vk, DWORD extraFlags) {
+    INPUT ip;
+    ZeroMemory(&ip, sizeof(ip));
+    ip.type = INPUT_KEYBOARD;
+    ip.ki.wVk = vk;
+    ip.ki.dwFlags = KEYEVENTF_KEYUP | extraFlags;
+    return ip;
+}
+
+// releaseBlockingModifiers synthesizes key-ups for Shift/Alt/Win so Ctrl+C/V
+// is not interpreted as Ctrl+Shift+C while the trigger chord is still held.
+// Ctrl is left alone because simulateCtrlC/V send their own Control events.
+const char* releaseBlockingModifiers() {
+    INPUT ip[8];
+    int n = 0;
+    if (isKeyPressed(VK_SHIFT)) {
+        ip[n++] = modifierKeyUp(VK_LSHIFT, 0);
+        ip[n++] = modifierKeyUp(VK_RSHIFT, KEYEVENTF_EXTENDEDKEY);
+    }
+    if (isKeyPressed(VK_MENU)) {
+        ip[n++] = modifierKeyUp(VK_LMENU, 0);
+        ip[n++] = modifierKeyUp(VK_RMENU, KEYEVENTF_EXTENDEDKEY);
+    }
+    if (isKeyPressed(VK_LWIN)) {
+        ip[n++] = modifierKeyUp(VK_LWIN, KEYEVENTF_EXTENDEDKEY);
+    }
+    if (isKeyPressed(VK_RWIN)) {
+        ip[n++] = modifierKeyUp(VK_RWIN, KEYEVENTF_EXTENDEDKEY);
+    }
+    if (n == 0) {
+        return NULL;
+    }
+    UINT res = SendInput(n, ip, sizeof(INPUT));
+    if (res != (UINT)n) {
+        return "Failed to release blocking modifiers";
+    }
+    return NULL;
+}
+
 const char* simulateCtrlC() {
     INPUT ip[4];
     ZeroMemory(ip, sizeof(ip));
@@ -202,6 +241,9 @@ func simulateType(text string) error {
 		return fmt.Errorf("multiline text requires clipboard paste on Windows")
 	}
 	waitModifiersRelease()
+	if err := waitCtrlRelease(func() bool { return C.isKeyPressed(C.int(C.VK_CONTROL)) != 0 }); err != nil {
+		return err
+	}
 	// Convert UTF-8 string to UTF-16 code units for KEYEVENTF_UNICODE.
 	codepoints := utf16.Encode([]rune(text))
 	if len(codepoints) == 0 {
@@ -215,21 +257,37 @@ func simulateType(text string) error {
 	return nil
 }
 
-// We need to wait for all modifiers to be released before simulating Ctrl+C/Ctrl+V.
-// Otherwise, if the trigger hotkey includes Alt/Shift/Win, the simulated copy/paste
-// may be interpreted as a different shortcut (e.g. Alt+Ctrl+C).
+// waitCtrlRelease protects Unicode typing, which does not send its own Ctrl
+// events like copy/paste. The predicate keeps tests independent of real input.
+func waitCtrlRelease(isPressed func() bool) error {
+	deadline := time.Now().Add(time.Second)
+	for isPressed() {
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("failed to type text: timed out waiting for Ctrl to be released")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return nil
+}
+
+// waitModifiersRelease clears Shift/Alt/Win before simulated Ctrl+C/V/type.
+// Waiting for the physical chord to come up made query hotkeys stall for hundreds
+// of milliseconds. Synthesized key-ups are enough for the target app to see a
+// plain Ctrl+C while the user is still holding the trigger. Ctrl is not released
+// here because the simulated copy/paste sequence sends Control itself.
 func waitModifiersRelease() {
+	if err := C.releaseBlockingModifiers(); err == nil {
+		return
+	}
 	for i := 0; i < 20; i++ {
-		isCtrlPressed := C.isKeyPressed(C.int(C.VK_CONTROL)) != 0
 		isAltPressed := C.isKeyPressed(C.int(C.VK_MENU)) != 0
 		isShiftPressed := C.isKeyPressed(C.int(C.VK_SHIFT)) != 0
 		isLWinPressed := C.isKeyPressed(C.int(C.VK_LWIN)) != 0
 		isRWinPressed := C.isKeyPressed(C.int(C.VK_RWIN)) != 0
-		if isCtrlPressed || isAltPressed || isShiftPressed || isLWinPressed || isRWinPressed {
-			time.Sleep(time.Millisecond * 50)
+		if isAltPressed || isShiftPressed || isLWinPressed || isRWinPressed {
+			time.Sleep(time.Millisecond * 5)
 			continue
-		} else {
-			break
 		}
+		break
 	}
 }

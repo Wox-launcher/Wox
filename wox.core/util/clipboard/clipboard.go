@@ -77,6 +77,13 @@ func claimExternalChange() bool {
 // NoDataErr returns the sentinel error reported when the clipboard contains no recognizable data.
 func NoDataErr() error { return noDataErr }
 
+// SequenceNumber is a cheap clipboard generation counter. It changes when another
+// app copies, including copies of the same text. Zero means the platform cannot
+// expose a counter and callers should use another change signal.
+func SequenceNumber() uint64 {
+	return readClipboardSequenceNumber()
+}
+
 // SetNativeImageFileWriter registers a UI-owned image clipboard writer for platforms where
 // background clipboard ownership is restricted by the compositor.
 func SetNativeImageFileWriter(writer func(context.Context, string) error) {

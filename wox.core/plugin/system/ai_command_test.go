@@ -23,6 +23,7 @@ type aiCommandTestAPI struct {
 	streamDone   chan struct{}
 	streamEvents []common.ChatStreamData
 	notifyCh     chan string
+	beforeStream func()
 }
 
 func newAICommandTestAPI(t *testing.T, commands []map[string]any) *aiCommandTestAPI {
@@ -110,6 +111,10 @@ func (a *aiCommandTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutL
 func (a *aiCommandTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 func (a *aiCommandTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
+	if a.beforeStream != nil {
+		a.beforeStream()
+	}
+
 	a.mu.Lock()
 	a.streamCalls++
 	a.mu.Unlock()
@@ -275,6 +280,55 @@ func TestAICommandRunAndPasteNotifiesStreamErrors(t *testing.T) {
 	runAndPasteAction := findAICommandAction(t, results[0].Actions, "i18n:plugin_ai_command_run_and_paste")
 	runAndPasteAction.Action(context.Background(), plugin.ActionContext{ResultId: results[0].Id})
 
+	require.Equal(t, "AI command action failed: model failed", api.waitForNotification(t))
+}
+
+func TestAICommandRunAndPasteShowsLoadingOverlayBeforeStream(t *testing.T) {
+	previousShowOverlay := aiCommandShowOverlay
+	previousCloseOverlay := aiCommandCloseOverlay
+	events := make(chan string, 2)
+	closed := make(chan struct{})
+	aiCommandShowOverlay = func(opts textoverlay.Options) {
+		if opts.Loading {
+			events <- "loading"
+		} else {
+			events <- "not loading"
+		}
+	}
+	aiCommandCloseOverlay = func(name string) { close(closed) }
+	t.Cleanup(func() {
+		aiCommandShowOverlay = previousShowOverlay
+		aiCommandCloseOverlay = previousCloseOverlay
+	})
+
+	api := newAICommandTestAPI(t, []map[string]any{aiCommandTestCommand("run_and_paste")})
+	api.beforeStream = func() { events <- "stream" }
+	api.streamEvents = []common.ChatStreamData{
+		{Status: common.ChatStreamStatusStreaming, Data: "partial answer"},
+		{Status: common.ChatStreamStatusError, Data: "model failed"},
+	}
+	p := &Plugin{api: api}
+
+	results := p.queryCommand(context.Background(), plugin.Query{Command: "grammar", Search: "this are bad"})
+	require.Len(t, results, 1)
+
+	runAndPasteAction := findAICommandAction(t, results[0].Actions, "i18n:plugin_ai_command_run_and_paste")
+	runAndPasteAction.Action(context.Background(), plugin.ActionContext{ResultId: results[0].Id})
+
+	// Wait for the worker to finish before assertions or restoring global hooks.
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for run-and-paste worker")
+	}
+	for _, expected := range []string{"loading", "stream"} {
+		select {
+		case event := <-events:
+			require.Equal(t, expected, event)
+		default:
+			t.Fatalf("missing %s event", expected)
+		}
+	}
 	require.Equal(t, "AI command action failed: model failed", api.waitForNotification(t))
 }
 

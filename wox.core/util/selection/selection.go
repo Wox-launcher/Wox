@@ -95,47 +95,23 @@ func (s *Selection) IsEmpty() bool {
 	return false
 }
 
+const (
+	clipboardCopyWait = 500 * time.Millisecond
+	clipboardCopyPoll = 5 * time.Millisecond
+)
+
 func getSelectedByClipboard(ctx context.Context) (Selection, error) {
-	simulateStartTimestamp := util.GetSystemTimestamp()
+	startedAt := util.GetSystemTimestamp()
+	seqBefore := clipboard.SequenceNumber()
 	if keyboard.SimulateCopy() != nil {
 		return Selection{}, errors.New("error simulate ctrl c")
 	}
+	simulateMs := util.GetSystemTimestamp() - startedAt
 
-	// loop to wait for clipboard data to be updated, so that we can get the clipboard data as soon as possible if the clipboard data is updated
-	// because sometimes clipboard data is not updated immediately after simulated ctrl c, small text data is updated immediately, but large file data is not
-	var clipboardDataAfter clipboard.Data
-	loopTimes := 10
-	for i := 0; i < loopTimes; i++ {
-		isLastLoop := loopTimes-1 == i
-
-		// wait for clipboard data to be updated
-		time.Sleep(50 * time.Millisecond)
-
-		clipboardData, err := clipboard.ReadFilesAndText()
-		if err != nil {
-			if isLastLoop {
-				return Selection{}, err
-			} else {
-				continue
-			}
-		}
-
-		// clipboard data must be updated between simulateStartTimestamp and simulateEndTimestamp
-		// otherwise, it means that the clipboard data is not updated by the simulated ctrl c
-		if lastClipboardChangeTimestamp.Load() < simulateStartTimestamp {
-			if isLastLoop {
-				return Selection{}, noSelection
-			} else {
-				continue
-			}
-		}
-
-		clipboardDataAfter = clipboardData
-		break
-	}
-
-	if clipboardDataAfter == nil {
-		return Selection{}, noSelection
+	clipboardDataAfter, err := waitForCopiedClipboard(seqBefore, startedAt)
+	util.GetLogger().Debug(ctx, fmt.Sprintf("selection clipboard capture: simulate=%dms wait=%dms seqBefore=%d", simulateMs, util.GetSystemTimestamp()-startedAt-simulateMs, seqBefore))
+	if err != nil {
+		return Selection{}, err
 	}
 
 	switch clipboardDataAfter.GetType() {
@@ -154,4 +130,31 @@ func getSelectedByClipboard(ctx context.Context) (Selection, error) {
 	}
 
 	return Selection{}, errors.New("unknown clipboard type")
+}
+
+func waitForCopiedClipboard(seqBefore uint64, startedAt int64) (clipboard.Data, error) {
+	deadline := time.Now().Add(clipboardCopyWait)
+	for first := true; ; first = false {
+		if !first {
+			if !time.Now().Before(deadline) {
+				return nil, noSelection
+			}
+			time.Sleep(clipboardCopyPoll)
+		}
+		if !clipboardCopyObserved(seqBefore, clipboard.SequenceNumber(), startedAt, lastClipboardChangeTimestamp.Load()) {
+			continue
+		}
+		clipboardData, err := clipboard.ReadFilesAndText()
+		if err != nil {
+			continue
+		}
+		return clipboardData, nil
+	}
+}
+
+func clipboardCopyObserved(seqBefore, seqNow uint64, startedAt, changedAt int64) bool {
+	if seqBefore > 0 {
+		return seqNow != seqBefore
+	}
+	return changedAt >= startedAt
 }

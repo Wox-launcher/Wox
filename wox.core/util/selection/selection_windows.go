@@ -23,6 +23,18 @@ type IUnknown = ole.IUnknown
 
 const (
 	UIA_TextPatternId = 10014
+
+	oleSFalse       = 0x00000001
+	rpcEChangedMode = 0x80010106
+
+	uiaNameLogMaxRunes = 80
+
+	uiaControlTypeEdit     int32 = 50004
+	uiaControlTypeText     int32 = 50020
+	uiaControlTypeCustom   int32 = 50025
+	uiaControlTypeDocument int32 = 50030
+	uiaControlTypeWindow   int32 = 50032
+	uiaControlTypePane     int32 = 50033
 )
 
 type IUIAutomation struct {
@@ -165,21 +177,27 @@ func (v *IUIAutomationElement) VTable() *IUIAutomationElementVtbl {
 
 type IUIAutomationElementVtbl struct {
 	ole.IUnknownVtbl
-	SetFocus                        uintptr
-	GetRuntimeId                    uintptr
-	FindFirst                       uintptr
-	FindAll                         uintptr
-	FindFirstBuildCache             uintptr
-	FindAllBuildCache               uintptr
-	BuildUpdatedCache               uintptr
-	GetCurrentPropertyValue         uintptr
-	GetCurrentPropertyValueEx       uintptr
-	GetCachedPropertyValue          uintptr
-	GetCachedPropertyValueEx        uintptr
-	GetCurrentPatternAs             uintptr
-	GetCachedPatternAs              uintptr
-	GetCurrentPattern               uintptr
-	GetCachedPattern                uintptr
+	SetFocus                  uintptr
+	GetRuntimeId              uintptr
+	FindFirst                 uintptr
+	FindAll                   uintptr
+	FindFirstBuildCache       uintptr
+	FindAllBuildCache         uintptr
+	BuildUpdatedCache         uintptr
+	GetCurrentPropertyValue   uintptr
+	GetCurrentPropertyValueEx uintptr
+	GetCachedPropertyValue    uintptr
+	GetCachedPropertyValueEx  uintptr
+	GetCurrentPatternAs       uintptr
+	GetCachedPatternAs        uintptr
+	GetCurrentPattern         uintptr
+	GetCachedPattern          uintptr
+	// GetCachedParent and GetCachedChildren sit between GetCachedPattern and
+	// get_CurrentProcessId in IUIAutomationElement. Skipping them shifts every
+	// later getter, so get_CurrentName would call get_CurrentControlType and
+	// treat the control-type id as a BSTR.
+	GetCachedParent                 uintptr
+	GetCachedChildren               uintptr
 	Get_CurrentProcessId            uintptr
 	Get_CurrentControlType          uintptr
 	Get_CurrentLocalizedControlType uintptr
@@ -258,6 +276,43 @@ func (v *IUIAutomationElement) GetCurrentPattern(patternId int32, pattern **IUnk
 		return ole.NewError(hr)
 	}
 	return nil
+}
+
+func (v *IUIAutomationElement) getCurrentBSTR(method uintptr) string {
+	if v == nil || method == 0 {
+		return ""
+	}
+	var bstr *uint16
+	hr, _, _ := syscall.SyscallN(method, uintptr(unsafe.Pointer(v)), uintptr(unsafe.Pointer(&bstr)))
+	if hr != 0 || !isPlausibleBSTR(bstr) {
+		return ""
+	}
+	defer ole.SysFreeString((*int16)(unsafe.Pointer(bstr)))
+	return ole.BstrToString(bstr)
+}
+
+// isPlausibleBSTR rejects values that COM property getters can write when the
+// vtable slot is an integer out-param (for example a control type id) rather
+// than a BSTR. SysStringLen reads four bytes before the pointer, so treating
+// 0xC354 as a BSTR access-violates at 0xC350.
+func isPlausibleBSTR(p *uint16) bool {
+	return uintptr(unsafe.Pointer(p)) > 0xffff
+}
+
+func (v *IUIAutomationElement) currentControlType() int32 {
+	if v == nil {
+		return 0
+	}
+	var id int32
+	hr, _, _ := syscall.SyscallN(
+		v.VTable().Get_CurrentControlType,
+		uintptr(unsafe.Pointer(v)),
+		uintptr(unsafe.Pointer(&id)),
+	)
+	if hr != 0 {
+		return 0
+	}
+	return id
 }
 
 func (v *IUIAutomationTextPattern) VTable() *IUIAutomationTextPatternVtbl {
@@ -366,8 +421,7 @@ func (v *IUIAutomationTextRange) GetText(maxLength int32, text *string) error {
 // getSelectedFromOS tries to get the selected text using UI Automation first,
 // and falls back to clipboard method if it fails.
 func getSelectedFromOS(ctx context.Context) (Selection, error) {
-	// Try UI Automation first
-	text, err := getSelectedByUIA()
+	text, err := getSelectedByUIA(ctx)
 	if err == nil && text != "" {
 		util.GetLogger().Info(ctx, fmt.Sprintf("UIA Success: %s", text))
 		return Selection{
@@ -382,25 +436,23 @@ func getSelectedFromOS(ctx context.Context) (Selection, error) {
 		util.GetLogger().Warn(ctx, "UIA returned empty text")
 	}
 
-	// Fallback to clipboard method
 	return getSelectedByClipboard(ctx)
 }
 
-func getSelectedByUIA() (string, error) {
-	// Important: Lock OS thread for COM
+func getSelectedByUIA(ctx context.Context) (selectedText string, err error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	// Initialize COM
-	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
-		// Just in case it's already initialized with a different mode, try to proceed
-		if oleErr, ok := err.(*ole.OleError); ok && oleErr.Code() != ole.S_OK && oleErr.Code() != 0x00000001 { // S_FALSE
-			return "", fmt.Errorf("CoInitializeEx failed: %w", err)
-		}
+	owned, err := initializeCOMForUIA()
+	if err != nil {
+		return "", err
 	}
-	defer ole.CoUninitialize()
+	if owned {
+		defer ole.CoUninitialize()
+	} else {
+		util.GetLogger().Debug(ctx, "UIA using existing COM apartment (RPC_E_CHANGED_MODE)")
+	}
 
-	// Create UIAutomation object
 	unknown, err := ole.CreateInstance(CLSID_CUIAutomation, IID_IUIAutomation)
 	if err != nil {
 		return "", fmt.Errorf("CreateInstance failed: %w", err)
@@ -409,67 +461,151 @@ func getSelectedByUIA() (string, error) {
 
 	automation := (*IUIAutomation)(unsafe.Pointer(unknown))
 
-	// Get focused element
 	var focusedElement *IUIAutomationElement
 	if err := automation.GetFocusedElement(&focusedElement); err != nil {
 		return "", fmt.Errorf("GetFocusedElement failed: %w", err)
 	}
+	if focusedElement == nil {
+		return "", fmt.Errorf("GetFocusedElement returned nil")
+	}
 	defer focusedElement.Release()
 
-	textPattern, err := findTextPattern(automation, focusedElement)
+	// Read diagnostic properties only on failure, before releasing the COM element.
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w; focused=%s", err, describeUIAElement(focusedElement))
+		}
+	}()
+	textPattern, depth, err := findTextPattern(automation, focusedElement)
 	if err != nil {
 		return "", err
 	}
 	defer textPattern.Release()
 
-	// Get Selection
 	var selectionRanges *IUIAutomationTextRangeArray
 	if err := textPattern.GetSelection(&selectionRanges); err != nil {
-		return "", fmt.Errorf("GetSelection failed: %w", err)
+		return "", fmt.Errorf("GetSelection failed: %w; depth=%d", err, depth)
 	}
 	if selectionRanges == nil {
-		return "", fmt.Errorf("no selection ranges")
+		return "", fmt.Errorf("no selection ranges; depth=%d", depth)
 	}
 	defer selectionRanges.Release()
 
 	var length int32
 	if err := selectionRanges.GetLength(&length); err != nil {
-		return "", fmt.Errorf("GetLength failed: %w", err)
+		return "", fmt.Errorf("GetLength failed: %w; depth=%d", err, depth)
 	}
-
 	if length == 0 {
-		return "", fmt.Errorf("empty selection")
+		return "", fmt.Errorf("empty selection; depth=%d ranges=0", depth)
 	}
 
-	// Get text from the first range
 	var textRange *IUIAutomationTextRange
 	if err := selectionRanges.GetElement(0, &textRange); err != nil {
-		return "", fmt.Errorf("GetElement failed: %w", err)
+		return "", fmt.Errorf("GetElement failed: %w; depth=%d ranges=%d", err, depth, length)
 	}
 	defer textRange.Release()
 
 	var text string
-	// -1 for no limit
 	if err := textRange.GetText(-1, &text); err != nil {
-		return "", fmt.Errorf("GetText failed: %w", err)
+		return "", fmt.Errorf("GetText failed: %w; depth=%d ranges=%d", err, depth, length)
+	}
+	if text == "" {
+		return "", fmt.Errorf("empty text; depth=%d ranges=%d", depth, length)
 	}
 
 	return text, nil
 }
 
+// initializeCOMForUIA enters STA when this thread has no apartment yet.
+// RPC_E_CHANGED_MODE means the thread is already MTA (for example after DirectWrite).
+// CUIAutomation is free-threaded, so UIA can continue and must not CoUninitialize
+// an apartment it did not create.
+func initializeCOMForUIA() (owned bool, err error) {
+	return comInitOwned(ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED))
+}
+
+func comInitOwned(err error) (bool, error) {
+	if err == nil {
+		return true, nil
+	}
+	oleErr, ok := err.(*ole.OleError)
+	if !ok {
+		return false, fmt.Errorf("CoInitializeEx failed: %w", err)
+	}
+	switch oleErr.Code() {
+	case ole.S_OK, oleSFalse:
+		return true, nil
+	case rpcEChangedMode:
+		return false, nil
+	default:
+		return false, fmt.Errorf("CoInitializeEx failed: %w", err)
+	}
+}
+
+func describeUIAElement(element *IUIAutomationElement) (desc string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			desc = fmt.Sprintf("describe-panic:%v", recovered)
+		}
+	}()
+	if element == nil {
+		return "nil"
+	}
+	controlType := element.currentControlType()
+	return fmt.Sprintf("name=%q class=%q type=%s(%d) localized=%q automationId=%q framework=%q",
+		truncateUIALog(element.getCurrentBSTR(element.VTable().Get_CurrentName)),
+		truncateUIALog(element.getCurrentBSTR(element.VTable().Get_CurrentClassName)),
+		uiaControlTypeLabel(controlType),
+		controlType,
+		truncateUIALog(element.getCurrentBSTR(element.VTable().Get_CurrentLocalizedControlType)),
+		truncateUIALog(element.getCurrentBSTR(element.VTable().Get_CurrentAutomationId)),
+		truncateUIALog(element.getCurrentBSTR(element.VTable().Get_CurrentFrameworkId)),
+	)
+}
+
+func truncateUIALog(value string) string {
+	runes := []rune(value)
+	if len(runes) <= uiaNameLogMaxRunes {
+		return value
+	}
+	return string(runes[:uiaNameLogMaxRunes]) + "..."
+}
+
+func uiaControlTypeLabel(id int32) string {
+	switch id {
+	case uiaControlTypeEdit:
+		return "Edit"
+	case uiaControlTypeText:
+		return "Text"
+	case uiaControlTypeCustom:
+		return "Custom"
+	case uiaControlTypeDocument:
+		return "Document"
+	case uiaControlTypeWindow:
+		return "Window"
+	case uiaControlTypePane:
+		return "Pane"
+	case 0:
+		return "unknown"
+	default:
+		return fmt.Sprintf("%d", id)
+	}
+}
+
 // findTextPattern walks from the focused node to its text container because browser focus often lands on a child that does not expose TextPattern itself.
-func findTextPattern(automation *IUIAutomation, focusedElement *IUIAutomationElement) (*IUIAutomationTextPattern, error) {
+func findTextPattern(automation *IUIAutomation, focusedElement *IUIAutomationElement) (*IUIAutomationTextPattern, int, error) {
 	var walker *IUIAutomationTreeWalker
 	if err := automation.GetRawViewWalker(&walker); err != nil {
-		return nil, fmt.Errorf("GetRawViewWalker failed: %w", err)
+		return nil, 0, fmt.Errorf("GetRawViewWalker failed: %w", err)
 	}
 	if walker == nil {
-		return nil, fmt.Errorf("RawViewWalker unavailable")
+		return nil, 0, fmt.Errorf("RawViewWalker unavailable")
 	}
 	defer walker.Release()
 
 	current := focusedElement
 	currentOwned := false
+	depth := 0
 	for current != nil {
 		var patternUnknown *IUnknown
 		patternErr := current.GetCurrentPattern(UIA_TextPatternId, &patternUnknown)
@@ -477,7 +613,7 @@ func findTextPattern(automation *IUIAutomation, focusedElement *IUIAutomationEle
 			if currentOwned {
 				current.Release()
 			}
-			return (*IUIAutomationTextPattern)(unsafe.Pointer(patternUnknown)), nil
+			return (*IUIAutomationTextPattern)(unsafe.Pointer(patternUnknown)), depth, nil
 		}
 		if patternUnknown != nil {
 			patternUnknown.Release()
@@ -488,14 +624,15 @@ func findTextPattern(automation *IUIAutomation, focusedElement *IUIAutomationEle
 			if currentOwned {
 				current.Release()
 			}
-			return nil, fmt.Errorf("GetParentElement failed: %w", err)
+			return nil, depth, fmt.Errorf("GetParentElement failed: %w", err)
 		}
 		if currentOwned {
 			current.Release()
 		}
 		current = parent
 		currentOwned = true
+		depth++
 	}
 
-	return nil, fmt.Errorf("TextPattern not supported by focused element or its ancestors")
+	return nil, depth, fmt.Errorf("TextPattern not supported by focused element or its ancestors")
 }
