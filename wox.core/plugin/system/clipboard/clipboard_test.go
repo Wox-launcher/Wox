@@ -60,7 +60,7 @@ func TestImagePasteFailureUsesTranslatedNotification(t *testing.T) {
 	t.Fatal("default paste action missing")
 }
 
-func TestConvertImageRecordExposesFavoriteAndAliasActions(t *testing.T) {
+func TestConvertImageRecordExposesFavoriteAndEditTitleActions(t *testing.T) {
 	api := &imagePasteFailureAPI{}
 	c := &ClipboardPlugin{api: api, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
 	alias := "receipt screenshot"
@@ -80,8 +80,8 @@ func TestConvertImageRecordExposesFavoriteAndAliasActions(t *testing.T) {
 	if clipboardResultHasAction(result, "i18n:plugin_clipboard_cancel_favorite") {
 		t.Fatal("non-favorite image records must not expose cancel favorite")
 	}
-	if !clipboardResultHasAction(result, "i18n:plugin_clipboard_edit_alias") {
-		t.Fatal("image records must expose edit alias")
+	if !clipboardResultHasAction(result, "i18n:plugin_clipboard_edit_title") {
+		t.Fatal("image records must expose edit title")
 	}
 
 	favorite := c.convertImageRecord(context.Background(), ClipboardRecord{
@@ -95,6 +95,25 @@ func TestConvertImageRecordExposesFavoriteAndAliasActions(t *testing.T) {
 	}
 	if clipboardResultHasAction(favorite, "i18n:plugin_clipboard_mark_favorite") {
 		t.Fatal("favorite image records must not expose add to favorites")
+	}
+}
+
+func TestConvertTextRecordPlacesEditTitleNextToEditText(t *testing.T) {
+	api := &imagePasteFailureAPI{}
+	c := &ClipboardPlugin{api: api, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	result := c.convertTextRecord(context.Background(), ClipboardRecord{
+		ID:      "text-edit",
+		Type:    string(clipboard.ClipboardTypeText),
+		Content: "hello clipboard",
+	}, plugin.Query{})
+
+	titleIdx := clipboardResultActionIndex(result, "i18n:plugin_clipboard_edit_title")
+	textIdx := clipboardResultActionIndex(result, "i18n:plugin_clipboard_edit_text")
+	if titleIdx < 0 || textIdx < 0 {
+		t.Fatal("text records must expose edit title and edit text")
+	}
+	if textIdx != titleIdx+1 {
+		t.Fatalf("edit title at %d and edit text at %d must be adjacent with title first", titleIdx, textIdx)
 	}
 }
 
@@ -167,12 +186,16 @@ func TestConvertRecordsExposeOpenContainingFolderAction(t *testing.T) {
 }
 
 func clipboardResultHasAction(result plugin.QueryResult, name string) bool {
-	for _, action := range result.Actions {
+	return clipboardResultActionIndex(result, name) >= 0
+}
+
+func clipboardResultActionIndex(result plugin.QueryResult, name string) int {
+	for index, action := range result.Actions {
 		if action.Name == name {
-			return true
+			return index
 		}
 	}
-	return false
+	return -1
 }
 
 func TestApplyCopyPastePrimaryActionHotkeys(t *testing.T) {

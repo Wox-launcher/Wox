@@ -20,7 +20,7 @@ Actions depend on the plugin and the selected result. Typical examples:
 | --- | --- |
 | App | Open, reveal in file manager, copy path, uninstall (Windows), terminate a running app |
 | File | Open, open containing folder, delete to trash, show system context menu, save to Notes |
-| Clipboard item | Copy, paste to the active window, favorite, edit alias, delete, save to Notes |
+| Clipboard item | Copy, paste to the active window, favorite, edit title, edit text, delete, save to Notes |
 | Bookmark or URL | Open in browser |
 | Plugin store result | Install, uninstall, update, open website |
 | Calculator / converter result | Copy the formatted result, raw result, or question and answer |

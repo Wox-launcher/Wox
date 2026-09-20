@@ -11,7 +11,7 @@ Wox includes a clipboard history launcher. Recent text and images stay searchabl
 
 ## What it is
 
-Type `cb` to browse history. Filter by text, an alias, or **OCR text from copied pictures**. Favorites, copy, and paste back into the active app are built in — including pasting images and emoji.
+Type `cb` to browse history. Filter by text, a title, or **OCR text from copied pictures**. Favorites, copy, and paste back into the active app are built in — including pasting images and emoji.
 
 You do not need a separate clipboard manager for everyday reuse.
 

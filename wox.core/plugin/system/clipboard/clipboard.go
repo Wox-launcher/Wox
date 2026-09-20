@@ -1151,6 +1151,62 @@ func (c *ClipboardPlugin) openContainingFolderAction(recordID string, filePath s
 	}
 }
 
+// editTitleAction edits the clipboard item's result title, stored in Alias.
+// The action is named "title" so it does not collide with Set result alias.
+func (c *ClipboardPlugin) editTitleAction(record ClipboardRecord) plugin.QueryResultAction {
+	defaultValue := ""
+	if record.Alias != nil {
+		defaultValue = *record.Alias
+	}
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_edit_title",
+		Icon:                   icons.Get(icons.ActionEdit),
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "title",
+					Label:        "i18n:plugin_clipboard_edit_title_label",
+					DefaultValue: defaultValue,
+					Tooltip:      "i18n:plugin_clipboard_edit_title_hint",
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			raw := actionContext.Values["title"]
+			var aliasPtr *string
+			if raw != "" {
+				aliasPtr = &raw
+			}
+
+			isUpdateSuccess := false
+			if record.IsFavorite {
+				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite title: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update favorite title: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record title: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			} else {
+				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update title: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update clipboard title: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record title: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			}
+
+			if isUpdateSuccess {
+				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			}
+		},
+	}
+}
+
 // convertRecordToResult converts a database record to a query result
 func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	var result plugin.QueryResult
@@ -1320,58 +1376,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		})
 	}
 
-	aliasDefaultValue := ""
-	if record.Alias != nil {
-		aliasDefaultValue = *record.Alias
-	}
-	actions = append(actions, plugin.QueryResultAction{
-		Name:                   "i18n:plugin_clipboard_edit_alias",
-		Icon:                   icons.Get(icons.ActionEdit),
-		Type:                   plugin.QueryResultActionTypeForm,
-		PreventHideAfterAction: true,
-		Form: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeTextBox,
-				Value: &definition.PluginSettingValueTextBox{
-					Key:          "alias",
-					Label:        "i18n:plugin_clipboard_edit_alias_label",
-					DefaultValue: aliasDefaultValue,
-					Tooltip:      "i18n:plugin_clipboard_edit_alias_hint",
-				},
-			},
-		},
-		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
-			raw := actionContext.Values["alias"]
-			var aliasPtr *string
-			if raw != "" {
-				aliasPtr = &raw
-			}
-
-			isUpdateSuccess := false
-			if record.IsFavorite {
-				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite alias: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update favorite alias: "+err.Error())
-				} else {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record alias: %s", record.ID))
-					isUpdateSuccess = true
-				}
-			} else {
-				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update alias: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update clipboard alias: "+err.Error())
-				} else {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record alias: %s", record.ID))
-					isUpdateSuccess = true
-				}
-			}
-
-			if isUpdateSuccess {
-				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-			}
-		},
-	})
-
+	actions = append(actions, c.editTitleAction(record))
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   icons.Get(icons.ActionDelete),
@@ -1597,22 +1602,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		})
 	}
 
-	// Delete action (works for both history and favorites)
-	actions = append(actions, plugin.QueryResultAction{
-		Name:                   "i18n:plugin_clipboard_delete",
-		Icon:                   icons.Get(icons.ActionDelete),
-		PreventHideAfterAction: true,
-		Hotkey:                 util.PrimaryHotkey("d"),
-		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			if err := c.deleteRecord(ctx, record); err != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
-				return
-			}
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
-			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-		},
-	})
-
+	actions = append(actions, c.editTitleAction(record))
 	// add edit action to edit text content
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_edit_text",
@@ -1664,58 +1654,19 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		},
 	})
 
-	// add edit alias action
-	aliasDefaultValue := ""
-	if record.Alias != nil {
-		aliasDefaultValue = *record.Alias
-	}
+	// Delete action (works for both history and favorites)
 	actions = append(actions, plugin.QueryResultAction{
-		Name:                   "i18n:plugin_clipboard_edit_alias",
-		Icon:                   icons.Get(icons.ActionEdit),
-		Type:                   plugin.QueryResultActionTypeForm,
+		Name:                   "i18n:plugin_clipboard_delete",
+		Icon:                   icons.Get(icons.ActionDelete),
 		PreventHideAfterAction: true,
-		Form: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeTextBox,
-				Value: &definition.PluginSettingValueTextBox{
-					Key:          "alias",
-					Label:        "i18n:plugin_clipboard_edit_alias_label",
-					DefaultValue: aliasDefaultValue,
-					Tooltip:      "i18n:plugin_clipboard_edit_alias_hint",
-				},
-			},
-		},
-		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
-			raw := actionContext.Values["alias"]
-			var aliasPtr *string
-			if raw != "" {
-				aliasPtr = &raw
+		Hotkey:                 util.PrimaryHotkey("d"),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if err := c.deleteRecord(ctx, record); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
+				return
 			}
-
-			isUpdateSuccess := false
-			// if record is favorite, update in settings, else update in database
-			if record.IsFavorite {
-				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite alias: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update favorite alias: "+err.Error())
-				} else {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record alias: %s", record.ID))
-					isUpdateSuccess = true
-				}
-			} else {
-				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update alias: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update clipboard alias: "+err.Error())
-				} else {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record alias: %s", record.ID))
-					isUpdateSuccess = true
-				}
-			}
-
-			if isUpdateSuccess {
-				// Refresh query to update all result data including form default values and action closures
-				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-			}
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
+			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		},
 	})
 
@@ -1893,6 +1844,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		})
 	}
 
+	result.Actions = append(result.Actions, c.editTitleAction(record))
 	result.Actions = append(result.Actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   icons.Get(icons.ActionDelete),
@@ -1905,58 +1857,6 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			}
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
 			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-		},
-	})
-
-	aliasDefaultValue := ""
-	if record.Alias != nil {
-		aliasDefaultValue = *record.Alias
-	}
-	result.Actions = append(result.Actions, plugin.QueryResultAction{
-		Name:                   "i18n:plugin_clipboard_edit_alias",
-		Icon:                   icons.Get(icons.ActionEdit),
-		Type:                   plugin.QueryResultActionTypeForm,
-		PreventHideAfterAction: true,
-		Form: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeTextBox,
-				Value: &definition.PluginSettingValueTextBox{
-					Key:          "alias",
-					Label:        "i18n:plugin_clipboard_edit_alias_label",
-					DefaultValue: aliasDefaultValue,
-					Tooltip:      "i18n:plugin_clipboard_edit_alias_hint",
-				},
-			},
-		},
-		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
-			raw := actionContext.Values["alias"]
-			var aliasPtr *string
-			if raw != "" {
-				aliasPtr = &raw
-			}
-
-			isUpdateSuccess := false
-			if record.IsFavorite {
-				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite alias: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update favorite alias: "+err.Error())
-				} else {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record alias: %s", record.ID))
-					isUpdateSuccess = true
-				}
-			} else {
-				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update alias: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update clipboard alias: "+err.Error())
-				} else {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record alias: %s", record.ID))
-					isUpdateSuccess = true
-				}
-			}
-
-			if isUpdateSuccess {
-				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-			}
 		},
 	})
 	if record.OCRText != nil {
