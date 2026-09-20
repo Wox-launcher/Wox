@@ -75,6 +75,12 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 					"WidthRatio": 0.0,
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
@@ -206,6 +212,7 @@ func (p *WebViewPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 		p.sites = p.loadSites(callbackCtx)
 		p.registerSiteCommands(callbackCtx)
 	})
+	p.api.OnMRURestore(ctx, p.handleMRURestore)
 }
 
 func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -242,18 +249,20 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 		}
 
 		results = append(results, plugin.QueryResult{
-			Title: site.Url,
-			Icon:  currentSite.Icon,
-			Score: 100,
+			Title:    site.Url,
+			Icon:     currentSite.Icon,
+			Score:    100,
+			ScoreKey: site.Keyword,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeWebView,
 				PreviewData: string(previewPayload),
 			},
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:      "i18n:plugin_webview_open_in_browser",
-					Icon:      icons.Get(icons.ActionOpen),
-					IsDefault: true,
+					Name:        "i18n:plugin_webview_open_in_browser",
+					Icon:        icons.Get(icons.ActionOpen),
+					IsDefault:   true,
+					ContextData: common.ContextData{"keyword": site.Keyword},
 					Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
 						if openErr := browser.OpenURL(site.Url, ""); openErr != nil {
 							p.api.Log(actionCtx, plugin.LogLevelError, fmt.Sprintf("failed to open url %s: %s", site.Url, openErr.Error()))
@@ -265,6 +274,19 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 	}
 
 	return plugin.NewQueryResponse(results)
+}
+
+// handleMRURestore rebuilds a configured webview site when the keyword still exists.
+func (p *WebViewPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	keyword := strings.TrimSpace(mruData.ContextData["keyword"])
+	if keyword == "" {
+		return nil, fmt.Errorf("empty webview keyword in context data")
+	}
+	response := p.Query(ctx, plugin.Query{Type: plugin.QueryTypeInput, Command: keyword, TriggerKeyword: "webview"})
+	if len(response.Results) == 0 {
+		return nil, fmt.Errorf("webview site no longer exists: %s", keyword)
+	}
+	return &response.Results[0], nil
 }
 
 // isWebViewURL accepts only absolute website URLs supported by the WebView plugin.

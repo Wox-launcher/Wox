@@ -42,6 +42,7 @@ const (
 	folderFavoriteContextNameKey  = "favorite_name"
 	folderFavoriteContextPathKey  = "favorite_path"
 	folderFavoriteContextIndexKey = "favorite_index"
+	folderMRUPathKey              = "path"
 )
 
 func init() {
@@ -84,6 +85,14 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Macos",
 			"Linux",
+		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
@@ -132,6 +141,7 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 func (p *FolderPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
 	p.api.OnHandlePluginCommand(ctx, p.handlePluginCommand)
+	p.api.OnMRURestore(ctx, p.handleMRURestore)
 }
 
 // handlePluginCommand opens Folder browsing at a path provided by another plugin.
@@ -323,12 +333,13 @@ func (p *FolderPlugin) buildPathResult(path string, title string, isDir bool, sc
 		SubTitle: path,
 		Icon:     getFolderPluginPathIcon(path, isDir),
 		Score:    score,
+		ScoreKey: path,
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeFile,
 			PreviewData: path,
 		},
 		Tails:   buildFolderFavoriteTails(favoriteMatch),
-		Actions: p.buildPathActions(path, isDir, favoriteMatch),
+		Actions: attachFolderMRUContext(p.buildPathActions(path, isDir, favoriteMatch), path),
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{path},
@@ -343,12 +354,13 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, favoriteInd
 		SubTitle: path,
 		Icon:     getFolderPluginPathIcon(path, true),
 		Score:    folderResultScore + scoreBoost,
+		ScoreKey: path,
 		Group:    "i18n:plugin_folder_favorites",
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeFile,
 			PreviewData: path,
 		},
-		Actions: p.buildFavoriteActions(name, path, favoriteIndex),
+		Actions: attachFolderMRUContext(p.buildFavoriteActions(name, path, favoriteIndex), path),
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{path},
@@ -830,8 +842,45 @@ func (p *FolderPlugin) buildFavoriteActionContextData(name string, path string, 
 		folderFavoriteContextNameKey:  strings.TrimSpace(name),
 		folderFavoriteContextPathKey:  strings.TrimSpace(path),
 		folderFavoriteContextIndexKey: strconv.Itoa(favoriteIndex),
+		folderMRUPathKey:              strings.TrimSpace(path),
 	}
 	return contextData
+}
+
+func attachFolderMRUContext(actions []plugin.QueryResultAction, path string) []plugin.QueryResultAction {
+	for i := range actions {
+		if actions[i].Id == folderToggleHiddenFilesActionID {
+			continue
+		}
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = common.ContextData{folderMRUPathKey: path}
+			continue
+		}
+		actions[i].ContextData[folderMRUPathKey] = path
+	}
+	return actions
+}
+
+// handleMRURestore rebuilds a folder or file result from the stored path.
+func (p *FolderPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	path := strings.TrimSpace(mruData.ContextData[folderMRUPathKey])
+	if path == "" {
+		path = strings.TrimSpace(mruData.ContextData[folderFavoriteContextPathKey])
+	}
+	if path == "" {
+		return nil, fmt.Errorf("empty folder path in context data")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("path no longer exists: %s", path)
+	}
+	name := strings.TrimSpace(mruData.ContextData[folderFavoriteContextNameKey])
+	if name != "" && info.IsDir() {
+		result := p.buildFavoriteResult(name, path, -1, 0)
+		return &result, nil
+	}
+	result := p.buildPathResult(path, filepath.Base(path), info.IsDir(), folderResultScore, nil)
+	return &result, nil
 }
 
 func folderFavoriteDataFromActionContext(actionContext plugin.ActionContext, fallbackName string, fallbackPath string, fallbackIndex int) (string, string, int) {

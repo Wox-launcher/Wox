@@ -111,6 +111,12 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 					"WidthRatio": 0.25,
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 	}
 }
@@ -142,6 +148,7 @@ func (r *AIChatPlugin) configurePluginBuiltinToolHooks() {
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.api.OnHandlePluginCommand(ctx, r.handlePluginCommand)
+	r.api.OnMRURestore(ctx, r.handleMRURestore)
 	r.mcpServers = []common.AIChatMCPServerConfig{}
 
 	// Configure hooks that let builtin tools call back into the plugin manager.
@@ -184,13 +191,15 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 
 	return []plugin.QueryResult{
 		{
-			Title: fallbackSearchTitle,
-			Icon:  aiChatIcon,
+			Title:    fallbackSearchTitle,
+			Icon:     aiChatIcon,
+			ScoreKey: query.RawQuery,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_chat_start_chat",
 					Icon:                   icons.Get(icons.ActionAdd),
 					PreventHideAfterAction: true,
+					ContextData:            common.ContextData{"query": query.RawQuery},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// Generate the chat id up front so it can be shared with
 						// the subsequent chat-mode query via ContextData. Without
@@ -1170,11 +1179,16 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 	}
 
 	resultId := uuid.NewString()
+	chatContext := common.ContextData{}
+	if activeChatId != "" {
+		chatContext["ai_chat_active_id"] = activeChatId
+	}
 	return plugin.QueryResult{
 		Id:       resultId,
 		Title:    "i18n:ui_ai_chat_new_chat",
 		SubTitle: "i18n:ui_ai_chat_create_new_chat",
 		Icon:     aiChatIcon,
+		ScoreKey: activeChatId,
 		Actions: []plugin.QueryResultAction{
 			{
 				Id:                     aiChatEnterChatModeActionId,
@@ -1182,6 +1196,7 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 				Icon:                   icons.Get(icons.ActionAdd),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
+				ContextData:            chatContext,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					// UI handles this internal action locally because entering chat mode is UI-only state.
 				},
@@ -1490,4 +1505,46 @@ func (c *AIChatPlugin) getResultGroup(ctx context.Context, chat common.AIChatDat
 	}
 
 	return "i18n:ui_ai_chat_history_history", 10
+}
+
+// handleMRURestore reopens a stored chat when that conversation still exists.
+func (r *AIChatPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	chatID := strings.TrimSpace(mruData.ContextData["ai_chat_active_id"])
+	queryText := strings.TrimSpace(mruData.ContextData["query"])
+	var found *common.AIChatData
+	for i := range r.chats {
+		if chatID != "" && r.chats[i].Id == chatID {
+			found = &r.chats[i]
+			break
+		}
+		if queryText != "" && r.chats[i].Title == queryText {
+			found = &r.chats[i]
+			break
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("chat no longer exists")
+	}
+	result := plugin.QueryResult{
+		Title:    found.Title,
+		SubTitle: "i18n:plugin_ai_chat_start_chat",
+		Icon:     aiChatIcon,
+		ScoreKey: found.Id,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_ai_chat_start_chat",
+				Icon:                   icons.Get(icons.ActionOpen),
+				PreventHideAfterAction: true,
+				ContextData:            common.ContextData{"ai_chat_active_id": found.Id, "query": found.Title},
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					r.api.ChangeQuery(ctx, common.PlainQuery{
+						QueryType:   plugin.QueryTypeInput,
+						QueryText:   "chat ",
+						ContextData: common.ContextData{"ai_chat_active_id": found.Id},
+					})
+				},
+			},
+		},
+	}
+	return &result, nil
 }

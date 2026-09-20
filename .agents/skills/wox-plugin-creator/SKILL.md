@@ -59,6 +59,7 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For inline command arguments or atomic query blocks, read [QueryHint](#queryhint). Command declarations contain suffix templates; `ChangeQuery` contains a complete instance. Keep legacy text parsing when structure is absent.
 - For query-scoped filters or sort controls, return `QueryResponse.Refinements` and read `references/refinements.md` before assigning hotkeys.
 - For `plugin.json`, `SettingDefinitions`, `QueryRequirements`, validators, dynamic settings, and feature flags, read `references/plugin_json_schema.md` first.
+- SDK and single-file SDK plugins should support MRU unless the plugin is clearly unsuitable. Declare the `mru` feature, put restore identity on action `ContextData`, and register `OnMRURestore` / `on_mru_restore` in `init()`. Skip MRU only for context-dependent, one-shot, diagnostic, or inbox-style plugins, and say why in the implementation notes. Script plugins cannot use MRU.
 - SDK and single-file SDK plugins must persist and read settings through the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). These values participate in Wox cloud sync and can follow the user across machines. Do not store plugin settings in local files, custom JSON, or other side storage unless the value is truly machine-local and cannot live in settings.
 
 ### Cache files first: use the plugin cache folder

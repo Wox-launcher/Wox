@@ -272,7 +272,9 @@ type QueryResult struct {
 	Preview  WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
 	Score int64
-	// ScoreKey is an optional stable identity for actioned-result scoring when title or subtitle is dynamic.
+	// ScoreKey is an optional stable identity when title or subtitle is dynamic.
+	// Wox uses it for actioned-result scoring, and as the MRU identity hash when
+	// the plugin's MRU HashBy is "scoreKey".
 	ScoreKey string
 	// Group results, Wox will group results by group name
 	Group string

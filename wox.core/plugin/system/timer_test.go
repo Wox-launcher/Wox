@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 )
@@ -215,5 +216,38 @@ func TestTimerTickRetriesTransientResultMiss(t *testing.T) {
 	}
 	if _, ok := timer.trackedResults.Load("t1"); !ok {
 		t.Fatal("active timer should remain tracked after a transient update miss")
+	}
+}
+
+type timerMRUTestAPI struct {
+	plugin.API
+}
+
+func (a *timerMRUTestAPI) GetTranslation(_ context.Context, key string) string {
+	return key
+}
+
+func TestTimerMRURestoreRebuildsStartResult(t *testing.T) {
+	timer := &TimerPlugin{api: &timerMRUTestAPI{}}
+	restored, err := timer.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{
+			"durationNs":    "60000000000",
+			"durationLabel": "1m",
+			"note":          "tea",
+		},
+	})
+	if err != nil {
+		t.Fatalf("restore timer: %v", err)
+	}
+	if restored.ScoreKey != timerStartScoreKey(time.Minute, "tea") {
+		t.Fatalf("score key = %q", restored.ScoreKey)
+	}
+	if _, err := timer.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
+		t.Fatal("empty context should fail restore")
+	}
+	if _, err := timer.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{"timerId": "missing"},
+	}); err == nil {
+		t.Fatal("missing timer without duration should fail restore")
 	}
 }

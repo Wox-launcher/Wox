@@ -98,6 +98,14 @@ func (t *TimerPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
+		},
 	}
 }
 
@@ -106,6 +114,7 @@ func (t *TimerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	t.timers = make(map[string]*timerEntry)
 	t.trackedResults = util.NewHashMap[string, string]()
 	t.loadTimers(ctx)
+	t.api.OnMRURestore(ctx, t.handleMRURestore)
 
 	util.Go(ctx, "refresh timers", func() {
 		ticker := time.NewTicker(time.Second)
@@ -153,7 +162,8 @@ func (t *TimerPlugin) buildStartResult(ctx context.Context, duration time.Durati
 		SubTitle: subTitle,
 		Icon:     timerPluginIcon,
 		Score:    timerStartResultScore,
-		Actions: []plugin.QueryResultAction{
+		ScoreKey: timerStartScoreKey(duration, note),
+		Actions: attachTimerMRUContext([]plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_timer_action_start_pinned",
 				Icon:      timerPinIcon,
@@ -170,7 +180,7 @@ func (t *TimerPlugin) buildStartResult(ctx context.Context, duration time.Durati
 					t.startTimer(ctx, duration, durationLabel, note, false)
 				},
 			},
-		},
+		}, timerStartMRUContext(duration, durationLabel, note)),
 	}
 }
 
@@ -187,7 +197,7 @@ func (t *TimerPlugin) buildTimerResult(ctx context.Context, entry *timerEntry) p
 		Score:    timerResultScoreBase - int64(remaining/time.Second),
 		ScoreKey: "timer:" + entry.ID,
 		Tails:    t.timerTails(ctx, entry),
-		Actions:  t.buildTimerActions(ctx, entry.ID),
+		Actions:  attachTimerMRUContext(t.buildTimerActions(ctx, entry.ID), timerEntryMRUContext(entry)),
 	}
 	t.trackResult(result.Id, entry.ID)
 	return result
@@ -826,4 +836,61 @@ func formatTimerRemaining(d time.Duration) string {
 		return fmt.Sprintf("%dh %02dm %02ds", hours, minutes, seconds)
 	}
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
+}
+
+func timerStartScoreKey(duration time.Duration, note string) string {
+	return fmt.Sprintf("timer:start:%d:%s", int64(duration), strings.TrimSpace(note))
+}
+
+func timerStartMRUContext(duration time.Duration, durationLabel, note string) common.ContextData {
+	return common.ContextData{
+		"durationNs":    strconv.FormatInt(int64(duration), 10),
+		"durationLabel": durationLabel,
+		"note":          note,
+	}
+}
+
+func timerEntryMRUContext(entry *timerEntry) common.ContextData {
+	data := timerStartMRUContext(entry.Duration, entry.DurationLabel, entry.Note)
+	data["timerId"] = entry.ID
+	return data
+}
+
+func attachTimerMRUContext(actions []plugin.QueryResultAction, data common.ContextData) []plugin.QueryResultAction {
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = data
+			continue
+		}
+		for key, value := range data {
+			actions[i].ContextData[key] = value
+		}
+	}
+	return actions
+}
+
+// handleMRURestore prefers a still-running timer and otherwise restores the start action.
+func (t *TimerPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	if timerID := strings.TrimSpace(mruData.ContextData["timerId"]); timerID != "" {
+		if entry := t.getTimer(timerID); entry != nil {
+			result := t.buildTimerResult(ctx, entry)
+			return &result, nil
+		}
+	}
+
+	rawDuration := strings.TrimSpace(mruData.ContextData["durationNs"])
+	if rawDuration == "" {
+		return nil, fmt.Errorf("empty timer duration in context data")
+	}
+	durationNs, err := strconv.ParseInt(rawDuration, 10, 64)
+	if err != nil || durationNs <= 0 {
+		return nil, fmt.Errorf("invalid timer duration in context data")
+	}
+	duration := time.Duration(durationNs)
+	durationLabel := strings.TrimSpace(mruData.ContextData["durationLabel"])
+	if durationLabel == "" {
+		durationLabel = formatTimerRemaining(duration)
+	}
+	result := t.buildStartResult(ctx, duration, durationLabel, strings.TrimSpace(mruData.ContextData["note"]))
+	return &result, nil
 }

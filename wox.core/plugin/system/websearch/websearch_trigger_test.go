@@ -2,6 +2,7 @@ package websearch
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 	"wox/plugin"
@@ -65,5 +66,36 @@ func TestWebSearchTriggerKeywords(t *testing.T) {
 	search.registerTriggerKeywords(context.Background())
 	if len(api.keywords) != 0 {
 		t.Fatalf("removed keywords = %v", api.keywords)
+	}
+}
+
+func TestWebSearchMRURestoreRebuildsResult(t *testing.T) {
+	search := webSearch{
+		Keyword: "g",
+		Title:   "Search {wox:parameter?name=query}",
+		Urls:    []string{"https://www.google.com/search?q={wox:parameter?name=query}"},
+	}
+	p := &WebSearchPlugin{api: &webSearchTriggerTestAPI{}, webSearches: []webSearch{search}}
+	encoded, err := json.Marshal(map[string]string{plugin.ParameterQueryVariable("query"): "wox"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: map[string]string{webSearchMRUKeywordKey: "g", webSearchMRUValuesKey: string(encoded)},
+	})
+	if err != nil {
+		t.Fatalf("restore web search: %v", err)
+	}
+	if restored.Actions[0].ContextData[webSearchMRUKeywordKey] != "g" {
+		t.Fatalf("restored context = %#v", restored.Actions[0].ContextData)
+	}
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
+		t.Fatal("empty context should fail restore")
+	}
+	p.webSearches[0].Disabled = true
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: map[string]string{webSearchMRUKeywordKey: "g", webSearchMRUValuesKey: string(encoded)},
+	}); err == nil {
+		t.Fatal("disabled search should fail restore")
 	}
 }

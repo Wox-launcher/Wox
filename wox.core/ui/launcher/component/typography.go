@@ -7,8 +7,9 @@ const (
 	AttentionBadgeFontSize = float32(15)
 	ResultTitleFontSize    = float32(15)
 	ResultSubtitleFontSize = float32(12)
-	ResultTitleTagFontSize = float32(9)
 	TailFontSize           = float32(11)
+	// Title-row alias/hotkey type matches result tails so both accessories read as one size.
+	ResultTitleTagFontSize = TailFontSize
 	ListEmptyFontSize      = float32(13)
 	ActionHeaderFontSize   = float32(13)
 	ActionTitleFontSize    = float32(13)

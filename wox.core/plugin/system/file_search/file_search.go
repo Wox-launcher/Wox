@@ -167,6 +167,7 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDisableAutoCommandHint},
+			{Name: plugin.MetadataFeatureMRU, Params: map[string]any{"HashBy": "scoreKey"}},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
@@ -311,6 +312,7 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 
 func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 	c.api.OnGetDynamicSetting(ctx, c.dynamicIndexStatsSetting)
 	c.indexPolicy = newFileSearchIndexPolicy()
 	c.indexPolicy.SetIgnorePatterns(c.getConfiguredIgnorePatternValues(ctx))
@@ -1020,10 +1022,11 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 			SubTitle:   item.Path,
 			Icon:       icon,
 			Score:      item.Score,
+			ScoreKey:   item.Path,
 			Group:      group,
 			GroupScore: groupScore,
 			Tails:      fileSearchResultTails(item, recent),
-			Actions:    actions,
+			Actions:    attachFileSearchMRUContext(actions, item.Path),
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
 				Files: []string{item.Path},
@@ -1263,6 +1266,49 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	}
 
 	return actions
+}
+
+func fileSearchMRUContext(path string) common.ContextData {
+	return common.ContextData{"path": path}
+}
+
+func attachFileSearchMRUContext(actions []plugin.QueryResultAction, path string) []plugin.QueryResultAction {
+	for i := range actions {
+		if actions[i].Name == "i18n:plugin_file_index_files" || actions[i].Name == "i18n:plugin_file_rebuild_content_index" {
+			continue
+		}
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = fileSearchMRUContext(path)
+			continue
+		}
+		actions[i].ContextData["path"] = path
+	}
+	return actions
+}
+
+// handleMRURestore rebuilds a file or folder result when the stored path still exists.
+func (c *FileSearchPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	path := strings.TrimSpace(mruData.ContextData["path"])
+	if path == "" {
+		return nil, fmt.Errorf("empty file path in context data")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("file no longer exists: %s", path)
+	}
+	item := filesearch.SearchResult{
+		Path:       path,
+		Name:       filepath.Base(path),
+		ParentPath: filepath.Dir(path),
+		IsDir:      info.IsDir(),
+		Mtime:      info.ModTime().UnixMilli(),
+		Size:       info.Size(),
+	}
+	results := c.materializeFileSearchResults(ctx, plugin.Query{}, []filesearch.SearchResult{item}, fileSearchSortRefinementRelevance, false, &fileSearchQueryDiagnostics{})
+	if len(results) == 0 {
+		return nil, fmt.Errorf("failed to restore file: %s", path)
+	}
+	return &results[0], nil
 }
 
 // buildCopyPathAction copies the result path for both files and folders.

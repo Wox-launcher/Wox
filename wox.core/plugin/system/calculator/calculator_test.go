@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"wox/common"
 	"wox/plugin"
 )
 
@@ -139,5 +140,33 @@ func TestCalculatorPrivateHistorySkipsConsecutiveDuplicate(t *testing.T) {
 	api.mu.Unlock()
 	if saved != "" {
 		t.Fatalf("duplicate calculator history was persisted: %s", saved)
+	}
+}
+
+func TestCalculatorMetadataEnablesMRU(t *testing.T) {
+	metadata := (&CalculatorPlugin{}).GetMetadata()
+	if !metadata.IsSupportFeature(plugin.MetadataFeatureMRU) {
+		t.Fatal("calculator plugin must declare the MRU feature")
+	}
+}
+
+func TestCalculatorMRURestoreRecalculatesExpression(t *testing.T) {
+	calculator := &CalculatorPlugin{api: &calculatorTestAPI{settings: map[string]string{}}}
+	restored, err := calculator.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{"query": "1+1"},
+	})
+	if err != nil {
+		t.Fatalf("restore calculator: %v", err)
+	}
+	if restored.ScoreKey != calculatorExpressionScoreKey("1+1") || restored.Actions[0].ContextData["query"] != "1+1" {
+		t.Fatalf("restored calculator = %#v", restored)
+	}
+	if _, err := calculator.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
+		t.Fatal("empty context should fail restore")
+	}
+	if _, err := calculator.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{"query": "not-an-expression"},
+	}); err == nil {
+		t.Fatal("invalid expression should fail restore")
 	}
 }

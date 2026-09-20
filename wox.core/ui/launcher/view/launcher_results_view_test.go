@@ -407,7 +407,10 @@ func TestLauncherResultTitleTagsStayVisibleWhenTitleIsLong(t *testing.T) {
 	aliasStyle := launcherResultHotkeyKeycapText(aliasCaps[0]).Style
 	hotkeyStyle := launcherResultHotkeyKeycapText(hotkeyCaps[0]).Style
 	if aliasStyle != hotkeyStyle || aliasStyle.Size != woxcomponent.ResultTitleTagFontSize {
-		t.Fatalf("title tag text style = alias %+v hotkey %+v, want the same smaller keycap type", aliasStyle, hotkeyStyle)
+		t.Fatalf("title tag text style = alias %+v hotkey %+v, want the same keycap type", aliasStyle, hotkeyStyle)
+	}
+	if aliasStyle.Size != woxcomponent.TailFontSize {
+		t.Fatalf("title tag font = %v, want tail size %v", aliasStyle.Size, woxcomponent.TailFontSize)
 	}
 	if aliasCaps[0].(woxwidget.Stack).Height != 16 || hotkeyCaps[0].(woxwidget.Stack).Height != 16 {
 		t.Fatalf("title tag keycap height = alias %.0f hotkey %.0f, want dense 16", aliasCaps[0].(woxwidget.Stack).Height, hotkeyCaps[0].(woxwidget.Stack).Height)

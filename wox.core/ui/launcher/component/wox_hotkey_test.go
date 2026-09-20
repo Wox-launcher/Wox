@@ -70,6 +70,9 @@ func TestLauncherHotkeyDensity(t *testing.T) {
 
 // TestWoxHotkeyDenseTitleTags keeps result alias/hotkey chips smaller than toolbar keys.
 func TestWoxHotkeyDenseTitleTags(t *testing.T) {
+	if ResultTitleTagFontSize != TailFontSize {
+		t.Fatalf("title tag font = %v, want tail size %v", ResultTitleTagFontSize, TailFontSize)
+	}
 	built, _ := WoxHotkey(HotkeyProps{Theme: &Theme{}, Compact: true, Dense: true, FontSize: ResultTitleTagFontSize, Labels: []string{"SZ", "S"}})
 	container := built.(woxwidget.Container)
 	first := container.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)

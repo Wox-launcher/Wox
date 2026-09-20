@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
@@ -83,6 +84,12 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 					"requireActiveBrowserUrl": "true",
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
@@ -123,6 +130,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 		}
 	})
 
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == browserWebsocketPortSettingKey {
 			util.Go(callbackCtx, "newWebsocketServer on port changed", func() {
@@ -164,11 +172,13 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 			Title:    tab.Title,
 			SubTitle: tab.Url,
 			Score:    util.MaxInt64(titleScore, urlScore),
+			ScoreKey: tab.Url,
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_browser_open_tab",
-					Icon: icons.Get(icons.ActionOpen),
+					Name:        "i18n:plugin_browser_open_tab",
+					Icon:        icons.Get(icons.ActionOpen),
+					ContextData: common.ContextData{"url": tab.Url, "title": tab.Title},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						msg := []byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex))
 						if tab.session != nil {
@@ -456,4 +466,71 @@ func mustJSONString(s string) string {
 		return `""`
 	}
 	return string(b)
+}
+
+// handleMRURestore highlights a still-open tab or opens the stored URL.
+func (c *BrowserPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	url := strings.TrimSpace(mruData.ContextData["url"])
+	if url == "" {
+		return nil, fmt.Errorf("empty browser url in context data")
+	}
+	title := strings.TrimSpace(mruData.ContextData["title"])
+	c.tabsMu.RLock()
+	tabs := append([]browserTab(nil), c.openedTabs...)
+	c.tabsMu.RUnlock()
+	for _, tab := range tabs {
+		if tab.Url != url {
+			continue
+		}
+		current := tab
+		browserIcon := browser.IconForBrowserID(current.Browser)
+		icon := browserIcon
+		if tabIcon, err := GetWebsiteIconWithCache(ctx, current.Url); err == nil {
+			icon = browserIcon.Overlay(tabIcon, 0.4, 0.6, 0.6)
+		}
+		result := plugin.QueryResult{
+			Title:    current.Title,
+			SubTitle: current.Url,
+			ScoreKey: current.Url,
+			Icon:     icon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:        "i18n:plugin_browser_open_tab",
+					Icon:        icons.Get(icons.ActionOpen),
+					ContextData: common.ContextData{"url": current.Url, "title": current.Title},
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						msg := []byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, current.TabId, current.WindowId, current.TabIndex))
+						if current.session != nil {
+							_ = current.session.Write(msg)
+							return
+						}
+						_ = c.m.Broadcast(msg)
+					},
+				},
+			},
+		}
+		return &result, nil
+	}
+	if title == "" {
+		title = url
+	}
+	result := plugin.QueryResult{
+		Title:    title,
+		SubTitle: url,
+		ScoreKey: url,
+		Icon:     browserIcon,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:        "i18n:plugin_url_open",
+				Icon:        icons.Get(icons.ActionOpen),
+				ContextData: common.ContextData{"url": url, "title": title},
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					if err := browser.OpenURL(url, ""); err != nil {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open browser url: %s", err.Error()))
+					}
+				},
+			},
+		},
+	}
+	return &result, nil
 }

@@ -35,6 +35,9 @@ const (
 	webSearchOpenWebViewHeightKey    = "height"
 	webSearchTableGroupAdvanced      = "advanced"
 	webSearchTableGroupWebView       = "webview"
+
+	webSearchMRUKeywordKey = "keyword"
+	webSearchMRUValuesKey  = "values"
 )
 
 var webSearchesSettingKey = "webSearches"
@@ -116,6 +119,12 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureQuerySelection,
+			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "rawQuery",
+				},
 			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
@@ -274,6 +283,7 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	util.Go(ctx, "parse websearch icons", func() {
 		r.indexIcons(ctx)
 	})
+	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
 
 // registerTriggerKeywords makes enabled searches participate in core scoped routing.
@@ -477,17 +487,23 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 			values[variable] = value
 		}
 	}
+	mruContext := webSearchMRUContext(search, values)
 	actions := []plugin.QueryResultAction{{
 		Name: "i18n:plugin_websearch_search", Icon: icons.Get(icons.ActionSearch), IsDefault: true,
+		ContextData: mruContext,
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			util.Go(ctx, "open web search urls", func() { r.openSearchUrls(ctx, search, values) })
 		},
 	}}
 	if previewURL := firstWebViewSearchURL(search, values); previewURL != "" && supportsWebViewPreview() {
+		previewContext := webViewPreviewContextData(search, previewURL)
+		for key, value := range mruContext {
+			previewContext[key] = value
+		}
 		actions = append(actions, plugin.QueryResultAction{
 			Id: webSearchOpenWebViewActionID, Name: "i18n:plugin_websearch_open_in_webview",
 			Icon: icons.Get(icons.ActionPreview), Hotkey: util.PrimaryHotkey("enter"),
-			PreventHideAfterAction: true, ContextData: webViewPreviewContextData(search, previewURL),
+			PreventHideAfterAction: true, ContextData: previewContext,
 			Action: func(context.Context, plugin.ActionContext) {
 				// UI handles this internal action locally because opening the
 				// in-launcher WebView preview is UI-only state.
@@ -595,6 +611,47 @@ func (r *WebSearchPlugin) getWebSearchItemBrowserOptions() []definition.PluginSe
 	}
 
 	return options
+}
+
+func webSearchMRUContext(search webSearch, values map[string]string) common.ContextData {
+	data := common.ContextData{webSearchMRUKeywordKey: search.Keyword}
+	if encoded, err := json.Marshal(values); err == nil {
+		data[webSearchMRUValuesKey] = string(encoded)
+	}
+	return data
+}
+
+// handleMRURestore rebuilds a search result from the engine keyword and stored parameter values.
+func (r *WebSearchPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	keyword := strings.TrimSpace(mruData.ContextData[webSearchMRUKeywordKey])
+	if keyword == "" {
+		return nil, fmt.Errorf("empty web search keyword in context data")
+	}
+	var values map[string]string
+	if raw := strings.TrimSpace(mruData.ContextData[webSearchMRUValuesKey]); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &values); err != nil {
+			return nil, fmt.Errorf("invalid web search values in context data: %w", err)
+		}
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("empty web search values in context data")
+	}
+
+	var found *webSearch
+	for i := range r.webSearches {
+		if r.webSearches[i].Keyword == keyword && !r.webSearches[i].Disabled {
+			found = &r.webSearches[i]
+			break
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("web search no longer exists: %s", keyword)
+	}
+	result := r.searchResult(ctx, *found, values, nil, nil)
+	if result.Title == "i18n:plugin_websearch_missing_context" {
+		return nil, fmt.Errorf("web search is missing required context: %s", keyword)
+	}
+	return &result, nil
 }
 
 func (r *WebSearchPlugin) openURLInWebSearchBrowser(url string, browserId string, private bool) error {

@@ -74,12 +74,19 @@ func (c *ColorPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 	}
 }
 
 func (c *ColorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
 func (c *ColorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -169,9 +176,47 @@ func (c *ColorPlugin) buildColorResult(ctx context.Context, color parsedColor, i
 		Score:      item.LastSeenAt,
 		Group:      group,
 		GroupScore: groupScore,
+		ScoreKey:   color.Hex,
 		Tails:      c.buildColorTails(ctx, complement, analogousLeft, analogousRight),
-		Actions:    c.buildColorActions(ctx, color, item, complement, analogousLeft, analogousRight, rgb, hsl),
+		Actions:    attachColorMRUContext(c.buildColorActions(ctx, color, item, complement, analogousLeft, analogousRight, rgb, hsl), color.Hex),
 	}
+}
+
+func colorMRUContext(hex string) common.ContextData {
+	return common.ContextData{"hex": hex}
+}
+
+func attachColorMRUContext(actions []plugin.QueryResultAction, hex string) []plugin.QueryResultAction {
+	data := colorMRUContext(hex)
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = data
+			continue
+		}
+		actions[i].ContextData["hex"] = hex
+	}
+	return actions
+}
+
+// handleMRURestore rebuilds a color result from the stored HEX value.
+func (c *ColorPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	hex := strings.TrimSpace(mruData.ContextData["hex"])
+	if hex == "" {
+		return nil, fmt.Errorf("empty color hex in context data")
+	}
+	parsed, ok := parseHexColor(hex)
+	if !ok {
+		return nil, fmt.Errorf("invalid color hex in context data: %s", hex)
+	}
+	item := ColorHistoryItem{Hex: parsed.Hex}
+	for _, historyItem := range c.loadHistory(ctx) {
+		if historyItem.Hex == parsed.Hex {
+			item = historyItem
+			break
+		}
+	}
+	result := c.buildColorResult(ctx, parsed, item)
+	return &result, nil
 }
 
 func (c *ColorPlugin) buildColorTails(ctx context.Context, complement string, analogousLeft string, analogousRight string) []plugin.QueryResultTail {

@@ -64,6 +64,14 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "rawQuery",
+				},
+			},
+		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
 				Type: definition.PluginSettingDefinitionTypeSelect,
@@ -132,6 +140,7 @@ func (c *CalculatorPlugin) Init(ctx context.Context, initParams plugin.InitParam
 
 	c.debounceInterval = 800 * time.Millisecond // 800ms debounce interval
 	c.histories = c.loadHistories(ctx)
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
 func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -163,8 +172,9 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			ScoreKey: calculatorExpressionScoreKey(query.Search),
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_calculator_copy_result",
-					Icon: icons.Get(icons.ActionCopy),
+					Name:        "i18n:plugin_calculator_copy_result",
+					Icon:        icons.Get(icons.ActionCopy),
+					ContextData: calculatorMRUContext(query.Search),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
@@ -176,9 +186,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 					},
 				},
 				{
-					Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
-					IsDefault: true,
-					Icon:      icons.Get(icons.ActionCopy),
+					Name:        "i18n:plugin_calculator_copy_result_with_thousands_separator",
+					IsDefault:   true,
+					Icon:        icons.Get(icons.ActionCopy),
+					ContextData: calculatorMRUContext(query.Search),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
@@ -211,16 +222,18 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 				ScoreKey: calculatorExpressionScoreKey(query.Search),
 				Actions: []plugin.QueryResultAction{
 					{
-						Name: "i18n:plugin_calculator_copy_result",
-						Icon: icons.Get(icons.ActionCopy),
+						Name:        "i18n:plugin_calculator_copy_result",
+						Icon:        icons.Get(icons.ActionCopy),
+						ContextData: calculatorMRUContext(query.Search),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(result)
 						},
 					},
 					{
-						Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
-						IsDefault: true,
-						Icon:      icons.Get(icons.ActionCopy),
+						Name:        "i18n:plugin_calculator_copy_result_with_thousands_separator",
+						IsDefault:   true,
+						Icon:        icons.Get(icons.ActionCopy),
+						ContextData: calculatorMRUContext(query.Search),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(formattedResult)
 						},
@@ -253,16 +266,18 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 					Icon:     calculatorIcon,
 					Actions: []plugin.QueryResultAction{
 						{
-							Name: "i18n:plugin_calculator_copy_result",
-							Icon: icons.Get(icons.ActionCopy),
+							Name:        "i18n:plugin_calculator_copy_result",
+							Icon:        icons.Get(icons.ActionCopy),
+							ContextData: calculatorMRUContext(h.Expression),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(h.Result)
 							},
 						},
 						{
-							Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
-							IsDefault: true,
-							Icon:      icons.Get(icons.ActionCopy),
+							Name:        "i18n:plugin_calculator_copy_result_with_thousands_separator",
+							IsDefault:   true,
+							Icon:        icons.Get(icons.ActionCopy),
+							ContextData: calculatorMRUContext(h.Expression),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(formattedHistoryResult)
 							},
@@ -271,6 +286,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 							Name:                   "i18n:plugin_calculator_recalculate",
 							Icon:                   icons.Get(icons.ActionRun),
 							PreventHideAfterAction: true,
+							ContextData:            calculatorMRUContext(h.Expression),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								c.api.ChangeQuery(ctx, common.PlainQuery{
 									QueryType: plugin.QueryTypeInput,
@@ -297,6 +313,51 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 
 func calculatorExpressionScoreKey(expression string) string {
 	return "calculator:" + strings.TrimSpace(expression)
+}
+
+func calculatorMRUContext(expression string) common.ContextData {
+	return common.ContextData{"query": strings.TrimSpace(expression)}
+}
+
+// handleMRURestore recalculates the stored expression so the homepage result stays current.
+func (c *CalculatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	query := strings.TrimSpace(mruData.ContextData["query"])
+	if query == "" {
+		return nil, fmt.Errorf("empty calculator query in context data")
+	}
+
+	thousandsSep, decimalSep := c.getSeparators(ctx)
+	val, err := Calculate(query, thousandsSep, decimalSep)
+	if err != nil {
+		return nil, fmt.Errorf("no result for query: %s", query)
+	}
+	result := val.String()
+	formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
+	return &plugin.QueryResult{
+		Title:    formattedResult,
+		SubTitle: query,
+		Icon:     calculatorIcon,
+		ScoreKey: calculatorExpressionScoreKey(query),
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:        "i18n:plugin_calculator_copy_result",
+				Icon:        icons.Get(icons.ActionCopy),
+				ContextData: calculatorMRUContext(query),
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					clipboard.WriteText(result)
+				},
+			},
+			{
+				Name:        "i18n:plugin_calculator_copy_result_with_thousands_separator",
+				IsDefault:   true,
+				Icon:        icons.Get(icons.ActionCopy),
+				ContextData: calculatorMRUContext(query),
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					clipboard.WriteText(formattedResult)
+				},
+			},
+		},
+	}, nil
 }
 
 func (c *CalculatorPlugin) getDecimalSeparator(ctx context.Context) DecimalSeparator {

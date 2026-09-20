@@ -198,6 +198,12 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					"requireActiveWindowIcon": true,
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 		Commands: []plugin.MetadataCommand{
 			{
@@ -339,6 +345,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		return
 	}
 	c.db = db
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 	c.syncPaddleWorkflowConsumer(ctx)
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
 		if key == clipboardImageTextRecognitionSettingKey || key == clipboardOCRModelSettingKey {
@@ -1146,17 +1153,53 @@ func (c *ClipboardPlugin) openContainingFolderAction(recordID string, filePath s
 
 // convertRecordToResult converts a database record to a query result
 func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
+	var result plugin.QueryResult
 	if record.Type == string(clipboard.ClipboardTypeText) {
-		return c.convertTextRecord(ctx, record, query)
+		result = c.convertTextRecord(ctx, record, query)
 	} else if record.Type == string(clipboard.ClipboardTypeFile) {
-		return c.convertFileRecord(ctx, record, query)
+		result = c.convertFileRecord(ctx, record, query)
 	} else if record.Type == string(clipboard.ClipboardTypeImage) {
-		return c.convertImageRecord(ctx, record, query)
+		result = c.convertImageRecord(ctx, record, query)
+	} else {
+		return plugin.QueryResult{
+			Title: "ERR: Unknown record type",
+		}
 	}
+	result.ScoreKey = record.ID
+	result.Actions = attachClipboardMRUContext(result.Actions, record.ID)
+	return result
+}
 
-	return plugin.QueryResult{
-		Title: "ERR: Unknown record type",
+func clipboardMRUContext(recordID string) common.ContextData {
+	return common.ContextData{"recordId": recordID}
+}
+
+func attachClipboardMRUContext(actions []plugin.QueryResultAction, recordID string) []plugin.QueryResultAction {
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = clipboardMRUContext(recordID)
+			continue
+		}
+		actions[i].ContextData["recordId"] = recordID
 	}
+	return actions
+}
+
+// handleMRURestore rebuilds a clipboard result when the stored record still exists.
+func (c *ClipboardPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	recordID := strings.TrimSpace(mruData.ContextData["recordId"])
+	if recordID == "" {
+		return nil, fmt.Errorf("empty clipboard record id in context data")
+	}
+	if c.db == nil {
+		return nil, fmt.Errorf("clipboard database is not available")
+	}
+	record, err := c.db.GetByID(ctx, recordID)
+	if err != nil {
+		return nil, fmt.Errorf("clipboard record no longer exists: %s", recordID)
+	}
+	result := c.convertRecordToResult(ctx, *record, plugin.Query{})
+	return &result, nil
 }
 
 func clipboardRecordFilePaths(record ClipboardRecord) []string {

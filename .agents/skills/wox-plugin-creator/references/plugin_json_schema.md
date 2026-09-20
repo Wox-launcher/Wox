@@ -448,12 +448,23 @@ Delays query execution until the user stops typing for `IntervalMs`.
 
 ### 5. MRU (Most Recently Used)
 
-Enables automatic boosting of frequently used results.
+SDK and single-file SDK plugins should enable MRU by default. Wox records a result after the user executes an action, then asks the plugin to rebuild it on the launcher start page. Script plugins cannot use MRU.
+
+Skip MRU only when the plugin is clearly unsuitable: results depend on the current selection, foreground app, or Open/Save dialog; the plugin is a one-shot action; it is diagnostic or maintenance-only; or it already is a history/inbox surface. If you skip it, document why.
+
+Declare the feature and implement `OnMRURestore` / `on_mru_restore`. Put restore identity on the executed action's `ContextData`. Return `null` / an error when the item is gone.
+
+`HashBy` options:
+
+- `title` (default): `Title` + `SubTitle`
+- `rawQuery`: original `Query.RawQuery`
+- `search`: `Query.Search`
+- `scoreKey`: result `ScoreKey` when titles are unstable
 
 ```json
 {
   "Name": "mru",
-  "Params": { "HashBy": "title" } // Options: "title", "rawQuery", "search"
+  "Params": { "HashBy": "title" }
 }
 ```
 

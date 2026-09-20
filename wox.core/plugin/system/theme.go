@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
@@ -52,11 +53,20 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
+		},
 	}
 }
 
 func (c *ThemePlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
 func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -86,11 +96,13 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				Title:    theme.ThemeName,
 				SubTitle: theme.Description,
 				Icon:     themeResultIcon(theme, iconCatalog),
+				ScoreKey: theme.ThemeId,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   changeThemeText,
 						Icon:                   icons.Get(icons.ActionRun),
 						PreventHideAfterAction: true,
+						ContextData:            themeMRUContext(theme.ThemeId),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							uiManager.ChangeTheme(ctx, theme)
 						},
@@ -167,6 +179,51 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	})
 
 	return plugin.NewQueryResponse(append(results, storeResults...))
+}
+
+func themeMRUContext(themeID string) common.ContextData {
+	return common.ContextData{"themeId": themeID}
+}
+
+// handleMRURestore rebuilds an installed theme result; uninstalled themes are skipped.
+func (c *ThemePlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	themeID := strings.TrimSpace(mruData.ContextData["themeId"])
+	if themeID == "" {
+		return nil, fmt.Errorf("empty theme id in context data")
+	}
+
+	uiManager := plugin.GetPluginManager().GetUI()
+	installedThemes := uiManager.GetAllThemes(ctx)
+	var found *common.Theme
+	for i := range installedThemes {
+		if installedThemes[i].ThemeId == themeID {
+			found = &installedThemes[i]
+			break
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("theme is no longer installed: %s", themeID)
+	}
+
+	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
+	result := plugin.QueryResult{
+		Title:    found.ThemeName,
+		SubTitle: found.Description,
+		Icon:     themeResultIcon(*found, installedThemes),
+		ScoreKey: found.ThemeId,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   changeThemeText,
+				Icon:                   icons.Get(icons.ActionRun),
+				PreventHideAfterAction: true,
+				ContextData:            themeMRUContext(found.ThemeId),
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					uiManager.ChangeTheme(ctx, *found)
+				},
+			},
+		},
+	}
+	return &result, nil
 }
 
 func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []plugin.QueryResult {

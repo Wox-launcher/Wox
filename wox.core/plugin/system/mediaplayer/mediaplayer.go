@@ -119,7 +119,14 @@ func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
-		Features: []plugin.MetadataFeature{},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
+		},
 	}
 }
 
@@ -129,6 +136,7 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	m.retriever = mediaRetriever
 	m.retriever.UpdateAPI(m.api)
 	m.trackedResults = util.NewHashMap[string, mediaTrackedResult]()
+	m.api.OnMRURestore(ctx, m.handleMRURestore)
 
 	// First SMTC/MediaRemote lookup is the expensive one; warm it so entering
 	// the plugin does not pay that cost on the query path.
@@ -299,9 +307,10 @@ func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMedia
 		Title:    mediaInfo.Title,
 		SubTitle: m.formatSubTitle(mediaInfo),
 		Icon:     m.formatIcon(mediaInfo),
+		ScoreKey: mediaMRUScoreKey(mediaInfo),
 		Preview:  m.formatPreview(mediaInfo),
 		Tails:    plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo)),
-		Actions:  actions,
+		Actions:  attachMediaMRUContext(actions, mediaInfo),
 	}
 	m.trackMediaResult(result.Id, mediaTrackedResult{
 		playbackState:          mediaInfo.State,
@@ -658,4 +667,46 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 	for _, resultId := range toRemove {
 		m.trackedResults.Delete(resultId)
 	}
+}
+
+func mediaMRUScoreKey(mediaInfo *MediaInfo) string {
+	return strings.Join([]string{mediaInfo.AppName, mediaInfo.Title, mediaInfo.Artist}, "\x1f")
+}
+
+func attachMediaMRUContext(actions []plugin.QueryResultAction, mediaInfo *MediaInfo) []plugin.QueryResultAction {
+	data := common.ContextData{
+		"title":  mediaInfo.Title,
+		"artist": mediaInfo.Artist,
+		"app":    mediaInfo.AppName,
+	}
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = data
+			continue
+		}
+		actions[i].ContextData["title"] = mediaInfo.Title
+		actions[i].ContextData["artist"] = mediaInfo.Artist
+		actions[i].ContextData["app"] = mediaInfo.AppName
+	}
+	return actions
+}
+
+// handleMRURestore rebuilds the now-playing result only when the same track is still active.
+func (m *MediaPlayerPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	title := strings.TrimSpace(mruData.ContextData["title"])
+	if title == "" {
+		return nil, fmt.Errorf("empty media title in context data")
+	}
+	mediaInfo, err := m.retriever.GetCurrentMedia(ctx)
+	if err != nil || mediaInfo == nil {
+		return nil, fmt.Errorf("no active media")
+	}
+	if mediaInfo.Title != title {
+		return nil, fmt.Errorf("media is no longer playing: %s", title)
+	}
+	if artist := strings.TrimSpace(mruData.ContextData["artist"]); artist != "" && mediaInfo.Artist != artist {
+		return nil, fmt.Errorf("media is no longer playing: %s", title)
+	}
+	result := m.buildMediaResult(mediaInfo, false, "")
+	return &result, nil
 }

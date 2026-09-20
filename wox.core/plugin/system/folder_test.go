@@ -1,11 +1,13 @@
 package system
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"wox/common"
 	"wox/plugin"
 )
 
@@ -232,6 +234,38 @@ func TestFolderQueryFuzzyMatchesChildName(t *testing.T) {
 
 	if len(response.Results) != 1 || response.Results[0].SubTitle != woxVideoPath {
 		t.Fatalf("results = %#v, want wox.video at %q", response.Results, woxVideoPath)
+	}
+}
+
+func TestFolderMetadataEnablesMRU(t *testing.T) {
+	metadata := (&FolderPlugin{}).GetMetadata()
+	if !metadata.IsSupportFeature(plugin.MetadataFeatureMRU) {
+		t.Fatal("folder plugin must declare the MRU feature")
+	}
+}
+
+func TestFolderMRURestoreRebuildsExistingPath(t *testing.T) {
+	dir := t.TempDir()
+	p := &FolderPlugin{}
+	restored, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{folderMRUPathKey: dir},
+	})
+	if err != nil {
+		t.Fatalf("restore folder: %v", err)
+	}
+	if restored.SubTitle != dir || restored.ScoreKey != dir {
+		t.Fatalf("restored folder = %#v", restored)
+	}
+	if restored.Actions[0].ContextData[folderMRUPathKey] != dir {
+		t.Fatalf("restored context = %#v", restored.Actions[0].ContextData)
+	}
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
+		t.Fatal("empty context should fail restore")
+	}
+	if _, err := p.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{folderMRUPathKey: filepath.Join(dir, "missing")},
+	}); err == nil {
+		t.Fatal("missing path should fail restore")
 	}
 }
 

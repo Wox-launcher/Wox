@@ -132,6 +132,7 @@ Prefer these APIs for all plugin settings. Values stored here can sync across ma
 - `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting. Normal plugin settings are eligible for cloud sync, so pass `true` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `OnSettingChanged(ctx, callback)`: Subscribe to setting changes.
 - `OnGetDynamicSetting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
+- `OnMRURestore(ctx, callback)`: Rebuild a start-page result from stored `MRUData`. Declare the `mru` feature first. Return `null` when the item is stale. Put restore identity on action `ContextData` when building results.
 
 ### UI Updates
 
@@ -215,6 +216,11 @@ class MyPlugin implements Plugin {
 
   async init(ctx, params) {
     this.api = params.API;
+    await this.api.OnMRURestore(ctx, async (_ctx, mruData) => {
+      const id = mruData.ContextData?.id;
+      if (!id) return null;
+      return { Title: id, Actions: [{ Name: "Open", ContextData: { id }, Action: async () => {} }] };
+    });
   }
 
   async query(ctx, query) {

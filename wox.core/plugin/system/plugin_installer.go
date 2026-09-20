@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -53,12 +54,19 @@ func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureQuerySelection,
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 	}
 }
 
 func (i *PluginInstallerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
+	i.api.OnMRURestore(ctx, i.handleMRURestore)
 }
 
 func (i *PluginInstallerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -144,11 +152,13 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.GetName(ctx)),
 		SubTitle: fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.GetDescription(ctx)),
 		Icon:     pluginIcon,
+		ScoreKey: pluginMetadata.Id,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   actionButtonName,
 				Icon:                   icons.Get(icons.ActionInstall),
 				PreventHideAfterAction: true,
+				ContextData:            common.ContextData{"pluginId": pluginMetadata.Id, "path": filePath},
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "install plugin from local", func() {
 						// notify starting
@@ -214,6 +224,54 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	})
 
 	return results
+}
+
+// handleMRURestore prefers an installed plugin and otherwise rebuilds the local package result.
+func (i *PluginInstallerPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	pluginID := strings.TrimSpace(mruData.ContextData["pluginId"])
+	if pluginID == "" {
+		return nil, fmt.Errorf("empty plugin id in context data")
+	}
+	if inst, ok := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
+		return item.Metadata.Id == pluginID
+	}); ok {
+		keyword := ""
+		if len(inst.Metadata.TriggerKeywords) > 0 {
+			keyword = inst.Metadata.TriggerKeywords[0]
+		}
+		result := plugin.QueryResult{
+			Title:    inst.GetName(ctx),
+			SubTitle: inst.GetDescription(ctx),
+			Icon:     common.ParseWoxImageOrDefault(inst.Metadata.Icon, icons.Get(icons.PluginInstaller)),
+			ScoreKey: inst.Metadata.Id,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_wpm_start_using",
+					Icon:                   icons.Get(icons.ActionOpen),
+					PreventHideAfterAction: true,
+					ContextData:            common.ContextData{"pluginId": inst.Metadata.Id},
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						if keyword != "" && keyword != "*" {
+							i.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: keyword + " "})
+						}
+					},
+				},
+			},
+		}
+		return &result, nil
+	}
+	filePath := strings.TrimSpace(mruData.ContextData["path"])
+	if filePath == "" {
+		return nil, fmt.Errorf("plugin is no longer installed: %s", pluginID)
+	}
+	if _, err := os.Stat(filePath); err != nil {
+		return nil, fmt.Errorf("plugin package no longer exists: %s", filePath)
+	}
+	results := i.queryForSelectionFile(ctx, filePath)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("failed to restore plugin package: %s", filePath)
+	}
+	return &results[0], nil
 }
 
 func resolvePluginIcon(filePath string, metadata plugin.Metadata) common.WoxImage {

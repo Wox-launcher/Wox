@@ -193,6 +193,12 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 					"requireActiveWindowIcon": true,
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 	}
 }
@@ -204,6 +210,7 @@ func (e *EmojiPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	e.emojiLoadErr = nil
 	e.customDescriptions = make(map[string][]string)
 	e.loadCustomDescriptions(ctx)
+	e.api.OnMRURestore(ctx, e.handleMRURestore)
 	// Emoji data is intentionally lazy-loaded on the first emoji query. The old
 	// startup path parsed the full embedded emoji catalog for every launch, which
 	// kept several megabytes of emoji search data live even when the user never
@@ -518,8 +525,42 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, query plugin.Query,
 		Title:    title,
 		SubTitle: subTitle,
 		Icon:     common.NewWoxImageEmoji(emoji),
-		Actions:  e.buildEmojiActions(ctx, query, emoji, isFrequentlyUsed),
+		ScoreKey: emoji,
+		Actions:  attachEmojiMRUContext(e.buildEmojiActions(ctx, query, emoji, isFrequentlyUsed), emoji),
 	}
+}
+
+func emojiMRUContext(emoji string) common.ContextData {
+	return common.ContextData{"emoji": emoji}
+}
+
+func attachEmojiMRUContext(actions []plugin.QueryResultAction, emoji string) []plugin.QueryResultAction {
+	data := emojiMRUContext(emoji)
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = data
+			continue
+		}
+		actions[i].ContextData["emoji"] = emoji
+	}
+	return actions
+}
+
+// handleMRURestore rebuilds an emoji result from the stored character.
+func (e *EmojiPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	emoji := strings.TrimSpace(mruData.ContextData["emoji"])
+	if emoji == "" {
+		return nil, fmt.Errorf("empty emoji in context data")
+	}
+	if !e.ensureEmojisLoaded(ctx) {
+		return nil, fmt.Errorf("emoji catalog is not available")
+	}
+	entry := e.findEmoji(emoji)
+	if entry == nil {
+		return nil, fmt.Errorf("emoji no longer exists: %s", emoji)
+	}
+	result := e.createEmojiResult(ctx, plugin.Query{}, *entry, false)
+	return &result, nil
 }
 
 // buildEmojiActions wires copy/paste defaults from the primary action setting.

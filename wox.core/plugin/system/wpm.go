@@ -139,6 +139,12 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 					"WidthRatio": 0.35,
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 		Commands: []plugin.MetadataCommand{
 			{
@@ -204,6 +210,7 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 
 func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.api = initParams.API
+	w.api.OnMRURestore(ctx, w.handleMRURestore)
 
 	w.reloadAllDevPlugins(ctx)
 	w.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
@@ -464,9 +471,10 @@ func (w *WPMPlugin) buildGlobalStorePluginResult(ctx context.Context, pluginMani
 		Title:    pluginName,
 		SubTitle: pluginManifest.GetDescription(ctx),
 		Icon:     w.buildPluginDetailIcon(pluginManifest),
+		ScoreKey: pluginManifest.Id,
 		Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_store"))},
 		Preview:  w.buildPluginDetailPreview(ctx, pluginManifest, false, false),
-		Actions: []plugin.QueryResultAction{
+		Actions: attachWPMMRUContext([]plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_wpm_view_install",
 				Icon:                   icons.Get(icons.ActionOpen),
@@ -479,7 +487,7 @@ func (w *WPMPlugin) buildGlobalStorePluginResult(ctx context.Context, pluginMani
 					})
 				},
 			},
-		},
+		}, pluginManifest.Id),
 	}
 }
 
@@ -722,7 +730,8 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 			Title:    pluginInstance.GetName(ctx),
 			SubTitle: pluginInstance.GetDescription(ctx),
 			Icon:     icon,
-			Actions: []plugin.QueryResultAction{
+			ScoreKey: pluginInstance.Metadata.Id,
+			Actions: attachWPMMRUContext([]plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_uninstall",
 					Icon:                   icons.Get(icons.ActionDelete),
@@ -751,7 +760,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 						}
 					},
 				},
-			},
+			}, pluginInstance.Metadata.Id),
 		}
 	})
 	return results
@@ -1098,9 +1107,10 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			Title:    pluginName,
 			SubTitle: pluginDescription,
 			Icon:     icon,
+			ScoreKey: pluginManifest.Id,
 			Tails:    tails,
 			Preview:  w.buildPluginDetailPreview(ctx, pluginManifest, installedFlag, false),
-			Actions:  actions,
+			Actions:  attachWPMMRUContext(actions, pluginManifest.Id),
 		})
 	}
 	return results
@@ -1621,4 +1631,60 @@ func (w *WPMPlugin) createSingleFilePluginWithTemplate(ctx context.Context, temp
 			QueryText: fmt.Sprintf("%s ", triggerKeyword),
 		})
 	})
+}
+
+func attachWPMMRUContext(actions []plugin.QueryResultAction, pluginID string) []plugin.QueryResultAction {
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = common.ContextData{"pluginId": pluginID}
+			continue
+		}
+		actions[i].ContextData["pluginId"] = pluginID
+	}
+	return actions
+}
+
+// handleMRURestore opens a still-available store or installed plugin from its id.
+func (w *WPMPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	pluginID := strings.TrimSpace(mruData.ContextData["pluginId"])
+	if pluginID == "" {
+		return nil, fmt.Errorf("empty plugin id in context data")
+	}
+	if inst, ok := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
+		return item.Metadata.Id == pluginID
+	}); ok {
+		icon := common.ParseWoxImageOrDefault(inst.Metadata.Icon, wpmIcon)
+		icon = common.ConvertRelativePathToAbsolutePath(ctx, icon, inst.PluginDirectory)
+		result := plugin.QueryResult{
+			Title:    inst.GetName(ctx),
+			SubTitle: inst.GetDescription(ctx),
+			Icon:     icon,
+			ScoreKey: inst.Metadata.Id,
+			Actions: attachWPMMRUContext([]plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_wpm_start_using",
+					Icon:                   icons.Get(icons.ActionOpen),
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						keyword := ""
+						if len(inst.Metadata.TriggerKeywords) > 0 {
+							keyword = inst.Metadata.TriggerKeywords[0]
+						}
+						if keyword != "" && keyword != "*" {
+							w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: keyword + " "})
+						}
+					},
+				},
+			}, inst.Metadata.Id),
+		}
+		return &result, nil
+	}
+	for _, manifest := range w.searchStorePlugins(ctx, "") {
+		if manifest.Id != pluginID {
+			continue
+		}
+		result := w.buildGlobalStorePluginResult(ctx, manifest)
+		return &result, nil
+	}
+	return nil, fmt.Errorf("plugin is no longer installed or in the store: %s", pluginID)
 }

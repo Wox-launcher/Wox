@@ -61,7 +61,7 @@ Script plugins are not deprecated. Use them when a one-shot command wrapper is e
    - SDK plugins: edit `plugin.json` to define metadata, trigger keywords, supported OS, features, i18n, and `SettingDefinitions`.
    - Single-file SDK plugins and script plugins: edit the JSON metadata block in the file header comments. Single-file SDK plugins must keep `MinWoxVersion` as `"2.4.2"`.
 3. **Implement**:
-   - `init()`: Initialize API clients and load settings. Called on every load/reload for SDK and single-file SDK plugins. Read and write settings through the Public API setting methods so values can sync across machines. If the plugin will cache files, resolve `get_cache_folder` / `GetCacheFolder` here and write later files under that path.
+   - `init()`: Initialize API clients and load settings. Called on every load/reload for SDK and single-file SDK plugins. Read and write settings through the Public API setting methods so values can sync across machines. If the plugin will cache files, resolve `get_cache_folder` / `GetCacheFolder` here and write later files under that path. Unless the plugin is clearly unsuitable for MRU, declare the `mru` feature and register `OnMRURestore` / `on_mru_restore` here.
    - `query()`: Handle user input and return `QueryResponse` (results plus optional refinements and layout). Refinement hotkeys are `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux; see `references/refinements.md`.
    - Register unload callbacks if you create timers, watchers, or sockets.
 4. **Internationalize**: Use the `I18n` field in `plugin.json` or the file header (recommended) or `lang/` files for packaged plugins. Single-file plugins only support inline `I18n`. See `plugin_i18n`.

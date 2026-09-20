@@ -102,6 +102,7 @@ Prefer these APIs for all plugin settings. Values stored here can sync across ma
 - `save_setting(ctx, key, value, is_platform_specific)`: Save setting. Normal plugin settings are eligible for cloud sync, so pass `True` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `on_setting_changed(ctx, callback)`: Listen for changes.
 - `on_get_dynamic_setting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
+- `on_mru_restore(ctx, callback)`: Rebuild a start-page result from stored `MRUData`. Declare the `mru` feature first. Return `None` when the item is stale. Put restore identity on action `ContextData` when building results.
 
 ### UI Updates
 
@@ -210,7 +211,15 @@ async def _on_get_dynamic_setting(ctx, key):
 from wox_plugin import Plugin, Query, Result, WoxImage
 
 class HelloPlugin(Plugin):
-    async def init(self, ctx, params): self.api = params.api
+    async def init(self, ctx, params):
+        self.api = params.api
+        await self.api.on_mru_restore(ctx, self._on_mru_restore)
+
+    async def _on_mru_restore(self, ctx, mru_data):
+        item_id = (mru_data.context_data or {}).get("id")
+        if not item_id:
+            return None
+        return Result(title=item_id, actions=[])
 
     async def query(self, ctx, query):
         # I18n with formatting

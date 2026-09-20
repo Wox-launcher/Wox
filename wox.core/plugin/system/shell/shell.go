@@ -148,6 +148,12 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
@@ -586,6 +592,7 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.historyManager = NewShellHistoryManager()
 	s.terminalManager = terminal.GetSessionManager()
 	s.api.OnHandlePluginCommand(ctx, s.handlePluginCommand)
+	s.api.OnMRURestore(ctx, s.handleMRURestore)
 	s.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		if key != shellDefaultWorkingDirectoryDetailSettingKey {
 			return definition.PluginSettingDefinitionItem{}
@@ -1498,6 +1505,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			SubTitle: subtitle,
 			Icon:     shellIcon,
 			Score:    100,
+			ScoreKey: savedCommandScoreKey(command, interpreter, workingDirectory),
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeText,
 				PreviewData:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_enter_to_execute"),
@@ -2287,6 +2295,29 @@ func (s *ShellPlugin) notifyCommandFinished(ctx context.Context, data shellConte
 
 func (s *ShellPlugin) buildSessionTitle(ctx context.Context, command string, status string) string {
 	return command
+}
+
+// handleMRURestore rebuilds an executable shell command from the stored action context.
+func (s *ShellPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	command := strings.TrimSpace(mruData.ContextData[shellActionCommandKey])
+	if command == "" {
+		return nil, fmt.Errorf("empty shell command in context data")
+	}
+	query := plugin.Query{
+		Type:           plugin.QueryTypeInput,
+		TriggerKeyword: ">",
+		Search:         command,
+		RawQuery:       "> " + command,
+		ContextData:    common.ContextData{},
+	}
+	if cwd := strings.TrimSpace(mruData.ContextData[shellActionWorkingDirKey]); cwd != "" {
+		query.ContextData[QueryContextWorkingDirectoryKey] = cwd
+	}
+	response := s.Query(ctx, query)
+	if len(response.Results) == 0 {
+		return nil, fmt.Errorf("no result for shell command: %s", command)
+	}
+	return &response.Results[0], nil
 }
 
 // formatDuration formats duration in milliseconds to human-readable string

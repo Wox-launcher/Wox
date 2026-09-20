@@ -262,6 +262,12 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 					"requireActiveWindowIcon": true,
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
 		},
 	}
 }
@@ -273,6 +279,7 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	// search text after restart, so queries like "ai translate hello" never reached
 	// queryCommand and could not start the preview stream.
 	c.registerQueryCommands(ctx, c.api.GetSetting(ctx, "commands"))
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "commands" {
 			c.api.Log(callbackCtx, plugin.LogLevelInfo, fmt.Sprintf("ai command setting changed: %s", value))
@@ -838,8 +845,9 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			Title:    command.Name,
 			SubTitle: modelLabel,
 			Icon:     aiCommandIcon,
+			ScoreKey: command.Command,
 			Preview:  c.buildSelectionPreview(ctx, command, query),
-			Actions:  c.buildAICommandActions(ctx, command, conversations, modelLabel, query),
+			Actions:  attachAICommandMRUContext(c.buildAICommandActions(ctx, command, conversations, modelLabel, query), command.Command, query.Search),
 		}
 		results = append(results, result)
 	}
@@ -873,7 +881,8 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 			Title:    command.Command,
 			SubTitle: command.Name,
 			Icon:     aiCommandIcon,
-			Actions: []plugin.QueryResultAction{
+			ScoreKey: command.Command,
+			Actions: attachAICommandMRUContext([]plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_command_run",
 					Icon:                   icons.Get(icons.ActionOpen),
@@ -885,7 +894,7 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 						})
 					},
 				},
-			},
+			}, command.Command, ""),
 		})
 	}
 	return results
@@ -958,6 +967,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		Id:       uuid.NewString(),
 		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
 		SubTitle: chatModelLabel,
+		ScoreKey: aiCommandSetting.Command + "\x1f" + query.Search,
 		// Behavior change: input AI command queries are now lazy. The preview shows
 		// the exact text that will be sent when the user chooses Run or Run And Paste,
 		// avoiding the previous expensive request on every query refresh.
@@ -967,8 +977,68 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 			PreviewTags: []plugin.WoxPreviewTag{{Label: chatModelLabel, Tooltip: "i18n:plugin_ai_command_model"}},
 		},
 		Icon:    aiCommandIcon,
-		Actions: c.buildAICommandActions(ctx, aiCommandSetting, conversations, chatModelLabel, query),
+		Actions: attachAICommandMRUContext(c.buildAICommandActions(ctx, aiCommandSetting, conversations, chatModelLabel, query), aiCommandSetting.Command, query.Search),
 	}
 
 	return []plugin.QueryResult{result}
+}
+
+func attachAICommandMRUContext(actions []plugin.QueryResultAction, command string, search string) []plugin.QueryResultAction {
+	data := common.ContextData{"command": command, "search": search}
+	for i := range actions {
+		if actions[i].ContextData == nil {
+			actions[i].ContextData = data
+			continue
+		}
+		actions[i].ContextData["command"] = command
+		actions[i].ContextData["search"] = search
+	}
+	return actions
+}
+
+// handleMRURestore rebuilds an AI command result when the configured command still exists.
+func (c *Plugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	commandName := strings.TrimSpace(mruData.ContextData["command"])
+	if commandName == "" {
+		return nil, fmt.Errorf("empty ai command in context data")
+	}
+	commands, err := c.getAllCommands(ctx)
+	if err != nil {
+		return nil, err
+	}
+	command, found := lo.Find(commands, func(item commandSetting) bool {
+		return item.Command == commandName
+	})
+	if !found {
+		return nil, fmt.Errorf("ai command no longer exists: %s", commandName)
+	}
+	search := strings.TrimSpace(mruData.ContextData["search"])
+	if search == "" {
+		result := plugin.QueryResult{
+			Title:    command.Command,
+			SubTitle: command.Name,
+			Icon:     aiCommandIcon,
+			ScoreKey: command.Command,
+			Actions: attachAICommandMRUContext([]plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_ai_command_run",
+					Icon:                   icons.Get(icons.ActionOpen),
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						c.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: "ai " + command.Command + " ",
+						})
+					},
+				},
+			}, command.Command, ""),
+		}
+		return &result, nil
+	}
+	query := plugin.Query{Type: plugin.QueryTypeInput, TriggerKeyword: "ai", Command: command.Command, Search: search, RawQuery: "ai " + command.Command + " " + search}
+	results := c.queryCommand(ctx, query)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no result for ai command: %s", commandName)
+	}
+	return &results[0], nil
 }
