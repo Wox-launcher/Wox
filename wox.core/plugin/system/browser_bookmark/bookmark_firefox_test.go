@@ -159,6 +159,10 @@ func (m *mockAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
+func (m *mockAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
+	return plugin.GetThemeColorsResult{}
+}
+
 func (m *mockAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
 	return plugin.RegisterTriggerKeywordResult{Success: true}
 }

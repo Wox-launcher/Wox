@@ -99,6 +99,7 @@ type UI interface {
 	GetActiveWindowSnapshot(ctx context.Context) ActiveWindowSnapshot
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
+	GetCurrentTheme(ctx context.Context) Theme
 	ChangeTheme(ctx context.Context, theme Theme)
 	InstallTheme(ctx context.Context, theme Theme)
 	UninstallTheme(ctx context.Context, theme Theme)

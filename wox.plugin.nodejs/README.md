@@ -132,6 +132,7 @@ Methods for interacting with Wox:
 - **Plugin Tools**: `RegisterPluginTool()`, `UnregisterPluginTool()`, `ListPluginTools()`, `InvokePluginTool()` (Wox >= 2.4.5)
 - **Clipboard**: `copy()`
 - **Cache**: `GetCacheFolder()`
+- **Theme**: `GetThemeColors()` (Wox >= 2.4.5)
 
 ## Plugin Tools
 

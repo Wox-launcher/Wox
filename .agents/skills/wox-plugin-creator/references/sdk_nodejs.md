@@ -124,6 +124,12 @@ If the plugin needs on-disk cache, prefer `GetCacheFolder` over any custom direc
 - Do not invent `cache/`, `tmp/`, or `downloads/` next to the plugin file, under user data, or under a hardcoded folder name.
 - User preferences and favorites are settings, not cache. Use `GetSetting` / `SetSetting` for those.
 
+### Theme
+
+Requires Wox >= 2.4.5.
+
+- `GetThemeColors(ctx, option?: GetThemeColorsOption)`: Opaque `#RRGGBB` launcher colors for HTML/webview previews: `Background`, `Text`, `SecondaryText`, `Border`, `Accent`, `AccentText`, `Selection`, plus `Dark`. Call this when building unconventional HTML previews so light and dark Wox themes stay in sync.
+
 ### Settings
 
 Prefer these APIs for all plugin settings. Values stored here can sync across machines through Wox cloud sync. Do not persist ordinary settings in local files or a custom store.
@@ -253,13 +259,19 @@ export const plugin = new MyPlugin();
 
 Use `webview` for inline HTML, including CSS. No HTTP server or temporary HTML file is needed; `html` is a payload field, not a preview type.
 
+Prefer HTML for unconventional previews (syntax highlighting, folding, custom layout). Do not use SVG/`image` for document-like content.
+
+Paint the page from `GetThemeColors` so light and dark launcher themes stay in sync. Put a theme color in `cacheKey`.
+
 ```typescript
 import type { WoxPreview, WoxPreviewWebviewData } from "@wox-launcher/wox-plugin"
 
+const colors = await this.api.GetThemeColors(ctx, {})
 const preview: WoxPreview = {
   PreviewType: "webview",
   PreviewData: JSON.stringify({
-    html: '<!doctype html><html><body><h1 style="color:teal">Hello Wox</h1></body></html>'
+    html: `<!doctype html><html><body style="background:${colors.Background};color:${colors.Text}">Hello Wox</body></html>`,
+    cacheKey: `hello:${colors.Background}`
   } satisfies WoxPreviewWebviewData)
 }
 // Assign preview to Result.Preview.

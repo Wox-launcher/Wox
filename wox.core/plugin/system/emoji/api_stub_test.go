@@ -123,6 +123,10 @@ func (s *stubAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
+func (s *stubAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
+	return plugin.GetThemeColorsResult{}
+}
+
 func (s *stubAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
 	return plugin.RegisterTriggerKeywordResult{Success: true}
 }

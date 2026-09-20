@@ -11,6 +11,8 @@ import {
   ResultAction,
   ScreenshotOption,
   ScreenshotResult,
+  GetThemeColorsOption,
+  GetThemeColorsResult,
   RegisterTriggerKeywordOption,
   RegisterTriggerKeywordResult,
   DragOutEvent,
@@ -429,5 +431,11 @@ export class PluginAPI implements PublicAPI {
 
   async GetCacheFolder(ctx: Context): Promise<string> {
     return (await this.invokeMethod(ctx, "GetCacheFolder", {})) as string
+  }
+
+  async GetThemeColors(ctx: Context, option: GetThemeColorsOption = {}): Promise<GetThemeColorsResult> {
+    return (await this.invokeMethod(ctx, "GetThemeColors", {
+      option: JSON.stringify(option ?? {})
+    })) as GetThemeColorsResult
   }
 }

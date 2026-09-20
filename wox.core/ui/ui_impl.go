@@ -144,6 +144,10 @@ func (u *uiImpl) GetAllThemes(ctx context.Context) []common.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }
 
+func (u *uiImpl) GetCurrentTheme(ctx context.Context) common.Theme {
+	return GetUIManager().GetCurrentTheme(ctx)
+}
+
 func (u *uiImpl) RestoreTheme(ctx context.Context) {
 	GetUIManager().RestoreTheme(ctx)
 }

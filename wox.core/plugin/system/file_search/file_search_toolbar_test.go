@@ -101,6 +101,9 @@ func (a fileSearchToolbarTestAPI) Screenshot(ctx context.Context, option plugin.
 	return plugin.ScreenshotResult{}
 }
 func (a fileSearchToolbarTestAPI) GetCacheFolder(ctx context.Context) string { return "" }
+func (a fileSearchToolbarTestAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
+	return plugin.GetThemeColorsResult{}
+}
 
 func TestIncrementalToolbarMessageWaitsForMinimumVisibleDuration(t *testing.T) {
 	plugin := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}

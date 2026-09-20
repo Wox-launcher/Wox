@@ -173,6 +173,10 @@ func (a *aiCommandTestAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
+func (a *aiCommandTestAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
+	return plugin.GetThemeColorsResult{}
+}
+
 func aiCommandTestCommand(defaultAction string) map[string]any {
 	command := map[string]any{
 		"name":    "Grammar",

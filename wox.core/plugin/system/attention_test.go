@@ -98,6 +98,10 @@ func (a *attentionActionTestAPI) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
+func (a *attentionActionTestAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
+	return plugin.GetThemeColorsResult{}
+}
+
 func newSystemAttentionTestManager(t *testing.T) *plugin.AttentionManager {
 	t.Helper()
 

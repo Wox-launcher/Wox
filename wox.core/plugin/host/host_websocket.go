@@ -550,6 +550,17 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 	case "GetCacheFolder":
 		result := pluginInstance.API.GetCacheFolder(ctx)
 		w.sendResponseToHost(ctx, request, result)
+	case "GetThemeColors":
+		var option plugin.GetThemeColorsOption
+		if optionStr, exists := request.Params["option"]; exists && strings.TrimSpace(optionStr) != "" {
+			if err := json.Unmarshal([]byte(optionStr), &option); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal theme colors option: %s", request.PluginName, err))
+				w.sendResponseErrToHost(ctx, request, fmt.Errorf("failed to unmarshal theme colors option: %w", err))
+				return
+			}
+		}
+		result := pluginInstance.API.GetThemeColors(ctx, option)
+		w.sendResponseToHost(ctx, request, result)
 	case "Notify":
 		message, exist := request.Params["message"]
 		if !exist {

@@ -1142,9 +1142,9 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 - **Runtime**: %s
 - **Entry**: %s
 - **TriggerKeywords**: %s
-- **Commands**: %s
+- **Commands**: %v
 - **SupportedOS**: %s
-- **Features**: %s
+- **Features**: %v
 `, lp.metadata.Directory, pluginName, pluginDescription, lp.metadata.Author,
 					lp.metadata.Website, lp.metadata.Version, lp.metadata.MinWoxVersion,
 					lp.metadata.Runtime, lp.metadata.Entry, lp.metadata.TriggerKeywords,

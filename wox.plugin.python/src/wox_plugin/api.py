@@ -72,6 +72,50 @@ class ScreenshotResult:
 
 
 @dataclass
+class GetThemeColorsOption:
+    """
+    Reserved so later theme-color filters can be added without a new API.
+
+    Requires Wox >= 2.4.5.
+    """
+
+    def to_dict(self) -> Dict[str, object]:
+        return {}
+
+
+@dataclass
+class GetThemeColorsResult:
+    """
+    Opaque launcher colors for plugin-authored HTML.
+
+    Requires Wox >= 2.4.5. Values are #RRGGBB with no alpha.
+    """
+
+    background: str = ""
+    text: str = ""
+    secondary_text: str = ""
+    border: str = ""
+    accent: str = ""
+    accent_text: str = ""
+    selection: str = ""
+    dark: bool = False
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, object]] = None) -> "GetThemeColorsResult":
+        payload = data or {}
+        return cls(
+            background=str(payload.get("Background", "") or ""),
+            text=str(payload.get("Text", "") or ""),
+            secondary_text=str(payload.get("SecondaryText", "") or ""),
+            border=str(payload.get("Border", "") or ""),
+            accent=str(payload.get("Accent", "") or ""),
+            accent_text=str(payload.get("AccentText", "") or ""),
+            selection=str(payload.get("Selection", "") or ""),
+            dark=bool(payload.get("Dark", False)),
+        )
+
+
+@dataclass
 class SetSettingOption:
     """
     Controls how a plugin setting is persisted.
@@ -129,6 +173,7 @@ class PublicAPI(Protocol):
         - Clipboard: copy
         - Screenshot: screenshot
         - Cache: get_cache_folder
+        - Theme: get_theme_colors
 
     Example:
         class MyPlugin:
@@ -823,5 +868,14 @@ class PublicAPI(Protocol):
         Example:
             cache_dir = await api.get_cache_folder(ctx)
             gif_path = os.path.join(cache_dir, "downloads", "item.gif")
+        """
+        ...
+
+    async def get_theme_colors(self, ctx: Context, option: Optional[GetThemeColorsOption] = None) -> GetThemeColorsResult:
+        """
+        Current launcher palette as opaque ``#RRGGBB`` colors.
+
+        Use this for HTML/webview previews so plugin surfaces follow the
+        active light or dark Wox theme. Requires Wox >= 2.4.5.
         """
         ...

@@ -94,6 +94,12 @@ If the plugin needs on-disk cache, prefer `get_cache_folder` over any custom dir
 - Do not invent `cache/`, `tmp/`, or `downloads/` next to the plugin file, under user data, or under a hardcoded folder name.
 - User preferences and favorites are settings, not cache. Use `get_setting` / `set_setting` for those.
 
+### Theme
+
+Requires Wox >= 2.4.5.
+
+- `get_theme_colors(ctx, option=None)`: Opaque `#RRGGBB` launcher colors for HTML/webview previews: `background`, `text`, `secondary_text`, `border`, `accent`, `accent_text`, `selection`, plus `dark`. Call this when building unconventional HTML previews so light and dark Wox themes stay in sync.
+
 ### Settings
 
 Prefer these APIs for all plugin settings. Values stored here can sync across machines through Wox cloud sync. Do not persist ordinary settings in local files or a custom store.
@@ -248,14 +254,20 @@ plugin = HelloPlugin()
 
 Use `WoxPreviewType.WEBVIEW` with a JSON-encoded `html` field. No HTTP server or temporary HTML file is needed; there is no separate `html` preview type.
 
+Prefer HTML for unconventional previews (syntax highlighting, folding, custom layout). Do not use SVG/`image` for document-like content.
+
+Paint the page from `get_theme_colors` so light and dark launcher themes stay in sync. Put a theme color in `cache_key`.
+
 ```python
 import json
 from wox_plugin import WoxPreview, WoxPreviewType
 
+colors = await self.api.get_theme_colors(ctx)
 preview = WoxPreview(
     preview_type=WoxPreviewType.WEBVIEW,
     preview_data=json.dumps({
-        "html": '<!doctype html><html><body><h1 style="color:teal">Hello Wox</h1></body></html>'
+        "html": f'<!doctype html><html><body style="background:{colors.background};color:{colors.text}">Hello Wox</body></html>',
+        "cacheKey": f"hello:{colors.background}",
     }),
 )
 # Assign preview to Result(preview=preview, ...).

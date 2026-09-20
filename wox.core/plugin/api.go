@@ -272,6 +272,11 @@ type API interface {
 	// user settings here; those belong in GetSetting/SetSetting so they can sync.
 	// Wox deletes the folder when the plugin is uninstalled.
 	GetCacheFolder(ctx context.Context) string
+
+	// GetThemeColors returns the current launcher palette as opaque #RRGGBB colors.
+	// Use it for HTML/webview previews so plugin surfaces follow light and dark themes.
+	// Requires Wox >= 2.4.5.
+	GetThemeColors(ctx context.Context, option GetThemeColorsOption) GetThemeColorsResult
 }
 
 type CopyParams struct {
@@ -297,6 +302,23 @@ type ScreenshotResult struct {
 	Success        bool
 	ScreenshotPath string
 	ErrMsg         string
+}
+
+// GetThemeColorsOption is reserved so later filters can be added without a new API.
+// Requires Wox >= 2.4.5.
+type GetThemeColorsOption struct{}
+
+// GetThemeColorsResult is the opaque launcher palette for plugin-authored HTML.
+// Requires Wox >= 2.4.5.
+type GetThemeColorsResult struct {
+	Background    string `json:"Background"`
+	Text          string `json:"Text"`
+	SecondaryText string `json:"SecondaryText"`
+	Border        string `json:"Border"`
+	Accent        string `json:"Accent"`
+	AccentText    string `json:"AccentText"`
+	Selection     string `json:"Selection"`
+	Dark          bool   `json:"Dark"`
 }
 
 // SetSettingOption controls how a plugin setting is persisted.
@@ -1213,6 +1235,31 @@ func (a *APIImpl) Screenshot(ctx context.Context, option ScreenshotOption) Scree
 			Success: false,
 			ErrMsg:  fmt.Sprintf("unexpected screenshot status: %s", result.Status),
 		}
+	}
+}
+
+// GetThemeColors maps the active Wox theme to opaque HTML-safe colors.
+func (a *APIImpl) GetThemeColors(ctx context.Context, _ GetThemeColorsOption) GetThemeColorsResult {
+	ui := GetPluginManager().GetUI()
+	if ui == nil {
+		return themeColorsResult(common.Theme{}.PluginColors())
+	}
+	theme := ui.GetCurrentTheme(ctx)
+	result := themeColorsResult(theme.PluginColors())
+	a.Log(ctx, LogLevelDebug, fmt.Sprintf("theme colors themeId=%s dark=%t background=%s text=%s", theme.ThemeId, result.Dark, result.Background, result.Text))
+	return result
+}
+
+func themeColorsResult(colors common.ThemePluginColors) GetThemeColorsResult {
+	return GetThemeColorsResult{
+		Background:    colors.Background,
+		Text:          colors.Text,
+		SecondaryText: colors.SecondaryText,
+		Border:        colors.Border,
+		Accent:        colors.Accent,
+		AccentText:    colors.AccentText,
+		Selection:     colors.Selection,
+		Dark:          colors.Dark,
 	}
 }
 

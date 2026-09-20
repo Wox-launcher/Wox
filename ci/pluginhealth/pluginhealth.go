@@ -712,6 +712,8 @@ func (pluginHealthUI) GetServerPort(context.Context) int { return 0 }
 
 func (pluginHealthUI) GetAllThemes(context.Context) []common.Theme { return nil }
 
+func (pluginHealthUI) GetCurrentTheme(context.Context) common.Theme { return common.Theme{} }
+
 func (pluginHealthUI) ChangeTheme(context.Context, common.Theme) {}
 
 func (pluginHealthUI) InstallTheme(context.Context, common.Theme) {}

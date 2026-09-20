@@ -1808,6 +1808,33 @@ export interface PublicAPI {
    * @returns Absolute cache directory path, or an empty string on failure
    */
   GetCacheFolder: (ctx: Context) => Promise<string>
+
+  /**
+   * Current launcher palette as opaque #RRGGBB colors for HTML/webview previews.
+   * Requires Wox >= 2.4.5.
+   */
+  GetThemeColors: (ctx: Context, option: GetThemeColorsOption) => Promise<GetThemeColorsResult>
+}
+
+/**
+ * Reserved so later theme-color filters can be added without a new API.
+ * Requires Wox >= 2.4.5.
+ */
+export interface GetThemeColorsOption {}
+
+/**
+ * Opaque launcher colors for plugin-authored HTML.
+ * Requires Wox >= 2.4.5.
+ */
+export interface GetThemeColorsResult {
+  Background: string
+  Text: string
+  SecondaryText: string
+  Border: string
+  Accent: string
+  AccentText: string
+  Selection: string
+  Dark: boolean
 }
 
 /**

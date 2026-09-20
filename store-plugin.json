@@ -1372,5 +1372,37 @@
     ],
     "DateCreated": "2026-09-16 18:41:00",
     "DateUpdated": "2026-09-16 18:41:00"
+  },
+  {
+    "Id": "955c78fd-35f4-470c-975c-474e1dc96d5a",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/1bb04831-8c37-4c6b-b956-465fa5dfeda7",
+    "Website": "https://gist.github.com/qianlifeng/0a8440a902dad5308dd3465e634a4428",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/0a8440a902dad5308dd3465e634a4428/raw/Wox.Plugin.JsonFormatter.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/9437d6d7-44d4-4229-ae9c-9623419de0b5"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-20 18:51:04",
+    "DateUpdated": "2026-09-20 18:51:04",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "JSON Formatter",
+        "plugin_description": "Format, minify, and validate JSON from the query, selection, or a file"
+      },
+      "zh_CN": {
+        "plugin_name": "JSON 格式化",
+        "plugin_description": "从查询、选中内容或文件格式化、压缩并校验 JSON"
+      }
+    }
   }
 ]

@@ -130,6 +130,10 @@ func (e emptyAPIImpl) GetCacheFolder(ctx context.Context) string {
 	return ""
 }
 
+func (e emptyAPIImpl) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
+	return plugin.GetThemeColorsResult{}
+}
+
 func (e emptyAPIImpl) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
 	return plugin.RegisterTriggerKeywordResult{Success: true}
 }

@@ -22,6 +22,8 @@ from wox_plugin import (
     ResultActionType,
     ScreenshotOption,
     ScreenshotResult,
+    GetThemeColorsOption,
+    GetThemeColorsResult,
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
     DragOutEvent,
@@ -498,3 +500,15 @@ class PluginAPI(PublicAPI):
         """Get this plugin's dedicated cache directory."""
         result = await self.invoke_method(ctx, "GetCacheFolder", {})
         return str(result) if result is not None else ""
+
+    async def get_theme_colors(self, ctx: Context, option: Optional[GetThemeColorsOption] = None) -> GetThemeColorsResult:
+        """Current launcher palette as opaque #RRGGBB colors."""
+        option_payload = option.to_dict() if option is not None and hasattr(option, "to_dict") else {}
+        response = await self.invoke_method(
+            ctx,
+            "GetThemeColors",
+            {"option": json.dumps(option_payload)},
+        )
+        if not isinstance(response, dict):
+            return GetThemeColorsResult()
+        return GetThemeColorsResult.from_dict(response)

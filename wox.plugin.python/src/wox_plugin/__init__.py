@@ -66,6 +66,7 @@ Methods for interacting with Wox:
 - **Clipboard**: `copy()`
 - **Screenshot**: `screenshot()`
 - **Cache**: `get_cache_folder()`
+- **Theme**: `get_theme_colors()`
 
 ### Models
 
@@ -80,6 +81,8 @@ Methods for interacting with Wox:
 - `CopyParams`: Parameters for clipboard operations
 - `ScreenshotOption`: Options for the screenshot workflow
 - `ScreenshotResult`: Result returned by the screenshot workflow
+- `GetThemeColorsOption`: Options for reading the current launcher palette
+- `GetThemeColorsResult`: Opaque #RRGGBB launcher colors for HTML previews
 
 #### Result Models (`models/result.py`)
 - `Result`: Search result with title, icon, preview, actions
@@ -221,7 +224,16 @@ settings = [
 
 from typing import List
 
-from .api import ChatStreamCallback, PublicAPI, ScreenshotOption, ScreenshotResult, SetSettingOption, SetSettingResult
+from .api import (
+    ChatStreamCallback,
+    PublicAPI,
+    GetThemeColorsOption,
+    GetThemeColorsResult,
+    ScreenshotOption,
+    ScreenshotResult,
+    SetSettingOption,
+    SetSettingResult,
+)
 from .models.ai import (
     AIModel,
     ChatStreamData,
@@ -331,6 +343,8 @@ __all__: List[str] = [
     "ChatStreamCallback",
     "ScreenshotOption",
     "ScreenshotResult",
+    "GetThemeColorsOption",
+    "GetThemeColorsResult",
     "SetSettingOption",
     "SetSettingResult",
     "PushAttentionRequest",
