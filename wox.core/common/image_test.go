@@ -303,6 +303,161 @@ func TestWoxImage_ToImage_Base64JPEG(t *testing.T) {
 	}
 }
 
+func TestIsSvgContentType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		want        bool
+	}{
+		{contentType: "image/svg+xml", want: true},
+		{contentType: "image/svg+xml; charset=utf-8", want: true},
+		{contentType: "IMAGE/SVG", want: true},
+		{contentType: "image/png", want: false},
+		{contentType: "text/html", want: false},
+		{contentType: "", want: false},
+	}
+	for _, test := range tests {
+		if got := isSvgContentType(test.contentType); got != test.want {
+			t.Fatalf("isSvgContentType(%q) = %t, want %t", test.contentType, got, test.want)
+		}
+	}
+}
+
+func TestIsSvgBytes(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "svg tag", data: `<svg xmlns="http://www.w3.org/2000/svg"></svg>`, want: true},
+		{name: "xml prolog", data: "<?xml version=\"1.0\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>", want: true},
+		{name: "doctype svg", data: "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"><svg></svg>", want: true},
+		{name: "bom prefix", data: "\ufeff<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>", want: true},
+		{name: "png bytes", data: "\x89PNG\r\n\x1a\n", want: false},
+		{name: "html page", data: "<!DOCTYPE html><html><body>not svg</body></html>", want: false},
+		{name: "empty", data: "", want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := isSvgBytes([]byte(test.data)); got != test.want {
+				t.Fatalf("isSvgBytes() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestWoxImage_URLSvgWithoutExtensionByContentType(t *testing.T) {
+	initConvertIconTestLocation(t)
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#f59e0b"/></svg>`
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "image/svg+xml")
+		if _, err := response.Write([]byte(svg)); err != nil {
+			t.Errorf("write remote svg: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	image := NewWoxImageUrl(server.URL + "/user-attachments/assets/343c6c2d-78b5-4f36-8ca9-61f9cd0f6cd2")
+	img, err := image.ToImage()
+	if err != nil {
+		t.Fatalf("expected extensionless SVG URL to decode, got %v", err)
+	}
+	if img.Bounds().Dx() != 32 || img.Bounds().Dy() != 32 {
+		t.Fatalf("unexpected rendered svg size: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
+
+	cachePath, err := image.urlImageCachePath(context.Background(), image.ImageData)
+	if err != nil {
+		t.Fatalf("url cache path: %v", err)
+	}
+	svgCache := replaceImageCacheExt(cachePath, ".svg")
+	if _, err := os.Stat(svgCache); err != nil {
+		t.Fatalf("expected sniffed SVG to be cached as .svg, stat %q: %v", svgCache, err)
+	}
+}
+
+func TestWoxImage_URLSvgWithoutExtensionByFileHeader(t *testing.T) {
+	initConvertIconTestLocation(t)
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#f59e0b"/></svg>`
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "application/octet-stream")
+		if _, err := response.Write([]byte(svg)); err != nil {
+			t.Errorf("write remote svg: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	image := NewWoxImageUrl(server.URL + "/user-attachments/assets/droppy-icon")
+	if _, err := image.ToImage(); err != nil {
+		t.Fatalf("expected SVG file header to decode without Content-Type, got %v", err)
+	}
+}
+
+func TestWoxImage_CachedImgSvgWithoutRefetch(t *testing.T) {
+	initConvertIconTestLocation(t)
+	rawURL := "https://gist.github.com/user-attachments/assets/already-cached"
+	image := NewWoxImageUrl(rawURL)
+	cachePath, err := image.urlImageCachePath(context.Background(), rawURL)
+	if err != nil {
+		t.Fatalf("url cache path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		t.Fatalf("mkdir cache: %v", err)
+	}
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#f59e0b"/></svg>`
+	if err := os.WriteFile(cachePath, []byte(svg), 0644); err != nil {
+		t.Fatalf("write cached svg: %v", err)
+	}
+
+	img, err := image.ToImageWithoutRemoteFetch()
+	if err != nil {
+		t.Fatalf("expected cached .img SVG to decode, got %v", err)
+	}
+	if img.Bounds().Dx() != 32 || img.Bounds().Dy() != 32 {
+		t.Fatalf("unexpected rendered svg size: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
+}
+
+func TestConvertIconWithSize_RemoteSvgWithoutExtension(t *testing.T) {
+	initConvertIconTestLocation(t)
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#f59e0b"/></svg>`
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "image/svg+xml")
+		if _, err := response.Write([]byte(svg)); err != nil {
+			t.Errorf("write remote svg: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	converted := ConvertIconWithSize(context.Background(), NewWoxImageUrl(server.URL+"/assets/droppy"), "", ResultListIconSize)
+	img, err := converted.ToImage()
+	if err != nil {
+		t.Fatalf("expected ConvertIcon to produce a usable SVG icon, got %+v err=%v", converted, err)
+	}
+	if img.Bounds().Empty() {
+		t.Fatal("converted SVG icon is empty")
+	}
+}
+
+func TestWoxImage_URLPngWithoutExtensionStillDecodes(t *testing.T) {
+	initConvertIconTestLocation(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "image/png")
+		if err := png.Encode(response, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+			t.Errorf("encode remote png: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	image := NewWoxImageUrl(server.URL + "/user-attachments/assets/plain-png")
+	img, err := image.ToImage()
+	if err != nil {
+		t.Fatalf("expected extensionless PNG URL to keep working, got %v", err)
+	}
+	if img.Bounds().Dx() != 8 || img.Bounds().Dy() != 8 {
+		t.Fatalf("unexpected png size: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
+}
+
 func TestWoxImage_AbsolutePathSvg(t *testing.T) {
 	svgPath := fmt.Sprintf("%s/icon.svg", t.TempDir())
 	svgContent := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#ff0000"/></svg>`

@@ -14,6 +14,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"io"
+	"mime"
 	"net/url"
 	"os"
 	"path"
@@ -171,7 +172,7 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 	}
 
 	if w.ImageType == WoxImageTypeAbsolutePath {
-		if isSvgFilePath(w.ImageData) {
+		if isSvgFilePath(w.ImageData) || fileLooksLikeSvg(w.ImageData) {
 			return w.ToImage()
 		}
 
@@ -220,7 +221,7 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 	}
 
 	if w.ImageType == WoxImageTypeAbsolutePath {
-		if isSvgFilePath(w.ImageData) {
+		if isSvgFilePath(w.ImageData) || fileLooksLikeSvg(w.ImageData) {
 			svgData, err := os.ReadFile(w.ImageData)
 			if err != nil {
 				return nil, err
@@ -284,7 +285,7 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 			return nil, err
 		}
 
-		if img, ok, err := w.loadCachedURLImage(cachePath); err != nil {
+		if img, ok, err := w.loadCachedURLImageAny(cachePath); err != nil {
 			return nil, err
 		} else if ok {
 			return img, nil
@@ -298,7 +299,7 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 			return nil, err
 		}
 
-		if img, ok, err := w.loadCachedURLImage(cachePath); err != nil {
+		if img, ok, err := w.loadCachedURLImageAny(cachePath); err != nil {
 			return nil, err
 		} else if ok {
 			return img, nil
@@ -389,6 +390,52 @@ func (w *WoxImage) urlImageCachePath(ctx context.Context, rawURL string) (string
 	return path.Join(imageCacheDirectory(ctx), cacheName), nil
 }
 
+// urlImageCacheCandidates also checks an .svg sibling because gist-style URLs
+// have no suffix and are first cached as .img, then rewritten after sniffing.
+func urlImageCacheCandidates(cachePath string) []string {
+	candidates := []string{cachePath}
+	if svgPath := replaceImageCacheExt(cachePath, ".svg"); svgPath != cachePath {
+		candidates = append(candidates, svgPath)
+	}
+	return candidates
+}
+
+func replaceImageCacheExt(cachePath string, ext string) string {
+	current := filepath.Ext(cachePath)
+	if current == "" {
+		return cachePath + ext
+	}
+	return cachePath[:len(cachePath)-len(current)] + ext
+}
+
+// existingURLImageCache returns the first populated cache file for a remote URL.
+func existingURLImageCache(cachePath string) (string, os.FileInfo, bool) {
+	for _, candidate := range urlImageCacheCandidates(cachePath) {
+		info, err := os.Stat(candidate)
+		if err != nil || info.IsDir() || info.Size() == 0 {
+			continue
+		}
+		return candidate, info, true
+	}
+	return "", nil, false
+}
+
+// loadCachedURLImageAny tries the URL-derived cache path and an .svg sibling.
+func (w *WoxImage) loadCachedURLImageAny(cachePath string) (image.Image, bool, error) {
+	var lastErr error
+	for _, candidate := range urlImageCacheCandidates(cachePath) {
+		img, ok, err := w.loadCachedURLImage(candidate)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if ok {
+			return img, true, nil
+		}
+	}
+	return nil, false, lastErr
+}
+
 func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, error) {
 	info, err := os.Stat(cachePath)
 	if err != nil {
@@ -401,12 +448,13 @@ func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, erro
 		return nil, false, nil
 	}
 
-	if isSvgFilePath(cachePath) {
-		svgData, err := os.ReadFile(cachePath)
-		if err != nil {
-			return nil, false, err
-		}
-		img, err := renderSvgImage(string(svgData))
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if isSvgFilePath(cachePath) || isSvgBytes(data) {
+		img, err := renderSvgImage(string(data))
 		if err != nil {
 			return nil, false, err
 		}
@@ -414,7 +462,7 @@ func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, erro
 		return img, true, nil
 	}
 
-	img, err := imaging.Open(cachePath)
+	img, err := imaging.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, false, err
 	}
@@ -427,16 +475,80 @@ func (w *WoxImage) warmURLImageCache(ctx context.Context, rawURL string, cachePa
 		return err
 	}
 
-	data, err := util.HttpGet(ctx, rawURL)
+	resp, err := util.HttpOpen(ctx, rawURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(cachePath, data, 0644)
+	dest := cachePath
+	if isSvgContentType(resp.Header.Get("Content-Type")) || isSvgBytes(data) {
+		dest = replaceImageCacheExt(cachePath, ".svg")
+	}
+
+	return os.WriteFile(dest, data, 0644)
 }
 
 func isSvgFilePath(filePath string) bool {
 	return strings.EqualFold(filepath.Ext(filePath), ".svg")
+}
+
+// isSvgContentType reports official SVG MIME types, including charset suffixes.
+func isSvgContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mediaType = strings.TrimSpace(strings.Split(contentType, ";")[0])
+	}
+	switch strings.ToLower(mediaType) {
+	case "image/svg+xml", "image/svg":
+		return true
+	default:
+		return false
+	}
+}
+
+// isSvgBytes sniffs an SVG document from the payload so gist user-attachment
+// URLs without a .svg suffix still render after download.
+func isSvgBytes(data []byte) bool {
+	trimmed := bytes.TrimSpace(bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}))
+	if len(trimmed) == 0 {
+		return false
+	}
+
+	lower := bytes.ToLower(trimmed)
+	if bytes.HasPrefix(lower, []byte("<svg")) || bytes.HasPrefix(lower, []byte("<!doctype svg")) {
+		return true
+	}
+	if !bytes.HasPrefix(lower, []byte("<?xml")) {
+		return false
+	}
+
+	probe := lower
+	if len(probe) > 1024 {
+		probe = probe[:1024]
+	}
+	return bytes.Contains(probe, []byte("<svg")) && !bytes.Contains(probe, []byte("<html"))
+}
+
+// fileLooksLikeSvg peeks the file header so extensionless cached SVGs still render.
+func fileLooksLikeSvg(filePath string) bool {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	header := make([]byte, 1024)
+	n, err := io.ReadFull(file, header)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return false
+	}
+	return isSvgBytes(header[:n])
 }
 
 func renderSvgImage(svg string) (image.Image, error) {
@@ -624,17 +736,19 @@ func (w *WoxImage) materializeURLImage(ctx context.Context) (WoxImage, error) {
 	if err != nil {
 		return WoxImage{}, err
 	}
-	if info, err := os.Stat(cachePath); err == nil && !info.IsDir() && info.Size() > 0 {
-		imagecache.Touch(ctx, cachePath, info)
-		return NewWoxImageAbsolutePath(cachePath), nil
+	if resolved, info, ok := existingURLImageCache(cachePath); ok {
+		imagecache.Touch(ctx, resolved, info)
+		return NewWoxImageAbsolutePath(resolved), nil
 	}
 	if err := w.warmURLImageCache(ctx, w.ImageData, cachePath); err != nil {
 		return WoxImage{}, err
 	}
-	if info, err := os.Stat(cachePath); err != nil || info.IsDir() || info.Size() == 0 {
+	resolved, info, ok := existingURLImageCache(cachePath)
+	if !ok {
 		return WoxImage{}, fmt.Errorf("url image cache miss after download: %s", w.ImageData)
 	}
-	return NewWoxImageAbsolutePath(cachePath), nil
+	imagecache.Touch(ctx, resolved, info)
+	return NewWoxImageAbsolutePath(resolved), nil
 }
 
 func isGIFFile(path string) bool {
