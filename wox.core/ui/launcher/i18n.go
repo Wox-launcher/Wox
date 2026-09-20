@@ -64,6 +64,7 @@ func (a *App) reloadTranslations() error {
 			a.settingsSearch.SetPlugins(nil)
 			a.settingsSearch.SetLoaded(false)
 			a.settingsSearch.SetLoading(false)
+			a.reloadChatResourceName("mentions")
 			reload = a.settingsOpen && a.settingTab == "plugins"
 			store = a.pluginSettings.PluginsStore()
 		}); err != nil {

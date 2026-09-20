@@ -1381,7 +1381,7 @@ func fileSearchCopyName(item filesearch.SearchResult) string {
 
 // buildExecuteCommandAtLocationAction hands the selected filesystem location to Shell without exposing it in the visible query.
 func (c *FileSearchPlugin) buildExecuteCommandAtLocationAction(item filesearch.SearchResult) plugin.QueryResultAction {
-	return shellplugin.PrepareCommandAtDirectoryAction(c.api, item.Path, item.IsDir)
+	return shellplugin.OpenAtDirectoryAction(c.api, item.Path, item.IsDir)
 }
 
 func ensureFileSearchFolderBrowseQuery(folderPath string) string {

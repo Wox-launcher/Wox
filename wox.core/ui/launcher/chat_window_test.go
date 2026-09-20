@@ -103,7 +103,7 @@ func TestDedicatedChatEscapeDismissesPanelsWithoutClosingWindow(t *testing.T) {
 		chatPreview: &chatPreviewState{active: true, editor: woxui.NewTextEditor("unsent draft")}, editor: woxui.NewTextEditor("query"),
 		uiCall: func(func()) error { dispatched <- struct{}{}; return nil },
 	}
-	for _, panel := range []string{"", "history", "models", "skills", chatCommandPanel, "debug"} {
+	for _, panel := range []string{"", "history", "models", "skills", chatCommandPanel, chatMentionPanel, "debug"} {
 		app.chatPreview.panel = panel
 		app.chatPreview.sidebarOpen = panel == "history"
 		if !app.onDedicatedChatKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {

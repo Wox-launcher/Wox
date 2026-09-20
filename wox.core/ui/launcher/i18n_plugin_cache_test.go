@@ -32,11 +32,15 @@ func TestLanguageChangeInvalidatesTranslatedPluginCaches(t *testing.T) {
 	a.pluginSettings.cachePlugins(true, nil)
 	a.pluginSettings.SetPluginsLoaded(true)
 	a.settingsSearch.SetLoaded(true)
+	a.aiSettings.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "笔记"}})
 	if err := a.reloadTranslations(); err != nil {
 		t.Fatal(err)
 	}
 	if !a.pluginSettings.PluginsLoaded() {
 		t.Fatal("same-language reload must retain catalogs")
+	}
+	if !a.aiSettings.PluginMentionsLoaded() || len(a.aiSettings.PluginMentions()) != 1 {
+		t.Fatal("same-language reload must retain chat plugin mentions")
 	}
 	service.language = i18n.LangCodeZhCn
 	if err := a.reloadTranslations(); err != nil {
@@ -49,5 +53,8 @@ func TestLanguageChangeInvalidatesTranslatedPluginCaches(t *testing.T) {
 	}
 	if a.pluginSettings.PluginsLoaded() || a.settingsSearch.Loaded() {
 		t.Fatal("old-language active catalog or search index remains loaded")
+	}
+	if a.aiSettings.PluginMentionsLoaded() || len(a.aiSettings.PluginMentions()) != 0 {
+		t.Fatal("old-language chat plugin mentions remain cached")
 	}
 }

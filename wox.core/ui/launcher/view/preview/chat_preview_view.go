@@ -18,6 +18,9 @@ const chatMessageGap = float32(12)
 const chatCopyFeedbackDuration = 1200 * time.Millisecond
 
 const (
+	chatMessageFontSize   = float32(13)
+	chatMessageLineHeight = float32(19)
+
 	// The composer starts at one line and grows with typed or wrapped lines.
 	chatComposerMinLines            = 1
 	chatComposerMaxLines            = 5
@@ -300,6 +303,7 @@ type ChatCatalogItemProps struct {
 	Current            bool
 	// Placeholder is a non-interactive loading row and must not take keyboard selection.
 	Placeholder         bool
+	Icon                *woxui.Image
 	OnSelect            func()
 	OnDelete            func()
 	deleteFocused       bool
@@ -476,16 +480,23 @@ func (s *chatCatalogItemState) advanceDeleteConfirmation() bool {
 func (s *chatCatalogItemState) Dispose() {}
 
 // chatCatalogItem renders the shared two-line catalog row and optional delete target.
+func chatCatalogLeadingIcon(item ChatCatalogItemProps, color woxui.Color) woxwidget.Widget {
+	if item.Icon != nil {
+		return woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
+	}
+	if item.Kind == "skills" || item.Kind == "plugin" {
+		return woxcomponent.ExtensionGlyph(18, color)
+	}
+	return woxcomponent.SparklesGlyph(18, color)
+}
+
 func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme, hovered bool, onHover func(bool)) woxwidget.Widget {
 	return chatCatalogItemWithDeleteState(item, width, height, theme, hovered, false, false, onHover, nil, item.OnDelete)
 }
 
 // chatCatalogLoadingItem renders a quiet, non-interactive catalog row while a group is still fetching.
 func chatCatalogLoadingItem(item ChatCatalogItemProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	icon := woxcomponent.SparklesGlyph(18, theme.ResultSubtitle)
-	if item.Kind == "skills" {
-		icon = woxcomponent.ExtensionGlyph(18, theme.ResultSubtitle)
-	}
+	icon := chatCatalogLeadingIcon(item, theme.ResultSubtitle)
 	titleWidth := min(float32(220), max(float32(100), width*0.42))
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 		{Left: 14, Top: 10, Child: icon},
@@ -525,10 +536,10 @@ func chatCatalogItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 			check = woxcomponent.CheckGlyph(18, iconColor)
 		}
 		titleWidth := min(float32(220), max(float32(100), width*0.42))
-		icon := woxcomponent.SparklesGlyph(18, iconColor)
-		if item.Kind == "skills" {
-			icon = woxcomponent.ExtensionGlyph(18, iconColor)
+		if item.Kind == "plugin" {
+			titleWidth = max(float32(100), width-56)
 		}
+		icon := chatCatalogLeadingIcon(item, iconColor)
 		return woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, OnHover: onHover, Child: woxwidget.Container{
 			Width: width, Height: height, Color: background, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 				{Left: 14, Top: 10, Child: icon},
@@ -723,6 +734,8 @@ type ChatMessageProps struct {
 	ContentWidth     float32
 	TextTrailing     woxwidget.Widget // Optional 32-unit action beside the message text.
 	TextLayout       woxwidget.TextBlockLayout
+	RichRuns         []woxcomponent.TextFieldRichRun
+	Window           *woxui.Window
 	Markdown         *woxcomponent.MarkdownProps
 	Reasoning        string
 	ReasoningLayout  woxwidget.TextBlockLayout
@@ -913,6 +926,22 @@ func (s *chatMessageState) Dispose() {
 	}
 }
 
+// chatMessageBodyText paints user text. Mention/skill tags reuse the composer chip field
+// without stealing focus from the composer.
+func chatMessageBodyText(props ChatMessageProps, width float32, textColor woxui.Color) woxwidget.Widget {
+	if len(props.RichRuns) == 0 {
+		return woxwidget.TextBlock{Value: props.Text, Width: width, Height: props.TextLayout.Size.Height, Style: woxui.TextStyle{Size: chatMessageFontSize}, LineHeight: chatMessageLineHeight, Color: textColor, Layout: &props.TextLayout}
+	}
+	lines := max(1, woxcomponent.TextFieldVisualLineCount(props.Text, props.Window, woxui.TextStyle{Size: chatMessageFontSize}, width, props.RichRuns))
+	return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+		ID: "chat-message-text-" + props.Key, Label: props.Text, Width: width, Height: props.TextLayout.Size.Height,
+		Padding: woxwidget.Insets{Bottom: 1}, Transparent: true, DisableHover: true,
+		Style: woxui.TextStyle{Size: chatMessageFontSize}, RichRuns: props.RichRuns, LineHeight: chatMessageLineHeight,
+		TextColor: textColor, Value: props.Text, Disabled: true, ReadOnly: true, MaxLines: max(8, lines+4),
+		Window: props.Window, Theme: props.Theme.Controls,
+	})
+}
+
 // chatMessageContent builds the message body while its retained owner supplies hover state.
 func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onHover func(bool), onActionHover func(bool, woxui.Rect)) woxwidget.Widget {
 	if props.Kind == "round" {
@@ -1014,7 +1043,7 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 				if props.TextTrailing != nil {
 					textWidth = max(float32(0), textWidth-38)
 				}
-				body := woxwidget.Widget(woxwidget.TextBlock{Value: props.Text, Width: textWidth, Height: props.TextLayout.Size.Height, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: textColor, Layout: &props.TextLayout})
+				body := chatMessageBodyText(props, textWidth, textColor)
 				if props.TextTrailing != nil {
 					body = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{woxwidget.Expanded{Child: body}, props.TextTrailing}}
 				}

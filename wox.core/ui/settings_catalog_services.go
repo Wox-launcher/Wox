@@ -170,6 +170,23 @@ func (s *CoreServices) AISkills(ctx context.Context, sessionID string) ([]contra
 	return converted, nil
 }
 
+// ChatPluginMentions returns plugins that currently expose tools and can be @mentioned in chat.
+func (s *CoreServices) ChatPluginMentions(ctx context.Context, sessionID string) ([]contract.AIPluginMention, error) {
+	ctx = uiServiceContext(ctx, sessionID)
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		return nil, errors.New("ai chat plugin not found")
+	}
+	mentions := chater.ListMentionablePlugins(ctx)
+	converted := make([]contract.AIPluginMention, len(mentions))
+	for index, mention := range mentions {
+		converted[index] = contract.AIPluginMention{
+			ID: mention.Id, Name: mention.Name, NameEn: mention.NameEn, Icon: mention.Icon,
+		}
+	}
+	return converted, nil
+}
+
 // CloneAISkills discovers skills from one remote repository.
 func (s *CoreServices) CloneAISkills(ctx context.Context, sessionID string, sourceURL string) ([]contract.AISkill, error) {
 	if strings.TrimSpace(sourceURL) == "" {

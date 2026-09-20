@@ -2,6 +2,8 @@ package preview
 
 import (
 	"strings"
+
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -186,15 +188,26 @@ func MeasureChatMessage(props ChatMessageProps, window *woxui.Window, width floa
 		bodyWidth = max(float32(0), bodyWidth-38)
 	}
 	if props.Markdown == nil {
-		props.TextLayout = layout("chat-text-"+props.Key, props.Text, woxui.TextStyle{Size: 13}, bodyWidth, 19)
+		if len(props.RichRuns) > 0 {
+			size := woxcomponent.TextFieldVisualContentSize(props.Text, window, woxui.TextStyle{Size: chatMessageFontSize}, bodyWidth, chatMessageLineHeight, props.RichRuns)
+			// WoxTextField treats zero padding as the default 12-unit inset; Bottom: 1
+			// matches markdown selectable text and must be included in the measured height.
+			props.TextLayout.Size = woxui.Size{Width: size.Width, Height: size.Height + 1}
+		} else {
+			props.TextLayout = layout("chat-text-"+props.Key, props.Text, woxui.TextStyle{Size: chatMessageFontSize}, bodyWidth, chatMessageLineHeight)
+		}
 	}
 	props.ReasoningLayout = layout("chat-reasoning-"+props.Key, props.Reasoning, woxui.TextStyle{Size: 11}, textWidth, 16)
 	props.ContentWidth = textWidth
 	if props.Role == "user" {
 		props.ContentWidth = 0
-		for _, line := range props.TextLayout.Lines {
-			if metrics, err := window.MeasureText(line, woxui.TextStyle{Size: 13}); err == nil {
-				props.ContentWidth = max(props.ContentWidth, metrics.Size.Width)
+		if len(props.RichRuns) > 0 {
+			props.ContentWidth = props.TextLayout.Size.Width
+		} else {
+			for _, line := range props.TextLayout.Lines {
+				if metrics, err := window.MeasureText(line, woxui.TextStyle{Size: chatMessageFontSize}); err == nil {
+					props.ContentWidth = max(props.ContentWidth, metrics.Size.Width)
+				}
 			}
 		}
 		if props.Skills != "" {

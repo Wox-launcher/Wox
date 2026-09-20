@@ -18,6 +18,8 @@ Skip a tool only when the feature is a launcher-only result row with no reusable
 
 List and invoke only see tools from plugins that finished init, are enabled, and still have the tool registered.
 
+In AI Chat, `@` is a typed mention picker. Plugins are one kind. Selecting a plugin inserts `{plugin:PluginId}` and displays its localized name; that plugin's tools become callable for the rest of the conversation. Tools are not dumped into every chat; `@` is the consent gate. Do not declare tools in `plugin.json`.
+
 ## Identity
 
 Unique key is `(PluginId, Name)`. `PluginId` is the registering instance; a plugin cannot register tools for another plugin.
@@ -102,7 +104,7 @@ open_note({noteId}) → {}
 | Notes | `create_note` | no |
 | Notes | `open_note` | yes |
 | Folder | `browse_path` | yes |
-| Shell | `prepare_command_at_directory` | yes |
+| Shell | `open_at_directory` | yes |
 | Chat | `open_chat_with_attachments` | yes |
 | File Search | `search` | no |
 | Media Player | `get_status`, `play`, `pause`, `toggle`, `next`, `previous` | no |

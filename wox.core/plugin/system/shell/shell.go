@@ -29,7 +29,7 @@ import (
 
 const (
 	PluginID                        = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
-	ToolPrepareCommandAtDirectory   = "prepare_command_at_directory"
+	ToolOpenAtDirectory             = "open_at_directory"
 	QueryContextWorkingDirectoryKey = "wox:shell:working_directory"
 
 	shellInterpreterSettingKey                   = "shell_interpreter"
@@ -592,8 +592,8 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.terminalManager = terminal.GetSessionManager()
 	s.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
 		Tool: plugin.PluginToolDescriptor{
-			Name:        ToolPrepareCommandAtDirectory,
-			Description: "i18n:plugin_shell_tool_prepare_command_at_directory",
+			Name:        ToolOpenAtDirectory,
+			Description: "i18n:plugin_shell_tool_open_at_directory",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"working_directory": map[string]any{"type": "string"}},
@@ -602,7 +602,7 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			OutputSchema: map[string]any{"type": "object"},
 			Annotations:  plugin.PluginToolAnnotations{RequiresUI: true},
 		},
-		Handler: s.prepareCommandAtDirectoryTool,
+		Handler: s.openAtDirectoryTool,
 	})
 	s.api.OnMRURestore(ctx, s.handleMRURestore)
 	s.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
@@ -627,8 +627,8 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	}
 }
 
-// prepareCommandAtDirectoryTool prepares a Shell query at a working directory without executing it.
-func (s *ShellPlugin) prepareCommandAtDirectoryTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+// openAtDirectoryTool opens the Shell prompt at a working directory without executing a command.
+func (s *ShellPlugin) openAtDirectoryTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
 	workingDirectory, _ := option.Arguments["working_directory"].(string)
 	workingDirectory = strings.TrimSpace(workingDirectory)
 	if workingDirectory == "" {
@@ -649,8 +649,8 @@ func (s *ShellPlugin) prepareCommandAtDirectoryTool(ctx context.Context, option 
 	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
 }
 
-// PrepareCommandAtDirectoryAction hands a filesystem location to Shell without exposing it in the visible query.
-func PrepareCommandAtDirectoryAction(api plugin.API, path string, isDir bool) plugin.QueryResultAction {
+// OpenAtDirectoryAction hands a filesystem location to Shell without exposing it in the visible query.
+func OpenAtDirectoryAction(api plugin.API, path string, isDir bool) plugin.QueryResultAction {
 	workingDirectory := path
 	if !isDir {
 		workingDirectory = filepath.Dir(path)
@@ -663,7 +663,7 @@ func PrepareCommandAtDirectoryAction(api plugin.API, path string, isDir bool) pl
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			plugin.InvokePluginToolAndNotify(ctx, api, plugin.InvokePluginToolOption{
 				PluginId:  PluginID,
-				Name:      ToolPrepareCommandAtDirectory,
+				Name:      ToolOpenAtDirectory,
 				Arguments: map[string]any{"working_directory": workingDirectory},
 			})
 		},

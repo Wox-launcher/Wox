@@ -55,6 +55,8 @@ type TextFieldRichRun struct {
 	ChipEditable bool
 	// ChipLabel is the painted token text used when a dismissible chip is hovered.
 	ChipLabel string
+	// ChipIcon is an optional leading glyph painted inside a token chip.
+	ChipIcon *woxui.Image
 	// LineGutter paints a leading decoration on every soft-wrapped line that intersects this run.
 	LineGutter      bool
 	LineGutterWidth float32
@@ -206,6 +208,23 @@ func textFieldVisualLines(value string, window *woxui.Window, style woxui.TextSt
 // TextFieldVisualLineCount returns wrapped lines using the same rules as WoxTextField.
 func TextFieldVisualLineCount(value string, window *woxui.Window, style woxui.TextStyle, width float32, richRuns []TextFieldRichRun) int {
 	return max(1, len(textFieldVisualLines(value, window, style, width, richRuns)))
+}
+
+// TextFieldVisualContentSize returns wrapped extent, honoring chip Advance on each line.
+func TextFieldVisualContentSize(value string, window *woxui.Window, style woxui.TextStyle, width, lineHeight float32, richRuns []TextFieldRichRun) woxui.Size {
+	if lineHeight <= 0 {
+		lineHeight = textFieldLineHeight
+	}
+	lines := textFieldVisualLines(value, window, style, width, richRuns)
+	if len(lines) == 0 {
+		return woxui.Size{Height: lineHeight}
+	}
+	runes := []rune(value)
+	maxWidth := float32(0)
+	for _, line := range lines {
+		maxWidth = max(maxWidth, line.indent+textFieldMeasureRangeOrEstimate(window, runes, line.start, line.end, style, richRuns))
+	}
+	return woxui.Size{Width: maxWidth, Height: float32(len(lines)) * lineHeight}
 }
 
 // TextFieldVisualLineIndex returns the wrapped line that contains caret.
@@ -2058,6 +2077,21 @@ func textFieldMeasureRange(window textFieldMeasurer, runes []rune, start, end in
 		}
 		metrics, _ := window.MeasureText(string(runes[segment.Start:segment.End]), segment.Style)
 		width += metrics.Size.Width
+	}
+	return width
+}
+
+func textFieldMeasureRangeOrEstimate(window *woxui.Window, runes []rune, start, end int, base woxui.TextStyle, richRuns []TextFieldRichRun) float32 {
+	if window != nil {
+		return textFieldMeasureRange(window, runes, start, end, base, richRuns)
+	}
+	width := float32(0)
+	for _, segment := range textFieldRichSegments(start, end, base, richRuns) {
+		if segment.Advance > 0 {
+			width += segment.Advance
+			continue
+		}
+		width += float32(max(0, segment.End-segment.Start)) * 7
 	}
 	return width
 }

@@ -431,7 +431,7 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 	})
 
 	isDir := util.IsDirExists(filePath)
-	executeAction := shellplugin.PrepareCommandAtDirectoryAction(i.api, filePath, isDir)
+	executeAction := shellplugin.OpenAtDirectoryAction(i.api, filePath, isDir)
 	results = append(results, plugin.QueryResult{
 		Title:   executeAction.Name,
 		Icon:    executeAction.Icon,

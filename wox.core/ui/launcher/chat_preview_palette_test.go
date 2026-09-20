@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 )
 
@@ -180,6 +181,227 @@ func TestChatModelPaletteHeightIncludesTitleWhileLoading(t *testing.T) {
 	snapshot.modelsLoading = false
 	if height := chatCatalogPanelHeight(snapshot, 600); height != 82 {
 		t.Fatalf("empty model palette height = %.0f, want 82 so the title and empty copy stay in one panel", height)
+	}
+}
+
+func TestSetChatTextOpensPluginMentionPanel(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
+	app := &App{
+		aiSettings: ai,
+		chatPreview: &chatPreviewState{
+			panel:  "history",
+			editor: woxui.NewTextEditor(""),
+			chat:   chatData{ID: "1", Title: "Suzhou"},
+		},
+	}
+
+	app.setChatText("@no")
+	if !app.chatPreview.sidebarOpen {
+		t.Fatal("typing @ hid the conversation sidebar")
+	}
+	if app.chatPreview.panel != chatMentionPanel {
+		t.Fatalf("panel = %q, want %q", app.chatPreview.panel, chatMentionPanel)
+	}
+	if app.chatPreview.panelQuery != "no" {
+		t.Fatalf("plugin query = %q", app.chatPreview.panelQuery)
+	}
+
+	app.setChatText("hello")
+	if app.chatPreview.panel != "history" || !app.chatPreview.sidebarOpen {
+		t.Fatalf("clearing @ did not restore the sidebar: panel=%q open=%v", app.chatPreview.panel, app.chatPreview.sidebarOpen)
+	}
+}
+
+func TestFindChatAtTokenUsesTokenAtCaret(t *testing.T) {
+	text := "hello @no"
+	token, ok := findChatAtToken(woxui.TextEditingState{Text: text, Selection: woxui.TextSelection{Anchor: len([]rune(text)), Focus: len([]rune(text))}})
+	if !ok || token.query != "no" || token.start != 6 || token.end != 9 {
+		t.Fatalf("at token = %+v, %v", token, ok)
+	}
+}
+
+func TestChatMentionPaletteItemsFilterByName(t *testing.T) {
+	mentions := chatMentionsFromPlugins([]chatPluginMention{{ID: "notes", Name: "Notes"}, {ID: "files", Name: "File Search", NameEn: "File Search"}})
+	items := chatMentionPaletteItems(mentions, "file", false)
+	if len(items) != 1 || items[0].title != "File Search" || items[0].group != chatMentionKindPlugin {
+		t.Fatalf("mention filter = %+v", items)
+	}
+}
+
+func TestChatMentionPaletteItemsMatchPinyinWhenEnabled(t *testing.T) {
+	mentions := []chatMention{
+		{Kind: chatMentionKindPlugin, ID: "media", Name: "媒体播放器", NameEn: "Media Player"},
+		{Kind: chatMentionKindPlugin, ID: "notes", Name: "Notes", NameEn: "Notes"},
+	}
+	if items := chatMentionPaletteItems(mentions, "mtbfq", false); len(items) != 0 {
+		t.Fatalf("pinyin disabled should not match initials, got %+v", items)
+	}
+	items := chatMentionPaletteItems(mentions, "mtbfq", true)
+	if len(items) != 1 || items[0].title != "媒体播放器" {
+		t.Fatalf("pinyin initials = %+v", items)
+	}
+	items = chatMentionPaletteItems(mentions, "meiti", true)
+	if len(items) != 1 || items[0].title != "媒体播放器" {
+		t.Fatalf("pinyin full = %+v", items)
+	}
+}
+
+func TestChatMentionCatalogGroupsPlugins(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
+	app := &App{
+		aiSettings:  ai,
+		chatPreview: &chatPreviewState{panel: chatMentionPanel, key: "chat-1"},
+	}
+	snapshot := snapshotChatPreviewLocked(app.chatPreview)
+	app.attachChatPreviewCatalogs(snapshot)
+	props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
+	if props.Label != "" {
+		t.Fatalf("mention catalog should use group headers, label = %q", props.Label)
+	}
+	if len(props.Items) != 1 || props.Items[0].Title != "Notes" || props.Items[0].Kind != chatMentionKindPlugin || props.Items[0].GroupLabel != "ui ai chat mention plugins" || props.Items[0].Subtitle != "" || props.Items[0].OnSelect == nil {
+		t.Fatalf("mention catalog items = %+v", props.Items)
+	}
+}
+
+func TestReplaceChatAtTokenWithPluginTag(t *testing.T) {
+	editor := woxui.NewTextEditor("use @no now")
+	editor.SetCaret(7)
+	replaceChatAtToken(editor, "{plugin:Notes}")
+	state := editor.State()
+	if state.Text != "use {plugin:Notes} now" || state.Selection.Focus != 18 {
+		t.Fatalf("replaced editor = %+v", state)
+	}
+}
+
+func TestChatMentionChipLabelKeepsAtPrefix(t *testing.T) {
+	if got := chatMentionChipLabel("媒体播放器"); got != "@媒体播放器" {
+		t.Fatalf("mention chip label = %q", got)
+	}
+	if got := chatMentionChipLabel(""); got != "@" {
+		t.Fatalf("empty mention chip label = %q", got)
+	}
+}
+
+func TestLookupChatMentionMatchesNameAndID(t *testing.T) {
+	mentions := chatMentionsFromPlugins([]chatPluginMention{{ID: "notes-id", Name: "笔记", NameEn: "Notes"}})
+	if got, ok := lookupChatMention(chatMentionKindPlugin, "Notes", mentions); !ok || got.ID != "notes-id" {
+		t.Fatalf("english lookup = %+v %v", got, ok)
+	}
+	if got, ok := lookupChatMention(chatMentionKindPlugin, "笔记", mentions); !ok || got.ID != "notes-id" {
+		t.Fatalf("localized lookup = %+v %v", got, ok)
+	}
+	if _, ok := lookupChatMention(chatMentionKindPlugin, "missing", mentions); ok {
+		t.Fatal("missing mention should not match")
+	}
+	if _, ok := lookupChatMention("file", "Notes", mentions); ok {
+		t.Fatal("other mention kinds must not match plugin catalog entries")
+	}
+}
+
+func TestChatInputPluginChipUsesLocalizedCatalogName(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Media Player", NameEn: "Media Player"}})
+	app := &App{aiSettings: ai, chatPreview: &chatPreviewState{key: "chat-1", editor: woxui.NewTextEditor("{plugin:notes} hello")}}
+	snapshot := snapshotChatPreviewLocked(app.chatPreview)
+	app.attachChatPreviewCatalogs(snapshot)
+	props := app.chatInputProps(snapshot, defaultPalette(), 400, 80, nil, nil)
+	if len(props.RichRuns) != 1 || props.RichRuns[0].ChipLabel != "@Media Player" {
+		t.Fatalf("localized chip = %#v", props.RichRuns)
+	}
+}
+
+func TestChatMessagePropsRendersPluginMentionAsChip(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "笔记", NameEn: "Notes", Icon: woxImage{ImageType: "emoji", ImageData: "📝"}}})
+	app := &App{
+		aiSettings:     ai,
+		lifecycleCtx:   context.Background(),
+		images:         map[string]*woxui.Image{},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+		previewLayouts: map[string]*textLayoutCache{},
+	}
+	props := app.chatMessageProps("chat", 0, chatConversation{
+		Role: "user", Text: "{plugin:notes} 现在有几个笔记?",
+		Mentions: []chatMentionRef{{Kind: chatMentionKindPlugin, ID: "notes", Name: "笔记"}},
+	}, defaultPalette(), 400, false, false, 1)
+	if props.Skills != "" {
+		t.Fatalf("inline mention chips should not add a skills footer, got %q", props.Skills)
+	}
+	if len(props.RichRuns) != 1 || props.RichRuns[0].ChipLabel != "@笔记" {
+		t.Fatalf("mention chip = %#v", props.RichRuns)
+	}
+	plain := woxcomponent.MeasureTokenChip(nil, "@笔记")
+	if props.RichRuns[0].Advance < plain {
+		t.Fatalf("plugin chip advance = %.0f, want at least the text chip width", props.RichRuns[0].Advance)
+	}
+}
+
+func TestChatMessagePropsRendersSkillTagAsChip(t *testing.T) {
+	app := &App{aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}), previewLayouts: map[string]*textLayoutCache{}}
+	props := app.chatMessageProps("chat", 0, chatConversation{
+		Role: "user", Text: "{skill:review} please",
+		SkillRefs: []chatSkillRef{{ID: "review", Name: "review"}},
+	}, defaultPalette(), 400, false, false, 1)
+	if props.Skills != "" {
+		t.Fatalf("inline skill chips should not add a skills footer, got %q", props.Skills)
+	}
+	if len(props.RichRuns) != 1 || props.RichRuns[0].ChipLabel != "review" {
+		t.Fatalf("skill chip = %#v", props.RichRuns)
+	}
+}
+
+func TestChatMessagePropsKeepsSkillsFooterWithoutInlineTags(t *testing.T) {
+	app := &App{aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}), previewLayouts: map[string]*textLayoutCache{}}
+	props := app.chatMessageProps("chat", 0, chatConversation{
+		Role: "user", Text: "hello",
+		Mentions: []chatMentionRef{{Kind: chatMentionKindPlugin, ID: "notes", Name: "笔记"}},
+	}, defaultPalette(), 400, false, false, 1)
+	if props.Skills != "@笔记" {
+		t.Fatalf("skills footer = %q", props.Skills)
+	}
+	if len(props.RichRuns) != 0 {
+		t.Fatalf("rich runs = %#v", props.RichRuns)
+	}
+}
+
+func TestChatInputPluginChipUsesCatalogIcon(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes", Icon: woxImage{ImageType: "emoji", ImageData: "📝"}}})
+	app := &App{
+		aiSettings:     ai,
+		lifecycleCtx:   context.Background(),
+		images:         map[string]*woxui.Image{},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+		chatPreview:    &chatPreviewState{key: "chat-1", editor: woxui.NewTextEditor("{plugin:Notes} hello")},
+	}
+	snapshot := snapshotChatPreviewLocked(app.chatPreview)
+	app.attachChatPreviewCatalogs(snapshot)
+	props := app.chatInputProps(snapshot, defaultPalette(), 400, 80, nil, nil)
+	if len(props.RichRuns) != 1 || props.RichRuns[0].ChipLabel != "@Notes" {
+		t.Fatalf("plugin chip = %#v", props.RichRuns)
+	}
+	plain := woxcomponent.MeasureTokenChip(nil, "@Notes")
+	if props.RichRuns[0].Advance < plain {
+		t.Fatalf("plugin chip advance = %.0f, want at least the text chip width", props.RichRuns[0].Advance)
+	}
+}
+
+func TestChatMentionTagRangesUsesRuneOffsetsAndIgnoresSkills(t *testing.T) {
+	text := "前 {plugin:Notes} {skill:Review} 后"
+	ranges := chatMentionTagRanges(text)
+	if len(ranges) != 1 || ranges[0].name != "Notes" || ranges[0].kind != chatMentionKindPlugin {
+		t.Fatalf("mention ranges = %+v", ranges)
+	}
+	runes := []rune(text)
+	tag := "{plugin:Notes}"
+	if ranges[0].start != 2 || ranges[0].end != 2+len([]rune(tag)) || string(runes[ranges[0].start:ranges[0].end]) != tag {
+		t.Fatalf("mention range = %+v", ranges[0])
 	}
 }
 
@@ -358,6 +580,10 @@ func (s *chatCatalogPrefetchServices) AIModels(_ context.Context, _ string) ([]c
 		<-s.release
 	}
 	return append([]contract.AIModel(nil), s.models...), nil
+}
+
+func (s *chatCatalogPrefetchServices) ChatPluginMentions(_ context.Context, _ string) ([]contract.AIPluginMention, error) {
+	return nil, nil
 }
 
 func (s *chatCatalogPrefetchServices) AISkills(_ context.Context, _ string) ([]contract.AISkill, error) {

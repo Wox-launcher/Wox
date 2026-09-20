@@ -50,7 +50,7 @@ func startInstalledToolBridge(ctx context.Context, options common.ChatOptions, e
 		defer bridge.mu.Unlock()
 		catalog := make([]map[string]any, 0, len(bridge.tools))
 		for _, tool := range bridge.tools {
-			catalog = append(catalog, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": tool.Parameters})
+			catalog = append(catalog, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": toolInputSchema(tool)})
 		}
 		data, err := json.Marshal(catalog)
 		util.GetLogger().Info(ctx, fmt.Sprintf("AI: CLI stage=list_tools tools=%d schemaBytes=%d", len(catalog), len(data)))
@@ -97,7 +97,7 @@ func (b *installedToolBridge) call(requestCtx context.Context, _ *mcp.CallToolRe
 		if tool.Name != input.Name {
 			continue
 		}
-		data, err := json.Marshal(tool.Parameters)
+		data, err := json.Marshal(toolInputSchema(tool))
 		if err != nil {
 			return nil, nil, err
 		}

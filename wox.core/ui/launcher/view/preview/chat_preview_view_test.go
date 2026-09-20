@@ -469,6 +469,20 @@ func TestChatHistoryDeleteConfirmationClearsOnMouseLeave(t *testing.T) {
 	}
 }
 
+func TestChatCatalogItemShowsPluginIconAndName(t *testing.T) {
+	theme := woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}
+	row := chatCatalogItem(ChatCatalogItemProps{SelectID: "notes", Kind: "plugin", Title: "Notes"}, 400, 38, theme, false, func(bool) {}).(woxwidget.Gesture)
+	stack := row.Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	title := stack.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Text)
+	if title.Value != "Notes" {
+		t.Fatalf("plugin title = %#v", title)
+	}
+	subtitle := stack.Children[2].Child.(woxwidget.Container).Child.(woxwidget.Text)
+	if subtitle.Value != "" {
+		t.Fatalf("plugin subtitle = %q, want empty", subtitle.Value)
+	}
+}
+
 func TestChatCatalogItemOnlyShowsCheckForCurrentModel(t *testing.T) {
 	theme := woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}
 
@@ -484,6 +498,60 @@ func TestChatCatalogItemOnlyShowsCheckForCurrentModel(t *testing.T) {
 	currentCheck := currentStack.Children[3].Child.(woxwidget.Container)
 	if currentCheck.Width != 28 || currentCheck.Child == nil {
 		t.Fatalf("current model check slot = width %.0f, child %#v; want check glyph", currentCheck.Width, currentCheck.Child)
+	}
+}
+
+func TestChatMessageRendersMentionChipsInline(t *testing.T) {
+	tag := "{plugin:notes}"
+	end := len([]rune(tag))
+	theme := woxcomponent.Theme{
+		SelectedBackground: woxui.Color{A: 255},
+		SelectedTitle:      woxui.Color{R: 255, G: 255, B: 255, A: 255},
+		Controls:           woxcomponent.ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}},
+	}
+	run := woxcomponent.NewTokenChipRunWithIcon(0, end, "@笔记", nil, nil, theme.Controls)
+	text := tag + " 现在有几个笔记?"
+	props := ChatMessageProps{
+		Key: "user-mention", Role: "user", Text: text, RichRuns: []woxcomponent.TextFieldRichRun{run},
+		TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 160, Height: 20}}, ContentWidth: 160, Theme: theme,
+	}
+	view := chatMessageContent(props, 1000, false, nil, nil).(woxwidget.Gesture)
+	body := view.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	children := body.Child.(woxwidget.Flex).Children
+	if len(children) != 1 {
+		t.Fatalf("user mention body children = %d, want only inline chips (no skills footer)", len(children))
+	}
+	field := children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if !field.Disabled || !field.Transparent || !field.ReadOnly || field.Value != text {
+		t.Fatalf("mention field = disabled %v transparent %v readOnly %v value %q", field.Disabled, field.Transparent, field.ReadOnly, field.Value)
+	}
+	if len(field.RichRuns) != 1 || field.RichRuns[0].ChipLabel != "@笔记" || field.RichRuns[0].Paint == nil {
+		t.Fatalf("mention chips = %#v", field.RichRuns)
+	}
+	if field.TextColor != theme.SelectedTitle {
+		t.Fatalf("mention text color = %#v, want selected title", field.TextColor)
+	}
+}
+
+func TestMeasureChatMessageUsesChipAdvanceForUserWidth(t *testing.T) {
+	tag := "{plugin:notes}"
+	run := woxcomponent.NewTokenChipRun(0, len([]rune(tag)), "@Notes", nil, woxcomponent.ControlTheme{})
+	props := MeasureChatMessage(ChatMessageProps{
+		Role: "user", Text: tag + " hi", RichRuns: []woxcomponent.TextFieldRichRun{run},
+	}, nil, 400, nil)
+	if props.TextLayout.Size.Height != chatMessageLineHeight+1 {
+		t.Fatalf("chip message height = %.0f, want %.0f", props.TextLayout.Size.Height, chatMessageLineHeight+1)
+	}
+	if props.ContentWidth < run.Advance {
+		t.Fatalf("content width = %.0f, want at least chip advance %.0f", props.ContentWidth, run.Advance)
+	}
+}
+
+func TestChatMessageHeightOmitsSkillsFooterWhenChipsInline(t *testing.T) {
+	withChips := ChatMessageProps{Role: "user", Text: "{plugin:notes} hi", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 20}}}
+	withFooter := ChatMessageProps{Role: "user", Text: "hi", Skills: "@Notes", TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 20}}}
+	if diff := chatMessageHeight(withFooter) - chatMessageHeight(withChips); diff != 21 {
+		t.Fatalf("skills footer extra height = %.0f, want 21", diff)
 	}
 }
 

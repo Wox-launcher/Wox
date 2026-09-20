@@ -12,6 +12,7 @@ type aiFakeService struct {
 	providers []contract.AIProvider
 	models    []contract.AIModel
 	skills    []contract.AISkill
+	mentions  []contract.AIPluginMention
 	err       error
 }
 
@@ -25,6 +26,39 @@ func (f *aiFakeService) AIModels(_ context.Context, _ string) ([]contract.AIMode
 
 func (f *aiFakeService) AISkills(_ context.Context, _ string) ([]contract.AISkill, error) {
 	return append([]contract.AISkill(nil), f.skills...), f.err
+}
+
+func (f *aiFakeService) ChatPluginMentions(_ context.Context, _ string) ([]contract.AIPluginMention, error) {
+	return append([]contract.AIPluginMention(nil), f.mentions...), f.err
+}
+
+func TestMentionCatalogInvalidationRejectsPendingResult(t *testing.T) {
+	var pending func()
+	c := newAISettingsController(CommonDeps{RunOnUI: func(operation string, fn func()) error {
+		if operation == "apply chat plugin mentions" {
+			pending = fn
+		} else {
+			fn()
+		}
+		return nil
+	}})
+	c.SetPluginMentionsLoading(true)
+	callbackCalled := false
+	c.LoadChatPluginMentions(t.Context(), &aiFakeService{mentions: []contract.AIPluginMention{{ID: "old", Name: "Old"}}}, "", func([]chatPluginMention) {
+		callbackCalled = true
+	})
+	app := &App{aiSettings: c}
+	app.reloadChatResourceName("mentions")
+	if c.PluginMentionsLoaded() || c.PluginMentionsLoading() {
+		t.Fatal("invalidated catalog must allow a fresh request")
+	}
+	stale := pending
+	c.LoadChatPluginMentions(t.Context(), &aiFakeService{mentions: []contract.AIPluginMention{{ID: "new", Name: "New"}}}, "", nil)
+	pending()
+	stale()
+	if callbackCalled || !c.PluginMentionsLoaded() || len(c.PluginMentions()) != 1 || c.PluginMentions()[0].ID != "new" {
+		t.Fatalf("stale result replaced catalog: %+v", c.PluginMentions())
+	}
 }
 
 func newAIDeps() (CommonDeps, *int) {

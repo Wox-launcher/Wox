@@ -10,6 +10,8 @@ const (
 	tokenChipRadius      = float32(4)
 	tokenChipFontSize    = float32(11)
 	tokenChipMinWidth    = float32(24)
+	tokenChipIconSize    = float32(12)
+	tokenChipIconGap     = float32(4)
 	tokenChipCloseCircle = float32(12)
 	tokenChipCloseIcon   = float32(8)
 	tokenChipCloseGap    = float32(4)
@@ -40,23 +42,46 @@ func tokenChipHoverExtra(run TextFieldRichRun) float32 {
 	return extra
 }
 
+func tokenChipIconSlot(icon *woxui.Image) float32 {
+	if icon == nil {
+		return 0
+	}
+	return tokenChipIconSize + tokenChipIconGap
+}
+
 // MeasureTokenChip returns the inline advance reserved for a compact token chip.
 func MeasureTokenChip(window textFieldMeasurer, label string) float32 {
+	return MeasureTokenChipWithIcon(window, label, nil)
+}
+
+// MeasureTokenChipWithIcon reserves space for an optional leading chip icon.
+func MeasureTokenChipWithIcon(window textFieldMeasurer, label string, icon *woxui.Image) float32 {
 	width := float32(len([]rune(label))) * 7
 	if window != nil {
 		if metrics, err := window.MeasureText(label, woxui.TextStyle{Size: tokenChipFontSize}); err == nil {
 			width = metrics.Size.Width
 		}
 	}
-	return max(tokenChipMinWidth, width+tokenChipPadX*2)
+	return max(tokenChipMinWidth, width+tokenChipPadX*2+tokenChipIconSlot(icon))
 }
 
 // PaintTokenChip draws a quiet pill that replaces a backing placeholder in the editor.
 func PaintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, theme ControlTheme) {
-	paintTokenChip(displayList, bounds, label, theme, 0, false)
+	paintTokenChip(displayList, bounds, label, nil, nil, theme, 0, false)
 }
 
-func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, theme ControlTheme, progress float32, editable bool) {
+func tokenChipLabelHeight(window textFieldMeasurer, label string, chipHeight float32) float32 {
+	style := woxui.TextStyle{Size: tokenChipFontSize}
+	height := tokenChipFontSize
+	if window != nil {
+		if metrics, err := window.MeasureText(label, style); err == nil && metrics.Size.Height > 0 {
+			height = metrics.Size.Height
+		}
+	}
+	return min(chipHeight, height)
+}
+
+func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label string, icon *woxui.Image, window textFieldMeasurer, theme ControlTheme, progress float32, editable bool) {
 	if displayList == nil || bounds.Width <= 0 || bounds.Height <= 0 {
 		return
 	}
@@ -78,9 +103,18 @@ func paintTokenChip(displayList *woxui.DisplayList, bounds woxui.Rect, label str
 	if editable {
 		extra += tokenChipEditSlot
 	}
-	labelWidth := max(float32(0), chip.Width-tokenChipPadX*2-extra*progress)
+	iconSlot := tokenChipIconSlot(icon)
+	if icon != nil {
+		displayList.DrawImage(icon, woxui.Rect{
+			X: chip.X + tokenChipPadX, Y: chip.Y + (chip.Height-tokenChipIconSize)/2,
+			Width: tokenChipIconSize, Height: tokenChipIconSize,
+		})
+	}
+	labelWidth := max(float32(0), chip.Width-tokenChipPadX*2-extra*progress-iconSlot)
+	labelHeight := tokenChipLabelHeight(window, label, chip.Height)
 	displayList.DrawText(label, woxui.Rect{
-		X: chip.X + tokenChipPadX, Y: chip.Y, Width: labelWidth, Height: chip.Height,
+		X: chip.X + tokenChipPadX + iconSlot, Y: chip.Y + (chip.Height-labelHeight)/2,
+		Width: labelWidth, Height: labelHeight,
 	}, woxui.TextStyle{Size: tokenChipFontSize}, theme.Text)
 	if progress > 0 {
 		if editable {
@@ -130,10 +164,15 @@ func paintTokenChipAction(displayList *woxui.DisplayList, chip woxui.Rect, circl
 
 // NewTokenChipRun hides placeholder text and paints a compact chip in its place.
 func NewTokenChipRun(start, end int, label string, window textFieldMeasurer, theme ControlTheme) TextFieldRichRun {
+	return NewTokenChipRunWithIcon(start, end, label, nil, window, theme)
+}
+
+// NewTokenChipRunWithIcon paints a compact chip with an optional leading icon.
+func NewTokenChipRunWithIcon(start, end int, label string, icon *woxui.Image, window textFieldMeasurer, theme ControlTheme) TextFieldRichRun {
 	return TextFieldRichRun{
-		Start: start, End: end, Advance: MeasureTokenChip(window, label), HideText: true, ChipLabel: label,
+		Start: start, End: end, Advance: MeasureTokenChipWithIcon(window, label, icon), HideText: true, ChipLabel: label, ChipIcon: icon,
 		Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			paintTokenChip(displayList, bounds, label, theme, 0, false)
+			paintTokenChip(displayList, bounds, label, icon, window, theme, 0, false)
 		},
 	}
 }
@@ -164,10 +203,11 @@ func withDismissibleChipHover(runs []TextFieldRichRun, start int, theme ControlT
 			continue
 		}
 		label := next[index].ChipLabel
+		icon := next[index].ChipIcon
 		editable := next[index].ChipEditable
 		next[index].Advance += tokenChipHoverExtra(next[index]) * progress
 		next[index].Paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			paintTokenChip(displayList, bounds, label, theme, progress, editable)
+			paintTokenChip(displayList, bounds, label, icon, nil, theme, progress, editable)
 		}
 		return next
 	}

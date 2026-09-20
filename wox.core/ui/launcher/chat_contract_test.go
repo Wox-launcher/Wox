@@ -20,6 +20,7 @@ func TestChatDataContractRoundTrip(t *testing.T) {
 			ID: "message-1", Role: "user", Text: "hello",
 			Images:    []woxImage{{ImageType: "emoji", ImageData: "👋"}},
 			SkillRefs: []chatSkillRef{{ID: "skill-1", Name: "Review", Path: "/tmp/review", Source: "local"}},
+			Mentions:  []chatMentionRef{{Kind: "plugin", ID: "notes", Name: "Notes"}},
 		}},
 	}
 	contractChat, err := chatDataToContract(source)

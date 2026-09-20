@@ -167,10 +167,18 @@ func (o *OpenAIBaseProvider) convertTools(tools []common.Tool) []openai.ChatComp
 		convertedTools[i] = openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
 			Name:        tool.Name,
 			Description: openai.String(tool.Description),
-			Parameters:  openai.FunctionParameters(jsonSchemaDefinitionToMap(tool.Parameters)),
+			Parameters:  openai.FunctionParameters(toolInputSchema(tool)),
 		})
 	}
 	return convertedTools
+}
+
+// toolInputSchema preserves full plugin contracts while keeping legacy tool schemas compatible.
+func toolInputSchema(tool common.Tool) map[string]any {
+	if tool.InputSchema != nil {
+		return tool.InputSchema
+	}
+	return jsonSchemaDefinitionToMap(tool.Parameters)
 }
 
 // jsonSchemaDefinitionToMap copies a tool schema without langchaingo's empty

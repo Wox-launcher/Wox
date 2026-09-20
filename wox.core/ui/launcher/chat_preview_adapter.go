@@ -81,7 +81,7 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 			return a.chatMessagesProps(snapshot, palette, width, height, imageScale)
 		},
 		PrepareCatalog: func(width, available float32) *previewview.ChatCatalogProps {
-			if panel != "models" && panel != "skills" && panel != chatCommandPanel {
+			if panel != "models" && panel != "skills" && panel != chatCommandPanel && panel != chatMentionPanel {
 				return nil
 			}
 			props := a.chatCatalogProps(snapshot, palette, width, chatCatalogPanelHeight(snapshot, available))
@@ -138,6 +138,14 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 	if snapshot == nil || snapshot.panel == "" || snapshot.question != nil {
 		return 0
 	}
+	if snapshot.panel == chatMentionPanel {
+		items := chatMentionPaletteItems(snapshot.mentions, snapshot.panelQuery, snapshot.usePinYin)
+		contentHeight := chatCommandContentHeight(items)
+		if snapshot.pluginMentionsLoading && len(items) == 0 {
+			contentHeight += chatCatalogGroupHeaderHeight + chatCatalogRowHeight
+		}
+		return previewview.ChatCatalogHeight(contentHeight, false, available)
+	}
 	if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
 		items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
 		loadingHeight := chatCommandPaletteLoadingHeight(items, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
@@ -155,6 +163,9 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
 	if snapshot.panel == "history" {
 		return a.chatHistoryCatalogProps(snapshot, palette, width, height)
+	}
+	if snapshot.panel == chatMentionPanel {
+		return a.chatMentionCatalogProps(snapshot, palette, width, height)
 	}
 	grouped := snapshot.panel == chatCommandPanel
 	viewportHeight := max(float32(40), height-44)
@@ -266,6 +277,61 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	}
 }
 
+func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
+	viewportHeight := max(float32(40), height-14)
+	commands := a.filteredChatMentionItems(snapshot.mentions, snapshot.panelQuery)
+	showLoading := snapshot.pluginMentionsLoading && len(commands) == 0
+	contentHeight := chatCommandContentHeight(commands)
+	if showLoading {
+		contentHeight += chatCatalogGroupHeaderHeight + chatCatalogRowHeight
+	}
+	maxOffset := max(float32(0), contentHeight-viewportHeight)
+	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
+	if len(commands) > 0 && snapshot.panelViewport <= 0 {
+		selected := min(max(0, snapshot.panelSelected), len(commands)-1)
+		rowTop := chatCommandItemOffset(commands, selected)
+		rowBottom := rowTop + chatCatalogRowHeight
+		if rowTop < offset {
+			offset = rowTop
+		} else if rowBottom > offset+viewportHeight {
+			offset = rowBottom - viewportHeight
+		}
+	}
+	a.setChatPanelViewport(viewportHeight)
+	rows := make([]previewview.ChatCatalogItemProps, 0, len(commands)+1)
+	if showLoading {
+		rows = append(rows, a.chatCatalogLoadingItem(snapshot, chatMentionKindPlugin, true))
+	}
+	for index, command := range commands {
+		item := command
+		mention := snapshot.mentions[item.sourceIndex]
+		rows = append(rows, previewview.ChatCatalogItemProps{
+			SelectID:   fmt.Sprintf("chat-mention-row-%s-%s-%d", item.group, snapshot.key, index),
+			GroupLabel: a.chatMentionGroupLabel(item.group), Kind: item.group, Title: item.title, Selected: index == snapshot.panelSelected,
+			Icon:     a.imageForSurface(mention.Icon, 256, palette.background),
+			OnSelect: func() { a.insertChatMention(item) },
+		})
+	}
+	emptyMessage := a.translate("i18n:ui_ai_chat_no_mentionable_plugins")
+	if snapshot.pluginMentionsLoading {
+		emptyMessage = a.translate("i18n:ui_ai_chat_loading_plugins")
+	} else if snapshot.pluginMentionsError != "" {
+		emptyMessage = snapshot.pluginMentionsError
+	}
+	return previewview.ChatCatalogProps{
+		Width: width, Height: height, Key: snapshot.key, Items: rows, EmptyMessage: emptyMessage,
+		Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(),
+		OnScroll: a.scrollChatPanel,
+	}
+}
+
+func (a *App) chatMentionGroupLabel(kind string) string {
+	if kind == chatMentionKindPlugin {
+		return a.translate("i18n:ui_ai_chat_mention_plugins")
+	}
+	return kind
+}
+
 // chatCatalogLoadingItem keeps a Models or Skills group visible while its catalog is still loading.
 func (a *App) chatCatalogLoadingItem(snapshot *chatPreviewSnapshot, group string, grouped bool) previewview.ChatCatalogItemProps {
 	title := a.translate("i18n:ui_ai_chat_loading_models")
@@ -274,6 +340,11 @@ func (a *App) chatCatalogLoadingItem(snapshot *chatPreviewSnapshot, group string
 		title = a.translate("i18n:ui_ai_chat_loading_skills")
 		if grouped {
 			groupLabel = a.translate("i18n:ui_ai_skills")
+		}
+	} else if group == chatMentionKindPlugin {
+		title = a.translate("i18n:ui_ai_chat_loading_plugins")
+		if grouped {
+			groupLabel = a.translate("i18n:ui_ai_chat_mention_plugins")
 		}
 	} else if grouped {
 		groupLabel = a.translate("i18n:ui_ai_chat_select_model_title")
@@ -808,11 +879,21 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		}
 		props.Text = strings.TrimSpace(conversation.Text)
 	}
-	if len(conversation.SkillRefs) > 0 {
-		names := make([]string, 0, len(conversation.SkillRefs))
+	if conversation.Role == "user" && props.Text != "" {
+		props.RichRuns, _ = chatTokenChipDecorations(props.Text, a.chatMentionCatalog(), a.window, chatMessageChipTheme(props.Theme, conversation.Role), func(mention chatMention) *woxui.Image {
+			return a.imageForSurface(mention.Icon, 256, palette.background)
+		})
+	}
+	if len(props.RichRuns) == 0 && (len(conversation.SkillRefs) > 0 || len(conversation.Mentions) > 0) {
+		names := make([]string, 0, len(conversation.SkillRefs)+len(conversation.Mentions))
 		for _, skill := range conversation.SkillRefs {
 			if skill.Name != "" {
 				names = append(names, "#"+skill.Name)
+			}
+		}
+		for _, mention := range conversation.Mentions {
+			if mention.Name != "" {
+				names = append(names, chatMentionChipLabel(mention.Name))
 			}
 		}
 		props.Skills = strings.Join(names, "  ")
@@ -887,7 +968,7 @@ func formatChatToolCall(conversation chatConversation) string {
 // chatInputProps prepares the controlled editor and toolbar actions.
 func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, window *woxui.Window, onKey func(woxui.KeyEvent) bool) previewview.ChatInputProps {
 	hintKey := "i18n:ui_ai_chat_input_hint"
-	hintFallback := "Type a message. Use / to switch models or insert skills"
+	hintFallback := "Type a message. Use / for models and skills, @ to mention a plugin"
 	if len(snapshot.attachments) > 0 {
 		hintKey = "i18n:plugin_ai_chat_input_hint_with_attachments"
 		hintFallback = "Ask about the attached files or images"
@@ -930,13 +1011,9 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		quoteDismiss = "Remove attachment"
 	}
 	theme := palette.componentTheme()
-	skillTags := chatSkillTagRanges(snapshot.editing.Text)
-	richRuns := make([]woxcomponent.TextFieldRichRun, 0, len(skillTags))
-	atomicTokens := make([]woxcomponent.TextFieldTokenRange, 0, len(skillTags))
-	for _, tag := range skillTags {
-		richRuns = append(richRuns, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, theme.Controls))
-		atomicTokens = append(atomicTokens, woxcomponent.TextFieldTokenRange{Start: tag.start, End: tag.end})
-	}
+	richRuns, atomicTokens := chatTokenChipDecorations(snapshot.editing.Text, snapshot.mentions, window, theme.Controls, func(mention chatMention) *woxui.Image {
+		return a.imageForSurface(mention.Icon, 256, palette.background)
+	})
 	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
 		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: window,
@@ -1032,8 +1109,45 @@ func (a *App) chatRoundProps(item chatRenderItem, theme woxcomponent.Theme, togg
 	return previewview.ChatMessageProps{Key: item.roundID, Kind: "round", RoundLabel: fmt.Sprintf(label, formatChatRoundDuration(item.roundStart, item.roundEnd)), RoundExpanded: item.roundExpanded, Theme: theme, OnToggleRound: toggle}
 }
 
+func chatMessageChipTheme(theme woxcomponent.Theme, role string) woxcomponent.ControlTheme {
+	chip := theme.Controls
+	if role == "user" && theme.SelectedTitle.A > 0 {
+		chip.Text = theme.SelectedTitle
+		chip.TextSecondary = theme.SelectedTitle
+	}
+	return chip
+}
+
+func chatTokenChipDecorations(text string, mentions []chatMention, window *woxui.Window, chipTheme woxcomponent.ControlTheme, iconFor func(chatMention) *woxui.Image) ([]woxcomponent.TextFieldRichRun, []woxcomponent.TextFieldTokenRange) {
+	skillTags := chatSkillTagRanges(text)
+	mentionTags := chatMentionTagRanges(text)
+	if len(skillTags) == 0 && len(mentionTags) == 0 {
+		return nil, nil
+	}
+	runs := make([]woxcomponent.TextFieldRichRun, 0, len(skillTags)+len(mentionTags))
+	tokens := make([]woxcomponent.TextFieldTokenRange, 0, len(skillTags)+len(mentionTags))
+	for _, tag := range skillTags {
+		runs = append(runs, woxcomponent.NewTokenChipRun(tag.start, tag.end, tag.name, window, chipTheme))
+		tokens = append(tokens, woxcomponent.TextFieldTokenRange{Start: tag.start, End: tag.end})
+	}
+	for _, tag := range mentionTags {
+		label := chatMentionChipLabel(tag.name)
+		var icon *woxui.Image
+		if mention, ok := lookupChatMention(tag.kind, tag.name, mentions); ok {
+			label = chatMentionChipLabel(mention.Name)
+			if iconFor != nil {
+				icon = iconFor(mention)
+			}
+		}
+		runs = append(runs, woxcomponent.NewTokenChipRunWithIcon(tag.start, tag.end, label, icon, window, chipTheme))
+		tokens = append(tokens, woxcomponent.TextFieldTokenRange{Start: tag.start, End: tag.end})
+	}
+	return runs, tokens
+}
+
 // prepareChatMessage applies the same rich reply rendering and geometry to every chat host.
 func (a *App) prepareChatMessage(props previewview.ChatMessageProps, window *woxui.Window, width, imageScale float32) previewview.ChatMessageProps {
+	props.Window = window
 	if props.Role == "assistant" && props.Text != "" {
 		innerWidth := previewview.ChatMessageTextWidth(width, props.Role)
 		markdown := a.markdownPropsWithDocument("chat-markdown-"+props.Key, woxcomponent.MarkdownDocument{}, "", uiPalette{}, innerWidth, imageScale)

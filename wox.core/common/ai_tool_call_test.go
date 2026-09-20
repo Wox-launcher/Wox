@@ -12,6 +12,8 @@ func TestFormatToolOrigin(t *testing.T) {
 		{source: ToolSourceBuiltin, name: "web_search", want: "builtin/web_search"},
 		{source: ToolSourceMCP, server: "ddg-search", name: "search", want: "ddg-search/search"},
 		{source: ToolSourceMCP, name: "search", want: "mcp/search"},
+		{source: ToolSourcePlugin, server: "Notes", name: "notes__create_note", want: "plugin/Notes/notes__create_note"},
+		{source: ToolSourcePlugin, name: "notes__create_note", want: "plugin/notes__create_note"},
 		{name: "search", want: "search"},
 		{source: ToolSourceBuiltin, want: ""},
 	}

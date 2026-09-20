@@ -483,7 +483,7 @@ func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title st
 
 // buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
 func (c *QuickJumpPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
-	return shellplugin.PrepareCommandAtDirectoryAction(c.api, path, isDir)
+	return shellplugin.OpenAtDirectoryAction(c.api, path, isDir)
 }
 
 func (c *QuickJumpPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool, isGlobalResult bool) {

@@ -14,20 +14,24 @@ import (
 // status, the shared model/skill catalogs used by chat preview and plugin/requirement
 // forms, and the modal model-manager overlay snapshot.
 type aiSettingsSnapshot struct {
-	Form             *formFieldsSnapshot
-	ProviderCatalog  []aiProviderInfo
-	ProvidersLoading bool
-	ProvidersLoaded  bool
-	ProvidersError   string
-	Models           []aiModel
-	ModelsLoading    bool
-	ModelsLoaded     bool
-	ModelsError      string
-	Skills           []chatSkill
-	SkillsLoading    bool
-	SkillsLoaded     bool
-	SkillsError      string
-	ModelManager     *modelManagerSnapshot
+	Form                  *formFieldsSnapshot
+	ProviderCatalog       []aiProviderInfo
+	ProvidersLoading      bool
+	ProvidersLoaded       bool
+	ProvidersError        string
+	Models                []aiModel
+	ModelsLoading         bool
+	ModelsLoaded          bool
+	ModelsError           string
+	Skills                []chatSkill
+	SkillsLoading         bool
+	SkillsLoaded          bool
+	SkillsError           string
+	PluginMentions        []chatPluginMention
+	PluginMentionsLoading bool
+	PluginMentionsLoaded  bool
+	PluginMentionsError   string
+	ModelManager          *modelManagerSnapshot
 }
 
 // aiSettingsController owns the AI tab state: the inline AI settings form (providers,
@@ -63,6 +67,12 @@ type aiSettingsController struct {
 	skillsLoading bool
 	skillsLoaded  bool
 	skillsError   string
+
+	pluginMentions         []chatPluginMention
+	pluginMentionsLoading  bool
+	pluginMentionsLoaded   bool
+	pluginMentionsError    string
+	pluginMentionsRevision uint64
 
 	// Modal model-manager overlay state. Owned here because it is opened from plugin
 	// settings and rendered in the settings window, but is a self-contained modal flow.
@@ -158,6 +168,15 @@ func (c *aiSettingsController) ResetModels() {
 func (c *aiSettingsController) ResetSkills() {
 	c.skillsLoaded = false
 	c.skillsError = ""
+}
+
+// ResetPluginMentions also invalidates pending loads, which may contain an older plugin state.
+func (c *aiSettingsController) ResetPluginMentions() {
+	c.pluginMentionsRevision++
+	c.pluginMentions = nil
+	c.pluginMentionsLoading = false
+	c.pluginMentionsLoaded = false
+	c.pluginMentionsError = ""
 }
 
 // Models returns a copy of the shared model catalog. Callers that need indexed access
@@ -281,6 +300,41 @@ func (c *aiSettingsController) SetSkillsError(msg string) {
 	c.skillsError = msg
 }
 
+func (c *aiSettingsController) PluginMentions() []chatPluginMention {
+	return append([]chatPluginMention(nil), c.pluginMentions...)
+}
+
+func (c *aiSettingsController) PluginMentionsLoading() bool {
+	return c.pluginMentionsLoading
+}
+
+func (c *aiSettingsController) PluginMentionsLoaded() bool {
+	return c.pluginMentionsLoaded
+}
+
+func (c *aiSettingsController) PluginMentionsError() string {
+	return c.pluginMentionsError
+}
+
+func (c *aiSettingsController) SetPluginMentionsLoading(loading bool) bool {
+	previous := c.pluginMentionsLoading
+	c.pluginMentionsLoading = loading
+	return previous
+}
+
+func (c *aiSettingsController) SetPluginMentions(mentions []chatPluginMention) {
+	c.pluginMentions = mentions
+	c.pluginMentionsLoading = false
+	c.pluginMentionsLoaded = true
+	c.pluginMentionsError = ""
+}
+
+func (c *aiSettingsController) SetPluginMentionsError(msg string) {
+	c.pluginMentionsLoading = false
+	c.pluginMentionsLoaded = true
+	c.pluginMentionsError = msg
+}
+
 // LoadAIModels fetches the core model catalog, sorts it, and stores it through SetModels.
 // onLoaded is invoked on success so the App can refresh the requirement/plugin/table
 // row forms that consume selectAIModel options and reset the chat-preview panel selection.
@@ -370,6 +424,45 @@ func (c *aiSettingsController) LoadAISkills(ctx context.Context, service contrac
 	})
 }
 
+// LoadChatPluginMentions applies the core-sorted catalog only if it has not been invalidated.
+func (c *aiSettingsController) LoadChatPluginMentions(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string, onLoaded func(mentions []chatPluginMention)) {
+	var revision uint64
+	if !c.deps.OnUI("start loading chat plugin mentions", func() {
+		revision = c.pluginMentionsRevision
+	}) {
+		return
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	loaded, err := service.ChatPluginMentions(timeoutCtx, sessionID)
+	cancel()
+	mentions := make([]chatPluginMention, 0, len(loaded))
+	for _, mention := range loaded {
+		if strings.TrimSpace(mention.ID) == "" || strings.TrimSpace(mention.Name) == "" {
+			continue
+		}
+		mentions = append(mentions, chatPluginMention{
+			ID: mention.ID, Name: mention.Name, NameEn: mention.NameEn, Icon: fromCoreImage(mention.Icon),
+		})
+	}
+	c.deps.OnUI("apply chat plugin mentions", func() {
+		if revision != c.pluginMentionsRevision {
+			return
+		}
+		if err == nil {
+			c.SetPluginMentions(mentions)
+		} else {
+			c.SetPluginMentionsError(err.Error())
+		}
+		if onLoaded != nil {
+			if err != nil {
+				onLoaded(nil)
+			} else {
+				onLoaded(mentions)
+			}
+		}
+	})
+}
+
 // ModelManager returns the live UI-owned model-manager overlay state; Snapshot copies it for the view layer.
 func (c *aiSettingsController) ModelManager() *modelManagerState {
 	return c.modelManager
@@ -388,19 +481,23 @@ func (c *aiSettingsController) Snapshot() aiSettingsSnapshot {
 		form = &snapshot
 	}
 	return aiSettingsSnapshot{
-		Form:             form,
-		ProviderCatalog:  append([]aiProviderInfo(nil), c.providerCatalog...),
-		ProvidersLoading: c.providersLoading,
-		ProvidersLoaded:  c.providersLoaded,
-		ProvidersError:   c.providersError,
-		Models:           append([]aiModel(nil), c.models...),
-		ModelsLoading:    c.modelsLoading,
-		ModelsLoaded:     c.modelsLoaded,
-		ModelsError:      c.modelsError,
-		Skills:           append([]chatSkill(nil), c.skills...),
-		SkillsLoading:    c.skillsLoading,
-		SkillsLoaded:     c.skillsLoaded,
-		SkillsError:      c.skillsError,
-		ModelManager:     snapshotModelManagerLocked(c.modelManager),
+		Form:                  form,
+		ProviderCatalog:       append([]aiProviderInfo(nil), c.providerCatalog...),
+		ProvidersLoading:      c.providersLoading,
+		ProvidersLoaded:       c.providersLoaded,
+		ProvidersError:        c.providersError,
+		Models:                append([]aiModel(nil), c.models...),
+		ModelsLoading:         c.modelsLoading,
+		ModelsLoaded:          c.modelsLoaded,
+		ModelsError:           c.modelsError,
+		Skills:                append([]chatSkill(nil), c.skills...),
+		SkillsLoading:         c.skillsLoading,
+		SkillsLoaded:          c.skillsLoaded,
+		SkillsError:           c.skillsError,
+		PluginMentions:        append([]chatPluginMention(nil), c.pluginMentions...),
+		PluginMentionsLoading: c.pluginMentionsLoading,
+		PluginMentionsLoaded:  c.pluginMentionsLoaded,
+		PluginMentionsError:   c.pluginMentionsError,
+		ModelManager:          snapshotModelManagerLocked(c.modelManager),
 	}
 }

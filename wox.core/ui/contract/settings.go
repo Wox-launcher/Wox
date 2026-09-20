@@ -297,11 +297,20 @@ type AISkill struct {
 	Enabled      bool
 }
 
+// AIPluginMention describes one plugin the chat composer can @mention.
+type AIPluginMention struct {
+	ID     string
+	Name   string
+	NameEn string
+	Icon   common.WoxImage
+}
+
 // AICatalogSettingsServices exposes provider, model, and skill catalogs.
 type AICatalogSettingsServices interface {
 	AIProviders(ctx context.Context, sessionID string) ([]AIProvider, error)
 	AIModels(ctx context.Context, sessionID string) ([]AIModel, error)
 	AISkills(ctx context.Context, sessionID string) ([]AISkill, error)
+	ChatPluginMentions(ctx context.Context, sessionID string) ([]AIPluginMention, error)
 }
 
 // AIOperationSettingsServices exposes settings-owned AI skill mutations.

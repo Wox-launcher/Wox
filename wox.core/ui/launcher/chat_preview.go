@@ -30,7 +30,7 @@ const (
 
 // chatOverlayPanel reports floating catalogs that must not replace the history drawer.
 func chatOverlayPanel(panel string) bool {
-	return panel == "models" || panel == "skills" || panel == chatCommandPanel || panel == "debug"
+	return panel == "models" || panel == "skills" || panel == chatCommandPanel || panel == chatMentionPanel || panel == "debug"
 }
 
 // chatHistoryVisible reports whether the conversation sidebar should stay in layout.
@@ -95,6 +95,7 @@ type chatConversation struct {
 	Attachments  []common.AIChatAttachment `json:"Attachments,omitempty"`
 	Images       []woxImage                `json:"Images"`
 	SkillRefs    []chatSkillRef            `json:"SkillRefs"`
+	Mentions     []chatMentionRef          `json:"Mentions"`
 	ToolCallInfo chatToolCallInfo          `json:"ToolCallInfo"`
 	Timestamp    int64                     `json:"Timestamp"`
 }
@@ -116,6 +117,13 @@ type chatSkill struct {
 	SourceName   string `json:"SourceName"`
 	Error        string `json:"Error"`
 	Enabled      bool   `json:"Enabled"`
+}
+
+type chatPluginMention struct {
+	ID     string
+	Name   string
+	NameEn string
+	Icon   woxImage
 }
 
 type chatToolCallInfo struct {
@@ -205,38 +213,43 @@ type chatPreviewState struct {
 }
 
 type chatPreviewSnapshot struct {
-	key              string
-	queryID          string
-	resultID         string
-	chat             chatData
-	editing          woxui.TextEditingState
-	active           bool
-	scroll           chatview.ChatScrollState
-	loading          bool
-	sending          bool
-	error            string
-	chats            []chatData
-	models           []aiModel
-	modelsLoading    bool
-	modelsError      string
-	skills           []chatSkill
-	skillsLoading    bool
-	skillsError      string
-	panel            string
-	panelQuery       string
-	panelSelected    int
-	panelScroll      float32
-	panelViewport    float32
-	sidebarOpen      bool
-	sidebarSelected  int
-	sidebarScroll    float32
-	sidebarViewport  float32
-	question         *aiQuestion
-	questionEditing  woxui.TextEditingState
-	questionSelected int
-	expandedRounds   map[string]bool
-	attachments      []common.AIChatAttachment
-	importing        bool
+	key                   string
+	queryID               string
+	resultID              string
+	chat                  chatData
+	editing               woxui.TextEditingState
+	active                bool
+	scroll                chatview.ChatScrollState
+	loading               bool
+	sending               bool
+	error                 string
+	chats                 []chatData
+	models                []aiModel
+	modelsLoading         bool
+	modelsError           string
+	skills                []chatSkill
+	skillsLoading         bool
+	skillsError           string
+	mentions              []chatMention
+	pluginMentions        []chatPluginMention
+	pluginMentionsLoading bool
+	pluginMentionsError   string
+	usePinYin             bool
+	panel                 string
+	panelQuery            string
+	panelSelected         int
+	panelScroll           float32
+	panelViewport         float32
+	sidebarOpen           bool
+	sidebarSelected       int
+	sidebarScroll         float32
+	sidebarViewport       float32
+	question              *aiQuestion
+	questionEditing       woxui.TextEditingState
+	questionSelected      int
+	expandedRounds        map[string]bool
+	attachments           []common.AIChatAttachment
+	importing             bool
 }
 
 type chatCommandPaletteItem struct {
@@ -289,6 +302,23 @@ func findChatSlashToken(editing woxui.TextEditingState) (chatSlashToken, bool) {
 		start--
 	}
 	if start >= len(runes) || runes[start] != '/' {
+		return chatSlashToken{}, false
+	}
+	end := cursor
+	for end < len(runes) && !unicode.IsSpace(runes[end]) {
+		end++
+	}
+	return chatSlashToken{start: start, end: end, query: strings.TrimSpace(string(runes[start+1 : end]))}, true
+}
+
+func findChatAtToken(editing woxui.TextEditingState) (chatSlashToken, bool) {
+	runes := []rune(editing.Text)
+	cursor := min(max(0, editing.Selection.Focus), len(runes))
+	start := cursor
+	for start > 0 && !unicode.IsSpace(runes[start-1]) {
+		start--
+	}
+	if start >= len(runes) || runes[start] != '@' {
 		return chatSlashToken{}, false
 	}
 	end := cursor
@@ -405,6 +435,7 @@ func cloneChatData(source chatData) chatData {
 		cloned.Conversations[index].Attachments = slices.Clone(conversation.Attachments)
 		cloned.Conversations[index].Images = append([]woxImage(nil), conversation.Images...)
 		cloned.Conversations[index].SkillRefs = append([]chatSkillRef(nil), conversation.SkillRefs...)
+		cloned.Conversations[index].Mentions = append([]chatMentionRef(nil), conversation.Mentions...)
 		if conversation.ToolCallInfo.Arguments != nil {
 			cloned.Conversations[index].ToolCallInfo.Arguments = make(map[string]any, len(conversation.ToolCallInfo.Arguments))
 			for key, value := range conversation.ToolCallInfo.Arguments {
@@ -620,17 +651,24 @@ func (a *App) prefetchChatCatalogs() {
 	}
 	requestModels := !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 	requestSkills := !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
+	requestPlugins := !a.aiSettings.PluginMentionsLoaded() && !a.aiSettings.PluginMentionsLoading()
 	if requestModels {
 		a.aiSettings.SetModelsLoading(true)
 	}
 	if requestSkills {
 		a.aiSettings.SetSkillsLoading(true)
 	}
+	if requestPlugins {
+		a.aiSettings.SetPluginMentionsLoading(true)
+	}
 	if requestModels {
 		util.Go(a.lifecycleCtx, "load AI models for chat", a.loadAIModels)
 	}
 	if requestSkills {
 		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
+	}
+	if requestPlugins {
+		util.Go(a.lifecycleCtx, "load chat plugin mentions", a.loadChatPluginMentions)
 	}
 }
 
@@ -645,6 +683,11 @@ func (a *App) attachChatPreviewCatalogs(snapshot *chatPreviewSnapshot) {
 	snapshot.skills = a.aiSettings.Skills()
 	snapshot.skillsLoading = a.aiSettings.SkillsLoading()
 	snapshot.skillsError = a.aiSettings.SkillsError()
+	snapshot.pluginMentions = a.aiSettings.PluginMentions()
+	snapshot.pluginMentionsLoading = a.aiSettings.PluginMentionsLoading()
+	snapshot.pluginMentionsError = a.aiSettings.PluginMentionsError()
+	snapshot.mentions = chatMentionsFromPlugins(snapshot.pluginMentions)
+	snapshot.usePinYin = a.chatMentionUsePinYin()
 }
 
 // loadChatPreview resolves one lightweight history entry through the chat service.
@@ -720,6 +763,7 @@ func (a *App) toggleChatDisclosure(disclosureID string) {
 func (a *App) toggleChatPanel(panel string) {
 	requestModels := false
 	requestSkills := false
+	requestPlugins := false
 	editorActive := false
 	state := a.chatPreview
 	if state == nil {
@@ -784,14 +828,23 @@ func (a *App) toggleChatPanel(panel string) {
 				a.aiSettings.SetSkillsLoading(true)
 			}
 		}
+		if panel == chatMentionPanel {
+			requestPlugins = !a.aiSettings.PluginMentionsLoaded() && !a.aiSettings.PluginMentionsLoading()
+			if requestPlugins {
+				a.aiSettings.SetPluginMentionsLoading(true)
+			}
+		}
 	}
 	state.active = true
-	editorActive = state.panel == "" || state.panel == "history" || state.panel == chatCommandPanel
+	editorActive = state.panel == "" || state.panel == "history" || state.panel == chatCommandPanel || state.panel == chatMentionPanel
 	if requestModels {
 		util.Go(a.lifecycleCtx, "load AI models for chat", a.loadAIModels)
 	}
 	if requestSkills {
 		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
+	}
+	if requestPlugins {
+		util.Go(a.lifecycleCtx, "load chat plugin mentions", a.loadChatPluginMentions)
 	}
 	a.updateChatTextInput(editorActive)
 	a.invalidateChatSurfaces()
@@ -801,6 +854,16 @@ func (a *App) toggleChatPanel(panel string) {
 func (a *App) reloadChatResourceName(resource string) {
 	if resource == "tools" || resource == "all" {
 		a.refreshAIMCPServerToolsLocked()
+	}
+	if resource == "mentions" || resource == "tools" || resource == "all" {
+		if a.aiSettings != nil {
+			a.aiSettings.ResetPluginMentions()
+			if state := a.chatPreview; state != nil && state.panel == chatMentionPanel && !a.aiSettings.PluginMentionsLoading() {
+				a.aiSettings.SetPluginMentionsLoading(true)
+				util.Go(a.lifecycleCtx, "reload chat plugin mentions", a.loadChatPluginMentions)
+			}
+		}
+		a.invalidateChatSurfaces()
 	}
 	if resource != "models" && resource != "skills" && resource != "all" {
 		return
@@ -838,6 +901,23 @@ func (a *App) loadAISkills() {
 			return
 		}
 		if a.chatPreview != nil && (a.chatPreview.panel == "skills" || a.chatPreview.panel == chatCommandPanel) {
+			a.chatPreview.panelSelected = 0
+			a.chatPreview.panelScroll = 0
+			a.chatPreview.panelViewport = 0
+		}
+		a.invalidateChatSurfaces()
+	})
+}
+
+// loadChatPluginMentions refreshes the mention overlay after the shared catalog is loaded.
+func (a *App) loadChatPluginMentions() {
+	a.aiSettings.LoadChatPluginMentions(context.Background(), a.services, a.sessionID, func(mentions []chatPluginMention) {
+		if mentions == nil {
+			util.GetLogger().Error(context.Background(), "load chat plugin mentions: "+a.aiSettings.PluginMentionsError())
+			a.invalidateChatSurfaces()
+			return
+		}
+		if a.chatPreview != nil && a.chatPreview.panel == chatMentionPanel {
 			a.chatPreview.panelSelected = 0
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
@@ -1097,13 +1177,52 @@ func (a *App) insertChatSkill(index int) {
 	a.invalidateChatSurfaces()
 }
 
+func (a *App) insertChatMention(item chatCommandPaletteItem) {
+	state := a.chatPreview
+	if state == nil || state.editor == nil {
+		return
+	}
+	mentions := a.chatMentionCatalog()
+	if item.sourceIndex < 0 || item.sourceIndex >= len(mentions) {
+		return
+	}
+	mention := mentions[item.sourceIndex]
+	payload := strings.TrimSpace(mention.ID)
+	if payload == "" {
+		payload = strings.TrimSpace(mention.Name)
+	}
+	if mention.Kind == "" || payload == "" {
+		return
+	}
+	tag := chatMentionTag(mention.Kind, payload)
+	if state.panel == chatMentionPanel {
+		replaceChatAtToken(state.editor, tag+" ")
+	} else {
+		state.editor.InsertText(tag + " ")
+	}
+	state.panelSelected = item.sourceIndex
+	restoreChatHistoryPanelLocked(state)
+	state.error = ""
+	state.active = true
+	a.updateChatTextInput(true)
+	a.invalidateChatSurfaces()
+}
+
 // replaceChatSlashToken replaces the active token while preserving surrounding message text.
 func replaceChatSlashToken(editor *woxui.TextEditor, replacement string) {
+	replaceChatPrefixToken(editor, findChatSlashToken, replacement)
+}
+
+func replaceChatAtToken(editor *woxui.TextEditor, replacement string) {
+	replaceChatPrefixToken(editor, findChatAtToken, replacement)
+}
+
+func replaceChatPrefixToken(editor *woxui.TextEditor, find func(woxui.TextEditingState) (chatSlashToken, bool), replacement string) {
 	if editor == nil {
 		return
 	}
 	state := editor.State()
-	token, ok := findChatSlashToken(state)
+	token, ok := find(state)
 	if !ok {
 		if replacement != "" {
 			editor.InsertText(replacement)
@@ -1192,7 +1311,10 @@ func (a *App) moveChatPanelSelection(delta int) {
 	}
 	count := len(state.chats)
 	var commands []chatCommandPaletteItem
-	if state.panel != "history" {
+	if state.panel == chatMentionPanel {
+		commands = a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
+		count = len(commands)
+	} else if state.panel != "history" {
 		commands = chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
 		count = len(commands)
 	}
@@ -1221,6 +1343,12 @@ func (a *App) activateChatPanelSelection() {
 	}
 	if panel == "history" {
 		a.selectChatHistory(chatID)
+	} else if panel == chatMentionPanel {
+		items := a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
+		if selected < 0 || selected >= len(items) {
+			return
+		}
+		a.insertChatMention(items[selected])
 	} else {
 		items := chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, panel)
 		if selected < 0 || selected >= len(items) {
@@ -1265,7 +1393,10 @@ func (a *App) setChatPanelViewport(height float32) {
 		state.panelViewport = max(float32(1), height)
 		count := len(state.chats)
 		commands := []chatCommandPaletteItem(nil)
-		if state.panel != "history" {
+		if state.panel == chatMentionPanel {
+			commands = a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
+			count = len(commands)
+		} else if state.panel != "history" {
 			commands = chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
 			count = len(commands)
 		}
@@ -1559,6 +1690,18 @@ func (a *App) submitChatMessage(text string) bool {
 		a.invalidateChatSurfaces()
 		return false
 	}
+	if chatMentionTagsPresent(text) && !a.aiSettings.PluginMentionsLoaded() {
+		requestPlugins := !a.aiSettings.PluginMentionsLoading()
+		if requestPlugins {
+			a.aiSettings.SetPluginMentionsLoading(true)
+		}
+		state.error = a.translate("i18n:ui_ai_chat_mentions_loading_retry")
+		if requestPlugins {
+			util.Go(a.lifecycleCtx, "load chat mentions before send", a.loadChatPluginMentions)
+		}
+		a.invalidateChatSurfaces()
+		return false
+	}
 	now := time.Now().UnixMilli()
 	skills := a.aiSettings.Skills()
 	skillRefs := chatSkillRefsFromText(text, skills)
@@ -1567,7 +1710,14 @@ func (a *App) submitChatMessage(text string) bool {
 		a.invalidateChatSurfaces()
 		return false
 	}
-	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, Attachments: slices.Clone(state.attachments), SkillRefs: skillRefs, Timestamp: now})
+	mentions := a.chatMentionCatalog()
+	mentionRefs := chatMentionRefsFromText(text, mentions)
+	if unresolved := unresolvedChatMentionTag(text, mentions); unresolved != "" {
+		state.error = fmt.Sprintf(a.translate("i18n:ui_ai_chat_unknown_mention"), unresolved)
+		a.invalidateChatSurfaces()
+		return false
+	}
+	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, Attachments: slices.Clone(state.attachments), SkillRefs: skillRefs, Mentions: mentionRefs, Timestamp: now})
 	state.chat.UpdatedAt = now
 	state.attachments = nil
 	key, revision, chat := beginChatRequestLocked(state)
@@ -1885,17 +2035,19 @@ func (a *App) focusAIQuestionInput() {
 func (a *App) setChatText(value string) {
 	requestModels := false
 	requestSkills := false
+	requestPlugins := false
 	if state := a.chatPreview; state != nil && state.editor != nil && state.question == nil {
 		state.editor.SetText(value, false)
 		state.error = ""
-		token, hasToken := findChatSlashToken(state.editor.State())
-		if hasToken {
-			queryChanged := state.panel != chatCommandPanel || state.panelQuery != token.query
+		slashToken, hasSlash := findChatSlashToken(state.editor.State())
+		atToken, hasAt := findChatAtToken(state.editor.State())
+		if hasSlash {
+			queryChanged := state.panel != chatCommandPanel || state.panelQuery != slashToken.query
 			if state.panel == "history" {
 				rememberChatHistorySidebarLocked(state)
 			}
 			state.panel = chatCommandPanel
-			state.panelQuery = token.query
+			state.panelQuery = slashToken.query
 			state.active = true
 			if queryChanged {
 				state.panelSelected = 0
@@ -1912,7 +2064,26 @@ func (a *App) setChatText(value string) {
 					a.aiSettings.SetSkillsLoading(true)
 				}
 			}
-		} else if state.panel == chatCommandPanel {
+		} else if hasAt {
+			queryChanged := state.panel != chatMentionPanel || state.panelQuery != atToken.query
+			if state.panel == "history" {
+				rememberChatHistorySidebarLocked(state)
+			}
+			state.panel = chatMentionPanel
+			state.panelQuery = atToken.query
+			state.active = true
+			if queryChanged {
+				state.panelSelected = 0
+				state.panelScroll = 0
+				state.panelViewport = 0
+			}
+			if a.aiSettings != nil {
+				requestPlugins = !a.aiSettings.PluginMentionsLoaded() && !a.aiSettings.PluginMentionsLoading()
+				if requestPlugins {
+					a.aiSettings.SetPluginMentionsLoading(true)
+				}
+			}
+		} else if state.panel == chatCommandPanel || state.panel == chatMentionPanel {
 			restoreChatHistoryPanelLocked(state)
 		}
 	}
@@ -1921,6 +2092,9 @@ func (a *App) setChatText(value string) {
 	}
 	if requestSkills {
 		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
+	}
+	if requestPlugins {
+		util.Go(a.lifecycleCtx, "load chat plugin mentions", a.loadChatPluginMentions)
 	}
 	a.invalidateChatSurfaces()
 }

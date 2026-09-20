@@ -314,6 +314,11 @@ func (a *App) SendAIQuestion(_ context.Context, questionID string, question stri
 
 // ReloadSettingPlugins refreshes plugin-backed settings and glance catalogs.
 func (a *App) ReloadSettingPlugins(_ context.Context) error {
+	if err := a.runOnUI("invalidate chat plugin mentions", func() {
+		a.reloadChatResourceName("mentions")
+	}); err != nil {
+		return err
+	}
 	util.Go(a.lifecycleCtx, "reload settings plugins", a.reloadGlanceCatalogFromCore)
 	a.publishSettingsChanged("plugins")
 	return nil
@@ -644,9 +649,13 @@ func fromCoreChatData(chat common.AIChatData) chatData {
 		for skillIndex, skill := range conversation.SkillRefs {
 			skillRefs[skillIndex] = chatSkillRef{ID: skill.Id, Name: skill.Name, Path: skill.Path, Source: skill.Source}
 		}
+		mentions := make([]chatMentionRef, len(conversation.Mentions))
+		for mentionIndex, mention := range conversation.Mentions {
+			mentions[mentionIndex] = chatMentionRef{Kind: string(mention.Kind), ID: mention.Id, Name: mention.Name}
+		}
 		conversations[index] = chatConversation{
 			ID: conversation.Id, Role: string(conversation.Role), Text: conversation.Text, Reasoning: conversation.Reasoning,
-			Images: images, SkillRefs: skillRefs, Attachments: append([]common.AIChatAttachment(nil), conversation.Attachments...),
+			Images: images, SkillRefs: skillRefs, Mentions: mentions, Attachments: append([]common.AIChatAttachment(nil), conversation.Attachments...),
 			ToolCallInfo: chatToolCallFromContract(conversation.ToolCallInfo),
 			Timestamp:    conversation.Timestamp,
 		}

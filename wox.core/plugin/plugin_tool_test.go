@@ -224,6 +224,32 @@ func TestPluginToolHiddenUntilInitializedAndAfterDisable(t *testing.T) {
 	}
 }
 
+type pluginMentionReloadUI struct {
+	common.UI
+	resources []string
+}
+
+func (u *pluginMentionReloadUI) ReloadChatResources(_ context.Context, resource string) {
+	u.resources = append(u.resources, resource)
+}
+
+func TestPluginEnableDisableInvalidatesChatMentions(t *testing.T) {
+	initPluginManagerLoadTest(t)
+	manager, _, target := newPluginToolTestEnv("alpha", "beta")
+	target.Setting = setting.NewPluginSetting(setting.NewPluginSettingStore(database.GetDB(), "beta"), nil)
+	view := &pluginMentionReloadUI{}
+	manager.ui = view
+	if err := manager.EnablePlugin(t.Context(), "beta"); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DisablePlugin(t.Context(), "beta"); err != nil {
+		t.Fatal(err)
+	}
+	if len(view.resources) != 2 || view.resources[0] != "mentions" || view.resources[1] != "mentions" {
+		t.Fatalf("mention invalidations = %v", view.resources)
+	}
+}
+
 func TestPluginToolClearOnUnloadAndIdempotentUnregister(t *testing.T) {
 	manager, caller, target := newPluginToolTestEnv("alpha", "beta")
 	emptyObject := map[string]any{"type": "object"}

@@ -689,6 +689,9 @@ func (m *Manager) DisablePlugin(ctx context.Context, pluginId string) error {
 		return err
 	}
 	m.deactivatePlugin(ctx, pluginInstance)
+	if m.ui != nil {
+		m.ui.ReloadChatResources(ctx, "mentions")
+	}
 	if strings.EqualFold(pluginId, AttentionPluginID) {
 		// Hide the query-box unread badge as soon as the inbox plugin is turned off.
 		PublishAttentionUnreadCount(ctx)
@@ -709,6 +712,9 @@ func (m *Manager) EnablePlugin(ctx context.Context, pluginId string) error {
 	if err := m.activatePlugin(ctx, pluginInstance); err != nil {
 		_ = pluginInstance.Setting.Disabled.Set(true)
 		return err
+	}
+	if m.ui != nil {
+		m.ui.ReloadChatResources(ctx, "mentions")
 	}
 	if strings.EqualFold(pluginId, AttentionPluginID) {
 		PublishAttentionUnreadCount(ctx)

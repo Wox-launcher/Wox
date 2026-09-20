@@ -1,6 +1,7 @@
 package component
 
 import (
+	stdimage "image"
 	"testing"
 
 	woxui "wox/ui/runtime"
@@ -67,6 +68,36 @@ func TestSnapTextFieldAtomicCaretMovesToNearerEdge(t *testing.T) {
 	}
 	if _, ok := snapTextFieldAtomicCaret(tokens, 1); ok {
 		t.Fatal("caret on the token edge should stay put")
+	}
+}
+
+func TestTokenChipLabelHeightFitsInsideChip(t *testing.T) {
+	if got := tokenChipLabelHeight(nil, "Notes", tokenChipHeight); got != tokenChipFontSize {
+		t.Fatalf("fallback label height = %.0f, want font size", got)
+	}
+	if got := tokenChipLabelHeight(nil, "Notes", 8); got != 8 {
+		t.Fatalf("clamped label height = %.0f, want chip height", got)
+	}
+}
+
+func TestNewTokenChipRunWithIconReservesLeadingSlot(t *testing.T) {
+	theme := ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}}
+	plain := NewTokenChipRun(0, 14, "Notes", nil, theme)
+	icon := &woxui.Image{Width: 12, Height: 12}
+	withIcon := NewTokenChipRunWithIcon(0, 14, "Notes", icon, nil, theme)
+	if withIcon.ChipIcon != icon || withIcon.Advance != plain.Advance+tokenChipIconSize+tokenChipIconGap {
+		t.Fatalf("icon chip = advance %.0f icon %#v, want %.0f extra icon slot", withIcon.Advance, withIcon.ChipIcon, tokenChipIconSize+tokenChipIconGap)
+	}
+	src := stdimage.NewRGBA(stdimage.Rect(0, 0, 4, 4))
+	painted, err := woxui.NewImage(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := NewTokenChipRunWithIcon(0, 14, "Notes", painted, nil, theme)
+	displayList := &woxui.DisplayList{}
+	run.Paint(displayList, woxui.Rect{Width: run.Advance, Height: tokenChipHeight})
+	if displayList.ImageDrawCount() != 1 {
+		t.Fatalf("icon chip image draws = %d, want 1", displayList.ImageDrawCount())
 	}
 }
 

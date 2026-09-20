@@ -1001,6 +1001,9 @@ func debugToolSummaries(tools []common.Tool) []common.AIChatDebugTool {
 		if tool.ServerConfig != nil {
 			server = tool.ServerConfig.Name
 		}
+		if tool.PluginName != "" {
+			server = tool.PluginName
+		}
 		summaries = append(summaries, common.AIChatDebugTool{
 			Name:        tool.Name,
 			Description: tool.Description,
@@ -1038,6 +1041,7 @@ func cloneDebugConversations(conversations []common.Conversation) []common.Conve
 		cloned[i].Attachments = append([]common.AIChatAttachment(nil), conversation.Attachments...)
 		cloned[i].Images = append([]common.WoxImage(nil), conversation.Images...)
 		cloned[i].SkillRefs = append([]common.AISkillRef(nil), conversation.SkillRefs...)
+		cloned[i].Mentions = append([]common.AIMentionRef(nil), conversation.Mentions...)
 		if conversation.ToolCallInfo.Arguments != nil {
 			cloned[i].ToolCallInfo.Arguments = map[string]any{}
 			for key, value := range conversation.ToolCallInfo.Arguments {

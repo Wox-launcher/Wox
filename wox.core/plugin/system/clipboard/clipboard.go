@@ -1131,7 +1131,7 @@ func resolveClipboardFilesystemPath(content string) (string, bool) {
 // locationLinkActions hands a clipboard filesystem location to Shell, Folder, and Notes.
 func (c *ClipboardPlugin) locationLinkActions(path string, isDir bool) []plugin.QueryResultAction {
 	return []plugin.QueryResultAction{
-		shellplugin.PrepareCommandAtDirectoryAction(c.api, path, isDir),
+		shellplugin.OpenAtDirectoryAction(c.api, path, isDir),
 		system.BrowsePathAction(c.api, path),
 		notesplugin.CreateNoteAction(c.api, "", "", path),
 	}

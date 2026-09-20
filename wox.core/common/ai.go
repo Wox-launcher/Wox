@@ -151,6 +151,11 @@ func FormatToolOrigin(source ToolSource, server, name string) string {
 		return string(ToolSourceMCP) + "/" + name
 	case ToolSourceBuiltin:
 		return string(ToolSourceBuiltin) + "/" + name
+	case ToolSourcePlugin:
+		if server = strings.TrimSpace(server); server != "" {
+			return string(ToolSourcePlugin) + "/" + server + "/" + name
+		}
+		return string(ToolSourcePlugin) + "/" + name
 	default:
 		return name
 	}
@@ -164,6 +169,40 @@ type AISkillRef struct {
 	Name   string
 	Path   string
 	Source string
+}
+
+// AIMentionKind identifies one @mention family in AI Chat. Plugins are the first kind.
+// To add another family: define a kind, register it in IsAIMentionKind, supply a catalog
+// source, choose the {kind:payload} tag body, and handle that kind at runtime.
+type AIMentionKind string
+
+const (
+	AIMentionKindPlugin AIMentionKind = "plugin"
+)
+
+// IsAIMentionKind reports whether kind is a chat @mention family. {skill:...} is not.
+func IsAIMentionKind(kind string) bool {
+	switch AIMentionKind(kind) {
+	case AIMentionKindPlugin:
+		return true
+	default:
+		return false
+	}
+}
+
+// AIMentionRef is the stable message-level pointer to one @mention.
+type AIMentionRef struct {
+	Kind AIMentionKind
+	Id   string
+	Name string
+}
+
+// AIPluginMention is one plugin the chat composer can @mention.
+type AIPluginMention struct {
+	Id     string
+	Name   string
+	NameEn string
+	Icon   WoxImage
 }
 
 // AIChatAttachment preserves user-provided material separately from instructions.
@@ -191,6 +230,7 @@ type Conversation struct {
 	Attachments  []AIChatAttachment `json:",omitempty"`
 	Images       []WoxImage
 	SkillRefs    []AISkillRef
+	Mentions     []AIMentionRef
 	ToolCallInfo ToolCallInfo
 	Timestamp    int64
 }
@@ -387,6 +427,7 @@ func cloneDebugConversations(conversations []Conversation) []Conversation {
 		cloned[i].Attachments = append([]AIChatAttachment(nil), conversation.Attachments...)
 		cloned[i].Images = append([]WoxImage(nil), conversation.Images...)
 		cloned[i].SkillRefs = append([]AISkillRef(nil), conversation.SkillRefs...)
+		cloned[i].Mentions = append([]AIMentionRef(nil), conversation.Mentions...)
 		cloned[i].ToolCallInfo = cloneDebugToolCallInfo(conversation.ToolCallInfo)
 	}
 	return cloned
@@ -421,6 +462,7 @@ type AIChater interface {
 	SummarizeChat(ctx context.Context, chatId string) bool
 	GetAllTools(ctx context.Context) []MCPTool
 	GetAllSkills(ctx context.Context) []Skill
+	ListMentionablePlugins(ctx context.Context) []AIPluginMention
 	ReloadMCPServers(ctx context.Context, notifyUI bool)
 	ReloadSkills(ctx context.Context) error
 	GetDefaultModel(ctx context.Context) Model
@@ -472,18 +514,23 @@ type ToolSource string
 const (
 	ToolSourceMCP     ToolSource = "mcp"
 	ToolSourceBuiltin ToolSource = "builtin"
+	ToolSourcePlugin  ToolSource = "plugin"
 )
 
 // Tool is the unified representation that the AI consumes for any callable tool.
 // MCPTool is kept for backward compatibility; MCP tools are wrapped into Tool
 // at the registry layer. Builtin tools use this type directly.
 type Tool struct {
-	Name         string
-	Description  string
-	Parameters   jsonschema.Definition
+	Name        string
+	Description string
+	Parameters  jsonschema.Definition
+	// InputSchema preserves complete plugin schemas; when nil, providers use Parameters.
+	InputSchema  map[string]any
 	Callback     func(ctx context.Context, args map[string]any) (ToolResult, error)
 	Source       ToolSource
-	ServerConfig *AIChatMCPServerConfig // nil for builtin tools
+	ServerConfig *AIChatMCPServerConfig // nil for builtin and plugin tools
+	PluginId     string                 // owning plugin for ToolSourcePlugin
+	PluginName   string                 // display name for ToolSourcePlugin origin labels
 }
 
 // ToolResult replaces the legacy (Conversation, error) tool callback return.

@@ -54,7 +54,7 @@ func FormatAvailableToolsPrompt(tools []common.Tool) string {
 	})
 
 	var builder strings.Builder
-	builder.WriteString("Tool catalog: builtin tools are already enabled and callable now. MCP and other catalog tools are discoverable but must be loaded with load_tools before they can be called. Use load_tools with exact names from the tool_catalog. Loaded tools become callable in the next model step.\n")
+	builder.WriteString("Tool catalog: builtin tools and mentioned plugin tools are already enabled and callable now. MCP and other catalog tools are discoverable but must be loaded with load_tools before they can be called. Use load_tools with exact names from the tool_catalog. Loaded tools become callable in the next model step.\n")
 	builder.WriteString("<tool_catalog>\n")
 
 	count := 0
@@ -190,6 +190,9 @@ func formatAvailableToolEntry(tool common.Tool) string {
 }
 
 func toolServerName(tool common.Tool) string {
+	if tool.Source == common.ToolSourcePlugin {
+		return strings.TrimSpace(tool.PluginName)
+	}
 	if tool.ServerConfig == nil {
 		return ""
 	}

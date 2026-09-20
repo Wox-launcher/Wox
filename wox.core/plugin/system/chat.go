@@ -420,7 +420,7 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 func (r *AIChatPlugin) GetAllTools(ctx context.Context) []common.MCPTool {
 	// Keep returning MCPTool shape for UI compatibility: the UI only reads
 	// Name/Description/Parameters. The registry is the source of truth now.
-	tools := r.availableToolsForRuntime(ctx)
+	tools := r.availableToolsForRuntime(ctx, nil)
 	tools = lo.Filter(tools, func(t common.Tool, _ int) bool {
 		return !ai.IsRuntimeOnlyTool(t.Name)
 	})
@@ -533,7 +533,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		})
 	}
 	chatErr := r.api.AIChatStream(chatCtx, aiChatData.Model, runtimeContext.Conversations, common.ChatOptions{
-		Tools:          r.initialToolsForRuntime(ctx),
+		Tools:          r.initialToolsForRuntime(ctx, mentionIDs(aiChatData.Conversations, common.AIMentionKindPlugin)),
 		LoopPolicy:     common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
 		DebugTrace:     runtimeContext.DebugTrace,
 		DebugTraceName: "chat",
@@ -683,7 +683,7 @@ func (r *AIChatPlugin) composeRuntimeConversations(ctx context.Context, aiChatDa
 			Timestamp: util.GetSystemTimestamp(),
 		})
 	}
-	if availableToolsPrompt := ai.FormatAvailableToolsPrompt(r.availableToolsForRuntime(ctx)); availableToolsPrompt != "" {
+	if availableToolsPrompt := ai.FormatAvailableToolsPrompt(r.availableToolsForRuntime(ctx, mentionIDs(aiChatData.Conversations, common.AIMentionKindPlugin))); availableToolsPrompt != "" {
 		runtimeConversations = append(runtimeConversations, common.Conversation{
 			Id:        uuid.NewString(),
 			Role:      common.ConversationRoleSystem,
@@ -727,16 +727,19 @@ func formatRuntimeTimePrompt(now time.Time) string {
 // initialToolsForRuntime returns enabled builtin tools on the first model step so
 // common actions like reading files, running commands, or editing code do not
 // require an extra load_tools round trip. MCP tools remain in the catalog and
-// are loaded on demand via load_tools.
-func (r *AIChatPlugin) initialToolsForRuntime(ctx context.Context) []common.Tool {
+// are loaded on demand via load_tools. @mentioned plugin tools are callable immediately.
+func (r *AIChatPlugin) initialToolsForRuntime(ctx context.Context, mentionedPluginIDs []string) []common.Tool {
 	r.reloadDisabledBuiltinTools(ctx)
-	return ai.FilterDisabledBuiltinTools(ai.GetToolRegistry().ListBySource(common.ToolSourceBuiltin), ai.DisabledBuiltinTools())
+	tools := ai.FilterDisabledBuiltinTools(ai.GetToolRegistry().ListBySource(common.ToolSourceBuiltin), ai.DisabledBuiltinTools())
+	return append(tools, r.pluginToolsForMentions(ctx, mentionedPluginIDs)...)
 }
 
-// availableToolsForRuntime exposes registered tools except user-disabled builtins.
-func (r *AIChatPlugin) availableToolsForRuntime(ctx context.Context) []common.Tool {
+// availableToolsForRuntime exposes registered tools except user-disabled builtins,
+// plus plugin tools the user @mentioned in this chat.
+func (r *AIChatPlugin) availableToolsForRuntime(ctx context.Context, mentionedPluginIDs []string) []common.Tool {
 	r.reloadDisabledBuiltinTools(ctx)
-	return ai.FilterDisabledBuiltinTools(ai.GetToolRegistry().List(), ai.DisabledBuiltinTools())
+	tools := ai.FilterDisabledBuiltinTools(ai.GetToolRegistry().List(), ai.DisabledBuiltinTools())
+	return append(tools, r.pluginToolsForMentions(ctx, mentionedPluginIDs)...)
 }
 
 func (r *AIChatPlugin) recentConversationsForRuntime(ctx context.Context, conversations []common.Conversation, compactionEntry *common.AIChatCompactionEntry) []common.Conversation {
@@ -811,7 +814,7 @@ func (r *AIChatPlugin) maybeAppendCompactionEntry(ctx context.Context, aiChatDat
 
 // withMessageSkillReferences expands explicit message-level skill refs for the current provider call only.
 func (r *AIChatPlugin) withMessageSkillReferences(ctx context.Context, conversation common.Conversation) common.Conversation {
-	if conversation.Role != common.ConversationRoleUser || len(conversation.SkillRefs) == 0 {
+	if conversation.Role != common.ConversationRoleUser {
 		return cloneAIConversation(conversation)
 	}
 
@@ -838,16 +841,33 @@ func (r *AIChatPlugin) withMessageSkillReferences(ctx context.Context, conversat
 		}
 		builder.WriteString(skillPrompt)
 	}
-	if builder.Len() == 0 {
-		return cloneAIConversation(conversation)
+
+	pluginPrompt := formatMentionedPluginsPrompt(conversation.Mentions)
+	cleanedText := ai.StripMentionTags(ai.StripSkillTags(conversation.Text))
+	if builder.Len() == 0 && pluginPrompt == "" {
+		if cleanedText == strings.TrimSpace(conversation.Text) {
+			return cloneAIConversation(conversation)
+		}
+		cloned := cloneAIConversation(conversation)
+		cloned.Text = cleanedText
+		return cloned
 	}
 
 	cloned := cloneAIConversation(conversation)
-	// Strip {skill:xxx} tags from the text sent to the model — they are an
-	// internal UI representation and the skill content is already injected
-	// above. The tags remain in the persisted conversation for display.
-	cleanedText := ai.StripSkillTags(conversation.Text)
-	cloned.Text = builder.String() + "\n\nUser request:\n" + cleanedText
+	// Strip {skill:xxx} and {plugin:xxx} tags from the text sent to the model —
+	// they are an internal UI representation. Skill content and mentioned plugin
+	// tools are injected separately. The tags remain in the persisted conversation.
+	var prefix strings.Builder
+	if builder.Len() > 0 {
+		prefix.WriteString(builder.String())
+	}
+	if pluginPrompt != "" {
+		if prefix.Len() > 0 {
+			prefix.WriteString("\n\n")
+		}
+		prefix.WriteString(pluginPrompt)
+	}
+	cloned.Text = prefix.String() + "\n\nUser request:\n" + cleanedText
 	return cloned
 }
 
@@ -958,6 +978,9 @@ func estimateConversationTokens(conversations []common.Conversation) int {
 		for _, ref := range conversation.SkillRefs {
 			total += estimateTextTokens(ref.Id) + estimateTextTokens(ref.Name) + estimateTextTokens(ref.Path) + estimateTextTokens(ref.Source)
 		}
+		for _, ref := range conversation.Mentions {
+			total += estimateTextTokens(string(ref.Kind)) + estimateTextTokens(ref.Id) + estimateTextTokens(ref.Name)
+		}
 		if conversation.ToolCallInfo.Id != "" {
 			total += 16
 			total += estimateTextTokens(conversation.ToolCallInfo.Id)
@@ -1055,6 +1078,7 @@ func cloneAIConversation(conversation common.Conversation) common.Conversation {
 	cloned.Attachments = append([]common.AIChatAttachment(nil), conversation.Attachments...)
 	cloned.Images = append([]common.WoxImage(nil), conversation.Images...)
 	cloned.SkillRefs = append([]common.AISkillRef(nil), conversation.SkillRefs...)
+	cloned.Mentions = append([]common.AIMentionRef(nil), conversation.Mentions...)
 	if conversation.ToolCallInfo.Arguments != nil {
 		cloned.ToolCallInfo.Arguments = map[string]any{}
 		for key, value := range conversation.ToolCallInfo.Arguments {

@@ -513,7 +513,7 @@ func folderCopyName(name string, path string) string {
 
 // buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
 func (p *FolderPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
-	action := shellplugin.PrepareCommandAtDirectoryAction(p.api, path, isDir)
+	action := shellplugin.OpenAtDirectoryAction(p.api, path, isDir)
 	action.Id = folderExecuteCommandHereActionID
 	return action
 }

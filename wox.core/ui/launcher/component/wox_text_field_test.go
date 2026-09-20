@@ -332,6 +332,19 @@ func TestTextFieldVisualLineCountUsesHardBreaksWithoutWindow(t *testing.T) {
 	}
 }
 
+func TestTextFieldVisualContentSizeHonorsChipAdvanceWithoutWindow(t *testing.T) {
+	tag := "{plugin:notes}"
+	end := len([]rune(tag))
+	run := NewTokenChipRun(0, end, "@Notes", nil, ControlTheme{})
+	size := TextFieldVisualContentSize(tag+" hi", nil, woxui.TextStyle{Size: 13}, 400, 19, []TextFieldRichRun{run})
+	if size.Height != 19 {
+		t.Fatalf("height = %.0f, want 19", size.Height)
+	}
+	if size.Width < run.Advance {
+		t.Fatalf("width = %.0f, want at least chip advance %.0f", size.Width, run.Advance)
+	}
+}
+
 func TestTextFieldLinesSoftWrapPreservesOffsets(t *testing.T) {
 	lines := textFieldLines("hello world", nil, woxui.TextStyle{Size: 12}, 0, true)
 	if len(lines) != 1 || lines[0].text != "hello world" {
