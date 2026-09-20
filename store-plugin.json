@@ -1404,5 +1404,37 @@
         "plugin_description": "从查询、选中内容或文件格式化、压缩并校验 JSON"
       }
     }
+  },
+  {
+    "Id": "cd22fbe8-af21-47c9-8ead-9484ad5abc2b",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/49bfac6b-183c-41b3-8ecc-9b2fee7fd733",
+    "Website": "https://gist.github.com/qianlifeng/8299ba9cd0478ef75a22537b9ffd5353",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/8299ba9cd0478ef75a22537b9ffd5353/raw/Wox.Plugin.RandomDataGenerator.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/aa754948-0830-49ce-bb93-e14912ca70e4"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-20 22:27:17",
+    "DateUpdated": "2026-09-20 22:27:17",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Random Data Generator",
+        "plugin_description": "Generate random numbers, UUIDs, passwords, emails, names, colors, and more. Add a count, e.g. random number 10"
+      },
+      "zh_CN": {
+        "plugin_name": "随机数据生成",
+        "plugin_description": "生成随机数字、UUID、密码、邮箱、姓名、颜色等。可指定数量，例如 random number 10"
+      }
+    }
   }
 ]
