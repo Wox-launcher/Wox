@@ -18,6 +18,15 @@ import {
   DragOutListenResult,
   UnregisterTriggerKeywordOption,
   UnregisterTriggerKeywordResult,
+  RegisterPluginToolOption,
+  RegisterPluginToolResult,
+  UnregisterPluginToolOption,
+  UnregisterPluginToolResult,
+  ListPluginToolsOption,
+  ListPluginToolsResult,
+  InvokePluginToolOption,
+  InvokePluginToolResult,
+  PluginToolHandler,
   SetSettingOption,
   SetSettingResult,
   UpdatableResult
@@ -46,6 +55,10 @@ export class PluginAPI implements PublicAPI {
   dragOutCallbacks: Map<string, (ctx: Context, event: DragOutEvent) => Promise<void> | void>
   llmStreamCallbacks: Map<string, AI.ChatStreamFunc>
   mruRestoreCallbacks: Map<string, (ctx: Context, mruData: MRUData) => Promise<Result | null>>
+  pluginToolCallbacks: Map<string, PluginToolHandler>
+  pluginToolCallbackIds: Map<string, string>
+  pluginToolCalls = new Set<Promise<unknown>>()
+  pluginToolsStopping = false
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
@@ -60,6 +73,8 @@ export class PluginAPI implements PublicAPI {
     this.dragOutCallbacks = new Map<string, (ctx: Context, event: DragOutEvent) => Promise<void> | void>()
     this.llmStreamCallbacks = new Map<string, AI.ChatStreamFunc>()
     this.mruRestoreCallbacks = new Map<string, (ctx: Context, mruData: MRUData) => Promise<Result | null>>()
+    this.pluginToolCallbacks = new Map<string, PluginToolHandler>()
+    this.pluginToolCallbackIds = new Map<string, string>()
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -221,6 +236,58 @@ export class PluginAPI implements PublicAPI {
 
   async UnregisterTriggerKeyword(ctx: Context, option: UnregisterTriggerKeywordOption): Promise<UnregisterTriggerKeywordResult> {
     return (await this.invokeMethod(ctx, "UnregisterTriggerKeyword", { option: JSON.stringify(option) })) as UnregisterTriggerKeywordResult
+  }
+
+  async RegisterPluginTool(ctx: Context, option: RegisterPluginToolOption): Promise<RegisterPluginToolResult> {
+    const callbackId = crypto.randomUUID()
+    this.pluginToolCallbacks.set(callbackId, option.Handler)
+    try {
+      const result = (await this.invokeMethod(ctx, "RegisterPluginTool", {
+        option: JSON.stringify({ Tool: option.Tool, CallbackId: callbackId })
+      })) as RegisterPluginToolResult
+      if (result?.Error) {
+        this.dropPluginToolCallback(option.Tool.Name, callbackId)
+      } else {
+        this.pluginToolCallbackIds.set(option.Tool.Name, callbackId)
+      }
+      return result
+    } catch (error) {
+      this.dropPluginToolCallback(option.Tool.Name, callbackId)
+      throw error
+    }
+  }
+
+  async UnregisterPluginTool(ctx: Context, option: UnregisterPluginToolOption): Promise<UnregisterPluginToolResult> {
+    const result = (await this.invokeMethod(ctx, "UnregisterPluginTool", { option: JSON.stringify(option) })) as UnregisterPluginToolResult
+    const callbackId = this.pluginToolCallbackIds.get(option.Name)
+    if (!result?.Error && callbackId) {
+      this.dropPluginToolCallback(option.Name, callbackId)
+    }
+    return result
+  }
+
+  async ListPluginTools(ctx: Context, option: ListPluginToolsOption): Promise<ListPluginToolsResult> {
+    return (await this.invokeMethod(ctx, "ListPluginTools", { option: JSON.stringify(option ?? {}) })) as ListPluginToolsResult
+  }
+
+  async InvokePluginTool(ctx: Context, option: InvokePluginToolOption): Promise<InvokePluginToolResult> {
+    return (await this.invokeMethod(ctx, "InvokePluginTool", {
+      option: JSON.stringify(option),
+      PluginToolCallId: ctx.Get("PluginToolCallId") ?? ""
+    })) as InvokePluginToolResult
+  }
+
+  dropPluginToolCallback(name: string, callbackId: string): void {
+    this.pluginToolCallbacks.delete(callbackId)
+    if (this.pluginToolCallbackIds.get(name) === callbackId) {
+      this.pluginToolCallbackIds.delete(name)
+    }
+  }
+
+  // Core may stop waiting before JavaScript finishes; drain actual work before releasing plugin resources.
+  async stopPluginTools(): Promise<void> {
+    this.pluginToolsStopping = true
+    await Promise.allSettled(Array.from(this.pluginToolCalls))
   }
 
   async LLMStream(ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc): Promise<void> {

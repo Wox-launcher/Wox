@@ -31,12 +31,16 @@ type Instance struct {
 	runtimeTriggerOptions    map[string]RegisterTriggerKeywordOption
 	runtimeTriggerKeywordsMu sync.RWMutex
 
-	DynamicSettingCallbacks   []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
-	SettingChangeCallbacks    []func(ctx context.Context, key string, value string)
-	DeepLinkCallbacks         []func(ctx context.Context, arguments map[string]string)
-	UnloadCallbacks           []func(ctx context.Context)
-	MRURestoreCallbacks       []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
-	PluginCommandHandlers     []PluginCommandHandler
+	DynamicSettingCallbacks []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
+	SettingChangeCallbacks  []func(ctx context.Context, key string, value string)
+	DeepLinkCallbacks       []func(ctx context.Context, arguments map[string]string)
+	UnloadCallbacks         []func(ctx context.Context)
+	MRURestoreCallbacks     []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
+	pluginTools             map[string]*pluginToolRegistration
+	pluginToolsMu           sync.RWMutex
+	// Unload closes admission before cancelling and draining active handlers.
+	pluginToolsStopping       bool
+	pluginToolCalls           map[*pluginToolActiveCall]struct{}
 	EnterPluginQueryCallbacks []func(ctx context.Context)
 	LeavePluginQueryCallbacks []func(ctx context.Context)
 	DragOutCallbacks          []func(ctx context.Context, event DragOutEvent)
@@ -61,6 +65,9 @@ func (i *Instance) beginInitCycle() {
 	if i == nil {
 		return
 	}
+	i.pluginToolsMu.Lock()
+	i.pluginToolsStopping = false
+	i.pluginToolsMu.Unlock()
 	i.initStateMu.Lock()
 	defer i.initStateMu.Unlock()
 	i.Initialized = false

@@ -254,7 +254,7 @@ wheels = [
 
 [[package]]
 name = "wox-plugin"
-version = "0.0.86"
+version = "0.0.87"
 source = { editable = "../wox.plugin.python" }
 
 [package.metadata]

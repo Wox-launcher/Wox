@@ -65,6 +65,45 @@ static plugin or command defaults.
 Cloud Sync. The older `save_setting()` method remains available for plugins
 targeting Wox releases before 2.4.0, but is deprecated for new integrations.
 
+## Plugin Tools
+
+Plugin Tools are schema-checked operations that plugins register at runtime. They require Wox >= 2.4.5.
+
+```python
+from wox_plugin import (
+    PluginToolAnnotations,
+    PluginToolDescriptor,
+    RegisterPluginToolOption,
+    InvokePluginToolHandlerResult,
+    InvokePluginToolOption,
+)
+
+await self.api.register_plugin_tool(ctx, RegisterPluginToolOption(
+    tool=PluginToolDescriptor(
+        name="echo_text",
+        description="Echo the supplied text",
+        input_schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+        output_schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+        annotations=PluginToolAnnotations(read_only=True, idempotent=True),
+    ),
+    handler=lambda _ctx, option: InvokePluginToolHandlerResult(output={"text": option.arguments["text"]}),
+))
+
+created = await self.api.invoke_plugin_tool(ctx, InvokePluginToolOption(
+    plugin_id=notes_plugin_id,
+    name="create_note",
+    arguments={"title": "Roadmap", "text": "Ship it"},
+))
+if created.error:
+    await self.api.notify(ctx, created.error.message)
+    return
+opened = await self.api.invoke_plugin_tool(ctx, InvokePluginToolOption(
+    plugin_id=notes_plugin_id,
+    name="open_note",
+    arguments={"noteId": created.output.get("noteId")},
+))
+```
+
 ## Query Requirements
 
 Plugins can declare settings that must be configured before Wox calls `query()`:

@@ -80,10 +80,17 @@ func (s *stubAPI) AIChatStream(ctx context.Context, model common.Model, conversa
 func (s *stubAPI) OnMRURestore(ctx context.Context, callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error)) {
 }
 
-func (s *stubAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {}
-
-func (s *stubAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
+func (s *stubAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
+	return plugin.RegisterPluginToolResult{}
+}
+func (s *stubAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
+	return plugin.UnregisterPluginToolResult{}
+}
+func (s *stubAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
+	return plugin.ListPluginToolsResult{}
+}
+func (s *stubAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
+	return plugin.InvokePluginToolResult{}
 }
 
 func (s *stubAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {

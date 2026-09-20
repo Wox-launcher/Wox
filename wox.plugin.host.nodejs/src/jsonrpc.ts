@@ -149,6 +149,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onLLMStream(ctx, request)
     case "onMRURestore":
       return onMRURestore(ctx, request)
+    case "onInvokePluginTool":
+      return onInvokePluginTool(ctx, request)
     default:
       logger.info(ctx, `unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
@@ -188,13 +190,16 @@ async function loadPluginExport(ctx: Context, request: PluginJsonRpcRequest, mod
   }
 }
 
-function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
+async function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   const pluginInstance = pluginInstances.get(request.PluginId)
   if (pluginInstance === undefined || pluginInstance === null) {
     logger.error(ctx, `<${request.PluginName}> plugin instance not found: ${request.PluginName}`)
     throw new Error(`plugin instance not found: ${request.PluginName}`)
   }
 
+  await pluginInstance.API?.stopPluginTools()
+  pluginInstance.API?.pluginToolCallbacks?.clear()
+  pluginInstance.API?.pluginToolCallbackIds?.clear()
   evictCommonJSModule(pluginInstance.ModulePath)
   pluginInstances.delete(request.PluginId)
 
@@ -282,6 +287,7 @@ async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
   }
 
   const callbackId = request.Params.CallbackId
+  await plugin.API.stopPluginTools()
   await plugin.API.unloadCallbacks.get(callbackId)?.(ctx)
 }
 
@@ -518,5 +524,44 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
   } catch (error) {
     logger.error(ctx, `MRU restore callback error: ${error}`)
     throw error
+  }
+}
+
+async function onInvokePluginTool(ctx: Context, request: PluginJsonRpcRequest) {
+  // Echo only the opaque parent token; Core retains the actual call chain and deadline.
+  ctx.Set("PluginToolCallId", request.Params.PluginToolCallId ?? "")
+  const plugin = pluginInstances.get(request.PluginId)
+  if (!plugin) {
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  if (plugin.API.pluginToolsStopping) {
+    return { Error: { Code: "PLUGIN_UNAVAILABLE", Message: "plugin is unloading" } }
+  }
+
+  const callbackId = request.Params.CallbackId
+  const callback = plugin.API.pluginToolCallbacks.get(callbackId)
+  if (!callback) {
+    throw new Error(`plugin tool callback not found: ${callbackId}`)
+  }
+
+  // Schedule after tracking so even a synchronous handler cannot race unload admission.
+  const execution = Promise.resolve().then(() =>
+    callback(ctx, {
+      Arguments: parseJsonParam<Record<string, unknown>>(request.Params.Arguments, {})
+    })
+  )
+  plugin.API.pluginToolCalls.add(execution)
+  try {
+    const result = await execution
+    if (result?.Error) {
+      return { Output: undefined, Error: result.Error }
+    }
+    return { Output: result?.Output ?? {}, Error: null }
+  } catch (error) {
+    logger.error(ctx, `<${request.PluginName}> plugin tool failed: ${String(error)}`)
+    return { Output: undefined, Error: { Code: "EXECUTION_FAILED", Message: String(error) } }
+  } finally {
+    plugin.API.pluginToolCalls.delete(execution)
   }
 }

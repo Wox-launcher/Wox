@@ -418,6 +418,7 @@ type PluginEditorProps struct {
 	Form              *PluginFormProps
 	Keywords          *PluginFormProps
 	Commands          *PluginFormProps
+	Tools             *PluginFormProps
 }
 
 // PluginStoreDetailProps contains the store-only plugin detail page.
@@ -494,7 +495,7 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 		}
 		content = append(content, pluginStoreDescriptionContent(description, innerWidth, theme))
 	}
-	for _, form := range []*PluginFormProps{props.Form, props.Keywords, props.Commands} {
+	for _, form := range []*PluginFormProps{props.Form, props.Keywords, props.Commands, props.Tools} {
 		if form == nil || len(form.Rows) == 0 {
 			continue
 		}

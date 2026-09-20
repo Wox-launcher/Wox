@@ -295,6 +295,85 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	}
 }
 
+func TestPluginInstalledToolsUseReadonlyTable(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugins.SetPlugins([]pluginSettingsPlugin{{
+		ID: "notes", Name: "Notes",
+		Tools: []pluginTool{
+			{Name: "open_note", Description: "Open a note"},
+			{Name: "create_note", Description: "Create a note"},
+		},
+	}})
+	plugins.SetSelected(0)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: formFieldsState{definitions: []formDefinition{pluginTriggerKeywordDefinition()}}})
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_tools_tip":            "Tool help",
+		"ui_plugin_tool_name_column":     "Name",
+		"ui_plugin_tool_desc_column":     "Description",
+		"ui_plugin_tab_tools":            "Tools",
+		"ui_plugin_tab_commands":         "Commands",
+		"ui_plugin_tab_settings":         "Settings",
+		"ui_plugin_tab_trigger_keywords": "Keywords",
+		"ui_plugin_tab_privacy":          "Privacy",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Editor == nil || props.Editor.Tools == nil || props.Editor.Tools.Intro != "" || len(props.Editor.Tools.Rows) != 1 {
+		t.Fatalf("tool form = %#v, want one readonly table", props.Editor)
+	}
+	if props.Editor.Tools.SectionLabel != "Tools" {
+		t.Fatalf("tool section = %q, want Tools", props.Editor.Tools.SectionLabel)
+	}
+	table := props.Editor.Tools.Rows[0].(woxwidget.Keyed).Child.(woxwidget.Container)
+	tableRows := table.Child.(woxwidget.Flex).Children
+	titleBlock := tableRows[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(titleBlock.Children) != 1 || titleBlock.Children[0].(woxwidget.TextBlock).Value != "Tool help" {
+		t.Fatal("tool group must own the title, with only description above the table")
+	}
+	grid := tableRows[1].(woxwidget.Stateful)
+	state := grid.CreateState()
+	state.InitState(woxwidget.StateContext{}, grid.Widget)
+	rendered := state.Build(woxwidget.StateContext{}, grid.Widget).(woxwidget.Stack).Children[1].Child.(woxwidget.Flex)
+	bodyScroll := rendered.Children[1].(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	body := bodyScroll.Child.(woxwidget.Flex).Children[0].(woxwidget.ScrollView).Child.(woxwidget.Flex)
+	firstCell := body.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Align).Child.(woxwidget.Semantics)
+	if firstCell.Label != "create_note" {
+		t.Fatalf("first tool = %q, want name sort order", firstCell.Label)
+	}
+	if ops := pluginTableOperationButtons(t, props.Editor.Tools.Rows[0]); len(ops) != 0 {
+		t.Fatalf("installed tools must be read-only, got operations %#v", ops)
+	}
+}
+
+func TestPluginOmitsToolsSectionWhenEmpty(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugins.SetPlugins([]pluginSettingsPlugin{{ID: "empty", Name: "Empty"}})
+	plugins.SetSelected(0)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: formFieldsState{definitions: []formDefinition{pluginTriggerKeywordDefinition()}}})
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_tab_settings":         "Settings",
+		"ui_plugin_tab_trigger_keywords": "Keywords",
+		"ui_plugin_tab_privacy":          "Privacy",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Editor == nil || props.Editor.Tools != nil {
+		t.Fatalf("empty tools must omit the section, got %#v", props.Editor.Tools)
+	}
+}
+
 func TestPluginKeywordAndCommandQueryText(t *testing.T) {
 	if got := pluginKeywordQueryText("cb"); got != "cb " {
 		t.Fatalf("keyword query = %q, want a trailing space so the plugin activates", got)

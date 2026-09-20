@@ -56,10 +56,17 @@ func (a fileSearchToolbarTestAPI) OnUnload(ctx context.Context, callback func(ct
 }
 func (a fileSearchToolbarTestAPI) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error)) {
 }
-func (a fileSearchToolbarTestAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+func (a fileSearchToolbarTestAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
+	return plugin.RegisterPluginToolResult{}
 }
-func (a fileSearchToolbarTestAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
+func (a fileSearchToolbarTestAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
+	return plugin.UnregisterPluginToolResult{}
+}
+func (a fileSearchToolbarTestAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
+	return plugin.ListPluginToolsResult{}
+}
+func (a fileSearchToolbarTestAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
+	return plugin.InvokePluginToolResult{}
 }
 func (a fileSearchToolbarTestAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {}
 func (a fileSearchToolbarTestAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)  {}

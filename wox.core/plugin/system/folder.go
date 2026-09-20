@@ -23,10 +23,9 @@ import (
 )
 
 const (
-	PluginID                      = "527ba64f-c8f5-4fc7-bb98-306f79d27f32"
-	PluginCommandBrowsePath       = "browse_path"
-	PluginCommandDataPath         = "path"
-	folderResultScore       int64 = 1000
+	PluginID                = "527ba64f-c8f5-4fc7-bb98-306f79d27f32"
+	ToolBrowsePath          = "browse_path"
+	folderResultScore int64 = 1000
 
 	folderOpenActionID                 = "open_folder"
 	folderEnterActionID                = "enter_folder"
@@ -140,29 +139,39 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 
 func (p *FolderPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
-	p.api.OnHandlePluginCommand(ctx, p.handlePluginCommand)
+	p.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolBrowsePath,
+			Description: "i18n:plugin_folder_tool_browse_path",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"path": map[string]any{"type": "string"}},
+				"required":   []any{"path"},
+			},
+			OutputSchema: map[string]any{"type": "object"},
+			Annotations:  plugin.PluginToolAnnotations{RequiresUI: true},
+		},
+		Handler: p.browsePathTool,
+	})
 	p.api.OnMRURestore(ctx, p.handleMRURestore)
 }
 
-// handlePluginCommand opens Folder browsing at a path provided by another plugin.
-func (p *FolderPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
-	if request.Command != PluginCommandBrowsePath {
-		return plugin.PluginCommandResult{Handled: false}
-	}
-
-	browsePath, err := resolveFolderBrowsePath(request.Data[PluginCommandDataPath])
+// browsePathTool opens Folder browsing at a path provided by another plugin.
+func (p *FolderPlugin) browsePathTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+	path, _ := option.Arguments["path"].(string)
+	browsePath, err := resolveFolderBrowsePath(path)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
 	if p.api == nil {
-		return plugin.PluginCommandResult{Handled: true, Message: "folder plugin is not initialized"}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorPluginUnavailable, Message: "folder plugin is not initialized"}}
 	}
 
 	p.api.ChangeQuery(ctx, common.PlainQuery{
 		QueryType: plugin.QueryTypeInput,
 		QueryText: ensureFolderQueryTrailingSeparator(browsePath),
 	})
-	return plugin.PluginCommandResult{Handled: true}
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
 }
 
 // BrowsePathAction hands a filesystem location to Folder without exposing extra query syntax.
@@ -172,12 +181,10 @@ func BrowsePathAction(api plugin.API, path string) plugin.QueryResultAction {
 		Icon:                   icons.Get(icons.ActionOpen),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
-			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
-				PluginId: PluginID,
-				Command:  PluginCommandBrowsePath,
-				Data: common.ContextData{
-					PluginCommandDataPath: path,
-				},
+			plugin.InvokePluginToolAndNotify(ctx, api, plugin.InvokePluginToolOption{
+				PluginId:  PluginID,
+				Name:      ToolBrowsePath,
+				Arguments: map[string]any{"path": path},
 			})
 		},
 	}

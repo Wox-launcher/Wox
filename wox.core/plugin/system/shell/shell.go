@@ -28,10 +28,9 @@ import (
 )
 
 const (
-	PluginID                               = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
-	PluginCommandPrepareCommandAtDirectory = "prepare_command_at_directory"
-	PluginCommandDataWorkingDirectory      = "working_directory"
-	QueryContextWorkingDirectoryKey        = "wox:shell:working_directory"
+	PluginID                        = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
+	ToolPrepareCommandAtDirectory   = "prepare_command_at_directory"
+	QueryContextWorkingDirectoryKey = "wox:shell:working_directory"
 
 	shellInterpreterSettingKey                   = "shell_interpreter"
 	shellDefaultWorkingDirectoryModeSettingKey   = "default_working_directory_mode"
@@ -591,7 +590,20 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.api = initParams.API
 	s.historyManager = NewShellHistoryManager()
 	s.terminalManager = terminal.GetSessionManager()
-	s.api.OnHandlePluginCommand(ctx, s.handlePluginCommand)
+	s.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolPrepareCommandAtDirectory,
+			Description: "i18n:plugin_shell_tool_prepare_command_at_directory",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"working_directory": map[string]any{"type": "string"}},
+				"required":   []any{"working_directory"},
+			},
+			OutputSchema: map[string]any{"type": "object"},
+			Annotations:  plugin.PluginToolAnnotations{RequiresUI: true},
+		},
+		Handler: s.prepareCommandAtDirectoryTool,
+	})
 	s.api.OnMRURestore(ctx, s.handleMRURestore)
 	s.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		if key != shellDefaultWorkingDirectoryDetailSettingKey {
@@ -615,19 +627,16 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	}
 }
 
-// handlePluginCommand handles plugin-to-plugin commands exposed by Shell.
-func (s *ShellPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
-	if request.Command != PluginCommandPrepareCommandAtDirectory {
-		return plugin.PluginCommandResult{Handled: false}
-	}
-
-	workingDirectory := strings.TrimSpace(request.Data[PluginCommandDataWorkingDirectory])
+// prepareCommandAtDirectoryTool prepares a Shell query at a working directory without executing it.
+func (s *ShellPlugin) prepareCommandAtDirectoryTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+	workingDirectory, _ := option.Arguments["working_directory"].(string)
+	workingDirectory = strings.TrimSpace(workingDirectory)
 	if workingDirectory == "" {
-		return plugin.PluginCommandResult{Handled: true, Message: "working directory is required"}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: "working directory is required"}}
 	}
 	resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, workingDirectory, false)
 	if !ok {
-		return plugin.PluginCommandResult{Handled: true, Message: fmt.Sprintf("invalid working directory: %s", workingDirectory)}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: fmt.Sprintf("invalid working directory: %s", workingDirectory)}}
 	}
 
 	s.api.ChangeQuery(ctx, common.PlainQuery{
@@ -637,7 +646,7 @@ func (s *ShellPlugin) handlePluginCommand(ctx context.Context, request plugin.Pl
 			QueryContextWorkingDirectoryKey: resolvedDirectory,
 		},
 	})
-	return plugin.PluginCommandResult{Handled: true}
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
 }
 
 // PrepareCommandAtDirectoryAction hands a filesystem location to Shell without exposing it in the visible query.
@@ -652,12 +661,10 @@ func PrepareCommandAtDirectoryAction(api plugin.API, path string, isDir bool) pl
 		Icon:                   icons.Get(icons.ActionRun),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
-			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
-				PluginId: PluginID,
-				Command:  PluginCommandPrepareCommandAtDirectory,
-				Data: common.ContextData{
-					PluginCommandDataWorkingDirectory: workingDirectory,
-				},
+			plugin.InvokePluginToolAndNotify(ctx, api, plugin.InvokePluginToolOption{
+				PluginId:  PluginID,
+				Name:      ToolPrepareCommandAtDirectory,
+				Arguments: map[string]any{"working_directory": workingDirectory},
 			})
 		},
 	}

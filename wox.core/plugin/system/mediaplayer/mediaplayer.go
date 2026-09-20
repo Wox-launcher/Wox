@@ -26,14 +26,21 @@ import (
 var mediaIcon = icons.Get(icons.PluginMediaPlayer)
 
 const (
-	// PluginID identifies the built-in media player plugin for internal plugin commands.
+	// PluginID identifies the built-in media player plugin for internal plugin tools.
 	PluginID = "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e"
 
-	PluginCommandPauseIfPlaying      = "pause_if_playing"
-	PluginCommandResultPaused        = "paused"
-	PluginCommandResultNotPlaying    = "not_playing"
-	PluginCommandResultNoActiveMedia = "no_active_media"
-	PluginCommandPlay                = "play"
+	ToolGetStatus = "get_status"
+	ToolPlay      = "play"
+	ToolPause     = "pause"
+	ToolToggle    = "toggle"
+	ToolNext      = "next"
+	ToolPrevious  = "previous"
+
+	ToolStatusNone    = "none"
+	ToolStatusPlaying = "playing"
+	ToolStatusPaused  = "paused"
+	ToolStatusStopped = "stopped"
+	ToolStatusUnknown = "unknown"
 
 	mediaControlPlay     = "play"
 	mediaControlPause    = "pause"
@@ -144,21 +151,48 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 		_, _ = m.retriever.GetCurrentMedia(util.NewTraceContext())
 	})
 
-	// Handle plugin-to-plugin commands for media control (e.g. dictation
-	// pauses media during voice input and resumes afterwards).
-	m.api.OnHandlePluginCommand(ctx, func(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
-		switch request.Command {
-		case PluginCommandPauseIfPlaying:
-			return m.pauseIfPlaying(ctx)
-		case mediaControlPause, mediaControlPlay, mediaControlToggle, mediaControlNext, mediaControlPrevious:
-			if err := m.retriever.ControlMedia(ctx, request.Command); err != nil {
-				return plugin.PluginCommandResult{Handled: false, Message: err.Error()}
-			}
-			return plugin.PluginCommandResult{Handled: true}
-		default:
-			return plugin.PluginCommandResult{Handled: false, Message: "unknown command: " + request.Command}
-		}
+	emptyObject := map[string]any{"type": "object"}
+	registerControl := func(name string, description string, idempotent bool, command string) {
+		m.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+			Tool: plugin.PluginToolDescriptor{
+				Name:         name,
+				Description:  description,
+				InputSchema:  emptyObject,
+				OutputSchema: emptyObject,
+				Annotations:  plugin.PluginToolAnnotations{Idempotent: idempotent},
+			},
+			Handler: func(ctx context.Context, _ plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+				if err := m.retriever.ControlMedia(ctx, command); err != nil {
+					return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
+				}
+				return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
+			},
+		})
+	}
+	m.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolGetStatus,
+			Description: "i18n:plugin_media_player_tool_get_status",
+			InputSchema: emptyObject,
+			OutputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"status": map[string]any{
+						"type": "string",
+						"enum": []any{ToolStatusNone, ToolStatusPlaying, ToolStatusPaused, ToolStatusStopped, ToolStatusUnknown},
+					},
+				},
+				"required": []any{"status"},
+			},
+			Annotations: plugin.PluginToolAnnotations{ReadOnly: true, Idempotent: true},
+		},
+		Handler: m.getStatusTool,
 	})
+	registerControl(ToolPlay, "i18n:plugin_media_player_tool_play", true, mediaControlPlay)
+	registerControl(ToolPause, "i18n:plugin_media_player_tool_pause", true, mediaControlPause)
+	registerControl(ToolToggle, "i18n:plugin_media_player_tool_toggle", false, mediaControlToggle)
+	registerControl(ToolNext, "i18n:plugin_media_player_tool_next", false, mediaControlNext)
+	registerControl(ToolPrevious, "i18n:plugin_media_player_tool_previous", false, mediaControlPrevious)
 
 	// Start global refresh timer
 	util.Go(ctx, "refresh media player", func() {
@@ -170,24 +204,15 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	})
 }
 
-// pauseIfPlaying only sends a pause command when the active media session is
-// currently playing, allowing callers to restore playback only when they
-// actually changed it.
-func (m *MediaPlayerPlugin) pauseIfPlaying(ctx context.Context) plugin.PluginCommandResult {
+func (m *MediaPlayerPlugin) getStatusTool(ctx context.Context, _ plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
 	mediaInfo, err := m.retriever.GetCurrentMedia(ctx)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
 	if mediaInfo == nil {
-		return plugin.PluginCommandResult{Handled: true, Message: PluginCommandResultNoActiveMedia}
+		return plugin.InvokePluginToolHandlerResult{Output: map[string]any{"status": ToolStatusNone}}
 	}
-	if mediaInfo.State != PlaybackStatePlaying {
-		return plugin.PluginCommandResult{Handled: true, Message: PluginCommandResultNotPlaying}
-	}
-	if err := m.retriever.ControlMedia(ctx, mediaControlPause); err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
-	}
-	return plugin.PluginCommandResult{Handled: true, Message: PluginCommandResultPaused}
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{"status": mediaInfo.State.String()}}
 }
 
 func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {

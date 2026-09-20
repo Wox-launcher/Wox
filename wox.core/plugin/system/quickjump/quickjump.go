@@ -22,7 +22,6 @@ import (
 	"wox/setting/validator"
 	"wox/ui"
 	"wox/util"
-	"wox/util/filesearch"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
 	"wox/util/shell"
@@ -301,32 +300,29 @@ func (c *QuickJumpPlugin) prioritizeCurrentDirectoryHits(ctx context.Context, qu
 // queryFileSearchResults converts global indexed results into Explorer-specific actions.
 func (c *QuickJumpPlugin) queryFileSearchResults(ctx context.Context, query plugin.Query, search string) ([]plugin.QueryResult, bool) {
 	folderOnly := query.Env.ActiveWindowIsOpenSaveDialogSelectFolder
-	commandData := common.ContextData{
-		filesearchplugin.PluginCommandDataQuery: search,
-	}
+	arguments := map[string]any{"query": search}
 	// Prefer source-side filtering so folder-only dialogs do not pull file hits.
 	if folderOnly {
-		commandData[filesearchplugin.PluginCommandDataEntryType] = filesearchplugin.PluginCommandEntryTypeFolder
+		arguments["entry_type"] = filesearchplugin.ToolSearchEntryTypeFolder
 	}
 	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer global file search: search=%q isOpenSaveDialogSelectFolder=%v", search, folderOnly))
-	commandResult, err := c.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
-		PluginId: filesearchplugin.PluginID,
-		Command:  filesearchplugin.PluginCommandSearch,
-		Data:     commandData,
+	commandResult := c.api.InvokePluginTool(ctx, plugin.InvokePluginToolOption{
+		PluginId:  filesearchplugin.PluginID,
+		Name:      filesearchplugin.ToolSearch,
+		Arguments: arguments,
 	})
-	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search failed: "+err.Error())
-		return nil, false
-	}
-	if !commandResult.Handled || commandResult.Message != "" {
-		if commandResult.Message != "" {
-			c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search failed: "+commandResult.Message)
-		}
+	if commandResult.Error != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search failed: "+commandResult.Error.Error())
 		return nil, false
 	}
 
-	var indexedResults []filesearch.SearchResult
-	if err := json.Unmarshal([]byte(commandResult.Data[filesearchplugin.PluginCommandResultDataResults]), &indexedResults); err != nil {
+	payload, err := json.Marshal(commandResult.Output["results"])
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search result encode failed: "+err.Error())
+		return nil, false
+	}
+	var indexedResults []filesearchplugin.FileSearchToolResult
+	if err := json.Unmarshal(payload, &indexedResults); err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search result decode failed: "+err.Error())
 		return nil, false
 	}

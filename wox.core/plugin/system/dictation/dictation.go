@@ -2196,24 +2196,30 @@ func (p *DictationPlugin) startVolumeDucking(ctx context.Context) {
 	if !enabled {
 		return
 	}
-	result, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+	statusResult := p.api.InvokePluginTool(ctx, plugin.InvokePluginToolOption{
 		PluginId: mediaplayer.PluginID,
-		Command:  mediaplayer.PluginCommandPauseIfPlaying,
+		Name:     mediaplayer.ToolGetStatus,
 	})
-	if err != nil {
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to pause media: %s", err.Error()))
+	if statusResult.Error != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to read media status: %s", statusResult.Error.Error()))
+		return
+	}
+	status, _ := statusResult.Output["status"].(string)
+	if status != mediaplayer.ToolStatusPlaying {
+		p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: media pause skipped: %s", status))
 		return
 	}
 
-	switch result.Message {
-	case mediaplayer.PluginCommandResultPaused:
-		p.setMediaPausedForDictation(true)
-		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media paused via plugin command")
-	case mediaplayer.PluginCommandResultNotPlaying, mediaplayer.PluginCommandResultNoActiveMedia:
-		p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: media pause skipped: %s", result.Message))
-	default:
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to pause media: %s", result.Message))
+	pauseResult := p.api.InvokePluginTool(ctx, plugin.InvokePluginToolOption{
+		PluginId: mediaplayer.PluginID,
+		Name:     mediaplayer.ToolPause,
+	})
+	if pauseResult.Error != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to pause media: %s", pauseResult.Error.Error()))
+		return
 	}
+	p.setMediaPausedForDictation(true)
+	p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media paused via plugin tool")
 }
 
 // stopVolumeDucking resumes media playback only when this dictation session
@@ -2222,20 +2228,16 @@ func (p *DictationPlugin) stopVolumeDucking(ctx context.Context) {
 	if !p.consumeMediaPausedForDictation() {
 		return
 	}
-	result, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+	result := p.api.InvokePluginTool(ctx, plugin.InvokePluginToolOption{
 		PluginId: mediaplayer.PluginID,
-		Command:  mediaplayer.PluginCommandPlay,
+		Name:     mediaplayer.ToolPlay,
 	})
-	if err != nil {
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to resume media: %s", err.Error()))
-		return
-	}
-	if result.Message != "" {
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to resume media: %s", result.Message))
+	if result.Error != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to resume media: %s", result.Error.Error()))
 		return
 	}
 
-	p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media resumed via plugin command")
+	p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media resumed via plugin tool")
 }
 
 func (p *DictationPlugin) setMediaPausedForDictation(paused bool) {

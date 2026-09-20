@@ -86,10 +86,17 @@ func (a *aiCommandTestAPI) OnUnload(ctx context.Context, callback func(ctx conte
 }
 func (a *aiCommandTestAPI) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error)) {
 }
-func (a *aiCommandTestAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+func (a *aiCommandTestAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
+	return plugin.RegisterPluginToolResult{}
 }
-func (a *aiCommandTestAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
+func (a *aiCommandTestAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
+	return plugin.UnregisterPluginToolResult{}
+}
+func (a *aiCommandTestAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
+	return plugin.ListPluginToolsResult{}
+}
+func (a *aiCommandTestAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
+	return plugin.InvokePluginToolResult{}
 }
 func (a *aiCommandTestAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {}
 func (a *aiCommandTestAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)  {}

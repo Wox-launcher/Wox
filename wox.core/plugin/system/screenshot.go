@@ -979,12 +979,10 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		})
 		p.scheduleScreenshotOCR(result.ScreenshotPath)
 		if result.ExtraActionID == screenshotAIExtraActionID {
-			plugin.InvokePluginCommandAndNotify(ctx, p.api, plugin.PluginCommandRequest{
-				PluginId: common.AIChatPluginID,
-				Command:  PluginCommandAttachFiles,
-				Data: common.ContextData{
-					PluginCommandDataPath: result.ScreenshotPath,
-				},
+			plugin.InvokePluginToolAndNotify(ctx, p.api, plugin.InvokePluginToolOption{
+				PluginId:  common.AIChatPluginID,
+				Name:      ToolOpenChatWithAttachments,
+				Arguments: map[string]any{"paths": []any{result.ScreenshotPath}},
 			})
 			return
 		}

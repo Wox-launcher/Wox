@@ -1,6 +1,6 @@
 ---
 name: wox-plugin-creator
-description: Create, scaffold, implement, and package Wox plugins (nodejs, python, script-nodejs, script-python, singlefile-python, singlefile-nodejs). Use when cloning official SDK templates, generating script or single-file SDK plugin templates, editing plugin.json metadata, defining SettingDefinitions and validators, wiring i18n, implementing plugin APIs, QueryResponse refinements, refinement hotkeys, structured query slots, or preparing plugin repositories for local packaging. If the user wants to publish a plugin to the official Wox store or check whether it is already listed, prefer wox-plugin-submit2store.
+description: Create, scaffold, implement, and package Wox plugins (nodejs, python, script-nodejs, script-python, singlefile-python, singlefile-nodejs). Use when cloning official SDK templates, generating script or single-file SDK plugin templates, editing plugin.json metadata, defining SettingDefinitions and validators, wiring i18n, implementing plugin APIs, QueryResponse refinements, refinement hotkeys, structured query slots, Plugin Tools (RegisterPluginTool / InvokePluginTool), or preparing plugin repositories for local packaging. If the user wants to publish a plugin to the official Wox store or check whether it is already listed, prefer wox-plugin-submit2store.
 ---
 
 # Wox Plugin Creator
@@ -59,6 +59,7 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For inline command arguments or atomic query blocks, read [QueryHint](#queryhint). Command declarations contain suffix templates; `ChangeQuery` contains a complete instance. Keep legacy text parsing when structure is absent.
 - For query-scoped filters or sort controls, return `QueryResponse.Refinements` and read `references/refinements.md` before assigning hotkeys.
 - For `plugin.json`, `SettingDefinitions`, `QueryRequirements`, validators, dynamic settings, and feature flags, read `references/plugin_json_schema.md` first.
+- When implementing an SDK or single-file SDK plugin, also register Plugin Tools in `init()` for capabilities other plugins should be able to call. Query results and actions stay for the user; tools expose the same work as structured operations. Read `references/plugin_tools.md` first. Requires Wox >= 2.4.5 (`MinWoxVersion` `"2.4.5"` or newer). Do not declare tools in `plugin.json`. Script plugins cannot use this API.
 - SDK and single-file SDK plugins should support MRU unless the plugin is clearly unsuitable. Declare the `mru` feature, put restore identity on action `ContextData`, and register `OnMRURestore` / `on_mru_restore` in `init()`. Skip MRU only for context-dependent, one-shot, diagnostic, or inbox-style plugins, and say why in the implementation notes. Script plugins cannot use MRU.
 - SDK and single-file SDK plugins must persist and read settings through the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). These values participate in Wox cloud sync and can follow the user across machines. Do not store plugin settings in local files, custom JSON, or other side storage unless the value is truly machine-local and cannot live in settings.
 
@@ -161,5 +162,5 @@ Do not target older interpreters. Script plugins still use the user's system Pyt
 ## Resources
 
 - scripts: `scripts/scaffold_wox_plugin.py`, `scripts/detect_local_runtime.py`, `scripts/search_iconify.py`
-- references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/icons.md`, `references/refinements.md`
+- references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/icons.md`, `references/refinements.md`, `references/plugin_tools.md`
 - assets: `assets/script_plugin_templates/`, `assets/single_file_plugin_templates/`, `assets/iconify/action/`

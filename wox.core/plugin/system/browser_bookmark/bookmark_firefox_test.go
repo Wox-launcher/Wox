@@ -114,10 +114,17 @@ func (m *mockAPI) OnMRURestore(
 	callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error),
 ) {
 }
-func (m *mockAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+func (m *mockAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
+	return plugin.RegisterPluginToolResult{}
 }
-func (m *mockAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
+func (m *mockAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
+	return plugin.UnregisterPluginToolResult{}
+}
+func (m *mockAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
+	return plugin.ListPluginToolsResult{}
+}
+func (m *mockAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
+	return plugin.InvokePluginToolResult{}
 }
 func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
 	return false

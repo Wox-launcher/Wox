@@ -724,6 +724,7 @@ func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance
 	}
 	pluginInstance.initLifecycleMu.Lock()
 	defer pluginInstance.initLifecycleMu.Unlock()
+	pluginInstance.stopPluginTools()
 	initialized, _ := pluginInstance.initStatus()
 	if initialized {
 		for _, callback := range pluginInstance.UnloadCallbacks {
@@ -790,7 +791,7 @@ func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
 	pluginInstance.DeepLinkCallbacks = nil
 	pluginInstance.UnloadCallbacks = nil
 	pluginInstance.MRURestoreCallbacks = nil
-	pluginInstance.PluginCommandHandlers = nil
+	pluginInstance.clearPluginTools()
 	pluginInstance.EnterPluginQueryCallbacks = nil
 	pluginInstance.LeavePluginQueryCallbacks = nil
 	pluginInstance.DragOutCallbacks = nil
@@ -1038,6 +1039,7 @@ func (m *Manager) initPluginLocked(ctx context.Context, instance *Instance) {
 			err := fmt.Errorf("plugin init panic: %v", r)
 			instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 			logger.Error(ctx, fmt.Sprintf("init plugin %s panicked: %s", instance.Metadata.GetName(ctx), err.Error()))
+			m.clearRuntimeCallbacks(instance)
 			instance.finishInit(false, err)
 		}
 	}()
@@ -1046,6 +1048,7 @@ func (m *Manager) initPluginLocked(ctx context.Context, instance *Instance) {
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("init plugin %s failed, cost %d ms: %s", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp, err.Error()))
+		m.clearRuntimeCallbacks(instance)
 		instance.finishInit(false, err)
 		return
 	}
@@ -1333,43 +1336,6 @@ func (m *Manager) GetSystemPlugin(pluginId string) SystemPlugin {
 		return nil
 	}
 	return instance.Plugin.(SystemPlugin)
-}
-
-// InvokePluginCommand routes a plugin-to-plugin command to the target plugin.
-func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, request PluginCommandRequest) (PluginCommandResult, error) {
-	if strings.TrimSpace(request.PluginId) == "" {
-		return PluginCommandResult{}, fmt.Errorf("plugin command target is empty")
-	}
-	if strings.TrimSpace(request.Command) == "" {
-		return PluginCommandResult{}, fmt.Errorf("plugin command is empty")
-	}
-
-	target := m.GetPluginInstanceById(request.PluginId)
-	if target == nil {
-		return PluginCommandResult{}, fmt.Errorf("plugin command target not found: %s", request.PluginId)
-	}
-	if len(target.PluginCommandHandlers) == 0 {
-		return PluginCommandResult{}, fmt.Errorf("plugin command target has no handler: %s", target.Metadata.GetName(ctx))
-	}
-
-	if request.Data == nil {
-		request.Data = common.ContextData{}
-	}
-
-	callerName := ""
-	if caller != nil {
-		callerName = caller.Metadata.GetName(ctx)
-	}
-	logger.Info(ctx, fmt.Sprintf("invoke plugin command: caller=%s target=%s command=%s", callerName, target.Metadata.GetName(ctx), request.Command))
-
-	for _, handler := range target.PluginCommandHandlers {
-		result := handler(ctx, request)
-		if result.Handled {
-			return result, nil
-		}
-	}
-
-	return PluginCommandResult{Handled: false, Message: "plugin command not handled"}, nil
 }
 
 func pluginInstanceDisabled(instance *Instance) bool {

@@ -29,6 +29,15 @@ from wox_plugin import (
     DragOutListenResult,
     UnregisterTriggerKeywordOption,
     UnregisterTriggerKeywordResult,
+    InvokePluginToolOption,
+    InvokePluginToolResult,
+    ListPluginToolsOption,
+    ListPluginToolsResult,
+    PluginToolHandler,
+    RegisterPluginToolOption,
+    RegisterPluginToolResult,
+    UnregisterPluginToolOption,
+    UnregisterPluginToolResult,
     SetSettingOption,
     SetSettingResult,
     ToolbarMsg,
@@ -57,6 +66,10 @@ class PluginAPI(PublicAPI):
         self.drag_out_callbacks: Dict[str, Callable[[Context, DragOutEvent], Awaitable[None] | None]] = {}
         self.llm_stream_callbacks: Dict[str, ChatStreamCallback] = {}
         self.mru_restore_callbacks: Dict[str, Callable[[Context, MRUData], Optional[Result] | Awaitable[Optional[Result]]]] = {}
+        self.plugin_tool_callbacks: Dict[str, PluginToolHandler] = {}
+        self.plugin_tool_callback_ids: Dict[str, str] = {}
+        self.plugin_tool_calls: set[asyncio.Task[Any]] = set()
+        self.plugin_tools_stopping = False
 
     async def invoke_method(self, ctx: Context, method: str, params: Dict[str, Any]) -> Any:
         """Invoke a method on Wox"""
@@ -256,6 +269,59 @@ class PluginAPI(PublicAPI):
         """Release this plugin's runtime trigger and its hint."""
         result = await self.invoke_method(ctx, "UnregisterTriggerKeyword", {"option": json.dumps(option.to_dict())})
         return UnregisterTriggerKeywordResult(success=isinstance(result, dict) and result.get("Success") is True)
+
+    async def register_plugin_tool(self, ctx: Context, option: RegisterPluginToolOption) -> RegisterPluginToolResult:
+        callback_id = str(uuid.uuid4())
+        self.plugin_tool_callbacks[callback_id] = option.handler
+        try:
+            result = await self.invoke_method(
+                ctx,
+                "RegisterPluginTool",
+                {"option": json.dumps({"Tool": option.tool.to_dict(), "CallbackId": callback_id})},
+            )
+            parsed = RegisterPluginToolResult.from_dict(result)
+            if parsed.error:
+                self.drop_plugin_tool_callback(option.tool.name, callback_id)
+            else:
+                self.plugin_tool_callback_ids[option.tool.name] = callback_id
+            return parsed
+        except Exception:
+            self.drop_plugin_tool_callback(option.tool.name, callback_id)
+            raise
+
+    async def unregister_plugin_tool(self, ctx: Context, option: UnregisterPluginToolOption) -> UnregisterPluginToolResult:
+        result = await self.invoke_method(ctx, "UnregisterPluginTool", {"option": json.dumps(option.to_dict())})
+        parsed = UnregisterPluginToolResult.from_dict(result)
+        callback_id = self.plugin_tool_callback_ids.get(option.name)
+        if not parsed.error and callback_id:
+            self.drop_plugin_tool_callback(option.name, callback_id)
+        return parsed
+
+    async def list_plugin_tools(self, ctx: Context, option: ListPluginToolsOption) -> ListPluginToolsResult:
+        result = await self.invoke_method(ctx, "ListPluginTools", {"option": json.dumps(option.to_dict() if option else {})})
+        return ListPluginToolsResult.from_dict(result)
+
+    async def invoke_plugin_tool(self, ctx: Context, option: InvokePluginToolOption) -> InvokePluginToolResult:
+        result = await self.invoke_method(
+            ctx,
+            "InvokePluginTool",
+            {
+                "option": json.dumps(option.to_dict()),
+                "PluginToolCallId": ctx.values.get("PluginToolCallId", ""),
+            },
+        )
+        return InvokePluginToolResult.from_dict(result)
+
+    def drop_plugin_tool_callback(self, name: str, callback_id: str) -> None:
+        self.plugin_tool_callbacks.pop(callback_id, None)
+        if self.plugin_tool_callback_ids.get(name) == callback_id:
+            self.plugin_tool_callback_ids.pop(name, None)
+
+    async def stop_plugin_tools(self) -> None:
+        """Drain real handlers before unload, even when Core already stopped waiting."""
+        self.plugin_tools_stopping = True
+        if self.plugin_tool_calls:
+            await asyncio.gather(*tuple(self.plugin_tool_calls), return_exceptions=True)
 
     async def ai_chat_stream(
         self,

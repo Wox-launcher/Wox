@@ -95,10 +95,17 @@ func (emptyChatAPI) OnDeepLink(context.Context, func(context.Context, map[string
 func (emptyChatAPI) OnUnload(context.Context, func(context.Context)) {}
 func (emptyChatAPI) OnMRURestore(context.Context, func(context.Context, plugin.MRUData) (*plugin.QueryResult, error)) {
 }
-func (emptyChatAPI) OnHandlePluginCommand(context.Context, plugin.PluginCommandHandler) {
+func (emptyChatAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
+	return plugin.RegisterPluginToolResult{}
 }
-func (emptyChatAPI) InvokePluginCommand(context.Context, plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
+func (emptyChatAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
+	return plugin.UnregisterPluginToolResult{}
+}
+func (emptyChatAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
+	return plugin.ListPluginToolsResult{}
+}
+func (emptyChatAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
+	return plugin.InvokePluginToolResult{}
 }
 func (emptyChatAPI) ShowToolbarMsg(context.Context, plugin.ToolbarMsg) {}
 func (emptyChatAPI) ClearToolbarMsg(context.Context, string)           {}
@@ -299,12 +306,11 @@ func TestAIChatAttachFilesCommandSeedsComposer(t *testing.T) {
 	}
 
 	api := &chatTestAPI{}
-	result := (&AIChatPlugin{api: api}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: PluginCommandAttachFiles,
-		Data:    common.ContextData{PluginCommandDataPath: path},
+	result := (&AIChatPlugin{api: api}).openChatWithAttachmentsTool(context.Background(), plugin.InvokePluginToolHandlerOption{
+		Arguments: map[string]any{"paths": []any{path}},
 	})
-	if !result.Handled || result.Message != "" {
-		t.Fatalf("attach files command = %#v", result)
+	if result.Error != nil {
+		t.Fatalf("open chat with attachments = %#v", result)
 	}
 	if !api.shown || api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "chat " {
 		t.Fatalf("opened chat = shown:%t query:%+v", api.shown, api.changed)
@@ -319,18 +325,9 @@ func TestAIChatAttachFilesCommandSeedsComposer(t *testing.T) {
 }
 
 func TestAIChatAttachFilesCommandRequiresPath(t *testing.T) {
-	result := (&AIChatPlugin{api: &chatTestAPI{}}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: PluginCommandAttachFiles,
-	})
-	if !result.Handled || result.Message != "path is required" {
-		t.Fatalf("empty attach files command = %#v", result)
-	}
-
-	unknown := (&AIChatPlugin{api: &chatTestAPI{}}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: "unknown",
-	})
-	if unknown.Handled {
-		t.Fatalf("unknown command = %#v", unknown)
+	result := (&AIChatPlugin{api: &chatTestAPI{}}).openChatWithAttachmentsTool(context.Background(), plugin.InvokePluginToolHandlerOption{})
+	if result.Error == nil || result.Error.Message != "path is required" {
+		t.Fatalf("empty attach files tool = %#v", result)
 	}
 }
 

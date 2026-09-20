@@ -11,6 +11,7 @@ require (
 	github.com/gen2brain/malgo v0.11.25
 	github.com/go-ole/go-ole v1.3.0
 	github.com/godbus/dbus/v5 v5.2.2
+	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56
@@ -27,7 +28,6 @@ require (
 	github.com/otiai10/copy v1.14.1
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a
 	github.com/rivo/uniseg v0.4.7
-	github.com/rs/cors v1.11.1
 	github.com/samber/lo v1.52.0
 	github.com/saracen/fastzip v0.2.0
 	github.com/shopspring/decimal v1.4.0
@@ -60,7 +60,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect

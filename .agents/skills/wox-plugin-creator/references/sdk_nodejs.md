@@ -141,6 +141,15 @@ Prefer these APIs for all plugin settings. Values stored here can sync across ma
 - `RefreshQuery(ctx, param)`: Re-run the current query.
 - `GetUpdatableResult(ctx, resultId)`: Get current state of a result.
 
+### Plugin Tools
+
+Runtime-registered callable operations. Requires Wox >= 2.4.5. See `references/plugin_tools.md`.
+
+- `RegisterPluginTool(ctx, option)`: Publish a tool owned by this plugin.
+- `UnregisterPluginTool(ctx, option)`: Remove one of this plugin's tools.
+- `ListPluginTools(ctx, option)`: Snapshot of callable tools.
+- `InvokePluginTool(ctx, option)`: Validate arguments, run another plugin's tool, validate output.
+
 ### AI & LLM
 
 - `AIChatStream(ctx, model, conversations, options, callback)`: Stream responses from AI providers.

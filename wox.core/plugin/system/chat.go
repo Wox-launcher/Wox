@@ -29,7 +29,7 @@ var aiChatsSettingKey = "ai_chats"
 const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
 const aiChatAttachmentsContextKey = "ai_chat_attachments"
 
-const PluginCommandAttachFiles = "attach_files"
+const ToolOpenChatWithAttachments = "open_chat_with_attachments"
 
 const (
 	aiChatCompactionTriggerEstimatedTokens = 24000
@@ -147,7 +147,26 @@ func (r *AIChatPlugin) configurePluginBuiltinToolHooks() {
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
-	r.api.OnHandlePluginCommand(ctx, r.handlePluginCommand)
+	r.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolOpenChatWithAttachments,
+			Description: "i18n:plugin_ai_chat_tool_open_chat_with_attachments",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"paths": map[string]any{
+						"type":     "array",
+						"minItems": 1,
+						"items":    map[string]any{"type": "string"},
+					},
+				},
+				"required": []any{"paths"},
+			},
+			OutputSchema: map[string]any{"type": "object"},
+			Annotations:  plugin.PluginToolAnnotations{RequiresUI: true},
+		},
+		Handler: r.openChatWithAttachmentsTool,
+	})
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
 	r.mcpServers = []common.AIChatMCPServerConfig{}
 
@@ -1233,27 +1252,24 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	return response
 }
 
-// handlePluginCommand imports files from another plugin into the AI Chat composer and shows the launcher.
-func (r *AIChatPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
-	if request.Command != PluginCommandAttachFiles {
-		return plugin.PluginCommandResult{Handled: false}
-	}
+// openChatWithAttachmentsTool imports files into the AI Chat composer and shows the launcher without sending a message.
+func (r *AIChatPlugin) openChatWithAttachmentsTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
 	if r.api == nil {
-		return plugin.PluginCommandResult{Handled: true, Message: "AI chat plugin is not initialized"}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorPluginUnavailable, Message: "AI chat plugin is not initialized"}}
 	}
 
-	path := strings.TrimSpace(request.Data[PluginCommandDataPath])
-	if path == "" {
-		return plugin.PluginCommandResult{Handled: true, Message: "path is required"}
+	paths := pluginToolStringSlice(option.Arguments, "paths")
+	if len(paths) == 0 {
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: "path is required"}}
 	}
 
-	imported, err := common.ImportChatAttachments([]string{path})
+	imported, err := common.ImportChatAttachments(paths)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
 	data, err := json.Marshal(imported)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
 	r.api.ChangeQuery(ctx, common.PlainQuery{
 		QueryType:   plugin.QueryTypeInput,
@@ -1261,7 +1277,35 @@ func (r *AIChatPlugin) handlePluginCommand(ctx context.Context, request plugin.P
 		ContextData: common.ContextData{aiChatAttachmentsContextKey: string(data)},
 	})
 	r.api.ShowApp(ctx)
-	return plugin.PluginCommandResult{Handled: true}
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
+}
+
+func pluginToolStringSlice(arguments map[string]any, key string) []string {
+	raw, ok := arguments[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch typed := raw.(type) {
+	case []string:
+		values := make([]string, 0, len(typed))
+		for _, value := range typed {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				values = append(values, trimmed)
+			}
+		}
+		return values
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, value := range typed {
+			text, _ := value.(string)
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				values = append(values, trimmed)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
 }
 
 // querySelection offers chat for text or files; importing happens only when the action is chosen.

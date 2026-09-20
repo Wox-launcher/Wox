@@ -92,13 +92,8 @@ func TestResolveFolderBrowsePathUsesDirectoryOrParent(t *testing.T) {
 }
 
 func TestFolderBrowseCommandRejectsUnknownCommand(t *testing.T) {
-	result := (&FolderPlugin{}).handlePluginCommand(t.Context(), plugin.PluginCommandRequest{Command: "unknown"})
-	if result.Handled {
-		t.Fatalf("unknown command should not be handled: %#v", result)
-	}
-
-	empty := (&FolderPlugin{}).handlePluginCommand(t.Context(), plugin.PluginCommandRequest{Command: PluginCommandBrowsePath})
-	if !empty.Handled || empty.Message == "" {
+	empty := (&FolderPlugin{}).browsePathTool(t.Context(), plugin.InvokePluginToolHandlerOption{})
+	if empty.Error == nil {
 		t.Fatalf("empty browse path = %#v", empty)
 	}
 }

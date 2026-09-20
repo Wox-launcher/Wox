@@ -28,6 +28,16 @@ from .models.trigger_keyword import (
     UnregisterTriggerKeywordOption,
     UnregisterTriggerKeywordResult,
 )
+from .models.plugin_tool import (
+    InvokePluginToolOption,
+    InvokePluginToolResult,
+    ListPluginToolsOption,
+    ListPluginToolsResult,
+    RegisterPluginToolOption,
+    RegisterPluginToolResult,
+    UnregisterPluginToolOption,
+    UnregisterPluginToolResult,
+)
 
 
 @dataclass
@@ -542,6 +552,22 @@ class PublicAPI(Protocol):
 
     async def unregister_trigger_keyword(self, ctx: Context, option: UnregisterTriggerKeywordOption) -> UnregisterTriggerKeywordResult:
         """Release this plugin's runtime trigger and hint; repeating the operation succeeds."""
+        ...
+
+    async def register_plugin_tool(self, ctx: Context, option: RegisterPluginToolOption) -> RegisterPluginToolResult:
+        """Register a plugin tool. Requires Wox >= 2.4.5."""
+        ...
+
+    async def unregister_plugin_tool(self, ctx: Context, option: UnregisterPluginToolOption) -> UnregisterPluginToolResult:
+        """Unregister a plugin tool previously registered by this plugin. Requires Wox >= 2.4.5."""
+        ...
+
+    async def list_plugin_tools(self, ctx: Context, option: ListPluginToolsOption) -> ListPluginToolsResult:
+        """List currently callable plugin tools. Requires Wox >= 2.4.5."""
+        ...
+
+    async def invoke_plugin_tool(self, ctx: Context, option: InvokePluginToolOption) -> InvokePluginToolResult:
+        """Invoke another plugin's registered tool. Requires Wox >= 2.4.5."""
         ...
 
     async def ai_chat_stream(

@@ -21,6 +21,80 @@ export interface UnregisterTriggerKeywordResult {
   Success: boolean
 }
 
+export interface PluginToolAnnotations {
+  ReadOnly: boolean
+  Destructive: boolean
+  Idempotent: boolean
+  RequiresUI: boolean
+}
+
+export interface PluginToolDescriptor {
+  Name: string
+  Description: string
+  InputSchema: Record<string, unknown>
+  OutputSchema: Record<string, unknown>
+  Annotations: PluginToolAnnotations
+}
+
+export interface PluginToolError {
+  Code: string
+  Message: string
+}
+
+export interface RegisterPluginToolOption {
+  Tool: PluginToolDescriptor
+  Handler: PluginToolHandler
+}
+
+export interface RegisterPluginToolResult {
+  Error?: PluginToolError | null
+}
+
+export interface UnregisterPluginToolOption {
+  Name: string
+}
+
+export interface UnregisterPluginToolResult {
+  Error?: PluginToolError | null
+}
+
+export interface ListPluginToolsOption {
+  PluginId?: string
+}
+
+export interface PluginToolListItem {
+  PluginId: string
+  PluginName: string
+  Tool: PluginToolDescriptor
+}
+
+export interface ListPluginToolsResult {
+  Tools: PluginToolListItem[]
+  Error?: PluginToolError | null
+}
+
+export interface InvokePluginToolOption {
+  PluginId: string
+  Name: string
+  Arguments?: Record<string, unknown>
+}
+
+export interface InvokePluginToolResult {
+  Output?: Record<string, unknown>
+  Error?: PluginToolError | null
+}
+
+export interface InvokePluginToolHandlerOption {
+  Arguments: Record<string, unknown>
+}
+
+export interface InvokePluginToolHandlerResult {
+  Output?: Record<string, unknown>
+  Error?: PluginToolError | null
+}
+
+export type PluginToolHandler = (ctx: Context, option: InvokePluginToolHandlerOption) => Promise<InvokePluginToolHandlerResult> | InvokePluginToolHandlerResult
+
 export type DragOutStatus = "success" | "cancel" | "cancel_in_source"
 
 export interface DragOutEvent {
@@ -1567,6 +1641,23 @@ export interface PublicAPI {
 
   RegisterTriggerKeyword: (ctx: Context, option: RegisterTriggerKeywordOption) => Promise<RegisterTriggerKeywordResult>
   UnregisterTriggerKeyword: (ctx: Context, option: UnregisterTriggerKeywordOption) => Promise<UnregisterTriggerKeywordResult>
+
+  /**
+   * Register a plugin tool. Requires Wox >= 2.4.5.
+   */
+  RegisterPluginTool: (ctx: Context, option: RegisterPluginToolOption) => Promise<RegisterPluginToolResult>
+  /**
+   * Unregister a plugin tool previously registered by this plugin. Requires Wox >= 2.4.5.
+   */
+  UnregisterPluginTool: (ctx: Context, option: UnregisterPluginToolOption) => Promise<UnregisterPluginToolResult>
+  /**
+   * List currently callable plugin tools. Requires Wox >= 2.4.5.
+   */
+  ListPluginTools: (ctx: Context, option: ListPluginToolsOption) => Promise<ListPluginToolsResult>
+  /**
+   * Invoke another plugin's registered tool. Requires Wox >= 2.4.5.
+   */
+  InvokePluginTool: (ctx: Context, option: InvokePluginToolOption) => Promise<InvokePluginToolResult>
 
   /**
    * Chat using LLM

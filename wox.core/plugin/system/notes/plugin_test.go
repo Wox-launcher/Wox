@@ -16,6 +16,16 @@ import (
 	"wox/util/fuzzymatch"
 )
 
+func TestCreateNoteToolCancelledBeforeImport(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	// An uninitialized repository is intentional: cancelled work must never reach it.
+	result := (&Plugin{}).createNoteTool(ctx, plugin.InvokePluginToolHandlerOption{Arguments: map[string]any{"text": "cancelled note"}})
+	if result.Error == nil || result.Error.Code != plugin.PluginToolErrorCancelled {
+		t.Fatalf("cancelled create = %+v", result)
+	}
+}
+
 func TestPluginQueryRoutesListNewSearchAndDeleted(t *testing.T) {
 	repository, _ := newRepositoryForTest(t)
 	p := &Plugin{repository: repository}
@@ -176,15 +186,14 @@ func TestNotesSearchMatcherSupportsPinyin(t *testing.T) {
 func TestCreateNoteCommandPersistsTextAndOpensDocument(t *testing.T) {
 	repository, _ := newRepositoryForTest(t)
 	p := &Plugin{repository: repository}
-	result := p.handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: PluginCommandCreateNote,
-		Data: common.ContextData{
-			PluginCommandDataTitle: "Roadmap",
-			PluginCommandDataText:  "Ship the folder browse handoff",
+	result := p.createNoteTool(context.Background(), plugin.InvokePluginToolHandlerOption{
+		Arguments: map[string]any{
+			"title": "Roadmap",
+			"text":  "Ship the folder browse handoff",
 		},
 	})
-	if !result.Handled || result.Message != "" {
-		t.Fatalf("create note command = %#v", result)
+	if result.Error != nil {
+		t.Fatalf("create note tool = %#v", result)
 	}
 	records, err := repository.List(false)
 	if err != nil || len(records) != 1 {
@@ -205,14 +214,13 @@ func TestCreateNoteCommandImportsImageWithoutOCR(t *testing.T) {
 	imagePath := filepath.Join(t.TempDir(), "20260827_wox_snapshots.jpg")
 	writeTestNotePNG(t, imagePath)
 
-	result := p.handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: PluginCommandCreateNote,
-		Data: common.ContextData{
-			PluginCommandDataPath: imagePath,
-			PluginCommandDataText: "master Public 0 + 5 Branches",
+	result := p.createNoteTool(context.Background(), plugin.InvokePluginToolHandlerOption{
+		Arguments: map[string]any{
+			"path": imagePath,
+			"text": "master Public 0 + 5 Branches",
 		},
 	})
-	if !result.Handled || result.Message != "" {
+	if result.Error != nil {
 		t.Fatalf("create note from image = %#v", result)
 	}
 	records, err := repository.List(false)
@@ -248,11 +256,10 @@ func TestCreateNoteCommandImportsFilePath(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	result := p.handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: PluginCommandCreateNote,
-		Data:    common.ContextData{PluginCommandDataPath: filePath},
+	result := p.createNoteTool(context.Background(), plugin.InvokePluginToolHandlerOption{
+		Arguments: map[string]any{"path": filePath},
 	})
-	if !result.Handled || result.Message != "" {
+	if result.Error != nil {
 		t.Fatalf("create note from path = %#v", result)
 	}
 	records, err := repository.List(false)
@@ -265,7 +272,7 @@ func TestCreateNoteCommandImportsFilePath(t *testing.T) {
 	}
 }
 
-func TestCreateNoteActionUsesPluginCommand(t *testing.T) {
+func TestCreateNoteActionUsesPluginTool(t *testing.T) {
 	action := CreateNoteAction(nil, "Title", "Body", "/tmp/file.go")
 	if action.Name != "i18n:plugin_notes_action_save" {
 		t.Fatalf("action name = %q", action.Name)
@@ -276,11 +283,19 @@ func TestCreateNoteActionUsesPluginCommand(t *testing.T) {
 }
 
 func TestCreateNoteCommandRequiresContent(t *testing.T) {
-	result := (&Plugin{}).handlePluginCommand(context.Background(), plugin.PluginCommandRequest{
-		Command: PluginCommandCreateNote,
+	result := (&Plugin{}).createNoteTool(context.Background(), plugin.InvokePluginToolHandlerOption{})
+	if result.Error == nil {
+		t.Fatalf("empty create note tool = %#v", result)
+	}
+}
+
+func TestOpenNoteToolRequiresExistingNote(t *testing.T) {
+	repository, _ := newRepositoryForTest(t)
+	result := (&Plugin{repository: repository}).openNoteTool(context.Background(), plugin.InvokePluginToolHandlerOption{
+		Arguments: map[string]any{"noteId": "missing"},
 	})
-	if !result.Handled || result.Message == "" {
-		t.Fatalf("empty create note command = %#v", result)
+	if result.Error == nil || result.Error.Code != "NOTE_NOT_FOUND" {
+		t.Fatalf("missing note = %#v", result)
 	}
 }
 

@@ -20,11 +20,9 @@ const (
 	notesMRUContextKey = "noteId"
 	notesMRUNewID      = "new"
 
-	PluginCommandCreateNote = "create_note"
-	PluginCommandDataText   = "text"
-	PluginCommandDataPath   = "path"
-	PluginCommandDataTitle  = "title"
-	createNoteMaxFileBytes  = 256 * 1024
+	ToolCreateNote         = "create_note"
+	ToolOpenNote           = "open_note"
+	createNoteMaxFileBytes = 256 * 1024
 )
 
 func init() {
@@ -74,7 +72,7 @@ func (p *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	})
 	p.api.OnDeepLink(ctx, p.handleDeepLink)
 	p.api.OnMRURestore(ctx, p.handleMRURestore)
-	p.api.OnHandlePluginCommand(ctx, p.handlePluginCommand)
+	p.registerPluginTools(ctx)
 	p.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
 		if strings.HasPrefix(key, noteSettingPrefix) {
 			p.repository.ExternalChanged(strings.TrimPrefix(key, noteSettingPrefix))
@@ -236,53 +234,126 @@ func (p *Plugin) createAndOpen(ctx context.Context) {
 	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowNew})
 }
 
-// handlePluginCommand creates a note from another plugin's text, file, or image path.
-func (p *Plugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
-	if request.Command != PluginCommandCreateNote {
-		return plugin.PluginCommandResult{Handled: false}
-	}
+func (p *Plugin) registerPluginTools(ctx context.Context) {
+	p.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolCreateNote,
+			Description: "i18n:plugin_notes_tool_create_note",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title": map[string]any{"type": "string"},
+					"text":  map[string]any{"type": "string"},
+					"path":  map[string]any{"type": "string"},
+				},
+				"anyOf": []any{
+					map[string]any{"required": []any{"text"}},
+					map[string]any{"required": []any{"path"}},
+				},
+			},
+			OutputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"noteId": map[string]any{"type": "string"}},
+				"required":   []any{"noteId"},
+			},
+		},
+		Handler: p.createNoteTool,
+	})
+	p.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolOpenNote,
+			Description: "i18n:plugin_notes_tool_open_note",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"noteId": map[string]any{"type": "string"}},
+				"required":   []any{"noteId"},
+			},
+			OutputSchema: map[string]any{"type": "object"},
+			Annotations:  plugin.PluginToolAnnotations{RequiresUI: true},
+		},
+		Handler: p.openNoteTool,
+	})
+}
 
-	title := strings.TrimSpace(request.Data[PluginCommandDataTitle])
-	text := request.Data[PluginCommandDataText]
-	path := strings.TrimSpace(request.Data[PluginCommandDataPath])
+// createNoteTool persists a note and returns its id without changing the current UI.
+func (p *Plugin) createNoteTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+	if err := ctx.Err(); err != nil {
+		return plugin.InvokePluginToolHandlerResult{Error: plugin.PluginToolErrorFromHost(err)}
+	}
+	title := pluginToolString(option.Arguments, "title")
+	text, _ := option.Arguments["text"].(string)
+	path := pluginToolString(option.Arguments, "path")
 	document, err := documentFromPluginCommand(title, text, path)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
 	if DocumentIsEmpty(document) {
-		return plugin.PluginCommandResult{Handled: true, Message: "note content is empty"}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: "note content is empty"}}
 	}
 
+	// File import may outlive cancellation; do not start a write after it returns.
+	if err := ctx.Err(); err != nil {
+		return plugin.InvokePluginToolHandlerResult{Error: plugin.PluginToolErrorFromHost(err)}
+	}
 	record, err := p.repository.Create()
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
 	saved, _, err := p.repository.Save(record.ID, record.Revision, document)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
-
-	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: saved.ID})
-	return plugin.PluginCommandResult{Handled: true}
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{"noteId": saved.ID}}
 }
 
-// CreateNoteAction asks Notes to persist and open a note built from the caller's context.
+// openNoteTool opens an existing note. Success means the open was scheduled, not that the user finished editing.
+func (p *Plugin) openNoteTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+	noteID := pluginToolString(option.Arguments, "noteId")
+	record, err := p.repository.Get(noteID)
+	if err != nil || record.DeletedAt > 0 {
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: "NOTE_NOT_FOUND", Message: "note not found"}}
+	}
+	p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
+}
+
+// CreateNoteAction asks Notes to persist a note, then opens it as a separate step.
 func CreateNoteAction(api plugin.API, title string, text string, path string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name: "i18n:plugin_notes_action_save",
 		Icon: icons.Get(icons.ActionAdd),
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
-			plugin.InvokePluginCommandAndNotify(ctx, api, plugin.PluginCommandRequest{
+			created := api.InvokePluginTool(ctx, plugin.InvokePluginToolOption{
 				PluginId: common.NotesPluginID,
-				Command:  PluginCommandCreateNote,
-				Data: common.ContextData{
-					PluginCommandDataTitle: title,
-					PluginCommandDataText:  text,
-					PluginCommandDataPath:  path,
+				Name:     ToolCreateNote,
+				Arguments: map[string]any{
+					"title": title,
+					"text":  text,
+					"path":  path,
 				},
 			})
+			if created.Error != nil {
+				api.Log(ctx, plugin.LogLevelError, created.Error.Error())
+				api.Notify(ctx, created.Error.Message)
+				return
+			}
+			noteID, _ := created.Output["noteId"].(string)
+			opened := api.InvokePluginTool(ctx, plugin.InvokePluginToolOption{
+				PluginId:  common.NotesPluginID,
+				Name:      ToolOpenNote,
+				Arguments: map[string]any{"noteId": noteID},
+			})
+			if opened.Error != nil {
+				api.Log(ctx, plugin.LogLevelError, opened.Error.Error())
+				api.Notify(ctx, opened.Error.Message)
+			}
 		},
 	}
+}
+
+func pluginToolString(arguments map[string]any, key string) string {
+	value, _ := arguments[key].(string)
+	return strings.TrimSpace(value)
 }
 
 // handleMRURestore rebuilds a homepage result from the note id recorded by a previous action.

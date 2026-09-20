@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"sort"
@@ -209,6 +210,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	}, accent)
 	editor.Keywords.SectionLabel = a.translate("i18n:ui_plugin_tab_trigger_keywords")
 	editor.Commands = a.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true, true, pluginFormTriggerKeywords(plugin, form.values))
+	editor.Tools = a.pluginToolsFormProps(snapshot, plugin, innerWidth, imageScale)
 
 	keepVisibleKey := pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 0)
 	settingDefinitions := form.definitions[1:]
@@ -349,6 +351,60 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}, accent)
 	form.SectionLabel = a.translate("i18n:ui_plugin_tab_commands")
 	return form
+}
+
+func (a *App) pluginToolsFormProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width, imageScale float32) *launcherview.PluginFormProps {
+	tools := a.pluginToolsForSettings(plugin)
+	if len(tools) == 0 {
+		return nil
+	}
+	sort.SliceStable(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
+	rows := make([]launcherview.FormTableRow, 0, len(tools))
+	for index, tool := range tools {
+		rows = append(rows, launcherview.FormTableRow{Index: index, Cells: []launcherview.FormTableCell{{Text: tool.Name}, {Text: tool.Description}}})
+	}
+	table := launcherview.FormTableFieldProps{
+		ID: "plugin-tools", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
+		Description: a.translate("i18n:ui_plugin_tools_tip"),
+		Columns: []launcherview.FormTableColumn{
+			{Label: a.translate("i18n:ui_plugin_tool_name_column"), Width: 160},
+			{Label: a.translate("i18n:ui_plugin_tool_desc_column")},
+		},
+		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_tab_tools"), Theme: snapshot.palette,
+	}
+	accent := snapshot.palette.Info
+	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
+		woxwidget.Keyed{Key: "plugin-tool-table", Child: launcherview.FormTableField(table)},
+	}, accent)
+	form.SectionLabel = a.translate("i18n:ui_plugin_tab_tools")
+	return form
+}
+
+func (a *App) pluginToolsForSettings(plugin pluginSettingsPlugin) []pluginTool {
+	if listed := a.listInstalledPluginTools(plugin.ID); len(listed) > 0 {
+		return listed
+	}
+	return append([]pluginTool(nil), plugin.Tools...)
+}
+
+func (a *App) listInstalledPluginTools(pluginID string) []pluginTool {
+	if strings.TrimSpace(pluginID) == "" {
+		return nil
+	}
+	manager := woxplugin.GetPluginManager()
+	if manager == nil {
+		return nil
+	}
+	ctx := a.lifecycleCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	listed := manager.ListPluginTools(ctx, nil, woxplugin.ListPluginToolsOption{PluginId: pluginID})
+	tools := make([]pluginTool, 0, len(listed.Tools))
+	for _, item := range listed.Tools {
+		tools = append(tools, pluginTool{Name: item.Tool.Name, Description: item.Tool.Description})
+	}
+	return tools
 }
 
 // addPluginKeywordQueryTests puts a launcher test action first in each keyword row's operation column.

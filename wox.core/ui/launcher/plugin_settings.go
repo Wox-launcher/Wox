@@ -34,6 +34,7 @@ type pluginSettingsPlugin struct {
 	ScreenshotURLs     []string           `json:"ScreenshotUrls"`
 	TriggerKeywords    []string           `json:"TriggerKeywords"`
 	Commands           []pluginCommand    `json:"Commands"`
+	Tools              []pluginTool       `json:"Tools"`
 	SupportedOS        []string           `json:"SupportedOS"`
 	Features           []pluginFeature    `json:"Features"`
 	Glances            []pluginGlance     `json:"Glances"`
@@ -49,6 +50,11 @@ type pluginSettingsPlugin struct {
 type pluginCommand struct {
 	Command     string `json:"Command"`
 	Description string `json:"Description"`
+}
+
+type pluginTool struct {
+	Name        string
+	Description string
 }
 
 type pluginFeature struct {

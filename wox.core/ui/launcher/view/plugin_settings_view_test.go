@@ -398,11 +398,39 @@ func TestPluginDetailsShareDescriptionFirstLayout(t *testing.T) {
 }
 
 func TestPluginDetailOmitsEmptySettingsAndCommands(t *testing.T) {
-	page := pluginEditor(PluginEditorProps{Form: &PluginFormProps{EmptyTitle: "No settings"}, Commands: &PluginFormProps{EmptyTitle: "No commands"}, DescriptionDetail: &PluginStoreDetailProps{Description: "Description"}}, 600, 500, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	page := pluginEditor(PluginEditorProps{Form: &PluginFormProps{EmptyTitle: "No settings"}, Commands: &PluginFormProps{EmptyTitle: "No commands"}, Tools: &PluginFormProps{EmptyTitle: "No tools"}, DescriptionDetail: &PluginStoreDetailProps{Description: "Description"}}, 600, 500, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	scroll := page.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	if len(scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children) != 1 {
-		t.Fatal("empty settings and commands must not create placeholder groups")
+		t.Fatal("empty settings, commands, and tools must not create placeholder groups")
 	}
+}
+
+func TestPluginEditorPlacesToolsAfterCommands(t *testing.T) {
+	page := pluginEditor(PluginEditorProps{
+		Commands:          &PluginFormProps{SectionLabel: "Commands", Rows: []woxwidget.Widget{woxwidget.Text{Value: "cmd"}}},
+		Tools:             &PluginFormProps{SectionLabel: "Tools", Rows: []woxwidget.Widget{woxwidget.Text{Value: "tool"}}},
+		DescriptionDetail: &PluginStoreDetailProps{Description: "Description"},
+	}, 600, 500, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	content := page.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(content) != 5 {
+		t.Fatalf("content items = %d, want description plus command and tool groups", len(content))
+	}
+	if pluginSectionHeaderLabel(t, content[1]) != "COMMANDS" {
+		t.Fatal("commands must appear before tools")
+	}
+	if pluginSectionHeaderLabel(t, content[3]) != "TOOLS" {
+		t.Fatal("tools must follow commands")
+	}
+}
+
+func pluginSectionHeaderLabel(t *testing.T, widget woxwidget.Widget) string {
+	t.Helper()
+	header := widget.(woxwidget.Container)
+	if header.Height != 43 {
+		t.Fatalf("section header height = %v, want 43", header.Height)
+	}
+	title := header.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	return title.Value
 }
 
 func TestPluginMetadataDescriptionWrapsInsteadOfClipping(t *testing.T) {

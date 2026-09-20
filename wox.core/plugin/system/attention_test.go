@@ -47,10 +47,17 @@ func (a *attentionActionTestAPI) OnUnload(ctx context.Context, callback func(ctx
 }
 func (a *attentionActionTestAPI) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error)) {
 }
-func (a *attentionActionTestAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+func (a *attentionActionTestAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
+	return plugin.RegisterPluginToolResult{}
 }
-func (a *attentionActionTestAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
-	return plugin.PluginCommandResult{}, nil
+func (a *attentionActionTestAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
+	return plugin.UnregisterPluginToolResult{}
+}
+func (a *attentionActionTestAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
+	return plugin.ListPluginToolsResult{}
+}
+func (a *attentionActionTestAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
+	return plugin.InvokePluginToolResult{}
 }
 func (a *attentionActionTestAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {}
 func (a *attentionActionTestAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)  {}

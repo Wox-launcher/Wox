@@ -129,8 +129,49 @@ Methods for interacting with Wox:
 - **MRU**: `onMruRestore()`
 - **Callbacks**: `onUnload()`, `onDeepLink()`
 - **Commands**: `registerQueryCommands()`
+- **Plugin Tools**: `RegisterPluginTool()`, `UnregisterPluginTool()`, `ListPluginTools()`, `InvokePluginTool()` (Wox >= 2.4.5)
 - **Clipboard**: `copy()`
 - **Cache**: `GetCacheFolder()`
+
+## Plugin Tools
+
+Plugin Tools are schema-checked operations that plugins register at runtime. They require Wox >= 2.4.5.
+
+```typescript
+await this.api.RegisterPluginTool(ctx, {
+  Tool: {
+    Name: "echo_text",
+    Description: "Echo the supplied text",
+    InputSchema: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"]
+    },
+    OutputSchema: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"]
+    },
+    Annotations: { ReadOnly: true, Destructive: false, Idempotent: true, RequiresUI: false }
+  },
+  Handler: async (_ctx, option) => ({ Output: { text: option.Arguments.text } })
+})
+
+const created = await this.api.InvokePluginTool(ctx, {
+  PluginId: notesPluginId,
+  Name: "create_note",
+  Arguments: { title: "Roadmap", text: "Ship it" }
+})
+if (created.Error) {
+  await this.api.Notify(ctx, created.Error.Message)
+  return
+}
+const opened = await this.api.InvokePluginTool(ctx, {
+  PluginId: notesPluginId,
+  Name: "open_note",
+  Arguments: { noteId: created.Output?.noteId }
+})
+```
 
 ## Actions
 

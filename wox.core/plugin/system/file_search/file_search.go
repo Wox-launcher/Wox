@@ -37,13 +37,18 @@ import (
 var fileIcon = icons.Get(icons.PluginFile)
 
 const (
-	PluginID                       = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
-	PluginCommandSearch            = "search"
-	PluginCommandDataQuery         = "query"
-	PluginCommandDataEntryType     = "entry_type"
-	PluginCommandEntryTypeFolder   = "folder"
-	PluginCommandResultDataResults = "results"
+	PluginID                  = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	ToolSearch                = "search"
+	ToolSearchEntryTypeFolder = "folder"
 )
+
+// FileSearchToolResult is the public search hit returned by the search tool.
+type FileSearchToolResult struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
+	Score int64  `json:"score"`
+}
 
 const fileRootsSettingKey = "roots"
 const contentRootsSettingKey = "contentRoots"
@@ -339,7 +344,41 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	}
 	c.engine = engine
 	c.api.Log(ctx, plugin.LogLevelInfo, "File search engine initialized")
-	c.api.OnHandlePluginCommand(ctx, c.handlePluginCommand)
+	c.api.RegisterPluginTool(ctx, plugin.RegisterPluginToolOption{
+		Tool: plugin.PluginToolDescriptor{
+			Name:        ToolSearch,
+			Description: "i18n:plugin_file_tool_search",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query":      map[string]any{"type": "string"},
+					"entry_type": map[string]any{"type": "string", "enum": []any{ToolSearchEntryTypeFolder}},
+				},
+				"required": []any{"query"},
+			},
+			OutputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"results": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"path":  map[string]any{"type": "string"},
+								"name":  map[string]any{"type": "string"},
+								"isDir": map[string]any{"type": "boolean"},
+								"score": map[string]any{"type": "integer"},
+							},
+							"required": []any{"path", "name", "isDir", "score"},
+						},
+					},
+				},
+				"required": []any{"results"},
+			},
+			Annotations: plugin.PluginToolAnnotations{ReadOnly: true, Idempotent: true},
+		},
+		Handler: c.searchTool,
+	})
 	c.unsubscribeStatusChange = c.engine.OnStatusChanged(func(status filesearch.StatusSnapshot) {
 		c.handleStatusChanged(status)
 	})
@@ -865,42 +904,35 @@ func (c *FileSearchPlugin) search(ctx context.Context, raw string, limit int) ([
 	return c.engine.Search(ctx, filesearch.SearchQuery{Raw: raw, DisablePinyin: !usePinyin}, limit)
 }
 
-// handlePluginCommand exposes raw indexed results to other plugins without leaking the engine instance.
-func (c *FileSearchPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
-	if request.Command != PluginCommandSearch {
-		return plugin.PluginCommandResult{Handled: false}
-	}
-
-	raw := strings.TrimSpace(request.Data[PluginCommandDataQuery])
+// searchTool exposes indexed results to other plugins without leaking the engine instance.
+func (c *FileSearchPlugin) searchTool(ctx context.Context, option plugin.InvokePluginToolHandlerOption) plugin.InvokePluginToolHandlerResult {
+	raw, _ := option.Arguments["query"].(string)
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return plugin.PluginCommandResult{Handled: true, Message: "query is required"}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: "query is required"}}
 	}
 
 	// Folder-only callers (open/save "select folder") need enough directory hits
 	// after filtering; widen the candidate window before trimming to the limit.
-	entryType := strings.ToLower(strings.TrimSpace(request.Data[PluginCommandDataEntryType]))
+	entryType, _ := option.Arguments["entry_type"].(string)
+	entryType = strings.ToLower(strings.TrimSpace(entryType))
 	searchLimit := fileSearchResultLimit
-	if entryType == PluginCommandEntryTypeFolder {
+	if entryType == ToolSearchEntryTypeFolder {
 		searchLimit = fileSearchRefinedCandidateLimit
 	}
 
 	results, err := c.search(ctx, raw, searchLimit)
 	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
-	if entryType == PluginCommandEntryTypeFolder {
+	if entryType == ToolSearchEntryTypeFolder {
 		results = refineFileSearchResults(results, fileSearchTypeRefinementFolder, fileSearchSortRefinementRelevance, fileSearchResultLimit)
 	}
-	payload, err := json.Marshal(results)
-	if err != nil {
-		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	entries := make([]FileSearchToolResult, 0, len(results))
+	for _, item := range results {
+		entries = append(entries, FileSearchToolResult{Path: item.Path, Name: item.Name, IsDir: item.IsDir, Score: item.Score})
 	}
-	return plugin.PluginCommandResult{
-		Handled: true,
-		Data: common.ContextData{
-			PluginCommandResultDataResults: string(payload),
-		},
-	}
+	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{"results": entries}}
 }
 
 func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {

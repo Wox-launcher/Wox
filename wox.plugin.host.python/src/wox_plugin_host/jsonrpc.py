@@ -15,8 +15,11 @@ from wox_plugin import (
     ChatStreamDataType,
     Context,
     FormActionContext,
+    InvokePluginToolHandlerOption,
+    InvokePluginToolHandlerResult,
     MRUData,
     PluginInitParams,
+    PluginToolError,
     ToolbarMsgActionContext,
     Query,
     QueryResponse,
@@ -91,6 +94,8 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
         return await on_mru_restore(ctx, request)
     elif method == "onLLMStream":
         return await on_llm_stream(ctx, request)
+    elif method == "onInvokePluginTool":
+        return await on_invoke_plugin_tool(ctx, request)
     else:
         await logger.info(ctx.get_trace_id(), f"unknown method handler: {method}")
         raise Exception(f"unknown method handler: {method}")
@@ -506,6 +511,8 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
 
     try:
         # Remove plugin from instances
+        if isinstance(plugin_instance.api, PluginAPI):
+            await plugin_instance.api.stop_plugin_tools()
         del plugin_instances[plugin_id]
 
         # Remove imported module cache to allow reloading updated code
@@ -520,6 +527,9 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         plugin_instance.actions.clear()
         plugin_instance.form_actions.clear()
         plugin_instance.toolbar_msg_actions.clear()
+        if isinstance(plugin_instance.api, PluginAPI):
+            plugin_instance.api.plugin_tool_callbacks.clear()
+            plugin_instance.api.plugin_tool_callback_ids.clear()
 
         await logger.info(ctx.get_trace_id(), f"<{plugin_name}> unload plugin successfully")
     except Exception as e:
@@ -738,6 +748,7 @@ async def on_unload(ctx: Context, request: Dict[str, Any]) -> None:
     if not callback:
         raise Exception(f"unload callback not found: {callback_id}")
 
+    await api.stop_plugin_tools()
     try:
         result = callback(ctx)
         if inspect.isawaitable(result):
@@ -879,3 +890,59 @@ async def on_llm_stream(ctx: Context, request: Dict[str, Any]) -> None:
         reasoning=reasoning,
     )
     callback(stream_data)
+
+
+async def on_invoke_plugin_tool(ctx: Context, request: Dict[str, Any]) -> Any:
+    """Execute a plugin tool handler registered by this plugin."""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    # Core owns the deadline and call chain; only echo its opaque parent token.
+    ctx.values["PluginToolCallId"] = params.get("PluginToolCallId", "")
+    callback_id = params.get("CallbackId")
+    if not callback_id:
+        raise Exception("CallbackId is required")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    if api.plugin_tools_stopping:
+        return InvokePluginToolHandlerResult(error=PluginToolError(code="PLUGIN_UNAVAILABLE", message="plugin is unloading")).to_dict()
+
+    callback = api.plugin_tool_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"plugin tool callback not found: {callback_id}")
+
+    arguments_raw = params.get("Arguments", "{}")
+    try:
+        arguments = json.loads(arguments_raw) if isinstance(arguments_raw, str) else arguments_raw
+    except Exception:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        arguments = {}
+
+    task = asyncio.current_task()
+    if task is not None:
+        api.plugin_tool_calls.add(task)
+    try:
+        result = callback(ctx, InvokePluginToolHandlerOption(arguments=arguments))
+        if inspect.isawaitable(result):
+            result = await result
+        if not isinstance(result, InvokePluginToolHandlerResult):
+            raise Exception("plugin tool handler must return InvokePluginToolHandlerResult")
+        return result.to_dict()
+    except Exception as e:
+        await logger.error(ctx.get_trace_id(), f"plugin tool callback error: {str(e)}")
+        return InvokePluginToolHandlerResult(error=PluginToolError(code="EXECUTION_FAILED", message=str(e))).to_dict()
+    finally:
+        if task is not None:
+            api.plugin_tool_calls.discard(task)
