@@ -1243,19 +1243,46 @@ func attachClipboardMRUContext(actions []plugin.QueryResultAction, recordID stri
 
 // handleMRURestore rebuilds a clipboard result when the stored record still exists.
 func (c *ClipboardPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
-	recordID := strings.TrimSpace(mruData.ContextData["recordId"])
-	if recordID == "" {
+	record, err := c.findClipboardRecord(ctx, mruData.ContextData["recordId"])
+	if err != nil {
+		return nil, err
+	}
+	result := c.convertRecordToResult(ctx, *record, plugin.Query{Env: mruData.Env})
+	return &result, nil
+}
+
+// findClipboardRecord looks up a record in favorites first, then history.
+// Starring a clipboard item moves it out of SQLite into settings, so alias and
+// MRU restore cannot depend on GetByID alone.
+func (c *ClipboardPlugin) findClipboardRecord(ctx context.Context, id string) (*ClipboardRecord, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return nil, fmt.Errorf("empty clipboard record id in context data")
 	}
-	if c.db == nil {
-		return nil, fmt.Errorf("clipboard database is not available")
-	}
-	record, err := c.db.GetByID(ctx, recordID)
+
+	favorites, err := c.getFavoriteItems(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("clipboard record no longer exists: %s", recordID)
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites for record lookup: %s", err.Error()))
+	} else {
+		for _, favoriteItem := range favorites {
+			if favoriteItem.ID == id {
+				record := c.convertFavoriteToRecord(favoriteItem)
+				return &record, nil
+			}
+		}
 	}
-	result := c.convertRecordToResult(ctx, *record, plugin.Query{})
-	return &result, nil
+
+	if c.db == nil {
+		return nil, fmt.Errorf("clipboard record no longer exists: %s", id)
+	}
+	record, err := c.db.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, fmt.Errorf("clipboard record no longer exists: %s", id)
+	}
+	return record, nil
 }
 
 func clipboardRecordFilePaths(record ClipboardRecord) []string {

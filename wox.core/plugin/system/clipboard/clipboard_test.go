@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"wox/common"
 	"wox/database"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -494,6 +495,78 @@ func (clipboardQueryTestDB) GetStats(context.Context) (map[string]int, error) {
 	return map[string]int{}, nil
 }
 func (clipboardQueryTestDB) Close() error { return nil }
+
+type clipboardRestoreTestDB struct {
+	clipboardQueryTestDB
+	records map[string]ClipboardRecord
+}
+
+func (d clipboardRestoreTestDB) GetByID(_ context.Context, id string) (*ClipboardRecord, error) {
+	record, ok := d.records[id]
+	if !ok {
+		return nil, nil
+	}
+	copy := record
+	return &copy, nil
+}
+
+func TestHandleMRURestoreRestoresFavoriteWhenHistoryRowIsGone(t *testing.T) {
+	favorites, err := json.Marshal([]FavoriteClipboardItem{
+		{ID: "fav-1", Type: string(clipboard.ClipboardTypeText), Content: "Another option is Wox Launcher.", Timestamp: 1},
+	})
+	if err != nil {
+		t.Fatalf("marshal favorites: %v", err)
+	}
+
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{favoritesSettingKey: string(favorites)}}
+	c := &ClipboardPlugin{api: api, db: clipboardQueryTestDB{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+
+	restored, err := c.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{"recordId": "fav-1"},
+	})
+	if err != nil {
+		t.Fatalf("restore favorite: %v", err)
+	}
+	if restored.Title != "Another option is Wox Launcher." {
+		t.Fatalf("title = %q", restored.Title)
+	}
+	if restored.ScoreKey != "fav-1" {
+		t.Fatalf("score key = %q", restored.ScoreKey)
+	}
+}
+
+func TestHandleMRURestoreRestoresHistoryRecord(t *testing.T) {
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{}}
+	c := &ClipboardPlugin{
+		api:        api,
+		db:         clipboardRestoreTestDB{records: map[string]ClipboardRecord{"hist-1": {ID: "hist-1", Type: string(clipboard.ClipboardTypeText), Content: "history text", Timestamp: 1}}},
+		imageCache: util.NewHashMap[string, *ImageCacheEntry](),
+	}
+
+	restored, err := c.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{"recordId": "hist-1"},
+	})
+	if err != nil {
+		t.Fatalf("restore history: %v", err)
+	}
+	if restored.Title != "history text" {
+		t.Fatalf("title = %q", restored.Title)
+	}
+}
+
+func TestHandleMRURestoreMissingRecord(t *testing.T) {
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{}}
+	c := &ClipboardPlugin{api: api, db: clipboardQueryTestDB{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+
+	if _, err := c.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
+		t.Fatal("empty context should fail restore")
+	}
+	if _, err := c.handleMRURestore(context.Background(), plugin.MRUData{
+		ContextData: common.ContextData{"recordId": "missing"},
+	}); err == nil {
+		t.Fatal("missing record should fail restore")
+	}
+}
 
 func TestClipboardSearchCandidatesKeepTypedRefinementsScoped(t *testing.T) {
 	text := clipboardSearchItem{Type: string(clipboard.ClipboardTypeText), Content: "hello world"}
