@@ -5,12 +5,72 @@ package woxui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lxn/win"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
 )
+
+// TestWindowsHTMLCacheEviction exercises the native cache and environment release without showing a window.
+func TestWindowsHTMLCacheEviction(t *testing.T) {
+	if os.Getenv("WOX_WINDOWS_WEBVIEW_INTEGRATION") != "1" {
+		t.Skip("set WOX_WINDOWS_WEBVIEW_INTEGRATION=1 to run native WebView cache eviction")
+	}
+	loader, err := filepath.Abs("../../resource/others/webview/WebView2Loader.dll")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WOX_WEBVIEW2_LOADER_PATH", loader)
+	err = Run(func() error {
+		window, err := Open(WindowOptions{Title: "Wox HTML cache eviction test", Size: Size{Width: 320, Height: 240}})
+		if err != nil {
+			return err
+		}
+		defer window.Close()
+		driver, err := newWindowsWebViewDriver(uintptr(window.native.hwnd), window.native.renderer)
+		if err != nil {
+			return err
+		}
+		window.native.webView = webviewruntime.New(driver, Call)
+		bounds := Rect{Width: 100, Height: 80}
+		if err := window.ShowWebView(WebViewContent{HTML: "<p>first</p>", CacheKey: "plugin-one"}, bounds); err != nil {
+			return err
+		}
+		if err := window.ShowWebView(WebViewContent{HTML: "<p>second</p>", CacheKey: "plugin-two", CacheDisabled: true}, bounds); err != nil {
+			return err
+		}
+		if err := driver.Evict("html"); err == nil {
+			return fmt.Errorf("native eviction accepted the active HTML slot")
+		}
+		if err := window.ShowWebView(WebViewContent{URL: "https://example.com", CacheKey: "site"}, bounds); err != nil {
+			return err
+		}
+		if err := driver.Evict("html"); err != nil {
+			return err
+		}
+		if driver.handle == nil {
+			return fmt.Errorf("HTML eviction released the active URL environment")
+		}
+		if err := driver.Evict("url|site"); err == nil {
+			return fmt.Errorf("native eviction accepted the active URL session")
+		}
+		if err := window.HideWebView(); err != nil {
+			return err
+		}
+		if err := driver.Evict("url|site"); err != nil {
+			return err
+		}
+		if driver.handle != nil {
+			return fmt.Errorf("last cache eviction retained the native environment or old plugin keys")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 // TestWebViewRetainsHiddenRenderer exercises trimming with a real native renderer and cached controller.
 func TestWebViewRetainsHiddenRenderer(t *testing.T) {
@@ -28,7 +88,7 @@ func TestWebViewRetainsHiddenRenderer(t *testing.T) {
 		if original == nil || native.focus.visible {
 			return fmt.Errorf("expected an initialized hidden renderer")
 		}
-		native.webView = webviewruntime.New(&webViewNavigationDriver{})
+		native.webView = webviewruntime.New(&webViewNavigationDriver{}, Call)
 		if result := native.executeCommand(windowCommand{kind: windowCommandTrimRenderer}); result.err != nil {
 			return result.err
 		}
@@ -59,8 +119,9 @@ type webViewNavigationDriver struct {
 func (*webViewNavigationDriver) Show(webviewruntime.Content, webviewruntime.Rect, float32) error {
 	return nil
 }
-func (*webViewNavigationDriver) Hide() error  { return nil }
-func (*webViewNavigationDriver) Reset() error { return nil }
+func (*webViewNavigationDriver) Hide() error        { return nil }
+func (*webViewNavigationDriver) Evict(string) error { return nil }
+func (*webViewNavigationDriver) Reset() error       { return nil }
 func (d *webViewNavigationDriver) GoBack() error {
 	d.backCalls++
 	return nil
@@ -130,7 +191,7 @@ func TestFocusWebViewQueuesUntilControllerExists(t *testing.T) {
 	}
 
 	driver := &webViewNavigationDriver{}
-	window.webView = webviewruntime.New(driver)
+	window.webView = webviewruntime.New(driver, func(fn func()) error { fn(); return nil })
 	result, handled = window.executeWebViewCommand(windowCommand{
 		kind:          windowCommandShowWebView,
 		webView:       WebViewContent{URL: "https://example.com"},
@@ -143,7 +204,7 @@ func TestFocusWebViewQueuesUntilControllerExists(t *testing.T) {
 
 func TestWebViewXButtonsNavigateOnlyWhilePointerIsOverSurface(t *testing.T) {
 	driver := &webViewNavigationDriver{}
-	window := &platformWindow{webView: webviewruntime.New(driver)}
+	window := &platformWindow{webView: webviewruntime.New(driver, func(fn func()) error { fn(); return nil })}
 
 	if window.handleWebViewXButton(win.XBUTTON1, true) {
 		t.Fatal("XButton1 was handled while the pointer was outside the WebView")

@@ -32,6 +32,7 @@ int32_t wox_windows_webview_navigation_state(WoxWindowsWebView *webview, char **
 int32_t wox_windows_webview_pointer(WoxWindowsWebView *webview, int32_t kind, int32_t x, int32_t y, int32_t button, int32_t scroll_x, int32_t scroll_y, uint32_t modifiers);
 int32_t wox_windows_webview_focus(WoxWindowsWebView *webview);
 void wox_windows_webview_destroy(WoxWindowsWebView *webview);
+int32_t wox_windows_webview_evict(WoxWindowsWebView *webview, const char *cache_key);
 void wox_windows_free_string(char *value);
 
 typedef struct WoxWindowsFilePreview WoxWindowsFilePreview;

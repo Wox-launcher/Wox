@@ -157,6 +157,14 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 			{AnchorBottom: true, Child: props.Footer},
 		}}
 	}
+	// Keep the footer's backdrop on the main surface; only floating UI belongs
+	// above an embedded WebView. The boundary is a no-op when no page was painted.
+	body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+		{Child: body},
+		{Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(list *woxui.DisplayList, _ woxui.Rect) {
+			list.FlushEmbeddedSurfaceOverlay()
+		}}},
+	}}
 	if props.Floating != nil && props.Floating.Child != nil {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 			{Child: body},

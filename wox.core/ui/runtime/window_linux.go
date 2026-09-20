@@ -187,7 +187,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		_ = window.setTopmost(options.Topmost)
 	}
 	window.applyWindowIcon()
-	window.webView = webviewruntime.New(&linuxWebViewDriver{window: window})
+	window.webView = webviewruntime.New(&linuxWebViewDriver{window: window}, Call)
 	run.mu.Lock()
 	run.windows = append(run.windows, window)
 	run.mu.Unlock()

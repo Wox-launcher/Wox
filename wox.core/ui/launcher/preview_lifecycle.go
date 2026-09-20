@@ -22,6 +22,11 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 		}
 		return
 	}
+	if a.resultsQueryID != a.query.QueryID {
+		// The old WebView is still being painted with the retained results.
+		// Keep its surface and overlay without reactivating obsolete preview work.
+		return
+	}
 	a.prepareRemotePreview(preview)
 	preview = a.resolvePreview(preview)
 	fileWebViewData := ""
@@ -89,9 +94,9 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	}
 }
 
-// selectedPreviewForLifecycle excludes stale query results and layouts that do not render a preview.
+// selectedPreviewForLifecycle retains an already active WebView during the result grace period.
 func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
-	if a.destroyed.Load() || !a.visible || a.resultsQueryID == "" || a.resultsQueryID != a.query.QueryID || a.selected < 0 || a.selected >= len(a.results) {
+	if a.destroyed.Load() || !a.visible || a.resultsQueryID == "" || a.selected < 0 || a.selected >= len(a.results) {
 		return queryResult{}, queryPreview{}, false
 	}
 	result := a.results[a.selected]
@@ -108,6 +113,19 @@ func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
 	}
 	if ratio >= 1 {
 		return queryResult{}, queryPreview{}, false
+	}
+	if a.resultsQueryID != a.query.QueryID {
+		if a.queryTransitionTimer == nil || a.webViewPreviewData == "" || a.webViewPreviewError != "" {
+			return queryResult{}, queryPreview{}, false
+		}
+		retained := a.resolvePreview(preview)
+		if retained.PreviewType == "file" {
+			file := a.filePreviewFor(retained.PreviewData)
+			retained = queryPreview{PreviewType: file.Kind, PreviewData: file.WebViewData}
+		}
+		if retained.PreviewType != "webview" || retained.PreviewData != a.webViewPreviewData {
+			return queryResult{}, queryPreview{}, false
+		}
 	}
 	return result, preview, true
 }

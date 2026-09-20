@@ -182,7 +182,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.Topmost {
 		_ = C.wox_darwin_window_set_topmost(window.native, 1)
 	}
-	window.webView = webviewruntime.New(&darwinWebViewDriver{window: window})
+	window.webView = webviewruntime.New(&darwinWebViewDriver{window: window}, Call)
 	window.startRenderWorker()
 	run.mu.Lock()
 	run.windows = append(run.windows, window)

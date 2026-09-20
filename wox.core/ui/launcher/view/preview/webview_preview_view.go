@@ -38,7 +38,7 @@ func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
 		},
 		Child: woxwidget.Gesture{ID: "webview-preview-input", OnPointer: props.OnPointer, Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			displayList.FillRoundedRect(bounds, WebViewPreviewCornerRadius, props.Theme.QueryBackground)
-			displayList.BeginEmbeddedSurfaceOverlay(bounds)
+			displayList.DeferEmbeddedSurfaceOverlay(bounds)
 			if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
 				props.OnBounds(bounds)
 			}

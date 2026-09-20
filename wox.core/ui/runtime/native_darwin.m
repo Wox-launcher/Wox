@@ -3993,6 +3993,10 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
         should_load = ![[window->web_view_content_keys objectForKey:key_value] isEqualToString:content_key];
       } else {
         WKWebView *stale = [window->web_view_cache objectForKey:key_value];
+        if (stale != nil && stale == window->active_web_view) {
+          // The cache owns this object; detach active state before releasing that ownership.
+          clear_active_web_view(window, true);
+        }
         [stale stopLoading];
         [stale removeFromSuperview];
         [window->web_view_cache removeObjectForKey:key_value];
@@ -4272,6 +4276,32 @@ int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
     [window->web_view_cache removeAllObjects];
     [window->web_view_signatures removeAllObjects];
     [window->web_view_content_keys removeAllObjects];
+  });
+  return result;
+}
+
+// Release only an inactive cache entry; another page may now own the preview surface.
+int32_t wox_darwin_window_evict_webview(WoxDarwinWindow *window, const char *cache_key) {
+  if (window == NULL || cache_key == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSString *key = web_view_string(cache_key);
+    WKWebView *web_view = [window->web_view_cache objectForKey:key];
+    if (web_view != nil && web_view == window->active_web_view) {
+      result = -1;
+      return;
+    }
+    [web_view stopLoading];
+    [web_view removeFromSuperview];
+    [window->web_view_cache removeObjectForKey:key];
+    [window->web_view_signatures removeObjectForKey:key];
+    [window->web_view_content_keys removeObjectForKey:key];
   });
   return result;
 }

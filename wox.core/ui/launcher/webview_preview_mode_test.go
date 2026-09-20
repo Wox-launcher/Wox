@@ -243,7 +243,7 @@ func TestFileWebViewPreviewKeepsQueryFocus(t *testing.T) {
 	}
 }
 
-func TestGlobalWebViewPreviewMovesHostFocusOffQuery(t *testing.T) {
+func TestWebViewPreviewActivationHostFocus(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.EditableText{Key: launcherview.LauncherQueryInputKey, Autofocus: true, Child: woxwidget.Container{Width: 100, Height: 30}},
@@ -260,6 +260,23 @@ func TestGlobalWebViewPreviewMovesHostFocusOffQuery(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
 	app.host = host
+	// Both replacing HTML in one result and selecting another HTML result must
+	// keep keyboard navigation on the query input.
+	app.results = []queryResult{
+		{ID: "first", Preview: queryPreview{PreviewType: "webview", PreviewData: `{"html":"<p>first</p>"}`}},
+		{ID: "second", Preview: queryPreview{PreviewType: "webview", PreviewData: `{"html":"<p>second</p>"}`}},
+	}
+	for _, selected := range []int{0, 1, 0} {
+		app.selected = selected
+		app.activateWebViewPreview(app.results[selected].Preview.PreviewData)
+		if !host.HasFocus(launcherview.LauncherQueryInputKey) || app.webViewWantKeyboardFocus {
+			t.Fatalf("HTML result %d stole query focus: key=%q pending=%t", selected, host.FocusedKey(), app.webViewWantKeyboardFocus)
+		}
+	}
+	app.activateWebViewPreview(`{"html":"<p>updated</p>"}`)
+	if !host.HasFocus(launcherview.LauncherQueryInputKey) || app.webViewWantKeyboardFocus {
+		t.Fatal("updating HTML must keep query focus")
+	}
 	preview := `{"url":"https://gemini.google.com"}`
 	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
 	app.selected = 0

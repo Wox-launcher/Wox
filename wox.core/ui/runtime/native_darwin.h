@@ -60,6 +60,7 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
 int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_floating_materials(WoxDarwinWindow *window, const WoxDarwinFloatingMaterial *materials, int32_t count);
 int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_evict_webview(WoxDarwinWindow *window, const char *cache_key);
 int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window);

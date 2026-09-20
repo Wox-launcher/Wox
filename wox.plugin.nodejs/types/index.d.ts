@@ -1928,14 +1928,16 @@ export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file" | "l
 /**
  * Embedded browser content. Set either url or html, then JSON.stringify into PreviewData.
  * Inline HTML has no plugin-relative base URL; use inline CSS and absolute resource URLs.
+ * HTML ignores cache options and reuses a window-local instance, released after 10 seconds unused.
  */
 export interface WoxPreviewWebviewData {
   url?: string
   html?: string
   injectCss?: string
   userAgent?: string
+  /** Disables persistent session caching for URL content only. */
   cacheDisabled?: boolean
-  /** Explicit content cache identity; defaults to the URL or HTML. */
+  /** URL session cache identity; defaults to the URL. Ignored for HTML. */
   cacheKey?: string
 }
 

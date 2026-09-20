@@ -10,6 +10,7 @@ import (
 var ErrWebViewUnavailable = webviewruntime.ErrUnavailable
 
 // WebViewContent describes one embedded browser document while Rect is controlled separately by layout.
+// HTML ignores cache options and uses one temporary instance, released after 10 seconds out of view.
 type WebViewContent struct {
 	URL           string
 	HTML          string

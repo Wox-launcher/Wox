@@ -35,6 +35,86 @@ func TestSelectedPreviewForLifecycleRejectsPreviewlessResult(t *testing.T) {
 	}
 }
 
+// TestWebViewPreviewSharesResultGracePeriod keeps the visible browser until results replace it or expire.
+func TestWebViewPreviewSharesResultGracePeriod(t *testing.T) {
+	const html = `{"html":"<p>previous result</p>"}`
+	for _, kind := range []string{"webview", "remote", "file"} {
+		t.Run(kind, func(t *testing.T) {
+			preview := queryPreview{PreviewType: kind, PreviewData: html}
+			app := &App{
+				visible: true, query: plainQuery{QueryID: "new-query", QueryText: "random ip s"},
+				resultsQueryID: "old-query", selected: 0, webViewPreviewData: html,
+			}
+			if kind == "remote" {
+				preview.PreviewData = "/preview?id=old"
+				app.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: html}}
+			} else if kind == "file" {
+				preview.PreviewData = "preview.html"
+				app.filePreviews = map[string]filePreviewContent{preview.PreviewData: {Kind: "webview", WebViewData: html}}
+			}
+			app.results = []queryResult{{Preview: preview}}
+			app.beginQueryTransitionLocked(true)
+			if app.queryTransitionTimer == nil {
+				t.Fatal("result grace period was not scheduled")
+			}
+			// Drive the deadline explicitly without posting to a native UI event loop.
+			app.queryTransitionTimer.Stop()
+			defer app.resetQueryTransitionLocked()
+			if _, _, visible := app.selectedPreviewForLifecycle(); !visible {
+				t.Fatal("active WebView was hidden before retained results expired")
+			}
+			app.reconcileSelectedPreviewOnUI()
+			if app.webViewPreviewData != html {
+				t.Fatal("query transition deactivated the retained WebView")
+			}
+			app.resetQueryTransitionLocked()
+			app.reconcileSelectedPreviewOnUI()
+			if app.webViewPreviewData != "" {
+				t.Fatal("WebView remained active after the result grace period")
+			}
+		})
+	}
+}
+
+// TestWebViewGracePeriodDoesNotKeepUnrenderedOrNewPreviews prevents stale surfaces outliving their result.
+func TestWebViewGracePeriodDoesNotKeepUnrenderedOrNewPreviews(t *testing.T) {
+	const html = `{"html":"<p>old</p>"}`
+	for _, change := range []string{"hidden", "destroyed", "different-preview", "error", "empty-results", "new-results", "no-preview-layout"} {
+		t.Run(change, func(t *testing.T) {
+			app := &App{
+				visible: true, query: plainQuery{QueryID: "new-query", QueryText: "random ip s"},
+				resultsQueryID: "old-query", selected: 0, webViewPreviewData: html,
+				results: []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: html}}},
+			}
+			app.beginQueryTransitionLocked(true)
+			app.queryTransitionTimer.Stop()
+			defer app.resetQueryTransitionLocked()
+			switch change {
+			case "hidden":
+				app.visible = false
+			case "destroyed":
+				app.destroyed.Store(true)
+			case "different-preview":
+				app.results[0].Preview.PreviewData = `{"html":"<p>different</p>"}`
+			case "error":
+				app.webViewPreviewError = "load failed"
+			case "empty-results":
+				app.results = nil
+			case "new-results":
+				app.resultsQueryID = app.query.QueryID
+				app.results[0].Preview = queryPreview{PreviewType: "text", PreviewData: "new result"}
+			case "no-preview-layout":
+				ratio := float64(1)
+				app.layout.ResultPreviewWidthRatio = &ratio
+			}
+			app.reconcileSelectedPreviewOnUI()
+			if app.webViewPreviewData != "" {
+				t.Fatal("unrendered WebView survived reconciliation")
+			}
+		})
+	}
+}
+
 func TestNativeFilePreviewLifecycleAdvancesGeneration(t *testing.T) {
 	app := &App{}
 	changed := app.activateNativeFilePreview("first.docx")

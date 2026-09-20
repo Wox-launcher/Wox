@@ -85,3 +85,16 @@ func TestSyncWebViewActionHotkeyNilSafe(t *testing.T) {
 	app.syncWebViewActionHotkey()
 	(&App{}).syncWebViewActionHotkey()
 }
+
+// TestHTMLPreviewTransitionsKeepNativeCache leaves HTML expiry to the shared runtime.
+func TestHTMLPreviewTransitionsKeepNativeCache(t *testing.T) {
+	const html = `{"html":"<p>preview</p>","cacheDisabled":true}`
+	const url = `{"url":"https://example.com"}`
+	if webViewPreviewURLChanged(html, url) || webViewPreviewURLChanged(url, html) {
+		t.Fatal("switching to or from HTML must not reset native URL and HTML sessions")
+	}
+	app := &App{webViewPreviewData: html}
+	if !app.hasCacheableWebViewPreviewLocked() {
+		t.Fatal("HTML secondary window must survive hide until its temporary session expires")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"runtime"
 )
 
 // FontWeight names portable text weights without exposing platform numeric values.
@@ -56,6 +57,8 @@ type DisplayList struct {
 	// overlayBegun records that later commands already target the overlay
 	// surface; a second split would fail at the native renderer.
 	overlayBegun bool
+	// Windows keeps launcher chrome on the main surface until floating panels paint.
+	pendingEmbeddedOverlay Rect
 	// floatingMaterials lists the materials declared so far, so a later surface
 	// can tell whether it is stacked over another floating surface and so the
 	// widget host can widen damage under a renderer-blurred surface using
@@ -335,6 +338,29 @@ func (d *DisplayList) RenderedFloatingMaterialRects() []Rect {
 		return nil
 	}
 	return append([]Rect(nil), d.floatingMaterials...)
+}
+
+// DeferEmbeddedSurfaceOverlay keeps non-overlapping launcher chrome on the Windows
+// main surface, where its material can still sample the backdrop. Other platforms
+// retain their existing native surface ordering.
+func (d *DisplayList) DeferEmbeddedSurfaceOverlay(rect Rect) {
+	if d == nil || rect.Width <= 0 || rect.Height <= 0 {
+		return
+	}
+	if runtime.GOOS != "windows" {
+		d.BeginEmbeddedSurfaceOverlay(rect)
+		return
+	}
+	d.pendingEmbeddedOverlay = rect
+}
+
+// FlushEmbeddedSurfaceOverlay starts the upper layer after launcher chrome and
+// before floating panels, which must cover the native page.
+func (d *DisplayList) FlushEmbeddedSurfaceOverlay() {
+	if d != nil {
+		d.BeginEmbeddedSurfaceOverlay(d.pendingEmbeddedOverlay)
+		d.pendingEmbeddedOverlay = Rect{}
+	}
 }
 
 // BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.

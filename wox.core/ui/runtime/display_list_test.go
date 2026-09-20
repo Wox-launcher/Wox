@@ -3,6 +3,7 @@ package woxui
 import (
 	"image"
 	"math"
+	"runtime"
 	"testing"
 )
 
@@ -114,6 +115,35 @@ func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {
 
 	if len(displayList.commands) != 2 || displayList.commands[0].kind != displayCommandFillRoundedRect || displayList.commands[1].text != "inside" {
 		t.Fatalf("damage commands = %+v, want only intersecting fill and text", displayList.commands)
+	}
+}
+
+func TestDeferredEmbeddedOverlayPreservesToolbarMaterial(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows defers the embedded surface boundary")
+	}
+	for _, pageVisible := range []bool{false, true} {
+		list := &DisplayList{}
+		tint := Color{R: 22, G: 22, B: 26, A: 56}
+		if pageVisible {
+			list.DeferEmbeddedSurfaceOverlay(Rect{X: 200, Width: 200, Height: 170})
+		}
+		list.FloatingMaterial(Rect{Y: 170, Width: 400, Height: 30}, 0, tint, Color{})
+		if list.overlayBegun || len(list.commands) != 1 || list.commands[0].color != tint {
+			t.Fatalf("page visible %t: toolbar lost main-surface transparency: %+v", pageVisible, list.commands)
+		}
+		list.FlushEmbeddedSurfaceOverlay()
+		list.FloatingMaterial(Rect{X: 200, Y: 40, Width: 180, Height: 120}, 8, tint, Color{})
+		wantAlpha := tint.A
+		if pageVisible {
+			wantAlpha = 255
+			if list.commands[1].kind != displayCommandBeginEmbeddedSurfaceOverlay {
+				t.Fatal("action panel must paint above the WebView")
+			}
+		}
+		if got := list.commands[len(list.commands)-1].color.A; got != wantAlpha {
+			t.Fatalf("page visible %t: panel alpha = %d, want %d", pageVisible, got, wantAlpha)
+		}
 	}
 }
 

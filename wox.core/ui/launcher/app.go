@@ -744,10 +744,10 @@ func (a *App) hasCacheableWebViewPreviewLocked() bool {
 		return false
 	}
 	data, err := decodeWebViewPreview(a.webViewPreviewData)
-	if err != nil || data.CacheDisabled {
+	if err != nil {
 		return false
 	}
-	return true
+	return data.HTML != "" || !data.CacheDisabled
 }
 
 // closePreviewWindow dismisses only the launcher instance that owns the preview.

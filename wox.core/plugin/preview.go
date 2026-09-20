@@ -98,6 +98,8 @@ type WoxPreviewChatData struct {
 	Model         common.Model
 }
 
+// WoxPreviewWebviewData describes browser content. HTML ignores cache options and
+// reuses a window-local instance until it has been unused for 10 seconds.
 type WoxPreviewWebviewData struct {
 	Url           string `json:"url"`
 	Html          string `json:"html,omitempty"`

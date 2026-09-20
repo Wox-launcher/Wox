@@ -74,6 +74,20 @@ func (d *linuxWebViewDriver) Reset() error {
 	return nil
 }
 
+// Evict releases one cached document while preserving other background pages.
+func (d *linuxWebViewDriver) Evict(cacheKey string) error {
+	native, err := d.window.openNative()
+	if err != nil {
+		return err
+	}
+	key := C.CString(cacheKey)
+	defer C.free(unsafe.Pointer(key))
+	if C.wox_linux_window_evict_webview(native, key) != 0 {
+		return errors.New("woxui: failed to evict Linux WebView")
+	}
+	return nil
+}
+
 func (*linuxWebViewDriver) GoBack() error {
 	return errors.New("woxui: linux WebView navigation is not implemented")
 }

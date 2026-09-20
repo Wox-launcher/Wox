@@ -57,9 +57,6 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 	cacheKey := strings.TrimSpace(d.CacheKey)
 	if !d.CacheDisabled && cacheKey == "" {
 		cacheKey = strings.TrimSpace(d.URL)
-		if cacheKey == "" {
-			cacheKey = strings.TrimSpace(d.HTML)
-		}
 	}
 	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, UserAgent: d.UserAgent, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
 }
@@ -175,7 +172,11 @@ func (a *App) activateWebViewPreview(previewData string) bool {
 		a.webViewPreviewError = ""
 		a.webViewNavigation = woxui.WebViewNavigationState{}
 		if a.isGlobalWebViewPreview() && !a.keepQueryFocusOnWebViewActivate {
-			a.beginWebViewKeyboardFocus()
+			// HTML previews change while typing or selecting results; taking focus
+			// here would send subsequent arrow keys to the page instead of the list.
+			if data, err := decodeWebViewPreview(previewData); err == nil && data.HTML == "" {
+				a.beginWebViewKeyboardFocus()
+			}
 		}
 	}
 	if strings.TrimSpace(a.webViewNavigation.URL) == "" {
@@ -194,6 +195,11 @@ func webViewPreviewURLChanged(previousData, nextData string) bool {
 	next, nextErr := decodeWebViewPreview(nextData)
 	if previousErr != nil || nextErr != nil {
 		return previousData != nextData
+	}
+	// HTML has a temporary shared slot. Switching to or from it must not reset
+	// that slot or destroy unrelated URL sessions before its idle deadline.
+	if previous.HTML != "" || next.HTML != "" {
+		return false
 	}
 	return strings.TrimSpace(previous.URL) != strings.TrimSpace(next.URL)
 }

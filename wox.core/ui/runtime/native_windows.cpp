@@ -894,6 +894,11 @@ struct WoxWindowsWebView {
     static_assert(sizeof(create_environment) == sizeof(procedure));
     std::memcpy(&create_environment, &procedure, sizeof(create_environment));
     std::wstring user_data = webview_user_data_folder();
+    // Set the initial background before controller creation: CSS and the controller property
+    // take effect too late to prevent WebView2's initial white frame. Keep explicit overrides.
+    if (GetEnvironmentVariableW(L"WEBVIEW2_DEFAULT_BACKGROUND_COLOR", nullptr, 0) == 0 && !SetEnvironmentVariableW(L"WEBVIEW2_DEFAULT_BACKGROUND_COLOR", L"00000000")) {
+      return HRESULT_FROM_WIN32(GetLastError());
+    }
     auto *handler = new WoxEnvironmentCompletedHandler(this);
     HRESULT result = create_environment(nullptr, user_data.empty() ? nullptr : user_data.c_str(), nullptr, handler);
     webview_debug("create environment returned 0x%08X", static_cast<unsigned int>(result));
@@ -1484,6 +1489,29 @@ struct WoxWindowsWebView {
     webview_release(session->core);
     webview_release(session->controller);
     webview_release(session->composition_controller);
+    // Retired shells stay valid for late creation callbacks, but must not retain HTML payloads.
+    std::string().swap(session->cache_key);
+    std::wstring().swap(session->signature);
+    std::wstring().swap(session->content_key);
+    std::wstring().swap(session->loaded_content_key);
+    std::wstring().swap(session->url);
+    std::wstring().swap(session->html);
+    std::wstring().swap(session->user_agent);
+  }
+
+  // evict removes only an inactive cached page, never the currently displayed browser.
+  HRESULT evict(const char *cache_key) {
+    auto cached = cache.find(cache_key);
+    if (cached == cache.end()) {
+      return S_OK;
+    }
+    if (cached->second == active) {
+      return E_UNEXPECTED;
+    }
+    dispose_session(cached->second);
+    cache.erase(cached);
+    // Let the driver release the environment as well when no browser still needs it.
+    return active == nullptr && cache.empty() ? S_FALSE : S_OK;
   }
 
   HRESULT show(const char *url, const char *html, const char *inject_css, const char *user_agent, bool cache_disabled, const char *cache_key, RECT bounds, float corner_radius) {
@@ -1876,6 +1904,10 @@ extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const ch
 
 extern "C" int32_t wox_windows_webview_hide(WoxWindowsWebView *webview) {
   return webview != nullptr ? webview->hide() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_evict(WoxWindowsWebView *webview, const char *cache_key) {
+  return webview != nullptr && cache_key != nullptr ? webview->evict(cache_key) : E_INVALIDARG;
 }
 
 extern "C" int32_t wox_windows_webview_go_back(WoxWindowsWebView *webview) {

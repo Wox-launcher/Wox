@@ -4277,6 +4277,35 @@ int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window) {
   return run_on_main_sync(reset_webview_main, &call) ? call.result : -1;
 }
 
+// Release only an inactive cache entry; another page may now own the preview surface.
+static void evict_webview_main(void *data) {
+  WoxWebViewCall *call = data;
+  WoxLinuxWindow *window = call->window;
+  if (window->closed) {
+    call->result = -1;
+    return;
+  }
+  GtkWidget *web_view = g_hash_table_lookup(window->web_view_cache, call->cache_key);
+  if (web_view != NULL && web_view == window->active_web_view) {
+    call->result = -1;
+    return;
+  }
+  if (web_view != NULL) {
+    gtk_widget_destroy(web_view);
+  }
+  g_hash_table_remove(window->web_view_cache, call->cache_key);
+  g_hash_table_remove(window->web_view_signatures, call->cache_key);
+  g_hash_table_remove(window->web_view_content_keys, call->cache_key);
+}
+
+int32_t wox_linux_window_evict_webview(WoxLinuxWindow *window, const char *cache_key) {
+  if (window == NULL || cache_key == NULL) {
+    return -1;
+  }
+  WoxWebViewCall call = {.window = window, .cache_key = cache_key};
+  return run_on_main_sync(evict_webview_main, &call) ? call.result : -1;
+}
+
 static void focus_webview_main(void *data) {
   WoxWindowCall *call = data;
   if (call->window->closed || call->window->active_web_view == NULL) {

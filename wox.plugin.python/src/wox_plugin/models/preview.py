@@ -97,6 +97,7 @@ class WoxPreviewType(str, Enum):
     Embedded browser content. Set either url or html in a JSON string.
     Inline HTML has no plugin-relative base URL; use inline CSS and absolute resource URLs.
     Optional keys: injectCss, userAgent, cacheDisabled, cacheKey.
+    HTML ignores cache options and reuses a window-local instance, released after 10 seconds unused.
 
     Example:
         preview = WoxPreview(

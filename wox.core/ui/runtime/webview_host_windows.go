@@ -112,7 +112,7 @@ func (w *platformWindow) executeWebViewCommand(command windowCommand) (windowCom
 			if err != nil {
 				return windowCommandResult{err: err}, true
 			}
-			w.webView = webviewruntime.New(driver)
+			w.webView = webviewruntime.New(driver, Call)
 		}
 		err := w.webView.Show(toWebViewContent(command.webView), toWebViewRect(command.webViewBounds), w.scale)
 		if err == nil {
@@ -315,6 +315,24 @@ func (w *windowsWebViewDriver) Hide() error {
 	result := C.wox_windows_webview_hide(w.handle)
 	if result < 0 {
 		return webViewHRESULT("hide WebView2", result)
+	}
+	return nil
+}
+
+// Evict releases only the expired cache entry; URL sessions may still be active.
+func (w *windowsWebViewDriver) Evict(cacheKey string) error {
+	if w == nil || w.handle == nil {
+		return nil
+	}
+	key := C.CString(cacheKey)
+	defer C.free(unsafe.Pointer(key))
+	result := C.wox_windows_webview_evict(w.handle, key)
+	if result < 0 {
+		return webViewHRESULT("evict WebView2", result)
+	}
+	if result == 1 {
+		// S_FALSE means no active or cached page retains the WebView2 environment.
+		w.destroy()
 	}
 	return nil
 }

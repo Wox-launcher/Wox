@@ -1,11 +1,19 @@
 package webview
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
+	"sync/atomic"
+	"time"
+
+	"wox/util"
 )
+
+const htmlCacheKey = "html"
+const htmlIdleTimeout = 10 * time.Second
 
 // ErrUnavailable reports that the current desktop is missing its system WebView runtime.
 var ErrUnavailable = errors.New("woxui: system WebView is unavailable")
@@ -56,6 +64,8 @@ type PointerEvent struct {
 type Driver interface {
 	Show(content Content, bounds Rect, scale float32) error
 	Hide() error
+	// Evict releases one cached session without disturbing another active page.
+	Evict(cacheKey string) error
 	Reset() error
 	GoBack() error
 	GoForward() error
@@ -72,13 +82,31 @@ type Driver interface {
 
 // Controller owns the portable lifecycle around one platform WebView driver.
 type Controller struct {
-	driver  Driver
-	visible bool
+	driver   Driver
+	dispatch func(func()) error
+	visible  atomic.Bool
+	// These fields are owned by the UI thread, including timer completion.
+	htmlVisible    bool
+	htmlRetained   bool
+	htmlTimer      *time.Timer
+	htmlGeneration uint64
 }
 
 // New creates a portable WebView controller around one native driver.
-func New(driver Driver) *Controller {
-	return &Controller{driver: driver}
+func New(driver Driver, dispatch func(func()) error) *Controller {
+	return &Controller{driver: driver, dispatch: dispatch}
+}
+
+// call serializes lifecycle changes with native callbacks on the owning UI thread.
+func (c *Controller) call(fn func() error) error {
+	if c == nil {
+		return ErrUnavailable
+	}
+	var result error
+	if err := c.dispatch(func() { result = fn() }); err != nil {
+		return err
+	}
+	return result
 }
 
 // Normalize validates content and placement before native work begins.
@@ -110,42 +138,114 @@ func IsAbsoluteURL(rawURL string) bool {
 
 // Show attaches or updates the native WebView after validating the portable contract.
 func (c *Controller) Show(content Content, bounds Rect, scale float32) error {
-	if c == nil || c.driver == nil {
-		return ErrUnavailable
-	}
 	normalized, err := Normalize(content, bounds)
 	if err != nil {
 		return err
 	}
-	if err := c.driver.Show(normalized, bounds, scale); err != nil {
-		return err
+	// HTML owns one temporary slot regardless of plugin cache options. URL keys
+	// live in a separate namespace so a plugin cannot collide with that slot.
+	if normalized.HTML != "" {
+		normalized.CacheKey = htmlCacheKey
+		normalized.CacheDisabled = false
+	} else if normalized.CacheKey != "" {
+		normalized.CacheKey = "url|" + normalized.CacheKey
 	}
-	c.visible = true
-	return nil
+	return c.call(func() error {
+		if c.driver == nil {
+			return ErrUnavailable
+		}
+		if normalized.HTML != "" {
+			// A driver can allocate a session before reporting a load failure;
+			// the subsequent hide still needs to release that temporary entry.
+			c.htmlRetained = true
+		}
+		if err := c.driver.Show(normalized, bounds, scale); err != nil {
+			if !c.htmlVisible {
+				c.scheduleHTMLExpiry()
+			}
+			return err
+		}
+		c.visible.Store(true)
+		c.htmlVisible = normalized.HTML != ""
+		if c.htmlVisible {
+			c.cancelHTMLExpiry()
+		} else {
+			c.scheduleHTMLExpiry()
+		}
+		return nil
+	})
 }
 
 // Hide detaches the active native surface without discarding cached browser state.
 func (c *Controller) Hide() error {
-	if c == nil || c.driver == nil {
+	if c == nil {
 		return nil
 	}
-	if err := c.driver.Hide(); err != nil {
-		return err
+	return c.call(func() error {
+		if c.driver == nil {
+			return nil
+		}
+		if err := c.driver.Hide(); err != nil {
+			return err
+		}
+		c.visible.Store(false)
+		c.htmlVisible = false
+		c.scheduleHTMLExpiry()
+		return nil
+	})
+}
+
+// scheduleHTMLExpiry starts once on leaving HTML; repeated hides or URL frames
+// must not postpone cleanup. A queued old callback cannot evict a reused slot.
+func (c *Controller) scheduleHTMLExpiry() {
+	if !c.htmlRetained || c.htmlTimer != nil {
+		return
 	}
-	c.visible = false
-	return nil
+	c.htmlGeneration++
+	generation := c.htmlGeneration
+	c.htmlTimer = time.AfterFunc(htmlIdleTimeout, func() {
+		if err := c.call(func() error {
+			if c.driver == nil || c.htmlVisible || generation != c.htmlGeneration {
+				return nil
+			}
+			c.htmlTimer = nil
+			if err := c.driver.Evict(htmlCacheKey); err != nil {
+				return err
+			}
+			c.htmlRetained = false
+			return nil
+		}); err != nil {
+			util.GetLogger().Error(context.Background(), "expire idle HTML WebView: "+err.Error())
+		}
+	})
+}
+
+// cancelHTMLExpiry invalidates callbacks that already reached the UI queue.
+func (c *Controller) cancelHTMLExpiry() {
+	c.htmlGeneration++
+	if c.htmlTimer != nil {
+		c.htmlTimer.Stop()
+		c.htmlTimer = nil
+	}
 }
 
 // Reset destroys active and cached native browser state.
 func (c *Controller) Reset() error {
-	if c == nil || c.driver == nil {
+	if c == nil {
 		return nil
 	}
-	if err := c.driver.Reset(); err != nil {
-		return err
-	}
-	c.visible = false
-	return nil
+	return c.call(func() error {
+		if c.driver == nil {
+			return nil
+		}
+		if err := c.driver.Reset(); err != nil {
+			return err
+		}
+		c.cancelHTMLExpiry()
+		c.htmlRetained, c.htmlVisible = false, false
+		c.visible.Store(false)
+		return nil
+	})
 }
 
 // GoBack navigates the active document backward.
@@ -211,15 +311,24 @@ func (c *Controller) Focus() error {
 
 // Visible reports whether the controller currently contributes a native composition surface.
 func (c *Controller) Visible() bool {
-	return c != nil && c.visible
+	return c != nil && c.visible.Load()
 }
 
 // Close permanently releases the native driver.
 func (c *Controller) Close() {
-	if c == nil || c.driver == nil {
+	if c == nil {
 		return
 	}
-	c.driver.Close()
-	c.driver = nil
-	c.visible = false
+	if err := c.call(func() error {
+		c.cancelHTMLExpiry()
+		if c.driver != nil {
+			c.driver.Close()
+			c.driver = nil
+		}
+		c.htmlRetained, c.htmlVisible = false, false
+		c.visible.Store(false)
+		return nil
+	}); err != nil {
+		util.GetLogger().Error(context.Background(), "close WebView: "+err.Error())
+	}
 }
