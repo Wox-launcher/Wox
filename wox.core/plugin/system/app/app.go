@@ -2091,7 +2091,7 @@ func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
 	ignoredApps := a.getIgnoredAppsSnapshot()
 	for _, info := range a.apps {
 		entry := a.buildQueryEntry(ctx, info)
-		if _, ignored := a.matchIgnoreRuleCandidates(entry.ignoreCandidates, ignoreMatchers); ignored {
+		if _, ignored := a.matchIgnoreRuleCandidates(info.Path, entry.ignoreCandidates, ignoreMatchers); ignored {
 			continue
 		}
 		if isIgnoredApp(info, ignoredApps) {
@@ -2274,7 +2274,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 			})
 			if isExtensionMatch {
 				fullPath := filepath.Join(dir.Path, entry.Name())
-				if _, ignored := a.matchIgnoreRuleCandidates([]string{fullPath}, ignoreMatchers); ignored {
+				if _, ignored := a.matchIgnoreRuleCandidates(fullPath, []string{fullPath}, ignoreMatchers); ignored {
 					// Bug fix: IgnoreRules previously filtered query results only after the full app
 					// crawl had already parsed every ignored file. Skipping matching paths here keeps
 					// deterministic smoke fixtures from waiting on large default Windows directories
@@ -2293,7 +2293,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 			if dirErr != nil || !isDirectory {
 				continue
 			}
-			if _, ignored := a.matchIgnoreRuleCandidates([]string{subDir}, ignoreMatchers); ignored {
+			if _, ignored := a.matchIgnoreRuleCandidates(subDir, []string{subDir}, ignoreMatchers); ignored {
 				// Bug fix: directory-wide ignore patterns such as "C:\Program Files\*" should stop
 				// recursion before expensive default roots are walked. Filtering only leaf apps was
 				// correct functionally but not enough for bounded smoke-test indexing.
@@ -2802,14 +2802,7 @@ func (a *ApplicationPlugin) indexedAppsForPreview(ctx context.Context, pattern s
 			name = strings.TrimSpace(info.Identity)
 		}
 
-		matched := false
-		for _, candidate := range buildIgnoreRuleCandidates(info, name) {
-			if compiled.MatchString(candidate) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
+		if !appMatchesCompiledIgnorePattern(pattern, compiled, info, name) {
 			continue
 		}
 		icon := info.Icon

@@ -98,6 +98,50 @@ func TestIgnoreRulePreviewMatchesCoreSearchAliases(t *testing.T) {
 	}
 }
 
+func TestExtensionIgnorePatternDoesNotUseShortcutTargetIdentity(t *testing.T) {
+	shortcut := appInfo{
+		Name:     "Search",
+		Path:     `C:\Users\me\AppData\Local\Microsoft\Windows\WinX\Group2\2 - Search.lnk`,
+		Identity: "searchhost.exe",
+	}
+	executable := appInfo{
+		Name:     "Notes",
+		Path:     `C:\Apps\Notes.exe`,
+		Identity: "notes.exe",
+	}
+
+	for _, pattern := range []string{"*.exe", ".exe"} {
+		if ignoreRuleHidesApp(shortcut, shortcut.Name, []appIgnoreRule{{Pattern: pattern, IncludeFuture: true}}) {
+			t.Fatalf("%s must not hide a shortcut just because Identity is the target executable", pattern)
+		}
+		if !ignoreRuleHidesApp(executable, executable.Name, []appIgnoreRule{{Pattern: pattern, IncludeFuture: true}}) {
+			t.Fatalf("%s should hide a real executable path", pattern)
+		}
+	}
+	if !ignoreRuleHidesApp(shortcut, shortcut.Name, []appIgnoreRule{{Pattern: "*.lnk", IncludeFuture: true}}) {
+		t.Fatal("*.lnk should still hide shortcuts by path")
+	}
+	if !ignoreRuleHidesApp(shortcut, shortcut.Name, []appIgnoreRule{{Pattern: ".lnk", IncludeFuture: true}}) {
+		t.Fatal(".lnk should still hide shortcuts by path")
+	}
+}
+
+func TestIndexedAppsForPreviewExcludesShortcutsFromExePattern(t *testing.T) {
+	plugin := &ApplicationPlugin{
+		apps: []appInfo{
+			{Name: "Search", Identity: "searchhost.exe", Path: `C:\Users\me\AppData\Local\Microsoft\Windows\WinX\Group2\2 - Search.lnk`},
+			{Name: "Notes", Identity: "notes.exe", Path: `C:\Apps\Notes.exe`},
+		},
+	}
+
+	for _, pattern := range []string{"*.exe", ".exe"} {
+		apps := plugin.indexedAppsForPreview(context.Background(), pattern)
+		if len(apps) != 1 || apps[0].Name != "Notes" {
+			t.Fatalf("%s preview = %+v, want only the executable", pattern, apps)
+		}
+	}
+}
+
 func TestAppMatchesIgnorePatternTreatsBareTextAsContains(t *testing.T) {
 	if AppMatchesIgnorePattern("app", "Notes", "") {
 		t.Fatal("bare app must not match Notes")

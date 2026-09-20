@@ -166,6 +166,22 @@ func compileAppIgnorePattern(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile("(?i)^" + escaped + "$")
 }
 
+// isAppIgnoreExtensionPattern reports whether the rule is a file-type filter
+// such as "*.exe", ".exe", or "*.lnk". Those must match the indexed app path
+// only. Bare ".exe" is wrapped as "*.exe*" by compileAppIgnorePattern, and
+// Windows shortcuts store the target executable in Identity, so treating
+// Identity as a candidate would hide every shortcut when the user asked to
+// hide executables.
+func isAppIgnoreExtensionPattern(pattern string) bool {
+	pattern = strings.TrimSpace(strings.ToLower(pattern))
+	pattern = strings.TrimPrefix(pattern, "*")
+	if !strings.HasPrefix(pattern, ".") {
+		return false
+	}
+	ext := strings.TrimPrefix(pattern, ".")
+	return ext != "" && !strings.ContainsAny(ext, `*?/\:`)
+}
+
 // AppMatchesIgnorePattern reports whether any candidate matches a wildcard ignore rule.
 func AppMatchesIgnorePattern(pattern string, candidates ...string) bool {
 	compiled, err := compileAppIgnorePattern(pattern)
@@ -178,6 +194,23 @@ func AppMatchesIgnorePattern(pattern string, candidates ...string) bool {
 		}
 	}
 	return false
+}
+
+func ignoreMatcherMatchesApp(matcher appIgnoreMatcher, path string, candidates []string) bool {
+	if isAppIgnoreExtensionPattern(matcher.pattern) {
+		path = strings.TrimSpace(path)
+		return path != "" && matcher.regex.MatchString(path)
+	}
+	for _, candidate := range candidates {
+		if matcher.regex.MatchString(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func appMatchesCompiledIgnorePattern(pattern string, compiled *regexp.Regexp, info appInfo, displayName string) bool {
+	return ignoreMatcherMatchesApp(appIgnoreMatcher{pattern: pattern, regex: compiled}, info.Path, buildIgnoreRuleCandidates(info, displayName))
 }
 
 func splitIgnoreRules(rules []appIgnoreRule) ([]appIgnoreMatcher, []ignoredApp) {
@@ -233,7 +266,10 @@ func (a *ApplicationPlugin) getIgnoreRuleMatchersSnapshot() []appIgnoreMatcher {
 
 func buildIgnoreRuleCandidates(info appInfo, displayName string) []string {
 	candidates := info.GetSearchCandidates(displayName)
-	candidates = append(candidates, strings.TrimSpace(info.Path), strings.TrimSpace(info.Identity))
+	// Ignore rules match name and path only. Identity is the resolved process
+	// name on Windows shortcuts (for example searchhost.exe for Search.lnk),
+	// so using it here would make ".exe" select every shortcut.
+	candidates = append(candidates, strings.TrimSpace(info.Path))
 
 	filtered := make([]string, 0, len(candidates))
 	for _, candidate := range util.UniqueStrings(candidates) {
@@ -246,16 +282,14 @@ func buildIgnoreRuleCandidates(info appInfo, displayName string) []string {
 	return filtered
 }
 
-func (a *ApplicationPlugin) matchIgnoreRuleCandidates(candidates []string, matchers []appIgnoreMatcher) (string, bool) {
+func (a *ApplicationPlugin) matchIgnoreRuleCandidates(path string, candidates []string, matchers []appIgnoreMatcher) (string, bool) {
 	if len(matchers) == 0 {
 		return "", false
 	}
 
-	for _, candidate := range candidates {
-		for _, matcher := range matchers {
-			if matcher.regex.MatchString(candidate) {
-				return matcher.pattern, true
-			}
+	for _, matcher := range matchers {
+		if ignoreMatcherMatchesApp(matcher, path, candidates) {
+			return matcher.pattern, true
 		}
 	}
 

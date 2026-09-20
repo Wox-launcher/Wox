@@ -103,11 +103,9 @@ func ignoreRuleHidesApp(info appInfo, displayName string, rules []appIgnoreRule)
 		return true
 	}
 	candidates := buildIgnoreRuleCandidates(info, displayName)
-	for _, candidate := range candidates {
-		for _, matcher := range matchers {
-			if matcher.regex.MatchString(candidate) {
-				return true
-			}
+	for _, matcher := range matchers {
+		if ignoreMatcherMatchesApp(matcher, info.Path, candidates) {
+			return true
 		}
 	}
 	return false
