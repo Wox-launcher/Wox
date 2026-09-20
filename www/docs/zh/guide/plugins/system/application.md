@@ -2,7 +2,7 @@
 
 应用搜索是全局插件。直接输入应用名即可，不需要关键字。如果只想看应用结果，也可以用 `app`。
 
-![应用插件](/images/plugin_app.png)
+![应用插件](/images/guide/plugin_app.png)
 
 ## 快速开始
 

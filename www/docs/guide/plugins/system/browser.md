@@ -2,7 +2,7 @@
 
 Browser searches and switches tabs in the active browser when browser integration is available. It is contextual: tab results stay scoped to the browser you are using.
 
-![The Browser plugin](/images/plugin_browser.png)
+![The Browser plugin](/images/guide/plugin_browser.png)
 
 ## Quick Start
 

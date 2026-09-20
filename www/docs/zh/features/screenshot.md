@@ -9,7 +9,7 @@ description: "从 Wox 启动器截图、标注、钉住并搜索截图历史，�
 
 截图插件可以捕获屏幕、标注图片，并在启动器里保留可搜索的历史。
 
-![Wox 截图](/images/plugin_screenshot.png)
+![Wox 截图](/images/guide/plugin_screenshot.png)
 
 ## 它是什么
 

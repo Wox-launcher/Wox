@@ -2,7 +2,7 @@
 
 Theme applies, installs, removes, and restores Wox themes.
 
-![The Theme plugin](/images/plugin_theme.jpg)
+![The Theme plugin](/images/guide/plugin_theme.jpg)
 
 ## Quick Start
 

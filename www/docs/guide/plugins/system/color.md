@@ -2,7 +2,7 @@
 
 Color previews a color value and copies it in common formats. It listens globally for hex, rgb, and similar color text, and `color` opens recent colors.
 
-![The Color plugin](/images/plugin_color.jpg)
+![The Color plugin](/images/guide/plugin_color.jpg)
 
 ## Quick Start
 

@@ -2,7 +2,7 @@
 
 Shell 可以从 Wox 运行命令，并保留命令历史。用 `>` 明确进入 shell 查询。部分命令也可以被全局识别。
 
-![Shell 插件](/images/plugin_shell.jpg)
+![Shell 插件](/images/guide/plugin_shell.jpg)
 
 ## 快速开始
 

@@ -2,7 +2,7 @@
 
 使用 `emoji` 在 Wox 中搜索并复制 Emoji。
 
-![Emoji 插件](/images/plugin_emoji.jpg)
+![Emoji 插件](/images/guide/plugin_emoji.jpg)
 
 ## 快速开始
 

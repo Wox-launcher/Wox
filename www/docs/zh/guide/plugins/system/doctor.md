@@ -2,7 +2,7 @@
 
 诊断插件检查常见配置问题：权限、运行时、更新状态，以及各平台的特殊要求。
 
-![诊断插件](/images/plugin_doctor.jpg)
+![诊断插件](/images/guide/plugin_doctor.jpg)
 
 ## 快速开始
 

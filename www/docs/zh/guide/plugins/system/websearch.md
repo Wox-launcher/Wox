@@ -2,7 +2,7 @@
 
 网页搜索插件会从 Wox 打开搜索 URL。它可以作为普通文本的 fallback 结果，也可以通过明确的搜索引擎关键字触发。
 
-![用查询提示填写网页搜索的具名参数](/images/plugin_websearch.jpg)
+![用查询提示填写网页搜索的具名参数](/images/guide/plugin_websearch.jpg)
 
 ## 快速开始
 

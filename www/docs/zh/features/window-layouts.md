@@ -9,7 +9,7 @@ description: "从 Wox 吸附窗口，并在 Windows 和 macOS 上保存、恢复
 
 窗口管理插件可以吸附当前窗口，也可以恢复已保存的工作区。目前支持 Windows 和 macOS。
 
-![Wox 窗口布局](/images/plugin_window_manager.png)
+![Wox 窗口布局](/images/guide/plugin_window_manager.png)
 
 ## 吸附当前窗口
 

@@ -2,7 +2,7 @@
 
 网址插件可以从启动器打开网页地址。粘贴或输入 URL 后，Wox 可以在浏览器中打开，并记住最近访问过的地址。
 
-![网址插件](/images/plugin_url.png)
+![网址插件](/images/guide/plugin_url.png)
 
 ## 快速开始
 

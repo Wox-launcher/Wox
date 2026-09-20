@@ -2,7 +2,7 @@
 
 Calculator evaluates expressions directly in the launcher. It listens globally, so you can type a calculation without a keyword.
 
-![The Calculator plugin](/images/plugin_calculator.png)
+![The Calculator plugin](/images/guide/plugin_calculator.png)
 
 ## Quick Start
 

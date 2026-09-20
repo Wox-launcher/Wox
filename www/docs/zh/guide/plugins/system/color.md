@@ -2,7 +2,7 @@
 
 颜色插件会预览颜色值，并复制成常见格式。它会全局识别 hex、rgb 等颜色文本；`color` 可以打开最近用过的颜色。
 
-![颜色插件](/images/plugin_color.jpg)
+![颜色插件](/images/guide/plugin_color.jpg)
 
 ## 快速开始
 

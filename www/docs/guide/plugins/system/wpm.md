@@ -2,7 +2,7 @@
 
 Plugin Manager installs, updates, and inspects plugins. Triggers are `wpm`, `store`, and `pm`.
 
-![The Plugin Manager](/images/plugin_wpm.jpg)
+![The Plugin Manager](/images/guide/plugin_wpm.jpg)
 
 ## Quick Start
 

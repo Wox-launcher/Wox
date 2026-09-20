@@ -2,7 +2,7 @@
 
 主题插件可以应用、安装、移除和恢复 Wox 主题。
 
-![主题插件](/images/plugin_theme.jpg)
+![主题插件](/images/guide/plugin_theme.jpg)
 
 ## 快速开始
 

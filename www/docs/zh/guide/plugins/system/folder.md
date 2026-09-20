@@ -2,7 +2,7 @@
 
 文件夹插件会在输入路径时补全目录。它监听全局输入，所以 `~/Documents` 或 `%LOCALAPPDATA%` 这类路径可以直接变成文件夹结果。
 
-![文件夹插件](/images/plugin_folder.png)
+![文件夹插件](/images/guide/plugin_folder.png)
 
 ## 快速开始
 

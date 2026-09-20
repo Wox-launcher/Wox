@@ -2,7 +2,7 @@
 
 浏览器插件可以在浏览器集成可用时搜索并切换标签页。它是上下文插件：标签结果只针对当前正在使用的浏览器。
 
-![浏览器插件](/images/plugin_browser.png)
+![浏览器插件](/images/guide/plugin_browser.png)
 
 ## 快速开始
 

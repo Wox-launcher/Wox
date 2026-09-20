@@ -2,7 +2,7 @@
 
 Converter handles units, currencies, crypto prices, number bases, dates, time zones, and simple math with typed values.
 
-![Converting a duration expression in Wox](/images/plugin_converter.png)
+![Converting a duration expression in Wox](/images/guide/plugin_converter.png)
 
 ## Quick Start
 

@@ -2,7 +2,7 @@
 
 Clipboard keeps recent text and image clipboard items so you can reuse them without switching to a separate clipboard manager. For a short overview, see [Clipboard history launcher](/features/clipboard-history).
 
-![The Clipboard plugin](/images/plugin_clipboard.png)
+![The Clipboard plugin](/images/guide/plugin_clipboard.png)
 
 ## Quick Start
 

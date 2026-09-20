@@ -2,7 +2,7 @@
 
 Open Wox, type what you want, then act on the selected result. You do not need every plugin keyword, but keywords are useful when you want one plugin to handle the query.
 
-![Querying in Wox](/images/query.jpg)
+![Querying in Wox](/images/guide/query.jpg)
 
 ## Query Types
 

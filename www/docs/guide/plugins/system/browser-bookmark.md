@@ -2,7 +2,7 @@
 
 Browser Bookmark is a global plugin. Type a bookmark title or part of a URL and Wox can open the matched page. `b` is available when you want only bookmark results.
 
-![The Browser Bookmark plugin](/images/plugin_bookmark.png)
+![The Browser Bookmark plugin](/images/guide/plugin_bookmark.png)
 
 ## Quick Start
 

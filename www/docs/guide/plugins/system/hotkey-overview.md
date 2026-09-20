@@ -2,7 +2,7 @@
 
 Hotkeys lists the shortcuts Wox has registered: the main hotkey, selection hotkey, query hotkeys, and plugin hotkeys.
 
-![The Hotkeys plugin](/images/plugin_hotkeys.jpg)
+![The Hotkeys plugin](/images/guide/plugin_hotkeys.jpg)
 
 ## Quick Start
 

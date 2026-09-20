@@ -2,7 +2,7 @@
 
 Chat opens an AI conversation inside Wox. Configure an AI provider before using it.
 
-![The Chat plugin](/images/plugin_chat.jpg)
+![The Chat plugin](/images/guide/plugin_chat.jpg)
 
 ## Quick Start
 

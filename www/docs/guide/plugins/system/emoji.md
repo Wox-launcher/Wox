@@ -2,7 +2,7 @@
 
 Use `emoji` to search and copy emoji from Wox.
 
-![The Emoji plugin](/images/plugin_emoji.jpg)
+![The Emoji plugin](/images/guide/plugin_emoji.jpg)
 
 ## Quick Start
 

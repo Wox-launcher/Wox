@@ -2,7 +2,7 @@
 
 转换器处理单位、货币、加密货币价格、进制、日期、时区，以及带类型值的简单计算。
 
-![在 Wox 中转换时长表达式](/images/plugin_converter.png)
+![在 Wox 中转换时长表达式](/images/guide/plugin_converter.png)
 
 ## 快速开始
 

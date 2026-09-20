@@ -2,7 +2,7 @@
 
 Query History reruns recent successful queries. The trigger is `h`.
 
-![The Query History plugin](/images/plugin_history.png)
+![The Query History plugin](/images/guide/plugin_history.png)
 
 ## Quick Start
 

@@ -2,7 +2,7 @@
 
 操作面板是结果的第二步。`Enter` 执行主要动作；操作面板展示插件附加在该结果上的其他动作。
 
-![操作面板](/images/action_panel.jpg)
+![操作面板](/images/guide/action_panel.jpg)
 
 ## 打开方式
 

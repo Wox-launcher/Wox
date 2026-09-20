@@ -9,7 +9,7 @@ description: "Dictate locally in Wox with downloadable models, then type, refine
 
 Dictation turns speech into text on your machine. Models are downloaded and run locally; Wox does not send the audio to a cloud speech API.
 
-![Offline dictation in Wox](/images/plugin_dictation.png)
+![Offline dictation in Wox](/images/guide/plugin_dictation.png)
 
 ## What it is
 

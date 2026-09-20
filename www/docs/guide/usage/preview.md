@@ -6,7 +6,7 @@ Many results can open a preview instead of jumping straight into another app. Us
 
 When the highlighted result supports preview, Wox shows it automatically beside the list, or filling the available space for some result types. You do not need to press a key.
 
-![Clipboard history with an automatic preview](/images/plugin_clipboard.png)
+![Clipboard history with an automatic preview](/images/guide/plugin_clipboard.png)
 
 Typical preview sources:
 
@@ -24,7 +24,7 @@ Large text, Office, and PDF previews start with details first so rapidly moving 
 
 On Windows, the Selection plugin can preview a file that is already selected in File Explorer or an open/save dialog.
 
-![Space Quick Look on Windows](/images/plugin_selection_quicklook.jpg)
+![Space Quick Look on Windows](/images/guide/plugin_selection_quicklook.jpg)
 
 1. Open **Settings -> Plugins -> Selection**.
 2. Enable **Space Quick Look**.

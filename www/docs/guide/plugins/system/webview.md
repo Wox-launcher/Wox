@@ -2,7 +2,7 @@
 
 WebView previews a configured website inside Wox. It is available on Windows and macOS.
 
-![The WebView plugin](/images/plugin_webview.jpg)
+![The WebView plugin](/images/guide/plugin_webview.jpg)
 
 ## Quick Start
 

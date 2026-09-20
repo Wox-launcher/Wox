@@ -2,7 +2,7 @@
 
 浏览器书签是全局插件。输入书签标题或 URL 的一部分，Wox 就可以打开匹配的页面。只想看书签结果时，可以使用 `b`。
 
-![浏览器书签插件](/images/plugin_bookmark.png)
+![浏览器书签插件](/images/guide/plugin_bookmark.png)
 
 ## 快速开始
 

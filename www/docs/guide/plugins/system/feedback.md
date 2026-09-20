@@ -2,7 +2,7 @@
 
 Feedback exports diagnostics, reviews crash reports, clears logs, and opens GitHub issues or feature requests.
 
-![The Feedback plugin](/images/plugin_feedback.jpg)
+![The Feedback plugin](/images/guide/plugin_feedback.jpg)
 
 ## Quick Start
 

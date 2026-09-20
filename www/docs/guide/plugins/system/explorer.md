@@ -4,7 +4,7 @@ Quick Jump was previously called Explorer. It is contextual: it helps you move b
 
 Windows and macOS are supported. Linux does not have this plugin.
 
-![The Quick Jump plugin](/images/plugin_quickjump.png)
+![The Quick Jump plugin](/images/guide/plugin_quickjump.png)
 
 ## In File Explorer or Finder
 

@@ -2,7 +2,7 @@
 
 WebSearch opens search URLs from Wox. It can work as a fallback result for normal text or through explicit engine keywords.
 
-![Filling named web search parameters with query hints](/images/plugin_websearch.jpg)
+![Filling named web search parameters with query hints](/images/guide/plugin_websearch.jpg)
 
 ## Quick Start
 

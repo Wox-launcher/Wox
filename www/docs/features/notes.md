@@ -9,7 +9,7 @@ description: "Capture text, tables, and images in Wox Notes. Search, pin, and re
 
 Wox includes floating Notes so you can capture something without switching to a separate notes app.
 
-![A Wox Note with a checklist, table, and quote](/images/plugin_notes.png)
+![A Wox Note with a checklist, table, and quote](/images/guide/plugin_notes.png)
 
 ## What it is
 

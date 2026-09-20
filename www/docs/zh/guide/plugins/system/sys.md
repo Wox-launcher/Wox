@@ -2,7 +2,7 @@
 
 系统命令可以执行锁屏、休眠、音量和设置等系统动作。它监听全局输入，所以可以直接输入 `lock`、`sleep` 或 `shutdown`。
 
-![系统命令插件](/images/plugin_sys.jpg)
+![系统命令插件](/images/guide/plugin_sys.jpg)
 
 ## 快速开始
 

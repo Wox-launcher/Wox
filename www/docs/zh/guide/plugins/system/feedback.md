@@ -2,7 +2,7 @@
 
 反馈插件可以导出诊断信息、查看崩溃报告、清理日志，并打开 GitHub issue 或功能请求。
 
-![反馈插件](/images/plugin_feedback.jpg)
+![反馈插件](/images/guide/plugin_feedback.jpg)
 
 ## 快速开始
 

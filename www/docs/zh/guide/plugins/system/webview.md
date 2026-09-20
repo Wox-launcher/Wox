@@ -2,7 +2,7 @@
 
 网页预览可以在 Wox 里打开配置好的网站。目前支持 Windows 和 macOS。
 
-![网页预览插件](/images/plugin_webview.jpg)
+![网页预览插件](/images/guide/plugin_webview.jpg)
 
 ## 快速开始
 

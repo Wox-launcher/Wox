@@ -2,7 +2,7 @@
 
 Application search is a global plugin. Type an app name directly; no keyword is required. `app` is also available when you want only application results.
 
-![The Application plugin](/images/plugin_app.png)
+![The Application plugin](/images/guide/plugin_app.png)
 
 ## Quick Start
 

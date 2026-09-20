@@ -2,7 +2,7 @@
 
 The Action Panel is the second step for a result. `Enter` runs the primary action; the Action Panel shows the other actions the plugin attached to that result.
 
-![The Action Panel](/images/action_panel.jpg)
+![The Action Panel](/images/guide/action_panel.jpg)
 
 ## Open It
 

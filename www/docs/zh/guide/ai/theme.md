@@ -2,7 +2,7 @@
 
 先完成 [AI 设置](./settings.md)，然后打开 **设置 → 主题编辑器 → AI 辅助**。
 
-![AI 辅助主题编辑](/images/theme_ai_generate.jpg)
+![AI 辅助主题编辑](/images/guide/theme_ai_generate.jpg)
 
 选择模型，用自然语言描述希望对当前主题做的调整，例如：
 

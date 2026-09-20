@@ -4,7 +4,7 @@
 
 目前支持 Windows 和 macOS。Linux 没有这个插件。
 
-![快速跳转插件](/images/plugin_quickjump.png)
+![快速跳转插件](/images/guide/plugin_quickjump.png)
 
 ## 在文件管理器中
 

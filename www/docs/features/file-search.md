@@ -9,7 +9,7 @@ description: "Wox indexes chosen folders on Windows, macOS, and Linux. Windows c
 
 Wox searches local files from the launcher on Windows, macOS, and Linux. You choose the roots. Results stay in the same list as apps and clipboard items.
 
-![The File plugin](/images/plugin_file.png)
+![The File plugin](/images/guide/plugin_file.png)
 
 ## What it is
 

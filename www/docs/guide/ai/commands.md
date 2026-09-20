@@ -4,7 +4,7 @@ AI Commands turn a saved prompt into a reusable Wox command. They are useful whe
 
 Configure [AI Settings](./settings.md) first.
 
-![An AI Command in Wox](/images/plugin_aicommand.jpg)
+![An AI Command in Wox](/images/guide/plugin_aicommand.jpg)
 
 ## Create a Command
 

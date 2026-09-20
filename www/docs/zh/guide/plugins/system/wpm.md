@@ -2,7 +2,7 @@
 
 插件管理器负责安装、更新和查看插件。触发关键字是 `wpm`、`store` 和 `pm`。
 
-![插件管理器](/images/plugin_wpm.jpg)
+![插件管理器](/images/guide/plugin_wpm.jpg)
 
 ## 快速开始
 

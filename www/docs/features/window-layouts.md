@@ -9,7 +9,7 @@ description: "Snap windows from Wox, then save and restore multi-app workspace l
 
 The Window Manager plugin snaps the active window and can restore a saved workspace. It is available on Windows and macOS.
 
-![Window layouts in Wox](/images/plugin_window_manager.png)
+![Window layouts in Wox](/images/guide/plugin_window_manager.png)
 
 ## Snap the current window
 
