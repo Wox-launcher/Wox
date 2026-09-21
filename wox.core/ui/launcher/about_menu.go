@@ -25,6 +25,7 @@ const (
 	aboutMenuFeedbackQuery    = "feedback "
 	aboutMenuPluginStoreQuery = "wpm install "
 	aboutMenuGuideURL         = "https://www.woxlauncher.com/guide/introduction.html"
+	aboutMenuGuideURLZh       = "https://www.woxlauncher.com/zh/guide/introduction.html"
 	aboutMenuChangelogURL     = "https://github.com/Wox-launcher/Wox/releases"
 	aboutMenuGithubURL        = "https://github.com/Wox-launcher/Wox"
 	aboutMenuRedditURL        = "https://www.reddit.com/r/WoxLauncher/"
@@ -96,10 +97,23 @@ func aboutMenuQuery(id string) (string, bool) {
 	}
 }
 
-func aboutMenuExternalURL(id string) (string, bool) {
+// aboutMenuGuideURLForLang uses the Chinese docs only for zh locales.
+func aboutMenuGuideURLForLang(lang string) string {
+	if isChineseLangCode(lang) {
+		return aboutMenuGuideURLZh
+	}
+	return aboutMenuGuideURL
+}
+
+func isChineseLangCode(lang string) bool {
+	code := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(lang), "-", "_"))
+	return code == "zh_cn" || code == "zh" || strings.HasPrefix(code, "zh_")
+}
+
+func aboutMenuExternalURL(id, lang string) (string, bool) {
 	switch id {
 	case aboutMenuGuideID:
-		return aboutMenuGuideURL, true
+		return aboutMenuGuideURLForLang(lang), true
 	case aboutMenuChangelogID:
 		return aboutMenuChangelogURL, true
 	case aboutMenuGithubID:
@@ -126,6 +140,16 @@ func aboutMenuButtonVisible(panelOpen bool, purpose actionPanelPurpose, message 
 		return true
 	}
 	return message == nil
+}
+
+// currentLangCode reads the live General setting, then the loaded translation bundle.
+func (a *App) currentLangCode() string {
+	if a.generalSettings != nil {
+		if lang := strings.TrimSpace(a.generalSettings.Data().LangCode); lang != "" {
+			return lang
+		}
+	}
+	return a.translationsLanguage
 }
 
 // runningVersion reads the already-known core version without opening Settings.
@@ -163,7 +187,7 @@ func (a *App) activateAboutMenuEntry(entry actionPanelEntry) bool {
 		a.openAboutMenuSettings(path)
 		return true
 	}
-	if target, ok := aboutMenuExternalURL(entry.ID); ok {
+	if target, ok := aboutMenuExternalURL(entry.ID, a.currentLangCode()); ok {
 		a.openAboutMenuURL(target)
 		return true
 	}

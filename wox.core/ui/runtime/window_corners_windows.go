@@ -29,17 +29,11 @@ func (w *platformWindow) setWindowChromeNative(custom bool, radius float32) erro
 		w.applyBackdrop()
 		return nil
 	}
-	if radius >= 0 {
-		return w.setCornerRadiusNative(radius)
+	if radius < 0 {
+		// Custom chrome disables DWM rounding, so the default painted outline also needs a native clip.
+		radius = DefaultWindowCornerRadius
 	}
-	if w.customCornerRadius != nil {
-		if err := w.setCornerRadiusNative(-1); err != nil {
-			return err
-		}
-		w.customWindowChrome = true
-	}
-	w.applyBackdrop()
-	return nil
+	return w.setCornerRadiusNative(radius)
 }
 
 // setCornerRadiusNative restores the system region when leaving a custom theme.

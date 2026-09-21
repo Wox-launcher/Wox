@@ -48,6 +48,27 @@ func TestDemoCustomChromePreservesAlpha(t *testing.T) {
 }
 
 // TestDemoToolbarHotkeyHighlight confines locator overlays to individual keycaps.
+// TestDemoCustomChromeCorners keeps omitted and explicit radii consistent with the native window.
+func TestDemoCustomChromeCorners(t *testing.T) {
+	zero, rounded := 0, 28
+	for _, radius := range []*int{nil, &zero, &rounded} {
+		demo := WoxLauncherDemo(LauncherDemoProps{
+			Width: 400, Height: 240, Opacity: 1, ShowToolbar: true,
+			Theme: Theme{AppWindowChrome: true, AppBorderRadius: radius},
+		}).(woxwidget.Clip)
+		children := demo.Child.(woxwidget.Stack).Children
+		want := woxui.DefaultWindowCornerRadius
+		if radius != nil {
+			want = float32(*radius)
+		}
+		border := children[len(children)-1].Child.(woxwidget.Container)
+		want = min(want, min(border.Width, border.Height)/2)
+		if border.Radius != want {
+			t.Fatalf("preview radius = %g, want %g", border.Radius, want)
+		}
+	}
+}
+
 func TestDemoToolbarHotkeyHighlight(t *testing.T) {
 	flash := woxui.Color{R: 255, A: 255}
 	for _, target := range []LauncherDemoHighlightTarget{LauncherDemoHighlightNone, LauncherDemoHighlightHotkey} {

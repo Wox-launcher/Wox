@@ -11,7 +11,7 @@ const (
 	// Title-row alias/hotkey type matches result tails so both accessories read as one size.
 	ResultTitleTagFontSize = TailFontSize
 	ListEmptyFontSize      = float32(13)
-	ActionHeaderFontSize   = float32(13)
+	ActionHeaderFontSize   = float32(12)
 	ActionTitleFontSize    = float32(13)
 	ActionFilterFontSize   = float32(13)
 	ToolbarFontSize        = float32(12)

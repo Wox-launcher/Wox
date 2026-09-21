@@ -33,6 +33,46 @@ func TestUsageSummaryHeaderAnchorsShareActionToRight(t *testing.T) {
 	}
 }
 
+func chineseUsageHeaderProps() UsageSettingsProps {
+	return UsageSettingsProps{
+		Title:      "使用情况",
+		Overview:   "自安装以来的 Wox 活跃概览",
+		ShareLabel: "分享到 X",
+		Periods: []UsagePeriod{
+			{ID: "7d", Label: "最近 7 天"},
+			{ID: "30d", Label: "最近 30 天"},
+			{ID: "365d", Label: "最近一年"},
+			{ID: "all", Label: "自安装以来"},
+		},
+	}
+}
+
+func TestUsageSummaryHeaderKeepsChinesePeriodsOnOneRow(t *testing.T) {
+	width := SettingsPageWideContentWidth(woxcomponent.SettingsWindowWidth - woxcomponent.SettingsRailMaxWidth)
+	header, height := usageSummaryHeader(chineseUsageHeaderProps(), width)
+	if height != usageHeaderHeight {
+		t.Fatalf("header height = %.0f, want %.0f so Chinese period labels stay on the title row", height, usageHeaderHeight)
+	}
+	selector := header.(woxwidget.Stack).Children[2]
+	if selector.Top != 0 {
+		t.Fatalf("period selector top = %.0f, want 0", selector.Top)
+	}
+	if selector.Left < usageHeaderTitleWidth {
+		t.Fatalf("period selector left = %.0f, overlaps the %.0f title column", selector.Left, usageHeaderTitleWidth)
+	}
+}
+
+func TestUsageSummaryHeaderStacksWhenPeriodSelectorDoesNotFit(t *testing.T) {
+	header, height := usageSummaryHeader(chineseUsageHeaderProps(), 500)
+	if height != usageHeaderStackedHeight {
+		t.Fatalf("header height = %.0f, want %.0f when the period selector cannot fit beside the title", height, usageHeaderStackedHeight)
+	}
+	selector := header.(woxwidget.Stack).Children[2]
+	if selector.Top != usageHeaderStackedSelectorTop {
+		t.Fatalf("period selector top = %.0f, want %.0f", selector.Top, usageHeaderStackedSelectorTop)
+	}
+}
+
 func TestUsagePeriodSelectorKeepsUnselectedOptionInteractive(t *testing.T) {
 	theme := woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 220, G: 230, B: 240, A: 255}}
 	selector, _ := usagePeriodSelector(UsageSettingsProps{

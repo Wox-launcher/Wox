@@ -172,6 +172,9 @@ func TestActionHeaderCentersLabel(t *testing.T) {
 		t.Fatalf("action header slot = %#v, want a full-width centered %v-high slot", header, ActionHeaderHeight)
 	}
 	label := header.Child.(woxwidget.TextBlock)
+	if label.Style.Size != 12 {
+		t.Fatalf("action header font size = %v, want 12", label.Style.Size)
+	}
 	if label.Height != ActionHeaderHeight || label.LineHeight != ActionHeaderHeight || label.AlignmentY != 0.5 || label.Value != "操作" {
 		t.Fatalf("action header label = %#v, want an 18px optically centered line", label)
 	}
@@ -247,6 +250,10 @@ func TestActionGroupHeaderIsNotInteractive(t *testing.T) {
 	}
 	if _, ok := rows[1].(woxwidget.Align); !ok {
 		t.Fatalf("group header = %#v, want a non-interactive align slot", rows[1])
+	}
+	label := rows[1].(woxwidget.Align).Child.(woxwidget.TextBlock)
+	if label.Style.Size != 12 || label.Color != (woxui.Color{A: 255}) {
+		t.Fatalf("group header = %#v, want 12-unit secondary type", label)
 	}
 }
 

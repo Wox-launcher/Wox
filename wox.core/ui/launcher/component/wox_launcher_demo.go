@@ -128,6 +128,9 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		resultInsets = props.Geometry.ResultPadding
 	}
 	windowRadius := float32(12)
+	if props.Theme.AppWindowChrome {
+		windowRadius = woxui.DefaultWindowCornerRadius
+	}
 	if props.Theme.AppBorderRadius != nil {
 		windowRadius = float32(*props.Theme.AppBorderRadius)
 	}

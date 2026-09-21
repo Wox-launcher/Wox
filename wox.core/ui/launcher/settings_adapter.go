@@ -493,6 +493,7 @@ func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) stri
 		"StartPage":          {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
 		"ShowPosition":       {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location"},
 		"UiDensity":          {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
+		"AppFontFamily":      {"": "ui_app_font_family_system_default"},
 		"CloudSyncServerUrl": {"https://sync.woxlauncher.com": "ui_cloud_sync_server_url_production", "http://127.0.0.1:8787": "ui_cloud_sync_server_url_local"},
 		"ReleaseChannel":     {"stable": "ui_release_channel_stable", "beta": "ui_release_channel_beta"},
 	}

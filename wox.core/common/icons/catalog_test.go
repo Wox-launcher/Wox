@@ -11,6 +11,47 @@ import (
 	woxsvg "wox/util/svg"
 )
 
+// TestPluginIconsAreVectorOnly keeps built-in identities scalable without embedded raster images.
+func TestPluginIconsAreVectorOnly(t *testing.T) {
+	for name, icon := range defaultPluginIcons {
+		if icon.ImageType != common.WoxImageTypeSvg || strings.Contains(icon.ImageData, "base64,") || strings.Contains(icon.ImageData, "<image") {
+			t.Fatalf("plugin icon %s must contain SVG geometry only", name)
+		}
+		for _, size := range []int{18, 48} {
+			img, err := woxsvg.Render(icon.ImageData, size, size)
+			if err != nil {
+				t.Fatalf("render %s at %d: %v", name, size, err)
+			}
+			visible := false
+			for y := 0; y < size; y++ {
+				for x := 0; x < size; x++ {
+					visible = visible || img.RGBAAt(x, y).A > 0
+				}
+			}
+			if !visible {
+				t.Fatalf("plugin icon %s is blank at %d", name, size)
+			}
+		}
+	}
+}
+
+// TestPluginStoreIconFillsCanvas prevents transparent padding from shrinking its menu identity.
+func TestPluginStoreIconFillsCanvas(t *testing.T) {
+	icon := Get(PluginWPM)
+	if icon.ImageType != common.WoxImageTypeSvg {
+		t.Fatalf("plugin store icon type = %q, want svg", icon.ImageType)
+	}
+	img, err := woxsvg.Render(icon.ImageData, 18, 18)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range [][2]int{{0, 9}, {17, 9}, {9, 0}, {9, 17}} {
+		if img.RGBAAt(point[0], point[1]).A == 0 {
+			t.Fatalf("plugin store icon has transparent padding at %v", point)
+		}
+	}
+}
+
 func TestStaticActivityIconsRenderAsSVG(t *testing.T) {
 	for name, icon := range map[string]common.WoxImage{
 		"media playing": Get(StatusPlaying),

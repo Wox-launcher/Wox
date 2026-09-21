@@ -39,7 +39,7 @@ func TestAboutMenuEntriesUseStableIDsAndLocalDispatch(t *testing.T) {
 		if entry.ID != item.id || entry.IsGroupHeader != item.header || entry.Source != actionPanelSourceLocal {
 			t.Fatalf("entry %d = id %q header %v source %v", index, entry.ID, entry.IsGroupHeader, entry.Source)
 		}
-		if url, ok := aboutMenuExternalURL(entry.ID); ok != (item.url != "") || url != item.url {
+		if url, ok := aboutMenuExternalURL(entry.ID, "en_US"); ok != (item.url != "") || url != item.url {
 			t.Fatalf("url for %s = %q ok %v, want %q", entry.ID, url, ok, item.url)
 		}
 		if path, ok := aboutMenuSettingsRoute(entry.ID); ok != (item.path != "") || path != item.path {
@@ -57,6 +57,21 @@ func TestAboutMenuEntriesUseStableIDsAndLocalDispatch(t *testing.T) {
 	}
 	if aboutMenuGuideURL != "https://www.woxlauncher.com/guide/introduction.html" {
 		t.Fatalf("guide url = %q", aboutMenuGuideURL)
+	}
+}
+
+func TestAboutMenuGuideURLFollowsChineseLanguage(t *testing.T) {
+	got, ok := aboutMenuExternalURL(aboutMenuGuideID, "zh_CN")
+	if !ok || got != aboutMenuGuideURLZh {
+		t.Fatalf("zh_CN guide = %q ok %v, want %q", got, ok, aboutMenuGuideURLZh)
+	}
+	got, ok = aboutMenuExternalURL(aboutMenuGuideID, "en_US")
+	if !ok || got != aboutMenuGuideURL {
+		t.Fatalf("en_US guide = %q ok %v, want %q", got, ok, aboutMenuGuideURL)
+	}
+	got, ok = aboutMenuExternalURL(aboutMenuGuideID, "ja_JP")
+	if !ok || got != aboutMenuGuideURL {
+		t.Fatalf("ja_JP guide = %q ok %v, want %q", got, ok, aboutMenuGuideURL)
 	}
 }
 

@@ -4,6 +4,23 @@ package woxui
 
 import "testing"
 
+// TestCustomChromeDefaultCorners covers initial selection and switches between authored and omitted radii.
+func TestCustomChromeDefaultCorners(t *testing.T) {
+	w := &platformWindow{options: WindowOptions{Role: WindowRoleScreenshot}}
+	for _, radius := range []float32{-1, 28, -1, 0, -1} {
+		if err := w.setWindowChromeNative(true, radius); err != nil {
+			t.Fatal(err)
+		}
+		want := radius
+		if radius < 0 {
+			want = DefaultWindowCornerRadius
+		}
+		if !w.customWindowChrome || w.customCornerRadius == nil || *w.customCornerRadius != want {
+			t.Fatalf("radius %g: custom=%v, clip=%v, want %g", radius, w.customWindowChrome, w.customCornerRadius, want)
+		}
+	}
+}
+
 // TestTrimmedRendererRetainsCornerClip verifies shape state can be replayed when GPU resources are recreated.
 func TestTrimmedRendererRetainsCornerClip(t *testing.T) {
 	r := &nativeRenderer{width: 800, height: 600}

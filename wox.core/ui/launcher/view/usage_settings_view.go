@@ -12,10 +12,15 @@ import (
 )
 
 const (
-	usageSectionGap         = float32(18)
-	usageCardGap            = float32(12)
-	usageKPIHeight          = float32(92)
-	usageHeatmapPanelHeight = float32(204)
+	usageSectionGap               = float32(18)
+	usageCardGap                  = float32(12)
+	usageKPIHeight                = float32(92)
+	usageHeatmapPanelHeight       = float32(204)
+	usageHeaderTitleWidth         = float32(240)
+	usageHeaderControlGap         = float32(12)
+	usageHeaderHeight             = float32(54)
+	usageHeaderStackedHeight      = float32(110)
+	usageHeaderStackedSelectorTop = float32(70)
 )
 
 // UsagePeriod describes one report period selector.
@@ -96,29 +101,38 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	})
 }
 
-// usageSummaryHeader keeps the report title, period filter, and share action on one balanced row when space permits.
+// usageSummaryHeader keeps the title, period filter, and share action on one row
+// when they fit. The filter stays centered and only shifts to clear the title
+// and share control, so longer translated labels do not wrap at the default width.
 func usageSummaryHeader(props UsageSettingsProps, width float32) (woxwidget.Widget, float32) {
 	selector, selectorWidth := usagePeriodSelector(props)
 	share, shareWidth := usageShareButton(props)
-	wide := width >= selectorWidth+512
-	headerHeight := float32(54)
+	wide := width >= usageHeaderTitleWidth+selectorWidth+shareWidth+usageHeaderControlGap*2
+	headerHeight := usageHeaderHeight
 	if !wide {
-		headerHeight = 110
+		headerHeight = usageHeaderStackedHeight
 	}
-	titleWidth := float32(240)
+	titleWidth := usageHeaderTitleWidth
 	if !wide {
 		titleWidth = min(float32(320), max(float32(150), width-shareWidth-18))
 	}
-	titleBlock := woxwidget.Container{Width: titleWidth, Height: 54, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
+	titleBlock := woxwidget.Container{Width: titleWidth, Height: usageHeaderHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 21, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 		woxwidget.Clip{Width: titleWidth, Height: 20, Child: woxwidget.Text{Value: props.Overview, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary}},
 	}}}
 	children := []woxwidget.StackChild{{Child: titleBlock}, {AnchorRight: true, Child: share}}
 	selectorTop := float32(0)
-	if !wide {
-		selectorTop = 70
+	selectorLeft := max(float32(0), (width-selectorWidth)/2)
+	if wide {
+		minLeft := usageHeaderTitleWidth + usageHeaderControlGap
+		maxLeft := width - shareWidth - usageHeaderControlGap - selectorWidth
+		if maxLeft >= minLeft {
+			selectorLeft = min(max(selectorLeft, minLeft), maxLeft)
+		}
+	} else {
+		selectorTop = usageHeaderStackedSelectorTop
 	}
-	children = append(children, woxwidget.StackChild{Left: max(float32(0), (width-selectorWidth)/2), Top: selectorTop, Child: selector})
+	children = append(children, woxwidget.StackChild{Left: selectorLeft, Top: selectorTop, Child: selector})
 	return woxwidget.Stack{Width: width, Height: headerHeight, Children: children}, headerHeight
 }
 

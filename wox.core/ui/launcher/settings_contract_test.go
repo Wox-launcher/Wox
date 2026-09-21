@@ -75,6 +75,33 @@ func TestLocalizedLanguageSettingIncludesDescription(t *testing.T) {
 	}
 }
 
+func TestLocalizedAppFontFamilySystemDefault(t *testing.T) {
+	app := &App{translations: map[string]string{
+		"ui_app_font_family":                "字体",
+		"ui_app_font_family_tips":           "为 Wox 界面选择系统字体",
+		"ui_app_font_family_system_default": "跟随系统默认",
+	}}
+	item := app.localizedSettingItem(systemFontSettingItem(settingsSnapshot{
+		appearance: appearanceSettingsSnapshot{FontFamilies: []string{"Arial", "Bahnschrift"}},
+	}))
+
+	if item.title != "字体" || item.description != "为 Wox 界面选择系统字体" {
+		t.Fatalf("localized font item = %#v", item)
+	}
+	if len(item.choices) < 3 {
+		t.Fatalf("font choices = %#v", item.choices)
+	}
+	if item.choices[0].value != "" || item.choices[0].label != "跟随系统默认" {
+		t.Fatalf("system default choice = %#v", item.choices[0])
+	}
+	if item.choices[1].label != "Arial" || item.choices[2].label != "Bahnschrift" {
+		t.Fatalf("installed font labels should stay untranslated, got %#v", item.choices)
+	}
+	if got := settingValueLabel(item); got != "跟随系统默认" {
+		t.Fatalf("closed font dropdown label = %q", got)
+	}
+}
+
 func TestLocalizedDebugSettings(t *testing.T) {
 	app := &App{translations: map[string]string{
 		"ui_cloud_sync_server_url":                             "同步服务地址",
