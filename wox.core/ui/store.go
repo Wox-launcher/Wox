@@ -141,6 +141,7 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 	logger.Info(ctx, fmt.Sprintf("start to install theme %s(%s)", theme.ThemeId, theme.ThemeAuthor))
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
+	GetUIManager().IgnoreThemeWatch(themePath)
 	theme.IsInstalled = true
 	theme.IsSystem = false
 
@@ -186,6 +187,7 @@ func (s *Store) uninstall(ctx context.Context, theme common.Theme, syncInstall b
 	}
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
+	GetUIManager().IgnoreThemeWatch(themePath)
 
 	if util.IsFileExists(themePath) {
 		removeErr := trash.MoveToTrash(themePath)

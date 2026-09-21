@@ -51,7 +51,6 @@ import (
 	"wox/util/window"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	cp "github.com/otiai10/copy"
@@ -72,6 +71,9 @@ type Manager struct {
 	views              map[string]contract.View
 	serverPort         int
 	themes             *util.HashMap[string, common.Theme]
+	themeFileIDs       *util.HashMap[string, string]
+	themeReloadTimers  *util.HashMap[string, *time.Timer]
+	themeWatchIgnored  *util.HashMap[string, int64]
 	systemThemeIds     []string
 	isUIReadyHandled   bool
 	isSystemDark       bool
@@ -130,6 +132,9 @@ func GetUIManager() *Manager {
 			},
 		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
+		managerInstance.themeFileIDs = util.NewHashMap[string, string]()
+		managerInstance.themeReloadTimers = util.NewHashMap[string, *time.Timer]()
+		managerInstance.themeWatchIgnored = util.NewHashMap[string, int64]()
 		logger = util.GetLogger()
 		// Inject the UI Manager as the dictation hotkey registrar to break the
 		// import cycle between ui and plugin/system/dictation.
@@ -325,53 +330,21 @@ func (m *Manager) Start(ctx context.Context) error {
 			continue
 		}
 		m.themes.Store(theme.ThemeId, theme)
+		m.rememberUserThemeFile(filepath.Join(userThemesDirectory, entry.Name()), theme.ThemeId)
 	}
 
+	// Dropping a JSON into the user theme directory loads it without a restart,
+	// matching single-file plugin discovery. Built-in JSON is watched only in
+	// dev so editing resource/themes hot-reloads the active system theme.
+	util.Go(ctx, "watch user themes", func() {
+		m.startUserThemeMonitoring(ctx, userThemesDirectory)
+	})
 	if util.IsDev() {
-		var onThemeChange = func(e fsnotify.Event) {
-			var themePath = e.Name
-
-			//skip temp file
-			if strings.HasSuffix(themePath, ".json~") {
-				return
-			}
-
-			if e.Op == fsnotify.Write || e.Op == fsnotify.Create {
-				logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
-				themeData, readThemeErr := os.ReadFile(themePath)
-				if readThemeErr != nil {
-					logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", themePath, readThemeErr.Error()))
-					return
-				}
-
-				changedTheme, themeErr := m.parseTheme(string(themeData))
-				if themeErr != nil {
-					logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", themePath, themeErr.Error()))
-					return
-				}
-
-				//replace theme if current theme is the same
-				if _, ok := m.themes.Load(changedTheme.ThemeId); ok {
-					m.themes.Store(changedTheme.ThemeId, changedTheme)
-					logger.Info(ctx, fmt.Sprintf("theme updated: %s", changedTheme.ThemeName))
-					if m.GetCurrentTheme(ctx).ThemeId == changedTheme.ThemeId {
-						m.ChangeTheme(ctx, changedTheme)
-					}
-				}
-			}
-		}
-
-		//watch embed themes folder
 		util.Go(ctx, "watch embed themes", func() {
 			workingDirectory, wdErr := os.Getwd()
 			if wdErr == nil {
-				util.WatchDirectoryChanges(ctx, filepath.Join(workingDirectory, "resource", "ui", "themes"), onThemeChange)
+				m.startEmbedThemeMonitoring(ctx, filepath.Join(workingDirectory, "resource", "themes"))
 			}
-		})
-
-		//watch user themes folder and reload themes
-		util.Go(ctx, "watch user themes", func() {
-			util.WatchDirectoryChanges(ctx, userThemesDirectory, onThemeChange)
 		})
 	}
 
