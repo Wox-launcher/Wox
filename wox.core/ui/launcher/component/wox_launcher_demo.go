@@ -118,7 +118,8 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 		background = props.Theme.Background
 	}
 	windowWidth := props.Width
-	contentBounds := LauncherContentBounds(props.Width, props.Height, props.Theme.AppContentInset)
+	outerHeight := props.Height
+	contentBounds := LauncherContentBounds(props.Width, props.Height, props.Theme.AppContentInset, props.Theme.Surfaces)
 	props.Width, props.Height = contentBounds.Width, contentBounds.Height
 	appPadding, queryHeight := demoAppPadding(props.Theme), demoQueryHeight(props)
 	appInsets := woxwidget.UniformInsets(appPadding)
@@ -174,7 +175,7 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	if props.Preview != nil && props.ResultWidth > 0 {
 		resultWidth = min(props.ResultWidth, props.Width-120)
 	}
-	windowHeight := renderHeight + 2*contentBounds.Y
+	windowHeight := renderHeight + outerHeight - contentBounds.Height
 	windowRadius = min(max(float32(0), windowRadius), min(windowWidth, windowHeight)/2)
 	tint := demoMicaColor(background)
 	if props.Theme.AppWindowChrome {
@@ -240,10 +241,13 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 			Child: demoActionPanel(props, panelWidth, panelHeight, demoAlpha(props.ActionProgress)),
 		})
 	}
-	if props.Theme.AppContentInset != 0 || props.Theme.AppContentBackground.A != 0 || props.Theme.AppContentBorderRadius != 0 || props.HighlightTarget == LauncherDemoHighlightContent {
+	if props.Theme.Surfaces != nil || props.Theme.AppContentInset != 0 || props.Theme.AppContentBackground.A != 0 || props.Theme.AppContentBorderRadius != 0 || props.HighlightTarget == LauncherDemoHighlightContent {
 		inner := demoHighlight(woxwidget.Stack{Width: props.Width, Height: renderHeight, Children: children}, props.Width, renderHeight, props.Theme.AppContentBorderRadius, props.HighlightTarget == LauncherDemoHighlightContent, props.HighlightColor, props.HighlightCorners)
 		content := WoxLauncherContent(windowWidth, windowHeight, props.Theme, inner)
 		children = []woxwidget.StackChild{{Child: content}}
+	}
+	if surface := props.Theme.Surfaces.Get("App"); surface != nil {
+		children = append([]woxwidget.StackChild{{Child: woxwidget.Container{Width: windowWidth, Height: windowHeight, Radius: windowRadius, Surface: surface}}}, children...)
 	}
 	children = append([]woxwidget.StackChild{{Child: underlay}, {Child: mica}}, children...)
 	borderColor, borderWidth := demoWindowBorderColor(props.Theme.PreviewSplit, opacity), float32(1)
@@ -309,7 +313,7 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 	}
 	// Live query chrome uses 8px left / 6px right so glance sits on the same edge.
 	borderColor, borderWidth := props.Theme.QueryBottomBorder()
-	return woxwidget.Container{BottomBorderColor: demoColorOpacity(borderColor, props.Opacity), BottomBorderWidth: borderWidth, Height: height, Radius: demoQueryRadius(props.Theme), Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
+	return woxwidget.Container{BottomBorderColor: demoColorOpacity(borderColor, props.Opacity), BottomBorderWidth: borderWidth, Height: height, Radius: demoQueryRadius(props.Theme), Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Surface: props.Theme.Surfaces.Get("QueryBox"), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
 	}}
 }
@@ -387,7 +391,7 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 			if props.HighlightTarget == LauncherDemoHighlightIndicator {
 				contentWidget = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: content}, {Left: indicator.Left, Top: indicator.Top, Child: CornerRadiusHighlight(min(width, indicator.Width), max(float32(0), height-indicator.Top-indicator.Bottom), indicator.Radius, props.HighlightColor)}}}
 			}
-			return demoHighlight(woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: ResultIndicatorBackground(width, height, row.Radius, background, indicator)}, {Child: contentWidget}}}, width, height, row.Radius, props.HighlightTarget == LauncherDemoHighlightSelectedBackground, props.HighlightColor, props.HighlightCorners)
+			return demoHighlight(woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: ResultIndicatorBackground(width, height, row.Radius, background, indicator, props.Theme.Surfaces.Get("ResultItemActive"))}, {Child: contentWidget}}}, width, height, row.Radius, props.HighlightTarget == LauncherDemoHighlightSelectedBackground, props.HighlightColor, props.HighlightCorners)
 		}
 		row.LeftBorderWidth = max(float32(0), props.Theme.SelectedBorderLeftWidth)
 		row.LeftBorderColor = demoColorOpacity(props.Theme.SelectedBorderLeftColor, float32(alpha)/255)
@@ -472,7 +476,7 @@ func demoToolbar(props LauncherDemoProps, height, windowRadius float32, alpha ui
 	// window's bottom corners stay rounded — the same trick as LauncherToolbarView.
 	fill := woxwidget.Container{
 		Width: props.Width, Height: height + windowRadius, Radius: windowRadius,
-		Color: demoColorOpacity(props.Theme.ToolbarBackground, props.Opacity), Floating: true,
+		Color: demoColorOpacity(props.Theme.ToolbarBackground, props.Opacity), Surface: props.Theme.Surfaces.Get("Toolbar"), Floating: true,
 	}
 	toolbar := woxwidget.Container{Width: props.Width, Height: height, Child: woxwidget.Clip{
 		Width: props.Width, Height: height,
@@ -561,7 +565,7 @@ func demoActionPanel(props LauncherDemoProps, width, height float32, alpha uint8
 	}
 
 	children = append(children, woxwidget.Container{Width: innerWidth, Height: demoActionSearchHeight, Padding: woxwidget.Insets{Top: 8}, Child: demoHighlight(query, innerWidth, 28, queryRadius, props.HighlightTarget == LauncherDemoHighlightActionQueryBackground, props.HighlightColor, props.HighlightCorners)})
-	panel := woxwidget.Container{Width: width, Height: height, Radius: 8, Floating: true, Color: demoColorOpacity(props.Theme.ActionBackground, float32(alpha)/255), Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	panel := woxwidget.Container{Surface: props.Theme.Surfaces.Get("ActionContainer"), Width: width, Height: height, Radius: 8, Floating: true, Color: demoColorOpacity(props.Theme.ActionBackground, float32(alpha)/255), Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 	panel.BorderColor = demoColorOpacity(props.Theme.ActionBorder, float32(alpha)/255)
 	panel.BorderWidth = props.Theme.ActionBorderWidth
 	panel.Radius = props.Theme.ActionContainerRadius

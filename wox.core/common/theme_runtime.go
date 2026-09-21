@@ -3,18 +3,22 @@ package common
 // Theme is the schema-independent resolved view consumed by the application.
 // Wire formats and their defaults belong to their versioned schema files.
 type Theme struct {
-	PreviewBorderRadius                   *int   `json:",omitempty"`
-	ResultItemActiveIndicatorWidth        *int   `json:",omitempty"`
-	ResultItemActiveIndicatorInsetLeft    *int   `json:",omitempty"`
-	ResultItemActiveIndicatorInsetTop     *int   `json:",omitempty"`
-	ResultItemActiveIndicatorInsetBottom  *int   `json:",omitempty"`
-	ResultItemActiveIndicatorBorderRadius *int   `json:",omitempty"`
-	QueryBoxBorderBottomWidth             *int   `json:",omitempty"`
-	ResultItemActiveIndicatorColor        string `json:",omitempty"`
-	QueryBoxBorderBottomColor             string `json:",omitempty"`
-	PreviewTagBorderRadius                *int   `json:",omitempty"`
-	AppBorderWidth                        *int   `json:",omitempty"`
-	AppBorderRadius                       *int   `json:",omitempty"`
+	I18n     map[string]map[string]string `json:",omitempty"`
+	Surfaces ThemeSurfaces                `json:",omitempty"`
+	// AssetFiles is package data, never a field in the authored theme JSON.
+	AssetFiles                            map[string][]byte `json:"-"`
+	PreviewBorderRadius                   *int              `json:",omitempty"`
+	ResultItemActiveIndicatorWidth        *int              `json:",omitempty"`
+	ResultItemActiveIndicatorInsetLeft    *int              `json:",omitempty"`
+	ResultItemActiveIndicatorInsetTop     *int              `json:",omitempty"`
+	ResultItemActiveIndicatorInsetBottom  *int              `json:",omitempty"`
+	ResultItemActiveIndicatorBorderRadius *int              `json:",omitempty"`
+	QueryBoxBorderBottomWidth             *int              `json:",omitempty"`
+	ResultItemActiveIndicatorColor        string            `json:",omitempty"`
+	QueryBoxBorderBottomColor             string            `json:",omitempty"`
+	PreviewTagBorderRadius                *int              `json:",omitempty"`
+	AppBorderWidth                        *int              `json:",omitempty"`
+	AppBorderRadius                       *int              `json:",omitempty"`
 
 	ScrollbarWidth        *int `json:",omitempty"`
 	ScrollbarHoverWidth   *int `json:",omitempty"`

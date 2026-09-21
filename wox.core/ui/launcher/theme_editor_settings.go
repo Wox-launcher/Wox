@@ -90,7 +90,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	saveAsIcon := a.imageForTint(settingControlIconSource("save"), &primaryForeground, physicalImageSize(18, imageScale))
 	wallpaperImage := a.themeSettings.ThemeWallpaperImage()
 	wallpaperBlurred := a.themeSettings.ThemeWallpaperBlurred()
-	draftPalette := themeEditorDraftPalette(state.raw, state.values)
+	draftPalette := themeEditorDraftPalette(state.raw, state.values, state.surfaces)
 	var geometry *woxcomponent.LauncherDemoGeometry
 	if isV2Theme(state.raw) {
 		geometry = &woxcomponent.LauncherDemoGeometry{AppPadding: draftPalette.appPadding, ResultPadding: draftPalette.resultContainerPadding, ItemPadding: draftPalette.resultItemPadding, ActionPadding: draftPalette.actionPadding, ToolbarPadding: draftPalette.toolbarPadding, ActionQueryRadius: draftPalette.actionQueryRadius}

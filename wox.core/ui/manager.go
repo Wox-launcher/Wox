@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image/png"
@@ -314,11 +313,14 @@ func (m *Manager) Start(ctx context.Context) error {
 		return readErr
 	}
 	for _, entry := range dirEntry {
-		if entry.IsDir() {
+		themePath := filepath.Join(userThemesDirectory, entry.Name())
+		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-
-		themeData, readThemeErr := os.ReadFile(userThemesDirectory + "/" + entry.Name())
+		if entry.IsDir() {
+			themePath = filepath.Join(themePath, "theme.json")
+		}
+		themeData, readThemeErr := os.ReadFile(themePath)
 		if readThemeErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", entry.Name(), readThemeErr.Error()))
 			continue
@@ -329,8 +331,11 @@ func (m *Manager) Start(ctx context.Context) error {
 			logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", entry.Name(), themeErr.Error()))
 			continue
 		}
+		if err := theme.LoadThemeAssets(filepath.Dir(themePath)); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("load theme assets: %v", err))
+		}
 		m.themes.Store(theme.ThemeId, theme)
-		m.rememberUserThemeFile(filepath.Join(userThemesDirectory, entry.Name()), theme.ThemeId)
+		m.rememberUserThemeFile(themePath, theme.ThemeId)
 	}
 
 	// Dropping a JSON into the user theme directory loads it without a restart,
@@ -1000,15 +1005,7 @@ func (m *Manager) GetThemeById(themeId string) common.Theme {
 }
 
 func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
-	var theme common.Theme
-	parseErr := json.Unmarshal([]byte(themeJson), &theme)
-	if parseErr != nil {
-		return common.Theme{}, parseErr
-	}
-	if err := theme.EnsureWoxVersionSupported(updater.CURRENT_VERSION); err != nil {
-		return common.Theme{}, err
-	}
-	return theme, nil
+	return common.ParseThemeDocument([]byte(themeJson), updater.CURRENT_VERSION)
 }
 
 func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) common.Theme {

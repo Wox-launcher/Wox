@@ -1,4 +1,5 @@
 {
+  "plugin_theme_package_invalid": "主题包无效",
   "ui_hotkey_ignore_fullscreen": "全屏时忽略快捷键",
   "ui_hotkey_ignore_fullscreen_tips": "前台窗口全屏时，不响应启动器快捷键。",
   "ui_hotkey_ignore_fullscreen_unavailable": "当前环境无法检测全屏。Linux X11 需要 xprop，Hyprland 需要 hyprctl；暂不支持其他 Wayland 桌面。",

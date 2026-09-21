@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,13 +23,65 @@ const (
 
 func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string) {
 	m.ensureThemeWatchMaps()
-	if _, err := util.WatchDirectoryChanges(ctx, directory, func(event fsnotify.Event) {
-		m.handleUserThemeFileEvent(ctx, event)
-	}); err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to watch user themes directory: %s", err.Error()))
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("watch themes: %v", err))
 		return
 	}
-	util.GetLogger().Info(ctx, fmt.Sprintf("started monitoring user themes directory: %s", directory))
+	defer watcher.Close()
+	addDirectories := func(root string) {
+		_ = filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if entry.IsDir() {
+				if strings.HasPrefix(entry.Name(), ".") && name != directory {
+					return filepath.SkipDir
+				}
+				if err := watcher.Add(name); err != nil {
+					util.GetLogger().Warn(ctx, fmt.Sprintf("watch theme directory %s: %v", name, err))
+				}
+			}
+			return nil
+		})
+	}
+	addDirectories(directory)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			util.GetLogger().Warn(ctx, fmt.Sprintf("theme watch: %v", err))
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			relative, err := filepath.Rel(directory, event.Name)
+			if err != nil {
+				continue
+			}
+			parts := strings.Split(filepath.ToSlash(relative), "/")
+			if len(parts) == 0 || strings.HasPrefix(parts[0], ".") {
+				continue
+			}
+			if event.Op&fsnotify.Create != 0 {
+				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+					addDirectories(event.Name)
+				}
+			}
+			_, knownPackage := m.themeFileIDs.Load(themeWatchKey(filepath.Join(directory, parts[0], "theme.json")))
+			info, statErr := os.Stat(event.Name)
+			if len(parts) > 1 || knownPackage || (statErr == nil && info.IsDir()) {
+				m.debounceUserThemeSync(ctx, filepath.Join(directory, parts[0], "theme.json"))
+			} else {
+				m.handleUserThemeFileEvent(ctx, event)
+			}
+		}
+	}
+
 }
 
 func (m *Manager) startEmbedThemeMonitoring(ctx context.Context, directory string) {
@@ -133,6 +186,9 @@ func (m *Manager) upsertUserThemeFromFile(ctx context.Context, themePath string)
 	}
 	if m.IsSystemTheme(theme.ThemeId) {
 		return common.Theme{}, fmt.Errorf("theme id %s belongs to a system theme", theme.ThemeId)
+	}
+	if err := theme.LoadThemeAssets(filepath.Dir(themePath)); err != nil {
+		return common.Theme{}, err
 	}
 	theme.IsInstalled = true
 	theme.IsSystem = false

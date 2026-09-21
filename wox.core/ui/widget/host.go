@@ -244,6 +244,7 @@ func (h *Host) WindowFocused() bool {
 
 // Frame reconciles one widget description, publishes semantics, and paints it.
 func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
+	displayList.RasterScale = frame.Scale
 	if h.disposed || h.window == nil || h.build == nil {
 		h.updateCaretBlink(false)
 		h.animations.reset()

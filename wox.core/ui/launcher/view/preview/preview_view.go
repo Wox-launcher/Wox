@@ -80,7 +80,7 @@ func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, heig
 	contentWidth := max(float32(0), width-2)
 	contentHeight := max(float32(0), height-2)
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: radius, Color: background,
+		Width: width, Height: height, Radius: radius, Color: background, Surface: theme.Surfaces.Get("Preview"),
 		BorderColor: border, BorderWidth: previewSurfaceBorderWidth, Padding: woxwidget.UniformInsets(previewSurfaceBorderWidth),
 		Child: woxwidget.Clip{Width: contentWidth, Height: contentHeight, Child: body},
 	}

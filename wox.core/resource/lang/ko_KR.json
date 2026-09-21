@@ -1,4 +1,5 @@
 {
+  "plugin_theme_package_invalid": "잘못된 테마 패키지",
   "ui_hotkey_ignore_fullscreen": "전체 화면에서 단축키 무시",
   "ui_hotkey_ignore_fullscreen_tips": "활성 창이 전체 화면이면 Wox 단축키를 무시합니다.",
   "ui_hotkey_ignore_fullscreen_unavailable": "전체 화면을 감지할 수 없습니다. Linux X11에는 xprop, Hyprland에는 hyprctl이 필요하며 다른 Wayland 데스크톱은 지원되지 않습니다.",

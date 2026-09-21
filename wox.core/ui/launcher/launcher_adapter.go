@@ -227,7 +227,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 			}
 		}
 	}
-	contentBounds := woxcomponent.LauncherContentBounds(frame.Size.Width, frame.Size.Height, snapshot.palette.AppContentInset)
+	contentBounds := woxcomponent.LauncherContentBounds(frame.Size.Width, frame.Size.Height, snapshot.palette.AppContentInset, snapshot.palette.Surfaces)
 	width, height := contentBounds.Width, contentBounds.Height
 	queryHeight := float32(0)
 	chromeFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen

@@ -366,3 +366,15 @@ func TestLauncherToolbarUsesThemeTintedMaterial(t *testing.T) {
 		}
 	}
 }
+
+// TestToolbarTextureUsesRoundedMaterial prevents the image from covering panel corners.
+func TestToolbarTextureUsesRoundedMaterial(t *testing.T) {
+	texture := &woxwidget.ImageSurface{}
+	tree := LauncherToolbarView(LauncherToolbarProps{Width: 500, Height: 40, Theme: woxcomponent.Theme{AppContentBorderRadius: 16, Surfaces: &woxcomponent.ThemeSurfaceSet{Items: map[string]*woxwidget.ImageSurface{"Toolbar": texture}}}}).(woxwidget.Stack)
+	layers := tree.Children[1].Child.(woxwidget.Clip).Child.(woxwidget.Stack)
+	backdrop := layers.Children[0].Child.(woxwidget.Container)
+	body := layers.Children[1].Child.(woxwidget.Container)
+	if backdrop.Surface != texture || backdrop.Radius != 16 || body.Surface != nil {
+		t.Fatal("toolbar texture must follow rounded backdrop instead of rectangular body")
+	}
+}

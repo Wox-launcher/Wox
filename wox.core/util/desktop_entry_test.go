@@ -23,7 +23,7 @@ func TestBuildLinuxDesktopEntryDeclaresKWinScreenshotInterface(t *testing.T) {
 	if !strings.Contains(entry, "Exec=\"/tmp/Wox.AppImage\" %U\n") {
 		t.Fatalf("desktop entry does not accept URL and file arguments:\n%s", entry)
 	}
-	if !strings.Contains(entry, "MimeType="+pluginPackageURLMIME+";"+PluginPackageMIMEType+";\n") {
+	if !strings.Contains(entry, "MimeType="+pluginPackageURLMIME+";"+PluginPackageMIMEType+";"+ThemePackageMIMEType+";\n") {
 		t.Fatalf("desktop entry does not declare plugin package MIME type:\n%s", entry)
 	}
 }

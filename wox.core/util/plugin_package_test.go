@@ -8,6 +8,21 @@ import (
 	"testing"
 )
 
+// TestThemePackageStartupUsesSharedInstaller keeps theme files out of plugin archive detection.
+func TestThemePackageStartupUsesSharedInstaller(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "Ming.WOX-THEME")
+	if !IsThemePackagePath(file) || IsPluginPackagePath(file) {
+		t.Fatal("package type detection changed")
+	}
+	links := CollectStartupDeepLinks([]string{file, file})
+	if len(links) != 1 || links[0] != PluginPackageInstallDeepLink(file) {
+		t.Fatal(links)
+	}
+	if got, ok := PluginPackagePathFromArg(file); !ok || got != file {
+		t.Fatalf("path=%q accepted=%v", got, ok)
+	}
+}
+
 func TestIsPluginPackagePath(t *testing.T) {
 	tests := []struct {
 		path string

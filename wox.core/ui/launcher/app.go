@@ -1205,7 +1205,12 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		height += int(densityMetrics.refinementBarHeight)
 	}
 	if visibleResults > 0 {
-		height += launcherResultAreaHeight(results, layout, max(0, float32(width)-2*palette.AppContentInset), maxResults, resultRowHeight, resultVerticalPadding, densityMetrics.groupHeaderHeight())
+		contentWidth := max(float32(0), float32(width)-2*palette.AppContentInset)
+		if palette.Surfaces != nil {
+			extra := palette.Surfaces.ContentInsets
+			contentWidth = max(0, contentWidth-extra.Left-extra.Right)
+		}
+		height += launcherResultAreaHeight(results, layout, contentWidth, maxResults, resultRowHeight, resultVerticalPadding, densityMetrics.groupHeaderHeight())
 	}
 	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)
@@ -1288,6 +1293,11 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		minimumHeight = min(height, resultRowHeight)
 	}
 	// Keep the requested result capacity inside the panel; the material rim is additional window chrome.
+	if palette.Surfaces != nil {
+		extra := palette.Surfaces.ContentInsets
+		height += int(extra.Top + extra.Bottom)
+		minimumHeight += int(extra.Top + extra.Bottom)
+	}
 	height += int(2 * palette.AppContentInset)
 	minimumHeight += int(2 * palette.AppContentInset)
 	if a.webViewFullscreen && a.webViewPreviewHeight > 0 {

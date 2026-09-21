@@ -122,7 +122,7 @@ func (a *LocalSettingApplier) ApplyInstalledTheme(ctx context.Context, themeID s
 	switch op {
 	case cloudsync.OpDelete:
 		theme := ui.GetUIManager().GetThemeById(themeID)
-		if theme.ThemeId == "" || theme.IsSystem {
+		if theme.ThemeId == "" || theme.IsSystem || !theme.CanSyncWithoutAssets() {
 			return nil
 		}
 		return ui.GetStoreManager().UninstallLocal(ctx, theme)
@@ -225,12 +225,15 @@ func decodeInstalledTheme(ctx context.Context, themeID string, rawValue string) 
 		if theme.ThemeId == "" {
 			theme.ThemeId = themeID
 		}
+		if !theme.CanSyncWithoutAssets() {
+			return common.Theme{}, false, nil
+		}
 		return theme, true, nil
 	}
 
 	for _, theme := range ui.GetStoreManager().GetThemes() {
 		if theme.ThemeId == themeID {
-			return theme, true, nil
+			return theme, theme.CanSyncWithoutAssets(), nil
 		}
 	}
 	util.GetLogger().Warn(ctx, fmt.Sprintf("skip installed theme sync for %s: theme payload not found", themeID))

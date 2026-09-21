@@ -232,7 +232,7 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 	for _, item := range items {
 		source := item.Theme
 		theme := themeSettingsTheme{
-			ID: source.ThemeId, Name: source.ThemeName, Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.Description,
+			ID: source.ThemeId, Name: source.GetName(ctx), Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.GetDescription(ctx),
 			IsSystem: source.IsSystem, IsInstalled: source.IsInstalled, IsUpgradable: item.IsUpgradable, IsAuto: source.IsAutoAppearance,
 			DarkThemeID: source.DarkThemeId, LightThemeID: source.LightThemeId,
 			previewTheme: fromCoreTheme(source),

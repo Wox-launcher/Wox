@@ -15,6 +15,8 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
+	"wox/ui"
+	"wox/updater"
 	"wox/util"
 	"wox/util/selection"
 
@@ -70,6 +72,10 @@ func (i *PluginInstallerPlugin) Init(ctx context.Context, initParams plugin.Init
 }
 
 func (i *PluginInstallerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if query.Type == plugin.QueryTypeSelection && query.Selection.Type == selection.SelectionTypeFile && len(query.Selection.FilePaths) == 1 && util.IsThemePackagePath(query.Selection.FilePaths[0]) {
+		return plugin.NewQueryResponse(i.queryThemePackage(ctx, query.Selection.FilePaths[0]))
+	}
+
 	// File-selection queries also cover double-clicked .wox packages forwarded
 	// through the wox://install deeplink / OS file association.
 	if query.Type == plugin.QueryTypeSelection &&
@@ -333,4 +339,17 @@ func readFileFromZip(filePath string, target string) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("file %s not found in archive", targetPath)
+}
+
+// queryThemePackage presents the parsed identity before installing the exact reviewed package.
+func (i *PluginInstallerPlugin) queryThemePackage(ctx context.Context, filePath string) []plugin.QueryResult {
+	theme, err := common.ReadThemePackage(filePath, updater.CURRENT_VERSION)
+	if err != nil {
+		return []plugin.QueryResult{{Title: "i18n:plugin_theme_package_invalid", SubTitle: err.Error(), Icon: themeIcon}}
+	}
+	return []plugin.QueryResult{{Title: theme.GetName(ctx), SubTitle: theme.GetDescription(ctx), Icon: themeIcon, Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_theme_install_theme", Icon: icons.Get(icons.ActionInstall), Action: func(ctx context.Context, _ plugin.ActionContext) {
+		if err := ui.GetStoreManager().Install(ctx, theme); err != nil {
+			i.api.Notify(ctx, err.Error())
+		}
+	}}}}}
 }

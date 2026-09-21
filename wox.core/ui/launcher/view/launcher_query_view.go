@@ -311,7 +311,7 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		// theme inset as empty space above the query pill.
 		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right, Bottom: props.AppPadding.Bottom},
 		Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
-			Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground,
+			Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground, Surface: props.Theme.Surfaces.Get("QueryBox"),
 			BottomBorderColor: queryBorderColor, BottomBorderWidth: queryBorderWidth,
 			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},

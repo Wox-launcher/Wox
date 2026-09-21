@@ -50,7 +50,7 @@ func TestLauncherContentInsetMovesEverySectionTogether(t *testing.T) {
 
 func TestBorderDragMoveAreaProvidesFourEdgeDragGestures(t *testing.T) {
 	dragged := 0
-	area := BorderDragMoveArea(100, 80, 5, woxwidget.Container{}, func() { dragged++ }).(woxwidget.Stack)
+	area := BorderDragMoveArea(100, 80, woxwidget.UniformInsets(5), woxwidget.Container{}, func() { dragged++ }).(woxwidget.Stack)
 	if len(area.Children) != 5 {
 		t.Fatalf("border drag child count = %d, want content plus four edges", len(area.Children))
 	}
@@ -101,5 +101,32 @@ func TestPreviewHoverCloseRevealsCloseButton(t *testing.T) {
 	button := shown.Children[1].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if button.OnHoverAt == nil || button.OnTap == nil || button.Width != 28 || button.Height != 28 {
 		t.Fatalf("close icon button props = %+v, want hoverable 28x28 button", button)
+	}
+}
+
+// TestThemeChromeDragLeavesContentInteractive exercises asymmetric insets across DPI changes.
+func TestThemeChromeDragLeavesContentInteractive(t *testing.T) {
+	for _, scale := range []float32{1, 1.25, 1.5, 2} {
+		drags, taps := 0, 0
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return LauncherView(LauncherViewProps{Width: 400, Height: 300,
+				Theme:       woxcomponent.Theme{Surfaces: &woxcomponent.ThemeSurfaceSet{ContentInsets: woxwidget.Insets{Top: 80, Left: 30, Right: 40, Bottom: 25}}},
+				OnDragStart: func() { drags++ },
+				Content:     woxwidget.Gesture{OnTap: func() { taps++ }, Child: woxwidget.Container{Width: 330, Height: 195}},
+			})
+		})
+		host.AttachServices(actionSearchHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 300}, Scale: scale, PixelSize: woxui.PixelSize{Width: int(400 * scale), Height: int(300 * scale)}})
+		for _, point := range []woxui.Point{{X: 200, Y: 40}, {X: 15, Y: 150}, {X: 380, Y: 150}, {X: 200, Y: 285}} {
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: point.X + 10, Y: point.Y}})
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+		}
+		point := woxui.Point{X: 200, Y: 150}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+		if drags != 4 || taps != 1 {
+			t.Fatalf("scale %v: drags=%d taps=%d", scale, drags, taps)
+		}
 	}
 }

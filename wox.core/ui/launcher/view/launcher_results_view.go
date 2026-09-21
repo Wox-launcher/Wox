@@ -132,6 +132,7 @@ type launcherResultRowProps struct {
 }
 
 type launcherResultBackgroundProps struct {
+	Surface   *woxwidget.ImageSurface
 	Indicator woxcomponent.ResultIndicatorStyle
 	Width     float32
 	Height    float32
@@ -389,11 +390,12 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	if item.Selected {
 		// Paint on the background layer so selection never changes content geometry.
 		backgroundProps.Indicator = props.Theme.ResultIndicator()
+		backgroundProps.Surface = props.Theme.Surfaces.Get("ResultItemActive")
 	}
 	backgroundLayer := woxwidget.Boundary[launcherResultBackgroundProps]{
 		Key: LauncherResultBackgroundBoundaryKey(item.ID), Label: "result-background:" + item.ID, Props: backgroundProps,
 		Build: func(props launcherResultBackgroundProps) woxwidget.Widget {
-			return woxcomponent.ResultIndicatorBackground(props.Width, props.Height, props.Radius, props.Color, props.Indicator)
+			return woxcomponent.ResultIndicatorBackground(props.Width, props.Height, props.Radius, props.Color, props.Indicator, props.Surface)
 		},
 	}
 	rowChildren := []woxwidget.Widget{

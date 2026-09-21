@@ -1,11 +1,30 @@
 package common
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"wox/i18n"
 
 	"github.com/Masterminds/semver/v3"
 )
+
+func (t Theme) GetName(ctx context.Context) string { return t.translate(ctx, t.ThemeName) }
+
+func (t Theme) GetDescription(ctx context.Context) string { return t.translate(ctx, t.Description) }
+
+// translate resolves display metadata without replacing authored keys in saved themes.
+func (t Theme) translate(ctx context.Context, text string) string {
+	if !strings.HasPrefix(text, "i18n:") {
+		return text
+	}
+	manager := i18n.GetI18nManager()
+	if translated := manager.TranslateI18nMap(ctx, text, t.I18n); translated != text {
+		return translated
+	}
+	return manager.TranslateWox(ctx, text)
+}
 
 type themeSchema struct {
 	colors  func(Theme) map[string]string

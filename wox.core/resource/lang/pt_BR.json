@@ -1,4 +1,5 @@
 {
+  "plugin_theme_package_invalid": "Pacote de tema inválido",
   "ui_hotkey_ignore_fullscreen": "Ignorar atalhos em tela cheia",
   "ui_hotkey_ignore_fullscreen_tips": "Ignorar atalhos do Wox quando a janela ativa estiver em tela cheia.",
   "ui_hotkey_ignore_fullscreen_unavailable": "A detecção de tela cheia está indisponível. No Linux, é necessário xprop no X11 ou hyprctl no Hyprland; outros ambientes Wayland não são compatíveis.",

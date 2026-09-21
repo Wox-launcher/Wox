@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 	"wox/cloudsync"
@@ -138,10 +139,17 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 	if err := theme.EnsureWoxVersionSupported(updater.CURRENT_VERSION); err != nil {
 		return err
 	}
+	if GetUIManager().IsSystemTheme(theme.ThemeId) {
+		return fmt.Errorf("cannot overwrite system theme")
+	}
+	if err := theme.ValidateAssets(); err != nil {
+		return err
+	}
 	logger.Info(ctx, fmt.Sprintf("start to install theme %s(%s)", theme.ThemeId, theme.ThemeAuthor))
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 	GetUIManager().IgnoreThemeWatch(themePath)
+	GetUIManager().IgnoreThemeWatch(filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json"))
 	theme.IsInstalled = true
 	theme.IsSystem = false
 
@@ -150,11 +158,27 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 		return err
 	}
 
-	writeErr := os.WriteFile(themePath, pretty.Pretty(themeJson), os.ModePerm)
+	var writeErr error
+	if len(theme.AssetFiles) > 0 {
+		writeErr = persistThemePackage(util.GetLocation().GetThemeDirectory(), theme)
+		if writeErr == nil {
+			if err := os.Remove(themePath); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			themePath = filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
+		}
+	} else {
+		packagePath := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
+		if util.IsFileExists(packagePath) {
+			themePath = packagePath
+		}
+		writeErr = os.WriteFile(themePath, pretty.Pretty(themeJson), os.ModePerm)
+	}
 	if writeErr != nil {
 		return writeErr
 	}
 
+	GetUIManager().rememberUserThemeFile(themePath, theme.ThemeId)
 	if applyTheme {
 		GetUIManager().AddTheme(ctx, theme)
 	} else {
@@ -186,9 +210,18 @@ func (s *Store) uninstall(ctx context.Context, theme common.Theme, syncInstall b
 		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_system_forbidden"))
 	}
 
+	if !common.ValidThemeAssetPath(theme.ThemeId) || filepath.Base(theme.ThemeId) != theme.ThemeId {
+		return fmt.Errorf("invalid theme id")
+	}
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 	GetUIManager().IgnoreThemeWatch(themePath)
-
+	GetUIManager().IgnoreThemeWatch(filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json"))
+	packagePath := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId)
+	if util.IsFileExists(filepath.Join(packagePath, "theme.json")) {
+		if err := trash.MoveToTrash(packagePath); err != nil {
+			return err
+		}
+	}
 	if util.IsFileExists(themePath) {
 		removeErr := trash.MoveToTrash(themePath)
 		if removeErr != nil {
@@ -197,7 +230,7 @@ func (s *Store) uninstall(ctx context.Context, theme common.Theme, syncInstall b
 	}
 
 	GetUIManager().RemoveTheme(ctx, theme)
-	if syncInstall {
+	if syncInstall && theme.CanSyncWithoutAssets() {
 		s.logInstalledThemeDelete(ctx, theme.ThemeId)
 	}
 
@@ -222,6 +255,9 @@ func (s *Store) QueueInstalledThemesForSync(ctx context.Context) {
 // logInstalledThemeUpsert records full theme JSON so custom themes can restore
 // without relying on the remote theme store.
 func (s *Store) logInstalledThemeUpsert(ctx context.Context, theme common.Theme) {
+	if !theme.CanSyncWithoutAssets() {
+		return
+	}
 	themeJSON, err := json.Marshal(theme)
 	if err != nil {
 		logger.Warn(ctx, fmt.Sprintf("failed to encode installed theme sync value for %s: %s", theme.ThemeId, err.Error()))

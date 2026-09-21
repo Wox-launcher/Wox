@@ -444,7 +444,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	// Keep the floating material tint and outer edge independent from internal dividers.
 	panel := woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.Theme.ActionContainerRadius, Floating: true,
-		Color: props.Theme.ActionBackground, BorderColor: props.Theme.ActionBorder, BorderWidth: props.Theme.ActionBorderWidth,
+		Color: props.Theme.ActionBackground, Surface: props.Theme.Surfaces.Get("ActionContainer"), BorderColor: props.Theme.ActionBorder, BorderWidth: props.Theme.ActionBorderWidth,
 		Padding: panelPadding, Child: content,
 	}
 	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.

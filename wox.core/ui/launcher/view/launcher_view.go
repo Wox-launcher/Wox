@@ -44,21 +44,21 @@ type LauncherViewProps struct {
 	OnDragStart   func()
 }
 
-// BorderDragMoveArea keeps preview-only launcher surfaces movable from every outer edge.
-func BorderDragMoveArea(width, height, borderWidth float32, child woxwidget.Widget, onDragStart func()) woxwidget.Widget {
-	if width <= 0 || height <= 0 || borderWidth <= 0 {
+// BorderDragMoveArea exposes only the reserved outer chrome as logical drag regions.
+func BorderDragMoveArea(width, height float32, insets woxwidget.Insets, child woxwidget.Widget, onDragStart func()) woxwidget.Widget {
+	if width <= 0 || height <= 0 || onDragStart == nil || insets == (woxwidget.Insets{}) {
 		return child
 	}
-	borderWidth = min(max(0, borderWidth), min(width/2, height/2))
-	if borderWidth <= 0 {
-		return child
-	}
+	insets.Top = min(max(0, insets.Top), height)
+	insets.Bottom = min(max(0, insets.Bottom), height-insets.Top)
+	insets.Left = min(max(0, insets.Left), width)
+	insets.Right = min(max(0, insets.Right), width-insets.Left)
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 		{Child: child},
-		{StretchWidth: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-top", OnDragStart: onDragStart, Child: woxwidget.Container{Height: borderWidth}}},
-		{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-bottom", OnDragStart: onDragStart, Child: woxwidget.Container{Height: borderWidth}}},
-		{Top: borderWidth, Bottom: borderWidth, StretchHeight: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-left", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth}}},
-		{Top: borderWidth, Right: 0, Bottom: borderWidth, AnchorRight: true, StretchHeight: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-right", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth}}},
+		{StretchWidth: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-top", OnDragStart: onDragStart, Child: woxwidget.Container{Height: insets.Top}}},
+		{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-bottom", OnDragStart: onDragStart, Child: woxwidget.Container{Height: insets.Bottom}}},
+		{Top: insets.Top, Bottom: insets.Bottom, StretchHeight: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-left", OnDragStart: onDragStart, Child: woxwidget.Container{Width: insets.Left}}},
+		{Top: insets.Top, Bottom: insets.Bottom, AnchorRight: true, StretchHeight: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-right", OnDragStart: onDragStart, Child: woxwidget.Container{Width: insets.Right}}},
 	}}
 }
 
@@ -122,7 +122,7 @@ func (s *previewHoverCloseState) Dispose() {}
 // LauncherView builds the accessible launcher window and its overlay layers.
 func LauncherView(props LauncherViewProps) woxwidget.Widget {
 	windowWidth, windowHeight := props.Width, props.Height
-	contentBounds := woxcomponent.LauncherContentBounds(windowWidth, windowHeight, props.Theme.AppContentInset)
+	contentBounds := woxcomponent.LauncherContentBounds(windowWidth, windowHeight, props.Theme.AppContentInset, props.Theme.Surfaces)
 	props.Width, props.Height = contentBounds.Width, contentBounds.Height
 	sections := make([]woxwidget.Widget, 0, 5)
 	if props.TitleBar != nil {
@@ -202,10 +202,16 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 			{Child: body}, {Child: woxwidget.Container{Width: props.Width, Height: props.Height, Radius: radius, BorderColor: borderColor, BorderWidth: borderWidth}},
 		}}
 	}
-	window := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: radius, Child: body})
+	window := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Surface: props.Theme.Surfaces.Get("App"), Radius: radius, Child: body})
+	dragInsets := woxwidget.Insets{Top: contentBounds.Y, Left: contentBounds.X, Right: max(0, windowWidth-contentBounds.X-contentBounds.Width), Bottom: max(0, windowHeight-contentBounds.Y-contentBounds.Height)}
 	if props.PreviewOnly {
-		window = BorderDragMoveArea(props.Width, props.Height, props.BorderWidth, window, props.OnDragStart)
+		border := min(max(0, props.BorderWidth), min(windowWidth, windowHeight)/2)
+		dragInsets.Top = max(dragInsets.Top, border)
+		dragInsets.Bottom = max(dragInsets.Bottom, border)
+		dragInsets.Left = max(dragInsets.Left, border)
+		dragInsets.Right = max(dragInsets.Right, border)
 	}
+	window = BorderDragMoveArea(props.Width, props.Height, dragInsets, window, props.OnDragStart)
 	return woxwidget.Semantics{
 		Key: "launcher-window-key", AutomationID: "launcher.window", Role: woxui.AccessibilityRoleWindow, Label: "Wox",
 		Child: window,

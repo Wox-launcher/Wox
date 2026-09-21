@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"wox/common"
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	"wox/util"
 	"wox/util/osvariant"
@@ -63,7 +64,8 @@ var themeEditorColorGroups = []themeColorGroup{
 }
 
 type themeEditorPreviewState struct {
-	ai themeEditorAIState
+	surfaces *woxcomponent.ThemeSurfaceSet
+	ai       themeEditorAIState
 	formFieldsState
 	key            string
 	raw            map[string]any
@@ -84,7 +86,8 @@ type themeEditorPreviewState struct {
 }
 
 type themeEditorPreviewSnapshot struct {
-	ai themeEditorAIState
+	surfaces *woxcomponent.ThemeSurfaceSet
+	ai       themeEditorAIState
 	formFieldsSnapshot
 	raw         map[string]any
 	key         string
@@ -210,6 +213,7 @@ func (a *App) loadSettingsThemeEditor() error {
 	hash := sha256.Sum256(encoded)
 	return a.runOnUI("apply settings theme editor", func() {
 		a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
+		a.themeSettings.ThemeEditor().surfaces = fromCoreTheme(theme).Surfaces
 		a.preloadThemeEditorModels()
 		a.preloadDemoWallpaper(true)
 		a.invalidateThemeEditorWindow()
@@ -222,6 +226,7 @@ func snapshotThemeEditorPreviewLocked(state *themeEditorPreviewState) *themeEdit
 		return nil
 	}
 	return &themeEditorPreviewSnapshot{
+		surfaces:           state.surfaces,
 		formFieldsSnapshot: snapshotFormFieldsLocked(&state.formFieldsState),
 		ai:                 state.ai,
 		raw:                copyThemeMap(state.raw),
@@ -248,8 +253,8 @@ func themeEditorPalette(values map[string]string) uiPalette {
 }
 
 // themeEditorDraftPalette preserves non-editable theme geometry while applying the live color draft.
-func themeEditorDraftPalette(raw map[string]any, values map[string]string) uiPalette {
-	theme, err := themeEditorDraftTheme(raw, values)
+func themeEditorDraftPalette(raw map[string]any, values map[string]string, surfaces ...*woxcomponent.ThemeSurfaceSet) uiPalette {
+	theme, err := themeEditorDraftTheme(raw, values, surfaces...)
 	if err != nil {
 		return themeEditorPalette(values)
 	}
@@ -257,7 +262,7 @@ func themeEditorDraftPalette(raw map[string]any, values map[string]string) uiPal
 }
 
 // themeEditorDraftTheme merges editable values into the complete source theme.
-func themeEditorDraftTheme(raw map[string]any, values map[string]string) (themeData, error) {
+func themeEditorDraftTheme(raw map[string]any, values map[string]string, surfaces ...*woxcomponent.ThemeSurfaceSet) (themeData, error) {
 	for _, token := range themeEditorTokens() {
 		if isV2Theme(raw) {
 			break
@@ -275,6 +280,9 @@ func themeEditorDraftTheme(raw map[string]any, values map[string]string) (themeD
 	if err != nil {
 		return themeData{}, err
 	}
+	if len(surfaces) > 0 {
+		theme.Surfaces = surfaces[0]
+	}
 	return theme, nil
 }
 
@@ -284,7 +292,7 @@ func (a *App) applySettingsThemeEditorDraft() {
 	if state == nil || !strings.HasPrefix(state.key, "settings-theme|") {
 		return
 	}
-	theme, err := themeEditorDraftTheme(state.raw, state.values)
+	theme, err := themeEditorDraftTheme(state.raw, state.values, state.surfaces)
 	if err == nil {
 		a.applyTheme(theme)
 	}
@@ -424,7 +432,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	validationError := validateThemeEditorValues(state.values)
 	if isV2Theme(state.raw) {
 		validationError = ""
-		if _, err := themeEditorDraftTheme(state.raw, state.values); err != nil {
+		if _, err := themeEditorDraftTheme(state.raw, state.values, state.surfaces); err != nil {
 			validationError = err.Error()
 		}
 	}
@@ -469,25 +477,23 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 			err = json.Unmarshal(encodedDraft, &theme)
 		}
 		var saved map[string]any
+		var applied themeData
 		if err == nil {
 			var savedTheme common.Theme
 			savedTheme, err = a.services.SaveTheme(ctx, a.sessionID, name, theme, overwrite)
 			if err == nil {
-				var encodedSaved []byte
-				encodedSaved, err = json.Marshal(savedTheme)
-				if err == nil {
-					err = json.Unmarshal(encodedSaved, &saved)
+				resolved, resolveErr := savedTheme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+				if resolveErr != nil {
+					err = resolveErr
+				} else {
+					applied = fromCoreTheme(resolved)
 				}
-			}
-		}
-		var applied themeData
-		if err == nil {
-			encoded, marshalErr := json.Marshal(saved)
-			if marshalErr != nil {
-				err = marshalErr
-			} else {
-				if unmarshalErr := json.Unmarshal(encoded, &applied); unmarshalErr != nil {
-					err = unmarshalErr
+				if err == nil {
+					var encodedSaved []byte
+					encodedSaved, err = json.Marshal(savedTheme)
+					if err == nil {
+						err = json.Unmarshal(encodedSaved, &saved)
+					}
 				}
 			}
 		}
@@ -506,6 +512,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 					definitions, savedValues := themeEditorForm(saved)
 					current.formFieldsState = newFormFieldsState(definitions, savedValues, false)
 					current.raw = saved
+					current.surfaces = applied.Surfaces
 					current.initial = copyStringMap(savedValues)
 					current.sourceID = themeMapString(saved, "ThemeId")
 					current.sourceName = themeMapString(saved, "ThemeName")

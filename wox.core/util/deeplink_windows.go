@@ -51,6 +51,9 @@ func EnsureDeepLinkProtocolHandler(ctx context.Context) bool {
 		GetLogger().Error(ctx, fmt.Sprintf("failed to register .wox file association: %s", err.Error()))
 		return true
 	}
+	if err := registerPackageAssociation(ctx, executable, ThemePackageExtension, ThemePackageMIMEType, "Wox.ThemePackage", "Wox Theme Package"); err != nil {
+		GetLogger().Error(ctx, fmt.Sprintf("register theme association: %v", err))
+	}
 	notifyFileAssociationChanged()
 	return true
 }
@@ -59,28 +62,33 @@ const windowsPluginPackageProgID = "Wox.PluginPackage"
 
 // registerPluginPackageAssociation makes Explorer open *.wox files with Wox.
 func registerPluginPackageAssociation(ctx context.Context, executable string) error {
-	extensionKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+PluginPackageExtension, registry.SET_VALUE)
+	return registerPackageAssociation(ctx, executable, PluginPackageExtension, PluginPackageMIMEType, windowsPluginPackageProgID, "Wox Plugin Package")
+}
+
+// registerPackageAssociation shares Explorer registration for plugin and theme archives.
+func registerPackageAssociation(ctx context.Context, executable, extension, mimeType, progID, label string) error {
+	extensionKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+extension, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("create extension key: %w", err)
 	}
 	defer extensionKey.Close()
-	if err := extensionKey.SetStringValue("", windowsPluginPackageProgID); err != nil {
+	if err := extensionKey.SetStringValue("", progID); err != nil {
 		return fmt.Errorf("set extension progid: %w", err)
 	}
-	if err := extensionKey.SetStringValue("Content Type", PluginPackageMIMEType); err != nil {
+	if err := extensionKey.SetStringValue("Content Type", mimeType); err != nil {
 		return fmt.Errorf("set extension content type: %w", err)
 	}
 
-	progIDKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+windowsPluginPackageProgID, registry.SET_VALUE)
+	progIDKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+progID, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("create progid key: %w", err)
 	}
 	defer progIDKey.Close()
-	if err := progIDKey.SetStringValue("", "Wox Plugin Package"); err != nil {
+	if err := progIDKey.SetStringValue("", label); err != nil {
 		return fmt.Errorf("name progid key: %w", err)
 	}
 
-	iconKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+windowsPluginPackageProgID+`\DefaultIcon`, registry.SET_VALUE)
+	iconKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+progID+`\DefaultIcon`, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("create default icon key: %w", err)
 	}
@@ -90,7 +98,7 @@ func registerPluginPackageAssociation(ctx context.Context, executable string) er
 	}
 
 	openCommand := fmt.Sprintf(`"%s" "%%1"`, executable)
-	openKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+windowsPluginPackageProgID+`\shell\open\command`, registry.SET_VALUE)
+	openKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\`+progID+`\shell\open\command`, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("create open command key: %w", err)
 	}
@@ -104,7 +112,7 @@ func registerPluginPackageAssociation(ctx context.Context, executable string) er
 		return fmt.Errorf("create application supported types: %w", err)
 	}
 	defer appKey.Close()
-	if err := appKey.SetStringValue(PluginPackageExtension, ""); err != nil {
+	if err := appKey.SetStringValue(extension, ""); err != nil {
 		return fmt.Errorf("set application supported type: %w", err)
 	}
 
@@ -117,7 +125,7 @@ func registerPluginPackageAssociation(ctx context.Context, executable string) er
 		return fmt.Errorf("set application open command: %w", err)
 	}
 
-	GetLogger().Info(ctx, "registered .wox file association")
+	GetLogger().Info(ctx, "registered "+extension+" file association")
 	return nil
 }
 

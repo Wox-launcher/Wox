@@ -1,4 +1,5 @@
 {
+  "plugin_theme_package_invalid": "無効なテーマパッケージ",
   "ui_hotkey_ignore_fullscreen": "全画面表示中はホットキーを無視",
   "ui_hotkey_ignore_fullscreen_tips": "前面のウィンドウが全画面表示中は Wox のホットキーを無視します。",
   "ui_hotkey_ignore_fullscreen_unavailable": "全画面表示を検出できません。Linux X11 には xprop、Hyprland には hyprctl が必要です。その他の Wayland デスクトップには未対応です。",

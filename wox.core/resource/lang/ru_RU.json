@@ -1,4 +1,5 @@
 {
+  "plugin_theme_package_invalid": "Недопустимый пакет темы",
   "ui_hotkey_ignore_fullscreen": "Игнорировать горячие клавиши в полноэкранном режиме",
   "ui_hotkey_ignore_fullscreen_tips": "Игнорировать горячие клавиши Wox, когда активное окно полноэкранное.",
   "ui_hotkey_ignore_fullscreen_unavailable": "Определение полноэкранного режима недоступно. В Linux нужен xprop для X11 или hyprctl для Hyprland; другие среды Wayland не поддерживаются.",

@@ -218,6 +218,7 @@ func UniformInsets(value float32) Insets {
 
 // Container paints an optional background and positions one child.
 type Container struct {
+	Surface *ImageSurface
 	Width   float32
 	Height  float32
 	Padding Insets
@@ -366,17 +367,23 @@ func (w Container) layout(ctx context, available constraints) *node {
 			if w.BorderWidth != 1 {
 				edge = woxui.Color{}
 			}
-			displayList.FloatingMaterial(bounds, w.Radius, w.Color, edge)
+			// A transparent image-framed panel supplies its own silhouette; a rectangular
+			// material behind it would fill the transparent parts outside the frame.
+			if w.Color.A != 0 || w.Surface == nil || w.Surface.Frame == nil {
+				displayList.FloatingMaterial(bounds, w.Radius, w.Color, edge)
+			}
+			w.Surface.Paint(displayList, bounds, w.Radius)
 			if w.BorderWidth > 0 && w.BorderWidth != 1 && w.BorderColor.A != 0 {
 				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
 			}
 			paintContainerEdgeBorders(displayList, bounds, w)
 		}
-	} else if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) {
+	} else if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) || w.Surface != nil {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			if w.Color.A != 0 {
 				displayList.FillRoundedRect(bounds, w.Radius, w.Color)
 			}
+			w.Surface.Paint(displayList, bounds, w.Radius)
 			if w.BorderColor.A != 0 && w.BorderWidth > 0 {
 				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
 			}

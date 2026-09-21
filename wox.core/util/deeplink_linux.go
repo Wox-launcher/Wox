@@ -42,6 +42,10 @@ func EnsureDeepLinkProtocolHandler(ctx context.Context) bool {
 		GetLogger().Error(ctx, fmt.Sprintf("failed to register .wox file association: %s", err.Error()))
 	}
 
+	cmd = exec.Command("xdg-mime", "default", LinuxDesktopFileName(), ThemePackageMIMEType)
+	if err := cmd.Run(); err != nil {
+		GetLogger().Error(ctx, fmt.Sprintf("register theme association: %v", err))
+	}
 	cmd = exec.Command("update-desktop-database", filepath.Dir(desktopFilePath))
 	if err := cmd.Run(); err != nil {
 		GetLogger().Warn(ctx, fmt.Sprintf("failed to update desktop database: %s", err.Error()))

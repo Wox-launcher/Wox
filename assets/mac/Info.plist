@@ -51,6 +51,24 @@
                     <string>com.github.wox.plugin</string>
                 </array>
             </dict>
+            <dict>
+                <key>CFBundleTypeName</key>
+                <string>Wox Theme Package</string>
+                <key>CFBundleTypeRole</key>
+                <string>Viewer</string>
+                <key>CFBundleTypeIconFile</key>
+                <string>app.icns</string>
+                <key>LSHandlerRank</key>
+                <string>Owner</string>
+                <key>CFBundleTypeExtensions</key>
+                <array>
+                    <string>wox-theme</string>
+                </array>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>com.github.wox.theme</string>
+                </array>
+            </dict>
         </array>
         <key>UTExportedTypeDeclarations</key>
         <array>
@@ -69,6 +87,24 @@
                     <key>public.filename-extension</key>
                     <array>
                         <string>wox</string>
+                    </array>
+                </dict>
+            </dict>
+            <dict>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.data</string>
+                    <string>public.zip-archive</string>
+                </array>
+                <key>UTTypeDescription</key>
+                <string>Wox Theme Package</string>
+                <key>UTTypeIdentifier</key>
+                <string>com.github.wox.theme</string>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <array>
+                        <string>wox-theme</string>
                     </array>
                 </dict>
             </dict>

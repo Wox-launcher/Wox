@@ -7,6 +7,7 @@ import (
 
 // Theme contains the semantic appearance shared by Wox launcher components.
 type Theme struct {
+	Surfaces                                   *ThemeSurfaceSet
 	Controls                                   ControlTheme
 	PreviewBackgroundColor                     *woxui.Color
 	PreviewBorderColor                         *woxui.Color

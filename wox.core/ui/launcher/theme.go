@@ -18,6 +18,7 @@ import (
 )
 
 type themeData struct {
+	Surfaces                                   *woxcomponent.ThemeSurfaceSet `json:"-"`
 	PreviewBackgroundColor                     string
 	PreviewBorderColor                         string
 	PreviewBorderRadius                        *int
@@ -152,6 +153,7 @@ type themeData struct {
 }
 
 type uiPalette struct {
+	Surfaces                                   *woxcomponent.ThemeSurfaceSet
 	PreviewBackgroundColor                     *woxui.Color
 	PreviewBorderColor                         *woxui.Color
 	PreviewBorderRadius                        *int
@@ -276,6 +278,7 @@ type uiPalette struct {
 // componentTheme exposes launcher appearance through the stable component package boundary.
 func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	return woxcomponent.Theme{
+		Surfaces: palette.Surfaces,
 		Controls: woxcomponent.ControlTheme{
 			ControlText: palette.actionText, BodyText: palette.previewText, ChromeText: palette.toolbarText,
 			Background: palette.background, Surface: palette.actionBackground, Text: palette.resultTitle, TextSecondary: palette.resultSubtitle, InputBackground: palette.queryBackground, InputText: palette.queryText, Focus: palette.cursor, TextSelectionBackground: palette.selectionBackground, TextSelectionText: palette.selectionText, SelectionBackground: palette.selectedBackground, SelectionText: palette.selectedTitle, Accent: palette.actionSelected, AccentText: palette.actionSelectedText, Border: palette.previewSplit, Error: woxui.Color{R: 232, G: 95, B: 95, A: 255},
@@ -545,6 +548,7 @@ func paletteForTheme(theme themeData) uiPalette {
 	toolbarBorder := parseThemeColor(theme.ToolbarFontColor, fallback.toolbarText)
 	toolbarBorder.A = min(toolbarBorder.A, uint8(26))
 	return uiPalette{
+		Surfaces:                                   theme.Surfaces,
 		ActionContainerDividerColor:                optionalThemeColor(theme.ActionContainerDividerColor),
 		PreviewBackgroundColor:                     optionalThemeColor(theme.PreviewBackgroundColor),
 		PreviewBorderColor:                         optionalThemeColor(theme.PreviewBorderColor),

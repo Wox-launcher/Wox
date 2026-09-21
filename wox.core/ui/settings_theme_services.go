@@ -117,6 +117,9 @@ func (s *CoreServices) SaveTheme(ctx context.Context, sessionID string, name str
 	if theme.AppBackgroundColor == "" {
 		return common.Theme{}, fmt.Errorf("theme data is empty")
 	}
+	if len(theme.AssetFiles) == 0 {
+		theme.AssetFiles = GetUIManager().GetThemeById(theme.ThemeId).AssetFiles
+	}
 	if overwrite {
 		if strings.TrimSpace(theme.ThemeId) == "" {
 			return common.Theme{}, fmt.Errorf("theme id is empty")

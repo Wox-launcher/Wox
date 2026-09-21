@@ -158,7 +158,9 @@ func launcherGridVisualRowView(row launcherGridVisualRow, props LauncherGridProp
 // launcherGridResultView builds one interactive grid cell.
 func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) woxwidget.Widget {
 	frameColor := woxui.Color{}
+	var surface *woxwidget.ImageSurface
 	if result.Selected {
+		surface = props.Theme.Surfaces.Get("ResultItemActive")
 		frameColor = props.Theme.SelectedBackground
 	} else if result.Hovered {
 		frameColor = props.Theme.ResultHoverColor()
@@ -187,7 +189,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	// Draw the hover/selected outline after the image so a full-bleed photo
 	// cannot cover the 4px frame.
 	visualChildren := []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: visualWidth, Height: visualHeight, Padding: woxwidget.UniformInsets(props.ItemPadding), Child: icon}},
+		{Child: woxwidget.Container{Width: visualWidth, Height: visualHeight, Surface: surface, Radius: 8, Padding: woxwidget.UniformInsets(props.ItemPadding), Child: icon}},
 		{Child: woxwidget.Boundary[launcherGridFrameProps]{
 			Key: LauncherResultBackgroundBoundaryKey(result.ID), Label: "grid-frame:" + result.ID, Props: frameProps,
 			Build: func(props launcherGridFrameProps) woxwidget.Widget {

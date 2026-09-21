@@ -14,6 +14,8 @@ import (
 // ThemeSchemaV2 is the complete v2 document. Nil styles inherit; zero and transparent are explicit overrides.
 // Platform and variant JSON null clears an inherited style instead of skipping it.
 type ThemeSchemaV2 struct {
+	I18n             map[string]map[string]string `json:",omitempty"`
+	Surfaces         ThemeSurfaces                `json:",omitempty"`
 	SchemaVersion    int
 	MinWoxVersion    string `json:",omitempty"`
 	ThemeId          string
@@ -225,6 +227,7 @@ func decodeThemeV2(data []byte, t *Theme) error {
 		MinWoxVersion:    definition.MinWoxVersion,
 		ThemeId:          definition.ThemeId,
 		ThemeName:        definition.ThemeName,
+		I18n:             definition.I18n,
 		ThemeAuthor:      definition.ThemeAuthor,
 		ThemeUrl:         definition.ThemeUrl,
 		Version:          definition.Version,
@@ -311,6 +314,7 @@ func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
 	// Window chrome follows the merged document so a platform-only outline still disables material.
 	resolved.source.(*themeV2Source).definition = t.source.(*themeV2Source).definition
 	resolved.source.(*themeV2Source).appWindowChrome = rawHasAppWindowChrome(raw)
+	resolved.AssetFiles = t.AssetFiles
 	resolved.Windows, resolved.MacOS, resolved.Linux = t.Windows, t.MacOS, t.Linux
 	return resolved, nil
 }
@@ -329,6 +333,26 @@ func mergeThemeV2OverrideFields(raw, fields map[string]json.RawMessage) {
 		}
 		if string(value) == "null" {
 			delete(raw, key)
+			continue
+		}
+		if key == "Surfaces" {
+			var parent, child map[string]json.RawMessage
+			_ = json.Unmarshal(raw[key], &parent)
+			if err := json.Unmarshal(value, &child); err != nil {
+				raw[key] = value
+				continue
+			}
+			if parent == nil {
+				parent = map[string]json.RawMessage{}
+			}
+			for name, surface := range child {
+				if string(surface) == "null" {
+					delete(parent, name)
+				} else {
+					parent[name] = surface
+				}
+			}
+			raw[key], _ = json.Marshal(parent)
 			continue
 		}
 		raw[key] = value
@@ -356,6 +380,7 @@ func marshalThemeV2(t Theme) ([]byte, error) {
 	definition.MinWoxVersion = t.MinWoxVersion
 	definition.ThemeId = t.ThemeId
 	definition.ThemeName = t.ThemeName
+	definition.I18n = t.I18n
 	definition.ThemeAuthor = t.ThemeAuthor
 	definition.ThemeUrl = t.ThemeUrl
 	definition.Version = t.Version
@@ -414,6 +439,9 @@ func validateV2ThemePlatforms(raw map[string]json.RawMessage) error {
 
 // resolve applies the versioned v2 defaults once, before backend geometry or UI adapters consume the theme.
 func (d ThemeSchemaV2) resolve() ([]byte, error) {
+	if err := d.Surfaces.Validate(); err != nil {
+		return nil, err
+	}
 	bases := []struct{ name, value string }{{"BaseBackgroundColor", d.BaseBackgroundColor}, {"BaseTextColor", d.BaseTextColor}, {"BaseAccentColor", d.BaseAccentColor}}
 	for _, base := range bases {
 		if _, ok := ParseThemeColor(base.value); !ok {
@@ -482,6 +510,10 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 	}
 	for key, value := range overrides {
 		if !themeV2StyleFields[key] || strings.HasPrefix(key, "Base") {
+			continue
+		}
+		if key == "Surfaces" {
+			values[key] = d.Surfaces
 			continue
 		}
 		if strings.HasSuffix(key, "Color") {
@@ -613,7 +645,7 @@ var themeV2StyleFields = func() map[string]bool {
 	for key := range themeV2DocumentFields {
 		fields[key] = true
 	}
-	for _, key := range []string{"SchemaVersion", "MinWoxVersion", "ThemeId", "ThemeName", "ThemeAuthor", "ThemeUrl", "Version", "Description", "IsSystem", "IsInstalled", "IsAutoAppearance", "DarkThemeId", "LightThemeId", "windows", "macos", "linux"} {
+	for _, key := range []string{"I18n", "SchemaVersion", "MinWoxVersion", "ThemeId", "ThemeName", "ThemeAuthor", "ThemeUrl", "Version", "Description", "IsSystem", "IsInstalled", "IsAutoAppearance", "DarkThemeId", "LightThemeId", "windows", "macos", "linux"} {
 		delete(fields, key)
 	}
 	return fields

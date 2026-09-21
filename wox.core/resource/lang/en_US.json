@@ -1,4 +1,5 @@
 {
+  "plugin_theme_package_invalid": "Invalid theme package",
   "ui_hotkey_ignore_fullscreen": "Ignore hotkeys in fullscreen",
   "ui_hotkey_ignore_fullscreen_tips": "Ignore launcher hotkeys while the active window is fullscreen.",
   "ui_hotkey_ignore_fullscreen_unavailable": "Fullscreen detection is unavailable. Linux requires xprop on X11 or hyprctl on Hyprland; other Wayland desktops are not supported.",

@@ -17,12 +17,172 @@ Paths below are relative to the Wox repository root. Read the current implementa
 
 - `wox.core/common/theme_schema_v2.go`: complete v2 document, accepted fields, color/geometry defaults, validation, and platform resolution.
 - `wox.core/resource/themes/`: built-in themes as working examples.
+- `wox.core/common/theme_surfaces.go` and `theme_package.go`: image surface declarations, resource validation, and package parsing.
 - `wox.core/common/theme_schema_v1.go`: legacy wire format and behavior, needed when converting an old theme.
 - `wox.core/common/theme_runtime.go` and `theme.go`: independent runtime representation, schema dispatch, and Wox version checks. These are not the authored JSON schema.
 
 Each schema owns its complete document and parser. Missing `SchemaVersion` or historical zero means v1. Loading must not rewrite old files. Changing v2 default semantics would change sparse themes; a new format belongs in a separately registered schema, not a retrofit of v1 or v2.
 
+## Image-backed themes
+
+Wox 2.4.4 adds optional image surfaces to schema 2. Existing v1/v2 JSON files,
+color defaults, window materials, and Action Panel placement are unchanged.
+Use `MinWoxVersion: "2.4.4"` when publishing a theme using these fields.
+
+### Package layout
+
+A `.wox-theme` file is a ZIP archive with `theme.json` at its root, not inside
+an enclosing folder:
+
+```text
+ming.wox-theme
+  theme.json
+  assets/lacquer.png
+  assets/palace-frame.png
+  assets/crest.png
+```
+
+Open the package with Wox, or select the file and invoke Wox's selection query.
+The installer shows its name and an Install action. Installation validates all
+entries before replacing `<theme-directory>/<ThemeId>/`; failed staging leaves
+the previous package intact. Plain `<ThemeId>.json` themes remain supported.
+Resource-backed themes are excluded from Cloud Sync.
+Theme editor color changes and Save As retain the image declarations and assets.
+
+The package accepts PNG and JPEG images. Paths are case-sensitive, slash-separated,
+relative to the package root. Absolute paths, traversal, symlinks, Windows device
+names, and case-colliding archive entries are rejected. Limits are 128 archive
+entries, 32 MiB uncompressed data, and 16 megapixels across all images. Nine-slice
+source cuts must leave a nonempty center. Assets for inactive platforms must also
+be included. No network image URLs or executable theme code are supported.
+
+### Example theme.json
+
+```json
+{
+  "SchemaVersion": 2,
+  "MinWoxVersion": "2.4.4",
+  "ThemeId": "6cf090bd-ef04-44e9-aa61-cbe0e1dc2275",
+  "ThemeName": "明",
+  "BaseBackgroundColor": "#721D16",
+  "BaseTextColor": "#FFF0CA",
+  "BaseAccentColor": "#F4C453",
+  "Surfaces": {
+    "App": {
+      "ContentInsets": {"Top": 110, "Right": 48, "Bottom": 32, "Left": 48},
+      "Background": {
+        "Source": "assets/lacquer.png",
+        "Mode": "tile",
+        "Size": {"Width": 128, "Height": 128}
+      },
+      "Frame": {
+        "Source": "assets/palace-frame.png",
+        "Mode": "nineSlice",
+        "Slice": {"Top": 160, "Right": 96, "Bottom": 96, "Left": 96},
+        "Insets": {"Top": 80, "Right": 48, "Bottom": 48, "Left": 48}
+      },
+      "Decorations": [{
+        "Source": "assets/crest.png",
+        "Anchor": "topCenter",
+        "Offset": {"X": 0, "Y": 0},
+        "Size": {"Width": 120, "Height": 110}
+      }]
+    },
+    "ActionContainer": {
+      "Background": {"Source": "assets/lacquer.png", "Mode": "tile"}
+    }
+  }
+}
+```
+
+### Surface contract
+
+The supported regions are `App`, `QueryBox`, `ResultItemActive`,
+`ActionContainer`, `Preview`, and `Toolbar`. Each accepts the same optional
+`Background`, `Frame`, and `Decorations` declarations. The generic preview shell
+is supported; embedded web/native content and specialized previews still own
+their inner rendering.
+
+Layers draw in this order: existing color/material, Background, Frame,
+Decorations, existing borders, interactive contents. Images do not introduce
+hit targets. Transparent image pixels reveal the underlying fill; they do not
+erase it. Author a transparent App background and custom chrome explicitly when
+needed. AppBorder fields still disable the OS material as before. Native
+arbitrary-shape input regions are not part of this extension.
+
+`Background` and `Frame` accept these modes:
+
+| Mode        | Geometry                                                                                             |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `stretch`   | Scale the image to the surface bounds.                                                               |
+| `tile`      | Repeat at `Size` logical units; if absent, use the image's pixel dimensions as logical units.        |
+| `nineSlice` | Cut at `Slice` source pixels, draw borders at `Insets` logical units, stretch the remaining regions. |
+
+Stretch and tiled images follow the surface corner radius. Nine-slice images
+retain their authored alpha silhouette; put rounded corners in the asset.
+Four corners retain their destination size unless the surface is too small,
+in which case opposing borders shrink proportionally. A frame's center is
+also drawn, so use a transparent center when only an outline is wanted.
+Tiled backgrounds retain only their latest raster size, at the active display's
+physical pixel density, capped by the asset's authored density. Moving between
+displays rebuilds this cache; `Size` remains in logical units. The limit is 16
+megapixels per background; larger requests use the existing color fallback.
+Reuse the same `Source` for shared textures: decoded pixels are shared across
+surfaces, while each surface keeps its own size cache. PNG file size is not its
+memory cost: decoded RGBA uses roughly width × height × 4 bytes, plus raster
+and native renderer caches. Use reasonably sized texture tiles.
+
+Decorations require `Source`, `Anchor`, and a positive logical `Size`; `Offset`
+defaults to zero. Anchors are `topLeft`, `topCenter`, `topRight`, `centerLeft`,
+`center`, `centerRight`, `bottomLeft`, `bottomCenter`, and `bottomRight`.
+Offsets are in logical units and decorations stay clipped to their owner.
+Decorations are static and do not change control layout.
+
+Only `App` accepts `ContentInsets`. These add to the existing uniform
+`AppContentInset`, outside the inner content panel and existing `AppPadding`.
+They reserve space for the entire launcher body, including the Toolbar and
+Action Panel. Frame insets do not implicitly add layout padding.
+
+Platform and variant `Surfaces` objects merge **by region**. A supplied region
+replaces that region's whole declaration; omitted regions inherit. Set a region
+to `null` to remove it, or `Surfaces: null` to remove every inherited surface.
+Existing scalar platform override semantics are unchanged.
+
+```json
+{
+  "windows": {"Surfaces": {"Toolbar": null}},
+  "linux": {"Surfaces": null}
+}
+```
+
+There is no separate package format version; the schema version belongs to
+`theme.json`.
+
 ## Author the document
+
+### Localized name and description
+
+Schema v2 supports optional inline `I18n`, using the same locale-to-key map as
+plugin.json. Set `ThemeName` and `Description` to `i18n:` keys:
+
+```json
+{
+  "ThemeName": "i18n:theme_name",
+  "Description": "i18n:theme_description",
+  "I18n": {
+    "en_US": {"theme_name": "Ming", "theme_description": "An imperial red and gold theme."},
+    "zh_CN": {"theme_name": "明", "theme_description": "朱红与金黄的皇家主题。"}
+  }
+}
+```
+
+Provide `en_US` as fallback, plus the intended languages (`zh_CN`, `ru_RU`,
+`pt_BR`, `ko_KR`, `ja_JP`). Missing translations fall back to English, then
+Wox's built-in translations, then the original key. Literal text stays literal.
+Translations are resolved for display and search; saved JSON retains the keys
+and translation map. `I18n` belongs at the root, not in platform overrides.
+This extension uses schema 2 and requires Wox 2.4.4. Theme translations currently
+use inline `I18n`; separate `lang/` files are not loaded.
 
 A minimal v2 document looks like this; replace the sample ID and name:
 
@@ -42,14 +202,14 @@ The three base colors, ID, and name are required. Explicitly declare schema 2. S
 
 Group overrides by surface: window, query/Glance/Attention, result container/items, Action Panel/items/query, preview/tags, toolbar/keycaps. Keep the document sparse; add overrides for intentional design differences.
 
-| Authored value | Meaning |
-| --- | --- |
-| Missing optional style | Inherit parent, or schema default at the root |
-| `null` at the root | Same as omitted: schema default |
-| `null` on a platform or variant | Clear the inherited value and restore the schema default |
-| Integer `0` | Explicit zero; never substitute a default |
-| `transparent` or alpha zero | Explicit transparency |
-| Empty color, negative/fractional geometry | Invalid |
+| Authored value                            | Meaning                                                  |
+| ----------------------------------------- | -------------------------------------------------------- |
+| Missing optional style                    | Inherit parent, or schema default at the root            |
+| `null` at the root                        | Same as omitted: schema default                          |
+| `null` on a platform or variant           | Clear the inherited value and restore the schema default |
+| Integer `0`                               | Explicit zero; never substitute a default                |
+| `transparent` or alpha zero               | Explicit transparency                                    |
+| Empty color, negative/fractional geometry | Invalid                                                  |
 
 Colors accept `#RRGGBB`, `#RRGGBBAA` (alpha last), `rgb(r,g,b)`, `rgba(r,g,b,a)`, and `transparent`. RGB channels are 0–255; alpha is 0–1. Geometry uses logical units, not physical screen pixels.
 
@@ -100,8 +260,50 @@ Preserve authored values and platform nodes when editing or saving. Never flatte
 
 ## Deliver and check
 
-For local debugging, use the user's requested path; the normal user theme directory is `~/.wox/wox-user/themes/`. Use `<ThemeId>.json` for a new file. Do not overwrite an unrelated theme or publish to the store as part of local authoring.
+For local debugging, use the user's requested path; the normal user theme directory is `~/.wox/wox-user/themes/`. Use `<ThemeId>.json` for a plain color theme. For image-backed themes, deliver a `.wox-theme` package containing root `theme.json` and its assets; installed packages live under `<ThemeId>/`. Do not overwrite an unrelated theme or publish to the store as part of local authoring.
 
 Validate JSON and use Wox's actual parser/resolver to check fields, colors, platform nodes, and version compatibility. Existing checks live in `wox.core/common/theme_v2_test.go` and `theme_document_test.go`; for changes to parsing run `go test -tags 'sqlite_fts5,wox_automation' ./common` from `wox.core`. That suite validates the implementation, not an arbitrary new file: load the authored file through Wox or a focused parser check as well.
 
 When a running preview is available, inspect selected/hovered results, the Action Panel, keycaps, toolbar, preview/tags, and Glance. For transparency, compare against light and dark desktop content. Report which platforms were actually observed; do not claim native material behavior from a static JSON check.
+
+Resource-backed themes are local-only for now: Cloud Sync skips their install, update, deletion, and snapshot payloads. Ordinary JSON themes continue to sync. Share image themes using the `.wox-theme` file.
+
+## Resizable frames: stretch versus repeat
+
+Schema v2 nine-slice images accept optional `"Repeat": {"X": "tile", "Y": "stretch"}`.
+Each omitted axis defaults to `stretch`; accepted values are `stretch` and `tile`.
+`Repeat` is invalid on whole-image `stretch` or `tile` modes. Existing declarations are unchanged.
+
+Corners retain their authored logical Insets. X controls the top/bottom middle strips;
+Y controls the left/right middle strips. The center follows both axes. Tiling starts
+at the left/top of each slice; the final partial tile is clipped, never squeezed.
+Top/bottom tile width equals source strip width multiplied by actual logical strip
+height divided by source strip height. Left/right tile height uses the corresponding
+width ratio. The center uses the first positive Insets/Slice ratio in Top, Bottom,
+Left, Right order (or 1 if all are zero). Keep these ratios consistent for a uniform
+material density. DPI is applied by the renderer; do not multiply Insets by display scale.
+Very small windows shrink opposing borders proportionally. A pathological slice that
+would require more than 4096 tile draws falls back to stretching that slice; avoid tiny
+repeat units and verify the maximum supported window size.
+
+Use stretching for flat fills and simple straight rules, tiling for roof tiles, woven
+patterns, rivets or bamboo, and fixed-size Decorations for crests, lettering and figures.
+Nine-slice does not turn an arbitrary illustration into a seamless material. The full
+middle strip is the repeat unit: its two ends must match in height, color, lighting,
+alpha and motif phase. Do not include isolated statues in it. Keep curved-to-straight
+transitions entirely within fixed corner slices; put cut lines only in straight,
+regular sections and preserve tangent continuity. Corners and adjacent strips need
+matching scale as well as matching pixels. Inspect the join at both ends, not only
+repeat-to-repeat seams. A clipped final motif can meet the far corner at a different
+phase; prefer a neutral join or a fixed decorative cap where this would be visible.
+
+For an irregular Action/About panel, set ActionContainerBackgroundColor and its border
+color to transparent, remove the separate rectangular Background image, and provide
+an opaque interior inside a transparent-exterior Frame. This also skips the rectangular
+floating material. Leave padding for the ornaments. App ContentInsets reserve draggable
+outer chrome; controls remain inside the reserved content bounds.
+
+Verify minimum, default and wide launcher widths, short and tall result lists, fractional
+DPI (125%, 150%), fixed crest proportions, partial tiles, alpha silhouette, and Action/
+About content clearance. Check the actual rendered UI before claiming seamless joins;
+image generation and parser validation alone cannot establish that.

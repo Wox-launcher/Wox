@@ -631,7 +631,7 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 		previewHeight := height - 127
 		previewWidth := width - resultWidth - 16
 		if props.Geometry != nil {
-			bounds := woxcomponent.LauncherContentBounds(width, height, props.DraftTheme.AppContentInset)
+			bounds := woxcomponent.LauncherContentBounds(width, height, props.DraftTheme.AppContentInset, props.DraftTheme.Surfaces)
 			resultWidth = bounds.Width * .4
 			previewWidth = bounds.Width - resultWidth - 16
 			previewHeight = bounds.Height - props.Geometry.AppPadding.Top - 55 - props.Geometry.ResultPadding.Top - 4 - 40 - props.Geometry.AppPadding.Bottom

@@ -89,12 +89,16 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	openThemeFolderText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_containing_folder")
 
 	results := lo.FilterMap(installedThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
-		match, _ := plugin.IsStringMatchScore(ctx, theme.ThemeName, query.Search)
+		match, _ := plugin.IsStringMatchScore(ctx, theme.GetName(ctx), query.Search)
 		if match {
 			themePath := filepath.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
+			packageManifest := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
+			if util.IsFileExists(packageManifest) {
+				themePath = packageManifest
+			}
 			result := plugin.QueryResult{
-				Title:    theme.ThemeName,
-				SubTitle: theme.Description,
+				Title:    theme.GetName(ctx),
+				SubTitle: theme.GetDescription(ctx),
 				Icon:     themeResultIcon(theme, iconCatalog),
 				ScoreKey: theme.ThemeId,
 				Actions: []plugin.QueryResultAction{
@@ -154,11 +158,11 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			return plugin.QueryResult{}, false
 		}
 
-		match, _ := plugin.IsStringMatchScore(ctx, theme.ThemeName, query.Search)
+		match, _ := plugin.IsStringMatchScore(ctx, theme.GetName(ctx), query.Search)
 		if match {
 			result := plugin.QueryResult{
-				Title:      theme.ThemeName,
-				SubTitle:   theme.Description,
+				Title:      theme.GetName(ctx),
+				SubTitle:   theme.GetDescription(ctx),
 				Icon:       themeResultIcon(theme, iconCatalog),
 				Group:      storeGroup,
 				GroupScore: 0,
@@ -207,8 +211,8 @@ func (c *ThemePlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUDa
 
 	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
 	result := plugin.QueryResult{
-		Title:    found.ThemeName,
-		SubTitle: found.Description,
+		Title:    found.GetName(ctx),
+		SubTitle: found.GetDescription(ctx),
 		Icon:     themeResultIcon(*found, installedThemes),
 		ScoreKey: found.ThemeId,
 		Actions: []plugin.QueryResultAction{

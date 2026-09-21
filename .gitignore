@@ -56,3 +56,4 @@ www/docs/zh/changelog/
 wox.ui.flutter/
 .gocache/
 cache/
+output/

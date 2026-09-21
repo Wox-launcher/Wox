@@ -167,7 +167,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 		}}
 	}
 	body := woxwidget.Container{
-		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground, Floating: true,
+		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground, Floating: true, Surface: props.Theme.Surfaces.Get("Toolbar"),
 		Padding: woxwidget.Insets{Left: props.Padding.Left, Right: props.Padding.Right},
 		Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: leftWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets}},
@@ -179,10 +179,10 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	}
 	var surface woxwidget.Widget = body
 	if radius := min(max(0, props.Theme.AppContentBorderRadius), min(props.Width/2, props.Height)); radius > 0 {
-		// Extend the rounded material above the clip so only the panel's bottom corners are rounded.
-		body.Color, body.Floating = woxui.Color{}, false
+		// Keep both material and texture on the rounded layer; a texture on body would cover the bottom corners.
+		body.Color, body.Floating, body.Surface = woxui.Color{}, false, nil
 		surface = woxwidget.Clip{Width: props.Width, Height: props.Height, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
-			{Top: -radius, Child: woxwidget.Container{Width: props.Width, Height: props.Height + radius, Radius: radius, Color: props.Theme.ToolbarBackground, Floating: true}},
+			{Top: -radius, Child: woxwidget.Container{Width: props.Width, Height: props.Height + radius, Radius: radius, Color: props.Theme.ToolbarBackground, Floating: true, Surface: props.Theme.Surfaces.Get("Toolbar")}},
 			{Child: body},
 		}}}
 	}

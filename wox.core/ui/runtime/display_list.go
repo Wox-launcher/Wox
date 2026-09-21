@@ -46,6 +46,9 @@ type TextMetrics struct {
 
 // DisplayList records the drawing commands for one frame.
 type DisplayList struct {
+	// RasterScale is the active display's physical pixels per logical unit.
+	// Zero means 1 for offscreen callers without a native frame.
+	RasterScale  float32
 	clearColor   Color
 	commands     []displayCommand
 	clipStack    []Rect

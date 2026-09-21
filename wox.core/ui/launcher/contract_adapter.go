@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	woxcomponent "wox/ui/launcher/component"
 
 	"wox/ai"
 	"wox/cloudsync"
@@ -519,6 +520,7 @@ func (a *App) ApplyTerminalState(_ context.Context, sessionID string, state term
 func fromCoreTheme(theme common.Theme) themeData {
 	colors := theme.ResolvedColors()
 	return themeData{
+		Surfaces:                                   woxcomponent.LoadThemeSurfaces(theme.Surfaces, theme.AssetFiles),
 		ActionContainerDividerColor:                colors["ActionContainerDividerColor"],
 		PreviewBackgroundColor:                     colors["PreviewBackgroundColor"],
 		PreviewBorderColor:                         colors["PreviewBorderColor"],

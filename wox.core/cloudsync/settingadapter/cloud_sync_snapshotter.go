@@ -176,7 +176,7 @@ func appendInstalledPluginOplogs(ctx context.Context, disabledPlugins map[string
 // appendInstalledThemeOplogs snapshots user-installed themes with their full current payload.
 func appendInstalledThemeOplogs(ctx context.Context, timestamp int64, oplogs *[]database.Oplog) error {
 	for _, theme := range ui.GetUIManager().GetAllThemes(ctx) {
-		if theme.IsSystem {
+		if theme.IsSystem || !theme.CanSyncWithoutAssets() {
 			continue
 		}
 

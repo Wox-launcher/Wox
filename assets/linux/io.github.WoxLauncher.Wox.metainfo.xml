@@ -24,6 +24,7 @@
   <mimetypes>
     <mimetype>x-scheme-handler/wox</mimetype>
     <mimetype>application/x-wox-plugin</mimetype>
+    <mimetype>application/x-wox-theme</mimetype>
   </mimetypes>
   <categories>
     <category>Utility</category>

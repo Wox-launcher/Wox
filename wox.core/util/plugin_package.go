@@ -10,6 +10,8 @@ import (
 const (
 	// PluginPackageExtension is the packaged plugin archive suffix.
 	PluginPackageExtension = ".wox"
+	ThemePackageExtension  = ".wox-theme"
+	ThemePackageMIMEType   = "application/x-wox-theme"
 	// PluginPackageMIMEType is the Linux/shared MIME type for .wox archives.
 	PluginPackageMIMEType = "application/x-wox-plugin"
 	pluginPackageURLMIME  = "x-scheme-handler/wox"
@@ -25,7 +27,7 @@ func PluginPackageInstallDeepLink(filePath string) string {
 	return "wox://install?path=" + url.QueryEscape(filePath)
 }
 
-// CollectStartupDeepLinks keeps protocol URLs and converts .wox file arguments
+// CollectStartupDeepLinks keeps protocol URLs and converts package file arguments
 // into install deeplinks so a second process can forward them to the running instance.
 func CollectStartupDeepLinks(args []string) []string {
 	links := make([]string, 0, 1)
@@ -58,7 +60,7 @@ func CollectStartupDeepLinks(args []string) []string {
 }
 
 // PluginPackagePathFromArg accepts a filesystem path or file:// URL and returns
-// a cleaned local .wox path when the argument is a plugin package.
+// a cleaned local .wox or .wox-theme path for the shared package installer.
 func PluginPackagePathFromArg(arg string) (string, bool) {
 	arg = strings.TrimSpace(arg)
 	if arg == "" {
@@ -66,12 +68,12 @@ func PluginPackagePathFromArg(arg string) (string, bool) {
 	}
 
 	if filePath, ok := pathFromFileURL(arg); ok {
-		if !IsPluginPackagePath(filePath) {
+		if !IsPluginPackagePath(filePath) && !IsThemePackagePath(filePath) {
 			return "", false
 		}
 		return filepath.Clean(filePath), true
 	}
-	if !IsPluginPackagePath(arg) {
+	if !IsPluginPackagePath(arg) && !IsThemePackagePath(arg) {
 		return "", false
 	}
 
@@ -113,4 +115,8 @@ func pathFromFileURL(raw string) (string, bool) {
 	}
 
 	return filePath, true
+}
+
+func IsThemePackagePath(path string) bool {
+	return strings.EqualFold(filepath.Ext(strings.TrimSpace(path)), ThemePackageExtension)
 }

@@ -31,8 +31,11 @@ func (t Theme) ResultIndicator() ResultIndicatorStyle {
 }
 
 // ResultIndicatorBackground shares the marker geometry between launcher rows and the demo.
-func ResultIndicatorBackground(width, height, radius float32, color woxui.Color, s ResultIndicatorStyle) woxwidget.Widget {
+func ResultIndicatorBackground(width, height, radius float32, color woxui.Color, s ResultIndicatorStyle, surfaces ...*woxwidget.ImageSurface) woxwidget.Widget {
 	base := woxwidget.Container{Width: width, Height: height, Radius: radius, Color: color}
+	if len(surfaces) > 0 {
+		base.Surface = surfaces[0]
+	}
 	if s.Left == 0 && s.Top == 0 && s.Bottom == 0 && s.Radius == 0 {
 		base.LeftBorderWidth, base.LeftBorderColor = s.Width, s.Color
 		return base
