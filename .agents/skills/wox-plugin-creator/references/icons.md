@@ -37,7 +37,7 @@ Third-party plugins cannot call `icons.Get`. Copy a bundled action SVG from `ass
 </svg>
 ```
 
-Script plugins prefix the same markup with `svg:`. SDK plugins pass it as `WoxImage` type `svg`.
+SDK plugins pass the markup as `WoxImage` type `svg`. Single-file Node.js plugins use `{ ImageType: "svg", ImageData: "<svg>...</svg>" }`.
 
 ## Bundled Action Verbs
 

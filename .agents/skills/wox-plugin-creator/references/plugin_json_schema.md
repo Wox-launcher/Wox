@@ -6,7 +6,7 @@ This document defines the schema for `plugin.json`, the manifest file required f
 
 The `plugin.json` file must be a valid JSON object located in the root of your plugin directory.
 
-> **Note**: Script plugins and single-file SDK plugins do **not** use `plugin.json`. They embed a JSON metadata block inside the file header comments. Single-file SDK plugins must set `MinWoxVersion` to `"2.4.2"`.
+> **Note**: Single-file SDK plugins do **not** use `plugin.json`. They embed a JSON metadata block inside the file header comments and must set `MinWoxVersion` to `"2.4.2"`.
 
 ## Fields Specification
 
@@ -126,7 +126,7 @@ Use this reference as the source of truth when authoring `SettingDefinitions` in
 
 SDK and single-file SDK plugins should persist settings through the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). Those APIs are what Wox can sync across machines. Do not store ordinary plugin settings in local files or a custom store.
 
-Machine-local cache is different. If the plugin downloads files, stores thumbnails, or caches search results, put those files under `GetCacheFolder` / `get_cache_folder` (`~/.wox/cache/plugins/<plugin-id>/`) first. Script plugins use `WOX_DIRECTORY_PLUGIN_CACHE`. Do not create a custom `cache/` directory beside the plugin or under user data.
+Machine-local cache is different. If the plugin downloads files, stores thumbnails, or caches search results, put those files under `GetCacheFolder` / `get_cache_folder` (`~/.wox/cache/plugins/<plugin-id>/`) first. Do not create a custom `cache/` directory beside the plugin or under user data.
 
 Before adding a setting, decide whether cloud sync should share one value across all devices or keep a separate value per platform.
 
@@ -448,7 +448,7 @@ Delays query execution until the user stops typing for `IntervalMs`.
 
 ### 5. MRU (Most Recently Used)
 
-SDK and single-file SDK plugins should enable MRU by default. Wox records a result after the user executes an action, then asks the plugin to rebuild it on the launcher start page. Script plugins cannot use MRU.
+SDK and single-file SDK plugins should enable MRU by default. Wox records a result after the user executes an action, then asks the plugin to rebuild it on the launcher start page.
 
 Skip MRU only when the plugin is clearly unsuitable: results depend on the current selection, foreground app, or Open/Save dialog; the plugin is a one-shot action; it is diagnostic or maintenance-only; or it already is a history/inbox surface. If you skip it, document why.
 

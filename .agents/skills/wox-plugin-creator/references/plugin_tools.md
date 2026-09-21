@@ -2,7 +2,7 @@
 
 Named, schema-checked operations that SDK and single-file SDK plugins register at runtime. Wox owns the catalog, validation, routing, and lifecycle. The handler owns business logic.
 
-Requires **Wox >= 2.4.5**. Set `MinWoxVersion` to `"2.4.5"` or newer before calling these APIs. Script plugins cannot register or invoke tools. Search-box subcommands (`Commands` / `RegisterQueryCommands`) are independent.
+Requires **Wox >= 2.4.5**. Set `MinWoxVersion` to `"2.4.5"` or newer before calling these APIs. Search-box subcommands (`Commands` / `RegisterQueryCommands`) are independent.
 
 Do not declare tools in `plugin.json`. Registration is the only source.
 
