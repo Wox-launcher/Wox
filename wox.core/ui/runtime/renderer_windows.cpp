@@ -54,6 +54,9 @@ struct WoxRenderer {
   uint64_t cached_large_image_id = 0;
   uint64_t cached_large_image_bytes = 0;
   std::vector<CachedImageBitmap> cached_image_bitmaps;
+  // Uploads too large for the retained cache but referenced again within the same frame, such as
+  // a repeated theme surface slice. They live until EndDraw so one image costs one upload per frame.
+  std::vector<CachedImageBitmap> frame_image_bitmaps;
   std::vector<ID2D1Bitmap1 *> retired_image_bitmaps;
   uint64_t cached_image_bitmap_bytes = 0;
   uint64_t cached_image_use_serial = 0;
@@ -296,19 +299,28 @@ static void release_material_resources(WoxRenderer *renderer) {
   renderer->material_source_size = {};
 }
 
-// release_retired_image_bitmaps keeps evicted resources alive until EndDraw has
+// release_retired_image_bitmaps keeps evicted and frame-scoped resources alive until EndDraw has
 // consumed every bitmap referenced by the current frame.
 static void release_retired_image_bitmaps(WoxRenderer *renderer) {
   for (ID2D1Bitmap1 *bitmap : renderer->retired_image_bitmaps) {
     release_com(&bitmap);
   }
   renderer->retired_image_bitmaps.clear();
+  for (CachedImageBitmap &entry : renderer->frame_image_bitmaps) {
+    release_com(&entry.bitmap);
+  }
+  renderer->frame_image_bitmaps.clear();
 }
 
 static ID2D1Bitmap1 *find_cached_image_bitmap(WoxRenderer *renderer, uint64_t image_id) {
   for (CachedImageBitmap &entry : renderer->cached_image_bitmaps) {
     if (entry.image_id == image_id) {
       entry.last_used = ++renderer->cached_image_use_serial;
+      return entry.bitmap;
+    }
+  }
+  for (const CachedImageBitmap &entry : renderer->frame_image_bitmaps) {
+    if (entry.image_id == image_id) {
       return entry.bitmap;
     }
   }
@@ -1011,6 +1023,11 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
       renderer->cached_large_image_bytes = image_bytes;
       release_bitmap = false;
     } else if (cache_image_bitmap(renderer, image_id, image_bytes, bitmap)) {
+      release_bitmap = false;
+    } else if (image_id != 0) {
+      // Not retained across frames, but tiled surfaces draw the same oversized slice dozens of
+      // times per frame; re-uploading each time left hundreds of MB in driver staging buffers.
+      renderer->frame_image_bitmaps.push_back(CachedImageBitmap{image_id, image_bytes, 0, bitmap});
       release_bitmap = false;
     }
   }

@@ -88,18 +88,11 @@ func LoadThemeSurfaces(definitions common.ThemeSurfaces, assets map[string][]byt
 				util.GetLogger().Warn(context.Background(), "theme nineSlice exceeds source image: "+def.Source)
 				return nil
 			}
-			xs, ys := [4]int{0, s.Left, w - s.Right, w}, [4]int{0, s.Top, h - s.Bottom, h}
-			for y := 0; y < 3; y++ {
-				for x := 0; x < 3; x++ {
-					r := image.Rect(xs[x], ys[y], xs[x+1], ys[y+1])
-					if r.Empty() {
-						continue
-					}
-					part := image.NewRGBA(image.Rect(0, 0, r.Dx(), r.Dy()))
-					draw.Draw(part, part.Bounds(), img, r.Min.Add(img.Bounds().Min), draw.Src)
-					result.Slices[y*3+x], _ = woxui.NewImageFromPackedRGBA(part)
-				}
-			}
+			// Surfaces sharing a source keep one decoded raster; display-density slices are
+			// derived at paint time instead of copying source pixels per surface.
+			result.Source = img
+			result.SliceColumns = [4]int{0, s.Left, w - s.Right, w}
+			result.SliceRows = [4]int{0, s.Top, h - s.Bottom, h}
 			result.Insets = themeSurfaceInsets(*def.Insets)
 			if def.Repeat != nil {
 				result.RepeatX = def.Repeat.X == "tile"

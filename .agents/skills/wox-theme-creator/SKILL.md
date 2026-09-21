@@ -138,6 +138,11 @@ Tiled backgrounds retain only their latest raster size, at the active display's
 physical pixel density, capped by the asset's authored density. Moving between
 displays rebuilds this cache; `Size` remains in logical units. The limit is 16
 megapixels per background; larger requests use the existing color fallback.
+Nine-slice textures are likewise derived at display density from the shared
+decoded source: borders and repeated tiles are downsampled to their logical
+size times the display scale (never upsampled), while an axis that stretches
+to the surface keeps its source pixels. Only the latest display scale is
+cached per surface.
 Reuse the same `Source` for shared textures: decoded pixels are shared across
 surfaces, while each surface keeps its own size cache. PNG file size is not its
 memory cost: decoded RGBA uses roughly width × height × 4 bytes, plus raster

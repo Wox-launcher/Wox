@@ -55,19 +55,29 @@ type SurfaceDecoration struct {
 	Size                 woxui.Size
 }
 
-// SurfaceImage retains source-resolution slices; only repeated textures need a size cache.
+// SurfaceImage retains authored-resolution sources and derives textures at display density.
+// Nine-slice themes often author borders far denser than the logical insets they paint into
+// (a 250px slice drawn 40 logical units wide), so uploading source pixels every frame cost far
+// more GPU staging memory than the theme's file size suggested. Only the latest display scale
+// is cached, matching the repeated tile texture.
 type SurfaceImage struct {
 	RepeatX, RepeatY bool
-	PixelScale       float32
-	Image            *woxui.Image
-	Slices           [9]*woxui.Image
-	Insets           Insets
-	Tile             *image.RGBA
-	TileSize         woxui.Size
-	mu               sync.Mutex
-	cached           *woxui.Image
-	cachedSize       image.Point
-	cachedTileSize   image.Point
+	// PixelScale is the logical size of one center source pixel, derived from the border density.
+	PixelScale float32
+	Image      *woxui.Image
+	Insets     Insets
+	// Source is the shared decoded raster of a nine-slice; SliceColumns and SliceRows hold the
+	// source pixel boundaries of its three columns and rows.
+	Source                  *image.RGBA
+	SliceColumns, SliceRows [4]int
+	Tile                    *image.RGBA
+	TileSize                woxui.Size
+	mu                      sync.Mutex
+	cached                  *woxui.Image
+	cachedSize              image.Point
+	cachedTileSize          image.Point
+	slices                  [9]*woxui.Image
+	slicesScale             float32
 }
 
 // Paint paints decoration over the surface fill, before its interactive contents.
@@ -100,25 +110,93 @@ func (s *SurfaceImage) paint(list *woxui.DisplayList, bounds woxui.Rect, radius 
 		list.DrawRotatedRoundedImage(s.Image, bounds, 0, radius)
 		return
 	}
+	if s.Source == nil {
+		return
+	}
+	slices := s.sliceTextures(list.RasterScale)
 	xs := surfaceEdges(bounds.X, bounds.Width, s.Insets.Left, s.Insets.Right)
 	ys := surfaceEdges(bounds.Y, bounds.Height, s.Insets.Top, s.Insets.Bottom)
 	for y := 0; y < 3; y++ {
 		for x := 0; x < 3; x++ {
-			if img := s.Slices[y*3+x]; img != nil && xs[x+1] > xs[x] && ys[y+1] > ys[y] {
-				rect := woxui.Rect{X: xs[x], Y: ys[y], Width: xs[x+1] - xs[x], Height: ys[y+1] - ys[y]}
-				scale := s.PixelScale
-				if scale <= 0 {
-					scale = 1
-				}
-				if y != 1 {
-					scale = rect.Height / float32(img.Height)
-				} else if x != 1 {
-					scale = rect.Width / float32(img.Width)
-				}
-				paintRepeatedSlice(list, img, rect, s.RepeatX && x == 1, s.RepeatY && y == 1, scale)
+			img := slices[y*3+x]
+			if img == nil || xs[x+1] <= xs[x] || ys[y+1] <= ys[y] {
+				continue
 			}
+			rect := woxui.Rect{X: xs[x], Y: ys[y], Width: xs[x+1] - xs[x], Height: ys[y+1] - ys[y]}
+			// Repeated tiles keep their logical size regardless of texture density.
+			tileWidth, tileHeight := s.sliceTileSize(x, y, rect.Width, rect.Height)
+			paintRepeatedSlice(list, img, rect, s.RepeatX && x == 1, s.RepeatY && y == 1, tileWidth, tileHeight)
 		}
 	}
+}
+
+// sliceTileSize reports the logical size of one repeated tile for the slice at column x, row y
+// when painted into a destination of the given size. Border rows and columns scale uniformly
+// with their destination thickness; the center uses the authored PixelScale.
+func (s *SurfaceImage) sliceTileSize(x, y int, width, height float32) (float32, float32) {
+	sourceWidth := float32(s.SliceColumns[x+1] - s.SliceColumns[x])
+	sourceHeight := float32(s.SliceRows[y+1] - s.SliceRows[y])
+	scale := s.PixelScale
+	if scale <= 0 {
+		scale = 1
+	}
+	if y != 1 && sourceHeight > 0 {
+		scale = height / sourceHeight
+	} else if x != 1 && sourceWidth > 0 {
+		scale = width / sourceWidth
+	}
+	return sourceWidth * scale, sourceHeight * scale
+}
+
+// sliceTextures returns the nine textures for one display scale. Every axis with a known
+// destination (border thickness, repeated tile length) is downsampled to display density; an
+// axis that stretches to the surface size keeps its source resolution because its destination
+// is unknown here. Sources are never upsampled.
+func (s *SurfaceImage) sliceTextures(scale float32) [9]*woxui.Image {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if scale <= 0 {
+		scale = 1
+	}
+	if s.slicesScale == scale {
+		return s.slices
+	}
+	insetWidths := [3]float32{s.Insets.Left, 0, s.Insets.Right}
+	insetHeights := [3]float32{s.Insets.Top, 0, s.Insets.Bottom}
+	var slices [9]*woxui.Image
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 3; x++ {
+			source := image.Rect(s.SliceColumns[x], s.SliceRows[y], s.SliceColumns[x+1], s.SliceRows[y+1])
+			if source.Empty() {
+				continue
+			}
+			width, height := source.Dx(), source.Dy()
+			targetWidth, targetHeight := s.sliceTileSize(x, y, insetWidths[x], insetHeights[y])
+			if x != 1 {
+				targetWidth = insetWidths[x]
+			}
+			if y != 1 {
+				targetHeight = insetHeights[y]
+			}
+			if x != 1 || s.RepeatX {
+				width = min(width, max(1, int(math.Ceil(float64(targetWidth*scale)))))
+			}
+			if y != 1 || s.RepeatY {
+				height = min(height, max(1, int(math.Ceil(float64(targetHeight*scale)))))
+			}
+			raster := image.NewRGBA(image.Rect(0, 0, width, height))
+			source = source.Add(s.Source.Bounds().Min)
+			if width == source.Dx() && height == source.Dy() {
+				draw.Draw(raster, raster.Bounds(), s.Source, source.Min, draw.Src)
+			} else {
+				draw.CatmullRom.Scale(raster, raster.Bounds(), s.Source, source, draw.Src, nil)
+			}
+			slices[y*3+x], _ = woxui.NewImageFromPackedRGBA(raster)
+		}
+	}
+	s.slices = slices
+	s.slicesScale = scale
+	return slices
 }
 
 // surfaceEdges proportionally shrinks borders when a surface is smaller than its corners.
@@ -164,18 +242,19 @@ func (s *SurfaceImage) tiled(bounds woxui.Rect, scale float32) *woxui.Image {
 	return s.cached
 }
 
-// paintRepeatedSlice clips partial final tiles instead of squeezing their motifs.
-func paintRepeatedSlice(list *woxui.DisplayList, img *woxui.Image, rect woxui.Rect, repeatX, repeatY bool, scale float32) {
+// paintRepeatedSlice clips partial final tiles instead of squeezing their motifs. Tile sizes are
+// logical units; a non-repeated axis stretches to the destination.
+func paintRepeatedSlice(list *woxui.DisplayList, img *woxui.Image, rect woxui.Rect, repeatX, repeatY bool, tileWidth, tileHeight float32) {
 	if !repeatX && !repeatY {
 		list.DrawImage(img, rect)
 		return
 	}
 	width, height := rect.Width, rect.Height
 	if repeatX {
-		width = float32(img.Width) * scale
+		width = tileWidth
 	}
 	if repeatY {
-		height = float32(img.Height) * scale
+		height = tileHeight
 	}
 	if width <= 0 || height <= 0 {
 		return

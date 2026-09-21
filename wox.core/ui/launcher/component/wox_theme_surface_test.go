@@ -36,7 +36,10 @@ func TestThemeSurfaceRendering(t *testing.T) {
 		t.Fatal("shared tile source was duplicated")
 	}
 	app := surfaces.Get("App")
-	if app.Frame.Slices[8].RGBAAt(0, 0) != (color.RGBA{R: 8, G: 8, A: 255}) {
+	if app.Frame.Source != surfaces.Get("Preview").Background.Tile || app.Frame.SliceColumns != [4]int{0, 4, 8, 12} || app.Frame.SliceRows != [4]int{0, 4, 8, 12} {
+		t.Fatal("nine-slice did not share the decoded source or sliced it wrongly")
+	}
+	if app.Frame.Source.RGBAAt(8, 8) != (color.RGBA{R: 8, G: 8, A: 255}) {
 		t.Fatal("bottom right source slice is wrong")
 	}
 	list := &woxui.DisplayList{}
@@ -49,7 +52,7 @@ func TestThemeSurfaceRendering(t *testing.T) {
 		if bounds != (woxui.Rect{X: 7, Y: 12, Width: 88, Height: 42}) {
 			t.Fatal(bounds)
 		}
-		if app.Frame.Insets.Left*scale != 2*scale || app.Frame.Slices[0].Width != 4 {
+		if app.Frame.Insets.Left*scale != 2*scale || app.Frame.SliceColumns[1] != 4 {
 			t.Fatal("source pixels changed with display scale")
 		}
 	}
