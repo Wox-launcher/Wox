@@ -121,6 +121,10 @@ func LoadThemeSurfaces(definitions common.ThemeSurfaces, assets map[string][]byt
 			continue
 		}
 		surface := &woxwidget.ImageSurface{Background: layer(def.Background), Frame: layer(def.Frame)}
+		if shadow := def.InnerShadow; shadow != nil {
+			color, _ := common.ParseThemeColor(shadow.Color)
+			surface.InnerShadow = &woxwidget.SurfaceInnerShadow{Color: woxui.Color{R: color.R, G: color.G, B: color.B, A: color.A}, Width: float32(shadow.Width), Radius: float32(shadow.Radius), Insets: themeSurfaceInsets(shadow.Insets)}
+		}
 		for _, d := range def.Decorations {
 			if load(d.Source) == nil {
 				continue

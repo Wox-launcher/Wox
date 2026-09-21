@@ -11,9 +11,41 @@ import (
 // ImageSurface is immutable decoration shared by cached widget descriptions.
 // Layers paint inside the existing surface and never introduce input targets.
 type ImageSurface struct {
+	InnerShadow *SurfaceInnerShadow
 	Background  *SurfaceImage
 	Frame       *SurfaceImage
 	Decorations []SurfaceDecoration
+}
+
+type SurfaceInnerShadow struct {
+	Color         woxui.Color
+	Width, Radius float32
+	Insets        Insets
+}
+
+// PaintOverlay keeps the inset shadow above opaque child fills, including the toolbar.
+func (s *ImageSurface) PaintOverlay(list *woxui.DisplayList, bounds woxui.Rect) {
+	if s == nil || s.InnerShadow == nil {
+		return
+	}
+	shadow := s.InnerShadow
+	bounds.X += shadow.Insets.Left
+	bounds.Y += shadow.Insets.Top
+	bounds.Width -= shadow.Insets.Left + shadow.Insets.Right
+	bounds.Height -= shadow.Insets.Top + shadow.Insets.Bottom
+	width := min(shadow.Width, min(bounds.Width, bounds.Height)/2)
+	if width <= 0 || shadow.Color.A == 0 {
+		return
+	}
+	radius := min(shadow.Radius, min(bounds.Width, bounds.Height)/2)
+	step := float32(1) / max(1, list.RasterScale)
+	for inset := float32(0); inset < width; inset += step {
+		color := shadow.Color
+		fade := 1 - inset/width
+		color.A = uint8(float32(color.A) * fade * fade)
+		rect := woxui.Rect{X: bounds.X + inset, Y: bounds.Y + inset, Width: bounds.Width - 2*inset, Height: bounds.Height - 2*inset}
+		list.StrokeRoundedRect(rect, max(0, radius-inset), min(step, width-inset), color)
+	}
 }
 
 type SurfaceDecoration struct {

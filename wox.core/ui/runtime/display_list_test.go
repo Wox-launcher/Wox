@@ -286,6 +286,27 @@ func TestRenderedFloatingMaterialTracksSurfacesCulledByDamage(t *testing.T) {
 	}
 }
 
+// TestOpaqueFloatingMaterialSkipsBackdrop keeps fractional edges out of the blur replacement path.
+func TestOpaqueFloatingMaterialSkipsBackdrop(t *testing.T) {
+	if nativeFloatingMaterialMode() != floatingMaterialRendered {
+		t.Skip("renderer-backed materials only")
+	}
+	for _, scale := range []float32{1, 1.25, 1.5, 2} {
+		var actual, expected DisplayList
+		actual.RasterScale = scale
+		bounds := Rect{X: 20.25, Y: 30.5, Width: 200, Height: 100}
+		tint := Color{R: 245, G: 241, B: 233, A: 255}
+		actual.FloatingMaterial(bounds, 18, tint, Color{})
+		expected.FillRoundedRect(bounds, 18, tint)
+		if err := actual.Compare(&expected); err != nil {
+			t.Fatal(err)
+		}
+		if len(actual.RenderedFloatingMaterialRects()) != 0 {
+			t.Fatal("opaque panel retained backdrop sampling")
+		}
+	}
+}
+
 func TestDisplayListDamageHonorsCurrentClip(t *testing.T) {
 	displayList := &DisplayList{}
 	displayList.SetDamage(Rect{Width: 100, Height: 100})

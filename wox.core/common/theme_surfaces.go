@@ -16,10 +16,19 @@ type ThemeOffset struct{ X, Y int }
 
 // ThemeSurface decorates an existing launcher region without replacing its controls.
 type ThemeSurface struct {
+	InnerShadow   *ThemeInnerShadow  `json:",omitempty"`
 	Background    *ThemeSurfaceImage `json:",omitempty"`
 	Frame         *ThemeSurfaceImage `json:",omitempty"`
 	Decorations   []ThemeDecoration  `json:",omitempty"`
 	ContentInsets *ThemeInsets       `json:",omitempty"`
+}
+
+// ThemeInnerShadow shades inward from an inset rounded panel in logical units.
+type ThemeInnerShadow struct {
+	Color  string
+	Width  int
+	Radius int
+	Insets ThemeInsets
 }
 
 // ThemeSurfaceImage separates source pixel slices from destination logical insets.
@@ -94,6 +103,11 @@ func (s ThemeSurfaces) Validate() error {
 		}
 		if surface == nil {
 			continue
+		}
+		if shadow := surface.InnerShadow; shadow != nil {
+			if _, ok := ParseThemeColor(shadow.Color); !ok || shadow.Width < 0 || shadow.Width > 64 || shadow.Radius < 0 || shadow.Radius > 4096 || !validInsets(&shadow.Insets) {
+				return fmt.Errorf("%s: invalid InnerShadow color, width (0..64), radius or insets", name)
+			}
 		}
 		if !validInsets(surface.ContentInsets) || (surface.ContentInsets != nil && name != "App") {
 			return fmt.Errorf("%s: ContentInsets is only supported on App and must be 0..4096", name)

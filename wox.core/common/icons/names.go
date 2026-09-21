@@ -45,6 +45,7 @@ const (
 	ActionUnpin                = "action.unpin"
 	ActionRevertRanking        = "action.revert-ranking"
 	ActionQueryAlias           = "action.query-alias"
+	ActionHotkey               = "action.hotkey"
 	ActionOpenContainingFolder = "action.open-containing-folder"
 	ActionContextMenu          = "action.context-menu"
 	ActionPreview              = "action.preview"

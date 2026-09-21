@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"wox/util"
 )
 
 const surfaceThemeJSON = `{"SchemaVersion":2,"ThemeId":"ming","ThemeName":"Ming","BaseBackgroundColor":"#721D16","BaseTextColor":"#FFF0CA","BaseAccentColor":"#F4C453","Surfaces":{"App":{"Background":{"Source":"assets/red.png","Mode":"tile"},"ContentInsets":{"Top":80}},"Toolbar":{"Background":{"Source":"assets/red.png","Mode":"stretch"}}},"windows":{"Surfaces":{"Toolbar":null}},"linux":{"Surfaces":{"App":{"Decorations":[{"Source":"assets/red.png","Anchor":"topCenter","Size":{"Width":40,"Height":20}}]}}}}`
@@ -52,6 +53,9 @@ func TestSurfaceThemeRoundTrip(t *testing.T) {
 
 // TestThemePackageValidation rejects traversal, missing assets and oversized version floors before extraction.
 func TestThemePackageValidation(t *testing.T) {
+	original := util.ProdEnv
+	util.ProdEnv = "true"
+	t.Cleanup(func() { util.ProdEnv = original })
 	var pngData bytes.Buffer
 	if err := png.Encode(&pngData, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
 		t.Fatal(err)

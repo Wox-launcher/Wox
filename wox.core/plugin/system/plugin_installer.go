@@ -345,9 +345,10 @@ func readFileFromZip(filePath string, target string) ([]byte, error) {
 func (i *PluginInstallerPlugin) queryThemePackage(ctx context.Context, filePath string) []plugin.QueryResult {
 	theme, err := common.ReadThemePackage(filePath, updater.CURRENT_VERSION)
 	if err != nil {
-		return []plugin.QueryResult{{Title: "i18n:plugin_theme_package_invalid", SubTitle: err.Error(), Icon: themeIcon}}
+		return []plugin.QueryResult{{Title: "i18n:plugin_theme_package_invalid", SubTitle: err.Error(), Icon: themeIcon, Score: 3000}}
 	}
-	return []plugin.QueryResult{{Title: theme.GetName(ctx), SubTitle: theme.GetDescription(ctx), Icon: themeIcon, Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_theme_install_theme", Icon: icons.Get(icons.ActionInstall), Action: func(ctx context.Context, _ plugin.ActionContext) {
+	// Match .wox installation priority above generic file-selection actions (AI Chat: 2000).
+	return []plugin.QueryResult{{Title: theme.GetName(ctx), SubTitle: theme.GetDescription(ctx), Icon: themeIcon, Score: 3000, Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_theme_install_theme", Icon: icons.Get(icons.ActionInstall), Action: func(ctx context.Context, _ plugin.ActionContext) {
 		if err := ui.GetStoreManager().Install(ctx, theme); err != nil {
 			i.api.Notify(ctx, err.Error())
 		}

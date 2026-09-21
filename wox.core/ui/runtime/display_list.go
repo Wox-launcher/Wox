@@ -301,6 +301,15 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 		}
 		return
 	case floatingMaterialRendered:
+		// Opaque panels hide the backdrop. Avoid clearing and reconstructing its
+		// rectangle, which can leave a fringe at fractional physical-pixel edges.
+		if tint.A == 255 {
+			d.FillRoundedRect(rect, radius, tint)
+			if edge.A != 0 {
+				d.StrokeRoundedRect(rect, radius, 1, edge)
+			}
+			return
+		}
 		// WebView already moved later paint onto the overlay, which has no page
 		// pixels to blur. Drop the theme's backdrop alpha so the card stays solid.
 		if d.overlayBegun {

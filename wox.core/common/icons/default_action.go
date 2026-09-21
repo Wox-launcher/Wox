@@ -13,13 +13,19 @@ func newActionIcon(paths string) common.WoxImage {
 	return common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + paths + `</svg>`)
 }
 
+// keyboardActionIcon is shared by hotkey and alias verbs. The Action Panel lists
+// them together, so a missing spacebar on one of them reads as three inconsistent
+// keyboards instead of one mark.
+var keyboardActionIcon = newActionIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6M8 16h8"/>`)
+
 var defaultActionIcons = map[string]common.WoxImage{
+	ActionHotkey:               keyboardActionIcon,
 	ActionFeedback:             newActionIcon(`<path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M7 9h10M7 13h7"/>`),
 	ActionInstall:              newActionIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
 	ActionPin:                  newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
 	ActionUnpin:                newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6M5 5l14 14"/>`),
 	ActionRevertRanking:        newActionIcon(`<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`),
-	ActionQueryAlias:           newActionIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6"/>`),
+	ActionQueryAlias:           keyboardActionIcon,
 	ActionOpenContainingFolder: newActionIcon(`<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>`),
 	ActionContextMenu:          newActionIcon(`<path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/>`),
 	ActionPreview:              newActionIcon(`<path d="M3 12s3-6.5 9-6.5 9 6.5 9 6.5-3 6.5-9 6.5S3 12 3 12z"/><circle cx="12" cy="12" r="3"/>`),

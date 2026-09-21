@@ -151,6 +151,12 @@ func TestThemeEditorReusesTuneIcon(t *testing.T) {
 	}
 }
 
+func TestHotkeyAndAliasActionsShareKeyboardIcon(t *testing.T) {
+	if Get(ActionHotkey) != Get(ActionQueryAlias) {
+		t.Fatal("hotkey and query-alias actions must share the keyboard glyph")
+	}
+}
+
 func TestDefaultThemeCoversNames(t *testing.T) {
 	theme := DefaultTheme()
 	for _, name := range Names() {

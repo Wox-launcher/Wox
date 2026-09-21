@@ -7,6 +7,27 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+// TestSurfaceInnerShadow stays above child fills and fades without shading the exterior.
+func TestSurfaceInnerShadow(t *testing.T) {
+	for _, scale := range []float32{1, 1.25, 1.5, 2} {
+		surface := &ImageSurface{InnerShadow: &SurfaceInnerShadow{Color: woxui.Color{A: 80}, Width: 6, Radius: 8, Insets: Insets{Top: 10, Right: 10, Bottom: 10, Left: 10}}}
+		host := NewHost(func(woxui.FrameInfo) Widget {
+			return Container{Width: 100, Height: 80, Surface: surface, Child: Container{Width: 100, Height: 80, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}}
+		})
+		host.AttachServices(&fakeHostServices{})
+		var list woxui.DisplayList
+		host.Frame(&list, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 80}, Scale: scale})
+		renderer, _ := woxui.NewSoftwareRenderer(100, 80)
+		if err := renderer.Render(&list); err != nil {
+			t.Fatal(err)
+		}
+		img := renderer.RGBA()
+		if img.RGBAAt(50, 10).R >= img.RGBAAt(50, 13).R || img.RGBAAt(50, 13).R >= 255 || img.RGBAAt(50, 25).R != 255 || img.RGBAAt(50, 9).R != 255 || img.RGBAAt(10, 10).R != 255 {
+			t.Fatalf("scale %v: inner shadow lost its fade, rounded corner or paint order", scale)
+		}
+	}
+}
+
 // TestSurfaceGeometryAndTexture checks negative origins, authored density and bounded size replacement.
 func TestSurfaceGeometryAndTexture(t *testing.T) {
 	for _, origin := range []float32{-1920, 0, 1280} {

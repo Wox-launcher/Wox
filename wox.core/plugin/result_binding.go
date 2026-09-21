@@ -217,7 +217,7 @@ func (m *Manager) newSetResultHotkeyAction(pluginInstance *Instance, result Quer
 	action := QueryResultAction{
 		Id:                     systemActionSetResultHotkeyID,
 		Name:                   "i18n:plugin_manager_set_result_hotkey",
-		Icon:                   icons.Get(icons.ControlKeyboard),
+		Icon:                   icons.Get(icons.ActionHotkey),
 		Type:                   QueryResultActionTypeForm,
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"wox/i18n"
+	"wox/util"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -131,7 +132,8 @@ func (t Theme) EnsureWoxVersionSupported(current string) error {
 	if err != nil {
 		return fmt.Errorf("invalid current Wox version %q: %w", current, err)
 	}
-	if required.GreaterThan(running) {
+	// Development builds can exercise unreleased theme features before the version bump.
+	if !util.IsDev() && required.GreaterThan(running) {
 		return fmt.Errorf("theme %s requires Wox %s or later, current Wox version is %s", t.ThemeName, required, running)
 	}
 	return nil

@@ -393,6 +393,9 @@ func (w Container) layout(ctx context, available constraints) *node {
 	if child != nil {
 		result.children = []*node{child}
 	}
+	if w.Surface != nil && w.Surface.InnerShadow != nil {
+		result.children = append(result.children, &node{bounds: result.bounds, paint: w.Surface.PaintOverlay})
+	}
 	return result
 }
 

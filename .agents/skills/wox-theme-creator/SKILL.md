@@ -97,6 +97,17 @@ be included. No network image URLs or executable theme code are supported.
 
 ### Surface contract
 
+`InnerShadow` optionally shades inward over child fills to make a panel appear
+recessed into its frame. It accepts `Color`, `Width` (0..64 logical units),
+`Radius` and `Insets` (each 0..4096). Insets locate the inner panel relative to
+the surface; match App ContentInsets and AppContentBorderRadius for an inset
+launcher. For example: `"InnerShadow": {"Color":"rgba(25,42,55,0.25)",
+"Width":7,"Radius":10,"Insets":{"Top":29,"Right":29,"Bottom":29,"Left":29}}`.
+The shadow fades to transparent inward, follows display density, and allocates
+no image cache. Keep its width within the content padding so text stays clear.
+It paints after children, unlike image layers; omit it to preserve existing
+appearance. This optional schema 2 extension requires Wox 2.4.5.
+
 The supported regions are `App`, `QueryBox`, `ResultItemActive`,
 `ActionContainer`, `Preview`, and `Toolbar`. Each accepts the same optional
 `Background`, `Frame`, and `Decorations` declarations. The generic preview shell
