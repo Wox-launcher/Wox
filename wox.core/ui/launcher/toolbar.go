@@ -89,7 +89,8 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 	a.toolbarMsg = &message
 	panelVisible := a.actionPanel
 	panelClosed := false
-	if panelVisible {
+	// About Menu only defers presenting the latest message; expiry and replacement keep running.
+	if a.shouldSyncActionPanelWithResults() {
 		if len(a.currentActionPanelEntries()) == 0 {
 			panelClosed = a.resetActionPanelLocked()
 		} else {
@@ -128,7 +129,7 @@ func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 		a.toolbarMsg = nil
 		a.toolbarRevision++
 		changed = true
-		if a.actionPanel {
+		if a.shouldSyncActionPanelWithResults() {
 			if len(a.currentActionPanelEntries()) == 0 {
 				panelClosed = a.resetActionPanelLocked()
 			} else {

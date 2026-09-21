@@ -17,16 +17,20 @@ const (
 	// only group boundaries inside the list do.
 	ActionHeaderGap          = 8
 	ActionGroupDividerHeight = 16
-	ActionSearchHeight       = 46
-	MaxVisibleActions        = 8
+	// ActionGroupHeaderHeight is the non-selectable section label slot inside the list.
+	ActionGroupHeaderHeight = 28
+	ActionSearchHeight      = 46
+	MaxVisibleActions       = 8
 	// ActionPanelTopGap keeps the floating panel below the query chrome.
 	ActionPanelTopGap = 8
 	// ActionPanelMargin is added to theme app padding for the overlay inset.
 	ActionPanelMargin = 10
 	// ActionIconSize is the logical leading glyph size before launcher density scaling.
 	// The adapter rasterizes at the same scaled size so the panel never resamples.
-	ActionIconSize     = 22
-	ActionTailIconSize = 18
+	ActionIconSize = 22
+	// ActionBrandIconSize is slightly smaller so filled community marks match stroke verbs.
+	ActionBrandIconSize = 18
+	ActionTailIconSize  = 18
 	// actionIconSlotPadding is the leading gutter around the glyph (5 left + 10 right).
 	actionIconSlotPadding = 15
 )
@@ -37,6 +41,7 @@ type ActionItemKind uint8
 const (
 	ActionItemKindAction ActionItemKind = iota
 	ActionItemKindSeparator
+	ActionItemKindGroupHeader
 )
 
 // ActionItem contains resolved presentation data for one result action or group chrome.
@@ -47,6 +52,8 @@ type ActionItem struct {
 	Label        string
 	Icon         *woxui.Image
 	SelectedIcon *woxui.Image
+	// IconSize is the painted glyph size. Zero keeps ActionIconSize; the leading slot stays aligned.
+	IconSize     float32
 	Tail         string
 	TailIcon     *woxui.Image
 	HotkeyLabels []string
@@ -54,7 +61,7 @@ type ActionItem struct {
 
 // Equal compares every prepared visual field for one action item.
 func (i ActionItem) Equal(other ActionItem) bool {
-	if i.Kind != other.Kind || i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || i.SelectedIcon != other.SelectedIcon || i.Tail != other.Tail || i.TailIcon != other.TailIcon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
+	if i.Kind != other.Kind || i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || i.SelectedIcon != other.SelectedIcon || i.IconSize != other.IconSize || i.Tail != other.Tail || i.TailIcon != other.TailIcon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
 		return false
 	}
 	for index := range i.HotkeyLabels {
@@ -65,12 +72,16 @@ func (i ActionItem) Equal(other ActionItem) bool {
 	return true
 }
 
-// ActionItemHeight returns the list-slot height for one action or group divider.
+// ActionItemHeight returns the list-slot height for one action or group chrome.
 func ActionItemHeight(item ActionItem) float32 {
-	if item.Kind == ActionItemKindSeparator {
+	switch item.Kind {
+	case ActionItemKindSeparator:
 		return ActionGroupDividerHeight
+	case ActionItemKindGroupHeader:
+		return ActionGroupHeaderHeight
+	default:
+		return ActionRowHeight
 	}
-	return ActionRowHeight
 }
 
 // ActionPanelListHeight sizes the visible action list, counting at most MaxVisibleActions rows.
@@ -84,6 +95,12 @@ func ActionPanelListHeight(items []ActionItem) float32 {
 		if item.Kind == ActionItemKindSeparator {
 			if visibleActions > 0 && visibleActions < MaxVisibleActions {
 				height += ActionGroupDividerHeight
+			}
+			continue
+		}
+		if item.Kind == ActionItemKindGroupHeader {
+			if visibleActions < MaxVisibleActions {
+				height += ActionGroupHeaderHeight
 			}
 			continue
 		}
@@ -241,6 +258,17 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			rows = append(rows, actionPanelDivider(innerWidth, props.Theme.ActionDividerColor()))
 			continue
 		}
+		if item.Kind == ActionItemKindGroupHeader {
+			headerHeight := ActionItemHeight(item)
+			rows = append(rows, woxwidget.Align{
+				Width: innerWidth, Height: headerHeight, Vertical: 0.5,
+				Child: woxwidget.TextBlock{
+					Value: item.Label, Width: innerWidth, Height: headerLineHeight, LineHeight: headerLineHeight, MaxLines: 1, AlignmentY: 0.5,
+					Style: woxui.TextStyle{Size: actionHeaderFontSize}, Color: props.ActionHeader,
+				},
+			})
+			continue
+		}
 		selected := item.Index == props.Selected
 		background := woxui.Color{}
 		foreground := props.Theme.ActionText
@@ -253,10 +281,19 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			iconSource = item.SelectedIcon
 		}
 		iconSize := scaledLauncherSize(ActionIconSize, props.DensityScale)
+		glyphSize := iconSize
+		if item.IconSize > 0 {
+			glyphSize = scaledLauncherSize(item.IconSize, props.DensityScale)
+		}
 		iconSlotWidth := iconSize + actionIconSlotPadding
 		var icon woxwidget.Widget = woxwidget.Painter{Width: iconSize, Height: iconSize}
 		if iconSource != nil {
-			icon = woxwidget.Image{Source: iconSource, Width: iconSize, Height: iconSize}
+			image := woxwidget.Image{Source: iconSource, Width: glyphSize, Height: glyphSize}
+			if glyphSize == iconSize {
+				icon = image
+			} else {
+				icon = woxwidget.Align{Width: iconSize, Height: iconSize, Horizontal: 0.5, Vertical: 0.5, Child: image}
+			}
 		}
 		trailingWidth := float32(0)
 		var trailing []woxwidget.Widget

@@ -93,6 +93,15 @@ func TestLauncherToolbarHeightIncludedInChatFullscreen(t *testing.T) {
 	}
 }
 
+func TestLauncherToolbarIncludesAboutMenuWhenEmpty(t *testing.T) {
+	if !launcherToolbarHeightIncluded(false, true, false, false) {
+		t.Fatal("an empty query still reserves toolbar height for the about menu button")
+	}
+	if launcherToolbarHeightIncluded(true, true, false, false) {
+		t.Fatal("HideToolbar must still omit the about menu button")
+	}
+}
+
 func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil

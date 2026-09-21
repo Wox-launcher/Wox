@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
@@ -94,6 +95,8 @@ type viewSnapshot struct {
 	webViewFullscreen     bool
 	terminalFullscreen    bool
 	actionPanel           bool
+	actionPanelPurpose    actionPanelPurpose
+	aboutMenuError        string
 	actionSelected        int
 	actionFilter          string
 	actionEntries         []actionPanelEntry
@@ -109,6 +112,7 @@ type viewSnapshot struct {
 
 type actionSectionRevisionState struct {
 	Open            bool
+	Purpose         actionPanelPurpose
 	Selected        int
 	Filter          string
 	ResultsRevision uint64
@@ -149,7 +153,7 @@ func (a *App) snapshot() viewSnapshot {
 		actionEntries = a.currentActionPanelEntries()
 		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translationSnapshot(), a.usePinYin())
 	}
-	actionState := actionSectionRevisionState{Open: a.actionPanel, Selected: a.actionSelected, Filter: actionFilter, ResultsRevision: a.resultsSectionRevision, ToolbarRevision: a.toolbarRevision}
+	actionState := actionSectionRevisionState{Open: a.actionPanel, Purpose: a.actionPanelPurpose, Selected: a.actionSelected, Filter: actionFilter, ResultsRevision: a.resultsSectionRevision, ToolbarRevision: a.toolbarRevision}
 	if actionState != a.actionSectionState {
 		a.actionSectionState = actionState
 		a.actionsSectionRevision++
@@ -193,6 +197,8 @@ func (a *App) snapshot() viewSnapshot {
 		webViewFullscreen:     a.webViewFullscreen,
 		terminalFullscreen:    a.terminalFullscreen,
 		actionPanel:           a.actionPanel,
+		actionPanelPurpose:    a.actionPanelPurpose,
+		aboutMenuError:        a.aboutMenuError,
 		actionSelected:        a.actionSelected,
 		actionFilter:          actionFilter,
 		actionEntries:         actionEntries,
@@ -237,7 +243,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		queryHeight, _ = launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, queryAtBottom)
 	}
 	toolbarHeight := float32(0)
-	if !snapshot.show.HideToolbar && !chromeFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
+	if !snapshot.show.HideToolbar && !chromeFullscreen {
 		toolbarHeight = snapshot.densityMetrics.toolbarHeight
 	}
 	refinementHeight := float32(0)
@@ -288,8 +294,12 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		panel, panelWidth, panelHeight := a.buildActionPanel(snapshot, width, height, queryChromeHeight, toolbarHeight, frame.Scale)
 		if panel != nil {
 			rightOffset := snapshot.palette.appPadding.Right + launcherview.ActionPanelMargin
+			leftOffset := snapshot.palette.appPadding.Left + launcherview.ActionPanelMargin
 			bottomOffset := launcherview.ActionPanelBottomOffset(snapshot.palette.appPadding.Bottom)
 			left := max(rightOffset, width-panelWidth-rightOffset)
+			if snapshot.actionPanelPurpose == actionPanelPurposeAbout {
+				left = leftOffset
+			}
 			slot, occlusion := actionPanelFloatingPlacement(left, height, queryChromeHeight, toolbarHeight, panelWidth, panelHeight, bottomOffset)
 			slot.Child = panel
 			floating = &slot
@@ -1358,7 +1368,8 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	progress := 0
 	hasProgress := false
 	indeterminate := false
-	if snapshot.toolbarMsg != nil {
+	showAboutMenu := aboutMenuButtonVisible(snapshot.actionPanel, snapshot.actionPanelPurpose, snapshot.toolbarMsg)
+	if snapshot.toolbarMsg != nil && !showAboutMenu {
 		leftLabel = snapshot.toolbarMsg.displayText()
 		if image := a.imageForSize(snapshot.toolbarMsg.Icon, physicalImageSize(18, imageScale)); image != nil {
 			leftIcon = image
@@ -1384,12 +1395,22 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	}
 	if len(entries) > 0 {
 		actions = append(actions, launcherview.LauncherToolbarAction{
-			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(a.actionPanelHotkey()), Active: snapshot.actionPanel, OnTap: a.toggleActionPanel,
+			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(a.actionPanelHotkey()),
+			Active: snapshot.actionPanel && snapshot.actionPanelPurpose != actionPanelPurposeAbout, OnTap: a.toggleActionPanel,
 		})
+	}
+	var menuIcon *woxui.Image
+	if showAboutMenu {
+		toolbarText := snapshot.palette.toolbarText
+		menuIcon = a.imageForTint(fromCoreImage(icons.Get(icons.ControlMenuLines)), &toolbarText, physicalImageSize(18, imageScale))
 	}
 	return launcherview.LauncherToolbarBoundary(launcherview.LauncherToolbarProps{
 		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
-		Label: leftLabel, Icon: leftIcon, Progress: progress, HasProgress: hasProgress, Indeterminate: indeterminate, Actions: actions, OnDragStart: func() {
+		Label: leftLabel, Icon: leftIcon, Progress: progress, HasProgress: hasProgress, Indeterminate: indeterminate, Actions: actions,
+		MenuVisible: showAboutMenu, MenuActive: snapshot.actionPanel && snapshot.actionPanelPurpose == actionPanelPurposeAbout,
+		MenuLabel: a.translate("i18n:toolbar_about_menu"), MenuIcon: menuIcon,
+		OnMenuTap: a.toggleAboutMenu, OnMenuHoverAt: a.onAboutMenuHover,
+		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
 				util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("start launcher toolbar window drag: %v", err))
 			}

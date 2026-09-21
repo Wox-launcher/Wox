@@ -84,6 +84,9 @@ Preserve the current special contracts unless a task explicitly targets them:
 | Action Panel corner geometry | `ActionContainerBorderRadius` controls panel corners, falling back to `ActionQueryBoxBorderRadius`. `ActionItemBorderRadius` controls action rows, falling back to `ResultItemBorderRadius`. Explicit zero produces square corners; all values are logical units and also apply to previews. |
 | Action Panel row | 40; optional 18 plugin identity tail or usage-score text such as `+55` in the trailing gutter, same 10/5 inset as hotkeys |
 | Action Panel group divider | 16-high slot with a 1-unit hairline; v2 uses `ActionContainerDividerColor`, v1 uses `PreviewSplit` |
+| Action Panel group title | Fixed 28-logical-unit slot, matching list extent and selection scrolling at every interface density; uses Action header type and color; not selectable; omitted when that group has no visible actions |
+| About Menu | Left-anchored Action Panel with the same geometry, theme, filter, and row contract as the result Action Panel |
+| Launcher toolbar About Menu | Compact icon-only control using toolbar density; occupies the left status slot when no message is presented or the menu is open |
 | Action Panel verb icons | Monochrome `action.*` SVGs using `var(--wox-theme-icon-color)` as the untinted fallback. On the Action Panel, tint only those theme-adaptive SVGs with `ActionText` / `ActionSelectedText` so they match the row label. Do not source-in tint plugin, brand, or status identity icons; a filled brand SVG would collapse into a solid blob. The SVG variable itself stays appearance black/white and is not a per-row text color. Execute actions use `action.execute` (lightning), not settings or play. |
 
 If a shared primitive serves both an ordinary page and a special surface, provide an explicit context-specific composition or semantic size instead of changing one default and relying on call-site overrides.

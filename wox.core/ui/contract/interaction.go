@@ -13,6 +13,7 @@ type TooltipOptions struct {
 	Name         string
 	Text         string
 	Side         string
+	HotkeyLabels []string
 	AnchorX      float64
 	AnchorY      float64
 	AnchorWidth  float64

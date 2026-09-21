@@ -39,6 +39,7 @@ const (
 	PluginFolder        = "plugin.folder"
 
 	// Actions and verbs.
+	ActionFeedback             = "action.feedback"
 	ActionInstall              = "action.install"
 	ActionPin                  = "action.pin"
 	ActionUnpin                = "action.unpin"
@@ -90,6 +91,11 @@ const (
 	BrandChrome            = "brand.chrome"
 	BrandWox               = "brand.wox"
 	BrandGoogle            = "brand.google"
+	BrandRedditMonochrome  = "brand.reddit-monochrome"
+	BrandDiscordMonochrome = "brand.discord-monochrome"
+	BrandGithubMonochrome  = "brand.github-monochrome"
+	BrandReddit            = "brand.reddit"
+	BrandDiscord           = "brand.discord"
 	StatusPlaying          = "status.playing"
 	StatusRunning          = "status.running"
 	StatusLoading          = "status.loading"
@@ -223,6 +229,7 @@ const (
 	ControlWindowMaximize      = "control.window-maximize"
 	ControlWindowRestore       = "control.window-restore"
 	ControlMenu                = "control.menu"
+	ControlMenuLines           = "control.menu-lines"
 	ControlChevronUp           = "control.chevron-up"
 	ControlChevronDown         = "control.chevron-down"
 	ControlClock               = "control.clock"

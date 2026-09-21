@@ -49,6 +49,7 @@ type Options struct {
 	Name          string
 	Text          string
 	Side          string
+	HotkeyLabels  []string
 	X             float64
 	Y             float64
 	TooltipWidth  float64
@@ -76,7 +77,7 @@ func Show(ctx context.Context, opts Options) {
 	if opts.Name == "" {
 		opts.Name = tooltipOverlayPrefix + "default"
 	}
-	width, estimatedHeight := estimateBounds(opts.Text)
+	width, estimatedHeight := estimateBounds(opts.Text, opts.HotkeyLabels)
 	placement := computePlacement(opts, width, estimatedHeight)
 
 	textoverlay.Show(textoverlay.Options{
@@ -92,8 +93,9 @@ func Show(ctx context.Context, opts Options) {
 			MaxHeight:        tooltipMaxHeightDip,
 			CornerRadius:     8,
 		},
-		Message:  opts.Text,
-		FontSize: tooltipFontSizeDip,
+		Message:      opts.Text,
+		HotkeyLabels: opts.HotkeyLabels,
+		FontSize:     tooltipFontSizeDip,
 		Padding: woxwidget.Insets{
 			Left: 11, Top: 8, Right: 11, Bottom: 8,
 		},
@@ -172,6 +174,7 @@ func (opts Options) withBounds(x float64, y float64, width float64, height float
 		Name:             opts.Name,
 		Text:             opts.Text,
 		Side:             opts.Side,
+		HotkeyLabels:     append([]string(nil), opts.HotkeyLabels...),
 		X:                x,
 		Y:                y,
 		TooltipWidth:     width,
@@ -398,7 +401,7 @@ func clampTooltipCoordinate(value float64, minValue float64, maxValue float64) f
 	return math.Max(minValue, math.Min(maxValue, value))
 }
 
-func estimateBounds(text string) (float64, float64) {
+func estimateBounds(text string, hotkeyLabels []string) (float64, float64) {
 	contentMaxWidth := float64(tooltipMaxWidthDip - tooltipPaddingXDip)
 	maxContentWidth := 0.0
 	lineCount := 0.0
@@ -421,7 +424,25 @@ func estimateBounds(text string) (float64, float64) {
 
 	width := maxTooltipDimension(tooltipMinWidthDip, math.Min(tooltipMaxWidthDip, maxContentWidth+tooltipPaddingXDip))
 	height := lineCount*tooltipLineHeightDip + tooltipPaddingYDip + tooltipHeightSlackDip
+	if hotkeyWidth := estimateHotkeyLabelsWidth(hotkeyLabels); hotkeyWidth > 0 {
+		width = maxTooltipDimension(tooltipMinWidthDip, math.Min(tooltipMaxWidthDip, width+hotkeyWidth))
+		height = math.Max(height, 20+tooltipPaddingYDip)
+	}
 	return width, height
+}
+
+func estimateHotkeyLabelsWidth(labels []string) float64 {
+	if len(labels) == 0 {
+		return 0
+	}
+	width := 8.0
+	for index, label := range labels {
+		width += math.Max(20, estimateLineWidth(label)+10)
+		if index > 0 {
+			width += 4
+		}
+	}
+	return width
 }
 
 func splitTooltipLines(text string) []string {

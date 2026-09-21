@@ -26,6 +26,29 @@ func TestStaticActivityIconsRenderAsSVG(t *testing.T) {
 	}
 }
 
+func TestCommunityBrandIconsRenderFromSvgl(t *testing.T) {
+	for _, name := range []string{BrandReddit, BrandDiscord} {
+		icon := Get(name)
+		if strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") {
+			t.Fatalf("community brand icon %s must keep authored colors from svgl", name)
+		}
+		img, err := woxsvg.Render(icon.ImageData, 22, 22)
+		if err != nil {
+			t.Fatalf("render %s: %v", name, err)
+		}
+		colored := false
+		for y := 0; y < 22; y++ {
+			for x := 0; x < 22; x++ {
+				pixel := img.RGBAAt(x, y)
+				colored = colored || pixel.A > 0 && (pixel.R != pixel.G || pixel.G != pixel.B)
+			}
+		}
+		if !colored {
+			t.Fatalf("community brand icon %s rendered blank or monochrome", name)
+		}
+	}
+}
+
 func TestChatPickerIconsRenderInColor(t *testing.T) {
 	for _, name := range []string{ChatSelectFile, ChatSelectFolder} {
 		icon := Get(name)
@@ -221,4 +244,29 @@ func TestPluginCreatorSkillActionAssetsMatchCatalog(t *testing.T) {
 func renderCatalogSVG(data string, width, height int) error {
 	_, err := woxsvg.Render(strings.ReplaceAll(data, "var(--wox-theme-icon-color)", "#000000"), width, height)
 	return err
+}
+
+func TestAboutMenuMonochromeIconsRender(t *testing.T) {
+	for _, name := range []string{ActionFeedback, BrandRedditMonochrome, BrandDiscordMonochrome, BrandGithubMonochrome} {
+		for _, color := range []string{"#000000", "#ffffff"} {
+			svg := strings.ReplaceAll(Get(name).ImageData, "var(--wox-theme-icon-color)", color)
+			img, err := woxsvg.Render(svg, 22, 22)
+			if err != nil {
+				t.Fatalf("render %s: %v", name, err)
+			}
+			visible := false
+			for y := 0; y < 22; y++ {
+				for x := 0; x < 22; x++ {
+					pixel := img.RGBAAt(x, y)
+					visible = visible || pixel.A > 0
+					if pixel.A > 0 && (pixel.R != pixel.G || pixel.G != pixel.B) {
+						t.Fatalf("%s has colored pixels", name)
+					}
+				}
+			}
+			if !visible {
+				t.Fatalf("%s rendered blank", name)
+			}
+		}
+	}
 }

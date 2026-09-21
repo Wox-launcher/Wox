@@ -85,6 +85,28 @@ func TestLauncherToolbarBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, LauncherToolbarProps{})
 }
 
+func TestLauncherToolbarAboutMenuButtonSemantics(t *testing.T) {
+	tapped := false
+	built := LauncherToolbarView(LauncherToolbarProps{
+		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1,
+		MenuVisible: true, MenuActive: true, MenuLabel: "About Menu",
+		OnMenuTap: func() { tapped = true },
+	}).(woxwidget.Stack)
+	body := built.Children[1].Child.(woxwidget.Container)
+	row := body.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	left := row.Children[0].(woxwidget.Container)
+	semantics := left.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	if semantics.AutomationID != "launcher.toolbar.about-menu" || semantics.Label != "About Menu" || !semantics.Expanded {
+		t.Fatalf("about menu semantics = %#v", semantics)
+	}
+	if err := semantics.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !tapped {
+		t.Fatalf("activate about menu: tapped %v err %v", tapped, err)
+	}
+	if len(left.Child.(woxwidget.Flex).Children) != 1 {
+		t.Fatal("about menu button must occupy the left status slot without a message")
+	}
+}
+
 func TestLauncherToolbarOmitsEmptyLeftContent(t *testing.T) {
 	built := LauncherToolbarView(LauncherToolbarProps{
 		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1,

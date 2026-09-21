@@ -75,6 +75,19 @@ func TestActionUpdatesRepaintOldAndNewPanelBounds(t *testing.T) {
 	}
 }
 
+func TestAboutMenuIconsUseMonochromeArtwork(t *testing.T) {
+	for _, entry := range aboutMenuEntries("") {
+		if entry.IsGroupHeader {
+			continue
+		}
+		if entry.ID == aboutMenuFeedbackID || entry.ID == aboutMenuGithubID || entry.ID == aboutMenuRedditID || entry.ID == aboutMenuDiscordID {
+			if !svgUsesThemeIconColor(entry.Icon) {
+				t.Fatalf("%s needs theme-adaptive monochrome artwork", entry.ID)
+			}
+		}
+	}
+}
+
 func TestActionPanelTintsThemeAdaptiveSVGOnly(t *testing.T) {
 	if !svgUsesThemeIconColor(fromCoreImage(icons.Get(icons.ActionCopy))) {
 		t.Fatal("action.copy must follow the row text tint")
@@ -327,6 +340,13 @@ func TestActionPanelWindowHeightIgnoresFilterWhenGroupsAppear(t *testing.T) {
 	}
 	if unfiltered != float32(3*launcherview.ActionRowHeight+launcherview.ActionGroupDividerHeight+2*launcherview.ActionRowHeight) {
 		t.Fatalf("unfiltered grouped height = %v, want three plugin rows, a divider, and two system rows", unfiltered)
+	}
+}
+
+func TestActionPanelFloatingPlacementCanAnchorLeft(t *testing.T) {
+	slot, occlusion := actionPanelFloatingPlacement(18, 600, 80, 40, 320, 400, 20)
+	if slot.Left != 18 || occlusion.X != 18 {
+		t.Fatalf("left about-menu placement = slot %+v occlusion %+v, want X 18", slot, occlusion)
 	}
 }
 

@@ -161,6 +161,9 @@ type App struct {
 	chatImportEpoch                 uint64
 	terminalFullscreen              bool
 	actionPanel                     bool
+	actionPanelPurpose              actionPanelPurpose
+	aboutMenuError                  string
+	aboutMenuTooltipRevision        atomic.Uint64
 	actionSelected                  int
 	actionSelectionKey              string
 	actionsSectionRevision          uint64
@@ -581,10 +584,7 @@ func (a *App) showWindow(params showAppParams) error {
 		if params.SelectAll {
 			a.selectEntireQuery()
 		}
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionSelectionKey = ""
-		a.actionFilter = nil
+		a.clearActionPanelStateLocked()
 		a.form = nil
 		a.visible = true
 		queryEmpty = a.query.QueryText == ""
@@ -679,10 +679,7 @@ func (a *App) hideWindow(notify bool) error {
 			alreadyHidden = true
 			return
 		}
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionSelectionKey = ""
-		a.actionFilter = nil
+		a.clearActionPanelStateLocked()
 		a.form = nil
 		a.stopQuickSelectLocked()
 		a.visible = false
@@ -913,10 +910,7 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 	a.refinementOpen = false
 	a.refinementScope = ""
 	a.completionHint = nil
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionSelectionKey = ""
-	a.actionFilter = nil
+	a.clearActionPanelStateLocked()
 	a.form = nil
 	a.reconcileSelectedPreview()
 	a.requirementForm = nil
@@ -1008,10 +1002,7 @@ func (a *App) requestMRU() error {
 		a.refinementOpen = false
 		a.refinementScope = ""
 		a.completionHint = nil
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionSelectionKey = ""
-		a.actionFilter = nil
+		a.clearActionPanelStateLocked()
 		a.form = nil
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
@@ -1087,9 +1078,9 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.resultScrollDetached = false
 	}
 	closedActionPanel := false
-	if a.actionPanel && len(a.currentActionPanelEntries()) == 0 {
+	if a.shouldSyncActionPanelWithResults() && len(a.currentActionPanelEntries()) == 0 {
 		closedActionPanel = a.resetActionPanelLocked()
-	} else if a.actionPanel {
+	} else if a.shouldSyncActionPanelWithResults() {
 		a.normalizeActionSelectionLocked()
 	}
 	a.reconcileSelectedPreview()
@@ -1202,7 +1193,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if params.HideQueryBox {
 		resultBottomInset = int(palette.appPadding.Bottom)
 	}
-	toolbarHasContent := resultCount > 0 || toolbarMessageVisible
+	toolbarHasContent := resultCount > 0 || toolbarMessageVisible || !params.HideToolbar
 	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webViewFullscreen)
 	height := 0
 	if !params.HideQueryBox {
@@ -1825,10 +1816,7 @@ func (a *App) moveSelection(delta int) {
 	if target != a.selected {
 		a.selected = target
 		a.resultScrollDetached = false
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionSelectionKey = ""
-		a.actionFilter = nil
+		a.clearActionPanelStateLocked()
 		a.chatFullscreen = false
 		a.clearWebViewPreviewModeLocked()
 		a.reconcileSelectedPreview()
@@ -1849,10 +1837,7 @@ func (a *App) moveSelectionByGroup(direction int) {
 	if target != a.selected {
 		a.selected = target
 		a.resultScrollDetached = false
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionSelectionKey = ""
-		a.actionFilter = nil
+		a.clearActionPanelStateLocked()
 		a.chatFullscreen = false
 		a.clearWebViewPreviewModeLocked()
 		a.reconcileSelectedPreview()

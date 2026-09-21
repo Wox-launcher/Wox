@@ -177,7 +177,7 @@ func TestNativeHoverTooltipServiceCallsAllowReentrantStateAccess(t *testing.T) {
 	showDone := make(chan struct{})
 	go func() {
 		app.showNativeHoverTooltipAtBounds(
-			&revision, revisionID, "tooltip", "Help", woxui.Rect{Width: 20, Height: 20}, "top",
+			&revision, revisionID, "tooltip", "Help", nil, woxui.Rect{Width: 20, Height: 20}, "top",
 			woxui.Rect{X: 100, Y: 100, Width: 400, Height: 300}, false,
 		)
 		close(showDone)

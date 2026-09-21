@@ -30,7 +30,7 @@ func (s *CoreServices) ShowTooltip(ctx context.Context, sessionID string, option
 		return errors.New("tooltip name and text are required")
 	}
 	tooltip.Show(uiServiceContext(ctx, sessionID), tooltip.Options{
-		Name: options.Name, Text: options.Text, Side: options.Side,
+		Name: options.Name, Text: options.Text, Side: options.Side, HotkeyLabels: options.HotkeyLabels,
 		AnchorX: options.AnchorX, AnchorY: options.AnchorY, AnchorWidth: options.AnchorWidth, AnchorHeight: options.AnchorHeight,
 		OwnerX: options.OwnerX, OwnerY: options.OwnerY, OwnerWidth: options.OwnerWidth, OwnerHeight: options.OwnerHeight,
 		IgnoreOwnerLeave: options.IgnoreOwnerLeave,

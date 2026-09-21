@@ -210,10 +210,14 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	if tipWidth > 0 {
 		tipReserve += runtimeTextLeadingGap
 	}
+	hotkeyReserve := textOverlayHotkeyWidth(window, instance.options.HotkeyLabels)
+	if hotkeyReserve > 0 {
+		hotkeyReserve += runtimeTextLeadingGap
+	}
 
 	natural, _ := window.MeasureText(instance.options.Message, style)
 	padding := textOverlayPadding(instance.options)
-	windowWidth := natural.Size.Width + leadingReserve + tipReserve + closeReserve + padding.Left + padding.Right
+	windowWidth := natural.Size.Width + leadingReserve + tipReserve + hotkeyReserve + closeReserve + padding.Left + padding.Right
 	if titleBarHeight > 0 && (instance.options.Title != "" || instance.titleIcon != nil) {
 		titleWidth := float32(0)
 		if instance.options.Title != "" {
@@ -249,10 +253,13 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 
 	contentWidth := max(float32(1), windowWidth-padding.Left-padding.Right)
-	textWidth := max(float32(1), contentWidth-leadingReserve-tipReserve-closeReserve)
+	textWidth := max(float32(1), contentWidth-leadingReserve-tipReserve-hotkeyReserve-closeReserve)
 	textLayout := woxwidget.LayoutTextBlock(window, instance.options.Message, style, textWidth, 0, 0)
 	textHeight := textLayout.Size.Height + runtimeTextBottomPadding
 	rowHeight := max(textHeight, leadingWidth)
+	if len(instance.options.HotkeyLabels) > 0 {
+		rowHeight = max(rowHeight, 20)
+	}
 	if instance.options.Closable {
 		rowHeight = max(rowHeight, runtimeTextCloseSize)
 	}
@@ -333,6 +340,9 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		row = append(row, woxwidget.Image{Source: instance.icon, Width: size, Height: size, Fit: woxwidget.ImageFitContain})
 	}
 	row = append(row, textContent)
+	if chip := textOverlayHotkeyChip(instance.window, instance.options.HotkeyLabels, chrome); chip != nil {
+		row = append(row, chip)
+	}
 	if instance.tipIcon != nil {
 		size := float32(instance.options.TooltipIconSize)
 		if size <= 0 {
@@ -448,6 +458,33 @@ func textOverlayFieldTheme(chrome overlay.ThemeChrome) woxcomponent.ControlTheme
 }
 
 // applyTextOverlayTheme matches native vibrancy and painted chrome to the Wox theme.
+func textOverlayHotkeyWidth(window *woxui.Window, labels []string) float32 {
+	if len(labels) == 0 {
+		return 0
+	}
+	_, width := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Labels: labels, Foreground: overlay.CurrentThemeChrome().Foreground, FontSize: 11, Compact: true, Window: window,
+	})
+	return width
+}
+
+func textOverlayHotkeyChip(window *woxui.Window, labels []string, chrome overlay.ThemeChrome) woxwidget.Widget {
+	if len(labels) == 0 {
+		return nil
+	}
+	background := woxui.Color{R: 255, G: 255, B: 255, A: 28}
+	border := woxui.Color{R: 255, G: 255, B: 255, A: 70}
+	if chrome.Light {
+		background = woxui.Color{R: 0, G: 0, B: 0, A: 20}
+		border = woxui.Color{R: 0, G: 0, B: 0, A: 50}
+	}
+	chip, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Labels: labels, Foreground: chrome.Foreground, Background: background, Border: border,
+		FontSize: 11, Compact: true, Window: window,
+	})
+	return chip
+}
+
 func applyTextOverlayTheme(opts *Options) {
 	overlay.ApplyThemeAppearance(&opts.Window)
 }

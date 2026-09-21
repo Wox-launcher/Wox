@@ -14,6 +14,7 @@ func newActionIcon(paths string) common.WoxImage {
 }
 
 var defaultActionIcons = map[string]common.WoxImage{
+	ActionFeedback:             newActionIcon(`<path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M7 9h10M7 13h7"/>`),
 	ActionInstall:              newActionIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
 	ActionPin:                  newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
 	ActionUnpin:                newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6M5 5l14 14"/>`),

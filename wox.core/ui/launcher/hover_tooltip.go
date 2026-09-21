@@ -162,6 +162,10 @@ func (a *App) clearLinuxInlineTooltipState(state **settingsInlineTooltipState, i
 // Hovering a different control hides the previous hint immediately so the
 // delayed show cannot leave the old tooltip stuck on the prior trigger.
 func (a *App) setNativeHoverTooltip(revision *atomic.Uint64, name, job string, inside bool, text string, anchor woxui.Rect, side string, windowFn func() *woxui.Window) {
+	a.setNativeHoverTooltipWithHotkeys(revision, name, job, inside, text, nil, anchor, side, windowFn)
+}
+
+func (a *App) setNativeHoverTooltipWithHotkeys(revision *atomic.Uint64, name, job string, inside bool, text string, hotkeyLabels []string, anchor woxui.Rect, side string, windowFn func() *woxui.Window) {
 	if nativeHoverTooltipArmed(inside, text, anchor) {
 		revisionID := revision.Add(1)
 		if a.nativeHoverTooltipNeedsReplace(name, text, anchor) {
@@ -172,7 +176,7 @@ func (a *App) setNativeHoverTooltip(revision *atomic.Uint64, name, job string, i
 			if !a.waitHoverTooltipDelay(revision, revisionID) {
 				return
 			}
-			a.showNativeHoverTooltip(revision, revisionID, name, text, anchor, side, windowFn, ignoreOwnerLeave)
+			a.showNativeHoverTooltip(revision, revisionID, name, text, hotkeyLabels, anchor, side, windowFn, ignoreOwnerLeave)
 		})
 		return
 	}
@@ -200,6 +204,7 @@ var launcherHoverTooltipNames = []string{
 	"go-ui-refinement",
 	"go-ui-titlebar-action",
 	"go-ui-result-tail",
+	aboutMenuTooltipName,
 }
 
 // dismissLauncherHoverTooltipsOnUI closes launcher overlay tooltips on the current
@@ -211,6 +216,7 @@ func (a *App) dismissLauncherHoverTooltipsOnUI() {
 	a.glanceTooltipRevision.Add(1)
 	a.attentionTooltipRevision.Add(1)
 	a.refinementTooltipRevision.Add(1)
+	a.aboutMenuTooltipRevision.Add(1)
 	a.tooltipMu.Lock()
 	for _, name := range launcherHoverTooltipNames {
 		delete(a.nativeHoverTooltipShown, name)
@@ -248,7 +254,7 @@ func (a *App) hideNativeHoverTooltip(name, job string) {
 	})
 }
 
-func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64, name, text string, anchor woxui.Rect, side string, windowFn func() *woxui.Window, ignoreOwnerLeave bool) {
+func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64, name, text string, hotkeyLabels []string, anchor woxui.Rect, side string, windowFn func() *woxui.Window, ignoreOwnerLeave bool) {
 	if revisionID != revision.Load() {
 		return
 	}
@@ -261,11 +267,11 @@ func (a *App) showNativeHoverTooltip(revision *atomic.Uint64, revisionID uint64,
 		log.Printf("read bounds for %s tooltip: %v", name, err)
 		return
 	}
-	a.showNativeHoverTooltipAtBounds(revision, revisionID, name, text, anchor, side, windowBounds, ignoreOwnerLeave)
+	a.showNativeHoverTooltipAtBounds(revision, revisionID, name, text, hotkeyLabels, anchor, side, windowBounds, ignoreOwnerLeave)
 }
 
 // showNativeHoverTooltipAtBounds presents one tooltip without holding the state lock across the synchronous UI boundary.
-func (a *App) showNativeHoverTooltipAtBounds(revision *atomic.Uint64, revisionID uint64, name, text string, anchor woxui.Rect, side string, windowBounds woxui.Rect, ignoreOwnerLeave bool) {
+func (a *App) showNativeHoverTooltipAtBounds(revision *atomic.Uint64, revisionID uint64, name, text string, hotkeyLabels []string, anchor woxui.Rect, side string, windowBounds woxui.Rect, ignoreOwnerLeave bool) {
 	a.tooltipCallMu.Lock()
 	defer a.tooltipCallMu.Unlock()
 	if revisionID != revision.Load() {
@@ -274,7 +280,7 @@ func (a *App) showNativeHoverTooltipAtBounds(revision *atomic.Uint64, revisionID
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
-		Name: name, Text: text, Side: side,
+		Name: name, Text: text, Side: side, HotkeyLabels: hotkeyLabels,
 		AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
 		AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
 		OwnerX: float64(windowBounds.X), OwnerY: float64(windowBounds.Y),

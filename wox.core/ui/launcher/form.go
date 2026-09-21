@@ -285,10 +285,7 @@ func changeFormFieldsChoiceLocked(fields *formFieldsState, index, delta int) {
 func (a *App) openFormAction(result queryResult, action resultAction) {
 	state := &formState{formFieldsState: newFormFieldsState(action.Form, nil, true), resultID: result.ID, queryID: result.QueryID, action: action}
 	a.form = state
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionSelectionKey = ""
-	a.actionFilter = nil
+	a.clearActionPanelStateLocked()
 	a.updateFormTextInput(state.editor != nil)
 	// A hotkey-only form should start recording immediately so the first
 	// keypress is captured without clicking the recorder.
@@ -559,6 +556,9 @@ func (a *App) updateFormTextInput(enabled bool) {
 }
 
 func (a *App) restoreQueryTextInput() {
+	if a.window == nil {
+		return
+	}
 	enabled := a.queryCanFocus() && a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
 	state := woxui.TextInputState{}
 	if enabled {

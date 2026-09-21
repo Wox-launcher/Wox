@@ -222,6 +222,34 @@ func TestActionPanelClampedHeightKeepsSearchVisible(t *testing.T) {
 	}
 }
 
+func TestActionPanelListHeightIncludesGroupHeader(t *testing.T) {
+	items := []ActionItem{
+		{ID: "feedback"}, {ID: "guide"}, {Kind: ActionItemKindGroupHeader, ID: "community", Label: "Community"}, {ID: "reddit"},
+	}
+	got := ActionPanelListHeight(items)
+	want := float32(3*ActionRowHeight + ActionGroupHeaderHeight)
+	if got != want {
+		t.Fatalf("group header list height = %v, want %v", got, want)
+	}
+}
+
+func TestActionGroupHeaderIsNotInteractive(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, ActionHeader: woxui.Color{A: 255},
+		Items: []ActionItem{{ID: "guide", Label: "Guide"}, {Kind: ActionItemKindGroupHeader, ID: "community", Label: "Community"}, {ID: "reddit", Label: "Reddit"}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	panel := view.Child.(woxwidget.Container)
+	actionList := actionScrollProps(panel.Child.(woxwidget.Flex).Children[2])
+	rows := actionList.Content.(woxwidget.Flex).Children
+	if len(rows) != 3 {
+		t.Fatalf("row count = %d, want action, header, action", len(rows))
+	}
+	if _, ok := rows[1].(woxwidget.Align); !ok {
+		t.Fatalf("group header = %#v, want a non-interactive align slot", rows[1])
+	}
+}
+
 func TestActionPanelListHeightIncludesVisibleGroupDivider(t *testing.T) {
 	items := []ActionItem{
 		{ID: "copy"}, {ID: "keyword"}, {Kind: ActionItemKindSeparator}, {ID: "pin"}, {ID: "reset"},
@@ -329,13 +357,13 @@ func TestActionStillPointerDoesNotStealDefaultSelection(t *testing.T) {
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 220}, PixelSize: woxui.PixelSize{Width: 400, Height: 220}, Scale: 1}
 	host.Frame(&woxui.DisplayList{}, frame)
 	// Park the pointer where the second action row will appear after the panel opens.
-	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 170, Y: 104}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 170, Y: 84}})
 	phase = 1
 	host.Frame(&woxui.DisplayList{}, frame)
 	if selected != 0 {
 		t.Fatalf("opening under a still pointer selected %d, want the default action", selected)
 	}
-	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 172, Y: 106}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 172, Y: 86}})
 	if selected != 1 {
 		t.Fatalf("pointer move selected %d, want the hovered action", selected)
 	}
@@ -417,6 +445,26 @@ func TestActionRowShowsPluginIconAsTail(t *testing.T) {
 	}
 }
 
+func TestActionRowCentersSmallerBrandIconInLeadingSlot(t *testing.T) {
+	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
+		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
+		Theme: woxcomponent.Theme{}, Items: []ActionItem{{ID: "reddit", Label: "Reddit", Icon: &woxui.Image{}, IconSize: ActionBrandIconSize}},
+	}, woxwidget.NewScrollController(0)).(woxwidget.Gesture)
+	content := actionScrollProps(view.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2]).Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	slot := content.Children[0].(woxwidget.Align)
+	if slot.Width != ActionIconSize+actionIconSlotPadding {
+		t.Fatalf("brand icon slot width = %v, want the shared leading gutter", slot.Width)
+	}
+	centered := slot.Child.(woxwidget.Container).Child.(woxwidget.Align)
+	if centered.Width != ActionIconSize || centered.Height != ActionIconSize || centered.Horizontal != 0.5 || centered.Vertical != 0.5 {
+		t.Fatalf("brand icon centering = %#v", centered)
+	}
+	image := centered.Child.(woxwidget.Image)
+	if image.Width != ActionBrandIconSize || image.Height != ActionBrandIconSize {
+		t.Fatalf("brand glyph = %vx%v, want %v", image.Width, image.Height, ActionBrandIconSize)
+	}
+}
+
 func TestActionRowCentersIconAndLabel(t *testing.T) {
 	view := buildActionsView(woxwidget.StateContext{}, ActionsProps{
 		WindowWidth: 600, WindowHeight: 600, DensityScale: 1, ActionPadding: woxwidget.UniformInsets(10),
@@ -461,6 +509,19 @@ func TestActionScrollbarUsesPanelGutter(t *testing.T) {
 			if panel.Padding.Right != wantInset || scroll.Width != innerWidth+padding-wantInset {
 				t.Fatalf("padding %v border %v: scroll width %v, right inset %v", padding, border, scroll.Width, panel.Padding.Right)
 			}
+		}
+	}
+}
+
+func TestActionGroupHeaderGeometryMatchesScrollExtentAcrossDensities(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		props := ActionsProps{WindowWidth: 600, WindowHeight: 600, DensityScale: scale,
+			Items: []ActionItem{{Kind: ActionItemKindGroupHeader, Label: "Community"}, {ID: "discord", Index: 1, Label: "Discord"}}, Selected: 1}
+		panel := buildActionsView(woxwidget.StateContext{}, props, woxwidget.NewScrollController(0)).(woxwidget.Gesture).Child.(woxwidget.Container)
+		scroll := actionScrollProps(panel.Child.(woxwidget.Flex).Children[2])
+		header := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Align)
+		if header.Height != ActionItemHeight(props.Items[0]) || scroll.ContentHeight != header.Height+ActionRowHeight || scroll.KeepVisible.Start != header.Height {
+			t.Fatalf("density %v: header %v, content %v, selected offset %v", scale, header.Height, scroll.ContentHeight, scroll.KeepVisible.Start)
 		}
 	}
 }
