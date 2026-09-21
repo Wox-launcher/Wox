@@ -86,8 +86,12 @@ type Semantics struct {
 	Protected      bool
 	Hidden         bool
 	NativeBoundary bool
-	OnAction       func(action woxui.AccessibilityAction, value string) error
-	Child          Widget
+	// HasTextSelection marks that SelectionStart/SelectionEnd are rune offsets in Value.
+	HasTextSelection bool
+	SelectionStart   int
+	SelectionEnd     int
+	OnAction         func(action woxui.AccessibilityAction, value string) error
+	Child            Widget
 }
 
 func (w Semantics) layout(ctx context, available constraints) *node {
@@ -103,23 +107,26 @@ func (w Semantics) layout(ctx context, available constraints) *node {
 		child.kind = "semantics"
 	}
 	child.semantic = &semanticBehavior{
-		automationID:   w.AutomationID,
-		role:           w.Role,
-		label:          w.Label,
-		description:    w.Description,
-		value:          w.Value,
-		actions:        append([]woxui.AccessibilityAction(nil), w.Actions...),
-		liveRegion:     w.LiveRegion,
-		enabled:        !w.Disabled,
-		selected:       w.Selected,
-		hovered:        w.Hovered,
-		checked:        w.Checked,
-		expanded:       w.Expanded,
-		readOnly:       w.ReadOnly,
-		protected:      w.Protected,
-		hidden:         w.Hidden,
-		nativeBoundary: w.NativeBoundary,
-		onAction:       w.OnAction,
+		automationID:     w.AutomationID,
+		role:             w.Role,
+		label:            w.Label,
+		description:      w.Description,
+		value:            w.Value,
+		actions:          append([]woxui.AccessibilityAction(nil), w.Actions...),
+		liveRegion:       w.LiveRegion,
+		enabled:          !w.Disabled,
+		selected:         w.Selected,
+		hovered:          w.Hovered,
+		checked:          w.Checked,
+		expanded:         w.Expanded,
+		readOnly:         w.ReadOnly,
+		protected:        w.Protected,
+		hidden:           w.Hidden,
+		nativeBoundary:   w.NativeBoundary,
+		hasTextSelection: w.HasTextSelection,
+		selectionStart:   w.SelectionStart,
+		selectionEnd:     w.SelectionEnd,
+		onAction:         w.OnAction,
 	}
 	return child
 }

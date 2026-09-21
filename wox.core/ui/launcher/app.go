@@ -92,6 +92,8 @@ type App struct {
 	queryMenuAnchor           woxui.Point
 	queryMenuEnablement       queryMenuEnablement
 	queryMenuTheme            woxcomponent.Theme
+	terminalMenuAnchor        woxui.Point
+	terminalMenuEnablement    terminalMenuEnablement
 	results                   []queryResult
 	resultRevision            uint64
 	resultsSectionRevision    uint64

@@ -45,6 +45,15 @@ type TerminalPreviewProps struct {
 	OnCloseSearch      func()
 	OnToggleFullscreen func()
 	OnTagHover         func(bool, string, woxui.Rect)
+	SelectionAnchor    int
+	SelectionFocus     int
+	OnSelectionStart   func(int, woxui.KeyModifiers)
+	OnSelectionExtend  func(int)
+	OnSelectWord       func(int)
+	OnSelectLine       func(int)
+	OnCopy             func()
+	OnSelectAll        func()
+	OnContextMenu      func(woxui.Point)
 }
 
 // TerminalMatch identifies one byte range in terminal output.
@@ -98,7 +107,7 @@ func terminalPreviewContent(props TerminalPreviewProps) woxwidget.Widget {
 	style := woxui.TextStyle{Size: 12}
 	layout := woxwidget.TextBlockLayout{}
 	if props.LayoutText != nil {
-		layout = props.LayoutText(value, style, innerWidth, 18)
+		layout = props.LayoutText(value, style, innerWidth, terminalOutputLineHeight)
 	}
 	contentHeight := max(innerHeight, layout.Size.Height)
 	maxOffset := max(float32(0), contentHeight-innerHeight)
@@ -107,6 +116,16 @@ func terminalPreviewContent(props TerminalPreviewProps) woxwidget.Widget {
 		props.OnClampScroll(maxOffset)
 	}
 	header := terminalHeader(props)
+	selectable := terminalOutputSelectable(props.Text)
+	selectionStart, selectionEnd := min(props.SelectionAnchor, props.SelectionFocus), max(props.SelectionAnchor, props.SelectionFocus)
+	runeStart, runeEnd := 0, 0
+	if selectable {
+		runeStart, runeEnd = terminalRuneSelection(props.Text, selectionStart, selectionEnd)
+	}
+	actions := []woxui.AccessibilityAction{}
+	if selectable {
+		actions = append(actions, woxui.AccessibilityActionSelectAll, woxui.AccessibilityActionCopy)
+	}
 	body := woxwidget.Container{Width: props.Width, Height: bodyHeight, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Gesture{
 		ID: "terminal-preview-scroll-" + props.SessionID,
 		OnScroll: func(delta woxui.Point) {
@@ -115,8 +134,22 @@ func terminalPreviewContent(props TerminalPreviewProps) woxwidget.Widget {
 			}
 		},
 		Child: woxwidget.ScrollView{Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight, Offset: offset, Child: woxwidget.Semantics{
-			AutomationID: "launcher.preview.terminal.output", Role: woxui.AccessibilityRoleText, Label: "Terminal output", Value: value, ReadOnly: true,
-			Child: terminalOutputText(props, value, style, layout, innerWidth, contentHeight),
+			Key: TerminalOutputKey(props.SessionID), AutomationID: "launcher.preview.terminal.output", Role: woxui.AccessibilityRoleText, Label: "Terminal output", Value: value, ReadOnly: true,
+			HasTextSelection: selectable, SelectionStart: runeStart, SelectionEnd: runeEnd, Actions: actions,
+			OnAction: func(action woxui.AccessibilityAction, _ string) error {
+				switch action {
+				case woxui.AccessibilityActionSelectAll:
+					if props.OnSelectAll != nil {
+						props.OnSelectAll()
+					}
+				case woxui.AccessibilityActionCopy:
+					if props.OnCopy != nil {
+						props.OnCopy()
+					}
+				}
+				return nil
+			},
+			Child: terminalOutputText(props, value, style, layout, innerWidth, contentHeight, innerHeight, maxOffset),
 		}},
 	}}
 	children := []woxwidget.Widget{header}
@@ -238,36 +271,101 @@ type terminalHighlightSegment struct {
 	matchIndex int
 }
 
-// terminalOutputText overlays Flutter-compatible match colors on the shared wrapped text layout.
-func terminalOutputText(props TerminalPreviewProps, value string, style woxui.TextStyle, layout woxwidget.TextBlockLayout, width, height float32) woxwidget.Widget {
-	text := woxwidget.TextBlock{Value: value, Width: width, Height: height, Style: style, LineHeight: 18, Color: props.Theme.PreviewText, Layout: &layout}
-	segments := terminalHighlightSegments(value, layout.Lines, props.Matches)
-	if len(segments) == 0 || props.Window == nil {
-		return text
+// terminalOutputText overlays selection and match colors on the shared wrapped text layout.
+func terminalOutputText(props TerminalPreviewProps, value string, style woxui.TextStyle, layout woxwidget.TextBlockLayout, width, height, viewportHeight, maxOffset float32) woxwidget.Widget {
+	text := woxwidget.TextBlock{Value: value, Width: width, Height: height, Style: style, LineHeight: terminalOutputLineHeight, Color: props.Theme.PreviewText, Layout: &layout}
+	children := []woxwidget.StackChild{}
+	selectionStart, selectionEnd := min(props.SelectionAnchor, props.SelectionFocus), max(props.SelectionAnchor, props.SelectionFocus)
+	selectionStart = TerminalClampUTF8Offset(props.Text, selectionStart)
+	selectionEnd = TerminalClampUTF8Offset(props.Text, min(selectionEnd, len(props.Text)))
+	if selectionStart < selectionEnd {
+		selectionColor := props.Theme.Controls.TextSelectionBackground
+		if selectionColor.A == 0 {
+			selectionColor = woxui.Color{R: 57, G: 204, B: 183, A: 120}
+		}
+		children = append(children, woxwidget.StackChild{Child: terminalRangePainter(value, layout, style, props.Window, width, height, []TerminalMatch{{Start: selectionStart, End: selectionEnd}}, -1, selectionColor, false)})
 	}
-	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: text}, {Child: woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+	children = append(children, woxwidget.StackChild{Child: text})
+	if segments := terminalHighlightSegments(value, layout.Lines, props.Matches); len(segments) > 0 && props.Window != nil {
+		children = append(children, woxwidget.StackChild{Child: terminalRangePainter(value, layout, style, props.Window, width, height, props.Matches, props.MatchIndex, woxui.Color{R: 255, G: 245, B: 157, A: 255}, true)})
+	}
+	content := woxwidget.Stack{Width: width, Height: height, Children: children}
+	if !terminalOutputSelectable(props.Text) {
+		return content
+	}
+	offsetAt := func(position woxui.Point) int {
+		offset := terminalOffsetAt(value, layout, props.Window, style, position, terminalOutputLineHeight)
+		if offset > len(props.Text) {
+			return len(props.Text)
+		}
+		return offset
+	}
+	return woxwidget.Gesture{
+		ID: string(TerminalOutputKey(props.SessionID)), Cursor: woxui.PointerCursorText,
+		OnSelectionStart: func(position woxui.Point, modifiers woxui.KeyModifiers) {
+			if props.OnSelectionStart != nil {
+				props.OnSelectionStart(offsetAt(position), modifiers)
+			}
+		},
+		OnSelectionExtend: func(position woxui.Point) {
+			if props.OnScroll != nil {
+				viewY := position.Y - props.Scroll
+				if viewY < 0 {
+					props.OnScroll(viewY, maxOffset)
+				} else if viewY > viewportHeight {
+					props.OnScroll(viewY-viewportHeight, maxOffset)
+				}
+			}
+			if props.OnSelectionExtend != nil {
+				props.OnSelectionExtend(offsetAt(position))
+			}
+		},
+		OnDoubleTapAt: func(position woxui.Point) {
+			if props.OnSelectWord != nil {
+				props.OnSelectWord(offsetAt(position))
+			}
+		},
+		OnTripleTapAt: func(position woxui.Point) {
+			if props.OnSelectLine != nil {
+				props.OnSelectLine(offsetAt(position))
+			}
+		},
+		OnSecondaryTapDown: props.OnContextMenu,
+		Child:              content,
+	}
+}
+
+// terminalRangePainter draws selection washes or search match overlays using the shared wrapped lines.
+func terminalRangePainter(value string, layout woxwidget.TextBlockLayout, style woxui.TextStyle, window *woxui.Window, width, height float32, matches []TerminalMatch, activeIndex int, background woxui.Color, overlayText bool) woxwidget.Widget {
+	segments := terminalHighlightSegments(value, layout.Lines, matches)
+	if len(segments) == 0 {
+		return woxwidget.Container{Width: width, Height: height}
+	}
+	activeBackground := woxui.Color{R: 251, G: 192, B: 45, A: 255}
+	return woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 		start, end := 0, len(segments)
 		if clip, ok := displayList.ClipRect(); ok {
-			// Match overlays need the same viewport culling as TextBlock itself.
-			first := max(0, int((clip.Y-bounds.Y)/18))
-			last := max(first, int((clip.Y+clip.Height-bounds.Y)/18)+1)
+			first := max(0, int((clip.Y-bounds.Y)/terminalOutputLineHeight))
+			last := max(first, int((clip.Y+clip.Height-bounds.Y)/terminalOutputLineHeight)+1)
 			start = sort.Search(len(segments), func(i int) bool { return segments[i].line >= first })
 			end = sort.Search(len(segments), func(i int) bool { return segments[i].line >= last })
 		}
 		for _, segment := range segments[start:end] {
 			line := layout.Lines[segment.line]
-			prefixMetrics, _ := props.Window.MeasureText(line[:segment.start], style)
-			matchMetrics, _ := props.Window.MeasureText(line[segment.start:segment.end], style)
-			y := bounds.Y + float32(segment.line)*18
-			background := woxui.Color{R: 255, G: 245, B: 157, A: 255}
-			if segment.matchIndex == props.MatchIndex {
-				background = woxui.Color{R: 251, G: 192, B: 45, A: 255}
+			prefixWidth := terminalMeasureWidth(window, line[:segment.start], style)
+			matchWidth := terminalMeasureWidth(window, line[segment.start:segment.end], style)
+			y := bounds.Y + float32(segment.line)*terminalOutputLineHeight
+			fill := background
+			if overlayText && segment.matchIndex == activeIndex {
+				fill = activeBackground
 			}
-			rect := woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: y + 1, Width: matchMetrics.Size.Width, Height: 16}
-			displayList.FillRoundedRect(rect, 1, background)
-			displayList.DrawText(line[segment.start:segment.end], woxui.Rect{X: rect.X, Y: y, Width: rect.Width, Height: 18}, style, woxui.Color{A: 242})
+			rect := woxui.Rect{X: bounds.X + prefixWidth, Y: y + 1, Width: matchWidth, Height: terminalOutputLineHeight - 2}
+			displayList.FillRoundedRect(rect, 1, fill)
+			if overlayText {
+				displayList.DrawText(line[segment.start:segment.end], woxui.Rect{X: rect.X, Y: y, Width: rect.Width, Height: terminalOutputLineHeight}, style, woxui.Color{A: 242})
+			}
 		}
-	}}}}}
+	}}
 }
 
 // terminalHighlightSegments maps absolute byte ranges onto the wrapped lines rendered by TextBlock.
@@ -275,31 +373,20 @@ func terminalHighlightSegments(value string, lines []string, matches []TerminalM
 	if len(matches) == 0 {
 		return nil
 	}
+	ranges := terminalLineRanges(value, lines)
 	segments := make([]terminalHighlightSegment, 0, len(matches))
-	cursor := 0
 	matchIndex := 0
-	for lineIndex, line := range lines {
-		lineStart := cursor
-		if line != "" {
-			if offset := strings.Index(value[cursor:], line); offset >= 0 {
-				lineStart = cursor + offset
-			}
-		}
-		lineEnd := lineStart + len(line)
-		for matchIndex < len(matches) && matches[matchIndex].End <= lineStart {
+	for lineIndex, line := range ranges {
+		for matchIndex < len(matches) && matches[matchIndex].End <= line.start {
 			matchIndex++
 		}
-		for index := matchIndex; index < len(matches) && matches[index].Start < lineEnd; index++ {
+		for index := matchIndex; index < len(matches) && matches[index].Start < line.end; index++ {
 			match := matches[index]
-			start := max(match.Start, lineStart)
-			end := min(match.End, lineEnd)
+			start := max(match.Start, line.start)
+			end := min(match.End, line.end)
 			if start < end {
-				segments = append(segments, terminalHighlightSegment{line: lineIndex, start: start - lineStart, end: end - lineStart, matchIndex: index})
+				segments = append(segments, terminalHighlightSegment{line: lineIndex, start: start - line.start, end: end - line.start, matchIndex: index})
 			}
-		}
-		cursor = lineEnd
-		for cursor < len(value) && (value[cursor] == '\r' || value[cursor] == '\n') {
-			cursor++
 		}
 	}
 	return segments

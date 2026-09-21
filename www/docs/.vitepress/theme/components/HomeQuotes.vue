@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useData } from "vitepress";
 
 const THREAD_URL =
-  "https://www.reddit.com/r/windowsapps/search/?q=%22Wox%20Launcher%22%20author%3ARamyIssa&restrict_sr=1";
+  "https://www.reddit.com/r/windowsapps/comments/1wawwhi/best_app_launcher_for_windows/";
 
 const quotes = [
   {

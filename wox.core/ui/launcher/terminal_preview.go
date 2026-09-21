@@ -8,10 +8,13 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	woxcomponent "wox/ui/launcher/component"
+	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 const (
@@ -63,22 +66,26 @@ type terminalPreviewState struct {
 	CaseSensitive       bool
 	Matches             []terminalMatch
 	MatchIndex          int
+	SelectionAnchor     int
+	SelectionFocus      int
 }
 
 type terminalPreviewSnapshot struct {
-	SessionID      string
-	Command        string
-	Status         string
-	Error          string
-	Text           string
-	Scroll         float32
-	LoadingHistory bool
-	SearchOpen     bool
-	SearchEditing  woxui.TextEditingState
-	CaseSensitive  bool
-	MatchCount     int
-	MatchIndex     int
-	Matches        []terminalMatch
+	SessionID       string
+	Command         string
+	Status          string
+	Error           string
+	Text            string
+	Scroll          float32
+	LoadingHistory  bool
+	SearchOpen      bool
+	SearchEditing   woxui.TextEditingState
+	CaseSensitive   bool
+	MatchCount      int
+	MatchIndex      int
+	Matches         []terminalMatch
+	SelectionAnchor int
+	SelectionFocus  int
 }
 
 type terminalMatch struct {
@@ -114,6 +121,11 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 		OnSearchKey:  a.onTerminalPreviewKey,
 		OnMoveSearch: a.moveTerminalSearch, OnToggleSearchCase: a.toggleTerminalSearchCase, OnCloseSearch: a.closeTerminalSearch,
 		OnToggleFullscreen: a.toggleTerminalFullscreen, OnTagHover: a.setPreviewTooltip,
+		SelectionAnchor: snapshot.SelectionAnchor, SelectionFocus: snapshot.SelectionFocus,
+		OnSelectionStart: a.startTerminalSelection, OnSelectionExtend: a.extendTerminalSelection,
+		OnSelectWord: a.selectTerminalWord, OnSelectLine: a.selectTerminalLine,
+		OnCopy: a.copyTerminalPreviewOutput, OnSelectAll: a.selectAllTerminalPreview,
+		OnContextMenu: a.openTerminalContextMenu,
 	})
 }
 
@@ -167,7 +179,7 @@ func snapshotTerminalPreview(state *terminalPreviewState) terminalPreviewSnapsho
 	snapshot := terminalPreviewSnapshot{
 		SessionID: state.SessionID, Command: state.Command, Status: state.Status, Error: state.Error, Text: state.Text, Scroll: state.Scroll,
 		LoadingHistory: state.LoadingHistory, SearchOpen: state.SearchOpen, CaseSensitive: state.CaseSensitive, MatchCount: len(state.Matches), MatchIndex: state.MatchIndex,
-		Matches: append([]terminalMatch(nil), state.Matches...),
+		Matches: append([]terminalMatch(nil), state.Matches...), SelectionAnchor: state.SelectionAnchor, SelectionFocus: state.SelectionFocus,
 	}
 	if state.SearchEditor != nil {
 		snapshot.SearchEditing = state.SearchEditor.State()
@@ -217,6 +229,7 @@ func (a *App) deactivateTerminalPreview() {
 	if a.terminalPreview != nil {
 		oldSessionID = a.terminalPreview.SessionID
 		searchWasOpen = a.terminalPreview.SearchOpen
+		a.closeTerminalContextMenu()
 		a.terminalPreview = nil
 	}
 	a.terminalFullscreen = false
@@ -237,6 +250,7 @@ func (a *App) applyTerminalChunk(chunk terminalChunk) {
 	if state == nil || state.SessionID != chunk.SessionID {
 		return
 	}
+	oldBase := state.BaseCursor
 	if state.Text == "" || chunk.Truncated || chunk.CursorStart < state.BaseCursor {
 		state.BaseCursor = chunk.CursorStart
 		state.Text = chunk.Content
@@ -262,6 +276,7 @@ func (a *App) applyTerminalChunk(chunk terminalChunk) {
 		state.Text = state.Text[trim:]
 		state.BaseCursor += int64(trim)
 	}
+	remapTerminalSelection(state, oldBase)
 	if state.HistoryAnchorBase > 0 && state.BaseCursor <= state.HistoryAnchorBase {
 		prefixBytes := state.HistoryAnchorBase - state.BaseCursor
 		if prefixBytes >= 0 && prefixBytes <= int64(len(state.Text)) {
@@ -481,7 +496,225 @@ func (a *App) toggleTerminalSearchCase() {
 	_ = a.window.Invalidate()
 }
 
-// onTerminalPreviewKey handles preview-local find before launcher navigation sees the keystroke.
+// remapTerminalSelection keeps an existing highlight attached to the same absolute output bytes.
+func remapTerminalSelection(state *terminalPreviewState, oldBase int64) {
+	if state == nil || state.SelectionAnchor == state.SelectionFocus {
+		return
+	}
+	// Preserve the drag anchor even when the selection runs backwards.
+	anchor := int(oldBase + int64(state.SelectionAnchor) - state.BaseCursor)
+	focus := int(oldBase + int64(state.SelectionFocus) - state.BaseCursor)
+	if max(anchor, focus) <= 0 || min(anchor, focus) >= len(state.Text) {
+		state.SelectionAnchor, state.SelectionFocus = 0, 0
+		return
+	}
+	state.SelectionAnchor = previewview.TerminalClampUTF8Offset(state.Text, anchor)
+	state.SelectionFocus = previewview.TerminalClampUTF8Offset(state.Text, focus)
+}
+
+// terminalSelectedText returns the currently highlighted output, or empty when collapsed.
+func terminalSelectedText(state *terminalPreviewState) string {
+	if state == nil {
+		return ""
+	}
+	start, end := min(state.SelectionAnchor, state.SelectionFocus), max(state.SelectionAnchor, state.SelectionFocus)
+	start = previewview.TerminalClampUTF8Offset(state.Text, start)
+	end = previewview.TerminalClampUTF8Offset(state.Text, end)
+	if start >= end || end > len(state.Text) {
+		return ""
+	}
+	return state.Text[start:end]
+}
+
+// focusQueryForTerminalSelection returns IME ownership to the query so Ctrl+C copies output, not find text.
+func (a *App) focusQueryForTerminalSelection() {
+	if a.host == nil || !a.queryCanFocus() {
+		return
+	}
+	if a.terminalSearchFocused() {
+		a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+		a.restoreQueryTextInput()
+	}
+}
+
+// startTerminalSelection begins a drag or shift-click highlight at the given output byte offset.
+func (a *App) startTerminalSelection(offset int, modifiers woxui.KeyModifiers) {
+	state := a.terminalPreview
+	if state == nil || strings.TrimSpace(state.Text) == "" {
+		return
+	}
+	a.focusQueryForTerminalSelection()
+	offset = previewview.TerminalClampUTF8Offset(state.Text, offset)
+	if modifiers&woxui.KeyModifierShift != 0 {
+		state.SelectionFocus = offset
+	} else {
+		state.SelectionAnchor = offset
+		state.SelectionFocus = offset
+	}
+	a.refreshTerminalContextMenuIfStale()
+	_ = a.window.Invalidate()
+}
+
+// extendTerminalSelection updates the highlight focus while the pointer is dragged.
+func (a *App) extendTerminalSelection(offset int) {
+	state := a.terminalPreview
+	if state == nil || strings.TrimSpace(state.Text) == "" {
+		return
+	}
+	state.SelectionFocus = previewview.TerminalClampUTF8Offset(state.Text, offset)
+	a.refreshTerminalContextMenuIfStale()
+	_ = a.window.Invalidate()
+}
+
+// selectTerminalWord selects the word under a double-click.
+func (a *App) selectTerminalWord(offset int) {
+	state := a.terminalPreview
+	if state == nil || strings.TrimSpace(state.Text) == "" {
+		return
+	}
+	a.focusQueryForTerminalSelection()
+	start, end := previewview.TerminalWordByteRange(state.Text, offset)
+	state.SelectionAnchor, state.SelectionFocus = start, end
+	a.refreshTerminalContextMenuIfStale()
+	_ = a.window.Invalidate()
+}
+
+// selectTerminalLine selects the newline-delimited line under a triple-click.
+func (a *App) selectTerminalLine(offset int) {
+	state := a.terminalPreview
+	if state == nil || strings.TrimSpace(state.Text) == "" {
+		return
+	}
+	a.focusQueryForTerminalSelection()
+	start, end := previewview.TerminalLineByteRange(state.Text, offset)
+	state.SelectionAnchor, state.SelectionFocus = start, end
+	a.refreshTerminalContextMenuIfStale()
+	_ = a.window.Invalidate()
+}
+
+// selectAllTerminalPreview highlights the complete loaded output window.
+func (a *App) selectAllTerminalPreview() {
+	state := a.terminalPreview
+	if state == nil || state.Text == "" {
+		return
+	}
+	state.SelectionAnchor, state.SelectionFocus = 0, len(state.Text)
+	a.refreshTerminalContextMenuIfStale()
+	_ = a.window.Invalidate()
+}
+
+// copyTerminalPreviewOutput copies the current highlight, or the full output when none is selected.
+func (a *App) copyTerminalPreviewOutput() {
+	state := a.terminalPreview
+	if state == nil {
+		return
+	}
+	text := terminalSelectedText(state)
+	if text == "" {
+		text = state.Text
+	}
+	if text == "" {
+		return
+	}
+	_ = clipboard.WriteText(text)
+}
+
+// copyTerminalPreviewSelection copies a non-empty highlight and reports whether Ctrl+C should be consumed.
+func (a *App) copyTerminalPreviewSelection() bool {
+	text := terminalSelectedText(a.terminalPreview)
+	if text == "" {
+		return false
+	}
+	_ = clipboard.WriteText(text)
+	return true
+}
+
+type terminalMenuEnablement struct {
+	canCopy, canSelectAll bool
+}
+
+func computeTerminalMenuEnablement(state *terminalPreviewState) terminalMenuEnablement {
+	if state == nil {
+		return terminalMenuEnablement{}
+	}
+	return terminalMenuEnablement{canCopy: terminalSelectedText(state) != "", canSelectAll: state.Text != ""}
+}
+
+// openTerminalContextMenu shows Copy and Select All above the terminal output.
+func (a *App) openTerminalContextMenu(windowPos woxui.Point) {
+	if a == nil || a.host == nil {
+		return
+	}
+	state := a.terminalPreview
+	if state == nil || strings.TrimSpace(state.Text) == "" {
+		return
+	}
+	a.focusQueryForTerminalSelection()
+	en := computeTerminalMenuEnablement(state)
+	theme := a.palette.componentTheme()
+	owner := previewview.TerminalOutputKey(state.SessionID)
+	var token uint64
+	clear := func() {
+		a.host.ClearOverlay(owner, token)
+	}
+	menu := woxcomponent.BuildTextEditContextMenu(woxcomponent.TextEditContextMenuProps{
+		ID: "launcher.preview.terminal.menu", Theme: theme.Controls,
+		CanCopy: en.canCopy, CanSelectAll: en.canSelectAll,
+		OnAction: func(action woxcomponent.TextEditContextAction) {
+			clear()
+			live := computeTerminalMenuEnablement(a.terminalPreview)
+			switch action {
+			case woxcomponent.TextEditContextCopy:
+				if live.canCopy {
+					a.copyTerminalPreviewOutput()
+				}
+			case woxcomponent.TextEditContextSelectAll:
+				if live.canSelectAll {
+					a.selectAllTerminalPreview()
+				}
+			}
+		},
+	})
+	token = a.host.SetOverlay(owner, woxcomponent.PlaceTextEditContextMenu(a.host.FrameSize(), windowPos, string(owner), menu, clear))
+	a.terminalMenuAnchor = windowPos
+	a.terminalMenuEnablement = en
+}
+
+// refreshTerminalContextMenuIfStale rebuilds an open menu when copy/select-all enablement changed.
+func (a *App) refreshTerminalContextMenuIfStale() {
+	state := a.terminalPreview
+	if a == nil || a.host == nil || state == nil || a.host.OverlayOwner() != previewview.TerminalOutputKey(state.SessionID) {
+		return
+	}
+	next := computeTerminalMenuEnablement(state)
+	if next == a.terminalMenuEnablement {
+		return
+	}
+	a.openTerminalContextMenu(a.terminalMenuAnchor)
+}
+
+// clearTerminalSelection drops an output highlight so later query copy shortcuts stay with the editor.
+func (a *App) clearTerminalSelection() {
+	state := a.terminalPreview
+	if state == nil || state.SelectionAnchor == state.SelectionFocus {
+		return
+	}
+	state.SelectionAnchor, state.SelectionFocus = 0, 0
+	a.refreshTerminalContextMenuIfStale()
+	if a.window != nil {
+		_ = a.window.Invalidate()
+	}
+}
+
+// closeTerminalContextMenu dismisses the output context menu for the visible session.
+func (a *App) closeTerminalContextMenu() {
+	if a == nil || a.host == nil || a.terminalPreview == nil {
+		return
+	}
+	a.host.ClearOverlay(previewview.TerminalOutputKey(a.terminalPreview.SessionID), 0)
+}
+
+// onTerminalPreviewKey handles preview-local find and output copy before launcher navigation sees the keystroke.
 func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
@@ -489,6 +722,13 @@ func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 	state := a.terminalPreview
 	if state == nil {
 		return false
+	}
+	if event.Key == woxui.KeyEscape && a.host != nil && a.host.HasOverlay() && a.host.OverlayOwner() == previewview.TerminalOutputKey(state.SessionID) {
+		a.closeTerminalContextMenu()
+		return true
+	}
+	if event.Modifiers.HasPrimary() && event.Key == woxui.Key("c") && !a.terminalSearchFocused() && a.copyTerminalPreviewSelection() {
+		return true
 	}
 	if hotkeyMatches(primaryHotkey("shift+f"), event) {
 		a.openTerminalSearch()

@@ -597,6 +597,7 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 		a.queryHintEditorState.allSelected = false
 		a.hideActionPanel()
 		a.deactivateRequirementForm()
+		a.clearTerminalSelection()
 		offset := a.queryOffsetAt(a.editor.State().Text, point, style, lineHeight)
 		if line {
 			a.editor.SelectLineAt(offset)
@@ -626,6 +627,7 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 			a.queryHintEditorState.allSelected = false
 			a.hideActionPanel()
 			a.deactivateRequirementForm()
+			a.clearTerminalSelection()
 			text := a.editor.State().Text
 			focus := a.queryOffsetAt(text, point, style, lineHeight)
 			if modifiers&woxui.KeyModifierShift != 0 {
@@ -852,6 +854,7 @@ func (a *App) placeQueryCaret(point woxui.Point, style woxui.TextStyle, lineHeig
 	a.queryHintEditorState.allSelected = false
 	a.hideActionPanel()
 	a.deactivateRequirementForm()
+	a.clearTerminalSelection()
 	text := a.editor.State().Text
 	offset := a.queryOffsetAt(text, point, style, lineHeight)
 	a.editor.SetCaret(offset)
