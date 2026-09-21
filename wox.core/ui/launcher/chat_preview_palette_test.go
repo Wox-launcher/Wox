@@ -2,13 +2,16 @@ package launcher
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"wox/common/icons"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 )
 
@@ -251,8 +254,13 @@ func TestChatMentionCatalogGroupsPlugins(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
 	app := &App{
-		aiSettings:  ai,
-		chatPreview: &chatPreviewState{panel: chatMentionPanel, key: "chat-1"},
+		aiSettings:     ai,
+		lifecycleCtx:   context.Background(),
+		images:         map[string]*woxui.Image{},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+		chatPreview:    &chatPreviewState{panel: chatMentionPanel, key: "chat-1"},
 	}
 	snapshot := snapshotChatPreviewLocked(app.chatPreview)
 	app.attachChatPreviewCatalogs(snapshot)
@@ -260,8 +268,146 @@ func TestChatMentionCatalogGroupsPlugins(t *testing.T) {
 	if props.Label != "" {
 		t.Fatalf("mention catalog should use group headers, label = %q", props.Label)
 	}
-	if len(props.Items) != 1 || props.Items[0].Title != "Notes" || props.Items[0].Kind != chatMentionKindPlugin || props.Items[0].GroupLabel != "ui ai chat mention plugins" || props.Items[0].Subtitle != "" || props.Items[0].OnSelect == nil {
+	if len(props.Items) != 3 {
 		t.Fatalf("mention catalog items = %+v", props.Items)
+	}
+	if props.Items[0].Kind != chatMentionKindFiles || props.Items[0].GroupLabel != "ui ai chat mention files" || props.Items[0].OnSelect == nil {
+		t.Fatalf("file picker item = %+v", props.Items[0])
+	}
+	if props.Items[1].Kind != chatMentionKindFiles || props.Items[1].GroupLabel != "ui ai chat mention files" || props.Items[1].OnSelect == nil {
+		t.Fatalf("folder picker item = %+v", props.Items[1])
+	}
+	if props.Items[2].Title != "Notes" || props.Items[2].Kind != chatMentionKindPlugin || props.Items[2].GroupLabel != "ui ai chat mention plugins" || props.Items[2].Subtitle != "" || props.Items[2].OnSelect == nil {
+		t.Fatalf("plugin mention item = %+v", props.Items[2])
+	}
+}
+
+func TestChatFileMentionsUseColoredCatalogIcons(t *testing.T) {
+	mentions := chatFileMentions(nil)
+	if len(mentions) != 2 {
+		t.Fatalf("file mentions = %+v", mentions)
+	}
+	fileIcon := fromCoreImage(icons.Get(icons.ChatSelectFile))
+	folderIcon := fromCoreImage(icons.Get(icons.ChatSelectFolder))
+	pluginFile := fromCoreImage(icons.Get(icons.PluginFile))
+	pluginFolder := fromCoreImage(icons.Get(icons.PluginFolder))
+	if mentions[0].Name != "Select file" || mentions[0].Icon != fileIcon || mentions[0].Icon == pluginFile {
+		t.Fatalf("select-file mention = %+v", mentions[0])
+	}
+	if mentions[1].Name != "Select folder" || mentions[1].Icon != folderIcon || mentions[1].Icon == pluginFolder {
+		t.Fatalf("select-folder mention = %+v", mentions[1])
+	}
+}
+
+func TestChatPickerIDsDoNotCapturePluginMentions(t *testing.T) {
+	for _, id := range []string{chatMentionIDOpenFile, chatMentionIDOpenFolder} {
+		ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+		ai.SetPluginMentions([]chatPluginMention{{ID: id, Name: "Picker plugin"}})
+		editor := woxui.NewTextEditor("@")
+		editor.SetCaret(1)
+		app := &App{aiSettings: ai, chatPreview: &chatPreviewState{panel: chatMentionPanel, editor: editor}}
+		catalog := app.chatMentionCatalog()
+		app.insertChatMention(chatCommandPaletteItem{sourceIndex: 2})
+		if got := editor.State().Text; got != "{plugin:"+id+"} " {
+			t.Fatalf("plugin %s inserted %q", id, got)
+		}
+		refs := chatMentionRefsFromText(editor.State().Text, catalog)
+		if len(refs) != 1 || refs[0].ID != id || refs[0].Kind != chatMentionKindPlugin {
+			t.Fatalf("plugin %s references = %+v", id, refs)
+		}
+		if directory, ok := chatMentionOpensPicker(chatMention{Kind: chatMentionKindFiles, ID: id}); !ok || directory != (id == chatMentionIDOpenFolder) {
+			t.Fatalf("file action %s no longer opens its picker", id)
+		}
+	}
+}
+
+func TestChatMentionPluginErrorRemainsVisibleWithFileActions(t *testing.T) {
+	for _, cached := range []bool{false, true} {
+		ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+		if cached {
+			ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
+		}
+		ai.SetPluginMentionsError("Plugin catalog unavailable")
+		app := &App{
+			aiSettings: ai, lifecycleCtx: context.Background(),
+			images: map[string]*woxui.Image{}, imageRequested: map[string]string{},
+			imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
+			chatPreview: &chatPreviewState{panel: chatMentionPanel, key: "error-test"},
+		}
+		for _, query := range []string{"", "no-match"} {
+			app.chatPreview.panelQuery = query
+			snapshot := snapshotChatPreviewLocked(app.chatPreview)
+			app.attachChatPreviewCatalogs(snapshot)
+			props := app.chatMentionCatalogProps(snapshot, defaultPalette(), 400, 100)
+			if len(props.Items) == 0 {
+				t.Fatal("missing plugin error row")
+			}
+			status := props.Items[len(props.Items)-1]
+			if status.Title != ai.PluginMentionsError() || status.Kind != chatMentionKindPlugin || status.GroupLabel == "" || !status.Placeholder || status.OnSelect != nil || status.Selected {
+				t.Fatalf("plugin error row = %+v", status)
+			}
+			// Measure actual rows and group transitions independently of the status-height helper.
+			height := float32(0)
+			group := ""
+			for _, row := range props.Items {
+				if row.GroupLabel != group {
+					height += chatCatalogGroupHeaderHeight
+					group = row.GroupLabel
+				}
+				height += chatCatalogRowHeight
+			}
+			if props.ContentHeight != height || chatCatalogPanelHeight(snapshot, 600) != previewview.ChatCatalogHeight(height, false, 600) {
+				t.Fatal("plugin error row is missing from panel geometry")
+			}
+			app.scrollChatPanel(1000)
+			if app.chatPreview.panelScroll != max(float32(0), height-app.chatPreview.panelViewport) {
+				t.Fatal("plugin error row is outside the scroll range")
+			}
+		}
+	}
+}
+
+func TestChatMentionPaletteItemsIncludeFileAndFolderPickers(t *testing.T) {
+	mentions := append(chatFileMentions(nil), chatMentionsFromPlugins([]chatPluginMention{{ID: "notes", Name: "Notes"}})...)
+	items := chatMentionPaletteItems(mentions, "", false)
+	if len(items) != 3 || items[0].group != chatMentionKindFiles || items[1].group != chatMentionKindFiles || items[2].group != chatMentionKindPlugin {
+		t.Fatalf("full mention catalog = %+v", items)
+	}
+	items = chatMentionPaletteItems(mentions, "file", false)
+	if len(items) != 1 || items[0].sourceIndex != 0 || items[0].group != chatMentionKindFiles {
+		t.Fatalf("file query = %+v", items)
+	}
+	items = chatMentionPaletteItems(mentions, "folder", false)
+	if len(items) != 1 || items[0].sourceIndex != 1 || items[0].group != chatMentionKindFiles {
+		t.Fatalf("folder query = %+v", items)
+	}
+}
+
+func TestInsertChatFileMentionClearsAtToken(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	editor := woxui.NewTextEditor("see @fi")
+	editor.SetCaret(len([]rune("see @fi")))
+	app := &App{
+		aiSettings: ai,
+		chatPreview: &chatPreviewState{
+			panel:  chatMentionPanel,
+			editor: editor,
+			chat:   chatData{ID: "1"},
+		},
+	}
+	items := app.filteredChatMentionItems(app.chatMentionCatalog(), "fi")
+	if len(items) == 0 || items[0].sourceIndex != 0 {
+		t.Fatalf("file mention items = %+v", items)
+	}
+	app.insertChatMention(items[0])
+	if got := app.chatPreview.editor.State().Text; got != "see " {
+		t.Fatalf("composer text = %q, want the @ token removed", got)
+	}
+	if app.chatPreview.panel == chatMentionPanel {
+		t.Fatal("file picker should close the mention overlay")
+	}
+	if strings.Contains(app.chatPreview.editor.State().Text, "{") {
+		t.Fatal("file picker must not insert a mention tag")
 	}
 }
 
@@ -504,6 +650,24 @@ func TestChatHistoryContentHeightIncludesGroupsAndRows(t *testing.T) {
 	}
 	if got := chatHistoryContentHeight(nil, now); got != 46 {
 		t.Fatalf("empty history content height = %.0f, want 46", got)
+	}
+}
+
+func TestChatMentionWheelScrollUsesMentionContentHeight(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	plugins := make([]chatPluginMention, 20)
+	for i := range plugins {
+		plugins[i] = chatPluginMention{ID: fmt.Sprintf("p%d", i), Name: fmt.Sprintf("Plugin %d", i)}
+	}
+	ai.SetPluginMentions(plugins)
+	app := &App{aiSettings: ai, chatPreview: &chatPreviewState{panel: chatMentionPanel, panelViewport: 160}}
+	contentHeight := chatCommandContentHeight(app.filteredChatMentionItems(app.chatMentionCatalog(), ""))
+	if contentHeight <= 160 {
+		t.Fatalf("mention catalog too short to overflow: %.0f", contentHeight)
+	}
+	app.scrollChatPanel(80)
+	if app.chatPreview.panelScroll != 80 {
+		t.Fatalf("mention wheel scroll = %.0f, want 80 (content %.0f)", app.chatPreview.panelScroll, contentHeight)
 	}
 }
 

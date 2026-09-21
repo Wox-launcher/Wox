@@ -121,7 +121,7 @@ func ChatAttachmentPath(attachment AIChatAttachment) string {
 	return filepath.Join(util.GetLocation().GetUserDataDirectory(), "chat", "attachments", id)
 }
 
-// ImportChatAttachment snapshots images; ordinary files keep their original absolute path only.
+// ImportChatAttachment snapshots images; ordinary files and folders keep their original absolute path only.
 func ImportChatAttachment(path string) (AIChatAttachment, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -130,6 +130,13 @@ func ImportChatAttachment(path string) (AIChatAttachment, error) {
 	info, err := os.Stat(abs)
 	if err != nil {
 		return AIChatAttachment{}, err
+	}
+	if info.IsDir() {
+		name := filepath.Base(abs)
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			name = abs
+		}
+		return AIChatAttachment{ID: uuid.NewString(), Kind: AIChatAttachmentFolder, Name: name, URL: abs}, nil
 	}
 	if !info.Mode().IsRegular() {
 		return AIChatAttachment{}, fmt.Errorf("not a regular file: %s", abs)

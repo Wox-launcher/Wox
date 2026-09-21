@@ -332,6 +332,36 @@ func TestChatModelSelectorUsesFlutterIconsAndHoverSurface(t *testing.T) {
 	}
 }
 
+func TestChatComposerAttachButtonSitsBeforeModel(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ResultTitle:        woxui.Color{R: 220, G: 225, B: 230, A: 255},
+		SelectedBackground: woxui.Color{R: 80, G: 90, B: 100, A: 255},
+	}
+	tapped := false
+	input := ChatInput(ChatInputProps{
+		Width: 400, Height: ChatComposerHeight(0), Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160,
+		AttachLabel: "Attach file", OnAttach: func() { tapped = true }, Theme: theme,
+	}).(woxwidget.Container)
+	card := input.Child.(woxwidget.Container)
+	toolbar := card.Child.(woxwidget.Flex).Children[2].(woxwidget.Stack)
+	leading := toolbar.Children[0].Child.(woxwidget.Align)
+	if leading.Width != 184 || leading.Height != 42 || leading.Vertical != 0.5 {
+		t.Fatalf("attach+model leading = width %.0f height %.0f vertical %.1f", leading.Width, leading.Height, leading.Vertical)
+	}
+	row := leading.Child.(woxwidget.Flex)
+	if row.Axis != woxwidget.Horizontal || row.Gap != 4 || len(row.Children) != 2 {
+		t.Fatalf("attach+model row = %+v", row)
+	}
+	plus := row.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if plus.ID != "chat-attach-test" || plus.Label != "Attach file" || plus.OnTap == nil || plus.Width != 20 || plus.Height != 20 || plus.Radius != 4 {
+		t.Fatalf("attach button = %+v", plus)
+	}
+	plus.OnTap()
+	if !tapped {
+		t.Fatal("attach button did not fire")
+	}
+}
+
 func TestChatCatalogModelRowHighlightsOnHover(t *testing.T) {
 	theme := woxcomponent.Theme{
 		PreviewText:        woxui.Color{R: 220, G: 225, B: 230, A: 255},

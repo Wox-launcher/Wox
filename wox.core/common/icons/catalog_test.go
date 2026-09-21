@@ -26,6 +26,29 @@ func TestStaticActivityIconsRenderAsSVG(t *testing.T) {
 	}
 }
 
+func TestChatPickerIconsRenderInColor(t *testing.T) {
+	for _, name := range []string{ChatSelectFile, ChatSelectFolder} {
+		icon := Get(name)
+		if strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") {
+			t.Fatalf("chat catalog icon %s must retain its authored colors", name)
+		}
+		img, err := woxsvg.Render(icon.ImageData, 18, 18)
+		if err != nil {
+			t.Fatalf("render %s: %v", name, err)
+		}
+		colored := false
+		for y := 0; y < 18; y++ {
+			for x := 0; x < 18; x++ {
+				pixel := img.RGBAAt(x, y)
+				colored = colored || pixel.A > 0 && (pixel.R != pixel.G || pixel.G != pixel.B)
+			}
+		}
+		if !colored {
+			t.Fatalf("chat catalog icon %s rendered blank or monochrome", name)
+		}
+	}
+}
+
 func TestUIIconsAreCategorizedSVGs(t *testing.T) {
 	categories := map[string]bool{}
 	for name, icon := range defaultUIIcons {

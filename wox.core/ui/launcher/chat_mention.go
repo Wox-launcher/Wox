@@ -7,13 +7,17 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	"wox/common/icons"
 	"wox/util"
 )
 
 const (
 	// chatMentionPanel is the grouped @ overlay. Kinds are rows, not separate panels.
-	chatMentionPanel      = "mentions"
-	chatMentionKindPlugin = string(common.AIMentionKindPlugin)
+	chatMentionPanel        = "mentions"
+	chatMentionKindPlugin   = string(common.AIMentionKindPlugin)
+	chatMentionKindFiles    = "files"
+	chatMentionIDOpenFile   = "open-file"
+	chatMentionIDOpenFolder = "open-folder"
 )
 
 var chatMentionTagPattern = regexp.MustCompile(`\{([a-z][a-z0-9_]*):([^}]*)\}`)
@@ -62,11 +66,55 @@ func chatMentionsFromPlugins(plugins []chatPluginMention) []chatMention {
 }
 
 func (a *App) chatMentionCatalog() []chatMention {
+	mentions := chatFileMentions(a)
 	if a == nil || a.aiSettings == nil {
-		return nil
+		return mentions
 	}
 	// Additional @ kinds append here. The overlay stays one grouped catalog.
-	return chatMentionsFromPlugins(a.aiSettings.PluginMentions())
+	return append(mentions, chatMentionsFromPlugins(a.aiSettings.PluginMentions())...)
+}
+
+// chatFileMentions are always-visible @ actions that open the native file or folder picker.
+func chatFileMentions(a *App) []chatMention {
+	fileName := "Select file"
+	folderName := "Select folder"
+	if a != nil {
+		fileName = a.translate("i18n:ui_ai_chat_select_file")
+		folderName = a.translate("i18n:ui_ai_chat_select_folder")
+	}
+	return []chatMention{
+		{Kind: chatMentionKindFiles, ID: chatMentionIDOpenFile, Name: fileName, NameEn: "Select file", Icon: fromCoreImage(icons.Get(icons.ChatSelectFile))},
+		{Kind: chatMentionKindFiles, ID: chatMentionIDOpenFolder, Name: folderName, NameEn: "Select folder", Icon: fromCoreImage(icons.Get(icons.ChatSelectFolder))},
+	}
+}
+
+// chatMentionOpensPicker reports whether an @ row should open a native picker instead of inserting a tag.
+func chatMentionOpensPicker(mention chatMention) (directory bool, ok bool) {
+	if mention.Kind != chatMentionKindFiles {
+		return false, false
+	}
+	switch mention.ID {
+	case chatMentionIDOpenFile:
+		return false, true
+	case chatMentionIDOpenFolder:
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+// chatMentionStatusHeight keeps the panel and scroll bounds aligned with its trailing status row.
+func chatMentionStatusHeight(items []chatCommandPaletteItem, loading bool, loadError string) float32 {
+	showLoading := chatCommandPaletteShowsLoading(items, chatMentionKindPlugin, loading)
+	showError := !loading && loadError != ""
+	if !showLoading && !showError {
+		return 0
+	}
+	height := chatCatalogRowHeight
+	if len(items) == 0 || items[len(items)-1].group != chatMentionKindPlugin {
+		height += chatCatalogGroupHeaderHeight
+	}
+	return height
 }
 
 func (a *App) chatMentionUsePinYin() bool {
@@ -183,6 +231,9 @@ func chatMentionRefsFromText(text string, catalog []chatMention) []chatMentionRe
 		mention, ok := lookupChatMention(tag.kind, tag.name, catalog)
 		key := mention.Kind + "/" + mention.ID
 		if !ok || mention.ID == "" || seen[key] {
+			continue
+		}
+		if _, picker := chatMentionOpensPicker(mention); picker {
 			continue
 		}
 		refs = append(refs, chatMentionRef{Kind: mention.Kind, ID: mention.ID, Name: mention.Name})

@@ -29,6 +29,8 @@ const (
 	chatComposerEditorPaddingBottom = float32(7)
 	chatComposerEditorPaddingX      = float32(14)
 	chatComposerToolbarHeight       = float32(42)
+	chatComposerAttachButtonSize    = float32(20)
+	chatComposerAttachButtonGap     = float32(4)
 	chatComposerDividerHeight       = float32(1)
 	chatComposerOuterPaddingY       = float32(14)
 	chatQuoteCardHeight             = float32(56)
@@ -99,7 +101,7 @@ func chatComposerAttachmentsExtent(attachments []ChatAttachmentProps) float32 {
 }
 
 func chatAttachmentIsTile(attachment ChatAttachmentProps) bool {
-	return attachment.Kind == "file" || attachment.Kind == "image"
+	return attachment.Kind == "file" || attachment.Kind == "folder" || attachment.Kind == "image"
 }
 
 // ChatPreviewProps contains the typed chat panes and optional catalog drawer.
@@ -536,7 +538,7 @@ func chatCatalogItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 			check = woxcomponent.CheckGlyph(18, iconColor)
 		}
 		titleWidth := min(float32(220), max(float32(100), width*0.42))
-		if item.Kind == "plugin" {
+		if item.Kind == "plugin" || item.Kind == "files" {
 			titleWidth = max(float32(100), width-56)
 		}
 		icon := chatCatalogLeadingIcon(item, iconColor)
@@ -1403,6 +1405,8 @@ type ChatInputProps struct {
 	OnChanged           func(string)
 	OnKey               func(woxui.KeyEvent) bool
 	OnPaste             func(string) bool `boundary:"stable"`
+	OnAttach            func()
+	AttachLabel         string
 	OnModels            func()
 	OnSend              func()
 	OnDismissAttachment func(string)
@@ -1474,9 +1478,17 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 		props.OnSend = props.OnStop
 		props.ActionLabel = props.StopLabel
 	}
+	if props.AttachLabel == "" {
+		props.AttachLabel = "Attach file"
+	}
+	attach := props.OnAttach != nil
 	if props.ModelWidth <= 0 {
 		metrics, _ := props.Window.MeasureText(props.Model, woxui.TextStyle{Size: 11})
-		props.ModelWidth = min(float32(267), metrics.Size.Width+47, max(float32(0), props.Width-100))
+		reserved := float32(100)
+		if attach {
+			reserved += chatComposerAttachButtonSize + chatComposerAttachButtonGap
+		}
+		props.ModelWidth = min(float32(267), metrics.Size.Width+47, max(float32(0), props.Width-reserved))
 	}
 	quoteHeight := chatComposerAttachmentsExtent(props.Attachments)
 	style := woxui.TextStyle{Size: 13}
@@ -1520,10 +1532,19 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	if props.Sending {
 		variant = woxcomponent.ButtonSurface
 	}
-	statusLeft := props.ModelWidth + 18
+	leadingWidth := props.ModelWidth
+	leading := woxwidget.Widget(modelButton)
+	if attach {
+		leadingWidth += chatComposerAttachButtonSize + chatComposerAttachButtonGap
+		leading = woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: chatComposerAttachButtonGap, CrossAxisAlignment: woxwidget.CrossAxisCenter,
+			Children: []woxwidget.Widget{chatComposerAttachButton(props), modelButton},
+		}
+	}
+	statusLeft := leadingWidth + 18
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
-		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: modelButton}},
+		{Left: 8, Child: woxwidget.Align{Width: leadingWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: leading}},
 		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, Variant: variant, Disabled: props.Importing && !props.Sending, OnTap: props.OnSend, Theme: props.Theme.Controls})}},
 	}
 	if props.Status != "" && statusWidth > 30 {
@@ -1538,6 +1559,19 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	)
 	card := woxwidget.Container{Width: props.Width, Height: cardHeight, Radius: 9, Color: props.Theme.QueryBackground, BorderColor: divider, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: cardChildren}}
 	return woxwidget.Container{Width: props.Width, Height: ChatComposerHeightForAttachments(props.Attachments, lineCount), Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
+}
+
+// chatComposerAttachButton is the plus control immediately before the model chip.
+func chatComposerAttachButton(props ChatInputProps) woxwidget.Widget {
+	iconColor := props.Theme.ResultTitle
+	iconColor.A = 180
+	hover := props.Theme.SelectedBackground
+	hover.A = 40
+	return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		ID: "chat-attach-" + props.Key, Label: props.AttachLabel, Icon: woxcomponent.AddGlyph(16, iconColor),
+		Width: chatComposerAttachButtonSize, Height: chatComposerAttachButtonSize, Radius: 4,
+		HoverBackground: hover, FocusRingColor: props.Theme.Cursor, Disabled: props.Importing, OnTap: props.OnAttach,
+	})
 }
 
 // chatComposerAttachmentPanes stacks a horizontal file/image strip above quote cards.

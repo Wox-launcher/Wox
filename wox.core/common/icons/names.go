@@ -82,6 +82,10 @@ const (
 	ActionPaste                = "action.paste"
 	ActionAdd                  = "action.add"
 
+	// Chat catalog marks retain color alongside plugin identities.
+	ChatSelectFile   = "chat.select-file"
+	ChatSelectFolder = "chat.select-folder"
+
 	// Status and brand marks.
 	BrandChrome            = "brand.chrome"
 	BrandWox               = "brand.wox"

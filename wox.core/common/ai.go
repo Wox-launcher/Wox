@@ -217,9 +217,10 @@ type AIChatAttachment struct {
 }
 
 const (
-	AIChatAttachmentQuote = "quote"
-	AIChatAttachmentImage = "image"
-	AIChatAttachmentFile  = "file"
+	AIChatAttachmentQuote  = "quote"
+	AIChatAttachmentImage  = "image"
+	AIChatAttachmentFile   = "file"
+	AIChatAttachmentFolder = "folder"
 )
 
 type Conversation struct {
@@ -652,6 +653,10 @@ func ChatMessageText(text string, attachments []AIChatAttachment) string {
 	for _, attachment := range attachments {
 		if attachment.Kind == AIChatAttachmentFile {
 			fmt.Fprintf(&builder, "Attached file: %s\nPath: %s\n\n", attachment.Name, attachment.URL)
+			continue
+		}
+		if attachment.Kind == AIChatAttachmentFolder {
+			fmt.Fprintf(&builder, "Attached folder: %s\nPath: %s\n\n", attachment.Name, attachment.URL)
 			continue
 		}
 		if attachment.Kind == AIChatAttachmentImage {

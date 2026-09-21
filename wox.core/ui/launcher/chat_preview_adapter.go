@@ -141,9 +141,7 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 	if snapshot.panel == chatMentionPanel {
 		items := chatMentionPaletteItems(snapshot.mentions, snapshot.panelQuery, snapshot.usePinYin)
 		contentHeight := chatCommandContentHeight(items)
-		if snapshot.pluginMentionsLoading && len(items) == 0 {
-			contentHeight += chatCatalogGroupHeaderHeight + chatCatalogRowHeight
-		}
+		contentHeight += chatMentionStatusHeight(items, snapshot.pluginMentionsLoading, snapshot.pluginMentionsError)
 		return previewview.ChatCatalogHeight(contentHeight, false, available)
 	}
 	if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
@@ -280,11 +278,8 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
 	viewportHeight := max(float32(40), height-14)
 	commands := a.filteredChatMentionItems(snapshot.mentions, snapshot.panelQuery)
-	showLoading := snapshot.pluginMentionsLoading && len(commands) == 0
-	contentHeight := chatCommandContentHeight(commands)
-	if showLoading {
-		contentHeight += chatCatalogGroupHeaderHeight + chatCatalogRowHeight
-	}
+	statusHeight := chatMentionStatusHeight(commands, snapshot.pluginMentionsLoading, snapshot.pluginMentionsError)
+	contentHeight := chatCommandContentHeight(commands) + statusHeight
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
 	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
 	if len(commands) > 0 && snapshot.panelViewport <= 0 {
@@ -299,9 +294,6 @@ func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 	}
 	a.setChatPanelViewport(viewportHeight)
 	rows := make([]previewview.ChatCatalogItemProps, 0, len(commands)+1)
-	if showLoading {
-		rows = append(rows, a.chatCatalogLoadingItem(snapshot, chatMentionKindPlugin, true))
-	}
 	for index, command := range commands {
 		item := command
 		mention := snapshot.mentions[item.sourceIndex]
@@ -312,12 +304,15 @@ func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 			OnSelect: func() { a.insertChatMention(item) },
 		})
 	}
-	emptyMessage := a.translate("i18n:ui_ai_chat_no_mentionable_plugins")
-	if snapshot.pluginMentionsLoading {
-		emptyMessage = a.translate("i18n:ui_ai_chat_loading_plugins")
-	} else if snapshot.pluginMentionsError != "" {
-		emptyMessage = snapshot.pluginMentionsError
+	if statusHeight > 0 {
+		status := a.chatCatalogLoadingItem(snapshot, chatMentionKindPlugin, true)
+		if !snapshot.pluginMentionsLoading {
+			status.SelectID = "chat-plugins-error-" + snapshot.key
+			status.Title = snapshot.pluginMentionsError
+		}
+		rows = append(rows, status)
 	}
+	emptyMessage := a.translate("i18n:ui_no_data")
 	return previewview.ChatCatalogProps{
 		Width: width, Height: height, Key: snapshot.key, Items: rows, EmptyMessage: emptyMessage,
 		Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(),
@@ -326,10 +321,14 @@ func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 }
 
 func (a *App) chatMentionGroupLabel(kind string) string {
-	if kind == chatMentionKindPlugin {
+	switch kind {
+	case chatMentionKindPlugin:
 		return a.translate("i18n:ui_ai_chat_mention_plugins")
+	case chatMentionKindFiles:
+		return a.translate("i18n:ui_ai_chat_mention_files")
+	default:
+		return kind
 	}
-	return kind
 }
 
 // chatCatalogLoadingItem keeps a Models or Skills group visible while its catalog is still loading.
@@ -968,7 +967,7 @@ func formatChatToolCall(conversation chatConversation) string {
 // chatInputProps prepares the controlled editor and toolbar actions.
 func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, window *woxui.Window, onKey func(woxui.KeyEvent) bool) previewview.ChatInputProps {
 	hintKey := "i18n:ui_ai_chat_input_hint"
-	hintFallback := "Type a message. Use / for models and skills, @ to mention a plugin"
+	hintFallback := "Type a message. Use / for models and skills, @ to mention a plugin or attach a file"
 	if len(snapshot.attachments) > 0 {
 		hintKey = "i18n:plugin_ai_chat_input_hint_with_attachments"
 		hintFallback = "Ask about the attached files or images"
@@ -1010,6 +1009,10 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	if strings.TrimSpace(quoteDismiss) == "" || quoteDismiss == "i18n:plugin_ai_chat_attachment_dismiss" {
 		quoteDismiss = "Remove attachment"
 	}
+	attachLabel := a.translate("i18n:ui_ai_chat_attach_file")
+	if strings.TrimSpace(attachLabel) == "" || attachLabel == "i18n:ui_ai_chat_attach_file" {
+		attachLabel = "Attach file"
+	}
 	theme := palette.componentTheme()
 	richRuns, atomicTokens := chatTokenChipDecorations(snapshot.editing.Text, snapshot.mentions, window, theme.Controls, func(mention chatMention) *woxui.Image {
 		return a.imageForSurface(mention.Icon, 256, palette.background)
@@ -1021,6 +1024,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		Attachments: a.chatAttachmentProps(snapshot.attachments, quoteLabel), QuoteDismissLabel: quoteDismiss,
 		RichRuns: richRuns, AtomicTokens: atomicTokens,
 		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: onKey, OnPaste: a.pasteChatComposer,
+		OnAttach: a.attachChatComposerFile, AttachLabel: attachLabel,
 		OnModels: func() { a.toggleChatPanel("models") }, OnSend: a.sendChatMessage, OnDismissAttachment: a.dismissChatAttachment,
 	}
 }
@@ -1089,6 +1093,9 @@ func (a *App) chatAttachmentProps(attachments []common.AIChatAttachment, quoteLa
 		case common.AIChatAttachmentFile:
 			item.Text = attachment.URL
 			item.Image = a.imageFor(fromCoreImage(icons.Get(icons.PluginFile)))
+		case common.AIChatAttachmentFolder:
+			item.Text = attachment.URL
+			item.Image = a.imageFor(fromCoreImage(icons.Get(icons.PluginFolder)))
 		case common.AIChatAttachmentImage:
 			item.Text = a.translate("i18n:plugin_ai_chat_image_label")
 			if path := common.ChatAttachmentPath(attachment); path != "" {

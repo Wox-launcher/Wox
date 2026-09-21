@@ -60,8 +60,16 @@ func TestChatAttachmentsKeepFilePathsAndSnapshotImages(t *testing.T) {
 			t.Fatalf("accepted unsafe image reference: %q", ref)
 		}
 	}
-	if _, err := ImportChatAttachment(directory); err == nil {
-		t.Fatal("accepted a directory")
+	folder, err := ImportChatAttachment(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if folder.Kind != AIChatAttachmentFolder || folder.URL != directory || folder.Text != "" {
+		t.Fatalf("directory must be a path-only folder reference: %+v", folder)
+	}
+	folderMessage := ChatMessageText("List", []AIChatAttachment{folder})
+	if !strings.Contains(folderMessage, directory) || !strings.Contains(folderMessage, "Attached folder") {
+		t.Fatalf("folder request = %q", folderMessage)
 	}
 	if _, err := ReadChatImage(filePath); err == nil {
 		t.Fatal("accepted binary data as an image")

@@ -686,7 +686,7 @@ func (a *App) attachChatPreviewCatalogs(snapshot *chatPreviewSnapshot) {
 	snapshot.pluginMentions = a.aiSettings.PluginMentions()
 	snapshot.pluginMentionsLoading = a.aiSettings.PluginMentionsLoading()
 	snapshot.pluginMentionsError = a.aiSettings.PluginMentionsError()
-	snapshot.mentions = chatMentionsFromPlugins(snapshot.pluginMentions)
+	snapshot.mentions = append(chatFileMentions(a), chatMentionsFromPlugins(snapshot.pluginMentions)...)
 	snapshot.usePinYin = a.chatMentionUsePinYin()
 }
 
@@ -1187,6 +1187,11 @@ func (a *App) insertChatMention(item chatCommandPaletteItem) {
 		return
 	}
 	mention := mentions[item.sourceIndex]
+	if directory, ok := chatMentionOpensPicker(mention); ok {
+		a.prepareChatComposerFilePick(true)
+		a.pickChatComposerAttachment(directory)
+		return
+	}
 	payload := strings.TrimSpace(mention.ID)
 	if payload == "" {
 		payload = strings.TrimSpace(mention.Name)
@@ -1458,7 +1463,13 @@ func (a *App) scrollChatPanel(delta float32) {
 		return
 	}
 	contentHeight := chatHistoryContentHeight(state.chats, time.Now())
-	if state.panel != "history" {
+	if state.panel == chatMentionPanel {
+		items := a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
+		contentHeight = chatCommandContentHeight(items)
+		if a.aiSettings != nil {
+			contentHeight += chatMentionStatusHeight(items, a.aiSettings.PluginMentionsLoading(), a.aiSettings.PluginMentionsError())
+		}
+	} else if state.panel != "history" {
 		items := chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
 		contentHeight = chatCommandContentHeight(items)
 	}

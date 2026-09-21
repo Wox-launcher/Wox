@@ -700,6 +700,7 @@ func TestChatFileAndImageAttachmentsUseCompactTiles(t *testing.T) {
 		Cursor:          woxui.Color{R: 30, G: 110, B: 220, A: 255},
 	}
 	file := ChatAttachmentProps{ID: "file", Kind: "file", Label: "a very long attachment name", Text: "/original/path", Image: &woxui.Image{Width: 24, Height: 24}}
+	folder := ChatAttachmentProps{ID: "folder", Kind: "folder", Label: "project", Text: "/original/dir", Image: &woxui.Image{Width: 24, Height: 24}}
 	image := ChatAttachmentProps{ID: "image", Kind: "image", Label: "snapshot.png", Text: "Image", Image: &woxui.Image{Width: 400, Height: 100}}
 	for _, sent := range []bool{false, true} {
 		fileView := chatAttachmentCard(file, 400, theme, "Remove", nil, sent).(woxwidget.Semantics)
@@ -710,6 +711,10 @@ func TestChatFileAndImageAttachmentsUseCompactTiles(t *testing.T) {
 		fileIcon := fileTile.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Image)
 		if fileIcon.Fit != woxwidget.ImageFitContain || fileIcon.Width != chatAttachmentTileIconSize {
 			t.Fatal("file icons must stay contained inside the tile")
+		}
+		folderView := chatAttachmentCard(folder, 400, theme, "Remove", nil, sent).(woxwidget.Semantics)
+		if folderView.Child.(woxwidget.Stack).Width != chatAttachmentTileSize || folderView.Label != folder.Label+": "+folder.Text {
+			t.Fatalf("folder tile = %#v", folderView)
 		}
 
 		imageView := chatAttachmentCard(image, 180, theme, "Remove", nil, sent).(woxwidget.Semantics)

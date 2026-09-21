@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"wox/common"
+	woxui "wox/ui/runtime"
 	"wox/util"
 	"wox/util/clipboard"
 )
@@ -130,6 +131,54 @@ func (a *App) cancelChatAttachmentImports() {
 	if state := a.chatPreview; state != nil {
 		state.importing = false
 	}
+}
+
+// attachChatComposerFile is the composer plus-button shortcut to the native file picker.
+func (a *App) attachChatComposerFile() {
+	a.prepareChatComposerFilePick(false)
+	a.pickChatComposerAttachment(false)
+}
+
+// prepareChatComposerFilePick closes the @ overlay so the native dialog is not covered.
+func (a *App) prepareChatComposerFilePick(clearAtToken bool) {
+	state := a.chatPreview
+	if state == nil {
+		return
+	}
+	if chatOverlayPanel(state.panel) {
+		if clearAtToken && state.panel == chatMentionPanel && state.editor != nil {
+			replaceChatAtToken(state.editor, "")
+		}
+		restoreChatHistoryPanelLocked(state)
+	}
+	state.error = ""
+	state.active = true
+	a.updateChatTextInput(true)
+	a.invalidateChatSurfaces()
+}
+
+// pickChatComposerAttachment opens the native file or folder picker and attaches the result.
+func (a *App) pickChatComposerAttachment(directory bool) {
+	if a == nil || a.chatPreview == nil {
+		return
+	}
+	window := a.chatTextInputWindow()
+	if window == nil {
+		return
+	}
+	path, err := window.PickFile(woxui.FileDialogOptions{Directory: directory})
+	if err != nil {
+		if state := a.chatPreview; state != nil {
+			state.error = a.chatAttachmentImportError(err)
+			a.invalidateChatSurfaces()
+		}
+		util.GetLogger().Error(a.chatImportLifecycleCtx(), fmt.Sprintf("chat file picker: %v", err))
+		return
+	}
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+	a.enqueueChatDraftAttachments([]string{path}, nil, a.chatWindowFocused)
 }
 
 func (a *App) enqueueChatDraftAttachments(paths []string, img *clipboard.ImageSnapshot, dedicated bool) {
