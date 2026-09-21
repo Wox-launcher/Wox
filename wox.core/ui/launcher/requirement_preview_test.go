@@ -2,11 +2,78 @@ package launcher
 
 import (
 	"encoding/json"
+	"runtime"
+	"strings"
 	"testing"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+func TestSubmitRequirementFormAttachesErrorsToFields(t *testing.T) {
+	app := &App{requirementForm: &requirementFormState{
+		formFieldsState: newFormFieldsState([]formDefinition{{
+			Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}},
+		}, {
+			Type: "textbox", Value: formDefinitionValue{Key: "client_id", Validators: []formValidator{{Type: "not_empty"}}},
+		}}, map[string]string{"api_key": "", "client_id": "ok"}, false),
+		key: "req",
+	}}
+	setFormFieldsFocusLocked(&app.requirementForm.formFieldsState, 1)
+	app.submitRequirementForm()
+	if app.requirementForm.error != "" {
+		t.Fatalf("footer error = %q, want field-scoped validation", app.requirementForm.error)
+	}
+	if got := app.requirementForm.fieldErrors["api_key"]; got == "" {
+		t.Fatal("empty api_key should show an error under that field")
+	}
+	if _, exists := app.requirementForm.fieldErrors["client_id"]; exists {
+		t.Fatalf("filled client_id should not have a field error, got %#v", app.requirementForm.fieldErrors)
+	}
+	if app.requirementForm.focused != 0 {
+		t.Fatalf("focused field = %d, want the first invalid field", app.requirementForm.focused)
+	}
+	syncFormFieldsEditorLocked(&app.requirementForm.formFieldsState)
+	if got := app.requirementForm.values["api_key"]; got != "" {
+		t.Fatalf("validation copied client_id into api_key: %q", got)
+	}
+	app.requirementForm.editor.SetText("new-key", false)
+	syncFormFieldsEditorLocked(&app.requirementForm.formFieldsState)
+	if app.requirementForm.values["api_key"] != "new-key" || app.requirementForm.values["client_id"] != "ok" {
+		t.Fatalf("editing after validation changed the wrong field: %#v", app.requirementForm.values)
+	}
+}
+
+func TestRequirementSaveLabelIncludesPrimaryEnterHotkey(t *testing.T) {
+	got := requirementSaveLabel(func(key string) string {
+		if key == "i18n:ui_save" {
+			return "Save"
+		}
+		return key
+	})
+	wantKey := "Ctrl"
+	if runtime.GOOS == "darwin" {
+		wantKey = "Cmd"
+	}
+	if !strings.HasPrefix(got, "Save (") || !strings.Contains(got, wantKey) || !strings.Contains(got, "Enter") {
+		t.Fatalf("save label = %q, want Save (%s+Enter)", got, wantKey)
+	}
+}
+
+func TestRequirementFormPrimaryEnterSavesWithoutFieldFocus(t *testing.T) {
+	app := &App{}
+	event := woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierControl, Down: true}
+	if runtime.GOOS == "darwin" {
+		event.Modifiers = woxui.KeyModifierMeta
+	}
+	if app.onRequirementFormKey(event) {
+		t.Fatal("ctrl/cmd+enter must not save when no requirement form is visible")
+	}
+	app.requirementForm = &requirementFormState{saving: true}
+	if !app.onRequirementFormKey(event) {
+		t.Fatal("ctrl/cmd+enter should save while the requirement preview is visible, even if the query box has focus")
+	}
+}
 
 func TestRequirementFormTabMovesOneHostFocusPerPress(t *testing.T) {
 	fields := newFormFieldsState([]formDefinition{

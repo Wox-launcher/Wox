@@ -67,7 +67,7 @@ Rules:
 
 - `SettingKey` must match a configurable setting key from `SettingDefinitions`.
 - `Validators` is optional. If omitted or empty, Wox reuses the validators from the matching setting definition.
-- If both the requirement and setting definition have no validators, Wox logs a metadata issue and does not block the query.
+- If both the requirement and setting definition have no validators, Wox does not block the query. Put `not_empty` on the requirement when the query must not run with an empty value.
 - `Message` is optional and supports `i18n:` keys. Use it for field-specific setup guidance.
 
 Example:

@@ -461,6 +461,7 @@ type FormSwitchFieldProps struct {
 	ID          string
 	Label       string
 	Description string
+	Error       string
 	Width       float32
 	Height      float32
 	LabelWidth  float32
@@ -473,7 +474,7 @@ type FormSwitchFieldProps struct {
 // FormSwitchField builds a real switch instead of exposing the boolean as text.
 func FormSwitchField(props FormSwitchFieldProps) woxwidget.Widget {
 	control := woxcomponent.WoxSwitch(woxcomponent.SwitchProps{ID: props.ID, Label: props.Label, Value: props.Checked, OnChange: props.OnChange, Theme: props.Theme})
-	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 22, props.Theme, props.OnOpenLink, nil)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, formFieldControlWithError(props.ID, props.Error, control, props.Theme), 22, props.Theme, props.OnOpenLink, nil)
 }
 
 // FormSelectFieldProps contains one outlined form dropdown.
@@ -481,6 +482,7 @@ type FormSelectFieldProps struct {
 	ID          string
 	Label       string
 	Description string
+	Error       string
 	Value       string
 	Width       float32
 	Height      float32
@@ -499,7 +501,7 @@ func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
 		Foreground: props.Theme.Text, Secondary: props.Theme.TextSecondary, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
-	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, nil)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, formFieldControlWithError(props.ID, props.Error, control, props.Theme), woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, nil)
 }
 
 // FormAIModelFieldProps contains Flutter's two-part provider/model selector state.
@@ -507,6 +509,7 @@ type FormAIModelFieldProps struct {
 	ID                 string
 	Label              string
 	Description        string
+	Error              string
 	Provider           string
 	Model              string
 	ModelNameHint      string
@@ -629,7 +632,7 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 		})
 	}
 	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, action}}
-	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, formAIModelControlHeight, props.Theme, props.OnOpenLink, props.Window)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, formFieldControlWithError(props.ID, props.Error, control, props.Theme), formAIModelControlHeight, props.Theme, props.OnOpenLink, props.Window)
 }
 
 func (s *formAIModelFieldState) Dispose() {}
@@ -639,6 +642,7 @@ type FormTextFieldProps struct {
 	ID          string
 	Label       string
 	Description string
+	Error       string
 	Suffix      string
 	Width       float32
 	Height      float32
@@ -651,6 +655,7 @@ type FormTextFieldProps struct {
 	Window      *woxui.Window
 	Theme       woxcomponent.ControlTheme
 	OnFocus     func()
+	OnBlur      func()
 	OnChanged   func(string)
 	OnKey       func(woxui.KeyEvent) bool
 	OnBrowse    func()
@@ -690,6 +695,9 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 			if focused && props.OnFocus != nil {
 				props.OnFocus()
 			}
+			if !focused && props.OnBlur != nil {
+				props.OnBlur()
+			}
 		},
 	})
 	var valueField woxwidget.Widget = input
@@ -710,7 +718,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 			}),
 		}}
 	}
-	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, valueField, fieldHeight, props.Theme, props.OnOpenLink, props.Window)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, formFieldControlWithError(props.ID, props.Error, valueField, props.Theme), fieldHeight, props.Theme, props.OnOpenLink, props.Window)
 }
 
 // formBrowseButtonWidth sizes the directory picker so the path field and button share one full control row.
@@ -735,6 +743,25 @@ func formSuffixWidth(window *woxui.Window, suffix string) float32 {
 		}
 	}
 	return max(float32(1), width)
+}
+
+// formFieldControlWithError places a field-scoped validation message under the control.
+func formFieldControlWithError(id, message string, control woxwidget.Widget, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	if strings.TrimSpace(message) == "" {
+		return control
+	}
+	errorText := woxwidget.TextBlock{
+		Value: message, LineHeight: 16,
+		Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: theme.Error,
+	}
+	if id != "" {
+		errorTextWidget := woxwidget.Semantics{
+			AutomationID: id + "-error", Role: woxui.AccessibilityRoleText, Label: message, Value: message,
+			LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: errorText,
+		}
+		return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{control, errorTextWidget}}
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{control, errorText}}
 }
 
 func formFieldLayout(id, label, description string, width, height, labelWidth float32, control woxwidget.Widget, controlHeight float32, theme woxcomponent.ControlTheme, onOpenLink func(string), window *woxui.Window) woxwidget.Widget {

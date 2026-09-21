@@ -603,6 +603,169 @@ func pluginTableOperationIconButton(t *testing.T, action woxwidget.Widget) woxco
 	return woxcomponent.IconButtonProps{}
 }
 
+func TestPreparePluginSettingSaveValuesPersistsClearedText(t *testing.T) {
+	state := &pluginSettingsFormState{
+		formFieldsState: formFieldsState{
+			definitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "api_key"}}},
+			values:      map[string]string{"api_key": ""},
+		},
+		initial: map[string]string{"api_key": "secret"},
+	}
+	submitted, persisted, err := preparePluginSettingSaveValues(state)
+	if err != nil {
+		t.Fatalf("prepare cleared setting: %v", err)
+	}
+	if submitted["api_key"] != "" || persisted["api_key"] != "" {
+		t.Fatalf("cleared api_key = submitted %q persisted %q, want empty strings", submitted["api_key"], persisted["api_key"])
+	}
+}
+
+func TestSelectPluginRevertsInvalidRequiredSetting(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{
+		{
+			ID: "yt", Name: "YouTube",
+			SettingDefinitions: []formDefinition{{
+				Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}},
+			}},
+			Setting: pluginSettingsData{Settings: map[string]string{"api_key": "secret"}},
+		},
+		{ID: "other", Name: "Other"},
+	})
+	a.setPluginSelectionLocked(0)
+	form := a.pluginSettings.Form()
+	if form == nil {
+		t.Fatal("youtube form should be built")
+	}
+	form.values["api_key"] = ""
+
+	a.selectPlugin(1)
+	if a.pluginSettings.Selected() != 1 {
+		t.Fatalf("selected = %d, want to leave YouTube even when the empty key cannot be saved", a.pluginSettings.Selected())
+	}
+	a.selectPlugin(0)
+	form = a.pluginSettings.Form()
+	if form == nil || form.values["api_key"] != "secret" {
+		t.Fatalf("api_key after return = %q, want the last saved value", form.values["api_key"])
+	}
+}
+
+func TestBlurPluginFormFieldShowsNotEmptyError(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
+	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}}}
+	a.pluginSettings.SetForm(&pluginSettingsFormState{
+		pluginID:        "yt",
+		formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"api_key": "secret"}, true),
+		initial:         map[string]string{"api_key": "secret"},
+	})
+
+	a.setPluginFormText(0, "")
+	a.blurPluginFormField(0)
+	form := a.pluginSettings.Form()
+	if form == nil {
+		t.Fatal("plugin form should still be open")
+	}
+	if got := form.fieldErrors["api_key"]; got != "Value cannot be empty" {
+		t.Fatalf("api_key error = %q, want the not_empty message under the field", got)
+	}
+
+	a.setPluginFormText(0, "new-key")
+	if _, exists := a.pluginSettings.Form().fieldErrors["api_key"]; exists {
+		t.Fatal("editing the field should clear its validation error")
+	}
+}
+
+func TestDeactivatePluginFormShowsNotEmptyError(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
+	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}}}
+	a.pluginSettings.SetForm(&pluginSettingsFormState{
+		pluginID:        "yt",
+		formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"api_key": ""}, true),
+		initial:         map[string]string{"api_key": "secret"},
+	})
+
+	a.deactivatePluginForm()
+	form := a.pluginSettings.Form()
+	if form == nil {
+		t.Fatal("plugin form should still be open")
+	}
+	if got := form.fieldErrors["api_key"]; got != "Value cannot be empty" {
+		t.Fatalf("api_key error = %q, want the not_empty message after blur", got)
+	}
+	if form.values["api_key"] != "" {
+		t.Fatalf("staged api_key = %q, want to keep the empty edit until the user leaves the plugin", form.values["api_key"])
+	}
+}
+
+func TestPluginDetailRendersRequiredSettingErrorUnderField(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugins.SetPlugins([]pluginSettingsPlugin{{ID: "yt", Name: "YouTube"}})
+	plugins.SetSelected(0)
+	plugins.SetForm(&pluginSettingsFormState{
+		pluginID: "yt",
+		formFieldsState: newFormFieldsState([]formDefinition{
+			pluginTriggerKeywordDefinition(),
+			{Type: "textbox", Value: formDefinitionValue{Key: "api_key", Label: "API Key"}},
+		}, map[string]string{"api_key": ""}, true),
+		fieldErrors: map[string]string{"api_key": "Value cannot be empty"},
+	})
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_tab_settings":         "Settings",
+		"ui_plugin_tab_commands":         "Commands",
+		"ui_plugin_tab_description":      "Description",
+		"ui_plugin_tab_trigger_keywords": "Keywords",
+		"ui_plugin_tab_privacy":          "Privacy",
+		"ui_plugin_no_settings":          "No settings",
+		"ui_plugin_no_settings_subtitle": "This plugin has no settings",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Editor == nil || props.Editor.Form == nil || len(props.Editor.Form.Rows) == 0 {
+		t.Fatal("plugin settings form should include the API Key field")
+	}
+	errorNode, ok := findPluginSemanticsByAutomationID(props.Editor.Form.Rows[0], "plugin-settings-field-1-error")
+	if !ok {
+		t.Fatal("cleared required setting is missing plugin-settings-field-1-error")
+	}
+	if errorNode.Label != "Value cannot be empty" {
+		t.Fatalf("field error = %q, want Value cannot be empty", errorNode.Label)
+	}
+}
+
+func findPluginSemanticsByAutomationID(widget woxwidget.Widget, automationID string) (woxwidget.Semantics, bool) {
+	switch node := widget.(type) {
+	case woxwidget.Semantics:
+		if node.AutomationID == automationID {
+			return node, true
+		}
+		return findPluginSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Keyed:
+		return findPluginSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Container:
+		return findPluginSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Expanded:
+		return findPluginSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Align:
+		return findPluginSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Clip:
+		return findPluginSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Flex:
+		for _, child := range node.Children {
+			if found, ok := findPluginSemanticsByAutomationID(child, automationID); ok {
+				return found, true
+			}
+		}
+	}
+	return woxwidget.Semantics{}, false
+}
+
 func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()

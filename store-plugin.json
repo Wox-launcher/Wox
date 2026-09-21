@@ -1436,5 +1436,37 @@
         "plugin_description": "生成随机数字、UUID、密码、邮箱、姓名、颜色等。可指定数量，例如 random number 10"
       }
     }
+  },
+  {
+    "Id": "a0d52aa9-0401-492a-aeda-7a64e16ac2e9",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.1.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/1cf1ba98-0092-4f20-8b40-2e10296060ab",
+    "Website": "https://gist.github.com/qianlifeng/04a9609de66eaa582a473f5852450ede",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/04a9609de66eaa582a473f5852450ede/raw/Wox.Plugin.YouTube.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/7502acdc-1ea5-4ef6-a3fb-31875353dabe"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-21 10:44:52",
+    "DateUpdated": "2026-09-21 10:44:52",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "YouTube",
+        "plugin_description": "Search YouTube videos and open them in the browser"
+      },
+      "zh_CN": {
+        "plugin_name": "YouTube",
+        "plugin_description": "搜索 YouTube 视频并在浏览器中打开"
+      }
+    }
   }
 ]

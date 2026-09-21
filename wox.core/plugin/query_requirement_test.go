@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"testing"
+	"wox/setting/definition"
 	"wox/setting/validator"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,38 @@ func TestMetadataQueryRequirementsScopes(t *testing.T) {
 
 	withUnknownCommand := requirements.GetRequirementsForQuery(Query{Command: "search"})
 	assert.Equal(t, []string{"accessKey"}, []string{withUnknownCommand[0].SettingKey})
+}
+
+func TestQueryRequirementUsesDeclaredValidatorsOnly(t *testing.T) {
+	manager := &Manager{}
+	plain := definition.PluginSettingDefinitionItem{
+		Type:  definition.PluginSettingDefinitionTypeTextBox,
+		Value: &definition.PluginSettingValueTextBox{Key: "api_key"},
+	}
+	assert.Empty(t, manager.getEffectiveQueryRequirementValidators(MetadataQueryRequirement{SettingKey: "api_key"}, plain))
+	assert.Empty(t, validateQueryRequirementValue("", nil))
+
+	settingRequired := definition.PluginSettingDefinitionItem{
+		Type: definition.PluginSettingDefinitionTypeTextBox,
+		Value: &definition.PluginSettingValueTextBox{
+			Key: "api_key",
+			Validators: []validator.PluginSettingValidator{{
+				Type:  validator.PluginSettingValidatorTypeNotEmpty,
+				Value: &validator.PluginSettingValidatorNotEmpty{},
+			}},
+		},
+	}
+	inherited := manager.getEffectiveQueryRequirementValidators(MetadataQueryRequirement{SettingKey: "api_key"}, settingRequired)
+	assert.Equal(t, validator.PluginSettingValidatorTypeNotEmpty, inherited[0].Type)
+
+	explicit := manager.getEffectiveQueryRequirementValidators(MetadataQueryRequirement{
+		SettingKey: "api_key",
+		Validators: []validator.PluginSettingValidator{{
+			Type:  validator.PluginSettingValidatorTypeNotEmpty,
+			Value: &validator.PluginSettingValidatorNotEmpty{},
+		}},
+	}, plain)
+	assert.Equal(t, validator.PluginSettingValidatorTypeNotEmpty, explicit[0].Type)
 }
 
 func TestValidateQueryRequirementValue(t *testing.T) {

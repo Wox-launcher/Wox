@@ -30,21 +30,21 @@ func TestRequirementPreviewMessageRendersMarkdownLinks(t *testing.T) {
 	}
 }
 
-func TestRequirementPreviewExposesValidationError(t *testing.T) {
-	const message = "Value cannot be empty"
+func TestRequirementPreviewExposesSaveError(t *testing.T) {
+	const message = "failed to persist setting"
 	view := RequirementPreviewView(RequirementPreviewProps{
 		Width: 420, Height: 280, Title: "Query Requirement Smoke needs configuration",
 		Error: message, Theme: woxcomponent.Theme{},
 	})
 	errorNode, ok := findSemanticsByAutomationID(view, "requirement-form-error")
 	if !ok {
-		t.Fatal("requirement validation error is missing requirement-form-error")
+		t.Fatal("requirement save error is missing requirement-form-error")
 	}
 	if errorNode.Role != woxui.AccessibilityRoleText || errorNode.Label != message || errorNode.Value != message {
-		t.Fatalf("requirement validation error = %#v, want labeled text %q", errorNode, message)
+		t.Fatalf("requirement save error = %#v, want labeled text %q", errorNode, message)
 	}
 	if errorNode.LiveRegion != woxui.AccessibilityLiveRegionPolite {
-		t.Fatalf("requirement validation error live region = %q, want polite", errorNode.LiveRegion)
+		t.Fatalf("requirement save error live region = %q, want polite", errorNode.LiveRegion)
 	}
 }
 

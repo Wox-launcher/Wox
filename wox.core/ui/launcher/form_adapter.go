@@ -19,6 +19,7 @@ type formFieldCallbacks struct {
 	hotkeyError       string
 	imageScale        float32
 	focus             func(index int)
+	blur              func(index int)
 	change            func(index, delta int)
 	setText           func(index int, value string)
 	onKey             func(woxui.KeyEvent) bool
@@ -36,6 +37,7 @@ type formFieldCallbacks struct {
 	openLink          func(target string)
 	serviceBusy       bool
 	serviceError      string
+	fieldErrors       map[string]string
 }
 
 // buildFormPanel maps action form state into the shared form view.
@@ -189,6 +191,7 @@ func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFie
 	foreground := palette.Text
 	return launcherview.FormAIModelField(launcherview.FormAIModelFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
+		Error:    callbacks.fieldErrors[definition.Value.Key],
 		Provider: providerLabel, Model: modelLabel, ProviderIcon: providerIcon, ModelIcon: providerIcon, ModelsAvailable: len(models) > 0,
 		ModelNameHint: a.translate("i18n:ui_ai_model_selector_model_name"),
 		ManageLabel:   a.translate("i18n:ui_ai_model_selector_open_ai_settings"),
@@ -319,7 +322,7 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 	if definition.Type == "checkbox" {
 		return launcherview.FormSwitchField(launcherview.FormSwitchFieldProps{
 			ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
-			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Checked: checked, Theme: palette,
+			Error: callbacks.fieldErrors[definition.Value.Key], Width: width, Height: height, LabelWidth: callbacks.labelWidth, Checked: checked, Theme: palette,
 			OnOpenLink: callbacks.openLink,
 			OnChange: func(bool) {
 				callbacks.focus(index)
@@ -328,7 +331,8 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 		})
 	}
 	props := launcherview.FormSelectFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
+		Error: callbacks.fieldErrors[definition.Value.Key], Value: selectedLabel,
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette,
 		OnOpenLink: callbacks.openLink,
 		OnTap: func() {
@@ -363,11 +367,16 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 	}
 	return launcherview.FormTextField(launcherview.FormTextFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Suffix: a.translate(definition.Value.Suffix),
-		Width: width, Height: height, LabelWidth: callbacks.labelWidth,
+		Error: callbacks.fieldErrors[definition.Value.Key], Width: width, Height: height, LabelWidth: callbacks.labelWidth,
 		State: state, Controller: controller, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette, OnBrowse: onBrowse, BrowseLabel: a.translate("i18n:ui_runtime_browse"),
 		OnOpenLink: callbacks.openLink,
 		OnFocus:    func() { callbacks.focus(index) },
+		OnBlur: func() {
+			if callbacks.blur != nil {
+				callbacks.blur(index)
+			}
+		},
 		OnChanged: func(value string) {
 			if callbacks.setText != nil {
 				callbacks.setText(index, value)

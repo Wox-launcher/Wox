@@ -171,6 +171,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		labelWidth:        a.pluginFormLabelWidth(form.definitions[1:]),
 		imageScale:        imageScale,
 		focus:             a.focusPluginFormField,
+		blur:              a.blurPluginFormField,
 		change:            a.changePluginFormChoice,
 		setText:           a.setPluginFormText,
 		pickDir:           a.pickPluginFormDirectory,
@@ -186,6 +187,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		runServiceAction:  a.runPluginServiceAction,
 		openLink:          a.openPluginSettingLink,
 		serviceBusy:       form.saving,
+		fieldErrors:       form.fieldErrors,
 	}
 	if form.statusError {
 		callbacks.serviceError = form.status

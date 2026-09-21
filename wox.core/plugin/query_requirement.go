@@ -124,12 +124,6 @@ func (m *Manager) validateQueryRequirements(ctx context.Context, pluginInstance 
 		}
 
 		validators := m.getEffectiveQueryRequirementValidators(requirement, settingDefinition)
-		if len(validators) == 0 {
-			// Metadata authors can deliberately use setting validators as the source
-			// of truth, but an empty combined validator set cannot decide readiness.
-			logger.Error(ctx, fmt.Sprintf("<%s> query requirement has no validators: %s", pluginInstance.GetName(ctx), requirement.SettingKey))
-			continue
-		}
 
 		value := pluginInstance.API.GetSetting(ctx, requirement.SettingKey)
 		if validationMessage := validateQueryRequirementValue(value, validators); validationMessage != "" {
@@ -173,21 +167,23 @@ func (m *Manager) resolveQueryRequirementSettingDefinition(ctx context.Context, 
 	return definition.PluginSettingDefinitionItem{}, false
 }
 
+// getEffectiveQueryRequirementValidators uses requirement validators first, then the setting's validators.
+// Empty on both sides means the query is not blocked.
 func (m *Manager) getEffectiveQueryRequirementValidators(requirement MetadataQueryRequirement, item definition.PluginSettingDefinitionItem) []validator.PluginSettingValidator {
 	if len(requirement.Validators) > 0 {
 		return requirement.Validators
 	}
 
+	var fromSetting []validator.PluginSettingValidator
 	switch v := item.Value.(type) {
 	case *definition.PluginSettingValueTextBox:
-		return v.Validators
+		fromSetting = v.Validators
 	case *definition.PluginSettingValueSelect:
-		return v.Validators
+		fromSetting = v.Validators
 	case *definition.PluginSettingValueSelectAIModel:
-		return v.Validators
-	default:
-		return nil
+		fromSetting = v.Validators
 	}
+	return fromSetting
 }
 
 func (m *Manager) withEffectiveRequirementValidators(item definition.PluginSettingDefinitionItem, validators []validator.PluginSettingValidator) definition.PluginSettingDefinitionItem {

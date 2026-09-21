@@ -64,7 +64,7 @@ Script plugins are not deprecated. Use them when a one-shot command wrapper is e
    - `init()`: Initialize API clients and load settings. Called on every load/reload for SDK and single-file SDK plugins. Read and write settings through the Public API setting methods so values can sync across machines. If the plugin will cache files, resolve `get_cache_folder` / `GetCacheFolder` here and write later files under that path. Unless the plugin is clearly unsuitable for MRU, declare the `mru` feature and register `OnMRURestore` / `on_mru_restore` here.
    - `query()`: Handle user input and return `QueryResponse` (results plus optional refinements and layout). Refinement hotkeys are `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux; see `references/refinements.md`.
    - Plugin Tools: register them in `init()` at the same time as query/action features so other plugins can call the same capabilities. See `references/plugin_tools.md`. Requires Wox 2.4.5+. Script plugins cannot use this API.
-   - Unconventional previews (syntax highlighting, folding, custom layout) should use `webview` HTML, painted from `GetThemeColors` / `get_theme_colors` so they follow the current light or dark launcher theme.
+   - Result previews: use `markdown` for information display. Use `webview` HTML only when markdown cannot express the preview; then paint it from `GetThemeColors` / `get_theme_colors`. Preview ranking is in `SKILL.md`.
    - Register unload callbacks if you create timers, watchers, or sockets.
 4. **Internationalize**: Use the `I18n` field in `plugin.json` or the file header (recommended) or `lang/` files for packaged plugins. Single-file plugins only support inline `I18n`. See `plugin_i18n`.
 5. **Validate settings-related work**:

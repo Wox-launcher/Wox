@@ -273,6 +273,7 @@ type pluginSettingsFormState struct {
 	saving      bool
 	status      string
 	statusError bool
+	fieldErrors map[string]string
 	revision    uint64
 }
 
@@ -283,6 +284,7 @@ type pluginSettingsFormSnapshot struct {
 	saving      bool
 	status      string
 	statusError bool
+	fieldErrors map[string]string
 	dirty       bool
 }
 
@@ -716,6 +718,7 @@ func snapshotPluginSettingsFormLocked(state *pluginSettingsFormState) *pluginSet
 		saving:             state.saving,
 		status:             state.status,
 		statusError:        state.statusError,
+		fieldErrors:        cloneFormTableFieldErrors(state.fieldErrors),
 		dirty:              pluginFormDirty(state.definitions, state.values, state.initial),
 	}
 }
@@ -1235,7 +1238,9 @@ func (a *App) deactivatePluginForm() {
 	a.stopHotkeyRecording()
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
+		focused := form.focused
 		form.active = false
+		a.validatePluginFormField(form, focused)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
 			a.submitPluginSettings()
 		}
@@ -1252,6 +1257,9 @@ func (a *App) focusPluginFormField(index int) {
 	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	previousFocused := state.focused
 	syncFormFieldsEditorLocked(&state.formFieldsState)
+	if previousFocused != index {
+		a.validatePluginFormField(state, previousFocused)
+	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.status = ""
 	textInput := state.editor != nil
@@ -1259,6 +1267,50 @@ func (a *App) focusPluginFormField(index int) {
 	a.invalidateSettingsWindow()
 	if previousFocused != index && pluginFormDirty(state.definitions, state.values, state.initial) {
 		a.submitPluginSettings()
+	}
+}
+
+// blurPluginFormField shows validator messages under a plugin setting after it loses focus.
+func (a *App) blurPluginFormField(index int) {
+	form := a.pluginSettings.Form()
+	if form == nil || form.saving {
+		return
+	}
+	syncFormFieldsEditorLocked(&form.formFieldsState)
+	a.validatePluginFormField(form, index)
+	a.invalidateSettingsWindow()
+}
+
+// validatePluginFormField records the first failing validator for one setting under that field.
+func (a *App) validatePluginFormField(form *pluginSettingsFormState, index int) {
+	if form == nil || index < 0 || index >= len(form.definitions) {
+		return
+	}
+	key := form.definitions[index].Value.Key
+	if key == "" {
+		return
+	}
+	errors := a.translateFormTableFieldErrors(validateFormFieldErrors([]formDefinition{form.definitions[index]}, form.values))
+	if form.fieldErrors == nil {
+		form.fieldErrors = map[string]string{}
+	}
+	if message := errors[key]; message != "" {
+		form.fieldErrors[key] = message
+	} else {
+		delete(form.fieldErrors, key)
+	}
+	if len(form.fieldErrors) == 0 {
+		form.fieldErrors = nil
+	}
+}
+
+func clearPluginFormFieldError(form *pluginSettingsFormState, index int) {
+	if form == nil || form.fieldErrors == nil || index < 0 || index >= len(form.definitions) {
+		return
+	}
+	delete(form.fieldErrors, form.definitions[index].Value.Key)
+	if len(form.fieldErrors) == 0 {
+		form.fieldErrors = nil
 	}
 }
 
@@ -1292,6 +1344,7 @@ func (a *App) changePluginFormChoice(index, delta int) {
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.status = ""
+	clearPluginFormFieldError(state, index)
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	a.submitPluginSettings()
@@ -1584,6 +1637,7 @@ func (a *App) setPluginFormChoice(index int, value string) {
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.values[definition.Value.Key] = value
 	state.status = ""
+	clearPluginFormFieldError(state, index)
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	a.submitPluginSettings()
@@ -1596,6 +1650,7 @@ func (a *App) editPluginFormKey(event woxui.KeyEvent) {
 		if changed {
 			syncFormFieldsEditorLocked(&state.formFieldsState)
 			state.status = ""
+			clearPluginFormFieldError(state, state.focused)
 		}
 	}
 	a.invalidateSettingsWindow()
@@ -1615,6 +1670,7 @@ func (a *App) setPluginFormText(index int, value string) {
 		return
 	}
 	form.status = ""
+	clearPluginFormFieldError(form, index)
 	a.invalidateSettingsWindow()
 	// dirPath is a completed folder, like a select: persist immediately so the next
 	// launcher query does not keep using the previous directory.
@@ -1715,12 +1771,10 @@ func (a *App) submitPluginSettings() {
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
-	if validationKey := validateFormFields(state.definitions, state.values); validationKey != "" {
+	if fieldErrors := a.translateFormTableFieldErrors(validateFormFieldErrors(state.definitions, state.values)); len(fieldErrors) > 0 {
 		pluginID := state.pluginID
-		message := a.translate(validationKey)
 		if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
-			form.status = message
-			form.statusError = true
+			form.fieldErrors = fieldErrors
 		}
 		a.invalidateSettingsWindow()
 		return
@@ -1738,6 +1792,7 @@ func (a *App) submitPluginSettings() {
 	state.saving = true
 	state.status = ""
 	state.statusError = false
+	state.fieldErrors = nil
 	state.revision++
 	pluginID := state.pluginID
 	a.invalidateSettingsWindow()

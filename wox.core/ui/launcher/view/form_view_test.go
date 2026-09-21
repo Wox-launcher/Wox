@@ -8,6 +8,73 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestFormTextFieldRendersErrorUnderControl(t *testing.T) {
+	const message = "Value cannot be empty"
+	field := FormTextField(FormTextFieldProps{
+		ID: "requirement-form-field-0", Label: "API Key", Description: "Paste the key here", Error: message,
+		Width: 400, Theme: woxcomponent.ControlTheme{Error: woxui.Color{R: 232, G: 95, B: 95, A: 255}},
+	})
+	errorNode, ok := findFormSemanticsByAutomationID(field, "requirement-form-field-0-error")
+	if !ok {
+		t.Fatal("textbox field error is missing requirement-form-field-0-error")
+	}
+	if errorNode.Label != message || errorNode.Value != message || errorNode.LiveRegion != woxui.AccessibilityLiveRegionPolite {
+		t.Fatalf("textbox field error = %#v, want labeled text %q", errorNode, message)
+	}
+}
+
+func TestFormTextFieldInvokesOnBlurWhenFocusLost(t *testing.T) {
+	focused := false
+	blurred := false
+	field := FormTextField(FormTextFieldProps{
+		ID: "api-key", Label: "API Key", Width: 400, LabelWidth: 100,
+		OnFocus: func() { focused = true },
+		OnBlur:  func() { blurred = true },
+		Theme:   woxcomponent.ControlTheme{},
+	})
+	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	input := controlColumn.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if input.OnFocusChange == nil {
+		t.Fatal("textbox is missing OnFocusChange")
+	}
+	input.OnFocusChange(true)
+	if !focused || blurred {
+		t.Fatalf("focus = %v blur = %v, want only OnFocus", focused, blurred)
+	}
+	input.OnFocusChange(false)
+	if !blurred {
+		t.Fatal("losing focus must call OnBlur")
+	}
+}
+
+func findFormSemanticsByAutomationID(widget woxwidget.Widget, automationID string) (woxwidget.Semantics, bool) {
+	switch node := widget.(type) {
+	case woxwidget.Semantics:
+		if node.AutomationID == automationID {
+			return node, true
+		}
+		return findFormSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Keyed:
+		return findFormSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Container:
+		return findFormSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Expanded:
+		return findFormSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Align:
+		return findFormSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Clip:
+		return findFormSemanticsByAutomationID(node.Child, automationID)
+	case woxwidget.Flex:
+		for _, child := range node.Children {
+			if found, ok := findFormSemanticsByAutomationID(child, automationID); ok {
+				return found, true
+			}
+		}
+	}
+	return woxwidget.Semantics{}, false
+}
+
 func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
 	panel := FormPanel(FormPanelProps{
 		Width: 388, MaximumHeight: 420, Rows: []woxwidget.Widget{woxwidget.Container{Width: 360, Height: 44}},
@@ -269,6 +336,19 @@ func TestFormHotkeyFieldShrinksSettingsLabelToKeepRecorderVisible(t *testing.T) 
 	}
 	if !controlArea.Children[0].AnchorRight || controlArea.Children[0].Right != 2 {
 		t.Fatalf("narrow settings recorder geometry = %#v, want right anchored with 2px inset", controlArea.Children[0])
+	}
+}
+
+func TestFormAIModelFieldRendersValidationError(t *testing.T) {
+	const message = "Value cannot be empty"
+	props := FormAIModelFieldProps{ID: "default-model", Width: 600, Error: message}
+	state := &formAIModelFieldState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	defer state.Dispose()
+	built := state.Build(woxwidget.StateContext{}, props)
+	errorNode, ok := findFormSemanticsByAutomationID(built, "default-model-error")
+	if !ok || errorNode.Value != message || errorNode.LiveRegion != woxui.AccessibilityLiveRegionPolite {
+		t.Fatalf("AI model validation error = %#v, found=%v", errorNode, ok)
 	}
 }
 

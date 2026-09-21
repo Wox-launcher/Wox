@@ -22,7 +22,7 @@ const (
 
 // Test020LauncherQueryRequirementValidation verifies saving the setup form with an empty required field stays on the form and shows the validator error.
 // Flow: install a plugin that requires accessKey -> query its trigger -> save without entering a value.
-// Evidence: the form remains visible, the plugin query result does not appear, and requirement-form-error reports the empty-value message.
+// Evidence: the form remains visible, the plugin query result does not appear, and the empty field shows its validator error.
 func Test020LauncherQueryRequirementValidation(t *testing.T) {
 	writeQueryRequirementPlugin(t, queryRequirementValidationPluginFile, queryRequirementAnyQueryPluginSource(queryRequirementValidationPluginID, "Query Requirement Validation Smoke", queryRequirementValidationTrigger))
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {

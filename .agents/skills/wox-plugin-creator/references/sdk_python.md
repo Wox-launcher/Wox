@@ -98,7 +98,7 @@ If the plugin needs on-disk cache, prefer `get_cache_folder` over any custom dir
 
 Requires Wox >= 2.4.5.
 
-- `get_theme_colors(ctx, option=None)`: Opaque `#RRGGBB` launcher colors for HTML/webview previews: `background`, `text`, `secondary_text`, `border`, `accent`, `accent_text`, `selection`, plus `dark`. Call this when building unconventional HTML previews so light and dark Wox themes stay in sync.
+- `get_theme_colors(ctx, option=None)`: Opaque `#RRGGBB` launcher colors for HTML/webview previews: `background`, `text`, `secondary_text`, `border`, `accent`, `accent_text`, `selection`, plus `dark`. Call this only when building HTML previews so light and dark Wox themes stay in sync. Markdown previews follow the launcher theme without this API.
 
 ### Settings
 
@@ -252,11 +252,11 @@ plugin = HelloPlugin()
 
 ## Static HTML preview
 
-Use `WoxPreviewType.WEBVIEW` with a JSON-encoded `html` field. No HTTP server or temporary HTML file is needed; there is no separate `html` preview type.
+Use `WoxPreviewType.WEBVIEW` with a JSON-encoded `html` field only after `markdown` cannot express the preview. Information display (title, body, images, metadata) belongs in `markdown`. HTML is the last option because the webview can steal query focus, miss theme colors, and hit layout bugs. No HTTP server or temporary HTML file is needed; there is no separate `html` preview type.
 
-Prefer HTML for unconventional previews (syntax highlighting, folding, custom layout). Do not use SVG/`image` for document-like content.
+Do not rasterize documents as SVG/`image` previews.
 
-Paint the page from `get_theme_colors` so light and dark launcher themes stay in sync. Put a theme color in `cache_key`.
+When HTML is required, paint the page from `get_theme_colors` so light and dark launcher themes stay in sync. Put a theme color in `cache_key`.
 
 ```python
 import json

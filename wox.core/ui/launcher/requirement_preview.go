@@ -34,14 +34,15 @@ type queryRequirementPreviewData struct {
 
 type requirementFormState struct {
 	formFieldsState
-	key        string
-	pluginID   string
-	pluginName string
-	title      string
-	message    string
-	saving     bool
-	error      string
-	revision   uint64
+	key         string
+	pluginID    string
+	pluginName  string
+	title       string
+	message     string
+	saving      bool
+	error       string
+	fieldErrors map[string]string
+	revision    uint64
 }
 
 type requirementFormSnapshot struct {
@@ -53,6 +54,7 @@ type requirementFormSnapshot struct {
 	message     string
 	saving      bool
 	error       string
+	fieldErrors map[string]string
 	modelsError string
 }
 
@@ -75,7 +77,7 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	callbacks := formFieldCallbacks{
 		idPrefix: "requirement-form", focus: a.focusRequirementFormField, change: a.changeRequirementFormChoice,
 		setText: a.setRequirementFormText, onKey: a.onRequirementFormKey, openTable: a.openRequirementFormTable,
-		openLink: a.openRequirementFormLink,
+		openLink: a.openRequirementFormLink, fieldErrors: form.fieldErrors,
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
@@ -83,7 +85,7 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	}
 	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
-		Error: errorMessage, SaveLabel: a.translate("i18n:ui_save"), Saving: form.saving, Rows: rows,
+		Error: errorMessage, SaveLabel: requirementSaveLabel(a.translate), Saving: form.saving, Rows: rows,
 		KeepVisibleKey: formFieldsKeepVisibleKey("requirement-form", form.formFieldsSnapshot),
 		OnSubmit:       a.submitRequirementForm,
 		OnOpenLink:     a.openRequirementFormLink,
@@ -179,6 +181,7 @@ func snapshotRequirementFormLocked(state *requirementFormState, modelsError stri
 		message:            state.message,
 		saving:             state.saving,
 		error:              state.error,
+		fieldErrors:        cloneFormTableFieldErrors(state.fieldErrors),
 		modelsError:        modelsError,
 	}
 }
@@ -276,32 +279,36 @@ func aiModelLabel(model aiModel) string {
 	return provider + " / " + model.Name
 }
 
+// requirementSaveLabel matches action-form save: Save (Ctrl+Enter) or Save (Cmd+Enter).
+func requirementSaveLabel(translate func(string) string) string {
+	return fmt.Sprintf("%s (%s)", translate("i18n:ui_save"), strings.Join(formatHotkeyLabels(primaryHotkey("enter")), "+"))
+}
+
 // onRequirementFormKey keeps navigation and editing inside the inline form while it owns focus.
 func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
 	state := a.requirementForm
-	active := state != nil && state.active
-	focused := -1
-	fieldType := ""
-	multiline := false
-	if active {
-		focused = state.focused
-		if focused >= 0 && focused < len(state.definitions) {
-			fieldType = state.definitions[focused].Type
-			multiline = fieldType == "textbox" && state.definitions[focused].Value.MaxLines > 1
-		}
-	}
-	if !active {
+	if state == nil {
 		return false
-	}
-	if event.Key == woxui.KeyEscape {
-		a.deactivateRequirementForm()
-		return true
 	}
 	if event.Key == woxui.KeyEnter && event.Modifiers.HasPrimary() {
 		a.submitRequirementForm()
+		return true
+	}
+	if !state.active {
+		return false
+	}
+	focused := state.focused
+	fieldType := ""
+	multiline := false
+	if focused >= 0 && focused < len(state.definitions) {
+		fieldType = state.definitions[focused].Type
+		multiline = fieldType == "textbox" && state.definitions[focused].Value.MaxLines > 1
+	}
+	if event.Key == woxui.KeyEscape {
+		a.deactivateRequirementForm()
 		return true
 	}
 	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
@@ -429,6 +436,9 @@ func (a *App) changeRequirementFormChoice(index, delta int) {
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.error = ""
+	if state.fieldErrors != nil && index >= 0 && index < len(state.definitions) {
+		delete(state.fieldErrors, state.definitions[index].Value.Key)
+	}
 	a.updateFormTextInput(false)
 	_ = a.window.Invalidate()
 }
@@ -437,6 +447,9 @@ func (a *App) setRequirementFormText(index int, value string) {
 	changed := a.requirementForm != nil && !a.requirementForm.saving && setFormFieldsTextLocked(&a.requirementForm.formFieldsState, index, value)
 	if changed {
 		a.requirementForm.error = ""
+		if a.requirementForm.fieldErrors != nil && index >= 0 && index < len(a.requirementForm.definitions) {
+			delete(a.requirementForm.fieldErrors, a.requirementForm.definitions[index].Value.Key)
+		}
 	}
 	if changed {
 		_ = a.window.Invalidate()
@@ -498,6 +511,18 @@ func isAbsoluteHTTPURL(value string) bool {
 		return false
 	}
 	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
+}
+
+func firstFormFieldErrorIndex(definitions []formDefinition, errors map[string]string) int {
+	if len(errors) == 0 {
+		return -1
+	}
+	for index, definition := range definitions {
+		if errors[definition.Value.Key] != "" {
+			return index
+		}
+	}
+	return -1
 }
 
 // validateFormFields implements the validator subset shared by core query requirements.
@@ -565,11 +590,18 @@ func (a *App) submitRequirementForm() {
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
-	if validationKey := validateFormFields(state.definitions, state.values); validationKey != "" {
+	if fieldErrors := a.translateFormTableFieldErrors(validateFormFieldErrors(state.definitions, state.values)); len(fieldErrors) > 0 {
 		formKey := state.key
-		validationMessage := a.translate(validationKey)
 		if a.requirementForm != nil && a.requirementForm.key == formKey {
-			a.requirementForm.error = validationMessage
+			a.requirementForm.fieldErrors = fieldErrors
+			a.requirementForm.error = ""
+			if index := firstFormFieldErrorIndex(state.definitions, fieldErrors); index >= 0 {
+				// Keep the editor bound to the focused field before the next value sync.
+				a.focusRequirementFormField(index)
+				if a.host != nil {
+					a.host.RequestFocus(woxwidget.Key(fmt.Sprintf("requirement-form-field-%d", index)))
+				}
+			}
 		}
 		_ = a.window.Invalidate()
 		return
@@ -581,6 +613,7 @@ func (a *App) submitRequirementForm() {
 	keys := editableFormKeys(state.definitions)
 	state.saving = true
 	state.error = ""
+	state.fieldErrors = nil
 	state.active = false
 	state.revision++
 	revision := state.revision
