@@ -847,8 +847,11 @@ func (a *App) queryViewClipboardPaste() error {
 }
 
 // setQueryText applies an accessibility or automation value through the normal query pipeline.
+// Replacing the launcher query must drop the previous result's Action Panel. Typing does that
+// when the query box takes focus; SetValue does not move focus, so close it here as well.
 func (a *App) setQueryText(value string) error {
 	a.deactivateRequirementForm()
+	a.hideActionPanel()
 	previousText := a.editor.State().Text
 	value = normalizeQueryNewlines(value)
 	a.rememberQueryHint()

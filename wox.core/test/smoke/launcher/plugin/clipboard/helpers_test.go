@@ -22,6 +22,7 @@ func TestClipboardResultWaitsForCompletion(t *testing.T) {
 	const marker = "clipboard-wait-regression"
 	var mu sync.Mutex
 	query, polls, queries := "", 0, 0
+	var generation uint64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -40,6 +41,9 @@ func TestClipboardResultWaitsForCompletion(t *testing.T) {
 			queries++
 		case "semantics.snapshot":
 			polls++
+			// Real frames bump Generation. A completed tree at generation 0 is the
+			// previous query, which SetLauncherQueryAndWaitComplete must ignore.
+			generation++
 			nodes := []woxui.AccessibilityNode{
 				{AutomationID: "launcher.query.input", Value: query},
 				{AutomationID: "launcher.results", Value: "loading"},
@@ -48,7 +52,7 @@ func TestClipboardResultWaitsForCompletion(t *testing.T) {
 				nodes[1].Value = "complete"
 				nodes = append(nodes, woxui.AccessibilityNode{AutomationID: "launcher.result.marker", Label: marker})
 			}
-			result = woxwidget.AutomationSnapshot{Tree: woxui.AccessibilityTree{Nodes: nodes}}
+			result = woxwidget.AutomationSnapshot{Tree: woxui.AccessibilityTree{Generation: generation, Nodes: nodes}}
 		default:
 			t.Errorf("unexpected method %q", request.Method)
 		}

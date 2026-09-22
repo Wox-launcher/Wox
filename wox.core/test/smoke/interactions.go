@@ -292,7 +292,9 @@ func OpenResultActionPanel(t *testing.T, ctx context.Context, client *automation
 	if err != nil {
 		t.Fatalf("wait for launcher result actions: %v", err)
 	}
-	if _, alreadyOpen := automationdriver.Find(ready, "action-search"); alreadyOpen {
+	// A leftover action-search node from the previous query is not an open panel.
+	// The query box can already be focused while that node is still in the last frame.
+	if search, alreadyOpen := automationdriver.Find(ready, "action-search"); alreadyOpen && search.Focused && actionPanelHasSelectedItem(ready) {
 		return ready
 	}
 	modifier := woxui.KeyModifierControl
@@ -529,10 +531,20 @@ func SelectSettingChoiceByLabel(t *testing.T, ctx context.Context, client *autom
 // SetLauncherQueryAndWaitComplete changes the query and waits for the matching result generation.
 func SetLauncherQueryAndWaitComplete(t *testing.T, ctx context.Context, client *automationdriver.Client, query string) woxwidget.AutomationSnapshot {
 	t.Helper()
+	before, err := client.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("read launcher query before setting %q: %v", query, err)
+	}
+	// The same text can already be complete in the previous test's frame. Wait for the
+	// frame published after this SetValue, which is what clears the Action Panel.
+	generation := before.Tree.Generation
 	if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 		t.Fatalf("set launcher query %q: %v", query, err)
 	}
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		if snapshot.Tree.Generation <= generation {
+			return false
+		}
 		results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
 		if !resultsFound || results.Value != "complete" {
 			return false
