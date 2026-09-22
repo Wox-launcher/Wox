@@ -68,7 +68,6 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: "query-hint", QueryHint: &common.QueryHint{Elements: []common.QueryElement{
 				{Id: "filter", Kind: common.QueryElementArgument, Suggestions: []string{"created", "assigned", "search"}},
 			}}},
-			{Command: "drag", Description: "Native file drag fixture"},
 			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
@@ -90,15 +89,12 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 
 func (p *smokeAutomationPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
-	p.api.OnDragOut(context.Background(), plugin.DragOutListenOption{Callback: p.recordSmokeDrag})
 	p.api.OnMRURestore(ctx, p.restoreResultBindingFixture)
 }
 
 // Query dispatches the deterministic native smoke behaviors by metadata command.
 func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	switch query.Command {
-	case "drag":
-		return querySmokeDrag(query)
 	case smokeAutomationSlowCommand:
 		return p.querySlow(ctx)
 	case smokeAutomationStreamingCommand:

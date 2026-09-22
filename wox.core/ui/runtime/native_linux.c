@@ -3,6 +3,7 @@
 #include "native_linux.h"
 
 #include <gtk/gtk.h>
+#include <gio/gio.h>
 #include <epoxy/gl.h>
 #include <pango/pangocairo.h>
 
@@ -4859,6 +4860,37 @@ static GtkWidget *accessibility_widget(const char *role, const char *value, uint
     gtk_drag_dest_unset(widget);
   }
   return widget;
+}
+
+// linux_atk_bus_available is false on CI images that have no org.a11y.Bus.
+// Building the GTK mirror then makes every node wait on a missing bus and the
+// UI thread never returns to automation snapshots.
+static bool linux_atk_bus_available(void) {
+  static int state = -1;
+  if (state >= 0) {
+    return state == 1;
+  }
+  state = 0;
+  GError *error = NULL;
+  GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+  if (bus == NULL) {
+    g_clear_error(&error);
+    return false;
+  }
+  GVariant *reply = g_dbus_connection_call_sync(bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", g_variant_new("(s)", "org.a11y.Bus"), G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NO_AUTO_START, 500, NULL, &error);
+  if (reply != NULL) {
+    gboolean owned = FALSE;
+    g_variant_get(reply, "(b)", &owned);
+    g_variant_unref(reply);
+    state = owned ? 1 : 0;
+  }
+  g_clear_error(&error);
+  g_object_unref(bus);
+  return state == 1;
+}
+
+int32_t wox_linux_accessibility_enabled(void) {
+  return linux_atk_bus_available() ? 1 : 0;
 }
 
 static gboolean linux_accessibility_idle(gpointer data) {

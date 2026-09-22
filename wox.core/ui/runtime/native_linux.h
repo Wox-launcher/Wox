@@ -46,6 +46,7 @@ int32_t wox_linux_window_request_animation_frame(WoxLinuxWindow *window);
 int32_t wox_linux_window_stop_animation_frames(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_text_input_state(WoxLinuxWindow *window, int32_t enabled, float x, float y, float width, float height);
 int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t cursor);
+int32_t wox_linux_accessibility_enabled(void);
 int32_t wox_linux_window_is_rendering(WoxLinuxWindow *window);
 int32_t wox_linux_accessibility_schedule(WoxLinuxWindow *window);
 int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generation);

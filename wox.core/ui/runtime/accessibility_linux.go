@@ -29,6 +29,9 @@ func init() {
 }
 
 func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) error {
+	if C.wox_linux_accessibility_enabled() == 0 {
+		return nil
+	}
 	native, err := window.openNative()
 	if err != nil {
 		return err
