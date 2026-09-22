@@ -542,7 +542,7 @@ func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
 	field := FormServiceField(FormServiceFieldProps{
 		Width: 420, LabelWidth: 80, Title: "Fast indexing", Description: "Install the optional Windows service.", Status: "Running", Detail: "2.8.0",
 		Actions: []FormServiceAction{{ID: "install", Label: "Install service", Primary: true, Enabled: true}},
-		Theme:   woxcomponent.ControlTheme{Text: woxui.Color{R: 160, G: 160, B: 164, A: 255}},
+		Theme:   woxcomponent.ControlTheme{Text: woxui.Color{R: 160, G: 160, B: 164, A: 255}, InputBackground: woxui.Color{R: 32, G: 32, B: 36, A: 255}},
 	})
 	semantics := field.(woxwidget.Semantics)
 	if semantics.Role != woxui.AccessibilityRoleGroup || semantics.Label != "Fast indexing" {
@@ -567,8 +567,8 @@ func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
 		t.Fatalf("service action = %+v", button)
 	}
 	chrome := focusedControlGesture(button).Child.(woxwidget.Container)
-	if chrome.BorderWidth != 1 || chrome.Color.A != 0 {
-		t.Fatalf("service action chrome = border %.0f fill %#v, want the shared outline add button", chrome.BorderWidth, chrome.Color)
+	if chrome.BorderWidth != 0 || chrome.Color != (woxui.Color{R: 32, G: 32, B: 36, A: 255}) {
+		t.Fatalf("service action chrome = border %.0f fill %#v, want the shared secondary button", chrome.BorderWidth, chrome.Color)
 	}
 	description := controlColumn.Children[1].(woxwidget.TextBlock)
 	if description.Value != "Install the optional Windows service." {

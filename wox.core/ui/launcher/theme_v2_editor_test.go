@@ -16,6 +16,9 @@ func TestThemeEditorGeometryRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	platform := util.GetCurrentPlatform()
+	if platform == "darwin" {
+		platform = "macos"
+	}
 	raw[platform] = map[string]any{"AppBorderRadius": nil, "ToolbarBorderWidth": float64(2)}
 	_, values := themeEditorForm(raw)
 	if values["AppBorderRadius"] != "" {
@@ -61,6 +64,9 @@ func TestThemeEditorGeometryRoundTrip(t *testing.T) {
 func TestThemeEditorActiveOverride(t *testing.T) {
 	for _, useVariant := range []bool{false, true} {
 		platform, variant := util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant()
+		if platform == "darwin" {
+			platform = "macos"
+		}
 		if useVariant && variant == "" {
 			continue
 		}

@@ -89,7 +89,11 @@ func TestFallbackHotkeyStringRecordsPunctuationCombos(t *testing.T) {
 }
 
 func TestFallbackHotkeyStringAllowsStandaloneFunctionKeys(t *testing.T) {
-	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.KeySpace, Down: true, Modifiers: woxui.KeyModifierAlt}); got != "alt+space" {
+	want := "alt+space"
+	if runtime.GOOS == "darwin" {
+		want = "option+space"
+	}
+	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.KeySpace, Down: true, Modifiers: woxui.KeyModifierAlt}); got != want {
 		t.Fatalf("Alt+Space = %q", got)
 	}
 	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.Key("f12"), Down: true}); got != "f12" {

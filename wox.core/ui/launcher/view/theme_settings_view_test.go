@@ -402,8 +402,8 @@ func TestThemeCatalogToolbarMatchesFlutterGeometry(t *testing.T) {
 	body := toolbar.Children[0].Child.(woxwidget.Container)
 	row := body.Child.(woxwidget.Flex)
 	action := row.Children[0].(woxwidget.Container)
-	keycaps := action.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
-	keyText := keycaps.Children[0].(woxwidget.Stack).Children[2].Child.(woxwidget.Text)
+	keycaps := action.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	keyText := keycaps.Children[0].(woxwidget.Stack).Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
 	if body.Height != 40 || body.Padding.Top != 6 || toolbar.Children[1].Child.(woxwidget.Container).Height != 1 {
 		t.Fatalf("theme toolbar = height %v padding %+v, want Flutter 40px footer with top divider", body.Height, body.Padding)
 	}

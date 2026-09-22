@@ -509,7 +509,7 @@ func TestLauncherViewPutsEmptyLeadingSpaceAboveBottomQuery(t *testing.T) {
 		Width: 400, Height: 75, QueryAtBottom: true,
 		Content: woxwidget.Container{Width: 400, Height: 10},
 		Header:  woxwidget.Container{Width: 400, Height: 65},
-	}).(woxwidget.Semantics).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	}).(woxwidget.Semantics).Child.(woxwidget.Container).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Flex)
 	if len(view.Children) != 2 {
 		t.Fatalf("section count = %d, want leading space then query chrome", len(view.Children))
 	}

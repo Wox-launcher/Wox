@@ -1,6 +1,7 @@
 package component
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -157,6 +158,9 @@ func TestMultilineTextFieldOwnsStandardEditingShortcutsBeforeParent(t *testing.T
 		t.Fatalf("Ctrl+Z text = %q, want original multiline value", controller.Text())
 	}
 	word := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		word = woxui.KeyModifierAlt
+	}
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyBackspace, Modifiers: word, Down: true}) || controller.Text() != "\nbeta" {
 		t.Fatalf("word+Backspace text = %q, want previous word deleted", controller.Text())
 	}

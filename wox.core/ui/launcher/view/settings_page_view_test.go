@@ -71,7 +71,7 @@ func TestSettingRowDropdownUsesThemeTextColor(t *testing.T) {
 		Theme: woxcomponent.ControlTheme{Text: want, TextSecondary: woxui.Color{R: 255, A: 255}},
 	}).(woxwidget.Container)
 	field := focusedControlGesture(row.Child.(woxwidget.Flex).Children[1].(woxwidget.Keyed).Child).Child.(woxwidget.Container)
-	value := field.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.TextBlock)
+	value := field.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
 
 	if value.Color != want {
 		t.Fatalf("dropdown value color = %#v, want theme result title %#v", value.Color, want)

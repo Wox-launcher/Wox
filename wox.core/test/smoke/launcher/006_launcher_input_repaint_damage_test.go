@@ -24,7 +24,7 @@ import (
 // Test006LauncherInputRepaintDamage verifies idle caret blinking stays local in both launcher editors.
 // Flow: settle a completed query -> observe query-box caret frames -> open the action panel -> observe its filter caret frames.
 // Evidence: every settled frame reports non-empty logical damage contained by the focused input instead of full-window damage.
-// Windows restores the caret backdrop; Linux still repaints the renderer-blurred panel.
+// Windows restores the caret backdrop; macOS and Linux repaint the renderer-blurred panel.
 func Test006LauncherInputRepaintDamage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		if err := client.SetRepaintDebugMode(ctx, woxwidget.RepaintDebugOff); err != nil {
@@ -36,7 +36,7 @@ func Test006LauncherInputRepaintDamage(t *testing.T) {
 
 		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
 		var surface woxui.Rect
-		if runtime.GOOS == "linux" {
+		if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 			// The renderer-blurred floating material samples the back buffer under the panel, so
 			// any repaint inside the panel must cover the whole panel plus the blur's sampling
 			// margin. Derive the panel from its rows and filter; the outset absorbs panel padding,

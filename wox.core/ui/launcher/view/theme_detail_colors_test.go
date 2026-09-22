@@ -23,7 +23,7 @@ func TestResultHoverOverridePreservesSelection(t *testing.T) {
 				t.Fatal("list hover replaced selection or lost transparency")
 			}
 			cell := launcherGridResultView(LauncherGridResult{ID: "hover", Hovered: true, Selected: selected}, LauncherGridProps{CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70, Theme: theme}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
-			frame := cell.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack).Children[0].Child.(woxwidget.Boundary[launcherGridFrameProps])
+			frame := cell.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack).Children[1].Child.(woxwidget.Boundary[launcherGridFrameProps])
 			if frame.Build(frame.Props).(woxwidget.Container).BorderColor != want {
 				t.Fatal("grid hover replaced selection or lost transparency")
 			}

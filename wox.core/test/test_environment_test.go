@@ -1,11 +1,26 @@
 package test
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"wox/util/permission"
 )
+
+// TestMain handles permission probe subprocesses before they can rerun the suite
+// and concurrently initialize the same test database.
+func TestMain(m *testing.M) {
+	if permission.IsMacOSPermissionProbeProcess() {
+		if err := json.NewEncoder(os.Stdout).Encode(permission.GetMacOSPermissionStatusDirect(context.Background())); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 // TestEnvironmentSetup tests that the test environment is properly configured
 func TestEnvironmentSetup(t *testing.T) {

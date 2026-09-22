@@ -101,6 +101,10 @@ func themeEditorTokenSource(raw map[string]any, key, platform, variant string) m
 	if !isV2Theme(raw) || key == "ThemeName" {
 		return raw
 	}
+	// Theme documents use macos even though the runtime platform is darwin.
+	if platform == "darwin" {
+		platform = "macos"
+	}
 	platformNode, _ := raw[platform].(map[string]any)
 	variants, _ := platformNode["variants"].(map[string]any)
 	variantNode, _ := variants[variant].(map[string]any)

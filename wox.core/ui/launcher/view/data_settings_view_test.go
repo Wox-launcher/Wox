@@ -40,7 +40,7 @@ func TestDataLogLevelUsesSharedAnchoredDropdown(t *testing.T) {
 }
 
 func TestDataBackupTableKeepsOperationColumnInsideNarrowViewport(t *testing.T) {
-	table := dataBackupTable(DataSettingsProps{Labels: DataSettingsLabels{BackupListTitle: "Backups"}}, 880)
+	table := dataBackupTable(DataSettingsProps{Labels: DataSettingsLabels{BackupListTitle: "Backups"}, Backups: []DataBackup{{ID: "backup-fixture"}}}, 880)
 	content := table.(woxwidget.Container).Child.(woxwidget.Flex)
 	grid := content.Children[1].(woxwidget.Stateful).Widget.(formTableGridProps)
 	widths := formTableColumnWidthsWithOperation(grid.field.Columns, grid.width, false)

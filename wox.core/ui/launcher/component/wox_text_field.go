@@ -635,7 +635,10 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			return true
 		}
 		allowsMutation := !original.ReadOnly
-		if event.Down && !event.Composing && event.Modifiers.HasPrimary() {
+		// Word deletion belongs to the editor before parent shortcuts; on macOS
+		// Option is distinct from the primary Command modifier.
+		wordDeletion := event.Modifiers.HasWordModifier() && (event.Key == woxui.KeyBackspace || event.Key == woxui.KeyDelete)
+		if event.Down && !event.Composing && (event.Modifiers.HasPrimary() || wordDeletion) {
 			switch event.Key {
 			case woxui.Key("a"):
 				if original.OnSelectAll != nil && original.OnSelectAll() {
@@ -696,7 +699,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 					return true
 				}
 				fallthrough
-			case woxui.KeyBackspace:
+			case woxui.KeyBackspace, woxui.KeyDelete:
 				if !allowsMutation {
 					return true
 				}
