@@ -16,6 +16,7 @@ import (
 // Flow: enter the last argument -> return to the command -> Tab into the argument -> Tab again.
 // Evidence: the hint follows the available target, Tab selects the argument, and another Tab preserves it.
 func Test004TabHintVisibility(t *testing.T) {
+	skipVolumeHintOnLinux(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		enterVolumeHint(t, ctx, client)
 		waitTabHint := func(visible bool) {

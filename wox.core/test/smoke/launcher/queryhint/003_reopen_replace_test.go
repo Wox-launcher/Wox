@@ -14,6 +14,7 @@ import (
 // Flow: type a volume -> hide -> show -> type a fresh query.
 // Evidence: the native selection covers command and argument, and the new text replaces both.
 func Test003ReopenReplace(t *testing.T) {
+	skipVolumeHintOnLinux(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		enterVolumeHint(t, ctx, client)
 		if err := client.EnterText(ctx, "30"); err != nil {

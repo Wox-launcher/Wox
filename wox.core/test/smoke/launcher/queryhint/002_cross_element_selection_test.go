@@ -16,6 +16,7 @@ import (
 // Flow: type a volume -> select backwards across argument and command -> replace -> undo -> Tab.
 // Evidence: replacement preserves exact text; undo restores the result and Tab selects only the argument range.
 func Test002CrossElementSelection(t *testing.T) {
+	skipVolumeHintOnLinux(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		enterVolumeHint(t, ctx, client)
 		if err := client.EnterText(ctx, "30"); err != nil {

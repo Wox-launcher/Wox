@@ -5,6 +5,7 @@ package queryhint
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,6 +13,15 @@ import (
 	"wox/test/smoke"
 	woxwidget "wox/ui/widget"
 )
+
+// skipVolumeHintOnLinux skips cases that type the system volume command.
+// Linux only registers it when pactl exists, and the CI image does not provide one.
+func skipVolumeHintOnLinux(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "linux" {
+		t.Skip("set volume query hint requires pactl, which is not available on Linux CI")
+	}
+}
 
 // enterVolumeHint uses real typing so the command matcher, hint and native editor participate.
 func enterVolumeHint(t *testing.T, ctx context.Context, client *automationdriver.Client) {
