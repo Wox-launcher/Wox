@@ -1,6 +1,9 @@
 param([string]$Root, [string]$Source)
+$ErrorActionPreference = "Stop"
+Write-Output "Loading native drag peer assemblies"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Write-Output "Compiling native drag peer"
 Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -TypeDefinition @"
 using System;
 using System.IO;
@@ -41,4 +44,5 @@ public class WoxDragPeer : Form {
  }
 }
 "@
+Write-Output "Starting native drag peer window"
 [WoxDragPeer]::Run($Root, $Source)

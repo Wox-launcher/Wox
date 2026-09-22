@@ -13,12 +13,12 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"wox/test/automationdriver"
 	woxui "wox/ui/runtime"
-	woxwidget "wox/ui/widget"
 )
 
 //go:embed native_drag_windows.ps1
@@ -26,8 +26,10 @@ var nativeDragPeerScript string
 
 // NativeDragPeer is an external OLE file source/target, owned and cleaned up by one smoke case.
 type NativeDragPeer struct {
-	Root   string
-	Handle uintptr
+	Root    string
+	Handle  uintptr
+	done    <-chan struct{}
+	exitErr error
 }
 
 var dragUser32 = windows.NewLazySystemDLL("user32.dll")
@@ -52,8 +54,10 @@ func OpenNativeDragPeer(t *testing.T, ctx context.Context, client *automationdri
 		output.Close()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { NativeDragMouse(0, 0, 4); _ = cmd.Process.Kill(); _ = cmd.Wait(); _ = output.Close() })
-	peer := &NativeDragPeer{Root: root}
+	done := make(chan struct{})
+	peer := &NativeDragPeer{Root: root, done: done}
+	go func() { peer.exitErr = cmd.Wait(); close(done) }()
+	t.Cleanup(func() { NativeDragMouse(0, 0, 4); _ = cmd.Process.Kill(); <-done; _ = output.Close() })
 	peer.Wait(t, ctx, client, "ready")
 	data, _ := os.ReadFile(filepath.Join(root, "ready"))
 	handle, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
@@ -67,12 +71,30 @@ func OpenNativeDragPeer(t *testing.T, ctx context.Context, client *automationdri
 // Wait observes the native peer's acknowledged drag state rather than guessing input timing.
 func (p *NativeDragPeer) Wait(t *testing.T, ctx context.Context, client *automationdriver.Client, name string) {
 	t.Helper()
-	if _, err := client.WaitFor(ctx, func(woxwidget.AutomationSnapshot) bool {
+	// Starting PowerShell includes compiling the WinForms peer on cold CI hosts.
+	// Give setup its own budget; actual drag acknowledgements retain ActionTimeout.
+	timeout := automationdriver.ActionTimeout
+	if name == "ready" {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
 		data, err := os.ReadFile(filepath.Join(p.Root, name))
-		return err == nil && len(data) > 0
-	}); err != nil {
-		log, _ := os.ReadFile(filepath.Join(p.Root, "peer.log"))
-		t.Fatalf("native drag peer %s: %v; %s", name, err, log)
+		if err == nil && len(data) > 0 {
+			return
+		}
+		select {
+		case <-p.done:
+			log, _ := os.ReadFile(filepath.Join(p.Root, "peer.log"))
+			t.Fatalf("native drag peer exited before %s: %v; %s", name, p.exitErr, log)
+		case <-ctx.Done():
+			log, _ := os.ReadFile(filepath.Join(p.Root, "peer.log"))
+			t.Fatalf("native drag peer %s: %v; %s", name, ctx.Err(), log)
+		case <-ticker.C:
+		}
 	}
 }
 

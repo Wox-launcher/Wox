@@ -65,6 +65,10 @@ int woxSmokeSessionAllowsForegroundActivation(void) {
     }
 }
 
+int woxSmokeCanPostKeyboardEvents(void) {
+    return CGPreflightPostEventAccess() ? 1 : 0;
+}
+
 int woxSmokePostKeyboardChord(uint16_t modifierKeyCode, uint64_t flags, uint16_t keyCode) {
     CGEventRef modifierDown = CGEventCreateKeyboardEvent(NULL, modifierKeyCode, true);
     CGEventRef down = CGEventCreateKeyboardEvent(NULL, keyCode, true);

@@ -13,6 +13,7 @@ int woxSmokeForceTerminateApplication(int pid);
 int woxSmokeFrontmostApplicationPid(void);
 char *woxSmokeFrontmostApplicationBundleID(void);
 int woxSmokeSessionAllowsForegroundActivation(void);
+int woxSmokeCanPostKeyboardEvents(void);
 int woxSmokePostKeyboardChord(uint16_t modifierKeyCode, uint64_t flags, uint16_t keyCode);
 */
 import "C"
@@ -36,8 +37,16 @@ const (
 	darwinEventFlagCommand = uint64(1 << 20)
 )
 
+// CanPostDarwinKeyboardEvents checks permission without prompting on CI hosts.
+func CanPostDarwinKeyboardEvents() bool {
+	return C.woxSmokeCanPostKeyboardEvents() != 0
+}
+
 // SendNativeKeyChord posts one modifier-key chord through the real macOS input path.
 func SendNativeKeyChord(keys ...string) error {
+	if !CanPostDarwinKeyboardEvents() {
+		return fmt.Errorf("macOS does not allow this test process to post keyboard events")
+	}
 	if len(keys) != 2 || !strings.EqualFold(keys[0], "command") {
 		return fmt.Errorf("unsupported macOS smoke chord %q", strings.Join(keys, "+"))
 	}

@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"wox/test/automationdriver"
@@ -31,13 +32,18 @@ func Test010LauncherActionPanelSecondaryClick(t *testing.T) {
 
 		// Query completion can precede the native resize. The result already has
 		// semantics then, but its center is outside the clipped results viewport.
-		snapshot, err := client.WaitFor(ctx, func(current woxwidget.AutomationSnapshot) bool {
+		snapshot, err := client.WaitForReason(ctx, func(current woxwidget.AutomationSnapshot) (bool, string) {
+			// A refresh can replace the dynamic result ID while the window resizes.
+			resultID, _ = smoke.FindLauncherResult(current, actionPanelShellCommand)
 			result, resultFound := automationdriver.Find(current, resultID)
 			viewport, viewportFound := automationdriver.Find(current, "launcher.results")
-			return resultFound && viewportFound && result.Bounds.Width > 0 && result.Bounds.Height > 0 &&
-				result.Bounds.X >= viewport.Bounds.X && result.Bounds.Y >= viewport.Bounds.Y &&
-				result.Bounds.X+result.Bounds.Width <= viewport.Bounds.X+viewport.Bounds.Width &&
-				result.Bounds.Y+result.Bounds.Height <= viewport.Bounds.Y+viewport.Bounds.Height
+			// Hit testing needs the injected point inside the viewport; scrollbar
+			// clipping and fractional row edges need not contain the entire row.
+			center := woxui.Point{X: result.Bounds.X + result.Bounds.Width/2, Y: result.Bounds.Y + result.Bounds.Height/2}
+			ready := resultFound && viewportFound && result.Bounds.Width > 0 && result.Bounds.Height > 0 &&
+				center.X >= viewport.Bounds.X && center.Y >= viewport.Bounds.Y &&
+				center.X < viewport.Bounds.X+viewport.Bounds.Width && center.Y < viewport.Bounds.Y+viewport.Bounds.Height
+			return ready, fmt.Sprintf("result=%+v viewport=%+v click=%+v", result.Bounds, viewport.Bounds, center)
 		})
 		if err != nil {
 			t.Fatalf("wait for clickable result after resize: %v", err)

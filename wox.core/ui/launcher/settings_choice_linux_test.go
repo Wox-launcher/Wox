@@ -15,15 +15,20 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
 	app.settingsOpen = true
+	queued := make(chan func(), 1)
+	app.uiCall = func(fn func()) error { queued <- fn; return nil }
 
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 14, Height: 14}
 	app.setSettingChoiceTooltip(true, "  tooltip content  ", anchor)
 	if app.settingsInlineTooltip != nil {
 		t.Fatal("inline tooltip must wait for the shared hover dwell")
 	}
-	deadline := time.Now().Add(nativeHoverTooltipDelay + 300*time.Millisecond)
-	for app.settingsInlineTooltip == nil && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	// Apply queued UI work on the test thread, just like the native event loop.
+	select {
+	case apply := <-queued:
+		apply()
+	case <-time.After(nativeHoverTooltipDelay + time.Second):
+		t.Fatal("inline tooltip did not dispatch after dwell")
 	}
 	if app.settingsInlineTooltip == nil {
 		t.Fatal("expected inline tooltip state on linux after the hover dwell")
