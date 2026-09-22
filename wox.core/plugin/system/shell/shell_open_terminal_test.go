@@ -7,6 +7,7 @@ import (
 	"testing"
 	"wox/common/icons"
 	"wox/plugin"
+	"wox/util"
 )
 
 func TestBuildOpenInSystemTerminalActionHandsOffAndHidesOnSuccess(t *testing.T) {
@@ -24,6 +25,9 @@ func TestBuildOpenInSystemTerminalActionHandsOffAndHidesOnSuccess(t *testing.T) 
 	}
 	if action.Icon != icons.Get(icons.ActionOpenInSystemTerminal) {
 		t.Fatal("icon should use action.open-in-system-terminal")
+	}
+	if action.Hotkey != util.PrimaryHotkey("t") {
+		t.Fatalf("hotkey = %q, want %q", action.Hotkey, util.PrimaryHotkey("t"))
 	}
 	if !action.PreventHideAfterAction {
 		t.Fatal("action should hide only after the terminal starts")

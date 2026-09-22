@@ -25,6 +25,7 @@ func (s *ShellPlugin) buildOpenInSystemTerminalAction(data shellContextData) plu
 		Id:                     "open_in_system_terminal",
 		Name:                   "i18n:plugin_shell_open_in_system_terminal",
 		Icon:                   icons.Get(icons.ActionOpenInSystemTerminal),
+		Hotkey:                 util.PrimaryHotkey("t"),
 		PreventHideAfterAction: true,
 		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
