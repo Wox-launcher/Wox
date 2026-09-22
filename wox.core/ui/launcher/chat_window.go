@@ -182,7 +182,7 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 			a.chatHost = host
 			a.chatWindowGeneration++
 			fontFamily = a.generalSettings.Data().AppFontFamily
-			isDark = themeColorIsDark(a.palette.background)
+			isDark = a.palette.isDark()
 			created = true
 		}
 	}); err != nil {

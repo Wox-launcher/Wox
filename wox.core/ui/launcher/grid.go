@@ -92,7 +92,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale,
 			if isLoadingIcon(result.Icon) {
 				item.Loading = true
 			} else if visible[index] {
-				item.Icon = a.imageForSize(result.Icon, physicalImageSize(int(math.Ceil(float64(max(visualWidth, visualHeight)))), imageScale))
+				item.Icon = a.imageForResult(result.Icon, physicalImageSize(int(math.Ceil(float64(max(visualWidth, visualHeight)))), imageScale), snapshot.palette, index == snapshot.selected)
 			}
 			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }
 			item.OnSelect = func() { a.selectResult(index) }

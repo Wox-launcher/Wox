@@ -55,7 +55,7 @@ func TestDecodeWoxImagePreservesRectangularSVGDimensions(t *testing.T) {
 	image, err := decodeWoxImageWithTintDimensions(woxImage{
 		ImageType: "svg",
 		ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="18" viewBox="0 0 96 18"><rect width="96" height="18" fill="#ffffff"/></svg>`,
-	}, nil, 192, 36, false)
+	}, nil, 192, 36, false, nil)
 	if err != nil {
 		t.Fatalf("decode rectangular SVG: %v", err)
 	}
@@ -305,7 +305,7 @@ func decodeLauncherTestGIF(t *testing.T) *woxui.Image {
 
 func TestDecodeSVGImageCurrentColorDefaultsToBlack(t *testing.T) {
 	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="currentColor"/></svg>`}
-	image, err := decodeWoxImageWithTintDimensions(source, nil, 10, 10, true)
+	image, err := decodeWoxImageWithTintDimensions(source, nil, 10, 10, true, nil)
 	if err != nil {
 		t.Fatalf("decode currentColor SVG: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestActionCopyIconFollowsAppearance(t *testing.T) {
 		t.Fatal("action.copy must use var(--wox-theme-icon-color)")
 	}
 	for _, dark := range []bool{false, true} {
-		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 48, 48, dark)
+		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 48, 48, dark, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -405,7 +405,7 @@ func TestActionCopyIconFollowsAppearance(t *testing.T) {
 func TestSVGWoxThemeIconColorFollowsAppearance(t *testing.T) {
 	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><path fill="var(--wox-theme-icon-color)" d="M0 0h10v10H0z"/><path fill="#4D6BFE" d="M10 0h10v10H10z"/></svg>`}
 	for _, dark := range []bool{false, true} {
-		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 20, 10, dark)
+		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 20, 10, dark, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -453,6 +453,72 @@ func TestImageCacheSeparatesAppearance(t *testing.T) {
 		}
 		if got := app.imageForSize(source, 18); got != want {
 			t.Fatalf("dark=%v: reused the wrong appearance", isDark)
+		}
+	}
+	// Image themes can have a transparent outer frame and an opaque light content panel.
+	app.palette.background = woxui.Color{}
+	app.palette.AppContentBackground = woxui.Color{R: 245, G: 241, B: 233, A: 255}
+	if got := app.imageForSize(source, 18); got != light {
+		t.Fatal("light content inside a transparent frame reused the dark icon")
+	}
+}
+
+func TestPaletteAppearanceUsesVisibleContent(t *testing.T) {
+	white := woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	black := woxui.Color{A: 255}
+	for _, tc := range []struct {
+		name                      string
+		background, content, text woxui.Color
+		dark                      bool
+	}{
+		{"light content", black, white, black, false},
+		{"dark content", white, black, white, true},
+		{"transparent content", white, woxui.Color{}, black, false},
+		{"translucent light content", black, woxui.Color{R: 255, G: 255, B: 255, A: 240}, black, false},
+		{"translucent dark content", white, woxui.Color{A: 240}, white, true},
+		{"transparent frame", woxui.Color{}, white, black, false},
+		{"unpainted light surface", woxui.Color{}, woxui.Color{}, black, false},
+		{"unpainted dark surface", woxui.Color{}, woxui.Color{}, white, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			palette := uiPalette{background: tc.background, AppContentBackground: tc.content, resultTitle: tc.text}
+			if got := palette.isDark(); got != tc.dark {
+				t.Fatalf("dark = %v, want %v", got, tc.dark)
+			}
+		})
+	}
+}
+
+// TestResultIconColors verifies selection variants preserve authored brand paints.
+func TestResultIconColors(t *testing.T) {
+	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><path fill="var(--wox-theme-icon-color)" d="M0 0h10v10H0z"/><path fill="#4D6BFE" d="M10 0h10v10H10z"/></svg>`}
+	palette := defaultPalette()
+	palette.resultTitle = woxui.Color{R: 40, G: 60, B: 80, A: 255}
+	palette.selectedTitle = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	app := &App{palette: palette, images: map[string]*woxui.Image{}, imageRequested: map[string]string{}, imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{}}
+	for _, selected := range []bool{false, true, false} {
+		want := palette.resultTitle
+		if selected {
+			want = palette.selectedTitle
+		}
+		key := imageKey(source) + fmt.Sprintf("-svg-20-icon-%02x%02x%02x%02x", want.R, want.G, want.B, want.A)
+		if palette.isDark() {
+			key = imageKey(source) + fmt.Sprintf("-svg-20-dark-icon-%02x%02x%02x%02x", want.R, want.G, want.B, want.A)
+		}
+		decoded, err := decodeWoxImageWithTintDimensions(source, nil, 20, 10, palette.isDark(), &want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		app.images[key] = decoded
+		got := app.imageForResult(source, 20, palette, selected)
+		if got != decoded {
+			t.Fatal("result icon did not use its row-color cache entry")
+		}
+		if pixel := got.RGBAAt(5, 5); pixel != (color.RGBA{R: want.R, G: want.G, B: want.B, A: want.A}) {
+			t.Fatalf("selected=%v: icon = %+v, want %+v", selected, pixel, want)
+		}
+		if pixel := got.RGBAAt(15, 5); pixel != (color.RGBA{R: 0x4d, G: 0x6b, B: 0xfe, A: 255}) {
+			t.Fatalf("brand color changed: %+v", pixel)
 		}
 	}
 }

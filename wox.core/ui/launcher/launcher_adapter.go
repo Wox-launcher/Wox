@@ -1126,7 +1126,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		loading := isLoadingIcon(result.Icon)
 		icon := (*woxui.Image)(nil)
 		if !loading {
-			icon = a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale))
+			icon = a.imageForResult(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale), snapshot.palette, index == snapshot.selected)
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,

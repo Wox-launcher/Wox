@@ -54,7 +54,8 @@ var defaultActionIcons = map[string]common.WoxImage{
 	ActionDelete: newActionIcon(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`),
 	// Exit is "leave Wox", so it uses the door-and-arrow log-out glyph and pairs
 	// with ActionOpen's frame-and-arrow. Power-off lives in SysShutdown.
-	ActionExit:               newActionIcon(`<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>`),
+	// Fixed red keeps quitting recognizable on both light and dark launcher surfaces.
+	ActionExit:               common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>`),
 	ActionCPUProfile:         newActionIcon(`<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/>`),
 	ActionSearch:             newActionIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`),
 	ActionUpdate:             newActionIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),

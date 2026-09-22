@@ -482,7 +482,7 @@ func (a *App) reloadTheme() error {
 
 func (a *App) applyTheme(theme themeData) {
 	palette := paletteForTheme(theme)
-	isDark := themeColorIsDark(palette.background)
+	isDark := palette.isDark()
 	woxui.SetDefaultAppearance(isDark)
 	a.palette = palette
 	settingsView := a.settingsView
@@ -514,6 +514,24 @@ func (a *App) applyTheme(theme themeData) {
 	a.invalidateSettingsWindow()
 	a.invalidateOnboardingWindow()
 	overlay.NotifyThemeChanged(isDark)
+}
+
+// isDark uses the visible content fill, not the transparent frame of image themes.
+func (palette uiPalette) isDark() bool {
+	content := palette.AppContentBackground
+	background := palette.background
+	contentAlpha := float32(content.A) / 255
+	backgroundAlpha := float32(background.A) / 255 * (1 - contentAlpha)
+	alpha := contentAlpha + backgroundAlpha
+	if alpha == 0 {
+		return !themeColorIsDark(palette.resultTitle)
+	}
+	return themeColorIsDark(woxui.Color{
+		R: uint8((float32(content.R)*contentAlpha + float32(background.R)*backgroundAlpha) / alpha),
+		G: uint8((float32(content.G)*contentAlpha + float32(background.G)*backgroundAlpha) / alpha),
+		B: uint8((float32(content.B)*contentAlpha + float32(background.B)*backgroundAlpha) / alpha),
+		A: 255,
+	})
 }
 
 func themeColorIsDark(color woxui.Color) bool {

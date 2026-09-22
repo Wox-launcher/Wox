@@ -64,7 +64,7 @@ func (a *App) openMacOSPermissionFlow(permissionType string) error {
 		ManualInstruction: a.translate("i18n:macos_permission_flow_manual_instruction"),
 		CloseLabel:        a.translate("i18n:ui_close"),
 		Theme:             a.palette.componentTheme(),
-		LightAppearance:   !themeColorIsDark(a.palette.background),
+		LightAppearance:   !a.palette.isDark(),
 		OnClosed: func() {
 			_ = a.runOnUI("restore host after macOS permission flow", a.restoreHostAfterMacOSPermissionFlow)
 			a.refreshMacOSPermissionFlowStatus()

@@ -359,7 +359,7 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 		return managed, openErr
 	}
 	window := managed.Window()
-	if err := window.SetAppearance(themeColorIsDark(c.app.palette.background)); err != nil {
+	if err := window.SetAppearance(c.app.palette.isDark()); err != nil {
 		return nil, err
 	}
 	if err := window.SetFontFamily(c.app.generalSettings.Data().AppFontFamily); err != nil {

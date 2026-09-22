@@ -241,12 +241,16 @@ func TestGetUnknownNameIsEmpty(t *testing.T) {
 	}
 }
 
-func TestActionIconsAreThemeAdaptiveSVGs(t *testing.T) {
+func TestActionIconsUseSemanticSVGColors(t *testing.T) {
 	for name, icon := range defaultActionIcons {
 		if icon.ImageType != common.WoxImageTypeSvg || !strings.HasPrefix(icon.ImageData, "<svg") {
 			t.Fatalf("action icon %q is not an SVG", name)
 		}
-		if !strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") {
+		if name == ActionExit {
+			if !strings.Contains(icon.ImageData, `stroke="#EF4444"`) || strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") {
+				t.Fatal("exit must retain its fixed red stroke across appearances")
+			}
+		} else if !strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") {
 			t.Fatalf("action icon %q must use var(--wox-theme-icon-color)", name)
 		}
 		if err := renderCatalogSVG(icon.ImageData, 24, 24); err != nil {

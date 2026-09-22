@@ -11,6 +11,8 @@ Apply one coherent visual language to Wox Go UI without changing business behavi
 
 Read [references/visual-style-guide.md](references/visual-style-guide.md) completely before designing, reviewing, or editing UI. Treat it as the sole visual policy for Wox Go UI. Treat production components and tests as implementation evidence; when they disagree with the guide, report or fix the implementation drift instead of silently redefining the guide from current code.
 
+Keep the guide at the level of cross-feature design principles and shared control conventions. Record feature-specific colors, dimensions, theme-field behavior, and bug-fix rationale in the owning code, tests, or domain documentation instead of appending them to the guide.
+
 Also read the repository `AGENTS.md`, `README.md`, `Wox.code-workspace`, and `wox.core/ui/README.md` before refactors.
 
 ## Classify the surface

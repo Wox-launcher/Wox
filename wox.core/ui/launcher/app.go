@@ -485,7 +485,7 @@ func (a *App) start() error {
 	a.window = launcher.Window()
 	a.host = host
 	host.Attach(a.window)
-	if err := a.window.SetAppearance(themeColorIsDark(a.palette.background)); err != nil {
+	if err := a.window.SetAppearance(a.palette.isDark()); err != nil {
 		return fmt.Errorf("apply Wox UI appearance: %w", err)
 	}
 	if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius); err != nil {
