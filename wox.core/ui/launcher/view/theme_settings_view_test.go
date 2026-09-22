@@ -552,6 +552,30 @@ func TestActiveThemeExplainsDisabledApply(t *testing.T) {
 	}
 }
 
+func TestThemeStoreImageDetailShowsMemoryTag(t *testing.T) {
+	meta := themeDetailMeta(ThemeSettingsProps{Mode: "store", ImageMemoryLabel: "Image · uses more memory"}, ThemeCatalogItem{Author: "qianlifeng", ImageTheme: true}, woxwidget.Container{})
+	if len(meta) != 4 {
+		t.Fatalf("image theme meta = %d items", len(meta))
+	}
+	plain := themeDetailMeta(ThemeSettingsProps{Mode: "store", ImageMemoryLabel: "Image · uses more memory"}, ThemeCatalogItem{Author: "qianlifeng"}, woxwidget.Container{})
+	if len(plain) != 3 {
+		t.Fatalf("color theme meta = %d items", len(plain))
+	}
+}
+
+func TestThemeStoreDetailShowsScreenshot(t *testing.T) {
+	shot := &woxui.Image{Width: 400, Height: 200}
+	view := themeDetail(ThemeSettingsProps{
+		Mode: "store", Detail: &ThemeCatalogItem{Name: "Omarchy", Description: "Charcoal", Screenshot: shot},
+	}, 600, 700).(woxwidget.Flex)
+	body := view.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	built := body.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 600, Height: 400}).(woxwidget.Align)
+	image := built.Child.(woxwidget.Image)
+	if image.Source != shot || image.Fit != woxwidget.ImageFitContain {
+		t.Fatalf("store screenshot = %#v", image)
+	}
+}
+
 func TestThemeDetailShowsDescriptionAndPreviewTogether(t *testing.T) {
 	for _, mode := range []string{"store", "installed"} {
 		detail := ThemeCatalogItem{Name: "Jade", Description: "A jade theme."}

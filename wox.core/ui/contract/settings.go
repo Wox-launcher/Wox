@@ -371,9 +371,11 @@ const (
 	ThemeCatalogStore     ThemeCatalog = "store"
 )
 
-// ThemeCatalogItem contains one resolved theme and catalog-specific upgrade state.
+// ThemeCatalogItem contains one installed theme or one store manifest.
+// Store entries keep Theme limited to install state; the document is downloaded on install.
 type ThemeCatalogItem struct {
 	Theme        common.Theme
+	Manifest     common.StoreThemeManifest
 	IsUpgradable bool
 }
 

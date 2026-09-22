@@ -83,6 +83,49 @@ func TestRestoreSnapshotAppliesRemoteRecordsAndMarksBootstrapped(t *testing.T) {
 	}
 }
 
+func TestRestoreSnapshotInstallationFailures(t *testing.T) {
+	for _, entity := range []string{EntityInstalledPlugin, EntityInstalledTheme} {
+		for _, missingValue := range []bool{false, true} {
+			name := entity + "/install-error"
+			if missingValue {
+				name = entity + "/missing-encrypted-value"
+			}
+			t.Run(name, func(t *testing.T) {
+				ctx := context.Background()
+				initCloudSyncTestDatabase(t)
+				record := CloudSyncRecord{EntityType: entity, Key: "unavailable", Op: OpUpsert}
+				if !missingValue {
+					record.Value = &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: `{}`}
+				}
+				client := &testCloudSyncClient{snapshotResponses: []*CloudSyncPullResponse{
+					{Records: []CloudSyncRecord{record}, NextCursor: "next", HasMore: true},
+					{Records: []CloudSyncRecord{{EntityType: EntityWoxSetting, Key: "ThemeId", Op: OpUpsert,
+						Value: &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "later-theme"}}}},
+				}}
+				applier := &testCloudSyncApplier{installErr: errors.New("download unavailable")}
+				manager := NewCloudSyncManager(CloudSyncConfig{}, CloudSyncDependencies{
+					Client: client, Crypto: testCloudSyncCrypto{},
+					DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"}, Applier: applier,
+				})
+				err := manager.RestoreSnapshot(ctx)
+				if (err != nil) != missingValue {
+					t.Fatalf("restore error = %v, missing value = %v", err, missingValue)
+				}
+				state, err := LoadCloudSyncState(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if state.Bootstrapped == missingValue || state.Cursor != "" {
+					t.Fatalf("unexpected restore state: %#v", state)
+				}
+				if !missingValue && (len(client.snapshotRequests) != 2 || applier.wox["ThemeId"] != "later-theme") {
+					t.Fatal("installation failure blocked the next snapshot page")
+				}
+			})
+		}
+	}
+}
+
 func TestRestoreSnapshotDoesNotMarkBootstrappedWhenApplyFails(t *testing.T) {
 	ctx := context.Background()
 	initCloudSyncTestDatabase(t)
@@ -486,9 +529,10 @@ func (p testCloudSyncDeviceProvider) DeviceID(ctx context.Context) (string, erro
 }
 
 type testCloudSyncApplier struct {
-	wox     map[string]string
-	plugins map[string]string
-	err     error
+	wox        map[string]string
+	plugins    map[string]string
+	err        error
+	installErr error
 }
 
 func (a *testCloudSyncApplier) ApplyWoxSetting(ctx context.Context, key string, op string, rawValue string) error {
@@ -522,6 +566,9 @@ func (a *testCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, pluginI
 	_ = pluginID
 	_ = op
 	_ = rawValue
+	if a.installErr != nil {
+		return a.installErr
+	}
 	return a.err
 }
 
@@ -530,6 +577,9 @@ func (a *testCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID 
 	_ = themeID
 	_ = op
 	_ = rawValue
+	if a.installErr != nil {
+		return a.installErr
+	}
 	return a.err
 }
 

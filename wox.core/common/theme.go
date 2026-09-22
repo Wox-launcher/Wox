@@ -13,6 +13,8 @@ import (
 
 func (t Theme) GetName(ctx context.Context) string { return t.translate(ctx, t.ThemeName) }
 
+func (t Theme) GetNameEnUs() string { return themeEnglishName(t.ThemeName, t.I18n) }
+
 func (t Theme) GetDescription(ctx context.Context) string { return t.translate(ctx, t.Description) }
 
 // translate resolves display metadata without replacing authored keys in saved themes.

@@ -1,136 +1,120 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useData, withBase } from "vitepress";
-import { englishPluginName, fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, type LocalizedStorePluginManifest } from "./pluginStore";
+import ThemeSwatch from "./ThemeSwatch.vue";
+import { englishThemeName, fetchStoreThemes, formatStoreDate, hasThemeSwatch, localizeTheme, type LocalizedStoreThemeManifest } from "./themeStore";
 
 const { lang } = useData();
-const plugins = ref<LocalizedStorePluginManifest[]>([]);
+const themes = ref<LocalizedStoreThemeManifest[]>([]);
 const isLoading = ref(true);
 const activeScreenshot = ref(0);
-const currentPluginId = ref("");
-const lastPluginStorageKey = "wox-store:last-plugin-id";
-const pluginDetailBodyClass = "plugin-detail-page";
+const currentThemeId = ref("");
+const lastThemeStorageKey = "wox-store:last-theme-id";
+const themeDetailBodyClass = "theme-detail-page";
 
 const uiText = computed(() => {
   const normalizedLang = (lang.value || "").toLowerCase();
 
   if (normalizedLang.startsWith("zh")) {
     return {
-      backToStore: "返回插件商店",
-      pluginStore: "插件商店",
-      install: "安装插件",
+      backToStore: "返回主题商店",
+      themeStore: "主题商店",
+      install: "安装主题",
+      imageBadge: "贴图",
+      imageMemory: "贴图 · 会增加内存占用",
       source: "Website",
       share: "分享",
       screenshots: "截图预览",
-      noScreenshots: "这个插件还没有上传截图。",
+      noScreenshots: "这个主题还没有上传截图。",
       metadata: "元信息",
-      compatibility: "兼容平台",
       author: "作者",
       version: "版本",
-      runtime: "运行时",
       minWoxVersion: "最低 Wox 版本",
-      pluginId: "插件 ID",
+      themeId: "主题 ID",
       created: "创建时间",
       updated: "更新时间",
-      more: "更多插件",
-      notFoundTitle: "没有找到这个插件",
-      notFoundDescription: "当前链接里的插件 ID 不存在，或者该插件已经从商店移除。",
-      loading: "正在加载插件详情...",
+      more: "更多主题",
+      notFoundTitle: "没有找到这个主题",
+      notFoundDescription: "当前链接里的主题 ID 不存在，或者该主题已经从商店移除。",
+      loading: "正在加载主题详情...",
     };
   }
 
   return {
-    backToStore: "Back to plugin store",
-    pluginStore: "Plugin Store",
-    install: "Install Plugin",
+    backToStore: "Back to theme store",
+    themeStore: "Theme Store",
+    install: "Install Theme",
+    imageBadge: "Image",
+    imageMemory: "Image · uses more memory",
     source: "Website",
     share: "Share",
     screenshots: "Screenshots",
-    noScreenshots: "This plugin does not provide screenshots yet.",
+    noScreenshots: "This theme does not provide screenshots yet.",
     metadata: "Metadata",
-    compatibility: "Compatibility",
     author: "Author",
     version: "Version",
-    runtime: "Runtime",
     minWoxVersion: "Min Wox Version",
-    pluginId: "Plugin ID",
+    themeId: "Theme ID",
     created: "Created",
     updated: "Updated",
-    more: "More plugins",
-    notFoundTitle: "Plugin not found",
-    notFoundDescription: "The plugin ID in this link does not exist or is no longer published in the store.",
-    loading: "Loading plugin details...",
+    more: "More themes",
+    notFoundTitle: "Theme not found",
+    notFoundDescription: "The theme ID in this link does not exist or is no longer published in the store.",
+    loading: "Loading theme details...",
   };
 });
 
-const plugin = computed(() => {
-  return plugins.value.find((item) => item.Id === currentPluginId.value) || null;
+const theme = computed(() => {
+  return themes.value.find((item) => item.Id === currentThemeId.value) || null;
 });
 
 const screenshotUrls = computed(() => {
-  return plugin.value?.ScreenshotUrls?.filter(Boolean) || [];
+  return theme.value?.ScreenshotUrls?.filter(Boolean) || [];
 });
 
-const platformItems = computed(() => {
-  return (plugin.value?.SupportedOS || []).map((os) => {
-    const normalizedOs = normalizeOsLabel(os);
-    const iconKey = normalizedOs.toLowerCase();
+const relatedThemes = computed(() => {
+  if (!theme.value) return [];
 
-    return {
-      key: iconKey,
-      label: normalizedOs,
-    };
-  });
-});
-
-const relatedPlugins = computed(() => {
-  if (!plugin.value) return [];
-
-  return plugins.value
-    .filter((item) => item.Id !== plugin.value!.Id)
-    .sort((left, right) => {
-      const leftScore = Number(left.Author === plugin.value!.Author) * 2 + Number(left.Runtime === plugin.value!.Runtime);
-      const rightScore = Number(right.Author === plugin.value!.Author) * 2 + Number(right.Runtime === plugin.value!.Runtime);
-      return rightScore - leftScore;
-    })
+  return themes.value
+    .filter((item) => item.Id !== theme.value!.Id)
+    .sort((left, right) => Number(right.Author === theme.value!.Author) - Number(left.Author === theme.value!.Author))
     .slice(0, 3);
 });
 
 const metadataRows = computed(() => {
-  if (!plugin.value) return [];
+  if (!theme.value) return [];
 
   return [
-    { label: uiText.value.author, value: plugin.value.Author },
-    { label: uiText.value.version, value: plugin.value.Version ? `v${plugin.value.Version}` : "" },
-    { label: uiText.value.runtime, value: plugin.value.Runtime?.toUpperCase() || "" },
-    { label: uiText.value.minWoxVersion, value: plugin.value.MinWoxVersion || "" },
-    { label: uiText.value.pluginId, value: plugin.value.Id },
-    { label: uiText.value.created, value: formatStoreDate(plugin.value.DateCreated, lang.value) },
-    { label: uiText.value.updated, value: formatStoreDate(plugin.value.DateUpdated, lang.value) },
+    { label: uiText.value.author, value: theme.value.Author },
+    { label: uiText.value.version, value: theme.value.Version ? `v${theme.value.Version}` : "" },
+    { label: uiText.value.minWoxVersion, value: theme.value.MinWoxVersion || "" },
+    { label: uiText.value.themeId, value: theme.value.Id },
+    { label: uiText.value.created, value: formatStoreDate(theme.value.DateCreated, lang.value) },
+    { label: uiText.value.updated, value: formatStoreDate(theme.value.DateUpdated, lang.value) },
   ].filter((item) => item.value);
 });
 
-const pluginStoreHref = computed(() => {
-  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/plugins.html" : "/store/plugins.html";
+const themeStoreHref = computed(() => {
+  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/themes.html" : "/store/themes.html";
   return withBase(prefix);
 });
 
 const shareText = computed(() => {
-  if (!plugin.value || typeof window === "undefined") return "";
+  if (!theme.value || typeof window === "undefined") return "";
 
-  const pluginUrl = window.location.href;
-  const description = plugin.value.LocalizedDescription?.trim();
+  const themeUrl = window.location.href;
+  const description = theme.value.LocalizedDescription?.trim();
   const preview = screenshotUrls.value[activeScreenshot.value] || screenshotUrls.value[0] || "";
   const previewLine = preview ? `\n${preview}` : "";
   const normalizedLang = (lang.value || "").toLowerCase();
 
   if (normalizedLang.startsWith("zh")) {
     const summary = description ? `\n${description}` : "";
-    return `我发现了一个很好用的 Wox 插件：${plugin.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher #WoxLauncherPlugin\n${pluginUrl}${previewLine}`;
+    return `我发现了一个很好看的 Wox 主题：${theme.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher\n${themeUrl}${previewLine}`;
   }
 
   const summary = description ? `\n${description}` : "";
-  return `I found a great Wox plugin: ${plugin.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher #WoxLauncherPlugin\n${pluginUrl}${previewLine}`;
+  return `I found a great Wox theme: ${theme.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher\n${themeUrl}${previewLine}`;
 });
 
 const shareHref = computed(() => {
@@ -141,71 +125,58 @@ const shareHref = computed(() => {
   return shareIntentUrl.toString();
 });
 
-function pluginDetailHref(pluginId: string) {
-  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/plugin.html" : "/store/plugin.html";
-  return withBase(`${prefix}?id=${encodeURIComponent(pluginId)}`);
+function themeDetailHref(themeId: string) {
+  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/theme.html" : "/store/theme.html";
+  return withBase(`${prefix}?id=${encodeURIComponent(themeId)}`);
 }
 
-function installHref(plugin: LocalizedStorePluginManifest) {
-  return `wox://query?q=${encodeURIComponent(`wpm install ${englishPluginName(plugin)}`)}`;
+function installHref(theme: LocalizedStoreThemeManifest) {
+  return `wox://query?q=${encodeURIComponent(`theme ${englishThemeName(theme)}`)}`;
 }
 
-function platformIconPath(osKey: string) {
-  if (osKey === "windows") {
-    return "M3 4.2 11 3v8.5H3zm9.5-1.3L21 1.6v9.1h-8.5zM3 12.9h8v8.6L3 20.3zm9.5 0H21v9.5l-8.5-1.2z";
-  }
-
-  if (osKey === "macos") {
-    return "M16.1 11.8c0-2.2 1.8-3.3 1.9-3.4-1-1.6-2.7-1.8-3.2-1.8-1.3-.1-2.5.8-3.2.8-.7 0-1.7-.8-2.7-.8-1.5 0-2.9.9-3.7 2.2-1.6 2.8-.4 6.9 1.2 9.1.8 1.1 1.7 2.3 3 2.2 1.2 0 1.6-.7 3-.7 1.4 0 1.8.7 3 .7 1.3 0 2.1-1.1 2.9-2.2.9-1.3 1.3-2.7 1.3-2.8-.1 0-3.5-1.4-3.5-5.3Zm-2.2-6.7c.6-.8 1-1.8.9-2.8-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.8-.9 2.8 1 0 2-.5 2.6-1.4Z";
-  }
-
-  // Linux icon from Material Design Icons (Apache-2.0).
-  return "M14.62,8.35C14.2,8.63 12.87,9.39 12.67,9.54C12.28,9.85 11.92,9.83 11.53,9.53C11.33,9.37 10,8.61 9.58,8.34C9.1,8.03 9.13,7.64 9.66,7.42C11.3,6.73 12.94,6.78 14.57,7.45C15.06,7.66 15.08,8.05 14.62,8.35M21.84,15.63C20.91,13.54 19.64,11.64 18,9.97C17.47,9.42 17.14,8.8 16.94,8.09C16.84,7.76 16.77,7.42 16.7,7.08C16.5,6.2 16.41,5.3 16,4.47C15.27,2.89 14,2.07 12.16,2C10.35,2.05 9,2.81 8.21,4.4C8,4.83 7.85,5.28 7.75,5.74C7.58,6.5 7.43,7.29 7.25,8.06C7.1,8.71 6.8,9.27 6.29,9.77C4.68,11.34 3.39,13.14 2.41,15.12C2.27,15.41 2.13,15.7 2.04,16C1.85,16.66 2.33,17.12 3.03,16.96C3.47,16.87 3.91,16.78 4.33,16.65C4.74,16.5 4.9,16.6 5,17C5.65,19.15 7.07,20.66 9.24,21.5C13.36,23.06 18.17,20.84 19.21,16.92C19.28,16.65 19.38,16.55 19.68,16.65C20.14,16.79 20.61,16.89 21.08,17C21.57,17.09 21.93,16.84 22,16.36C22.03,16.1 21.94,15.87 21.84,15.63";
-}
-
-function syncCurrentPluginIdFromUrl(replaceHistory = false) {
+function syncCurrentThemeIdFromUrl(replaceHistory = false) {
   if (typeof window === "undefined") return;
 
-  const queryPluginId = new URLSearchParams(window.location.search).get("id") || "";
-  if (queryPluginId) {
-    currentPluginId.value = queryPluginId;
-    window.sessionStorage.setItem(lastPluginStorageKey, queryPluginId);
+  const queryThemeId = new URLSearchParams(window.location.search).get("id") || "";
+  if (queryThemeId) {
+    currentThemeId.value = queryThemeId;
+    window.sessionStorage.setItem(lastThemeStorageKey, queryThemeId);
     return;
   }
 
-  const lastPluginId = window.sessionStorage.getItem(lastPluginStorageKey) || "";
-  currentPluginId.value = lastPluginId;
+  const lastThemeId = window.sessionStorage.getItem(lastThemeStorageKey) || "";
+  currentThemeId.value = lastThemeId;
 
-  if (!lastPluginId) return;
+  if (!lastThemeId) return;
 
   const currentUrl = new URL(window.location.href);
-  currentUrl.searchParams.set("id", lastPluginId);
+  currentUrl.searchParams.set("id", lastThemeId);
   if (replaceHistory) {
     window.history.replaceState({}, "", currentUrl.toString());
   }
 }
 
-function openPluginDetail(pluginId: string) {
-  if (typeof window === "undefined" || !pluginId) return;
-  if (currentPluginId.value === pluginId) return;
+function openThemeDetail(themeId: string) {
+  if (typeof window === "undefined" || !themeId) return;
+  if (currentThemeId.value === themeId) return;
 
-  currentPluginId.value = pluginId;
+  currentThemeId.value = themeId;
   activeScreenshot.value = 0;
-  window.sessionStorage.setItem(lastPluginStorageKey, pluginId);
+  window.sessionStorage.setItem(lastThemeStorageKey, themeId);
 
   const currentUrl = new URL(window.location.href);
-  currentUrl.searchParams.set("id", pluginId);
+  currentUrl.searchParams.set("id", themeId);
   window.history.pushState({}, "", currentUrl.toString());
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-async function loadPlugins() {
+async function loadThemes() {
   isLoading.value = true;
 
   try {
-    const storePlugins = await fetchStorePlugins();
-    plugins.value = storePlugins.map((item) => localizePlugin(item, lang.value));
-    syncCurrentPluginIdFromUrl(true);
+    const storeThemes = await fetchStoreThemes();
+    themes.value = storeThemes.map((item) => localizeTheme(item, lang.value));
+    syncCurrentThemeIdFromUrl(true);
     activeScreenshot.value = 0;
   } catch (error) {
     console.error(error);
@@ -215,25 +186,25 @@ async function loadPlugins() {
 }
 
 function handlePopState() {
-  syncCurrentPluginIdFromUrl();
+  syncCurrentThemeIdFromUrl();
   activeScreenshot.value = 0;
 }
 
 onMounted(() => {
   if (typeof document !== "undefined") {
-    document.body.classList.add(pluginDetailBodyClass);
+    document.body.classList.add(themeDetailBodyClass);
   }
 
   if (typeof window !== "undefined") {
     window.addEventListener("popstate", handlePopState);
   }
 
-  loadPlugins();
+  loadThemes();
 });
 
 onUnmounted(() => {
   if (typeof document !== "undefined") {
-    document.body.classList.remove(pluginDetailBodyClass);
+    document.body.classList.remove(themeDetailBodyClass);
   }
 
   if (typeof window !== "undefined") {
@@ -247,30 +218,30 @@ onUnmounted(() => {
     <div class="status-card">{{ uiText.loading }}</div>
   </div>
 
-  <div v-else-if="plugin" class="plugin-page">
-    <a :href="pluginStoreHref" class="back-link">{{ uiText.backToStore }}</a>
+  <div v-else-if="theme" class="theme-page">
+    <a :href="themeStoreHref" class="back-link">{{ uiText.backToStore }}</a>
 
     <section class="hero-card">
       <div class="hero-copy">
-        <div class="eyebrow">{{ uiText.pluginStore }}</div>
+        <div class="eyebrow">{{ uiText.themeStore }}</div>
 
         <div class="hero-head">
-          <img v-if="plugin.IconUrl" :src="plugin.IconUrl" class="hero-icon" alt="plugin icon" />
-          <div v-else class="hero-icon hero-icon-placeholder">{{ plugin.IconEmoji || "🧩" }}</div>
+          <ThemeSwatch v-if="hasThemeSwatch(theme.IconColors)" class="hero-icon" :colors="theme.IconColors" :size="88" />
+          <div v-else class="hero-icon hero-icon-placeholder">◐</div>
 
           <div class="hero-title-wrap">
-            <h1>{{ plugin.LocalizedName }}</h1>
-            <p class="hero-description">{{ plugin.LocalizedDescription }}</p>
+            <h1>{{ theme.LocalizedName }}</h1>
+            <p class="hero-description">{{ theme.LocalizedDescription }}</p>
             <div class="hero-meta">
-              <span>{{ uiText.author }} · {{ plugin.Author }}</span>
-              <span v-if="plugin.Runtime">{{ uiText.runtime }} · {{ plugin.Runtime.toUpperCase() }}</span>
-              <span v-if="plugin.DateUpdated">{{ uiText.updated }} · {{ formatStoreDate(plugin.DateUpdated, lang) }}</span>
+              <span>{{ uiText.author }} · {{ theme.Author }}</span>
+              <span v-if="theme.DateUpdated">{{ uiText.updated }} · {{ formatStoreDate(theme.DateUpdated, lang) }}</span>
+              <span v-if="theme.ImageTheme" class="image-badge">{{ uiText.imageMemory }}</span>
             </div>
           </div>
         </div>
 
         <div class="hero-actions">
-          <a :href="installHref(plugin)" class="primary-action">
+          <a :href="installHref(theme)" class="primary-action">
             <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
               <path
                 d="M12 2.5a1 1 0 0 1 1 1v8.1l2.6-2.6a1 1 0 1 1 1.4 1.4l-4.3 4.3a1 1 0 0 1-1.4 0L7 10.4a1 1 0 0 1 1.4-1.4l2.6 2.6V3.5a1 1 0 0 1 1-1ZM5 15.5a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-2.5a1 1 0 0 1 1-1Z"
@@ -280,7 +251,7 @@ onUnmounted(() => {
             <span>{{ uiText.install }}</span>
           </a>
           <!-- Keep Website as a single top-level action; the removed sidebar duplicate made metadata feel like navigation instead of factual details. -->
-          <a v-if="plugin.Website" :href="plugin.Website" target="_blank" rel="noreferrer" class="secondary-action">
+          <a v-if="theme.Website" :href="theme.Website" target="_blank" rel="noreferrer" class="secondary-action">
             <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
               <path
                 d="M14 3h6a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0V6.4l-8.8 8.8a1 1 0 0 1-1.4-1.4L17.6 5H14a1 1 0 1 1 0-2ZM6 5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4a1 1 0 1 0-2 0v4H6V7h4a1 1 0 1 0 0-2H6Z"
@@ -299,27 +270,14 @@ onUnmounted(() => {
       </div>
 
       <div class="hero-panel">
-        <div class="panel-label">{{ uiText.compatibility }}</div>
-        <div class="platform-list">
-          <span v-for="item in platformItems" :key="item.key" class="platform-chip">
-            <svg viewBox="0 0 24 24" aria-hidden="true" class="platform-icon">
-              <path :d="platformIconPath(item.key)" fill="currentColor" />
-            </svg>
-            <span>{{ item.label }}</span>
-          </span>
-        </div>
         <div class="hero-stats">
           <div class="stat-card">
             <span class="stat-label">{{ uiText.version }}</span>
-            <strong>v{{ plugin.Version }}</strong>
+            <strong>v{{ theme.Version }}</strong>
           </div>
-          <div class="stat-card" v-if="plugin.MinWoxVersion">
+          <div class="stat-card" v-if="theme.MinWoxVersion">
             <span class="stat-label">{{ uiText.minWoxVersion }}</span>
-            <strong>{{ plugin.MinWoxVersion }}</strong>
-          </div>
-          <div class="stat-card" v-if="plugin.Runtime">
-            <span class="stat-label">{{ uiText.runtime }}</span>
-            <strong>{{ plugin.Runtime.toUpperCase() }}</strong>
+            <strong>{{ theme.MinWoxVersion }}</strong>
           </div>
         </div>
       </div>
@@ -333,7 +291,7 @@ onUnmounted(() => {
           </div>
 
           <div v-if="screenshotUrls.length" class="screenshot-shell">
-            <img :src="screenshotUrls[activeScreenshot]" class="hero-shot" :alt="`${plugin.LocalizedName} screenshot ${activeScreenshot + 1}`" />
+            <img :src="screenshotUrls[activeScreenshot]" class="hero-shot" :alt="`${theme.LocalizedName} screenshot ${activeScreenshot + 1}`" />
 
             <div v-if="screenshotUrls.length > 1" class="thumbnail-row">
               <button
@@ -344,7 +302,7 @@ onUnmounted(() => {
                 :class="{ active: index === activeScreenshot }"
                 @click="activeScreenshot = index"
               >
-                <img :src="url" :alt="`${plugin.LocalizedName} thumbnail ${index + 1}`" />
+                <img :src="url" :alt="`${theme.LocalizedName} thumbnail ${index + 1}`" />
               </button>
             </div>
           </div>
@@ -369,19 +327,22 @@ onUnmounted(() => {
       </aside>
     </section>
 
-    <section v-if="relatedPlugins.length" class="related-section">
+    <section v-if="relatedThemes.length" class="related-section">
       <div class="section-head">
         <h2>{{ uiText.more }}</h2>
       </div>
 
       <div class="related-grid">
-        <a v-for="item in relatedPlugins" :key="item.Id" :href="pluginDetailHref(item.Id)" class="related-card" @click.prevent="openPluginDetail(item.Id)">
+        <a v-for="item in relatedThemes" :key="item.Id" :href="themeDetailHref(item.Id)" class="related-card" @click.prevent="openThemeDetail(item.Id)">
           <div class="related-top">
-            <img v-if="item.IconUrl" :src="item.IconUrl" class="related-icon" alt="plugin icon" />
-            <div v-else class="related-icon related-placeholder">{{ item.IconEmoji || "🧩" }}</div>
+            <ThemeSwatch v-if="hasThemeSwatch(item.IconColors)" class="related-icon" :colors="item.IconColors" :size="48" />
+            <div v-else class="related-icon related-placeholder">◐</div>
 
             <div class="related-copy">
-              <h3>{{ item.LocalizedName }}</h3>
+              <div class="name-row">
+                <h3>{{ item.LocalizedName }}</h3>
+                <span v-if="item.ImageTheme" class="image-badge">{{ uiText.imageBadge }}</span>
+              </div>
               <span>{{ item.Author }}</span>
             </div>
           </div>
@@ -396,13 +357,13 @@ onUnmounted(() => {
     <div class="status-card">
       <h1>{{ uiText.notFoundTitle }}</h1>
       <p>{{ uiText.notFoundDescription }}</p>
-      <a :href="pluginStoreHref" class="secondary-action">{{ uiText.backToStore }}</a>
+      <a :href="themeStoreHref" class="secondary-action">{{ uiText.backToStore }}</a>
     </div>
   </div>
 </template>
 
 <style scoped>
-.plugin-page {
+.theme-page {
   --plugin-detail-card-padding: 30px;
   --plugin-detail-gap: 24px;
   --plugin-detail-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
@@ -492,9 +453,32 @@ onUnmounted(() => {
   max-width: 720px;
 }
 
+.name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.image-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vp-c-warning-1) 16%, transparent);
+  color: var(--vp-c-warning-1);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px 16px;
   margin-top: 16px;
   color: var(--vp-c-text-2);

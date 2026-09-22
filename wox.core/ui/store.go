@@ -30,7 +30,8 @@ var storeInstance *Store
 var storeOnce sync.Once
 
 type Store struct {
-	themes []common.Theme
+	mu        sync.RWMutex
+	manifests []common.StoreThemeManifest
 }
 
 func GetStoreManager() *Store {
@@ -50,34 +51,30 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 }
 
 func (s *Store) Start(ctx context.Context) {
-	s.themes = s.GetStoreThemes(ctx)
+	s.RefreshThemeManifests(ctx)
 
-	util.Go(ctx, "load theme plugins", func() {
+	util.Go(ctx, "load store themes", func() {
 		for range time.NewTicker(time.Minute * 10).C {
-			pluginManifests := s.GetStoreThemes(util.NewTraceContext())
-			if len(pluginManifests) > 0 {
-				s.themes = pluginManifests
-			}
+			s.RefreshThemeManifests(util.NewTraceContext())
 		}
 	})
 }
 
-func (s *Store) GetStoreThemes(ctx context.Context) []common.Theme {
-	var storeThemeManifests []common.Theme
+func (s *Store) GetStoreThemes(ctx context.Context) ([]common.StoreThemeManifest, error) {
+	var storeThemeManifests []common.StoreThemeManifest
 
 	for _, store := range s.getStoreManifests(ctx) {
 		themeManifest, manifestErr := s.GetStoreTheme(ctx, store)
 		if manifestErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to get theme manifest from %s store: %s", store.Name, manifestErr.Error()))
-			continue
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to get theme manifest from %s store: %s", store.Name, manifestErr.Error()))
+			return nil, manifestErr
 		}
 
 		for _, manifest := range themeManifest {
-			_, found := lo.Find(storeThemeManifests, func(m common.Theme) bool {
-				return manifest.ThemeId == m.ThemeId
+			_, found := lo.Find(storeThemeManifests, func(m common.StoreThemeManifest) bool {
+				return manifest.Id == m.Id
 			})
 			if found {
-				//skip duplicated theme
 				continue
 			}
 
@@ -85,12 +82,24 @@ func (s *Store) GetStoreThemes(ctx context.Context) []common.Theme {
 		}
 	}
 
-	logger.Info(ctx, fmt.Sprintf("found %d themes from stores", len(storeThemeManifests)))
-	return storeThemeManifests
+	util.GetLogger().Info(ctx, fmt.Sprintf("found %d themes from stores", len(storeThemeManifests)))
+	return storeThemeManifests, nil
 }
 
-func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]common.Theme, error) {
-	logger.Info(ctx, fmt.Sprintf("start to get theme manifest from %s(%s)", store.Name, store.Url))
+// RefreshThemeManifests replaces the catalog only after a successful fetch.
+func (s *Store) RefreshThemeManifests(ctx context.Context) error {
+	manifests, err := s.GetStoreThemes(ctx)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.manifests = manifests
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]common.StoreThemeManifest, error) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("start to get theme manifest from %s(%s)", store.Name, store.Url))
 
 	response, getErr := util.HttpGet(ctx, store.Url)
 	if getErr != nil {
@@ -100,22 +109,26 @@ func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]commo
 	return parseStoreThemes(ctx, response)
 }
 
-// parseStoreThemes isolates unsupported schemas so a future entry cannot hide the entire catalog.
-func parseStoreThemes(ctx context.Context, data []byte) ([]common.Theme, error) {
+// parseStoreThemes keeps valid catalog entries when one row is incomplete.
+func parseStoreThemes(ctx context.Context, data []byte) ([]common.StoreThemeManifest, error) {
 	var entries []json.RawMessage
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, err
 	}
-	themes := make([]common.Theme, 0, len(entries))
+	manifests := make([]common.StoreThemeManifest, 0, len(entries))
 	for _, entry := range entries {
-		var theme common.Theme
-		if err := json.Unmarshal(entry, &theme); err != nil {
-			util.GetLogger().Warn(ctx, fmt.Sprintf("skip unsupported or invalid store theme: %s", err))
+		var manifest common.StoreThemeManifest
+		if err := json.Unmarshal(entry, &manifest); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("skip invalid store theme: %s", err))
 			continue
 		}
-		themes = append(themes, theme)
+		if err := manifest.Validate(); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("skip invalid store theme: %s", err))
+			continue
+		}
+		manifests = append(manifests, manifest)
 	}
-	return themes, nil
+	return manifests, nil
 }
 
 func (s *Store) Install(ctx context.Context, theme common.Theme) error {
@@ -230,18 +243,23 @@ func (s *Store) uninstall(ctx context.Context, theme common.Theme, syncInstall b
 	}
 
 	GetUIManager().RemoveTheme(ctx, theme)
-	if syncInstall && theme.CanSyncWithoutAssets() {
-		s.logInstalledThemeDelete(ctx, theme.ThemeId)
+	if syncInstall {
+		if _, ok := s.FindThemeManifest(ctx, theme.ThemeId); ok {
+			s.logInstalledThemeDelete(ctx, theme.ThemeId)
+		}
 	}
 
 	return nil
 }
 
-func (s *Store) GetThemes() []common.Theme {
-	return s.themes
+func (s *Store) GetThemeManifests() []common.StoreThemeManifest {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.manifests
 }
 
-// QueueInstalledThemesForSync seeds user themes into the oplog.
+// QueueInstalledThemesForSync seeds installed store themes into the oplog.
+// Themes created on this device are omitted.
 func (s *Store) QueueInstalledThemesForSync(ctx context.Context) {
 	GetUIManager().themes.Range(func(key string, theme common.Theme) bool {
 		if theme.IsSystem {
@@ -252,24 +270,48 @@ func (s *Store) QueueInstalledThemesForSync(ctx context.Context) {
 	})
 }
 
-// logInstalledThemeUpsert records full theme JSON so custom themes can restore
-// without relying on the remote theme store.
+// FindThemeManifest classifies local themes using the catalog, loading it if empty.
+func (s *Store) FindThemeManifest(ctx context.Context, themeID string) (common.StoreThemeManifest, bool) {
+	if manifest, ok := s.cachedThemeManifest(themeID); ok {
+		return manifest, true
+	}
+	// A loaded catalog that does not contain the ID is a local theme. Don't
+	// refetch the store for every local save.
+	if len(s.GetThemeManifests()) > 0 {
+		return common.StoreThemeManifest{}, false
+	}
+	s.RefreshThemeManifests(ctx)
+	return s.cachedThemeManifest(themeID)
+}
+
+// ResolveThemeManifest refreshes cache misses during sync and preserves fetch errors.
+// A stale catalog must not turn a remote installation into a successful no-op.
+func (s *Store) ResolveThemeManifest(ctx context.Context, themeID string) (common.StoreThemeManifest, bool, error) {
+	if manifest, ok := s.cachedThemeManifest(themeID); ok {
+		return manifest, true, nil
+	}
+	if err := s.RefreshThemeManifests(ctx); err != nil {
+		return common.StoreThemeManifest{}, false, err
+	}
+	manifest, ok := s.cachedThemeManifest(themeID)
+	return manifest, ok, nil
+}
+
+func (s *Store) cachedThemeManifest(themeID string) (common.StoreThemeManifest, bool) {
+	for _, manifest := range s.GetThemeManifests() {
+		if manifest.Id == themeID {
+			return manifest, true
+		}
+	}
+	return common.StoreThemeManifest{}, false
+}
+
+// logInstalledThemeUpsert records a store theme ID. Local themes are not synced.
 func (s *Store) logInstalledThemeUpsert(ctx context.Context, theme common.Theme) {
-	if !theme.CanSyncWithoutAssets() {
+	if _, ok := s.FindThemeManifest(ctx, theme.ThemeId); !ok {
 		return
 	}
-	themeJSON, err := json.Marshal(theme)
-	if err != nil {
-		logger.Warn(ctx, fmt.Sprintf("failed to encode installed theme sync value for %s: %s", theme.ThemeId, err.Error()))
-		return
-	}
-	value := cloudsync.InstalledThemeValue{
-		ID:      theme.ThemeId,
-		Version: theme.Version,
-		Source:  cloudsync.InstallSyncSourceUser,
-		Theme:   themeJSON,
-	}
-	if err := cloudsync.LogInstalledThemeUpsert(ctx, value); err != nil {
+	if err := cloudsync.LogInstalledThemeUpsert(ctx, cloudsync.InstalledThemeValue{ID: theme.ThemeId}); err != nil {
 		logger.Warn(ctx, fmt.Sprintf("failed to log installed theme sync value for %s: %s", theme.ThemeId, err.Error()))
 	}
 }

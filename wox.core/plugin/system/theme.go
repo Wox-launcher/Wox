@@ -76,8 +76,8 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	uiManager := plugin.GetPluginManager().GetUI()
 	installedThemes := uiManager.GetAllThemes(ctx)
-	storeThemes := ui.GetStoreManager().GetThemes()
-	iconCatalog := append(append([]common.Theme{}, installedThemes...), storeThemes...)
+	storeManifests := ui.GetStoreManager().GetThemeManifests()
+	iconCatalog := append([]common.Theme{}, installedThemes...)
 	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
 	uninstallThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_theme")
 	currentGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_current")
@@ -87,9 +87,19 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	installThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_install_theme")
 	systemTagText := i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_system_tag")
 	openThemeFolderText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_containing_folder")
+	imageThemeHint := ""
+	imageThemeIDs := map[string]bool{}
+	for _, manifest := range storeManifests {
+		if manifest.ImageTheme {
+			imageThemeIDs[manifest.Id] = true
+		}
+	}
+	if len(imageThemeIDs) > 0 {
+		imageThemeHint = i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_image_memory_hint")
+	}
 
 	results := lo.FilterMap(installedThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
-		match, _ := plugin.IsStringMatchScore(ctx, theme.GetName(ctx), query.Search)
+		match := plugin.IsStringMatch(ctx, theme.GetName(ctx), query.Search) || plugin.IsStringMatch(ctx, theme.GetNameEnUs(), query.Search)
 		if match {
 			themePath := filepath.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 			packageManifest := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
@@ -98,7 +108,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			}
 			result := plugin.QueryResult{
 				Title:    theme.GetName(ctx),
-				SubTitle: theme.GetDescription(ctx),
+				SubTitle: themeStoreSubtitle(theme.GetDescription(ctx), imageThemeIDs[theme.ThemeId], imageThemeHint),
 				Icon:     themeResultIcon(theme, iconCatalog),
 				ScoreKey: theme.ThemeId,
 				Actions: []plugin.QueryResultAction{
@@ -152,37 +162,52 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	installedThemeIds := lo.Map(installedThemes, func(t common.Theme, _ int) string { return t.ThemeId })
 
-	storeResults := lo.FilterMap(storeThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
-		// Skip if already installed
-		if lo.Contains(installedThemeIds, theme.ThemeId) {
+	storeResults := lo.FilterMap(storeManifests, func(manifest common.StoreThemeManifest, _ int) (plugin.QueryResult, bool) {
+		if lo.Contains(installedThemeIds, manifest.Id) {
 			return plugin.QueryResult{}, false
 		}
 
-		match, _ := plugin.IsStringMatchScore(ctx, theme.GetName(ctx), query.Search)
-		if match {
-			result := plugin.QueryResult{
-				Title:      theme.GetName(ctx),
-				SubTitle:   theme.GetDescription(ctx),
-				Icon:       themeResultIcon(theme, iconCatalog),
-				Group:      storeGroup,
-				GroupScore: 0,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name:                   installThemeText,
-						Icon:                   icons.Get(icons.ActionInstall),
-						PreventHideAfterAction: true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							uiManager.InstallTheme(ctx, theme)
-						},
+		match := plugin.IsStringMatch(ctx, manifest.GetName(ctx), query.Search) || plugin.IsStringMatch(ctx, manifest.GetNameEnUs(), query.Search)
+		if !match {
+			return plugin.QueryResult{}, false
+		}
+		icon := themeIcon
+		if manifest.IconColors.HasColors() {
+			icon = manifest.IconColors.SwatchImage()
+		}
+		return plugin.QueryResult{
+			Title:      manifest.GetName(ctx),
+			SubTitle:   themeStoreSubtitle(manifest.GetDescription(ctx), manifest.ImageTheme, imageThemeHint),
+			Icon:       icon,
+			Group:      storeGroup,
+			GroupScore: 0,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   installThemeText,
+					Icon:                   icons.Get(icons.ActionInstall),
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						if err := ui.GetStoreManager().InstallManifest(ctx, manifest); err != nil {
+							c.api.Notify(ctx, err.Error())
+						}
 					},
 				},
-			}
-			return result, true
-		}
-		return plugin.QueryResult{}, false
+			},
+		}, true
 	})
 
 	return plugin.NewQueryResponse(append(results, storeResults...))
+}
+
+// themeStoreSubtitle keeps the theme description and adds the image-theme memory note.
+func themeStoreSubtitle(description string, imageTheme bool, hint string) string {
+	if !imageTheme || hint == "" {
+		return description
+	}
+	if description == "" {
+		return hint
+	}
+	return description + " · " + hint
 }
 
 func themeMRUContext(themeID string) common.ContextData {

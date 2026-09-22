@@ -34,11 +34,16 @@ type ThemeCatalogItem struct {
 	IsInstalled       bool
 	IsUpgradable      bool
 	IsAuto            bool
+	HasSwatch         bool
+	ImageTheme        bool
 	Active            bool
 	Selected          bool
 	PreviewTheme      woxcomponent.Theme
 	LightPreviewTheme woxcomponent.Theme
 	DarkPreviewTheme  woxcomponent.Theme
+	Screenshot        *woxui.Image
+	ScreenshotLoading bool
+	OnScreenshot      func()
 }
 
 // AutoThemeEditorState is the installed-catalog create/edit canvas for one Auto theme.
@@ -85,6 +90,8 @@ type ThemeSettingsProps struct {
 	PreviewLabel          string
 	DescriptionLabel      string
 	SystemLabel           string
+	ImageLabel            string
+	ImageMemoryLabel      string
 	PreviewTitle          string
 	PreviewTexts          []string
 	PreviewSubtitles      []string
@@ -286,15 +293,16 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 	}
 	trailing, _ := themeListTrailing(props, item)
 	status := strings.TrimSpace(item.Version + "  " + item.Author)
-	var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, common.ThemeSwatchSize)
-	if item.IsAuto {
-		swatch = themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, common.ThemeSwatchSize)
-	}
+	swatch := themeListSwatch(props, item)
 	rowChildren := []woxwidget.Widget{
 		swatch,
 		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			title := []woxwidget.Widget{woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor}}
+			if props.Mode == "store" && item.ImageTheme && props.ImageLabel != "" {
+				title = append(title, woxcomponent.WoxCompactTag(props.ImageLabel, subtitleColor))
+			}
 			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
+				woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: title},
 				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
 			}}}
 		}}},
@@ -313,6 +321,56 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 			}
 		}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren}},
 	})}
+}
+
+// themeListSwatch uses the store icon when the catalog entry is not an installed document.
+func themeListSwatch(props ThemeSettingsProps, item ThemeCatalogItem) woxwidget.Widget {
+	if item.IsAuto {
+		return themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, common.ThemeSwatchSize)
+	}
+	if item.HasSwatch {
+		return themeSwatch(item.PreviewTheme, common.ThemeSwatchSize)
+	}
+	if props.Mode == "store" {
+		return woxwidget.Container{Width: common.ThemeSwatchSize, Height: common.ThemeSwatchSize, Radius: common.ThemeSwatchRadius, Color: props.Theme.InputBackground}
+	}
+	return themeSwatch(item.PreviewTheme, common.ThemeSwatchSize)
+}
+
+// themeStoreScreenshot shows the catalog preview image instead of a live color mock.
+func themeStoreScreenshot(props ThemeSettingsProps, theme ThemeCatalogItem, width, height float32) woxwidget.Widget {
+	const pad = float32(20)
+	contentWidth := max(float32(0), width-pad*2)
+	contentHeight := max(float32(0), height-pad*2)
+	if theme.Screenshot != nil && theme.Screenshot.Width > 0 && theme.Screenshot.Height > 0 {
+		shotWidth := contentWidth
+		shotHeight := shotWidth * float32(theme.Screenshot.Height) / float32(theme.Screenshot.Width)
+		if contentHeight > 0 && shotHeight > contentHeight {
+			shotHeight = contentHeight
+			shotWidth = shotHeight * float32(theme.Screenshot.Width) / float32(theme.Screenshot.Height)
+		}
+		image := woxwidget.Image{Source: theme.Screenshot, Width: shotWidth, Height: shotHeight, Radius: 8, Fit: woxwidget.ImageFitContain}
+		var child woxwidget.Widget = image
+		if theme.OnScreenshot != nil {
+			child = woxwidget.Gesture{ID: "theme-store-screenshot", OnTap: theme.OnScreenshot, Child: image}
+		}
+		return woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: child}
+	}
+	if theme.ScreenshotLoading {
+		return woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxLoadingIndicator(24, props.Theme.Focus)}
+	}
+	return woxwidget.Container{Width: width, Height: height}
+}
+
+// themeDetailMeta places the image-theme note with the author, matching the store detail page.
+func themeDetailMeta(props ThemeSettingsProps, theme ThemeCatalogItem, website woxwidget.Widget) []woxwidget.Widget {
+	meta := []woxwidget.Widget{
+		woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}},
+	}
+	if props.Mode == "store" && theme.ImageTheme && props.ImageMemoryLabel != "" {
+		meta = append(meta, woxcomponent.WoxCompactTag(props.ImageMemoryLabel, props.Theme.TextSecondary))
+	}
+	return append(meta, woxwidget.Expanded{Child: woxwidget.Container{}}, website)
 }
 
 func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem) (woxwidget.Widget, float32) {
@@ -356,13 +414,13 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			}}},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: themeActions(props, theme)},
 		}}},
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}}},
-			website,
-		}},
+		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: themeDetailMeta(props, theme, website)},
 	}}}
 	bodyHeight := max(float32(0), height-headerHeight)
 	preview := func(previewHeight float32) woxwidget.Widget {
+		if props.Mode == "store" {
+			return themeStoreScreenshot(props, theme, width, previewHeight)
+		}
 		return themePreviewTab(props, theme, width, previewHeight)
 	}
 	var body woxwidget.Widget

@@ -15,7 +15,6 @@ const (
 	OpDelete              = "delete"
 
 	InstallSyncSourceStore = "store"
-	InstallSyncSourceUser  = "user"
 
 	CloudSyncProgressOperationSnapshot = "snapshot"
 	CloudSyncProgressOperationPush     = "push"
@@ -259,13 +258,10 @@ type InstalledPluginValue struct {
 	Manifest json.RawMessage `json:"manifest,omitempty"`
 }
 
-// InstalledThemeValue stores the full theme payload so user-edited themes can
-// be restored without depending on the remote theme store.
+// InstalledThemeValue identifies a store theme. The other device downloads it
+// from the theme store. Local themes are not synced.
 type InstalledThemeValue struct {
-	ID      string          `json:"id"`
-	Version string          `json:"version,omitempty"`
-	Source  string          `json:"source,omitempty"`
-	Theme   json.RawMessage `json:"theme,omitempty"`
+	ID string `json:"id"`
 }
 
 type CloudSyncKDF struct {

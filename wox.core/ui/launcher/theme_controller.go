@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
@@ -230,14 +231,28 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 
 	themes := make([]themeSettingsTheme, 0, len(items))
 	for _, item := range items {
+		if strings.TrimSpace(item.Manifest.Id) != "" {
+			manifest := item.Manifest
+			entry := themeSettingsTheme{
+				ID: manifest.Id, Name: manifest.GetName(ctx), Author: manifest.Author, URL: manifest.Website,
+				Version: manifest.Version, Description: manifest.GetDescription(ctx),
+				IsInstalled: item.Theme.IsInstalled, IsUpgradable: item.IsUpgradable, ImageTheme: manifest.ImageTheme,
+				ScreenshotURLs: append([]string(nil), manifest.ScreenshotUrls...),
+			}
+			if manifest.IconColors.HasColors() {
+				entry.HasSwatch = true
+				entry.previewTheme = storeThemeSwatchPreview(manifest.IconColors)
+			}
+			themes = append(themes, entry)
+			continue
+		}
 		source := item.Theme
-		theme := themeSettingsTheme{
+		themes = append(themes, themeSettingsTheme{
 			ID: source.ThemeId, Name: source.GetName(ctx), Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.GetDescription(ctx),
 			IsSystem: source.IsSystem, IsInstalled: source.IsInstalled, IsUpgradable: item.IsUpgradable, IsAuto: source.IsAutoAppearance,
 			DarkThemeID: source.DarkThemeId, LightThemeID: source.LightThemeId,
 			previewTheme: fromCoreTheme(source),
-		}
-		themes = append(themes, theme)
+		})
 	}
 	sort.SliceStable(themes, func(i, j int) bool {
 		if mode == "installed" && themes[i].IsSystem != themes[j].IsSystem {
@@ -272,6 +287,25 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 
 // themeCatalogSelection keeps the list on the requested theme, then the applied
 // theme, instead of the first row when an uninstalled id is gone.
+// storeThemeSwatchPreview keeps only the colors the catalog icon paints.
+func storeThemeSwatchPreview(colors common.StoreThemeIconColors) themeData {
+	query := colors.Query
+	if strings.EqualFold(strings.TrimSpace(query), "transparent") {
+		query = "#00000000"
+	}
+	preview := themeData{
+		AppBackgroundColor:              colors.Background,
+		QueryBoxBackgroundColor:         query,
+		ResultItemActiveBackgroundColor: colors.Selected,
+		AppBorderColor:                  colors.Outline,
+	}
+	if colors.OutlineWidth > 0 && strings.TrimSpace(colors.Outline) != "" {
+		width := colors.OutlineWidth
+		preview.AppBorderWidth = &width
+	}
+	return preview
+}
+
 func themeCatalogSelection(themes []themeSettingsTheme, preferredID, fallbackID string) int {
 	if len(themes) == 0 {
 		return -1

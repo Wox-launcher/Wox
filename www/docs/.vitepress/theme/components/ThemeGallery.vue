@@ -1,8 +1,10 @@
-<script setup>
-import { computed, ref, onMounted } from "vue";
-import { useData } from "vitepress";
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
+import { useData, withBase } from "vitepress";
+import ThemeSwatch from "./ThemeSwatch.vue";
+import { englishThemeName, fetchStoreThemes, hasThemeSwatch, localizeTheme, type LocalizedStoreThemeManifest } from "./themeStore";
 
-const themes = ref([]);
+const themes = ref<LocalizedStoreThemeManifest[]>([]);
 const searchQuery = ref("");
 const { lang } = useData();
 
@@ -14,6 +16,9 @@ const uiText = computed(() => {
       searchPlaceholder: "搜索主题...",
       by: "作者",
       install: "安装",
+      source: "官网",
+      imageBadge: "贴图",
+      empty: "没有找到匹配的主题。",
     };
   }
 
@@ -21,24 +26,37 @@ const uiText = computed(() => {
     searchPlaceholder: "Search themes...",
     by: "by",
     install: "Install",
+    source: "Website",
+    imageBadge: "Image",
+    empty: "No themes match your search.",
   };
 });
 
 onMounted(async () => {
   try {
-    const res = await fetch("https://raw.githubusercontent.com/Wox-launcher/Wox/master/store-theme.json");
-    themes.value = await res.json();
-  } catch (e) {
-    console.error(e);
+    const storeThemes = await fetchStoreThemes();
+    themes.value = storeThemes.map((theme) => localizeTheme(theme, lang.value));
+  } catch (error) {
+    console.error(error);
   }
 });
 
 const filteredThemes = computed(() => {
-  return themes.value.filter((t) => t.ThemeName.toLowerCase().includes(searchQuery.value.toLowerCase()) || t.Description.toLowerCase().includes(searchQuery.value.toLowerCase()));
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return themes.value;
+
+  return themes.value.filter((theme) => {
+    return [theme.LocalizedName, theme.LocalizedDescription, theme.Author].filter(Boolean).some((value) => value!.toLowerCase().includes(query));
+  });
 });
 
-function installHref(themeName) {
-  return `wox://query?q=${encodeURIComponent(`theme ${themeName}`)}`;
+function themeDetailHref(themeId: string) {
+  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/theme.html" : "/store/theme.html";
+  return withBase(`${prefix}?id=${encodeURIComponent(themeId)}`);
+}
+
+function installHref(theme: LocalizedStoreThemeManifest) {
+  return `wox://query?q=${encodeURIComponent(`theme ${englishThemeName(theme)}`)}`;
 }
 </script>
 
@@ -48,64 +66,39 @@ function installHref(themeName) {
       <input v-model="searchQuery" type="text" :placeholder="uiText.searchPlaceholder" class="search-input" />
     </div>
 
-    <div class="grid">
-      <div v-for="theme in filteredThemes" :key="theme.ThemeId" class="card">
-        <div class="preview" :style="{ backgroundColor: theme.AppBackgroundColor || '#282a36' }">
-          <div class="preview-content">
-            <div
-              class="preview-query"
-              :style="{
-                backgroundColor: theme.QueryBoxBackgroundColor,
-                color: theme.QueryBoxFontColor,
-                borderRadius: (theme.QueryBoxBorderRadius || 4) + 'px',
-              }"
-            >
-              > {{ theme.ThemeName.toLowerCase().substring(0, 10) }}
+    <div v-if="filteredThemes.length" class="grid">
+      <article v-for="theme in filteredThemes" :key="theme.Id" class="card">
+        <a :href="themeDetailHref(theme.Id)" class="card-link" :aria-label="theme.LocalizedName"></a>
+
+        <div class="card-header">
+          <ThemeSwatch v-if="hasThemeSwatch(theme.IconColors)" class="icon" :colors="theme.IconColors" :size="56" />
+          <div v-else class="icon-placeholder">◐</div>
+
+          <div class="title-area">
+            <div class="name-row">
+              <h3 class="name">{{ theme.LocalizedName }}</h3>
+              <span v-if="theme.ImageTheme" class="image-badge">{{ uiText.imageBadge }}</span>
             </div>
-            <div class="preview-results">
-              <div
-                class="preview-result active"
-                :style="{
-                  backgroundColor: theme.ResultItemActiveBackgroundColor,
-                  borderRadius: (theme.ResultItemBorderRadius || 0) + 'px',
-                }"
-              >
-                <div class="preview-icon"></div>
-                <div class="preview-text" :style="{ color: theme.ResultItemActiveTitleColor }">
-                  {{ theme.ThemeName }}
-                </div>
-              </div>
-              <div
-                class="preview-result"
-                :style="{
-                  borderRadius: (theme.ResultItemBorderRadius || 0) + 'px',
-                }"
-              >
-                <div class="preview-icon inactive"></div>
-                <div class="preview-text" :style="{ color: theme.ResultItemTitleColor }">Another Theme</div>
-              </div>
-            </div>
+            <span class="author">{{ uiText.by }} {{ theme.Author }}</span>
           </div>
         </div>
-        <div class="card-body">
-          <div class="header">
-            <h3 class="name">{{ theme.ThemeName }}</h3>
-            <span class="version">v{{ theme.Version }}</span>
-          </div>
-          <p class="author">{{ uiText.by }} {{ theme.ThemeAuthor }}</p>
-          <p class="description">{{ theme.Description }}</p>
-          <div class="color-palette">
-            <div class="swatches">
-              <div class="color-swatch" :style="{ backgroundColor: theme.AppBackgroundColor }" title="Background"></div>
-              <div class="color-swatch" :style="{ backgroundColor: theme.ResultItemActiveBackgroundColor }" title="Accent"></div>
-              <div class="color-swatch" :style="{ backgroundColor: theme.ResultItemTitleColor }" title="Text"></div>
-              <div class="color-swatch" :style="{ backgroundColor: theme.QueryBoxBackgroundColor }" title="Query Box"></div>
-            </div>
-            <a :href="installHref(theme.ThemeName)" class="primary-btn" @click.stop>{{ uiText.install }}</a>
+
+        <p class="description">{{ theme.LocalizedDescription }}</p>
+
+        <div class="footer">
+          <span class="version">v{{ theme.Version }}</span>
+
+          <div class="actions">
+            <a v-if="theme.Website" :href="theme.Website" class="secondary-btn" target="_blank" rel="noreferrer" @click.stop>
+              {{ uiText.source }}
+            </a>
+            <a :href="installHref(theme)" class="primary-btn" @click.stop>{{ uiText.install }}</a>
           </div>
         </div>
-      </div>
+      </article>
     </div>
+
+    <div v-else class="empty-state">{{ uiText.empty }}</div>
   </div>
 </template>
 
@@ -120,18 +113,21 @@ function installHref(themeName) {
 
 .search-input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 14px 16px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  background-color: var(--vp-c-bg-alt);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent), var(--vp-c-bg-alt);
   color: var(--vp-c-text-1);
   font-size: 16px;
-  transition: border-color 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .search-input:focus {
-  border-color: var(--vp-c-brand);
+  border-color: var(--vp-c-brand-1);
   outline: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent);
 }
 
 .grid {
@@ -153,167 +149,200 @@ function installHref(themeName) {
 }
 
 .card {
-  background-color: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
   display: flex;
   flex-direction: column;
+  min-height: 280px;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--vp-c-divider) 84%, white 16%);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(100, 108, 255, 0.12), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 32%), var(--vp-c-bg-soft);
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  border-color: var(--vp-c-brand);
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 45%, var(--vp-c-divider));
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.1);
 }
 
-.preview {
-  height: 140px;
+.card-link {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+}
+
+.card-link:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+.actions,
+.actions a {
+  position: relative;
+  z-index: 3;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.icon,
+.icon-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+
+.icon {
+  object-fit: cover;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+}
+
+.icon-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-bg-mute));
+  font-size: 28px;
 }
 
-.preview-content {
-  width: 100%;
-  max-width: 240px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.preview-query {
-  padding: 6px 10px;
-  font-family: monospace;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-}
-
-.preview-results {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.preview-result {
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preview-icon {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background-color: currentColor;
-  opacity: 0.8;
-}
-
-.preview-icon.inactive {
-  opacity: 0.4;
-}
-
-.preview-text {
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.card-body {
-  padding: 16px;
+.title-area {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  min-width: 0;
 }
 
-.header {
+.name-row {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  color: var(--vp-c-text-1);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.image-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vp-c-warning-1) 16%, transparent);
+  color: var(--vp-c-warning-1);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.author {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+}
+
+.description {
+  flex: 1;
+  margin: 0 0 16px;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.version {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 10%, var(--vp-c-bg-mute));
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-top: auto;
 }
 
 .actions {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-.primary-btn {
+.primary-btn,
+.secondary-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 34px;
   padding: 0 14px;
   border-radius: 999px;
-  background: var(--vp-c-brand-1);
-  color: var(--vp-c-bg);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
   transition:
     transform 0.2s,
-    background-color 0.2s;
+    background-color 0.2s,
+    border-color 0.2s;
+}
+
+.primary-btn {
+  background: var(--vp-c-brand-1);
+  color: var(--vp-c-bg);
 }
 
 .primary-btn:hover {
   background: var(--vp-c-brand-2);
   color: var(--vp-c-bg);
-  transform: translateY(-1px);
 }
 
-.name {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+.secondary-btn {
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg);
   color: var(--vp-c-text-1);
 }
 
-.version {
-  font-size: 11px;
-  color: var(--vp-c-text-3);
-  background-color: var(--vp-c-bg-mute);
-  padding: 2px 6px;
-  border-radius: 4px;
+.secondary-btn:hover,
+.primary-btn:hover {
+  transform: translateY(-1px);
 }
 
-.author {
-  font-size: 12px;
+.secondary-btn:hover {
+  color: var(--vp-c-text-1);
+}
+
+.empty-state {
+  padding: 48px 24px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 20px;
   color: var(--vp-c-text-2);
-  margin: 0 0 8px 0;
-}
-
-.description {
-  font-size: 14px;
-  color: var(--vp-c-text-2);
-  margin: 0 0 16px 0;
-  line-height: 1.5;
-  flex: 1;
-}
-
-.color-palette {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--vp-c-divider);
-}
-
-.swatches {
-  display: flex;
-  gap: 8px;
-}
-
-.color-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid rgba(128, 128, 128, 0.2);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
 }
 </style>

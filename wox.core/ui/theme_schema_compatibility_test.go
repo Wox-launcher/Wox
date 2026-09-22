@@ -18,8 +18,12 @@ func TestThemeCompatibilityBoundaries(t *testing.T) {
 			t.Fatal("installed incompatible theme")
 		}
 	}
-	themes, err := parseStoreThemes(context.Background(), []byte(`[{"ThemeName":"Legacy"},{"SchemaVersion":999},{"ThemeName":"Future","MinWoxVersion":"999.0.0"}]`))
-	if err != nil || len(themes) != 2 {
-		t.Fatalf("catalog isolation: %d themes, %v", len(themes), err)
+	themes, err := parseStoreThemes(context.Background(), []byte(`[
+		{"Id":"ok","Name":"Ok","Version":"1.0.0","DownloadUrl":"https://example.com/ok.json","IconColors":{"Background":"#111111","Query":"#222222","Selected":"#333333"}},
+		{"Id":"incomplete"},
+		{"Id":"pkg","Name":"Pkg","Version":"1.0.0","DownloadUrl":"https://example.com/pkg.wox-theme","IconColors":{"Background":"#111111","Query":"#222222","Selected":"#333333"}}
+	]`))
+	if err != nil || len(themes) != 2 || themes[0].Id != "ok" || themes[1].Id != "pkg" {
+		t.Fatalf("catalog isolation: %#v, %v", themes, err)
 	}
 }

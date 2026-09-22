@@ -4,6 +4,9 @@ import "strings"
 
 // themeEditorTokenSection groups properties by the visible element they style.
 func themeEditorTokenSection(key string) string {
+	if strings.HasPrefix(key, "Overlay") {
+		return ""
+	}
 	section := "appearance"
 	switch {
 	case strings.HasPrefix(key, "Glance"):

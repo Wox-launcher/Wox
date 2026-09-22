@@ -128,8 +128,8 @@ func (t Theme) ThemeAssetSources() ([]string, error) {
 	return sources, nil
 }
 
-// CanSyncWithoutAssets excludes resource themes, including inactive platform assets.
-// Invalid documents are also excluded rather than syncing an incomplete theme.
+// CanSyncWithoutAssets reports whether the document carries no image files, including inactive platform assets.
+// Invalid documents are reported as not asset-free.
 func (t Theme) CanSyncWithoutAssets() bool {
 	if len(t.AssetFiles) > 0 {
 		return false

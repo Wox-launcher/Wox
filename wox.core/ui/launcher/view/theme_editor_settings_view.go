@@ -266,6 +266,7 @@ type ThemeEditorSettingsProps struct {
 	Wallpaper          *woxui.Image
 	WallpaperBlurred   *woxui.Image
 	FlashToken         string
+	DialogToken        string
 	LocateIcon         *woxui.Image
 	DiscardIcon        *woxui.Image
 	OverwriteIcon      *woxui.Image
@@ -591,7 +592,15 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 	stageWidth := min(float32(900), max(float32(0), width))
 	stageHeight := min(float32(420), max(float32(0), height-20))
 	windowWidth := min(float32(780), max(float32(0), stageWidth-24))
-	windowHeight := min(float32(360), max(float32(0), stageHeight-24))
+	overlaySpace := float32(0)
+	if themeEditorOverlayFocused(props) {
+		overlaySpace = 78
+	}
+	windowHeight := min(float32(360), max(float32(0), stageHeight-24-overlaySpace))
+	demo := woxwidget.Widget(themeEditorPreviewWindow(props, windowWidth, windowHeight))
+	if sample, ok := themeEditorOverlaySample(props, min(windowWidth, 320)); ok {
+		demo = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 14, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{demo, sample}}
+	}
 
 	stageColor := props.Theme.InputBackground
 	stage := woxwidget.Stack{Width: stageWidth, Height: stageHeight, Children: []woxwidget.StackChild{
@@ -603,22 +612,36 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, Color: woxui.Color{A: 255}}})
 	}
 	stage.Children = append(stage.Children,
-		woxwidget.StackChild{Child: woxwidget.Align{Width: stageWidth, Height: stageHeight, Horizontal: 0.5, Vertical: 0.5, Child: themeEditorPreviewWindow(props, windowWidth, windowHeight)}},
+		woxwidget.StackChild{Child: woxwidget.Align{Width: stageWidth, Height: stageHeight, Horizontal: 0.5, Vertical: 0.5, Child: demo}},
 		woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, BorderColor: themeAlpha(props.Theme.Border, 150), BorderWidth: 1}},
 	)
-	if sample, ok := themeEditorOverlaySample(props); ok {
-		stage.Children = append(stage.Children, woxwidget.StackChild{Left: 28, Bottom: 28, AnchorBottom: true, Child: sample})
-	}
 	return woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: stage}
 }
 
-// themeEditorOverlaySample shows the desktop overlay fill. It is not part of the launcher frame.
-func themeEditorOverlaySample(props ThemeEditorSettingsProps) (woxwidget.Widget, bool) {
-	backgroundToken := props.FlashToken == "OverlayBackgroundColor"
-	textToken := props.FlashToken == "OverlayFontColor"
-	if !backgroundToken && !textToken {
+// themeEditorOverlayFocused is true while the Overlay group is open, or one of its colors is located.
+func themeEditorOverlayFocused(props ThemeEditorSettingsProps) bool {
+	if props.ActiveGroup >= 0 && props.ActiveGroup < len(props.Groups) {
+		for _, token := range props.Groups[props.ActiveGroup].Tokens {
+			if token.Key == "OverlayBackgroundColor" || token.Key == "OverlayFontColor" {
+				return true
+			}
+		}
+	}
+	for _, token := range []string{props.FlashToken, props.DialogToken} {
+		if token == "OverlayBackgroundColor" || token == "OverlayFontColor" {
+			return true
+		}
+	}
+	return false
+}
+
+// themeEditorOverlaySample shows the desktop overlay under the launcher. It is not part of the launcher frame.
+func themeEditorOverlaySample(props ThemeEditorSettingsProps, width float32) (woxwidget.Widget, bool) {
+	if !themeEditorOverlayFocused(props) {
 		return nil, false
 	}
+	backgroundToken := props.FlashToken == "OverlayBackgroundColor" || props.DialogToken == "OverlayBackgroundColor"
+	textToken := props.FlashToken == "OverlayFontColor" || props.DialogToken == "OverlayFontColor"
 	background := props.DraftTheme.Background
 	if props.DraftTheme.OverlayBackground != nil {
 		background = *props.DraftTheme.OverlayBackground
@@ -627,8 +650,9 @@ func themeEditorOverlaySample(props ThemeEditorSettingsProps) (woxwidget.Widget,
 	if props.DraftTheme.OverlayText != nil {
 		foreground = *props.DraftTheme.OverlayText
 	}
-	const cardWidth, cardHeight float32 = 196, 64
-	text := themeEditorFlashOverlay(woxwidget.Text{Value: "Overlay", Style: woxui.TextStyle{Size: 13}, Color: foreground}, 64, 20, 3, textToken)
+	cardWidth := max(float32(180), width)
+	const cardHeight float32 = 56
+	text := themeEditorFlashOverlay(woxwidget.Text{Value: "Overlay", Style: woxui.TextStyle{Size: 13}, Color: foreground}, 72, 20, 3, textToken)
 	card := woxwidget.Container{
 		Width: cardWidth, Height: cardHeight, Radius: 12, Color: background,
 		Child: woxwidget.Align{Width: cardWidth, Height: cardHeight, Horizontal: 0.5, Vertical: 0.5, Child: text},

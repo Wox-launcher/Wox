@@ -163,6 +163,24 @@ func TestThemeEditorSaveActions(t *testing.T) {
 	}
 }
 
+func TestThemeEditorOverlaySitsBelowLauncher(t *testing.T) {
+	props := ThemeEditorSettingsProps{DialogToken: "OverlayBackgroundColor", DraftTheme: woxcomponent.Theme{}}
+	stage := themeEditorLivePreview(props, 900, 520).(woxwidget.Align).Child.(woxwidget.Stack)
+	var column woxwidget.Flex
+	found := false
+	for _, child := range stage.Children {
+		aligned, ok := child.Child.(woxwidget.Align)
+		if !ok {
+			continue
+		}
+		column, found = aligned.Child.(woxwidget.Flex)
+		break
+	}
+	if !found || column.Axis != woxwidget.Vertical || len(column.Children) != 2 {
+		t.Fatal("overlay sample must sit under the launcher demo")
+	}
+}
+
 // TestThemeEditorPreviewLocatorBounds follows the same body and tag geometry as PreviewView.
 func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
 	color := woxui.Color{R: 70, A: 90}

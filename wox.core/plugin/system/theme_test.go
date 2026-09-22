@@ -6,6 +6,18 @@ import (
 	"wox/common"
 )
 
+func TestThemeStoreSubtitleAddsImageMemoryHint(t *testing.T) {
+	if got := themeStoreSubtitle("Cozy frame", false, "Image themes use more memory"); got != "Cozy frame" {
+		t.Fatalf("color theme subtitle = %q", got)
+	}
+	if got := themeStoreSubtitle("Cozy frame", true, "Image themes use more memory"); got != "Cozy frame · Image themes use more memory" {
+		t.Fatalf("image theme subtitle = %q", got)
+	}
+	if got := themeStoreSubtitle("", true, "Image themes use more memory"); got != "Image themes use more memory" {
+		t.Fatalf("hint-only subtitle = %q", got)
+	}
+}
+
 func TestInstalledThemeListGroupOrdersSystemBelowCurrent(t *testing.T) {
 	currentGroup, currentScore := installedThemeListGroup(true, true, "current", "system", "available")
 	if currentGroup != "current" || currentScore != 100 {

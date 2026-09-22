@@ -33,11 +33,16 @@ func (s *CoreServices) Themes(ctx context.Context, sessionID string, catalog con
 	var themes []common.Theme
 	switch catalog {
 	case contract.ThemeCatalogStore:
-		storeThemes := GetStoreManager().GetThemes()
-		themes = make([]common.Theme, 0, len(storeThemes))
-		for _, theme := range storeThemes {
-			themes = append(themes, GetUIManager().resolvePlatformTheme(ctx, theme))
+		manifests := GetStoreManager().GetThemeManifests()
+		result := make([]contract.ThemeCatalogItem, 0, len(manifests))
+		for _, manifest := range manifests {
+			result = append(result, contract.ThemeCatalogItem{
+				Theme:        common.Theme{ThemeId: manifest.Id, IsInstalled: installedIDs[manifest.Id]},
+				Manifest:     manifest,
+				IsUpgradable: GetUIManager().IsThemeUpgradable(manifest.Id, manifest.Version),
+			})
 		}
+		return result, nil
 	case contract.ThemeCatalogInstalled:
 		themes = GetUIManager().GetAllThemes(ctx)
 	default:
@@ -61,13 +66,13 @@ func (s *CoreServices) OperateTheme(ctx context.Context, sessionID string, theme
 	ctx = uiServiceContext(ctx, sessionID)
 	switch operation {
 	case contract.ThemeOperationInstall:
-		theme, exists := lo.Find(GetStoreManager().GetThemes(), func(item common.Theme) bool {
-			return item.ThemeId == themeID
+		manifest, exists := lo.Find(GetStoreManager().GetThemeManifests(), func(item common.StoreThemeManifest) bool {
+			return item.Id == themeID
 		})
 		if !exists {
 			return fmt.Errorf("theme %q not found in the store", themeID)
 		}
-		if err := GetStoreManager().Install(ctx, theme); err != nil {
+		if err := GetStoreManager().InstallManifest(ctx, manifest); err != nil {
 			return fmt.Errorf("install theme %q: %w", themeID, err)
 		}
 		return nil

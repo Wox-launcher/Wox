@@ -435,7 +435,10 @@ html {
 
   body.plugin-detail-page .VPDoc:not(.has-sidebar) .container.container,
   body.plugin-detail-page .VPDoc:not(.has-sidebar) .content.content,
-  body.plugin-detail-page .VPDoc:not(.has-sidebar) .content-container.content-container {
+  body.plugin-detail-page .VPDoc:not(.has-sidebar) .content-container.content-container,
+  body.theme-detail-page .VPDoc:not(.has-sidebar) .container.container,
+  body.theme-detail-page .VPDoc:not(.has-sidebar) .content.content,
+  body.theme-detail-page .VPDoc:not(.has-sidebar) .content-container.content-container {
     max-width: min(1480px, calc(100vw - 64px));
   }
 }

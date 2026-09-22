@@ -49,7 +49,6 @@ import (
 	"wox/util/tray"
 	"wox/util/window"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	cp "github.com/otiai10/copy"
@@ -1290,16 +1289,10 @@ func (m *Manager) IsSystemTheme(id string) bool {
 
 func (m *Manager) IsThemeUpgradable(id string, version string) bool {
 	theme := m.GetThemeById(id)
-	if theme.ThemeId != "" {
-		existingVersion, existingErr := semver.NewVersion(theme.Version)
-		currentVersion, currentErr := semver.NewVersion(version)
-		if existingErr != nil && currentErr != nil && existingVersion != nil && currentVersion != nil {
-			if existingVersion.GreaterThan(currentVersion) {
-				return true
-			}
-		}
+	if theme.ThemeId == "" {
+		return false
 	}
-	return false
+	return plugin.IsVersionUpgradable(theme.Version, version)
 }
 
 func (m *Manager) ShowTray() {

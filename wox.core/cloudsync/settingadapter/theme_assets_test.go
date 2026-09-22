@@ -1,14 +1,14 @@
 package settingadapter
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"wox/cloudsync"
 	"wox/common"
 )
 
-// TestInstalledThemeSyncSkipsResources covers unloaded and inactive platform assets.
+// TestInstalledThemeSyncSkipsResources covers asset detection and id-only sync records.
+// Sync stores the theme ID, not the document, including when an older record still embeds one.
 func TestInstalledThemeSyncSkipsResources(t *testing.T) {
 	for _, tc := range []struct {
 		name, extra string
@@ -28,13 +28,18 @@ func TestInstalledThemeSyncSkipsResources(t *testing.T) {
 			if got := theme.CanSyncWithoutAssets(); got != tc.want {
 				t.Fatalf("sync eligibility = %v, want %v", got, tc.want)
 			}
-			data, err := json.Marshal(cloudsync.InstalledThemeValue{ID: theme.ThemeId, Theme: json.RawMessage(document)})
+			data, err := json.Marshal(cloudsync.InstalledThemeValue{ID: theme.ThemeId})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, ok, err := decodeInstalledTheme(context.Background(), theme.ThemeId, string(data))
-			if err != nil || ok != tc.want {
-				t.Fatalf("decode = %v, %v; want %v", ok, err, tc.want)
+			id, err := installedThemeID(theme.ThemeId, string(data))
+			if err != nil || id != theme.ThemeId {
+				t.Fatalf("theme id = %s, %v", id, err)
+			}
+			legacy := `{"id":"` + theme.ThemeId + `","theme":` + document + `}`
+			id, err = installedThemeID("", legacy)
+			if err != nil || id != theme.ThemeId {
+				t.Fatalf("legacy theme id = %s, %v", id, err)
 			}
 			theme.AssetFiles = map[string][]byte{"assets/unused.png": {1}}
 			if theme.CanSyncWithoutAssets() {

@@ -604,12 +604,18 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 		}
 		if len(resp.Records) > 0 {
 			progressBase := restored
-			if err := m.applyRecordsWithProgress(ctx, resp.Records, &cloudSyncApplyProgress{
+			result := m.applyRecordsWithDetails(ctx, resp.Records, &cloudSyncApplyProgress{
 				Operation: CloudSyncProgressOperationRestore,
 				Base:      progressBase,
 				Total:     0,
-			}); err != nil {
-				return fmt.Errorf("failed to apply remote snapshot: %w", err)
+			})
+			for _, detail := range result.Details {
+				if detail.Status == CloudSyncHistoryStatusFailed {
+					util.GetLogger().Warn(ctx, fmt.Sprintf("cloud sync restore failed for %s/%s: %s", detail.EntityType, detail.Key, detail.Error))
+				}
+			}
+			if result.restoreErr != nil {
+				return fmt.Errorf("failed to apply remote snapshot: %w", result.restoreErr)
 			}
 			restored += len(resp.Records)
 			m.setProgressFromRecord(CloudSyncProgressOperationRestore, resp.Records[len(resp.Records)-1], restored, 0)
@@ -620,6 +626,9 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	_, err = UpdateCloudSyncState(ctx, func(s *database.CloudSyncState) {
 		s.LastPullTs = util.GetSystemTimestamp()
 		s.LastError = ""
@@ -657,6 +666,8 @@ type cloudSyncApplyRecordsResult struct {
 	Failed    int
 
 	err error
+	// Optional installations may fail without preventing bootstrap and future pulls.
+	restoreErr error
 }
 
 // Err returns the last per-record apply error for callers that still need aggregate failure semantics.
@@ -669,9 +680,12 @@ func (r *cloudSyncApplyRecordsResult) addSucceeded(record CloudSyncRecord) {
 	r.Details = append(r.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusSucceeded, ""))
 }
 
-func (r *cloudSyncApplyRecordsResult) addFailed(record CloudSyncRecord, err error) {
+func (r *cloudSyncApplyRecordsResult) addFailed(record CloudSyncRecord, err error, blocksRestore bool) {
 	r.Failed++
 	r.err = err
+	if blocksRestore {
+		r.restoreErr = err
+	}
 	r.Details = append(r.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusFailed, userFacingCloudSyncError(err)))
 }
 
@@ -705,13 +719,13 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 		var rawValue string
 		if record.Op == OpUpsert {
 			if record.Value == nil {
-				result.addFailed(record, fmt.Errorf("missing encrypted value for upsert"))
+				result.addFailed(record, fmt.Errorf("missing encrypted value for upsert"), true)
 				continue
 			}
 			aad := buildCloudSyncAAD(record.EntityType, record.PluginID, record.Key, record.Op)
 			plaintext, err := m.crypto.Decrypt(ctx, *record.Value, aad)
 			if err != nil {
-				result.addFailed(record, err)
+				result.addFailed(record, err, true)
 				continue
 			}
 			rawValue = plaintext
@@ -721,7 +735,7 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 		case EntityWoxSetting:
 			willChangeCurrentTheme := themeSettingWillChange(record, rawValue)
 			if err := m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err)
+				result.addFailed(record, err, true)
 				continue
 			}
 			appliedWoxSetting = true
@@ -729,21 +743,21 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 			result.addSucceeded(record)
 		case EntityPluginSetting:
 			if err := m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err)
+				result.addFailed(record, err, true)
 				continue
 			}
 			appliedPluginSetting = true
 			result.addSucceeded(record)
 		case EntityInstalledPlugin:
 			if err := m.applier.ApplyInstalledPlugin(ctx, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err)
+				result.addFailed(record, err, record.Op != OpUpsert)
 				continue
 			}
 			appliedInstalledPlugin = true
 			result.addSucceeded(record)
 		case EntityInstalledTheme:
 			if err := m.applier.ApplyInstalledTheme(ctx, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err)
+				result.addFailed(record, err, record.Op != OpUpsert)
 				continue
 			}
 			appliedInstalledTheme = true

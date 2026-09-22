@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"wox/cloudsync"
-	"wox/common"
 	"wox/database"
 	"wox/plugin"
 	"wox/setting"
@@ -122,19 +121,27 @@ func (a *LocalSettingApplier) ApplyInstalledTheme(ctx context.Context, themeID s
 	switch op {
 	case cloudsync.OpDelete:
 		theme := ui.GetUIManager().GetThemeById(themeID)
-		if theme.ThemeId == "" || theme.IsSystem || !theme.CanSyncWithoutAssets() {
+		if theme.ThemeId == "" || theme.IsSystem {
 			return nil
 		}
 		return ui.GetStoreManager().UninstallLocal(ctx, theme)
 	case cloudsync.OpUpsert:
-		theme, ok, err := decodeInstalledTheme(ctx, themeID, rawValue)
+		id, err := installedThemeID(themeID, rawValue)
 		if err != nil {
 			return err
 		}
+		manifest, ok, err := ui.GetStoreManager().ResolveThemeManifest(ctx, id)
+		if err != nil {
+			return fmt.Errorf("resolve synced theme %s: %w", id, err)
+		}
 		if !ok {
+			util.GetLogger().Info(ctx, fmt.Sprintf("skip installed theme sync for %s: not in the theme store", id))
 			return nil
 		}
-		return ui.GetStoreManager().InstallLocal(ctx, theme)
+		if installed := ui.GetUIManager().GetThemeById(id); installed.ThemeId != "" && !ui.GetUIManager().IsThemeUpgradable(id, manifest.Version) {
+			return nil
+		}
+		return ui.GetStoreManager().InstallManifestLocal(ctx, manifest)
 	default:
 		return fmt.Errorf("unknown oplog op: %s", op)
 	}
@@ -210,34 +217,19 @@ func decodeInstalledPluginManifest(ctx context.Context, pluginID string, rawValu
 	return plugin.StorePluginManifest{}, false, nil
 }
 
-// decodeInstalledTheme resolves the full theme payload carried by the sync
-// record or falls back to the current store cache.
-func decodeInstalledTheme(ctx context.Context, themeID string, rawValue string) (common.Theme, bool, error) {
+// installedThemeID reads the store theme id and ignores any legacy theme document.
+func installedThemeID(themeID string, rawValue string) (string, error) {
+	if strings.TrimSpace(rawValue) == "" {
+		return themeID, nil
+	}
 	var value cloudsync.InstalledThemeValue
 	if err := json.Unmarshal([]byte(rawValue), &value); err != nil {
-		return common.Theme{}, false, err
+		return "", err
 	}
-	if len(value.Theme) > 0 {
-		var theme common.Theme
-		if err := json.Unmarshal(value.Theme, &theme); err != nil {
-			return common.Theme{}, false, err
-		}
-		if theme.ThemeId == "" {
-			theme.ThemeId = themeID
-		}
-		if !theme.CanSyncWithoutAssets() {
-			return common.Theme{}, false, nil
-		}
-		return theme, true, nil
+	if value.ID != "" {
+		return value.ID, nil
 	}
-
-	for _, theme := range ui.GetStoreManager().GetThemes() {
-		if theme.ThemeId == themeID {
-			return theme, theme.CanSyncWithoutAssets(), nil
-		}
-	}
-	util.GetLogger().Warn(ctx, fmt.Sprintf("skip installed theme sync for %s: theme payload not found", themeID))
-	return common.Theme{}, false, nil
+	return themeID, nil
 }
 
 // shouldSkipPluginInstall avoids reinstalling the same or newer local plugin

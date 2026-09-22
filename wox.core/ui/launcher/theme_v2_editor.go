@@ -46,10 +46,6 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 		{key: "BaseAccentColor", label: "i18n:ui_theme_base_accent"},
 	}})
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppContentBackgroundColor", label: "i18n:ui_theme_editor_token_app_content_background"})
-	groups[0].tokens = append(groups[0].tokens,
-		themeColorToken{key: "OverlayBackgroundColor", label: "i18n:ui_theme_editor_token_overlay_background"},
-		themeColorToken{key: "OverlayFontColor", label: "i18n:ui_theme_editor_token_overlay_text"},
-	)
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppBorderColor", label: "i18n:ui_theme_editor_window_border"})
 	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), themeColorToken{key: "QueryBoxBorderBottomColor", label: "i18n:ui_theme_editor_bottom_border"})
 	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), themeColorToken{key: "ResultItemActiveIndicatorColor", label: "i18n:ui_theme_editor_indicator"})
@@ -90,6 +86,13 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 	for index, tokens := range themeEditorGeometryGroups {
 		groups[index].tokens = append(groups[index].tokens, tokens...)
 	}
+	// Overlay is its own top-level group, after Toolbar and before basic colors.
+	// Surface indices 0-5 stay stable for the launcher preview scenes.
+	overlay := themeColorGroup{label: "i18n:ui_theme_editor_group_overlay", tokens: []themeColorToken{
+		{key: "OverlayBackgroundColor", label: "i18n:ui_theme_editor_token_overlay_background"},
+		{key: "OverlayFontColor", label: "i18n:ui_theme_editor_token_overlay_text"},
+	}}
+	groups = append(groups[:len(themeEditorColorGroups)], append([]themeColorGroup{overlay}, groups[len(themeEditorColorGroups):]...)...)
 	return groups
 }
 

@@ -17,19 +17,22 @@ import (
 )
 
 type themeSettingsTheme struct {
-	ID           string `json:"ThemeId"`
-	Name         string `json:"ThemeName"`
-	Author       string `json:"ThemeAuthor"`
-	URL          string `json:"ThemeUrl"`
-	Version      string `json:"Version"`
-	Description  string `json:"Description"`
-	IsSystem     bool   `json:"IsSystem"`
-	IsInstalled  bool   `json:"IsInstalled"`
-	IsUpgradable bool   `json:"IsUpgradable"`
-	IsAuto       bool   `json:"IsAutoAppearance"`
-	DarkThemeID  string `json:"DarkThemeId"`
-	LightThemeID string `json:"LightThemeId"`
-	previewTheme themeData
+	ID             string   `json:"ThemeId"`
+	Name           string   `json:"ThemeName"`
+	Author         string   `json:"ThemeAuthor"`
+	URL            string   `json:"ThemeUrl"`
+	Version        string   `json:"Version"`
+	Description    string   `json:"Description"`
+	IsSystem       bool     `json:"IsSystem"`
+	IsInstalled    bool     `json:"IsInstalled"`
+	IsUpgradable   bool     `json:"IsUpgradable"`
+	IsAuto         bool     `json:"IsAutoAppearance"`
+	DarkThemeID    string   `json:"DarkThemeId"`
+	LightThemeID   string   `json:"LightThemeId"`
+	ScreenshotURLs []string `json:"ScreenshotUrls"`
+	HasSwatch      bool
+	ImageTheme     bool
+	previewTheme   themeData
 }
 
 // buildThemeCatalog converts core theme metadata into the pure catalog view.
@@ -47,7 +50,7 @@ func (a *App) themeCatalogProps(snapshot settingsSnapshot, width, height, imageS
 	}
 	var detail *launcherview.ThemeCatalogItem
 	if themeSnap.ThemeSelected >= 0 && themeSnap.ThemeSelected < len(themeSnap.Themes) {
-		item := themeCatalogItem(themeSnap.Themes[themeSnap.ThemeSelected], themeSnap.ThemeSelected, snapshot)
+		item := a.presentThemeCatalogItem(themeSnap.Themes[themeSnap.ThemeSelected], themeSnap.ThemeSelected, snapshot, width)
 		detail = &item
 	}
 	iconTint := snapshot.palette.Text
@@ -68,6 +71,7 @@ func (a *App) themeCatalogProps(snapshot settingsSnapshot, width, height, imageS
 		EmptyLabel:  a.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.translate("i18n:ui_setting_theme_website"), InstallLabel: a.translate("i18n:ui_setting_theme_install"),
 		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), AppliedLabel: a.translate("i18n:ui_setting_theme_applied"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
 		PreviewLabel: a.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.translate("i18n:ui_setting_theme_description"), SystemLabel: a.translate("i18n:ui_setting_theme_system_tag"),
+		ImageLabel: a.translate("i18n:ui_setting_theme_image_tag"), ImageMemoryLabel: a.translate("i18n:ui_setting_theme_image_memory"),
 		PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
 		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"),
 		PreviewMoreLabel: a.translate("i18n:toolbar_more_actions"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
@@ -162,9 +166,24 @@ func themeCatalogItem(theme themeSettingsTheme, sourceIndex int, snapshot settin
 	return launcherview.ThemeCatalogItem{
 		SourceIndex: sourceIndex, ID: theme.ID, Name: theme.Name, Author: theme.Author, URL: theme.URL, Version: theme.Version, Description: theme.Description,
 		IsSystem: theme.IsSystem, IsInstalled: theme.IsInstalled, IsUpgradable: theme.IsUpgradable, IsAuto: theme.IsAuto,
+		HasSwatch: theme.HasSwatch, ImageTheme: theme.ImageTheme,
 		Active: theme.ID == snapshot.general.Data.ThemeID, Selected: sourceIndex == snapshot.theme.ThemeSelected,
 		PreviewTheme: previewTheme, LightPreviewTheme: lightTheme, DarkPreviewTheme: darkTheme,
 	}
+}
+
+// presentThemeCatalogItem adds store icon and screenshot images. Installed themes keep the live swatch.
+func (a *App) presentThemeCatalogItem(theme themeSettingsTheme, sourceIndex int, snapshot settingsSnapshot, width float32) launcherview.ThemeCatalogItem {
+	item := themeCatalogItem(theme, sourceIndex, snapshot)
+	if snapshot.theme.ThemesMode != "store" || len(theme.ScreenshotURLs) == 0 {
+		return item
+	}
+	source := woxImage{ImageType: "url", ImageData: theme.ScreenshotURLs[0]}
+	requestSize := int(min(float32(2048), max(float32(512), width*2)))
+	item.Screenshot = a.imageForSurface(source, requestSize, settingsPalette().Background)
+	item.ScreenshotLoading = item.Screenshot == nil
+	item.OnScreenshot = func() { a.openPreviewImageOverlay(source) }
+	return item
 }
 
 // themeVariantPreview resolves an AUTO endpoint and keeps Flutter's readable fallback when it is unavailable.
@@ -316,7 +335,11 @@ func (a *App) runThemeOperation(kind string) {
 		if kind == "upgrade" {
 			operation = contract.ThemeOperationInstall
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		timeout := 30 * time.Second
+		if kind == "install" || kind == "upgrade" {
+			timeout = 2 * time.Minute
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		err := a.services.OperateTheme(ctx, a.sessionID, theme.ID, operation)
 		cancel()
 		if err == nil && kind == "apply" {

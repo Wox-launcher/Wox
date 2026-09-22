@@ -96,6 +96,19 @@ func TestThemeEditorTokenLocation(t *testing.T) {
 			t.Fatal("unknown token must not jump to Window")
 		}
 	}
+	groups := themeEditorGroups(map[string]any{"SchemaVersion": float64(2)})
+	overlayIndex := -1
+	for index, group := range groups {
+		if group.label == "i18n:ui_theme_editor_group_overlay" {
+			overlayIndex = index
+		}
+	}
+	if overlayIndex != len(themeEditorColorGroups) || themeEditorGroupForToken(map[string]any{"SchemaVersion": float64(2)}, "OverlayBackgroundColor") != overlayIndex {
+		t.Fatal("overlay colors must be their own top-level group after Toolbar")
+	}
+	if themeEditorTokenSection("OverlayBackgroundColor") != "" {
+		t.Fatal("overlay group should not nest another section header")
+	}
 	if themeEditorGroupForToken(nil, "ActionContainerDividerColor") != -1 {
 		t.Fatal("v2 token leaked into legacy groups")
 	}

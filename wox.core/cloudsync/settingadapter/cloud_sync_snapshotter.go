@@ -173,24 +173,16 @@ func appendInstalledPluginOplogs(ctx context.Context, disabledPlugins map[string
 	return nil
 }
 
-// appendInstalledThemeOplogs snapshots user-installed themes with their full current payload.
+// appendInstalledThemeOplogs snapshots store themes by ID. Local themes are omitted.
 func appendInstalledThemeOplogs(ctx context.Context, timestamp int64, oplogs *[]database.Oplog) error {
 	for _, theme := range ui.GetUIManager().GetAllThemes(ctx) {
-		if theme.IsSystem || !theme.CanSyncWithoutAssets() {
+		if theme.IsSystem {
 			continue
 		}
-
-		themeJSON, err := json.Marshal(theme)
-		if err != nil {
-			return fmt.Errorf("failed to encode installed theme sync value for %s: %w", theme.ThemeId, err)
+		if _, ok := ui.GetStoreManager().FindThemeManifest(ctx, theme.ThemeId); !ok {
+			continue
 		}
-		value := cloudsync.InstalledThemeValue{
-			ID:      theme.ThemeId,
-			Version: theme.Version,
-			Source:  cloudsync.InstallSyncSourceUser,
-			Theme:   themeJSON,
-		}
-		rawValue, err := json.Marshal(value)
+		rawValue, err := json.Marshal(cloudsync.InstalledThemeValue{ID: theme.ThemeId})
 		if err != nil {
 			return fmt.Errorf("failed to encode installed theme snapshot for %s: %w", theme.ThemeId, err)
 		}

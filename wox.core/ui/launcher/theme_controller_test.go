@@ -162,6 +162,38 @@ func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 	}
 }
 
+func TestThemeControllerReloadStoreManifest(t *testing.T) {
+	deps, _ := newThemeControllerDeps()
+	controller := newThemeSettingsController(deps)
+	items := []contract.ThemeCatalogItem{{
+		Theme: common.Theme{ThemeId: "s1", IsInstalled: true},
+		Manifest: common.StoreThemeManifest{
+			Id: "s1", Name: "Omarchy", Author: "qianlifeng", Version: "1.0.2", Description: "Charcoal",
+			Website:        "https://example.com/omarchy",
+			ScreenshotUrls: []string{"https://example.com/shot.png"},
+			IconColors:     common.StoreThemeIconColors{Background: "#2D343A", Query: "transparent", Selected: "#394144", Outline: "#C7C2B3", OutlineWidth: 2},
+			ImageTheme:     true,
+		},
+	}}
+	service := &themeFakeService{themes: map[contract.ThemeCatalog][]contract.ThemeCatalogItem{contract.ThemeCatalogStore: items}}
+	if err := controller.ReloadThemes(context.Background(), service, "session", "store", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	theme := controller.Snapshot().Themes[0]
+	if theme.ID != "s1" || theme.Name != "Omarchy" || theme.URL != "https://example.com/omarchy" || !theme.IsInstalled || !theme.ImageTheme {
+		t.Fatalf("store theme = %#v", theme)
+	}
+	if len(theme.ScreenshotURLs) != 1 {
+		t.Fatalf("store media = %#v", theme)
+	}
+	if !theme.HasSwatch || theme.previewTheme.AppBackgroundColor != "#2D343A" || theme.previewTheme.QueryBoxBackgroundColor != "#00000000" || theme.previewTheme.ResultItemActiveBackgroundColor != "#394144" {
+		t.Fatalf("store swatch = %#v", theme.previewTheme)
+	}
+	if theme.previewTheme.AppBorderWidth == nil || *theme.previewTheme.AppBorderWidth != 2 {
+		t.Fatal("store swatch should keep the authored outline width")
+	}
+}
+
 func TestThemeAutoPickerItemsSkipAutoThemes(t *testing.T) {
 	items := themeAutoPickerItems([]themeSettingsTheme{
 		{ID: "auto", Name: "Wox Auto", IsAuto: true, LightThemeID: "light", DarkThemeID: "dark"},
