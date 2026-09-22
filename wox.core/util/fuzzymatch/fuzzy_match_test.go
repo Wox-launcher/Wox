@@ -25,6 +25,24 @@ func TestPinyinDifferentLengthPoolReuse(t *testing.T) {
 	}
 }
 
+func TestReleasePinyinDictionaryReloads(t *testing.T) {
+	syllables, ok := LookupCharPinyin('项')
+	if !ok || len(syllables) == 0 || syllables[0] == "" {
+		t.Fatalf("pinyin for 项 = %v, ok=%v", syllables, ok)
+	}
+	ReleasePinyinDictionary()
+	pinyinDictMu.Lock()
+	unloaded := pinyinDict == nil
+	pinyinDictMu.Unlock()
+	if !unloaded {
+		t.Fatal("pinyin dictionary was still loaded after release")
+	}
+	syllables, ok = LookupCharPinyin('项')
+	if !ok || len(syllables) == 0 || syllables[0] == "" {
+		t.Fatalf("reloaded pinyin for 项 = %v, ok=%v", syllables, ok)
+	}
+}
+
 func TestPinyinCacheOwnsMappedTerm(t *testing.T) {
 	ReleaseIdleCaches()
 	defer ReleaseIdleCaches()

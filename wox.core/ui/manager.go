@@ -1204,6 +1204,16 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 		woxui.ReleaseIdleTextMetricsCache()
 		sqlitememory.ReleaseIdleMemory(ctx)
 		debug.FreeOSMemory()
+
+		// The character table is several megabytes of map buckets and is only
+		// needed while matching Chinese text. Drop it once the launcher has
+		// stayed hidden as long as the renderer trim, then return those pages.
+		time.Sleep(20 * time.Second)
+		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
+			return
+		}
+		fuzzymatch.ReleasePinyinDictionary()
+		debug.FreeOSMemory()
 	})
 }
 

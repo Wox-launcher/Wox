@@ -24,7 +24,7 @@ func buildPinyinFields(input string) (string, string) {
 	for _, r := range input {
 		switch {
 		case unicode.Is(unicode.Han, r):
-			pinyins, ok := fuzzymatch.PinyinDict[int(r)]
+			pinyins, ok := fuzzymatch.LookupCharPinyin(r)
 			if !ok || len(pinyins) == 0 {
 				continue
 			}

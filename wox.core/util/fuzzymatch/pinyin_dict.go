@@ -1,9 +1,11 @@
 package fuzzymatch
 
-// PinyinDict is data map
-// Warning: Auto-generated file, don't edit.
-// Optimized: values are pre-split and tone-stripped
-var PinyinDict = map[int][]string{
+// Pinyin dictionary data.
+// Warning: Auto-generated file, don't edit the entries.
+// Optimized: values are pre-split and tone-stripped.
+// The literal stays inside a function so a long hide can drop the heap map and rebuild it later.
+func loadPinyinDict() map[int][]string {
+	return map[int][]string{
 	0x3447: {"zhou"},
 	0x344A: {"yi"},
 	0x356E: {"fu"},
@@ -8109,4 +8111,5 @@ var PinyinDict = map[int][]string{
 	0x2CE7C: {"xie"},
 	0x2CE88: {"yi"},
 	0x2CE93: {"chu"},
+	}
 }
