@@ -96,6 +96,8 @@ type themeData struct {
 	AppContentInset                      int
 	AppContentBackgroundColor            string
 	AppContentBorderRadius               int
+	OverlayBackgroundColor               string
+	OverlayFontColor                     string
 	AppPaddingLeft                       int
 	AppPaddingTop                        int
 	AppPaddingRight                      int
@@ -208,6 +210,8 @@ type uiPalette struct {
 	AppContentInset                            float32
 	AppContentBackground                       woxui.Color
 	AppContentBorderRadius                     float32
+	OverlayBackground                          *woxui.Color
+	OverlayText                                *woxui.Color
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int
 	GlanceHoverBackgroundColor                 *woxui.Color
@@ -337,6 +341,8 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		AppContentInset:                            palette.AppContentInset,
 		AppContentBackground:                       palette.AppContentBackground,
 		AppContentBorderRadius:                     palette.AppContentBorderRadius,
+		OverlayBackground:                          palette.OverlayBackground,
+		OverlayText:                                palette.OverlayText,
 		AppBorderColor:                             palette.AppBorderColor,
 		AppBorderWidth:                             palette.AppBorderWidth,
 		AppBorderRadius:                            palette.AppBorderRadius,
@@ -603,6 +609,8 @@ func paletteForTheme(theme themeData) uiPalette {
 		AppContentInset:                            float32(theme.AppContentInset),
 		AppContentBackground:                       parseThemeColor(theme.AppContentBackgroundColor, woxui.Color{}),
 		AppContentBorderRadius:                     float32(theme.AppContentBorderRadius),
+		OverlayBackground:                          optionalThemeColor(theme.OverlayBackgroundColor),
+		OverlayText:                                optionalThemeColor(theme.OverlayFontColor),
 		AppBorderColor:                             optionalThemeColor(theme.AppBorderColor),
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,

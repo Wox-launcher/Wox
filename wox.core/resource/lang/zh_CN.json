@@ -452,6 +452,8 @@
   "ui_theme_editor_group_toolbar": "工具栏",
   "ui_theme_editor_token_app_background": "背景",
   "ui_theme_editor_token_app_content_background": "内容面板背景",
+  "ui_theme_editor_token_overlay_background": "浮层背景",
+  "ui_theme_editor_token_overlay_text": "浮层文字",
   "ui_theme_base_background": "基础背景色",
   "ui_theme_base_text": "基础文字色",
   "ui_theme_base_accent": "基础强调色",

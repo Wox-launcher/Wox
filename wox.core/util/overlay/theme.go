@@ -38,9 +38,9 @@ var (
 	themeFallbackLightText  = woxui.Color{R: 28, G: 28, B: 30, A: 255}
 )
 
-// ThemeBackground is the painted wash used by launcher and WebView windows.
-// Notes and text overlays use the same color so text stays readable over
-// native acrylic or vibrancy instead of sitting on bare window material.
+// ThemeBackground is the painted wash for floating overlay windows.
+// OverlayBackgroundColor wins so a transparent launcher frame does not leave
+// the overlay sitting on the desktop. Otherwise it keeps AppBackgroundColor.
 func ThemeBackground(fallback woxui.Color) woxui.Color {
 	themeMu.Lock()
 	provider := themeProvider
@@ -48,10 +48,12 @@ func ThemeBackground(fallback woxui.Color) woxui.Color {
 	if provider == nil {
 		return fallback
 	}
-	return parseThemeCSSColor(provider().AppBackgroundColor, fallback)
+	theme := provider()
+	return parseThemeCSSColor(theme.OverlayBackgroundColor, parseThemeCSSColor(theme.AppBackgroundColor, fallback))
 }
 
-// CurrentThemeChrome resolves AppBackgroundColor and a matching foreground.
+// CurrentThemeChrome resolves the overlay fill and a matching foreground.
+// Text follows OverlayFontColor, then action-item text, then toolbar text.
 func CurrentThemeChrome() ThemeChrome {
 	background := ThemeBackground(themeFallbackBackground)
 	fallbackText := themeFallbackDarkText
@@ -64,7 +66,7 @@ func CurrentThemeChrome() ThemeChrome {
 	themeMu.Unlock()
 	if provider != nil {
 		theme := provider()
-		foreground = parseThemeCSSColor(theme.ActionItemFontColor, parseThemeCSSColor(theme.ToolbarFontColor, fallbackText))
+		foreground = parseThemeCSSColor(theme.OverlayFontColor, parseThemeCSSColor(theme.ActionItemFontColor, parseThemeCSSColor(theme.ToolbarFontColor, fallbackText)))
 	}
 	light := !ColorIsDark(background)
 	return ThemeChrome{Background: SurfaceFill(runtime.GOOS, background, light), Foreground: foreground, Light: light}

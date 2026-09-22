@@ -46,6 +46,10 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 		{key: "BaseAccentColor", label: "i18n:ui_theme_base_accent"},
 	}})
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppContentBackgroundColor", label: "i18n:ui_theme_editor_token_app_content_background"})
+	groups[0].tokens = append(groups[0].tokens,
+		themeColorToken{key: "OverlayBackgroundColor", label: "i18n:ui_theme_editor_token_overlay_background"},
+		themeColorToken{key: "OverlayFontColor", label: "i18n:ui_theme_editor_token_overlay_text"},
+	)
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppBorderColor", label: "i18n:ui_theme_editor_window_border"})
 	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), themeColorToken{key: "QueryBoxBorderBottomColor", label: "i18n:ui_theme_editor_bottom_border"})
 	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), themeColorToken{key: "ResultItemActiveIndicatorColor", label: "i18n:ui_theme_editor_indicator"})

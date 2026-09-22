@@ -606,7 +606,34 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 		woxwidget.StackChild{Child: woxwidget.Align{Width: stageWidth, Height: stageHeight, Horizontal: 0.5, Vertical: 0.5, Child: themeEditorPreviewWindow(props, windowWidth, windowHeight)}},
 		woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: 18, BorderColor: themeAlpha(props.Theme.Border, 150), BorderWidth: 1}},
 	)
+	if sample, ok := themeEditorOverlaySample(props); ok {
+		stage.Children = append(stage.Children, woxwidget.StackChild{Left: 28, Bottom: 28, AnchorBottom: true, Child: sample})
+	}
 	return woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: stage}
+}
+
+// themeEditorOverlaySample shows the desktop overlay fill. It is not part of the launcher frame.
+func themeEditorOverlaySample(props ThemeEditorSettingsProps) (woxwidget.Widget, bool) {
+	backgroundToken := props.FlashToken == "OverlayBackgroundColor"
+	textToken := props.FlashToken == "OverlayFontColor"
+	if !backgroundToken && !textToken {
+		return nil, false
+	}
+	background := props.DraftTheme.Background
+	if props.DraftTheme.OverlayBackground != nil {
+		background = *props.DraftTheme.OverlayBackground
+	}
+	foreground := props.DraftTheme.QueryText
+	if props.DraftTheme.OverlayText != nil {
+		foreground = *props.DraftTheme.OverlayText
+	}
+	const cardWidth, cardHeight float32 = 196, 64
+	text := themeEditorFlashOverlay(woxwidget.Text{Value: "Overlay", Style: woxui.TextStyle{Size: 13}, Color: foreground}, 64, 20, 3, textToken)
+	card := woxwidget.Container{
+		Width: cardWidth, Height: cardHeight, Radius: 12, Color: background,
+		Child: woxwidget.Align{Width: cardWidth, Height: cardHeight, Horizontal: 0.5, Vertical: 0.5, Child: text},
+	}
+	return themeEditorFlashOverlay(card, cardWidth, cardHeight, 12, backgroundToken), true
 }
 
 func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {

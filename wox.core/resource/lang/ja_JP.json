@@ -452,6 +452,8 @@
   "ui_theme_editor_group_toolbar": "ツールバー",
   "ui_theme_editor_token_app_background": "アプリ背景",
   "ui_theme_editor_token_app_content_background": "コンテンツパネルの背景",
+  "ui_theme_editor_token_overlay_background": "オーバーレイの背景",
+  "ui_theme_editor_token_overlay_text": "オーバーレイの文字",
   "ui_theme_base_background": "基本背景色",
   "ui_theme_base_text": "基本文字色",
   "ui_theme_base_accent": "基本アクセント色",

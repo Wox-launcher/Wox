@@ -46,10 +46,14 @@ type ThemeSchemaV2 struct {
 	AppContentInset           *int    `json:",omitempty"`
 	AppContentBackgroundColor *string `json:",omitempty"`
 	AppContentBorderRadius    *int    `json:",omitempty"`
-	AppPaddingLeft            *int    `json:",omitempty"`
-	AppPaddingTop             *int    `json:",omitempty"`
-	AppPaddingRight           *int    `json:",omitempty"`
-	AppPaddingBottom          *int    `json:",omitempty"`
+	// Floating overlays sit on the desktop, not inside the launcher frame.
+	// Omitted values follow the effective app background and action-item text.
+	OverlayBackgroundColor *string `json:",omitempty"`
+	OverlayFontColor       *string `json:",omitempty"`
+	AppPaddingLeft         *int    `json:",omitempty"`
+	AppPaddingTop          *int    `json:",omitempty"`
+	AppPaddingRight        *int    `json:",omitempty"`
+	AppPaddingBottom       *int    `json:",omitempty"`
 
 	QueryBoxFontColor                    *string `json:",omitempty"`
 	QueryBoxBackgroundColor              *string `json:",omitempty"`
@@ -544,6 +548,10 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 		"ToolbarPrimaryHotkeyFontColor":       "ToolbarHotkeyFontColor",
 		"ToolbarPrimaryHotkeyBackgroundColor": "ToolbarHotkeyBackgroundColor",
 		"ToolbarPrimaryHotkeyBorderColor":     "ToolbarHotkeyBorderColor",
+		// Overlay windows are a separate surface. Unauthored colors keep the
+		// previous app-background wash and action-item text.
+		"OverlayBackgroundColor": "AppBackgroundColor",
+		"OverlayFontColor":       "ActionItemFontColor",
 	} {
 		if _, authored := values[primary]; !authored {
 			values[primary] = values[normal]

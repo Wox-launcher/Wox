@@ -61,12 +61,15 @@ be included. No network image URLs or executable theme code are supported.
 ```json
 {
   "SchemaVersion": 2,
-  "MinWoxVersion": "2.4.4",
+  "MinWoxVersion": "2.4.5",
   "ThemeId": "6cf090bd-ef04-44e9-aa61-cbe0e1dc2275",
   "ThemeName": "明",
   "BaseBackgroundColor": "#721D16",
   "BaseTextColor": "#FFF0CA",
   "BaseAccentColor": "#F4C453",
+  "AppBackgroundColor": "transparent",
+  "OverlayBackgroundColor": "#721D16",
+  "OverlayFontColor": "#FFF0CA",
   "Surfaces": {
     "App": {
       "ContentInsets": {"Top": 110, "Right": 48, "Bottom": 32, "Left": 48},
@@ -174,6 +177,19 @@ Existing scalar platform override semantics are unchanged.
 There is no separate package format version; the schema version belongs to
 `theme.json`.
 
+Floating overlays (text notifications, tooltips, image preview, timer, dictation,
+and permission prompts) are not the launcher window. When `Surfaces` uses an
+image, set `OverlayBackgroundColor` and `OverlayFontColor` explicitly.
+Image-backed themes usually leave `AppBackgroundColor` transparent so the frame
+asset is the window; overlays have no frame, so that transparent color lets the
+desktop show through and the text becomes unreadable. Use an opaque fill that
+matches the readable content surface, and a text color that contrasts with it.
+Do not copy the transparent window color. Omitted overlay colors follow the
+effective `AppBackgroundColor` and `ActionItemFontColor`, which is correct only
+for themes whose window fill is already a readable wash. These fields do not
+recolor the launcher, Notes, or WebView windows. Authoring them requires Wox
+2.4.5.
+
 ## Author the document
 
 ### Localized name and description
@@ -245,6 +261,7 @@ Start with background, text, and accent roles. Optional colors derive independen
 
 - For translucent themes, consider app, query, Action Panel, action query, preview, and toolbar backgrounds together. An opaque surface can hide translucency beneath it; layered alpha and native materials affect the final appearance.
 - V2 `AppContentInset` reserves a uniform logical inset around the entire launcher content, including the toolbar, previews, and floating panels. `AppContentBackgroundColor` paints the inner panel and `AppContentBorderRadius` rounds its background. Defaults are 0, transparent, and 0, preserving existing themes. These fields do not select custom window chrome: use a translucent `AppBackgroundColor` and omit `AppBorder*` to expose a native-material rim. Existing `AppPadding*` remains spacing inside the content panel. Child surfaces retain their own corner styles; the toolbar follows the panel's bottom corners.
+- Floating overlays use `OverlayBackgroundColor` and `OverlayFontColor`. Omitted values follow the effective `AppBackgroundColor` and `ActionItemFontColor`. They do not change the launcher, Notes, or WebView windows. Image-backed themes must set both explicitly; see Image-backed themes.
 - V2 uses `ResultItemActiveIndicatorColor`, `ResultItemActiveIndicatorWidth`, `ResultItemActiveIndicatorInsetLeft`, `ResultItemActiveIndicatorInsetTop`, `ResultItemActiveIndicatorInsetBottom`, and `ResultItemActiveIndicatorBorderRadius` for the selected-result marker. Width defaults to 0, color to the base accent, and insets/radius to 0. Zero insets/radius reproduce the edge strip; use positive insets and radius for a short rounded marker. Reserve icon space with result-item padding; marker geometry does not shift content. The unreleased v2 `ResultItemActiveBorderLeftWidth/Color` fields were removed; v1 keeps its original fields. Check normal, selected, and hovered rows separately; `ResultItemHoverBackgroundColor` controls hover.
 - `QueryBoxBorderBottomColor` and `QueryBoxBorderBottomWidth` draw an inside bottom edge without changing query layout. Width defaults to 0; color defaults to the base accent. Zero disables it and explicit transparency is preserved.
 - Action Panel border fields are `ActionContainerBorderColor`, `ActionContainerBorderWidth`, and `ActionContainerBorderRadius`. `ActionContainerDividerColor` controls internal separators independently of `PreviewSplitLineColor`.

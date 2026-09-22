@@ -575,6 +575,8 @@ func fromCoreTheme(theme common.Theme) themeData {
 		AppContentInset:                            theme.AppContentInset,
 		AppContentBackgroundColor:                  colors["AppContentBackgroundColor"],
 		AppContentBorderRadius:                     theme.AppContentBorderRadius,
+		OverlayBackgroundColor:                     theme.OverlayBackgroundColor,
+		OverlayFontColor:                           theme.OverlayFontColor,
 		AppBorderColor:                             colors["AppBorderColor"],
 		AppBorderWidth:                             theme.AppBorderWidth,
 		AppBorderRadius:                            theme.AppBorderRadius,

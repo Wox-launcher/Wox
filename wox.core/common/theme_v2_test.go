@@ -10,6 +10,74 @@ import (
 
 const minimalV2Theme = `{"SchemaVersion":2,"ThemeId":"test-v2","ThemeName":"Test","BaseBackgroundColor":"#182020B8","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6"}`
 
+// TestOverlayThemeColorInheritance keeps existing themes on the app wash and lets image themes opt out.
+func TestOverlayThemeColorInheritance(t *testing.T) {
+	var theme Theme
+	if err := json.Unmarshal([]byte(minimalV2Theme), &theme); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := theme.ResolveForTarget("windows", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	colors := resolved.ResolvedColors()
+	if colors["OverlayBackgroundColor"] != colors["AppBackgroundColor"] || colors["OverlayFontColor"] != colors["ActionItemFontColor"] {
+		t.Fatalf("overlay colors = %s/%s, want app background %s and action text %s", colors["OverlayBackgroundColor"], colors["OverlayFontColor"], colors["AppBackgroundColor"], colors["ActionItemFontColor"])
+	}
+	if resolved.OverlayBackgroundColor != colors["OverlayBackgroundColor"] || resolved.OverlayFontColor != colors["OverlayFontColor"] {
+		t.Fatal("resolved overlay fields diverged from the color map")
+	}
+	encoded, err := json.Marshal(theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := saved["OverlayBackgroundColor"]; ok {
+		t.Fatal("save materialized inherited OverlayBackgroundColor")
+	}
+	if _, ok := saved["OverlayFontColor"]; ok {
+		t.Fatal("save materialized inherited OverlayFontColor")
+	}
+
+	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"AppBackgroundColor":"transparent","ActionItemFontColor":"#112233","OverlayBackgroundColor":"#F5F1E9","OverlayFontColor":"#293F50","windows":{"AppBackgroundColor":"#101820","OverlayBackgroundColor":"#FFFCF6"}}`
+	if err := json.Unmarshal([]byte(input), &theme); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"windows", "macos"} {
+		resolved, err = theme.ResolveForTarget(platform, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		colors = resolved.ResolvedColors()
+		wantBackground, wantFont := "#F5F1E9FF", "#293F50FF"
+		if platform == "windows" {
+			wantBackground = "#FFFCF6FF"
+		}
+		if colors["OverlayBackgroundColor"] != wantBackground || colors["OverlayFontColor"] != wantFont {
+			t.Fatalf("%s overlay = %s/%s, want %s/%s", platform, colors["OverlayBackgroundColor"], colors["OverlayFontColor"], wantBackground, wantFont)
+		}
+		if platform == "macos" && colors["AppBackgroundColor"] != "#00000000" {
+			t.Fatalf("macos app background = %s, want the transparent frame", colors["AppBackgroundColor"])
+		}
+		if platform == "windows" && colors["OverlayBackgroundColor"] == colors["AppBackgroundColor"] {
+			t.Fatal("windows overlay fill followed the platform app background instead of its own color")
+		}
+	}
+	encoded, err = json.Marshal(theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if string(saved["OverlayBackgroundColor"]) != `"#F5F1E9"` || string(saved["AppBackgroundColor"]) != `"transparent"` {
+		t.Fatalf("save flattened overlay or app background: %s", encoded)
+	}
+}
+
 // TestToolbarPrimaryThemeInheritance preserves sparse saves, per-platform inheritance and transparent overrides.
 func TestToolbarPrimaryThemeInheritance(t *testing.T) {
 	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"ToolbarFontColor":"#12345680","ToolbarHotkeyFontColor":"#23456790","ToolbarHotkeyBackgroundColor":"#34567860","ToolbarHotkeyBorderColor":"#45678950","windows":{"ToolbarFontColor":"#ABCDEF80","ToolbarPrimaryHotkeyBorderColor":"transparent"}}`

@@ -54,8 +54,8 @@ type overlayImage struct {
 
 // ThemeColors carries the Wox theme colors used for image overlay chrome.
 type ThemeColors struct {
-	// Background is AppBackgroundColor, painted under the title bar so overlay
-	// chrome matches the launcher and WebView instead of raw window vibrancy.
+	// Background is the overlay fill, painted under the title bar so chrome
+	// stays readable instead of sitting on raw window vibrancy.
 	Background woxui.Color
 	Foreground woxui.Color
 	Toolbar    woxui.Color

@@ -32,6 +32,29 @@ func TestThemeBackgroundUsesAppBackgroundColor(t *testing.T) {
 	}
 }
 
+func TestCurrentThemeChromeUsesOverlayColors(t *testing.T) {
+	SetThemeProvider(func() common.Theme {
+		return common.Theme{
+			AppBackgroundColor:     "transparent",
+			ActionItemFontColor:    "#FFFFFF",
+			OverlayBackgroundColor: "#F5F1E9",
+			OverlayFontColor:       "#293F50",
+		}
+	})
+	defer SetThemeProvider(nil)
+	chrome := CurrentThemeChrome()
+	if !chrome.Light {
+		t.Fatal("opaque cream overlay fill should request the light appearance")
+	}
+	wantBackground := SurfaceFill(runtime.GOOS, woxui.Color{R: 0xF5, G: 0xF1, B: 0xE9, A: 255}, true)
+	if chrome.Background != wantBackground {
+		t.Fatalf("overlay background = %#v, want %#v", chrome.Background, wantBackground)
+	}
+	if chrome.Foreground != (woxui.Color{R: 0x29, G: 0x3F, B: 0x50, A: 255}) {
+		t.Fatalf("overlay foreground = %#v, want #293F50", chrome.Foreground)
+	}
+}
+
 func TestCurrentThemeChromeFollowsLightAppearance(t *testing.T) {
 	SetThemeProvider(func() common.Theme {
 		return common.Theme{AppBackgroundColor: "#F5F5F5", ToolbarFontColor: "#1C1C1E"}

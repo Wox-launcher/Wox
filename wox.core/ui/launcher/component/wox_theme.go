@@ -62,6 +62,8 @@ type Theme struct {
 	AppContentInset                            float32
 	AppContentBackground                       woxui.Color
 	AppContentBorderRadius                     float32
+	OverlayBackground                          *woxui.Color
+	OverlayText                                *woxui.Color
 	AppBorderColor                             *woxui.Color
 	AppBorderWidth                             *int
 	AppBorderRadius                            *int

@@ -436,7 +436,7 @@ func surfaceFill(goos string, color woxui.Color, lightAppearance bool, nativeMat
 }
 
 // HUDSurface is the overlay panel used by compact HUD windows.
-// It paints the same AppBackgroundColor wash as launcher, Notes, and WebView.
+// It paints OverlayBackgroundColor, falling back to AppBackgroundColor.
 func HUDSurface(width, height, radius float32, lightAppearance bool, child woxwidget.Widget) woxwidget.Container {
 	fill := SurfaceFill(runtime.GOOS, CurrentThemeChrome().Background, lightAppearance)
 	return woxwidget.Container{

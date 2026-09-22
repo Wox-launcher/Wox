@@ -452,6 +452,8 @@
   "ui_theme_editor_group_toolbar": "Toolbar",
   "ui_theme_editor_token_app_background": "Background",
   "ui_theme_editor_token_app_content_background": "Content panel background",
+  "ui_theme_editor_token_overlay_background": "Overlay background",
+  "ui_theme_editor_token_overlay_text": "Overlay text",
   "ui_theme_base_background": "Base background",
   "ui_theme_base_text": "Base text",
   "ui_theme_base_accent": "Base accent",

@@ -44,6 +44,8 @@ type Theme struct {
 	AppContentInset           int
 	AppContentBackgroundColor string
 	AppContentBorderRadius    int
+	OverlayBackgroundColor    string
+	OverlayFontColor          string
 	AppPaddingLeft            int
 	AppPaddingTop             int
 	AppPaddingRight           int
