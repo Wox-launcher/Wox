@@ -74,7 +74,7 @@ func Test028LauncherFileDragVisibility(t *testing.T) {
 			} else if mode == "cancel-in-source" {
 				smoke.NativeDragMouse(0, 0, 4)
 			} else {
-				tx, ty := peer.Center()
+				tx, ty := peer.DropPointOutside(t, hwnd)
 				t.Logf("drag mode=%s targetPhysical=(%d,%d)", mode, tx, ty)
 				smoke.NativeDragMouse(tx, ty, 0)
 				peer.Wait(t, ctx, client, "entered")

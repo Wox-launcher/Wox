@@ -15,8 +15,19 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
 	app.settingsOpen = true
+	// settingsNativeWindow always hops through runOnUI. The real Linux dispatcher
+	// runs that inline when the caller is already the UI thread. A one-slot queue
+	// that does not reenter fills up inside invalidate and blocks the hide path.
 	queued := make(chan func(), 1)
-	app.uiCall = func(fn func()) error { queued <- fn; return nil }
+	depth := 0
+	app.uiCall = func(fn func()) error {
+		if depth > 0 {
+			fn()
+			return nil
+		}
+		queued <- fn
+		return nil
+	}
 
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 14, Height: 14}
 	app.setSettingChoiceTooltip(true, "  tooltip content  ", anchor)
@@ -26,7 +37,9 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	// Apply queued UI work on the test thread, just like the native event loop.
 	select {
 	case apply := <-queued:
+		depth++
 		apply()
+		depth--
 	case <-time.After(nativeHoverTooltipDelay + time.Second):
 		t.Fatal("inline tooltip did not dispatch after dwell")
 	}
@@ -44,6 +57,13 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	}
 
 	app.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	depth++
+	select {
+	case apply := <-queued:
+		apply()
+	default:
+	}
+	depth--
 	if app.settingsInlineTooltip != nil {
 		t.Fatalf("tooltip state = %#v, want nil after hide", app.settingsInlineTooltip)
 	}

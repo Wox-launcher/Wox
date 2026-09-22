@@ -284,6 +284,10 @@ struct WoxLinuxWindow {
   bool presenting;
   bool rendering;
   guint invalidate_idle;
+  // overlay_frame_pending asks the idle below to clear the overlay. Embedded
+  // content is already in that FBO, so a later clear would wipe it.
+  bool overlay_frame_pending;
+  guint overlay_present_idle;
   bool closed;
   GdkRectangle input_cursor_rect;
   WoxRendererResourceStats frame_resource_stats;
@@ -2873,10 +2877,20 @@ static void apply_linux_window_size(WoxLinuxWindow *window, int width, int heigh
   trace_linux_window_geometry(window, "resize_after_request");
 }
 
+static void queue_linux_window_render(WoxLinuxWindow *window);
+
 // present_linux_window_now presents a full frame at the current allocation before
 // SetBounds returns, matching Windows redrawWindowAfterResize.
 static void present_linux_window_now(WoxLinuxWindow *window) {
   if (window->closed || !window->visible || window->context == 0 || window->presenting) {
+    return;
+  }
+  if (window->rendering) {
+    // SetBounds during GtkGLArea::render must not call gdk_window_process_updates.
+    // That re-enters the render signal, and the nested glXMakeCurrent waits for
+    // the outer frame that cannot return. queue_linux_window_render waits until
+    // this signal returns; a direct queue_render is cleared before it can run.
+    queue_linux_window_render(window);
     return;
   }
   trace_linux_window_geometry(window, "present_now_begin");
@@ -3030,7 +3044,11 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
     return TRUE;
   }
   if (GTK_WIDGET(area) == window->overlay_gl_area) {
-    if (renderer->frame_framebuffer == 0) {
+    // The background frame only sets overlay_frame_pending. Clearing here keeps
+    // gtk_gl_area_make_current off the background render stack.
+    if (window->overlay_frame_pending || renderer->frame_framebuffer == 0) {
+      window->overlay_frame_pending = false;
+      glDisable(GL_SCISSOR_TEST);
       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
       glClear(GL_COLOR_BUFFER_BIT);
     } else {
@@ -3120,6 +3138,10 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
   if (window->invalidate_idle != 0) {
     g_source_remove(window->invalidate_idle);
     window->invalidate_idle = 0;
+  }
+  if (window->overlay_present_idle != 0) {
+    g_source_remove(window->overlay_present_idle);
+    window->overlay_present_idle = 0;
   }
   clear_active_web_view(window, false);
   g_clear_pointer(&window->action_hotkey_js, g_free);
@@ -5696,11 +5718,54 @@ int32_t wox_linux_window_begin_embedded_surface_overlay(WoxLinuxWindow *window) 
   return 0;
 }
 
+// linux_present_overlay_idle runs after GtkGLArea::render returns. queue_render
+// or make_current on the overlay from inside the background render signal blocks
+// in glXMakeCurrent: X waits for the outer frame, and that frame waits for X.
+// The launcher smoke hit this while the window height was still catching up.
+static gboolean linux_present_overlay_idle(gpointer data) {
+  WoxLinuxWindow *window = data;
+  window->overlay_present_idle = 0;
+  if (window->closed || !window->visible || window->overlay_gl_area == NULL) {
+    return G_SOURCE_REMOVE;
+  }
+  if (window->rendering) {
+    window->overlay_present_idle = g_idle_add(linux_present_overlay_idle, window);
+    return G_SOURCE_REMOVE;
+  }
+  gtk_gl_area_queue_render(GTK_GL_AREA(window->overlay_gl_area));
+  return G_SOURCE_REMOVE;
+}
+
+static void schedule_linux_overlay_present(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || window->overlay_gl_area == NULL) {
+    return;
+  }
+  if (window->overlay_present_idle == 0) {
+    window->overlay_present_idle = g_idle_add(linux_present_overlay_idle, window);
+  }
+}
+
 int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
   if (window == NULL || window->active_renderer == NULL) {
     return -1;
   }
+  bool switched_to_overlay = window->active_renderer != &window->renderer;
   int32_t result = finish_linux_renderer_frame(window, window->active_renderer);
+  if (window->rendering) {
+    if (result == 0 && window->overlay_gl_area != NULL) {
+      window->overlay_frame_pending = !window->embedded_surface_overlay_active;
+      schedule_linux_overlay_present(window);
+    }
+    window->embedded_surface_overlay_active = false;
+    window->active_renderer = NULL;
+    window->active_gl_area = NULL;
+    // Embedded drawing already made the overlay context current. GTK still
+    // composites the background drawable after this signal returns.
+    if (switched_to_overlay && linux_gl_area_can_make_current(window->gl_area)) {
+      gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
+    }
+    return result;
+  }
   if (result == 0 && !window->embedded_surface_overlay_active) {
     WoxLinuxRenderer *background = &window->renderer;
     window->active_renderer = &window->overlay_renderer;

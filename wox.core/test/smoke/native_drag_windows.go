@@ -177,3 +177,49 @@ func NativeDragEscape() {
 func (p *NativeDragPeer) Center() (int32, int32) {
 	return NativeDragPoint(p.Handle, woxui.Point{X: 50, Y: 50})
 }
+
+type nativeWindowRect struct {
+	Left, Top, Right, Bottom int32
+}
+
+func nativeWindowRectOf(handle uintptr) (nativeWindowRect, bool) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	old, _, _ := dragUser32.NewProc("SetThreadDpiAwarenessContext").Call(^uintptr(3))
+	defer dragUser32.NewProc("SetThreadDpiAwarenessContext").Call(old)
+	var rect nativeWindowRect
+	ok, _, _ := dragUser32.NewProc("GetWindowRect").Call(handle, uintptr(unsafe.Pointer(&rect)))
+	if ok == 0 || rect.Right <= rect.Left || rect.Bottom <= rect.Top {
+		return nativeWindowRect{}, false
+	}
+	return rect, true
+}
+
+func nativeRectContains(rect nativeWindowRect, x, y int32) bool {
+	return x >= rect.Left && x < rect.Right && y >= rect.Top && y < rect.Bottom
+}
+
+// DropPointOutside returns a physical pixel on this peer that is not also inside avoid.
+// CI desktops are small, so the peer's center often still lies on the launcher HWND.
+// OLE hit-tests the topmost window, and DragEnter never reaches a covered peer.
+func (p *NativeDragPeer) DropPointOutside(t *testing.T, avoid uintptr) (int32, int32) {
+	t.Helper()
+	peer, ok := nativeWindowRectOf(p.Handle)
+	if !ok {
+		t.Fatal("native drag peer has no window rect")
+	}
+	avoidRect, _ := nativeWindowRectOf(avoid)
+	// Stay off the title bar and the outer border so the point is in the drop client.
+	const inset int32 = 12
+	const title int32 = 40
+	for y := peer.Bottom - inset; y >= peer.Top+title; y -= 8 {
+		for x := peer.Right - inset; x >= peer.Left+inset; x -= 8 {
+			if nativeRectContains(avoidRect, x, y) {
+				continue
+			}
+			return x, y
+		}
+	}
+	t.Fatalf("no peer drop point outside source: peer=%+v source=%+v", peer, avoidRect)
+	return 0, 0
+}
