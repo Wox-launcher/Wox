@@ -45,6 +45,8 @@ extern void woxGoLinuxPointer(uintptr_t context, uint8_t kind, float x, float y,
 extern void woxGoLinuxObservePointer(uintptr_t context, float desktop_x, float desktop_y, int32_t inside);
 extern void woxGoLinuxFileDrop(uintptr_t context, const char *paths);
 extern int32_t woxGoLinuxAccessibilityAction(uintptr_t context, uint64_t node_id, const char *action, const char *value);
+extern void woxGoLinuxAccessibilityFlush(uintptr_t context);
+extern void woxGoLinuxAccessibilityDrop(uintptr_t context);
 
 enum {
   WOX_KEY_MODIFIER_SHIFT = 1 << 0,
@@ -288,6 +290,7 @@ struct WoxLinuxWindow {
   // content is already in that FBO, so a later clear would wipe it.
   bool overlay_frame_pending;
   guint overlay_present_idle;
+  guint accessibility_idle;
   bool closed;
   GdkRectangle input_cursor_rect;
   WoxRendererResourceStats frame_resource_stats;
@@ -3143,6 +3146,13 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
     g_source_remove(window->overlay_present_idle);
     window->overlay_present_idle = 0;
   }
+  if (window->accessibility_idle != 0) {
+    g_source_remove(window->accessibility_idle);
+    window->accessibility_idle = 0;
+  }
+  if (context != 0) {
+    woxGoLinuxAccessibilityDrop(context);
+  }
   clear_active_web_view(window, false);
   g_clear_pointer(&window->action_hotkey_js, g_free);
   g_hash_table_destroy(window->web_view_cache);
@@ -4849,6 +4859,31 @@ static GtkWidget *accessibility_widget(const char *role, const char *value, uint
     gtk_drag_dest_unset(widget);
   }
   return widget;
+}
+
+static gboolean linux_accessibility_idle(gpointer data) {
+  WoxLinuxWindow *window = data;
+  window->accessibility_idle = 0;
+  if (!window->closed && window->context != 0) {
+    woxGoLinuxAccessibilityFlush(window->context);
+  }
+  return G_SOURCE_REMOVE;
+}
+
+// wox_linux_window_is_rendering reports the GtkGLArea render signal. Rebuilding the
+// accessibility mirror there blocks the main loop inside ATK, so snapshots never return.
+int32_t wox_linux_window_is_rendering(WoxLinuxWindow *window) {
+  return window != NULL && window->rendering ? 1 : 0;
+}
+
+int32_t wox_linux_accessibility_schedule(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || window->context == 0) {
+    return -1;
+  }
+  if (window->accessibility_idle == 0) {
+    window->accessibility_idle = g_idle_add(linux_accessibility_idle, window);
+  }
+  return 0;
 }
 
 int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generation) {

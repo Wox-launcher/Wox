@@ -13,14 +13,40 @@ import "C"
 import (
 	"errors"
 	"runtime/cgo"
+	"sync"
 	"unsafe"
 )
+
+// linuxAccessibilityDeferred keeps the latest mirror tree until the GL render
+// signal returns. Publishing it inside that signal stalls ATK on the main loop.
+var linuxAccessibilityDeferred = struct {
+	sync.Mutex
+	pending map[*platformWindow]AccessibilityTree
+}{pending: map[*platformWindow]AccessibilityTree{}}
 
 func init() {
 	updateNativeAccessibility = updateLinuxAccessibility
 }
 
 func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) error {
+	native, err := window.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_is_rendering(native) != 0 {
+		linuxAccessibilityDeferred.Lock()
+		linuxAccessibilityDeferred.pending[window] = tree
+		linuxAccessibilityDeferred.Unlock()
+		if C.wox_linux_accessibility_schedule(native) != 0 {
+			return errors.New("woxui: failed to schedule Linux accessibility update")
+		}
+		return nil
+	}
+	return applyLinuxAccessibility(window, tree)
+}
+
+// applyLinuxAccessibility rebuilds the GTK accessibility mirror outside the GL render signal.
+func applyLinuxAccessibility(window *platformWindow, tree AccessibilityTree) error {
 	native, err := window.openNative()
 	if err != nil {
 		return err
@@ -79,6 +105,37 @@ func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) er
 		}
 	}
 	return nil
+}
+
+// woxGoLinuxAccessibilityFlush publishes the accessibility mirror deferred during render.
+//
+//export woxGoLinuxAccessibilityFlush
+func woxGoLinuxAccessibilityFlush(context C.uintptr_t) {
+	window, ok := cgo.Handle(context).Value().(*platformWindow)
+	if !ok {
+		return
+	}
+	linuxAccessibilityDeferred.Lock()
+	tree, pending := linuxAccessibilityDeferred.pending[window]
+	delete(linuxAccessibilityDeferred.pending, window)
+	linuxAccessibilityDeferred.Unlock()
+	if !pending {
+		return
+	}
+	_ = applyLinuxAccessibility(window, tree)
+}
+
+// woxGoLinuxAccessibilityDrop discards a mirror tree after its window is destroyed.
+//
+//export woxGoLinuxAccessibilityDrop
+func woxGoLinuxAccessibilityDrop(context C.uintptr_t) {
+	window, ok := cgo.Handle(context).Value().(*platformWindow)
+	if !ok {
+		return
+	}
+	linuxAccessibilityDeferred.Lock()
+	delete(linuxAccessibilityDeferred.pending, window)
+	linuxAccessibilityDeferred.Unlock()
 }
 
 //export woxGoLinuxAccessibilityAction

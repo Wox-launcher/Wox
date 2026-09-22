@@ -123,7 +123,7 @@ func Test028LauncherFileDragVisibility(t *testing.T) {
 					t.Fatal(err)
 				}
 				// The peer title bar is native chrome, so clicking it changes focus without starting another drag.
-				tx, ty := smoke.NativeDragPoint(peer.Handle, woxui.Point{X: 40, Y: -8})
+				tx, ty := peer.TitleBarPointOutside(t, hwnd)
 				smoke.NativeDragMouse(tx, ty, 0)
 				smoke.NativeDragMouse(0, 0, 2)
 				smoke.NativeDragMouse(0, 0, 4)

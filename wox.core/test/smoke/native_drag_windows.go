@@ -223,3 +223,31 @@ func (p *NativeDragPeer) DropPointOutside(t *testing.T, avoid uintptr) (int32, i
 	t.Fatalf("no peer drop point outside source: peer=%+v source=%+v", peer, avoidRect)
 	return 0, 0
 }
+
+// TitleBarPointOutside returns a physical pixel on the peer title bar that is not inside avoid.
+// The client area starts another OLE drag. A fixed title-bar offset still lies on the launcher
+// when a small CI desktop overlaps the peer, so the click never moves foreground.
+func (p *NativeDragPeer) TitleBarPointOutside(t *testing.T, avoid uintptr) (int32, int32) {
+	t.Helper()
+	peer, ok := nativeWindowRectOf(p.Handle)
+	if !ok {
+		t.Fatal("native drag peer has no window rect")
+	}
+	avoidRect, _ := nativeWindowRectOf(avoid)
+	_, clientTop := NativeDragPoint(p.Handle, woxui.Point{})
+	top := peer.Top + 4
+	bottom := clientTop - 1
+	if bottom < top {
+		bottom = top
+	}
+	for y := top; y <= bottom; y += 4 {
+		for x := peer.Right - 12; x >= peer.Left+12; x -= 8 {
+			if !nativeRectContains(peer, x, y) || nativeRectContains(avoidRect, x, y) {
+				continue
+			}
+			return x, y
+		}
+	}
+	t.Fatalf("no peer title-bar point outside source: peer=%+v clientTop=%d source=%+v", peer, clientTop, avoidRect)
+	return 0, 0
+}
