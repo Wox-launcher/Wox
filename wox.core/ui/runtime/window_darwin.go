@@ -4,7 +4,7 @@ package woxui
 
 /*
 #cgo CFLAGS: -fblocks -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit
+#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit -framework Accelerate
 #include <stdlib.h>
 #include "native_darwin.h"
 */
@@ -60,9 +60,6 @@ type platformWindow struct {
 	fullDamage          bool
 	webView             *webviewruntime.Controller
 	webViewActionHotkey string
-	// floatingMaterials mirrors what the native window currently shows, so frames
-	// that declare the same materials skip the main-thread update.
-	floatingMaterials []floatingMaterial
 }
 
 type darwinRenderFrame struct {
@@ -234,9 +231,6 @@ func (w *platformWindow) hide() error {
 		w.mu.Lock()
 		dropped := w.pendingFrame
 		w.pendingFrame = nil
-		// Hiding retired the native materials along with the surfaces; forget them so
-		// the first frame after the next show declares its materials again.
-		w.floatingMaterials = nil
 		w.mu.Unlock()
 		if dropped != nil {
 			w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=window_hidden frameId=%d", dropped.displayList.frameID))
@@ -1070,12 +1064,15 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	commandIndex := -1
 	encodeFailed := false
 	var failedCommandKind displayCommandKind
-	var materials []floatingMaterial
 	displayList.forEachCommand(func(command displayCommand) bool {
 		commandIndex++
 		switch command.kind {
 		case displayCommandFloatingMaterial:
-			materials = append(materials, floatingMaterial{bounds: command.rect, radius: command.radius, tint: command.color, edge: command.edge})
+			result = C.wox_darwin_window_floating_material(native,
+				C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius),
+				C.float(floatingMaterialBlurSigma), C.float(FloatingMaterialBlurMargin),
+				C.uint8_t(command.color.R), C.uint8_t(command.color.G), C.uint8_t(command.color.B), C.uint8_t(command.color.A),
+				C.uint8_t(command.edge.R), C.uint8_t(command.edge.G), C.uint8_t(command.edge.B), C.uint8_t(command.edge.A))
 		case displayCommandFillRoundedRect:
 			result = C.wox_darwin_window_fill_rounded_rect(
 				native,
@@ -1174,11 +1171,6 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	encodeCost := time.Since(encodeStart)
 
 	endStart := time.Now()
-	if !encodeFailed {
-		if materialResult := w.applyFloatingMaterials(native, materials); materialResult != 0 {
-			w.logRenderDiagnostic(fmt.Sprintf("event=floating_material_failed frameId=%d count=%d status=%d", displayList.frameID, len(materials), int32(materialResult)))
-		}
-	}
 	endResult := C.wox_darwin_window_end_frame(native, transactionalFrame)
 	endCost := time.Since(endStart)
 	if encodeFailed {
@@ -1486,4 +1478,15 @@ func (w *platformWindow) setWindowChrome(custom bool, radius float32) error {
 		return errors.New("woxui: failed to update macOS window chrome")
 	}
 	return nil
+}
+
+// testRenderDarwinMaterial exercises the native renderer without opening a window.
+func testRenderDarwinMaterial(scale float32, alpha uint8, mode int) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_darwin_test_render_material((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.uint8_t(alpha), C.int32_t(mode))
+	if status != 0 {
+		return nil, int(status)
+	}
+	return pixels, size
 }

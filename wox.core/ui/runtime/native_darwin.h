@@ -7,23 +7,6 @@
 
 typedef struct WoxDarwinWindow WoxDarwinWindow;
 
-// One floating-surface material declared by a frame, in logical client coordinates.
-typedef struct WoxDarwinFloatingMaterial {
-  float x;
-  float y;
-  float width;
-  float height;
-  float corner_radius;
-  uint8_t tint_red;
-  uint8_t tint_green;
-  uint8_t tint_blue;
-  uint8_t tint_alpha;
-  uint8_t edge_red;
-  uint8_t edge_green;
-  uint8_t edge_blue;
-  uint8_t edge_alpha;
-} WoxDarwinFloatingMaterial;
-
 enum {
   WOX_DARWIN_FRAME_SKIPPED = 1,
   WOX_DARWIN_FRAME_SURFACE_BUSY = 2,
@@ -58,7 +41,6 @@ int32_t wox_darwin_window_set_pointer_passthrough(WoxDarwinWindow *window, int32
 int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char *url);
 int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height, float corner_radius);
 int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window);
-int32_t wox_darwin_window_set_floating_materials(WoxDarwinWindow *window, const WoxDarwinFloatingMaterial *materials, int32_t count);
 int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window);
 int32_t wox_darwin_window_evict_webview(WoxDarwinWindow *window, const char *cache_key);
 int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
@@ -91,12 +73,14 @@ int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t 
 int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha);
 int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius);
 int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height);
 int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window);
 int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional);
 int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out);
+int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float scale, uint8_t background_alpha, int32_t mode);
 int32_t wox_darwin_test_cached_image_owns_pixels(void);
 int32_t wox_darwin_test_large_image_admission(void);
 int32_t wox_darwin_test_screenshot_pixel_at_point(int32_t image_width, int32_t image_height, float frame_width, float frame_height, float x, float y, int32_t *pixel_x, int32_t *pixel_y);

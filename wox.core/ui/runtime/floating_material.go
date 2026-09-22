@@ -13,14 +13,9 @@ package woxui
 // DisplayList.FloatingMaterial while painting, and each platform realises the
 // recorded materials in the way its compositor allows (see floatingMaterialMode):
 //
-//   - macOS hosts one native visual-effect view per material between the main and
-//     overlay composition surfaces. The platform window reconciles the materials
-//     declared by each presented frame with the views it owns: a material that a
-//     frame no longer declares disappears with that frame, so there is no separate
-//     show/hide lifecycle to keep in sync. Only two composition surfaces exist, so
-//     every material samples the main surface and cannot blur another floating
-//     surface; a surface stacked over one paints an opaque cover of its tint
-//     instead (see DisplayList.FloatingMaterial).
+//   - macOS blurs its CoreGraphics back buffer with Accelerate, then paints the
+//     authored tint and edge in the same display-list and clip stack. There are
+//     no separate native material views or material-specific overlay surfaces.
 //   - Windows blurs the Direct2D back buffer under the surface rectangle in place
 //     while the frame is encoded, compresses backdrop contrast/chroma around the
 //     authored tint without changing sampled alpha, then paints the tint and edge.
@@ -40,9 +35,6 @@ const (
 	// floatingMaterialPainted paints the tint and hairline edge as ordinary commands on
 	// the main surface; themes author an opaque tint there.
 	floatingMaterialPainted floatingMaterialMode = iota
-	// floatingMaterialOverlay backs the surface with a native view between the main and
-	// overlay composition surfaces, so the surface content moves onto the overlay.
-	floatingMaterialOverlay
 	// floatingMaterialRendered blurs the main surface under the rectangle inside the
 	// renderer while the frame is encoded; the surface keeps painting on the main surface.
 	floatingMaterialRendered
@@ -67,12 +59,4 @@ func opaqueFloatingMaterialTint(tint Color) Color {
 		tint.A = 255
 	}
 	return tint
-}
-
-// floatingMaterial is one material declared by a frame, in logical client coordinates.
-type floatingMaterial struct {
-	bounds Rect
-	radius float32
-	tint   Color
-	edge   Color
 }

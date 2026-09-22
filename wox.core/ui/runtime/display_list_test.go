@@ -119,8 +119,8 @@ func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {
 }
 
 func TestDeferredEmbeddedOverlayPreservesToolbarMaterial(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows defers the embedded surface boundary")
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+		t.Skip("renderer-backed platforms defer the embedded surface boundary")
 	}
 	for _, pageVisible := range []bool{false, true} {
 		list := &DisplayList{}
@@ -174,19 +174,6 @@ func TestFloatingMaterialRecordsNativeMaterialOrPaintsSurface(t *testing.T) {
 	displayList.FloatingMaterial(Rect{X: 400, Y: 40, Width: 50, Height: 50}, 4, tint, edge)
 
 	switch nativeFloatingMaterialMode() {
-	case floatingMaterialOverlay:
-		// One overlay switch, then one material per surface for the platform window to reconcile.
-		if len(displayList.commands) != 3 || displayList.commands[0].kind != displayCommandBeginEmbeddedSurfaceOverlay {
-			t.Fatalf("commands = %+v, want overlay boundary followed by two materials", displayList.commands)
-		}
-		material := displayList.commands[1]
-		if material.kind != displayCommandFloatingMaterial || material.rect != bounds || material.radius != 9 || material.color != tint || material.edge != edge {
-			t.Fatalf("material = %+v, want the declared bounds, radius, tint and edge", material)
-		}
-		if displayList.commands[2].kind != displayCommandFloatingMaterial {
-			t.Fatalf("second material = %+v, want a second material command", displayList.commands[2])
-		}
-		return
 	case floatingMaterialRendered:
 		// The renderer blurs in place, so the surface stays on the main surface: no overlay switch.
 		if len(displayList.commands) != 2 || displayList.commands[0].kind != displayCommandFloatingMaterial || displayList.commands[1].kind != displayCommandFloatingMaterial {
@@ -229,26 +216,6 @@ func TestFloatingMaterialOverEmbeddedOverlayDropsTransparency(t *testing.T) {
 	material := displayList.commands[2]
 	if material.color != (Color{R: 22, G: 22, B: 26, A: 255}) || material.edge != edge {
 		t.Fatalf("overlay material = %+v, want the authored tint at full opacity", material)
-	}
-}
-
-func TestFloatingMaterialCoversSurfaceStackedOverAnother(t *testing.T) {
-	if nativeFloatingMaterialMode() != floatingMaterialOverlay {
-		t.Skip("only an overlay material cannot sample another floating surface; painted tints are opaque and a renderer blur samples everything beneath")
-	}
-	displayList := &DisplayList{}
-	tint := Color{R: 22, G: 22, B: 26, A: 56}
-	displayList.FloatingMaterial(Rect{X: 20, Y: 30, Width: 200, Height: 100}, 9, tint, Color{A: 40})
-	displayList.FloatingMaterial(Rect{X: 40, Y: 40, Width: 50, Height: 50}, 4, tint, Color{A: 40})
-
-	// The stacked surface adds an opaque fill inset by the hairline; the material samples
-	// the main surface only and would otherwise show the lower panel's text through the tint.
-	if len(displayList.commands) != 4 || displayList.commands[3].kind != displayCommandFillRoundedRect {
-		t.Fatalf("commands = %+v, want a cover fill after the stacked material", displayList.commands)
-	}
-	cover := displayList.commands[3]
-	if cover.rect != (Rect{X: 41, Y: 41, Width: 48, Height: 48}) || cover.radius != 3 || cover.color != (Color{R: 22, G: 22, B: 26, A: 255}) {
-		t.Fatalf("cover = %+v, want the opaque tint inset by 1px", cover)
 	}
 }
 

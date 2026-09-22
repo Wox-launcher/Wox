@@ -60,11 +60,9 @@ type DisplayList struct {
 	// overlayBegun records that later commands already target the overlay
 	// surface; a second split would fail at the native renderer.
 	overlayBegun bool
-	// Windows keeps launcher chrome on the main surface until floating panels paint.
+	// Renderer-backed platforms keep launcher chrome on the main surface until floating panels paint.
 	pendingEmbeddedOverlay Rect
-	// floatingMaterials lists the materials declared so far, so a later surface
-	// can tell whether it is stacked over another floating surface and so the
-	// widget host can widen damage under a renderer-blurred surface using
+	// floatingMaterials lets the widget host widen damage under a blurred surface using
 	// FloatingMaterialBlurMargin (see RenderedFloatingMaterialRects). Declared
 	// surfaces are kept even when damage culling skips their command, because
 	// the next frame's damage depends on them.
@@ -277,16 +275,10 @@ type displayCommand struct {
 	points       []Point
 }
 
-// FloatingMaterial backs a surface that floats above other Go UI content in the same
-// window (dialog, menu, tooltip, action panel). The caller must paint nothing else as
-// background: the material carries tint and edge on every platform (see
-// floating_material.go for how each one realises it). With a native overlay material
-// the surface moves onto the overlay composition surface. With a renderer blur the
-// command stays in place in the main surface stream, so it must be recorded after the
-// content beneath and before the surface content, which is the natural paint order.
-// Without either, the same call paints the tint and a hairline edge directly, so
-// damage culling and composition behave exactly as for an ordinary container. On every
-// path the tint means "over the window content", so themes tune one value per platform.
+// FloatingMaterial paints a floating surface's backdrop, tint, and edge in display-list
+// order. The renderer samples previously drawn content inside the current clip stack;
+// unsupported platforms paint just the tint and edge. Native WebView pixels cannot be
+// sampled, so surfaces above them use an opaque tint.
 func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Color) {
 	if rect.Width <= 0 || rect.Height <= 0 {
 		return
@@ -321,23 +313,6 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 		d.floatingMaterials = append(d.floatingMaterials, rect)
 		return
 	}
-	d.BeginEmbeddedSurfaceOverlay(rect)
-	d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge})
-	// Every material samples the main surface only, so a surface stacked over another
-	// floating surface would show that surface's overlay pixels through its own tint.
-	// Cover them with an opaque fill of the tint colour; a translucent wash was tried and
-	// still let the lower text read through, so the stacked surface gives up the blur
-	// and keeps only the material's edge and shadow.
-	for _, lower := range d.floatingMaterials {
-		if rectsOverlap(rect, lower) {
-			cover := tint
-			cover.A = 255
-			// Inset by the hairline so the material's edge stays visible around the fill.
-			d.FillRoundedRect(Rect{X: rect.X + 1, Y: rect.Y + 1, Width: rect.Width - 2, Height: rect.Height - 2}, max(float32(0), radius-1), cover)
-			break
-		}
-	}
-	d.floatingMaterials = append(d.floatingMaterials, rect)
 }
 
 // RenderedFloatingMaterialRects returns the surfaces this frame backed with a renderer
@@ -352,14 +327,13 @@ func (d *DisplayList) RenderedFloatingMaterialRects() []Rect {
 	return append([]Rect(nil), d.floatingMaterials...)
 }
 
-// DeferEmbeddedSurfaceOverlay keeps non-overlapping launcher chrome on the Windows
-// main surface, where its material can still sample the backdrop. Other platforms
-// retain their existing native surface ordering.
+// DeferEmbeddedSurfaceOverlay keeps launcher chrome on the main surface, where
+// its material can sample the backdrop, until floating panels cover the WebView.
 func (d *DisplayList) DeferEmbeddedSurfaceOverlay(rect Rect) {
 	if d == nil || rect.Width <= 0 || rect.Height <= 0 {
 		return
 	}
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 		d.BeginEmbeddedSurfaceOverlay(rect)
 		return
 	}

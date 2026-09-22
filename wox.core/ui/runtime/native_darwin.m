@@ -1,6 +1,7 @@
 //go:build darwin
 
 #import "native_darwin.h"
+#import "floating_material_darwin.h"
 
 #import <Cocoa/Cocoa.h>
 #import <CoreText/CoreText.h>
@@ -86,7 +87,6 @@ typedef struct WoxDarwinRenderer WoxDarwinRenderer;
 @class WoxWindowDelegate;
 @class WoxWebViewToolbar;
 @class WoxResultDragSource;
-@class WoxFloatingMaterialView;
 
 typedef struct {
   uint64_t image_id;
@@ -118,10 +118,6 @@ struct WoxDarwinWindow {
   NSString *action_hotkey_js;
   char action_hotkey_key[32];
   uint8_t action_hotkey_modifiers;
-  // Materials behind floating surfaces, reused by index across frames and kept
-  // hidden when a frame declares fewer, so reopening a panel does not rebuild
-  // its material view every time.
-  NSMutableArray<WoxFloatingMaterialView *> *floating_materials;
   uintptr_t context;
   uint64_t epoch;
   bool visible;
@@ -396,97 +392,6 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
   [window->window makeFirstResponder:(NSView *)window->view];
   [window->window invalidateShadow];
 }
-
-// WoxFloatingMaterialView is the material behind one surface that floats above
-// other Go UI content inside the same window (action panel, dialog, menu,
-// tooltip): a within-window blur of the Go content beneath, under a
-// plain layer carrying the theme tint, so the surface reads as a separate card
-// instead of a flat wash.
-//
-// It deliberately does not use Liquid Glass even where the window material
-// does. A glass view nested inside the window glass changes its rendering with
-// the application's active state (it turns almost clear once another app is
-// frontmost) and exposes no public way to pin it, whereas
-// NSVisualEffectStateActive keeps this material identical whether or not the
-// window has focus, matching the window material and the Windows backdrop.
-//
-// It is chrome only: the Go UI owns every pointer event, so hit testing falls
-// through to the render view exactly as if the material were not there.
-@interface WoxFloatingMaterialView : NSView {
-  NSVisualEffectView *_material;
-  NSView *_tint;
-}
-- (void)applyMaterial:(const WoxDarwinFloatingMaterial *)material;
-@end
-
-@implementation WoxFloatingMaterialView
-- (instancetype)initWithFrame:(NSRect)frame {
-  self = [super initWithFrame:frame];
-  if (self == nil) {
-    return nil;
-  }
-  self.wantsLayer = YES;
-  // Above the main IOSurface (0) and any embedded WebView (1), below the
-  // overlay IOSurface (2) that carries the surface's own pixels.
-  self.layer.zPosition = 1.5;
-  // A floating surface needs its own drop shadow; the window shadow only
-  // outlines the window. shadowPath is set per apply because the material layer
-  // has no alpha content to derive it from.
-  self.layer.shadowColor = NSColor.blackColor.CGColor;
-  self.layer.shadowOpacity = 0.34f;
-  self.layer.shadowRadius = 16.0;
-  self.layer.shadowOffset = CGSizeMake(0.0, 6.0);
-  // The card edge is an explicit hairline on this layer, which CA composites
-  // above the sublayers; NSVisualEffectView has no rim of its own.
-  self.layer.borderWidth = 1.0;
-  _material = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
-  // HUDWindow is the most translucent of the standard materials that still
-  // hides the text beneath; Popover and Menu read as nearly opaque cards.
-  _material.material = NSVisualEffectMaterialHUDWindow;
-  _material.state = NSVisualEffectStateActive;
-  _material.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-  _material.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  _material.wantsLayer = YES;
-  _material.layer.masksToBounds = YES;
-  _tint = [[NSView alloc] initWithFrame:self.bounds];
-  _tint.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  _tint.wantsLayer = YES;
-  [self addSubview:_material];
-  [self addSubview:_tint positioned:NSWindowAbove relativeTo:_material];
-  return self;
-}
-
-- (void)dealloc {
-  [_material release];
-  [_tint release];
-  [super dealloc];
-}
-
-- (NSView *)hitTest:(NSPoint)point {
-  (void)point;
-  return nil;
-}
-
-- (BOOL)isFlipped {
-  return YES;
-}
-
-- (void)applyMaterial:(const WoxDarwinFloatingMaterial *)material {
-  // WoxRenderView is flipped, so Go's top-left logical rect is the frame as is.
-  self.frame = NSMakeRect(material->x, material->y, material->width, material->height);
-  CGFloat radius = fmaxf(0.0f, fminf(material->corner_radius, fminf(material->width, material->height) * 0.5f));
-  NSColor *tint = [NSColor colorWithSRGBRed:material->tint_red / 255.0 green:material->tint_green / 255.0 blue:material->tint_blue / 255.0 alpha:material->tint_alpha / 255.0];
-  CGPathRef shadow_path = CGPathCreateWithRoundedRect(CGRectMake(0.0, 0.0, material->width, material->height), radius, radius, NULL);
-  self.layer.shadowPath = shadow_path;
-  CGPathRelease(shadow_path);
-  self.layer.cornerRadius = radius;
-  self.layer.borderColor = [NSColor colorWithSRGBRed:material->edge_red / 255.0 green:material->edge_green / 255.0 blue:material->edge_blue / 255.0 alpha:material->edge_alpha / 255.0].CGColor;
-  _material.layer.cornerRadius = radius;
-  _tint.layer.cornerRadius = radius;
-  _tint.layer.backgroundColor = tint.CGColor;
-  self.hidden = NO;
-}
-@end
 
 @interface WoxNativeWindow : NSWindow
 @property(nonatomic, assign) BOOL woxNonactivating;
@@ -1722,11 +1627,6 @@ static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
   clear_renderer_surfaces(window->renderer);
   clear_renderer_surfaces(window->overlay_renderer);
   clear_cached_images(window);
-  // The surfaces are blank until the next show renders, so a material left
-  // visible would appear on its own as a stale card over the empty window.
-  for (WoxFloatingMaterialView *material in window->floating_materials) {
-    material.hidden = YES;
-  }
   [CATransaction commit];
   [CATransaction flush];
   [window->window orderOut:nil];
@@ -4212,52 +4112,6 @@ int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window) {
   return result;
 }
 
-// wox_darwin_window_set_floating_materials makes the window show exactly the
-// materials declared by the frame being presented. Views are reused by index,
-// which keeps their subview order equal to paint order, so a material declared
-// later stacks above one declared earlier; surplus views are hidden, not freed.
-//
-// Like the surface presentation in finish_darwin_renderer_frame, the update is
-// queued asynchronously to the main thread from the render thread: the caller
-// holds the renderer lock, which main-thread window operations also take, so
-// waiting for main here would deadlock. Queuing before the frame's present block
-// lands both in the same main-thread turn, and the presentation generation drops
-// an update for a frame whose window was hidden or re-shown in the meantime.
-int32_t wox_darwin_window_set_floating_materials(WoxDarwinWindow *window, const WoxDarwinFloatingMaterial *materials, int32_t count) {
-  if (window == NULL || count < 0 || (count > 0 && materials == NULL) || window->closed) {
-    return -1;
-  }
-  NSData *snapshot = count > 0 ? [NSData dataWithBytes:materials length:sizeof(WoxDarwinFloatingMaterial) * (NSUInteger)count] : nil;
-  uint64_t generation = atomic_load_explicit(&window->presentation_generation, memory_order_relaxed);
-  dispatch_block_t apply = ^{
-    if (window->closed || atomic_load_explicit(&window->presentation_generation, memory_order_relaxed) != generation) {
-      return;
-    }
-    if (window->floating_materials == nil) {
-      window->floating_materials = [[NSMutableArray alloc] init];
-    }
-    const WoxDarwinFloatingMaterial *items = snapshot.bytes;
-    for (int32_t index = 0; index < count; index++) {
-      if ((NSUInteger)index >= window->floating_materials.count) {
-        WoxFloatingMaterialView *view = [[WoxFloatingMaterialView alloc] initWithFrame:NSZeroRect];
-        [window->view addSubview:view positioned:NSWindowAbove relativeTo:nil];
-        [window->floating_materials addObject:view];
-        [view release];
-      }
-      [window->floating_materials[(NSUInteger)index] applyMaterial:&items[index]];
-    }
-    for (NSUInteger index = (NSUInteger)count; index < window->floating_materials.count; index++) {
-      window->floating_materials[index].hidden = YES;
-    }
-  };
-  if ([NSThread isMainThread]) {
-    apply();
-  } else {
-    dispatch_async(dispatch_get_main_queue(), apply);
-  }
-  return 0;
-}
-
 int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
   if (window == NULL) {
     return -1;
@@ -4854,11 +4708,6 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     clear_active_web_view(window, true);
     [window->web_view_toolbar release];
     window->web_view_toolbar = nil;
-    for (WoxFloatingMaterialView *material in window->floating_materials) {
-      [material removeFromSuperview];
-    }
-    [window->floating_materials release];
-    window->floating_materials = nil;
     [window->web_view_cache removeAllObjects];
     [window->web_view_signatures removeAllObjects];
     [window->web_view_content_keys removeAllObjects];
@@ -5146,6 +4995,31 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
   CGContextAddPath(renderer->context, path);
   CGContextStrokePath(renderer->context);
   CGPathRelease(path);
+  return 0;
+}
+
+// Paint in display-list order so floating surfaces share normal clipping and stacking.
+int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
+    return -1;
+  }
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  if (width <= 0.0f || height <= 0.0f) {
+    return 0;
+  }
+  if (!window->embedded_surface_overlay_active && blur_sigma > 0.0f) {
+    // A failed blur leaves the backdrop intact; the authored tint still paints.
+    wox_darwin_blur_material(renderer->context, renderer->scale, CGRectMake(x, y, width, height), radius, blur_sigma, blur_margin, tint_red, tint_green, tint_blue);
+  }
+  if (window->embedded_surface_overlay_active && tint_alpha != 0) {
+    tint_alpha = 255;
+  }
+  if (tint_alpha != 0) {
+    wox_darwin_window_fill_rounded_rect(window, x, y, width, height, radius, tint_red, tint_green, tint_blue, tint_alpha);
+  }
+  if (edge_alpha != 0) {
+    return wox_darwin_window_stroke_rounded_rect(window, x, y, width, height, radius, 1.0f, edge_red, edge_green, edge_blue, edge_alpha);
+  }
   return 0;
 }
 
@@ -5509,4 +5383,34 @@ int32_t wox_darwin_capture_display_bgra(uint32_t display_id, int32_t x, int32_t 
     CGImageRelease(crop);
     return 0;
   }
+}
+
+// Render the production material and clip path into a bitmap without creating an AppKit window.
+int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float scale, uint8_t background_alpha, int32_t mode) {
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(pixels, size, size, 8, size * 4, color_space, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+  CGColorSpaceRelease(color_space);
+  if (context == NULL) {
+    return -1;
+  }
+  CGContextTranslateCTM(context, 0, size);
+  CGContextScaleCTM(context, scale, -scale);
+  WoxDarwinRenderer renderer = {.context = context, .scale = scale, .viewport_size = CGSizeMake(96, 96), .frame_open = true};
+  WoxDarwinWindow window = {.active_renderer = &renderer, .embedded_surface_overlay_active = mode == 3};
+  wox_darwin_window_fill_rounded_rect(&window, 0, 0, 96, 96, 0, 20, 40, 80, background_alpha);
+  CGContextSetBlendMode(context, kCGBlendModeCopy);
+  wox_darwin_window_fill_rounded_rect(&window, 0, 0, 96, 48, 0, 80, 40, 20, background_alpha);
+  wox_darwin_window_fill_rounded_rect(&window, 44, 0, 8, 96, 0, 255, 255, 255, background_alpha);
+  CGContextSetBlendMode(context, kCGBlendModeNormal);
+  if (mode != 0) {
+    wox_darwin_window_set_clip_rect(&window, 0, 26, 80, 54);
+    wox_darwin_window_floating_material(&window, -8, 16, 88, 64, 10, 12, 36, 60, 80, 100, 64, 0, 0, 0, 0);
+    if (mode == 2) {
+      wox_darwin_window_floating_material(&window, 24, 36, 40, 32, 6, 12, 36, 100, 80, 60, 64, 0, 0, 0, 0);
+    }
+    wox_darwin_window_clear_clip(&window);
+  }
+  CGContextFlush(context);
+  CGContextRelease(context);
+  return 0;
 }
