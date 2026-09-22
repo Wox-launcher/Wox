@@ -297,15 +297,15 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 	rowChildren := []woxwidget.Widget{
 		swatch,
 		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-			title := []woxwidget.Widget{woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor}}
-			if props.Mode == "store" && item.ImageTheme && props.ImageLabel != "" {
-				title = append(title, woxcomponent.WoxCompactTag(props.ImageLabel, subtitleColor))
-			}
 			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: title},
+				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
 				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
 			}}}
 		}}},
+	}
+	if props.Mode == "store" && item.ImageTheme && props.ImageLabel != "" {
+		rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5,
+			Child: woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary)})
 	}
 	if trailing != nil {
 		rowChildren = append(rowChildren, trailing)
@@ -362,15 +362,15 @@ func themeStoreScreenshot(props ThemeSettingsProps, theme ThemeCatalogItem, widt
 	return woxwidget.Container{Width: width, Height: height}
 }
 
-// themeDetailMeta places the image-theme note with the author, matching the store detail page.
+// themeDetailMeta keeps metadata within its share of the row instead of letting Align consume the website slot.
 func themeDetailMeta(props ThemeSettingsProps, theme ThemeCatalogItem, website woxwidget.Widget) []woxwidget.Widget {
 	meta := []woxwidget.Widget{
-		woxwidget.Align{Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary}},
+		woxwidget.Flexible{Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: props.Theme.TextSecondary}},
 	}
-	if props.Mode == "store" && theme.ImageTheme && props.ImageMemoryLabel != "" {
-		meta = append(meta, woxcomponent.WoxCompactTag(props.ImageMemoryLabel, props.Theme.TextSecondary))
+	if props.Mode == "store" && theme.ImageTheme && props.ImageLabel != "" {
+		meta = append(meta, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary))
 	}
-	return append(meta, woxwidget.Expanded{Child: woxwidget.Container{}}, website)
+	return []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: meta}}, website}
 }
 
 func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem) (woxwidget.Widget, float32) {
@@ -424,18 +424,28 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 		return themePreviewTab(props, theme, width, previewHeight)
 	}
 	var body woxwidget.Widget
-	if description := strings.TrimSpace(theme.Description); description != "" {
+	description := strings.TrimSpace(theme.Description)
+	var details []woxwidget.Widget
+	if description != "" {
+		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
+			Value: description, Width: innerWidth, LineHeight: 20,
+			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary,
+		}})
+	}
+	if props.Mode == "store" && theme.ImageTheme && props.ImageMemoryLabel != "" {
+		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
+			Value: props.ImageMemoryLabel, Width: innerWidth, LineHeight: 20,
+			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Warning,
+		}})
+	}
+	if len(details) > 0 {
 		// Size the preview to the leftover pane. Giving it the full body height
 		// inside a scroll view made the description overflow and wheel away.
-		body = woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
-				Value: description, Width: max(float32(0), width-40), LineHeight: 20,
-				Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary,
-			}},
+		body = woxwidget.Flex{Axis: woxwidget.Vertical, Children: append(details,
 			woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 				return preview(size.Height)
 			}}},
-		}}
+		)}
 	} else {
 		body = preview(bodyHeight)
 	}

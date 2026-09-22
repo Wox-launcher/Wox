@@ -552,14 +552,59 @@ func TestActiveThemeExplainsDisabledApply(t *testing.T) {
 	}
 }
 
-func TestThemeStoreImageDetailShowsMemoryTag(t *testing.T) {
-	meta := themeDetailMeta(ThemeSettingsProps{Mode: "store", ImageMemoryLabel: "Image · uses more memory"}, ThemeCatalogItem{Author: "qianlifeng", ImageTheme: true}, woxwidget.Container{})
-	if len(meta) != 4 {
-		t.Fatalf("image theme meta = %d items", len(meta))
+func TestThemeStoreImageTagMatchesPluginTrailingBadge(t *testing.T) {
+	props := ThemeSettingsProps{Mode: "store", ImageLabel: "Image"}
+	for _, selected := range []bool{false, true} {
+		item := ThemeCatalogItem{ID: "knit", Name: "Knit", ImageTheme: true, IsInstalled: true, Selected: selected}
+		slot := themeListRow(props, item, 250).(woxwidget.Container)
+		row := focusedControlGesture(slot.Child).Child.(woxwidget.Container)
+		children := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+		tagSlot := children[2].(woxwidget.Align)
+		tag := tagSlot.Child.(woxwidget.Container)
+		label := tag.Child.(woxwidget.Text)
+		if len(children) != 4 || tagSlot.Width != 44 || tagSlot.Horizontal != 1 || tagSlot.Vertical != 0.5 || label.Value != "Image" || label.Style.Size != woxcomponent.TagFontSize {
+			t.Fatal("Image must use the plugin badge slot before the installed icon")
+		}
 	}
-	plain := themeDetailMeta(ThemeSettingsProps{Mode: "store", ImageMemoryLabel: "Image · uses more memory"}, ThemeCatalogItem{Author: "qianlifeng"}, woxwidget.Container{})
-	if len(plain) != 3 {
-		t.Fatalf("color theme meta = %d items", len(plain))
+}
+
+func TestThemeStoreImageDetailKeepsMetadataAndMemoryVisible(t *testing.T) {
+	props := ThemeSettingsProps{Mode: "store", ImageLabel: "Image", ImageMemoryLabel: "Image · uses more memory"}
+	props.Theme.Warning = woxui.Color{R: 253, G: 186, B: 116, A: 255}
+	item := ThemeCatalogItem{Author: "qianlifeng", ImageTheme: true}
+	for _, width := range []float32{280, 600} {
+		meta := themeDetailMeta(props, item, woxwidget.Container{Width: 104, Height: 32})
+		group := meta[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
+		group.Children[1] = woxwidget.Semantics{Key: "image-tag", Child: group.Children[1]}
+		meta[0] = woxwidget.Expanded{Child: group}
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: meta}
+		})
+		host.AttachServices(settingsWindowHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 32}, Scale: 1.5, PixelSize: woxui.PixelSize{Width: int(width * 1.5), Height: 48}})
+		bounds, ok := host.BoundsForKey("image-tag")
+		host.Dispose()
+		if !ok || bounds.X+bounds.Width > width-104-8 || bounds.Width <= 0 {
+			t.Fatalf("image tag overlaps website at width %v: %+v", width, bounds)
+		}
+		for _, description := range []string{"", "A cozy theme."} {
+			item.Description = description
+			props.Detail = &item
+			detail := themeDetail(props, width, 700).(woxwidget.Flex)
+			body := detail.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+			index := 0
+			if description != "" {
+				index = 1
+				text := body.Children[0].(woxwidget.Container).Child.(woxwidget.TextBlock)
+				if text.Color != props.Theme.TextSecondary {
+					t.Fatal("description should retain its secondary text color")
+				}
+			}
+			text := body.Children[index].(woxwidget.Container).Child.(woxwidget.TextBlock)
+			if text.Value != props.ImageMemoryLabel || text.Color != props.Theme.Warning || text.MaxLines != 0 || text.Width != width-40 {
+				t.Fatalf("memory hint must wrap within the detail pane: %#v", text)
+			}
+		}
 	}
 }
 
