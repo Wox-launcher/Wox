@@ -14,11 +14,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 const (
@@ -112,6 +114,15 @@ func newHandler(controller Controller, token string) http.Handler {
 			writeRPCError(writer, call.ID, -32600, "invalid JSON-RPC request")
 			return
 		}
+		// UI dispatch can stay blocked after the client times out. Capture stacks
+		// from the request cancellation callback, which does not need the UI thread.
+		started := time.Now()
+		stopDiagnostics := context.AfterFunc(request.Context(), func() {
+			stacks := make([]byte, 2*1024*1024)
+			n := runtime.Stack(stacks, true)
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("automation request cancelled before completion: method=%s elapsed=%s stackBytes=%d capacity=%d\n%s", call.Method, time.Since(started), n, len(stacks), stacks[:n]))
+		})
+		defer stopDiagnostics()
 		result, rpcErr := dispatch(request.Context(), controller, call.Method, call.Params)
 		if rpcErr != nil {
 			writeRPCError(writer, call.ID, rpcErr.Code, rpcErr.Message)

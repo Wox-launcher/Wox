@@ -53,6 +53,8 @@ func Test028LauncherFileDragVisibility(t *testing.T) {
 			source, _ := automationdriver.Find(snapshot, sourceID)
 			hwnd := smoke.NativeDragForeground()
 			x, y := smoke.NativeDragPoint(hwnd, woxui.Point{X: source.Bounds.X + source.Bounds.Width/2, Y: source.Bounds.Y + source.Bounds.Height/2})
+			t.Logf("drag mode=%s sourceLogical=%+v sourcePhysical=(%d,%d) sourceHWND=%x peerHWND=%x", mode, source.Bounds, x, y, hwnd, peer.Handle)
+			smoke.LogNativeDragState(t, "before source drag "+mode, hwnd)
 			_ = os.Remove(path + ".event.json")
 			_ = os.Remove(filepath.Join(peer.Root, "entered"))
 			_ = os.Remove(filepath.Join(peer.Root, "received"))
@@ -73,6 +75,7 @@ func Test028LauncherFileDragVisibility(t *testing.T) {
 				smoke.NativeDragMouse(0, 0, 4)
 			} else {
 				tx, ty := peer.Center()
+				t.Logf("drag mode=%s targetPhysical=(%d,%d)", mode, tx, ty)
 				smoke.NativeDragMouse(tx, ty, 0)
 				peer.Wait(t, ctx, client, "entered")
 				smoke.NativeDragMouse(0, 0, 4)

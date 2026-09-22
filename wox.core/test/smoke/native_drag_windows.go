@@ -81,6 +81,7 @@ func (p *NativeDragPeer) Wait(t *testing.T, ctx context.Context, client *automat
 	defer cancel()
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
+	LogNativeDragState(t, "waiting for peer "+name, p.Handle)
 	for {
 		data, err := os.ReadFile(filepath.Join(p.Root, name))
 		if err == nil && len(data) > 0 {
@@ -91,11 +92,28 @@ func (p *NativeDragPeer) Wait(t *testing.T, ctx context.Context, client *automat
 			log, _ := os.ReadFile(filepath.Join(p.Root, "peer.log"))
 			t.Fatalf("native drag peer exited before %s: %v; %s", name, p.exitErr, log)
 		case <-ctx.Done():
+			LogNativeDragState(t, "timed out waiting for peer "+name, p.Handle)
 			log, _ := os.ReadFile(filepath.Join(p.Root, "peer.log"))
 			t.Fatalf("native drag peer %s: %v; %s", name, ctx.Err(), log)
 		case <-ticker.C:
 		}
 	}
+}
+
+// LogNativeDragState reads native state without the automation endpoint, which may be blocked in OLE.
+func LogNativeDragState(t *testing.T, stage string, handle uintptr) {
+	t.Helper()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	old, _, _ := dragUser32.NewProc("SetThreadDpiAwarenessContext").Call(^uintptr(3))
+	defer dragUser32.NewProc("SetThreadDpiAwarenessContext").Call(old)
+	point := struct{ X, Y int32 }{}
+	cursorOK, _, cursorErr := dragUser32.NewProc("GetCursorPos").Call(uintptr(unsafe.Pointer(&point)))
+	rect := struct{ Left, Top, Right, Bottom int32 }{}
+	rectOK, _, rectErr := dragUser32.NewProc("GetWindowRect").Call(handle, uintptr(unsafe.Pointer(&rect)))
+	dpi, _, _ := dragUser32.NewProc("GetDpiForWindow").Call(handle)
+	leftButton, _, _ := dragUser32.NewProc("GetAsyncKeyState").Call(1)
+	t.Logf("native drag %s: hwnd=%x foreground=%x visible=%v captured=%v dpi=%d cursorPhysical=%+v cursorOK=%d cursorErr=%v rectPhysical=%+v rectOK=%d rectErr=%v leftButtonDown=%v", stage, handle, NativeDragForeground(), NativeDragVisible(handle), NativeDragCaptured(handle), dpi, point, cursorOK, cursorErr, rect, rectOK, rectErr, leftButton&0x8000 != 0)
 }
 
 // NativeDragPoint maps semantic logical coordinates into physical desktop pixels on the HWND's display.
