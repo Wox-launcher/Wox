@@ -7,6 +7,7 @@
 ```text
 wox://query?q=<url-encoded-query>
 wox://install?path=<url-encoded-file>
+wox://confetti
 ```
 
 `q` 的值就是 Wox 要放入查询框的文本。空格和特殊符号需要 URL 编码。
@@ -14,6 +15,10 @@ wox://install?path=<url-encoded-file>
 `wox://install?path=` 会打开本地 `.wox` 插件安装界面。双击 `.wox` 文件时，Wox 在注册文件关联后走同一条路径。
 
 ## 示例
+
+在鼠标所在屏幕播放撒花动画，不打开启动器或抢占焦点。动画约六秒后结束，重复调用会重新播放：
+
+<WoxRunQuery href="wox://confetti" />
 
 打开插件管理器安装查询：
 
