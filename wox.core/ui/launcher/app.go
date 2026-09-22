@@ -946,7 +946,10 @@ func (a *App) sendCurrentQuery() error {
 		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
 		return err
 	}
-	if !preserveQuery && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
+	// A selection query keeps its payload in QuerySelection, so an empty QueryText
+	// is not an empty query box; replacing it with MRU reassigns QueryID and the
+	// in-flight selection results are discarded by applyResults.
+	if !preserveQuery && query.QueryType != "selection" && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
 		return a.requestMRU()
 	}
 	return nil
