@@ -3,6 +3,8 @@
 ## v2.4.5 - 2026-09-23
 
 This release lets you set a global hotkey or a search alias on any result.
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/result_hotkey_alias.png)
+
 
 - Improve
   - [`Theme`] Add the `.wox-theme` theme format.

@@ -3,6 +3,7 @@
 ## v2.4.5 - 2026-09-23
 
 此版本新增给任意结果设置全局快捷键或者搜索别名。
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/result_hotkey_alias.png)
 
 - Improve
   - [`Theme`] 新增 `.wox-theme`主题格式
