@@ -148,6 +148,14 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(err)
 		}
 		return resultOrError(true, controller.SetAutomationRepaintDebugMode(params.Mode))
+	case "render.caret_blink":
+		var params struct {
+			IntervalMs int `json:"intervalMs"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		return resultOrError(true, controller.SetAutomationCaretBlinkInterval(time.Duration(params.IntervalMs)*time.Millisecond))
 	case "render.simulate_device_removed":
 		simulator, ok := controller.(rendererDeviceRemovalSimulator)
 		if !ok {

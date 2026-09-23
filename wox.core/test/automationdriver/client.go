@@ -161,6 +161,12 @@ func (c *Client) SetRepaintDebugMode(ctx context.Context, mode woxwidget.Repaint
 	return err
 }
 
+// SetCaretBlinkInterval sets how long one caret phase stays visible. Zero restores the product default.
+func (c *Client) SetCaretBlinkInterval(ctx context.Context, interval time.Duration) error {
+	_, err := call[bool](ctx, c, "render.caret_blink", map[string]any{"intervalMs": int(interval.Milliseconds())})
+	return err
+}
+
 // SimulateRendererDeviceRemoved makes the active Windows renderer report device loss on its next frame.
 func (c *Client) SimulateRendererDeviceRemoved(ctx context.Context) error {
 	_, err := call[bool](ctx, c, "render.simulate_device_removed", nil)

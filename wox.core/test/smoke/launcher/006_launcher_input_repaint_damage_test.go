@@ -27,6 +27,16 @@ import (
 // Windows restores the caret backdrop; macOS and Linux repaint the renderer-blurred panel.
 func Test006LauncherInputRepaintDamage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
+		// The assertion is which pixels move, not the 500ms product phase. A short phase
+		// keeps the same blink path without waiting out four full idle cycles.
+		if err := client.SetCaretBlinkInterval(ctx, 200*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			restoreCtx, cancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
+			defer cancel()
+			_ = client.SetCaretBlinkInterval(restoreCtx, 0)
+		})
 		if err := client.SetRepaintDebugMode(ctx, woxwidget.RepaintDebugOff); err != nil {
 			t.Fatal(err)
 		}
@@ -95,6 +105,7 @@ func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automation
 	generation := settled.Tree.Generation
 	lastFrameID := uint64(0)
 	consecutiveLocal := 0
+	var pixels *caretPixelProof
 	observed := make([]woxui.FrameMetricsSample, 0, 16)
 	idleCtx, cancelIdle := context.WithTimeout(ctx, 6*time.Second)
 	defer cancelIdle()
@@ -131,23 +142,45 @@ func assertIdleInputDamage(t *testing.T, ctx context.Context, client *automation
 			}
 			if local {
 				consecutiveLocal++
-				if consecutiveLocal >= 2 {
-					if runtime.GOOS == "windows" && !highlights {
-						assertCaretPixelChanges(t, ctx, client, sample.LogicalDamage)
+				// Pixel proof uses these same presented caret frames. A second loop would
+				// wait through another two blinks, and a fixed sleep after each semantics
+				// change captures phases that have not reached the screen yet.
+				if runtime.GOOS == "windows" && !highlights {
+					if pixels == nil {
+						pixels = newCaretPixelProof(t, ctx, client, sample.LogicalDamage)
 					}
+					if pixels.observe(t, ctx, client) {
+						return
+					}
+				} else if consecutiveLocal >= 2 {
 					return
 				}
 			} else {
 				consecutiveLocal = 0
+				pixels = nil
 			}
 		}
+	}
+	if pixels != nil && pixels.changes < 2 {
+		t.Fatalf("caret pixels for %q did not blink through two phases", inputID)
 	}
 	t.Fatalf("idle repaint for %q never settled to two consecutive local frames within %+v; allowed bounds %+v", inputID, observed, allowed)
 }
 
-// assertCaretPixelChanges checks real composited pixels across blink phases, including
-// translucent material restoration. Scale comes from the captured image, not an assumed DPI.
-func assertCaretPixelChanges(t *testing.T, ctx context.Context, client *automationdriver.Client, caret woxui.Rect) {
+// caretPixelProof checks composited caret pixels across blink phases while damage is sampled.
+// Two changes are one off transition and the return to the first phase, so the backdrop is restored.
+type caretPixelProof struct {
+	caret     woxui.Rect
+	bounds    woxui.Rect
+	directory string
+	phase     int
+	changes   int
+	previous  image.Image
+	other     image.Image
+}
+
+// newCaretPixelProof records window bounds once so each blink does not repeat that read.
+func newCaretPixelProof(t *testing.T, ctx context.Context, client *automationdriver.Client, caret woxui.Rect) *caretPixelProof {
 	t.Helper()
 	bounds, err := client.Bounds(ctx)
 	if err != nil {
@@ -164,89 +197,80 @@ func assertCaretPixelChanges(t *testing.T, ctx context.Context, client *automati
 			os.RemoveAll(directory)
 		}
 	})
-	var previous, otherPhase image.Image
-	changes := 0
-	deadline := time.Now().Add(6 * time.Second)
-	for phase := 0; time.Now().Before(deadline) && changes < 2; phase++ {
-		snapshot, err := client.Snapshot(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := client.WaitForChange(ctx, snapshot.Tree.Generation); err != nil {
-			t.Fatal(err)
-		}
-		// A semantics frame is not a blink phase, and capture can race presentation.
-		// Sample across several periods instead of requiring five frames to contain two flips.
-		time.Sleep(100 * time.Millisecond)
-		path := filepath.Join(directory, fmt.Sprintf("caret-%d.png", phase))
-		if err := client.Capture(ctx, path); err != nil {
-			t.Fatal(err)
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		current, err := png.Decode(file)
-		file.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if previous != nil {
-			if current.Bounds() != previous.Bounds() {
-				t.Fatal("window moved or resized during idle blink")
+	return &caretPixelProof{caret: caret, bounds: bounds, directory: directory}
+}
+
+// observe captures the presented frame and reports whether both blink phases are proven.
+func (p *caretPixelProof) observe(t *testing.T, ctx context.Context, client *automationdriver.Client) bool {
+	t.Helper()
+	path := filepath.Join(p.directory, fmt.Sprintf("caret-%d.png", p.phase))
+	p.phase++
+	if err := client.Capture(ctx, path); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := png.Decode(file)
+	file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.previous == nil {
+		p.previous = current
+		return false
+	}
+	if current.Bounds() != p.previous.Bounds() {
+		t.Fatal("window moved or resized during idle blink")
+	}
+	sx := float64(current.Bounds().Dx()) / float64(p.bounds.Width)
+	sy := float64(current.Bounds().Dy()) / float64(p.bounds.Height)
+	// Host caret paints include a 4px outset and stroke antialiasing. A
+	// 1px physical pad is not enough at 150%+ scaling.
+	pad := int(math.Ceil(max(sx, sy)))
+	if pad < 1 {
+		pad = 1
+	}
+	allowed := image.Rect(int(math.Floor(float64(p.caret.X)*sx))-pad, int(math.Floor(float64(p.caret.Y)*sy))-pad,
+		int(math.Ceil(float64(p.caret.X+p.caret.Width)*sx))+pad, int(math.Ceil(float64(p.caret.Y+p.caret.Height)*sy))+pad)
+	changed := false
+	// Desktop capture composites the translucent window over the live wallpaper.
+	// Flat pixels drift by several 8-bit levels between frames; a caret blink is a
+	// large contrast change. Ignore that ambient drift, including in the halo used
+	// to catch compositor rounding around the caret.
+	nearby := allowed.Inset(-3).Intersect(current.Bounds())
+	for y := nearby.Min.Y; y < nearby.Max.Y; y++ {
+		for x := nearby.Min.X; x < nearby.Max.X; x++ {
+			r, g, b, a := current.At(x, y).RGBA()
+			pr, pg, pb, pa := p.previous.At(x, y).RGBA()
+			if !caretPixelChanged(r, g, b, a, pr, pg, pb, pa) {
+				continue
 			}
-			sx := float64(current.Bounds().Dx()) / float64(bounds.Width)
-			sy := float64(current.Bounds().Dy()) / float64(bounds.Height)
-			// Host caret paints include a 4px outset and stroke antialiasing. A
-			// 1px physical pad is not enough at 150%+ scaling.
-			pad := int(math.Ceil(max(sx, sy)))
-			if pad < 1 {
-				pad = 1
+			if !image.Pt(x, y).In(allowed) {
+				t.Fatalf("blink changed pixel (%d,%d) outside caret %v at scale %.2fx%.2f", x, y, allowed, sx, sy)
 			}
-			allowed := image.Rect(int(math.Floor(float64(caret.X)*sx))-pad, int(math.Floor(float64(caret.Y)*sy))-pad,
-				int(math.Ceil(float64(caret.X+caret.Width)*sx))+pad, int(math.Ceil(float64(caret.Y+caret.Height)*sy))+pad)
-			changed := false
-			// Desktop capture composites the translucent window over the live wallpaper.
-			// Flat pixels drift by several 8-bit levels between frames; a caret blink is a
-			// large contrast change. Ignore that ambient drift, including in the halo used
-			// to catch compositor rounding around the caret.
-			nearby := allowed.Inset(-3).Intersect(current.Bounds())
-			for y := nearby.Min.Y; y < nearby.Max.Y; y++ {
-				for x := nearby.Min.X; x < nearby.Max.X; x++ {
-					r, g, b, a := current.At(x, y).RGBA()
-					pr, pg, pb, pa := previous.At(x, y).RGBA()
-					if !caretPixelChanged(r, g, b, a, pr, pg, pb, pa) {
-						continue
-					}
-					if !image.Pt(x, y).In(allowed) {
-						t.Fatalf("blink changed pixel (%d,%d) outside caret %v at scale %.2fx%.2f", x, y, allowed, sx, sy)
-					}
-					changed = true
-				}
-			}
-			if changed {
-				if otherPhase != nil {
-					for y := nearby.Min.Y; y < nearby.Max.Y; y++ {
-						for x := nearby.Min.X; x < nearby.Max.X; x++ {
-							r, g, b, a := current.At(x, y).RGBA()
-							pr, pg, pb, pa := otherPhase.At(x, y).RGBA()
-							if caretPixelChanged(r, g, b, a, pr, pg, pb, pa) {
-								t.Fatalf("caret phase accumulated a pixel change at (%d,%d)", x, y)
-							}
-						}
-					}
-				}
-				otherPhase = previous
-				previous = current
-				changes++
-			}
-		} else {
-			previous = current
+			changed = true
 		}
 	}
-	if changes < 2 {
-		t.Fatal("caret pixels did not blink through two phases")
+	if !changed {
+		return false
 	}
+	if p.other != nil {
+		for y := nearby.Min.Y; y < nearby.Max.Y; y++ {
+			for x := nearby.Min.X; x < nearby.Max.X; x++ {
+				r, g, b, a := current.At(x, y).RGBA()
+				pr, pg, pb, pa := p.other.At(x, y).RGBA()
+				if caretPixelChanged(r, g, b, a, pr, pg, pb, pa) {
+					t.Fatalf("caret phase accumulated a pixel change at (%d,%d)", x, y)
+				}
+			}
+		}
+	}
+	p.other = p.previous
+	p.previous = current
+	p.changes++
+	return p.changes >= 2
 }
 
 // caretCaptureNoise is the per-channel delta ignored in desktop captures.

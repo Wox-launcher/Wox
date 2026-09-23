@@ -196,6 +196,18 @@ func (a *App) ToggleRepaintDebugMode(_ context.Context) (string, error) {
 	return string(mode), nil
 }
 
+// SetAutomationCaretBlinkInterval changes the caret phase length on the active widget host.
+// Zero restores the product default. Smoke uses a short phase so blink checks are not bound to 500ms.
+func (a *App) SetAutomationCaretBlinkInterval(interval time.Duration) error {
+	host, _, _ := a.automationSurface()
+	if host == nil {
+		return errors.New("active widget host is not initialized")
+	}
+	return woxui.Call(func() {
+		host.SetCaretBlinkInterval(interval)
+	})
+}
+
 // SetAutomationRepaintDebugMode changes incremental-rendering diagnostics on the active widget host.
 func (a *App) SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error {
 	host, _, _ := a.automationSurface()

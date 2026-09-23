@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -46,6 +47,10 @@ func (f *fakeController) RequestAutomationFrame() error {
 
 func (f *fakeController) SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error {
 	f.repaintMode = mode
+	return nil
+}
+
+func (f *fakeController) SetAutomationCaretBlinkInterval(time.Duration) error {
 	return nil
 }
 

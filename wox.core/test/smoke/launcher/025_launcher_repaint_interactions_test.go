@@ -73,17 +73,30 @@ func Test025LauncherRepaintInteractions(t *testing.T) {
 	})
 }
 
-// assertInteractionDamage drains prior native-buffer history before observing every new frame.
+// interactionFrameQuiet is how long completed frames must stop arriving before the
+// stream is settled. The next present carries retained-buffer repair, so this stays
+// wider than a vsync, and it stays under the 500ms caret blink so a focused editor
+// can still go quiet. The budgets are the old fixed sleeps: a burst that never rests
+// still waits that long, and an idle stream returns as soon as it is quiet.
+const interactionFrameQuiet = 200 * time.Millisecond
+
+const (
+	interactionSettleBudget  = 1200 * time.Millisecond
+	interactionObserveBudget = 900 * time.Millisecond
+)
+
+// assertInteractionDamage drains frames already in flight, then checks every frame the action presents.
 func assertInteractionDamage(t *testing.T, ctx context.Context, client *automationdriver.Client, allowed woxui.Rect, label string, action func() error) {
 	t.Helper()
-	time.Sleep(1200 * time.Millisecond)
-	if err := client.ResetFrameMetrics(ctx); err != nil {
+	if err := drainInteractionFrames(ctx, client); err != nil {
 		t.Fatal(err)
 	}
 	if err := action(); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(900 * time.Millisecond)
+	if err := waitForInteractionFrames(ctx, client, interactionObserveBudget, true); err != nil {
+		t.Fatal(err)
+	}
 	metrics, err := client.FrameMetrics(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -93,13 +106,77 @@ func assertInteractionDamage(t *testing.T, ctx context.Context, client *automati
 		if !frame.HostCompleted {
 			continue
 		}
-		checked++
 		damage := frame.LogicalDamage
-		if damage.Width <= 0 || damage.Height <= 0 || !containsRect(allowed, damage) {
+		// An idle completion can record an empty rect. That is not a repaint; a real
+		// full-window paint still carries a rect and is rejected below.
+		if damage.Width <= 0 || damage.Height <= 0 {
+			continue
+		}
+		checked++
+		if !containsRect(allowed, damage) {
 			t.Fatalf("%s frame %d damage=%+v allowed=%+v", label, frame.FrameID, damage, allowed)
 		}
 	}
 	if checked == 0 {
 		t.Fatalf("%s produced no observed frames", label)
 	}
+}
+
+// drainInteractionFrames waits until completed frames stop arriving, then forgets them.
+func drainInteractionFrames(ctx context.Context, client *automationdriver.Client) error {
+	if err := waitForInteractionFrames(ctx, client, interactionSettleBudget, false); err != nil {
+		return err
+	}
+	return client.ResetFrameMetrics(ctx)
+}
+
+// waitForInteractionFrames polls until completed frames stop arriving.
+// requireFrame waits for the action to present at least one frame before accepting quiet.
+func waitForInteractionFrames(ctx context.Context, client *automationdriver.Client, budget time.Duration, requireFrame bool) error {
+	deadline := time.Now().Add(budget)
+	quietSince := time.Time{}
+	var lastID uint64
+	seen := false
+	for {
+		metrics, err := client.FrameMetrics(ctx)
+		if err != nil {
+			return err
+		}
+		frameID := newestCompletedFrameID(metrics, requireFrame)
+		now := time.Now()
+		if !seen || frameID != lastID {
+			seen = true
+			lastID = frameID
+			quietSince = now
+		}
+		if now.Sub(quietSince) >= interactionFrameQuiet && (!requireFrame || frameID > 0) {
+			return nil
+		}
+		if !now.Before(deadline) {
+			return nil
+		}
+		timer := time.NewTimer(25 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+// newestCompletedFrameID returns the newest finished frame. When damaged is set, empty
+// idle completions do not count, so a caret tick cannot close the wait before the action paints.
+func newestCompletedFrameID(metrics woxui.FrameMetricsSnapshot, damaged bool) uint64 {
+	frameID := uint64(0)
+	for _, frame := range metrics.Recent {
+		if !frame.HostCompleted || frame.FrameID <= frameID {
+			continue
+		}
+		if damaged && (frame.LogicalDamage.Width <= 0 || frame.LogicalDamage.Height <= 0) {
+			continue
+		}
+		frameID = frame.FrameID
+	}
+	return frameID
 }

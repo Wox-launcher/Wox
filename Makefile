@@ -416,7 +416,9 @@ build-go-ui-smoke: ensure-resources
 clean-go-ui-smoke:
 	@rm -f "$(GO_UI_SMOKE_BINARY)"
 
-# The suite runner owns one Wox process shared by every serial smoke package.
+# The suite runner compiles the selected smoke packages once, then owns one Wox
+# process shared by those packages. Packages still run one at a time so the first
+# failure stops the suite before a later case reuses a dirty process.
 smoke: build-go-ui-smoke
 	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
 		cd wox.core && \

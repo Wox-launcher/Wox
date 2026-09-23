@@ -103,6 +103,7 @@ type Host struct {
 
 	caretBlinkMu         sync.Mutex
 	caretBlinkTimer      *time.Timer
+	caretBlinkInterval   time.Duration
 	caretBlinkActive     bool
 	caretVisible         bool
 	caretBlinkGeneration uint64
@@ -132,16 +133,17 @@ type Host struct {
 // NewHost creates a retained host whose builder runs once per invalidated frame.
 func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 	host := &Host{
-		build:            build,
-		identities:       map[string]woxui.AccessibilityNodeID{},
-		identityMeta:     map[string]identityBinding{},
-		nodes:            map[woxui.AccessibilityNodeID]*node{},
-		scopeRestore:     map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
-		change:           make(chan struct{}),
-		reported:         map[string]bool{},
-		caretVisible:     true,
-		windowFocused:    true,
-		repaintDebugMode: repaintDebugModeFromEnvironment(),
+		build:              build,
+		identities:         map[string]woxui.AccessibilityNodeID{},
+		identityMeta:       map[string]identityBinding{},
+		nodes:              map[woxui.AccessibilityNodeID]*node{},
+		scopeRestore:       map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
+		change:             make(chan struct{}),
+		reported:           map[string]bool{},
+		caretVisible:       true,
+		caretBlinkInterval: caretBlinkInterval,
+		windowFocused:      true,
+		repaintDebugMode:   repaintDebugModeFromEnvironment(),
 	}
 	host.snapshot.Store(AutomationSnapshot{})
 	host.elements = newElementTree(host)
@@ -1601,10 +1603,38 @@ func (h *Host) updateCaretBlink(active bool) {
 	}
 }
 
+// SetCaretBlinkInterval changes how long one caret phase stays on screen.
+// Zero restores the product default. A running blink is rescheduled from now.
+func (h *Host) SetCaretBlinkInterval(interval time.Duration) {
+	if h == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = caretBlinkInterval
+	}
+	h.caretBlinkMu.Lock()
+	defer h.caretBlinkMu.Unlock()
+	h.caretBlinkInterval = interval
+	if !h.caretBlinkActive {
+		return
+	}
+	// A callback already waiting on the lock must not replace the timer we schedule below.
+	h.caretBlinkGeneration++
+	if h.caretBlinkTimer != nil {
+		h.caretBlinkTimer.Stop()
+		h.caretBlinkTimer = nil
+	}
+	h.scheduleCaretBlinkLocked()
+}
+
 // scheduleCaretBlinkLocked schedules one phase change; the resulting frame schedules the next one.
 func (h *Host) scheduleCaretBlinkLocked() {
 	generation := h.caretBlinkGeneration
-	h.caretBlinkTimer = time.AfterFunc(caretBlinkInterval, func() {
+	interval := h.caretBlinkInterval
+	if interval <= 0 {
+		interval = caretBlinkInterval
+	}
+	h.caretBlinkTimer = time.AfterFunc(interval, func() {
 		h.caretBlinkMu.Lock()
 		if !h.caretBlinkActive || h.caretBlinkGeneration != generation {
 			h.caretBlinkMu.Unlock()

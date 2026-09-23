@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -28,6 +29,7 @@ type Controller interface {
 	ResetAutomationFrameMetrics() error
 	RequestAutomationFrame() error
 	SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error
+	SetAutomationCaretBlinkInterval(interval time.Duration) error
 	WaitForAutomationChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error)
 	PerformAutomationAction(automationID string, action woxui.AccessibilityAction, value string) error
 	DispatchAutomationPointer(event woxui.PointerEvent) error
