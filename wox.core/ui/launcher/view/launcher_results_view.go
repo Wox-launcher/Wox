@@ -682,9 +682,23 @@ func launcherResultTrailing(tail woxwidget.Widget, tailWidth float32, number str
 	}
 }
 
+// launcherQuickSelectText keeps the digit readable. It is normally the window fill,
+// so a light chip reads as a hole. Image themes author a fully transparent fill;
+// a zero-alpha digit would disappear, so contrast it with the chip instead.
+func launcherQuickSelectText(fill, text woxui.Color) woxui.Color {
+	if text.A != 0 {
+		return text
+	}
+	if 0.2126*float32(fill.R)+0.7152*float32(fill.G)+0.0722*float32(fill.B) < 128 {
+		return woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	}
+	return woxui.Color{A: 255}
+}
+
 // launcherQuickSelectBadge draws the hold-to-number chip with text that uses the
 // window background so a light selected tail color cannot wash out the digit.
 func launcherQuickSelectBadge(number string, densityScale float32, fill, text woxui.Color) woxwidget.Widget {
+	text = launcherQuickSelectText(fill, text)
 	size := scaledLauncherSize(launcherQuickSelectSize, densityScale)
 	radius := scaledLauncherSize(launcherQuickSelectRadius, densityScale)
 	left := scaledLauncherSize(launcherQuickSelectPaddingLeft, densityScale)

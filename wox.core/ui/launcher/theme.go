@@ -413,7 +413,12 @@ func (theme themeData) usesCustomWindowChrome() bool {
 }
 
 // opaqueWindowBackground disables unsupported desktop translucency without changing component blending.
+// A fully transparent fill is an image-theme frame, not a wash. Forcing its alpha turns #00000000
+// into a black rectangle behind the frame image's clear margin. Partial washes still become opaque.
 func opaqueWindowBackground(color woxui.Color, customChrome bool) woxui.Color {
+	if color.A == 0 {
+		return color
+	}
 	if runtime.GOOS == "linux" && (customChrome || !woxui.HasNativeWindowMaterial()) {
 		color.A = 255
 	}

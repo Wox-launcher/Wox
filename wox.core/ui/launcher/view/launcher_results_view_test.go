@@ -507,6 +507,20 @@ func TestLauncherResultShowsQuickSelectBadge(t *testing.T) {
 	}
 }
 
+func TestLauncherQuickSelectTextContrastsTransparentFrame(t *testing.T) {
+	light := woxui.Color{R: 245, G: 245, B: 245, A: 255}
+	dark := woxui.Color{R: 24, G: 29, B: 38, A: 255}
+	if got := launcherQuickSelectText(light, woxui.Color{}); got != (woxui.Color{A: 255}) {
+		t.Fatalf("light chip digit = %#v, want black", got)
+	}
+	if got := launcherQuickSelectText(dark, woxui.Color{}); got != (woxui.Color{R: 255, G: 255, B: 255, A: 255}) {
+		t.Fatalf("dark chip digit = %#v, want white", got)
+	}
+	if got := launcherQuickSelectText(light, dark); got != dark {
+		t.Fatalf("opaque window digit = %#v, want the window fill", got)
+	}
+}
+
 func TestLauncherResultSelectedQuickSelectKeepsReadableDigit(t *testing.T) {
 	background := woxui.Color{R: 24, G: 29, B: 38, A: 255}
 	selectedFill := woxui.Color{R: 245, G: 245, B: 245, A: 255}

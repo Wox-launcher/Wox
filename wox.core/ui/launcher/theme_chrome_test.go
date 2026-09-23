@@ -3,6 +3,7 @@ package launcher
 import (
 	"encoding/json"
 	"os"
+	"runtime"
 	"testing"
 
 	"wox/common"
@@ -44,6 +45,30 @@ func TestThemeIndependentChrome(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestImageThemeWindowFillStaysClear keeps a transparent frame from becoming a black Linux wash.
+func TestImageThemeWindowFillStaysClear(t *testing.T) {
+	borderWidth := 0
+	borderRadius := 0
+	transparent := paletteForTheme(themeData{
+		AppBackgroundColor: "#00000000",
+		AppBorderWidth:     &borderWidth,
+		AppBorderRadius:    &borderRadius,
+	})
+	if transparent.background != (woxui.Color{}) {
+		t.Fatalf("transparent frame fill = %#v, want a clear window", transparent.background)
+	}
+	wash := paletteForTheme(themeData{AppBackgroundColor: "#18201D80", AppBorderWidth: &borderWidth})
+	if runtime.GOOS == "linux" {
+		if wash.background != (woxui.Color{R: 0x18, G: 0x20, B: 0x1D, A: 255}) {
+			t.Fatalf("linux wash = %#v, want opaque authored rgb", wash.background)
+		}
+		return
+	}
+	if wash.background.A != 0x80 {
+		t.Fatalf("wash alpha = %d, want 128", wash.background.A)
 	}
 }
 
