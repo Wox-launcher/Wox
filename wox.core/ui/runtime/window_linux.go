@@ -885,6 +885,18 @@ func testLinuxResourceCacheGeneration() int32 {
 	return int32(C.wox_linux_test_resource_cache_generation())
 }
 
+// testLinuxDrawnTextFit wraps the native single-slot text layout for Go tests.
+// It returns the drawn overflow in device pixels and the drawn line count.
+func testLinuxDrawnTextFit(text, fontFamily string, fontSize, scale float32) (int32, int32) {
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	nativeFontFamily := C.CString(fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
+	var lines C.int32_t
+	overflow := int32(C.wox_linux_test_drawn_text_fit(nativeText, nativeFontFamily, C.float(fontSize), C.float(scale), &lines))
+	return overflow, int32(lines)
+}
+
 func testLinuxResizeHit(x, y float32, width, height, grip int32) int32 {
 	return int32(C.wox_linux_test_resize_hit(C.float(x), C.float(y), C.int32_t(width), C.int32_t(height), C.int32_t(grip)))
 }
