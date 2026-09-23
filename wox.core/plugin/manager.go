@@ -187,14 +187,14 @@ type Manager struct {
 	activeBrowserUrl string //active browser url before wox is activated
 
 	// Script plugin monitoring
-	scriptPluginWatcher *fsnotify.Watcher
-	scriptReloadTimers  *util.HashMap[string, *time.Timer]
+	scriptPluginWatch  *util.DirectoryWatch
+	scriptReloadTimers *util.HashMap[string, *time.Timer]
 
-	// Single-file SDK plugin monitoring is a separate watcher so script and
+	// Single-file SDK plugin monitoring is a separate subscription so script and
 	// packaged plugin reload behavior can stay unchanged.
-	singleFilePluginWatcher *fsnotify.Watcher
-	singleFileReloadTimers  *util.HashMap[string, *time.Timer]
-	singleFileWatchIgnored  *util.HashMap[string, int64]
+	singleFilePluginWatch  *util.DirectoryWatch
+	singleFileReloadTimers *util.HashMap[string, *time.Timer]
+	singleFileWatchIgnored *util.HashMap[string, int64]
 
 	// Result delivery latency tracks result-producing jobs from start through channel delivery.
 	pluginResultDeliveryLatency *util.HashMap[string, *util.EWMA]
@@ -282,13 +282,8 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 		return fmt.Errorf("failed to load plugins: %w", loadErr)
 	}
 
-	// Start script plugin monitoring
-	util.Go(ctx, "start script plugin monitoring", func() {
-		m.startScriptPluginMonitoring(util.NewTraceContext())
-	})
-	util.Go(ctx, "start single-file plugin monitoring", func() {
-		m.startSingleFilePluginMonitoring(util.NewTraceContext())
-	})
+	m.startScriptPluginMonitoring(util.NewTraceContext())
+	m.startSingleFilePluginMonitoring(util.NewTraceContext())
 
 	// Start shared runtime host health monitoring
 	m.startHostWatchdog(ctx)
@@ -306,12 +301,8 @@ func (m *Manager) Stop(ctx context.Context) {
 	m.stopHostWatchdog()
 
 	// Stop script plugin monitoring
-	if m.scriptPluginWatcher != nil {
-		m.scriptPluginWatcher.Close()
-	}
-	if m.singleFilePluginWatcher != nil {
-		m.singleFilePluginWatcher.Close()
-	}
+	m.scriptPluginWatch.Close()
+	m.singleFilePluginWatch.Close()
 	m.scriptReloadTimers.Range(func(_ string, timer *time.Timer) bool {
 		timer.Stop()
 		return true
@@ -1160,46 +1151,17 @@ func (m *Manager) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metad
 func (m *Manager) startScriptPluginMonitoring(ctx context.Context) {
 	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
 
-	// Create file system watcher
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("Failed to create script plugin watcher: %s", err.Error()))
-		return
-	}
-
-	m.scriptPluginWatcher = watcher
-
-	// Add the script plugins directory to the watcher
-	err = watcher.Add(userScriptPluginDirectory)
+	watch, err := util.WatchDirectory(userScriptPluginDirectory, func(event fsnotify.Event) {
+		m.handleScriptPluginEvent(ctx, event)
+	}, func(watchErr error) {
+		logger.Error(ctx, fmt.Sprintf("Script plugin watcher error: %s", watchErr.Error()))
+	})
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to watch script plugin directory: %s", err.Error()))
-		watcher.Close()
 		return
 	}
-
+	m.scriptPluginWatch = watch
 	logger.Info(ctx, fmt.Sprintf("Started monitoring script plugins directory: %s", userScriptPluginDirectory))
-
-	// Start watching for events
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				logger.Info(ctx, "Script plugin watcher closed")
-				return
-			}
-			m.handleScriptPluginEvent(ctx, event)
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				logger.Info(ctx, "Script plugin watcher error channel closed")
-				return
-			}
-			logger.Error(ctx, fmt.Sprintf("Script plugin watcher error: %s", err.Error()))
-		case <-ctx.Done():
-			logger.Info(ctx, "Script plugin monitoring stopped due to context cancellation")
-			watcher.Close()
-			return
-		}
-	}
 }
 
 // handleScriptPluginEvent handles file system events for script plugins
@@ -2437,6 +2399,21 @@ func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
 	m.sessionPluginQueries.Delete(sessionId)
 	m.clearLazyResultIconsForSessionExcept(sessionId, "")
 	logger.Info(ctx, fmt.Sprintf("cleared plugin session state: %s", sessionId))
+}
+
+// ReleasePreparedSearchText drops precomputed app, command, and plugin-name match text.
+// Plugins rebuild it on the next query.
+func (m *Manager) ReleasePreparedSearchText() {
+	for _, instance := range m.GetPluginInstances() {
+		if instance == nil || instance.Plugin == nil {
+			continue
+		}
+		releaser, ok := instance.Plugin.(PreparedSearchReleaser)
+		if !ok {
+			continue
+		}
+		releaser.ReleasePreparedSearchText()
+	}
 }
 
 // TrimHiddenSessionQueryCache keeps only the newest query result set after hide.

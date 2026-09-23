@@ -62,14 +62,18 @@ var logger *util.Log
 const mainHotkeyRegistrationToolbarMessageID = "wox-main-hotkey-registration-failed"
 
 type Manager struct {
-	hotkeyService      *corehotkey.Service
-	ui                 common.UI
-	viewMu             sync.RWMutex
-	primaryView        contract.View
-	views              map[string]contract.View
-	serverPort         int
-	themes             *util.HashMap[string, common.Theme]
-	themeFileIDs       *util.HashMap[string, string]
+	hotkeyService *corehotkey.Service
+	ui            common.UI
+	viewMu        sync.RWMutex
+	primaryView   contract.View
+	views         map[string]contract.View
+	serverPort    int
+	themes        *util.HashMap[string, common.Theme]
+	themeFileIDs  *util.HashMap[string, string]
+	// themePackageDirs maps a user theme id to the directory holding its asset files. Stored
+	// themes keep AssetFiles nil and reload the bytes from here only when a theme is applied,
+	// previewed, or exported, so packaged wallpapers do not stay resident for inactive themes.
+	themePackageDirs   *util.HashMap[string, string]
 	themeReloadTimers  *util.HashMap[string, *time.Timer]
 	themeWatchIgnored  *util.HashMap[string, int64]
 	systemThemeIds     []string
@@ -131,6 +135,7 @@ func GetUIManager() *Manager {
 		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		managerInstance.themeFileIDs = util.NewHashMap[string, string]()
+		managerInstance.themePackageDirs = util.NewHashMap[string, string]()
 		managerInstance.themeReloadTimers = util.NewHashMap[string, *time.Timer]()
 		managerInstance.themeWatchIgnored = util.NewHashMap[string, int64]()
 		logger = util.GetLogger()
@@ -333,8 +338,8 @@ func (m *Manager) Start(ctx context.Context) error {
 		if err := theme.LoadThemeAssets(filepath.Dir(themePath)); err != nil {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("load theme assets: %v", err))
 		}
-		m.themes.Store(theme.ThemeId, theme)
 		m.rememberUserThemeFile(themePath, theme.ThemeId)
+		m.themes.Store(theme.ThemeId, stripThemeAssets(theme))
 	}
 
 	// Dropping a JSON into the user theme directory loads it without a restart,
@@ -930,10 +935,37 @@ func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 		if v.IsAutoAppearance {
 			return m.getActualTheme(ctx, v)
 		}
-		return m.resolvePlatformTheme(ctx, v)
+		return m.resolvePlatformTheme(ctx, m.ThemeWithAssets(ctx, v))
 	}
 
 	return common.Theme{}
+}
+
+// ThemeWithAssets reloads packaged asset bytes for a stored theme that needs them. Stored
+// themes drop AssetFiles after validation so only the theme being applied or previewed pays
+// for its wallpapers; themes without asset sources are returned unchanged.
+func (m *Manager) ThemeWithAssets(ctx context.Context, theme common.Theme) common.Theme {
+	if len(theme.AssetFiles) > 0 {
+		return theme
+	}
+	sources, err := theme.ThemeAssetSources()
+	if err != nil || len(sources) == 0 {
+		return theme
+	}
+	directory, ok := m.themePackageDirs.Load(theme.ThemeId)
+	if !ok {
+		return theme
+	}
+	if err := theme.LoadThemeAssets(directory); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("load theme assets for %s: %v", theme.ThemeId, err))
+	}
+	return theme
+}
+
+// stripThemeAssets returns the theme without its asset bytes for long-lived storage.
+func stripThemeAssets(theme common.Theme) common.Theme {
+	theme.AssetFiles = nil
+	return theme
 }
 
 // getActualTheme returns the actual theme to apply based on system appearance
@@ -948,7 +980,7 @@ func (m *Manager) getActualTheme(ctx context.Context, autoTheme common.Theme) co
 
 	if targetTheme, ok := m.themes.Load(targetThemeId); ok {
 		// Copy the target theme's properties but keep auto theme's identity
-		result := targetTheme
+		result := m.ThemeWithAssets(ctx, targetTheme)
 		result.ThemeId = autoTheme.ThemeId
 		result.IsAutoAppearance = autoTheme.IsAutoAppearance
 		result.DarkThemeId = autoTheme.DarkThemeId
@@ -970,8 +1002,17 @@ func (m *Manager) GetAllThemes(ctx context.Context) []common.Theme {
 }
 
 func (m *Manager) AddTheme(ctx context.Context, theme common.Theme) {
-	m.themes.Store(theme.ThemeId, theme)
+	m.StoreTheme(theme)
 	m.ChangeTheme(ctx, theme)
+}
+
+// StoreTheme registers a theme without applying it. Asset bytes are dropped when the theme's
+// package directory is known, because ThemeWithAssets can reload them on demand.
+func (m *Manager) StoreTheme(theme common.Theme) {
+	if _, known := m.themePackageDirs.Load(theme.ThemeId); known {
+		theme = stripThemeAssets(theme)
+	}
+	m.themes.Store(theme.ThemeId, theme)
 }
 
 func (m *Manager) RemoveTheme(ctx context.Context, theme common.Theme) {
@@ -1031,7 +1072,7 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 		m.isSystemDark = appearance.IsDark()
 		m.applyAutoAppearanceThemeIfNeed(ctx)
 	} else {
-		m.GetUI(ctx).ChangeTheme(ctx, m.resolvePlatformTheme(ctx, theme))
+		m.GetUI(ctx).ChangeTheme(ctx, m.resolvePlatformTheme(ctx, m.ThemeWithAssets(ctx, theme)))
 	}
 }
 
@@ -1212,6 +1253,9 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
 			return
 		}
+		// Drop prepared search text before the pinyin table. Those indexes hold the
+		// table's syllable slices, so the table cannot be collected while they remain.
+		plugin.GetPluginManager().ReleasePreparedSearchText()
 		fuzzymatch.ReleasePinyinDictionary()
 		debug.FreeOSMemory()
 	})
@@ -2341,7 +2385,7 @@ func (m *Manager) applyAutoAppearanceThemeIfNeed(ctx context.Context) {
 		// auto appearance keeps storing the auto theme ID while the UI receives the
 		// same flattened payload as normal theme changes.
 		if impl, ok := m.ui.(*uiImpl); ok {
-			impl.ChangeThemeWithoutSave(ctx, m.resolvePlatformTheme(ctx, targetTheme))
+			impl.ChangeThemeWithoutSave(ctx, m.resolvePlatformTheme(ctx, m.ThemeWithAssets(ctx, targetTheme)))
 		}
 	} else {
 		logger.Warn(ctx, fmt.Sprintf("target theme not found: %s", targetThemeId))

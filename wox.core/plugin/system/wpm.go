@@ -95,7 +95,7 @@ type pluginTemplate struct {
 
 type localPlugin struct {
 	metadata plugin.Metadata
-	watcher  *fsnotify.Watcher
+	watcher  *util.DirectoryWatch
 }
 
 func (w *WPMPlugin) getLocalPluginName(ctx context.Context, metadata plugin.Metadata) string {
@@ -1400,11 +1400,7 @@ func (w *WPMPlugin) unloadLocalPluginByDirectory(ctx context.Context, directory 
 
 // closeLocalPluginResources releases the directory watcher and pending reload timer.
 func (w *WPMPlugin) closeLocalPluginResources(ctx context.Context, lp localPlugin) {
-	if lp.watcher != nil {
-		if err := lp.watcher.Close(); err != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to close watcher: %s", err.Error()))
-		}
-	}
+	lp.watcher.Close()
 	if w.reloadPluginTimers == nil || lp.metadata.Id == "" {
 		return
 	}

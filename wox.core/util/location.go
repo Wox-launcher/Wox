@@ -88,9 +88,6 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetLogHostsDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.EnsureDirectoryExist(l.GetLogPluginDirectory()); directoryErr != nil {
-		return directoryErr
-	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetPluginDirectory()); directoryErr != nil {
 		return directoryErr
 	}
@@ -177,6 +174,8 @@ func (l *Location) GetWoxDataDirectory() string {
 	return l.woxDataDirectory
 }
 
+// GetLogPluginDirectory is the legacy per-plugin log root. Plugins now log into the shared
+// Wox log, so this path is only referenced by the migration that removes old files.
 func (l *Location) GetLogPluginDirectory() string {
 	return path.Join(l.GetLogDirectory(), "plugins")
 }

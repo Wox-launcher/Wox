@@ -1097,21 +1097,15 @@ func (a *App) deleteChatHistory(chatID string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := a.services.DeleteChat(ctx, a.sessionID, chatID)
-		activeDeleted := false
 		if dispatchErr := a.runOnUI("apply deleted chat history", func() {
-			if state := a.chatPreview; state != nil {
-				if err != nil {
+			if err != nil {
+				if state := a.chatPreview; state != nil {
 					state.error = err.Error()
-				} else {
-					state.chats = slices.DeleteFunc(state.chats, func(chat chatData) bool { return chat.ID == chatID })
-					activeDeleted = state.chat.ID == chatID
-					state.panelSelected = min(state.panelSelected, max(0, len(state.chats)-1))
 				}
+				a.invalidateChatSurfaces()
+				return
 			}
-			if activeDeleted {
-				a.startNewChat()
-			}
-			a.invalidateChatSurfaces()
+			a.applyDeletedChat(chatID)
 		}); dispatchErr != nil {
 			log.Printf("dispatch deleted chat history: %v", dispatchErr)
 		}
@@ -1119,6 +1113,21 @@ func (a *App) deleteChatHistory(chatID string) {
 			log.Printf("delete chat history: %v", err)
 		}
 	})
+}
+
+// applyDeletedChat removes a chat from the history list and leaves the active view on a new
+// chat when the deleted one was open. Must run on the UI thread.
+func (a *App) applyDeletedChat(chatID string) {
+	activeDeleted := false
+	if state := a.chatPreview; state != nil {
+		state.chats = slices.DeleteFunc(state.chats, func(chat chatData) bool { return chat.ID == chatID })
+		activeDeleted = state.chat.ID == chatID
+		state.panelSelected = min(state.panelSelected, max(0, len(state.chats)-1))
+	}
+	if activeDeleted {
+		a.startNewChat()
+	}
+	a.invalidateChatSurfaces()
 }
 
 // selectChatModel applies one catalog entry to the next send and closes the catalog.

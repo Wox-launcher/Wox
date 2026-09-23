@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"path"
 	"sync"
 	"time"
 	"wox/ai"
@@ -340,7 +339,6 @@ type SetSettingResult struct {
 // APIImpl is the concrete API implementation bound to one plugin instance.
 type APIImpl struct {
 	pluginInstance       *Instance
-	logger               *util.Log
 	toolCallStartTimeMap *util.HashMap[string, int64] // store the start time of tool calls
 }
 
@@ -429,30 +427,20 @@ func PublishAttentionUnreadCount(ctx context.Context) {
 	ui.UpdateAttentionUnreadCount(ctx, count)
 }
 
+// Log writes plugin output into the shared Wox log tagged with the plugin name.
+// Plugins used to get a private logger and log file each; that duplicated every
+// line already written here and cost a goroutine, a pipe, and an open file per plugin.
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
 	logCtx := util.WithComponentContext(ctx, a.pluginInstance.GetName(ctx))
-	if level == LogLevelError {
-		a.logger.Error(logCtx, msg)
+	switch level {
+	case LogLevelError:
 		logger.Error(logCtx, msg)
-		return
-	}
-
-	if level == LogLevelInfo {
-		a.logger.Info(logCtx, msg)
+	case LogLevelInfo:
 		logger.Info(logCtx, msg)
-		return
-	}
-
-	if level == LogLevelDebug {
-		a.logger.Debug(logCtx, msg)
+	case LogLevelDebug:
 		logger.Debug(logCtx, msg)
-		return
-	}
-
-	if level == LogLevelWarning {
-		a.logger.Warn(logCtx, msg)
+	case LogLevelWarning:
 		logger.Warn(logCtx, msg)
-		return
 	}
 }
 
@@ -1278,9 +1266,8 @@ func (a *APIImpl) GetCacheFolder(ctx context.Context) string {
 }
 
 func NewAPI(instance *Instance) API {
-	apiImpl := &APIImpl{pluginInstance: instance}
-	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), instance.Metadata.Id)
-	apiImpl.logger = util.CreateLogger(logFolder)
-	apiImpl.toolCallStartTimeMap = util.NewHashMap[string, int64]()
-	return apiImpl
+	return &APIImpl{
+		pluginInstance:       instance,
+		toolCallStartTimeMap: util.NewHashMap[string, int64](),
+	}
 }

@@ -6,8 +6,22 @@ import (
 	"testing"
 
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
+	"wox/util/fuzzymatch"
 )
+
+func TestReleasePreparedSearchTextClearsCommandIndex(t *testing.T) {
+	plugin := &SysPlugin{
+		commandSearchIndexes: map[i18n.LangCode][][]*fuzzymatch.PreparedText{
+			"en_US": {{fuzzymatch.PrepareText("lock")}},
+		},
+	}
+	plugin.ReleasePreparedSearchText()
+	if plugin.commandSearchIndexes != nil {
+		t.Fatalf("released command index has %d languages, want none", len(plugin.commandSearchIndexes))
+	}
+}
 
 func TestDevCommandsIncludeToolbarProgressPreview(t *testing.T) {
 	for _, command := range (&SysPlugin{}).buildDevCommands() {

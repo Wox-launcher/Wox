@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 
 	"wox/common/icons"
 	woxcomponent "wox/ui/launcher/component"
@@ -22,7 +23,19 @@ const (
 	chatWindowMinimumHeight = float32(480)
 )
 
-var chatWindowIcon, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginAIChat)), nil, 256)
+var (
+	chatWindowIconOnce  sync.Once
+	chatWindowIconImage *woxui.Image
+)
+
+// chatWindowIcon decodes the 256 px taskbar glyph on first open instead of at package init,
+// so sessions that never open the chat window do not keep the raster resident.
+func chatWindowIcon() *woxui.Image {
+	chatWindowIconOnce.Do(func() {
+		chatWindowIconImage, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginAIChat)), nil, 256)
+	})
+	return chatWindowIconImage
+}
 
 func chatWindowNativeMinSize() woxui.Size {
 	return woxui.Size{Width: chatWindowMinimumWidth, Height: chatWindowMinimumHeight}
@@ -153,7 +166,7 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 			Title:   a.chatWindowTitle(),
 			Size:    woxui.Size{Width: chatWindowDefaultWidth, Height: chatWindowDefaultHeight},
 			MinSize: chatWindowNativeMinSize(),
-			Role:    chatWindowRole, Icon: chatWindowIcon, Resizable: true, HideOnBlur: false,
+			Role:    chatWindowRole, Icon: chatWindowIcon(), Resizable: true, HideOnBlur: false,
 			OnFrame: host.Frame, OnPointer: host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)

@@ -291,6 +291,13 @@ func (a *App) SendChatResponse(_ context.Context, chat common.AIChatData) error 
 	})
 }
 
+// RemoveChat drops a chat deleted outside this UI, for example by Cloud Sync from another device.
+func (a *App) RemoveChat(_ context.Context, chatID string) error {
+	return a.runOnUI("remove chat", func() {
+		a.applyDeletedChat(chatID)
+	})
+}
+
 // ReloadChatResources invalidates the requested AI catalogs.
 func (a *App) ReloadChatResources(_ context.Context, resourceName string) error {
 	return a.runOnUI("reload chat resources", func() {
@@ -738,6 +745,14 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 	}
 	_ = a.window.Invalidate()
 	if !progress.Active {
+		// Background syncs finish while the settings window is closed most of the time.
+		// Reloading then would fetch and keep the whole installed plugin catalog for a
+		// page nobody is looking at, so mark the snapshot stale and let the cloud tab
+		// reload it on its next open.
+		if !a.settingsOpen {
+			a.cloudSettings.SetLoaded(false)
+			return
+		}
 		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.reloadCloudSyncSilently)
 	}
 }

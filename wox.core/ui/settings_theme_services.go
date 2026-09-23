@@ -54,7 +54,8 @@ func (s *CoreServices) Themes(ctx context.Context, sessionID string, catalog con
 		theme.IsInstalled = installedIDs[theme.ThemeId]
 		theme.IsSystem = GetUIManager().IsSystemTheme(theme.ThemeId)
 		result[index] = contract.ThemeCatalogItem{
-			Theme:        theme,
+			// The installed catalog renders per-theme previews, so packaged assets are loaded here.
+			Theme:        GetUIManager().ThemeWithAssets(ctx, theme),
 			IsUpgradable: GetUIManager().IsThemeUpgradable(theme.ThemeId, theme.Version),
 		}
 	}
@@ -123,7 +124,7 @@ func (s *CoreServices) SaveTheme(ctx context.Context, sessionID string, name str
 		return common.Theme{}, fmt.Errorf("theme data is empty")
 	}
 	if len(theme.AssetFiles) == 0 {
-		theme.AssetFiles = GetUIManager().GetThemeById(theme.ThemeId).AssetFiles
+		theme.AssetFiles = GetUIManager().ThemeWithAssets(ctx, GetUIManager().GetThemeById(theme.ThemeId)).AssetFiles
 	}
 	if overwrite {
 		if strings.TrimSpace(theme.ThemeId) == "" {

@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -22,28 +21,28 @@ func (a *App) reloadTranslations() error {
 	if langCode == "" {
 		langCode = i18n.LangCodeEnUs
 	}
-	encoded, err := a.services.LanguageJSON(ctx, a.sessionID, langCode)
+	// The bundle is core's own parsed table and is read-only here. English reuses it
+	// directly instead of holding a second copy of the whole language pack; other
+	// languages need a merged copy so missing keys fall back to English.
+	translations, err := a.services.LanguageBundle(ctx, a.sessionID, langCode)
 	if err != nil {
 		return fmt.Errorf("load language bundle: %w", err)
 	}
-	translations := map[string]string{}
-	if err := json.Unmarshal([]byte(encoded), &translations); err != nil {
-		return fmt.Errorf("decode language bundle: %w", err)
-	}
 	if langCode != i18n.LangCodeEnUs {
-		englishJSON, englishErr := a.services.LanguageJSON(ctx, a.sessionID, i18n.LangCodeEnUs)
+		fallback, englishErr := a.services.LanguageBundle(ctx, a.sessionID, i18n.LangCodeEnUs)
 		if englishErr != nil {
 			return fmt.Errorf("load fallback language bundle: %w", englishErr)
 		}
-		fallback := map[string]string{}
-		if err := json.Unmarshal([]byte(englishJSON), &fallback); err != nil {
-			return fmt.Errorf("decode fallback language bundle: %w", err)
-		}
+		merged := make(map[string]string, len(fallback))
 		for key, value := range fallback {
-			if translations[key] == "" {
-				translations[key] = value
+			merged[key] = value
+		}
+		for key, value := range translations {
+			if value != "" {
+				merged[key] = value
 			}
 		}
+		translations = merged
 	}
 	a.translationsMu.Lock()
 	languageChanged := a.translationsLanguage != "" && a.translationsLanguage != string(langCode)
@@ -94,13 +93,11 @@ func (a *App) translate(value string) string {
 	return strings.ReplaceAll(key, "_", " ")
 }
 
-// translationSnapshot isolates matching and rendering from concurrent language reloads.
+// translationSnapshot returns the current table for matching and rendering. Reloads publish a
+// new map instead of mutating the old one, so handing out the reference is safe and avoids
+// copying the whole language pack on every action panel keystroke.
 func (a *App) translationSnapshot() map[string]string {
 	a.translationsMu.RLock()
 	defer a.translationsMu.RUnlock()
-	snapshot := make(map[string]string, len(a.translations))
-	for key, value := range a.translations {
-		snapshot[key] = value
-	}
-	return snapshot
+	return a.translations
 }

@@ -124,6 +124,18 @@ Preserve these cleanup contracts when investigating a regression:
 
 Before the native close fix, a separate same-shape debug run rose from 104.8 MB after the warm settings close to 112.8 MB after 15 measured cycles. Treat a return of that cumulative, window-count-scaled shape as a regression even when the absolute starting footprint differs.
 
+## Windows Debug Reference
+
+Use the September 22, 2026 Windows run as a comparison point for hidden idle memory, not as a budget. The run used a dev build with `sqlite_fts5,wox_automation`, real Wox data, two 20-query warm-up blocks, and three `PrivateWorkingSetMB` samples 45 seconds after hide, when both the 10-second and 30-second release stages had run:
+
+| Checkpoint | Median PrivateWorkingSetMB | Live Go heap |
+| --- | ---: | ---: |
+| Staged trims plus prepared search text and pinyin release | 63.8 MB | 17.2 MB |
+| Shared plugin logger and shared fsnotify watcher | 60.8 MB | 15.2 MB |
+| Live-object reductions (`wox.core/ui/README.md`, "Hidden-state ownership rules") | 55.4 MB | 11.0 MB |
+
+Hidden memory drops in two steps: about 2-4 MB at 10 seconds and about 40 MB at 30 seconds, so sampling before 45 seconds compares different lifecycle states. When attributing what remains, use Delve `goroutines -group userloc` for goroutine ownership and the `woxmemory go` / `woxmemory native` commands for the Go-versus-native split; the largest native owners are NT heap fragmentation from show/hide churn and renderer objects that survive hide.
+
 ## Decide Whether Memory Leaks
 
 Interpret the post-warm-up series, not a single number:

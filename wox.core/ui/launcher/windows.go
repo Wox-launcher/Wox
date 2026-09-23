@@ -444,6 +444,10 @@ func (a *App) onSettingsWindowClosed() {
 	a.cloudSettings.SetForm(nil)
 	a.cloudSettings.SetActionMenu("")
 	a.cloudSettings.SetPluginDialog(nil)
+	// The cloud tab reloads its snapshot on open, so the installed plugin catalog it
+	// fetched for the exclusion list does not need to outlive the window.
+	a.cloudSettings.SetPlugins(nil)
+	a.cloudSettings.SetLoaded(false)
 	a.settingsTableEditor = nil
 	a.aiSettings.SetForm(nil)
 	a.abandonModelManager()

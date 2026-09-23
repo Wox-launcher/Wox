@@ -53,41 +53,17 @@ func (m *Manager) startSingleFilePluginMonitoring(ctx context.Context) {
 		return
 	}
 
-	watcher, err := fsnotify.NewWatcher()
+	watch, err := util.WatchDirectory(directory, func(event fsnotify.Event) {
+		m.handleSingleFilePluginEvent(ctx, event)
+	}, func(watchErr error) {
+		logger.Error(ctx, fmt.Sprintf("Single-file plugin watcher error: %s", watchErr.Error()))
+	})
 	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("Failed to create single-file plugin watcher: %s", err.Error()))
-		return
-	}
-	m.singleFilePluginWatcher = watcher
-
-	if err := watcher.Add(directory); err != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to watch single-file plugin directory: %s", err.Error()))
-		watcher.Close()
 		return
 	}
-
+	m.singleFilePluginWatch = watch
 	logger.Info(ctx, fmt.Sprintf("Started monitoring single-file plugins directory: %s", directory))
-
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				logger.Info(ctx, "Single-file plugin watcher closed")
-				return
-			}
-			m.handleSingleFilePluginEvent(ctx, event)
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				logger.Info(ctx, "Single-file plugin watcher error channel closed")
-				return
-			}
-			logger.Error(ctx, fmt.Sprintf("Single-file plugin watcher error: %s", err.Error()))
-		case <-ctx.Done():
-			logger.Info(ctx, "Single-file plugin monitoring stopped due to context cancellation")
-			watcher.Close()
-			return
-		}
-	}
 }
 
 func (m *Manager) handleSingleFilePluginEvent(ctx context.Context, event fsnotify.Event) {

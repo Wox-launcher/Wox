@@ -101,6 +101,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	results := lo.FilterMap(installedThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
 		match := plugin.IsStringMatch(ctx, theme.GetName(ctx), query.Search) || plugin.IsStringMatch(ctx, theme.GetNameEnUs(), query.Search)
 		if match {
+			themeID := theme.ThemeId
 			themePath := filepath.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 			packageManifest := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
 			if util.IsFileExists(packageManifest) {
@@ -117,9 +118,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 						Icon:                   icons.Get(icons.ActionRun),
 						PreventHideAfterAction: true,
 						ContextData:            themeMRUContext(theme.ThemeId),
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							uiManager.ChangeTheme(ctx, theme)
-						},
+						Action:                 changeThemeByID(uiManager, theme.ThemeId),
 					},
 				},
 			}
@@ -143,7 +142,9 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 					Icon:                   icons.Get(icons.ActionDelete),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						uiManager.UninstallTheme(ctx, theme)
+						if installed, ok := findInstalledTheme(uiManager.GetAllThemes(ctx), themeID); ok {
+							uiManager.UninstallTheme(ctx, installed)
+						}
 						c.api.ChangeQuery(ctx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s ", query.TriggerKeyword),
@@ -223,14 +224,8 @@ func (c *ThemePlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUDa
 
 	uiManager := plugin.GetPluginManager().GetUI()
 	installedThemes := uiManager.GetAllThemes(ctx)
-	var found *common.Theme
-	for i := range installedThemes {
-		if installedThemes[i].ThemeId == themeID {
-			found = &installedThemes[i]
-			break
-		}
-	}
-	if found == nil {
+	found, ok := findInstalledTheme(installedThemes, themeID)
+	if !ok {
 		return nil, fmt.Errorf("theme is no longer installed: %s", themeID)
 	}
 
@@ -238,7 +233,7 @@ func (c *ThemePlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUDa
 	result := plugin.QueryResult{
 		Title:    found.GetName(ctx),
 		SubTitle: found.GetDescription(ctx),
-		Icon:     themeResultIcon(*found, installedThemes),
+		Icon:     themeResultIcon(found, installedThemes),
 		ScoreKey: found.ThemeId,
 		Actions: []plugin.QueryResultAction{
 			{
@@ -246,13 +241,35 @@ func (c *ThemePlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUDa
 				Icon:                   icons.Get(icons.ActionRun),
 				PreventHideAfterAction: true,
 				ContextData:            themeMRUContext(found.ThemeId),
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					uiManager.ChangeTheme(ctx, *found)
-				},
+				Action:                 changeThemeByID(uiManager, themeID),
 			},
 		},
 	}
 	return &result, nil
+}
+
+// findInstalledTheme returns the theme value for id so callers do not hold pointers into the catalog slice.
+func findInstalledTheme(themes []common.Theme, id string) (common.Theme, bool) {
+	for _, theme := range themes {
+		if theme.ThemeId == id {
+			return theme, true
+		}
+	}
+	return common.Theme{}, false
+}
+
+// changeThemeByID resolves the theme when the action runs. Result actions live in the query and
+// MRU caches, so capturing the whole Theme value (or the entire installed catalog) kept every
+// listed theme resident long after the query finished.
+func changeThemeByID(uiManager common.UI, themeID string) func(context.Context, plugin.ActionContext) {
+	return func(ctx context.Context, _ plugin.ActionContext) {
+		theme, ok := findInstalledTheme(uiManager.GetAllThemes(ctx), themeID)
+		if !ok {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("theme is no longer installed: %s", themeID))
+			return
+		}
+		uiManager.ChangeTheme(ctx, theme)
+	}
 }
 
 func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []plugin.QueryResult {

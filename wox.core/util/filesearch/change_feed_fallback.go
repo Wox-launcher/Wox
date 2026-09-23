@@ -6,12 +6,19 @@ import (
 	"sync"
 	"time"
 
+	"wox/util"
+
 	"github.com/fsnotify/fsnotify"
 )
 
 type FallbackChangeFeed struct {
-	mu          sync.RWMutex
-	watcher     *fsnotify.Watcher
+	mu sync.RWMutex
+	// watcher is this feed's own DirectoryWatcher rather than the process-wide one. A
+	// watcher-level error makes the feed reconcile every root it watches, which must not be
+	// triggered by an overflow in an unrelated feature's directory. Refreshing roots swaps
+	// subscriptions on this one instance instead of recreating fsnotify watchers.
+	watcher     *util.DirectoryWatcher
+	watches     []*util.DirectoryWatch
 	roots       []RootRecord
 	rootMatcher rootPathMatcher
 	signals     chan ChangeSignal
@@ -32,15 +39,35 @@ func (f *FallbackChangeFeed) Signals() <-chan ChangeSignal {
 	return f.signals
 }
 
-func (f *FallbackChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return err
+func (f *FallbackChangeFeed) Refresh(_ context.Context, roots []RootRecord) error {
+	f.mu.Lock()
+	if f.closed {
+		f.mu.Unlock()
+		return nil
 	}
+	if f.watcher == nil {
+		f.watcher = util.NewDirectoryWatcher()
+	}
+	watcher := f.watcher
+	f.mu.Unlock()
 
 	watchedRoots := make([]RootRecord, 0, len(roots))
+	watches := make([]*util.DirectoryWatch, 0, len(roots))
 	for _, root := range roots {
-		if err := watcher.Add(root.Path); err != nil {
+		watch, err := watcher.Watch(root.Path, f.handleEvent, func(watchErr error) {
+			// Watcher-level errors carry no path; the old private watcher reconciled every
+			// root it owned, so each root subscription reports itself the same way.
+			f.emit(ChangeSignal{
+				Kind:         ChangeSignalKindRequiresRootReconcile,
+				SemanticKind: ChangeSemanticKindRequiresRootReconcile,
+				RootID:       root.ID,
+				FeedType:     RootFeedTypeFallback,
+				Path:         root.Path,
+				Reason:       watchErr.Error(),
+				At:           time.Now(),
+			})
+		})
+		if err != nil {
 			f.emit(ChangeSignal{
 				Kind:         ChangeSignalKindFeedUnavailable,
 				SemanticKind: ChangeSemanticKindFeedUnavailable,
@@ -54,6 +81,7 @@ func (f *FallbackChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 		}
 
 		watchedRoots = append(watchedRoots, root)
+		watches = append(watches, watch)
 		if root.FeedState == RootFeedStateUnavailable {
 			f.emit(ChangeSignal{
 				Kind:         ChangeSignalKindRequiresRootReconcile,
@@ -70,11 +98,11 @@ func (f *FallbackChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 	f.mu.Lock()
 	if f.closed {
 		f.mu.Unlock()
-		_ = watcher.Close()
+		closeDirectoryWatches(watches)
 		return nil
 	}
-	oldWatcher := f.watcher
-	f.watcher = watcher
+	oldWatches := f.watches
+	f.watches = watches
 	f.roots = append([]RootRecord(nil), watchedRoots...)
 	// Optimization: fallback fsnotify can be a Linux primary feed and a Windows
 	// fallback. Keep the root matcher in the same critical section as roots so
@@ -82,22 +110,8 @@ func (f *FallbackChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 	f.rootMatcher = newRootPathMatcher(watchedRoots)
 	f.mu.Unlock()
 
-	if oldWatcher != nil {
-		_ = oldWatcher.Close()
-	}
-
-	if len(watchedRoots) == 0 {
-		_ = watcher.Close()
-		f.mu.Lock()
-		if f.watcher == watcher {
-			f.watcher = nil
-			f.rootMatcher = rootPathMatcher{}
-		}
-		f.mu.Unlock()
-		return nil
-	}
-
-	go f.watchLoop(ctx, watcher, watchedRoots)
+	// New roots are subscribed before old ones are released so a refresh never has a gap.
+	closeDirectoryWatches(oldWatches)
 	return nil
 }
 
@@ -109,18 +123,21 @@ func (f *FallbackChangeFeed) Close() error {
 		return nil
 	}
 	f.closed = true
-
-	if f.watcher != nil {
-		err := f.watcher.Close()
-		f.watcher = nil
-		f.roots = nil
-		f.rootMatcher = rootPathMatcher{}
-		return err
-	}
-
+	f.watches = nil
 	f.roots = nil
 	f.rootMatcher = rootPathMatcher{}
-	return nil
+	if f.watcher == nil {
+		return nil
+	}
+	watcher := f.watcher
+	f.watcher = nil
+	return watcher.Close()
+}
+
+func closeDirectoryWatches(watches []*util.DirectoryWatch) {
+	for _, watch := range watches {
+		watch.Close()
+	}
 }
 
 func (f *FallbackChangeFeed) SnapshotRootFeed(ctx context.Context, root RootRecord) (RootFeedSnapshot, error) {
@@ -131,36 +148,6 @@ func (f *FallbackChangeFeed) SnapshotRootFeed(ctx context.Context, root RootReco
 		FeedCursor: "",
 		FeedState:  RootFeedStateReady,
 	}, nil
-}
-
-func (f *FallbackChangeFeed) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, roots []RootRecord) {
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return
-			}
-			f.handleEvent(event)
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return
-			}
-			for _, root := range roots {
-				f.emit(ChangeSignal{
-					Kind:         ChangeSignalKindRequiresRootReconcile,
-					SemanticKind: ChangeSemanticKindRequiresRootReconcile,
-					RootID:       root.ID,
-					FeedType:     RootFeedTypeFallback,
-					Path:         root.Path,
-					Reason:       err.Error(),
-					At:           time.Now(),
-				})
-			}
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 func (f *FallbackChangeFeed) handleEvent(event fsnotify.Event) {

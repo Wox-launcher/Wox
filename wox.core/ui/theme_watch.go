@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"wox/common"
@@ -21,14 +22,44 @@ const (
 	themeManagedWriteWindow = 2 * time.Second
 )
 
+// startUserThemeMonitoring watches the user theme root and every theme package directory below it.
+// fsnotify is not recursive, so each package directory is its own subscription on the shared
+// watcher; new package directories subscribe when created and removed ones unsubscribe.
 func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string) {
 	m.ensureThemeWatchMaps()
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("watch themes: %v", err))
-		return
+	var watchesMu sync.Mutex
+	watches := map[string]*util.DirectoryWatch{}
+	var handleEvent func(event fsnotify.Event)
+	addDirectory := func(name string) {
+		watchesMu.Lock()
+		defer watchesMu.Unlock()
+		if _, exists := watches[name]; exists {
+			return
+		}
+		watch, err := util.WatchDirectory(name, handleEvent, func(watchErr error) {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("theme watch: %v", watchErr))
+		})
+		if err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("watch theme directory %s: %v", name, err))
+			return
+		}
+		watches[name] = watch
 	}
-	defer watcher.Close()
+	// removeDirectory releases the subscription for name and everything below it. Deleting or
+	// renaming a theme package emits one event for the package directory, while its assets
+	// subdirectory was subscribed separately; leaving that entry behind would make a later
+	// addDirectory treat it as already watched and asset edits would never arrive.
+	removeDirectory := func(name string) {
+		watchesMu.Lock()
+		defer watchesMu.Unlock()
+		prefix := name + string(filepath.Separator)
+		for path, watch := range watches {
+			if path == name || strings.HasPrefix(path, prefix) {
+				watch.Close()
+				delete(watches, path)
+			}
+		}
+	}
 	addDirectories := func(root string) {
 		_ = filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
 			if err != nil {
@@ -38,50 +69,45 @@ func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string
 				if strings.HasPrefix(entry.Name(), ".") && name != directory {
 					return filepath.SkipDir
 				}
-				if err := watcher.Add(name); err != nil {
-					util.GetLogger().Warn(ctx, fmt.Sprintf("watch theme directory %s: %v", name, err))
-				}
+				addDirectory(name)
 			}
 			return nil
 		})
 	}
-	addDirectories(directory)
-	for {
-		select {
-		case <-ctx.Done():
+	handleEvent = func(event fsnotify.Event) {
+		relative, err := filepath.Rel(directory, event.Name)
+		if err != nil {
 			return
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return
-			}
-			util.GetLogger().Warn(ctx, fmt.Sprintf("theme watch: %v", err))
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return
-			}
-			relative, err := filepath.Rel(directory, event.Name)
-			if err != nil {
-				continue
-			}
-			parts := strings.Split(filepath.ToSlash(relative), "/")
-			if len(parts) == 0 || strings.HasPrefix(parts[0], ".") {
-				continue
-			}
-			if event.Op&fsnotify.Create != 0 {
-				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-					addDirectories(event.Name)
-				}
-			}
-			_, knownPackage := m.themeFileIDs.Load(themeWatchKey(filepath.Join(directory, parts[0], "theme.json")))
-			info, statErr := os.Stat(event.Name)
-			if len(parts) > 1 || knownPackage || (statErr == nil && info.IsDir()) {
-				m.debounceUserThemeSync(ctx, filepath.Join(directory, parts[0], "theme.json"))
-			} else {
-				m.handleUserThemeFileEvent(ctx, event)
-			}
+		}
+		parts := strings.Split(filepath.ToSlash(relative), "/")
+		if len(parts) == 0 || strings.HasPrefix(parts[0], ".") {
+			return
+		}
+		info, statErr := os.Stat(event.Name)
+		if event.Op&fsnotify.Create != 0 && statErr == nil && info.IsDir() {
+			addDirectories(event.Name)
+		}
+		if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+			removeDirectory(filepath.Clean(event.Name))
+		}
+		_, knownPackage := m.themeFileIDs.Load(themeWatchKey(filepath.Join(directory, parts[0], "theme.json")))
+		if len(parts) > 1 || knownPackage || (statErr == nil && info.IsDir()) {
+			m.debounceUserThemeSync(ctx, filepath.Join(directory, parts[0], "theme.json"))
+		} else {
+			m.handleUserThemeFileEvent(ctx, event)
 		}
 	}
-
+	addDirectories(directory)
+	if ctx.Done() == nil {
+		return
+	}
+	<-ctx.Done()
+	watchesMu.Lock()
+	defer watchesMu.Unlock()
+	for name, watch := range watches {
+		watch.Close()
+		delete(watches, name)
+	}
 }
 
 func (m *Manager) startEmbedThemeMonitoring(ctx context.Context, directory string) {
@@ -187,6 +213,7 @@ func (m *Manager) upsertUserThemeFromFile(ctx context.Context, themePath string)
 	if m.IsSystemTheme(theme.ThemeId) {
 		return common.Theme{}, fmt.Errorf("theme id %s belongs to a system theme", theme.ThemeId)
 	}
+	// Load validates the package; the stored copy drops the bytes and reloads them on demand.
 	if err := theme.LoadThemeAssets(filepath.Dir(themePath)); err != nil {
 		return common.Theme{}, err
 	}
@@ -195,9 +222,10 @@ func (m *Manager) upsertUserThemeFromFile(ctx context.Context, themePath string)
 	key := themeWatchKey(themePath)
 	if oldID, ok := m.themeFileIDs.Load(key); ok && oldID != theme.ThemeId {
 		m.themes.Delete(oldID)
+		m.themePackageDirs.Delete(oldID)
 	}
-	m.themes.Store(theme.ThemeId, theme)
 	m.rememberUserThemeFile(themePath, theme.ThemeId)
+	m.themes.Store(theme.ThemeId, stripThemeAssets(theme))
 	util.GetLogger().Info(ctx, fmt.Sprintf("user theme loaded: %s (%s)", theme.ThemeName, theme.ThemeId))
 	return theme, nil
 }
@@ -213,6 +241,7 @@ func (m *Manager) removeUserThemeByPath(themePath string) (string, bool) {
 	if themeID == "" || m.IsSystemTheme(themeID) {
 		return "", false
 	}
+	m.themePackageDirs.Delete(themeID)
 	if _, exists := m.themes.Load(themeID); !exists {
 		return "", false
 	}
@@ -224,6 +253,7 @@ func (m *Manager) removeUserThemeByPath(themePath string) (string, bool) {
 func (m *Manager) rememberUserThemeFile(themePath, themeID string) {
 	m.ensureThemeWatchMaps()
 	m.themeFileIDs.Store(themeWatchKey(themePath), themeID)
+	m.themePackageDirs.Store(themeID, filepath.Dir(themeWatchKey(themePath)))
 }
 
 // IgnoreThemeWatch temporarily gives a managed install or uninstall sole ownership of reload.
@@ -256,6 +286,9 @@ func (m *Manager) ensureThemeWatchMaps() {
 	}
 	if m.themeFileIDs == nil {
 		m.themeFileIDs = util.NewHashMap[string, string]()
+	}
+	if m.themePackageDirs == nil {
+		m.themePackageDirs = util.NewHashMap[string, string]()
 	}
 	if m.themeReloadTimers == nil {
 		m.themeReloadTimers = util.NewHashMap[string, *time.Timer]()

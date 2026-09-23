@@ -195,7 +195,7 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 	if applyTheme {
 		GetUIManager().AddTheme(ctx, theme)
 	} else {
-		GetUIManager().themes.Store(theme.ThemeId, theme)
+		GetUIManager().StoreTheme(theme)
 	}
 	if syncInstall {
 		s.logInstalledThemeUpsert(ctx, theme)

@@ -8,6 +8,17 @@ import (
 	"wox/util/fuzzymatch"
 )
 
+func TestReleasePreparedSearchTextClearsIndicatorIndex(t *testing.T) {
+	plugin := &IndicatorPlugin{
+		searchIndex:    []indicatorSearchEntry{{pluginName: "Selection"}},
+		searchIndexKey: "en",
+	}
+	plugin.ReleasePreparedSearchText()
+	if plugin.searchIndex != nil || plugin.searchIndexKey != "" {
+		t.Fatalf("released index = %d entries key %q, want empty", len(plugin.searchIndex), plugin.searchIndexKey)
+	}
+}
+
 func TestIndicatorDescriptionMatchRejectsScatteredCharacters(t *testing.T) {
 	pattern := fuzzymatch.PreparePattern("confetti")
 	scattered := fuzzymatch.FuzzyMatchPrepared(fuzzymatch.PrepareText("Actions and previews for selected text or files"), pattern, false)

@@ -124,6 +124,9 @@ type UI interface {
 
 	// AI chat plugin related methods
 	SendChatResponse(ctx context.Context, chatData AIChatData)
+	// RemoveChat drops a chat that no longer exists in storage, such as one deleted on another
+	// device, from the history list and from the active view if it is open.
+	RemoveChat(ctx context.Context, chatID string)
 	ReloadChatResources(ctx context.Context, resouceName string)
 	SendAIQuestion(ctx context.Context, questionId string, question string, options []AIQuestionOption)
 

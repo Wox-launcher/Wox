@@ -647,13 +647,16 @@ func (m *Metadata) translate(ctx context.Context, text common.I18nString) string
 		return cached
 	}
 
-	if translated := i18n.GetI18nManager().TranslateI18nMap(ctx, rawText, m.I18n); translated != rawText {
-		m.translateCache.Store(cacheKey, translated)
-		return translated
+	translated := i18n.GetI18nManager().TranslateI18nMap(ctx, rawText, m.I18n)
+	if translated == rawText {
+		translated = i18n.GetI18nManager().TranslateWox(ctx, rawText)
 	}
-
-	translated := i18n.GetI18nManager().TranslateWox(ctx, rawText)
-	m.translateCache.Store(cacheKey, translated)
+	// Only memoize real translations. Callers also route dynamic text through here
+	// (glance values, notification titles), and caching every distinct untranslated
+	// string turned this per-plugin map into an unbounded leak.
+	if translated != rawText {
+		m.translateCache.Store(cacheKey, translated)
+	}
 	return translated
 }
 

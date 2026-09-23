@@ -1,7 +1,10 @@
 package plugin
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"wox/common"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,6 +105,19 @@ func TestValidateGlancesRejectsDuplicateIds(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate glance id")
+}
+
+func TestMetadataTranslateCachesOnlyTranslatedText(t *testing.T) {
+	metadata := Metadata{I18n: map[string]map[string]string{"en_US": {"plugin_name": "Notes"}}}
+	ctx := context.Background()
+
+	assert.Equal(t, "Notes", metadata.translate(ctx, "i18n:plugin_name"))
+	for index := 0; index < 50; index++ {
+		dynamic := fmt.Sprintf("%d MB", index)
+		assert.Equal(t, dynamic, metadata.translate(ctx, common.I18nString(dynamic)))
+	}
+
+	assert.Equal(t, 1, metadata.translateCache.Len(), "dynamic untranslated text must not accumulate in the cache")
 }
 
 func TestValidateGlancesAcceptsPluginLocalIds(t *testing.T) {

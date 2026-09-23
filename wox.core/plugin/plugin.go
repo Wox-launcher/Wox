@@ -32,6 +32,12 @@ type GlanceProvider interface {
 	Glance(ctx context.Context, request GlanceRequest) GlanceResponse
 }
 
+// PreparedSearchReleaser drops precomputed fuzzy-match text kept for the query hot path.
+// The next query rebuilds it.
+type PreparedSearchReleaser interface {
+	ReleasePreparedSearchText()
+}
+
 // ActionProxyCreator is implemented by plugins that need to create proxy callbacks for actions
 // This is used by external plugins (Node.js/Python) to create callbacks that invoke the host
 type ActionProxyCreator interface {

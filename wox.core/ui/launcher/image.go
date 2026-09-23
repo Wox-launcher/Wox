@@ -33,6 +33,9 @@ type woxImage struct {
 
 var appIconImageSource = woxImage{ImageType: "appicon", ImageData: "embedded"}
 
+// appIconTitleBarPixels is the decode size for the launcher title bar app icon (20 logical px).
+const appIconTitleBarPixels = 64
+
 // isLoadingIcon reports whether a result still shows the shared static loading SVG.
 func isLoadingIcon(icon woxImage) bool {
 	return icon.ImageType == icons.Get(icons.StatusLoading).ImageType && icon.ImageData == icons.Get(icons.StatusLoading).ImageData
@@ -403,6 +406,15 @@ func (a *App) trimIdleImageCache() {
 	a.imageMu.Lock()
 	defer a.imageMu.Unlock()
 	a.evictImagesToBudget("", hiddenImageCacheKeepCount, hiddenImageCacheMaxBytes)
+	a.imagesRevision.Add(1)
+}
+
+// releaseIdleImageCache drops every decoded icon after a long hide.
+// Must run on the UI thread. Result rows keep their icon sources and decode again on the next show.
+func (a *App) releaseIdleImageCache() {
+	a.imageMu.Lock()
+	defer a.imageMu.Unlock()
+	a.clearImageCacheLocked("")
 	a.imagesRevision.Add(1)
 }
 

@@ -93,9 +93,9 @@ func TestDecodeTrayQueriesPreservesMissingQueryAsEmpty(t *testing.T) {
 }
 
 func TestCoreServicesRejectsUnsupportedLanguage(t *testing.T) {
-	_, err := NewCoreServices().LanguageJSON(context.Background(), "session", "unsupported")
+	_, err := NewCoreServices().LanguageBundle(context.Background(), "session", "unsupported")
 	if err == nil || !strings.Contains(err.Error(), "unsupported lang code") {
-		t.Fatalf("LanguageJSON error = %v, want unsupported language error", err)
+		t.Fatalf("LanguageBundle error = %v, want unsupported language error", err)
 	}
 }
 

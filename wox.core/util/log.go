@@ -38,6 +38,10 @@ func GetLogger() *Log {
 	logOnce.Do(func() {
 		logFolder := GetLocation().GetLogDirectory()
 		logInstance = CreateLogger(logFolder)
+		// Only the process-wide logger may own the standard library log output;
+		// doing this inside CreateLogger let every extra logger hijack it.
+		log.SetFlags(0) // remove default timestamp
+		log.SetOutput(logInstance.writer)
 		setCrashOutput(logInstance)
 		logInstance.startMaintenanceRoutine()
 	})
@@ -81,8 +85,6 @@ func CreateLogger(logFolder string) *Log {
 	}
 
 	logImpl.logger, logImpl.writer, logImpl.fileWriter, logImpl.level = createLogger(logFolder, defaultLogLevel)
-	log.SetFlags(0) // remove default timestamp
-	log.SetOutput(logImpl.writer)
 	return logImpl
 }
 

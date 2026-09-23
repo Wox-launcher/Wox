@@ -38,5 +38,11 @@ func ResolveOplogSyncPolicy(entityType string, entityID string, key string, op s
 		return OplogSyncPolicy{Delay: 5 * time.Second}
 	}
 
+	// AI Chat persists a streaming conversation several times per turn; coalesce those
+	// writes the same way Notes autosave is coalesced.
+	if entityType == EntityPluginSetting && entityID == common.AIChatPluginID && strings.HasPrefix(key, "chat:") {
+		return OplogSyncPolicy{Delay: 5 * time.Second}
+	}
+
 	return OplogSyncPolicy{}
 }

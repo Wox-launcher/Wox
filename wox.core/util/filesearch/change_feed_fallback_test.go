@@ -80,10 +80,10 @@ func TestFallbackChangeFeedKeepsOneWatchPerRoot(t *testing.T) {
 	}
 
 	feed.mu.RLock()
-	watches := feed.watcher.WatchList()
+	watches := feed.watches
 	feed.mu.RUnlock()
-	if len(watches) != 1 || watches[0] != rootPath {
-		t.Fatalf("expected one root watch, got %#v", watches)
+	if len(watches) != 1 || watches[0].Directory() != rootPath {
+		t.Fatalf("expected one root watch, got %d watches", len(watches))
 	}
 }
 

@@ -209,6 +209,10 @@ func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatD
 	u.applyView(ctx, "send chat response", func(view contract.View) error { return view.SendChatResponse(ctx, aiChatData) })
 }
 
+func (u *uiImpl) RemoveChat(ctx context.Context, chatID string) {
+	u.applyView(ctx, "remove chat", func(view contract.View) error { return view.RemoveChat(ctx, chatID) })
+}
+
 func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
 	u.applyView(ctx, "reload chat resources", func(view contract.View) error { return view.ReloadChatResources(ctx, resouceName) })
 }

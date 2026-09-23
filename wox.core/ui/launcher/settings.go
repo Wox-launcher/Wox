@@ -301,7 +301,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 			return err
 		}
 	}
-	if err := a.reloadSettings(); err != nil {
+	if err := a.reloadSettingsForWindow(); err != nil {
 		return err
 	}
 	if err := a.hideWindow(true); err != nil {
@@ -477,8 +477,21 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	return settingsWindow.Invalidate()
 }
 
-// reloadSettings refreshes the shared settings snapshot and language catalog.
+// reloadSettings refreshes the shared settings snapshot and language catalog. Settings
+// window forms are rebuilt only while a settings or onboarding window is open; the hidden
+// launcher previously kept three fully built editor forms (AI provider tables, hotkeys,
+// query shortcuts) resident from startup even though nothing could show them.
 func (a *App) reloadSettings() error {
+	return a.reloadSettingsWithForms(false)
+}
+
+// reloadSettingsForWindow reloads settings and always builds the editor forms. It is used
+// right before a settings or onboarding window opens, when the open flags are not set yet.
+func (a *App) reloadSettingsForWindow() error {
+	return a.reloadSettingsWithForms(true)
+}
+
+func (a *App) reloadSettingsWithForms(forceForms bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	loaded, err := a.services.GeneralSettings(ctx, a.sessionID)
@@ -518,16 +531,18 @@ func (a *App) reloadSettings() error {
 	var applyErr error
 	densityChanged := false
 	if err := a.runOnUI("apply general settings snapshot", func() {
-		aiForm := newAISettingsForm(data)
-		hotkeyForm := newHotkeySettingsForm(data)
-		generalForm := newGeneralQuerySettingsForm(data)
-		applyAIProviderCatalogLocked(&aiForm, a.aiSettings.ProviderCatalog())
-		aiForm.active = a.settingsOpen && a.settingTab == "ai"
-		hotkeyForm.active = a.settingsOpen && a.settingTab == "hotkey"
-		generalForm.active = a.settingsOpen && a.settingTab == "general"
-		a.aiSettings.SetForm(&aiForm)
-		a.hotkeySettings.SetForm(&hotkeyForm)
-		a.generalSettings.SetForm(&generalForm)
+		if forceForms || a.settingsOpen || a.onboardingOpen {
+			aiForm := newAISettingsForm(data)
+			hotkeyForm := newHotkeySettingsForm(data)
+			generalForm := newGeneralQuerySettingsForm(data)
+			applyAIProviderCatalogLocked(&aiForm, a.aiSettings.ProviderCatalog())
+			aiForm.active = a.settingsOpen && a.settingTab == "ai"
+			hotkeyForm.active = a.settingsOpen && a.settingTab == "hotkey"
+			generalForm.active = a.settingsOpen && a.settingTab == "general"
+			a.aiSettings.SetForm(&aiForm)
+			a.hotkeySettings.SetForm(&hotkeyForm)
+			a.generalSettings.SetForm(&generalForm)
+		}
 
 		nextDensityMetrics := launcherDensityMetricsFor(data.UIDensity)
 		densityChanged = a.densityMetrics != nextDensityMetrics

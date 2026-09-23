@@ -65,6 +65,22 @@ func (m *Manager) GetCurrentLangCode() LangCode {
 	return m.currentLangCode
 }
 
+// GetLangMap returns the parsed table for langCode. The English and current-language tables
+// are the manager's own maps so the UI can share them instead of parsing a second copy; they
+// are never mutated after load and callers must treat them as read-only.
+func (m *Manager) GetLangMap(ctx context.Context, langCode LangCode) (map[string]string, error) {
+	m.mu.RLock()
+	currentLangCode, currentLang, enUsLang := m.currentLangCode, m.currentLang, m.enUsLang
+	m.mu.RUnlock()
+	switch langCode {
+	case LangCodeEnUs:
+		return enUsLang, nil
+	case currentLangCode:
+		return currentLang, nil
+	}
+	return loadLangMap(ctx, langCode)
+}
+
 func (m *Manager) GetLangJson(ctx context.Context, langCode LangCode) (string, error) {
 	jsonBytes, err := resource.GetLangJson(ctx, string(langCode))
 	if err != nil {

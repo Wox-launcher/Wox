@@ -78,7 +78,7 @@ type onboardingThemeState struct {
 
 // openOnboarding presents the first-run guide in its dedicated window.
 func (a *App) openOnboarding() error {
-	if err := a.reloadSettings(); err != nil {
+	if err := a.reloadSettingsForWindow(); err != nil {
 		return err
 	}
 	wasSettings := false

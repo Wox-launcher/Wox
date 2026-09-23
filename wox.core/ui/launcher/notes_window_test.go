@@ -1861,8 +1861,8 @@ func TestNotesWindowUsesNotesPluginIconOnTaskbar(t *testing.T) {
 	if notesWindowIcon() == nil {
 		t.Fatal("notes window icon failed to decode")
 	}
-	if notesWindowIcon() != notesTitleBarIcon {
-		t.Fatal("taskbar icon must use the notes plugin glyph, not the Wox app icon")
+	if notesWindowIcon() != notesTitleBarIcon || notesWindowIcon() != notesWindowIcon() {
+		t.Fatal("taskbar icon must use the shared notes plugin glyph, not the Wox app icon")
 	}
 }
 

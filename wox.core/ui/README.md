@@ -72,6 +72,30 @@ Do not add `SetProcessWorkingSetSize(-1, -1)` / `EmptyWorkingSet` to this sequen
 
 Forcing WARP (`WOX_WINDOWS_FORCE_WARP=1`) was 10 MB lower when hidden and about 40 MB lower while visible because the hardware user-mode driver keeps heap and anonymous allocations the trim cannot reach; it is not used by default because it moves rendering to the CPU.
 
+### Hidden-state ownership rules (September 22, 2026)
+
+A follow-up on the same Windows machine (dev build with `sqlite_fts5,wox_automation`, two 20-query warm-up blocks, samples 45 seconds after hide) moved the hidden private working set from 64.1 MB to 55.4 MB and the live Go heap from 17.2 MB to 11.0 MB. The 30-second stage already released most renderer memory; the remaining gains came from process-wide ownership fixes rather than more cache trimming:
+
+| Change | Hidden footprint |
+| --- | ---: |
+| Baseline: staged trims, prepared search text and pinyin table released at 30 s | 64.1 MB |
+| One shared Wox log for plugins; one process-wide fsnotify watcher | 60.7 MB |
+| Live-object reductions below | 55.4 MB |
+
+Rules that follow from it:
+
+- Plugins log through the shared Wox logger with their name as the component. Do not create a `util.Log` per plugin: each one cost a goroutine, an `io.Pipe`, an open file, and a zap/Lumberjack pair, and `CreateLogger` used to redirect the standard library `log` output every time it ran.
+- Watch directories through [`util.WatchDirectory`](../util/file_watcher.go). Every `fsnotify.NewWatcher` owns a completion port and a goroutine blocked in a native wait, which pins an OS thread; the shared watcher multiplexes all directories onto one and uses a 16 KB per-directory buffer instead of the 64 KB default.
+- `Metadata.translate` memoizes only strings it actually translated. Glance values and notification titles pass through it too, and caching every distinct untranslated string made the per-plugin map grow without bound.
+- Decode rasters at the size they are drawn and when they are first needed. Title bars draw the app icon at 20 logical px, so `newApp` decodes it at 64 px; the notes and chat taskbar glyphs are decoded on first window open.
+- `Manager.themes` stores themes without `AssetFiles`. Packages are still validated on load, but wallpaper bytes are reloaded through `Manager.ThemeWithAssets` only for the theme being applied, previewed in the installed catalog, or saved.
+- Settings-only state is built while a settings or onboarding window is open. `reloadSettings` skips the AI, hotkey, and query forms otherwise; a background cloud sync that finishes with the window closed marks the cloud snapshot stale instead of reloading the installed plugin catalog, and the catalog is released on close.
+- The launcher shares the i18n manager's language table through `LanguageBundle` instead of parsing a second copy, and `translationSnapshot` returns the published map rather than copying it per action-panel keystroke.
+- Result actions capture identifiers, not domain values. The theme plugin used to capture whole `common.Theme` values (and, for MRU restore, a pointer into the entire installed catalog) in action closures that live in the query and MRU caches.
+- Many-record plugin data is one plugin setting per record (`note:{id}`, `chat:{id}`), loaded on demand with only summaries resident. The AI Chat history moved from one `ai_chats` array to `chat:{id}` keys in the `20260922_split_ai_chats` migration; per-key settings also let Cloud Sync merge records edited on different devices.
+
+What is left after these changes is mostly native: about 10 MB of committed-but-free NT heap fragmentation from show/hide churn, the swap chain and Direct2D targets that survive hide, private DLL pages, and Go runtime metadata that scales with the heap. The next lever is releasing the Windows swap chain and Direct2D targets at the 30-second stage the way macOS releases its surface pool.
+
 ## SVG theme colors
 
 SVG icons can use `fill="var(--wox-theme-icon-color)"` or `stroke="var(--wox-theme-icon-color)"` to follow Wox appearance: white in dark themes and black in light themes. Fixed colors remain unchanged, including in SVGs that mix brand colors with this variable. This applies to inline, file, and Base64 SVGs in the shared launcher image pipeline. Controls that explicitly tint an entire icon retain that behavior.

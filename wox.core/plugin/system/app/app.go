@@ -557,8 +557,9 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 	preparedPattern := fuzzymatch.PreparePattern(query.Search)
 
 	// Query against a stable snapshot so index rebuilds or settings changes do not
-	// force extra work in the middle of a keystroke.
+	// force extra work in the middle of a keystroke. A long hide drops the snapshot.
 	snapshotStart := time.Now()
+	a.ensureQueryEntries(ctx)
 	entries, generation := a.getQueryEntriesSnapshot()
 	snapshotUs := time.Since(snapshotStart).Microseconds()
 	startedAt := time.Now().UnixNano()
@@ -2128,6 +2129,27 @@ func (a *ApplicationPlugin) buildQueryEntry(ctx context.Context, info appInfo) a
 	}
 	entry.ignoreCandidates = buildIgnoreRuleCandidates(info, info.Name)
 	return entry
+}
+
+// ReleasePreparedSearchText drops precomputed app names after a long hide.
+// The next query rebuilds them from the in-memory app list.
+func (a *ApplicationPlugin) ReleasePreparedSearchText() {
+	a.queryEntriesMutex.Lock()
+	a.queryEntries = nil
+	a.queryEntriesGeneration++
+	a.queryEntriesMutex.Unlock()
+	a.clearQuerySessionCache()
+}
+
+// ensureQueryEntries rebuilds the search snapshot after it was released.
+func (a *ApplicationPlugin) ensureQueryEntries(ctx context.Context) {
+	a.queryEntriesMutex.RLock()
+	ready := a.queryEntries != nil
+	a.queryEntriesMutex.RUnlock()
+	if ready {
+		return
+	}
+	a.rebuildQueryEntries(ctx)
 }
 
 func (a *ApplicationPlugin) getQueryEntriesSnapshot() ([]appQueryEntry, uint64) {

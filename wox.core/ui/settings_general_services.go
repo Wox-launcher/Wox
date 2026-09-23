@@ -121,12 +121,12 @@ func (s *CoreServices) OpenMacOSPermission(ctx context.Context, sessionID string
 	return nil
 }
 
-// LanguageJSON returns one validated translation bundle.
-func (s *CoreServices) LanguageJSON(ctx context.Context, sessionID string, langCode i18n.LangCode) (string, error) {
+// LanguageBundle returns one validated translation table shared with the i18n manager.
+func (s *CoreServices) LanguageBundle(ctx context.Context, sessionID string, langCode i18n.LangCode) (map[string]string, error) {
 	if !i18n.IsSupportedLangCode(string(langCode)) {
-		return "", fmt.Errorf("unsupported lang code: %s", langCode)
+		return nil, fmt.Errorf("unsupported lang code: %s", langCode)
 	}
-	return i18n.GetI18nManager().GetLangJson(uiServiceContext(ctx, sessionID), langCode)
+	return i18n.GetI18nManager().GetLangMap(uiServiceContext(ctx, sessionID), langCode)
 }
 
 // UpdateGeneralSetting applies one string-encoded setting while preserving runtime side effects.

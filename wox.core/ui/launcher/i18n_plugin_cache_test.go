@@ -16,8 +16,8 @@ type languageCacheServices struct {
 func (s *languageCacheServices) GeneralSettings(context.Context, string) (contract.GeneralSettings, error) {
 	return contract.GeneralSettings{LangCode: s.language}, nil
 }
-func (s *languageCacheServices) LanguageJSON(context.Context, string, i18n.LangCode) (string, error) {
-	return `{}`, nil
+func (s *languageCacheServices) LanguageBundle(context.Context, string, i18n.LangCode) (map[string]string, error) {
+	return map[string]string{}, nil
 }
 
 func TestLanguageChangeInvalidatesTranslatedPluginCaches(t *testing.T) {

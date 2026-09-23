@@ -144,6 +144,26 @@ func TestRebuildQueryEntriesSkipsIgnoredApps(t *testing.T) {
 	}
 }
 
+func TestReleasePreparedSearchTextRebuildsOnDemand(t *testing.T) {
+	plugin := &ApplicationPlugin{
+		apps: []appInfo{{Name: "Notes", Path: `C:\Apps\Notes.exe`, Identity: "notes.exe"}},
+	}
+	plugin.rebuildQueryEntries(context.Background())
+	if len(plugin.queryEntries) != 1 || len(plugin.queryEntries[0].preparedSearchCandidates) == 0 {
+		t.Fatalf("query entries = %+v, want prepared Notes text", plugin.queryEntries)
+	}
+
+	plugin.ReleasePreparedSearchText()
+	if plugin.queryEntries != nil {
+		t.Fatalf("released query entries = %+v, want nil", plugin.queryEntries)
+	}
+
+	plugin.ensureQueryEntries(context.Background())
+	if len(plugin.queryEntries) != 1 || plugin.queryEntries[0].info.Name != "Notes" || len(plugin.queryEntries[0].preparedSearchCandidates) == 0 {
+		t.Fatalf("rebuilt query entries = %+v, want prepared Notes text", plugin.queryEntries)
+	}
+}
+
 func TestBuildAppActionsIncludesHideAction(t *testing.T) {
 	actions := (&ApplicationPlugin{}).buildAppActions(appInfo{Name: "Notes", Path: `C:\Apps\Notes.exe`}, "Notes", nil)
 	for _, action := range actions {

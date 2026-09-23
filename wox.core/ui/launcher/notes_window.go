@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -71,10 +72,18 @@ const (
 	notesFormatBarLeadCount = 7
 )
 
-var notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginNotes)), nil, 256)
+var (
+	notesTitleBarIconOnce sync.Once
+	notesTitleBarIcon     *woxui.Image
+)
 
 // notesWindowIcon is the notes plugin glyph used both in the title bar and on the taskbar.
+// It is decoded on first use: the 256 px taskbar raster costs 256 KB and most sessions never
+// open the notes window, so decoding it at package init kept that memory resident for nothing.
 func notesWindowIcon() *woxui.Image {
+	notesTitleBarIconOnce.Do(func() {
+		notesTitleBarIcon, _ = decodeWoxImageWithTint(fromCoreImage(icons.Get(icons.PluginNotes)), nil, 256)
+	})
 	return notesTitleBarIcon
 }
 
@@ -1188,7 +1197,7 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		{Right: contentRight + 6, AnchorRight: true, Top: 4, Child: right},
 	}
 	if runtime.GOOS != "darwin" {
-		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: launcherview.NotesToolbarHeight, Vertical: .5, Child: woxwidget.Image{Source: notesTitleBarIcon, Width: 20, Height: 20}}})
+		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: launcherview.NotesToolbarHeight, Vertical: .5, Child: woxwidget.Image{Source: notesWindowIcon(), Width: 20, Height: 20}}})
 	}
 	children = append(children, woxwidget.StackChild{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
 		ID: "notes.toolbar.close", Width: width, Platform: runtime.GOOS, Theme: theme.Controls, Active: active, Maximized: c.windowMaximized,

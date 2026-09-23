@@ -189,7 +189,9 @@ type GeneralSettings struct {
 type GeneralSettingsServices interface {
 	GeneralSettings(ctx context.Context, sessionID string) (GeneralSettings, error)
 	AvailableLanguages(ctx context.Context, sessionID string) ([]i18n.Lang, error)
-	LanguageJSON(ctx context.Context, sessionID string, langCode i18n.LangCode) (string, error)
+	// LanguageBundle returns the parsed translation table for langCode. The map is shared
+	// with core and must be treated as read-only.
+	LanguageBundle(ctx context.Context, sessionID string, langCode i18n.LangCode) (map[string]string, error)
 	UpdateGeneralSetting(ctx context.Context, sessionID string, key string, value string) error
 }
 

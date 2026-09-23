@@ -287,6 +287,15 @@ func limitIndicatorQueryResults(results []plugin.QueryResult) []plugin.QueryResu
 	return results[:indicatorQueryResultLimit]
 }
 
+// ReleasePreparedSearchText drops the translated plugin search index after a long hide.
+// The next query rebuilds it.
+func (i *IndicatorPlugin) ReleasePreparedSearchText() {
+	i.searchIndexMu.Lock()
+	i.searchIndex = nil
+	i.searchIndexKey = ""
+	i.searchIndexMu.Unlock()
+}
+
 // getSearchIndex reuses translated and normalized plugin metadata until the plugin snapshot changes.
 func (i *IndicatorPlugin) getSearchIndex(ctx context.Context, pluginInstances []*plugin.Instance) []indicatorSearchEntry {
 	indexKey := buildIndicatorSearchIndexKey(pluginInstances)

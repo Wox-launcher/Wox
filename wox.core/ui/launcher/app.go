@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -307,7 +308,9 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	if windowID == "" {
 		windowID = woxui.WindowID("wox.instance." + sessionID)
 	}
-	appIcon, _ := decodeWoxImageWithTint(appIconImageSource, nil, 256)
+	// Title bars draw this at 20 logical px, so 64 px covers 3x scaling; decoding the
+	// full 256 px source kept a 256 KB raster per launcher instance for a 20 px glyph.
+	appIcon, _ := decodeWoxImageWithTint(appIconImageSource, nil, appIconTitleBarPixels)
 	app := &App{
 		isDev:                  isDev,
 		isPrimary:              isPrimary,
@@ -718,7 +721,22 @@ func (a *App) hideWindow(notify bool) error {
 			a.trimIdleImageCache()
 		}); err != nil {
 			log.Printf("trim hidden launcher image cache: %v", err)
+			return
 		}
+		// A quick reopen still has the trimmed cache. After the launcher stays
+		// hidden as long as the renderer trim, drop the remaining decoded icons.
+		// Continue mode keeps the result list and reloads each icon from its source.
+		time.Sleep(20 * time.Second)
+		if err := a.runOnUI("release hidden launcher image cache", func() {
+			if a.visible {
+				return
+			}
+			a.releaseIdleImageCache()
+		}); err != nil {
+			log.Printf("release hidden launcher image cache: %v", err)
+			return
+		}
+		debug.FreeOSMemory()
 	})
 	if notify {
 		return a.notifyHidden()

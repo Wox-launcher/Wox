@@ -786,6 +786,14 @@ func (r *SysPlugin) commandMatches(command SysCommand, search string, candidates
 	return false, 0
 }
 
+// ReleasePreparedSearchText drops precomputed system-command text after a long hide.
+// The next query rebuilds it for the current language.
+func (r *SysPlugin) ReleasePreparedSearchText() {
+	r.commandSearchIndexMu.Lock()
+	r.commandSearchIndexes = nil
+	r.commandSearchIndexMu.Unlock()
+}
+
 // getCommandSearchIndex prepares static command candidates once per UI language.
 func (r *SysPlugin) getCommandSearchIndex(ctx context.Context) [][]*fuzzymatch.PreparedText {
 	langCode := i18n.GetI18nManager().GetCurrentLangCode()

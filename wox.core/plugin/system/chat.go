@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	aitool "wox/ai/builtintool/wox"
 	"wox/common"
 	"wox/common/icons"
+	"wox/database"
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
@@ -21,10 +23,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"gorm.io/gorm"
 )
 
 var aiChatIcon = icons.Get(icons.PluginAIChat)
-var aiChatsSettingKey = "ai_chats"
+
+// aiChatSettingKeyPrefix keys one plugin setting per chat (`chat:{id}`), mirroring Notes.
+// Independent keys let Cloud Sync merge chats edited on different devices and let the
+// plugin keep only summaries in memory; the legacy single `ai_chats` array is split by
+// the 20260922_split_ai_chats migration.
+const aiChatSettingKeyPrefix = "chat:"
 
 const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
 const aiChatAttachmentsContextKey = "ai_chat_attachments"
@@ -42,7 +50,13 @@ func init() {
 }
 
 type AIChatPlugin struct {
+	// chats is the in-memory index of persisted chats as summaries (no conversations),
+	// sorted by UpdatedAt descending. Full payloads are read from store on demand so chat
+	// history does not stay resident for the whole session. chatsMu guards the slice
+	// because stream callbacks and Cloud Sync change notifications update it concurrently.
+	chatsMu     sync.Mutex
 	chats       []common.AIChatData
+	store       *setting.PluginSettingStore
 	mcpServers  []common.AIChatMCPServerConfig
 	mcpToolsMap []common.MCPTool
 	api         plugin.API
@@ -53,6 +67,8 @@ type AIChatPlugin struct {
 
 type activeAIChatCancel struct {
 	cancel context.CancelFunc
+	// live returns the in-flight chat state owned by the running stream.
+	live func() common.AIChatData
 }
 
 type aiChatRuntimeContext struct {
@@ -174,13 +190,19 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.configurePluginBuiltinToolHooks()
 	r.reloadDisabledBuiltinTools(ctx)
 
-	chats, err := r.loadChats(ctx)
+	r.store = setting.NewPluginSettingStore(database.GetDB(), common.AIChatPluginID)
+	chats, err := r.loadChatSummaries(ctx)
 	if err != nil {
-		r.chats = []common.AIChatData{}
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load chats: %s", err.Error()))
-	} else {
-		r.chats = chats
 	}
+	r.replaceChatSummaries(chats)
+	// Local writes go through the store directly, so this only fires for Cloud Sync applies
+	// and settings-page edits; both must refresh the summary index and any open chat.
+	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
+		if strings.HasPrefix(key, aiChatSettingKeyPrefix) {
+			r.handleChatSettingChanged(callbackCtx, strings.TrimPrefix(key, aiChatSettingKeyPrefix), value)
+		}
+	})
 
 	// Providers may have been removed while Wox was closed; drop stale defaults now.
 	r.EnsureDefaultModelValid(ctx)
@@ -269,7 +291,7 @@ func (r *AIChatPlugin) GetDefaultModel(ctx context.Context) common.Model {
 	}
 
 	// Prefer the most recently updated chat whose provider still exists.
-	for _, chat := range r.chats {
+	for _, chat := range r.chatSummaries() {
 		if isAIModelProviderConfigured(ctx, chat.Model) {
 			return common.Model{
 				Name:          chat.Model.Name,
@@ -384,37 +406,160 @@ func (r *AIChatPlugin) reloadDisabledBuiltinTools(ctx context.Context) {
 	ai.SetDisabledBuiltinTools(setting.GetSettingManager().GetWoxSetting(ctx).AIDisabledBuiltinTools.Get())
 }
 
-func (r *AIChatPlugin) loadChats(ctx context.Context) ([]common.AIChatData, error) {
-	chats := []common.AIChatData{}
-	chatsJson := r.api.GetSetting(ctx, aiChatsSettingKey)
-	if chatsJson == "" {
-		return []common.AIChatData{}, nil
-	}
+// aiChatSummary is the subset of AIChatData decoded for the in-memory index. Decoding into
+// this struct skips allocating conversations for every stored chat at startup.
+type aiChatSummary struct {
+	Id        string
+	Title     string
+	Model     common.Model
+	CreatedAt int64
+	UpdatedAt int64
+}
 
-	err := json.Unmarshal([]byte(chatsJson), &chats)
+func (summary aiChatSummary) toChatData() common.AIChatData {
+	return common.AIChatData{Id: summary.Id, Title: summary.Title, Model: summary.Model, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt, IsSummary: true}
+}
+
+func chatSummaryOf(chat common.AIChatData) common.AIChatData {
+	return aiChatSummary{Id: chat.Id, Title: chat.Title, Model: chat.Model, CreatedAt: chat.CreatedAt, UpdatedAt: chat.UpdatedAt}.toChatData()
+}
+
+func chatSettingKey(chatID string) string {
+	return aiChatSettingKeyPrefix + chatID
+}
+
+// loadChatSummaries indexes every persisted chat without keeping conversation bodies.
+func (r *AIChatPlugin) loadChatSummaries(ctx context.Context) ([]common.AIChatData, error) {
+	values, err := r.store.ListByPrefix(aiChatSettingKeyPrefix)
 	if err != nil {
-		return []common.AIChatData{}, err
+		return nil, err
 	}
-
-	sort.Slice(chats, func(i, j int) bool {
-		return chats[i].UpdatedAt > chats[j].UpdatedAt
-	})
-
+	chats := make([]common.AIChatData, 0, len(values))
+	for key, raw := range values {
+		var summary aiChatSummary
+		if err := json.Unmarshal([]byte(raw), &summary); err != nil || summary.Id == "" {
+			r.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI: skip invalid chat record %s", key))
+			continue
+		}
+		chats = append(chats, summary.toChatData())
+	}
+	sortChatsByUpdatedAt(chats)
 	return chats, nil
 }
 
-func (r *AIChatPlugin) saveChats(ctx context.Context) {
-	persistedChats := make([]common.AIChatData, len(r.chats))
-	for i, chat := range r.chats {
-		persistedChats[i] = cloneAIChatDataForState(chat)
+func sortChatsByUpdatedAt(chats []common.AIChatData) {
+	sort.SliceStable(chats, func(i, j int) bool {
+		return chats[i].UpdatedAt > chats[j].UpdatedAt
+	})
+}
+
+// loadChat reads one full chat payload; a missing or unreadable record reports false.
+func (r *AIChatPlugin) loadChat(ctx context.Context, chatID string) (common.AIChatData, bool) {
+	if r.store == nil || chatID == "" {
+		return common.AIChatData{}, false
 	}
-	chatsJson, err := json.Marshal(persistedChats)
-	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal chats: %s", err.Error()))
+	var chat common.AIChatData
+	if err := r.store.Get(chatSettingKey(chatID), &chat); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load chat %s: %s", chatID, err.Error()))
+		}
+		return common.AIChatData{}, false
+	}
+	chat.IsSummary = false
+	return chat, chat.Id != ""
+}
+
+// saveChat persists one chat as its own synced setting and refreshes its summary.
+func (r *AIChatPlugin) saveChat(ctx context.Context, chat common.AIChatData) {
+	if r.store == nil || chat.Id == "" {
 		return
 	}
+	persisted := cloneAIChatDataForState(chat)
+	raw, err := json.Marshal(persisted)
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal chat %s: %s", chat.Id, err.Error()))
+		return
+	}
+	if err := r.store.SetWithSync(chatSettingKey(chat.Id), string(raw), true); err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to save chat %s: %s", chat.Id, err.Error()))
+		return
+	}
+	r.upsertChatSummary(chatSummaryOf(persisted))
+}
 
-	r.api.SaveSetting(ctx, aiChatsSettingKey, string(chatsJson), false)
+// chatSummaries returns a copy of the summary index for read-only iteration.
+func (r *AIChatPlugin) chatSummaries() []common.AIChatData {
+	r.chatsMu.Lock()
+	defer r.chatsMu.Unlock()
+	return append([]common.AIChatData(nil), r.chats...)
+}
+
+func (r *AIChatPlugin) replaceChatSummaries(chats []common.AIChatData) {
+	r.chatsMu.Lock()
+	defer r.chatsMu.Unlock()
+	r.chats = chats
+}
+
+func (r *AIChatPlugin) upsertChatSummary(summary common.AIChatData) {
+	r.chatsMu.Lock()
+	defer r.chatsMu.Unlock()
+	replaced := false
+	for i := range r.chats {
+		if r.chats[i].Id == summary.Id {
+			r.chats[i] = summary
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		r.chats = append(r.chats, summary)
+	}
+	sortChatsByUpdatedAt(r.chats)
+}
+
+func (r *AIChatPlugin) removeChatSummary(chatID string) bool {
+	r.chatsMu.Lock()
+	defer r.chatsMu.Unlock()
+	for i := range r.chats {
+		if r.chats[i].Id == chatID {
+			r.chats = append(r.chats[:i], r.chats[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// handleChatSettingChanged mirrors a remotely synced upsert or delete into the summary index
+// and the UI. The callback value is the applied payload, or empty for a delete, so the
+// decision does not depend on re-reading the store: a transient read failure must not be
+// mistaken for a remote deletion.
+func (r *AIChatPlugin) handleChatSettingChanged(ctx context.Context, chatID string, value string) {
+	if strings.TrimSpace(value) == "" {
+		r.removeChatSummary(chatID)
+		if r.isChatStreaming(chatID) {
+			// The device still generating this chat keeps it; its next save re-creates the
+			// record, which is preferable to losing an answer that is being written.
+			return
+		}
+		if ui := plugin.GetPluginManager().GetUI(); ui != nil {
+			ui.RemoveChat(ctx, chatID)
+		}
+		return
+	}
+	var chat common.AIChatData
+	if err := json.Unmarshal([]byte(value), &chat); err != nil || chat.Id == "" {
+		r.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI: ignore synced chat %s with invalid payload", chatID))
+		return
+	}
+	chat.IsSummary = false
+	r.upsertChatSummary(chatSummaryOf(chat))
+	if r.isChatStreaming(chatID) {
+		// The local stream owns this chat until it finishes; its next save wins.
+		return
+	}
+	if ui := plugin.GetPluginManager().GetUI(); ui != nil {
+		ui.SendChatResponse(ctx, chat)
+	}
 }
 
 func (r *AIChatPlugin) GetAllTools(ctx context.Context) []common.MCPTool {
@@ -462,19 +607,32 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	// Remember the model used for this send so the next new chat opens with it.
 	r.SetDefaultModel(ctx, aiChatData.Model)
 
-	r.appendOrUpdateChatData(aiChatData)
-	r.saveChats(ctx)
+	r.saveChat(ctx, aiChatData)
 
 	runtimeContext := r.buildRuntimeRequestContext(ctx, &aiChatData)
-	r.appendOrUpdateChatData(aiChatData)
-	r.saveChats(ctx)
+	r.saveChat(ctx, aiChatData)
 
 	// Detach from the caller deadline so hiding the launcher or finishing the
 	// start-chat RPC cannot cancel a background conversation. Only StopChat
 	// cancels this context. AIChatStream is asynchronous, so keep the cancel
 	// entry registered until a terminal stream callback cleans up this exact entry.
+	var chatDataMu sync.Mutex
 	chatCtx, cancelChat := context.WithCancel(context.WithoutCancel(ctx))
-	activeCancel := &activeAIChatCancel{cancel: cancelChat}
+	activeCancel := &activeAIChatCancel{
+		cancel: cancelChat,
+		// The store only holds the last persisted snapshot (start, title, end). While the
+		// stream runs, GetChat must read this live copy so reopening the chat during a long
+		// tool call does not fall back to where the previous save left it.
+		live: func() common.AIChatData {
+			chatDataMu.Lock()
+			defer chatDataMu.Unlock()
+			snapshot := cloneAIChatDataForUI(aiChatData)
+			if runtimeContext.DebugTrace != nil {
+				snapshot.DebugTrace = cloneAIChatDebugTrace(runtimeContext.DebugTrace)
+			}
+			return snapshot
+		},
+	}
 	r.activeChatCancels.Store(aiChatData.Id, activeCancel)
 	cleanupActiveCancel := func() {
 		cancelChat()
@@ -482,7 +640,6 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	}
 
 	const chatStreamUIUpdateMinIntervalMs int64 = 120
-	var chatDataMu sync.Mutex
 	var lastChatResponseAt int64
 	var responseId = uuid.NewString()
 	var prevStatus common.ChatStreamDataStatus
@@ -512,7 +669,9 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			r.summarizeChat(context.WithoutCancel(ctx), titleChat, func(title string) {
 				chatDataMu.Lock()
 				active, running := r.activeChatCancels.Load(aiChatData.Id)
-				storedChat, exists := r.GetChat(ctx, aiChatData.Id)
+				// Read the persisted copy directly: GetChat would return this stream's live
+				// state, whose lock is already held here.
+				storedChat, exists := r.loadChat(ctx, aiChatData.Id)
 				if !exists || storedChat.Title != "" || (running && active != activeCancel) {
 					chatDataMu.Unlock()
 					return
@@ -525,8 +684,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 					titleSnapshot.Title = title
 				}
 				titleSnapshot.IsStreaming = running && active == activeCancel
-				r.appendOrUpdateChatData(titleSnapshot)
-				r.saveChats(ctx)
+				r.saveChat(ctx, titleSnapshot)
 				plugin.GetPluginManager().GetUI().SendChatResponse(ctx, titleSnapshot)
 				chatDataMu.Unlock()
 			})
@@ -608,8 +766,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		isTerminalError := streamResult.Status == common.ChatStreamStatusError
 		if isFinished || isTerminalError {
 			// Serialize terminal persistence with the asynchronous title result.
-			r.appendOrUpdateChatData(snapshot)
-			r.saveChats(ctx)
+			r.saveChat(ctx, snapshot)
 		}
 		if shouldSendSnapshot {
 			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, snapshot)
@@ -637,8 +794,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		})
 		aiChatData.IsStreaming = false
 		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
-		r.appendOrUpdateChatData(aiChatData)
-		r.saveChats(ctx)
+		r.saveChat(ctx, aiChatData)
 		r.api.Notify(ctx, r.api.GetTranslation(ctx, "ui_ai_chat_failed_to_chat"))
 	}
 }
@@ -1115,24 +1271,6 @@ func (r *AIChatPlugin) appendOrUpdateConversationAtEnd(aiChatData *common.AIChat
 	aiChatData.Conversations = append(aiChatData.Conversations, conversation)
 }
 
-func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
-	aiChatData = cloneAIChatDataForState(aiChatData)
-	for i := range r.chats {
-		if r.chats[i].Id == aiChatData.Id {
-			r.chats[i] = aiChatData
-			sort.Slice(r.chats, func(i, j int) bool {
-				return r.chats[i].UpdatedAt > r.chats[j].UpdatedAt
-			})
-			return
-		}
-	}
-
-	r.chats = append(r.chats, aiChatData)
-	sort.Slice(r.chats, func(i, j int) bool {
-		return r.chats[i].UpdatedAt > r.chats[j].UpdatedAt
-	})
-}
-
 // StopChat cancels the active streaming context for the given chat id.
 // Returns true if a streaming session was found and cancelled.
 func (r *AIChatPlugin) StopChat(ctx context.Context, chatId string) bool {
@@ -1148,44 +1286,44 @@ func (r *AIChatPlugin) StopChat(ctx context.Context, chatId string) bool {
 
 // DeleteChat removes a persisted chat by id and reports whether it existed.
 func (r *AIChatPlugin) DeleteChat(ctx context.Context, chatId string) bool {
-	for i := range r.chats {
-		if r.chats[i].Id == chatId {
-			r.chats = append(r.chats[:i], r.chats[i+1:]...)
-			r.saveChats(ctx)
-			return true
-		}
+	if !r.removeChatSummary(chatId) || r.store == nil {
+		return false
 	}
-
-	return false
+	if err := r.store.DeleteWithSync(chatSettingKey(chatId), true); err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to delete chat %s: %s", chatId, err.Error()))
+	}
+	return true
 }
 
-// GetChat returns the full chat payload for a summary item selected in the UI.
+// GetChat returns the full chat payload for a summary item selected in the UI. A chat that is
+// still streaming is served from the running stream's live state instead of the store.
 func (r *AIChatPlugin) GetChat(ctx context.Context, chatId string) (common.AIChatData, bool) {
-	for i := range r.chats {
-		if r.chats[i].Id == chatId {
-			snapshot := cloneAIChatDataForUI(r.chats[i])
-			snapshot.IsStreaming = r.isChatStreaming(chatId)
-			snapshot.IsSummary = false
-			return snapshot, true
+	if entry, ok := r.activeChatCancels.Load(chatId); ok {
+		if active, ok := entry.(*activeAIChatCancel); ok && active.live != nil {
+			chat := active.live()
+			chat.IsStreaming = true
+			chat.IsSummary = false
+			return chat, true
 		}
 	}
-
-	return common.AIChatData{}, false
+	chat, exists := r.loadChat(ctx, chatId)
+	if !exists {
+		return common.AIChatData{}, false
+	}
+	chat.IsStreaming = r.isChatStreaming(chatId)
+	return chat, true
 }
 
 // SummarizeChat starts an asynchronous title refresh for a persisted chat.
 func (r *AIChatPlugin) SummarizeChat(ctx context.Context, chatId string) bool {
-	for i := range r.chats {
-		if r.chats[i].Id == chatId {
-			chat := r.chats[i]
-			util.Go(ctx, "summarize chat", func() {
-				r.summarizeChat(ctx, chat, nil)
-			})
-			return true
-		}
+	chat, exists := r.loadChat(ctx, chatId)
+	if !exists {
+		return false
 	}
-
-	return false
+	util.Go(ctx, "summarize chat", func() {
+		r.summarizeChat(ctx, chat, nil)
+	})
+	return true
 }
 
 func (r *AIChatPlugin) newChatData(ctx context.Context) common.AIChatData {
@@ -1205,9 +1343,9 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 		activeChat.Id = activeChatId
 		activeChat.IsStreaming = r.isChatStreaming(activeChatId)
 	}
-	chatSummaries := make([]common.AIChatData, 0, len(r.chats))
-	for _, chat := range r.chats {
-		chatSummaries = append(chatSummaries, r.cloneAIChatDataForPreviewList(chat))
+	chatSummaries := r.chatSummaries()
+	for i := range chatSummaries {
+		chatSummaries[i] = r.cloneAIChatDataForPreviewList(chatSummaries[i])
 	}
 
 	previewData, err := json.Marshal(common.AIChatPreviewData{
@@ -1440,17 +1578,14 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 				return
 			}
 
-			// update the chat title
+			// Update the persisted chat; the store copy wins over the caller's snapshot
+			// because the chat may have received more conversations since summarization started.
 			updatedChat := chat
-			updatedChat.Title = title
-			for i := range r.chats {
-				if r.chats[i].Id == chat.Id {
-					r.chats[i].Title = title
-					updatedChat = r.chats[i]
-					break
-				}
+			if stored, exists := r.loadChat(ctx, chat.Id); exists {
+				updatedChat = stored
 			}
-			r.saveChats(ctx)
+			updatedChat.Title = title
+			r.saveChat(ctx, updatedChat)
 			updatedSnapshot := cloneAIChatDataForUI(updatedChat)
 			// Title updates come from persisted chat state, so restore the transient debug trace for the UI snapshot.
 			updatedSnapshot.DebugTrace = cloneAIChatDebugTrace(debugTrace)
@@ -1579,36 +1714,34 @@ func (c *AIChatPlugin) getResultGroup(ctx context.Context, chat common.AIChatDat
 func (r *AIChatPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
 	chatID := strings.TrimSpace(mruData.ContextData["ai_chat_active_id"])
 	queryText := strings.TrimSpace(mruData.ContextData["query"])
-	var found *common.AIChatData
-	for i := range r.chats {
-		if chatID != "" && r.chats[i].Id == chatID {
-			found = &r.chats[i]
-			break
-		}
-		if queryText != "" && r.chats[i].Title == queryText {
-			found = &r.chats[i]
+	var found common.AIChatData
+	exists := false
+	for _, chat := range r.chatSummaries() {
+		if (chatID != "" && chat.Id == chatID) || (queryText != "" && chat.Title == queryText) {
+			found, exists = chat, true
 			break
 		}
 	}
-	if found == nil {
+	if !exists {
 		return nil, fmt.Errorf("chat no longer exists")
 	}
+	foundID, foundTitle := found.Id, found.Title
 	result := plugin.QueryResult{
-		Title:    found.Title,
+		Title:    foundTitle,
 		SubTitle: "i18n:plugin_ai_chat_start_chat",
 		Icon:     aiChatIcon,
-		ScoreKey: found.Id,
+		ScoreKey: foundID,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_ai_chat_start_chat",
 				Icon:                   icons.Get(icons.ActionOpen),
 				PreventHideAfterAction: true,
-				ContextData:            common.ContextData{"ai_chat_active_id": found.Id, "query": found.Title},
+				ContextData:            common.ContextData{"ai_chat_active_id": foundID, "query": foundTitle},
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					r.api.ChangeQuery(ctx, common.PlainQuery{
 						QueryType:   plugin.QueryTypeInput,
 						QueryText:   "chat ",
-						ContextData: common.ContextData{"ai_chat_active_id": found.Id},
+						ContextData: common.ContextData{"ai_chat_active_id": foundID},
 					})
 				},
 			},

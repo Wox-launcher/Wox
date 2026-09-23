@@ -265,6 +265,24 @@ func TestImageCacheHiddenTrimUsesCountAndByteBudget(t *testing.T) {
 	}
 }
 
+func TestImageCacheLongHiddenReleaseDropsKeptImages(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageRequested: map[string]string{}}
+	for index := 0; index < 8; index++ {
+		key := fmt.Sprintf("icon-%d", index)
+		app.imageLastUsed[key] = uint64(index + 1)
+		app.imageRequested[key] = key
+		app.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
+	}
+	app.trimIdleImageCache()
+	if len(app.images) != 8 {
+		t.Fatalf("short hide kept %d images, want 8", len(app.images))
+	}
+	app.releaseIdleImageCache()
+	if len(app.images) != 0 || app.imageCacheByteSizeLocked() != 0 || len(app.imageRequested) != 0 {
+		t.Fatalf("long hide cache = %d images / %d bytes / %d requests, want empty", len(app.images), app.imageCacheByteSizeLocked(), len(app.imageRequested))
+	}
+}
+
 func TestImageCacheCountsAnimatedFrames(t *testing.T) {
 	animated := decodeLauncherTestGIF(t)
 	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
