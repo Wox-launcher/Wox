@@ -142,6 +142,7 @@ typedef struct {
   GLint rect_color;
   GLint rect_radius;
   GLint rect_stroke_width;
+  GLint rect_aa_pad;
   GLint rect_polygon;
   GLint rect_polygon_count;
   GLint texture_viewport;
@@ -868,13 +869,17 @@ static const char *const rect_vertex_source =
     "#version 330 core\n"
     "uniform vec2 u_viewport;\n"
     "uniform vec4 u_rect;\n"
+    "uniform float u_aa_pad;\n"
     "out vec2 v_local;\n"
     "void main() {\n"
     "  vec2 corners[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0));\n"
     "  vec2 corner = corners[gl_VertexID];\n"
-    "  vec2 point = u_rect.xy + corner * u_rect.zw;\n"
+    // The coverage ramp extends outside the shape. A quad that matches u_rect
+    // discards it, so a 1px inset shadow pops as the launcher resizes.
+    "  vec2 pad = vec2(max(u_aa_pad, 0.0));\n"
+    "  vec2 point = u_rect.xy - pad + corner * (u_rect.zw + pad * 2.0);\n"
     "  gl_Position = vec4(point.x / u_viewport.x * 2.0 - 1.0, 1.0 - point.y / u_viewport.y * 2.0, 0.0, 1.0);\n"
-    "  v_local = corner * u_rect.zw;\n"
+    "  v_local = point - u_rect.xy;\n"
     "}\n";
 
 static const char *const rect_fragment_source =
@@ -1514,6 +1519,7 @@ static bool initialize_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *render
   renderer->rect_color = glGetUniformLocation(renderer->rect_program, "u_color");
   renderer->rect_radius = glGetUniformLocation(renderer->rect_program, "u_radius");
   renderer->rect_stroke_width = glGetUniformLocation(renderer->rect_program, "u_stroke_width");
+  renderer->rect_aa_pad = glGetUniformLocation(renderer->rect_program, "u_aa_pad");
   renderer->rect_polygon = glGetUniformLocation(renderer->rect_program, "u_polygon[0]");
   renderer->rect_polygon_count = glGetUniformLocation(renderer->rect_program, "u_polygon_count");
   renderer->texture_viewport = glGetUniformLocation(renderer->texture_program, "u_viewport");
@@ -3015,6 +3021,7 @@ static void apply_linux_window_corner_mask(WoxLinuxWindow *window, WoxLinuxRende
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, radius);
   glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glUniform1f(renderer->rect_aa_pad, 0.0f);
   glUniform1i(renderer->rect_polygon_count, 0);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -5208,6 +5215,7 @@ int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, floa
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, radius);
   glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glUniform1f(renderer->rect_aa_pad, 0.0f);
   glUniform1i(renderer->rect_polygon_count, 0);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   return 0;
@@ -5241,6 +5249,7 @@ int32_t wox_linux_window_fill_convex_polygon(WoxLinuxWindow *window, const float
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, 0.0f);
   glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glUniform1f(renderer->rect_aa_pad, 0.0f);
   glUniform2fv(renderer->rect_polygon, point_count, points);
   glUniform1i(renderer->rect_polygon_count, point_count);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -5263,6 +5272,8 @@ int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, fl
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, radius);
   glUniform1f(renderer->rect_stroke_width, stroke_width);
+  // Pad the quad by one device pixel so the stroke's outer coverage is actually drawn.
+  glUniform1f(renderer->rect_aa_pad, renderer->scale > 0.0f ? 1.0f / renderer->scale : 1.0f);
   glUniform1i(renderer->rect_polygon_count, 0);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   return 0;
@@ -5665,6 +5676,18 @@ int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, c
   return 0;
 }
 
+// logical_pixel_bound maps a clip edge to a device pixel. Edges that already lie on a
+// pixel stay there; floor/ceil of a value that is 1 ulp off an integer otherwise grows
+// the scissor by a pixel and lets a border tile paint over the corner joint.
+static int logical_pixel_bound(float logical, float scale, bool upper) {
+  float pixel = logical * scale;
+  float nearest = roundf(pixel);
+  if (fabsf(pixel - nearest) <= 0.02f) {
+    return (int)lrintf(nearest);
+  }
+  return upper ? (int)ceilf(pixel) : (int)floorf(pixel);
+}
+
 int32_t wox_linux_window_set_clip_rect(WoxLinuxWindow *window, float x, float y, float width, float height) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
@@ -5674,10 +5697,10 @@ int32_t wox_linux_window_set_clip_rect(WoxLinuxWindow *window, float x, float y,
   float top = fmaxf(0.0f, fminf(renderer->logical_height, y));
   float right = fmaxf(left, fminf(renderer->logical_width, x + fmaxf(0.0f, width)));
   float bottom = fmaxf(top, fminf(renderer->logical_height, y + fmaxf(0.0f, height)));
-  int pixel_left = (int)floorf(left * renderer->scale);
-  int pixel_right = (int)ceilf(right * renderer->scale);
-  int pixel_top = (int)floorf(top * renderer->scale);
-  int pixel_bottom = (int)ceilf(bottom * renderer->scale);
+  int pixel_left = logical_pixel_bound(left, renderer->scale, false);
+  int pixel_right = logical_pixel_bound(right, renderer->scale, true);
+  int pixel_top = logical_pixel_bound(top, renderer->scale, false);
+  int pixel_bottom = logical_pixel_bound(bottom, renderer->scale, true);
   int framebuffer_height = (int)ceilf(renderer->logical_height * renderer->scale);
   int scissor_left = pixel_left;
   int scissor_bottom = framebuffer_height - pixel_bottom;

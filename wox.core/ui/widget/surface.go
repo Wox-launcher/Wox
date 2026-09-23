@@ -113,9 +113,14 @@ func (s *SurfaceImage) paint(list *woxui.DisplayList, bounds woxui.Rect, radius 
 	if s.Source == nil {
 		return
 	}
-	slices := s.sliceTextures(list.RasterScale)
-	xs := surfaceEdges(bounds.X, bounds.Width, s.Insets.Left, s.Insets.Right)
-	ys := surfaceEdges(bounds.Y, bounds.Height, s.Insets.Top, s.Insets.Bottom)
+	scale := rasterScale(list.RasterScale)
+	slices := s.sliceTextures(scale)
+	// Device-pixel edges keep a corner and its border on the same pixel while the
+	// launcher height changes during search. Independent rounding would open a crack.
+	xs := snapEdges(surfaceEdges(bounds.X, bounds.Width, s.Insets.Left, s.Insets.Right), scale)
+	ys := snapEdges(surfaceEdges(bounds.Y, bounds.Height, s.Insets.Top, s.Insets.Bottom), scale)
+	// One device pixel of overlap covers the filtered texel at a nine-slice joint.
+	pad := float32(1) / scale
 	for y := 0; y < 3; y++ {
 		for x := 0; x < 3; x++ {
 			img := slices[y*3+x]
@@ -125,9 +130,60 @@ func (s *SurfaceImage) paint(list *woxui.DisplayList, bounds woxui.Rect, radius 
 			rect := woxui.Rect{X: xs[x], Y: ys[y], Width: xs[x+1] - xs[x], Height: ys[y+1] - ys[y]}
 			// Repeated tiles keep their logical size regardless of texture density.
 			tileWidth, tileHeight := s.sliceTileSize(x, y, rect.Width, rect.Height)
-			paintRepeatedSlice(list, img, rect, s.RepeatX && x == 1, s.RepeatY && y == 1, tileWidth, tileHeight)
+			left, top, right, bottom := borderJointOverlap(x, y, xs, ys, pad)
+			paintRepeatedSlice(list, img, rect, s.RepeatX && x == 1, s.RepeatY && y == 1, tileWidth, tileHeight, scale, left, top, right, bottom)
 		}
 	}
+}
+
+// rasterScale is the display density used to snap slice geometry. An unknown scale is 1:1.
+func rasterScale(scale float32) float32 {
+	if scale <= 0 {
+		return 1
+	}
+	return scale
+}
+
+// snapRaster rounds one logical coordinate onto the device-pixel grid.
+func snapRaster(value, scale float32) float32 {
+	scale = rasterScale(scale)
+	return float32(math.Round(float64(value*scale))) / scale
+}
+
+// snapEdges snaps each nine-slice boundary and keeps the three cells in order.
+func snapEdges(edges [4]float32, scale float32) [4]float32 {
+	for i := range edges {
+		edges[i] = snapRaster(edges[i], scale)
+	}
+	for i := 1; i < len(edges); i++ {
+		if edges[i] < edges[i-1] {
+			edges[i] = edges[i-1]
+		}
+	}
+	return edges
+}
+
+// borderJointOverlap lets a border strip cover one device pixel of each corner.
+// The center cell is left alone: image themes often leave it transparent, and
+// overlapping it would erase the frame.
+func borderJointOverlap(x, y int, xs, ys [4]float32, pad float32) (left, top, right, bottom float32) {
+	if x == 1 && y != 1 {
+		if xs[1] > xs[0] {
+			left = pad
+		}
+		if xs[3] > xs[2] {
+			right = pad
+		}
+	}
+	if y == 1 && x != 1 {
+		if ys[1] > ys[0] {
+			top = pad
+		}
+		if ys[3] > ys[2] {
+			bottom = pad
+		}
+	}
+	return left, top, right, bottom
 }
 
 // sliceTileSize reports the logical size of one repeated tile for the slice at column x, row y
@@ -242,13 +298,12 @@ func (s *SurfaceImage) tiled(bounds woxui.Rect, scale float32) *woxui.Image {
 	return s.cached
 }
 
-// paintRepeatedSlice clips partial final tiles instead of squeezing their motifs. Tile sizes are
-// logical units; a non-repeated axis stretches to the destination.
-func paintRepeatedSlice(list *woxui.DisplayList, img *woxui.Image, rect woxui.Rect, repeatX, repeatY bool, tileWidth, tileHeight float32) {
-	if !repeatX && !repeatY {
-		list.DrawImage(img, rect)
-		return
-	}
+// paintRepeatedSlice draws one nine-slice cell. A repeated axis keeps the authored tile
+// size and clips the leftover piece, so growing the launcher reveals more pattern instead
+// of scaling every tile on that side. Tile edges snap to device pixels. overlap* lets the
+// first and last tile cover one pixel of a corner joint; corners and the center pass zero.
+func paintRepeatedSlice(list *woxui.DisplayList, img *woxui.Image, rect woxui.Rect, repeatX, repeatY bool, tileWidth, tileHeight, scale, overlapLeft, overlapTop, overlapRight, overlapBottom float32) {
+	scale = rasterScale(scale)
 	width, height := rect.Width, rect.Height
 	if repeatX {
 		width = tileWidth
@@ -259,17 +314,52 @@ func paintRepeatedSlice(list *woxui.DisplayList, img *woxui.Image, rect woxui.Re
 	if width <= 0 || height <= 0 {
 		return
 	}
-	columns, rows := math.Ceil(float64(rect.Width/width)), math.Ceil(float64(rect.Height/height))
+	columns, rows := 1.0, 1.0
+	if repeatX {
+		columns = math.Ceil(float64(rect.Width / width))
+	}
+	if repeatY {
+		rows = math.Ceil(float64(rect.Height / height))
+	}
 	// Bound commands for pathological tiny textures; ordinary theme tiles stay far below this.
 	if columns*rows > 4096 {
 		list.DrawImage(img, rect)
 		return
 	}
-	list.PushClipRect(rect)
-	defer list.PopClipRect()
-	for y := 0; y < int(rows); y++ {
-		for x := 0; x < int(columns); x++ {
-			list.DrawImage(img, woxui.Rect{X: rect.X + float32(x)*width, Y: rect.Y + float32(y)*height, Width: width, Height: height})
+	clip := rect
+	clip.X -= overlapLeft
+	clip.Y -= overlapTop
+	clip.Width += overlapLeft + overlapRight
+	clip.Height += overlapTop + overlapBottom
+	if columns > 1 || rows > 1 || overlapLeft != 0 || overlapTop != 0 || overlapRight != 0 || overlapBottom != 0 {
+		list.PushClipRect(clip)
+		defer list.PopClipRect()
+	}
+	rowCount, columnCount := int(rows), int(columns)
+	for y := 0; y < rowCount; y++ {
+		// Full tile size, including the piece the clip cuts off. Shrinking that
+		// destination would squash the motif into the leftover span.
+		y0 := snapRaster(rect.Y+float32(y)*height, scale)
+		y1 := snapRaster(rect.Y+float32(y+1)*height, scale)
+		if y == 0 {
+			y0 -= overlapTop
+		}
+		if y == rowCount-1 {
+			y1 += overlapBottom
+		}
+		for x := 0; x < columnCount; x++ {
+			x0 := snapRaster(rect.X+float32(x)*width, scale)
+			x1 := snapRaster(rect.X+float32(x+1)*width, scale)
+			if x == 0 {
+				x0 -= overlapLeft
+			}
+			if x == columnCount-1 {
+				x1 += overlapRight
+			}
+			if x1 <= x0 || y1 <= y0 {
+				continue
+			}
+			list.DrawImage(img, woxui.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0})
 		}
 	}
 }

@@ -85,7 +85,7 @@ func TestTransparentFrameSkipsFloatingMaterial(t *testing.T) {
 	}
 }
 
-// TestRepeatedSliceClipsPartialTiles covers mixed axes, negative origins and bounded work.
+// TestRepeatedSliceClipsPartialTiles keeps authored tile size and clips the leftover piece.
 func TestRepeatedSliceClipsPartialTiles(t *testing.T) {
 	img, err := woxui.NewImage(image.NewRGBA(image.Rect(0, 0, 10, 8)))
 	if err != nil {
@@ -99,10 +99,19 @@ func TestRepeatedSliceClipsPartialTiles(t *testing.T) {
 		{false, false, 1, 1}, {true, false, 1, 3}, {false, true, 1, 3}, {true, true, 1, 9}, {true, true, .5, 25}, {true, true, .0001, 1},
 	} {
 		var list woxui.DisplayList
-		paintRepeatedSlice(&list, img, woxui.Rect{X: -1920, Y: -50, Width: 23, Height: 19}, tc.x, tc.y, float32(img.Width)*tc.scale, float32(img.Height)*tc.scale)
+		paintRepeatedSlice(&list, img, woxui.Rect{X: -1920, Y: -50, Width: 23, Height: 19}, tc.x, tc.y, float32(img.Width)*tc.scale, float32(img.Height)*tc.scale, 1, 0, 0, 0, 0)
 		if got := list.ImageDrawCount(); got != tc.want {
 			t.Fatalf("%+v: image count %d", tc, got)
 		}
+	}
+	edges := snapEdges(surfaceEdges(0.2, 100.2, 12.4, 18.2), 1.25)
+	for i := 1; i < len(edges); i++ {
+		if edges[i] < edges[i-1] {
+			t.Fatal(edges)
+		}
+	}
+	if edges[0] == 0.2 || edges[3] <= edges[0] {
+		t.Fatal(edges)
 	}
 }
 
