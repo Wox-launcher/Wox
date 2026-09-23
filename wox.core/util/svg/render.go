@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/srwiley/rasterx"
 	"golang.org/x/image/math/fixed"
@@ -18,6 +19,7 @@ func Render(data string, width, height int) (*image.RGBA, error) {
 }
 
 // RenderWithCurrentColor rasterizes SVG using currentColor for paints that reference it.
+// The returned image is the pose at time zero when the document is animated.
 func RenderWithCurrentColor(data string, width, height int, currentColor color.Color) (*image.RGBA, error) {
 	if currentColor == nil {
 		currentColor = color.NRGBA{A: 255}
@@ -29,8 +31,66 @@ func RenderWithCurrentColor(data string, width, height int, currentColor color.C
 	return icon.Render(width, height)
 }
 
+// RenderFrames samples an SVG, including one SMIL cycle when the document is animated.
+func RenderFrames(data string, width, height int, currentColor color.Color) ([]*image.RGBA, []time.Duration, error) {
+	if currentColor == nil {
+		currentColor = color.NRGBA{A: 255}
+	}
+	icon, err := parseIcon(strings.NewReader(data), currentColor)
+	if err != nil {
+		return nil, nil, err
+	}
+	return icon.RenderFrames(width, height)
+}
+
 // Render rasterizes a parsed icon at the requested pixel size.
+// Animated documents return the pose at time zero; RenderFrames samples the rest.
 func (icon *Icon) Render(width, height int) (*image.RGBA, error) {
+	return icon.renderAt(width, height, 0)
+}
+
+// RenderFrames samples one SMIL cycle into playback frames. Documents without
+// animation return a single frame and no delays.
+func (icon *Icon) RenderFrames(width, height int) ([]*image.RGBA, []time.Duration, error) {
+	if width <= 0 || height <= 0 {
+		return nil, nil, fmt.Errorf("SVG render size must be positive")
+	}
+	duration, indefinite := icon.animationTimeline()
+	if duration <= 0 {
+		frame, err := icon.renderAt(width, height, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+		return []*image.RGBA{frame}, nil, nil
+	}
+	count := int(duration / svgFrameStep)
+	if count < 2 {
+		count = 2
+	}
+	if count > svgMaxFrames {
+		count = svgMaxFrames
+	}
+	frames := make([]*image.RGBA, 0, count)
+	delays := make([]time.Duration, count)
+	step := duration / time.Duration(count)
+	for index := 0; index < count; index++ {
+		frame, err := icon.renderAt(width, height, time.Duration(index)*step)
+		if err != nil {
+			return nil, nil, err
+		}
+		frames = append(frames, frame)
+		delays[index] = step
+	}
+	if !indefinite {
+		// A finite animation ends on its last pose instead of jumping back to the start.
+		frames = append(frames, frames[len(frames)-1])
+		delays = append(delays, svgFiniteHold)
+	}
+	return frames, delays, nil
+}
+
+// renderAt rasterizes the document at one instant on its animation timeline.
+func (icon *Icon) renderAt(width, height int, at time.Duration) (*image.RGBA, error) {
 	if width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("SVG render size must be positive")
 	}
@@ -40,8 +100,12 @@ func (icon *Icon) Render(width, height int) (*image.RGBA, error) {
 	target := icon.targetMatrix(width, height)
 
 	for _, shape := range icon.shapes {
-		if shape.style.maskID == "" {
-			if err := icon.drawShape(dasher, scanner, shape, target, width, height); err != nil {
+		resolved, err := icon.resolveShape(shape, target, at)
+		if err != nil {
+			return nil, err
+		}
+		if resolved.style.maskID == "" {
+			if err := icon.drawShape(dasher, scanner, resolved, rasterx.Identity, width, height); err != nil {
 				return nil, err
 			}
 			continue
@@ -49,10 +113,10 @@ func (icon *Icon) Render(width, height int) (*image.RGBA, error) {
 		layer := image.NewRGBA(image.Rect(0, 0, width, height))
 		layerScanner := newWindingScanner(width, height, layer)
 		layerDasher := rasterx.NewDasher(width, height, layerScanner)
-		if err := icon.drawShape(layerDasher, layerScanner, shape, target, width, height); err != nil {
+		if err := icon.drawShape(layerDasher, layerScanner, resolved, rasterx.Identity, width, height); err != nil {
 			return nil, err
 		}
-		if err := icon.applyMask(output, layer, shape.style.maskID, width, height); err != nil {
+		if err := icon.applyMask(output, layer, resolved.style.maskID, width, height, at); err != nil {
 			return nil, err
 		}
 	}
@@ -74,7 +138,7 @@ func (icon *Icon) drawShape(dasher *rasterx.Dasher, scanner *windingScanner, sha
 }
 
 // applyMask composites a shape through an SVG luminance mask, the format Iconify two-tone icons use.
-func (icon *Icon) applyMask(dest *image.RGBA, source *image.RGBA, maskID string, width, height int) error {
+func (icon *Icon) applyMask(dest *image.RGBA, source *image.RGBA, maskID string, width, height int, at time.Duration) error {
 	shapes := icon.masks[maskID]
 	if len(shapes) == 0 {
 		draw.Draw(dest, dest.Bounds(), source, image.Point{}, draw.Over)
@@ -85,7 +149,11 @@ func (icon *Icon) applyMask(dest *image.RGBA, source *image.RGBA, maskID string,
 	dasher := rasterx.NewDasher(width, height, scanner)
 	target := icon.targetMatrix(width, height)
 	for _, shape := range shapes {
-		if err := icon.drawShape(dasher, scanner, shape, target, width, height); err != nil {
+		resolved, err := icon.resolveShape(shape, target, at)
+		if err != nil {
+			return err
+		}
+		if err := icon.drawShape(dasher, scanner, resolved, rasterx.Identity, width, height); err != nil {
 			return err
 		}
 	}

@@ -39,6 +39,49 @@ func TestRenderCurrentColorOverridesDefaultBlack(t *testing.T) {
 	}
 }
 
+func TestRenderAnimationSurvivesFreezeAndRotates(t *testing.T) {
+	const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="0" y="4" width="4" height="2" fill="#000"><animateTransform attributeName="transform" type="rotate" from="0 5 5" to="180 5 5" dur="1s" repeatCount="indefinite" fill="freeze"/></rect></svg>`
+	frames, delays, err := RenderFrames(source, 10, 10, nil)
+	if err != nil {
+		t.Fatalf("render animated SVG: %v", err)
+	}
+	if len(frames) < 2 || len(delays) != len(frames) {
+		t.Fatalf("frames = %d delays = %d", len(frames), len(delays))
+	}
+	if frames[0].RGBAAt(1, 5).A < 200 {
+		t.Fatalf("start pose alpha = %d, want the unrotated rect", frames[0].RGBAAt(1, 5).A)
+	}
+	if frames[0].RGBAAt(8, 5).A > 40 {
+		t.Fatalf("start pose unexpectedly covers the far side: alpha %d", frames[0].RGBAAt(8, 5).A)
+	}
+	last := frames[len(frames)-1]
+	left, right := 0, 0
+	for x := 0; x < 5; x++ {
+		left += int(last.RGBAAt(x, 5).A)
+	}
+	for x := 5; x < 10; x++ {
+		right += int(last.RGBAAt(x, 5).A)
+	}
+	if right <= left {
+		t.Fatalf("later pose stayed on the left (left=%d right=%d)", left, right)
+	}
+}
+
+func TestRenderOpacityAnimationFadesIn(t *testing.T) {
+	const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#000"><animate attributeName="opacity" from="0" to="1" dur="1s" repeatCount="indefinite" fill="freeze"/></rect></svg>`
+	frames, _, err := RenderFrames(source, 10, 10, nil)
+	if err != nil {
+		t.Fatalf("render opacity animation: %v", err)
+	}
+	if frames[0].RGBAAt(5, 5).A > 20 {
+		t.Fatalf("start alpha = %d, want a transparent pose", frames[0].RGBAAt(5, 5).A)
+	}
+	end := frames[len(frames)-1].RGBAAt(5, 5).A
+	if end < 200 {
+		t.Fatalf("end alpha = %d, want a nearly opaque pose", end)
+	}
+}
+
 func TestRenderKeepsExplicitColors(t *testing.T) {
 	const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#2f88ff"/></svg>`
 	rgba, err := RenderWithCurrentColor(source, 10, 10, color.NRGBA{R: 255, G: 0, B: 0, A: 255})

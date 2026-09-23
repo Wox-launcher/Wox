@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang.org/x/sync/singleflight"
+
 	"wox/util"
 	"wox/util/imagecache"
 	"wox/util/timetracking"
@@ -23,6 +26,9 @@ type pluginImageCache struct {
 }
 
 var pluginImageCaches sync.Map
+
+// remoteIconFetches collapses concurrent downloads of one URL. Different URLs run together.
+var remoteIconFetches singleflight.Group
 
 type imageCacheDirectoryKey struct{}
 
@@ -49,7 +55,9 @@ func pluginImageCacheFor(pluginID string) (string, *pluginImageCache, error) {
 }
 
 // ConvertPluginIcon owns all file artifacts produced for one plugin. The lock
-// keeps deletion from racing downloads and writes; different plugins run independently.
+// keeps deletion from racing cache writes; different plugins run independently.
+// Remote bytes are fetched before that lock. A grid of URL icons must not wait
+// on one another for the network, and a stale generation must not spend a request.
 func ConvertPluginIcon(ctx context.Context, image WoxImage, pluginID, pluginDirectory string, config IconConversion) (WoxImage, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -61,7 +69,16 @@ func ConvertPluginIcon(ctx context.Context, image WoxImage, pluginID, pluginDire
 	if err != nil {
 		return imageThumbnailPlaceholder, err
 	}
-	// ponytail: serialize conversions per plugin; use per-source locks if contention becomes measurable.
+	if image.ImageType == WoxImageTypeUrl && !config.AllowLazy {
+		if config.CacheScope != "" && config.CacheScope != state.currentDirectory(root) {
+			return imageThumbnailPlaceholder, fmt.Errorf("plugin image request is stale")
+		}
+		localized, fetchErr := fetchRemoteIcon(ctx, image)
+		if fetchErr != nil {
+			return imageThumbnailPlaceholder, fetchErr
+		}
+		image = localized
+	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	directory := filepath.Join(root, strconv.FormatUint(state.generation, 10))
@@ -109,6 +126,35 @@ func ClearPluginImageCache(pluginID string) error {
 		}
 	}
 	return err
+}
+
+// currentDirectory is the generation directory new artifacts must use.
+func (s *pluginImageCache) currentDirectory(root string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return filepath.Join(root, strconv.FormatUint(s.generation, 10))
+}
+
+// fetchRemoteIcon stores the URL payload in the shared image cache. One URL is
+// downloaded once; other URLs proceed at the same time. Call this before attaching
+// a plugin generation directory, and do not hold that lock: a slow response must
+// not block the rest of the grid. Raw bytes outlive one generation and are copied
+// into the current directory after the download.
+func fetchRemoteIcon(ctx context.Context, image WoxImage) (WoxImage, error) {
+	if err := ctx.Err(); err != nil {
+		return WoxImage{}, err
+	}
+	fetched, err, _ := remoteIconFetches.Do(image.ImageData, func() (any, error) {
+		return image.materializeURLImage(ctx)
+	})
+	if err != nil {
+		return WoxImage{}, err
+	}
+	localized, ok := fetched.(WoxImage)
+	if !ok {
+		return WoxImage{}, fmt.Errorf("remote icon fetch returned %T", fetched)
+	}
+	return localized, nil
 }
 
 func imageCacheDirectory(ctx context.Context) string {

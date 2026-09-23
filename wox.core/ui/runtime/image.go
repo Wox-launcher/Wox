@@ -231,6 +231,52 @@ func NewImage(source image.Image) (*Image, error) {
 	return &Image{Width: rgba.Rect.Dx(), Height: rgba.Rect.Dy(), id: nextImageID.Add(1), pixels: rgba.Pix, format: imagePixelFormatRGBA}, nil
 }
 
+// NewAnimatedImage packs playback frames the same way GIF decoding does.
+// One frame, or a single retained frame after the byte budget, stays static.
+func NewAnimatedImage(frames []image.Image, delays []time.Duration) (*Image, error) {
+	if len(frames) == 0 {
+		return nil, fmt.Errorf("image has no frames")
+	}
+	if len(frames) == 1 {
+		return NewImage(frames[0])
+	}
+	width, height := frames[0].Bounds().Dx(), frames[0].Bounds().Dy()
+	keep := gifRetainedFrameCount(len(frames), width, height)
+	selected := make([]*Image, 0, keep)
+	selectedDelays := make([]time.Duration, 0, keep)
+	next := 0
+	for index, frame := range frames {
+		slot := index * keep / len(frames)
+		if slot >= keep {
+			slot = keep - 1
+		}
+		delay := time.Duration(0)
+		if index < len(delays) {
+			delay = delays[index]
+		}
+		if slot == next && len(selected) < keep {
+			converted, err := NewImage(frame)
+			if err != nil {
+				return nil, err
+			}
+			selected = append(selected, converted)
+			selectedDelays = append(selectedDelays, 0)
+			next++
+		}
+		if len(selectedDelays) == 0 {
+			continue
+		}
+		selectedDelays[len(selectedDelays)-1] += delay
+	}
+	if len(selected) < 2 {
+		return selected[0], nil
+	}
+	head := selected[0]
+	selected[0] = &Image{Width: head.Width, Height: head.Height, id: head.id, pixels: head.pixels, format: head.format}
+	head.animation = &imageAnimation{frames: selected, delays: selectedDelays}
+	return head, nil
+}
+
 // NewImageFromPackedRGBA retains an immutable, tightly packed RGBA buffer without copying it.
 func NewImageFromPackedRGBA(source *image.RGBA) (*Image, error) {
 	if source == nil {

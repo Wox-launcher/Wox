@@ -34,12 +34,31 @@ type pathStyle struct {
 	dashes        []float64
 	dashOffset    float64
 	matrix        rasterx.Matrix2D
-	maskID        string
+	// localMatrix is this element's own transform, before ancestor transforms.
+	localMatrix rasterx.Matrix2D
+	// localOpacity is this element's own opacity, before ancestor opacity.
+	localOpacity float64
+	maskID       string
 }
 
 type svgShape struct {
-	path  rasterx.Path
-	style pathStyle
+	path         rasterx.Path
+	style        pathStyle
+	tag          string
+	attributes   map[string]string
+	parentGroup  int
+	localMatrix  rasterx.Matrix2D
+	localOpacity float64
+	animations   []svgAnimation
+}
+
+// svgGroup is one non-shape element. Ancestor transforms stay here so a group
+// animation can replace that element's transform without rebaking every child.
+type svgGroup struct {
+	parent       int
+	localMatrix  rasterx.Matrix2D
+	localOpacity float64
+	animations   []svgAnimation
 }
 
 type viewBox struct {
@@ -51,8 +70,17 @@ type Icon struct {
 	viewBox             viewBox
 	preserveAspectRatio string
 	shapes              []svgShape
+	groups              []svgGroup
 	gradients           map[string]*rasterx.Gradient
 	masks               map[string][]svgShape
+}
+
+// openElement is one start tag still waiting for its end tag.
+type openElement struct {
+	group    int
+	shape    int
+	maskID   string
+	hasShape bool
 }
 
 // Parse reads the SVG subset used by Wox icons into a reusable document.
@@ -68,6 +96,7 @@ func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
 		style.currentColor = currentColor
 	}
 	styles := []pathStyle{style}
+	stack := []openElement{{group: -1, shape: -1}}
 	decoder := xml.NewDecoder(reader)
 	defsDepth := 0
 	maskIDs := []string{}
@@ -84,11 +113,25 @@ func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
 		switch element := token.(type) {
 		case xml.StartElement:
 			attributes := attributeMap(element.Attr)
+			// Animation elements reuse the name fill for a timing mode. Parsing
+			// fill="freeze" as a paint rejects otherwise valid icons.
+			if isAnimationElement(element.Name.Local) {
+				styles = append(styles, styles[len(styles)-1])
+				if anim, ok := readAnimation(element.Name.Local, attributes); ok {
+					icon.addAnimation(stack, anim)
+				}
+				stack = append(stack, openElement{group: -1, shape: -1})
+				continue
+			}
 			style, err := applyStyle(styles[len(styles)-1], attributes)
 			if err != nil {
 				return nil, fmt.Errorf("parse <%s> style: %w", element.Name.Local, err)
 			}
 			styles = append(styles, style)
+			parentGroup := -1
+			if len(stack) > 0 {
+				parentGroup = stack[len(stack)-1].group
+			}
 
 			switch element.Name.Local {
 			case "svg":
@@ -134,16 +177,24 @@ func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
 						return nil, fmt.Errorf("parse <%s>: %w", element.Name.Local, err)
 					}
 					if recognized && len(path) > 0 {
-						shape := svgShape{path: path, style: style}
+						shape := svgShape{
+							path: path, style: style, tag: element.Name.Local, attributes: attributes,
+							parentGroup: parentGroup, localMatrix: style.localMatrix, localOpacity: style.localOpacity,
+						}
 						if len(maskIDs) > 0 {
 							id := maskIDs[len(maskIDs)-1]
 							shape.style.maskID = ""
 							icon.masks[id] = append(icon.masks[id], shape)
-						} else {
-							icon.shapes = append(icon.shapes, shape)
+							stack = append(stack, openElement{group: parentGroup, shape: len(icon.masks[id]) - 1, maskID: id, hasShape: true})
+							continue
 						}
+						icon.shapes = append(icon.shapes, shape)
+						stack = append(stack, openElement{group: parentGroup, shape: len(icon.shapes) - 1, hasShape: true})
+						continue
 					}
 				}
+				icon.groups = append(icon.groups, svgGroup{parent: parentGroup, localMatrix: style.localMatrix, localOpacity: style.localOpacity})
+				stack = append(stack, openElement{group: len(icon.groups) - 1, shape: -1})
 			}
 		case xml.EndElement:
 			switch element.Name.Local {
@@ -158,6 +209,9 @@ func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
 			}
 			if len(styles) > 1 {
 				styles = styles[:len(styles)-1]
+			}
+			if len(stack) > 1 {
+				stack = stack[:len(stack)-1]
 			}
 		}
 	}
@@ -182,6 +236,8 @@ func defaultPathStyle() pathStyle {
 		lineCap:       rasterx.ButtCap,
 		lineJoin:      rasterx.Miter,
 		matrix:        rasterx.Identity,
+		localMatrix:   rasterx.Identity,
+		localOpacity:  1,
 	}
 }
 
@@ -228,6 +284,8 @@ func applyStyle(base pathStyle, attributes map[string]string) (pathStyle, error)
 	}
 
 	style := base
+	style.localMatrix = rasterx.Identity
+	style.localOpacity = 1
 	if value := properties["color"]; value != "" {
 		parsed, err := parseColor(value)
 		if err != nil {
@@ -257,7 +315,8 @@ func applyStyle(base pathStyle, attributes map[string]string) (pathStyle, error)
 		if err != nil {
 			return style, err
 		}
-		style.opacity *= clampUnit(opacity)
+		style.localOpacity = clampUnit(opacity)
+		style.opacity = base.opacity * style.localOpacity
 	}
 	if value := properties["fill-opacity"]; value != "" {
 		opacity, err := parseFraction(value)
@@ -326,11 +385,12 @@ func applyStyle(base pathStyle, attributes map[string]string) (pathStyle, error)
 		style.dashOffset = offset
 	}
 	if value := properties["transform"]; value != "" {
-		matrix, err := parseTransform(style.matrix, value)
+		local, err := parseTransform(rasterx.Identity, value)
 		if err != nil {
 			return style, err
 		}
-		style.matrix = matrix
+		style.localMatrix = local
+		style.matrix = base.matrix.Mult(local)
 	}
 	if value, ok := properties["mask"]; ok {
 		id, err := parseMaskReference(value)

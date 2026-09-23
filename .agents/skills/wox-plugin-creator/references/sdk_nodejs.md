@@ -138,13 +138,13 @@ Prefer these APIs for all plugin settings. Values stored here can sync across ma
 - `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting. Normal plugin settings are eligible for cloud sync, so pass `true` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `OnSettingChanged(ctx, callback)`: Subscribe to setting changes.
 - `OnGetDynamicSetting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
-- `OnMRURestore(ctx, callback)`: Rebuild a start-page result from stored `MRUData`. Declare the `mru` feature first. Return `null` when the item is stale. Put restore identity on action `ContextData` when building results.
+- `OnMRURestore(ctx, callback)`: Rebuild a start-page result from stored `MRUData`. Declare the `mru` feature first. Return `null` when the item is stale. Put restore identity on action `ContextData` when building results. Return immediately from memory or local cache. Wox waits 300ms, then discards that start-page restore and shows the next MRU item. Do not fetch or call host APIs inside the callback.
 
 ### UI Updates
 
-- `UpdateResult(ctx, result: UpdatableResult)`: Update a specific result in real-time (e.g., progress bars).
+- `UpdateResult(ctx, result: UpdatableResult)`: Update one visible result in place. Keep the same `Id`. See `SKILL.md`.
 - `PushResults(ctx, query, results)`: Append results to the current list.
-- `RefreshQuery(ctx, param)`: Re-run the current query.
+- `RefreshQuery(ctx, param)`: Re-run the current query. Use only when rows must be added or removed. See `SKILL.md`.
 - `GetUpdatableResult(ctx, resultId)`: Get current state of a result.
 
 ### Plugin Tools
@@ -257,7 +257,7 @@ export const plugin = new MyPlugin();
 
 ## Static HTML preview
 
-Use `webview` for inline HTML, including CSS, only after `markdown` cannot express the preview. Information display (title, body, images, metadata) belongs in `markdown`. HTML is the last option because the webview can steal query focus, miss theme colors, and hit layout bugs. No HTTP server or temporary HTML file is needed; `html` is a payload field, not a preview type.
+A result preview is only for a large body that does not fit the row. See `SKILL.md`. When a preview is required, prose, lists, links, and images belong in `markdown`. Use `webview` for inline HTML, including CSS, only after markdown cannot express that preview. HTML is the last option because the webview can steal query focus, miss theme colors, and hit layout bugs. No HTTP server or temporary HTML file is needed; `html` is a payload field, not a preview type.
 
 Do not rasterize documents as SVG/`image` previews.
 

@@ -52,14 +52,17 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For single-file SDK plugins, the scaffold copies templates from `~/.wox/ai/skills/wox-plugin-creator/assets/single_file_plugin_templates/` (or the repo `.agents/skills/wox-plugin-creator/assets/single_file_plugin_templates/` fallback).
 - Prefer standard library features; avoid third-party dependencies unless absolutely necessary. Single-file SDK plugins cannot use pip/npm packages.
 - For SDK usage and API details, read `references/sdk_nodejs.md` or `references/sdk_python.md`.
-- Result previews: default to `markdown` for information display (headings, lists, links, images, metadata). Use `text` or `image` when that is all the result needs. Use `webview` HTML only after markdown cannot express the preview, such as syntax highlighting, folding, or interactive custom layout. HTML is the last option because the webview can steal query focus, miss launcher theme colors, and hit layout bugs. There is no separate `html` preview type; HTML uses `webview` with a JSON-encoded `html` field and no local HTTP server. See the HTML preview examples in the SDK references.
+- Keep a result on the row. `Title` is the name to scan. `SubTitle` is one short identity line, such as a code, place, or source. `Tails` are the few facts that must stay visible, such as a price and its change. Do not add `Preview` for a quote, status, short record, or anything that fits on that row.
+- A text tail is already a capsule. Use an SVG image tail only when that capsule must also contain an icon. Match the launcher metrics below, and see [Simulated tail tags](#simulated-tail-tags).
+- Refresh a visible row in place with `UpdateResult` / `update_result`. Remember the results returned by the latest `query()`. Replace that list on the next query. When a background refresh or an action changes a row that is still on screen, call `UpdateResult` with the same result `Id` and only the fields that changed (`Title`, `SubTitle`, `Icon`, `Tails`, `Actions`). The query text stays put and the list does not reload. Use `RefreshQuery` / `refresh_query` only when rows must be added or removed and `UpdateResult` cannot express that. Do not use `ChangeQuery` to redraw results.
+- Add `Preview` only for a large body that cannot fit the row: a long document, many fields, a chart, a gallery, or syntax highlighting. When a preview is required, use `markdown` for prose, lists, links, and images. Use `text` or `image` when that is the whole preview. Use `webview` HTML only after markdown cannot express it, such as syntax highlighting, folding, or an interactive layout. HTML is the last option because the webview can steal query focus, miss launcher theme colors, and hit layout bugs. There is no separate `html` preview type; HTML uses `webview` with a JSON-encoded `html` field and no local HTTP server. See the HTML preview examples in the SDK references.
 - Do not rasterize documents as SVG/`image` previews; those scale as pictures, cannot select text, and do not follow theme colors.
 - When HTML is required, follow the current Wox theme. Call `GetThemeColors` / `get_theme_colors` (Wox >= 2.4.5) when building the HTML and paint opaque `Background`, `Text`, `SecondaryText`, `Border`, `Accent`, `AccentText`, and `Selection`. Use `Dark` to choose a light or dark syntax palette. Do not hardcode only a dark page, and do not rely on `transparent` or `prefers-color-scheme` as a substitute for the launcher palette. Include a theme color in `cacheKey` so the preview refreshes after a theme change. If the API is missing, fall back to a dark and a light default.
 - For inline command arguments or atomic query blocks, read [QueryHint](#queryhint). Command declarations contain suffix templates; `ChangeQuery` contains a complete instance. Keep legacy text parsing when structure is absent.
 - For query-scoped filters or sort controls, return `QueryResponse.Refinements` and read `references/refinements.md` before assigning hotkeys.
 - For `plugin.json`, `SettingDefinitions`, `QueryRequirements`, validators, dynamic settings, and feature flags, read `references/plugin_json_schema.md` first.
 - When implementing an SDK or single-file SDK plugin, also register Plugin Tools in `init()` for capabilities other plugins should be able to call. Query results and actions stay for the user; tools expose the same work as structured operations. Read `references/plugin_tools.md` first. Requires Wox >= 2.4.5 (`MinWoxVersion` `"2.4.5"` or newer). Do not declare tools in `plugin.json`.
-- SDK and single-file SDK plugins should support MRU unless the plugin is clearly unsuitable. Declare the `mru` feature, put restore identity on action `ContextData`, and register `OnMRURestore` / `on_mru_restore` in `init()`. Skip MRU only for context-dependent, one-shot, diagnostic, or inbox-style plugins, and say why in the implementation notes.
+- SDK and single-file SDK plugins should support MRU unless the plugin is clearly unsuitable. Declare the `mru` feature, put restore identity on action `ContextData`, and register `OnMRURestore` / `on_mru_restore` in `init()`. The restore callback must return immediately from memory or local cache. Wox waits 300ms for each start-page MRU restore, then discards that item, logs the timeout, and shows the next MRU item. Do not fetch, scan disk, or call host APIs inside the callback. Skip MRU only for context-dependent, one-shot, diagnostic, or inbox-style plugins, and say why in the implementation notes.
 - SDK and single-file SDK plugins must persist and read settings through the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). These values participate in Wox cloud sync and can follow the user across machines. Do not store plugin settings in local files, custom JSON, or other side storage unless the value is truly machine-local and cannot live in settings.
 
 ### Cache files first: use the plugin cache folder
@@ -94,6 +97,28 @@ If a plugin needs to cache anything on disk, put it under the Wox plugin cache f
   2. Upload the screenshot and icon to GitHub (drag them onto the gist page or a gist comment). Copy the resulting `https://gist.github.com/user-attachments/assets/<id>` URLs, for example `https://gist.github.com/user-attachments/assets/7502acdc-1ea5-4ef6-a3fb-31875353dabe`.
   3. Then follow `wox-plugin-submit2store`: clone Wox and add a `store-plugin.json` entry. `Website` is the gist HTML URL, `DownloadUrl` is the gist raw URL including the filename (`https://gist.githubusercontent.com/<user>/<gist-id>/raw/Wox.Plugin.<Name>.js`), `IconUrl` and `ScreenshotUrls` are the user-attachments URLs. Runtime is `nodejs` or `python`. Do not ship a `.wox` for this plugin type.
 - For packaged SDK plugins, use `wox-plugin-submit2store` with a GitHub repository and `.wox` release. Ask the user before submitting to the store.
+
+## Simulated tail tags
+
+Text tails are capsules drawn by the launcher. Copy these unscaled metrics when an SVG has to imitate one. Density scale multiplies them; at 100% they are:
+
+| | |
+| --- | --- |
+| Height | 22 |
+| Corner radius | half the height, 11. A 1px stroke inset by 0.5 uses a 21px rect with `rx="10.5"`. |
+| Side inset | 8 on the left and 8 on the right. Tag width is measured text width plus 16. |
+| Font size | 11 |
+| Border | 1 |
+| Success | fill `#027A48`, label `#FFFFFF` |
+| Danger | fill `#B42318`, label `#FFFFFF` |
+| Warning | fill `#B54708`, label `#FFFFFF` |
+| Default | no fill, border `#FFFFFF` at alpha 51 (`#FFFFFF33`), label is the row foreground |
+
+Prefer a real `text` tail whenever the label is only text. Wox then applies this capsule, including the selected-row color.
+
+Use `Type: "image"` only to put an icon and a label in the same capsule. Set `ImageWidth` to the capsule width and `ImageHeight` to 22, or the launcher squares it into a 20px icon. Width is `8 + icon + gap + label + 8`.
+
+Draw the label as filled glyph paths inside the SVG. The SVG rasterizer does not draw `<text>`. One `<text text-anchor="middle">` whose `x` is the viewBox center is pulled out and painted centered on the whole image. With an icon on the left, that extra centering adds the icon width again as right inset. Do not use that centered text when the icon and the label sit side by side.
 
 ## QueryHint
 

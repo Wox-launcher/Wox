@@ -1082,6 +1082,7 @@ func launcherPreviewRatio(layout queryLayout, chatFullscreen bool) float32 {
 }
 
 func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
+	a.pruneRetainedResultIcons(snapshot.results, snapshot.resultsRevision)
 	if snapshot.layout.GridLayout != nil {
 		return a.buildGridResults(snapshot, width, height, imageScale, underlayHeight)
 	}
@@ -1129,7 +1130,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		loading := isLoadingIcon(result.Icon)
 		icon := (*woxui.Image)(nil)
 		if !loading {
-			icon = a.imageForResult(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale), snapshot.palette, index == snapshot.selected)
+			icon = a.imageForResultRow(result.ID, result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale), snapshot.palette, index == snapshot.selected)
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,

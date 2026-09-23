@@ -6,7 +6,7 @@ Use this reference when a plugin needs polished `result` and `action` icons.
 
 Treat result icons and Action Panel icons as different contracts.
 
-- **Plugin metadata and result-row icons** may be colorful. Brand marks, app icons, favicons, emoji, and mixed-color SVGs belong here.
+- **Plugin metadata and result-row icons** may be colorful. Brand marks, app icons, favicons, emoji, and mixed-color SVGs belong here. When the row is a real company, app, or product and a stable logo URL exists, use that image. Use a generic mark when there is no logo.
 - **Action Panel leading icons must be monochrome theme-adaptive SVGs.** Prefer verbs that match Wox's built-in `action.*` catalog: copy, open, execute (lightning), delete, edit, paste, add, search, settings.
 - Do not reuse the plugin mark, a colored result icon, an emoji, or a brand logo as the leading action glyph. The Action Panel only tints SVGs that contain `var(--wox-theme-icon-color)`. A colored or emoji action stays authored and looks out of place next to system actions.
 - Execute actions use the lightning verb, not a gear or a play triangle.

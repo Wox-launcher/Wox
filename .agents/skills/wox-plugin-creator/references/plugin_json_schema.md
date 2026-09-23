@@ -454,6 +454,8 @@ Skip MRU only when the plugin is clearly unsuitable: results depend on the curre
 
 Declare the feature and implement `OnMRURestore` / `on_mru_restore`. Put restore identity on the executed action's `ContextData`. Return `null` / an error when the item is gone.
 
+The restore callback must return immediately from memory or local cache. Wox waits 300ms for each start-page MRU restore. If the callback has not returned, Wox discards that item, logs the timeout, and shows the next MRU item. Do not fetch, scan disk, or call host APIs inside the callback.
+
 `HashBy` options:
 
 - `title` (default): `Title` + `SubTitle`

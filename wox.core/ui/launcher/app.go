@@ -254,8 +254,13 @@ type App struct {
 	// pinnedPreview is the full-bleed preview image currently on screen.
 	pinnedPreview viewportPreviewPin
 	// imageCacheSize is the running decoded-byte total so eviction stays O(k) instead of scanning the map.
-	imageCacheSize                            int
-	imageErrors                               map[string]string
+	imageCacheSize int
+	imageErrors    map[string]string
+	// retainedResultIcons is the last decoded bitmap for each result row.
+	// A replacement icon keeps that bitmap until its own decode finishes.
+	retainedResultIcons                       map[string]*woxui.Image
+	retainedResultIconRevision                uint64
+	retainedResultIconsPruned                 bool
 	remotePreviews                            map[string]queryPreview
 	previewRequests                           map[string]bool
 	filePreviews                              map[string]filePreviewContent

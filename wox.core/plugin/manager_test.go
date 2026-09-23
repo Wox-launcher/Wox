@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -692,6 +693,39 @@ func TestTrimHiddenSessionQueryCacheKeepsNewest(t *testing.T) {
 	manager.TrimHiddenSessionQueryCache(context.Background(), sessionID)
 	if sessionQueries.Len() != 1 {
 		t.Fatalf("second hide trim changed the kept query set, len=%d", sessionQueries.Len())
+	}
+}
+
+func TestRestoreMRUItemSkipsSlowPluginAndKeepsFastOne(t *testing.T) {
+	manager := &Manager{}
+	pluginInstance := &Instance{Metadata: Metadata{Id: "stock", Name: "Stock"}}
+	var block atomic.Bool
+	block.Store(true)
+	pluginInstance.MRURestoreCallbacks = []func(context.Context, MRUData) (*QueryResult, error){
+		func(context.Context, MRUData) (*QueryResult, error) {
+			if block.Load() {
+				time.Sleep(2 * time.Second)
+				return &QueryResult{Title: "late"}, nil
+			}
+			return &QueryResult{Title: "next"}, nil
+		},
+	}
+	item := setting.MRUItem{PluginID: "stock", Title: "Advanced Micro Devices, Inc."}
+
+	start := time.Now()
+	restored := manager.restoreMRUItem(context.Background(), pluginInstance, item, QueryEnv{})
+	elapsed := time.Since(start)
+	if restored != nil {
+		t.Fatalf("slow MRU restore was kept: %+v", restored)
+	}
+	if elapsed < 200*time.Millisecond || elapsed > 800*time.Millisecond {
+		t.Fatalf("slow MRU restore returned in %s, want about %s", elapsed, mruRestoreTimeout)
+	}
+
+	block.Store(false)
+	next := manager.restoreMRUItem(context.Background(), pluginInstance, item, QueryEnv{})
+	if next == nil || next.Title != "next" {
+		t.Fatalf("next MRU item = %+v", next)
 	}
 }
 

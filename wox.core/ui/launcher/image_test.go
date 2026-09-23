@@ -2,10 +2,13 @@ package launcher
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -589,5 +592,143 @@ func TestResultIconColors(t *testing.T) {
 		if pixel := got.RGBAAt(15, 5); pixel != (color.RGBA{R: 0x4d, G: 0x6b, B: 0xfe, A: 255}) {
 			t.Fatalf("brand color changed: %+v", pixel)
 		}
+	}
+}
+
+// TestResultIconSelectionReusesRemoteBitmap verifies that moving the active result
+// does not reload a remote icon through the light placeholder.
+func TestDecodeSVGAnimationIsPlayback(t *testing.T) {
+	const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"><animate attributeName="opacity" from="0" to="1" dur="1s" repeatCount="indefinite" fill="freeze"/></rect></svg>`
+	decoded, err := decodeSVGImage(source, 10, 10, nil, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decoded.IsAnimated() || decoded.FrameCount() < 2 {
+		t.Fatalf("frames = %d, want an animated SVG", decoded.FrameCount())
+	}
+	if decoded.Frame(0).IsAnimated() {
+		t.Fatal("a playback frame must not start another animation")
+	}
+	if decoded.Frame(0).RGBAAt(5, 5).A > 20 {
+		t.Fatalf("first frame alpha = %d, want the transparent pose", decoded.Frame(0).RGBAAt(5, 5).A)
+	}
+}
+
+func TestResultIconSelectionReusesRemoteBitmap(t *testing.T) {
+	payload, err := json.Marshal(lazyImagePayload{
+		Token: "token", CacheKey: "icon-cache",
+		Placeholder: woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg"/>`},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := woxImage{ImageType: "lazyloadimage", ImageData: string(payload)}
+	palette := defaultPalette()
+	palette.resultTitle = woxui.Color{R: 40, G: 60, B: 80, A: 255}
+	palette.selectedTitle = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	app := &App{
+		palette:        palette,
+		images:         map[string]*woxui.Image{},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+	}
+	decoded := &woxui.Image{Width: 20, Height: 20}
+	key, _, _ := imageAppearanceCacheKey(source, nil, 20, 20, palette.isDark(), nil)
+	app.images[key] = decoded
+
+	if got := app.imageForResult(source, 20, palette, false); got != decoded {
+		t.Fatal("idle remote icon missed its cached bitmap")
+	}
+	if got := app.imageForResult(source, 20, palette, true); got != decoded {
+		t.Fatal("selecting a remote icon started a new decode")
+	}
+	if len(app.imageRequested) != 0 {
+		t.Fatalf("selection requested another image load: %+v", app.imageRequested)
+	}
+
+	plain := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path fill="#111111" d="M0 0h10v10H0z"/></svg>`}
+	plainKey, _, _ := imageAppearanceCacheKey(plain, nil, 20, 20, palette.isDark(), nil)
+	plainImage := &woxui.Image{Width: 20, Height: 20}
+	app.images[plainKey] = plainImage
+	if app.imageForResult(plain, 20, palette, true) != plainImage {
+		t.Fatal("fixed-color SVG was keyed by the selected row color")
+	}
+
+	path := filepath.Join(t.TempDir(), "icon.svg")
+	if err := os.WriteFile(path, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><path fill="#111" d="M0 0h1v1H0z"/></svg>`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	fileIcon := woxImage{ImageType: "absolute", ImageData: path}
+	fileKey, _, _ := imageAppearanceCacheKey(fileIcon, nil, 20, 20, palette.isDark(), nil)
+	fileImage := &woxui.Image{Width: 20, Height: 20}
+	app.images[fileKey] = fileImage
+	if app.imageForResult(fileIcon, 20, palette, true) != fileImage {
+		t.Fatal("on-disk SVG without the theme variable was redecoded for selection")
+	}
+}
+
+// TestResultIconKeepsPreviousBitmapWhileReplacementDecodes verifies that an
+// UpdateResult icon swap does not blank the row before the new bitmap exists.
+func TestResultIconKeepsPreviousBitmapWhileReplacementDecodes(t *testing.T) {
+	palette := defaultPalette()
+	app := &App{
+		palette:        palette,
+		images:         map[string]*woxui.Image{},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+	}
+	current := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#111111"/></svg>`}
+	next := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#222222"/></svg>`}
+	currentImage := &woxui.Image{Width: 20, Height: 20}
+	nextImage := &woxui.Image{Width: 20, Height: 20}
+	currentKey, _, _ := imageAppearanceCacheKey(current, nil, 20, 20, palette.isDark(), nil)
+	nextKey, _, _ := imageAppearanceCacheKey(next, nil, 20, 20, palette.isDark(), nil)
+	app.images[currentKey] = currentImage
+
+	if got := app.imageForResultRow("status", current, 20, palette, false); got != currentImage {
+		t.Fatal("decoded icon was not shown")
+	}
+	// The replacement is already in flight and has no bitmap yet.
+	app.imageRequested[nextKey] = next.ImageData
+	if got := app.imageForResultRow("status", next, 20, palette, false); got != currentImage {
+		t.Fatal("in-flight replacement cleared the visible icon")
+	}
+	if got := app.imageForResultRow("other", next, 20, palette, false); got != nil {
+		t.Fatal("another result reused the retained icon")
+	}
+	if got := app.imageForResultRow("", next, 20, palette, false); got != nil {
+		t.Fatal("an empty result id reused a retained icon")
+	}
+	app.imageErrors[nextKey] = "decode failed"
+	if got := app.imageForResultRow("status", next, 20, palette, false); got != currentImage {
+		t.Fatal("decode failure cleared the visible icon")
+	}
+
+	app.images[nextKey] = nextImage
+	if got := app.imageForResultRow("status", next, 20, palette, false); got != nextImage {
+		t.Fatal("decoded replacement was not shown")
+	}
+	if got := app.imageForResultRow("status", woxImage{}, 20, palette, false); got != nil {
+		t.Fatal("cleared icon kept the previous bitmap")
+	}
+	delete(app.images, nextKey)
+	if got := app.imageForResultRow("status", next, 20, palette, false); got != nil {
+		t.Fatal("cleared icon was restored while its replacement was still decoding")
+	}
+
+	app.retainedResultIcons = map[string]*woxui.Image{"stay": currentImage, "gone": nextImage}
+	app.pruneRetainedResultIcons([]queryResult{{ID: "stay"}, {ID: "group", IsGroup: true}}, 1)
+	if app.retainedResultIcons["stay"] != currentImage {
+		t.Fatal("prune dropped a result that is still listed")
+	}
+	if _, ok := app.retainedResultIcons["gone"]; ok {
+		t.Fatal("prune kept a result that left the list")
+	}
+	app.retainedResultIcons["later"] = nextImage
+	app.pruneRetainedResultIcons([]queryResult{{ID: "stay"}}, 1)
+	if app.retainedResultIcons["later"] != nextImage {
+		t.Fatal("prune scanned the same result revision again")
 	}
 }

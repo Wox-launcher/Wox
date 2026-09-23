@@ -5033,6 +5033,11 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 	}
 }
 
+// mruRestoreTimeout bounds one start-page MRU restore. The list is not drawn
+// until the current restore returns, so a plugin that fetches or otherwise
+// waits is skipped and the next item is used.
+const mruRestoreTimeout = 300 * time.Millisecond
+
 func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
 	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query := Query{
@@ -5073,7 +5078,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 		}
 
 		pluginQuery := m.buildPluginQueryEnv(ctx, pluginInstance, query)
-		if restored := m.restoreFromMRU(ctx, pluginInstance, item, pluginQuery.Env); restored != nil {
+		if restored := m.restoreMRUItem(ctx, pluginInstance, item, pluginQuery.Env); restored != nil {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("mru item restored: %s", item.Title))
 
 			// Build a stable dedupe key using restored values, which are language-independent for Go plugins
@@ -5154,6 +5159,32 @@ func (m *Manager) getPluginInstance(pluginID string) *Instance {
 		return pluginInstance
 	}
 	return nil
+}
+
+// restoreMRUItem waits at most mruRestoreTimeout. A restore that is still
+// running is cancelled and logged, and the caller continues with the next item.
+func (m *Manager) restoreMRUItem(ctx context.Context, pluginInstance *Instance, item setting.MRUItem, env QueryEnv) *QueryResult {
+	if ctx.Err() != nil || pluginInstance == nil {
+		return nil
+	}
+	restoreCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan *QueryResult, 1)
+	util.Go(restoreCtx, "restore mru item", func() {
+		done <- m.restoreFromMRU(restoreCtx, pluginInstance, item, env)
+	})
+	timer := time.NewTimer(mruRestoreTimeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-timer.C:
+		cancel()
+		util.GetLogger().Warn(ctx, fmt.Sprintf("MRU restore exceeded %s, skip to next item: plugin=%s title=%s", mruRestoreTimeout, pluginInstance.GetName(ctx), item.Title))
+		return nil
+	case restored := <-done:
+		return restored
+	}
 }
 
 // restoreFromMRU attempts to restore a QueryResult from MRU data

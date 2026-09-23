@@ -7,8 +7,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 	"wox/util"
 	"wox/util/imagecache"
 )
@@ -164,8 +167,68 @@ func TestPluginImageCacheRemoteAndStaleLazyRequest(t *testing.T) {
 	if _, err := os.Stat(fresh.ImageData); err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() != 2 {
-		t.Fatal("restart reused a stale remote artifact")
+	if fresh.ImageData == "" {
+		t.Fatal("restart returned an empty artifact")
+	}
+	if _, err := os.Stat(fresh.ImageData); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("raw download was not reused after the resized artifact was cleared, requests=%d", requests.Load())
+	}
+}
+
+func TestPluginImageCacheRemoteDownloadsRunTogether(t *testing.T) {
+	initConvertIconTestLocation(t)
+	ctx := context.Background()
+	data, err := os.ReadFile(writeTestImage(t, 32, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inFlight atomic.Int32
+	var maxInFlight atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := inFlight.Add(1)
+		for {
+			seen := maxInFlight.Load()
+			if current <= seen || maxInFlight.CompareAndSwap(seen, current) {
+				break
+			}
+		}
+		defer inFlight.Add(-1)
+		<-release
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+
+	const icons = 4
+	var started sync.WaitGroup
+	started.Add(icons)
+	errs := make(chan error, icons)
+	for index := 0; index < icons; index++ {
+		source := NewWoxImageUrl(server.URL + "/icon-" + strconv.Itoa(index) + ".png")
+		go func() {
+			started.Done()
+			_, err := ConvertPluginIcon(ctx, source, "remote-grid", "", IconConversion{})
+			errs <- err
+		}()
+	}
+	started.Wait()
+	deadline := time.After(2 * time.Second)
+	for maxInFlight.Load() < icons {
+		select {
+		case <-deadline:
+			close(release)
+			t.Fatalf("remote downloads overlapped %d/%d", maxInFlight.Load(), icons)
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	close(release)
+	for index := 0; index < icons; index++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

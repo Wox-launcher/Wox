@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"image"
 	"image/color"
 	"log"
 	"math"
@@ -16,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"wox/common"
@@ -118,28 +120,94 @@ func (a *App) imageForSize(source woxImage, size int) *woxui.Image {
 }
 
 // imageForResult resolves opt-in SVG paints against the row label without tinting fixed colors.
+// Icons that do not use the theme variable share one bitmap across selection. A separate
+// selected-color entry would miss the cache and flash the light lazy placeholder.
 func (a *App) imageForResult(source woxImage, size int, palette uiPalette, selected bool) *woxui.Image {
+	if !resultIconFollowsRowColor(source) {
+		return a.imageForSize(source, size)
+	}
 	color := palette.resultTitle
 	if selected {
 		color = palette.selectedTitle
 	}
-	switch source.ImageType {
-	case "emoji", "fileicon", "appicon", "theme":
-		return a.imageForSize(source, size)
-	case "svg":
-		if !svgUsesThemeIconColor(source) {
-			return a.imageForSize(source, size)
+	return a.imageForTintAppearance(source, nil, size, size, palette.isDark(), &color, false)
+}
+
+// imageForResultRow resolves one result icon and keeps the previous bitmap while a
+// replacement is still decoding. UpdateResult swaps the source immediately, and a
+// cache miss would otherwise paint an empty icon until the new SVG is ready.
+// A cleared source drops the retained bitmap. A decode failure keeps it.
+func (a *App) imageForResultRow(id string, source woxImage, size int, palette uiPalette, selected bool) *woxui.Image {
+	if source.ImageType == "" || source.ImageData == "" {
+		if id != "" {
+			delete(a.retainedResultIcons, id)
 		}
-	case "absolute":
-		if !strings.EqualFold(filepath.Ext(source.ImageData), ".svg") {
-			return a.imageForSize(source, size)
+		return nil
+	}
+	image := a.imageForResult(source, size, palette, selected)
+	if image != nil {
+		if id != "" {
+			if a.retainedResultIcons == nil {
+				a.retainedResultIcons = map[string]*woxui.Image{}
+			}
+			a.retainedResultIcons[id] = image
 		}
-	case "base64":
-		if !strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml") {
-			return a.imageForSize(source, size)
+		return image
+	}
+	if id == "" {
+		return nil
+	}
+	return a.retainedResultIcons[id]
+}
+
+// pruneRetainedResultIcons drops bitmaps for results that left the list.
+// The results revision gates the scan so later frames of the same list do not rebuild it.
+func (a *App) pruneRetainedResultIcons(results []queryResult, revision uint64) {
+	if a.retainedResultIconsPruned && a.retainedResultIconRevision == revision {
+		return
+	}
+	a.retainedResultIconsPruned = true
+	a.retainedResultIconRevision = revision
+	if len(a.retainedResultIcons) == 0 {
+		return
+	}
+	live := make(map[string]struct{}, len(results))
+	for index := range results {
+		if id := results[index].ID; id != "" {
+			live[id] = struct{}{}
 		}
 	}
-	return a.imageForTintAppearance(source, nil, size, size, palette.isDark(), &color, false)
+	for id := range a.retainedResultIcons {
+		if _, ok := live[id]; !ok {
+			delete(a.retainedResultIcons, id)
+		}
+	}
+}
+
+// absoluteSVGThemeColorCache remembers which on-disk SVGs opt into the row label color.
+var absoluteSVGThemeColorCache sync.Map
+
+// resultIconFollowsRowColor reports whether the active row may repaint this icon.
+// Remote results and ordinary rasters do not contain the theme variable, so selection
+// must not allocate a second cache entry for them.
+func resultIconFollowsRowColor(source woxImage) bool {
+	switch source.ImageType {
+	case "svg", "base64":
+		return svgUsesThemeIconColor(source)
+	case "absolute":
+		if !strings.EqualFold(filepath.Ext(source.ImageData), ".svg") {
+			return false
+		}
+		if cached, ok := absoluteSVGThemeColorCache.Load(source.ImageData); ok {
+			return cached.(bool)
+		}
+		data, err := os.ReadFile(source.ImageData)
+		uses := err == nil && bytes.Contains(data, []byte("var(--wox-theme-icon-color)"))
+		absoluteSVGThemeColorCache.Store(source.ImageData, uses)
+		return uses
+	default:
+		return false
+	}
 }
 
 // imageForDimensions preserves non-square SVG geometry at the requested physical resolution.
@@ -557,20 +625,32 @@ func decodeSVGImage(data string, width, height int, tint *woxui.Color, dark bool
 	if tint != nil {
 		currentColor = color.NRGBA{R: tint.R, G: tint.G, B: tint.B, A: tint.A}
 	}
-	rgba, err := woxsvg.RenderWithCurrentColor(data, width, height, currentColor)
+	frames, delays, err := woxsvg.RenderFrames(data, width, height, currentColor)
 	if err != nil {
 		return nil, err
 	}
 	if tint != nil {
-		for index := 0; index < len(rgba.Pix); index += 4 {
-			alpha := uint8((uint16(rgba.Pix[index+3])*uint16(tint.A) + 127) / 255)
-			rgba.Pix[index] = uint8((uint16(tint.R)*uint16(alpha) + 127) / 255)
-			rgba.Pix[index+1] = uint8((uint16(tint.G)*uint16(alpha) + 127) / 255)
-			rgba.Pix[index+2] = uint8((uint16(tint.B)*uint16(alpha) + 127) / 255)
-			rgba.Pix[index+3] = alpha
+		for _, frame := range frames {
+			for index := 0; index < len(frame.Pix); index += 4 {
+				alpha := uint8((uint16(frame.Pix[index+3])*uint16(tint.A) + 127) / 255)
+				frame.Pix[index] = uint8((uint16(tint.R)*uint16(alpha) + 127) / 255)
+				frame.Pix[index+1] = uint8((uint16(tint.G)*uint16(alpha) + 127) / 255)
+				frame.Pix[index+2] = uint8((uint16(tint.B)*uint16(alpha) + 127) / 255)
+				frame.Pix[index+3] = alpha
+			}
 		}
 	}
-	return woxui.NewImage(rgba)
+	if len(frames) <= 1 {
+		if len(frames) == 0 {
+			return nil, fmt.Errorf("SVG produced no frames")
+		}
+		return woxui.NewImage(frames[0])
+	}
+	images := make([]image.Image, len(frames))
+	for index, frame := range frames {
+		images[index] = frame
+	}
+	return woxui.NewAnimatedImage(images, delays)
 }
 
 func decodeThemeImage(data string) (*woxui.Image, error) {

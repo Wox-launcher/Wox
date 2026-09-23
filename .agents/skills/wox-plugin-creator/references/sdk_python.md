@@ -108,13 +108,13 @@ Prefer these APIs for all plugin settings. Values stored here can sync across ma
 - `save_setting(ctx, key, value, is_platform_specific)`: Save setting. Normal plugin settings are eligible for cloud sync, so pass `True` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `on_setting_changed(ctx, callback)`: Listen for changes.
 - `on_get_dynamic_setting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
-- `on_mru_restore(ctx, callback)`: Rebuild a start-page result from stored `MRUData`. Declare the `mru` feature first. Return `None` when the item is stale. Put restore identity on action `ContextData` when building results.
+- `on_mru_restore(ctx, callback)`: Rebuild a start-page result from stored `MRUData`. Declare the `mru` feature first. Return `None` when the item is stale. Put restore identity on action `ContextData` when building results. Return immediately from memory or local cache. Wox waits 300ms, then discards that start-page restore and shows the next MRU item. Do not fetch or call host APIs inside the callback.
 
 ### UI Updates
 
-- `update_result(ctx, result: UpdatableResult)`: Real-time update.
+- `update_result(ctx, result: UpdatableResult)`: Update one visible result in place. Keep the same id. See `SKILL.md`.
 - `push_results(ctx, query, results)`: Append results.
-- `refresh_query(ctx, param)`: Re-run query.
+- `refresh_query(ctx, param)`: Re-run the current query. Use only when rows must be added or removed. See `SKILL.md`.
 - `get_updatable_result(ctx, result_id)`: Get current result state.
 
 ### Plugin Tools
@@ -252,7 +252,7 @@ plugin = HelloPlugin()
 
 ## Static HTML preview
 
-Use `WoxPreviewType.WEBVIEW` with a JSON-encoded `html` field only after `markdown` cannot express the preview. Information display (title, body, images, metadata) belongs in `markdown`. HTML is the last option because the webview can steal query focus, miss theme colors, and hit layout bugs. No HTTP server or temporary HTML file is needed; there is no separate `html` preview type.
+A result preview is only for a large body that does not fit the row. See `SKILL.md`. When a preview is required, prose, lists, links, and images belong in `markdown`. Use `WoxPreviewType.WEBVIEW` with a JSON-encoded `html` field only after markdown cannot express that preview. HTML is the last option because the webview can steal query focus, miss theme colors, and hit layout bugs. No HTTP server or temporary HTML file is needed; there is no separate `html` preview type.
 
 Do not rasterize documents as SVG/`image` previews.
 
