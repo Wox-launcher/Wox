@@ -39,6 +39,9 @@ func TestLinuxDrawnTextFitsItsSlot(t *testing.T) {
 				if overflow > 0 {
 					t.Errorf("%q at size %v scale %v drew %dpx past its slot; the last glyph would be clipped", label, size, scale, overflow)
 				}
+				if overflow < 0 {
+					t.Errorf("%q at size %v scale %v drew %dpx short of its slot; the raster is not at device scale", label, size, scale, -overflow)
+				}
 			}
 		}
 	}
