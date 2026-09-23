@@ -169,11 +169,35 @@ func TestParseMarkdownPromotesImageOnSoftLineBreak(t *testing.T) {
 	}
 }
 
+func TestMarkdownImagePlaceholderKeepsAspectAndHidesSourceURL(t *testing.T) {
+	document := ParseMarkdown("![](https://example.com/shot.png)")
+	resolved := 0
+	props := MarkdownProps{
+		ID: "preview", ResolveImage: func(string) (*woxui.Image, string) {
+			resolved++
+			return nil, ""
+		},
+	}
+	hidden, aspect := markdownImageFrame(document.blocks[0], props, 690, false, 2560.0/1788.0, 1)
+	if aspect != 0 || resolved != 0 {
+		t.Fatalf("hidden image aspect %v resolved %d, want the previous aspect and no decode", aspect, resolved)
+	}
+	box, ok := hidden.(woxwidget.Container)
+	if !ok || box.Child != nil || box.Height < 400 {
+		t.Fatalf("hidden image = %#v, want a stable empty slot", hidden)
+	}
+	loading, _ := markdownImageFrame(document.blocks[0], props, 690, true, 0, 1)
+	loadingBox, ok := loading.(woxwidget.Container)
+	if !ok || loadingBox.Child != nil || loadingBox.Height != markdownImagePlaceholderHeight || resolved != 1 {
+		t.Fatalf("loading image = %#v resolved %d, want an empty placeholder without the source URL", loading, resolved)
+	}
+}
+
 func TestMarkdownImageUsesAvailableWidthWithoutHeightCap(t *testing.T) {
 	document := ParseMarkdown("![](https://example.com/shot.png)")
-	widget := renderMarkdownBlock(document.blocks[0], MarkdownProps{
+	widget, _ := markdownImageFrame(document.blocks[0], MarkdownProps{
 		ID: "preview", ResolveImage: func(string) (*woxui.Image, string) { return &woxui.Image{Width: 2560, Height: 1788}, "" },
-	}, 690, new(int), new(int))
+	}, 690, true, 0, 1)
 	align := widget.(woxwidget.Align)
 	image := align.Child.(woxwidget.Image)
 	if image.Width != 690 || image.Height <= 280 {

@@ -62,15 +62,16 @@ func (w frameWorkCounters) metrics(textDraws, imageDraws int) woxui.FrameWorkMet
 }
 
 type context struct {
-	window    textMeasurer
-	animation animationFrame
-	dynamic   *dynamicUse
-	damage    *frameDamageTracker
-	debug     *repaintDebugFrame
-	elements  *elementTree
-	element   *stateElement
-	work      *frameWorkCounters
-	scroll    *scrollLayoutEnv
+	window       textMeasurer
+	animation    animationFrame
+	dynamic      *dynamicUse
+	damage       *frameDamageTracker
+	debug        *repaintDebugFrame
+	elements     *elementTree
+	element      *stateElement
+	work         *frameWorkCounters
+	scroll       *scrollLayoutEnv
+	viewportPass *viewportPass
 }
 
 func (c context) withElement(element *stateElement) context {
@@ -147,6 +148,7 @@ type node struct {
 	clip       bool
 	children   []*node
 	boundary   *boundaryCache
+	viewport   *viewportQuery
 }
 
 func (n *node) place(x, y float32) {
@@ -576,6 +578,12 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 			CreateState: func() State { return &scrollViewState{} },
 		}).layout(ctx, available)
 	}
+	// The outermost scroll owns the pass. Nested scrolls share it and only
+	// add their own axis, so a picture must be inside every ancestor viewport.
+	ownsViewport := ctx.viewportPass == nil
+	if ownsViewport {
+		ctx.viewportPass = &viewportPass{}
+	}
 	ctx.useScroll(w.dynamicController, w.Offset)
 	width := available.width
 	if w.Width > 0 {
@@ -598,6 +606,10 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 			contentWidth = max(contentWidth, child.bounds.Width)
 		}
 		offset := min(max(float32(0), scroll.offset), max(float32(0), contentWidth-width))
+		publishScrollViewport(child, offset, width, true)
+		if ownsViewport {
+			flushScrollViewport(child)
+		}
 		if w.onGeometry != nil {
 			w.onGeometry(width, contentWidth, scrollChildRange(child, w.KeepVisibleKey, true))
 		} else if w.OnGeometryChanged != nil {
@@ -628,6 +640,10 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		contentHeight = max(height, max(w.ContentHeight, child.bounds.Height))
 	}
 	offset := min(max(float32(0), scroll.offset), max(float32(0), contentHeight-height))
+	publishScrollViewport(child, offset, height, false)
+	if ownsViewport {
+		flushScrollViewport(child)
+	}
 	if w.onGeometry != nil {
 		w.onGeometry(height, contentHeight, scrollChildRange(child, w.KeepVisibleKey, false))
 	} else if w.OnGeometryChanged != nil {

@@ -68,6 +68,7 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 }
 
 func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	a.releasePinnedPreviewImage()
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -161,7 +162,7 @@ func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPositi
 	markdown := a.markdownProps(scrollKey, value, baseDirectory, palette, max(float32(0), width-40), imageScale)
 	return previewview.MarkdownPreviewView(previewview.MarkdownPreviewProps{
 		ID: scrollKey, Document: markdown.Document, Width: width, Height: height, InitialOffset: initialOffset, Theme: palette.componentTheme(), Window: a.window,
-		ResolveImage: markdown.ResolveImage, OnOpenImage: markdown.OnOpenImage, OnOpenLink: markdown.OnOpenLink,
+		ResolveImage: markdown.ResolveImage, ReleaseImage: markdown.ReleaseImage, OnOpenImage: markdown.OnOpenImage, OnOpenLink: markdown.OnOpenLink,
 	})
 }
 
@@ -206,8 +207,14 @@ func (a *App) markdownPropsWithDocument(id string, document woxcomponent.Markdow
 			if !ok {
 				return nil, "Unsupported Markdown image: " + source
 			}
-			requestSize := min(2048, max(256, physicalImageSize(int(math.Ceil(float64(width))), imageScale)))
-			return a.imageForSize(imageSource, requestSize), a.imageErrorFor(imageSource)
+			return a.imageForViewport(imageSource, markdownImageRequestSize(width, imageScale)), a.imageErrorFor(imageSource)
+		},
+		ReleaseImage: func(source string) {
+			imageSource, ok := resolveSource(source)
+			if !ok {
+				return
+			}
+			a.releaseViewportImage(imageSource, markdownImageRequestSize(width, imageScale))
 		},
 		OnOpenImage: func(source string) {
 			if imageSource, ok := resolveSource(source); ok {
@@ -220,6 +227,11 @@ func (a *App) markdownPropsWithDocument(id string, document woxcomponent.Markdow
 			}
 		},
 	}
+}
+
+// markdownImageRequestSize is the physical raster size for one Markdown picture.
+func markdownImageRequestSize(width, imageScale float32) int {
+	return min(2048, max(256, physicalImageSize(int(math.Ceil(float64(width))), imageScale)))
 }
 
 // markdownDocument bounds AST reuse so repeated frames do not reparse unchanged streaming content.
@@ -472,8 +484,19 @@ func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, 
 	return cached.measure(value, textLayoutKey{session: scrollKey, font: font, window: a.window, width: width, lineHeight: lineHeight, style: style})
 }
 
+// releasePinnedPreviewImage drops the full-bleed preview pin when another preview is shown.
+func (a *App) releasePinnedPreviewImage() {
+	if a.pinnedPreview.size == 0 {
+		return
+	}
+	a.releaseViewportImage(a.pinnedPreview.source, a.pinnedPreview.size)
+	a.pinnedPreview = viewportPreviewPin{}
+}
+
 func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
-	image := a.imageForSize(source, previewImageRequestSize(width, height))
+	size := previewImageRequestSize(width, height)
+	a.pinnedPreview = viewportPreviewPin{source: source, size: size}
+	image := a.imageForViewport(source, size)
 	theme := palette.componentTheme()
 	message := ""
 	if image == nil {

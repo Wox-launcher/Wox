@@ -234,6 +234,57 @@ func TestImageCacheReplaceAppliesByteBudget(t *testing.T) {
 	}
 }
 
+func TestImageForViewportPinsUntilRelease(t *testing.T) {
+	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ffffff"/></svg>`}
+	app := &App{
+		palette:          uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
+		images:           map[string]*woxui.Image{},
+		imageRequested:   map[string]string{},
+		imageVariants:    map[string]string{},
+		imageVariantKeys: map[string]string{},
+		imageLastUsed:    map[string]uint64{},
+		imageErrors:      map[string]string{},
+	}
+	key, _, _ := imageAppearanceCacheKey(source, nil, 32, 32, false, nil)
+	app.images[key] = &woxui.Image{Width: 32, Height: 32}
+	if app.imageForViewport(source, 32) == nil {
+		t.Fatal("expected the cached viewport image")
+	}
+	if _, ok := app.imageViewport[key]; !ok {
+		t.Fatalf("viewport pin missing for %s", key)
+	}
+	app.releaseViewportImage(source, 32)
+	if _, ok := app.imageViewport[key]; ok {
+		t.Fatal("release left the viewport pin in place")
+	}
+}
+
+func TestImageCacheKeepsViewportImagesWhenBudgetIsExceeded(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"shown": {}}}
+	app.imageLastUsed["shown"] = 1
+	app.insertImageLocked("shown", &woxui.Image{Width: 3000, Height: 3000})
+	app.imageViewport["also"] = struct{}{}
+	app.imageLastUsed["also"] = 2
+	app.insertImageLocked("also", &woxui.Image{Width: 3000, Height: 3000})
+	if _, ok := app.images["shown"]; !ok {
+		t.Fatal("viewport image was discarded to store another viewport image")
+	}
+	if _, ok := app.images["also"]; !ok {
+		t.Fatal("incoming viewport image was discarded")
+	}
+	app.imageLastUsed["cold"] = 0
+	app.insertImageLocked("cold", &woxui.Image{Width: 8, Height: 8})
+	if _, ok := app.images["cold"]; !ok {
+		t.Fatal("unpinned image was not stored")
+	}
+	if _, shown := app.images["shown"]; !shown {
+		t.Fatal("storing an unpinned image discarded a viewport image")
+	}
+	if _, also := app.images["also"]; !also {
+		t.Fatal("storing an unpinned image discarded the other viewport image")
+	}
+}
+
 func TestImageCacheHiddenTrimEvictsSingleOversizeImage(t *testing.T) {
 	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{"preview": 1}}
 	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})

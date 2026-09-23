@@ -2,6 +2,8 @@ package component
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	woxui "wox/ui/runtime"
@@ -353,9 +355,29 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		return true
 	}, Child: woxwidget.Stack{Width: props.Width, Height: props.Height + max(float32(0), props.UnderlayHeight), Children: children}}
 	if props.AutomationID != "" {
+		var actions []woxui.AccessibilityAction
+		var onAction func(woxui.AccessibilityAction, string) error
+		// A scroll action makes the node interactive, so an unlabeled surface stays non-interactive.
+		if props.Controller != nil && strings.TrimSpace(props.Label) != "" {
+			controller := props.Controller
+			actions = []woxui.AccessibilityAction{woxui.AccessibilityActionScroll}
+			// Automation scrolls by the same absolute offset the wheel and thumb use.
+			onAction = func(action woxui.AccessibilityAction, value string) error {
+				if action != woxui.AccessibilityActionScroll {
+					return nil
+				}
+				target, err := strconv.ParseFloat(strings.TrimSpace(value), 32)
+				if err != nil {
+					return err
+				}
+				controller.JumpTo(float32(target))
+				return nil
+			}
+		}
 		result = woxwidget.Semantics{
 			Key: props.Key + "-semantics", AutomationID: props.AutomationID, Role: woxui.AccessibilityRoleGroup, Label: props.Label,
-			Value: fmt.Sprintf("%.0f/%.0f", offset, max(float32(0), content-viewport)), ReadOnly: true, Child: result,
+			Value: fmt.Sprintf("%.0f/%.0f", offset, max(float32(0), content-viewport)), ReadOnly: true,
+			Actions: actions, OnAction: onAction, Child: result,
 		}
 	}
 	return result

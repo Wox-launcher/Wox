@@ -139,7 +139,7 @@ func (a *App) imageForResult(source woxImage, size int, palette uiPalette, selec
 			return a.imageForSize(source, size)
 		}
 	}
-	return a.imageForTintAppearance(source, nil, size, size, palette.isDark(), &color)
+	return a.imageForTintAppearance(source, nil, size, size, palette.isDark(), &color, false)
 }
 
 // imageForDimensions preserves non-square SVG geometry at the requested physical resolution.
@@ -212,53 +212,54 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 
 // imageForTintDimensions keeps cache and decode dimensions aligned for rectangular SVGs.
 func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int) *woxui.Image {
-	return a.imageForTintAppearance(source, tint, svgWidth, svgHeight, a.palette.isDark(), nil)
+	return a.imageForTintAppearance(source, tint, svgWidth, svgHeight, a.palette.isDark(), nil, false)
+}
+
+// viewportPreviewPin identifies the single full-bleed preview image on screen.
+type viewportPreviewPin struct {
+	source woxImage
+	size   int
+}
+
+// imageForViewport resolves one picture that is currently inside a scroll viewport.
+// The decoded entry stays pinned until releaseViewportImage, so cache pressure cannot drop it.
+func (a *App) imageForViewport(source woxImage, size int) *woxui.Image {
+	return a.imageForTintAppearance(source, nil, size, size, a.palette.isDark(), nil, true)
+}
+
+// releaseViewportImage lets a picture that left the viewport be evicted again.
+func (a *App) releaseViewportImage(source woxImage, size int) {
+	if a == nil || source.ImageType == "" || source.ImageData == "" {
+		return
+	}
+	size = max(1, size)
+	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.palette.isDark(), nil)
+	a.imageMu.Lock()
+	delete(a.imageViewport, key)
+	a.imageMu.Unlock()
 }
 
 // imageForSurface resolves only explicit SVG theme variables for the owning
 // surface, preserving fixed brand colors and sharing the appearance-aware cache.
 func (a *App) imageForSurface(source woxImage, size int, background woxui.Color) *woxui.Image {
-	return a.imageForTintAppearance(source, nil, size, size, themeColorIsDark(background), nil)
+	return a.imageForTintAppearance(source, nil, size, size, themeColorIsDark(background), nil, false)
 }
 
 // imageForTintAppearance captures appearance before asynchronous image decoding.
-func (a *App) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color) *woxui.Image {
+func (a *App) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color, viewport bool) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
 	}
 	svgWidth = max(1, svgWidth)
 	svgHeight = max(1, svgHeight)
-	// Capture appearance before asynchronous decoding; keep both cache lookups theme-specific.
-	dark = tint == nil && dark
-	// Raster-only sources do not depend on SVG theme variables.
-	switch source.ImageType {
-	case "emoji", "fileicon", "appicon", "theme":
-		dark = false
-	case "absolute":
-		dark = dark && strings.EqualFold(filepath.Ext(source.ImageData), ".svg")
-	case "base64":
-		dark = dark && strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml")
-	}
-	variantKey := imageVariantKey(source, tint)
-	key := imageKey(source)
-	if svgWidth == svgHeight {
-		key += fmt.Sprintf("-svg-%d", svgWidth)
-	} else {
-		key += fmt.Sprintf("-svg-%dx%d", svgWidth, svgHeight)
-	}
-	if tint != nil {
-		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
-	}
-	if dark {
-		key += "-dark"
-		variantKey += "-dark"
-	}
-	if themeIconColor != nil {
-		colorKey := fmt.Sprintf("-icon-%02x%02x%02x%02x", themeIconColor.R, themeIconColor.G, themeIconColor.B, themeIconColor.A)
-		key += colorKey
-		variantKey += colorKey
-	}
+	key, variantKey, dark := imageAppearanceCacheKey(source, tint, svgWidth, svgHeight, dark, themeIconColor)
 	a.imageMu.Lock()
+	if viewport {
+		if a.imageViewport == nil {
+			a.imageViewport = map[string]struct{}{}
+		}
+		a.imageViewport[key] = struct{}{}
+	}
 	if a.imageVariants == nil {
 		a.imageVariants = map[string]string{}
 	}
@@ -427,11 +428,16 @@ func (a *App) imageCacheByteSizeLocked() int {
 
 func (a *App) clearImageCacheLocked(keepKey string) {
 	for key := range a.images {
-		if key == keepKey {
+		if key == keepKey || a.imageViewportPinned(key) {
 			continue
 		}
 		a.removeImageLocked(key)
 	}
+}
+
+func (a *App) imageViewportPinned(key string) bool {
+	_, pinned := a.imageViewport[key]
+	return pinned
 }
 
 // evictImagesToBudget drops the coldest images until both budgets fit, ordering candidates
@@ -454,6 +460,11 @@ func (a *App) evictImagesToBudget(keepKey string, maxCount, maxBytes int) {
 	for _, key := range candidates {
 		if len(a.images) <= maxCount && a.imageCacheSize <= maxBytes {
 			return
+		}
+		// A picture still inside a scroll viewport stays decoded even when the
+		// byte budget is already full. Leaving the viewport clears the pin.
+		if a.imageViewportPinned(key) {
+			continue
 		}
 		a.removeImageLocked(key)
 	}
@@ -578,6 +589,40 @@ func decodeThemeImage(data string) (*woxui.Image, error) {
 		theme.ResultItemActiveBackgroundColor = legacy.ResultItemActiveBackgroundColor
 	}
 	return decodeSVGImage(common.ThemeSwatchSVG(theme), 128, 128, nil, false, nil)
+}
+
+// imageAppearanceCacheKey is the decoded-image cache id, including the appearance
+// adjustments applied before decoding. dark is the value decode must use.
+func imageAppearanceCacheKey(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color) (string, string, bool) {
+	dark = tint == nil && dark
+	switch source.ImageType {
+	case "emoji", "fileicon", "appicon", "theme":
+		dark = false
+	case "absolute":
+		dark = dark && strings.EqualFold(filepath.Ext(source.ImageData), ".svg")
+	case "base64":
+		dark = dark && strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml")
+	}
+	variantKey := imageVariantKey(source, tint)
+	key := imageKey(source)
+	if svgWidth == svgHeight {
+		key += fmt.Sprintf("-svg-%d", svgWidth)
+	} else {
+		key += fmt.Sprintf("-svg-%dx%d", svgWidth, svgHeight)
+	}
+	if tint != nil {
+		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
+	}
+	if dark {
+		key += "-dark"
+		variantKey += "-dark"
+	}
+	if themeIconColor != nil {
+		colorKey := fmt.Sprintf("-icon-%02x%02x%02x%02x", themeIconColor.R, themeIconColor.G, themeIconColor.B, themeIconColor.A)
+		key += colorKey
+		variantKey += colorKey
+	}
+	return key, variantKey, dark
 }
 
 func imageKey(source woxImage) string {

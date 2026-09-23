@@ -16,6 +16,7 @@ type MarkdownPreviewProps struct {
 	Theme         woxcomponent.Theme
 	Window        *woxui.Window
 	ResolveImage  func(source string) (*woxui.Image, string)
+	ReleaseImage  func(source string)
 	OnOpenImage   func(source string)
 	OnOpenLink    func(target string)
 }
@@ -26,7 +27,7 @@ func MarkdownPreviewView(props MarkdownPreviewProps) woxwidget.Widget {
 	innerHeight := max(float32(0), props.Height-40)
 	content := woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
 		ID: props.ID, Document: props.Document, Width: innerWidth, Theme: props.Theme.Controls, Window: props.Window,
-		ResolveImage: props.ResolveImage, OnOpenImage: props.OnOpenImage, OnOpenLink: props.OnOpenLink,
+		ResolveImage: props.ResolveImage, ReleaseImage: props.ReleaseImage, OnOpenImage: props.OnOpenImage, OnOpenLink: props.OnOpenLink,
 	})
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(20),

@@ -742,10 +742,28 @@ func (c *notesWindowController) deleteImage(block int) {
 	c.reproject(false)
 }
 
-// resolveNoteImage loads a note attachment or remote picture at preview resolution.
+// resolveNoteImage loads a note attachment or remote picture at preview resolution
+// and pins it while the block stays in the editor viewport.
 func (c *notesWindowController) resolveNoteImage(image common.NoteImage) *woxui.Image {
-	if c.app == nil {
+	source, size, ok := c.noteImageCacheSource(image)
+	if !ok {
 		return nil
+	}
+	return c.app.imageForViewport(source, size)
+}
+
+// releaseNoteImage drops the viewport pin after the block scrolls away.
+func (c *notesWindowController) releaseNoteImage(image common.NoteImage) {
+	source, size, ok := c.noteImageCacheSource(image)
+	if !ok {
+		return
+	}
+	c.app.releaseViewportImage(source, size)
+}
+
+func (c *notesWindowController) noteImageCacheSource(image common.NoteImage) (woxImage, int, bool) {
+	if c.app == nil {
+		return woxImage{}, 0, false
 	}
 	width := c.lastFrame.Width
 	if width <= 0 {
@@ -754,13 +772,13 @@ func (c *notesWindowController) resolveNoteImage(image common.NoteImage) *woxui.
 	height := woxcomponent.NoteEditorImageMaxHeight * max(c.zoom, 1)
 	size := previewImageRequestSize(width, height)
 	if remote := notesplugin.NoteImageRemoteURL(image); remote != "" {
-		return c.app.imageForSize(woxImage{ImageType: "url", ImageData: remote}, size)
+		return woxImage{ImageType: "url", ImageData: remote}, size, true
 	}
 	path := notesplugin.ResolveNoteImagePath(image)
 	if path == "" {
-		return nil
+		return woxImage{}, 0, false
 	}
-	return c.app.imageForSize(woxImage{ImageType: "absolute", ImageData: path}, size)
+	return woxImage{ImageType: "absolute", ImageData: path}, size, true
 }
 
 // scheduleSave coalesces typing into the 500 ms autosave boundary.
@@ -1106,7 +1124,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 				DeleteTable: c.app.translate("i18n:notes_table_delete"),
 			},
 			FocusedTableBlock: c.focusedTableBlock, FocusedTableRow: c.focusedTableRow, FocusedTableCol: c.focusedTableCol,
-			ResolveImage: c.resolveNoteImage, MissingImageLabel: a.translate("i18n:notes_image_missing"),
+			ResolveImage: c.resolveNoteImage, ReleaseImage: c.releaseNoteImage, MissingImageLabel: a.translate("i18n:notes_image_missing"),
 			FocusedImageBlock: c.focusedImageBlock, OnImageFocus: c.focusImage, OnImageLeave: c.focusTextBesideImage, OnImageScale: c.scaleImage, OnImageDelete: c.deleteImage,
 			OnImageActionHover: c.updateTableActionTooltip,
 			ImageActionLabels: woxcomponent.NoteImageActionLabels{

@@ -249,6 +249,10 @@ type App struct {
 	imageVariantKeys map[string]string
 	imageLastUsed    map[string]uint64
 	imageUseSequence uint64
+	// imageViewport pins decoded images that are currently inside a scroll viewport.
+	imageViewport map[string]struct{}
+	// pinnedPreview is the full-bleed preview image currently on screen.
+	pinnedPreview viewportPreviewPin
 	// imageCacheSize is the running decoded-byte total so eviction stays O(k) instead of scanning the map.
 	imageCacheSize                            int
 	imageErrors                               map[string]string

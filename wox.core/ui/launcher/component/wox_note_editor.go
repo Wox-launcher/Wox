@@ -58,6 +58,7 @@ type NoteEditorProps struct {
 	FocusedTableRow      int
 	FocusedTableCol      int
 	ResolveImage         func(common.NoteImage) *woxui.Image
+	ReleaseImage         func(common.NoteImage)
 	MissingImageLabel    string
 	ActiveSegmentStart   int
 	FocusedImageBlock    int
@@ -408,18 +409,54 @@ func DeleteNoteImage(document common.NoteDocument, block int) common.NoteDocumen
 }
 
 // noteEditorImage renders one attachment with the same reserved toolbar slot as tables.
+// The bitmap is decoded only while the block intersects the editor viewport.
 func noteEditorImage(props NoteEditorProps, blockIndex int, block common.NoteBlock, width float32) (woxwidget.Widget, float32) {
 	focused := props.FocusedImageBlock == blockIndex
-	picture, pictureHeight := noteEditorImagePicture(props, block, width, focused || props.DocumentSelected)
-	drawWidth, drawHeight := noteEditorImageSize(nil, block.Image, width, props.Zoom)
-	if image := noteEditorResolvedImage(props, block); image != nil {
-		drawWidth, drawHeight = noteEditorImageSize(image, block.Image, width, props.Zoom)
+	highlight := focused || props.DocumentSelected
+	_, pictureHeight, _ := noteEditorImagePicture(props, block, width, highlight, false, 0)
+	height := pictureHeight
+	if !props.ReadOnly && props.OnImageScale != nil && props.OnImageDelete != nil {
+		height += noteEditorImageToolbarGap + noteEditorImageToolbarHeight
+	}
+	id := block.ID
+	if id == "" {
+		id = fmt.Sprintf("%d", blockIndex)
+	}
+	return woxwidget.ViewportSlot{
+		Key: woxwidget.Key(props.ID + ".image." + id + ".viewport"),
+		Release: func() {
+			if props.ReleaseImage != nil && block.Image != nil {
+				props.ReleaseImage(*block.Image)
+			}
+		},
+		Build: func(visible bool, aspect float32) (woxwidget.Widget, float32) {
+			return noteEditorImageBlock(props, blockIndex, block, width, highlight, focused && !props.DocumentSelected, visible, aspect)
+		},
+	}, height
+}
+
+// noteEditorImageBlock is the toolbar plus picture for one visibility pass.
+func noteEditorImageBlock(props NoteEditorProps, blockIndex int, block common.NoteBlock, width float32, highlight, showActions, visible bool, knownAspect float32) (woxwidget.Widget, float32) {
+	picture, pictureHeight, image := noteEditorImagePicture(props, block, width, highlight, visible, knownAspect)
+	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom)
+	aspect := float32(0)
+	if image != nil && image.Width > 0 && image.Height > 0 {
+		aspect = float32(image.Width) / float32(image.Height)
+	} else if block.Image != nil && block.Image.Width > 0 && block.Image.Height > 0 {
+		aspect = float32(block.Image.Width) / float32(block.Image.Height)
 	}
 	if !props.ReadOnly && props.OnImageFocus != nil {
 		id := fmt.Sprintf("%s.image.%s", props.ID, block.ID)
+		bitmap := "deferred"
+		if visible {
+			bitmap = "pending"
+		}
+		if image != nil && image.Width > 0 && image.Height > 0 {
+			bitmap = "loaded"
+		}
 		picture = woxwidget.Semantics{
 			Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleImage,
-			Label: noteEditorImageLabel(props, block), Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			Label: noteEditorImageLabel(props, block), Value: bitmap, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 			OnAction: func(action woxui.AccessibilityAction, _ string) error {
 				if action == woxui.AccessibilityActionActivate && props.OnImageFocus != nil {
 					props.OnImageFocus(blockIndex)
@@ -439,25 +476,16 @@ func noteEditorImage(props NoteEditorProps, blockIndex int, block common.NoteBlo
 			}, Child: picture},
 		}
 	}
-	toolbar := noteEditorImageToolbar(props, blockIndex, width, focused && !props.DocumentSelected)
-	if toolbar != nil && !focused && !props.ReadOnly && props.OnImageLeave != nil {
+	toolbar := noteEditorImageToolbar(props, blockIndex, width, showActions)
+	if toolbar != nil && !showActions && !props.ReadOnly && props.OnImageLeave != nil {
 		toolbar = woxwidget.Gesture{ID: fmt.Sprintf("%s.image.%s.chrome", props.ID, block.ID), OnTap: func() {
 			props.OnImageLeave(blockIndex, false)
 		}, Child: toolbar}
 	}
-	height := pictureHeight
 	if toolbar != nil {
-		height += noteEditorImageToolbarGap + noteEditorImageToolbarHeight
-		return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: noteEditorImageToolbarGap, Children: []woxwidget.Widget{toolbar, picture}}, height
+		return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: noteEditorImageToolbarGap, Children: []woxwidget.Widget{toolbar, picture}}, aspect
 	}
-	return picture, height
-}
-
-func noteEditorResolvedImage(props NoteEditorProps, block common.NoteBlock) *woxui.Image {
-	if props.ResolveImage == nil || block.Image == nil {
-		return nil
-	}
-	return props.ResolveImage(*block.Image)
+	return picture, aspect
 }
 
 // noteEditorImageTapHitsPicture reports taps on the centered bitmap, not the full-width chrome.
@@ -467,16 +495,20 @@ func noteEditorImageTapHitsPicture(local woxui.Point, rowWidth, drawWidth, drawH
 	return local.X >= left && local.X <= left+drawWidth && local.Y >= top && local.Y <= top+drawHeight
 }
 
-func noteEditorImagePicture(props NoteEditorProps, block common.NoteBlock, width float32, focused bool) (woxwidget.Widget, float32) {
+func noteEditorImagePicture(props NoteEditorProps, block common.NoteBlock, width float32, focused, load bool, knownAspect float32) (woxwidget.Widget, float32, *woxui.Image) {
 	var image *woxui.Image
-	if props.ResolveImage != nil && block.Image != nil {
+	if load && props.ResolveImage != nil && block.Image != nil {
 		image = props.ResolveImage(*block.Image)
 	}
 	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom)
+	if (image == nil || image.Width <= 0 || image.Height <= 0) && (block.Image == nil || block.Image.Width <= 0 || block.Image.Height <= 0) && knownAspect > 0 {
+		drawWidth = width
+		drawHeight = max(float32(1), width/knownAspect)
+	}
 	var child woxwidget.Widget
 	if image == nil || image.Width <= 0 || image.Height <= 0 {
 		child = woxwidget.Container{Width: drawWidth, Height: drawHeight, Color: withAlpha(props.Theme.BodyText, 10)}
-		if block.Image == nil || block.Image.Width <= 0 || block.Image.Height <= 0 {
+		if knownAspect <= 0 && (block.Image == nil || block.Image.Width <= 0 || block.Image.Height <= 0) {
 			child = woxwidget.Container{
 				Width: drawWidth, Height: drawHeight, Padding: woxwidget.UniformInsets(10),
 				Color: withAlpha(props.Theme.BodyText, 10),
@@ -502,7 +534,7 @@ func noteEditorImagePicture(props NoteEditorProps, block common.NoteBlock, width
 		Width: width, Height: drawHeight + noteEditorImageHighlightPad*2, Padding: woxwidget.UniformInsets(noteEditorImageHighlightPad),
 		BorderWidth: borderWidth, BorderColor: border, Radius: 6,
 		Child: woxwidget.Align{Width: width - noteEditorImageHighlightPad*2, Height: drawHeight, Horizontal: 0.5, Child: child},
-	}, drawHeight + noteEditorImageHighlightPad*2
+	}, drawHeight + noteEditorImageHighlightPad*2, image
 }
 
 func noteEditorImageLabel(props NoteEditorProps, block common.NoteBlock) string {

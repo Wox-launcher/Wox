@@ -196,6 +196,30 @@ func TestWoxScrollViewOpacityFollowsScrollActivity(t *testing.T) {
 	state.Dispose()
 }
 
+func TestWoxScrollViewScrollActionJumpsToOffset(t *testing.T) {
+	props := ScrollViewProps{Key: "scroll-action", Width: 100, Height: 80, ContentHeight: 200, AutomationID: "scroll-action", Label: "Notes"}
+	state := &scrollViewState{}
+	semantics := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if err := semantics.OnAction(woxui.AccessibilityActionScroll, "50"); err != nil {
+		t.Fatalf("scroll action: %v", err)
+	}
+	semantics = state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if state.controller.Offset() != 50 || semantics.Value != "50/120" {
+		t.Fatalf("scroll action offset = %.0f value %q, want 50 and 50/120", state.controller.Offset(), semantics.Value)
+	}
+	state.Dispose()
+}
+
+func TestWoxScrollViewScrollActionRequiresLabel(t *testing.T) {
+	props := ScrollViewProps{Key: "scroll-unlabeled", Width: 100, Height: 80, ContentHeight: 200, AutomationID: "settings-page-scroll"}
+	state := &scrollViewState{}
+	semantics := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if len(semantics.Actions) != 0 || semantics.OnAction != nil {
+		t.Fatal("unlabeled scroll surface must stay non-interactive")
+	}
+	state.Dispose()
+}
+
 func TestWoxScrollViewCanKeepOverflowIndicatorVisible(t *testing.T) {
 	props := ScrollViewProps{Key: "persistent-scroll", Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}, AlwaysShowScrollbar: true, AutomationID: "persistent-scroll-state", Label: "Scroll position"}
 	state := &scrollViewState{}

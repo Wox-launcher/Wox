@@ -98,6 +98,8 @@ type MarkdownProps struct {
 	// Window enables pointer hit-testing so rendered text can be selected and copied.
 	Window       *woxui.Window
 	ResolveImage func(source string) (*woxui.Image, string)
+	// ReleaseImage drops the viewport pin after the picture scrolls away.
+	ReleaseImage func(source string)
 	OnOpenImage  func(source string)
 	OnOpenLink   func(target string)
 	// InlineTrailing appends a control to the final top-level inline paragraph.
@@ -895,37 +897,59 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 	})
 }
 
-// markdownImageWidget reuses launcher image loading and overlay callbacks without owning I/O.
+// markdownImagePlaceholderHeight is the slot used before a picture's aspect is known.
+const markdownImagePlaceholderHeight float32 = 160
+
+// markdownImageWidget loads a picture only while its slot is in the scroll viewport.
+// Off-screen changelog and note images stay out of the decoded cache, so they cannot
+// evict the picture currently on screen and collapse the page back to a URL line.
 func markdownImageWidget(block markdownBlock, props MarkdownProps, width float32, linkIndex *int) woxwidget.Widget {
+	*linkIndex++
+	ordinal := *linkIndex
+	return woxwidget.ViewportSlot{
+		Key: woxwidget.Key(fmt.Sprintf("%s-image-%d", props.ID, ordinal)),
+		Release: func() {
+			if props.ReleaseImage != nil {
+				props.ReleaseImage(block.image)
+			}
+		},
+		Build: func(visible bool, aspect float32) (woxwidget.Widget, float32) {
+			return markdownImageFrame(block, props, width, visible, aspect, ordinal)
+		},
+	}
+}
+
+// markdownImageFrame paints one Markdown image. A positive return aspect is width/height.
+func markdownImageFrame(block markdownBlock, props MarkdownProps, width float32, visible bool, aspect float32, ordinal int) (woxwidget.Widget, float32) {
 	image, imageError := (*woxui.Image)(nil), ""
-	if props.ResolveImage != nil {
+	if visible && props.ResolveImage != nil {
 		image, imageError = props.ResolveImage(block.image)
 	}
 	if image == nil {
-		label := block.imageLabel
-		if label == "" {
-			label = block.image
+		height := markdownImagePlaceholderHeight
+		if aspect > 0 {
+			height = max(float32(1), width/aspect)
 		}
 		if imageError != "" {
-			label = imageError
+			return woxwidget.Container{Width: width, Height: max(height, float32(52)), Padding: woxwidget.UniformInsets(10), Color: withAlpha(props.Theme.BodyText, 10), Child: woxwidget.TextBlock{
+				Value: imageError, Width: max(float32(0), width-20), Height: 32, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.BodyText,
+			}}, 0
 		}
-		return woxwidget.Container{Width: width, Height: 52, Padding: woxwidget.UniformInsets(10), Color: withAlpha(props.Theme.BodyText, 10), Child: woxwidget.TextBlock{
-			Value: label, Width: max(float32(0), width-20), Height: 32, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.BodyText,
-		}}
+		return woxwidget.Container{Width: width, Height: height, Color: withAlpha(props.Theme.BodyText, 10)}, 0
 	}
 	if image.Width <= 0 || image.Height <= 0 {
-		return woxwidget.Container{Width: width, Height: 32, Child: woxwidget.Text{Value: "Invalid Markdown image", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error}}
+		return woxwidget.Container{Width: width, Height: 32, Child: woxwidget.Text{Value: "Invalid Markdown image", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error}}, 0
 	}
 	availableWidth := max(float32(1), width)
 	scale := availableWidth / float32(image.Width)
 	drawWidth := float32(image.Width) * scale
 	drawHeight := float32(image.Height) * scale
+	nextAspect := float32(image.Width) / float32(image.Height)
 	content := woxwidget.Align{Width: width, Height: drawHeight, Horizontal: 0.5, Child: woxwidget.Image{Source: image, Width: drawWidth, Height: drawHeight}}
 	if props.OnOpenImage == nil {
-		return content
+		return content, nextAspect
 	}
-	(*linkIndex)++
-	id := fmt.Sprintf("%s-image-%d", props.ID, *linkIndex)
+	id := fmt.Sprintf("%s-image-%d", props.ID, ordinal)
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleImage, Label: block.imageLabel, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
@@ -935,5 +959,5 @@ func markdownImageWidget(block markdownBlock, props MarkdownProps, width float32
 			return nil
 		},
 		Child: woxwidget.Gesture{ID: id, OnTap: func() { props.OnOpenImage(block.image) }, Child: content},
-	}
+	}, nextAspect
 }

@@ -261,6 +261,77 @@ func findNoteEditorTextBlock(widget woxwidget.Widget) (woxwidget.TextBlock, bool
 	return woxwidget.TextBlock{}, false
 }
 
+func TestNoteImageSemanticsReportBitmapState(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png", Width: 400, Height: 200}},
+	}}
+	editor := WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{BodyText: woxui.Color{A: 255}},
+		OnImageFocus: func(int) {},
+		ResolveImage: func(common.NoteImage) *woxui.Image { return &woxui.Image{Width: 400, Height: 200} },
+	})
+	box := noteEditorColumn(t, editor).Children[0].(woxwidget.Container)
+	slot := box.Child.(woxwidget.ViewportSlot)
+	hidden, _ := slot.Build(false, 0)
+	if value := noteImageSemanticsValue(t, hidden); value != "deferred" {
+		t.Fatalf("offscreen image value = %q, want deferred", value)
+	}
+	shown, _ := slot.Build(true, 0)
+	if value := noteImageSemanticsValue(t, shown); value != "loaded" {
+		t.Fatalf("visible image value = %q, want loaded", value)
+	}
+}
+
+func noteImageSemanticsValue(t *testing.T, widget woxwidget.Widget) string {
+	t.Helper()
+	switch typed := widget.(type) {
+	case woxwidget.Semantics:
+		if typed.Role == woxui.AccessibilityRoleImage {
+			return typed.Value
+		}
+		return noteImageSemanticsValue(t, typed.Child)
+	case woxwidget.Flex:
+		for _, child := range typed.Children {
+			if value := noteImageSemanticsValue(t, child); value != "" {
+				return value
+			}
+		}
+	case woxwidget.Gesture:
+		return noteImageSemanticsValue(t, typed.Child)
+	case woxwidget.Container:
+		return noteImageSemanticsValue(t, typed.Child)
+	}
+	t.Fatalf("image semantics missing in %T", widget)
+	return ""
+}
+
+func TestWoxNoteEditorDefersImageDecodeUntilVisible(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", Width: 400, Height: 200}},
+		{ID: "p", Type: common.NoteBlockParagraph, Text: "caption"},
+	}}
+	calls := 0
+	editor := WoxNoteEditor(NoteEditorProps{
+		ID: "notes.editor", Document: document, Width: 320, Height: 240, LineHeight: 24,
+		Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 24},
+		Style:   woxui.TextStyle{Size: 14}, Theme: ControlTheme{BodyText: woxui.Color{A: 255}},
+		ResolveImage: func(common.NoteImage) *woxui.Image {
+			calls++
+			return &woxui.Image{Width: 400, Height: 200}
+		},
+	})
+	if calls != 0 {
+		t.Fatalf("editor build decoded %d images, want none until the slot is visible", calls)
+	}
+	box := noteEditorColumn(t, editor).Children[0].(woxwidget.Container)
+	unwrapNoteImageSlot(box.Child)
+	if calls != 1 {
+		t.Fatalf("visible image decoded %d times, want 1", calls)
+	}
+}
+
 func TestWoxNoteEditorRendersImageSegments(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png", Width: 400, Height: 200}},
@@ -493,7 +564,7 @@ func noteEditorImageChrome(t *testing.T, widget woxwidget.Widget) woxwidget.Widg
 	if !ok {
 		t.Fatalf("image slot = %T, want a padded container", noteEditorColumn(t, widget).Children[0])
 	}
-	column, ok := box.Child.(woxwidget.Flex)
+	column, ok := unwrapNoteImageSlot(box.Child).(woxwidget.Flex)
 	if !ok || column.Axis != woxwidget.Vertical || len(column.Children) != 2 {
 		t.Fatalf("image chrome = %#v, want a reserved toolbar above the picture", box.Child)
 	}
@@ -506,7 +577,7 @@ func noteEditorImagePictureBox(t *testing.T, widget woxwidget.Widget) woxwidget.
 	if !ok {
 		t.Fatalf("image slot = %T, want a padded container", noteEditorColumn(t, widget).Children[0])
 	}
-	column, ok := box.Child.(woxwidget.Flex)
+	column, ok := unwrapNoteImageSlot(box.Child).(woxwidget.Flex)
 	if !ok || len(column.Children) != 2 {
 		t.Fatalf("image chrome = %#v, want toolbar plus picture", box.Child)
 	}
@@ -525,6 +596,16 @@ func noteEditorImagePictureBox(t *testing.T, widget woxwidget.Widget) woxwidget.
 			return container
 		}
 	}
+}
+
+// unwrapNoteImageSlot builds the visible image block held by a viewport slot.
+func unwrapNoteImageSlot(widget woxwidget.Widget) woxwidget.Widget {
+	slot, ok := widget.(woxwidget.ViewportSlot)
+	if !ok || slot.Build == nil {
+		return widget
+	}
+	child, _ := slot.Build(true, 0)
+	return child
 }
 
 func noteEditorColumn(t *testing.T, widget woxwidget.Widget) woxwidget.Flex {
