@@ -1500,5 +1500,29 @@
         "plugin_description": "查询 A 股、港股和美股报价。"
       }
     }
+  },
+  {
+    "Id": "1a1827d1-63ef-463b-8741-1cb2bf0ad10e",
+    "Name": "Stopwatch",
+    "Author": "lmgarret",
+    "Version": "0.1.1",
+    "MinWoxVersion": "2.0.4",
+    "Runtime": "python",
+    "Description": "Stopwatch with laps, live in the launcher",
+    "IconUrl": "https://raw.githubusercontent.com/lmgarret/wox-stopwatch-plugin/main/images/stopwatch.svg",
+    "Website": "https://github.com/lmgarret/wox-stopwatch-plugin",
+    "DownloadUrl": "https://github.com/lmgarret/wox-stopwatch-plugin/releases/latest/download/wox.plugin.stopwatch.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/lmgarret/wox-stopwatch-plugin/main/screenshots/idle.png",
+      "https://raw.githubusercontent.com/lmgarret/wox-stopwatch-plugin/main/screenshots/running.png",
+      "https://raw.githubusercontent.com/lmgarret/wox-stopwatch-plugin/main/screenshots/laps.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-23 16:58:10",
+    "DateUpdated": "2026-09-23 16:58:10"
   }
 ]
