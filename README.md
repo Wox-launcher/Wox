@@ -8,7 +8,7 @@
 <a href="https://github.com/Wox-launcher/Wox/releases"><img src="https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg" alt="Downloads"></a>
 </p>
 
-<p align="center"><strong>Latest: v2.4.4 · Sep 2026</strong> · Windows, macOS, and Linux.</p>
+<p align="center"><strong>Latest: v2.4.5 · Sep 2026</strong> · Windows, macOS, and Linux.</p>
 
 ![Confetti](./screenshots/confetti.png)
 

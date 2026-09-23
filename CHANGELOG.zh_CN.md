@@ -1,5 +1,52 @@
 # Changelog
 
+## v2.4.5 - 2026-09-23
+
+此版本新增给任意结果设置全局快捷键或者搜索别名。
+
+- Improve
+  - [`Theme`] 新增 `.wox-theme`主题格式
+  - [`Web Search`] 用 Ctrl/Cmd+Enter 在启动器里打开搜到的网页 [#4574](https://github.com/Wox-launcher/Wox/issues/4574)。
+  - [`Launcher`] 可从工具栏或 Ctrl/Cmd+Shift+K 打开关于菜单。
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/about_panel.png)
+  - [`AI Chat`] 在对话里用 @ 提及插件。
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_chat_ask_plugin.png)
+  - [`Shell`] 用 Ctrl/Cmd+T 在系统终端打开当前命令。
+  - [`Hotkey`] 全屏时忽略启动器热键 [#4573](https://github.com/Wox-launcher/Wox/issues/4573)，COSMIC 支持全局快捷键 [#4576](https://github.com/Wox-launcher/Wox/issues/4576)。
+  - [`Folder`] 可预览文件夹内容，并复制路径或名称。
+  - [`Screenshot`] 可将截图发送到 AI 对话，便于你快速向AI询问/总结图片内容
+  - [`Clipboard`] 用 `cb fav` 筛选收藏。
+  - [`Settings`] 将热键设置独立出去。优化插件设置页面，将插件说明、设置和关键词显示在同一页。
+  - [`App`] 可复制应用名称。隐藏后更省内存。
+  - [`Preview`] HTML 预览跟随启动器颜色。
+  - [`Confetti`] 用 `wox://confetti` 播放彩纸。
+
+- Fix
+  - [`Shell`] 修复命令输出无法选中复制 [#4581](https://github.com/Wox-launcher/Wox/issues/4581)。
+  - [`App`] 修复 `.exe` 忽略规则隐藏快捷方式 [#4580](https://github.com/Wox-launcher/Wox/issues/4580)。
+  - [`Launcher`] 修复拖入文件被最近列表替换，多屏缩放时位置错误 [#4572](https://github.com/Wox-launcher/Wox/issues/4572)。
+  - [`Query`] 修复 `wox://` 链接打开空白启动器。
+  - [`Clipboard`] 修复收藏不出现在开始页。
+  - [`Settings`] 修复错误提示错位、下拉标签截断和插件路径空白。
+  - [`Hotkey`] 修复按住组合键、Caps Lock 查询热键和录制误触。
+  - [`Selection`] 修复按住快捷键时读不到选中内容。
+  - [`Screenshot`] 修复截图里的中日韩文字变成方框。
+  - [`Cloud Sync`] 修复付款链接打开错误页面。
+  - [`Preview`] 修复无 `.svg` 后缀的图标不显示。
+  - [`Attention`] 修复未读数缺少图标。
+  - [`Linux`] 修复首次引导主题列表一直加载。
+
+- Store
+  - Plugin
+    - [Stremio Search](https://github.com/NubPlayz/Stremio.Search.Wox.Plugin) Fast local library search & catalog lookup for Stremio [@NubPlayz](https://github.com/NubPlayz)
+    - [JSON 格式化](https://gist.github.com/qianlifeng/0a8440a902dad5308dd3465e634a4428) 从查询、选中内容或文件格式化、压缩并校验 JSON [@qianlifeng](https://github.com/qianlifeng)
+    - [随机数据生成](https://gist.github.com/qianlifeng/8299ba9cd0478ef75a22537b9ffd5353) 生成随机数字、UUID、密码、邮箱、姓名、颜色等。可指定数量，例如 random number 10 [@qianlifeng](https://github.com/qianlifeng)
+    - [YouTube](https://gist.github.com/qianlifeng/04a9609de66eaa582a473f5852450ede) 搜索 YouTube 视频并在浏览器中打开 [@qianlifeng](https://github.com/qianlifeng)
+  - Theme
+    - [织](https://github.com/qianlifeng/Wox.Theme.Knit) 蓝灰与奶油白交织的毛衣边框，让工作空间温暖而清爽。 [@qianlifeng](https://github.com/qianlifeng)
+      ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme_knit.png)
+
+
 ## v2.4.4 - 2026-09-16
 
 此版本带来新的 Jade 系统主题，并在 macOS 26 上使用 Liquid Glass。设置窗口使用独立外观，主题不再影响设置窗口。

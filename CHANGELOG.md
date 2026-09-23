@@ -1,5 +1,51 @@
 # Changelog
 
+## v2.4.5 - 2026-09-23
+
+This release lets you set a global hotkey or a search alias on any result.
+
+- Improve
+  - [`Theme`] Add the `.wox-theme` theme format.
+  - [`Web Search`] Open a search result inside the launcher with Ctrl/Cmd+Enter [#4574](https://github.com/Wox-launcher/Wox/issues/4574).
+  - [`Launcher`] Open the About menu from the toolbar or Ctrl/Cmd+Shift+K.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/about_panel.png)
+  - [`AI Chat`] Mention a plugin in the conversation with @.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_chat_ask_plugin.png)
+  - [`Shell`] Open the current command in the system terminal with Ctrl/Cmd+T.
+  - [`Hotkey`] Ignore launcher hotkeys in fullscreen [#4573](https://github.com/Wox-launcher/Wox/issues/4573), and register global shortcuts on COSMIC [#4576](https://github.com/Wox-launcher/Wox/issues/4576).
+  - [`Folder`] Preview a folder's contents, and copy its path or name.
+  - [`Screenshot`] Send a capture to AI Chat so you can quickly ask about or summarize the image.
+  - [`Clipboard`] Filter favorites with `cb fav`.
+  - [`Settings`] Give hotkeys their own settings page. Show a plugin's description, settings, and keywords on one page.
+  - [`App`] Copy an app's name. Use less memory after Wox hides.
+  - [`Preview`] Make HTML previews follow the launcher colors.
+  - [`Confetti`] Play confetti from another app with `wox://confetti`.
+
+- Fix
+  - [`Shell`] Fix command output that could not be selected or copied [#4581](https://github.com/Wox-launcher/Wox/issues/4581).
+  - [`App`] Fix an `.exe` ignore rule hiding shortcuts [#4580](https://github.com/Wox-launcher/Wox/issues/4580).
+  - [`Launcher`] Fix a dropped file being replaced by the recent list, and wrong placement with mixed display scaling [#4572](https://github.com/Wox-launcher/Wox/issues/4572).
+  - [`Query`] Fix `wox://` links opening an empty launcher.
+  - [`Clipboard`] Fix favorites missing from the start page.
+  - [`Settings`] Fix misplaced errors, clipped dropdown labels, and blank plugin paths.
+  - [`Hotkey`] Fix held shortcuts, Caps Lock query hotkeys, and accidental keys while recording.
+  - [`Selection`] Fix reading the selection while the shortcut is still held.
+  - [`Screenshot`] Fix Chinese, Japanese, and Korean text in saved screenshots turning into boxes.
+  - [`Cloud Sync`] Fix payment links opening the wrong page.
+  - [`Preview`] Fix icons whose links have no `.svg` ending.
+  - [`Attention`] Fix the unread count missing its icon.
+  - [`Linux`] Fix the first-run theme list stuck loading.
+
+- Store
+  - Plugin
+    - [Stremio Search](https://github.com/NubPlayz/Stremio.Search.Wox.Plugin) Fast local library search & catalog lookup for Stremio [@NubPlayz](https://github.com/NubPlayz)
+    - [JSON Formatter](https://gist.github.com/qianlifeng/0a8440a902dad5308dd3465e634a4428) Format, minify, and validate JSON from the query, selection, or a file [@qianlifeng](https://github.com/qianlifeng)
+    - [Random Data Generator](https://gist.github.com/qianlifeng/8299ba9cd0478ef75a22537b9ffd5353) Generate random numbers, UUIDs, passwords, emails, names, colors, and more. Add a count, e.g. random number 10 [@qianlifeng](https://github.com/qianlifeng)
+    - [YouTube](https://gist.github.com/qianlifeng/04a9609de66eaa582a473f5852450ede) Search YouTube videos and open them in the browser [@qianlifeng](https://github.com/qianlifeng)
+  - Theme
+    - [Knit](https://github.com/qianlifeng/Wox.Theme.Knit) A cozy blue-grey and cream knit frame for a quieter workspace. [@qianlifeng](https://github.com/qianlifeng)
+      ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme_knit.png)
+
 ## v2.4.4 - 2026-09-16
 
 This release brings a new Jade system theme, and uses Liquid Glass on macOS 26. Settings keep their own look, so themes no longer change the Settings window.
