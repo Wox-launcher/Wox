@@ -316,6 +316,9 @@ func ShowPin(ctx context.Context, opts PinOptions) error {
 	if opts.ID == "" {
 		opts.ID = "wox_screenshot_pin_" + util.Md5([]byte(fmt.Sprintf("%s:%d", opts.Path, time.Now().UnixNano())))
 	}
+	// A pinned capture stays above other apps. Windows only adds WS_EX_TOPMOST
+	// when Topmost is set, so an ordinary utility window drops behind the next
+	// focused application.
 	return Show(ctx, Options{
 		ID:               opts.ID,
 		Image:            common.NewWoxImageAbsolutePath(opts.Path),
@@ -324,6 +327,7 @@ func ShowPin(ctx context.Context, opts PinOptions) error {
 		Height:           opts.Height,
 		Movable:          true,
 		CloseOnEscape:    true,
+		Topmost:          true,
 		AbsolutePosition: true,
 		Anchor:           overlay.AnchorTopLeft,
 		OffsetX:          opts.OffsetX,
