@@ -206,14 +206,16 @@ func assertCaretPixelChanges(t *testing.T, ctx context.Context, client *automati
 			allowed := image.Rect(int(math.Floor(float64(caret.X)*sx))-pad, int(math.Floor(float64(caret.Y)*sy))-pad,
 				int(math.Ceil(float64(caret.X+caret.Width)*sx))+pad, int(math.Ceil(float64(caret.Y+caret.Height)*sy))+pad)
 			changed := false
-			// Desktop capture includes live pixels behind the translucent window.
-			// Check the caret and adjacent pixels, allowing two levels of compositor rounding.
+			// Desktop capture composites the translucent window over the live wallpaper.
+			// Flat pixels drift by several 8-bit levels between frames; a caret blink is a
+			// large contrast change. Ignore that ambient drift, including in the halo used
+			// to catch compositor rounding around the caret.
 			nearby := allowed.Inset(-3).Intersect(current.Bounds())
 			for y := nearby.Min.Y; y < nearby.Max.Y; y++ {
 				for x := nearby.Min.X; x < nearby.Max.X; x++ {
 					r, g, b, a := current.At(x, y).RGBA()
 					pr, pg, pb, pa := previous.At(x, y).RGBA()
-					if absPixelDelta(r, pr) <= 2*257 && absPixelDelta(g, pg) <= 2*257 && absPixelDelta(b, pb) <= 2*257 && a == pa {
+					if !caretPixelChanged(r, g, b, a, pr, pg, pb, pa) {
 						continue
 					}
 					if !image.Pt(x, y).In(allowed) {
@@ -228,7 +230,7 @@ func assertCaretPixelChanges(t *testing.T, ctx context.Context, client *automati
 						for x := nearby.Min.X; x < nearby.Max.X; x++ {
 							r, g, b, a := current.At(x, y).RGBA()
 							pr, pg, pb, pa := otherPhase.At(x, y).RGBA()
-							if absPixelDelta(r, pr) > 2*257 || absPixelDelta(g, pg) > 2*257 || absPixelDelta(b, pb) > 2*257 || a != pa {
+							if caretPixelChanged(r, g, b, a, pr, pg, pb, pa) {
 								t.Fatalf("caret phase accumulated a pixel change at (%d,%d)", x, y)
 							}
 						}
@@ -245,6 +247,16 @@ func assertCaretPixelChanges(t *testing.T, ctx context.Context, client *automati
 	if changes < 2 {
 		t.Fatal("caret pixels did not blink through two phases")
 	}
+}
+
+// caretCaptureNoise is the per-channel delta ignored in desktop captures.
+// DWM resampling of the translucent launcher moves flat pixels by several
+// 8-bit levels. A painted caret changes contrast by well over this floor.
+const caretCaptureNoise = 16 * 257
+
+// caretPixelChanged reports a capture delta large enough to be a caret blink.
+func caretPixelChanged(r, g, b, a, pr, pg, pb, pa uint32) bool {
+	return absPixelDelta(r, pr) > caretCaptureNoise || absPixelDelta(g, pg) > caretCaptureNoise || absPixelDelta(b, pb) > caretCaptureNoise || absPixelDelta(a, pa) > caretCaptureNoise
 }
 
 func absPixelDelta(a, b uint32) uint32 {
