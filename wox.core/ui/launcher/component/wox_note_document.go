@@ -283,20 +283,43 @@ func noteFirstNonEmpty(values ...string) string {
 func DocumentFromEditor(value string, previous common.NoteDocument) common.NoteDocument {
 	previous.Blocks = flattenNoteBlockLines(previous.Blocks)
 	lines := strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")
+
+	// Match lines to previous blocks through the unchanged leading and trailing lines instead of by
+	// index. Headings have no prefix in the editor text, so index matching made inserted or removed
+	// lines shift heading types onto neighboring lines.
+	oldValue, _, oldRanges := ProjectNoteDocument(previous, woxui.TextStyle{}, ControlTheme{})
+	oldLines := strings.Split(oldValue, "\n")
+	oldCount := len(oldRanges)
+	prefix := 0
+	for prefix < len(lines) && prefix < oldCount && lines[prefix] == oldLines[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(lines)-prefix && suffix < oldCount-prefix && lines[len(lines)-1-suffix] == oldLines[oldCount-1-suffix] {
+		suffix++
+	}
+
 	blocks := make([]common.NoteBlock, 0, len(lines))
 	inCodeFence := false
-	for _, raw := range lines {
+	for lineIndex, raw := range lines {
 		if strings.HasPrefix(strings.TrimSpace(raw), "```") {
 			inCodeFence = !inCodeFence
 			continue
 		}
+		oldLine := -1
+		switch {
+		case lineIndex < prefix:
+			oldLine = lineIndex
+		case lineIndex >= len(lines)-suffix:
+			oldLine = lineIndex - len(lines) + oldCount
+		case lineIndex < oldCount-suffix:
+			// Changed lines between the unchanged ends are edits of the previous line at the same position.
+			oldLine = lineIndex
+		}
 		old := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph}
 		index := len(blocks)
-		if index < len(previous.Blocks) {
-			old = previous.Blocks[index]
-			if old.IsStructural() {
-				old = common.NoteBlock{ID: old.ID, Type: common.NoteBlockParagraph}
-			}
+		if oldLine >= 0 {
+			old = previous.Blocks[oldRanges[oldLine].Block]
 		} else if index > 0 && blocks[index-1].Type == common.NoteBlockCode {
 			old.Type = common.NoteBlockCode
 		}
