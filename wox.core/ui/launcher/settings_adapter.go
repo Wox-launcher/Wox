@@ -16,6 +16,7 @@ const settingsTitleBarHeight = launcherview.SettingsTitleBarHeight
 
 func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
+	snapshot.palette.DensityScale = a.densityMetrics.normalized().scale
 	items := settingItemsForSnapshot(snapshot)
 	if snapshot.row >= len(items) && len(items) > 0 {
 		snapshot.row = len(items) - 1
@@ -116,7 +117,7 @@ func (a *App) settingsWindowTitle() string {
 
 func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32, windowFocused bool) woxwidget.Widget {
 	title := a.settingsWindowTitle()
-	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
+	titleStyle := woxui.TextStyle{Size: snapshot.palette.Scaled(13), Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
 	if window := a.settingsNativeWindow(); window != nil {
 		if metrics, err := window.MeasureText(title, titleStyle); err == nil {

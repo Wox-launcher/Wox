@@ -1062,7 +1062,7 @@
   "ui_app_width": "ウィンドウ幅",
   "ui_app_width_tips": "Wox ウィンドウの幅を調整します",
   "ui_interface_size": "インターフェースサイズ",
-  "ui_interface_size_tips": "ランチャーのテキストとコントロールのサイズを調整します",
+  "ui_interface_size_tips": "文字とコントロールのサイズを調整します",
   "ui_interface_size_compact": "コンパクト",
   "ui_interface_size_normal": "ノーマル",
   "ui_interface_size_comfortable": "快適",

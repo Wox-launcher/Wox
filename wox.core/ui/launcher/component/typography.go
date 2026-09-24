@@ -21,7 +21,7 @@ const (
 	GridItemTitleFontSize  = float32(12)
 )
 
-// Settings typography stays fixed across launcher density modes.
+// Settings typography values are normal-density bases. Draw sites scale them with ControlTheme.Scaled.
 const (
 	SettingsPageTitleFontSize       = float32(22)
 	SettingsPageDescriptionFontSize = float32(13)

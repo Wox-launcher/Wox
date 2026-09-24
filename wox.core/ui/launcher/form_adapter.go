@@ -41,6 +41,13 @@ type formFieldCallbacks struct {
 }
 
 // buildFormPanel maps action form state into the shared form view.
+// formControlTheme applies Interface size to launcher forms without changing the shared launcher palette.
+func (a *App) formControlTheme(snapshot viewSnapshot) woxcomponent.ControlTheme {
+	theme := snapshot.palette.componentTheme().Controls
+	theme.DensityScale = snapshot.densityMetrics.normalized().scale
+	return theme
+}
+
 func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwidget.Widget, float32, float32) {
 	form := snapshot.form
 	labelWidth := a.measureFormLabelWidth(form.action.Form, a.window, 60, 0)
@@ -61,7 +68,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 		KeepVisibleKey: formFieldsKeepVisibleKey("action-form", form.formFieldsSnapshot),
 		CancelLabel:    fmt.Sprintf("%s (Esc)", a.translate("i18n:ui_cancel")),
 		SaveLabel:      fmt.Sprintf("%s (%s)", a.translate("i18n:ui_save"), strings.Join(formatHotkeyLabels(primaryHotkey("enter")), "+")),
-		Theme:          snapshot.palette.componentTheme().Controls,
+		Theme:          a.formControlTheme(snapshot),
 		OnCancel:       a.closeFormAction, OnSave: a.submitFormAction,
 	})
 	return panel, panelWidth, panelMaximumHeight
@@ -69,7 +76,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 
 func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, labelWidth, height float32) woxwidget.Widget {
 	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable, pickDir: a.pickFormActionDirectory, recordKey: a.recordActionFormHotkey}
-	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette.componentTheme().Controls, index, definition, width, height)
+	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, a.formControlTheme(snapshot), index, definition, width, height)
 }
 
 // measureFormLabelWidth mirrors Flutter's measured label column while allowing each form surface to keep its own bounds.
@@ -78,7 +85,7 @@ func (a *App) measureFormLabelWidth(definitions []formDefinition, window *woxui.
 	if window == nil {
 		return width
 	}
-	style := woxui.TextStyle{Size: 13}
+	style := woxui.TextStyle{Size: woxcomponent.ControlTheme{DensityScale: a.densityMetrics.normalized().scale}.Scaled(13)}
 	for _, definition := range definitions {
 		labelKey := definition.Value.Label
 		if labelKey == "" {

@@ -196,7 +196,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			color = props.Theme.Error
 		}
 		list = woxwidget.Container{Width: width, Height: viewportHeight, Padding: woxwidget.Insets{Top: 18}, Child: woxwidget.TextBlock{
-			Value: props.Message, Width: width, Height: min(float32(80), viewportHeight), MaxLines: 3, Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: color,
+			Value: props.Message, Width: width, Height: min(float32(80), viewportHeight), MaxLines: 3, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, LineHeight: 18, Color: color,
 		}}
 	} else if len(items) == 0 {
 		list = themeEmptyState(props, width, viewportHeight)
@@ -298,8 +298,8 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 		swatch,
 		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
-				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
+				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
+				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
 			}}}
 		}}},
 	}
@@ -365,7 +365,7 @@ func themeStoreScreenshot(props ThemeSettingsProps, theme ThemeCatalogItem, widt
 // themeDetailMeta keeps metadata within its share of the row instead of letting Align consume the website slot.
 func themeDetailMeta(props ThemeSettingsProps, theme ThemeCatalogItem, website woxwidget.Widget) []woxwidget.Widget {
 	meta := []woxwidget.Widget{
-		woxwidget.Flexible{Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: props.Theme.TextSecondary}},
+		woxwidget.Flexible{Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, Color: props.Theme.TextSecondary}},
 	}
 	if props.Mode == "store" && theme.ImageTheme && props.ImageLabel != "" {
 		meta = append(meta, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary))
@@ -408,8 +408,8 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 		woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 				return woxwidget.Clip{Width: size.Width, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.InputText},
-					woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary},
+					woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(20)}, Color: props.Theme.InputText},
+					woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary},
 				}}}
 			}}},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: themeActions(props, theme)},
@@ -429,13 +429,13 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 	if description != "" {
 		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
 			Value: description, Width: innerWidth, LineHeight: 20,
-			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary,
+			Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary,
 		}})
 	}
 	if props.Mode == "store" && theme.ImageTheme && props.ImageMemoryLabel != "" {
 		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
 			Value: props.ImageMemoryLabel, Width: innerWidth, LineHeight: 20,
-			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Warning,
+			Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Warning,
 		}})
 	}
 	if len(details) > 0 {
@@ -453,7 +453,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 	if props.Error != "" {
 		body = woxwidget.Stack{Width: width, Height: bodyHeight, Children: []woxwidget.StackChild{
 			{Child: body},
-			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: props.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error}},
+			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: props.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.Error}},
 		}}
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}}
@@ -511,7 +511,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 		Width: width, Height: height, Backdrop: props.WallpaperBlurred, Background: theme.Background, Theme: theme, Opacity: 1,
 		Query: props.PreviewTitle, Results: themeCatalogDemoResults(props, theme), ShowQuery: true, ShowToolbar: true,
 		PrimaryAction: props.PreviewOpenLabel, ActionCopy: props.PreviewOpenLabel, ActionMore: props.PreviewMoreLabel,
-		QueryFontSize: themeCatalogDemoQueryFontSize, ResultTitleFontSize: themeCatalogDemoTitleFontSize, ResultSubtitleFontSize: themeCatalogDemoSubtitleFontSize,
+		QueryFontSize: props.Theme.Scaled(themeCatalogDemoQueryFontSize), ResultTitleFontSize: props.Theme.Scaled(themeCatalogDemoTitleFontSize), ResultSubtitleFontSize: props.Theme.Scaled(themeCatalogDemoSubtitleFontSize),
 		QueryHeight: themeCatalogDemoQueryHeight, RowHeight: themeCatalogDemoRowHeight, RowGap: themeCatalogDemoRowGap, ToolbarHeight: themeCatalogDemoToolbarHeight,
 	})}
 }
@@ -567,15 +567,15 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 		}
 		rows = append(rows, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: rowHeight, Padding: woxwidget.Insets{Left: 12, Right: 10}, Child: woxwidget.Align{Height: rowHeight, Vertical: 0.5, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
+				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: props.Theme.Scaled(22)}, Color: titleColor}},
 				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-					return themeCatalogRowText(size.Width, title, titleColor)
+					return themeCatalogRowText(size.Width, title, titleColor, props.Theme)
 				}}},
 			},
 		}}}})
 	}
 	query := woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: woxwidget.Text{
-		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: light.QueryText,
+		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: light.QueryText,
 	}}}}
 	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", FillWidth: true, Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultTitle})
 	toolbar := themeCatalogToolbar(props, dark, width, false)
@@ -612,15 +612,15 @@ func themePreviewWindowChrome(theme woxcomponent.Theme, width, height float32) (
 }
 
 // themeCatalogRowText keeps every preview result title vertically centered.
-func themeCatalogRowText(width float32, title string, titleColor woxui.Color) woxwidget.Widget {
-	return woxwidget.Clip{Width: width, Height: 42, Child: woxwidget.Align{Width: width, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor}}}
+func themeCatalogRowText(width float32, title string, titleColor woxui.Color, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	return woxwidget.Clip{Width: width, Height: 42, Child: woxwidget.Align{Width: width, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: theme.Scaled(13)}, Color: titleColor}}}
 }
 
 // themeCatalogToolbar mirrors Flutter's installed-theme preview footer.
 func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, width float32, paintBackground bool) woxwidget.Widget {
 	const height = float32(40)
 	const horizontalPadding = float32(10)
-	labelStyle := woxui.TextStyle{Size: 14}
+	labelStyle := woxui.TextStyle{Size: props.Theme.Scaled(14)}
 	keycap, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
 		Theme: &theme, Toolbar: true, Primary: true, Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
 		Border: theme.ToolbarText, FontSize: woxcomponent.TailFontSize, Window: props.Window,
@@ -895,7 +895,7 @@ func themeAutoEditor(props ThemeSettingsProps, width, height float32) woxwidget.
 	if editor.Error != "" {
 		body = woxwidget.Stack{Width: width, Height: bodyHeight, Children: []woxwidget.StackChild{
 			{Child: body},
-			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: editor.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error}},
+			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: editor.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.Error}},
 		}}
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, woxwidget.Container{Width: width, Height: bodyHeight, Child: body}}}

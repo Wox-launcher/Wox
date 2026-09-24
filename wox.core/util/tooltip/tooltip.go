@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"wox/setting"
 	woxwidget "wox/ui/widget"
 	"wox/util/mouse"
 	"wox/util/overlay"
@@ -423,7 +424,7 @@ func estimateBounds(text string, hotkeyLabels []string) (float64, float64) {
 	}
 
 	width := maxTooltipDimension(tooltipMinWidthDip, math.Min(tooltipMaxWidthDip, maxContentWidth+tooltipPaddingXDip))
-	height := lineCount*tooltipLineHeightDip + tooltipPaddingYDip + tooltipHeightSlackDip
+	height := lineCount*float64(setting.ScaleUiDensity(tooltipLineHeightDip, setting.PeekUiDensity())) + tooltipPaddingYDip + tooltipHeightSlackDip
 	if hotkeyWidth := estimateHotkeyLabelsWidth(hotkeyLabels); hotkeyWidth > 0 {
 		width = maxTooltipDimension(tooltipMinWidthDip, math.Min(tooltipMaxWidthDip, width+hotkeyWidth))
 		height = math.Max(height, 20+tooltipPaddingYDip)
@@ -465,7 +466,7 @@ func estimateLineWidth(text string) float64 {
 		return 0
 	}
 
-	fontSize := float64(tooltipFontSizeDip)
+	fontSize := float64(setting.ScaleUiDensity(tooltipFontSizeDip, setting.PeekUiDensity()))
 	width := 0.0
 	for _, r := range text {
 		switch {

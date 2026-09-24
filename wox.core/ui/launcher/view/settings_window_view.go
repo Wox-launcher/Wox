@@ -139,7 +139,7 @@ func (s *settingsTitleBarState) Dispose() {}
 // buildSettingsTitleBar composes platform title controls from retained hover state.
 func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string, onHover, onPress func(string, bool)) woxwidget.Widget {
 	height := SettingsTitleBarHeight
-	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
+	titleStyle := woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}
 	dragWidth := props.Width
 	if props.Platform == "darwin" && props.RailWidth > 0 {
 		dragWidth = props.RailWidth

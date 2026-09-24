@@ -15,11 +15,11 @@ const (
 
 // Heights are logical units; display scale, font and image changes invalidate them.
 type chatMarkdownLayoutKey struct {
-	width, scale float32
-	trailing     bool
-	font         string
-	images       uint64
-	window       *woxui.Window
+	width, scale, fontSize float32
+	trailing               bool
+	font                   string
+	images                 uint64
+	window                 *woxui.Window
 }
 
 type chatMarkdownEntry struct {

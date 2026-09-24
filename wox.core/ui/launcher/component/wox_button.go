@@ -73,9 +73,10 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	if props.FontSize > 0 {
 		fontSize = props.FontSize
 	}
+	fontSize = props.Theme.Scaled(fontSize)
 	// Keep a whole-unit label slot. fontSize*1.35 produced fractional padding and
 	// left CJK ink off the button centerline.
-	const labelLineHeight = float32(18)
+	labelLineHeight := props.Theme.Scaled(18)
 	contentHeight := labelLineHeight
 
 	background := props.Theme.InputBackground

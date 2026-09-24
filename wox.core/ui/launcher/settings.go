@@ -563,6 +563,9 @@ func (a *App) reloadSettingsWithForms(forceForms bool) error {
 			if err := a.settingsView.Window().SetFontFamily(data.AppFontFamily); err != nil {
 				applyErr = fmt.Errorf("apply Wox settings UI font: %w", err)
 			}
+			if densityChanged {
+				_ = a.settingsView.Window().Invalidate()
+			}
 		}
 		if a.onboardingView != nil {
 			if err := a.onboardingView.Window().SetFontFamily(data.AppFontFamily); err != nil {

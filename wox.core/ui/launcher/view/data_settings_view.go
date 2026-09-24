@@ -100,7 +100,7 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
-			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error,
+			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.Error,
 		}})
 	}
 	return SettingsPage(SettingsPageProps{Theme: props.Theme,

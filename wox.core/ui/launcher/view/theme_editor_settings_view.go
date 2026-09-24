@@ -156,9 +156,9 @@ func themeEditorColorSlider(id, label string, value float64, theme woxcomponent.
 		}, Child: track},
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Align{Width: 70, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.TextSecondary}},
+		woxwidget.Align{Width: 70, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary}},
 		woxwidget.Align{Width: trackWidth, Height: 24, Vertical: 0.5, Child: semanticTrack},
-		woxwidget.Container{Width: 46, Height: 24, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Width: 36, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%.0f%%", normalized*100), Style: woxui.TextStyle{Size: 12}, Color: theme.Text}}},
+		woxwidget.Container{Width: 46, Height: 24, Padding: woxwidget.Insets{Left: 10}, Child: woxwidget.Align{Width: 36, Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: fmt.Sprintf("%.0f%%", normalized*100), Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.Text}}},
 	}}
 }
 
@@ -317,7 +317,7 @@ func (s *themeEditorSettingsState) Dispose()                                    
 func (s *themeEditorSettingsState) Build(ctx woxwidget.StateContext, input any) woxwidget.Widget {
 	props := input.(ThemeEditorSettingsProps)
 	headerHeight := float32(44)
-	header := woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
+	header := woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(22), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
 	bodyHeight := max(float32(0), props.Height-headerHeight)
 	if props.Error != "" {
 		bodyHeight = max(float32(0), bodyHeight-40)
@@ -328,7 +328,7 @@ func (s *themeEditorSettingsState) Build(ctx woxwidget.StateContext, input any) 
 		previewWidth := max(float32(0), props.Width-inspectorWidth-16)
 		left := []woxwidget.Widget{woxwidget.Container{Width: previewWidth, Height: headerHeight, Child: header}}
 		if props.Error != "" {
-			left = append(left, woxwidget.TextBlock{Value: props.Error, Width: previewWidth, Height: 40, MaxLines: 2, LineHeight: 20, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error})
+			left = append(left, woxwidget.TextBlock{Value: props.Error, Width: previewWidth, Height: 40, MaxLines: 2, LineHeight: 20, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
 		}
 		left = append(left, themeEditorLivePreview(props, previewWidth, bodyHeight))
 		body = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
@@ -342,7 +342,7 @@ func (s *themeEditorSettingsState) Build(ctx woxwidget.StateContext, input any) 
 	}
 	children := []woxwidget.Widget{woxwidget.Container{Width: props.Width, Height: headerHeight, Child: header}}
 	if props.Error != "" {
-		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: props.Width, Height: 40, MaxLines: 2, LineHeight: 20, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error})
+		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: props.Width, Height: 40, MaxLines: 2, LineHeight: 20, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
 	}
 	children = append(children, body)
 	if props.Width >= 760 {
@@ -411,10 +411,10 @@ func (s *themeEditorSettingsState) inspector(ctx woxwidget.StateContext, props T
 			token := tokens[i]
 			token.Label = themeEditorPropertyLabel(token.Label, group.Label, token.Subgroup)
 			if token.Subgroup != "" && token.Subgroup != previousSection {
-				rows = append(rows, woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Top: 12, Bottom: 4}, Child: woxwidget.Text{Value: token.Subgroup, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary}})
+				rows = append(rows, woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Top: 12, Bottom: 4}, Child: woxwidget.Text{Value: token.Subgroup, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary}})
 				previousSection = token.Subgroup
 				if strings.HasPrefix(token.Key, "AppBorder") && props.ShowChromeHelp {
-					rows = append(rows, woxwidget.TextBlock{Value: props.ChromeHelp, Width: contentWidth, LineHeight: 18, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary})
+					rows = append(rows, woxwidget.TextBlock{Value: props.ChromeHelp, Width: contentWidth, LineHeight: 18, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary})
 				}
 			}
 			rowProps := props
@@ -438,7 +438,7 @@ func (s *themeEditorSettingsState) inspector(ctx woxwidget.StateContext, props T
 								s.linked[prefix] = value
 							})
 						}}),
-						woxwidget.Text{Value: props.LinkPaddingLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.TextSecondary},
+						woxwidget.Text{Value: props.LinkPaddingLabel, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
 					}})
 					if linked {
 						token.Label = props.PaddingLabel
@@ -456,7 +456,7 @@ func (s *themeEditorSettingsState) inspector(ctx woxwidget.StateContext, props T
 		rows = append(rows, woxwidget.Container{Height: 1, Width: contentWidth, Color: props.Theme.Border})
 	}
 	if len(rows) == 0 {
-		rows = append(rows, woxwidget.TextBlock{Value: props.NoPropertiesLabel, Width: contentWidth, LineHeight: 20, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary})
+		rows = append(rows, woxwidget.TextBlock{Value: props.NoPropertiesLabel, Width: contentWidth, LineHeight: 20, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary})
 	}
 	viewportHeight := max(float32(0), height)
 	var scroll woxwidget.Widget = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: woxwidget.Key("theme-editor-properties-" + strconv.Itoa(s.scrollRevision)), Width: width, Height: viewportHeight, ContentWidth: width, Theme: props.Theme,
@@ -581,9 +581,9 @@ func themeEditorPropertyRow(props ThemeEditorSettingsProps, token ThemeEditorCol
 		}}))
 	}
 	controls = append(controls, reset)
-	children := []woxwidget.Widget{woxwidget.TextBlock{Value: label, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text}, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls}}
+	children := []woxwidget.Widget{woxwidget.TextBlock{Value: label, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Text}, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls}}
 	if token.Error != "" {
-		children = append(children, woxwidget.TextBlock{Value: token.Error, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error})
+		children = append(children, woxwidget.TextBlock{Value: token.Error, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
 	}
 	return woxwidget.Container{Width: width, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: children}}
 }
@@ -652,7 +652,7 @@ func themeEditorOverlaySample(props ThemeEditorSettingsProps, width float32) (wo
 	}
 	cardWidth := max(float32(180), width)
 	const cardHeight float32 = 56
-	text := themeEditorFlashOverlay(woxwidget.Text{Value: "Overlay", Style: woxui.TextStyle{Size: 13}, Color: foreground}, 72, 20, 3, textToken)
+	text := themeEditorFlashOverlay(woxwidget.Text{Value: "Overlay", Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: foreground}, 72, 20, 3, textToken)
 	card := woxwidget.Container{
 		Width: cardWidth, Height: cardHeight, Radius: 12, Color: background,
 		Child: woxwidget.Align{Width: cardWidth, Height: cardHeight, Horizontal: 0.5, Vertical: 0.5, Child: text},
@@ -798,11 +798,11 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 			}
 		}
 	}
-	title := themeEditorFlashOverlay(woxwidget.Text{Value: "Theme Preview", Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.DraftTheme.PreviewText}, contentWidth, 18, 3, props.FlashToken == "PreviewFontColor")
-	body := themeEditorFlashOverlay(woxwidget.TextBlock{Value: "Colors update immediately in this live preview.", Width: contentWidth, Height: 30, MaxLines: 2, Style: woxui.TextStyle{Size: 10}, LineHeight: 15, Color: themeAlpha(props.DraftTheme.PreviewText, 210)}, contentWidth, 30, 3, props.FlashToken == "PreviewFontColor")
+	title := themeEditorFlashOverlay(woxwidget.Text{Value: "Theme Preview", Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.DraftTheme.PreviewText}, contentWidth, 18, 3, props.FlashToken == "PreviewFontColor")
+	body := themeEditorFlashOverlay(woxwidget.TextBlock{Value: "Colors update immediately in this live preview.", Width: contentWidth, Height: 30, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(10)}, LineHeight: props.Theme.Scaled(15), Color: themeAlpha(props.DraftTheme.PreviewText, 210)}, contentWidth, 30, 3, props.FlashToken == "PreviewFontColor")
 	selection := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: "select ", Style: woxui.TextStyle{Size: 9}, Color: props.DraftTheme.PreviewText},
-		themeEditorFlashOverlay(woxwidget.Container{Width: 42, Height: 16, Color: selectionColor, Child: woxwidget.Text{Value: "preview", Style: woxui.TextStyle{Size: 9}, Color: props.DraftTheme.PreviewText}}, 42, 16, 3, props.FlashToken == "PreviewTextSelectionColor"),
+		woxwidget.Text{Value: "select ", Style: woxui.TextStyle{Size: props.Theme.Scaled(9)}, Color: props.DraftTheme.PreviewText},
+		themeEditorFlashOverlay(woxwidget.Container{Width: 42, Height: 16, Color: selectionColor, Child: woxwidget.Text{Value: "preview", Style: woxui.TextStyle{Size: props.Theme.Scaled(9)}, Color: props.DraftTheme.PreviewText}}, 42, 16, 3, props.FlashToken == "PreviewTextSelectionColor"),
 	}}
 	// Properties describe body content; footer metadata uses PreviewTag colors in v2.
 	propertyToken := props.FlashToken == "PreviewPropertyTitleColor" || props.FlashToken == "PreviewPropertyContentColor"
@@ -810,8 +810,8 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 		labelWidth := min(float32(88), contentWidth/2)
 		valueWidth := max(float32(0), contentWidth-labelWidth-10)
 		selection = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-			themeEditorFlashOverlay(woxwidget.Text{Value: props.PropertyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.DraftTheme.PreviewPropertyTitle}, labelWidth, 18, 3, props.FlashToken == "PreviewPropertyTitleColor"),
-			themeEditorFlashOverlay(woxwidget.Text{Value: "702.7 KB", Style: woxui.TextStyle{Size: 12}, Color: props.DraftTheme.PreviewPropertyContent}, valueWidth, 18, 3, props.FlashToken == "PreviewPropertyContentColor"),
+			themeEditorFlashOverlay(woxwidget.Text{Value: props.PropertyLabel, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.DraftTheme.PreviewPropertyTitle}, labelWidth, 18, 3, props.FlashToken == "PreviewPropertyTitleColor"),
+			themeEditorFlashOverlay(woxwidget.Text{Value: "702.7 KB", Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.DraftTheme.PreviewPropertyContent}, valueWidth, 18, 3, props.FlashToken == "PreviewPropertyContentColor"),
 		}}
 	}
 	previewBody := woxwidget.Container{Width: layout.BodyWidth, Height: layout.BodyHeight, Padding: woxwidget.UniformInsets(12), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
@@ -839,7 +839,7 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 		children = append(children, woxwidget.StackChild{Left: 14, Top: 12, Child: woxcomponent.CornerRadiusHighlight(layout.InnerWidth, layout.BodyHeight+2, radius, themeEditorFlashColor())})
 	}
 	if props.FlashToken == "PreviewTagBorderRadius" {
-		metrics, _ := props.Window.MeasureText("2026-05-26 10:47:08", woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold})
+		metrics, _ := props.Window.MeasureText("2026-05-26 10:47:08", woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold})
 		chipWidth := min(max(float32(36), metrics.Size.Width+18), min(float32(220), max(float32(36), layout.InnerWidth)))
 		radius := float32(8)
 		if props.DraftTheme.PreviewTagBorderRadius != nil {

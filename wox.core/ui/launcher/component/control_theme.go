@@ -1,6 +1,10 @@
 package component
 
-import woxui "wox/ui/runtime"
+import (
+	"math"
+
+	woxui "wox/ui/runtime"
+)
 
 // ControlTheme defines appearance for reusable controls, independent of launcher layout and result styling.
 type ControlTheme struct {
@@ -31,4 +35,15 @@ type ControlTheme struct {
 	ScrollbarWidth            *int
 	ScrollbarHoverWidth       *int
 	ScrollbarBorderRadius     *int
+	// DensityScale is the active Interface size. Zero and one keep normal-density bases.
+	DensityScale float32
+}
+
+// Scaled rounds a normal-density size into the theme's Interface size.
+func (theme ControlTheme) Scaled(value float32) float32 {
+	scale := theme.DensityScale
+	if scale <= 0 || scale == 1 || value == 0 {
+		return value
+	}
+	return float32(math.Round(float64(value * scale)))
 }

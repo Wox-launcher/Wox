@@ -1062,7 +1062,7 @@
   "ui_app_width": "窗口宽度",
   "ui_app_width_tips": "调整 Wox 窗口的宽度",
   "ui_interface_size": "界面大小",
-  "ui_interface_size_tips": "调整启动器文本和控件尺寸",
+  "ui_interface_size_tips": "调整界面文字和控件尺寸",
   "ui_interface_size_compact": "紧凑",
   "ui_interface_size_normal": "正常",
   "ui_interface_size_comfortable": "宽松",

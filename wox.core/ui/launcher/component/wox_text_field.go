@@ -338,8 +338,10 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	props.Focused = s.focusNode.HasFocus()
 	style := props.Style
 	if style.Size <= 0 {
-		style = woxui.TextStyle{Size: SettingsControlFontSize}
+		style.Size = SettingsControlFontSize
 	}
+	// Callers pass normal-density sizes. The field applies Interface size once.
+	style.Size = props.Theme.Scaled(style.Size)
 	s.style = style
 	s.richRuns = props.RichRuns
 	s.atomicTokens = props.AtomicTokens
@@ -836,6 +838,8 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			})
 		}
 	}
+	props.Style = style
+	props.LineHeight = s.lineHeight
 	props.handleDragging = s.handleDragging
 	props.handleDragLocalY = s.handleDragLocalY
 	props.onTrailingHandleDrag = func(localY float32, ended bool) {

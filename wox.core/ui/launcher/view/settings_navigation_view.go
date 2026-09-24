@@ -59,7 +59,7 @@ func settingsNavGroupLabel(item SettingsNavItem, width float32, theme woxcompone
 	row := woxwidget.Container{
 		Width: width, Height: woxcomponent.SettingsNavGroupHeight, Padding: woxwidget.Insets{Left: 12, Right: 10},
 		Child: woxwidget.Align{Height: woxcomponent.SettingsNavGroupHeight, Vertical: 0.5, Child: woxwidget.Text{
-			Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary,
+			Value: label, Style: woxui.TextStyle{Size: theme.Scaled(size), Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary,
 		}},
 	}
 	if lead {
@@ -97,9 +97,9 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 					color = props.Theme.SelectionBackground
 					foreground = props.Theme.SelectionText
 				}
-				labelStyle := woxui.TextStyle{Size: 13}
+				labelStyle := woxui.TextStyle{Size: props.Theme.Scaled(13)}
 				leftPadding := float32(10 + item.Depth*18)
-				var icon woxwidget.Widget = woxwidget.Text{Value: item.FallbackIcon, Style: woxui.TextStyle{Size: 15}, Color: foreground}
+				var icon woxwidget.Widget = woxwidget.Text{Value: item.FallbackIcon, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: foreground}
 				if item.Icon != nil {
 					icon = woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
 				}
@@ -205,7 +205,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 	}
 	background := woxui.Color{}
 	if len(props.Results) == 0 {
-		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize}, Color: props.Theme.TextSecondary}}
+		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSearchTitleFontSize)}, Color: props.Theme.TextSecondary}}
 	}
 	start := float32(selected) * rowHeight
 	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
@@ -221,8 +221,8 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 				subtitleColor = props.Theme.SelectionText
 			}
 			textColumn := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: titleColor},
-				woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchSubtitleFontSize}, Color: subtitleColor},
+				woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSearchTitleFontSize), Weight: woxui.FontWeightSemibold}, Color: titleColor},
+				woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSearchSubtitleFontSize)}, Color: subtitleColor},
 			}}
 			var content woxwidget.Widget = textColumn
 			if showIcons && result.Icon != nil {

@@ -49,7 +49,7 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 	}
 	innerWidth := max(float32(0), contentWidth-20)
 	innerHeight := max(float32(0), height-14)
-	questionHeight := chatQuestionPanelHeight(snapshot, innerHeight)
+	questionHeight := chatQuestionPanelHeight(snapshot, innerHeight, a.chatDensityScale())
 	debugHeight := float32(0)
 	if snapshot.panel == "debug" {
 		debugHeight = chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
@@ -119,7 +119,7 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 	// The sidebar toggle advertises the same Ctrl/Cmd+B shortcut Flutter binds to preview fullscreen.
 	historyTooltip := historyLabel + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")"
 	return previewview.ChatHeaderProps{
-		Width: width, Height: height, Key: snapshot.key, Title: title,
+		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Title: title,
 		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug",
 		ShowExit: showExit && launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
 		ShowOpenWindow: showOpenWindow, OpenWindowLabel: openWindowLabel,
@@ -269,7 +269,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		}
 	}
 	return previewview.ChatCatalogProps{
-		Width: width, Height: height, Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
+		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
 		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
 	}
@@ -314,7 +314,7 @@ func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 	}
 	emptyMessage := a.translate("i18n:ui_no_data")
 	return previewview.ChatCatalogProps{
-		Width: width, Height: height, Key: snapshot.key, Items: rows, EmptyMessage: emptyMessage,
+		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Items: rows, EmptyMessage: emptyMessage,
 		Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatPanel,
 	}
@@ -411,7 +411,7 @@ func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 		a.setChatSidebarViewport(viewportHeight)
 	}
 	return previewview.ChatCatalogProps{
-		Width: width, Height: height, Key: snapshot.key, Items: items, EmptyMessage: a.translate("i18n:ui_no_data"),
+		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Items: items, EmptyMessage: a.translate("i18n:ui_no_data"),
 		Scroll: offset, ContentHeight: contentHeight, ShowNew: true, NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatHistoryDrawer, OnNew: a.startNewChat,
 	}
@@ -453,9 +453,10 @@ func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	summary, value := formatChatDebugTrace(snapshot.chat.DebugTrace)
 	textWidth := max(float32(20), innerWidth-16)
 	hash := sha256.Sum256([]byte(value))
-	layout := a.previewTextLayout(fmt.Sprintf("chat-debug\x00%s\x00%x", snapshot.key, hash[:8]), value, woxui.TextStyle{Size: 10}, textWidth, 16)
+	scale := a.chatDensityScale()
+	layout := a.previewTextLayout(fmt.Sprintf("chat-debug\x00%s\x00%x", snapshot.key, hash[:8]), value, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 10)}, textWidth, previewview.ChatScaledSize(scale, 16))
 	return previewview.ChatDebugProps{
-		Width: width, Height: height, Key: snapshot.key, Summary: summary, Value: value, Layout: layout,
+		Width: width, Height: height, DensityScale: scale, Key: snapshot.key, Summary: summary, Value: value, Layout: layout,
 		Scroll: snapshot.panelScroll, Theme: palette.componentTheme(), OnScroll: a.scrollChatDebugPanel, OnGeometryChanged: a.setChatDebugGeometry,
 		OnCopy: func() { _ = a.copyChatText(value) },
 	}
@@ -613,9 +614,12 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	if snapshot.loading {
 		emptyMessage = "Loading conversation…"
 	}
-	emptyMetrics, _ := a.window.MeasureText(emptyMessage, woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold})
+	scale := a.chatDensityScale()
+	emptySize := previewview.ChatScaledSize(scale, 28)
+	emptyMetrics, _ := a.window.MeasureText(emptyMessage, woxui.TextStyle{Size: emptySize, Weight: woxui.FontWeightSemibold})
 	props := previewview.ChatMessagesProps{
-		Width: width, Height: height, Key: snapshot.key, EmptyMessage: emptyMessage,
+		Width: width, Height: height, DensityScale: scale, Key: snapshot.key, EmptyMessage: emptyMessage,
+		EmptyTextStyle: woxui.TextStyle{Size: emptySize, Weight: woxui.FontWeightSemibold}, EmptyLineHeight: previewview.ChatScaledSize(scale, 36),
 		EmptyTextWidth: emptyMetrics.Size.Width, EmptyTextHeight: emptyMetrics.Size.Height,
 		ContentHeight: innerHeight, Scroll: snapshot.scroll, Theme: palette.componentTheme(), OnScroll: a.scrollChatPreview,
 	}
@@ -674,13 +678,14 @@ func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]boo
 	}
 	separator := a.translate("i18n:ui_ai_chat_tool_activity_action_separator")
 	summary := strings.Join([]string{a.chatToolActivityStatusLabel(status), strings.Join(actions, separator), count}, " · ")
+	scale := a.chatDensityScale()
 	summaryWidth := float32(0)
-	if metrics, err := a.window.MeasureText(summary, woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}); err == nil {
+	if metrics, err := a.window.MeasureText(summary, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11), Weight: woxui.FontWeightSemibold}); err == nil {
 		summaryWidth = metrics.Size.Width
 	}
 	activityID := item.roundID
 	props := previewview.ChatMessageProps{
-		Key: activityID, Kind: "tool-activity", RoundExpanded: item.roundExpanded,
+		Key: activityID, DensityScale: scale, Kind: "tool-activity", RoundExpanded: item.roundExpanded,
 		ToolSummary: summary, ToolSummaryWidth: summaryWidth, ToolLeading: leading, ToolStatus: status, ToolStatusColor: statusColor,
 		Theme: palette.componentTheme(), OnToggleRound: func() { a.toggleChatDisclosure(activityID) },
 	}
@@ -714,8 +719,9 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 		end = start
 	}
 	duration := fmt.Sprintf("%dms", max(int64(0), end-start))
+	scale := a.chatDensityScale()
 	durationWidth := float32(0)
-	if metrics, err := a.window.MeasureText(duration, woxui.TextStyle{Size: 11}); err == nil {
+	if metrics, err := a.window.MeasureText(duration, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}); err == nil {
 		durationWidth = metrics.Size.Width
 	}
 	name := chatToolOriginLabel(tool)
@@ -723,7 +729,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 		name = a.translate("i18n:ui_ai_chat_tools")
 	}
 	nameWidth := float32(0)
-	if metrics, err := a.window.MeasureText(name, woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}); err == nil {
+	if metrics, err := a.window.MeasureText(name, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11), Weight: woxui.FontWeightSemibold}); err == nil {
 		nameWidth = metrics.Size.Width
 	}
 	callID := conversation.ID
@@ -731,7 +737,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 		callID = fmt.Sprintf("%s:%d", activityID, index)
 	}
 	props := previewview.ChatToolCallProps{
-		Key: callID, Name: name, NameWidth: nameWidth, Duration: duration, DurationWidth: durationWidth,
+		Key: callID, DensityScale: scale, Name: name, NameWidth: nameWidth, Duration: duration, DurationWidth: durationWidth,
 		Status: status, StatusColor: chatToolStatusColor(status, palette.componentTheme()), Expanded: expanded[callID],
 		OnToggle: func() { a.toggleChatDisclosure(callID) },
 	}
@@ -764,7 +770,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 	props.Details = make([]previewview.ChatToolDetailProps, 0, len(details))
 	props.DetailsHeight = 16
 	for detailIndex, detail := range details {
-		layout := a.previewTextLayout(fmt.Sprintf("chat-tool-detail\x00%s\x00%d", callID, detailIndex), detail[1], woxui.TextStyle{Size: 11}, detailTextWidth, 16)
+		layout := a.previewTextLayout(fmt.Sprintf("chat-tool-detail\x00%s\x00%d", callID, detailIndex), detail[1], woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}, detailTextWidth, previewview.ChatScaledSize(scale, 16))
 		props.Details = append(props.Details, previewview.ChatToolDetailProps{Label: detail[0], Value: detail[1], Layout: layout})
 		props.DetailsHeight += layout.Size.Height + 40
 	}
@@ -856,22 +862,23 @@ func (a *App) chatToolActivityStatusLabel(status string) string {
 
 // chatMessageProps resolves text layouts, images, and controller actions for one conversation.
 func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, showMeta, hideReasoning bool, imageScale float32) previewview.ChatMessageProps {
+	scale := a.chatDensityScale()
 	innerWidth := previewview.ChatMessageTextWidth(width, conversation.Role)
 	props := previewview.ChatMessageProps{
-		Key: fmt.Sprintf("%s-%d", key, index), Role: conversation.Role, ShowMeta: showMeta, Theme: palette.componentTheme(),
+		Key: fmt.Sprintf("%s-%d", key, index), DensityScale: scale, Role: conversation.Role, ShowMeta: showMeta, Theme: palette.componentTheme(),
 		CopyLabel: a.translate("i18n:ui_ai_chat_copy_message"), CopiedLabel: a.translate("i18n:ui_ai_chat_message_copied"),
 		EditLabel: a.translate("i18n:ui_ai_chat_edit_message"), RetryLabel: a.translate("i18n:ui_ai_chat_regenerate_response"),
 		OnTooltip: a.setPreviewTooltip,
 	}
 	if conversation.Timestamp > 0 {
 		props.Timestamp = time.UnixMilli(conversation.Timestamp).Local().Format("15:04")
-		if metrics, err := a.window.MeasureText(props.Timestamp, woxui.TextStyle{Size: 11}); err == nil {
+		if metrics, err := a.window.MeasureText(props.Timestamp, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}); err == nil {
 			props.TimestampWidth = metrics.Size.Width
 		}
 	}
 	if conversation.Role == "tool" || conversation.ToolCallInfo.Name != "" {
 		props.ToolText = formatChatToolCall(conversation)
-		props.ToolLayout = a.previewTextLayout(fmt.Sprintf("chat-tool\x00%s\x00%d", key, index), props.ToolText, woxui.TextStyle{Size: 11}, innerWidth, 17)
+		props.ToolLayout = a.previewTextLayout(fmt.Sprintf("chat-tool\x00%s\x00%d", key, index), props.ToolText, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}, innerWidth, previewview.ChatScaledSize(scale, 17))
 	} else {
 		if reasoning := strings.TrimSpace(conversation.Reasoning); reasoning != "" && !hideReasoning {
 			props.Reasoning = reasoning
@@ -903,7 +910,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		if attachment.Kind != common.AIChatAttachmentQuote {
 			continue
 		}
-		attachment.Layout = a.previewTextLayout(fmt.Sprintf("chat-attachment\x00%s\x00%d\x00%d", key, index, i), attachment.Text, woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, max(float32(0), innerWidth-32), 18)
+		attachment.Layout = a.previewTextLayout(fmt.Sprintf("chat-attachment\x00%s\x00%d\x00%d", key, index, i), attachment.Text, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, woxcomponent.SettingsHelpFontSize)}, max(float32(0), innerWidth-32), previewview.ChatScaledSize(scale, 18))
 	}
 	if len(conversation.Images) > 0 {
 		props.Images = make([]*woxui.Image, 0, min(3, len(conversation.Images)))
@@ -1018,7 +1025,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		return a.imageForSurface(mention.Icon, 256, palette.background)
 	})
 	return previewview.ChatInputProps{
-		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
+		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Editing: snapshot.editing,
 		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: window,
 		Model: model, Status: status, StatusColor: statusColor, SendLabel: a.translate("i18n:ui_ai_chat_send"), StopLabel: a.translate("i18n:ui_ai_chat_stop"), OnStop: a.stopChatMessage, Sending: streaming, Importing: snapshot.importing, Theme: theme,
 		Attachments: a.chatAttachmentProps(snapshot.attachments, quoteLabel), QuoteDismissLabel: quoteDismiss,
@@ -1030,7 +1037,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 }
 
 // chatQuestionPanelHeight bounds the tool question without starving the conversation viewport.
-func chatQuestionPanelHeight(snapshot *chatPreviewSnapshot, available float32) float32 {
+func chatQuestionPanelHeight(snapshot *chatPreviewSnapshot, available, scale float32) float32 {
 	if snapshot == nil || snapshot.question == nil {
 		return 0
 	}
@@ -1041,6 +1048,8 @@ func chatQuestionPanelHeight(snapshot *chatPreviewSnapshot, available float32) f
 			height += 56
 		}
 	}
+	// The question title grows with interface size; keep the same slack the normal panel reserved.
+	height += max(float32(0), previewview.ChatScaledSize(scale, 17)*2-34)
 	return min(max(float32(140), height), max(float32(140), available*0.48))
 }
 
@@ -1048,7 +1057,7 @@ func chatQuestionPanelHeight(snapshot *chatPreviewSnapshot, available float32) f
 func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32, window *woxui.Window, onKey func(woxui.KeyEvent) bool) previewview.ChatQuestionProps {
 	question := snapshot.question
 	props := previewview.ChatQuestionProps{
-		Width: width, Height: height, Question: question.Question, Theme: palette.componentTheme(),
+		Width: width, Height: height, DensityScale: a.chatDensityScale(), Question: question.Question, Theme: palette.componentTheme(),
 		OnCancel: func() { a.submitAIQuestionAnswer("User cancelled") }, OnSubmit: a.submitSelectedAIQuestionAnswer,
 	}
 	props.Options = make([]previewview.ChatQuestionOptionProps, 0, len(question.Options))
@@ -1113,7 +1122,7 @@ func (a *App) chatRoundProps(item chatRenderItem, theme woxcomponent.Theme, togg
 	if strings.TrimSpace(label) == "" || label == "i18n:ui_ai_chat_round_worked_duration" {
 		label = "Worked for %s"
 	}
-	return previewview.ChatMessageProps{Key: item.roundID, Kind: "round", RoundLabel: fmt.Sprintf(label, formatChatRoundDuration(item.roundStart, item.roundEnd)), RoundExpanded: item.roundExpanded, Theme: theme, OnToggleRound: toggle}
+	return previewview.ChatMessageProps{Key: item.roundID, DensityScale: a.chatDensityScale(), Kind: "round", RoundLabel: fmt.Sprintf(label, formatChatRoundDuration(item.roundStart, item.roundEnd)), RoundExpanded: item.roundExpanded, Theme: theme, OnToggleRound: toggle}
 }
 
 func chatMessageChipTheme(theme woxcomponent.Theme, role string) woxcomponent.ControlTheme {
@@ -1153,19 +1162,30 @@ func chatTokenChipDecorations(text string, mentions []chatMention, window *woxui
 }
 
 // prepareChatMessage applies the same rich reply rendering and geometry to every chat host.
+// chatDensityScale is the interface-size multiplier shared by chat text and its line boxes.
+func (a *App) chatDensityScale() float32 {
+	if a == nil {
+		return 1
+	}
+	return a.densityMetrics.normalized().scale
+}
+
 func (a *App) prepareChatMessage(props previewview.ChatMessageProps, window *woxui.Window, width, imageScale float32) previewview.ChatMessageProps {
 	props.Window = window
+	if props.DensityScale <= 0 {
+		props.DensityScale = a.chatDensityScale()
+	}
 	if props.Role == "assistant" && props.Text != "" {
 		innerWidth := previewview.ChatMessageTextWidth(width, props.Role)
 		markdown := a.markdownPropsWithDocument("chat-markdown-"+props.Key, woxcomponent.MarkdownDocument{}, "", uiPalette{}, innerWidth, imageScale)
-		markdown.Theme, markdown.Window, markdown.FontSize = props.Theme.Controls, window, 13
+		markdown.Theme, markdown.Window, markdown.FontSize = props.Theme.Controls, window, previewview.ChatMessageFontSize(props.DensityScale)
 		markdown.InlineTrailing = props.TextTrailing
 		font := ""
 		if a.generalSettings != nil {
 			font = a.generalSettings.Data().AppFontFamily
 		}
 		markdown, props.TextLayout.Size = a.chatMarkdown.measure(props.Key, props.Text, chatMarkdownLayoutKey{
-			width: innerWidth, scale: imageScale, font: font, images: a.imagesRevision.Load(), window: window, trailing: props.TextTrailing != nil,
+			width: innerWidth, scale: imageScale, fontSize: markdown.FontSize, font: font, images: a.imagesRevision.Load(), window: window, trailing: props.TextTrailing != nil,
 		}, markdown)
 		props.Markdown = &markdown
 	}

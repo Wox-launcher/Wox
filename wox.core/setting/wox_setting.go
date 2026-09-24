@@ -2,6 +2,7 @@ package setting
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"wox/common"
@@ -61,7 +62,7 @@ type WoxSetting struct {
 	// UI related
 	AppWidth       *WoxSettingValue[int]
 	MaxResultCount *WoxSettingValue[int]
-	// UiDensity keeps launcher text and control sizing in one user preference.
+	// UiDensity keeps launcher, chat, and text-overlay sizing in one user preference.
 	// The setting is stored as an enum instead of individual dimensions so Go
 	// window estimates and UI rendering can derive the same compact,
 	// normal, and comfortable sizes without expanding the settings DTO.
@@ -337,6 +338,34 @@ func NormalizeUiDensity(value string) UiDensity {
 // value is not one of the three supported scale buckets.
 func IsValidUiDensity(value UiDensity) bool {
 	return value == UiDensityCompact || value == UiDensityNormal || value == UiDensityComfortable
+}
+
+// UiDensityMultiplier is the exact compact/normal/comfortable factor.
+// Integer window estimates multiply in float64 so halves such as 55 * 0.9 still round to 50.
+func UiDensityMultiplier(density UiDensity) float64 {
+	switch NormalizeUiDensity(string(density)) {
+	case UiDensityCompact:
+		return 0.9
+	case UiDensityComfortable:
+		return 1.1
+	default:
+		return 1
+	}
+}
+
+// UiDensityScale is the shared multiplier used by launcher, chat, and text-overlay text.
+func UiDensityScale(density UiDensity) float32 {
+	return float32(UiDensityMultiplier(density))
+}
+
+// ScaleUiDensity rounds a normal-density size into the selected interface-size bucket.
+// A normal density returns the authored size unchanged.
+func ScaleUiDensity(value float32, density UiDensity) float32 {
+	scale := UiDensityScale(density)
+	if scale == 1 {
+		return value
+	}
+	return float32(math.Round(float64(value * scale)))
 }
 
 // NormalizeReleaseChannel converts missing or unsupported channel values to stable.

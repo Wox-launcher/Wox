@@ -34,7 +34,7 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 	header := woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{Title: props.Title, Description: props.Description, Width: contentWidth, Theme: props.Theme})
 	if !props.Available {
 		message := woxwidget.Container{Width: contentWidth, Height: 30, Child: woxwidget.Text{
-			Value: "AI settings are unavailable.", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary,
+			Value: "AI settings are unavailable.", Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary,
 		}}
 		return SettingsPage(SettingsPageProps{Theme: props.Theme,
 			ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: []woxwidget.Widget{header, message},
@@ -57,7 +57,7 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
-			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.Error,
+			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.Error,
 		}})
 	}
 	return SettingsPage(SettingsPageProps{Theme: props.Theme,

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"wox/setting"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -221,7 +222,7 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	if titleBarHeight > 0 && (instance.options.Title != "" || instance.titleIcon != nil) {
 		titleWidth := float32(0)
 		if instance.options.Title != "" {
-			title, _ := window.MeasureText(instance.options.Title, woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold})
+			title, _ := window.MeasureText(instance.options.Title, woxui.TextStyle{Size: textOverlayScaled(13), Weight: woxui.FontWeightSemibold})
 			titleWidth = title.Size.Width
 		}
 		titleLeading := float32(12)
@@ -463,7 +464,7 @@ func textOverlayHotkeyWidth(window *woxui.Window, labels []string) float32 {
 		return 0
 	}
 	_, width := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Labels: labels, Foreground: overlay.CurrentThemeChrome().Foreground, FontSize: 11, Compact: true, Window: window,
+		Labels: labels, Foreground: overlay.CurrentThemeChrome().Foreground, FontSize: textOverlayScaled(11), Compact: true, Window: window,
 	})
 	return width
 }
@@ -480,7 +481,7 @@ func textOverlayHotkeyChip(window *woxui.Window, labels []string, chrome overlay
 	}
 	chip, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
 		Labels: labels, Foreground: chrome.Foreground, Background: background, Border: border,
-		FontSize: 11, Compact: true, Window: window,
+		FontSize: textOverlayScaled(11), Compact: true, Window: window,
 	})
 	return chip
 }
@@ -523,13 +524,19 @@ func textOverlayHoverFill(chrome overlay.ThemeChrome) woxui.Color {
 	return woxui.Color{R: 255, G: 255, B: 255, A: 20}
 }
 
+// textOverlayScaled applies the current interface size to an authored overlay size.
+func textOverlayScaled(size float32) float32 {
+	return setting.ScaleUiDensity(size, setting.PeekUiDensity())
+}
+
 // textOverlayFontSize resolves the message font size, defaulting to the shared
-// overlay size when the caller did not request a custom one.
+// overlay size when the caller did not request a custom one. Both paths follow UiDensity.
 func textOverlayFontSize(options Options) float32 {
-	if options.FontSize > 0 {
-		return options.FontSize
+	size := options.FontSize
+	if size <= 0 {
+		size = DefaultFontSize
 	}
-	return DefaultFontSize
+	return textOverlayScaled(size)
 }
 
 // textOverlayPadding resolves the panel padding, defaulting to the shared
@@ -617,7 +624,7 @@ func (instance *runtimeTextOverlay) buildTitleBar(width float32, active bool, ch
 		}
 		titleRow = append(titleRow, woxwidget.TextBlock{
 			Value: instance.options.Title, Width: textWidth, MaxLines: 1, ShrinkWrap: true,
-			Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: foreground,
+			Style: woxui.TextStyle{Size: textOverlayScaled(13), Weight: woxui.FontWeightSemibold}, Color: foreground,
 		})
 	}
 	if len(titleRow) > 0 {
@@ -699,7 +706,7 @@ func (instance *runtimeTextOverlay) showCopyTooltip() {
 		return
 	}
 	label := instance.copyTooltipLabel()
-	style := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
+	style := woxui.TextStyle{Size: textOverlayScaled(11), Weight: woxui.FontWeightSemibold}
 	metrics, _ := instance.window.MeasureText(label, style)
 	width := max(float32(48), metrics.Size.Width+16)
 	x, y := runtimeTextCopyTooltipAnchor(windowBounds, instance.copyAnchor)

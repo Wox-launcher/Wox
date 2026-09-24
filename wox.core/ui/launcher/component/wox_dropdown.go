@@ -65,7 +65,7 @@ func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, 
 	// Keep the trailer on its measured text width. A reserved 80-unit column
 	// clipped labels such as "Stable channel" next to a short version like v2.4.4.
 	children = append(children, woxwidget.Expanded{Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: woxwidget.TextBlock{
-		Value: props.Value, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Foreground,
+		Value: props.Value, Height: props.Theme.Scaled(18), LineHeight: props.Theme.Scaled(18), MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(SettingsControlFontSize)}, Color: props.Foreground,
 	}}})
 	if props.Trailing != "" {
 		secondary := props.Secondary
@@ -74,7 +74,7 @@ func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, 
 		}
 		children = append(children,
 			woxwidget.Container{Width: 10, Height: props.Height},
-			woxwidget.Text{Value: props.Trailing, Style: woxui.TextStyle{Size: SettingsSecondaryFontSize}, Color: secondary},
+			woxwidget.Text{Value: props.Trailing, Style: woxui.TextStyle{Size: props.Theme.Scaled(SettingsSecondaryFontSize)}, Color: secondary},
 		)
 	}
 	children = append(children, WoxDropdownIndicator(indicatorWidth, props.Height, props.Foreground))

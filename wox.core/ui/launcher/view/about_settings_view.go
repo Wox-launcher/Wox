@@ -40,7 +40,7 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	var logo woxwidget.Widget = woxwidget.Container{
 		Width: 100, Height: 100, Radius: 22, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255},
 		Child: woxwidget.Align{Width: 100, Height: 100, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-			Value: "W", Style: woxui.TextStyle{Size: 54, Weight: woxui.FontWeightSemibold}, Color: woxui.Color{A: 255},
+			Value: "W", Style: woxui.TextStyle{Size: props.Theme.Scaled(54), Weight: woxui.FontWeightSemibold}, Color: woxui.Color{A: 255},
 		}},
 	}
 	if props.AppIcon != nil {
@@ -53,11 +53,11 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 		woxwidget.Container{Height: 30},
 		woxwidget.Align{Width: contentWidth, Height: 28, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{
 			Height: 26, Radius: 16, Color: props.Theme.Accent, Padding: woxwidget.Insets{Left: 12, Top: 4, Right: 12, Bottom: 4},
-			Child: woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.AccentText},
+			Child: woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.AccentText},
 		}},
 		woxwidget.Container{Height: 30},
 		woxwidget.Align{Width: contentWidth, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-			Value: props.Description, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.Text,
+			Value: props.Description, Style: woxui.TextStyle{Size: props.Theme.Scaled(16)}, Color: props.Theme.Text,
 		}},
 		woxwidget.Container{Height: 40},
 		woxwidget.Align{Width: contentWidth, Height: 32, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 30, Children: links}},
@@ -65,7 +65,7 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	if props.Status != "" {
 		children = append(children,
 			woxwidget.Container{Height: 18},
-			woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error}},
+			woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error}},
 		)
 	}
 	children = append(children, woxwidget.Container{Height: 40})

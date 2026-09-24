@@ -649,7 +649,7 @@ func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.Pl
 	labelWidth := float32(80)
 	if window := a.settingsNativeWindow(); window != nil {
 		for _, field := range fields {
-			if metrics, err := window.MeasureText(field.Label, woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize}); err == nil {
+			if metrics, err := window.MeasureText(field.Label, woxui.TextStyle{Size: snapshot.palette.Scaled(woxcomponent.SettingsLabelFontSize)}); err == nil {
 				labelWidth = max(labelWidth, metrics.Size.Width)
 			}
 		}

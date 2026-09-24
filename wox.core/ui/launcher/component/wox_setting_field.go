@@ -34,7 +34,7 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 		gap = 20
 	}
 	labelHeight := max(float32(0), height-props.Padding.Top-props.Padding.Bottom)
-	labelText := woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
+	labelText := woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: props.Theme.Scaled(SettingsLabelFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
 	heading := woxwidget.Widget(labelText)
 	if props.LabelAccessory != nil {
 		heading = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -46,7 +46,7 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 		// Let help text determine row height; fixed single-line labels clipped translations.
 		description := woxwidget.TextBlock{
 			Value: props.Description, Width: props.LabelWidth, MaxLines: props.DescriptionMaxLines,
-			Style: woxui.TextStyle{Size: SettingsHelpFontSize}, LineHeight: 16, Color: props.Theme.TextSecondary,
+			Style: woxui.TextStyle{Size: props.Theme.Scaled(SettingsHelpFontSize)}, LineHeight: props.Theme.Scaled(16), Color: props.Theme.TextSecondary,
 		}
 		label = woxwidget.Container{Width: props.LabelWidth, Child: woxwidget.Constrained{MinHeight: labelHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			heading, description,

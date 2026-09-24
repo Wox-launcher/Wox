@@ -308,7 +308,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
-		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette.componentTheme().Controls, width, height, frame.Scale)
+		overlay = a.buildFormTableOverlay(snapshot.tableEditor, a.formControlTheme(snapshot), width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: a.launcherTableOverlaySectionSignature(snapshot, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 		nativePreviewOcclusion = woxui.Rect{Width: width, Height: height}
 	}

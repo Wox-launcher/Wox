@@ -421,6 +421,13 @@ func (a *App) PickFiles(_ context.Context, params common.PickFilesParams) ([]str
 	return []string{path}, nil
 }
 
+// screenshotControlTheme keeps the size dialog on the same Interface size as the rest of Wox.
+func (a *App) screenshotControlTheme() woxcomponent.ControlTheme {
+	theme := a.palette.componentTheme().Controls
+	theme.DensityScale = a.densityMetrics.normalized().scale
+	return theme
+}
+
 // CaptureScreenshot starts the native capture session without changing launcher visibility.
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
@@ -428,7 +435,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
 		ExtraActions:      request.ExtraActions,
 		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 30, ShowPointer: true}, WindowManager: a.windows,
-		Theme: a.palette.componentTheme().Controls, FontFamily: a.generalSettings.Data().AppFontFamily,
+		Theme: a.screenshotControlTheme(), FontFamily: a.generalSettings.Data().AppFontFamily,
 		SizeLabels: woxscreenshot.ScreenshotSizeLabels{
 			Title: a.translate("i18n:plugin_screenshot_size_title"),
 			Width: a.translate("i18n:plugin_screenshot_size_width"), Height: a.translate("i18n:plugin_screenshot_size_height"),

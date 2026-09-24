@@ -1062,7 +1062,7 @@
   "ui_app_width": "창 너비",
   "ui_app_width_tips": "Wox 창의 너비를 조정합니다",
   "ui_interface_size": "인터페이스 크기",
-  "ui_interface_size_tips": "런처 텍스트 및 컨트롤 크기를 조정합니다",
+  "ui_interface_size_tips": "텍스트와 컨트롤 크기를 조정합니다",
   "ui_interface_size_compact": "컴팩트",
   "ui_interface_size_normal": "보통",
   "ui_interface_size_comfortable": "넓게",

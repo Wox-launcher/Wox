@@ -406,21 +406,21 @@ func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 }
 
 func TestFormTextFieldKeepsSuffixOutsideInput(t *testing.T) {
-	assertFormTextFieldSuffix(t, "天", formSuffixWidth(nil, "天"))
-	assertFormTextFieldSuffix(t, "items", formSuffixWidth(nil, "items"))
+	assertFormTextFieldSuffix(t, "天", formSuffixWidth(nil, "天", woxcomponent.ControlTheme{}))
+	assertFormTextFieldSuffix(t, "items", formSuffixWidth(nil, "items", woxcomponent.ControlTheme{}))
 }
 
 func TestFormSuffixWidthKeepsLatinUnitsVisible(t *testing.T) {
-	if got := formSuffixWidth(nil, "ms"); got != 16 {
+	if got := formSuffixWidth(nil, "ms", woxcomponent.ControlTheme{}); got != 16 {
 		t.Fatalf("ms width = %.0f, want 16", got)
 	}
-	if got := formSuffixWidth(nil, "item"); got != 32 {
+	if got := formSuffixWidth(nil, "item", woxcomponent.ControlTheme{}); got != 32 {
 		t.Fatalf("item width = %.0f, want 32 so it is wider than the old 20 slot", got)
 	}
-	if got := formSuffixWidth(nil, "items"); got != 40 {
+	if got := formSuffixWidth(nil, "items", woxcomponent.ControlTheme{}); got != 40 {
 		t.Fatalf("items width = %.0f, want 40", got)
 	}
-	if got := formSuffixWidth(nil, "天"); got != woxcomponent.SettingsControlFontSize {
+	if got := formSuffixWidth(nil, "天", woxcomponent.ControlTheme{}); got != woxcomponent.SettingsControlFontSize {
 		t.Fatalf("天 width = %.0f, want the 13 control size", got)
 	}
 }

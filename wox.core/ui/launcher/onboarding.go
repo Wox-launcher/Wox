@@ -182,6 +182,7 @@ func (a *App) finishOnboarding() {
 
 func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
+	snapshot.palette.DensityScale = a.densityMetrics.normalized().scale
 	steps := a.onboardingSteps()
 	systemThemes := onboardingSystemThemes(snapshot.theme.Themes)
 	for index := range steps {

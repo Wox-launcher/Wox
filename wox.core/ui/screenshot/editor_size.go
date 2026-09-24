@@ -190,7 +190,7 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 		controller *woxwidget.TextEditingController
 	}{{"width", labels.Width, dialog.width}, {"height", labels.Height, dialog.height}} {
 		fields = append(fields, woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: field.label, Height: 20, MaxLines: 1, Style: TextStyle{Size: woxcomponent.SettingsLabelFontSize}, Color: theme.Text},
+			woxwidget.TextBlock{Value: field.label, Height: 20, MaxLines: 1, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text},
 			// Text fields need their actual width for text clipping and pointer-to-caret mapping.
 			woxwidget.LayoutBuilder{Build: func(size Size) woxwidget.Widget {
 				return woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
@@ -215,7 +215,7 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 		}},
 	})
 	children := []woxwidget.Widget{
-		woxwidget.TextBlock{Value: labels.Title, Height: 20, MaxLines: 1, Style: TextStyle{Size: woxcomponent.SettingsLabelFontSize, Weight: FontWeightSemibold}, Color: theme.Text},
+		woxwidget.TextBlock{Value: labels.Title, Height: 20, MaxLines: 1, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize), Weight: FontWeightSemibold}, Color: theme.Text},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisEnd, Children: []woxwidget.Widget{fields[0], swap, fields[1]}},
 		woxwidget.Semantics{AutomationID: "screenshot.size.lock-row", Role: woxui.AccessibilityRoleGroup, Label: labels.LockAspectRatio,
 			Child: woxwidget.Gesture{ID: "screenshot.size.lock-row", OnTap: func() { dialog.setRatioLocked(!dialog.lockRatio) }, Child: woxwidget.Flex{
@@ -223,14 +223,14 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 					woxwidget.Align{Width: 32, Height: 32, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{
 						ID: "screenshot.size.lock", Label: labels.LockAspectRatio, Value: dialog.lockRatio, OnChange: dialog.setRatioLocked, Theme: theme,
 					})},
-					woxwidget.Text{Value: labels.LockAspectRatio, Style: TextStyle{Size: woxcomponent.SettingsLabelFontSize}, Color: theme.Text},
+					woxwidget.Text{Value: labels.LockAspectRatio, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text},
 				},
 			}}},
 	}
 	if dialog.invalid {
 		errorText := fmt.Sprintf(labels.InvalidSize, dialog.maxWidth, dialog.maxHeight)
 		children = append(children, woxwidget.Semantics{AutomationID: "screenshot.size.error", Role: woxui.AccessibilityRoleText, Label: errorText, LiveRegion: woxui.AccessibilityLiveRegionPolite,
-			Child: woxwidget.TextBlock{Value: errorText, Height: 36, LineHeight: 18, MaxLines: 2, Style: TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: theme.Error}})
+			Child: woxwidget.TextBlock{Value: errorText, Height: 36, LineHeight: theme.Scaled(18), MaxLines: 2, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: theme.Error}})
 	}
 	children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisEnd, Gap: 8, Children: []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "screenshot.size.cancel", Label: labels.Cancel, Theme: theme, OnTap: func() { dialog.editor.closeSizeDialog(true) }}),

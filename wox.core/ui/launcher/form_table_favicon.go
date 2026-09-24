@@ -130,7 +130,7 @@ func (a *App) buildFormTableFavicon(snapshot *formTableFaviconState, theme woxco
 		OverlayWidth: width, OverlayHeight: height, Padding: woxwidget.Insets{Left: 20, Right: 20, Top: 20, Bottom: 20},
 		InitialFocus: "form-table-favicon-url", OnEscape: a.closeFormTableFavicon, Theme: theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize}, Color: theme.Text},
+			woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text},
 			woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 				ID: "form-table-favicon-url", Label: "URL", Hint: "https://example.com", Width: contentWidth,
 				Value: snapshot.url, Disabled: snapshot.loading, Window: a.formTableNativeWindow(), Theme: theme,
@@ -148,7 +148,7 @@ func (a *App) buildFormTableFavicon(snapshot *formTableFaviconState, theme woxco
 					}
 				},
 			}),
-			woxwidget.TextBlock{Value: status, Width: contentWidth, Height: 32, MaxLines: 2, LineHeight: 16, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: color},
+			woxwidget.TextBlock{Value: status, Width: contentWidth, Height: 32, MaxLines: 2, LineHeight: theme.Scaled(16), Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: color},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisEnd, Gap: 8, Children: []woxwidget.Widget{
 				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-favicon-cancel", Label: a.translate("i18n:ui_cancel"), OnTap: a.closeFormTableFavicon, Theme: theme}),
 				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-favicon-confirm", Label: confirm, Disabled: snapshot.loading, Variant: woxcomponent.ButtonPrimary, OnTap: a.fetchFormTableFavicon, Theme: theme}),

@@ -1022,7 +1022,7 @@
   "ui_app_width": "Largura da janela",
   "ui_app_width_tips": "Ajuste a largura da janela do Wox",
   "ui_interface_size": "Tamanho da interface",
-  "ui_interface_size_tips": "Ajuste o tamanho do texto e dos controles do launcher",
+  "ui_interface_size_tips": "Ajuste o tamanho do texto e dos controles",
   "ui_interface_size_compact": "Compacto",
   "ui_interface_size_normal": "Normal",
   "ui_interface_size_comfortable": "Confortável",

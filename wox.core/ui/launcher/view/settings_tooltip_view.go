@@ -71,7 +71,7 @@ func SettingsInlineTooltipOverlay(props SettingsInlineTooltipProps) (woxwidget.W
 			Height:     float32(lineCount) * settingsInlineTooltipLineHeight,
 			MaxLines:   lineCount,
 			LineHeight: settingsInlineTooltipLineHeight,
-			Style:      woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold},
+			Style:      woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold},
 			Color:      textColor,
 		},
 	}

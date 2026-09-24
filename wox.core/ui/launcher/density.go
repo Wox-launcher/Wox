@@ -21,13 +21,7 @@ type launcherDensityMetrics struct {
 
 // launcherDensityMetricsFor keeps native launcher geometry aligned with Flutter's density buckets.
 func launcherDensityMetricsFor(value string) launcherDensityMetrics {
-	scale := float32(1)
-	switch setting.NormalizeUiDensity(value) {
-	case setting.UiDensityCompact:
-		scale = 0.9
-	case setting.UiDensityComfortable:
-		scale = 1.1
-	}
+	scale := setting.UiDensityScale(setting.NormalizeUiDensity(value))
 	metrics := launcherDensityMetrics{scale: scale}
 	metrics.queryBoxHeight = metrics.scaled(55)
 	metrics.resultRowBaseHeight = metrics.scaled(50)

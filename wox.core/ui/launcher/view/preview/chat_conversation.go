@@ -46,7 +46,7 @@ func prepareChatConversation(props ChatConversationProps) ChatPreviewProps {
 	}
 	width = max(float32(0), width)
 	p.Input.Width = width
-	p.Input.Height = ChatComposerHeightForAttachments(p.Input.Attachments, ChatComposerVisibleLines(p.Input.Editing.Text, width, p.Input.Window, p.Input.RichRuns))
+	p.Input.Height = chatComposerHeightForAttachments(p.Input.Attachments, chatComposerVisibleLines(p.Input.Editing.Text, width, p.Input.Window, p.Input.RichRuns, p.Input.DensityScale), p.Input.DensityScale)
 	height := max(float32(0), p.Height-14-p.Input.Height)
 	if p.Header != nil {
 		height -= p.Header.Height
@@ -69,11 +69,16 @@ func prepareChatConversation(props ChatConversationProps) ChatPreviewProps {
 		p.Messages.ContentHeight, p.Messages.ExtentRevision = ChatMessagesScrollMetrics(p.Messages.Messages, height-14)
 		style, lineHeight := p.Messages.EmptyTextStyle, p.Messages.EmptyLineHeight
 		if style.Size <= 0 {
-			style = woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}
+			style = woxui.TextStyle{Size: ChatScaledSize(p.Messages.DensityScale, 28), Weight: woxui.FontWeightSemibold}
+		} else {
+			style.Size = ChatScaledSize(p.Messages.DensityScale, style.Size)
 		}
 		if lineHeight <= 0 {
-			lineHeight = 36
+			lineHeight = ChatScaledSize(p.Messages.DensityScale, 36)
+		} else {
+			lineHeight = ChatScaledSize(p.Messages.DensityScale, lineHeight)
 		}
+		p.Messages.EmptyTextStyle, p.Messages.EmptyLineHeight = style, lineHeight
 		p.Messages.EmptyTextWidth = max(float32(0), width-24)
 		layout := woxwidget.LayoutTextBlock(p.Input.Window, p.Messages.EmptyMessage, style, p.Messages.EmptyTextWidth, 0, lineHeight)
 		p.Messages.EmptyTextHeight, p.Messages.EmptyTextLayout = layout.Size.Height, &layout
@@ -187,17 +192,19 @@ func MeasureChatMessage(props ChatMessageProps, window *woxui.Window, width floa
 	if props.TextTrailing != nil {
 		bodyWidth = max(float32(0), bodyWidth-38)
 	}
+	bodyStyle := woxui.TextStyle{Size: ChatMessageFontSize(props.DensityScale)}
+	bodyLine := ChatMessageLineHeight(props.DensityScale)
 	if props.Markdown == nil {
 		if len(props.RichRuns) > 0 {
-			size := woxcomponent.TextFieldVisualContentSize(props.Text, window, woxui.TextStyle{Size: chatMessageFontSize}, bodyWidth, chatMessageLineHeight, props.RichRuns)
+			size := woxcomponent.TextFieldVisualContentSize(props.Text, window, bodyStyle, bodyWidth, bodyLine, props.RichRuns)
 			// WoxTextField treats zero padding as the default 12-unit inset; Bottom: 1
 			// matches markdown selectable text and must be included in the measured height.
 			props.TextLayout.Size = woxui.Size{Width: size.Width, Height: size.Height + 1}
 		} else {
-			props.TextLayout = layout("chat-text-"+props.Key, props.Text, woxui.TextStyle{Size: chatMessageFontSize}, bodyWidth, chatMessageLineHeight)
+			props.TextLayout = layout("chat-text-"+props.Key, props.Text, bodyStyle, bodyWidth, bodyLine)
 		}
 	}
-	props.ReasoningLayout = layout("chat-reasoning-"+props.Key, props.Reasoning, woxui.TextStyle{Size: 11}, textWidth, 16)
+	props.ReasoningLayout = layout("chat-reasoning-"+props.Key, props.Reasoning, woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, 11)}, textWidth, ChatScaledSize(props.DensityScale, 16))
 	props.ContentWidth = textWidth
 	if props.Role == "user" {
 		props.ContentWidth = 0
@@ -205,13 +212,13 @@ func MeasureChatMessage(props ChatMessageProps, window *woxui.Window, width floa
 			props.ContentWidth = props.TextLayout.Size.Width
 		} else {
 			for _, line := range props.TextLayout.Lines {
-				if metrics, err := window.MeasureText(line, woxui.TextStyle{Size: chatMessageFontSize}); err == nil {
+				if metrics, err := window.MeasureText(line, bodyStyle); err == nil {
 					props.ContentWidth = max(props.ContentWidth, metrics.Size.Width)
 				}
 			}
 		}
 		if props.Skills != "" {
-			if metrics, err := window.MeasureText(props.Skills, woxui.TextStyle{Size: 10}); err == nil {
+			if metrics, err := window.MeasureText(props.Skills, woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, 10)}); err == nil {
 				props.ContentWidth = max(props.ContentWidth, metrics.Size.Width)
 			}
 		}

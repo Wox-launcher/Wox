@@ -43,7 +43,7 @@ func settingsChromeLabelHasCase(label string) bool {
 func WoxSectionHeader(props SectionHeaderProps) woxwidget.Widget {
 	label, size := SettingsChromeLabel(props.Label)
 	title := woxwidget.Align{Height: 42, Vertical: 0.5, Child: woxwidget.Text{
-		Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
+		Value: label, Style: woxui.TextStyle{Size: props.Theme.Scaled(size), Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
 	}}
 	children := []woxwidget.Widget{woxwidget.Expanded{Child: title}}
 	if props.Action != nil {

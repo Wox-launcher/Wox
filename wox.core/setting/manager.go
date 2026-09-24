@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"wox/common"
 	"wox/database"
@@ -15,7 +16,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var managerInstance *Manager
+var managerInstance atomic.Pointer[Manager]
 var managerOnce sync.Once
 var logger *util.Log
 
@@ -36,11 +37,27 @@ func GetSettingManager() *Manager {
 		}
 
 		store := NewWoxSettingStore(db)
-		managerInstance = &Manager{}
-		managerInstance.woxSetting = NewWoxSetting(store)
-		managerInstance.mruManager = NewMRUManager(db)
+		manager := &Manager{}
+		manager.woxSetting = NewWoxSetting(store)
+		manager.mruManager = NewMRUManager(db)
+		managerInstance.Store(manager)
 	})
-	return managerInstance
+	return managerInstance.Load()
+}
+
+// PeekUiDensity reads the live interface size without initializing settings.
+// Overlays can appear in tests and before the database exists; those callers keep normal density.
+func PeekUiDensity() UiDensity {
+	manager := managerInstance.Load()
+	if manager == nil || manager.woxSetting == nil || manager.woxSetting.UiDensity == nil {
+		return UiDensityNormal
+	}
+	return NormalizeUiDensity(string(manager.woxSetting.UiDensity.Get()))
+}
+
+// CurrentUiDensityScale is the multiplier currently applied to launcher, chat, and overlay text.
+func CurrentUiDensityScale() float32 {
+	return UiDensityScale(PeekUiDensity())
 }
 
 func (m *Manager) Init(ctx context.Context) error {

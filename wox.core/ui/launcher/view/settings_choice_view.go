@@ -332,7 +332,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 				}
 			}, Child: woxwidget.Container{Width: 28, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 6}, Child: woxwidget.Align{
 				Width: 22, Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.Text{
-					Value: "ⓘ", Style: woxui.TextStyle{Size: 14}, Color: foreground,
+					Value: "ⓘ", Style: woxui.TextStyle{Size: props.Theme.Scaled(14)}, Color: foreground,
 				},
 			}}}
 		}
@@ -350,12 +350,12 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			)
 		}
 		rowChildren = append(rowChildren, woxwidget.Expanded{Child: woxwidget.Align{Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.TextBlock{
-			Value: choice.Label, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: foreground,
+			Value: choice.Label, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: foreground,
 		}}})
 		if choice.Trailing != "" {
 			rowChildren = append(rowChildren,
 				woxwidget.Container{Width: 12, Height: settingsChoiceRowHeight},
-				woxwidget.Text{Value: choice.Trailing, Style: woxui.TextStyle{Size: 12}, Color: foreground},
+				woxwidget.Text{Value: choice.Trailing, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: foreground},
 			)
 		}
 		rowChildren = append(rowChildren, tooltip)
@@ -451,7 +451,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 func settingsChoiceGroupHeader(width float32, choice SettingsChoice, index int, props SettingsChoiceProps) woxwidget.Widget {
 	key := woxwidget.Key(fmt.Sprintf("setting-choice-group-%d", index))
 	children := []woxwidget.Widget{woxwidget.Text{
-		Value: strings.ToUpper(choice.Label), Style: woxui.TextStyle{Size: woxcomponent.SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
+		Value: strings.ToUpper(choice.Label), Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSectionTitleFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
 	}}
 	if choice.GroupTooltip != "" && props.InfoIcon != nil && props.OnTooltip != nil {
 		children = append(children, woxwidget.Semantics{

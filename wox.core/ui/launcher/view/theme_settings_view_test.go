@@ -271,7 +271,7 @@ func TestThemeActionsShareControlHeight(t *testing.T) {
 }
 
 func TestThemeCatalogRowsShowOnlyCenteredTitle(t *testing.T) {
-	row := themeCatalogRowText(200, "Result", woxui.Color{A: 255}).(woxwidget.Clip)
+	row := themeCatalogRowText(200, "Result", woxui.Color{A: 255}, woxcomponent.ControlTheme{}).(woxwidget.Clip)
 	centered := row.Child.(woxwidget.Align)
 	if centered.Height != 42 || centered.Vertical != 0.5 || centered.Child.(woxwidget.Text).Value != "Result" {
 		t.Fatalf("selected preview text = %#v", centered)

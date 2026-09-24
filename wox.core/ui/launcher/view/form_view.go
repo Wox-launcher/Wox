@@ -94,9 +94,9 @@ func FormStatsField(props FormStatsFieldProps) woxwidget.Widget {
 			Child: woxwidget.Flex{
 				Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter,
 				Children: []woxwidget.Widget{
-					woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.TextSecondary},
+					woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: props.Theme.TextSecondary},
 					woxwidget.Expanded{Child: woxwidget.Painter{}},
-					woxwidget.Text{Value: row.Value, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.Text},
+					woxwidget.Text{Value: row.Value, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsControlFontSize)}, Color: props.Theme.Text},
 				},
 			},
 		})
@@ -105,7 +105,7 @@ func FormStatsField(props FormStatsFieldProps) woxwidget.Widget {
 		Width: innerWidth, Radius: formStatsCardRadius, Color: props.Theme.InputBackground,
 		BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(formStatsCardPadding),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formStatsTitleGap, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsLabelFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+			woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsLabelFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formStatsRowGap, Children: rows},
 		}},
 	}
@@ -149,12 +149,12 @@ type FormServiceFieldProps struct {
 // FormServiceField builds the same label/control/help layout used by switch rows.
 func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 	row := []woxwidget.Widget{
-		woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+		woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsControlFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 	}
 	if tag := formServiceVersionLabel(props.Detail); tag != "" {
 		row = append(row, woxcomponent.WoxTag(tag, props.Theme.TextSecondary))
 	} else if detail := strings.TrimSpace(props.Detail); detail != "" {
-		row = append(row, woxwidget.Text{Value: detail, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.TextSecondary})
+		row = append(row, woxwidget.Text{Value: detail, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: props.Theme.TextSecondary})
 	}
 	row = append(row, woxwidget.Expanded{Child: woxwidget.Painter{}})
 	for _, action := range props.Actions {
@@ -167,7 +167,7 @@ func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 		control = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			control,
 			woxwidget.Semantics{Role: woxui.AccessibilityRoleText, Label: props.Error, LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: woxwidget.Text{
-				Value: props.Error, Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: props.Theme.Error,
+				Value: props.Error, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: props.Theme.Error,
 			}},
 		}}
 	}
@@ -236,11 +236,11 @@ func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 			}),
 		}
 	}
-	style := woxui.TextStyle{Size: 12}
+	style := woxui.TextStyle{Size: props.Theme.Scaled(12)}
 	color := props.Theme.TextSecondary
 	padding := woxwidget.Insets{Top: 8}
 	if props.Kind == "unsupported" {
-		style = woxui.TextStyle{Size: 11}
+		style = woxui.TextStyle{Size: props.Theme.Scaled(11)}
 		padding.Top = 10
 	}
 	height := props.Height
@@ -294,8 +294,8 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 	value := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
 		Width: fieldWidth, Height: 42, Radius: 8, Color: formFieldBackground(props.Focused, props.Theme), Padding: woxwidget.Insets{Left: 12, Top: 7, Right: 12},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
-			woxwidget.Text{Value: props.Detail, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.TextSecondary},
+			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+			woxwidget.Text{Value: props.Detail, Style: woxui.TextStyle{Size: props.Theme.Scaled(9)}, Color: props.Theme.TextSecondary},
 		}},
 	}}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
@@ -402,18 +402,18 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			// Flutter positions the hint from its actual render box. Clip Go's wider overflow area before the recorder so fallback glyphs cannot outpaint measured text bounds.
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: hintLeft, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
 				Width: hintWidth, Height: 22, Child: woxwidget.Align{Width: hintWidth, Height: 22, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
-					Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
+					Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor,
 				}},
 			}}})
 		} else if placement == HotkeyStatusLeft {
 			hintWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: 0, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
-				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor},
+				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor},
 			}}})
 		} else {
 			statusWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + statusGap, Child: woxwidget.Align{Width: statusWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
+				Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor,
 			}}})
 		}
 	}
@@ -431,7 +431,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			control,
 			woxwidget.TextBlock{
 				Value: props.Status, Width: controlWidth, LineHeight: 18, MaxLines: 3,
-				Style: woxui.TextStyle{Size: 12}, Color: hotkeyStatusColor(props),
+				Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: hotkeyStatusColor(props),
 			},
 		}}
 	}
@@ -678,7 +678,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 	}
 	suffixWidth := float32(0)
 	if props.Suffix != "" {
-		suffixWidth = formSuffixWidth(props.Window, props.Suffix)
+		suffixWidth = formSuffixWidth(props.Window, props.Suffix, props.Theme)
 		inputWidth = max(float32(60), inputWidth-suffixWidth-8)
 	}
 	fieldHeight := woxcomponent.SettingsControlHeight
@@ -705,7 +705,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 		valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 			input,
 			woxwidget.Align{Width: suffixWidth, Height: fieldHeight, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Suffix, Style: woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}, Color: props.Theme.Text,
+				Value: props.Suffix, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsControlFontSize)}, Color: props.Theme.Text,
 			}},
 		}}
 	}
@@ -727,8 +727,8 @@ func formBrowseButtonWidth(label string) float32 {
 }
 
 // formSuffixWidth sizes a unit label so translated suffixes such as "items" stay visible.
-func formSuffixWidth(window *woxui.Window, suffix string) float32 {
-	style := woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}
+func formSuffixWidth(window *woxui.Window, suffix string, theme woxcomponent.ControlTheme) float32 {
+	style := woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsControlFontSize)}
 	if window != nil {
 		if metrics, err := window.MeasureText(suffix, style); err == nil && metrics.Size.Width > 0 {
 			return metrics.Size.Width
@@ -739,7 +739,7 @@ func formSuffixWidth(window *woxui.Window, suffix string) float32 {
 		if r <= 0x7F {
 			width += 8
 		} else {
-			width += woxcomponent.SettingsControlFontSize
+			width += theme.Scaled(woxcomponent.SettingsControlFontSize)
 		}
 	}
 	return max(float32(1), width)
@@ -752,7 +752,7 @@ func formFieldControlWithError(id, message string, control woxwidget.Widget, the
 	}
 	errorText := woxwidget.TextBlock{
 		Value: message, LineHeight: 16,
-		Style: woxui.TextStyle{Size: woxcomponent.SettingsHelpFontSize}, Color: theme.Error,
+		Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: theme.Error,
 	}
 	if id != "" {
 		errorTextWidget := woxwidget.Semantics{
@@ -772,15 +772,15 @@ func formFieldLayout(id, label, description string, width, height, labelWidth fl
 	rightChildren := []woxwidget.Widget{control}
 	if description != "" {
 		var descriptionWidget woxwidget.Widget = woxwidget.TextBlock{
-			Value: description, LineHeight: 18,
-			Style: woxui.TextStyle{Size: 11}, Color: theme.TextSecondary,
+			Value: description, LineHeight: theme.Scaled(18),
+			Style: woxui.TextStyle{Size: theme.Scaled(11)}, Color: theme.TextSecondary,
 		}
 		if onOpenLink != nil {
 			markdownTheme := theme
 			markdownTheme.BodyText = theme.TextSecondary
 			descriptionWidget = woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
 				ID: id + "-description", Document: woxcomponent.ParseMarkdown(description), Width: formFieldControlWidth(width, labelWidth),
-				FontSize: 11, BlockGap: 4, ExcludeLinkFocus: true, Theme: markdownTheme, Window: window, OnOpenLink: onOpenLink,
+				FontSize: theme.Scaled(11), BlockGap: 4, ExcludeLinkFocus: true, Theme: markdownTheme, Window: window, OnOpenLink: onOpenLink,
 			})
 		}
 		rightChildren = append(rightChildren, descriptionWidget)
@@ -804,7 +804,7 @@ func formFieldControlWidth(width, labelWidth float32) float32 {
 
 func formFieldLabel(label string, width, height, top float32, theme woxcomponent.ControlTheme, weight woxui.FontWeight) woxwidget.Widget {
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: top}, Child: woxwidget.Text{
-		Value: label, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: theme.Text,
+		Value: label, Style: woxui.TextStyle{Size: theme.Scaled(13), Weight: weight}, Color: theme.Text,
 	}}
 }
 

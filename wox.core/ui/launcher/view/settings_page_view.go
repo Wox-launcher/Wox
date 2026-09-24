@@ -58,7 +58,7 @@ func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 // SettingsMessage builds a neutral page-level loading or error message.
 func SettingsMessage(value string, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 24}, Child: woxwidget.TextBlock{
-		Value: value, Width: width, Height: 80, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: theme.TextSecondary,
+		Value: value, Width: width, Height: 80, Style: woxui.TextStyle{Size: theme.Scaled(13)}, LineHeight: 19, Color: theme.TextSecondary,
 	}}
 }
 

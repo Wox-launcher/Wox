@@ -30,26 +30,27 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 	}
 
 	contentWidth := float32(80)
+	labelSize := props.Theme.Scaled(SettingsControlFontSize)
 	var content woxwidget.Widget = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
-		Value: props.Placeholder, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Theme.Text,
+		Value: props.Placeholder, Style: woxui.TextStyle{Size: labelSize}, Color: props.Theme.Text,
 	}}
 	if props.Hold && len(props.Labels) > 0 {
 		label := strings.TrimSpace(props.HoldPrefix + " " + strings.Join(props.Labels, " + "))
 		contentWidth = float32(len([]rune(label)))*8 + 2
 		if props.Window != nil {
-			if metrics, err := props.Window.MeasureText(label, woxui.TextStyle{Size: SettingsControlFontSize, Weight: woxui.FontWeightSemibold}); err == nil {
+			if metrics, err := props.Window.MeasureText(label, woxui.TextStyle{Size: labelSize, Weight: woxui.FontWeightSemibold}); err == nil {
 				contentWidth = metrics.Size.Width
 			}
 		}
 		content = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
-			Value: label, Style: woxui.TextStyle{Size: SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ControlText,
+			Value: label, Style: woxui.TextStyle{Size: labelSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ControlText,
 		}}
 	} else if len(props.Labels) > 0 {
 		content, contentWidth = WoxHotkey(HotkeyProps{
 			// Flutter's recorder uses the app's default Material canvas rather than the launcher theme,
 			// so key legends stay light and keyboard-like on both light and dark Wox surfaces.
 			Labels: props.Labels, Foreground: woxui.Color{R: 33, G: 33, B: 33, A: 255}, Background: woxui.Color{R: 250, G: 250, B: 250, A: 255},
-			Border: woxui.Color{R: 0, G: 0, B: 0, A: 31}, Compact: true, Window: props.Window,
+			Border: woxui.Color{R: 0, G: 0, B: 0, A: 31}, Compact: true, FontSize: labelSize, Window: props.Window,
 		})
 	}
 

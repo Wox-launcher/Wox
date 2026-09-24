@@ -96,7 +96,8 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 		}
 		return false
 	}
-	input := chat.ChatInputProps{Key: "theme-editor-ai", Disabled: state.busy, Editing: r.TextEditingState{Text: state.prompt}, Hint: a.translate("i18n:ui_theme_editor_ai_hint"), Window: window, Model: modelName, SendLabel: a.translate("i18n:ui_ai_chat_send"), StopLabel: a.translate("i18n:ui_ai_chat_stop"), OnStop: a.cancelThemeEditorAI, Sending: state.busy, Importing: !state.busy && (strings.TrimSpace(state.prompt) == "" || len(state.models) == 0 || snapshot.saving), Theme: theme, OnChanged: changed, OnModels: choose, OnSend: a.sendThemeEditorAI, OnKey: onKey}
+	scale := a.chatDensityScale()
+	input := chat.ChatInputProps{Key: "theme-editor-ai", DensityScale: scale, Disabled: state.busy, Editing: r.TextEditingState{Text: state.prompt}, Hint: a.translate("i18n:ui_theme_editor_ai_hint"), Window: window, Model: modelName, SendLabel: a.translate("i18n:ui_ai_chat_send"), StopLabel: a.translate("i18n:ui_ai_chat_stop"), OnStop: a.cancelThemeEditorAI, Sending: state.busy, Importing: !state.busy && (strings.TrimSpace(state.prompt) == "" || len(state.models) == 0 || snapshot.saving), Theme: theme, OnChanged: changed, OnModels: choose, OnSend: a.sendThemeEditorAI, OnKey: onKey}
 	latestApplied := ""
 	conversations := make([]chatConversation, 0, len(state.history))
 	for _, entry := range state.history {
@@ -148,9 +149,9 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 		messages = append(messages, a.prepareChatMessage(chat.ChatMessageProps{Key: key, Role: entry.Role, Text: entry.Text, TextTrailing: undo, Reasoning: entry.Reasoning, Theme: theme}, window, width, imageScale))
 	}
 	if state.status != "" {
-		messages = append(messages, chat.ChatMessageProps{Key: "theme-ai-status", Role: "assistant", Text: state.status, Theme: theme})
+		messages = append(messages, chat.ChatMessageProps{Key: "theme-ai-status", DensityScale: scale, Role: "assistant", Text: state.status, Theme: theme})
 	}
-	messageProps := chat.ChatMessagesProps{EmptyTextStyle: r.TextStyle{Size: 14}, EmptyLineHeight: 22, EmptyMessage: a.translate("i18n:ui_theme_editor_ai_empty"), Key: "theme-editor-ai", Messages: messages, Scroll: state.messageScroll, Theme: theme, OnScroll: func(delta, limit float32) {
+	messageProps := chat.ChatMessagesProps{DensityScale: scale, EmptyTextStyle: r.TextStyle{Size: 14}, EmptyLineHeight: 22, EmptyMessage: a.translate("i18n:ui_theme_editor_ai_empty"), Key: "theme-editor-ai", Messages: messages, Scroll: state.messageScroll, Theme: theme, OnScroll: func(delta, limit float32) {
 		if current := a.themeSettings.ThemeEditor(); current != nil {
 			current.ai.messageScroll.Scroll(delta, limit)
 			a.invalidateThemeEditorWindow()
@@ -178,7 +179,7 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 				}
 			}})
 		}
-		catalog = &chat.ChatCatalogProps{Key: "theme-editor-ai-models", Label: a.translate("i18n:ui_ai_chat_select_model_title"), Items: items, EmptyMessage: a.translate("i18n:ui_theme_editor_ai_no_models"), ContentHeight: float32(len(items)) * 38, Scroll: state.modelScroll, Theme: theme, OnScroll: func(delta float32) {
+		catalog = &chat.ChatCatalogProps{Key: "theme-editor-ai-models", DensityScale: scale, Label: a.translate("i18n:ui_ai_chat_select_model_title"), Items: items, EmptyMessage: a.translate("i18n:ui_theme_editor_ai_no_models"), ContentHeight: float32(len(items)) * 38, Scroll: state.modelScroll, Theme: theme, OnScroll: func(delta float32) {
 			if current := a.themeSettings.ThemeEditor(); current != nil {
 				current.ai.modelScroll = max(float32(0), current.ai.modelScroll+delta)
 				a.invalidateThemeEditorWindow()

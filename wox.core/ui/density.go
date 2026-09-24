@@ -18,19 +18,9 @@ func currentUiDensity(ctx context.Context) setting.UiDensity {
 }
 
 func scaledDensityHeight(baseHeight int, density setting.UiDensity) int {
-	scale := 1.0
-	// Keep these scale values in sync with the Go UI launcher metrics. Core uses
-	// them for backend window estimates, while UI uses them for rendering; if
-	// only one side changes, compact/comfortable windows can be mispositioned or
-	// clipped.
-	switch setting.NormalizeUiDensity(string(density)) {
-	case setting.UiDensityCompact:
-		scale = 0.9
-	case setting.UiDensityComfortable:
-		scale = 1.1
-	}
-
-	return int(math.Round(float64(baseHeight) * scale))
+	// Core window estimates and UI rendering share setting.UiDensityScale. If
+	// only one side changes, compact/comfortable windows can be mispositioned or clipped.
+	return int(math.Round(float64(baseHeight) * setting.UiDensityMultiplier(density)))
 }
 
 // DensityQueryBoxBaseHeight returns the scaled query-box content height used by

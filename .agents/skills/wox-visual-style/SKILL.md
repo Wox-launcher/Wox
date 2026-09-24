@@ -22,6 +22,7 @@ Classify the requested surface before applying size rules:
 - Apply the ordinary control system to Settings, dialogs, forms, tables, catalogs, onboarding management controls, and other application-management pages.
 - Keep the Launcher query, its accessories, results, toolbar, refinements, Glance, and Attention under launcher density and theme geometry.
 - Keep the complete Action Panel, including its filter and rows, under its own geometry contract.
+- Scale every interface element's text, line box, and the control that holds that text with `UiDensity`. Keep normal-density bases in `typography.go` and multiply them at draw time with `ControlTheme.Scaled` or the launcher density scale. Do not bake the current density into those bases, and do not multiply a size that was already scaled.
 - Keep native window controls and platform-owned dialogs under the platform contract.
 
 Do not use a special-surface exception to justify page-local styling elsewhere.

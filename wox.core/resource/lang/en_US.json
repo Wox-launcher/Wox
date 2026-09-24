@@ -1062,7 +1062,7 @@
   "ui_app_width": "Window width",
   "ui_app_width_tips": "Adjust the width of the Wox window",
   "ui_interface_size": "Interface size",
-  "ui_interface_size_tips": "Adjust launcher text and control size",
+  "ui_interface_size_tips": "Adjust text and control size",
   "ui_interface_size_compact": "Compact",
   "ui_interface_size_normal": "Normal",
   "ui_interface_size_comfortable": "Comfortable",
