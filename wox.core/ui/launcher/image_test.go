@@ -319,21 +319,21 @@ func TestImageCacheHiddenTrimUsesCountAndByteBudget(t *testing.T) {
 	}
 }
 
-func TestImageCacheLongHiddenReleaseDropsKeptImages(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageRequested: map[string]string{}}
-	for index := 0; index < 8; index++ {
-		key := fmt.Sprintf("icon-%d", index)
+func TestHiddenLauncherKeepsImagesUsedBySettings(t *testing.T) {
+	app := &App{settingsOpen: true, images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	for index := 0; index < hiddenImageCacheKeepCount+1; index++ {
+		key := fmt.Sprintf("settings-icon-%d", index)
 		app.imageLastUsed[key] = uint64(index + 1)
-		app.imageRequested[key] = key
 		app.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
 	}
 	app.trimIdleImageCache()
-	if len(app.images) != 8 {
-		t.Fatalf("short hide kept %d images, want 8", len(app.images))
+	if got := len(app.images); got != hiddenImageCacheKeepCount+1 {
+		t.Fatalf("settings cache has %d images, want %d", got, hiddenImageCacheKeepCount+1)
 	}
-	app.releaseIdleImageCache()
-	if len(app.images) != 0 || app.imageCacheByteSizeLocked() != 0 || len(app.imageRequested) != 0 {
-		t.Fatalf("long hide cache = %d images / %d bytes / %d requests, want empty", len(app.images), app.imageCacheByteSizeLocked(), len(app.imageRequested))
+	app.settingsOpen = false
+	app.trimIdleImageCache()
+	if got := len(app.images); got != hiddenImageCacheKeepCount {
+		t.Fatalf("closed settings cache has %d images, want %d", got, hiddenImageCacheKeepCount)
 	}
 }
 

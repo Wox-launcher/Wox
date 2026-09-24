@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -732,20 +731,6 @@ func (a *App) hideWindow(notify bool) error {
 			log.Printf("trim hidden launcher image cache: %v", err)
 			return
 		}
-		// A quick reopen still has the trimmed cache. After the launcher stays
-		// hidden as long as the renderer trim, drop the remaining decoded icons.
-		// Continue mode keeps the result list and reloads each icon from its source.
-		time.Sleep(20 * time.Second)
-		if err := a.runOnUI("release hidden launcher image cache", func() {
-			if a.visible {
-				return
-			}
-			a.releaseIdleImageCache()
-		}); err != nil {
-			log.Printf("release hidden launcher image cache: %v", err)
-			return
-		}
-		debug.FreeOSMemory()
 	})
 	if notify {
 		return a.notifyHidden()

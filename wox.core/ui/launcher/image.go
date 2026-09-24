@@ -472,18 +472,12 @@ func (a *App) insertImageLocked(key string, image *woxui.Image) {
 // trimIdleImageCache evicts cold decoded images while the launcher stays hidden.
 // Must run on the UI thread like every other access to the image maps.
 func (a *App) trimIdleImageCache() {
+	if a.settingsOpen || a.onboardingOpen {
+		return
+	}
 	a.imageMu.Lock()
 	defer a.imageMu.Unlock()
 	a.evictImagesToBudget("", hiddenImageCacheKeepCount, hiddenImageCacheMaxBytes)
-	a.imagesRevision.Add(1)
-}
-
-// releaseIdleImageCache drops every decoded icon after a long hide.
-// Must run on the UI thread. Result rows keep their icon sources and decode again on the next show.
-func (a *App) releaseIdleImageCache() {
-	a.imageMu.Lock()
-	defer a.imageMu.Unlock()
-	a.clearImageCacheLocked("")
 	a.imagesRevision.Add(1)
 }
 
