@@ -38,6 +38,15 @@ class PluginSettingDefinitionType(str, Enum):
     single-line (default) or multi-line input.
     """
 
+    PASSWORD = "password"
+    """
+    Single-line password input field with masked display.
+
+    Shares the textbox value shape (Key, Label, DefaultValue, Tooltip,
+    MaxLines). Characters are displayed as bullets while typing and
+    copy is disabled. Suitable for API keys, tokens, and passwords.
+    """
+
     CHECKBOX = "checkbox"
     """
     Boolean toggle/checkbox.

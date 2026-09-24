@@ -117,7 +117,7 @@ Use this reference as the source of truth when authoring `SettingDefinitions` in
 
 | Property              | Type       | Description                                                                                                       |
 | --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Type`                | `string`   | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic` |
+| `Type`                | `string`   | Component type. Enum: `head`, `textbox`, `password`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic` |
 | `Value`               | `object`   | Configuration object specific to the type.                                                                        |
 | `DisabledInPlatforms` | `string[]` | Optional. Platforms where this setting is disabled. Uses SDK platform names such as `windows`, `darwin`, `linux`. |
 | `IsPlatformSpecific`  | `boolean`  | Optional. If `true`, Wox stores different values per platform. Normal plugin settings are eligible for cloud sync, so use this for values that should not be shared across Windows, macOS, and Linux. |

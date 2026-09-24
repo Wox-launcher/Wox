@@ -14,6 +14,7 @@ type PluginSettingDefinitionType string
 const (
 	PluginSettingDefinitionTypeHead          PluginSettingDefinitionType = "head"
 	PluginSettingDefinitionTypeTextBox       PluginSettingDefinitionType = "textbox"
+	PluginSettingDefinitionTypePassword      PluginSettingDefinitionType = "password"
 	PluginSettingDefinitionTypeDirPath       PluginSettingDefinitionType = "dirPath"
 	PluginSettingDefinitionTypeCheckBox      PluginSettingDefinitionType = "checkbox"
 	PluginSettingDefinitionTypeSelect        PluginSettingDefinitionType = "select"
@@ -98,6 +99,17 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		n.Value = &v
 	case "textbox":
 		n.Type = PluginSettingDefinitionTypeTextBox
+		var v PluginSettingValueTextBox
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "password":
+		// Password fields share the textbox value shape. The launcher UI
+		// renders them with masked, copy-protected input based on the
+		// "password" type (see MaskProtectedText in ui/runtime).
+		n.Type = PluginSettingDefinitionTypePassword
 		var v PluginSettingValueTextBox
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
