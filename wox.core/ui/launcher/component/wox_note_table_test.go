@@ -74,12 +74,12 @@ func TestEnsureNoteImageEditGapsInsertsCaretParagraphs(t *testing.T) {
 func TestNoteEditorImageSizeAppliesScaleAfterHeightFit(t *testing.T) {
 	image := &woxui.Image{Width: 800, Height: 1200}
 	meta := &common.NoteImage{Width: 800, Height: 1200}
-	fullW, fullH := noteEditorImageSize(image, meta, 380, 1)
+	fullW, fullH := noteEditorImageSize(image, meta, 380, 1, 0)
 	if fullH != NoteEditorImageMaxHeight {
 		t.Fatalf("full tall image = %.0fx%.0f, want height %v", fullW, fullH, NoteEditorImageMaxHeight)
 	}
 	small := &common.NoteImage{Width: 800, Height: 1200, Scale: 90}
-	smallW, smallH := noteEditorImageSize(image, small, 380, 1)
+	smallW, smallH := noteEditorImageSize(image, small, 380, 1, 0)
 	if smallW >= fullW || smallH >= fullH {
 		t.Fatalf("90%% tall image = %.0fx%.0f, want smaller than %.0fx%.0f", smallW, smallH, fullW, fullH)
 	}
@@ -90,11 +90,11 @@ func TestNoteEditorImageSizeAppliesScaleAfterHeightFit(t *testing.T) {
 
 func TestNoteEditorImageSizeScalesWidePictures(t *testing.T) {
 	image := &woxui.Image{Width: 1600, Height: 800}
-	fullW, fullH := noteEditorImageSize(image, &common.NoteImage{Scale: 0}, 320, 1)
+	fullW, fullH := noteEditorImageSize(image, &common.NoteImage{Scale: 0}, 320, 1, 0)
 	if fullW != 320 || fullH != 160 {
 		t.Fatalf("full wide image = %.0fx%.0f, want 320x160", fullW, fullH)
 	}
-	halfW, halfH := noteEditorImageSize(image, &common.NoteImage{Scale: 50}, 320, 1)
+	halfW, halfH := noteEditorImageSize(image, &common.NoteImage{Scale: 50}, 320, 1, 0)
 	if halfW != 160 || halfH != 80 {
 		t.Fatalf("50%% wide image = %.0fx%.0f, want 160x80", halfW, halfH)
 	}

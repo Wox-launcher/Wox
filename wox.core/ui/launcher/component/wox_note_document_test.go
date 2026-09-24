@@ -7,6 +7,17 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+func TestNoteEditorImageKeepsHeightAfterLeavingViewport(t *testing.T) {
+	for _, image := range []woxui.Image{{Width: 400, Height: 800}, {Width: 1000, Height: 500}} {
+		meta := &common.NoteImage{Scale: 40}
+		loadedWidth, loadedHeight := noteEditorImageSize(&image, meta, 500, 1, 0)
+		deferredWidth, deferredHeight := noteEditorImageSize(nil, meta, 500, 1, float32(image.Width)/float32(image.Height))
+		if loadedWidth != deferredWidth || loadedHeight != deferredHeight {
+			t.Fatalf("image %dx%d changes size after unloading: loaded %.1fx%.1f, deferred %.1fx%.1f", image.Width, image.Height, loadedWidth, loadedHeight, deferredWidth, deferredHeight)
+		}
+	}
+}
+
 func TestDocumentFromEditorKeepsRepeatedLinkLabel(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{{
 		Type: common.NoteBlockParagraph,

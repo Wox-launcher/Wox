@@ -438,7 +438,7 @@ func noteEditorImage(props NoteEditorProps, blockIndex int, block common.NoteBlo
 // noteEditorImageBlock is the toolbar plus picture for one visibility pass.
 func noteEditorImageBlock(props NoteEditorProps, blockIndex int, block common.NoteBlock, width float32, highlight, showActions, visible bool, knownAspect float32) (woxwidget.Widget, float32) {
 	picture, pictureHeight, image := noteEditorImagePicture(props, block, width, highlight, visible, knownAspect)
-	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom)
+	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom, knownAspect)
 	aspect := float32(0)
 	if image != nil && image.Width > 0 && image.Height > 0 {
 		aspect = float32(image.Width) / float32(image.Height)
@@ -500,11 +500,7 @@ func noteEditorImagePicture(props NoteEditorProps, block common.NoteBlock, width
 	if load && props.ResolveImage != nil && block.Image != nil {
 		image = props.ResolveImage(*block.Image)
 	}
-	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom)
-	if (image == nil || image.Width <= 0 || image.Height <= 0) && (block.Image == nil || block.Image.Width <= 0 || block.Image.Height <= 0) && knownAspect > 0 {
-		drawWidth = width
-		drawHeight = max(float32(1), width/knownAspect)
-	}
+	drawWidth, drawHeight := noteEditorImageSize(image, block.Image, width, props.Zoom, knownAspect)
 	var child woxwidget.Widget
 	if image == nil || image.Width <= 0 || image.Height <= 0 {
 		child = woxwidget.Container{Width: drawWidth, Height: drawHeight, Color: withAlpha(props.Theme.BodyText, 10)}
@@ -597,28 +593,39 @@ func noteEditorImageToolbar(props NoteEditorProps, block int, width float32, foc
 	}}
 }
 
-func noteEditorImageSize(image *woxui.Image, meta *common.NoteImage, availableWidth, zoom float32) (float32, float32) {
+// noteEditorImageSize keeps remote images at the same height after their bitmap leaves the viewport.
+func noteEditorImageSize(image *woxui.Image, meta *common.NoteImage, availableWidth, zoom, knownAspect float32) (float32, float32) {
 	srcWidth, srcHeight := 0, 0
 	if image != nil && image.Width > 0 && image.Height > 0 {
 		srcWidth, srcHeight = image.Width, image.Height
 	} else if meta != nil && meta.Width > 0 && meta.Height > 0 {
 		srcWidth, srcHeight = meta.Width, meta.Height
+	} else if knownAspect > 0 {
+		return noteEditorImageFit(availableWidth, 1/knownAspect, zoom, meta)
 	}
+	if srcWidth <= 0 || srcHeight <= 0 {
+		scale := float32(1)
+		if meta != nil {
+			scale = float32(notespluginScale(meta.Scale)) / 100
+		}
+		return max(availableWidth*scale, 80), noteEditorImagePlaceholderHeight
+	}
+	return noteEditorImageFit(availableWidth, float32(srcHeight)/float32(srcWidth), zoom, meta)
+}
+
+func noteEditorImageFit(availableWidth, heightPerWidth, zoom float32, meta *common.NoteImage) (float32, float32) {
 	scale := float32(1)
 	if meta != nil {
 		scale = float32(notespluginScale(meta.Scale)) / 100
-	}
-	if srcWidth <= 0 || srcHeight <= 0 {
-		return max(availableWidth*scale, 80), noteEditorImagePlaceholderHeight
 	}
 	maxHeight := NoteEditorImageMaxHeight * max(zoom, 1)
 	// Fit 100% into the editor box first, then apply the user's percent.
 	// Scaling width before the height cap made +/- a no-op for tall pictures.
 	fitWidth := availableWidth
-	fitHeight := float32(srcHeight) * (fitWidth / float32(srcWidth))
+	fitHeight := fitWidth * heightPerWidth
 	if fitHeight > maxHeight {
 		fitHeight = maxHeight
-		fitWidth = float32(srcWidth) * (fitHeight / float32(srcHeight))
+		fitWidth = fitHeight / heightPerWidth
 	}
 	return fitWidth * scale, fitHeight * scale
 }
