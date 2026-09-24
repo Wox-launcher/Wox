@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
@@ -14,7 +17,7 @@ function runGh(args) {
 }
 
 try {
-  const release = JSON.parse(runGh(["release", "view", "--repo", repository, "--json", "tagName,url,assets"]));
+  const release = JSON.parse(runGh(["release", "view", "--repo", repository, "--json", "tagName,url,assets,body"]));
   const version = release.tagName.replace(/^v/, "");
   const asset = release.assets.find(({ name }) => name === assetName);
   if (!/^\d+\.\d+\.\d+$/.test(version) || !asset) {
@@ -59,13 +62,37 @@ try {
 
   const token = runGh(["auth", "token"]);
   // Keep the GitHub token out of command-line arguments, where it may be logged.
-  const result = spawnSync(
-    "wingetcreate",
-    ["update", packageId, "--version", version, "--urls", asset.url, "--submit"],
-    { stdio: "inherit", env: { ...process.env, WINGET_CREATE_GITHUB_TOKEN: token } },
-  );
-  if (result.error) throw result.error;
-  process.exit(result.status ?? 1);
+  const env = { ...process.env, WINGET_CREATE_GITHUB_TOKEN: token };
+  const outputDir = mkdtempSync(join(tmpdir(), "wox-winget-update-"));
+  try {
+    const generated = spawnSync(
+      "wingetcreate",
+      ["update", packageId, "--version", version, "--urls", asset.url, "--out", outputDir],
+      { stdio: "inherit", env },
+    );
+    if (generated.error) throw generated.error;
+    if (generated.status !== 0) throw new Error(`wingetcreate update failed with exit code ${generated.status}`);
+
+    const manifestDir = join(outputDir, "manifests", "w", "Wox", "Wox", version);
+    const localePath = join(manifestDir, "Wox.Wox.locale.en-US.yaml");
+    const localeManifest = readFileSync(localePath, "utf8");
+    if (!localeManifest.includes("ReleaseNotesUrl:")) {
+      throw new Error("Generated locale manifest has no ReleaseNotesUrl field");
+    }
+    const notes = release.body.trim().replace(/\r\n/g, "\n");
+    const notesYaml = `ReleaseNotes: |-${notes ? `\n${notes.split("\n").map((line) => `  ${line}`).join("\n")}` : ""}\n`;
+    writeFileSync(localePath, localeManifest.replace("ReleaseNotesUrl:", `${notesYaml}ReleaseNotesUrl:`));
+
+    const submitted = spawnSync(
+      "wingetcreate",
+      ["submit", "--prtitle", `New version: ${packageId} version ${version}`, manifestDir],
+      { stdio: "inherit", env },
+    );
+    if (submitted.error) throw submitted.error;
+    process.exitCode = submitted.status ?? 1;
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true });
+  }
 } catch (error) {
   console.error(error.message);
   process.exit(1);
