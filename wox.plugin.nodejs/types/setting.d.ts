@@ -17,7 +17,7 @@ import { Platform } from "./index.js"
  * const settingType: PluginSettingDefinitionType = "textbox"
  * ```
  */
-export type PluginSettingDefinitionType = "head" | "textbox" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
+export type PluginSettingDefinitionType = "head" | "textbox" | "password" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
 
 /**
  * Visual styling properties for a setting element.
