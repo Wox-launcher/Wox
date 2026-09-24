@@ -27,3 +27,22 @@ func TestChatScrollState(t *testing.T) {
 		t.Fatal("new request did not resume follow")
 	}
 }
+
+func TestChatScrollStateShortOverflowStaysScrolledUp(t *testing.T) {
+	var state ChatScrollState
+	if state.Position(24.8) != 24.8 {
+		t.Fatal("short conversation must still follow the latest message")
+	}
+	state.Scroll(-40, 24.8)
+	if state.Position(24.8) != 0 {
+		t.Fatal("scrolling a short overflow snapped back to the bottom")
+	}
+	state.Scroll(-10, 24.8)
+	if state.Position(24.8) != 0 {
+		t.Fatal("further upward scrolling left the top")
+	}
+	state.Scroll(40, 24.8)
+	if state.Position(30) != 30 {
+		t.Fatal("returning to the bottom of a short overflow did not resume follow")
+	}
+}

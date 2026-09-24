@@ -1170,7 +1170,9 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 		crossAxisAlignment = woxwidget.CrossAxisEnd
 	}
 	card := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, CrossAxisAlignment: crossAxisAlignment, Children: cardChildren}
-	return woxwidget.Gesture{ID: "chat-message-hover-" + props.Key, OnHover: onHover, Child: woxwidget.Stack{Width: width, Height: cardHeight, Children: []woxwidget.StackChild{{Left: left, Child: card}}}}
+	// Text, tables, and the action row are nested gestures. Without covering them,
+	// moving across the answer drops hover in the gaps and the action row flickers.
+	return woxwidget.Gesture{ID: "chat-message-hover-" + props.Key, CoverHover: true, OnHover: onHover, Child: woxwidget.Stack{Width: width, Height: cardHeight, Children: []woxwidget.StackChild{{Left: left, Child: card}}}}
 }
 
 // chatToolActivity builds Flutter's grouped two-level tool disclosure.

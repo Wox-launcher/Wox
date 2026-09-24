@@ -87,6 +87,17 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 	}
 }
 
+func TestChatMessageHoverCoversWholeAnswer(t *testing.T) {
+	view := chatMessageContent(ChatMessageProps{
+		Key: "assistant", Role: "assistant", ShowMeta: true, Text: "hello",
+		TextLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Height: 19}},
+	}, 1000, false, func(bool) {}, nil).(woxwidget.Gesture)
+	stack, ok := view.Child.(woxwidget.Stack)
+	if !view.CoverHover || view.ID != "chat-message-hover-assistant" || !ok || stack.Width != 1000 || stack.Height <= 0 {
+		t.Fatalf("message hover = cover %v id %q size %.0fx%.0f, want the whole answer", view.CoverHover, view.ID, stack.Width, stack.Height)
+	}
+}
+
 func TestChatMessageActionsUseSharedIconButtonHover(t *testing.T) {
 	theme := woxcomponent.Theme{
 		ResultSubtitle: woxui.Color{R: 180, G: 180, B: 180, A: 200},
