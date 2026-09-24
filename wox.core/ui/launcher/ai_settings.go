@@ -227,7 +227,7 @@ func newAISettingsForm(data settingsData) formFieldsState {
 					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 100, Type: "select", Filterable: true, Validators: []formValidator{{Type: "not_empty"}}},
 					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Tooltip: "i18n:ui_ai_providers_alias_tooltip", Width: 120, Type: "text"},
 					{Key: "Host", Label: "i18n:ui_ai_providers_host", Tooltip: "i18n:ui_ai_providers_host_tooltip", Width: 160, Type: "text", VisibleWhen: api},
-					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "text", HideInTable: true, VisibleWhen: api},
+					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "password", HideInTable: true, VisibleWhen: api},
 					{Key: "Executable", Label: "i18n:ui_ai_cli_executable", Tooltip: "i18n:ui_ai_cli_executable_tooltip", Type: "text", HideInTable: true, VisibleWhen: installed},
 					{Key: "ReasoningEffort", Label: "i18n:ui_ai_cli_effort", Tooltip: "i18n:ui_ai_cli_effort_tooltip", Type: "select", SelectOptions: efforts, HideInTable: true, VisibleWhen: installed},
 				},

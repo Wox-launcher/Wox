@@ -202,7 +202,7 @@ on Wox releases before 2.4.0.
 ```typescript
 const settings: PluginSettingDefinitionItem[] = [
   {
-    Type: "textbox",
+    Type: "password",
     Value: {
       Key: "apiKey",
       Label: "API Key",

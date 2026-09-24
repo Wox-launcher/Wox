@@ -761,7 +761,7 @@ class PluginSettingDefinitionItem:
         # Create appropriate value object based on type
         value_data = data.get("Value", {})
         value: PluginSettingDefinitionValue
-        if setting_type == PluginSettingDefinitionType.TEXTBOX:
+        if setting_type in (PluginSettingDefinitionType.TEXTBOX, PluginSettingDefinitionType.PASSWORD):
             value = PluginSettingValueTextBox(
                 key=value_data.get("Key", ""),
                 label=value_data.get("Label", ""),

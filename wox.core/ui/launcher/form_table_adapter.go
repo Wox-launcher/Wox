@@ -58,6 +58,9 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 		}
 	}
 	value := formTableColumnValue(column, row)
+	if column.Type == "password" {
+		return woxui.MaskProtectedText(value)
+	}
 	if column.Type == "aiMCPServerTools" {
 		switch tools := row[column.Key].(type) {
 		case []any:

@@ -26,8 +26,11 @@ func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 	if providers.Columns[0].Type != "aiModelStatus" || !providers.Columns[0].HideInUpdate {
 		t.Fatalf("provider status column = type %q, hide in update %v", providers.Columns[0].Type, providers.Columns[0].HideInUpdate)
 	}
-	if providers.Columns[4].Key != "ApiKey" || !providers.Columns[4].HideInTable {
+	if providers.Columns[4].Key != "ApiKey" || providers.Columns[4].Type != "password" || !providers.Columns[4].HideInTable {
 		t.Fatalf("provider API key column should stay hidden in the table, got %+v", providers.Columns[4])
+	}
+	if shown := (&App{}).formTableDisplayValue(providers.Columns[4], map[string]any{"ApiKey": "secret"}); shown != "••••••" {
+		t.Fatalf("provider API key display = %q, want masked text", shown)
 	}
 	if providers.Columns[1].Key != "Name" || !providers.Columns[1].Filterable {
 		t.Fatalf("provider name column should be a filterable select, got %+v", providers.Columns[1])
@@ -84,8 +87,15 @@ func TestInstalledAIProviderFields(t *testing.T) {
 		state := &formTableEditorState{definition: definition, rowForm: &fields}
 		applyFormTableRowVisibleFieldsLocked(state)
 		assertFormFieldKeys(t, *state.rowForm, []string{"Name", "Alias", "Host", "ApiKey"})
+		if field := formFieldByKey(*state.rowForm, "ApiKey"); field.Type != "password" {
+			t.Fatalf("API key field type = %q, want password", field.Type)
+		}
 		if len(validateAISettingsTableRow(definition, state.rowForm)) == 0 {
 			t.Fatal("OpenAI must still require an API key")
+		}
+		state.rowForm.values["ApiKey"] = "secret"
+		if row := formTableRowFromFields(definition, state.rowForm, nil); row["ApiKey"] != "secret" {
+			t.Fatalf("API key was not saved: %+v", row)
 		}
 	}
 }

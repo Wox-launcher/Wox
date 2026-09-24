@@ -579,6 +579,9 @@ func formTableColumnDefinition(column formTableColumn, row map[string]any) (form
 	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable":
 		value.MaxLines = max(1, column.TextMaxLines)
 		return formDefinition{Type: "textbox", Value: value}, true
+	case "password":
+		value.MaxLines = 1
+		return formDefinition{Type: "password", Value: value}, true
 	case "dirPath":
 		value.MaxLines = 1
 		return formDefinition{Type: "dirPath", Value: value}, true
@@ -955,7 +958,7 @@ func formTableRowFromFields(definition formDefinition, fields *formFieldsState, 
 				}
 			}
 			row[column.Key] = items
-		case "text", "dirPath", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable", "select", "selectAIModel", "hotkey":
+		case "text", "password", "dirPath", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable", "select", "selectAIModel", "hotkey":
 			row[column.Key] = value
 		case "woxImage":
 			image, _ := parseFormTableWoxImage(value)

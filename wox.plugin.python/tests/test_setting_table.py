@@ -6,10 +6,20 @@ from wox_plugin import (
     PluginSettingValueTable,
     PluginSettingValueTableColumn,
     PluginSettingValueTableGroup,
+    PluginSettingValueTextBox,
 )
 
 
 class SettingTableTest(unittest.TestCase):
+    def test_password_round_trip(self):
+        item = PluginSettingDefinitionItem(
+            type=PluginSettingDefinitionType.PASSWORD,
+            value=PluginSettingValueTextBox(key="api_key", label="API Key", tooltip="Enter your API key", max_lines=1),
+        )
+
+        decoded = PluginSettingDefinitionItem.from_dict(item.to_dict())
+        self.assertEqual(decoded.to_dict(), item.to_dict())
+
     def test_table_groups_round_trip(self):
         item = PluginSettingDefinitionItem(
             type=PluginSettingDefinitionType.TABLE,
