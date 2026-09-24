@@ -732,7 +732,7 @@
     "Id": "263fa95c-db99-4dc8-be68-784b5ae421f8",
     "Name": "i18n:plugin_name",
     "Author": "stmluyuer",
-    "Version": "0.1.0",
+    "Version": "0.1.1",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -752,7 +752,7 @@
       "Linux"
     ],
     "DateCreated": "2026-04-28 13:05:57",
-    "DateUpdated": "2026-04-28 13:05:57",
+    "DateUpdated": "2026-09-24 03:06:45",
     "I18n": {
       "en_US": {
         "plugin_name": "LuxTranslate",
@@ -1377,7 +1377,7 @@
     "Id": "955c78fd-35f4-470c-975c-474e1dc96d5a",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "1.0.0",
+    "Version": "1.0.1",
     "MinWoxVersion": "2.4.2",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -1393,7 +1393,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-20 18:51:04",
-    "DateUpdated": "2026-09-20 18:51:04",
+    "DateUpdated": "2026-09-24 03:06:52",
     "I18n": {
       "en_US": {
         "plugin_name": "JSON Formatter",
