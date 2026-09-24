@@ -1,9 +1,9 @@
 import "winston-daily-rotate-file"
 import { WebSocketServer } from "ws"
+import { closeCurrentConnection, setCurrentConnection, waitingForResponse } from "./connection"
 import { handleRequestFromWox,PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
 import { logger } from "./logger"
 import * as crypto from "crypto"
-import Deferred from "promise-deferred"
 import { NewTraceContext, TraceIdKey } from "./trace"
 import { NewContextWithValue } from "@wox-launcher/wox-plugin"
 import { PluginJsonRpcRequest, PluginJsonRpcResponse } from "./types"
@@ -40,21 +40,22 @@ setInterval(() => {
   }
 }, 1000)
 
-export const waitingForResponse: {
-  [key: string]: Deferred.Deferred<unknown>
-} = {}
-
 const wss = new WebSocketServer({ port: Number.parseInt(port) })
 wss.on("connection", function connection(ws) {
+  setCurrentConnection(ws)
   logger.updateWebSocket(ws)
 
   ws.on("error", function (error) {
-    logger.updateWebSocket(undefined)
+    if (closeCurrentConnection(ws)) {
+      logger.updateWebSocket(undefined)
+    }
     logger.error(NewTraceContext(), `[${hostId}] connection error: ${error.message}`)
   })
 
   ws.on("close", function close(code, reason) {
-    logger.updateWebSocket(undefined)
+    if (closeCurrentConnection(ws)) {
+      logger.updateWebSocket(undefined)
+    }
     logger.info(NewTraceContext(), `[${hostId}] connection closed, code: ${code}, reason: ${reason}`)
   })
 
@@ -159,6 +160,7 @@ wss.on("connection", function connection(ws) {
       return
     }
 
+    delete waitingForResponse[pluginJsonRpcResponse.Id]
     promiseInstance.resolve(pluginJsonRpcResponse.Result)
   }
 })

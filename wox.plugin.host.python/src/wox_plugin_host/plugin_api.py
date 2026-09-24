@@ -49,12 +49,14 @@ from wox_plugin import (
 
 from . import logger
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST
-from .plugin_manager import waiting_for_response
+from . import plugin_manager
+from .plugin_manager import set_current_connection, waiting_for_response
 
 
 class PluginAPI(PublicAPI):
     def __init__(self, ws: websockets.asyncio.server.ServerConnection, plugin_id: str, plugin_name: str):
-        self.ws = ws
+        # Init receives the socket that is current at load. Later reconnects replace it.
+        set_current_connection(ws)
         self.plugin_id = plugin_id
         self.plugin_name = plugin_name
         self.setting_change_callbacks: Dict[str, Callable[[Context, str, str], Awaitable[None] | None]] = {}
@@ -106,15 +108,20 @@ class PluginAPI(PublicAPI):
             "PluginName": self.plugin_name,
         }
 
-        await self.ws.send(json.dumps(request))
+        ws = plugin_manager.current_connection
+        if ws is None:
+            raise RuntimeError("host websocket is not connected")
 
-        # Create a Future to wait for the response
+        # Register before send so a response that arrives immediately is not missed.
         future: asyncio.Future[Any] = asyncio.Future()
         waiting_for_response[request_id] = future
-
         try:
+            await ws.send(json.dumps(request))
             return await future
         except Exception as e:
+            waiting_for_response.pop(request_id, None)
+            if not future.done():
+                future.cancel()
             await logger.error(trace_id, f"invoke method failed: {str(e)}")
             raise e
 

@@ -35,7 +35,7 @@ import {
 } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
-import { waitingForResponse } from "./index"
+import { currentConnection, waitingForResponse } from "./connection"
 import Deferred from "promise-deferred"
 import { logger } from "./logger"
 import { MetadataCommand, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin/types/setting"
@@ -45,7 +45,6 @@ import { PluginJsonRpcTypeRequest, pluginInstances } from "./jsonrpc"
 import { PluginJsonRpcRequest } from "./types"
 
 export class PluginAPI implements PublicAPI {
-  ws: WebSocket
   pluginId: string
   pluginName: string
   settingChangeCallbacks: Map<string, (ctx: Context, key: string, value: string) => void>
@@ -62,8 +61,7 @@ export class PluginAPI implements PublicAPI {
   pluginToolCalls = new Set<Promise<unknown>>()
   pluginToolsStopping = false
 
-  constructor(ws: WebSocket, pluginId: string, pluginName: string) {
-    this.ws = ws
+  constructor(_ws: WebSocket, pluginId: string, pluginName: string) {
     this.pluginId = pluginId
     this.pluginName = pluginName
     this.settingChangeCallbacks = new Map<string, (ctx: Context, key: string, value: string) => void>()
@@ -87,7 +85,14 @@ export class PluginAPI implements PublicAPI {
       logger.info(ctx, `<${this.pluginName}> start invoke method to Wox: ${method}, id: ${requestId}`)
     }
 
-    this.ws.send(
+    const ws = currentConnection
+    if (ws === undefined || ws.readyState !== WebSocket.OPEN) {
+      throw new Error("host websocket is not connected")
+    }
+
+    const deferred = new Deferred<unknown>()
+    waitingForResponse[requestId] = deferred
+    ws.send(
       JSON.stringify({
         TraceId: traceId,
         SessionId: ctx.Values.SessionId,
@@ -98,10 +103,15 @@ export class PluginAPI implements PublicAPI {
         Params: params,
         PluginId: this.pluginId,
         PluginName: this.pluginName
-      } as PluginJsonRpcRequest)
+      } as PluginJsonRpcRequest),
+      (error?: Error) => {
+        if (!error || waitingForResponse[requestId] !== deferred) {
+          return
+        }
+        delete waitingForResponse[requestId]
+        deferred.reject(error)
+      }
     )
-    const deferred = new Deferred<unknown>()
-    waitingForResponse[requestId] = deferred
 
     return await deferred.promise
   }

@@ -8,6 +8,7 @@ const ts = require("typescript")
 const instances = new Map()
 const mocks = {
   "./index": { waitingForResponse: {} },
+  "./connection": { waitingForResponse: {}, currentConnection: undefined },
   "./logger": { logger: { info() {}, error() {} } },
   "./jsonrpc": { pluginInstances: instances }
 }

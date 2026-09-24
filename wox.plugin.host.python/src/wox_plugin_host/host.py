@@ -8,7 +8,7 @@ import websockets
 
 from . import logger
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST, PLUGIN_JSONRPC_TYPE_RESPONSE
-from .plugin_manager import waiting_for_response
+from .plugin_manager import close_current_connection, set_current_connection, waiting_for_response
 from .jsonrpc import handle_request_from_wox
 
 
@@ -57,13 +57,16 @@ async def handle_message(ws: websockets.asyncio.server.ServerConnection, message
 
         if PLUGIN_JSONRPC_TYPE_RESPONSE in message:
             # Handle response from Wox
-            if msg_data.get("Id") in waiting_for_response:
-                deferred = waiting_for_response[msg_data["Id"]]
+            request_id = msg_data.get("Id")
+            if not request_id:
+                await logger.error(trace_id, "pluginJsonRpcResponse.Id is undefined")
+                return
+            deferred = waiting_for_response.pop(request_id, None)
+            if deferred is not None and not deferred.done():
                 if msg_data.get("Error"):
                     deferred.set_exception(Exception(msg_data["Error"]))
                 else:
                     deferred.set_result(msg_data.get("Result"))
-                del waiting_for_response[msg_data["Id"]]
         elif PLUGIN_JSONRPC_TYPE_REQUEST in message:
             # Handle request from Wox
             try:
@@ -102,7 +105,7 @@ async def handle_message(ws: websockets.asyncio.server.ServerConnection, message
 
 async def handler(websocket: websockets.asyncio.server.ServerConnection) -> None:
     """WebSocket connection handler"""
-    logger.update_websocket(websocket)
+    set_current_connection(websocket)
 
     try:
         while True:
@@ -110,13 +113,13 @@ async def handler(websocket: websockets.asyncio.server.ServerConnection) -> None
                 message = await websocket.recv()
                 asyncio.create_task(handle_message(websocket, str(message)))
             except websockets.exceptions.ConnectionClosed:
-                await logger.info(str(uuid.uuid4()), "connection closed")
                 break
             except Exception as e:
                 error_stack = traceback.format_exc()
                 await logger.error(str(uuid.uuid4()), f"connection error: {str(e)}\nStack trace:\n{error_stack}")
     finally:
-        logger.update_websocket(None)
+        if close_current_connection(websocket):
+            await logger.info(str(uuid.uuid4()), "connection closed")
 
 
 async def start_websocket(websocket_port: int) -> None:
