@@ -57,3 +57,4 @@ wox.ui.flutter/
 .gocache/
 cache/
 output/
+manifests/

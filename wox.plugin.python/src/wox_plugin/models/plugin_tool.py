@@ -56,8 +56,10 @@ class PluginToolDescriptor:
     def from_dict(cls, data: Optional[dict[str, Any]]) -> "PluginToolDescriptor":
         if not isinstance(data, dict):
             return cls(name="", description="", input_schema={}, output_schema={})
-        input_schema = data.get("InputSchema") if isinstance(data.get("InputSchema"), dict) else {}
-        output_schema = data.get("OutputSchema") if isinstance(data.get("OutputSchema"), dict) else {}
+        raw_input_schema = data.get("InputSchema")
+        raw_output_schema = data.get("OutputSchema")
+        input_schema = raw_input_schema if isinstance(raw_input_schema, dict) else {}
+        output_schema = raw_output_schema if isinstance(raw_output_schema, dict) else {}
         return cls(
             name=str(data.get("Name", "") or ""),
             description=str(data.get("Description", "") or ""),
