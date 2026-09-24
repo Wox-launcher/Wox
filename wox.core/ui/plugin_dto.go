@@ -32,6 +32,7 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 
 	storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
 	if storeErr == nil {
+		installedPlugin.Website = storePlugin.Website
 		installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
 		installedPlugin.IsUpgradable = plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version)
 	} else {
