@@ -73,7 +73,14 @@ func DecodeImageMax(reader io.Reader, maxDimension int) (*Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewImage(constrainDecodedImage(source, maxDimension))
+	decoded := constrainDecodedImage(source, maxDimension)
+	if rgba, ok := decoded.(*image.RGBA); ok {
+		// This packed buffer is local to decoding, so the renderer can retain it directly.
+		if packed, packedErr := NewImageFromPackedRGBA(rgba); packedErr == nil {
+			return packed, nil
+		}
+	}
+	return NewImage(decoded)
 }
 
 func asBufferedReader(reader io.Reader) *bufio.Reader {

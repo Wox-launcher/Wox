@@ -80,7 +80,6 @@ struct WoxRenderer {
   bool damage_clip_active = false;
   RECT present_dirty_rect = {};
   bool present_dirty = false;
-  bool cache_large_images = false;
   bool embedded_surface_overlay_enabled = false;
   bool simulate_device_removed = false;
   bool uses_warp = false;
@@ -607,9 +606,6 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
 
   auto *renderer = new WoxRenderer();
   *renderer_out = nullptr;
-  // Screenshot windows disable embedded surfaces and repeatedly draw one virtual-desktop image.
-  // Retaining that large source bitmap avoids queuing another full GPU upload for every setup frame.
-  renderer->cache_large_images = enable_embedded_surface_overlay == 0;
   renderer->embedded_surface_overlay_enabled = enable_embedded_surface_overlay != 0;
   renderer->width = width == 0 ? 1 : width;
   renderer->height = height == 0 ? 1 : height;
@@ -797,6 +793,9 @@ extern "C" int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
   clear_cached_image_bitmaps(renderer);
+  release_com(&renderer->cached_large_image_bitmap);
+  renderer->cached_large_image_id = 0;
+  renderer->cached_large_image_bytes = 0;
   release_material_resources(renderer);
   // Releasing our bitmap references is not enough: Direct2D keeps internal CPU-side resource
   // caches after upload. A hidden window has no useful warm resources, so release them eagerly.
@@ -1005,7 +1004,8 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
   ID2D1Bitmap1 *bitmap = nullptr;
   bool release_bitmap = true;
   const uint64_t image_bytes = static_cast<uint64_t>(row_stride) * image_height;
-  const bool cache_bitmap = renderer->cache_large_images && image_id != 0 && image_bytes >= 8ULL * 1024ULL * 1024ULL;
+  // Reuse a large preview bitmap across repaints instead of uploading its pixels every frame.
+  const bool cache_bitmap = image_id != 0 && image_bytes >= 4ULL * 1024ULL * 1024ULL;
   if (cache_bitmap && renderer->cached_large_image_id == image_id && renderer->cached_large_image_bitmap != nullptr) {
     bitmap = renderer->cached_large_image_bitmap;
     release_bitmap = false;
@@ -1017,7 +1017,10 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
       return result;
     }
     if (cache_bitmap) {
-      release_com(&renderer->cached_large_image_bitmap);
+      // The previous image can still be referenced by commands queued in this frame.
+      if (renderer->cached_large_image_bitmap != nullptr) {
+        renderer->retired_image_bitmaps.push_back(renderer->cached_large_image_bitmap);
+      }
       renderer->cached_large_image_bitmap = bitmap;
       renderer->cached_large_image_id = image_id;
       renderer->cached_large_image_bytes = image_bytes;

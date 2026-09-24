@@ -12,6 +12,7 @@ import (
 
 func TestDecodeImageMaxDownscalesLargeRasters(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 80, 40))
+	source.SetRGBA(0, 0, color.RGBA{R: 128, G: 64, A: 192})
 	var encoded bytes.Buffer
 	if err := png.Encode(&encoded, source); err != nil {
 		t.Fatalf("encode: %v", err)
@@ -26,6 +27,14 @@ func TestDecodeImageMaxDownscalesLargeRasters(t *testing.T) {
 	}
 	if limited.Width != 20 || limited.Height != 10 {
 		t.Fatalf("limited size = %dx%d, want 20x10", limited.Width, limited.Height)
+	}
+	decoded, err := png.Decode(bytes.NewReader(encoded.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := NewImage(constrainDecodedImage(decoded, 20))
+	if err != nil || !bytes.Equal(limited.pixels, want.pixels) {
+		t.Fatalf("limited pixels differ from the copied RGBA result: %v", err)
 	}
 }
 

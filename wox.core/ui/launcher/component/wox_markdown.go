@@ -897,8 +897,9 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 	})
 }
 
-// markdownImagePlaceholderHeight is the slot used before a picture's aspect is known.
-const markdownImagePlaceholderHeight float32 = 160
+// Reserve enough height before decoding so the following image does not briefly enter
+// the viewport and start loading while this image still has an unknown aspect.
+const markdownImagePlaceholderHeight float32 = 256
 
 // markdownImageWidget loads a picture only while its slot is in the scroll viewport.
 // Off-screen changelog and note images stay out of the decoded cache, so they cannot
@@ -908,6 +909,8 @@ func markdownImageWidget(block markdownBlock, props MarkdownProps, width float32
 	ordinal := *linkIndex
 	return woxwidget.ViewportSlot{
 		Key: woxwidget.Key(fmt.Sprintf("%s-image-%d", props.ID, ordinal)),
+		// Markdown screenshots are large; load them only when they reach the viewport.
+		Overscan: -1,
 		Release: func() {
 			if props.ReleaseImage != nil {
 				props.ReleaseImage(block.image)
