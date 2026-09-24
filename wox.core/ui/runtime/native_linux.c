@@ -5020,6 +5020,57 @@ typedef struct {
   int32_t result;
 } WoxTextMeasureCall;
 
+// configure_text_layout gives one string the same single-line geometry in every
+// caller. Measuring and drawing a label through separate copies of these
+// settings is what let the two disagree, so both paths and their tests share
+// this one function.
+//
+// Hint metrics stay off because they snap each glyph advance to a whole device
+// pixel: a string measured at the logical size and drawn at the device size
+// rounds against different grids, and the drawn line then outruns the slot the
+// layout reserved from the measurement. Unhinted advances scale linearly, which
+// is what a resolution independent layout expects and what CoreText and
+// DirectWrite already give the other two backends. Glyph rasterization hinting
+// is untouched.
+//
+// The layout is never given a width: DrawText is one line and callers clip. A
+// Pango width wraps on any measure/draw mismatch, which drops the tail of the
+// line onto a second one that a single-line surface discards.
+static void configure_text_layout(PangoLayout *layout, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic) {
+  cairo_font_options_t *font_options = cairo_font_options_create();
+  cairo_font_options_set_hint_metrics(font_options, CAIRO_HINT_METRICS_OFF);
+  pango_cairo_context_set_font_options(pango_layout_get_context(layout), font_options);
+  cairo_font_options_destroy(font_options);
+
+  PangoFontDescription *font = pango_font_description_new();
+  pango_font_description_set_family(font, font_family[0] == '\0' ? "Sans" : font_family);
+  pango_font_description_set_absolute_size(font, font_size * PANGO_SCALE);
+  pango_font_description_set_weight(font, font_weight == 1 ? PANGO_WEIGHT_SEMIBOLD : PANGO_WEIGHT_NORMAL);
+  pango_font_description_set_style(font, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
+  pango_layout_set_font_description(layout, font);
+  pango_font_description_free(font);
+
+  pango_layout_set_width(layout, -1);
+  pango_layout_set_single_paragraph_mode(layout, TRUE);
+}
+
+// measure_text_layout returns logical Pango metrics without a surface. It is the
+// measurement measure_text_main reports and the one the drawn-fit test checks
+// against.
+static void measure_text_layout(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+  PangoContext *context = pango_font_map_create_context(pango_cairo_font_map_get_default());
+  PangoLayout *layout = pango_layout_new(context);
+  pango_layout_set_text(layout, text, -1);
+  configure_text_layout(layout, font_family, font_size, font_weight, italic);
+  PangoRectangle logical;
+  pango_layout_get_extents(layout, NULL, &logical);
+  *width = (float)logical.width / PANGO_SCALE;
+  *height = (float)logical.height / PANGO_SCALE;
+  *baseline = (float)pango_layout_get_baseline(layout) / PANGO_SCALE;
+  g_object_unref(layout);
+  g_object_unref(context);
+}
+
 // measure_text_main returns logical Pango metrics without allocating a render texture.
 static void measure_text_main(void *data) {
   WoxTextMeasureCall *call = data;
@@ -5033,24 +5084,50 @@ static void measure_text_main(void *data) {
   if (call->text[0] == '\0') {
     return;
   }
-  PangoContext *context = pango_font_map_create_context(pango_cairo_font_map_get_default());
-  PangoLayout *layout = pango_layout_new(context);
-  PangoFontDescription *font = pango_font_description_new();
-	pango_font_description_set_family(font, call->font_family[0] == '\0' ? "Sans" : call->font_family);
-  pango_font_description_set_absolute_size(font, call->font_size * PANGO_SCALE);
-  pango_font_description_set_weight(font, call->font_weight == 1 ? PANGO_WEIGHT_SEMIBOLD : PANGO_WEIGHT_NORMAL);
-  pango_font_description_set_style(font, call->italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
-  pango_layout_set_font_description(layout, font);
-  pango_layout_set_text(layout, call->text, -1);
-  pango_layout_set_single_paragraph_mode(layout, TRUE);
-  PangoRectangle logical;
-  pango_layout_get_extents(layout, NULL, &logical);
-  *call->width = (float)logical.width / PANGO_SCALE;
-  *call->height = (float)logical.height / PANGO_SCALE;
-  *call->baseline = (float)pango_layout_get_baseline(layout) / PANGO_SCALE;
-  pango_font_description_free(font);
-  g_object_unref(layout);
-  g_object_unref(context);
+  measure_text_layout(call->text, call->font_family, call->font_size, call->font_weight, call->italic, call->width, call->height, call->baseline);
+}
+
+// WoxLinuxTextRaster holds one line of text drawn into a device-pixel surface.
+// The layout stays alive so the drawn-fit test can read the geometry that was
+// actually rasterized.
+typedef struct {
+  cairo_surface_t *surface;
+  cairo_t *cairo;
+  PangoLayout *layout;
+} WoxLinuxTextRaster;
+
+// rasterize_text_line draws one line of text in white into a new
+// pixel_width x pixel_height surface. wox_linux_window_draw_text and its test
+// both go through here, so the test covers the real draw setup.
+//
+// The line is laid out in logical units and cairo rasterizes it at device
+// resolution, the way the other two backends do. Laying out at the scaled font
+// size instead left the drawn line disagreeing with the slot sized from
+// measure_text: at a fractional or HiDPI scale it ran several pixels long,
+// which wrapped the tail away while a Pango width was set and clips the last
+// glyph without one.
+static bool rasterize_text_line(WoxLinuxTextRaster *raster, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float scale, int pixel_width, int pixel_height) {
+  raster->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, pixel_width, pixel_height);
+  if (cairo_surface_status(raster->surface) != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(raster->surface);
+    raster->surface = NULL;
+    return false;
+  }
+  raster->cairo = cairo_create(raster->surface);
+  cairo_set_source_rgba(raster->cairo, 1.0, 1.0, 1.0, 1.0);
+  cairo_scale(raster->cairo, scale, scale);
+  raster->layout = pango_cairo_create_layout(raster->cairo);
+  pango_layout_set_text(raster->layout, text, -1);
+  configure_text_layout(raster->layout, font_family, font_size, font_weight, italic);
+  pango_cairo_show_layout(raster->cairo, raster->layout);
+  cairo_surface_flush(raster->surface);
+  return true;
+}
+
+static void destroy_text_raster(WoxLinuxTextRaster *raster) {
+  g_object_unref(raster->layout);
+  cairo_destroy(raster->cairo);
+  cairo_surface_destroy(raster->surface);
 }
 
 int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
@@ -5572,35 +5649,14 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
     return 0;
   }
 
-  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, pixel_width, pixel_height);
-  if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
-    cairo_surface_destroy(surface);
+  WoxLinuxTextRaster raster;
+  if (!rasterize_text_line(&raster, text, family, font_size, font_weight, italic, renderer->scale, pixel_width, pixel_height)) {
     return -1;
   }
-  cairo_t *cairo = cairo_create(surface);
-  cairo_set_source_rgba(cairo, 1.0, 1.0, 1.0, 1.0);
-  PangoLayout *layout = pango_cairo_create_layout(cairo);
-  PangoFontDescription *font = pango_font_description_new();
-  pango_font_description_set_family(font, family);
-  pango_font_description_set_absolute_size(font, font_size * renderer->scale * PANGO_SCALE);
-  pango_font_description_set_weight(font, font_weight == 1 ? PANGO_WEIGHT_SEMIBOLD : PANGO_WEIGHT_NORMAL);
-  pango_font_description_set_style(font, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
-  pango_layout_set_font_description(layout, font);
-  pango_layout_set_text(layout, text, -1);
-  pango_layout_set_single_paragraph_mode(layout, TRUE);
-  // DrawText is one non-wrapping line. A Pango width wraps on any measure/draw
-  // mismatch, so a tight 18px SVG badge keeps "5H" / "Week" and clips "100%" / "2%".
-  // The cairo surface already clips overflow to the destination slot.
-  pango_layout_set_width(layout, -1);
-  pango_cairo_show_layout(cairo, layout);
-  cairo_surface_flush(surface);
 
-  GLuint texture = upload_gl_texture(pixel_width, pixel_height, GL_BGRA, cairo_image_surface_get_data(surface), 0);
+  GLuint texture = upload_gl_texture(pixel_width, pixel_height, GL_BGRA, cairo_image_surface_get_data(raster.surface), 0);
   if (texture == 0) {
-    pango_font_description_free(font);
-    g_object_unref(layout);
-    cairo_destroy(cairo);
-    cairo_surface_destroy(surface);
+    destroy_text_raster(&raster);
     return -1;
   }
   window->frame_resource_stats.text_rasterizations++;
@@ -5614,10 +5670,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
     glDeleteTextures(1, &texture);
   }
 
-  pango_font_description_free(font);
-  g_object_unref(layout);
-  cairo_destroy(cairo);
-  cairo_surface_destroy(surface);
+  destroy_text_raster(&raster);
   return 0;
 }
 
@@ -5933,6 +5986,52 @@ int32_t wox_linux_test_resource_cache_generation(void) {
                        : -1;
   free(renderer.texts);
   return result;
+}
+
+// wox_linux_test_drawn_text_fit reproduces one draw_text slot without GL. The
+// layout sizes a label's slot from measure_text and scales it, so the same
+// string drawn into that slot has to stay on one line and fill it exactly. The
+// measurement and the raster come from the same helpers measure_text_main and
+// wox_linux_window_draw_text use, so a change to either real path shows up here.
+//
+// The drawn width is read in device pixels through the raster's own transform,
+// so a missing cairo_scale reads short and a layout at the scaled font size
+// reads long, rather than both being hidden by the test rescaling the result.
+//
+// Returns the drawn width minus the slot width in device pixels, rounded up:
+// zero fits exactly, above zero is a clipped glyph, and below zero is text drawn
+// smaller than its slot. lines_out reports the drawn line count, where anything
+// above one is a dropped tail. Returns INT32_MIN on bad input.
+int32_t wox_linux_test_drawn_text_fit(const char *text, const char *font_family, float font_size, float scale, int32_t *lines_out) {
+  if (text == NULL || font_family == NULL || text[0] == '\0' || font_size <= 0.0f || scale <= 0.0f || lines_out == NULL) {
+    return INT32_MIN;
+  }
+  const char *family = font_family[0] == '\0' ? "Sans" : font_family;
+  *lines_out = 0;
+
+  float logical_width = 0.0f;
+  float logical_height = 0.0f;
+  float baseline = 0.0f;
+  measure_text_layout(text, family, font_size, 0, 0, &logical_width, &logical_height, &baseline);
+  int pixel_width = (int)ceilf(logical_width * scale);
+  int pixel_height = (int)ceilf(logical_height * scale);
+  if (pixel_width <= 0 || pixel_height <= 0) {
+    return INT32_MIN;
+  }
+
+  WoxLinuxTextRaster raster;
+  if (!rasterize_text_line(&raster, text, family, font_size, 0, 0, scale, pixel_width, pixel_height)) {
+    return INT32_MIN;
+  }
+  PangoRectangle drawn;
+  pango_layout_get_extents(raster.layout, NULL, &drawn);
+  *lines_out = (int32_t)pango_layout_get_line_count(raster.layout);
+  double device_width = (double)drawn.width / PANGO_SCALE;
+  double device_height = 0.0;
+  cairo_user_to_device_distance(raster.cairo, &device_width, &device_height);
+  int32_t overflow = (int32_t)ceil(device_width) - pixel_width;
+  destroy_text_raster(&raster);
+  return overflow;
 }
 
 int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t height, int32_t grip) {

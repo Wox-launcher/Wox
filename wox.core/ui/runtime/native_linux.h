@@ -70,6 +70,7 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window);
 int32_t wox_linux_window_take_frame_resource_stats(WoxLinuxWindow *window, WoxRendererResourceStats *out);
 int32_t wox_linux_background_blur_available(void);
 int32_t wox_linux_test_resource_cache_generation(void);
+int32_t wox_linux_test_drawn_text_fit(const char *text, const char *font_family, float font_size, float scale, int32_t *lines_out);
 int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t height, int32_t grip);
 int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot);
 int32_t wox_linux_test_window_requests_background_blur(int32_t screenshot, int32_t blur_available);
