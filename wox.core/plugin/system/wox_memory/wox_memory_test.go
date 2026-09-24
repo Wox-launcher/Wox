@@ -45,6 +45,22 @@ func TestMetadataUsesDedicatedTriggerKeyword(t *testing.T) {
 	}
 }
 
+func TestGlobalMemoryResultsUseLowRankingScore(t *testing.T) {
+	results := (&WoxMemoryPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{Type: plugin.QueryTypeInput}, memoryDiagnostics{
+		processBytes:      1000,
+		privateAttributed: true,
+		goPrivateBytes:    1000,
+	})
+	if len(results) == 0 {
+		t.Fatal("global memory query returned no results")
+	}
+	for _, result := range results {
+		if result.Score != 1 {
+			t.Fatalf("global result %q score = %d, want 1", result.Id, result.Score)
+		}
+	}
+}
+
 func TestWriteHeapProfile(t *testing.T) {
 	profilePath := filepath.Join(t.TempDir(), "memory.prof")
 	writeHeapProfile(context.Background(), profilePath)

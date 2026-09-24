@@ -170,6 +170,15 @@ func TestHotkeySurfaceStates(t *testing.T) {
 	}
 }
 
+func TestThemedHotkeyIgnoresRecorderDensity(t *testing.T) {
+	built, _ := WoxHotkey(HotkeyProps{Theme: &Theme{}, DensityScale: 1.1, Labels: []string{"J"}, Window: &woxui.Window{}})
+	key := built.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	label := key.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if key.Height != 20 || built.(woxwidget.Container).Height != 28 || label.Style.Size != TailFontSize {
+		t.Fatalf("themed keycap followed recorder density: height %.0f/%.0f size %.0f", key.Height, built.(woxwidget.Container).Height, label.Style.Size)
+	}
+}
+
 func TestDenseHotkeyScalesWithLauncherDensity(t *testing.T) {
 	built, _ := WoxHotkey(HotkeyProps{Theme: &Theme{}, Dense: true, Compact: true, DensityScale: 1.5, FontSize: ResultTitleTagFontSize * 1.5, Labels: []string{"Ctrl", "K"}})
 	outer := built.(woxwidget.Container)

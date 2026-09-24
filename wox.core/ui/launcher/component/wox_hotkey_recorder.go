@@ -29,20 +29,26 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 		border = props.Theme.Error
 	}
 
-	contentWidth := float32(80)
+	// Key legends stay on the 11px tail base. Settings body text is 13px, and using
+	// that size made normal-density capsules larger than the authored recorder.
+	keycapFont := props.Theme.Scaled(TailFontSize)
 	labelSize := props.Theme.Scaled(SettingsControlFontSize)
-	var content woxwidget.Widget = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
+	keycapHeight := props.Theme.Scaled(22)
+	padX := props.Theme.Scaled(8)
+	padY := props.Theme.Scaled(4)
+	contentWidth := props.Theme.Scaled(80)
+	var content woxwidget.Widget = woxwidget.Align{Width: contentWidth, Height: keycapHeight, Vertical: 0.5, Child: woxwidget.Text{
 		Value: props.Placeholder, Style: woxui.TextStyle{Size: labelSize}, Color: props.Theme.Text,
 	}}
 	if props.Hold && len(props.Labels) > 0 {
 		label := strings.TrimSpace(props.HoldPrefix + " " + strings.Join(props.Labels, " + "))
-		contentWidth = float32(len([]rune(label)))*8 + 2
+		contentWidth = float32(len([]rune(label)))*props.Theme.Scaled(8) + props.Theme.Scaled(2)
 		if props.Window != nil {
 			if metrics, err := props.Window.MeasureText(label, woxui.TextStyle{Size: labelSize, Weight: woxui.FontWeightSemibold}); err == nil {
 				contentWidth = metrics.Size.Width
 			}
 		}
-		content = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
+		content = woxwidget.Align{Width: contentWidth, Height: keycapHeight, Vertical: 0.5, Child: woxwidget.Text{
 			Value: label, Style: woxui.TextStyle{Size: labelSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ControlText,
 		}}
 	} else if len(props.Labels) > 0 {
@@ -50,14 +56,14 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 			// Flutter's recorder uses the app's default Material canvas rather than the launcher theme,
 			// so key legends stay light and keyboard-like on both light and dark Wox surfaces.
 			Labels: props.Labels, Foreground: woxui.Color{R: 33, G: 33, B: 33, A: 255}, Background: woxui.Color{R: 250, G: 250, B: 250, A: 255},
-			Border: woxui.Color{R: 0, G: 0, B: 0, A: 31}, Compact: true, FontSize: labelSize, Window: props.Window,
+			Border: woxui.Color{R: 0, G: 0, B: 0, A: 31}, Compact: true, FontSize: keycapFont, DensityScale: props.Theme.DensityScale, Window: props.Window,
 		})
 	}
 
-	width := contentWidth + 16
+	width := contentWidth + padX + padX
 	contentBox := woxwidget.Container{
-		Width: width, Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 4, Right: 8, Bottom: 4},
-		BorderColor: border, BorderWidth: 1, Radius: 4, Child: content,
+		Width: width, Height: keycapHeight + padY + padY, Padding: woxwidget.Insets{Left: padX, Top: padY, Right: padX, Bottom: padY},
+		BorderColor: border, BorderWidth: 1, Radius: props.Theme.Scaled(4), Child: content,
 	}
 	key := woxwidget.Key(props.ID)
 	return woxwidget.Stateful{
@@ -111,7 +117,7 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 		}
 	}
 	return woxwidget.Focusable{
-		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Focus, FocusRingRadius: 4,
+		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Focus, FocusRingRadius: config.Props.Theme.Scaled(4),
 		// Ask the parent first. If it handles the event, do not record or unfocus.
 		OnKey: func(event woxui.KeyEvent) bool {
 			if config.Props.OnKey != nil && config.Props.OnKey(event) {

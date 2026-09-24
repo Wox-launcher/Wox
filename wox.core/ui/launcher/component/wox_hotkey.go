@@ -20,7 +20,8 @@ type HotkeyProps struct {
 	Compact    bool
 	// Dense shrinks title-row chips so they sit on the result title line.
 	Dense bool
-	// DensityScale applies launcher logical density to dense result chips.
+	// DensityScale multiplies dense result chips and the unthemed recorder.
+	// Zero and one keep the authored normal-density sizes.
 	DensityScale float32
 	Window       *woxui.Window
 }
@@ -34,7 +35,8 @@ func WoxHotkey(props HotkeyProps) (woxwidget.Widget, float32) {
 	style := woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}
 	keyHeight, minWidth, horizontalInset := float32(22), float32(28), float32(14)
 	gap, radius := float32(4), float32(4)
-	// Themed launcher shortcuts are supporting hints; keep the unthemed recorder at its existing density.
+	// Themed launcher shortcuts are supporting hints and keep their own metrics.
+	// The unthemed recorder multiplies these normal-density bases by DensityScale.
 	if props.Toolbar || props.Theme != nil {
 		style.Weight = woxui.FontWeightRegular
 		keyHeight, minWidth, horizontalInset = 20, 20, 10
@@ -49,6 +51,13 @@ func WoxHotkey(props HotkeyProps) (woxwidget.Widget, float32) {
 			gap = float32(math.Round(float64(4 * scale)))
 			radius = gap
 		}
+	} else {
+		scale := ControlTheme{DensityScale: props.DensityScale}
+		keyHeight = scale.Scaled(keyHeight)
+		minWidth = scale.Scaled(minWidth)
+		horizontalInset = scale.Scaled(horizontalInset)
+		gap = scale.Scaled(gap)
+		radius = scale.Scaled(radius)
 	}
 	border := props.Border
 	if border.A == 0 {
@@ -113,7 +122,8 @@ func WoxHotkey(props HotkeyProps) (woxwidget.Widget, float32) {
 	if props.Compact {
 		height = 22
 		padding = woxwidget.Insets{}
-		if props.Dense {
+		// Unthemed keycaps are already 22 tall, so this stays put at normal density.
+		if props.Dense || (props.Theme == nil && !props.Toolbar) {
 			height = keyHeight
 		}
 	}

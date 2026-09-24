@@ -307,7 +307,13 @@ const (
 // The named owners of the native component are one level deeper, behind the native command.
 func (p *WoxMemoryPlugin) buildMemoryDiagnosticResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
 	results := p.processMemoryResults(ctx, query, diagnostics)
-	return append(results, p.externalProcessResults(ctx, query, diagnostics)...)
+	results = append(results, p.externalProcessResults(ctx, query, diagnostics)...)
+	if query.IsGlobalQuery() {
+		for index := range results {
+			results[index].Score = 1
+		}
+	}
+	return results
 }
 
 // processMemoryResults partitions the private working set by measured page ownership, falling

@@ -8,6 +8,67 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxHotkeyRecorderNormalDensityKeepsAuthoredKeycaps(t *testing.T) {
+	for _, scale := range []float32{0, 1} {
+		recorder, width := WoxHotkeyRecorder(HotkeyRecorderProps{
+			ID: "hotkey", Labels: []string{"Alt", "Space"}, Theme: ControlTheme{DensityScale: scale},
+		})
+		container := hotkeyRecorderBox(recorder)
+		padding := woxwidget.Insets{Left: 8, Top: 4, Right: 8, Bottom: 4}
+		if container.Height != 30 || container.Padding != padding || container.Radius != 4 || container.BorderWidth != 1 {
+			t.Fatalf("scale %v outline = height %.0f padding %+v radius %.0f border %.0f", scale, container.Height, container.Padding, container.Radius, container.BorderWidth)
+		}
+		chip := container.Child.(woxwidget.Container)
+		row := chip.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+		first := row.Children[0].(woxwidget.Stack)
+		label := first.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
+		if chip.Height != 22 || first.Height != 22 || label.Style.Size != TailFontSize || label.Style.Weight != woxui.FontWeightSemibold {
+			t.Fatalf("scale %v keycap = height %.0f/%.0f width %.0f size %.0f weight %v", scale, chip.Height, first.Height, first.Width, label.Style.Size, label.Style.Weight)
+		}
+		second := row.Children[1].(woxwidget.Stack)
+		if second.Width != 47 || row.Gap != 4 || width != container.Width || width != first.Width+second.Width+row.Gap+16 {
+			t.Fatalf("scale %v space key = width %.0f gap %.0f reported %.0f", scale, second.Width, row.Gap, width)
+		}
+	}
+}
+
+func TestWoxHotkeyRecorderFollowsInterfaceSize(t *testing.T) {
+	comfortable, _ := WoxHotkeyRecorder(HotkeyRecorderProps{
+		ID: "hotkey", Labels: []string{"Alt", "Space"}, Theme: ControlTheme{DensityScale: 1.1},
+	})
+	box := hotkeyRecorderBox(comfortable)
+	chip := box.Child.(woxwidget.Container)
+	row := chip.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	label := row.Children[0].(woxwidget.Stack).Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if box.Height != 32 || box.Padding.Left != 9 || box.Padding.Top != 4 || chip.Height != 24 || label.Style.Size != 12 || row.Gap != 4 {
+		t.Fatalf("comfortable recorder = outline %.0f pad %+v key %.0f font %.0f gap %.0f", box.Height, box.Padding, chip.Height, label.Style.Size, row.Gap)
+	}
+
+	compact, compactWidth := WoxHotkeyRecorder(HotkeyRecorderProps{
+		ID: "hotkey", Labels: []string{"J"}, Theme: ControlTheme{DensityScale: 0.9},
+	})
+	box = hotkeyRecorderBox(compact)
+	chip = box.Child.(woxwidget.Container)
+	key := chip.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	label = key.Children[2].Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if box.Height != 28 || box.Padding.Left != 7 || chip.Height != 20 || key.Width != 25 || label.Style.Size != 10 || compactWidth != key.Width+14 {
+		t.Fatalf("compact recorder = outline %.0f pad %.0f key %.0f/%.0f font %.0f width %.0f", box.Height, box.Padding.Left, chip.Height, key.Width, label.Style.Size, compactWidth)
+	}
+
+	placeholder, placeholderWidth := WoxHotkeyRecorder(HotkeyRecorderProps{
+		ID: "hotkey", Placeholder: "Record", Theme: ControlTheme{DensityScale: 1},
+	})
+	box = hotkeyRecorderBox(placeholder)
+	text := box.Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if box.Height != 30 || box.Child.(woxwidget.Align).Height != 22 || text.Style.Size != SettingsControlFontSize || placeholderWidth != 96 {
+		t.Fatalf("normal placeholder = height %.0f/%.0f size %.0f width %.0f", box.Height, box.Child.(woxwidget.Align).Height, text.Style.Size, placeholderWidth)
+	}
+}
+
+func hotkeyRecorderBox(recorder woxwidget.Widget) woxwidget.Container {
+	return buildHotkeyRecorderForTest(recorder).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+}
+
 func TestWoxHotkeyRecorderRendersHoldModifierAsText(t *testing.T) {
 	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{
 		ID: "hotkey", Labels: []string{"Cmd"}, Hold: true, HoldPrefix: "Hold", Theme: ControlTheme{ControlText: woxui.Color{R: 1, A: 255}},
