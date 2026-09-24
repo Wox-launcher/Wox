@@ -266,23 +266,15 @@ html {
   font-weight: 600;
 }
 
-.wox-quote-meta a,
-.wox-quotes-more a {
+.wox-quote-meta a {
   color: inherit;
   text-decoration: none;
 }
 
-.wox-quote-meta a:hover,
-.wox-quotes-more a:hover {
+.wox-quote-meta a:hover {
   color: var(--vp-c-text-1);
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.wox-quotes-more {
-  margin: 20px 0 0;
-  font-size: 14px;
-  font-weight: 600;
 }
 
 .wox-release-stamp {

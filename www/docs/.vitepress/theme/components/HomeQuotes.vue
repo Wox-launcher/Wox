@@ -1,25 +1,22 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useData } from "vitepress";
-
 const THREAD_URL =
+  "https://www.reddit.com/r/windowsapps/comments/1woafkh/wox_the_best_alternative_ive_found_and_even/";
+const PREVIOUS_THREAD_URL =
   "https://www.reddit.com/r/windowsapps/comments/1wawwhi/best_app_launcher_for_windows/";
 
 const quotes = [
   {
-    text: "After using a lot of them I settled on using Flow Launcher, but now I stumbled upon Wox Launcher and it's actually so great that I'm considering a switch.",
-    author: "u/RamyIssa",
+    text: "Opensource, free, Surprisingly lighter than raycast while delivering the same and more.",
+    author: "u/NOVARYS",
     href: THREAD_URL,
   },
   {
-    text: "From my testing it couldn't be better. It's so polished with great themes and so many customization capabilities.",
+    text: "After using a lot of them I settled on using Flow Launcher, but now I stumbled upon Wox Launcher and it's actually so great that I'm considering a switch.",
     author: "u/RamyIssa",
-    href: THREAD_URL,
+    href: PREVIOUS_THREAD_URL,
   },
 ];
 
-const { lang } = useData();
-const isZh = computed(() => (lang.value || "").toLowerCase().startsWith("zh"));
 </script>
 
 <template>
@@ -33,15 +30,11 @@ const isZh = computed(() => (lang.value || "").toLowerCase().startsWith("zh"));
           <p>{{ quote.text }}</p>
         </blockquote>
         <p class="wox-quote-meta">
-          <a :href="quote.href" rel="noopener noreferrer">{{ quote.author }}</a>
-          · Reddit · r/windowsapps
+          <a :href="quote.href" rel="noopener noreferrer">
+            {{ quote.author }} · Reddit · r/windowsapps
+          </a>
         </p>
       </article>
     </div>
-    <p class="wox-quotes-more">
-      <a :href="THREAD_URL" rel="noopener noreferrer">{{
-        isZh ? "查看 Reddit 原帖" : "See the Reddit thread"
-      }}</a>
-    </p>
   </section>
 </template>
