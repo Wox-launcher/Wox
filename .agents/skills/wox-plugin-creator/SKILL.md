@@ -52,7 +52,7 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For single-file SDK plugins, the scaffold copies templates from `~/.wox/ai/skills/wox-plugin-creator/assets/single_file_plugin_templates/` (or the repo `.agents/skills/wox-plugin-creator/assets/single_file_plugin_templates/` fallback).
 - Prefer standard library features; avoid third-party dependencies unless absolutely necessary. Single-file SDK plugins cannot use pip/npm packages.
 - For SDK usage and API details, read `references/sdk_nodejs.md` or `references/sdk_python.md`.
-- Keep a result on the row. `Title` is the name to scan. `SubTitle` is one short identity line, such as a code, place, or source. `Tails` are the few facts that must stay visible, such as a price and its change. Do not add `Preview` for a quote, status, short record, or anything that fits on that row.
+- Keep a result on the row. `Title` is the name to scan. `SubTitle` is one short identity line, such as a code, place, or source. `Tails` are the few facts that must stay visible, such as a price and its change. Use at most three tail tags on one result. A fourth tag can be clipped, so part of a tag is not shown. Put any further fact in the subtitle, the copied text, or a preview. Do not add `Preview` for a quote, status, short record, or anything that fits on that row.
 - A text tail is already a capsule. Use an SVG image tail only when that capsule must also contain an icon. Match the launcher metrics below, and see [Simulated tail tags](#simulated-tail-tags).
 - Refresh a visible row in place with `UpdateResult` / `update_result`. Remember the results returned by the latest `query()`. Replace that list on the next query. When a background refresh or an action changes a row that is still on screen, call `UpdateResult` with the same result `Id` and only the fields that changed (`Title`, `SubTitle`, `Icon`, `Tails`, `Actions`). The query text stays put and the list does not reload. Use `RefreshQuery` / `refresh_query` only when rows must be added or removed and `UpdateResult` cannot express that. Do not use `ChangeQuery` to redraw results.
 - Add `Preview` only for a large body that cannot fit the row: a long document, many fields, a chart, a gallery, or syntax highlighting. When a preview is required, use `markdown` for prose, lists, links, and images. Use `text` or `image` when that is the whole preview. Use `webview` HTML only after markdown cannot express it, such as syntax highlighting, folding, or an interactive layout. HTML is the last option because the webview can steal query focus, miss launcher theme colors, and hit layout bugs. There is no separate `html` preview type; HTML uses `webview` with a JSON-encoded `html` field and no local HTTP server. See the HTML preview examples in the SDK references.
@@ -100,7 +100,7 @@ If a plugin needs to cache anything on disk, put it under the Wox plugin cache f
 
 ## Simulated tail tags
 
-Text tails are capsules drawn by the launcher. Copy these unscaled metrics when an SVG has to imitate one. Density scale multiplies them; at 100% they are:
+Text tails are capsules drawn by the launcher. Use at most three on one result. More than three can leave a tag partly hidden. Copy these unscaled metrics when an SVG has to imitate one. Density scale multiplies them; at 100% they are:
 
 | | |
 | --- | --- |

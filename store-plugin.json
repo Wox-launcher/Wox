@@ -1524,5 +1524,37 @@
     ],
     "DateCreated": "2026-09-23 16:58:10",
     "DateUpdated": "2026-09-23 16:58:10"
+  },
+  {
+    "Id": "7c1a0e4e-6b2d-4f5a-9c31-2a8e5d0b7f14",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/e60a71a3-cf9b-4683-94fd-e22d52258711",
+    "Website": "https://gist.github.com/qianlifeng/25d66a91de168cb7e210f2cf756960c2",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/25d66a91de168cb7e210f2cf756960c2/raw/Wox.Plugin.Weather.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/b6fe32c4-3000-4398-89c2-8b2264445bda"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-24 09:59:55",
+    "DateUpdated": "2026-09-24 09:59:55",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Weather",
+        "plugin_description": "Current weather and the next few days from wttr.in."
+      },
+      "zh_CN": {
+        "plugin_name": "天气",
+        "plugin_description": "用 wttr.in 查看当前天气和未来几天。"
+      }
+    }
   }
 ]
