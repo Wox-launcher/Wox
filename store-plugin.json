@@ -1556,5 +1556,37 @@
         "plugin_description": "用 wttr.in 查看当前天气和未来几天。"
       }
     }
+  },
+  {
+    "Id": "32457cd4-8e0d-4826-a9f6-1656d7197202",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/25301f4a-e242-42e0-9dc0-67db5ba42844",
+    "Website": "https://gist.github.com/qianlifeng/bf1b14e74b6cbecd6fcc8fc6ede94f7f",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/bf1b14e74b6cbecd6fcc8fc6ede94f7f/raw/Wox.Plugin.WordCount.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/ab077fd2-f412-43ec-bbbe-8e85d701750b"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-24 11:12:59",
+    "DateUpdated": "2026-09-24 11:12:59",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Word Count",
+        "plugin_description": "Count words and text statistics from a query or selection"
+      },
+      "zh_CN": {
+        "plugin_name": "词数统计",
+        "plugin_description": "统计查询文本或选中文本中的词数及文本信息"
+      }
+    }
   }
 ]

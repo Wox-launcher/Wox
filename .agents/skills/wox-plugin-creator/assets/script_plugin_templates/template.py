@@ -6,7 +6,7 @@
 #   "Version": "1.0.0",
 #   "MinWoxVersion": "2.0.0",
 #   "Description": "{{.Description}}",
-#   "Icon": "emoji:🐍",
+#   "Icon": "svg:<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' rx='12' fill='#2563eb'/><path d='M14 11h14l7 7v19H14z' fill='#eff6ff'/><path d='M28 11v7h7' fill='#bfdbfe'/><path d='M19 24h11M19 29h11M19 34h7' fill='none' stroke='#2563eb' stroke-width='2.5' stroke-linecap='round'/></svg>",
 #   "TriggerKeywords": {{.TriggerKeywordsJSON}},
 #   "SettingDefinitions": [
 #     {
@@ -338,6 +338,7 @@ class WoxPluginBase:
 ACTION_COPY_ICON = 'svg:<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>'
 ACTION_OPEN_ICON = 'svg:<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/></svg>'
 ACTION_EXECUTE_ICON = 'svg:<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5h5.5L9 22l10-13h-6z"/></svg>'
+RESULT_ICON = "svg:<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' rx='12' fill='#2563eb'/><path d='M14 11h14l7 7v19H14z' fill='#eff6ff'/><path d='M28 11v7h7' fill='#bfdbfe'/><path d='M19 24h11M19 29h11M19 34h7' fill='none' stroke='#2563eb' stroke-width='2.5' stroke-linecap='round'/></svg>"
 
 
 class MyPlugin(WoxPluginBase):
@@ -352,7 +353,7 @@ class MyPlugin(WoxPluginBase):
         results: List[WoxPluginBase.QueryResult] = [
             {
                 "title": f"Query: {search}",
-                "icon": "emoji:🔍",
+                "icon": RESULT_ICON,
                 "subtitle": "Click to copy the query to clipboard",
                 "score": 100,
                 "actions": [
@@ -366,7 +367,7 @@ class MyPlugin(WoxPluginBase):
             },
             {
                 "title": "Example: Multiple Actions",
-                "icon": "emoji:⚙️",
+                "icon": RESULT_ICON,
                 "subtitle": "Right-click to see multiple actions",
                 "score": 90,
                 "actions": [
@@ -392,7 +393,7 @@ class MyPlugin(WoxPluginBase):
             },
             {
                 "title": "Settings Example",
-                "icon": "emoji:⚙️",
+                "icon": RESULT_ICON,
                 "subtitle": f"API Key configured: {'Yes' if api_key else 'No'}",
                 "score": 70,
                 "actions": [

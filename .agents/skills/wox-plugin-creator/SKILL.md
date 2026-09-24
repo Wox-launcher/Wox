@@ -52,6 +52,7 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For single-file SDK plugins, the scaffold copies templates from `~/.wox/ai/skills/wox-plugin-creator/assets/single_file_plugin_templates/` (or the repo `.agents/skills/wox-plugin-creator/assets/single_file_plugin_templates/` fallback).
 - Prefer standard library features; avoid third-party dependencies unless absolutely necessary. Single-file SDK plugins cannot use pip/npm packages.
 - For SDK usage and API details, read `references/sdk_nodejs.md` or `references/sdk_python.md`.
+- For plugins declaring `querySelection`, return results only for selection types and content the plugin can process. Return an empty results list for unsupported, missing, or empty selection data instead of showing usage or help rows for unrelated selections.
 - Keep a result on the row. `Title` is the name to scan. `SubTitle` is one short identity line, such as a code, place, or source. `Tails` are the few facts that must stay visible, such as a price and its change. Use at most three tail tags on one result. A fourth tag can be clipped, so part of a tag is not shown. Put any further fact in the subtitle, the copied text, or a preview. Do not add `Preview` for a quote, status, short record, or anything that fits on that row.
 - A text tail is already a capsule. Use an SVG image tail only when that capsule must also contain an icon. Match the launcher metrics below, and see [Simulated tail tags](#simulated-tail-tags).
 - Refresh a visible row in place with `UpdateResult` / `update_result`. Remember the results returned by the latest `query()`. Replace that list on the next query. When a background refresh or an action changes a row that is still on screen, call `UpdateResult` with the same result `Id` and only the fields that changed (`Title`, `SubTitle`, `Icon`, `Tails`, `Actions`). The query text stays put and the list does not reload. Use `RefreshQuery` / `refresh_query` only when rows must be added or removed and `UpdateResult` cannot express that. Do not use `ChangeQuery` to redraw results.
@@ -82,6 +83,7 @@ If a plugin needs to cache anything on disk, put it under the Wox plugin cache f
 ### 2) Author result and action icons
 
 - Read `references/icons.md` before choosing any glyph. Result-row and plugin-identity icons may be colorful; Action Panel leading icons must not.
+- Scaffold templates use inline SVGs for the default plugin and result icons. Keep those defaults as SVG; use emoji or other formats only when deliberately choosing a result identity icon.
 - Prefer a bundled monochrome verb from `assets/iconify/action/` (copy, open, execute/lightning, delete, edit, paste, add, search, settings). These SVGs already use `var(--wox-theme-icon-color)` so the Action Panel can tint them to the row label.
 - Do not use emoji, brand logos, the plugin mark, or mixed-color result art as the leading action icon. The panel only tints SVGs that contain the theme variable; anything else stays authored and looks inconsistent next to system actions.
 - Execute actions use the lightning verb (`action/execute.svg`), not a gear or play triangle. Settings actions use the gear.

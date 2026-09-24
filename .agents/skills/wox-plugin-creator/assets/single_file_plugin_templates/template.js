@@ -6,7 +6,7 @@
 //   "MinWoxVersion": "{{.MinWoxVersion}}",
 //   "Runtime": "{{.Runtime}}",
 //   "Description": "{{.Description}}",
-//   "Icon": "emoji:🟨",
+//   "Icon": "svg:<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' rx='12' fill='#2563eb'/><path d='M14 11h14l7 7v19H14z' fill='#eff6ff'/><path d='M28 11v7h7' fill='#bfdbfe'/><path d='M19 24h11M19 29h11M19 34h7' fill='none' stroke='#2563eb' stroke-width='2.5' stroke-linecap='round'/></svg>",
 //   "TriggerKeywords": {{.TriggerKeywordsJSON}},
 //   "SupportedOS": ["Windows", "Linux", "Macos"]
 // }
@@ -39,8 +39,8 @@ class MyPlugin {
         Title: "{{.Name}}",
         SubTitle: query.Search || "Single-file Node.js SDK plugin",
         Icon: {
-          ImageType: "emoji",
-          ImageData: "🟨"
+          ImageType: "svg",
+          ImageData: "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' rx='12' fill='#2563eb'/><path d='M14 11h14l7 7v19H14z' fill='#eff6ff'/><path d='M28 11v7h7' fill='#bfdbfe'/><path d='M19 24h11M19 29h11M19 34h7' fill='none' stroke='#2563eb' stroke-width='2.5' stroke-linecap='round'/></svg>"
         },
         Actions: []
       }]
