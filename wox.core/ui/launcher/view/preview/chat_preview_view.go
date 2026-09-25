@@ -910,9 +910,10 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 	})}
 }
 
-// chatMessageState keeps hover-only metadata out of the launcher controller.
+// chatMessageState keeps message-local interaction state out of the launcher controller.
 type chatMessageState struct {
 	hovered       bool
+	selection     woxcomponent.MarkdownSelection
 	actionHovered bool
 	copied        bool
 	copyAnchor    woxui.Rect
@@ -934,6 +935,12 @@ func (s *chatMessageState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {
 
 func (s *chatMessageState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(ChatMessageProps)
+	if props.Markdown != nil {
+		markdown := *props.Markdown
+		markdown.Selection = &s.selection
+		s.selection.Reset()
+		props.Markdown = &markdown
+	}
 	props.Copied = s.copied
 	if original := props.OnCopy; original != nil {
 		props.OnCopy = func() bool {

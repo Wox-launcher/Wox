@@ -128,7 +128,7 @@ type TextFieldProps struct {
 	OnCopy func() bool
 	// OnCut replaces the default cut of the field selection when it returns true.
 	OnCut func() bool
-	// PaintSelection draws the current selection even when the field is not focused.
+	// PaintSelection draws unfocused selections; a collapsed range highlights the whole document block.
 	PaintSelection bool
 	// OnPaste receives raw clipboard text and, when it returns true, replaces the default insert.
 	// Empty text is still delivered so callers can paste images or files from the same shortcut.
@@ -138,6 +138,8 @@ type TextFieldProps struct {
 	OnChanged          func(string)
 	OnSelectionChanged func(woxui.TextSelection)
 	OnTapOffset        func(int) bool
+	// markdownSelection joins read-only blocks without changing the Host's drag capture.
+	markdownSelection *markdownSelectionField
 	// TrailingHandle shows a drag affordance in the left gutter of the Start-End block.
 	TrailingHandle *TextFieldTrailingHandle
 	// OnHoverOffset reports the rune under the pointer so a block handle can follow hover.
@@ -330,6 +332,11 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		displayState.Composition = woxui.MaskProtectedText(realState.Composition)
 		displayState.Selection = woxui.MapSelectionToProtectedDisplay(realState.Text, realState.Selection)
 	}
+	if props.markdownSelection != nil {
+		// Notes use PaintSelection to highlight entire blocks, including collapsed ranges.
+		// Markdown must only preserve an actual selection across unfocused siblings.
+		props.PaintSelection = !displayState.Selection.Collapsed()
+	}
 	if props.PaintSelection && displayState.Selection.Collapsed() && displayState.Text != "" {
 		displayState.Selection = woxui.TextSelection{Anchor: 0, Focus: utf8.RuneCountInString(displayState.Text)}
 	}
@@ -394,6 +401,9 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		s.refreshContextMenuIfStale(context, widget.(TextFieldProps), ownerKey, runContextAction)
 	}
 	notifySelection = func() {
+		if field := props.markdownSelection; field != nil {
+			field.owner.selectField(field, s.controller.State().Selection.Anchor)
+		}
 		notifyTextFieldSelectionChanged(widget.(TextFieldProps), s.controller.State().Selection)
 		s.refreshContextMenuIfStale(context, widget.(TextFieldProps), ownerKey, runContextAction)
 	}
@@ -413,7 +423,13 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		if provider == nil {
 			return false
 		}
-		if selected := s.controller.SelectedText(); selected != "" {
+		selected := s.controller.SelectedText()
+		if field := original.markdownSelection; field != nil {
+			if documentSelected := field.owner.SelectedText(); documentSelected != "" {
+				selected = documentSelected
+			}
+		}
+		if selected != "" {
 			if err := provider.WriteText(selected); err != nil {
 				return false
 			}
@@ -570,6 +586,9 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			s.controller.SetCaret(offset)
 		}
 		notifySelection()
+		if field := props.markdownSelection; field != nil {
+			field.owner.dragging = true
+		}
 		invalidate()
 	}
 	props.onSecondaryTap = func(windowPos woxui.Point) {
@@ -600,6 +619,11 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		if fieldPadding == (woxwidget.Insets{}) {
 			fieldPadding = woxwidget.Insets{Left: 12, Top: 9, Right: 12, Bottom: 7}
 		}
+		if field := original.markdownSelection; field != nil {
+			// The captured gesture reports logical coordinates relative to its original field.
+			field.owner.extend(woxui.Point{X: field.bounds.X + position.X - fieldPadding.Left, Y: field.bounds.Y + position.Y - fieldPadding.Top})
+			return
+		}
 		local := woxui.Point{X: max(float32(0), position.X-fieldPadding.Left), Y: position.Y - fieldPadding.Top}
 		s.dragScrollWindow = original.Window
 		s.dragProtected = original.Protected
@@ -626,7 +650,12 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		}
 		s.applyDragSelectionAt(local)
 	}
-	props.onSelectionEnd = func() { s.stopDragScroll() }
+	props.onSelectionEnd = func() {
+		s.stopDragScroll()
+		if field := props.markdownSelection; field != nil {
+			field.owner.dragging = false
+		}
+	}
 	props.OnKey = func(event woxui.KeyEvent) bool {
 		original := widget.(TextFieldProps)
 		if original.Disabled {
@@ -1147,6 +1176,10 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		point.Y = max(float32(0), point.Y)
 		return textFieldOffsetAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, point)
 	}
+	if field := props.markdownSelection; field != nil {
+		field.hitTest = offsetAt
+		field.padding = padding
+	}
 	glyphHitAt := func(position woxui.Point) (int, bool) {
 		return textFieldGlyphHitAt(state, props.Window, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerWidth, softWrap, props.Focused, contentPoint(position))
 	}
@@ -1296,6 +1329,10 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 				return woxui.TextInputState{}
 			}
 			innerBounds := woxui.Rect{X: bounds.X + padding.Left, Y: bounds.Y + padding.Top, Width: innerWidth, Height: innerHeight}
+			if field := props.markdownSelection; field != nil {
+				// Keep the captured field's origin current when scrolling moves it outside the paint clip.
+				field.bounds = innerBounds
+			}
 			return woxui.TextInputState{Enabled: true, CursorRect: textFieldCursorRect(state, style, props.RichRuns, maxLines, props.LineHeight, props.verticalOffset, innerBounds, softWrap, props.Window)}
 		},
 		Child: content,
@@ -1306,6 +1343,9 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 // textFieldInnerContent stacks an optional left-gutter handle over the padded field.
 func textFieldInnerContent(props TextFieldProps, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, padding woxwidget.Insets, radius float32, background woxui.Color, innerWidth, innerHeight, height float32, maxLines int, softWrap bool) woxwidget.Widget {
 	painter := woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.caretActive, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
+		if field := props.markdownSelection; field != nil {
+			field.bounds = bounds
+		}
 		if state.Text == "" && state.Composition == "" && props.Hint != "" {
 			displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.TextSecondary)
 		}

@@ -347,3 +347,176 @@ func TestWoxMarkdownSelectAllCopiesPlainText(t *testing.T) {
 		t.Fatalf("copied markdown = %q, want the rendered plain text", provider.text)
 	}
 }
+
+// TestChatMarkdownStartsWithoutSelection compares the actual paint output, not just controller state.
+func TestChatMarkdownStartsWithoutSelection(t *testing.T) {
+	props := MarkdownProps{
+		ID: "md", Document: ParseMarkdown("First paragraph\n\n- List item\n\nLast paragraph"),
+		Width: 300, Window: &woxui.Window{},
+		Theme: ControlTheme{BodyText: woxui.Color{R: 220, A: 255}, TextSelectionBackground: woxui.Color{B: 180, A: 255}},
+	}
+	render := func(selection *MarkdownSelection) *woxui.DisplayList {
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			props.Selection = selection
+			if selection != nil {
+				selection.Reset()
+			}
+			return WoxMarkdown(props)
+		})
+		host.AttachServices(&hotkeyRecorderHostServices{})
+		list := &woxui.DisplayList{}
+		host.Frame(list, woxui.FrameInfo{Size: woxui.Size{Width: 300, Height: 200}, PixelSize: woxui.PixelSize{Width: 300, Height: 200}, Scale: 1})
+		return list
+	}
+	if err := render(nil).Compare(render(&MarkdownSelection{})); err != nil {
+		t.Fatalf("opening an answer changed its unselected paint: %v", err)
+	}
+}
+
+// TestChatMarkdownDragCopyAndClear exercises the real pointer, scrolling and paint paths.
+func TestChatMarkdownDragCopyAndClear(t *testing.T) {
+	provider := &memoryClipboard{}
+	SetClipboardProvider(provider)
+	t.Cleanup(func() { SetClipboardProvider(nil) })
+	for _, scale := range []float32{1, 1.5, 2} {
+		var selection MarkdownSelection
+		props := MarkdownProps{
+			ID: "md", Document: ParseMarkdown("First paragraph\n\n- List item\n\n```\ncode\n```\n\nLast paragraph"),
+			Width: 300, Window: &woxui.Window{},
+			Theme: ControlTheme{BodyText: woxui.Color{R: 220, A: 255}, TextSelectionBackground: woxui.Color{B: 180, A: 255}},
+		}
+		height := woxwidget.MeasureStateless(props.Window, WoxMarkdown(props), 300).Height
+		offset := float32(0)
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			selection.Reset()
+			props.Selection = &selection
+			return woxwidget.Container{Width: 340, Height: 200, Padding: woxwidget.Insets{Left: 18, Top: 10}, Child: woxwidget.Flex{
+				Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+					WoxScrollView(ScrollViewProps{
+						Key: "scroll", Width: 300, Height: 90, ContentHeight: height, Offset: offset, HideScrollbar: true,
+						OnScroll: func(delta float32) { offset = min(max(float32(0), offset+delta), height-90) }, Content: WoxMarkdown(props),
+					}),
+					woxwidget.Focusable{Key: "outside", Child: woxwidget.Container{Width: 300, Height: 20}},
+				},
+			}}
+		})
+		host.AttachServices(&hotkeyRecorderHostServices{})
+		frame := func() *woxui.DisplayList {
+			list := &woxui.DisplayList{}
+			host.Frame(list, woxui.FrameInfo{Size: woxui.Size{Width: 340, Height: 200}, PixelSize: woxui.PixelSize{Width: int(340 * scale), Height: int(200 * scale)}, Scale: scale})
+			return list
+		}
+		frame()
+		host.RequestFocus("outside")
+		initial := frame()
+		first, _ := host.BoundsForKey("md-text-1")
+		start := woxui.Point{X: first.X + first.Width - 2, Y: first.Y + 5}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: start})
+		frame()
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: start, Scroll: woxui.Point{Y: -100}})
+		frame()
+		if offset <= 0 {
+			t.Fatal("text selection swallowed the parent scroll")
+		}
+		last, _ := host.BoundsForKey("md-text-4")
+		end := woxui.Point{X: last.X + last.Width - 2, Y: last.Y + 5}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: end})
+		frame()
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: end})
+		frame()
+		const want = "\nList item\ncode\nLast paragraph"
+		if got := selection.SelectedText(); got != want {
+			t.Fatalf("scale %v: drag selection = %q, want %q", scale, got, want)
+		}
+		host.Key(woxui.KeyEvent{Key: "c", Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true})
+		if provider.text != want {
+			t.Fatalf("scale %v: copied %q", scale, provider.text)
+		}
+		host.Key(woxui.KeyEvent{Key: "a", Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true})
+		host.Key(woxui.KeyEvent{Key: "c", Modifiers: woxui.KeyModifierControl | woxui.KeyModifierMeta, Down: true})
+		if provider.text != "First paragraph" {
+			t.Fatalf("keyboard selection retained stale sibling ranges: %q", provider.text)
+		}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: end})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: end})
+		offset = 0
+		host.RequestFocus("outside")
+		if err := initial.Compare(frame()); err != nil {
+			t.Fatalf("scale %v: clearing selection left highlighted text: %v", scale, err)
+		}
+	}
+}
+
+func TestMarkdownSelectionSpansFieldsInBothDirections(t *testing.T) {
+	var selection MarkdownSelection
+	selection.Reset()
+	for index, value := range []string{"first", "middle", "last"} {
+		field := selection.field(value, value)
+		field.bounds = woxui.Rect{X: 0, Y: float32(index * 20), Width: 100, Height: 16}
+		field.hitTest = func(point woxui.Point) int {
+			if point.X < 50 {
+				return 1
+			}
+			return 3
+		}
+	}
+	selection.selectField(selection.fields[0], 2)
+	selection.dragging = true
+	selection.extend(woxui.Point{X: 5, Y: 45})
+	if got := selection.SelectedText(); got != "rst\nmiddle\nl" {
+		t.Fatalf("forward selection = %q", got)
+	}
+	selection.dragging = false
+	selection.extend(woxui.Point{X: 80, Y: 45})
+	if got := selection.SelectedText(); got != "rst\nmiddle\nl" {
+		t.Fatalf("ended drag changed selection = %q", got)
+	}
+	selection.selectField(selection.fields[2], 3)
+	selection.dragging = true
+	selection.extend(woxui.Point{X: 5, Y: 5})
+	if got := selection.SelectedText(); got != "irst\nmiddle\nlas" {
+		t.Fatalf("backward selection = %q", got)
+	}
+	selection.Reset()
+	for _, value := range []string{"first", "middle", "last"} {
+		selection.field(value, value)
+	}
+	if got := selection.SelectedText(); got != "irst\nmiddle\nlas" {
+		t.Fatalf("selection after widget rebuild = %q", got)
+	}
+}
+
+// BenchmarkChatMarkdownScroll compares the same retained scrolling path with and without shared selection.
+func BenchmarkChatMarkdownScroll(b *testing.B) {
+	for _, shared := range []bool{false, true} {
+		name := "independent"
+		if shared {
+			name = "shared"
+		}
+		b.Run(name, func(b *testing.B) {
+			props := MarkdownProps{
+				ID: "md", Width: 500, Window: &woxui.Window{},
+				Document: ParseMarkdown(strings.Repeat("Paragraph with **bold text**.\n\n- First item\n- Second item\n\n", 30)),
+			}
+			height := woxwidget.MeasureStateless(props.Window, WoxMarkdown(props), 500).Height
+			var selection MarkdownSelection
+			offset := float32(0)
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				if shared {
+					selection.Reset()
+					props.Selection = &selection
+				}
+				return woxwidget.ScrollView{Width: 500, Height: 300, ContentHeight: height, Offset: offset, Child: WoxMarkdown(props)}
+			})
+			host.AttachServices(&hotkeyRecorderHostServices{})
+			frame := woxui.FrameInfo{Size: woxui.Size{Width: 500, Height: 300}, PixelSize: woxui.PixelSize{Width: 500, Height: 300}, Scale: 1}
+			host.Frame(&woxui.DisplayList{}, frame)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for index := 0; index < b.N; index++ {
+				offset = float32(index%20) * (height - 300) / 20
+				host.Frame(&woxui.DisplayList{}, frame)
+			}
+		})
+	}
+}

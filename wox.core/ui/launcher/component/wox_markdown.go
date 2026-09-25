@@ -97,6 +97,7 @@ type MarkdownProps struct {
 	Theme            ControlTheme
 	// Window enables pointer hit-testing so rendered text can be selected and copied.
 	Window       *woxui.Window
+	Selection    *MarkdownSelection
 	ResolveImage func(source string) (*woxui.Image, string)
 	// ReleaseImage drops the viewport pin after the picture scrolls away.
 	ReleaseImage func(source string)
@@ -740,12 +741,18 @@ func markdownSelectableText(id, value string, rich []TextFieldRichRun, links []m
 			}
 		}
 	}
-	return WoxTextField(TextFieldProps{
+	fieldProps := TextFieldProps{
 		ID: id, Label: value, Width: width, Height: height, Padding: woxwidget.Insets{Bottom: 1},
 		Transparent: true, DisableHover: true, Style: style, RichRuns: rich, LineHeight: lineHeight,
 		TextColor: props.Theme.BodyText, Value: value, ReadOnly: true, MaxLines: max(8, len(lines)+4),
 		Window: props.Window, Theme: props.Theme, OnTapOffset: onTapOffset, CursorAtOffset: cursorAt,
-	})
+	}
+	if props.Selection != nil {
+		field := props.Selection.field(id, value)
+		fieldProps.Controller = field.controller
+		fieldProps.markdownSelection = field
+	}
+	return WoxTextField(fieldProps)
 }
 
 func markdownCursorAt(links []markdownLinkRange, offset int) woxui.PointerCursor {
@@ -963,4 +970,118 @@ func markdownImageFrame(block markdownBlock, props MarkdownProps, width float32,
 		},
 		Child: woxwidget.Gesture{ID: id, OnTap: func() { props.OnOpenImage(block.image) }, Child: content},
 	}, nextAspect
+}
+
+// MarkdownSelection retains one answer's text selection while its Markdown widgets rebuild.
+type MarkdownSelection struct {
+	fields   []*markdownSelectionField
+	byID     map[string]*markdownSelectionField
+	anchor   *markdownSelectionField
+	anchorAt int
+	focus    *markdownSelectionField
+	dragging bool
+}
+
+type markdownSelectionField struct {
+	owner      *MarkdownSelection
+	value      string
+	index      int
+	bounds     woxui.Rect
+	padding    woxwidget.Insets
+	hitTest    func(woxui.Point) int
+	controller *woxwidget.TextEditingController
+}
+
+// Reset starts a new widget build without discarding controllers or the active range.
+func (s *MarkdownSelection) Reset() {
+	s.fields = s.fields[:0]
+}
+
+// field keeps each text controller stable while the answer is re-rendered during streaming.
+func (s *MarkdownSelection) field(id, value string) *markdownSelectionField {
+	if s.byID == nil {
+		s.byID = make(map[string]*markdownSelectionField)
+	}
+	f := s.byID[id]
+	if f == nil {
+		f = &markdownSelectionField{owner: s, controller: woxwidget.NewTextEditingController(value)}
+		s.byID[id] = f
+	} else if f.value != value {
+		f.controller.SetText(value, false)
+	}
+	f.value = value
+	f.index = len(s.fields)
+	f.bounds = woxui.Rect{}
+	s.fields = append(s.fields, f)
+	return f
+}
+
+// selectField clears sibling ranges when a click or keyboard action selects within one field.
+func (s *MarkdownSelection) selectField(field *markdownSelectionField, offset int) {
+	for _, other := range s.fields {
+		if other != field {
+			other.controller.SetCaret(0)
+		}
+	}
+	s.anchor, s.focus, s.anchorAt = field, field, offset
+	s.dragging = false
+}
+
+// extend maps the pointer to the nearest rendered field and fills the intervening range.
+func (s *MarkdownSelection) extend(position woxui.Point) {
+	if !s.dragging || s.anchor == nil || len(s.fields) == 0 {
+		return
+	}
+	var target *markdownSelectionField
+	best := float32(1e30)
+	for _, field := range s.fields {
+		if field.hitTest == nil || field.bounds.Width <= 0 || field.bounds.Height <= 0 {
+			continue
+		}
+		dx := max(field.bounds.X-position.X, float32(0), position.X-field.bounds.X-field.bounds.Width)
+		dy := max(field.bounds.Y-position.Y, float32(0), position.Y-field.bounds.Y-field.bounds.Height)
+		distance := dx*dx + dy*dy
+		if distance < best {
+			best, target = distance, field
+		}
+	}
+	if target == nil {
+		return
+	}
+	point := woxui.Point{X: position.X - target.bounds.X + target.padding.Left, Y: position.Y - target.bounds.Y + target.padding.Top}
+	focusAt := target.hitTest(point)
+	if s.focus == target && target.controller.State().Selection.Focus == focusAt {
+		return
+	}
+	s.focus = target
+	for _, field := range s.fields {
+		switch {
+		case field == s.anchor && field == target:
+			field.controller.SetSelection(s.anchorAt, focusAt)
+		case field == s.anchor && field.index < target.index:
+			field.controller.SetSelection(s.anchorAt, utf8.RuneCountInString(field.value))
+		case field == s.anchor:
+			field.controller.SetSelection(s.anchorAt, 0)
+		case field == target && field.index > s.anchor.index:
+			field.controller.SetSelection(0, focusAt)
+		case field == target:
+			field.controller.SetSelection(utf8.RuneCountInString(field.value), focusAt)
+		case field.index > min(s.anchor.index, target.index) && field.index < max(s.anchor.index, target.index):
+			field.controller.SelectAll()
+		default:
+			field.controller.SetCaret(0)
+		}
+	}
+}
+
+// SelectedText returns the selected plain text in document order for the clipboard.
+func (s *MarkdownSelection) SelectedText() string {
+	if s.anchor == nil || s.focus == nil {
+		return ""
+	}
+	parts := make([]string, 0, max(s.focus.index, s.anchor.index)-min(s.focus.index, s.anchor.index)+1)
+	for index := min(s.anchor.index, s.focus.index); index <= max(s.anchor.index, s.focus.index) && index < len(s.fields); index++ {
+		parts = append(parts, s.fields[index].controller.SelectedText())
+	}
+	return strings.Join(parts, "\n")
 }
