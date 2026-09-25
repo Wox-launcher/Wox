@@ -39,6 +39,28 @@ func TestDocumentFromEditorKeepsRepeatedLinkLabel(t *testing.T) {
 	}
 }
 
+func TestDocumentFromEditorKeepsHeadingsWhenInsertingLinesBefore(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{ID: "h2", Type: common.NoteBlockHeading2, Text: "Heading 2"},
+		{ID: "p1", Type: common.NoteBlockParagraph, Text: "Test"},
+		{ID: "h3", Type: common.NoteBlockHeading3, Text: "Heading 3"},
+		{ID: "p2", Type: common.NoteBlockParagraph, Text: "Test"},
+	}}
+	parsed := DocumentFromEditor("Heading 2\nTest\n\n\nHeading 3\nTest", document)
+	want := []common.NoteBlockType{common.NoteBlockHeading2, common.NoteBlockParagraph, common.NoteBlockParagraph, common.NoteBlockParagraph, common.NoteBlockHeading3, common.NoteBlockParagraph}
+	if len(parsed.Blocks) != len(want) {
+		t.Fatalf("blocks = %#v", parsed.Blocks)
+	}
+	for index, blockType := range want {
+		if parsed.Blocks[index].Type != blockType {
+			t.Fatalf("block %d type = %v, want %v (%#v)", index, parsed.Blocks[index].Type, blockType, parsed.Blocks)
+		}
+	}
+	if parsed.Blocks[4].ID != "h3" || parsed.Blocks[5].ID != "p2" {
+		t.Fatalf("shifted block ids = %q %q", parsed.Blocks[4].ID, parsed.Blocks[5].ID)
+	}
+}
+
 func TestNoteTaskGroupIncludesIndentedChildren(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{ID: "a", Type: common.NoteBlockTask, Text: "parent"},
