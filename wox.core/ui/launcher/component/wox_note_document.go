@@ -632,7 +632,8 @@ func ToggleNoteInline(document common.NoteDocument, ranges []NoteBlockRange, sel
 	allActive := true
 	for _, blockRange := range ranges {
 		from, to := max(start, blockRange.TextStart), min(end, blockRange.TextEnd)
-		if from >= to {
+		// Dividers project a placeholder rule but own no inline text to style.
+		if from >= to || document.Blocks[blockRange.Block].Type == common.NoteBlockDivider {
 			continue
 		}
 		styles := noteBlockStyles(document.Blocks[blockRange.Block], document.Blocks[blockRange.Block].Text)
@@ -644,7 +645,7 @@ func ToggleNoteInline(document common.NoteDocument, ranges []NoteBlockRange, sel
 	}
 	for _, blockRange := range ranges {
 		from, to := max(start, blockRange.TextStart), min(end, blockRange.TextEnd)
-		if from >= to {
+		if from >= to || document.Blocks[blockRange.Block].Type == common.NoteBlockDivider {
 			continue
 		}
 		block := &document.Blocks[blockRange.Block]
@@ -784,7 +785,8 @@ func noteInlineStyleAt(document common.NoteDocument, ranges []NoteBlockRange, se
 	var combined *noteInlineStyle
 	for _, blockRange := range ranges {
 		from, to := max(start, blockRange.TextStart), min(end, blockRange.TextEnd)
-		if from >= to {
+		// A divider's placeholder rule has no backing text, so select-all must not index its styles.
+		if from >= to || document.Blocks[blockRange.Block].Type == common.NoteBlockDivider {
 			continue
 		}
 		styles := noteBlockStyles(document.Blocks[blockRange.Block], document.Blocks[blockRange.Block].Text)

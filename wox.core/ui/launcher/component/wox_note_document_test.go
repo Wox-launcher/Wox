@@ -229,3 +229,20 @@ func TestNoteEditorTaskReorderHandleFollowsCaret(t *testing.T) {
 		t.Fatalf("hover task = %d, want 1", hovered)
 	}
 }
+
+func TestSelectionAcrossDividerDoesNotPanic(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockParagraph, Text: "before", Spans: []common.NoteSpan{{Start: 0, End: 6, Bold: true}}},
+		{Type: common.NoteBlockDivider},
+		{Type: common.NoteBlockParagraph, Text: "after", Spans: []common.NoteSpan{{Start: 0, End: 5, Bold: true}}},
+	}}
+	value, _, ranges := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
+	all := woxui.TextSelection{Anchor: 0, Focus: len([]rune(value))}
+	if formats := NoteActiveFormats(document, ranges, all); !formats["bold"] {
+		t.Fatalf("select-all formats = %#v, want bold from the text blocks", formats)
+	}
+	updated := ToggleNoteInline(document, ranges, all, "bold", "")
+	if len(updated.Blocks[0].Spans) != 0 || len(updated.Blocks[2].Spans) != 0 || len(updated.Blocks[1].Spans) != 0 {
+		t.Fatalf("toggle bold across divider = %#v, want bold removed from text and none on the divider", updated.Blocks)
+	}
+}
