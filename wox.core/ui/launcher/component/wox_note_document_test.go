@@ -246,3 +246,59 @@ func TestSelectionAcrossDividerDoesNotPanic(t *testing.T) {
 		t.Fatalf("toggle bold across divider = %#v, want bold removed from text and none on the divider", updated.Blocks)
 	}
 }
+
+// typeNoteLine replays a line one rune at a time through the editor projection, the way the note
+// window reparses the backing text on every keystroke.
+func typeNoteLine(line string) common.NoteDocument {
+	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{Type: common.NoteBlockParagraph}}}
+	for _, char := range line {
+		text, _, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
+		document = DocumentFromEditor(text+string(char), document)
+	}
+	return document
+}
+
+func TestTypingTaskPrefixCreatesTaskBlock(t *testing.T) {
+	for _, testCase := range []struct {
+		line    string
+		checked bool
+	}{
+		{"- [ ] buy milk", false},
+		{"- [x] buy milk", true},
+		{"[ ] buy milk", false},
+		{"[x] buy milk", true},
+	} {
+		document := typeNoteLine(testCase.line)
+		if len(document.Blocks) != 1 {
+			t.Fatalf("typing %q produced %d blocks, want 1", testCase.line, len(document.Blocks))
+		}
+		block := document.Blocks[0]
+		if block.Type != common.NoteBlockTask || block.Checked != testCase.checked || block.Text != "buy milk" {
+			t.Fatalf("typing %q = type %s checked %v text %q, want task checked %v text %q",
+				testCase.line, block.Type, block.Checked, block.Text, testCase.checked, "buy milk")
+		}
+	}
+}
+
+func TestTypingBulletAndOrderedPrefixesStayLists(t *testing.T) {
+	for _, testCase := range []struct {
+		line      string
+		blockType common.NoteBlockType
+		text      string
+	}{
+		{"- buy milk", common.NoteBlockBullet, "buy milk"},
+		{"1. buy milk", common.NoteBlockOrdered, "buy milk"},
+		{"- 1. buy milk", common.NoteBlockBullet, "1. buy milk"},
+		{"- [draft] buy milk", common.NoteBlockBullet, "[draft] buy milk"},
+	} {
+		document := typeNoteLine(testCase.line)
+		if len(document.Blocks) != 1 {
+			t.Fatalf("typing %q produced %d blocks, want 1", testCase.line, len(document.Blocks))
+		}
+		block := document.Blocks[0]
+		if block.Type != testCase.blockType || block.Text != testCase.text {
+			t.Fatalf("typing %q = type %s text %q, want type %s text %q",
+				testCase.line, block.Type, block.Text, testCase.blockType, testCase.text)
+		}
+	}
+}
