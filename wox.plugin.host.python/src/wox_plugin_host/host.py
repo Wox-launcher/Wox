@@ -5,6 +5,7 @@ import traceback
 from typing import Any
 from wox_plugin import Context
 import websockets
+from websockets.asyncio.server import ServerConnection
 
 from . import logger
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST, PLUGIN_JSONRPC_TYPE_RESPONSE
@@ -44,7 +45,7 @@ def _clean_for_serialization(obj: Any) -> Any:
     return None
 
 
-async def handle_message(ws: websockets.asyncio.server.ServerConnection, message: str) -> None:
+async def handle_message(ws: ServerConnection, message: str) -> None:
     """Handle incoming WebSocket message"""
 
     trace_id = str(uuid.uuid4())
@@ -103,7 +104,7 @@ async def handle_message(ws: websockets.asyncio.server.ServerConnection, message
         )
 
 
-async def handler(websocket: websockets.asyncio.server.ServerConnection) -> None:
+async def handler(websocket: ServerConnection) -> None:
     """WebSocket connection handler"""
     set_current_connection(websocket)
 

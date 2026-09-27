@@ -8,7 +8,7 @@ import uuid
 from os import path
 from typing import Any, Dict, Optional, Union
 
-import websockets
+from websockets.asyncio.server import ServerConnection
 from wox_plugin import (
     ActionContext,
     ChatStreamData,
@@ -51,7 +51,7 @@ def _parse_context_data(raw: Optional[Union[str, Dict[str, Any]]]) -> Dict[str, 
     return {}
 
 
-async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> Any:
+async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: ServerConnection) -> Any:
     """Handle incoming request from Wox, retaining its UI routing context."""
     for key in ("SessionId", "QueryId"):
         if isinstance(request.get(key), str) and request[key]:
@@ -193,7 +193,7 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         raise e
 
 
-async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> None:
+async def init_plugin(ctx: Context, request: Dict[str, Any], ws: ServerConnection) -> None:
     """Initialize a plugin"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")

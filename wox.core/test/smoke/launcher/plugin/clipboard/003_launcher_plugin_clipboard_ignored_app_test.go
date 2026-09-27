@@ -21,7 +21,7 @@ import (
 // Field 0 is the shared trigger-keywords table prepended to every plugin form.
 const (
 	clipboardPluginID                   = "5f815d98-27f5-488d-a756-c317ea39935b"
-	clipboardIgnoredApplicationsFieldID = "plugin-settings-field-9"
+	clipboardIgnoredApplicationsFieldID = "plugin-settings-field-10"
 )
 
 // Test003LauncherPluginClipboardIgnoredApp verifies ignored applications bypass Clipboard history.

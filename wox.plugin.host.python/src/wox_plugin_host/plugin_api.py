@@ -3,7 +3,7 @@ import json
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-import websockets
+from websockets.asyncio.server import ServerConnection
 from wox_plugin import (
     AIModel,
     PushAttentionRequest,
@@ -54,7 +54,7 @@ from .plugin_manager import set_current_connection, waiting_for_response
 
 
 class PluginAPI(PublicAPI):
-    def __init__(self, ws: websockets.asyncio.server.ServerConnection, plugin_id: str, plugin_name: str):
+    def __init__(self, ws: ServerConnection, plugin_id: str, plugin_name: str):
         # Init receives the socket that is current at load. Later reconnects replace it.
         set_current_connection(ws)
         self.plugin_id = plugin_id
