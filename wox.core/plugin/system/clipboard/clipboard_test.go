@@ -414,6 +414,22 @@ func TestClipboardFavQueryFiltersBySearch(t *testing.T) {
 
 	api := &clipboardFavoritesTestAPI{settings: map[string]string{favoritesSettingKey: string(favorites)}}
 	c := &ClipboardPlugin{api: api, db: clipboardQueryTestDB{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	ctx := context.Background()
+
+	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{}).Results); len(got) != 0 {
+		t.Fatalf("default cb titles = %v, want no favorites", got)
+	}
+	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{Search: "pypi"}).Results); len(got) != 0 {
+		t.Fatalf("default cb pypi titles = %v, want no favorites", got)
+	}
+
+	api.settings[showFavoritesByDefaultSettingKey] = "true"
+	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{}).Results); len(got) != 2 {
+		t.Fatalf("shown cb titles = %v, want both favorites", got)
+	}
+	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{Search: "pypi"}).Results); len(got) != 1 || got[0] != "pypi token" {
+		t.Fatalf("shown cb pypi titles = %v, want [pypi token]", got)
+	}
 
 	listed := c.Query(context.Background(), plugin.Query{Command: "fav"})
 	if got := clipboardResultTitles(listed.Results); len(got) != 2 {
@@ -425,10 +441,170 @@ func TestClipboardFavQueryFiltersBySearch(t *testing.T) {
 	if len(titles) != 1 || titles[0] != "pypi token" {
 		t.Fatalf("cb fav pypi titles = %v, want [pypi token]", titles)
 	}
+	for _, action := range filtered.Results[0].Actions {
+		if action.Name == "i18n:plugin_clipboard_move_favorite_up" || action.Name == "i18n:plugin_clipboard_move_favorite_down" {
+			t.Fatal("filtered favorites must not expose moves outside the visible list")
+		}
+	}
 
 	unmatched := c.Query(context.Background(), plugin.Query{Command: "fav", Search: "sdf"})
 	if got := clipboardResultTitles(unmatched.Results); len(got) != 0 {
 		t.Fatalf("cb fav sdf titles = %v, want none", got)
+	}
+
+	newRecord := ClipboardRecord{ID: "new", Type: string(clipboard.ClipboardTypeText), Content: "new text", Timestamp: 3}
+	result := c.convertRecordToResult(ctx, newRecord, plugin.Query{})
+	for _, action := range result.Actions {
+		if action.Name == "i18n:plugin_clipboard_mark_favorite" {
+			action.Action(ctx, plugin.ActionContext{})
+			if api.changedQuery.QueryType != plugin.QueryTypeInput || api.changedQuery.QueryText != "cb fav " {
+				t.Fatalf("favorite action changed query to %+v", api.changedQuery)
+			}
+			return
+		}
+	}
+	t.Fatal("mark favorite action missing")
+}
+
+func TestClipboardFavoriteUsageAndManualRank(t *testing.T) {
+	ctx := context.Background()
+	legacyScores := favoriteDisplayScores([]FavoriteClipboardItem{{ID: "old", Timestamp: 1}, {ID: "new", Timestamp: 2}})
+	if legacyScores["new"] <= legacyScores["old"] {
+		t.Fatalf("legacy favorites lost timestamp order: %v", legacyScores)
+	}
+	items := []FavoriteClipboardItem{
+		{ID: "top", Type: string(clipboard.ClipboardTypeText), Content: "Top", UseCount: 21, Timestamp: 4},
+		{ID: "a", Type: string(clipboard.ClipboardTypeText), Content: "A", UseCount: 20, Timestamp: 3},
+		{ID: "b", Type: string(clipboard.ClipboardTypeText), Content: "B", UseCount: 18, Timestamp: 2},
+		{ID: "c", Type: string(clipboard.ClipboardTypeText), Content: "C", UseCount: 17, Timestamp: 1},
+	}
+	encoded, err := json.Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{favoritesSettingKey: string(encoded)}}
+	c := &ClipboardPlugin{api: api, db: clipboardQueryTestDB{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	if err := c.saveFavoriteRankStats(ctx, items); err != nil {
+		t.Fatal(err)
+	}
+
+	initialResults := c.Query(ctx, plugin.Query{Command: "fav"}).Results
+	for i, result := range initialResults {
+		hasUp, hasDown := false, false
+		for _, action := range result.Actions {
+			hasUp = hasUp || action.Name == "i18n:plugin_clipboard_move_favorite_up"
+			hasDown = hasDown || action.Name == "i18n:plugin_clipboard_move_favorite_down"
+		}
+		if hasUp != (i > 0) || hasDown != (i+1 < len(initialResults)) {
+			t.Fatalf("favorite %s at %d has up=%v down=%v", result.ScoreKey, i, hasUp, hasDown)
+		}
+	}
+	for _, result := range initialResults {
+		if result.ScoreKey != "b" {
+			continue
+		}
+		for _, action := range result.Actions {
+			if action.Name == "i18n:plugin_clipboard_move_favorite_up" {
+				action.Action(ctx, plugin.ActionContext{})
+			}
+		}
+	}
+	if api.refreshCount != 1 {
+		t.Fatalf("refresh count = %d, want 1", api.refreshCount)
+	}
+	items, err = c.getFavoriteItems(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sortFavoritesByRank(items)
+	if items[0].ID != "top" || items[1].ID != "b" || items[2].ID != "a" || items[3].ID != "c" || items[1].rankScore()-items[2].rankScore() != favoriteMoveScoreGap {
+		t.Fatalf("after moving B up: %+v", items)
+	}
+	response := c.Query(ctx, plugin.Query{Command: "fav"})
+	resultScores := map[string]int64{}
+	for _, result := range response.Results {
+		resultScores[result.ScoreKey] = result.Score
+	}
+	if !(resultScores["top"] > resultScores["b"] && resultScores["b"] > resultScores["a"] && resultScores["a"] > resultScores["c"]) {
+		t.Fatalf("cb fav scores = %v", resultScores)
+	}
+
+	for i := 0; i < 10; i++ {
+		c.recordUsed(ctx, ClipboardRecord{ID: "a", IsFavorite: true})
+	}
+	items, _ = c.getFavoriteItems(ctx)
+	sortFavoritesByRank(items)
+	if items[1].ID != "b" {
+		t.Fatalf("A overtook B before its 11th use: %+v", items)
+	}
+	c.recordUsed(ctx, ClipboardRecord{ID: "a", IsFavorite: true})
+	items, _ = c.getFavoriteItems(ctx)
+	sortFavoritesByRank(items)
+	if items[1].ID != "a" {
+		t.Fatalf("A did not overtake B after its 11th use: %+v", items)
+	}
+
+	c.moveFavoriteAndRefresh(ctx, "a", false)
+	items, _ = c.getFavoriteItems(ctx)
+	sortFavoritesByRank(items)
+	if api.refreshCount != 2 || items[0].ID != "top" || items[1].ID != "b" || items[2].ID != "a" || items[1].rankScore()-items[2].rankScore() != favoriteMoveScoreGap {
+		t.Fatalf("after moving A down: refresh=%d items=%+v", api.refreshCount, items)
+	}
+	if api.settings[favoritesSettingKey] != string(encoded) {
+		t.Fatal("usage and reordering must not rewrite favorite content")
+	}
+	statsBefore := api.settings[favoriteRankStatsSettingKey]
+	c.moveFavoriteAndRefresh(ctx, "missing", true)
+	c.moveFavoriteAndRefresh(ctx, "top", true)
+	if api.refreshCount != 2 || api.settings[favoriteRankStatsSettingKey] != statsBefore {
+		t.Fatal("invalid moves must not persist or refresh")
+	}
+	api.failSetSetting = true
+	c.moveFavoriteAndRefresh(ctx, "b", true)
+	if api.refreshCount != 2 || api.settings[favoriteRankStatsSettingKey] != statsBefore {
+		t.Fatal("failed persistence must not refresh or change the saved rank")
+	}
+}
+
+func TestMoveFavoriteOneStepEdgeCases(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		items      []FavoriteClipboardItem
+		id         string
+		up         bool
+		wantMove   bool
+		wantOrder  []string
+		wantScores []int64
+	}{
+		{name: "empty", id: "missing", up: true},
+		{name: "single top", items: []FavoriteClipboardItem{{ID: "A"}}, id: "A", up: true, wantOrder: []string{"A"}, wantScores: []int64{0}},
+		{name: "single bottom", items: []FavoriteClipboardItem{{ID: "A"}}, id: "A", wantOrder: []string{"A"}, wantScores: []int64{0}},
+		{name: "missing", items: []FavoriteClipboardItem{{ID: "A", UseCount: 10}, {ID: "B"}}, id: "missing", up: true, wantOrder: []string{"A", "B"}, wantScores: []int64{10, 0}},
+		{name: "top cannot move up", items: []FavoriteClipboardItem{{ID: "A", UseCount: 10}, {ID: "B"}}, id: "A", up: true, wantOrder: []string{"A", "B"}, wantScores: []int64{10, 0}},
+		{name: "bottom cannot move down", items: []FavoriteClipboardItem{{ID: "A", UseCount: 10}, {ID: "B"}}, id: "B", wantOrder: []string{"A", "B"}, wantScores: []int64{10, 0}},
+		{name: "two items up", items: []FavoriteClipboardItem{{ID: "A", UseCount: 5}, {ID: "B"}}, id: "B", up: true, wantMove: true, wantOrder: []string{"B", "A"}, wantScores: []int64{15, 5}},
+		{name: "two items down", items: []FavoriteClipboardItem{{ID: "A", UseCount: 5}, {ID: "B"}}, id: "A", wantMove: true, wantOrder: []string{"B", "A"}, wantScores: []int64{15, 5}},
+		{name: "five point gap up", items: []FavoriteClipboardItem{{ID: "A", UseCount: 100}, {ID: "B", UseCount: 95}, {ID: "C", UseCount: 90}}, id: "C", up: true, wantMove: true, wantOrder: []string{"A", "C", "B"}, wantScores: []int64{115, 105, 95}},
+		{name: "five point gap down", items: []FavoriteClipboardItem{{ID: "A", UseCount: 100}, {ID: "B", UseCount: 95}, {ID: "C", UseCount: 90}}, id: "B", wantMove: true, wantOrder: []string{"A", "C", "B"}, wantScores: []int64{115, 105, 95}},
+		{name: "wide gap leaves top alone", items: []FavoriteClipboardItem{{ID: "A", UseCount: 100}, {ID: "B", UseCount: 20}, {ID: "C"}}, id: "C", up: true, wantMove: true, wantOrder: []string{"A", "C", "B"}, wantScores: []int64{100, 30, 20}},
+		{name: "all tied", items: []FavoriteClipboardItem{{ID: "A", Timestamp: 3}, {ID: "B", Timestamp: 2}, {ID: "C", Timestamp: 1}}, id: "C", up: true, wantMove: true, wantOrder: []string{"A", "C", "B"}, wantScores: []int64{20, 10, 0}},
+		{name: "crowded chain", items: []FavoriteClipboardItem{{ID: "A", UseCount: 9}, {ID: "B", UseCount: 8}, {ID: "C", UseCount: 7}, {ID: "D", UseCount: 6}}, id: "D", up: true, wantMove: true, wantOrder: []string{"A", "B", "D", "C"}, wantScores: []int64{37, 27, 17, 7}},
+		{name: "negative bonus", items: []FavoriteClipboardItem{{ID: "A", RankBonus: -5}, {ID: "B", RankBonus: -10}, {ID: "C", RankBonus: -11}}, id: "C", up: true, wantMove: true, wantOrder: []string{"A", "C", "B"}, wantScores: []int64{10, 0, -10}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			originalUses := make(map[string]int64, len(tc.items))
+			for _, item := range tc.items {
+				originalUses[item.ID] = item.UseCount
+			}
+			if moved := moveFavoriteOneStep(tc.items, tc.id, tc.up); moved != tc.wantMove {
+				t.Fatalf("moved = %v, want %v", moved, tc.wantMove)
+			}
+			for i, item := range tc.items {
+				if item.ID != tc.wantOrder[i] || item.rankScore() != tc.wantScores[i] || item.UseCount != originalUses[item.ID] {
+					t.Fatalf("item %d = %+v, want id=%s score=%d original use count=%d", i, item, tc.wantOrder[i], tc.wantScores[i], originalUses[item.ID])
+				}
+			}
+		})
 	}
 }
 
@@ -442,11 +618,30 @@ func clipboardResultTitles(results []plugin.QueryResult) []string {
 
 type clipboardFavoritesTestAPI struct {
 	imagePasteFailureAPI
-	settings map[string]string
+	settings       map[string]string
+	refreshCount   int
+	changedQuery   common.PlainQuery
+	failSetSetting bool
 }
 
 func (a *clipboardFavoritesTestAPI) GetSetting(_ context.Context, key string) string {
 	return a.settings[key]
+}
+
+func (a *clipboardFavoritesTestAPI) SetSetting(_ context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
+	if a.failSetSetting {
+		return plugin.SetSettingResult{ErrMsg: "test failure"}
+	}
+	a.settings[option.Key] = option.Value
+	return plugin.SetSettingResult{Success: true}
+}
+
+func (a *clipboardFavoritesTestAPI) RefreshQuery(context.Context, plugin.RefreshQueryParam) {
+	a.refreshCount++
+}
+
+func (a *clipboardFavoritesTestAPI) ChangeQuery(_ context.Context, query common.PlainQuery) {
+	a.changedQuery = query
 }
 
 type clipboardQueryTestDB struct{}

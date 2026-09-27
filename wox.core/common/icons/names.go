@@ -61,6 +61,8 @@ const (
 	ActionSettings             = "action.settings"
 	ActionStar                 = "action.star"
 	ActionUnstar               = "action.unstar"
+	ActionMoveUp               = "action.move-up"
+	ActionMoveDown             = "action.move-down"
 	ActionLock                 = "action.lock"
 	ActionDelete               = "action.delete"
 	ActionExit                 = "action.exit"

@@ -48,10 +48,12 @@ var defaultActionIcons = map[string]common.WoxImage{
 	// the global "Pin in current query" ranking action, which appears on every
 	// result; keeping the two glyphs distinct is what stops an Action Panel from
 	// showing two identical pins side by side.
-	ActionStar:   newActionIcon(`<path d="m12 3 2.6 5.4 6 .9-4.3 4.2 1 5.9L12 16.8 6.7 19.4l1-5.9L3.4 9.3l6-.9z"/>`),
-	ActionUnstar: newActionIcon(`<path d="m12 3 2.6 5.4 6 .9-4.3 4.2 1 5.9L12 16.8 6.7 19.4l1-5.9L3.4 9.3l6-.9z"/><path d="M5 5l14 14"/>`),
-	ActionLock:   newActionIcon(`<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>`),
-	ActionDelete: newActionIcon(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`),
+	ActionStar:     newActionIcon(`<path d="m12 3 2.6 5.4 6 .9-4.3 4.2 1 5.9L12 16.8 6.7 19.4l1-5.9L3.4 9.3l6-.9z"/>`),
+	ActionUnstar:   newActionIcon(`<path d="m12 3 2.6 5.4 6 .9-4.3 4.2 1 5.9L12 16.8 6.7 19.4l1-5.9L3.4 9.3l6-.9z"/><path d="M5 5l14 14"/>`),
+	ActionMoveUp:   newActionIcon(`<path d="M12 19V5m-5 5 5-5 5 5"/>`),
+	ActionMoveDown: newActionIcon(`<path d="M12 5v14m-5-5 5 5 5-5"/>`),
+	ActionLock:     newActionIcon(`<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>`),
+	ActionDelete:   newActionIcon(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`),
 	// Exit is "leave Wox", so it uses the door-and-arrow log-out glyph and pairs
 	// with ActionOpen's frame-and-arrow. Power-off lives in SysShutdown.
 	// Fixed red keeps quitting recognizable on both light and dark launcher surfaces.

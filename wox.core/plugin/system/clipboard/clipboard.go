@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,7 +78,11 @@ func applyCopyPastePrimaryAction(copyAction *plugin.QueryResultAction, pasteActi
 }
 
 var favoritesSettingKey = "favorites"
+var favoriteRankStatsSettingKey = "favorite_rank_stats"
+var showFavoritesByDefaultSettingKey = "show_favorites_by_default"
 var ignoredApplicationsSettingKey = "ignored_applications"
+
+const favoriteMoveScoreGap int64 = 10
 
 const (
 	clipboardTypeRefinementKey   = "clipboard_type"
@@ -118,6 +123,15 @@ type FavoriteClipboardItem struct {
 	OCRText   *string  `json:"ocrText,omitempty"`
 	Timestamp int64    `json:"timestamp"`
 	CreatedAt int64    `json:"createdAt"`
+	UseCount  int64    `json:"-"`
+	RankBonus int64    `json:"-"`
+	RankOrder int64    `json:"-"`
+}
+
+type favoriteRankStat struct {
+	UseCount  int64 `json:"useCount,omitempty"`
+	RankBonus int64 `json:"rankBonus,omitempty"`
+	RankOrder int64 `json:"rankOrder,omitempty"`
 }
 
 // ClipboardDBInterface defines the interface for clipboard database operations
@@ -145,6 +159,7 @@ type ClipboardPlugin struct {
 	db              ClipboardDBInterface
 	maxHistoryCount int
 	backgroundTasks sync.WaitGroup
+	favoritesMu     sync.Mutex
 	// Cache for generated preview and icon images to avoid regeneration
 	imageCache *util.HashMap[string, *ImageCacheEntry]
 	// faviconFetchAttempted remembers hosts already requested this session so a
@@ -284,6 +299,15 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 						{Label: "i18n:plugin_clipboard_primary_action_copy_to_clipboard", Value: primaryActionValueCopy},
 						{Label: "i18n:plugin_clipboard_primary_action_paste_to_active_app", Value: primaryActionValuePaste},
 					},
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          showFavoritesByDefaultSettingKey,
+					Label:        "i18n:plugin_clipboard_show_favorites_by_default",
+					Tooltip:      "i18n:plugin_clipboard_show_favorites_by_default_tooltip",
+					DefaultValue: "false",
 				},
 			},
 			{
@@ -777,10 +801,17 @@ func clipboardSearchCandidateMatches(ctx context.Context, candidate string, sear
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
 	var iconRecords []ClipboardRecord
+	var favoriteScores map[string]int64
 	selectedType := c.getSelectedClipboardType(query)
-	addResult := func(record ClipboardRecord) {
+	showFavorites := c.api.GetSetting(ctx, showFavoritesByDefaultSettingKey) == "true"
+	addResult := func(record ClipboardRecord) *plugin.QueryResult {
 		iconRecords = append(iconRecords, record)
-		results = append(results, c.convertRecordToResult(ctx, record, query))
+		result := c.convertRecordToResult(ctx, record, query)
+		if record.IsFavorite && !query.IsGlobalQuery() {
+			result.Score = favoriteScores[record.ID]
+		}
+		results = append(results, result)
+		return &results[len(results)-1]
 	}
 
 	if query.Command == clipboardPasteCommand {
@@ -799,26 +830,37 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
 			return c.newClipboardQueryResponse(results)
 		}
+		favoriteScores = favoriteDisplayScores(favorites)
+		sortFavoritesByRank(favorites)
 
-		for _, favoriteItem := range favorites {
+		for i, favoriteItem := range favorites {
 			if !clipboardFavoriteVisibleInFavQuery(ctx, favoriteItem, query.Search, selectedType) {
 				continue
 			}
 			record := c.convertFavoriteToRecord(favoriteItem)
-			addResult(record)
+			result := addResult(record)
+			if query.Search == "" && selectedType == clipboardTypeRefinementAll {
+				if i > 0 {
+					result.Actions = append(result.Actions, c.favoriteMoveAction(record.ID, true))
+				}
+				if i+1 < len(favorites) {
+					result.Actions = append(result.Actions, c.favoriteMoveAction(record.ID, false))
+				}
+			}
 		}
 		return c.clipboardQueryResponse(ctx, results, iconRecords)
 	}
 
 	if query.Search == "" {
-		if selectedType == clipboardTypeRefinementAll {
-			// The default clipboard view keeps favorites first. Explicit type
+		if selectedType == clipboardTypeRefinementAll && showFavorites {
+			// When enabled, the clipboard view keeps favorites first. Explicit type
 			// refinements should narrow history instead of jumping to the
 			// high-score Favorites group; users can still use "cb fav" for that.
 			favorites, err := c.getFavoriteItems(ctx)
 			if err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
 			} else {
+				favoriteScores = favoriteDisplayScores(favorites)
 				for _, favoriteItem := range favorites {
 					if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
 						continue
@@ -861,12 +903,15 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	var allResults []ClipboardRecord
 
 	// Search in favorites from settings
-	favorites, err := c.getFavoriteItems(ctx)
-	if err == nil {
-		for _, favoriteItem := range favorites {
-			if clipboardFavoriteMatchesSearch(ctx, favoriteItem, query.Search, selectedType) {
-				record := c.convertFavoriteToRecord(favoriteItem)
-				allResults = append(allResults, record)
+	if showFavorites {
+		favorites, err := c.getFavoriteItems(ctx)
+		if err == nil {
+			favoriteScores = favoriteDisplayScores(favorites)
+			for _, favoriteItem := range favorites {
+				if clipboardFavoriteMatchesSearch(ctx, favoriteItem, query.Search, selectedType) {
+					record := c.convertFavoriteToRecord(favoriteItem)
+					allResults = append(allResults, record)
+				}
 			}
 		}
 	}
@@ -1138,15 +1183,16 @@ func (c *ClipboardPlugin) locationLinkActions(path string, isDir bool) []plugin.
 }
 
 // openContainingFolderAction reveals a clipboard-backed file in the system file manager.
-func (c *ClipboardPlugin) openContainingFolderAction(recordID string, filePath string) plugin.QueryResultAction {
+func (c *ClipboardPlugin) openContainingFolderAction(record ClipboardRecord, filePath string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name: "i18n:plugin_clipboard_open_containing_folder",
 		Icon: icons.Get(icons.ActionOpenContainingFolder),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			c.moveRecordToTop(ctx, recordID)
 			if err := shell.OpenFileInFolder(filePath); err != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file in folder: id=%s path=%s err=%s", recordID, filePath, err.Error()))
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file in folder: id=%s path=%s err=%s", record.ID, filePath, err.Error()))
+				return
 			}
+			c.recordUsed(ctx, record)
 		},
 	}
 }
@@ -1224,6 +1270,25 @@ func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record Clip
 	result.ScoreKey = record.ID
 	result.Actions = attachClipboardMRUContext(result.Actions, record.ID)
 	return result
+}
+
+// favoriteMoveAction adjusts the full favorites order from the unfiltered cb fav list.
+func (c *ClipboardPlugin) favoriteMoveAction(id string, up bool) plugin.QueryResultAction {
+	name := "i18n:plugin_clipboard_move_favorite_down"
+	icon := icons.ActionMoveDown
+	if up {
+		name = "i18n:plugin_clipboard_move_favorite_up"
+		icon = icons.ActionMoveUp
+	}
+	return plugin.QueryResultAction{
+		Name:                   name,
+		Icon:                   icons.Get(icon),
+		ContextData:            clipboardMRUContext(id),
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			c.moveFavoriteAndRefresh(ctx, id, up)
+		},
+	}
 }
 
 func clipboardMRUContext(recordID string) common.ContextData {
@@ -1327,10 +1392,11 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 			Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
 			Icon: icons.Get(icons.ActionCopy),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				c.moveRecordToTop(ctx, record.ID)
 				if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore file clipboard record: id=%s err=%s", record.ID, err.Error()))
+					return
 				}
+				c.recordUsed(ctx, record)
 			},
 		},
 	}
@@ -1340,7 +1406,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
 			return fmt.Errorf("failed to restore file clipboard record before paste: %w", err)
 		}
-		c.moveRecordToTop(actionCtx, record.ID)
+		c.recordUsed(actionCtx, record)
 		return nil
 	})
 	if pasteToActiveWindowErr == nil {
@@ -1357,19 +1423,20 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 			Name: "i18n:plugin_clipboard_open_path",
 			Icon: icons.Get(icons.ActionOpen),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				c.moveRecordToTop(ctx, record.ID)
 				if err := shell.Open(singlePath); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file path: id=%s path=%s err=%s", record.ID, singlePath, err.Error()))
+					return
 				}
+				c.recordUsed(ctx, record)
 			},
 		})
 
 		if !util.IsDirExists(singlePath) {
-			actions = append(actions, c.openContainingFolderAction(record.ID, singlePath))
+			actions = append(actions, c.openContainingFolderAction(record, singlePath))
 		}
 		actions = append(actions, c.locationLinkActions(singlePath, util.IsDirExists(singlePath))...)
 	} else if len(filePaths) > 0 {
-		actions = append(actions, c.openContainingFolderAction(record.ID, filePaths[0]))
+		actions = append(actions, c.openContainingFolderAction(record, filePaths[0]))
 		actions = append(actions, notesplugin.CreateNoteAction(c.api, "", strings.Join(filePaths, "\n"), ""))
 	}
 
@@ -1383,7 +1450,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to set favorite: %s", err.Error()))
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("marked record as favorite: %s", record.ID))
-					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+					c.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "cb fav "})
 				}
 			},
 		})
@@ -1538,10 +1605,11 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			Name: "i18n:plugin_clipboard_copy",
 			Icon: icons.Get(icons.ActionCopy),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				c.moveRecordToTop(ctx, record.ID)
 				if err := clipboard.WriteText(record.Content); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy text record to clipboard: id=%s err=%s", record.ID, err.Error()))
+					return
 				}
+				c.recordUsed(ctx, record)
 			},
 		},
 	}
@@ -1552,7 +1620,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		if err := clipboard.WriteText(record.Content); err != nil {
 			return fmt.Errorf("failed to copy text record before paste action: %w", err)
 		}
-		c.moveRecordToTop(actionCtx, record.ID)
+		c.recordUsed(actionCtx, record)
 		return nil
 	})
 	if pasteToActiveWindowErr == nil {
@@ -1568,10 +1636,11 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			Name: "i18n:plugin_clipboard_open_link",
 			Icon: icons.Get(icons.ActionOpen),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				c.moveRecordToTop(ctx, record.ID)
 				if err := shell.Open(normalizedLink); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard link: id=%s url=%s err=%s", record.ID, normalizedLink, err.Error()))
+					return
 				}
+				c.recordUsed(ctx, record)
 			},
 		})
 	}
@@ -1581,16 +1650,17 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			Name: "i18n:plugin_clipboard_open_path",
 			Icon: icons.Get(icons.ActionOpenContainingFolder),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				c.moveRecordToTop(ctx, record.ID)
 				if err := shell.Open(openDirectoryPath); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard directory path: id=%s path=%s err=%s", record.ID, openDirectoryPath, err.Error()))
+					return
 				}
+				c.recordUsed(ctx, record)
 			},
 		})
 	}
 
 	if filesystemPath != "" && !filesystemIsDir {
-		actions = append(actions, c.openContainingFolderAction(record.ID, filesystemPath))
+		actions = append(actions, c.openContainingFolderAction(record, filesystemPath))
 	}
 
 	if filesystemPath != "" {
@@ -1609,7 +1679,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to set favorite: %s", err.Error()))
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("marked record as favorite: %s", record.ID))
-					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+					c.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "cb fav "})
 				}
 			},
 		})
@@ -1810,10 +1880,11 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 				Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
 				Icon: icons.Get(icons.ActionCopy),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					c.moveRecordToTop(ctx, record.ID)
 					if err := c.restoreImageRecordToClipboard(ctx, record); err != nil {
 						c.api.Log(ctx, plugin.LogLevelError, err.Error())
+						return
 					}
+					c.recordUsed(ctx, record)
 				},
 			},
 		},
@@ -1826,7 +1897,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			c.api.Log(actionCtx, plugin.LogLevelError, err.Error())
 			return errors.New(c.api.GetTranslation(actionCtx, "plugin_clipboard_image_restore_failed"))
 		}
-		c.moveRecordToTop(actionCtx, record.ID)
+		c.recordUsed(actionCtx, record)
 		return nil
 	})
 	if pasteToActiveWindowErr == nil {
@@ -1838,7 +1909,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 	}
 
 	if strings.TrimSpace(record.FilePath) != "" {
-		result.Actions = append(result.Actions, c.openContainingFolderAction(record.ID, record.FilePath))
+		result.Actions = append(result.Actions, c.openContainingFolderAction(record, record.FilePath))
 	}
 
 	if !record.IsFavorite {
@@ -1851,7 +1922,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to set favorite: %s", err.Error()))
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("marked record as favorite: %s", record.ID))
-					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+					c.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "cb fav "})
 				}
 			},
 		})
@@ -2004,9 +2075,28 @@ func (c *ClipboardPlugin) deleteRecordAssets(ctx context.Context, record Clipboa
 	c.imageCache.Delete(record.ID)
 }
 
-// moveRecordToTop updates the timestamp of a record to move it to the top
-func (c *ClipboardPlugin) moveRecordToTop(ctx context.Context, id string) {
-	if err := c.db.UpdateTimestamp(ctx, id, util.GetSystemTimestamp()); err != nil {
+// recordUsed counts successful favorite actions while keeping history's recency behavior.
+func (c *ClipboardPlugin) recordUsed(ctx context.Context, record ClipboardRecord) {
+	if record.IsFavorite {
+		c.favoritesMu.Lock()
+		defer c.favoritesMu.Unlock()
+		favorites, err := c.getFavoriteItems(ctx)
+		if err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to count favorite use: %s", err.Error()))
+			return
+		}
+		for i := range favorites {
+			if favorites[i].ID == record.ID {
+				favorites[i].UseCount++
+				if err := c.saveFavoriteRankStats(ctx, favorites); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save favorite use: %s", err.Error()))
+				}
+				return
+			}
+		}
+		return
+	}
+	if err := c.db.UpdateTimestamp(ctx, record.ID, util.GetSystemTimestamp()); err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to move record to top: %s", err.Error()))
 	}
 }
@@ -2464,8 +2554,139 @@ func (c *ClipboardPlugin) getFavoriteItems(ctx context.Context) ([]FavoriteClipb
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal favorites: %s", err.Error()))
 		return []FavoriteClipboardItem{}, nil
 	}
+	stats, err := c.getFavoriteRankStats(ctx)
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read favorite ranking: %s", err.Error()))
+		return favorites, nil
+	}
+	for i := range favorites {
+		if stat, ok := stats[favorites[i].ID]; ok {
+			favorites[i].UseCount = stat.UseCount
+			favorites[i].RankBonus = stat.RankBonus
+			favorites[i].RankOrder = stat.RankOrder
+		}
+	}
 
 	return favorites, nil
+}
+
+// getFavoriteRankStats loads the compact usage and manual-order data by favorite ID.
+func (c *ClipboardPlugin) getFavoriteRankStats(ctx context.Context) (map[string]favoriteRankStat, error) {
+	raw := c.api.GetSetting(ctx, favoriteRankStatsSettingKey)
+	if raw == "" {
+		return nil, nil
+	}
+	var stats map[string]favoriteRankStat
+	if err := json.Unmarshal([]byte(raw), &stats); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+// saveFavoriteRankStats keeps frequent usage writes separate from large favorite content.
+func (c *ClipboardPlugin) saveFavoriteRankStats(ctx context.Context, favorites []FavoriteClipboardItem) error {
+	stats := make(map[string]favoriteRankStat, len(favorites))
+	for _, item := range favorites {
+		if item.UseCount != 0 || item.RankBonus != 0 || item.RankOrder != 0 {
+			stats[item.ID] = favoriteRankStat{UseCount: item.UseCount, RankBonus: item.RankBonus, RankOrder: item.RankOrder}
+		}
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		return fmt.Errorf("failed to marshal favorite ranking: %w", err)
+	}
+	result := c.api.SetSetting(ctx, plugin.SetSettingOption{Key: favoriteRankStatsSettingKey, Value: string(raw)})
+	if !result.Success {
+		return fmt.Errorf("failed to save favorite ranking: %s", result.ErrMsg)
+	}
+	return nil
+}
+
+func (item FavoriteClipboardItem) rankScore() int64 {
+	return item.UseCount + item.RankBonus
+}
+
+// sortFavoritesByRank keeps old favorites in timestamp order and manual ties in chosen order.
+func sortFavoritesByRank(favorites []FavoriteClipboardItem) {
+	sort.Slice(favorites, func(i, j int) bool {
+		if favorites[i].rankScore() != favorites[j].rankScore() {
+			return favorites[i].rankScore() > favorites[j].rankScore()
+		}
+		if favorites[i].RankOrder != favorites[j].RankOrder {
+			return favorites[i].RankOrder > favorites[j].RankOrder
+		}
+		if favorites[i].Timestamp != favorites[j].Timestamp {
+			return favorites[i].Timestamp > favorites[j].Timestamp
+		}
+		return favorites[i].ID < favorites[j].ID
+	})
+}
+
+// favoriteDisplayScores reserves the lower score range for deterministic timestamp ties.
+func favoriteDisplayScores(favorites []FavoriteClipboardItem) map[string]int64 {
+	ordered := append([]FavoriteClipboardItem(nil), favorites...)
+	sortFavoritesByRank(ordered)
+	scores := make(map[string]int64, len(ordered))
+	scale := int64(len(ordered) + 1)
+	for i, item := range ordered {
+		scores[item.ID] = item.rankScore()*scale + int64(len(ordered)-i)
+	}
+	return scores
+}
+
+// moveFavoriteOneStep promotes the lower item with a ten-use gap, preserving every other rank.
+func moveFavoriteOneStep(favorites []FavoriteClipboardItem, id string, up bool) bool {
+	sortFavoritesByRank(favorites)
+	index := -1
+	for i := range favorites {
+		if favorites[i].ID == id {
+			index = i
+			break
+		}
+	}
+	if index < 0 || (up && index == 0) || (!up && index == len(favorites)-1) {
+		return false
+	}
+
+	above := index
+	promoted := index + 1
+	if up {
+		above = index - 1
+		promoted = index
+	}
+	favorites[promoted].RankBonus = favorites[above].rankScore() + favoriteMoveScoreGap - favorites[promoted].UseCount
+
+	// Widen crowded scores above the swap so a single move never jumps two places.
+	previousScore := favorites[promoted].rankScore()
+	for i := above - 1; i >= 0; i-- {
+		if favorites[i].rankScore() < previousScore+favoriteMoveScoreGap {
+			favorites[i].RankBonus = previousScore + favoriteMoveScoreGap - favorites[i].UseCount
+		}
+		previousScore = favorites[i].rankScore()
+	}
+	favorites[above], favorites[promoted] = favorites[promoted], favorites[above]
+	for i := range favorites {
+		favorites[i].RankOrder = int64(len(favorites) - i)
+	}
+	return true
+}
+
+// moveFavoriteAndRefresh persists one rank change and immediately redraws the list.
+func (c *ClipboardPlugin) moveFavoriteAndRefresh(ctx context.Context, id string, up bool) {
+	c.favoritesMu.Lock()
+	favorites, err := c.getFavoriteItems(ctx)
+	if err == nil && moveFavoriteOneStep(favorites, id, up) {
+		err = c.saveFavoriteRankStats(ctx, favorites)
+	} else if err == nil {
+		c.favoritesMu.Unlock()
+		return
+	}
+	c.favoritesMu.Unlock()
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to move favorite: %s", err.Error()))
+		return
+	}
+	c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 }
 
 // saveFavoriteItems saves favorite items to settings
@@ -2475,12 +2696,17 @@ func (c *ClipboardPlugin) saveFavoriteItems(ctx context.Context, favorites []Fav
 		return fmt.Errorf("failed to marshal favorites: %w", err)
 	}
 
-	c.api.SaveSetting(ctx, favoritesSettingKey, string(favoritesJson), false)
+	result := c.api.SetSetting(ctx, plugin.SetSettingOption{Key: favoritesSettingKey, Value: string(favoritesJson)})
+	if !result.Success {
+		return fmt.Errorf("failed to save favorites: %s", result.ErrMsg)
+	}
 	return nil
 }
 
 // addToFavorites adds an item to favorites settings
 func (c *ClipboardPlugin) addToFavorites(ctx context.Context, record ClipboardRecord) error {
+	c.favoritesMu.Lock()
+	defer c.favoritesMu.Unlock()
 	favorites, err := c.getFavoriteItems(ctx)
 	if err != nil {
 		return err
@@ -2517,6 +2743,8 @@ func (c *ClipboardPlugin) addToFavorites(ctx context.Context, record ClipboardRe
 
 // removeFromFavorites removes an item from favorites settings
 func (c *ClipboardPlugin) removeFromFavorites(ctx context.Context, id string) error {
+	c.favoritesMu.Lock()
+	defer c.favoritesMu.Unlock()
 	favorites, err := c.getFavoriteItems(ctx)
 	if err != nil {
 		return err
@@ -2530,7 +2758,13 @@ func (c *ClipboardPlugin) removeFromFavorites(ctx context.Context, id string) er
 		}
 	}
 
-	return c.saveFavoriteItems(ctx, favorites)
+	if err := c.saveFavoriteItems(ctx, favorites); err != nil {
+		return err
+	}
+	if err := c.saveFavoriteRankStats(ctx, favorites); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to prune favorite ranking: %s", err.Error()))
+	}
+	return nil
 }
 
 // convertFavoriteToRecord converts FavoriteClipboardItem to ClipboardRecord
@@ -2605,6 +2839,8 @@ func (c *ClipboardPlugin) cancelFavorite(ctx context.Context, id string) error {
 }
 
 func (c *ClipboardPlugin) updateFavoriteContent(ctx context.Context, id string, newContent string) error {
+	c.favoritesMu.Lock()
+	defer c.favoritesMu.Unlock()
 	favorites, err := c.getFavoriteItems(ctx)
 	if err != nil {
 		return err
@@ -2621,6 +2857,8 @@ func (c *ClipboardPlugin) updateFavoriteContent(ctx context.Context, id string, 
 }
 
 func (c *ClipboardPlugin) updateFavoriteAlias(ctx context.Context, id string, alias *string) error {
+	c.favoritesMu.Lock()
+	defer c.favoritesMu.Unlock()
 	favorites, err := c.getFavoriteItems(ctx)
 	if err != nil {
 		return err
@@ -2640,6 +2878,8 @@ func (c *ClipboardPlugin) updateFavoriteAlias(ctx context.Context, id string, al
 func (c *ClipboardPlugin) updateRecordTimestamp(ctx context.Context, record *ClipboardRecord, timestamp int64) {
 	if record.IsFavorite {
 		// Update in favorites settings
+		c.favoritesMu.Lock()
+		defer c.favoritesMu.Unlock()
 		favorites, err := c.getFavoriteItems(ctx)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites for timestamp update: %s", err.Error()))

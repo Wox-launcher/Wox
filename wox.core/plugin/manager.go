@@ -2203,6 +2203,9 @@ func shouldClearGroupForGlobalQuery(query Query, pluginInstance *Instance) bool 
 	if pluginInstance != nil && pluginInstance.Metadata.Id == fileSearchPluginID {
 		return false
 	}
+	if pluginInstance != nil && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureResultGroups) {
+		return false
+	}
 	return true
 }
 

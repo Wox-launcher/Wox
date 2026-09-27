@@ -544,6 +544,12 @@ func TestShouldClearGroupForGlobalQueryKeepsFilePlugin(t *testing.T) {
 	assert.False(t, shouldClearGroupForGlobalQuery(globalQuery, filePlugin))
 	assert.True(t, shouldClearGroupForGlobalQuery(globalQuery, otherPlugin))
 	assert.False(t, shouldClearGroupForGlobalQuery(Query{Type: QueryTypeInput, TriggerKeyword: "f"}, filePlugin))
+
+	groupedPlugin := &Instance{Metadata: Metadata{
+		Id:       "games",
+		Features: []MetadataFeature{{Name: MetadataFeatureResultGroups}},
+	}}
+	assert.False(t, shouldClearGroupForGlobalQuery(globalQuery, groupedPlugin))
 }
 
 func TestShouldHidePreviewForGlobalQueryStillHidesFilePreview(t *testing.T) {
