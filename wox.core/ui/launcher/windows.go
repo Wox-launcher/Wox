@@ -441,6 +441,8 @@ func (a *App) onSettingsWindowClosed() {
 	a.themeSettings.SetThemeDetailTab("preview")
 	a.releaseDemoWallpaperLocked()
 	a.generalSettings.SetChoicePicker(nil)
+	a.generalSettings.SetShowDisplayPicker(nil)
+	a.generalSettings.ClearShowDisplays()
 	a.cloudSettings.SetForm(nil)
 	a.cloudSettings.SetActionMenu("")
 	a.cloudSettings.SetPluginDialog(nil)

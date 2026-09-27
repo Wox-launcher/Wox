@@ -1,7 +1,6 @@
 package view
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -211,98 +210,6 @@ func windowGroupEditorBody(props WindowGroupEditorProps, width, height float32) 
 		}}},
 		woxwidget.Container{Width: 330, Height: height, Child: windowGroupLayoutPanel(props, 330, height)},
 	}}
-}
-
-func windowGroupDisplayArrangement(props WindowGroupEditorProps, width, height float32) woxwidget.Widget {
-	if props.LoadingDisplays {
-		return windowGroupMessageBox(width, height, props.Theme, "…")
-	}
-	if props.DisplaysError != "" {
-		retry := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "window-group-retry-displays", Label: props.RetryLabel, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnRetryDisplays, Theme: props.Theme,
-		})
-		return woxwidget.Container{
-			Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.35), BorderWidth: 1,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.DisplaysError, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.Error},
-				retry,
-			}},
-		}
-	}
-	if len(props.DisplayTiles) == 0 {
-		return windowGroupMessageBox(width, height, props.Theme, props.NoDisplaysLabel)
-	}
-	minX, minY, maxX, maxY := displayDesktopBounds(props.DisplayTiles)
-	desktopWidth := max(1.0, float64(maxX-minX))
-	desktopHeight := max(1.0, float64(maxY-minY))
-	const padding = float32(24)
-	scale := min((width-padding*2)/float32(desktopWidth), (height-padding*2)/float32(desktopHeight))
-	contentWidth := float32(desktopWidth) * scale
-	contentHeight := float32(desktopHeight) * scale
-	offsetX := (width - contentWidth) / 2
-	offsetY := (height - contentHeight) / 2
-	children := make([]woxwidget.StackChild, 0, len(props.DisplayTiles))
-	for _, tile := range props.DisplayTiles {
-		rect := displayTileRect(tile)
-		left := offsetX + (rect.X-minX)*scale
-		top := offsetY + (rect.Y-minY)*scale
-		tileWidth := max(float32(90), rect.Width*scale)
-		tileHeight := max(float32(58), rect.Height*scale)
-		children = append(children, woxwidget.StackChild{
-			Left: left, Top: top, Child: windowGroupDisplayTile(props, tile, tileWidth, tileHeight),
-		})
-	}
-	return woxwidget.Container{
-		Width: width, Height: height, Radius: 6, Color: windowGroupFadeColor(props.Theme.TextSecondary, 0.06),
-		BorderColor: windowGroupFadeColor(props.Theme.TextSecondary, 0.35), BorderWidth: 1,
-		Child: woxwidget.Stack{Width: width, Height: height, Children: children},
-	}
-}
-
-func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDisplayTileProps, width, height float32) woxwidget.Widget {
-	selectedColor := windowGroupSelectionColor()
-	border := windowGroupFadeColor(props.Theme.TextSecondary, 0.4)
-	borderWidth := float32(1)
-	background := props.Theme.InputBackground
-	if tile.Selected {
-		border = windowGroupFadeColor(selectedColor, 0.9)
-		borderWidth = 2
-		background = windowGroupBlendColor(windowGroupFadeColor(selectedColor, 0.08), props.Theme.InputBackground)
-	}
-	slotChildren := make([]woxwidget.StackChild, 0, len(tile.Slots))
-	for _, slot := range tile.Slots {
-		x, y, w, h := slotFractionRect(slot, width, height)
-		slotChildren = append(slotChildren, woxwidget.StackChild{
-			Left: x + 3, Top: y + 3, Child: windowGroupSlotTile(props, slot, tile.Selected, tile.Index, w-6, h-6),
-		})
-	}
-	content := woxwidget.Stack{Width: width, Height: height, Children: slotChildren}
-	if tile.IsPrimary {
-		content.Children = append(content.Children, woxwidget.StackChild{
-			Top: 6, Right: 6, AnchorRight: true, Child: woxwidget.Text{Value: props.PrimaryDisplayLabel, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.TextSecondary},
-		})
-	}
-	tileSurface := woxwidget.Widget(woxwidget.Container{
-		Width: width, Height: height, Radius: 6, Color: background, BorderColor: border, BorderWidth: borderWidth, Child: content,
-	})
-	if tile.Selected {
-		tileSurface = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
-			{Left: -3, Top: -3, Child: woxwidget.Container{
-				Width: width + 6, Height: height + 6, Radius: 9,
-				BorderColor: windowGroupFadeColor(selectedColor, 0.22), BorderWidth: 3,
-			}},
-			{Child: tileSurface},
-		}}
-	}
-	return woxwidget.Gesture{
-		ID: fmt.Sprintf("window-group-display-%d", tile.Index),
-		OnTap: func() {
-			if props.OnSelectDisplay != nil {
-				props.OnSelectDisplay(tile.Index)
-			}
-		},
-		Child: tileSurface,
-	}
 }
 
 func windowGroupLayoutPanel(props WindowGroupEditorProps, width, height float32) woxwidget.Widget {
@@ -710,32 +617,8 @@ func windowGroupMessageBox(width, height float32, theme woxcomponent.ControlThem
 	}
 }
 
-func displayDesktopBounds(tiles []WindowGroupDisplayTileProps) (minX, minY, maxX, maxY float32) {
-	if len(tiles) == 0 {
-		return 0, 0, 1, 1
-	}
-	first := displayTileRect(tiles[0])
-	minX, minY, maxX, maxY = first.X, first.Y, first.X+first.Width, first.Y+first.Height
-	for _, tile := range tiles[1:] {
-		rect := displayTileRect(tile)
-		minX = min(minX, rect.X)
-		minY = min(minY, rect.Y)
-		maxX = max(maxX, rect.X+rect.Width)
-		maxY = max(maxY, rect.Y+rect.Height)
-	}
-	return minX, minY, maxX, maxY
-}
-
 type displayRect struct {
 	X, Y, Width, Height float32
-}
-
-func displayTileRect(tile WindowGroupDisplayTileProps) displayRect {
-	rect := tile.Bounds
-	if rect.Width <= 0 || rect.Height <= 0 {
-		rect = tile.WorkArea
-	}
-	return displayRect{X: float32(rect.X), Y: float32(rect.Y), Width: max(1, float32(rect.Width)), Height: max(1, float32(rect.Height))}
 }
 
 func slotFractionRect(slot WindowGroupSlotProps, width, height float32) (x, y, w, h float32) {

@@ -400,6 +400,7 @@ func (u *uiImpl) applyView(ctx context.Context, operation string, apply func(vie
 func getShowOptions(ctx context.Context, showContext common.ShowContext) contract.ShowOptions {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	var position Position
+	rememberPosition := false
 	showQueryBox := !showContext.HideQueryBox
 	hideToolbar := showContext.HideToolbar
 	showSource := showContext.ShowSource
@@ -430,15 +431,21 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 		case setting.PositionTypeActiveScreen:
 			position = NewActiveScreenPositionWithOptions(ctx, windowWidth, maxResultCount, showQueryBox, !hideToolbar)
 		case setting.PositionTypeLastLocation:
-			// Use saved window position if available, otherwise use mouse screen position as fallback
-			if woxSetting.LastWindowX.Get() != -1 && woxSetting.LastWindowY.Get() != -1 {
-				logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d", woxSetting.LastWindowX.Get(), woxSetting.LastWindowY.Get()))
-				position = NewLastLocationPosition(woxSetting.LastWindowX.Get(), woxSetting.LastWindowY.Get())
+			// An explicit WindowPosition above does not set this, so it cannot replace the saved origin.
+			last := woxSetting.LastWindowPosition.Get()
+			rememberPosition = true
+			if last.Valid && lastLocationVisible(last.X, last.Y) {
+				logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d", last.X, last.Y))
+				position = NewLastLocationPosition(last.X, last.Y)
+			} else if last.Valid {
+				logger.Info(ctx, fmt.Sprintf("Saved window position is off-screen: x=%d, y=%d", last.X, last.Y))
+				position = NewMouseScreenPositionWithOptions(ctx, windowWidth, maxResultCount, showQueryBox, !hideToolbar)
 			} else {
 				logger.Info(ctx, "No saved window position, using mouse screen position as fallback")
-				// No saved position, fallback to mouse screen position
 				position = NewMouseScreenPositionWithOptions(ctx, windowWidth, maxResultCount, showQueryBox, !hideToolbar)
 			}
+		case setting.PositionTypeSpecificScreen:
+			position = NewSpecificScreenPositionWithOptions(ctx, windowWidth, maxResultCount, showQueryBox, !hideToolbar, woxSetting.ShowDisplay.Get(), !util.IsLinux())
 		default: // Default to mouse screen
 			position = NewMouseScreenPositionWithOptions(ctx, windowWidth, maxResultCount, showQueryBox, !hideToolbar)
 		}
@@ -453,10 +460,11 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 	return contract.ShowOptions{
 		SelectAll: showContext.SelectAll, HideQueryBox: showContext.HideQueryBox, HideToolbar: hideToolbar, ShowPreviewTitleBar: showContext.ShowPreviewTitleBar,
 		QueryBoxAtBottom: showContext.QueryBoxAtBottom, HideOnBlur: showContext.HideOnBlur,
-		RestoreWindow:  showContext.RestoreWindow,
-		Position:       contract.Position{Type: string(position.Type), X: position.X, Y: position.Y},
-		PositionHeight: showContext.WindowPositionHeight,
-		WindowWidth:    windowWidth, MaxResultCount: maxResultCount, QueryHistories: queryHistories, LaunchMode: woxSetting.LaunchMode.Get(),
+		RestoreWindow:    showContext.RestoreWindow,
+		Position:         contract.Position{Type: string(position.Type), X: position.X, Y: position.Y},
+		RememberPosition: rememberPosition,
+		PositionHeight:   showContext.WindowPositionHeight,
+		WindowWidth:      windowWidth, MaxResultCount: maxResultCount, QueryHistories: queryHistories, LaunchMode: woxSetting.LaunchMode.Get(),
 		StartPage: woxSetting.StartPage.Get(), ShowSource: string(showSource),
 	}
 }

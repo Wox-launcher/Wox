@@ -45,6 +45,16 @@ func GetSettingManager() *Manager {
 	return managerInstance.Load()
 }
 
+// CurrentWoxSetting returns live settings when the manager is already initialized.
+// Callers that can run before the database exists, including tests, receive nil.
+func CurrentWoxSetting() *WoxSetting {
+	manager := managerInstance.Load()
+	if manager == nil {
+		return nil
+	}
+	return manager.woxSetting
+}
+
 // PeekUiDensity reads the live interface size without initializing settings.
 // Overlays can appear in tests and before the database exists; those callers keep normal density.
 func PeekUiDensity() UiDensity {

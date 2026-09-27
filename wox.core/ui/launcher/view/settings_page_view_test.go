@@ -64,6 +64,17 @@ func TestSettingRowSwitchUsesTheSameTrailingValueSlotAsDropdown(t *testing.T) {
 	}
 }
 
+func TestSettingRowButtonUsesDropdownChrome(t *testing.T) {
+	row := SettingRow(SettingRowProps{
+		ID: "ShowDisplay", Title: "Screen", Value: "Primary · 5120×2880", Width: 800, Kind: "button",
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
+	}).(woxwidget.Container)
+	field := focusedControlGesture(row.Child.(woxwidget.Flex).Children[1]).Child.(woxwidget.Container)
+	if field.Color.A != 0 || field.BorderWidth != 1 || field.BorderColor.A != 80 {
+		t.Fatalf("screen chooser chrome = fill %d border %.0f alpha %d, want an outlined dropdown", field.Color.A, field.BorderWidth, field.BorderColor.A)
+	}
+}
+
 func TestSettingRowDropdownUsesThemeTextColor(t *testing.T) {
 	want := woxui.Color{R: 12, G: 34, B: 56, A: 255}
 	row := SettingRow(SettingRowProps{

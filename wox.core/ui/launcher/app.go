@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/setting"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
@@ -685,10 +686,15 @@ func (a *App) hideWindow(notify bool) error {
 	var launcher *woxui.ManagedWindow
 	alreadyHidden := false
 	var hideErr error
+	var lastX, lastY int
+	saveLast := false
 	if err := a.runOnUI("prepare launcher hide", func() {
 		if !a.visible {
 			alreadyHidden = true
 			return
+		}
+		if a.isPrimary && a.show.RememberPosition {
+			lastX, lastY, saveLast = a.captureLauncherOriginLocked()
 		}
 		a.clearActionPanelStateLocked()
 		a.form = nil
@@ -717,6 +723,11 @@ func (a *App) hideWindow(notify bool) error {
 	}
 	if hideErr != nil {
 		return hideErr
+	}
+	if saveLast {
+		if err := saveLastWindowOrigin(lastX, lastY); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("save last window location: %v", err))
+		}
 	}
 	// Quick re-shows keep their warm icon cache; only trim decoded images after
 	// the launcher stays hidden long enough to be considered idle.
@@ -770,6 +781,41 @@ func (a *App) closePreviewWindow() {
 	})
 }
 
+// captureLauncherOriginLocked reads the primary window origin in logical coordinates.
+func (a *App) captureLauncherOriginLocked() (int, int, bool) {
+	if a.window == nil {
+		return 0, 0, false
+	}
+	bounds, err := a.window.Bounds()
+	if err != nil {
+		return 0, 0, false
+	}
+	return roundLogicalCoordinate(bounds.X), roundLogicalCoordinate(bounds.Y), true
+}
+
+func roundLogicalCoordinate(value float32) int {
+	if value >= 0 {
+		return int(value + 0.5)
+	}
+	return int(value - 0.5)
+}
+
+// saveLastWindowOrigin writes one local value before the next show reads it.
+func saveLastWindowOrigin(x, y int) error {
+	woxSetting := setting.CurrentWoxSetting()
+	if woxSetting == nil || woxSetting.ShowPosition == nil || woxSetting.ShowPosition.Get() != setting.PositionTypeLastLocation {
+		return nil
+	}
+	if woxSetting.LastWindowPosition == nil {
+		return nil
+	}
+	previous := woxSetting.LastWindowPosition.Get()
+	if previous.Valid && previous.X == x && previous.Y == y {
+		return nil
+	}
+	return woxSetting.LastWindowPosition.Set(setting.SavedWindowPosition{X: x, Y: y, Valid: true})
+}
+
 func (a *App) onFocus(event woxui.FocusEvent) {
 	if event.Active {
 		a.notifyQueryBoxFocusOnWindowActivation()
@@ -787,6 +833,11 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	launcher := a.launcher
 	// A pop-out still uses this session's services after the launcher loses focus.
 	retainSecondary := a.isPrimary || a.chatWindowOpen() || a.hasCacheableWebViewPreviewLocked()
+	var lastX, lastY int
+	saveLast := false
+	if hideOnBlur && a.isPrimary && a.show.RememberPosition {
+		lastX, lastY, saveLast = a.captureLauncherOriginLocked()
+	}
 	if hideOnBlur {
 		a.visible = false
 		a.bottomAnchorY = 0
@@ -807,6 +858,11 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		}
 		a.resetChatPreview()
 		a.clearWebViewPreviewModeLocked()
+	}
+	if saveLast {
+		if err := saveLastWindowOrigin(lastX, lastY); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("save last window location after blur: %v", err))
+		}
 	}
 	util.Go(a.lifecycleCtx, "notify launcher focus change", func() {
 		if hideOnBlur {
@@ -2103,6 +2159,7 @@ type showAppParams struct {
 	HideToolbar         bool                         `json:"HideToolbar"`
 	QueryBoxAtBottom    bool                         `json:"QueryBoxAtBottom"`
 	HideOnBlur          bool                         `json:"HideOnBlur"`
+	RememberPosition    bool                         `json:"-"`
 	ShowSource          string                       `json:"ShowSource"`
 	RestoreWindow       *common.ActiveWindowSnapshot `json:"-"`
 }

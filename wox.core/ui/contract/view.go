@@ -20,6 +20,9 @@ type Position struct {
 type ShowOptions struct {
 	SelectAll bool
 	Position  Position
+	// RememberPosition asks the launcher to store its origin when it hides.
+	// Explicit window positions leave this false so they do not replace Last location.
+	RememberPosition bool
 	// PositionHeight is the height WindowPosition was computed for. When
 	// QueryBoxAtBottom is set, the launcher keeps that implied bottom edge fixed.
 	PositionHeight int

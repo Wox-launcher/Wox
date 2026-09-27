@@ -34,12 +34,15 @@ type WoxSetting struct {
 	// homepage MRU. PlatformValue keeps same-OS Cloud Sync. Sync apply must
 	// persist the payload as-is and must not restore-validate or drop failed
 	// bindings.
-	ResultBindings         *PlatformValue[[]ResultBinding]
-	QueryAliases           *WoxSettingValue[[]QueryAlias]
-	TrayQueries            *WoxSettingValue[[]TrayQuery]
-	LaunchMode             *WoxSettingValue[LaunchMode]
-	StartPage              *WoxSettingValue[StartPage]
-	ShowPosition           *WoxSettingValue[PositionType]
+	ResultBindings *PlatformValue[[]ResultBinding]
+	QueryAliases   *WoxSettingValue[[]QueryAlias]
+	TrayQueries    *WoxSettingValue[[]TrayQuery]
+	LaunchMode     *WoxSettingValue[LaunchMode]
+	StartPage      *WoxSettingValue[StartPage]
+	ShowPosition   *WoxSettingValue[PositionType]
+	// ShowDisplay is the monitor chosen for PositionTypeSpecificScreen.
+	// Display ids belong to this machine, so the value stays local.
+	ShowDisplay            *WoxSettingValue[ShowDisplayTarget]
 	AIProviders            *WoxSettingValue[[]AIProvider]
 	AIMCPServers           *WoxSettingValue[[]common.AIChatMCPServerConfig]
 	AISkills               *WoxSettingValue[[]common.Skill]
@@ -87,7 +90,10 @@ type WoxSetting struct {
 	ShowPerformanceTailBackendPrepared *WoxSettingValue[bool]
 	ShowPerformanceTailUiReceived      *WoxSettingValue[bool]
 
-	// Window position for last location mode
+	// LastWindowPosition is a local, atomic origin for last-location mode.
+	LastWindowPosition *WoxSettingValue[SavedWindowPosition]
+	// Legacy keys remain declared as local so Cloud Sync snapshots cannot upload
+	// stale rows received from older devices after the migration has run.
 	LastWindowX *WoxSettingValue[int]
 	LastWindowY *WoxSettingValue[int]
 
@@ -114,10 +120,34 @@ type ReleaseChannel string
 type PositionType string
 
 const (
-	PositionTypeMouseScreen  PositionType = "mouse_screen"
-	PositionTypeActiveScreen PositionType = "active_screen"
-	PositionTypeLastLocation PositionType = "last_location"
+	PositionTypeMouseScreen    PositionType = "mouse_screen"
+	PositionTypeActiveScreen   PositionType = "active_screen"
+	PositionTypeLastLocation   PositionType = "last_location"
+	PositionTypeSpecificScreen PositionType = "specific_screen"
 )
+
+// ShowDisplayTarget is the monitor the user picked for a specific-screen position.
+// Work-area fields are the fingerprint from selection time, not the window origin.
+type ShowDisplayTarget struct {
+	ID         string `json:"id"`
+	WorkX      int    `json:"workX"`
+	WorkY      int    `json:"workY"`
+	WorkWidth  int    `json:"workWidth"`
+	WorkHeight int    `json:"workHeight"`
+	Primary    bool   `json:"primary"`
+}
+
+// SavedWindowPosition keeps both coordinates together, including negative origins.
+type SavedWindowPosition struct {
+	X     int  `json:"x"`
+	Y     int  `json:"y"`
+	Valid bool `json:"valid"`
+}
+
+// Chosen reports whether the user has picked a monitor.
+func (t ShowDisplayTarget) Chosen() bool {
+	return strings.TrimSpace(t.ID) != "" || t.WorkWidth > 0 || t.WorkHeight > 0
+}
 
 const (
 	LaunchModeFresh    LaunchMode = "fresh"    // start fresh with empty query
@@ -432,6 +462,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LaunchMode:                         NewWoxSettingValue(store, "LaunchMode", LaunchModeContinue),
 		StartPage:                          NewWoxSettingValue(store, "StartPage", StartPageMRU),
 		ShowPosition:                       NewWoxSettingValue(store, "ShowPosition", PositionTypeMouseScreen),
+		ShowDisplay:                        NewLocalWoxSettingValue(store, "ShowDisplay", ShowDisplayTarget{}),
 		AppWidth:                           NewWoxSettingValue(store, "AppWidth", 750),
 		MaxResultCount:                     NewWoxSettingValue(store, "MaxResultCount", 8),
 		UiDensity:                          NewWoxSettingValueWithValidator(store, "UiDensity", UiDensityNormal, IsValidUiDensity),
@@ -457,8 +488,9 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),
 		ReleaseChannel:                     NewWoxSettingValueWithValidator(store, "ReleaseChannel", ReleaseChannelStable, IsValidReleaseChannel),
-		LastWindowX:                        NewWoxSettingValue(store, "LastWindowX", -1),
-		LastWindowY:                        NewWoxSettingValue(store, "LastWindowY", -1),
+		LastWindowPosition:                 NewLocalWoxSettingValue(store, "LastWindowPosition", SavedWindowPosition{}),
+		LastWindowX:                        NewLocalWoxSettingValue(store, "LastWindowX", -1),
+		LastWindowY:                        NewLocalWoxSettingValue(store, "LastWindowY", -1),
 		QueryHotkeys:                       NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
 		ResultBindings:                     NewPlatformValue(store, "ResultBindings", []ResultBinding{}, []ResultBinding{}, []ResultBinding{}),
 		QueryAliases:                       NewWoxSettingValue(store, "QueryAliases", []QueryAlias{}),

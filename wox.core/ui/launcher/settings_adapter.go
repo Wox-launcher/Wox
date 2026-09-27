@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 
+	"wox/setting"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -58,6 +59,8 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.ai.ModelManager != nil {
 		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height, frame.Scale)
+	} else if snapshot.general.ShowDisplayPicker != nil {
+		overlay = a.buildShowDisplayPickerOverlay(snapshot, width, height)
 	} else if snapshot.general.ChoicePicker != nil {
 		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.PluginDialog != nil {
@@ -333,6 +336,10 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			children = append(children, a.buildSettingsSectionHeader(section, contentWidth, snapshot.palette))
 		}
 		children = append(children, target)
+		if snapshot.tab == "appearance" && item.key == "ShowPosition" && item.value == string(setting.PositionTypeSpecificScreen) {
+			a.ensureShowDisplays()
+			children = append(children, a.buildShowDisplayRow(snapshot, contentWidth))
+		}
 	}
 	if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
@@ -492,7 +499,7 @@ func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) stri
 	choiceKeys := map[string]map[string]string{
 		"LaunchMode":         {"fresh": "ui_launch_mode_fresh", "continue": "ui_launch_mode_continue"},
 		"StartPage":          {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
-		"ShowPosition":       {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location"},
+		"ShowPosition":       {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location", "specific_screen": "ui_show_position_specific_screen"},
 		"UiDensity":          {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
 		"AppFontFamily":      {"": "ui_app_font_family_system_default"},
 		"CloudSyncServerUrl": {"https://sync.woxlauncher.com": "ui_cloud_sync_server_url_production", "http://127.0.0.1:8787": "ui_cloud_sync_server_url_local"},

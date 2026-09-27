@@ -25,8 +25,10 @@ type DialogProps struct {
 	BorderWidth  float32
 	InitialFocus woxwidget.Key
 	OnEscape     func()
-	Child        woxwidget.Widget
-	Theme        ControlTheme
+	// OnBackdrop runs when the dimmed area outside the panel is clicked.
+	OnBackdrop func()
+	Child      woxwidget.Widget
+	Theme      ControlTheme
 }
 
 // WoxDialog builds shared modal chrome, focus trapping, and dialog semantics.
@@ -123,7 +125,7 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	left := max(float32(0), (props.OverlayWidth-props.Width)/2)
 	top := max(float32(0), (props.OverlayHeight-props.Height)/2)
 	return woxwidget.Stack{Width: props.OverlayWidth, Height: props.OverlayHeight, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Gesture{ID: backdropID, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.OverlayWidth, Height: props.OverlayHeight, Color: backdrop}}},
+		{Child: woxwidget.Gesture{ID: backdropID, OnTap: props.OnBackdrop, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.OverlayWidth, Height: props.OverlayHeight, Color: backdrop}}},
 		{Left: left, Top: top, Child: dialog},
 	}}
 }

@@ -42,7 +42,7 @@ var builtInSettingSearchAliases = map[string][]string{
 	"ActionPanelHotkey":         {"action hotkey", "more actions", "action panel"},
 	"UsePinYin":                 {"pinyin"},
 	"LangCode":                  {"language"},
-	"ShowPosition":              {"position"},
+	"ShowPosition":              {"position", "screen", "monitor", "display"},
 	"ShowTray":                  {"tray"},
 	"AppWidth":                  {"width"},
 	"AppFontFamily":             {"font"},

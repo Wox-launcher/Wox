@@ -68,6 +68,7 @@ type settingsData struct {
 	HttpProxyEnabled                   bool
 	HttpProxyURL                       string `json:"HttpProxyUrl"`
 	ShowPosition                       string
+	ShowDisplay                        setting.ShowDisplayTarget
 	EnableAutoBackup                   bool
 	EnableAutoUpdate                   bool
 	ReleaseChannel                     string
@@ -653,6 +654,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		HttpProxyEnabled:                   loaded.HTTPProxyEnabled,
 		HttpProxyURL:                       loaded.HTTPProxyURL,
 		ShowPosition:                       string(loaded.ShowPosition),
+		ShowDisplay:                        loaded.ShowDisplay,
 		EnableAutoBackup:                   loaded.EnableAutoBackup,
 		EnableAutoUpdate:                   loaded.EnableAutoUpdate,
 		ReleaseChannel:                     string(loaded.ReleaseChannel),
@@ -721,6 +723,12 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if a.onCloudSettingsKey(event) {
+		return true
+	}
+	if a.generalSettings.ShowDisplayPicker() != nil {
+		if event.Key == woxui.KeyEscape {
+			a.closeShowDisplayPicker()
+		}
 		return true
 	}
 	choicePicker := a.generalSettings.ChoicePicker()
@@ -853,6 +861,7 @@ func (a *App) selectSettingTab(tab string) {
 	loadCloud := false
 	loadUpdateChannels := false
 	a.generalSettings.SetChoicePicker(nil)
+	a.generalSettings.SetShowDisplayPicker(nil)
 	if tab == "plugins" {
 		if a.pluginSettings.SearchEditor() == nil {
 			a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
@@ -1463,7 +1472,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 		}
 		return []settingItem{
 			{key: "LangCode", title: "Language", description: "Language used by Wox", value: data.LangCode, choices: []settingChoice{{data.LangCode, data.LangCode}}},
-			{key: "ShowPosition", title: "Window position", description: "Display used when Wox opens", value: data.ShowPosition, choices: []settingChoice{{"mouse_screen", "Mouse display"}, {"active_screen", "Active display"}, {"last_location", "Last location"}}},
+			{key: "ShowPosition", title: "Window position", description: "Display used when Wox opens", value: data.ShowPosition, choices: []settingChoice{{"mouse_screen", "Mouse display"}, {"active_screen", "Active display"}, {"last_location", "Last location"}, {"specific_screen", "Specific screen"}}},
 			{key: "ShowTray", title: "Tray icon", description: "Show Wox in the system tray or menu bar", value: boolValue(data.ShowTray), choices: boolChoices},
 			{key: "AppWidth", title: "Launcher width", description: "Logical width of the query and result window", value: fmt.Sprintf("%d", data.AppWidth), choices: widthChoices},
 			{key: "UiDensity", title: "UI density", description: "Spacing and row size across the launcher", value: data.UIDensity, choices: []settingChoice{{"compact", "Compact"}, {"normal", "Normal"}, {"comfortable", "Comfortable"}}},

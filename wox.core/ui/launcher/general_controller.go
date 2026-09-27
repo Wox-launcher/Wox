@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	woxui "wox/ui/runtime"
+	"wox/util/screen"
 )
 
 // generalSettingsSnapshot is the immutable General tab state consumed by the view layer.
@@ -12,13 +13,16 @@ import (
 // controllers keep their own narrow mirrors (e.g. networkSettingsController.proxyEnabled)
 // and read their slice via ApplyData calls driven by App.reloadSettings.
 type generalSettingsSnapshot struct {
-	EditKey      string
-	Editing      woxui.TextEditingState
-	ChoicePicker *settingChoicePickerSnapshot
-	Languages    []settingChoice
-	Data         settingsData
-	Form         *formFieldsSnapshot
-	FormFocused  bool
+	EditKey            string
+	Editing            woxui.TextEditingState
+	ChoicePicker       *settingChoicePickerSnapshot
+	ShowDisplayPicker  *showDisplayPickerSnapshot
+	ShowDisplays       []screen.Display
+	ShowDisplaysLoaded bool
+	Languages          []settingChoice
+	Data               settingsData
+	Form               *formFieldsSnapshot
+	FormFocused        bool
 }
 
 // generalSettingsController owns the General tab state and the single shared built-in
@@ -38,6 +42,13 @@ type generalSettingsController struct {
 	// Query Aliases and Tray Queries live on General, not Hotkey.
 	form        *formFieldsState
 	formFocused bool
+
+	// Show-display cache and picker are touched only on the UI thread.
+	showDisplayPicker   *showDisplayPickerState
+	showDisplays        []screen.Display
+	showDisplaysLoaded  bool
+	showDisplaysLoading bool
+	showDisplaysError   string
 }
 
 func newGeneralSettingsController(deps CommonDeps, shared *sharedEditState) *generalSettingsController {
@@ -190,13 +201,25 @@ func (c *generalSettingsController) Snapshot() generalSettingsSnapshot {
 		snap := snapshotFormFieldsLocked(c.form)
 		form = &snap
 	}
+	displays := append([]screen.Display(nil), c.showDisplays...)
+	var picker *showDisplayPickerSnapshot
+	if c.showDisplayPicker != nil {
+		copy := showDisplayPickerSnapshot{
+			Loading: c.showDisplayPicker.loading, Error: c.showDisplayPicker.error,
+			Displays: append([]screen.Display(nil), c.showDisplayPicker.displays...),
+		}
+		picker = &copy
+	}
 	return generalSettingsSnapshot{
-		EditKey:      editKey,
-		Editing:      editing,
-		ChoicePicker: choicePicker,
-		Languages:    languages,
-		Data:         data,
-		Form:         form,
-		FormFocused:  c.formFocused,
+		EditKey:            editKey,
+		Editing:            editing,
+		ChoicePicker:       choicePicker,
+		ShowDisplayPicker:  picker,
+		ShowDisplays:       displays,
+		ShowDisplaysLoaded: c.showDisplaysLoaded,
+		Languages:          languages,
+		Data:               data,
+		Form:               form,
+		FormFocused:        c.formFocused,
 	}
 }

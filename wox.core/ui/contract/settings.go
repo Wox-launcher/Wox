@@ -157,6 +157,7 @@ type GeneralSettings struct {
 	HTTPProxyEnabled                   bool
 	HTTPProxyURL                       string
 	ShowPosition                       setting.PositionType
+	ShowDisplay                        setting.ShowDisplayTarget
 	IsLinuxWaylandSession              bool
 	IsEvdevReadAvailable               bool
 	EnableAutoBackup                   bool

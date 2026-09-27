@@ -96,6 +96,16 @@ func NewLastLocationPosition(x, y int) Position {
 	}
 }
 
+// NewSpecificScreenPositionWithOptions centers the launcher on the saved monitor.
+func NewSpecificScreenPositionWithOptions(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool, saved setting.ShowDisplayTarget, trustID bool) Position {
+	x, y := specificScreenPosition(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar, saved, trustID)
+	return Position{
+		Type: setting.PositionTypeSpecificScreen,
+		X:    x,
+		Y:    y,
+	}
+}
+
 func getWindowMouseScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {
 	size := screen.GetMouseScreen()
 	x, y := getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)

@@ -64,6 +64,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		HTTPProxyEnabled:                   woxSetting.HttpProxyEnabled.Get(),
 		HTTPProxyURL:                       woxSetting.HttpProxyUrl.Get(),
 		ShowPosition:                       woxSetting.ShowPosition.Get(),
+		ShowDisplay:                        woxSetting.ShowDisplay.Get(),
 		IsLinuxWaylandSession:              util.IsLinuxWaylandSession(),
 		IsEvdevReadAvailable:               keyboard.IsEvdevReadAvailable(),
 		EnableAutoBackup:                   woxSetting.EnableAutoBackup.Get(),
@@ -261,6 +262,12 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		woxSetting.StartPage.Set(setting.StartPage(value))
 	case "ShowPosition":
 		woxSetting.ShowPosition.Set(setting.PositionType(value))
+	case "ShowDisplay":
+		var target setting.ShowDisplayTarget
+		if err := json.Unmarshal([]byte(value), &target); err != nil {
+			return err
+		}
+		woxSetting.ShowDisplay.Set(target)
 	case "AIProviders":
 		var providers []setting.AIProvider
 		if err := json.Unmarshal([]byte(value), &providers); err != nil {

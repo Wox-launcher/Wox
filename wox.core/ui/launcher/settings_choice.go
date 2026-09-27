@@ -90,6 +90,7 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 		return
 	}
 	a.generalSettings.EndEdit()
+	a.generalSettings.SetShowDisplayPicker(nil)
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{item: item, anchor: anchor})
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()

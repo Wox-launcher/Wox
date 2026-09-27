@@ -139,6 +139,16 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 				}
 			},
 		})}
+	case "button":
+		onTap := props.OnTap
+		if props.Disabled {
+			onTap = nil
+		}
+		valueField = woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
+			ID: "setting-button-" + props.ID, Label: props.Title, Value: props.Value,
+			Width: valueWidth, Height: woxcomponent.SettingsControlHeight,
+			Foreground: valueColor, Secondary: valueColor, Theme: props.Theme, OnTap: onTap,
+		})
 	default:
 		onTap := props.OnTap
 		onTapBounds := props.OnChoiceTap
