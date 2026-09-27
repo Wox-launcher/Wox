@@ -785,6 +785,29 @@ func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
 	}
 }
 
+func TestPluginSelectionRefreshPreservesUnsavedField(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: "app", Name: "Apps",
+		SettingDefinitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{
+			Key: "accessKey", Validators: []formValidator{{Type: "not_empty"}},
+		}}},
+		Setting: pluginSettingsData{Settings: map[string]string{"accessKey": "temporary-key"}},
+	}})
+	a.setPluginSelectionLocked(0)
+	form := a.pluginSettings.Form()
+	a.focusPluginFormField(1)
+	a.setPluginFormText(1, "")
+	a.blurPluginFormField(1)
+
+	a.setPluginSelectionLocked(0)
+	if a.pluginSettings.Form() != form || form.values["accessKey"] != "" || form.fieldErrors["accessKey"] == "" {
+		t.Fatalf("same-plugin refresh discarded the dirty required field: value=%q errors=%v", form.values["accessKey"], form.fieldErrors)
+	}
+}
+
 func TestSetPluginSelectionAppliesCachedAIModels(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()

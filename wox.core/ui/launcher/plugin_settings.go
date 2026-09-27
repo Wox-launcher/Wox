@@ -549,10 +549,17 @@ func (a *App) setPluginSelectionLocked(index int) {
 	}
 	plugin := plugins[index]
 	if form := a.pluginSettings.Form(); form != nil && form.pluginID == plugin.ID {
+		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if editor := a.settingsTableEditor; editor != nil && editor.target == &form.formFieldsState {
 			// A post-save definition refresh rebuilds this form. The settings overlay
 			// is published only while settingsTableEditor.target matches the live form
 			// pointer, so replacing it here would hide an in-flight row editor.
+			a.pluginSettings.SetSelected(index)
+			return
+		}
+		// A post-save refresh can arrive after a new edit and must not replace it.
+		// ponytail: defer dynamic definitions until save or reopen; merge them in place if live updates are needed.
+		if pluginFormDirty(form.definitions, form.values, form.initial) {
 			a.pluginSettings.SetSelected(index)
 			return
 		}
