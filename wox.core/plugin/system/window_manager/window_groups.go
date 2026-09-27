@@ -984,7 +984,7 @@ func appendUniqueString(values []string, value string) []string {
 }
 
 // browserExtensionProvider is implemented by the Browser plugin to expose tab
-// state and URL-opening via the Chrome extension. Window Manager uses it to
+// state and URL-opening via the browser extension. Window Manager uses it to
 // activate existing tabs instead of opening duplicates.
 type browserExtensionProvider interface {
 	GetOpenedTabs() []browser.TabInfo

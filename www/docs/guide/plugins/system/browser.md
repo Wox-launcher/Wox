@@ -14,4 +14,4 @@ You can also type part of a tab title while a supported browser is focused. Sele
 
 ## Notes
 
-Install or enable the Wox browser integration for your browser if tab results do not appear. Bookmark search is a separate plugin: [Browser Bookmark](./browser-bookmark.md).
+If tab results do not appear, install the Wox browser extension from the [Chrome Web Store](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh) or [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/wox/). Bookmark search is a separate plugin: [Browser Bookmark](./browser-bookmark.md).

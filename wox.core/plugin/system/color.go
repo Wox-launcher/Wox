@@ -26,8 +26,10 @@ func init() {
 }
 
 type ColorPlugin struct {
-	api       plugin.API
-	historyMu sync.Mutex
+	api             plugin.API
+	historyMu       sync.Mutex
+	historyWritesMu sync.Mutex
+	historyWrites   sync.WaitGroup
 }
 
 type ColorHistoryItem struct {
@@ -97,11 +99,31 @@ func (c *ColorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	parsed, ok := parseHexColor(search)
 	if ok {
-		// New feature: a complete HEX query is treated as an observation. Upserting
-		// keeps query-time history useful without duplicating the same color while
-		// the user repeats or refines the query.
-		item := c.upsertColorHistory(ctx, parsed.Hex)
-		return plugin.NewQueryResponse([]plugin.QueryResult{c.buildColorResult(ctx, parsed, item)})
+		observedAt := util.GetSystemTimestamp()
+		item := ColorHistoryItem{Hex: parsed.Hex, CreatedAt: observedAt, LastSeenAt: observedAt}
+		for _, existing := range c.loadHistory(ctx) {
+			if existing.Hex == parsed.Hex {
+				item = existing
+				if item.CreatedAt == 0 {
+					item.CreatedAt = observedAt
+				}
+				if item.LastSeenAt < observedAt {
+					item.LastSeenAt = observedAt
+				}
+				break
+			}
+		}
+		result := c.buildColorResult(ctx, parsed, item)
+		// Keep persistence off the query path and let it finish if typing cancels this query.
+		persistCtx := context.WithoutCancel(ctx)
+		c.historyWritesMu.Lock()
+		c.historyWrites.Add(1)
+		c.historyWritesMu.Unlock()
+		util.Go(persistCtx, "save color history", func() {
+			defer c.historyWrites.Done()
+			c.upsertColorHistory(persistCtx, parsed.Hex, observedAt)
+		})
+		return plugin.NewQueryResponse([]plugin.QueryResult{result})
 	}
 
 	if query.IsGlobalQuery() {
@@ -335,38 +357,46 @@ func (c *ColorPlugin) filterHistory(ctx context.Context, search string) []ColorH
 	return filtered
 }
 
-func (c *ColorPlugin) upsertColorHistory(ctx context.Context, hex string) ColorHistoryItem {
-	// Query execution can overlap while the user types. Lock write paths so the
-	// setting-backed JSON history is updated as one read-modify-write operation.
+func (c *ColorPlugin) upsertColorHistory(ctx context.Context, hex string, observedAt int64) {
+	// Background writes can run out of query order; keep the latest observation.
 	c.historyMu.Lock()
 	defer c.historyMu.Unlock()
 
 	history := c.loadHistory(ctx)
-	now := util.GetSystemTimestamp()
 
 	for i := range history {
 		if history[i].Hex != hex {
 			continue
 		}
-		history[i].LastSeenAt = now
+		if history[i].LastSeenAt >= observedAt && history[i].CreatedAt != 0 {
+			return
+		}
+		history[i].LastSeenAt = max(history[i].LastSeenAt, observedAt)
 		if history[i].CreatedAt == 0 {
-			history[i].CreatedAt = now
+			history[i].CreatedAt = observedAt
 		}
 		c.saveHistory(ctx, history)
-		return history[i]
+		return
 	}
 
 	item := ColorHistoryItem{
 		Hex:        hex,
-		CreatedAt:  now,
-		LastSeenAt: now,
+		CreatedAt:  observedAt,
+		LastSeenAt: observedAt,
 	}
 	history = append(history, item)
 	c.saveHistory(ctx, history)
-	return item
+}
+
+// waitForHistoryWrites keeps actions from racing with observations queued by earlier queries.
+func (c *ColorPlugin) waitForHistoryWrites() {
+	c.historyWritesMu.Lock()
+	c.historyWrites.Wait()
+	c.historyWritesMu.Unlock()
 }
 
 func (c *ColorPlugin) updateFavorite(ctx context.Context, hex string, favorite bool) {
+	c.waitForHistoryWrites()
 	c.historyMu.Lock()
 	defer c.historyMu.Unlock()
 
@@ -382,6 +412,7 @@ func (c *ColorPlugin) updateFavorite(ctx context.Context, hex string, favorite b
 }
 
 func (c *ColorPlugin) updateName(ctx context.Context, hex string, name string) {
+	c.waitForHistoryWrites()
 	c.historyMu.Lock()
 	defer c.historyMu.Unlock()
 
@@ -397,6 +428,7 @@ func (c *ColorPlugin) updateName(ctx context.Context, hex string, name string) {
 }
 
 func (c *ColorPlugin) deleteColor(ctx context.Context, hex string) {
+	c.waitForHistoryWrites()
 	c.historyMu.Lock()
 	defer c.historyMu.Unlock()
 

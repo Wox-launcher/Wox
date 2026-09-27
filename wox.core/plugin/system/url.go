@@ -105,12 +105,6 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		})
 
 		for _, history := range existingUrlHistory {
-			icon := r.getRecentUrlIcon(ctx, history)
-			displayIcon := urlIcon
-			if icon.IsValid() && icon != urlIcon {
-				displayIcon = icon.Overlay(urlIcon, 0.4, 0.6, 0.6)
-			}
-
 			contextData := common.ContextData{
 				"url":   history.Url,
 				"title": history.Title,
@@ -121,7 +115,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 				Title:    history.Url,
 				SubTitle: history.Title,
 				Score:    100,
-				Icon:     displayIcon,
+				Icon:     r.getRecentUrlIcon(ctx, history),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:        "i18n:plugin_url_open",

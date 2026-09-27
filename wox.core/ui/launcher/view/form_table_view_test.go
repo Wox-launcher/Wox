@@ -424,7 +424,7 @@ func TestFormTableHotkeyStatusUsesRemainingControlWidth(t *testing.T) {
 }
 
 func TestFormTableRowMarkdownDescriptionReservesWrappedHeight(t *testing.T) {
-	description := "The query when the hotkey is triggered. Type { to insert dynamic variables.\n\nUsing the active browser URL variable requires the Wox Chrome extension: [Install Wox Chrome extension](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)"
+	description := "The query when the hotkey is triggered. Type { to insert dynamic variables.\n\nUsing the active browser URL variable requires the Wox browser extension: [Install for Chrome](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh) or [Install for Firefox](https://addons.mozilla.org/en-US/firefox/addon/wox/)."
 	plainHeight := FormTableRowFieldHeight("textbox", description, 1)
 	markdownHeight := FormTableRowFieldHeightFor("textbox", description, "", 1, true, 500)
 	if markdownHeight <= plainHeight {

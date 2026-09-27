@@ -14,4 +14,4 @@ browser github
 
 ## 说明
 
-如果没有标签结果，先为浏览器安装或启用 Wox 的浏览器集成。书签搜索是另一个插件：[浏览器书签](./browser-bookmark.md)。
+如果没有标签结果，请从 [Chrome Web Store](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh) 或 [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/wox/) 安装 Wox 浏览器扩展。书签搜索是另一个插件：[浏览器书签](./browser-bookmark.md)。

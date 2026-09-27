@@ -1429,11 +1429,15 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	queryForPluginStart := util.GetSystemTimestamp()
 	queryForPluginTimingStart := time.Now()
+	var startLogUs int64
 	if tracker := timetracking.New("query_for_plugin_start"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("plugin", pluginLabel)
+		startLogStart := time.Now()
 		tracker.Log(ctx)
+		startLogUs = time.Since(startLogStart).Microseconds()
 	}
+	afterStartLog := time.Now()
 	input := pluginQueryInput{
 		query:        query,
 		queryContext: BuildQueryContext(query, pluginInstance),
@@ -1449,11 +1453,16 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	})
 
 	inputStart := util.GetSystemTimestamp()
+	inputTimingStart := time.Now()
+	preInputUs := inputTimingStart.Sub(afterStartLog).Microseconds()
 	input = m.buildPluginQueryInput(ctx, pluginInstance, query)
 	if tracker := timetracking.New("build_plugin_query_input"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("plugin", pluginLabel)
 		tracker.SetBool("blocked", input.blocked)
+		tracker.SetInt64("startLogUs", startLogUs)
+		tracker.SetInt64("preInputUs", preInputUs)
+		tracker.SetInt64("buildUs", time.Since(inputTimingStart).Microseconds())
 		tracker.SetInt64("costMs", util.GetSystemTimestamp()-inputStart)
 		tracker.Log(ctx)
 	}
@@ -1498,8 +1507,10 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Instance, query Query) pluginQueryInput {
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	layoutStart := util.GetSystemTimestamp()
+	layoutTimingStart := time.Now()
 	metadataLayout := m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
 	layoutCost := util.GetSystemTimestamp() - layoutStart
+	layoutCostUs := time.Since(layoutTimingStart).Microseconds()
 	contextStart := util.GetSystemTimestamp()
 	queryContext := BuildQueryContext(query, pluginInstance)
 	contextCost := util.GetSystemTimestamp() - contextStart
@@ -1512,6 +1523,7 @@ func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Ins
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("plugin", pluginLabel)
 		tracker.SetInt64("layoutMs", layoutCost)
+		tracker.SetInt64("layoutUs", layoutCostUs)
 		tracker.SetInt64("contextMs", contextCost)
 		tracker.Log(ctx)
 	}

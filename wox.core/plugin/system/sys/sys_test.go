@@ -3,6 +3,9 @@ package sys
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"wox/common"
@@ -10,6 +13,28 @@ import (
 	"wox/plugin"
 	"wox/util/fuzzymatch"
 )
+
+func TestCommandExistsCachesAvailability(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("PATH", directory)
+	command := "wox-command-exists-test"
+	if runtime.GOOS == "windows" {
+		command += ".exe"
+	}
+	path := filepath.Join(directory, command)
+	if err := os.WriteFile(path, nil, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if !commandExists(command) {
+		t.Fatal("test command was not found")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if !commandExists(command) {
+		t.Fatal("cached command availability was lost")
+	}
+}
 
 func TestReleasePreparedSearchTextClearsCommandIndex(t *testing.T) {
 	plugin := &SysPlugin{
