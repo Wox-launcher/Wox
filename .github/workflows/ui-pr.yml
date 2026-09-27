@@ -1,0 +1,56 @@
+name: UI Quality
+
+# Pull requests only compile the native UI. Widget unit tests and launcher
+# smoke stay on the daily schedule in ui-scheduled.yml until that coverage
+# should gate PRs again.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ui.yml"
+      - "Makefile"
+      - "wox.core/appcontrol/**"
+      - "wox.core/common/**"
+      - "wox.core/main.go"
+      - "wox.core/plugin/system/shell/terminal/**"
+      - "wox.core/ui/**"
+      - "wox.core/test/automationdriver/**"
+      - "wox.core/test/smoke/**"
+      - "wox.core/test/smokerunner/**"
+      - "wox.plugin.host.nodejs/**"
+      - "wox.plugin.host.python/**"
+      - "wox.plugin.nodejs/**"
+      - "wox.plugin.python/**"
+
+permissions:
+  contents: read
+
+jobs:
+  native-compile-pr:
+    name: Native UI compile (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: false
+      # hosts/ is gitignored, and go:embed rejects a missing directory.
+      # make ensure-resources creates this same placeholder for local builds.
+      - name: Create host embed placeholder
+        shell: bash
+        run: |
+          mkdir -p wox.core/resource/hosts
+          touch wox.core/resource/hosts/placeholder
+      - name: Compile native UI packages
+        shell: bash
+        working-directory: wox.core
+        run: go test ./ui/runtime ./ui/widget ./ui/launcher -run TestDoesNotExist
