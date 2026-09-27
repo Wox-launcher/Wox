@@ -738,6 +738,8 @@ func (pluginHealthUI) IsVisible(context.Context) bool { return false }
 
 func (pluginHealthUI) SendChatResponse(context.Context, common.AIChatData) {}
 
+func (pluginHealthUI) RemoveChat(context.Context, string) {}
+
 func (pluginHealthUI) ReloadChatResources(context.Context, string) {}
 
 func (pluginHealthUI) SendAIQuestion(context.Context, string, string, []common.AIQuestionOption) {}
