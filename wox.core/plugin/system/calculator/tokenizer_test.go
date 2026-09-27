@@ -133,6 +133,40 @@ func TestTokenize(t *testing.T) {
 			},
 			hasError: false,
 		},
+		{
+			input:        "1_000_000 * 2",
+			thousandsSep: ",",
+			decimalSep:   ".",
+			expected: []token{
+				{kind: numberToken, val: decimal.NewFromInt(1000000)},
+				{kind: reservedToken, str: "*"},
+				{kind: numberToken, val: decimal.NewFromInt(2)},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		{
+			input:        "3.141_592",
+			thousandsSep: ",",
+			decimalSep:   ".",
+			expected: []token{
+				{kind: numberToken, val: decimal.RequireFromString("3.141592")},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		{
+			input:        "1__000",
+			thousandsSep: ",",
+			decimalSep:   ".",
+			hasError:     true,
+		},
+		{
+			input:        "1_000_",
+			thousandsSep: ",",
+			decimalSep:   ".",
+			hasError:     true,
+		},
 		// Test Argument Separation Conflict: max(1, 2) with Comma Decimal (Space separates)
 		// Should parse as 1, separator, 2. But wait, token logic consumes comma as decimal if followed by digit.
 		// Space breaks the "followed by digit" check? No, space is after comma.

@@ -72,6 +72,20 @@ func NumberPrefix(chars []rune, i *int, n int, thousandsSep, decimalSep string) 
 			}
 		}
 
+		// Digit separator. An underscore between two digits is ignored
+		// (1_000_000, 3.141_592). It is independent of the thousands-separator
+		// setting and does not require groups of three. A leading, trailing,
+		// doubled, or decimal-adjacent underscore stays unconsumed so the
+		// expression is rejected instead of silently changing value.
+		if char == '_' && current+1 < n && current > *i {
+			prev := chars[current-1]
+			next := chars[current+1]
+			if prev >= '0' && prev <= '9' && next >= '0' && next <= '9' {
+				current++
+				continue
+			}
+		}
+
 		// Nothing matched, break
 		break
 	}

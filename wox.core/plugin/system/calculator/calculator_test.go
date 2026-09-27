@@ -52,6 +52,30 @@ func TestCalculateExactRationalArithmetic(t *testing.T) {
 	}
 }
 
+func TestCalculateDigitSeparator(t *testing.T) {
+	result, err := Calculate("1_000_000 * 2", ",", ".")
+	if err != nil {
+		t.Fatalf("Calculate returned an error: %v", err)
+	}
+	if result.String() != "2000000" {
+		t.Fatalf("Calculate = %s, expected 2000000", result)
+	}
+
+	api := &calculatorTestAPI{settings: map[string]string{
+		"DecimalSeparator":   "Dot",
+		"ThousandsSeparator": "Comma",
+	}}
+	calculator := &CalculatorPlugin{api: api, debounceInterval: time.Hour}
+	response := calculator.Query(context.Background(), plugin.Query{
+		Type:     plugin.QueryTypeInput,
+		RawQuery: "1_000_000 * 2",
+		Search:   "1_000_000 * 2",
+	})
+	if len(response.Results) != 1 || response.Results[0].Title != "2,000,000" {
+		t.Fatalf("calculator query = %#v", response.Results)
+	}
+}
+
 func TestCalculatorDisplayResultOptsIntoAutomaticQueryHistory(t *testing.T) {
 	api := &calculatorTestAPI{settings: map[string]string{}}
 	calculator := &CalculatorPlugin{api: api, debounceInterval: time.Hour}
