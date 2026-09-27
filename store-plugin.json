@@ -1588,5 +1588,37 @@
         "plugin_description": "统计查询文本或选中文本中的词数及文本信息"
       }
     }
+  },
+  {
+    "Id": "c3a91e47-8d2b-4f65-a1c0-6e9b4d7f2a18",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/047683e2-807b-410e-8a63-f6935d25706e",
+    "Website": "https://gist.github.com/qianlifeng/a7a020011d234423ef5a17143d540007",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/a7a020011d234423ef5a17143d540007/raw/Wox.Plugin.Game.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/cc51b72e-dbf3-4fe6-b2cb-a935e83962d8"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-27 18:21:26",
+    "DateUpdated": "2026-09-27 18:21:26",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Games",
+        "plugin_description": "Search installed games from Steam, Epic, GOG, Ubisoft Connect, EA, Battle.net, Xbox, and itch.io."
+      },
+      "zh_CN": {
+        "plugin_name": "游戏",
+        "plugin_description": "搜索 Steam、Epic、GOG、Ubisoft Connect、EA、Battle.net、Xbox 和 itch.io 里已安装的游戏。"
+      }
+    }
   }
 ]
