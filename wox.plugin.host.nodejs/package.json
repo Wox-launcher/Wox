@@ -38,5 +38,5 @@
     "winston-daily-rotate-file": "^4.7.1",
     "ws": "^8.14.1"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@12.6.0"
 }
