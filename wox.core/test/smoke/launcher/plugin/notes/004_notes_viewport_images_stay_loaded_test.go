@@ -94,12 +94,6 @@ func enterNoteMarkdownSource(t *testing.T, ctx context.Context, client *automati
 func toggleNoteMarkdownView(t *testing.T, ctx context.Context, client *automationdriver.Client) {
 	t.Helper()
 	openMoreMenu(t, ctx, client)
-	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "notes.menu.view")
-		return found
-	}); err != nil {
-		t.Fatalf("wait for Notes view action: %v", err)
-	}
 	if err := client.Perform(ctx, "notes.menu.view", woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("toggle Notes Markdown view: %v", err)
 	}

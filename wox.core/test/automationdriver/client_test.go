@@ -678,6 +678,81 @@ func TestClientMovesPointerToSemanticsNodeCenter(t *testing.T) {
 	}
 }
 
+func TestPerformRetriesUntilElementAppears(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		attempts++
+		result := map[string]any{"jsonrpc": "2.0", "id": requestPayload.ID, "result": true}
+		if attempts < 3 {
+			result = map[string]any{
+				"jsonrpc": "2.0",
+				"id":      requestPayload.ID,
+				"error":   map[string]any{"code": -32000, "message": `automation element "notes.menu.delete" was not found`},
+			}
+		}
+		body, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	if err := client.Perform(context.Background(), "notes.menu.delete", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("perform after the element appears: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("perform attempts = %d, want 3", attempts)
+	}
+}
+
+func TestPerformDoesNotRetryActionErrors(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID uint64 `json:"id"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		attempts++
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      requestPayload.ID,
+			"error":   map[string]any{"code": -32000, "message": "automation element is disabled"},
+		})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	err = client.Perform(context.Background(), "notes.menu.delete", woxui.AccessibilityActionActivate, "")
+	if err == nil || attempts != 1 {
+		t.Fatalf("perform err = %v, attempts = %d, want one immediate action error", err, attempts)
+	}
+}
+
 func TestFindByAutomationIDPrefix(t *testing.T) {
 	snapshot := woxwidget.AutomationSnapshot{Tree: woxui.AccessibilityTree{Nodes: []woxui.AccessibilityNode{
 		{AutomationID: "terminal-search-input-first"},

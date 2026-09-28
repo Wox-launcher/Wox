@@ -319,13 +319,40 @@ func FindByAutomationIDPrefix(snapshot woxwidget.AutomationSnapshot, prefix stri
 }
 
 // Perform invokes one action on a semantics node.
+// Menus and dialogs join the tree on the frame after the action that opens them.
+// A missing target is that frame not having run yet, so Perform waits for it
+// instead of failing the case on the first lookup.
 func (c *Client) Perform(ctx context.Context, automationID string, action woxui.AccessibilityAction, value string) error {
-	_, err := call[bool](ctx, c, "semantics.perform", map[string]any{
-		"automationId": automationID,
-		"action":       action,
-		"value":        value,
-	})
-	return c.pauseAfterStep(ctx, err)
+	ctx, cancel := withActionTimeout(ctx)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var err error
+	for {
+		_, err = call[bool](ctx, c, "semantics.perform", map[string]any{
+			"automationId": automationID,
+			"action":       action,
+			"value":        value,
+		})
+		if err == nil || !automationElementMissing(err) {
+			return c.pauseAfterStep(ctx, err)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for automation element %q: %w", automationID, err)
+		case <-ticker.C:
+		}
+	}
+}
+
+// automationElementMissing reports the host lookup miss. Other action errors
+// already ran against a live node and must not be retried.
+func automationElementMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "automation element") && strings.Contains(message, "was not found")
 }
 
 // Pointer sends one logical pointer event to the active widget host.

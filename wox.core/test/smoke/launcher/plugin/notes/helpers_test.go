@@ -118,6 +118,31 @@ func openMoreMenu(t *testing.T, ctx context.Context, client *automationdriver.Cl
 	if err := client.Perform(ctx, "notes.toolbar.more", woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("open Notes menu: %v", err)
 	}
+	// The menu is built on the frame after the toolbar action. Linux can still
+	// be painting the note when the next Perform runs, so wait until a row exists.
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := automationdriver.Find(snapshot, "notes.menu.view")
+		return found
+	}); err != nil {
+		current, snapErr := client.Snapshot(ctx)
+		if snapErr != nil {
+			t.Fatalf("wait for Notes menu: %v", err)
+		}
+		t.Fatalf("wait for Notes menu: %v; %s", err, formatNotesMenuNodes(current))
+	}
+}
+
+func formatNotesMenuNodes(snapshot woxwidget.AutomationSnapshot) string {
+	ids := make([]string, 0, 8)
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "notes.menu.") || node.AutomationID == "notes.toolbar.more" {
+			ids = append(ids, node.AutomationID)
+		}
+	}
+	if len(ids) == 0 {
+		return "menu nodes missing"
+	}
+	return "menu nodes [" + strings.Join(ids, " ") + "]"
 }
 
 func openSearch(t *testing.T, ctx context.Context, client *automationdriver.Client, query string) {
