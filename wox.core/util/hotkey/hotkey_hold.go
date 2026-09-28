@@ -42,6 +42,8 @@ type holdModifierCallback struct {
 	pressTimer *time.Timer
 	pressFired bool
 	pressSeq   int64
+	// Keep Win masking until Win releases, even if another chord key releases first.
+	winMatched bool
 }
 
 type holdModifierRelease struct {
@@ -75,12 +77,17 @@ func ensureHoldKeyListener() error {
 		return nil
 	}
 
-	listener, err := addRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+	listener, err := addModifierKeyListener(func(event keyboard.RawKeyEvent) bool {
 		handlePressModifierRawEvent(event)
 
 		holdTrackerMu.Lock()
 
 		if event.Type == keyboard.EventTypeKeyDown {
+			if (event.Key == keyboard.KeyLeftSuper || event.Key == keyboard.KeyRightSuper) && event.NativeKeyCode != 0 && !isHoldModifierPhysicallyPressed(event.Key) {
+				for _, cb := range holdModifierCallbacksForKey(event.Key) {
+					cb.winMatched = false
+				}
+			}
 			reconcileStuckHoldModifiers(event.Key)
 			setHoldModifierPressed(event.Key, true)
 			if _, isModifier := holdModifierFamily(event.Key); !isModifier && holdModifierAnyRecorderPressed() {
@@ -103,6 +110,7 @@ func ensureHoldKeyListener() error {
 					continue
 				}
 				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyDown: combo=%s event=%s timer=%v fired=%v", mcb.combo, modifierKeyLogLabel(event.Key), mcb.pressTimer != nil, mcb.pressFired))
+				mcb.winMatched = true
 				armHoldModifierPress(mcb)
 			}
 			holdTrackerMu.Unlock()
@@ -112,6 +120,11 @@ func ensureHoldKeyListener() error {
 
 		if event.Type == keyboard.EventTypeKeyUp {
 			setHoldModifierPressed(event.Key, false)
+			if event.Key == keyboard.KeyLeftSuper || event.Key == keyboard.KeyRightSuper {
+				for _, cb := range holdModifierCallbacksForKey(event.Key) {
+					cb.winMatched = false
+				}
+			}
 			// Check hold-modifier callbacks first (press + release mode).
 			releases := releaseHoldModifierPressesForKey(event.Key)
 			if releases != nil {
@@ -136,6 +149,15 @@ func ensureHoldKeyListener() error {
 
 		holdTrackerMu.Unlock()
 		return false
+	}, func(key keyboard.Key) bool {
+		holdTrackerMu.Lock()
+		defer holdTrackerMu.Unlock()
+		for _, cb := range holdModifierCallbacksForKey(key) {
+			if len(cb.keys) == 1 || cb.winMatched {
+				return true
+			}
+		}
+		return pressModifierTracker.HasKey(key) || len(holdCallbacksForRawKey(key)) > 0
 	})
 	if err != nil {
 		return err

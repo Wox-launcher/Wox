@@ -1,5 +1,10 @@
 package keyboard
 
+// IsNativeKeyPressed retains unmapped keys until release on unsupported platforms.
+func IsNativeKeyPressed(code uint32) bool { return nativeKeyPressed(code) }
+
+var nativeKeyPressed = func(code uint32) bool { return true }
+
 func SimulateCopy() error {
 	return simulateCopy()
 }

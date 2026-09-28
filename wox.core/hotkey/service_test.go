@@ -60,12 +60,12 @@ func TestRegisteredHotkeyStateKeepsOnlySuccessfulEntries(t *testing.T) {
 
 func TestResultHotkeyConflictsIncludeDictationAndModifierOrder(t *testing.T) {
 	entries := []Entry{{Source: SourceDictation, ID: "dictate", CombineKey: "Ctrl+Alt+K"}, {Source: SourceResult, ID: "result", CombineKey: "alt+ctrl+k"}}
-	if err := validateResultHotkeyConflicts(entries); err == nil {
+	if err := validateHotkeyConflicts(entries); err == nil {
 		t.Fatal("dictation conflict was accepted")
 	}
 	entries[0].CombineKey = "hold:left_alt"
 	entries[1].CombineKey = "left_alt"
-	if err := validateResultHotkeyConflicts(entries); err == nil {
+	if err := validateHotkeyConflicts(entries); err == nil {
 		t.Fatal("hold/press conflict was accepted")
 	}
 }
@@ -104,5 +104,16 @@ func TestSyncedResultConflictKeepsOtherHotkeys(t *testing.T) {
 	got := usableResultHotkeys(context.Background(), entries)
 	if len(got) != 2 || got[0].Source != SourceMain || got[1].ID != "valid" {
 		t.Fatalf("unrelated hotkeys were lost: %+v", got)
+	}
+}
+
+// TestMainDictationConflict checks both configuration orders.
+func TestMainDictationConflict(t *testing.T) {
+	entries := []Entry{{Source: SourceMain, CombineKey: "left_win"}, {Source: SourceDictation, CombineKey: "left_cmd"}}
+	for i := 0; i < 2; i++ {
+		if err := validateHotkeyConflicts(entries); err == nil {
+			t.Fatal("main/dictation conflict accepted")
+		}
+		entries[0], entries[1] = entries[1], entries[0]
 	}
 }

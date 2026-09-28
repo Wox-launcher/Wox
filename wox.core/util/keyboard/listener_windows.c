@@ -10,6 +10,26 @@ extern int keyboardHookEventCGO(int eventKind, unsigned int vkCode, unsigned int
 // release as the end of a combination instead of a lone press that opens the
 // Start menu. AutoHotkey and PowerToys use the same 0xFF mask key.
 #define WOX_WIN_MASK_VK 0xFF
+#define WOX_WIN_RELEASE_TAG ((ULONG_PTR)0x574F5857)
+
+// Replace an intercepted Win-up atomically: masking after passing it through
+// can open Start first, while swallowing it alone leaves the OS key stuck down.
+static int sendMaskedWinRelease(UINT vkCode)
+{
+    INPUT inputs[3];
+    ZeroMemory(inputs, sizeof(inputs));
+    for (int i = 0; i < 3; i++)
+    {
+        inputs[i].type = INPUT_KEYBOARD;
+        inputs[i].ki.dwExtraInfo = WOX_WIN_RELEASE_TAG;
+    }
+    inputs[0].ki.wVk = WOX_WIN_MASK_VK;
+    inputs[1].ki.wVk = WOX_WIN_MASK_VK;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[2].ki.wVk = (WORD)vkCode;
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP | KEYEVENTF_EXTENDEDKEY;
+    return SendInput(3, inputs, sizeof(INPUT)) == 3;
+}
 
 enum requestAction
 {
@@ -33,6 +53,7 @@ typedef struct
 static HANDLE gKeyboardThread = NULL;
 static DWORD gKeyboardThreadId = 0;
 static HHOOK gRawKeyboardHook = NULL;
+static int gWinUsedWithKey[2] = {0, 0};
 
 static void clearKeyboardThreadHandle(void)
 {
@@ -115,6 +136,12 @@ static LRESULT CALLBACK lowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (nCode == HC_ACTION)
     {
         KBDLLHOOKSTRUCT *event = (KBDLLHOOKSTRUCT *)lParam;
+        // Go listeners already saw the physical release. Do not dispatch our
+        // replacement again or it would recursively mask and re-trigger it.
+        if ((event->flags & LLKHF_INJECTED) && event->dwExtraInfo == WOX_WIN_RELEASE_TAG)
+        {
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
         // Let Caps Lock events created by SetCapsLockState update the OS toggle state
         // without re-entering Wox's Caps Lock combo state machine.
         if (event->vkCode == VK_CAPITAL && (event->flags & LLKHF_INJECTED))
@@ -139,9 +166,50 @@ static LRESULT CALLBACK lowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
         if (eventKind != -1)
         {
+            int winSide = event->vkCode == VK_LWIN ? 0 : event->vkCode == VK_RWIN ? 1 : -1;
+            if (eventKind == 0)
+            {
+                if (winSide >= 0)
+                {
+                    // The hook sees the old state. A fresh down also resets a
+                    // combination whose release was lost across Win+L/lock.
+                    if (!(GetAsyncKeyState(event->vkCode) & 0x8000))
+                    {
+                        gWinUsedWithKey[winSide] = 0;
+                    }
+                }
+                else if (event->vkCode != VK_CONTROL && event->vkCode != VK_LCONTROL && event->vkCode != VK_RCONTROL &&
+                         event->vkCode != VK_SHIFT && event->vkCode != VK_LSHIFT && event->vkCode != VK_RSHIFT &&
+                         event->vkCode != VK_MENU && event->vkCode != VK_LMENU && event->vkCode != VK_RMENU)
+                {
+                    if (GetAsyncKeyState(VK_LWIN) & 0x8000)
+                    {
+                        gWinUsedWithKey[0] = 1;
+                    }
+                    if (GetAsyncKeyState(VK_RWIN) & 0x8000)
+                    {
+                        gWinUsedWithKey[1] = 1;
+                    }
+                }
+            }
             int consume = keyboardHookEventCGO(eventKind, event->vkCode, currentModifierMask(), event->scanCode, event->flags);
             if (consume != 0)
             {
+                if (eventKind == 1 && (event->vkCode == VK_LWIN || event->vkCode == VK_RWIN))
+                {
+                    // System combinations already suppress Start. Preserve
+                    // their physical release instead of substituting input.
+                    if (gWinUsedWithKey[winSide])
+                    {
+                        return CallNextHookEx(NULL, nCode, wParam, lParam);
+                    }
+                    if (!sendMaskedWinRelease(event->vkCode))
+                    {
+                        // UIPI may reject injection over elevated windows. Let
+                        // the physical release through rather than sticking Win.
+                        return CallNextHookEx(NULL, nCode, wParam, lParam);
+                    }
+                }
                 return 1;
             }
         }

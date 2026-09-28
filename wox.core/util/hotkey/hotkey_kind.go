@@ -32,7 +32,7 @@ func resolveHotkeyKind(spec hotkeySpec, hasRelease bool, options registerOptions
 	}
 
 	if spec.isModifierChord() {
-		if options.allowModifierPress {
+		if options.allowModifierPress || spec.isWindowsKey() {
 			return hotkeyKindPressModifier, nil
 		}
 		return hotkeyKindUnknown, fmt.Errorf("modifier-only hotkeys require explicit modifier press support")

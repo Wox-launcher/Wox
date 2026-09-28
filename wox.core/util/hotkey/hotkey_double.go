@@ -149,7 +149,7 @@ func registerDoubleHotKey(modifierKey keyboard.Key, callback func()) error {
 		return nil
 	}
 
-	listener, err := addRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+	listener, err := addModifierKeyListener(func(event keyboard.RawKeyEvent) bool {
 		triggeredKeys := doubleKeyTracker.HandleEvent(event, util.GetSystemTimestamp())
 		for _, triggeredKey := range triggeredKeys {
 			callback, ok := doubleKeyCallbacks.Load(triggeredKey)
@@ -163,7 +163,7 @@ func registerDoubleHotKey(modifierKey keyboard.Key, callback func()) error {
 		}
 
 		return false
-	})
+	}, hasDoubleModifierRegistrationForRawKey)
 	if err != nil {
 		doubleKeyCallbacks.Delete(modifierKey)
 		doubleKeyTracker.Unregister(modifierKey)

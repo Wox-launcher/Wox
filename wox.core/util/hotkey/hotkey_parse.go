@@ -2,6 +2,7 @@ package hotkey
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"wox/util/keyboard"
@@ -30,6 +31,16 @@ func (s hotkeySpec) isDoubleModifier() bool {
 
 func (s hotkeySpec) isModifierChord() bool {
 	return len(s.modifierChordKeys) > 0
+}
+
+func (s hotkeySpec) isWindowsKey() bool {
+	return runtime.GOOS == "windows" && len(s.modifierChordKeys) == 1 &&
+		(s.modifierChordKeys[0] == keyboard.KeyLeftSuper || s.modifierChordKeys[0] == keyboard.KeyRightSuper)
+}
+
+func IsWindowsKeyHotkeyString(combineKey string) bool {
+	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
+	return err == nil && spec.isWindowsKey()
 }
 
 func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {

@@ -11,6 +11,7 @@ import (
 	corehotkey "wox/hotkey"
 	woxui "wox/ui/runtime"
 	"wox/util"
+	utilhotkey "wox/util/hotkey"
 )
 
 var defaultHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo"}
@@ -58,6 +59,9 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	if len(allowedKinds) == 0 {
 		allowedKinds = defaultHotkeyRecordingKinds
 	}
+	if runtime.GOOS == "windows" && persistKey == "MainHotkey" {
+		allowedKinds = append(append([]string{}, allowedKinds...), "pressModifier")
+	}
 	allowed := make(map[string]bool, len(allowedKinds))
 	for _, kind := range allowedKinds {
 		allowed[kind] = true
@@ -70,6 +74,9 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	}
 	setFormFieldsFocusLocked(target, index)
 	hint := a.hotkeyRecordingHint(target.definitions[index], allowedKinds)
+	if runtime.GOOS == "windows" && persistKey == "MainHotkey" {
+		hint = a.translate("i18n:ui_hotkey_windows_key_hint")
+	}
 	key := target.definitions[index].Value.Key
 	state := &hotkeyRecordingState{
 		diagnosticCtx: util.NewTraceContext(),
@@ -233,6 +240,9 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 		return nil
 	}
 	canonical := canonicalRecordedHotkey(payload)
+	if state.persistKey == "MainHotkey" && payload.Kind == "pressModifier" && !utilhotkey.IsWindowsKeyHotkeyString(canonical) {
+		return nil
+	}
 	if event, ok := recordedHotkeyEvent(canonical); ok && state.onKey != nil && state.onKey(event) {
 		util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI candidate handled by parent: hotkey=%s", canonical))
 		return nil
@@ -244,7 +254,7 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 		util.GetLogger().Info(state.diagnosticCtx, "hotkey UI candidate ignored: reason=unchanged")
 		return nil
 	}
-	if hotkeyKindSkipsAvailability(payload.Kind) {
+	if hotkeyKindSkipsAvailability(payload.Kind) && state.persistKey != "MainHotkey" {
 		a.acceptRecordedHotkey(state, canonical)
 		return nil
 	}

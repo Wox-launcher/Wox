@@ -1,9 +1,23 @@
 package hotkey
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// TestWindowsKeyRegistersWithoutOpeningOtherModifierOnlyShortcuts keeps the
+// launcher exception limited to one Windows key and leaves dictation intact.
+func TestWindowsKeyRegistersWithoutOpeningOtherModifierOnlyShortcuts(t *testing.T) {
+	for _, key := range []string{"left_win", "right_win", "left_alt", "left_ctrl", "left_win+left_shift"} {
+		spec := mustParseHotkeySpec(t, key)
+		kind, err := resolveHotkeyKind(spec, false, registerOptions{})
+		allowed := runtime.GOOS == "windows" && (key == "left_win" || key == "right_win")
+		if allowed && (err != nil || kind != hotkeyKindPressModifier) || !allowed && err == nil {
+			t.Fatalf("ordinary registration of %s: kind=%s err=%v", key, kind, err)
+		}
+	}
+}
 
 func TestResolveHotkeyKindForModifierChordByRegistrationIntent(t *testing.T) {
 	spec := mustParseHotkeySpec(t, "left_alt")

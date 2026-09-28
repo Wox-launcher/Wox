@@ -35,6 +35,7 @@
   "ui_hotkey_hold_prefix": "길게 누르기",
   "ui_hotkey_hold_press_hint": "보조 키를 눌러 단축키를 설정하세요. 왼쪽/오른쪽 키가 구분됩니다",
   "ui_hotkey_modifier_press_hint": "단축키를 누르거나, 보조 키를 두 번 누르거나, 보조 키를 누르세요",
+  "ui_hotkey_windows_key_hint": "단축키를 누르거나, 보조 키를 두 번 누르거나, Win 키만 누르세요",
   "ui_hotkey_dictation_press_hint": "단축키를 누르거나, 보조 키를 한 번 또는 두 번 누르거나, 보조 키를 길게 누르세요",
   "ui_hotkey_accessibility_required": "손쉬운 사용 권한이 필요합니다",
   "ui_hotkey_raw_recorder_unavailable": "현재 환경에서는 이 단축키 유형을 기록할 수 없습니다",

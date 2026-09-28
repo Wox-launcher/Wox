@@ -3,11 +3,27 @@ package hotkey
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"wox/util"
 	"wox/util/keyboard"
 )
+
+// addModifierKeyListener lets Windows replace an owned Win release with a masked
+// release. Native code preserves physical releases after ordinary keys, so
+// system Win combinations keep their original input sequence.
+func addModifierKeyListener(handler keyboard.RawKeyHandler, ownsKey func(keyboard.Key) bool) (keyboard.RawKeySubscription, error) {
+	return addRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+		// Inspect the gesture before the handler clears release state.
+		mask := runtime.GOOS == "windows" && event.Type == keyboard.EventTypeKeyUp && (event.Key == keyboard.KeyLeftSuper || event.Key == keyboard.KeyRightSuper) && ownsKey(event.Key)
+		consume := handler(event)
+		if mask {
+			return true
+		}
+		return consume
+	})
+}
 
 // platformHotkeyAvailableCheck is a platform hook that can short-circuit the
 // standard register-test-unregister availability check. If non-nil, it is called
@@ -163,6 +179,7 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 	keyboardSpecs := make([]keyboard.GlobalHotkeySpec, 0, len(specs))
 
 	parser := &Hotkey{}
+	registeredSpecial := map[string]bool{}
 	for _, spec := range specs {
 		parsed, parseErr := parser.parseCombineKey(spec.CombineKey)
 		if parseErr != nil {
@@ -183,6 +200,12 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 		}
 
 		if parsed.isDoubleModifier() || parsed.isCapsLockKey() || parsed.isModifierChord() {
+			// Synced or older settings may bypass validation; keep the first owner.
+			binding, _ := BindingKey(spec.CombineKey)
+			if registeredSpecial[binding] {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("skip duplicate special hotkey: %s", spec.CombineKey))
+				continue
+			}
 			hk := &Hotkey{}
 			var err error
 			if spec.OnRelease != nil {
@@ -202,6 +225,7 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("skip special hotkey in group, register failed: %s: %s", spec.CombineKey, err.Error()))
 				continue
 			}
+			registeredSpecial[binding] = true
 			group.hotkeys = append(group.hotkeys, hk)
 			continue
 		}

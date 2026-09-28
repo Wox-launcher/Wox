@@ -34,6 +34,7 @@
   "ui_hotkey_press_hint": "Pressione qualquer tecla para definir o atalho ou clique duas vezes nas teclas modificadoras",
   "ui_hotkey_hold_prefix": "Segurar",
   "ui_hotkey_modifier_press_hint": "Pressione um atalho, pressione duas vezes um modificador ou pressione modificadores uma vez",
+  "ui_hotkey_windows_key_hint": "Pressione um atalho, pressione duas vezes um modificador ou pressione apenas a tecla Win",
   "ui_hotkey_dictation_press_hint": "Pressione um atalho, pressione modificadores uma ou duas vezes, ou mantenha modificadores pressionados",
   "ui_hotkey_accessibility_required": "Permissão de Acessibilidade necessária",
   "ui_hotkey_raw_recorder_unavailable": "Este tipo de atalho não pode ser gravado no ambiente atual",

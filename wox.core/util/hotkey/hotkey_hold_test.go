@@ -1,11 +1,59 @@
 package hotkey
 
 import (
+	"context"
 	"runtime"
 	"testing"
 	"time"
 	"wox/util/keyboard"
 )
+
+// TestWinModifierOwnersMaskRelease covers launcher, dictation press/hold, and
+// double-Win bindings through the same raw hook contract.
+func TestWinModifierOwnersMaskRelease(t *testing.T) {
+	for _, mode := range []string{"launcher", "press", "hold", "double"} {
+		t.Run(mode, func(t *testing.T) {
+			rawHandler, restore := captureRawKeyListenerForTest(t)
+			defer restore()
+			hk := &Hotkey{}
+			var err error
+			switch mode {
+			case "launcher":
+				if runtime.GOOS != "windows" {
+					t.Skip("single Win launcher shortcut is Windows-only")
+				}
+				err = hk.Register(context.Background(), "left_win", func() {})
+			case "press":
+				err = hk.RegisterWithModifierPress(context.Background(), "left_win", func() {})
+			case "hold":
+				err = hk.RegisterWithRelease(context.Background(), "left_win", func() {}, func() {})
+			case "double":
+				err = hk.Register(context.Background(), "win+win", func() {})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer hk.Unregister(context.Background())
+			for _, key := range []keyboard.Key{keyboard.KeyLeftSuper, keyboard.KeyRightSuper} {
+				if rawHandler()(rawModifierEvent(keyboard.EventTypeKeyDown, key)) {
+					t.Fatal("Win-down must reach the OS for combinations")
+				}
+				if rawHandler()(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyE)) {
+					t.Fatal("Win+E must reach the OS")
+				}
+				rawHandler()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyE))
+				wantMask := runtime.GOOS == "windows" && (key == keyboard.KeyLeftSuper || mode == "double")
+				if masked := rawHandler()(rawModifierEvent(keyboard.EventTypeKeyUp, key)); masked != wantMask {
+					t.Fatalf("Win-up masked=%t, want %t for %v", masked, wantMask, key)
+				}
+			}
+			hk.Unregister(context.Background())
+			if rawHandler()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftSuper)) {
+				t.Fatal("unregister must stop masking Win")
+			}
+		})
+	}
+}
 
 func TestHoldModifierKeysRelatedKeepsSidesDistinct(t *testing.T) {
 	if !holdModifierKeysRelated(keyboard.KeyLeftShift, keyboard.KeyShift) {
@@ -251,5 +299,62 @@ func assertNoSignal(t *testing.T, ch <-chan struct{}, label string) {
 	case <-ch:
 		t.Fatalf("did not expect %s", label)
 	case <-time.After(holdModifierPressDelay + 80*time.Millisecond):
+	}
+}
+
+// TestPartialWinChordKeepsStart verifies that registration alone does not own Win.
+func TestPartialWinChordKeepsStart(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows release masking")
+	}
+	for _, hold := range []bool{false, true} {
+		raw, restore := captureRawKeyListenerForTest(t)
+		hk := &Hotkey{}
+		var err error
+		if hold {
+			err = hk.RegisterWithRelease(context.Background(), "left_shift+left_win", func() {}, func() {})
+		} else {
+			err = hk.RegisterWithModifierPress(context.Background(), "left_shift+left_win", func() {})
+		}
+		if err != nil {
+			restore()
+			t.Fatal(err)
+		}
+		raw()(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftSuper))
+		if raw()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftSuper)) {
+			t.Error("unmatched chord suppressed Start")
+		}
+		raw()(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftShift))
+		raw()(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftSuper))
+		raw()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftShift))
+		if !raw()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftSuper)) {
+			t.Errorf("matched chord did not suppress Start: hold=%t pressed=%v", hold, pressModifierTracker.pressed)
+		}
+		raw()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftShift))
+		hk.Unregister(context.Background())
+		restore()
+	}
+}
+
+// TestDuplicateModifierGroupKeepsFirstOwner guards synced duplicate bindings.
+func TestDuplicateModifierGroupKeepsFirstOwner(t *testing.T) {
+	_, restore := captureRawKeyListenerForTest(t)
+	defer restore()
+	owner := ""
+	group, err := RegisterGroup(context.Background(), []Spec{
+		{CombineKey: "left_cmd", Callback: func() { owner = "main" }},
+		{CombineKey: "left_cmd", Callback: func() { owner = "dictation" }},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer group.Unregister(context.Background())
+	callback, ok := pressModifierCallbacks.Load("left_cmd")
+	if !ok {
+		t.Fatal("missing main callback")
+	}
+	callback()
+	if owner != "main" || len(group.hotkeys) != 1 {
+		t.Fatal("duplicate replaced first owner")
 	}
 }

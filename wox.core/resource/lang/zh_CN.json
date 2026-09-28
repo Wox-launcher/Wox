@@ -32,6 +32,7 @@
   "ui_hotkey_recording": "录制中...",
   "ui_hotkey_click_to_set": "点击设置",
   "ui_hotkey_press_hint": "按任意键设置快捷键，或双击修饰键",
+  "ui_hotkey_windows_key_hint": "按快捷键、双击修饰键，或单独按下 Win 键",
   "ui_hotkey_hold_prefix": "按住",
   "ui_hotkey_hold_press_hint": "按修饰键设置快捷键，支持左右键区分",
   "ui_hotkey_modifier_press_hint": "按快捷键、双击修饰键，或按一次修饰键",

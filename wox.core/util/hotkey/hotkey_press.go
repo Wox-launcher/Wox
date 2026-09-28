@@ -2,6 +2,7 @@ package hotkey
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"wox/util"
@@ -31,6 +32,7 @@ type modifierPressTracker struct {
 	mu              sync.Mutex
 	registrations   map[string]*modifierPressRegistration
 	pressed         map[keyboard.Key]bool
+	unknownPressed  map[uint32]bool
 	suppressedUntil map[keyboard.Key]int64
 }
 
@@ -38,6 +40,7 @@ func newModifierPressTracker() *modifierPressTracker {
 	return &modifierPressTracker{
 		registrations:   map[string]*modifierPressRegistration{},
 		pressed:         map[keyboard.Key]bool{},
+		unknownPressed:  map[uint32]bool{},
 		suppressedUntil: map[keyboard.Key]int64{},
 	}
 }
@@ -49,6 +52,12 @@ func (t *modifierPressTracker) Register(keys []keyboard.Key) {
 	canonicalKeys := canonicalHoldModifierKeys(keys)
 	if len(canonicalKeys) == 0 {
 		return
+	}
+	if len(t.registrations) == 0 {
+		// Releases can be missed while no press binding owns the listener.
+		clear(t.pressed)
+		clear(t.unknownPressed)
+		clear(t.suppressedUntil)
 	}
 	combo := holdModifierComboString(canonicalKeys)
 	t.registrations[combo] = &modifierPressRegistration{keys: canonicalKeys, combo: combo}
@@ -68,18 +77,47 @@ func (t *modifierPressTracker) Len() int {
 	return len(t.registrations)
 }
 
-func (t *modifierPressTracker) HandleEvent(event keyboard.RawKeyEvent, shouldDelaySinglePress func(keyboard.Key) bool, now int64) []modifierPressTrigger {
-	if event.Key == keyboard.KeyUnknown {
-		return nil
+// HasKey identifies single modifiers or chords matched during this gesture.
+func (t *modifierPressTracker) HasKey(key keyboard.Key) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, registration := range t.registrations {
+		if containsHoldModifierKey(registration.keys, key) && (len(registration.keys) == 1 || registration.exactSeen) {
+			return true
+		}
 	}
+	return false
+}
 
+func (t *modifierPressTracker) HandleEvent(event keyboard.RawKeyEvent, shouldDelaySinglePress func(keyboard.Key) bool, now int64) []modifierPressTrigger {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	switch event.Type {
 	case keyboard.EventTypeKeyDown:
+		// Win+L can lose releases while the desktop is locked. Native Windows
+		// events can reconcile the old physical state before applying this down.
+		if runtime.GOOS == "windows" && event.NativeKeyCode != 0 {
+			for code := range t.unknownPressed {
+				if !isPressNativeKeyPressed(code) {
+					delete(t.unknownPressed, code)
+				}
+			}
+			for key := range t.pressed {
+				if key != keyboard.KeyUnknown && !isPressModifierPhysicallyPressed(key) {
+					delete(t.pressed, key)
+				}
+			}
+			for _, registration := range t.registrations {
+				if !t.anyChordKeyPressedLocked(registration.keys) {
+					registration.active = false
+				}
+			}
+		}
 		t.cancelPendingLocked(event.Key)
-		if isSpecificModifierKey(event.Key) {
+		if event.Key == keyboard.KeyUnknown {
+			t.unknownPressed[event.NativeKeyCode] = true
+		} else {
 			t.pressed[event.Key] = true
 		}
 		for _, registration := range t.registrations {
@@ -94,14 +132,24 @@ func (t *modifierPressTracker) HandleEvent(event keyboard.RawKeyEvent, shouldDel
 				registration.canceled = false
 				registration.exactSeen = false
 			}
+			if len(t.unknownPressed) > 0 {
+				registration.canceled = true
+			}
+			// A key held before the chord started also makes this a combination.
+			for key := range t.pressed {
+				if !containsHoldModifierKey(registration.keys, key) {
+					registration.canceled = true
+				}
+			}
 			if t.exactKeysPressedLocked(registration.keys) {
 				registration.exactSeen = true
 			}
 		}
 		return nil
 	case keyboard.EventTypeKeyUp:
-		if isSpecificModifierKey(event.Key) {
-			t.pressed[event.Key] = false
+		delete(t.pressed, event.Key)
+		if event.Key == keyboard.KeyUnknown {
+			delete(t.unknownPressed, event.NativeKeyCode)
 		}
 
 		triggers := []modifierPressTrigger{}
@@ -196,6 +244,9 @@ func (t *modifierPressTracker) SuppressNextPressForRawKey(key keyboard.Key, now 
 }
 
 func (t *modifierPressTracker) exactKeysPressedLocked(keys []keyboard.Key) bool {
+	if len(t.unknownPressed) > 0 {
+		return false
+	}
 	for _, key := range keys {
 		if !t.pressed[key] {
 			return false
@@ -242,10 +293,12 @@ func (t *modifierPressTracker) pressSuppressedLocked(keys []keyboard.Key, now in
 }
 
 var (
-	pressModifierCallbacks  = util.NewHashMap[string, func()]()
-	pressModifierTracker    = newModifierPressTracker()
-	pressModifierTimerMu    sync.Mutex
-	pressModifierFlushTimer *time.Timer
+	isPressNativeKeyPressed          = keyboard.IsNativeKeyPressed
+	isPressModifierPhysicallyPressed = keyboard.IsKeyPressed
+	pressModifierCallbacks           = util.NewHashMap[string, func()]()
+	pressModifierTracker             = newModifierPressTracker()
+	pressModifierTimerMu             sync.Mutex
+	pressModifierFlushTimer          *time.Timer
 )
 
 func startPressModifierTracking(keys []keyboard.Key, onPress func()) error {

@@ -88,7 +88,7 @@ func (s *Service) UpdateWoxConfig(ctx context.Context, config WoxConfig, restore
 	previousEntries := s.collector.snapshot()
 	s.collectWoxConfig(ctx, config)
 	if restoreCollectorOnFailure {
-		if err := validateResultHotkeyConflicts(s.collector.snapshot()); err != nil {
+		if err := validateHotkeyConflicts(s.collector.snapshot()); err != nil {
 			s.collector.restore(previousEntries)
 			return err
 		}
@@ -114,7 +114,7 @@ func (s *Service) UpdateDictationBindings(ctx context.Context, bindings []Dictat
 		return err
 	}
 	if registerNow {
-		if err := validateResultHotkeyConflicts(s.collector.snapshot()); err != nil {
+		if err := validateHotkeyConflicts(s.collector.snapshot()); err != nil {
 			s.collector.restore(previousEntries)
 			return err
 		}
@@ -387,9 +387,9 @@ func resultBindingsFromSetting(woxSetting *setting.WoxSetting) []setting.ResultB
 	return setting.CloneResultBindings(woxSetting.ResultBindings.Get())
 }
 
-// validateResultHotkeyConflicts checks all owners, including dictation, before
-// native registration can silently skip or overwrite a duplicate result chord.
-func validateResultHotkeyConflicts(entries []Entry) error {
+// validateHotkeyConflicts checks all owners, including dictation, before
+// native registration can silently skip or overwrite a duplicate chord.
+func validateHotkeyConflicts(entries []Entry) error {
 	seen := make(map[string]Entry, len(entries))
 	for _, entry := range entries {
 		key, err := utilhotkey.BindingKey(entry.CombineKey)
@@ -402,8 +402,13 @@ func validateResultHotkeyConflicts(entries []Entry) error {
 		if key == "" {
 			continue
 		}
-		if previous, found := seen[key]; found && (entry.Source == SourceResult || previous.Source == SourceResult) {
-			return fmt.Errorf("i18n:plugin_manager_result_hotkey_conflict")
+		if previous, found := seen[key]; found {
+			if entry.Source == SourceResult || previous.Source == SourceResult {
+				return fmt.Errorf("i18n:plugin_manager_result_hotkey_conflict")
+			}
+			if entry.Source == SourceMain || previous.Source == SourceMain {
+				return fmt.Errorf("i18n:ui_hotkey_conflict_main")
+			}
 		}
 		seen[key] = entry
 	}
@@ -447,7 +452,7 @@ func (s *Service) ApplyResultBindings(ctx context.Context, bindings []setting.Re
 	previousRegistered := cloneEntries(s.registered)
 	s.collectResultBindings(bindings)
 	pending := s.collector.snapshot()
-	if err := validateResultHotkeyConflicts(pending); err != nil {
+	if err := validateHotkeyConflicts(pending); err != nil {
 		s.collector.restore(previousEntries)
 		return err
 	}

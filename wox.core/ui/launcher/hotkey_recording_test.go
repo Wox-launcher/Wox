@@ -401,3 +401,35 @@ func TestActionHotkeyRecordingOnlyAllowsNormalCombos(t *testing.T) {
 		t.Fatal("recorder did not start")
 	}
 }
+
+// TestMainHotkeyRecordingAllowsWindowsKeyOnlyOnWindows keeps the launcher
+// exception separate from local action shortcuts and other modifier presses.
+func TestMainHotkeyRecordingAllowsWindowsKeyOnlyOnWindows(t *testing.T) {
+	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
+	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.settingsOpen = true
+	app.settingTab = "hotkey"
+	form := newHotkeySettingsForm(settingsData{})
+	app.hotkeySettings.SetForm(&form)
+	for index, definition := range form.definitions {
+		if definition.Value.Key == "MainHotkey" {
+			app.recordHotkeySettingsField(index)
+			break
+		}
+	}
+	select {
+	case kinds := <-services.kinds:
+		if containsString(kinds, "pressModifier") != (runtime.GOOS == "windows") {
+			t.Fatalf("main shortcut recording kinds = %v", kinds)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("recorder did not start")
+	}
+	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "left_ctrl", Kind: "pressModifier"}); err != nil {
+		t.Fatal(err)
+	}
+	if app.hotkeySettings.Recording().display == "left_ctrl" {
+		t.Fatal("main shortcut must not accept other single modifiers")
+	}
+}

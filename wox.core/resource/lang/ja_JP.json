@@ -35,6 +35,7 @@
   "ui_hotkey_hold_prefix": "長押し",
   "ui_hotkey_hold_press_hint": "修飾キーを押してホットキーを設定します。左/右キーは区別されます",
   "ui_hotkey_modifier_press_hint": "ショートカットを押すか、修飾キーをダブル押し、または修飾キーを押してください",
+  "ui_hotkey_windows_key_hint": "ショートカットを押すか、修飾キーをダブル押し、または Win キーだけを押してください",
   "ui_hotkey_dictation_press_hint": "ショートカットを押すか、修飾キーをダブル押し/押すか、修飾キーを長押ししてください",
   "ui_hotkey_accessibility_required": "アクセシビリティの許可が必要です",
   "ui_hotkey_raw_recorder_unavailable": "このホットキータイプは現在の環境では記録できません",

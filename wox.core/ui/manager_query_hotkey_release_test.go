@@ -21,3 +21,26 @@ func TestQueryHotkeyReleasePolicy(t *testing.T) {
 		}
 	}
 }
+
+// TestHotkeyCompareUsesPhysicalWinChord covers aliases and dictation's hold
+// binding without treating the left and right Windows keys as the same key.
+func TestHotkeyCompareUsesPhysicalWinChord(t *testing.T) {
+	left := hotkeyCompareKeys("left_win")
+	for _, alias := range []string{"left_cmd", "left_super", "hold:left_win"} {
+		if !hotkeyCompareKeysIntersect(left, hotkeyCompareKeys(alias)) {
+			t.Fatalf("%s must conflict with left Win", alias)
+		}
+	}
+	if hotkeyCompareKeysIntersect(left, hotkeyCompareKeys("right_win")) {
+		t.Fatal("left and right Win must remain distinct")
+	}
+}
+
+// TestHotkeyLegacyAliases retains old conflict comparisons alongside physical chords.
+func TestHotkeyLegacyAliases(t *testing.T) {
+	for _, pair := range [][2]string{{"win+e", "windows+e"}, {"win+e", "meta+e"}, {"alt+space", "option+space"}} {
+		if !hotkeyCompareKeysIntersect(hotkeyCompareKeys(pair[0]), hotkeyCompareKeys(pair[1])) {
+			t.Errorf("aliases diverge: %v", pair)
+		}
+	}
+}

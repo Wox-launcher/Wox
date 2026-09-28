@@ -291,3 +291,7 @@ func waitModifiersRelease() {
 		break
 	}
 }
+
+func init() {
+	nativeKeyPressed = func(code uint32) bool { return C.isKeyPressed(C.int(code)) != 0 }
+}

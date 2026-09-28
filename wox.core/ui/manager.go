@@ -827,6 +827,22 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 }
 
 func hotkeyCompareKeys(hotkeyStr string) map[string]bool {
+	// Compare the physical chord so Win aliases and dictation's hold prefix
+	// cannot hide a conflict with the launcher's new single-Win shortcut.
+	if key, err := utilhotkey.BindingKey(hotkeyStr); err == nil && key != "" {
+		return map[string]bool{key: true}
+	}
+	// Parse legacy UI aliases without collapsing side-specific chords.
+	tokens := strings.Split(hotkeyStr, "+")
+	for i, token := range tokens {
+		tokens[i] = normalizeHotkeyToken(token)
+		if tokens[i] == "meta" {
+			tokens[i] = "cmd"
+		}
+	}
+	if key, err := utilhotkey.BindingKey(strings.Join(tokens, "+")); err == nil && key != "" {
+		return map[string]bool{key: true}
+	}
 	normalized := normalizeHotkeyForCompare(hotkeyStr)
 	if normalized == "" {
 		return map[string]bool{}

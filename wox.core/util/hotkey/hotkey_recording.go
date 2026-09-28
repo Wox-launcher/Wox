@@ -145,7 +145,9 @@ func (m *hotkeyRecordingSessionManager) Start(options recordingSessionOptions) (
 	}
 
 	state := newRecordingRawState(allowed, options.onRecorded)
-	listener, err := addRawKeyListener(state.HandleEvent)
+	listener, err := addModifierKeyListener(state.HandleEvent, func(key keyboard.Key) bool {
+		return allowed[hotkeyKindPressModifier] || allowed[hotkeyKindHoldModifier] || allowed[hotkeyKindDoubleModifier]
+	})
 	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey recorder start: allowed=%v listenerError=%v backend={%s}", options.allowedKinds, err, keyboard.RawKeyboardDiagnostics()))
 	if err == nil {
 		// Sample even with no incoming events, including Secure Input changes during recording.
