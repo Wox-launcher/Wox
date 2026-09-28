@@ -287,7 +287,7 @@ func writeTextData(text string) error {
 		cText := (*C.wchar_t)(unsafe.Pointer(&[]uint16{0}[0]))
 		ret := C.clipboardWriteText(cText, 0)
 		if ret != 0 {
-			return fmt.Errorf("clipboard: writeText(empty) failed (code=%d)", int(ret))
+			return fmt.Errorf("clipboard: writeText(empty) failed (code=%d, %s)", int(ret), buildWatchSnapshot())
 		}
 		return nil
 	}
@@ -301,7 +301,7 @@ func writeTextData(text string) error {
 	}
 
 	if ret != 0 {
-		return fmt.Errorf("clipboard: writeText failed (code=%d)", int(ret))
+		return fmt.Errorf("clipboard: writeText failed (code=%d, %s)", int(ret), buildWatchSnapshot())
 	}
 
 	// Update lastSeqNum to avoid triggering watchChange on our own writes

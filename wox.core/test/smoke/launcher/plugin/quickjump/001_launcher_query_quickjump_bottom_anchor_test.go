@@ -21,7 +21,7 @@ const quickJumpInstance = string(common.ShowSourceQuickJump)
 // secondary keeps a fixed bottom edge while rapid queries resize it.
 // Flow: open Quick Jump secondary -> capture bottom edge -> type successive queries that
 // change result height -> reopen the same Quick Jump instance with a new query.
-// Evidence: native window bottom (Y+Height) stays within 1px across resizes and re-shows.
+// Evidence: native window bottom (Y+Height) stays within 1 logical unit as results resize.
 func Test001LauncherQueryQuickJumpBottomAnchor(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		if err := client.OpenQuickJumpQuery(ctx, "a"); err != nil {
@@ -70,11 +70,29 @@ func Test001LauncherQueryQuickJumpBottomAnchor(t *testing.T) {
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
 			scopeIcons, scopeFound := automationdriver.Find(snapshot, "launcher.query.scope-icons")
-			return inputFound && input.Value == "reanchor" && scopeFound && scopeIcons.Value == "1"
+			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
+			return inputFound && input.Value == "reanchor" && scopeFound && scopeIcons.Value == "1" && (!resultsFound || results.Value == "complete")
 		}); err != nil {
 			t.Fatalf("wait for reopened quick jump query: %v", err)
 		}
-		assertBottomEdgeStable(t, ctx, client, initialBottom)
+		// Reopening recomputes the position from the current display work area.
+		// macOS can change that work area while the test is running.
+		reopenedBounds, err := client.Bounds(ctx)
+		if err != nil {
+			t.Fatalf("read reopened quick jump bounds: %v", err)
+		}
+		reopenedBottom := reopenedBounds.Y + reopenedBounds.Height
+		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "a"); err != nil {
+			t.Fatalf("enter reopened quick jump query: %v", err)
+		}
+		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
+			return inputFound && input.Value == "a" && resultsFound && results.Value == "complete"
+		}); err != nil {
+			t.Fatalf("wait for reopened quick jump results: %v", err)
+		}
+		assertBottomEdgeStable(t, ctx, client, reopenedBottom)
 	})
 }
 

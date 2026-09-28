@@ -811,6 +811,11 @@ class PublicAPI(Protocol):
             await api.refresh_query(ctx, RefreshQueryParam(
                 preserve_selected_index=False
             ))
+
+            # After moving an item, follow that result
+            await api.refresh_query(ctx, RefreshQueryParam(
+                selected_result_id=item_id
+            ))
         """
         ...
 

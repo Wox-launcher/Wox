@@ -241,10 +241,16 @@ type QueryRefinementOption struct {
 
 // RefreshQueryParam contains parameters for refreshing a query
 type RefreshQueryParam struct {
-	// PreserveSelectedIndex controls whether to maintain the previously selected item index after refresh
-	// When true, the user's current selection index in the results list is preserved
-	// When false, the selection resets to the first item (index 0)
+	// PreserveSelectedIndex controls whether to maintain the previously selected item index after refresh.
+	// When true, the user's current selection index in the results list is preserved.
+	// When false, the selection resets to the first item (index 0).
+	// This keeps the row, so a result that moved to another index is no longer selected.
 	PreserveSelectedIndex bool
+	// SelectedResultId reselects the result with this id after refresh.
+	// The plugin must set the same QueryResult.Id on the rebuilt result.
+	// A non-empty id takes precedence over PreserveSelectedIndex, so the highlight
+	// follows that result when its row moves. An empty id keeps the index behavior.
+	SelectedResultId string
 }
 
 const QueryResultDragDataTypeFiles = "files"

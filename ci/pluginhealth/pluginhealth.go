@@ -674,7 +674,7 @@ type pluginHealthUI struct{}
 
 func (pluginHealthUI) ChangeQuery(context.Context, common.PlainQuery) {}
 
-func (pluginHealthUI) RefreshQuery(context.Context, bool) {}
+func (pluginHealthUI) RefreshQuery(context.Context, common.RefreshQueryOptions) {}
 
 func (pluginHealthUI) HideApp(context.Context) {}
 

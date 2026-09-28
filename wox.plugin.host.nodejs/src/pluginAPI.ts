@@ -418,9 +418,13 @@ export class PluginAPI implements PublicAPI {
   }
 
   async RefreshQuery(ctx: Context, param: RefreshQueryParam): Promise<void> {
-    await this.invokeMethod(ctx, "RefreshQuery", {
+    const params: { [key: string]: string } = {
       preserveSelectedIndex: param.PreserveSelectedIndex.toString()
-    })
+    }
+    if (param.SelectedResultId) {
+      params.selectedResultId = param.SelectedResultId
+    }
+    await this.invokeMethod(ctx, "RefreshQuery", params)
   }
 
   async Copy(ctx: Context, params: CopyParams): Promise<void> {

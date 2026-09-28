@@ -748,6 +748,44 @@ func TestLauncherBoundsEffectivelyEqualToleratesDPIRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRestoreRefreshSelectionFollowsResultID(t *testing.T) {
+	queryID := "q"
+	pending := &pendingResultSelection{queryID: queryID, index: 3, resultID: "b"}
+	partial := []queryResult{{ID: "group", IsGroup: true}, {ID: "top"}, {ID: "a"}, {ID: "b"}}
+	selected, preserved, keep := restoreRefreshSelection(partial, pending, queryID, false)
+	if selected != 3 || !preserved || !keep {
+		t.Fatalf("partial selection = %d preserved=%v keep=%v", selected, preserved, keep)
+	}
+
+	reordered := []queryResult{{ID: "group", IsGroup: true}, {ID: "top"}, {ID: "b"}, {ID: "a"}}
+	selected, preserved, keep = restoreRefreshSelection(reordered, pending, queryID, true)
+	if selected != 2 || !preserved || keep {
+		t.Fatalf("moved selection = %d preserved=%v keep=%v", selected, preserved, keep)
+	}
+
+	indexPending := &pendingResultSelection{queryID: queryID, index: 3, preserveIndex: true}
+	selected, preserved, keep = restoreRefreshSelection(reordered, indexPending, queryID, false)
+	if selected != 3 || !preserved || keep {
+		t.Fatalf("index selection = %d preserved=%v keep=%v", selected, preserved, keep)
+	}
+
+	missing := &pendingResultSelection{queryID: queryID, index: 3, resultID: "gone"}
+	selected, preserved, keep = restoreRefreshSelection(reordered, missing, queryID, true)
+	if selected != 1 || preserved || keep {
+		t.Fatalf("missing id selection = %d preserved=%v keep=%v", selected, preserved, keep)
+	}
+	missing.preserveIndex = true
+	selected, preserved, keep = restoreRefreshSelection(reordered, missing, queryID, true)
+	if selected != 3 || !preserved || keep {
+		t.Fatalf("missing id index fallback = %d preserved=%v keep=%v", selected, preserved, keep)
+	}
+
+	selected, preserved, keep = restoreRefreshSelection(reordered, pending, "other", true)
+	if selected != 1 || preserved || keep {
+		t.Fatalf("stale query selection = %d preserved=%v keep=%v", selected, preserved, keep)
+	}
+}
+
 func TestSelectableIndexFromPreservesExplicitRefreshIndex(t *testing.T) {
 	results := []queryResult{{ID: "first"}, {ID: "group", IsGroup: true}, {ID: "third"}}
 

@@ -504,9 +504,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		if preserveSelectedIndexStr, exists := request.Params["preserveSelectedIndex"]; exists {
 			preserveSelectedIndex = preserveSelectedIndexStr == "true"
 		}
+		selectedResultId := strings.TrimSpace(request.Params["selectedResultId"])
+		if selectedResultId == "" {
+			selectedResultId = strings.TrimSpace(request.Params["SelectedResultId"])
+		}
 
 		pluginInstance.API.RefreshQuery(ctx, plugin.RefreshQueryParam{
 			PreserveSelectedIndex: preserveSelectedIndex,
+			SelectedResultId:      selectedResultId,
 		})
 
 		w.sendResponseToHost(ctx, request, "")

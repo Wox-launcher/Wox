@@ -840,12 +840,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			record := c.convertFavoriteToRecord(favoriteItem)
 			result := addResult(record)
 			if query.Search == "" && selectedType == clipboardTypeRefinementAll {
-				if i > 0 {
-					result.Actions = append(result.Actions, c.favoriteMoveAction(record.ID, true))
-				}
-				if i+1 < len(favorites) {
-					result.Actions = append(result.Actions, c.favoriteMoveAction(record.ID, false))
-				}
+				c.appendFavoriteMoveActions(result, record.ID, i, len(favorites))
 			}
 		}
 		return c.clipboardQueryResponse(ctx, results, iconRecords)
@@ -861,12 +856,14 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
 			} else {
 				favoriteScores = favoriteDisplayScores(favorites)
-				for _, favoriteItem := range favorites {
+				sortFavoritesByRank(favorites)
+				for i, favoriteItem := range favorites {
 					if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
 						continue
 					}
 					record := c.convertFavoriteToRecord(favoriteItem)
-					addResult(record)
+					result := addResult(record)
+					c.appendFavoriteMoveActions(result, record.ID, i, len(favorites))
 				}
 			}
 		}
@@ -1267,12 +1264,16 @@ func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record Clip
 			Title: "ERR: Unknown record type",
 		}
 	}
+	// Id stays on the record so a refresh can reselect this item after it moves.
+	if record.ID != "" {
+		result.Id = record.ID
+	}
 	result.ScoreKey = record.ID
 	result.Actions = attachClipboardMRUContext(result.Actions, record.ID)
 	return result
 }
 
-// favoriteMoveAction adjusts the full favorites order from the unfiltered cb fav list.
+// favoriteMoveAction adjusts the full favorites order from cb and cb fav.
 func (c *ClipboardPlugin) favoriteMoveAction(id string, up bool) plugin.QueryResultAction {
 	name := "i18n:plugin_clipboard_move_favorite_down"
 	icon := icons.ActionMoveDown
@@ -1288,6 +1289,17 @@ func (c *ClipboardPlugin) favoriteMoveAction(id string, up bool) plugin.QueryRes
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			c.moveFavoriteAndRefresh(ctx, id, up)
 		},
+	}
+}
+
+// appendFavoriteMoveActions adds one-step moves for a favorite in the full ranked list.
+// Callers use it only when that whole list is on screen, so each move stays one visible step.
+func (c *ClipboardPlugin) appendFavoriteMoveActions(result *plugin.QueryResult, id string, index int, count int) {
+	if index > 0 {
+		result.Actions = append(result.Actions, c.favoriteMoveAction(id, true))
+	}
+	if index+1 < count {
+		result.Actions = append(result.Actions, c.favoriteMoveAction(id, false))
 	}
 }
 
@@ -2686,7 +2698,9 @@ func (c *ClipboardPlugin) moveFavoriteAndRefresh(ctx context.Context, id string,
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to move favorite: %s", err.Error()))
 		return
 	}
-	c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+	// SelectedResultId follows the moved favorite. PreserveSelectedIndex would
+	// stay on the old row, which is a different item after the swap.
+	c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{SelectedResultId: id})
 }
 
 // saveFavoriteItems saves favorite items to settings

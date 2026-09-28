@@ -252,6 +252,11 @@ type API interface {
 	//       // Refresh query and reset to first item
 	//       api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: false})
 	//   }
+	//
+	// Example - Refresh after moving the selected item:
+	//   api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: item.Id})
+	// The rebuilt result must use the same QueryResult.Id. The highlight follows
+	// that result when its index changes.
 	RefreshQuery(ctx context.Context, param RefreshQueryParam)
 
 	// RefreshGlance asks Wox UI to pull the latest Global Glance data for this plugin.
@@ -1118,7 +1123,10 @@ func (a *APIImpl) IsVisible(ctx context.Context) bool {
 }
 
 func (a *APIImpl) RefreshQuery(ctx context.Context, param RefreshQueryParam) {
-	GetPluginManager().GetUI().RefreshQuery(ctx, param.PreserveSelectedIndex)
+	GetPluginManager().GetUI().RefreshQuery(ctx, common.RefreshQueryOptions{
+		PreserveSelectedIndex: param.PreserveSelectedIndex,
+		SelectedResultId:      param.SelectedResultId,
+	})
 }
 
 func (a *APIImpl) RefreshGlance(ctx context.Context, ids []string) {

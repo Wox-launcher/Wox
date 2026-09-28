@@ -113,7 +113,7 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 }
 
 // RefreshQuery starts a new query identity while optionally retaining the visible selection.
-func (a *App) RefreshQuery(_ context.Context, preserveSelectedIndex bool) error {
+func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions) error {
 	if err := a.runOnUI("refresh query", func() {
 		selected := a.selected
 		if a.queryContextKnown {
@@ -124,12 +124,17 @@ func (a *App) RefreshQuery(_ context.Context, preserveSelectedIndex bool) error 
 		a.queryContextKnown = false
 		a.completionHint = nil
 		a.stopGlanceLocked(true)
-		if !preserveSelectedIndex {
+		if options.SelectedResultId == "" && !options.PreserveSelectedIndex {
 			a.pendingSelection = nil
 			a.selected = -1
 			a.resultScrollDetached = false
 		} else {
-			a.pendingSelection = &pendingResultSelection{queryID: a.query.QueryID, index: selected}
+			a.pendingSelection = &pendingResultSelection{
+				queryID:       a.query.QueryID,
+				index:         selected,
+				resultID:      options.SelectedResultId,
+				preserveIndex: options.PreserveSelectedIndex,
+			}
 			a.selected = selected
 		}
 		a.reconcileSelectedPreview()

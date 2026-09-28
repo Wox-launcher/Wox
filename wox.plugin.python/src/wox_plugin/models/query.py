@@ -738,6 +738,7 @@ class RefreshQueryParam:
 
     Attributes:
         preserve_selected_index: Whether to keep the current selection position
+        selected_result_id: Result id to reselect after refresh. Requires the same Result.id
 
     Example usage:
         # After deleting an item, refresh and reset selection
@@ -749,6 +750,11 @@ class RefreshQueryParam:
         await api.refresh_query(ctx, RefreshQueryParam(
             preserve_selected_index=True  # Keep current position
         ))
+
+        # After moving an item, follow that result instead of the old row
+        await api.refresh_query(ctx, RefreshQueryParam(
+            selected_result_id=item_id
+        ))
     """
 
     preserve_selected_index: bool = field(default=False)
@@ -759,13 +765,24 @@ class RefreshQueryParam:
     This is useful when updating results without disrupting the user's position.
 
     When False, the selection resets to the first item (index 0).
-    Use this when the selected item may have been removed or repositioned.
+    Use this when the selected item may have been removed. A moved item should
+    pass selected_result_id instead, so the highlight follows that result.
 
     Examples:
         - preserve_selected_index=True: After marking an item as favorite,
           the results list updates but the user stays on the same item
         - preserve_selected_index=False: After deleting the selected item,
           the selection moves to the first item
+    """
+
+    selected_result_id: str = field(default="")
+    """
+    Reselects the result with this id after refresh.
+
+    The plugin must set the same Result.id on the rebuilt result. When this is
+    non-empty it takes precedence over preserve_selected_index, so the highlight
+    follows the item even if its row moves. An empty value keeps the index
+    behavior.
     """
 
 

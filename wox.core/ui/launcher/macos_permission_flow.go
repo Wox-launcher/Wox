@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"wox/common"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	"wox/util"
@@ -149,7 +150,7 @@ func (a *App) restoreHostAfterMacOSPermissionFlow() {
 				util.GetLogger().Warn(context.Background(), fmt.Sprintf("restore launcher after macOS permission flow: %v", err))
 				return
 			}
-			if err := a.RefreshQuery(context.Background(), true); err != nil {
+			if err := a.RefreshQuery(context.Background(), common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
 				util.GetLogger().Warn(context.Background(), fmt.Sprintf("refresh query after macOS permission flow: %v", err))
 			}
 		})

@@ -15,10 +15,11 @@ import (
 // Flow: install a plugin with a required accessKey -> open its Settings -> enter a value -> blur -> clear the field -> blur again.
 // Evidence: the accessKey field stays empty on the same plugin and shows a validator error directly under the input.
 func Test031LauncherPluginSettingRequiredBlur(t *testing.T) {
-	writeQueryRequirementPlugin(t, pluginSettingValidationPluginFile, queryRequirementAnyQueryPluginSource(pluginSettingValidationPluginID, "Plugin Setting Validation Smoke", pluginSettingValidationTrigger))
+	writeQueryRequirementPlugin(t, pluginSettingBlurPluginFile, queryRequirementAnyQueryPluginSource(pluginSettingBlurPluginID, "Plugin Setting Blur Smoke", pluginSettingBlurTrigger))
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		waitForPluginSettingValidationPlugin(t, ctx, client)
-		openPluginSettingAccessKey(t, ctx, client, pluginSettingValidationPluginID)
+		smoke.ShowLauncher(t, ctx, client)
+		waitForQueryRequirementForm(t, ctx, client, pluginSettingBlurTrigger+" ")
+		openPluginSettingAccessKey(t, ctx, client, pluginSettingBlurPluginID)
 		focusAutomationNode(t, ctx, client, pluginSettingAccessKeyFieldID)
 		setPluginSettingText(t, ctx, client, pluginSettingAccessKeyFieldID, "temporary-key")
 		focusAutomationNode(t, ctx, client, "plugin-search")
@@ -38,7 +39,7 @@ func Test031LauncherPluginSettingRequiredBlur(t *testing.T) {
 		focusAutomationNode(t, ctx, client, "plugin-search")
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			field, found := automationdriver.Find(snapshot, pluginSettingAccessKeyFieldID)
-			item, selected := automationdriver.Find(snapshot, pluginListAutomationID(pluginSettingValidationPluginID))
+			item, selected := automationdriver.Find(snapshot, pluginListAutomationID(pluginSettingBlurPluginID))
 			return found && field.Value == "" && pluginSettingFieldErrorVisible(snapshot) && selected && item.Selected
 		})
 		if err != nil {

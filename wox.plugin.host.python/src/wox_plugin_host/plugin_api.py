@@ -465,6 +465,8 @@ class PluginAPI(PublicAPI):
         params = {
             "PreserveSelectedIndex": param.preserve_selected_index,
         }
+        if param.selected_result_id:
+            params["selectedResultId"] = param.selected_result_id
         await self.invoke_method(ctx, "RefreshQuery", params)
 
     async def copy(self, ctx: Context, params: Any) -> None:

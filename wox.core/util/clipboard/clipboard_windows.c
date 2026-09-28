@@ -28,6 +28,23 @@ static BOOL openClipboardRetry() {
     return FALSE;
 }
 
+// EmptyClipboard can fail even after OpenClipboard succeeds, so retry the
+// entire write transaction before reporting a clipboard failure.
+static int prepareClipboardWrite() {
+    int error = -1;
+    for (int i = 0; i < 5; i++) {
+        if (openClipboardRetry()) {
+            if (EmptyClipboard()) {
+                return 0;
+            }
+            CloseClipboard();
+            error = -2;
+        }
+        Sleep(10 + i * 10);
+    }
+    return error;
+}
+
 // copyReadableMemory avoids crashing when another application publishes an invalid clipboard handle.
 static BOOL copyReadableMemory(void *destination, const void *source, SIZE_T size) {
     SIZE_T copied = 0;
@@ -371,13 +388,9 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
 // text must be a null-terminated wide string, textLen is the number of characters (not including null).
 // Returns 0 on success, negative on error.
 int clipboardWriteText(const wchar_t *text, int textLen) {
-    if (!openClipboardRetry()) {
-        return -1;
-    }
-
-    if (!EmptyClipboard()) {
-        CloseClipboard();
-        return -2;
+    int prepareResult = prepareClipboardWrite();
+    if (prepareResult != 0) {
+        return prepareResult;
     }
 
     if (textLen <= 0) {
@@ -421,13 +434,9 @@ int clipboardWriteFilePaths(const wchar_t *paths, int totalLen) {
         return -1;
     }
 
-    if (!openClipboardRetry()) {
-        return -2;
-    }
-
-    if (!EmptyClipboard()) {
-        CloseClipboard();
-        return -3;
+    int prepareResult = prepareClipboardWrite();
+    if (prepareResult != 0) {
+        return prepareResult == -1 ? -2 : -3;
     }
 
     SIZE_T dataSize = sizeof(DROPFILES) + ((SIZE_T)totalLen * sizeof(wchar_t));
@@ -470,13 +479,9 @@ int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
         return -1;
     }
 
-    if (!openClipboardRetry()) {
-        return -2;
-    }
-
-    if (!EmptyClipboard()) {
-        CloseClipboard();
-        return -3;
+    int prepareResult = prepareClipboardWrite();
+    if (prepareResult != 0) {
+        return prepareResult == -1 ? -2 : -3;
     }
 
     SIZE_T dataSize = sizeof(DROPFILES) + ((SIZE_T)totalLen * sizeof(wchar_t));
@@ -538,13 +543,9 @@ int clipboardWriteImage(const unsigned char *pngData, int pngLen,
         return -1;  // DIB data is required
     }
 
-    if (!openClipboardRetry()) {
-        return -2;
-    }
-
-    if (!EmptyClipboard()) {
-        CloseClipboard();
-        return -3;
+    int prepareResult = prepareClipboardWrite();
+    if (prepareResult != 0) {
+        return prepareResult == -1 ? -2 : -3;
     }
 
     // Write PNG format first (for apps that support transparency)

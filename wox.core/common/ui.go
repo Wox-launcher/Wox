@@ -77,11 +77,18 @@ func (c PlainQuery) String() string {
 	return ""
 }
 
+// RefreshQueryOptions chooses which row stays selected after the current query runs again.
+type RefreshQueryOptions struct {
+	PreserveSelectedIndex bool
+	// SelectedResultId reselects the result with this id. Empty keeps the index behavior.
+	SelectedResultId string
+}
+
 // ui methods that can be invoked by plugins
 // because the golang recycle dependency issue, we can't use UI interface directly from plugin, so we need to define a new interface here
 type UI interface {
 	ChangeQuery(ctx context.Context, query PlainQuery)
-	RefreshQuery(ctx context.Context, preserveSelectedIndex bool)
+	RefreshQuery(ctx context.Context, options RefreshQueryOptions)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context, showContext ShowContext)

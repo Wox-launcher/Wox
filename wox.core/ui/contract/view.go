@@ -59,7 +59,7 @@ type View interface {
 	Toggle(ctx context.Context, options ShowOptions) error
 	OpenInstance(ctx context.Context, options OpenInstanceOptions) error
 	ChangeQuery(ctx context.Context, query common.PlainQuery) error
-	RefreshQuery(ctx context.Context, preserveSelectedIndex bool) error
+	RefreshQuery(ctx context.Context, options common.RefreshQueryOptions) error
 	RefreshGlance(ctx context.Context, pluginID string, ids []string) error
 	RecordHotkey(ctx context.Context, hotkey string, kind string) error
 	ChangeTheme(ctx context.Context, theme common.Theme) error

@@ -1136,13 +1136,9 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	} else if !glanceEligible {
 		a.stopGlanceLocked(true)
 	}
-	a.selected = selectableIndex(results)
-	preservedSelection := false
-	if a.pendingSelection != nil {
-		if a.pendingSelection.queryID == queryID {
-			a.selected = selectableIndexFrom(results, a.pendingSelection.index)
-			preservedSelection = true
-		}
+	selected, preservedSelection, keepPendingSelection := restoreRefreshSelection(results, a.pendingSelection, queryID, complete)
+	a.selected = selected
+	if !keepPendingSelection {
 		a.pendingSelection = nil
 	}
 	if !preservedSelection {
@@ -2101,9 +2097,49 @@ func selectableIndexFrom(results []queryResult, start int) int {
 	return selectableIndex(results)
 }
 
+// resultIndexByID finds a refreshed result by the stable id the plugin set.
+// Group headers are not selectable, so they never count as a match.
+func resultIndexByID(results []queryResult, id string) int {
+	if id == "" {
+		return -1
+	}
+	for index, result := range results {
+		if !result.IsGroup && result.ID == id {
+			return index
+		}
+	}
+	return -1
+}
+
+// restoreRefreshSelection applies one refresh snapshot.
+// A result id stays pending until the query is complete so a later snapshot can
+// still follow the item. Index preservation is applied once, matching the previous refresh.
+// keepPending reports whether the caller should retain pending for the next snapshot.
+func restoreRefreshSelection(results []queryResult, pending *pendingResultSelection, queryID string, complete bool) (selected int, preserved bool, keepPending bool) {
+	selected = selectableIndex(results)
+	if pending == nil || pending.queryID != queryID {
+		return selected, false, false
+	}
+	if pending.resultID != "" {
+		if index := resultIndexByID(results, pending.resultID); index >= 0 {
+			return index, true, !complete
+		}
+		if pending.preserveIndex {
+			return selectableIndexFrom(results, pending.index), true, !complete
+		}
+		return selected, false, !complete
+	}
+	return selectableIndexFrom(results, pending.index), true, false
+}
+
+// pendingResultSelection restores the highlight after RefreshQuery.
+// resultID follows one result when the plugin rebuilds it with the same id.
+// preserveIndex keeps the old row when resultID is empty or that result is gone.
 type pendingResultSelection struct {
-	queryID string
-	index   int
+	queryID       string
+	index         int
+	resultID      string
+	preserveIndex bool
 }
 
 type plainQuery struct {

@@ -31,8 +31,8 @@ func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 	u.applyView(ctx, "change query", func(view contract.View) error { return view.ChangeQuery(ctx, query) })
 }
 
-func (u *uiImpl) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
-	u.applyView(ctx, "refresh query", func(view contract.View) error { return view.RefreshQuery(ctx, preserveSelectedIndex) })
+func (u *uiImpl) RefreshQuery(ctx context.Context, options common.RefreshQueryOptions) {
+	u.applyView(ctx, "refresh query", func(view contract.View) error { return view.RefreshQuery(ctx, options) })
 }
 
 func (u *uiImpl) RefreshGlance(ctx context.Context, pluginId string, ids []string) {

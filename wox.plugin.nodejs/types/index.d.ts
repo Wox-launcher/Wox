@@ -1396,8 +1396,16 @@ export interface RefreshQueryParam {
    * Controls whether to maintain the previously selected item index after refresh.
    * When true, the user's current selection index in the results list is preserved.
    * When false, the selection resets to the first item (index 0).
+   * This keeps the row, so a result that moved to another index is no longer selected.
    */
   PreserveSelectedIndex: boolean
+  /**
+   * Reselects the result with this id after refresh.
+   * The plugin must set the same Result.Id on the rebuilt result.
+   * A non-empty id takes precedence over PreserveSelectedIndex, so the highlight
+   * follows that result when its row moves.
+   */
+  SelectedResultId?: string
 }
 
 /**
@@ -1776,6 +1784,12 @@ export interface PublicAPI {
    *   await api.RefreshQuery(ctx, { PreserveSelectedIndex: false })
    * }
    * ```
+   *
+   * Example - Refresh after moving the selected item:
+   * ```typescript
+   * await api.RefreshQuery(ctx, { PreserveSelectedIndex: false, SelectedResultId: item.id })
+   * ```
+   * The rebuilt result must use the same Result.Id. The highlight follows that result when its index changes.
    *
    * @param ctx Context
    * @param param RefreshQueryParam to control refresh behavior

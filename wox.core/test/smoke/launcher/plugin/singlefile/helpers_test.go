@@ -152,16 +152,20 @@ func waitForPluginResult(t *testing.T, ctx context.Context, client *automationdr
 
 func waitForClipboardText(t *testing.T, ctx context.Context, expected string) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, automationdriver.ActionTimeout)
+	defer cancel()
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
+	var lastText string
+	var lastErr error
 	for {
-		text, err := clipboard.ReadText()
-		if err == nil && text == expected {
+		lastText, lastErr = clipboard.ReadText()
+		if lastErr == nil && lastText == expected {
 			return
 		}
 		select {
 		case <-ctx.Done():
-			t.Fatalf("wait for clipboard text %q: %v", expected, ctx.Err())
+			t.Fatalf("wait for clipboard text %q: %v (last read error=%v, last text length=%d)", expected, ctx.Err(), lastErr, len(lastText))
 		case <-ticker.C:
 		}
 	}

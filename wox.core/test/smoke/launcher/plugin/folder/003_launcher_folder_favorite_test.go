@@ -47,9 +47,12 @@ func Test003LauncherFolderFavorite(t *testing.T) {
 			t.Fatalf("save folder favorite: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			refreshed, found := folderResultByPath(snapshot, root)
 			_, formOpen := automationdriver.Find(snapshot, "form-save")
 			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
-			return !formOpen && resultsFound && results.Value == "complete"
+			// The form closes before its async callback persists the favorite.
+			// Wait for the replacement result produced by the callback's query refresh.
+			return found && refreshed.AutomationID != result.AutomationID && !formOpen && resultsFound && results.Value == "complete"
 		}); err != nil {
 			t.Fatalf("wait for folder favorite save: %v", err)
 		}

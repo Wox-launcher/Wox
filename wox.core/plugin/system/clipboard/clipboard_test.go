@@ -405,8 +405,8 @@ func TestClipboardFavQueryFiltersBySearch(t *testing.T) {
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	favorites, err := json.Marshal([]FavoriteClipboardItem{
-		{ID: "pypi", Type: string(clipboard.ClipboardTypeText), Content: "pypi token", Timestamp: 2},
 		{ID: "wox", Type: string(clipboard.ClipboardTypeText), Content: "Another option is Wox Launcher.", Timestamp: 1},
+		{ID: "pypi", Type: string(clipboard.ClipboardTypeText), Content: "pypi token", Timestamp: 2},
 	})
 	if err != nil {
 		t.Fatalf("marshal favorites: %v", err)
@@ -424,11 +424,19 @@ func TestClipboardFavQueryFiltersBySearch(t *testing.T) {
 	}
 
 	api.settings[showFavoritesByDefaultSettingKey] = "true"
-	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{}).Results); len(got) != 2 {
-		t.Fatalf("shown cb titles = %v, want both favorites", got)
+	shown := c.Query(ctx, plugin.Query{}).Results
+	if got := clipboardResultTitles(shown); len(got) != 2 || got[0] != "pypi token" || got[1] != "Another option is Wox Launcher." {
+		t.Fatalf("shown cb titles = %v, want ranked favorites", got)
 	}
-	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{Search: "pypi"}).Results); len(got) != 1 || got[0] != "pypi token" {
+	if clipboardHasMoveAction(shown[0], true) || !clipboardHasMoveAction(shown[0], false) || !clipboardHasMoveAction(shown[1], true) || clipboardHasMoveAction(shown[1], false) {
+		t.Fatalf("cb favorite moves = up/down %v/%v then %v/%v", clipboardHasMoveAction(shown[0], true), clipboardHasMoveAction(shown[0], false), clipboardHasMoveAction(shown[1], true), clipboardHasMoveAction(shown[1], false))
+	}
+	searched := c.Query(ctx, plugin.Query{Search: "pypi"}).Results
+	if got := clipboardResultTitles(searched); len(got) != 1 || got[0] != "pypi token" {
 		t.Fatalf("shown cb pypi titles = %v, want [pypi token]", got)
+	}
+	if clipboardHasMoveAction(searched[0], true) || clipboardHasMoveAction(searched[0], false) {
+		t.Fatal("filtered cb favorites must not expose moves outside the visible list")
 	}
 
 	listed := c.Query(context.Background(), plugin.Query{Command: "fav"})
@@ -495,6 +503,9 @@ func TestClipboardFavoriteUsageAndManualRank(t *testing.T) {
 			hasUp = hasUp || action.Name == "i18n:plugin_clipboard_move_favorite_up"
 			hasDown = hasDown || action.Name == "i18n:plugin_clipboard_move_favorite_down"
 		}
+		if result.Id != result.ScoreKey {
+			t.Fatalf("favorite result id = %q, score key = %q", result.Id, result.ScoreKey)
+		}
 		if hasUp != (i > 0) || hasDown != (i+1 < len(initialResults)) {
 			t.Fatalf("favorite %s at %d has up=%v down=%v", result.ScoreKey, i, hasUp, hasDown)
 		}
@@ -509,8 +520,8 @@ func TestClipboardFavoriteUsageAndManualRank(t *testing.T) {
 			}
 		}
 	}
-	if api.refreshCount != 1 {
-		t.Fatalf("refresh count = %d, want 1", api.refreshCount)
+	if api.refreshCount != 1 || api.lastRefresh.SelectedResultId != "b" || api.lastRefresh.PreserveSelectedIndex {
+		t.Fatalf("refresh = %+v count %d, want selected result b", api.lastRefresh, api.refreshCount)
 	}
 	items, err = c.getFavoriteItems(ctx)
 	if err != nil {
@@ -547,8 +558,8 @@ func TestClipboardFavoriteUsageAndManualRank(t *testing.T) {
 	c.moveFavoriteAndRefresh(ctx, "a", false)
 	items, _ = c.getFavoriteItems(ctx)
 	sortFavoritesByRank(items)
-	if api.refreshCount != 2 || items[0].ID != "top" || items[1].ID != "b" || items[2].ID != "a" || items[1].rankScore()-items[2].rankScore() != favoriteMoveScoreGap {
-		t.Fatalf("after moving A down: refresh=%d items=%+v", api.refreshCount, items)
+	if api.refreshCount != 2 || api.lastRefresh.SelectedResultId != "a" || items[0].ID != "top" || items[1].ID != "b" || items[2].ID != "a" || items[1].rankScore()-items[2].rankScore() != favoriteMoveScoreGap {
+		t.Fatalf("after moving A down: refresh=%+v count=%d items=%+v", api.lastRefresh, api.refreshCount, items)
 	}
 	if api.settings[favoritesSettingKey] != string(encoded) {
 		t.Fatal("usage and reordering must not rewrite favorite content")
@@ -608,6 +619,19 @@ func TestMoveFavoriteOneStepEdgeCases(t *testing.T) {
 	}
 }
 
+func clipboardHasMoveAction(result plugin.QueryResult, up bool) bool {
+	name := "i18n:plugin_clipboard_move_favorite_down"
+	if up {
+		name = "i18n:plugin_clipboard_move_favorite_up"
+	}
+	for _, action := range result.Actions {
+		if action.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func clipboardResultTitles(results []plugin.QueryResult) []string {
 	titles := make([]string, 0, len(results))
 	for _, result := range results {
@@ -620,6 +644,7 @@ type clipboardFavoritesTestAPI struct {
 	imagePasteFailureAPI
 	settings       map[string]string
 	refreshCount   int
+	lastRefresh    plugin.RefreshQueryParam
 	changedQuery   common.PlainQuery
 	failSetSetting bool
 }
@@ -636,8 +661,9 @@ func (a *clipboardFavoritesTestAPI) SetSetting(_ context.Context, option plugin.
 	return plugin.SetSettingResult{Success: true}
 }
 
-func (a *clipboardFavoritesTestAPI) RefreshQuery(context.Context, plugin.RefreshQueryParam) {
+func (a *clipboardFavoritesTestAPI) RefreshQuery(_ context.Context, param plugin.RefreshQueryParam) {
 	a.refreshCount++
+	a.lastRefresh = param
 }
 
 func (a *clipboardFavoritesTestAPI) ChangeQuery(_ context.Context, query common.PlainQuery) {

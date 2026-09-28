@@ -14,6 +14,10 @@ import (
 )
 
 const (
+	// Settings survive plugin unloads, so the blur and switch cases use separate identities.
+	pluginSettingBlurPluginID            = "com.wox.smoke.pluginsetting.blur"
+	pluginSettingBlurTrigger             = "psetblur"
+	pluginSettingBlurPluginFile          = "Wox.Plugin.SmokePluginSettingBlur.py"
 	pluginSettingValidationPluginID      = "com.wox.smoke.pluginsetting.validation"
 	pluginSettingValidationOtherPluginID = "com.wox.smoke.pluginsetting.validation.other"
 	pluginSettingValidationTrigger       = "psetval"
@@ -61,7 +65,7 @@ func pluginListAutomationID(pluginID string) string {
 }
 
 func describePluginSettingSnapshot(snapshot woxwidget.AutomationSnapshot) string {
-	return automationdriver.DescribeNodes(snapshot, "plugin-search", pluginSettingAccessKeyFieldID, pluginSettingAccessKeyErrorID, pluginListAutomationID(pluginSettingValidationPluginID), pluginListAutomationID(pluginSettingValidationOtherPluginID))
+	return automationdriver.DescribeNodes(snapshot, "plugin-search", pluginSettingAccessKeyFieldID, pluginSettingAccessKeyErrorID, pluginListAutomationID(pluginSettingBlurPluginID), pluginListAutomationID(pluginSettingValidationPluginID), pluginListAutomationID(pluginSettingValidationOtherPluginID))
 }
 
 func waitForPluginSettingValidationPlugin(t *testing.T, ctx context.Context, client *automationdriver.Client) {
