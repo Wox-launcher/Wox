@@ -651,6 +651,106 @@ func TestSelectPluginRevertsInvalidRequiredSetting(t *testing.T) {
 	}
 }
 
+func TestPluginSettingSaveReconcileRebuildsFormReplacedDuringSave(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: "app", Name: "Apps",
+		SettingDefinitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{
+			Key: "accessKey", Validators: []formValidator{{Type: "not_empty"}},
+		}}},
+		Setting: pluginSettingsData{Settings: map[string]string{}},
+	}})
+	a.setPluginSelectionLocked(0)
+	replaced := a.pluginSettings.Form()
+	if replaced == nil || replaced.values["accessKey"] != "" {
+		t.Fatal("switch-back should first rebuild from the settings saved before this request")
+	}
+	submitted := &pluginSettingsFormState{pluginID: "app"}
+
+	resubmit := a.reconcilePluginSettingSave(submitted, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
+	form := a.pluginSettings.Form()
+	if resubmit || form == nil || form == replaced || form.values["accessKey"] != "saved-key" || len(form.fieldErrors) != 0 {
+		t.Fatalf("reconciled form = %v resubmit=%v value=%q errors=%v", form == replaced, resubmit, formValue(form, "accessKey"), formErrors(form))
+	}
+}
+
+func TestPluginSettingSaveReconcileKeepsEditOnReplacementForm(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "accessKey"}}
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: "app", Name: "Apps",
+		SettingDefinitions: []formDefinition{definition},
+		Setting:            pluginSettingsData{Settings: map[string]string{"accessKey": "saved-key"}},
+	}})
+	a.setPluginSelectionLocked(0)
+	form := a.pluginSettings.Form()
+	form.values["accessKey"] = "typed-during-save"
+	submitted := &pluginSettingsFormState{pluginID: "app"}
+
+	resubmit := a.reconcilePluginSettingSave(submitted, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
+	if resubmit || a.pluginSettings.Form() != form || form.values["accessKey"] != "typed-during-save" {
+		t.Fatalf("replacement edit = %q resubmit=%v same=%v", form.values["accessKey"], resubmit, a.pluginSettings.Form() == form)
+	}
+}
+
+func TestPluginSettingSaveReconcileResubmitsEditOnOriginalForm(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "accessKey"}}
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: "app", Name: "Apps",
+		SettingDefinitions: []formDefinition{definition},
+		Setting:            pluginSettingsData{Settings: map[string]string{}},
+	}})
+	a.setPluginSelectionLocked(0)
+	form := a.pluginSettings.Form()
+	form.saving = true
+	form.values["accessKey"] = "typed-during-save"
+
+	resubmit := a.reconcilePluginSettingSave(form, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
+	if !resubmit || form.saving || form.initial["accessKey"] != "saved-key" || form.values["accessKey"] != "typed-during-save" {
+		t.Fatalf("original form resubmit=%v saving=%v initial=%q value=%q", resubmit, form.saving, form.initial["accessKey"], form.values["accessKey"])
+	}
+}
+
+func TestPluginSelectionRefreshSkipsFormWhileSaveInFlight(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: "app", Name: "Apps",
+		SettingDefinitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{
+			Key: "accessKey", Validators: []formValidator{{Type: "not_empty"}},
+		}}},
+		Setting: pluginSettingsData{Settings: map[string]string{"accessKey": "temporary-key"}},
+	}})
+	a.setPluginSelectionLocked(0)
+	form := a.pluginSettings.Form()
+	form.saving = true
+	form.initial["accessKey"] = ""
+	form.values["accessKey"] = ""
+
+	a.setPluginSelectionLocked(0)
+	if a.pluginSettings.Form() != form || form.values["accessKey"] != "" {
+		t.Fatalf("in-flight refresh replaced the cleared field with %q", formValue(a.pluginSettings.Form(), "accessKey"))
+	}
+}
+
+func formValue(form *pluginSettingsFormState, key string) string {
+	if form == nil {
+		return ""
+	}
+	return form.values[key]
+}
+
+func formErrors(form *pluginSettingsFormState) map[string]string {
+	if form == nil {
+		return nil
+	}
+	return form.fieldErrors
+}
+
 func TestBlurPluginFormFieldShowsNotEmptyError(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()

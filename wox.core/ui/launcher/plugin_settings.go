@@ -557,9 +557,11 @@ func (a *App) setPluginSelectionLocked(index int) {
 			a.pluginSettings.SetSelected(index)
 			return
 		}
-		// A post-save refresh can arrive after a new edit and must not replace it.
+		// Refresh can arrive while a save is still in flight, before initial moves
+		// forward. An edit that matches the previous initial then looks clean, and
+		// replacing the form would drop it. A dirty form is kept for the same reason.
 		// ponytail: defer dynamic definitions until save or reopen; merge them in place if live updates are needed.
-		if pluginFormDirty(form.definitions, form.values, form.initial) {
+		if form.saving || pluginFormDirty(form.definitions, form.values, form.initial) {
 			a.pluginSettings.SetSelected(index)
 			return
 		}
@@ -1802,6 +1804,7 @@ func (a *App) submitPluginSettings() {
 	state.fieldErrors = nil
 	state.revision++
 	pluginID := state.pluginID
+	submitted := state
 	a.invalidateSettingsWindow()
 
 	util.Go(a.lifecycleCtx, "save plugin settings", func() {
@@ -1809,25 +1812,8 @@ func (a *App) submitPluginSettings() {
 		defer cancel()
 		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, persistedValues)
 		_ = a.runOnUI("apply plugin settings save", func() {
-			form := a.pluginSettings.Form()
-			if form != nil && form.pluginID == pluginID {
-				form.saving = false
-				if saveErr != nil {
-					form.status = saveErr.Error()
-					form.statusError = true
-				} else {
-					for key, value := range submittedValues {
-						form.initial[key] = value
-					}
-					form.status = ""
-					form.statusError = false
-				}
-			}
-			if saveErr == nil {
-				a.applySavedPluginSettingValues(pluginID, persistedValues)
-				if form != nil && form.pluginID == pluginID && pluginFormDirty(form.definitions, form.values, form.initial) {
-					a.submitPluginSettings()
-				}
+			if a.reconcilePluginSettingSave(submitted, pluginID, submittedValues, persistedValues, saveErr) {
+				a.submitPluginSettings()
 			}
 			a.invalidateSettingsWindow()
 		})
@@ -1838,6 +1824,50 @@ func (a *App) submitPluginSettings() {
 		// Dynamic settings may depend on any saved value, so always resolve them again.
 		a.refreshPluginFormDefinitions(pluginID)
 	})
+}
+
+// reconcilePluginSettingSave applies one finished save to the form that started it.
+// Switching plugins replaces that form before UpdatePluginSettings returns. The
+// callback used to match only the plugin id, write the saved value into the new
+// form's initial, and resubmit. A fast switch-back had rebuilt that form from the
+// stale empty value, so the resubmit failed not_empty and the refresh then refused
+// to replace the now-dirty form. Edits on the original form are submitted again.
+// A later form is left alone when it already has edits; a clean one is rebuilt
+// from the catalog so the saved value shows up. It returns true when the original
+// form still has unsaved edits.
+func (a *App) reconcilePluginSettingSave(submitted *pluginSettingsFormState, pluginID string, submittedValues, persistedValues map[string]string, saveErr error) bool {
+	form := a.pluginSettings.Form()
+	sameForm := form != nil && form == submitted
+	if sameForm {
+		form.saving = false
+		if saveErr != nil {
+			form.status = saveErr.Error()
+			form.statusError = true
+		} else {
+			for key, value := range submittedValues {
+				form.initial[key] = value
+			}
+			form.status = ""
+			form.statusError = false
+		}
+	}
+	if saveErr != nil {
+		return false
+	}
+	a.applySavedPluginSettingValues(pluginID, persistedValues)
+	if sameForm {
+		return pluginFormDirty(form.definitions, form.values, form.initial)
+	}
+	if form == nil || form.pluginID != pluginID || pluginFormDirty(form.definitions, form.values, form.initial) {
+		return false
+	}
+	plugins := a.pluginSettings.Plugins()
+	selected := a.pluginSettings.Selected()
+	if selected < 0 || selected >= len(plugins) || plugins[selected].ID != pluginID {
+		return false
+	}
+	a.setPluginSelectionLocked(selected)
+	return false
 }
 
 // refreshPluginFormDefinitions reloads one installed plugin's setting definitions without flashing the catalog.
