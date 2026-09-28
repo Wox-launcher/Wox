@@ -409,6 +409,9 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 // installWithProgress keeps local restore and user-triggered installs on the
 // same file/runtime path while controlling whether the result is synced.
 func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback, syncInstall bool) error {
+	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+		return err
+	}
 	// Serialize all install/uninstall operations. Without this lock, a user
 	// installing two plugins in quick succession causes the operations to race:
 	// both may try to unload/reload the same runtime host, write to overlapping
@@ -853,6 +856,9 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 }
 
 func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath string, progressCallback InstallProgressCallback) error {
+	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+		return err
+	}
 	// Serialize local installs with remote installs and uninstalls for the same
 	// reasons as InstallWithProgress (issue #4401).
 	s.installMu.Lock()

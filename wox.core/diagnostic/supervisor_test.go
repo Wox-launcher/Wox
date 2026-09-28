@@ -7,7 +7,27 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"wox/util"
 )
+
+func TestSupervisedChildArgsPreserveTroubleshootingMode(t *testing.T) {
+	args := []string{"wox.exe", ArgSupervisor, ArgWaitParent, "1234", util.ArgNoThirdPartyPlugins, "wox://query?q=test"}
+	for _, firstLaunch := range []bool{true, false} {
+		want := []string{ArgChild, util.ArgNoThirdPartyPlugins}
+		if firstLaunch {
+			want = append(want, "wox://query?q=test")
+		}
+		if got := supervisedChildArgs(args, firstLaunch); !reflect.DeepEqual(got, want) {
+			t.Fatalf("supervisedChildArgs(firstLaunch=%t) = %v, want %v", firstLaunch, got, want)
+		}
+	}
+	if got := supervisedChildArgs([]string{"wox.exe", ArgSupervisor, "wox://query?q=test"}, false); !reflect.DeepEqual(got, []string{ArgChild}) {
+		t.Fatalf("normal crash restart arguments = %v", got)
+	}
+	if got := supervisedChildArgs([]string{"wox.exe", ArgSupervisor, ArgChild}, true); !reflect.DeepEqual(got, []string{ArgChild}) {
+		t.Fatalf("explicit normal restart arguments = %v", got)
+	}
+}
 
 func TestForwardedProcessArgs(t *testing.T) {
 	args := []string{

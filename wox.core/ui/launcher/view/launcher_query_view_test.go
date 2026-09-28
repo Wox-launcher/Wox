@@ -417,6 +417,22 @@ func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 	}
 }
 
+func TestLauncherHeaderKeepsPluginModeVisibleWhileLoading(t *testing.T) {
+	for _, loading := range []bool{false, true} {
+		header := LauncherHeaderView(LauncherHeaderProps{
+			Width: 400, Height: 60, QueryBoxHeight: 50, QueryWidth: 180,
+			StatusLabel: "第三方插件已禁用", StatusDescription: "Quit and reopen Wox to restore plugins.", StatusWidth: 140,
+			Loading: loading, LoadingWidth: 30, LoadingSize: 20,
+		}).(woxwidget.Container)
+		row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+		status := row.Children[1].(woxwidget.Align)
+		semantics := status.Child.(woxwidget.Semantics)
+		if status.Vertical != 0.5 || status.Width != 140 || semantics.AutomationID != "launcher.plugin-mode" || semantics.Label != "第三方插件已禁用" || semantics.Description == "" {
+			t.Fatalf("loading=%t: plugin mode indicator lost placement or accessible text: %+v", loading, status)
+		}
+	}
+}
+
 func TestLauncherHeaderPlacesAttentionBesideGlance(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 600, Height: 60, QueryBoxHeight: 50, QueryWidth: 400,

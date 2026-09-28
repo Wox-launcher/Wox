@@ -281,6 +281,9 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 	if loadErr != nil {
 		return fmt.Errorf("failed to load plugins: %w", loadErr)
 	}
+	if util.IsThirdPartyPluginsDisabled() {
+		return nil
+	}
 
 	m.startScriptPluginMonitoring(util.NewTraceContext())
 	m.startSingleFilePluginMonitoring(util.NewTraceContext())
@@ -380,6 +383,10 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 
 	// load system plugin first
 	m.loadSystemPlugins(ctx)
+	if util.IsThirdPartyPluginsDisabled() {
+		logger.Info(ctx, "troubleshooting mode: skipping third-party plugins and runtime hosts")
+		return nil
+	}
 
 	logger.Debug(ctx, "start loading user plugin metadata")
 	basePluginDirectory := util.GetLocation().GetPluginDirectory()
@@ -525,6 +532,9 @@ func (m *Manager) loadScriptPlugins(ctx context.Context) ([]Metadata, error) {
 }
 
 func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
+	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+		return err
+	}
 	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.GetName(ctx)))
 	unlock := m.lockPluginLoad(metadata.Id)
 	defer unlock()
@@ -569,6 +579,10 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 }
 
 func (m *Manager) loadHostPluginLocked(ctx context.Context, host Host, metadata Metadata) error {
+	// Installs and reloads must not bypass the startup-only troubleshooting mode.
+	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+		return err
+	}
 	// Plugin loading is the final shared gate for startup, local installs, and dev
 	// reloads. Install-time checks can be bypassed by existing files on disk, so
 	// keep this guard here to prevent incompatible plugins from entering runtime hosts.
@@ -633,6 +647,9 @@ func (m *Manager) loadHostPluginLocked(ctx context.Context, host Host, metadata 
 }
 
 func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error {
+	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+		return err
+	}
 	metadata, parseErr := m.ParseMetadata(ctx, pluginDirectory)
 	if parseErr != nil {
 		return parseErr
@@ -657,6 +674,14 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 		return loadErr
 	}
 
+	return nil
+}
+
+// ensureThirdPartyPluginsEnabled also stops installers before they replace files that cannot be loaded in this session.
+func ensureThirdPartyPluginsEnabled(ctx context.Context) error {
+	if util.IsThirdPartyPluginsDisabled() {
+		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_feedback_third_party_plugins_disabled"))
+	}
 	return nil
 }
 

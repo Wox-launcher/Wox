@@ -2,6 +2,8 @@ package system
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"wox/diagnostic"
 	"wox/plugin"
@@ -17,6 +19,9 @@ func (feedbackTestAPI) GetTranslation(ctx context.Context, key string) string {
 }
 
 func TestQueryShowsCommonOperationsByDefault(t *testing.T) {
+	previousEnv := util.ProdEnv
+	util.ProdEnv = ""
+	t.Cleanup(func() { util.ProdEnv = previousEnv })
 	if err := util.GetLocation().Init(); err != nil {
 		t.Fatalf("init location: %v", err)
 	}
@@ -39,6 +44,55 @@ func TestQueryShowsCommonOperationsByDefault(t *testing.T) {
 		}
 		if response.Results[i].Preview.PreviewData != "" {
 			t.Fatalf("default result %d should not have a preview", i)
+		}
+	}
+}
+
+func TestFeedbackRestartOnlyShownInProduction(t *testing.T) {
+	previousEnv := util.ProdEnv
+	t.Cleanup(func() { util.ProdEnv = previousEnv })
+	p := &FeedbackPlugin{api: feedbackTestAPI{}}
+	for _, production := range []bool{false, true} {
+		util.ProdEnv = ""
+		if production {
+			util.ProdEnv = "true"
+		}
+		results := p.Query(context.Background(), plugin.Query{}).Results
+		want := 3
+		if production {
+			want = 4
+		}
+		if len(results) != want {
+			t.Fatalf("production=%t: got %d results, want %d", production, len(results), want)
+		}
+		if production {
+			result := results[3]
+			if result.Title != "i18n:plugin_feedback_restart_without_plugins_title" || len(result.Actions) != 1 || !result.Actions[0].IsDefault || result.Actions[0].Action == nil {
+				t.Fatalf("invalid troubleshooting restart result: %+v", result)
+			}
+		}
+	}
+}
+
+func TestFeedbackRestartRestoresPluginsInTroubleshootingMode(t *testing.T) {
+	previousArgs := os.Args
+	t.Cleanup(func() { os.Args = previousArgs })
+	p := &FeedbackPlugin{api: feedbackTestAPI{}}
+	for _, disabled := range []bool{false, true} {
+		os.Args = []string{"wox.exe"}
+		title := "i18n:plugin_feedback_restart_without_plugins_title"
+		subtitle := "i18n:plugin_feedback_restart_without_plugins_subtitle"
+		if disabled {
+			os.Args = append(os.Args, util.ArgNoThirdPartyPlugins)
+			title = "i18n:plugin_feedback_restart_title"
+			subtitle = "i18n:plugin_feedback_restart_subtitle"
+		}
+		result := p.buildRestartResult()
+		if result.Title != title || result.SubTitle != subtitle || result.Actions[0].Name != title {
+			t.Fatalf("disabled=%t: unexpected restart result: %+v", disabled, result)
+		}
+		if !strings.Contains(result.Icon.ImageData, `stroke="var(--wox-theme-icon-color)"`) {
+			t.Fatal("restart result icon must follow the launcher theme")
 		}
 	}
 }

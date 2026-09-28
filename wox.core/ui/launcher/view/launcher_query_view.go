@@ -177,6 +177,9 @@ type LauncherHeaderProps struct {
 	RefinementWidth   float32
 	Attention         woxwidget.Widget
 	AttentionWidth    float32
+	StatusLabel       string
+	StatusDescription string
+	StatusWidth       float32
 	Glance            woxwidget.Widget
 	GlanceWidth       float32
 	Icon              *woxui.Image
@@ -228,6 +231,18 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	if props.Refinement != nil {
 		children = append(children, woxwidget.Align{
 			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
+		})
+	}
+	if props.StatusLabel != "" {
+		theme := props.Theme.Controls
+		theme.DensityScale = props.DensityScale
+		children = append(children, woxwidget.Align{
+			Width: props.StatusWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
+			Child: woxwidget.Semantics{
+				Key: "launcher-plugin-mode-tag", AutomationID: "launcher.plugin-mode", Role: woxui.AccessibilityRoleText,
+				Label: props.StatusLabel, Description: props.StatusDescription,
+				Child: woxcomponent.WoxWarningTag(props.StatusLabel, props.StatusWidth, theme),
+			},
 		})
 	}
 	if props.Attention != nil {

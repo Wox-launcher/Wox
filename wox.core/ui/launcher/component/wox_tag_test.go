@@ -28,3 +28,17 @@ func TestWoxCompactTagUsesDenseMetadataSize(t *testing.T) {
 		t.Fatalf("compact tag = %q size %v, want Disabled/%v", label.Value, label.Style.Size, CompactTagFontSize)
 	}
 }
+
+func TestWoxWarningTagScalesAndKeepsOpaqueStatusColors(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1, 1.5} {
+		theme := ControlTheme{DensityScale: scale, Warning: woxui.Color{R: 253, G: 230, B: 138, A: 255}, WarningText: woxui.Color{R: 102, G: 60, A: 255}}
+		tag := WoxWarningTag("第三方插件已禁用", 180, theme).(woxwidget.Container)
+		label := tag.Child.(woxwidget.TextBlock)
+		if tag.Height != theme.Scaled(26) || tag.Radius != theme.Scaled(4) || tag.Color != theme.Warning || label.Color != theme.WarningText {
+			t.Fatalf("scale=%v: warning tag lost scaled geometry or status colors: %+v", scale, tag)
+		}
+		if !label.Centered || label.AlignmentY != 0.5 || label.MaxLines != 1 || label.Width != max(0, tag.Width-theme.Scaled(16)) || label.Style.Size != theme.Scaled(TagFontSize) || label.Style.Weight != woxui.FontWeightSemibold {
+			t.Fatalf("scale=%v: warning label lost centered alignment, truncation or density: %+v", scale, label)
+		}
+	}
+}

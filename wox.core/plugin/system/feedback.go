@@ -9,6 +9,7 @@ import (
 	"wox/common/icons"
 	"wox/diagnostic"
 	"wox/plugin"
+	"wox/ui"
 	"wox/updater"
 	"wox/util"
 	"wox/util/shell"
@@ -76,12 +77,52 @@ func (p *FeedbackPlugin) Query(ctx context.Context, query plugin.Query) plugin.Q
 	return plugin.NewQueryResponse(p.buildDefaultResults())
 }
 
-// buildDefaultResults lists the everyday GitHub and log actions.
+// buildDefaultResults lists feedback and troubleshooting actions supported by this build.
 func (p *FeedbackPlugin) buildDefaultResults() []plugin.QueryResult {
-	return []plugin.QueryResult{
+	results := []plugin.QueryResult{
 		p.buildBugResult(),
 		p.buildFeatureResult(),
 		p.buildClearLogsResult(),
+	}
+	if !util.IsDev() {
+		results = append(results, p.buildRestartResult())
+	}
+	return results
+}
+
+// buildRestartResult switches between troubleshooting and normal startup without changing plugin settings.
+func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
+	title := "i18n:plugin_feedback_restart_without_plugins_title"
+	subtitle := "i18n:plugin_feedback_restart_without_plugins_subtitle"
+	childArg := util.ArgNoThirdPartyPlugins
+	if util.IsThirdPartyPluginsDisabled() {
+		title = "i18n:plugin_feedback_restart_title"
+		subtitle = "i18n:plugin_feedback_restart_subtitle"
+		// An explicit child argument avoids forwarding the current troubleshooting flag.
+		childArg = diagnostic.ArgChild
+	}
+	return plugin.QueryResult{
+		Title:    title,
+		SubTitle: subtitle,
+		Icon:     icons.Get(icons.ControlRefresh),
+		Score:    50,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   title,
+				Icon:                   icons.Get(icons.ActionExecute),
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					// A fresh launch must not replay the file or deeplink that originally opened Wox.
+					if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true, childArg); err != nil {
+						util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
+						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_restart_failed"), err.Error()))
+						return
+					}
+					ui.GetUIManager().ExitApp(ctx)
+				},
+			},
+		},
 	}
 }
 

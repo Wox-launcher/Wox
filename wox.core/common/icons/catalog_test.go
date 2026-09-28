@@ -298,7 +298,7 @@ func renderCatalogSVG(data string, width, height int) error {
 }
 
 func TestAboutMenuMonochromeIconsRender(t *testing.T) {
-	for _, name := range []string{ActionFeedback, BrandRedditMonochrome, BrandDiscordMonochrome, BrandGithubMonochrome} {
+	for _, name := range []string{ActionFeedback, BrandRedditMonochrome, BrandDiscordMonochrome, BrandGithubMonochrome, ControlRefresh} {
 		for _, color := range []string{"#000000", "#ffffff"} {
 			svg := strings.ReplaceAll(Get(name).ImageData, "var(--wox-theme-icon-color)", color)
 			img, err := woxsvg.Render(svg, 22, 22)

@@ -20,7 +20,8 @@ const (
 	maxConsecutiveCrashRestarts = 2
 )
 
-func (m *Manager) StartSupervisorDetached(ctx context.Context, waitParent bool) error {
+// StartSupervisorDetached launches a supervisor; explicit child arguments replace the current launch arguments.
+func (m *Manager) StartSupervisorDetached(ctx context.Context, waitParent bool, childArgs ...string) error {
 	if err := m.EnsureDirectories(); err != nil {
 		return err
 	}
@@ -32,7 +33,10 @@ func (m *Manager) StartSupervisorDetached(ctx context.Context, waitParent bool) 
 	if waitParent {
 		args = append(args, ArgWaitParent, strconv.Itoa(os.Getpid()))
 	}
-	args = append(args, forwardedProcessArgs(os.Args)...)
+	if len(childArgs) == 0 {
+		childArgs = forwardedProcessArgs(os.Args)
+	}
+	args = append(args, childArgs...)
 	cmd := shell.BuildCommand(executable, nil, args...)
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
@@ -65,13 +69,9 @@ func (m *Manager) RunSupervisor(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	initialChildArgs := append([]string{ArgChild}, forwardedProcessArgs(args)...)
 	consecutiveCrashes := 0
 	for firstLaunch := true; ; firstLaunch = false {
-		childArgs := []string{ArgChild}
-		if firstLaunch {
-			childArgs = initialChildArgs
-		}
+		childArgs := supervisedChildArgs(args, firstLaunch)
 		cmd, startedAt, startErr := m.startSupervisedChild(ctx, logFile, executable, childArgs)
 		if startErr != nil {
 			return 1
@@ -97,6 +97,18 @@ func (m *Manager) RunSupervisor(ctx context.Context, args []string) int {
 		m.AppendBreadcrumb(ctx, "crash_restart_scheduled", map[string]any{"attempt": consecutiveCrashes, "delayMs": crashRestartDelay.Milliseconds()})
 		time.Sleep(crashRestartDelay)
 	}
+}
+
+// supervisedChildArgs preserves troubleshooting mode after a crash without replaying file opens or deeplinks.
+func supervisedChildArgs(args []string, firstLaunch bool) []string {
+	childArgs := []string{ArgChild}
+	if firstLaunch {
+		return append(childArgs, forwardedProcessArgs(args)...)
+	}
+	if hasArg(args, util.ArgNoThirdPartyPlugins) {
+		childArgs = append(childArgs, util.ArgNoThirdPartyPlugins)
+	}
+	return childArgs
 }
 
 // startSupervisedChild starts one monitored Wox process and connects its output to the supervisor log.

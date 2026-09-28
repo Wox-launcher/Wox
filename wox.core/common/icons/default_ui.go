@@ -97,7 +97,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlDownload:          newMonochromeUIIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
 	ControlError:             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>`),
 	ControlWarning:           newMonochromeUIIcon(`<path d="M12 3 2.8 20h18.4z"/><path d="M12 9v5M12 17h.01"/>`),
-	ControlRefresh:           newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
+	ControlRefresh:           newActionIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
 	ControlSwap:              newMonochromeUIIcon(`<path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/>`),
 	ControlMoveVertical:      newMonochromeUIIcon(`<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>`),
 	ControlGripDots:          newMonochromeUIIcon(`<circle cx="9" cy="6" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="6" r="1.6" fill="#fff" stroke="none"/><circle cx="9" cy="12" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="#fff" stroke="none"/><circle cx="9" cy="18" r="1.6" fill="#fff" stroke="none"/><circle cx="15" cy="18" r="1.6" fill="#fff" stroke="none"/>`),

@@ -507,7 +507,6 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 			queryWidth -= snapshot.densityMetrics.scaled(49) + accessoryGap
 		}
 	}
-	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	var refinement woxwidget.Widget
 	if !snapshot.queryLoading && len(snapshot.refinements) > 0 {
 		refinement = a.buildRefinementToggle(snapshot, scale)
@@ -529,6 +528,24 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		loadingSize = snapshot.densityMetrics.scaled(20)
 		queryWidth -= loadingWidth + accessoryGap
 	}
+	statusLabel, statusDescription := "", ""
+	statusWidth := float32(0)
+	if util.IsThirdPartyPluginsDisabled() {
+		statusLabel = a.translate("i18n:plugin_feedback_third_party_plugins_disabled_tag")
+		statusDescription = a.translate("i18n:plugin_feedback_third_party_plugins_disabled")
+		metrics, _ := a.window.MeasureText(statusLabel, woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.TagFontSize), Weight: woxui.FontWeightSemibold})
+		statusWidth = metrics.Size.Width + snapshot.densityMetrics.scaled(16)
+		// The persistent mode indicator takes priority over the optional clock on narrow windows.
+		if glance != nil && queryWidth-statusWidth-accessoryGap < snapshot.densityMetrics.scaled(140) {
+			glance = nil
+			queryWidth += glanceWidth + accessoryGap
+			if snapshot.attentionVisible {
+				queryWidth -= accessoryGap - snapshot.densityMetrics.scaled(4)
+			}
+		}
+		statusWidth = min(statusWidth, max(0, queryWidth-snapshot.densityMetrics.scaled(140)-accessoryGap))
+		queryWidth -= statusWidth + accessoryGap
+	}
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	_, headerPadding := launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, snapshot.show.QueryBoxAtBottom)
 	if snapshot.hint == nil && a.queryHintEditorState.candidate != nil {
@@ -545,6 +562,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: headerPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight, queryLineHeight), Refinement: refinement, RefinementWidth: refinementWidth,
 		Attention: attention, AttentionWidth: attentionWidth, Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Icons: queryIcons,
+		StatusLabel: statusLabel, StatusDescription: statusDescription, StatusWidth: statusWidth,
 		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
 		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {

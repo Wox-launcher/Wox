@@ -28,6 +28,7 @@ type ControlTheme struct {
 	Info                      woxui.Color
 	Success                   woxui.Color
 	Warning                   woxui.Color
+	WarningText               woxui.Color
 	Error                     woxui.Color
 	ScrollbarThumbColor       *woxui.Color
 	ScrollbarThumbHoverColor  *woxui.Color

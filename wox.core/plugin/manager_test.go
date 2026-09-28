@@ -44,6 +44,47 @@ func TestAppendPluginInstanceRejectsDuplicateID(t *testing.T) {
 	assert.Equal(t, "other-plugin", instances[1].Metadata.Id)
 }
 
+func TestTroubleshootingModeBlocksThirdPartyLoading(t *testing.T) {
+	initPluginManagerLoadTest(t)
+	previousArgs := os.Args
+	previousSystemPlugins, previousHosts := AllSystemPlugin, AllHosts
+	os.Args = []string{"wox.exe", util.ArgNoThirdPartyPlugins}
+	t.Cleanup(func() {
+		os.Args = previousArgs
+		AllSystemPlugin, AllHosts = previousSystemPlugins, previousHosts
+	})
+	builtin := &troubleshootingSystemPlugin{}
+	host := &countingLoadHost{}
+	AllSystemPlugin, AllHosts = []SystemPlugin{builtin}, []Host{host}
+	manager := &Manager{systemPluginsReady: make(chan struct{})}
+	require.NoError(t, manager.Start(context.Background(), nil))
+	instances := manager.GetPluginInstances()
+	require.Len(t, instances, 1)
+	assert.True(t, instances[0].IsSystemPlugin)
+	assert.Equal(t, int32(1), builtin.initCalls.Load())
+	assert.Zero(t, host.startCount)
+	assert.Nil(t, manager.scriptPluginWatch)
+	assert.Nil(t, manager.singleFilePluginWatch)
+	assert.False(t, manager.hostWatchdogStarted)
+	metadata := Metadata{Id: "third-party-plugin", Runtime: string(PLUGIN_RUNTIME_PYTHON)}
+	require.Error(t, manager.loadHostPlugin(context.Background(), host, metadata))
+	require.Error(t, manager.LoadPlugin(context.Background(), "missing-plugin-directory"))
+	require.Error(t, manager.ReloadPlugin(context.Background(), metadata))
+	assert.Zero(t, host.loadCalls.Load())
+	assert.Len(t, manager.GetPluginInstances(), 1)
+	store := &Store{}
+	blocked := ensureThirdPartyPluginsEnabled(context.Background()).Error()
+	require.EqualError(t, store.Install(context.Background(), StorePluginManifest{}), blocked)
+	require.EqualError(t, store.InstallLocal(context.Background(), StorePluginManifest{}), blocked)
+	require.EqualError(t, store.InstallFromLocal(context.Background(), "missing-plugin-package"), blocked)
+}
+
+type troubleshootingSystemPlugin struct{ fakeLifecyclePlugin }
+
+func (*troubleshootingSystemPlugin) GetMetadata() Metadata {
+	return Metadata{Id: "troubleshooting-builtin", Name: "Built-in test plugin", Runtime: string(PLUGIN_RUNTIME_GO)}
+}
+
 func TestConcurrentLoadHostPluginKeepsOneInstance(t *testing.T) {
 	initPluginManagerLoadTest(t)
 	host := &countingLoadHost{}

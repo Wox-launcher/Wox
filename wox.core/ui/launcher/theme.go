@@ -284,6 +284,7 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	return woxcomponent.Theme{
 		Surfaces: palette.Surfaces,
 		Controls: woxcomponent.ControlTheme{
+			Warning: woxui.Color{R: 253, G: 230, B: 138, A: 255}, WarningText: woxui.Color{R: 102, G: 60, A: 255},
 			ControlText: palette.actionText, BodyText: palette.previewText, ChromeText: palette.toolbarText,
 			Background: palette.background, Surface: palette.actionBackground, Text: palette.resultTitle, TextSecondary: palette.resultSubtitle, InputBackground: palette.queryBackground, InputText: palette.queryText, Focus: palette.cursor, TextSelectionBackground: palette.selectionBackground, TextSelectionText: palette.selectionText, SelectionBackground: palette.selectedBackground, SelectionText: palette.selectedTitle, Accent: palette.actionSelected, AccentText: palette.actionSelectedText, Border: palette.previewSplit, Error: woxui.Color{R: 232, G: 95, B: 95, A: 255},
 			ScrollbarThumbColor: palette.ScrollbarThumbColor, ScrollbarThumbHoverColor: palette.ScrollbarThumbHoverColor, ScrollbarThumbActiveColor: palette.ScrollbarThumbActiveColor, ScrollbarWidth: palette.ScrollbarWidth, ScrollbarHoverWidth: palette.ScrollbarHoverWidth, ScrollbarBorderRadius: palette.ScrollbarBorderRadius,

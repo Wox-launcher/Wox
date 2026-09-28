@@ -211,6 +211,9 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.api = initParams.API
 	w.api.OnMRURestore(ctx, w.handleMRURestore)
+	if util.IsThirdPartyPluginsDisabled() {
+		return
+	}
 
 	w.reloadAllDevPlugins(ctx)
 	w.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
@@ -313,6 +316,9 @@ func sameLocalPluginDirectory(left string, right string) bool {
 }
 
 func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
+	if util.IsThirdPartyPluginsDisabled() {
+		return
+	}
 	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("start to load dev plugin: %s", pluginDirectory))
 
 	metadata, err := w.parseMetadata(ctx, pluginDirectory)
