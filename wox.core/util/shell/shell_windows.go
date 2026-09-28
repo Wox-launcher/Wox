@@ -95,11 +95,16 @@ func RunElevated(file string, parameters string, directory string) (WaitFunc, er
 
 // executeShellVerb keeps normal and elevated launches on the same ShellExecute path.
 func executeShellVerb(path string, verb string) error {
-	_, err := shellExecute(shellExecuteRequest{
+	req := shellExecuteRequest{
 		File: path,
 		Verb: verb,
 		Show: shellExecuteShowNormal,
-	})
+	}
+	if resolved, ok := shortcutLaunchRequest(path, verb); ok {
+		req = resolved
+	}
+	// Fall back only before launching: retrying after an error could launch twice or repeat a cancelled UAC prompt.
+	_, err := shellExecute(req)
 	return err
 }
 
