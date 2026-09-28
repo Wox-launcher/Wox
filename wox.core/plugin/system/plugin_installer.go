@@ -190,20 +190,16 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 							instances := plugin.GetPluginManager().GetPluginInstances()
 							if len(instances) > 0 {
 								if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginMetadata.Id }); ok {
-									if len(inst.Metadata.TriggerKeywords) > 0 {
-										kw := inst.Metadata.TriggerKeywords[0]
-										if kw != "*" && strings.TrimSpace(kw) != "" {
-											// add "Start Using" action
-											newActions = append(newActions, plugin.QueryResultAction{
-												Name:                   "i18n:plugin_wpm_start_using",
-												Icon:                   icons.Get(icons.ActionOpen),
-												PreventHideAfterAction: true,
-												IsDefault:              true,
-												Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-													i.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
-												},
-											})
-										}
+									if kw := inst.PrimaryTriggerKeyword(); strings.TrimSpace(kw) != "" {
+										newActions = append(newActions, plugin.QueryResultAction{
+											Name:                   "i18n:plugin_wpm_start_using",
+											Icon:                   icons.Get(icons.ActionOpen),
+											PreventHideAfterAction: true,
+											IsDefault:              true,
+											Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+												i.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+											},
+										})
 									}
 								}
 							}
@@ -241,10 +237,7 @@ func (i *PluginInstallerPlugin) handleMRURestore(ctx context.Context, mruData pl
 	if inst, ok := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
 		return item.Metadata.Id == pluginID
 	}); ok {
-		keyword := ""
-		if len(inst.Metadata.TriggerKeywords) > 0 {
-			keyword = inst.Metadata.TriggerKeywords[0]
-		}
+		keyword := inst.PrimaryTriggerKeyword()
 		result := plugin.QueryResult{
 			Title:    inst.GetName(ctx),
 			SubTitle: inst.GetDescription(ctx),
@@ -257,7 +250,7 @@ func (i *PluginInstallerPlugin) handleMRURestore(ctx context.Context, mruData pl
 					PreventHideAfterAction: true,
 					ContextData:            common.ContextData{"pluginId": inst.Metadata.Id},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if keyword != "" && keyword != "*" {
+						if keyword != "" {
 							i.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: keyword + " "})
 						}
 					},

@@ -816,22 +816,17 @@ func (w *WPMPlugin) buildPostInstallActions(ctx context.Context, pluginManifest 
 	instances := plugin.GetPluginManager().GetPluginInstances()
 	if len(instances) > 0 {
 		if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
-			if len(inst.Metadata.TriggerKeywords) > 0 {
-				kw := inst.Metadata.TriggerKeywords[0]
-				if kw != "*" && strings.TrimSpace(kw) != "" {
-					// Capture kw in a local variable for the closure so that
-					// all "Start Using" closures do not share the loop variable.
-					kwCopy := kw
-					newActions = append(newActions, plugin.QueryResultAction{
-						Name:                   "i18n:plugin_wpm_start_using",
-						Icon:                   icons.Get(icons.ActionOpen),
-						PreventHideAfterAction: true,
-						IsDefault:              true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kwCopy + " "})
-						},
-					})
-				}
+			// Global plugins can still expose a keyword after "*", and users may override it.
+			if kw := inst.PrimaryTriggerKeyword(); strings.TrimSpace(kw) != "" {
+				newActions = append(newActions, plugin.QueryResultAction{
+					Name:                   "i18n:plugin_wpm_start_using",
+					Icon:                   icons.Get(icons.ActionOpen),
+					PreventHideAfterAction: true,
+					IsDefault:              true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+					},
+				})
 			}
 		}
 	}
@@ -1662,11 +1657,7 @@ func (w *WPMPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 					Icon:                   icons.Get(icons.ActionOpen),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						keyword := ""
-						if len(inst.Metadata.TriggerKeywords) > 0 {
-							keyword = inst.Metadata.TriggerKeywords[0]
-						}
-						if keyword != "" && keyword != "*" {
+						if keyword := inst.PrimaryTriggerKeyword(); keyword != "" {
 							w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: keyword + " "})
 						}
 					},

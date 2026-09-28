@@ -57,11 +57,6 @@ const (
 	// plugin must implement OnMRURestore callback to restore results from MRU data
 	MetadataFeatureMRU MetadataFeatureName = "mru"
 
-	// Keep result Group headers in global search. Plugins that organize a catalog
-	// into sections, such as games by launcher, opt in. Results with an empty
-	// Group still join the flat global list.
-	MetadataFeatureResultGroups MetadataFeatureName = "resultGroups"
-
 	// enable this feature to display results in a grid layout instead of list
 	// Deprecated: return QueryResponse.Layout.GridLayout instead. Metadata is kept for
 	// existing plugins, but query-scoped layout is more flexible when only some result
