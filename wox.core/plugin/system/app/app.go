@@ -820,16 +820,28 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 			Icon:        icons.Get(icons.ActionOpen),
 			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				launchStart := time.Now()
+				util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=start app=%q path=%q", info.Name, info.Path))
+				defer func() {
+					util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=done path=%q totalMs=%d", info.Path, time.Since(launchStart).Milliseconds()))
+				}()
 				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
 
 				// Check if app is already running and try to activate its window
 				// macos default behavior is to activate existing instance
 				// windows needs special handling to activate existing window
 				if util.IsWindows() {
+					util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=get_pid_start path=%q elapsedMs=%d", info.Path, time.Since(launchStart).Milliseconds()))
+					pidStart := time.Now()
 					currentPid := a.retriever.GetPid(ctx, info)
+					util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=get_pid_done path=%q pid=%d costMs=%d", info.Path, currentPid, time.Since(pidStart).Milliseconds()))
 					if currentPid > 0 {
 						// App is running, try to activate its window
-						if window.ActivateWindowByPid(currentPid) {
+						util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=activate_start path=%q pid=%d", info.Path, currentPid))
+						activateStart := time.Now()
+						activated := window.ActivateWindowByPid(currentPid)
+						util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=activate_done path=%q pid=%d activated=%t costMs=%d", info.Path, currentPid, activated, time.Since(activateStart).Milliseconds()))
+						if activated {
 							a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Activated existing window for %s (PID: %d)", info.Name, currentPid))
 							return
 						}
@@ -842,6 +854,8 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				// executables. Launching them through gio preserves the desktop entry's Exec
 				// handling and environment wrappers; xdg-open remains the compatibility fallback.
 				var runErr error
+				util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=shell_open_start path=%q", info.Path))
+				shellStart := time.Now()
 				if util.IsLinux() && strings.HasSuffix(strings.ToLower(info.Path), ".desktop") {
 					_, runErr = shell.Run("gio", "launch", info.Path)
 					if runErr != nil {
@@ -851,6 +865,8 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				} else {
 					runErr = shell.Open(info.Path)
 				}
+				// Shell return time does not include asynchronous work or the application's window startup.
+				util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=shell_open_done path=%q costMs=%d error=%v", info.Path, time.Since(shellStart).Milliseconds(), runErr))
 				if runErr != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
 					a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), runErr.Error()))

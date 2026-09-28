@@ -1174,7 +1174,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 // The full-height budget is the list contract: container padding plus
 // MaxResultCount list rows. Grid content is capped to that same row budget so a
 // full grid window matches a full list window.
-func launcherResultAreaHeight(results []queryResult, layout queryLayout, width float32, maxResults, resultRowHeight, resultVerticalPadding int, groupHeaderHeight float32) int {
+func launcherResultAreaHeight(results []queryResult, layout queryLayout, width float32, maxResults, resultRowHeight, resultPaddingTop, resultPaddingBottom int, groupHeaderHeight float32) int {
 	if len(results) == 0 || maxResults <= 0 {
 		return 0
 	}
@@ -1184,8 +1184,12 @@ func launcherResultAreaHeight(results []queryResult, layout queryLayout, width f
 		contentHeight = min(gridResultsHeight(results, width, layout.GridLayout), maxResults*resultRowHeight)
 	} else {
 		contentHeight = int(listVisibleResultsHeight(results, visibleResults, float32(resultRowHeight), groupHeaderHeight, float32(resultRowGap)))
+		if len(results) > maxResults {
+			// Bottom padding belongs to the end of the full list, not after the last visible row.
+			resultPaddingBottom = 0
+		}
 	}
-	return resultVerticalPadding + contentHeight
+	return resultPaddingTop + resultPaddingBottom + contentHeight
 }
 
 func (a *App) applyWindowBounds() error {
@@ -1250,8 +1254,14 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	}
 	visibleResults := min(resultCount, maxResults)
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
-	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
+	resultPaddingTop := int(palette.resultContainerPadding.Top)
+	resultPaddingBottom := int(palette.resultContainerPadding.Bottom)
 	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText, a.queryLineHeight(densityMetrics)) + palette.appPadding.Top + palette.appPadding.Bottom)
+	listOverflowsResultLimit := layout.GridLayout == nil && resultCount > maxResults
+	if listOverflowsResultLimit && !params.QueryBoxAtBottom {
+		// Top query layouts transfer AppPaddingBottom to the result list, where it is also end-only padding.
+		queryAreaHeight -= int(palette.appPadding.Bottom)
+	}
 	// With the query box hidden, buildResults folds appPadding.Bottom into the
 	// result list content, so the window height must reserve that margin too.
 	// Otherwise the list overflows by it and a scrollbar appears even when every
@@ -1259,6 +1269,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	resultBottomInset := 0
 	if params.HideQueryBox {
 		resultBottomInset = int(palette.appPadding.Bottom)
+		if listOverflowsResultLimit && !params.QueryBoxAtBottom {
+			resultBottomInset = 0
+		}
 	}
 	toolbarHasContent := resultCount > 0 || toolbarMessageVisible || !params.HideToolbar
 	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webViewFullscreen)
@@ -1277,12 +1290,15 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 			extra := palette.Surfaces.ContentInsets
 			contentWidth = max(0, contentWidth-extra.Left-extra.Right)
 		}
-		height += launcherResultAreaHeight(results, layout, contentWidth, maxResults, resultRowHeight, resultVerticalPadding, densityMetrics.groupHeaderHeight())
+		height += launcherResultAreaHeight(results, layout, contentWidth, maxResults, resultRowHeight, resultPaddingTop, resultPaddingBottom, densityMetrics.groupHeaderHeight())
 	}
 	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)
 	}
-	maximumResultWindowHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
+	maximumResultWindowHeight := resultPaddingTop + resultPaddingBottom + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
+	if listOverflowsResultLimit {
+		maximumResultWindowHeight -= resultPaddingBottom
+	}
 	if !params.HideQueryBox {
 		maximumResultWindowHeight += queryAreaHeight
 	} else {

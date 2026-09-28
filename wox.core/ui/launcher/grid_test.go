@@ -9,10 +9,11 @@ func TestFullGridWindowMatchesFullListWindow(t *testing.T) {
 	palette := defaultPalette()
 	density := launcherDensityMetricsFor("")
 	rowHeight := int(density.resultRowHeight(palette))
-	padding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
+	paddingTop := int(palette.resultContainerPadding.Top)
+	paddingBottom := int(palette.resultContainerPadding.Bottom)
 	maxResults := defaultMaxResult
 	width := float32(defaultWidth)
-	fullBudget := padding + maxResults*rowHeight
+	fullBudget := paddingTop + paddingBottom + maxResults*rowHeight
 
 	listResults := make([]queryResult, maxResults)
 	for index := range listResults {
@@ -23,13 +24,25 @@ func TestFullGridWindowMatchesFullListWindow(t *testing.T) {
 		gridResults = append(gridResults, queryResult{ID: fmt.Sprintf("grid-%d", index), Title: "emoji"})
 	}
 
-	listHeight := launcherResultAreaHeight(listResults, queryLayout{}, width, maxResults, rowHeight, padding, density.groupHeaderHeight())
-	gridHeight := launcherResultAreaHeight(gridResults, queryLayout{GridLayout: &gridLayout{Columns: 8, AspectRatio: 1}}, width, maxResults, rowHeight, padding, density.groupHeaderHeight())
+	listHeight := launcherResultAreaHeight(listResults, queryLayout{}, width, maxResults, rowHeight, paddingTop, paddingBottom, density.groupHeaderHeight())
+	gridHeight := launcherResultAreaHeight(gridResults, queryLayout{GridLayout: &gridLayout{Columns: 8, AspectRatio: 1}}, width, maxResults, rowHeight, paddingTop, paddingBottom, density.groupHeaderHeight())
 	if listHeight != fullBudget {
 		t.Fatalf("full list height = %d, want %d", listHeight, fullBudget)
 	}
 	if gridHeight != fullBudget {
 		t.Fatalf("full grid height = %d, want %d", gridHeight, fullBudget)
+	}
+}
+
+func TestListWindowExcludesEndPaddingBeforeScroll(t *testing.T) {
+	results := make([]queryResult, 9)
+	for index := range results {
+		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: "item"}
+	}
+
+	height := launcherResultAreaHeight(results, queryLayout{}, 760, 8, 50, 8, 20, 28)
+	if height != 408 {
+		t.Fatalf("overflowing list height = %d, want 408 without end-only bottom padding", height)
 	}
 }
 

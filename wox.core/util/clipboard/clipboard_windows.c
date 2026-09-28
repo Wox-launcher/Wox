@@ -18,9 +18,9 @@ static UINT getPNGFormat() {
 
 // openClipboardRetry opens the clipboard with up to 5 retries.
 // Returns TRUE on success, FALSE on failure.
-static BOOL openClipboardRetry() {
+static BOOL openClipboardRetry(HWND owner) {
     for (int i = 0; i < 5; i++) {
-        if (OpenClipboard(NULL)) {
+        if (OpenClipboard(owner)) {
             return TRUE;
         }
         Sleep(10 + i * 10);
@@ -30,10 +30,16 @@ static BOOL openClipboardRetry() {
 
 // EmptyClipboard can fail even after OpenClipboard succeeds, so retry the
 // entire write transaction before reporting a clipboard failure.
-static int prepareClipboardWrite() {
+static int prepareClipboardWrite(HWND *owner) {
+    // A NULL owner makes EmptyClipboard clear ownership and SetClipboardData fail.
+    // Keep creation, writing, and destruction inside one C call on the same thread.
+    *owner = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+    if (*owner == NULL) {
+        return -1;
+    }
     int error = -1;
     for (int i = 0; i < 5; i++) {
-        if (openClipboardRetry()) {
+        if (openClipboardRetry(*owner)) {
             if (EmptyClipboard()) {
                 return 0;
             }
@@ -42,7 +48,14 @@ static int prepareClipboardWrite() {
         }
         Sleep(10 + i * 10);
     }
+    DestroyWindow(*owner);
     return error;
+}
+
+// closeClipboardWrite releases the temporary owner after publishing eager data.
+static void closeClipboardWrite(HWND owner) {
+    CloseClipboard();
+    DestroyWindow(owner);
 }
 
 // copyReadableMemory avoids crashing when another application publishes an invalid clipboard handle.
@@ -58,7 +71,7 @@ static BOOL copyReadableMemory(void *destination, const void *source, SIZE_T siz
 // the clipboard, so a copied screenshot would otherwise stay resident in the Wox heap until the
 // clipboard content changes. An immediate open/close pair releases the copy right after a read.
 void clipboardReleaseDataCache() {
-    if (openClipboardRetry()) {
+    if (openClipboardRetry(NULL)) {
         CloseClipboard();
     }
 }
@@ -104,7 +117,7 @@ int clipboardReadText(wchar_t **outText, int *outLen) {
         return -1;  // no text data
     }
 
-    if (!openClipboardRetry()) {
+    if (!openClipboardRetry(NULL)) {
         return -2;  // failed to open
     }
 
@@ -174,7 +187,7 @@ int clipboardReadFilePaths(wchar_t **outPaths, int *outLen) {
         return -1;
     }
 
-    if (!openClipboardRetry()) {
+    if (!openClipboardRetry(NULL)) {
         return -2;
     }
 
@@ -240,7 +253,7 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
         return -1;  // no image data
     }
 
-    if (!openClipboardRetry()) {
+    if (!openClipboardRetry(NULL)) {
         return -2;
     }
 
@@ -388,28 +401,29 @@ int clipboardReadImage(unsigned char **outData, int *outLen, int *outIsPNG, Bitm
 // text must be a null-terminated wide string, textLen is the number of characters (not including null).
 // Returns 0 on success, negative on error.
 int clipboardWriteText(const wchar_t *text, int textLen) {
-    int prepareResult = prepareClipboardWrite();
+    HWND owner;
+    int prepareResult = prepareClipboardWrite(&owner);
     if (prepareResult != 0) {
         return prepareResult;
     }
 
     if (textLen <= 0) {
         // Empty text: just clear clipboard
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return 0;
     }
 
     SIZE_T bufSize = (textLen + 1) * sizeof(wchar_t);
     HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bufSize);
     if (hMem == NULL) {
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -3;
     }
 
     wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
     if (pMem == NULL) {
         GlobalFree(hMem);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -4;
     }
     memcpy(pMem, text, textLen * sizeof(wchar_t));
@@ -418,11 +432,11 @@ int clipboardWriteText(const wchar_t *text, int textLen) {
 
     if (SetClipboardData(CF_UNICODETEXT, hMem) == NULL) {
         GlobalFree(hMem);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -5;
     }
 
-    CloseClipboard();
+    closeClipboardWrite(owner);
     return 0;
 }
 
@@ -434,7 +448,8 @@ int clipboardWriteFilePaths(const wchar_t *paths, int totalLen) {
         return -1;
     }
 
-    int prepareResult = prepareClipboardWrite();
+    HWND owner;
+    int prepareResult = prepareClipboardWrite(&owner);
     if (prepareResult != 0) {
         return prepareResult == -1 ? -2 : -3;
     }
@@ -442,14 +457,14 @@ int clipboardWriteFilePaths(const wchar_t *paths, int totalLen) {
     SIZE_T dataSize = sizeof(DROPFILES) + ((SIZE_T)totalLen * sizeof(wchar_t));
     HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, dataSize);
     if (hDrop == NULL) {
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -4;
     }
 
     DROPFILES *dropFiles = (DROPFILES *)GlobalLock(hDrop);
     if (dropFiles == NULL) {
         GlobalFree(hDrop);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -5;
     }
 
@@ -463,11 +478,11 @@ int clipboardWriteFilePaths(const wchar_t *paths, int totalLen) {
 
     if (SetClipboardData(CF_HDROP, hDrop) == NULL) {
         GlobalFree(hDrop);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -6;
     }
 
-    CloseClipboard();
+    closeClipboardWrite(owner);
     return 0;
 }
 
@@ -479,7 +494,8 @@ int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
         return -1;
     }
 
-    int prepareResult = prepareClipboardWrite();
+    HWND owner;
+    int prepareResult = prepareClipboardWrite(&owner);
     if (prepareResult != 0) {
         return prepareResult == -1 ? -2 : -3;
     }
@@ -487,14 +503,14 @@ int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
     SIZE_T dataSize = sizeof(DROPFILES) + ((SIZE_T)totalLen * sizeof(wchar_t));
     HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, dataSize);
     if (hDrop == NULL) {
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -4;
     }
 
     DROPFILES *dropFiles = (DROPFILES *)GlobalLock(hDrop);
     if (dropFiles == NULL) {
         GlobalFree(hDrop);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -5;
     }
 
@@ -508,7 +524,7 @@ int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
 
     if (SetClipboardData(CF_HDROP, hDrop) == NULL) {
         GlobalFree(hDrop);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -6;
     }
 
@@ -531,7 +547,7 @@ int clipboardWriteAnimatedGIF(const wchar_t *paths, int totalLen,
         }
     }
 
-    CloseClipboard();
+    closeClipboardWrite(owner);
     return 0;
 }
 
@@ -543,7 +559,8 @@ int clipboardWriteImage(const unsigned char *pngData, int pngLen,
         return -1;  // DIB data is required
     }
 
-    int prepareResult = prepareClipboardWrite();
+    HWND owner;
+    int prepareResult = prepareClipboardWrite(&owner);
     if (prepareResult != 0) {
         return prepareResult == -1 ? -2 : -3;
     }
@@ -570,14 +587,14 @@ int clipboardWriteImage(const unsigned char *pngData, int pngLen,
     // Write CF_DIB for compatibility
     HGLOBAL hDib = GlobalAlloc(GMEM_MOVEABLE, dibLen);
     if (hDib == NULL) {
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -4;
     }
 
     void *pDib = GlobalLock(hDib);
     if (pDib == NULL) {
         GlobalFree(hDib);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -5;
     }
     memcpy(pDib, dibData, dibLen);
@@ -585,11 +602,11 @@ int clipboardWriteImage(const unsigned char *pngData, int pngLen,
 
     if (SetClipboardData(CF_DIB, hDib) == NULL) {
         GlobalFree(hDib);
-        CloseClipboard();
+        closeClipboardWrite(owner);
         return -6;
     }
 
-    CloseClipboard();
+    closeClipboardWrite(owner);
     return 0;
 }
 

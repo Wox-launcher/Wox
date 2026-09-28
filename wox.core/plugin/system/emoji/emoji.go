@@ -574,7 +574,10 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 			Icon:      icons.Get(icons.ActionCopy),
 			IsDefault: copyIsDefault,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				clipboard.WriteText(emoji)
+				if err := clipboard.WriteText(emoji); err != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("Failed to copy emoji: %v", err))
+					return
+				}
 				e.recordUsage(ctx, emoji)
 			},
 		},
