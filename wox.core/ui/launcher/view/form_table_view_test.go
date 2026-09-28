@@ -414,6 +414,24 @@ func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 	}
 }
 
+// TestFormTableHotkeySemantics verifies assistive activation uses the real recorder callback.
+func TestFormTableHotkeySemantics(t *testing.T) {
+	activated := false
+	control := formTableRowControl(FormTableRowFieldProps{
+		ID: "hotkey", Kind: "hotkey", Label: "Shortcut", Value: "ctrl+f12", RecordingStatus: "Press a key",
+		OnTap: func() { activated = true },
+	}, 400, 40).(woxwidget.Semantics)
+	if control.AutomationID != "hotkey" || control.Role != woxui.AccessibilityRoleButton || control.Label != "Shortcut" || control.Value != "ctrl+f12" || control.Description != "Press a key" {
+		t.Fatalf("recorder semantics = %+v", control)
+	}
+	if len(control.Actions) != 1 || control.Actions[0] != woxui.AccessibilityActionActivate {
+		t.Fatalf("recorder actions = %v", control.Actions)
+	}
+	if err := control.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !activated {
+		t.Fatalf("activate recorder: called=%v error=%v", activated, err)
+	}
+}
+
 func TestFormTableHotkeyStatusUsesRemainingControlWidth(t *testing.T) {
 	control := formTableRowControl(FormTableRowFieldProps{
 		ID: "hotkey", Kind: "hotkey", Recording: true, RecordingStatus: "Press a key", Theme: woxcomponent.ControlTheme{},

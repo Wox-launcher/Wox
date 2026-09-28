@@ -1234,14 +1234,18 @@ func TestSendCurrentQueryPreservesSelectionQuery(t *testing.T) {
 }
 
 func TestSendCurrentQueryLoadsMRUForEmptyInput(t *testing.T) {
-	services := &sendQueryRecorderServices{}
-	app := newSendQueryTestApp(services, newInputQuery(""), showAppParams{StartPage: "mru", ShowSource: "default", LaunchMode: "continue"})
+	for _, source := range []string{"default", "query_hotkey", "selection", "tray_query", "quickjump", "deeplink"} {
+		t.Run(source, func(t *testing.T) {
+			services := &sendQueryRecorderServices{}
+			app := newSendQueryTestApp(services, newInputQuery(""), showAppParams{StartPage: "mru", ShowSource: source, LaunchMode: "continue"})
 
-	if err := app.sendCurrentQuery(); err != nil {
-		t.Fatalf("send current query: %v", err)
-	}
-	if !waitForMRUCalled(t, services) {
-		t.Fatal("empty input with mru start page should request MRU")
+			if err := app.sendCurrentQuery(); err != nil {
+				t.Fatalf("send current query: %v", err)
+			}
+			if !waitForMRUCalled(t, services) {
+				t.Fatal("empty input with mru start page should request MRU")
+			}
+		})
 	}
 }
 

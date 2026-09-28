@@ -1325,7 +1325,19 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 			ID: props.ID, Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
 			Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange, OnKey: props.OnKey,
 		})
-		recorder = woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder}
+		// Table recorders expose the same accessible activation as standalone hotkey fields.
+		recorder = woxwidget.Semantics{
+			Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton,
+			Label: props.Label, Value: props.Value, Description: props.RecordingStatus,
+			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			OnAction: func(action woxui.AccessibilityAction, _ string) error {
+				if action == woxui.AccessibilityActionActivate && props.OnTap != nil {
+					props.OnTap()
+				}
+				return nil
+			},
+			Child: woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder},
+		}
 		if !props.Recording || props.RecordingStatus == "" || width-recorderWidth <= 8 {
 			return recorder
 		}

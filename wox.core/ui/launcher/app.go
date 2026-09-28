@@ -999,13 +999,11 @@ func (a *App) sendCurrentQuery() error {
 	var query plainQuery
 	var startPage string
 	var skipCompletionHint bool
-	var preserveQuery bool
 	if err := a.runOnUI("prepare current query", func() {
 		query = a.query
 		query.QueryHint = a.query.QueryHint.Clone()
 		startPage = a.show.StartPage
 		skipCompletionHint = a.query.QueryHint != nil || a.queryHintEditorState.candidate != nil || !a.generalSettings.Data().EnableQueryCompletionHint
-		preserveQuery = a.shouldPreserveQueryOnShowLocked()
 		a.startQueryLoadingLocked()
 	}); err != nil {
 		return err
@@ -1017,7 +1015,9 @@ func (a *App) sendCurrentQuery() error {
 	// A selection query keeps its payload in QuerySelection, so an empty QueryText
 	// is not an empty query box; replacing it with MRU reassigns QueryID and the
 	// in-flight selection results are discarded by applyResults.
-	if !preserveQuery && query.QueryType != "selection" && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
+	// Show-source preservation only applies when opening the launcher; clearing
+	// an input query must return to MRU even after a query hotkey or deeplink.
+	if query.QueryType != "selection" && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
 		return a.requestMRU()
 	}
 	return nil
