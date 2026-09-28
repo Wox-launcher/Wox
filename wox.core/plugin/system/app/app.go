@@ -71,16 +71,18 @@ type appInfo struct {
 	CanRunAsAdministrator bool `json:"can_run_as_administrator,omitempty"`
 
 	Pid int `json:"-"`
+	// Derived from the current launch semantics, never persisted or confused with process Identity.
+	launchKey string
 	// IsDefaultIcon is persisted so launchpad can hide entries whose icon fell
 	// back to a generic/default asset after a restart. Normal app search still
 	// keeps these entries visible.
 	IsDefaultIcon bool `json:"is_default_icon,omitempty"`
 }
 
-// equals compares the persisted identity of two entries. Pid is runtime-only state
-// and is intentionally ignored.
+// equals compares index metadata, including derived launch semantics. Pid is intentionally ignored.
 func (info appInfo) equals(other appInfo) bool {
 	return info.Name == other.Name &&
+		info.launchKey == other.launchKey &&
 		slices.Equal(info.SearchableNames, other.SearchableNames) &&
 		info.Identity == other.Identity &&
 		info.Path == other.Path &&
@@ -143,7 +145,6 @@ type appContextData struct {
 type appQueryEntry struct {
 	info                     appInfo
 	preparedSearchCandidates []*fuzzymatch.PreparedText
-	ignoreCandidates         []string
 }
 
 // Query results usually shrink as the user extends the same search text.
@@ -433,6 +434,7 @@ func (a *ApplicationPlugin) populateAppMetadata(ctx context.Context, appPath str
 	if strings.TrimSpace(info.Path) == "" {
 		info.Path = appPath
 	}
+	populateAppLaunchKey(info)
 	if strings.TrimSpace(info.Identity) == "" {
 		info.Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, *info))
 	}
@@ -2103,18 +2105,28 @@ func (a *ApplicationPlugin) indexExtraApps(ctx context.Context, apps []appInfo, 
 func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
 	// Ignore rules depend on app metadata and current settings, not on the user's
 	// search text, so filter them once here instead of on every query.
-	entries := make([]appQueryEntry, 0, len(a.apps))
+	visibleApps := make([]appInfo, 0, len(a.apps))
 	ignoreMatchers := a.getIgnoreRuleMatchersSnapshot()
 	ignoredApps := a.getIgnoredAppsSnapshot()
 	for _, info := range a.apps {
-		entry := a.buildQueryEntry(ctx, info)
-		if _, ignored := a.matchIgnoreRuleCandidates(info.Path, entry.ignoreCandidates, ignoreMatchers); ignored {
+		displayName := info.Name
+		if strings.HasPrefix(displayName, "i18n:") {
+			displayName = a.api.GetTranslation(ctx, displayName)
+		}
+		if _, ignored := a.matchIgnoreRuleCandidates(info.Path, buildIgnoreRuleCandidates(info, displayName), ignoreMatchers); ignored {
 			continue
 		}
 		if isIgnoredApp(info, ignoredApps) {
 			continue
 		}
-		entries = append(entries, entry)
+		visibleApps = append(visibleApps, info)
+	}
+	// Keep every source in a.apps/cache so incremental removal can promote another entry and
+	// deleted aliases disappear on rebuild. Filter before merging to preserve per-path ignore rules.
+	visibleApps = deduplicateAppLaunches(visibleApps)
+	entries := make([]appQueryEntry, 0, len(visibleApps))
+	for _, info := range visibleApps {
+		entries = append(entries, a.buildQueryEntry(info))
 	}
 
 	a.queryEntriesMutex.Lock()
@@ -2125,16 +2137,13 @@ func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
 
 }
 
-func (a *ApplicationPlugin) buildQueryEntry(ctx context.Context, info appInfo) appQueryEntry {
+func (a *ApplicationPlugin) buildQueryEntry(info appInfo) appQueryEntry {
 	entry := appQueryEntry{
 		info: info,
 	}
 
 	if strings.HasPrefix(info.Name, "i18n:") {
-		// Translated titles can change with locale, so keep the translated form in
-		// the entry used by matching and ignore rules.
-		displayName := a.api.GetTranslation(ctx, info.Name)
-		entry.ignoreCandidates = buildIgnoreRuleCandidates(info, displayName)
+		// Translated titles are prepared with the current locale during matching.
 		return entry
 	}
 
@@ -2143,7 +2152,6 @@ func (a *ApplicationPlugin) buildQueryEntry(ctx context.Context, info appInfo) a
 	for _, candidate := range searchCandidates {
 		entry.preparedSearchCandidates = append(entry.preparedSearchCandidates, fuzzymatch.PrepareText(candidate))
 	}
-	entry.ignoreCandidates = buildIgnoreRuleCandidates(info, info.Name)
 	return entry
 }
 
@@ -2428,6 +2436,7 @@ func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error)
 
 	for i := range apps {
 		apps[i].Pid = 0
+		populateAppLaunchKey(&apps[i])
 		if strings.TrimSpace(apps[i].Identity) == "" {
 			apps[i].Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, apps[i]))
 		}

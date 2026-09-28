@@ -224,3 +224,53 @@ func FuzzShortcutDataSupported(f *testing.F) {
 		shortcutMetadataSupported(data)
 	})
 }
+
+func TestDesktopLaunchKeyPreservesLaunchSemantics(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(os.Getenv("WINDIR"), "explorer.exe")
+	path := filepath.Join(root, "launch.lnk")
+	writeLaunchShortcut(t, path, target, "", "", 1)
+	plain := DesktopLaunchKey(path)
+	if plain == "" || plain != DesktopLaunchKey(target) || plain != DesktopLaunchKey(strings.ToUpper(target)) {
+		t.Fatal("plain shortcut and normalized executable should have the same launch key")
+	}
+	seen := map[string]bool{plain: true}
+	for _, tc := range []struct {
+		args, directory string
+		show            int32
+	}{
+		{`--profile="Work"`, "", 1},
+		{`--profile="work"`, "", 1},
+		{`--profile="Work" `, "", 1},
+		{"", filepath.Dir(target), 1},
+		{"", "", 3},
+		{"", "", 7},
+	} {
+		writeLaunchShortcut(t, path, target, tc.args, tc.directory, tc.show)
+		key := DesktopLaunchKey(path)
+		if key == "" || seen[key] {
+			t.Fatalf("distinct launch semantics merged: %+v", tc)
+		}
+		seen[key] = true
+	}
+	writeLaunchShortcut(t, path, target, "", "", 1)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flags := binary.LittleEndian.Uint32(data[20:])
+	binary.LittleEndian.PutUint32(data[20:], flags|shortcutRunAsUser)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if key := DesktopLaunchKey(path); key == "" || key == plain {
+		t.Fatal("elevated shortcut must have its own launch key")
+	}
+	binary.LittleEndian.PutUint32(data[20:], flags|0x1000) // MSI/Darwin link, even with an existing exe target.
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if DesktopLaunchKey(path) != "" || DesktopLaunchKey("shell:AppsFolder\\Example") != "" {
+		t.Fatal("unsupported launches must not have semantic keys")
+	}
+}

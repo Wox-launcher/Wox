@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"debug/pe"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,6 +21,32 @@ import (
 )
 
 const shortcutRunAsUser = 0x00002000
+
+// DesktopLaunchKey identifies equivalent default launches without executing them. Unsupported links
+// have no key: indexers must retain their original entries rather than guess from GetPath alone.
+func DesktopLaunchKey(path string) string {
+	req := shellExecuteRequest{File: path, Verb: "open", Show: shellExecuteShowNormal}
+	if strings.EqualFold(filepath.Ext(path), ".lnk") {
+		var ok bool
+		req, ok = shortcutLaunchRequest(path, "open")
+		if !ok {
+			return ""
+		}
+	} else if !strings.EqualFold(filepath.Ext(path), ".exe") {
+		return ""
+	}
+	absPath, err := filepath.Abs(req.File)
+	if err != nil {
+		return ""
+	}
+	req.File = strings.ToLower(filepath.Clean(absPath))
+	if req.Directory != "" {
+		req.Directory = strings.ToLower(filepath.Clean(req.Directory))
+	}
+	// Structured encoding avoids delimiter collisions; arguments and empty directories stay distinct.
+	key, _ := json.Marshal(req)
+	return string(key)
+}
 
 // shortcutLaunchRequest bypasses Shell link activation only when all launch-affecting data is understood.
 // Anything unsupported stays with Windows, including console apps whose title/icon can depend on the .lnk itself.
