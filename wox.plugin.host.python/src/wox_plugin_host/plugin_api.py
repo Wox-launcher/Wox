@@ -462,7 +462,7 @@ class PluginAPI(PublicAPI):
 
     async def refresh_query(self, ctx: Context, param: RefreshQueryParam) -> None:
         """Re-execute the current query with the existing query text"""
-        params = {
+        params: Dict[str, bool | str] = {
             "PreserveSelectedIndex": param.preserve_selected_index,
         }
         if param.selected_result_id:
