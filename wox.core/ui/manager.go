@@ -73,9 +73,13 @@ type Manager struct {
 	// themePackageDirs maps a user theme id to the directory holding its asset files. Stored
 	// themes keep AssetFiles nil and reload the bytes from here only when a theme is applied,
 	// previewed, or exported, so packaged wallpapers do not stay resident for inactive themes.
-	themePackageDirs   *util.HashMap[string, string]
-	themeReloadTimers  *util.HashMap[string, *time.Timer]
-	themeWatchIgnored  *util.HashMap[string, int64]
+	themePackageDirs  *util.HashMap[string, string]
+	themeReloadTimers *util.HashMap[string, *time.Timer]
+	themeWatchIgnored *util.HashMap[string, int64]
+	// themeWatchMu serializes package replacement with watch changes. The callback releases
+	// a package's subscriptions and returns a function that watches its final directory again.
+	themeWatchMu       sync.Mutex
+	themeWatchSuspend  func(string) func()
 	systemThemeIds     []string
 	isUIReadyHandled   bool
 	isSystemDark       bool

@@ -2768,6 +2768,7 @@
   "plugin_theme_group_store": "스토어",
   "plugin_theme_group_system": "시스템 테마",
   "plugin_theme_image_memory_hint": "이미지 테마는 메모리를 더 사용합니다",
+  "plugin_theme_install_success": "테마가 성공적으로 설치되었습니다",
   "plugin_theme_install_theme": "테마 설치",
   "plugin_theme_no_embed_theme": "내장 테마를 찾을 수 없습니다",
   "plugin_theme_open_containing_folder": "테마 폴더 열기",

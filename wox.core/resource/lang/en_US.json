@@ -2769,6 +2769,7 @@
   "plugin_theme_group_store": "Store",
   "plugin_theme_group_system": "System Themes",
   "plugin_theme_image_memory_hint": "Image themes use more memory",
+  "plugin_theme_install_success": "Theme installed successfully",
   "plugin_theme_install_theme": "Install theme",
   "plugin_theme_no_embed_theme": "No embed theme found",
   "plugin_theme_open_containing_folder": "Open theme folder",

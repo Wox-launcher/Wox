@@ -2769,6 +2769,7 @@
   "plugin_theme_group_store": "ストア",
   "plugin_theme_group_system": "システムテーマ",
   "plugin_theme_image_memory_hint": "画像テーマはメモリ使用量が増えます",
+  "plugin_theme_install_success": "テーマをインストールしました",
   "plugin_theme_install_theme": "テーマをインストール",
   "plugin_theme_no_embed_theme": "ビルトインテーマが見つかりません",
   "plugin_theme_open_containing_folder": "テーマフォルダーを開く",

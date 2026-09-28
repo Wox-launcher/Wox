@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"wox/common"
@@ -27,12 +26,9 @@ const (
 // watcher; new package directories subscribe when created and removed ones unsubscribe.
 func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string) {
 	m.ensureThemeWatchMaps()
-	var watchesMu sync.Mutex
 	watches := map[string]*util.DirectoryWatch{}
 	var handleEvent func(event fsnotify.Event)
 	addDirectory := func(name string) {
-		watchesMu.Lock()
-		defer watchesMu.Unlock()
 		if _, exists := watches[name]; exists {
 			return
 		}
@@ -50,8 +46,6 @@ func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string
 	// subdirectory was subscribed separately; leaving that entry behind would make a later
 	// addDirectory treat it as already watched and asset edits would never arrive.
 	removeDirectory := func(name string) {
-		watchesMu.Lock()
-		defer watchesMu.Unlock()
 		prefix := name + string(filepath.Separator)
 		for path, watch := range watches {
 			if path == name || strings.HasPrefix(path, prefix) {
@@ -75,6 +69,11 @@ func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string
 		})
 	}
 	handleEvent = func(event fsnotify.Event) {
+		m.themeWatchMu.Lock()
+		defer m.themeWatchMu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
 		relative, err := filepath.Rel(directory, event.Name)
 		if err != nil {
 			return
@@ -87,7 +86,8 @@ func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string
 		if event.Op&fsnotify.Create != 0 && statErr == nil && info.IsDir() {
 			addDirectories(event.Name)
 		}
-		if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+		// A queued removal may refer to the old package after replacement restored its watches.
+		if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 && os.IsNotExist(statErr) {
 			removeDirectory(filepath.Clean(event.Name))
 		}
 		_, knownPackage := m.themeFileIDs.Load(themeWatchKey(filepath.Join(directory, parts[0], "theme.json")))
@@ -97,16 +97,37 @@ func (m *Manager) startUserThemeMonitoring(ctx context.Context, directory string
 			m.handleUserThemeFileEvent(ctx, event)
 		}
 	}
+	m.themeWatchMu.Lock()
+	m.themeWatchSuspend = func(name string) func() {
+		removeDirectory(name)
+		return func() { addDirectories(name) }
+	}
 	addDirectories(directory)
+	m.themeWatchMu.Unlock()
 	if ctx.Done() == nil {
 		return
 	}
 	<-ctx.Done()
-	watchesMu.Lock()
-	defer watchesMu.Unlock()
-	for name, watch := range watches {
-		watch.Close()
-		delete(watches, name)
+	m.themeWatchMu.Lock()
+	defer m.themeWatchMu.Unlock()
+	m.themeWatchSuspend = nil
+	removeDirectory(directory)
+}
+
+// pauseThemePackageWatch releases child directory handles that block parent renames on Windows.
+// Keep watch changes locked until the caller restores either the new package or the old one.
+func (m *Manager) pauseThemePackageWatch(directory string) func() {
+	m.themeWatchMu.Lock()
+	if m.themeWatchSuspend == nil {
+		m.themeWatchMu.Unlock()
+		return func() {}
+	}
+	resume := m.themeWatchSuspend(filepath.Clean(directory))
+	return func() {
+		defer m.themeWatchMu.Unlock()
+		// Events queued during replacement must not unload the package or remove fresh watches.
+		m.IgnoreThemeWatch(filepath.Join(directory, "theme.json"))
+		resume()
 	}
 }
 

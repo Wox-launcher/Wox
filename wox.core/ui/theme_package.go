@@ -21,7 +21,7 @@ func (s *Store) InstallPackage(ctx context.Context, filePath string) error {
 }
 
 // persistThemePackage stages a complete directory and restores the old one if replacement fails.
-func persistThemePackage(directory string, theme common.Theme) error {
+func (m *Manager) persistThemePackage(directory string, theme common.Theme) error {
 	if err := theme.ValidateAssets(); err != nil {
 		return err
 	}
@@ -47,6 +47,8 @@ func persistThemePackage(directory string, theme common.Theme) error {
 		return err
 	}
 	target := filepath.Join(directory, theme.ThemeId)
+	resume := m.pauseThemePackageWatch(target)
+	defer resume()
 	backup := stage + "-previous"
 	hadPrevious := false
 	if info, err := os.Lstat(target); err == nil {

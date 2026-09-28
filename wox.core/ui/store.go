@@ -173,7 +173,7 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 
 	var writeErr error
 	if len(theme.AssetFiles) > 0 {
-		writeErr = persistThemePackage(util.GetLocation().GetThemeDirectory(), theme)
+		writeErr = GetUIManager().persistThemePackage(util.GetLocation().GetThemeDirectory(), theme)
 		if writeErr == nil {
 			if err := os.Remove(themePath); err != nil && !os.IsNotExist(err) {
 				return err
@@ -231,6 +231,8 @@ func (s *Store) uninstall(ctx context.Context, theme common.Theme, syncInstall b
 	GetUIManager().IgnoreThemeWatch(filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json"))
 	packagePath := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId)
 	if util.IsFileExists(filepath.Join(packagePath, "theme.json")) {
+		resume := GetUIManager().pauseThemePackageWatch(packagePath)
+		defer resume()
 		if err := trash.MoveToTrash(packagePath); err != nil {
 			return err
 		}

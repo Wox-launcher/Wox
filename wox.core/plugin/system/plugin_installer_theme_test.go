@@ -46,6 +46,9 @@ func TestThemeInstallerPriority(t *testing.T) {
 		if valid && (len(response.Results[0].Actions) != 1 || response.Results[0].Actions[0].Name != "i18n:plugin_theme_install_theme") {
 			t.Fatal("default install action missing")
 		}
+		if valid && !response.Results[0].Actions[0].PreventHideAfterAction {
+			t.Fatal("theme installation must keep Wox visible")
+		}
 		if !valid && len(response.Results[0].Actions) != 0 {
 			t.Fatal("invalid package must not be installable")
 		}
