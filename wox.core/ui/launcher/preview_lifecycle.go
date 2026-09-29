@@ -15,6 +15,7 @@ func (a *App) reconcileSelectedPreview() {
 func (a *App) reconcileSelectedPreviewOnUI() {
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if !visible {
+		a.releasePinnedPreviewImage()
 		a.cancelScheduledFilePreview()
 		hideWebView := a.deactivatePreviewTypes("")
 		if hideWebView {
@@ -29,12 +30,20 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	}
 	a.prepareRemotePreview(preview)
 	preview = a.resolvePreview(preview)
+	// Release the old image even when the next surface bypasses buildPreviewBody.
+	var imageSource woxImage
+	if preview.PreviewType == "image" {
+		imageSource, _ = parsePreviewImage(preview.PreviewData)
+	}
 	fileWebViewData := ""
 	nativeFilePath := ""
 	nativeFileAutoLoad := false
 	if preview.PreviewType == "file" {
 		a.prepareFilePreview(preview.PreviewData)
 		filePreview := a.filePreviewFor(preview.PreviewData)
+		if filePreview.Kind == "image" {
+			imageSource = filePreview.Image
+		}
 		if filePreview.Kind == "webview" {
 			fileWebViewData = filePreview.WebViewData
 		}
@@ -44,6 +53,10 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 		}
 	} else {
 		a.cancelScheduledFilePreview()
+	}
+
+	if imageSource != a.pinnedPreview.source {
+		a.releasePinnedPreviewImage()
 	}
 
 	previewType := preview.PreviewType

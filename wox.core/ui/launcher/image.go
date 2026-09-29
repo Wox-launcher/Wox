@@ -287,6 +287,7 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 type viewportPreviewPin struct {
 	source woxImage
 	size   int
+	key    string
 }
 
 // imageForViewport resolves one picture that is currently inside a scroll viewport.
@@ -302,9 +303,21 @@ func (a *App) releaseViewportImage(source woxImage, size int) {
 	}
 	size = max(1, size)
 	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.palette.isDark(), nil)
+	a.releaseViewportImageKey(key)
+}
+
+// releaseViewportImageKey uses the original appearance key and immediately retires oversized inactive images.
+func (a *App) releaseViewportImageKey(key string) {
 	a.imageMu.Lock()
+	defer a.imageMu.Unlock()
+	if !a.imageViewportPinned(key) {
+		return
+	}
 	delete(a.imageViewport, key)
-	a.imageMu.Unlock()
+	if imageCacheBytes(a.images[key]) > launcherImageCacheMaxBytes {
+		a.removeImageLocked(key)
+	}
+	a.evictImagesToBudget("", launcherImageCacheLimit, launcherImageCacheMaxBytes)
 }
 
 // imageForSurface resolves only explicit SVG theme variables for the owning
@@ -460,7 +473,11 @@ func (a *App) insertImageLocked(key string, image *woxui.Image) {
 		delete(a.images, key)
 	}
 	incoming := imageCacheBytes(image)
-	if incoming > launcherImageCacheMaxBytes {
+	if a.imageViewportPinned(key) {
+		// Visible preview pixels are mandatory working memory, not evictable cache.
+		// Charging them to the icon budget makes icons evict each other indefinitely.
+		a.evictImagesToBudget(key, launcherImageCacheLimit, launcherImageCacheMaxBytes)
+	} else if incoming > launcherImageCacheMaxBytes {
 		a.clearImageCacheLocked(key)
 	} else {
 		a.evictImagesToBudget(key, launcherImageCacheLimit-1, launcherImageCacheMaxBytes-incoming)
@@ -509,25 +526,31 @@ func (a *App) evictImagesToBudget(keepKey string, maxCount, maxBytes int) {
 	if len(a.images) <= maxCount && a.imageCacheSize <= maxBytes {
 		return
 	}
+	count, bytes := len(a.images), a.imageCacheSize
 	candidates := make([]string, 0, len(a.images))
-	for key := range a.images {
+	for key, image := range a.images {
+		if a.imageViewportPinned(key) {
+			count--
+			bytes -= imageCacheBytes(image)
+			continue
+		}
 		if key == keepKey {
 			continue
 		}
 		candidates = append(candidates, key)
 	}
+	if count <= maxCount && bytes <= maxBytes {
+		return
+	}
 	sort.Slice(candidates, func(first, second int) bool {
 		return a.imageLastUsed[candidates[first]] < a.imageLastUsed[candidates[second]]
 	})
 	for _, key := range candidates {
-		if len(a.images) <= maxCount && a.imageCacheSize <= maxBytes {
+		if count <= maxCount && bytes <= maxBytes {
 			return
 		}
-		// A picture still inside a scroll viewport stays decoded even when the
-		// byte budget is already full. Leaving the viewport clears the pin.
-		if a.imageViewportPinned(key) {
-			continue
-		}
+		count--
+		bytes -= imageCacheBytes(a.images[key])
 		a.removeImageLocked(key)
 	}
 }

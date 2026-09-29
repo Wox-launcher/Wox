@@ -175,3 +175,41 @@ func TestNativeFilePreviewCoalescesPendingBounds(t *testing.T) {
 	}
 	app.stopNativeFilePreviewTimers()
 }
+
+// TestPreviewPinFollowsSelectedSurface covers transitions that never build another image body.
+func TestPreviewPinFollowsSelectedSurface(t *testing.T) {
+	for _, transition := range []string{"same-image", "hidden", "empty-results", "no-preview", "text", "different-image", "no-preview-layout"} {
+		t.Run(transition, func(t *testing.T) {
+			source := woxImage{ImageType: "absolute", ImageData: "/tmp/preview.png"}
+			app := &App{visible: true, query: plainQuery{QueryID: "q"}, resultsQueryID: "q", selected: 0,
+				results: []queryResult{{Preview: queryPreview{PreviewType: "image", PreviewData: "absolute:/tmp/preview.png"}}},
+				images:  map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"preview": {}},
+				pinnedPreview: viewportPreviewPin{source: source, size: 2048, key: "preview"},
+			}
+			app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+			switch transition {
+			case "hidden":
+				app.visible = false
+			case "empty-results":
+				app.results = nil
+			case "no-preview":
+				app.results[0].Preview = queryPreview{}
+			case "text":
+				app.results[0].Preview = queryPreview{PreviewType: "text", PreviewData: "next"}
+			case "different-image":
+				app.results[0].Preview.PreviewData = "absolute:/tmp/next.png"
+			case "no-preview-layout":
+				ratio := float64(1)
+				app.layout.ResultPreviewWidthRatio = &ratio
+			}
+			app.reconcileSelectedPreviewOnUI()
+			if transition == "same-image" {
+				if app.images["preview"] == nil || app.pinnedPreview.key != "preview" {
+					t.Fatal("unchanged preview lost its pin")
+				}
+			} else if len(app.imageViewport) != 0 || app.images["preview"] != nil || app.pinnedPreview.size != 0 {
+				t.Fatal("inactive preview retained its pin or oversized cache entry")
+			}
+		})
+	}
+}

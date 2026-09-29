@@ -732,3 +732,73 @@ func TestResultIconKeepsPreviousBitmapWhileReplacementDecodes(t *testing.T) {
 		t.Fatal("prune scanned the same result revision again")
 	}
 }
+
+// TestPinnedPreviewDoesNotEvictChrome covers the repeated Glance/menu reload loop.
+func TestPinnedPreviewDoesNotEvictChrome(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"preview": {}}}
+	icon := &woxui.Image{Width: 36, Height: 36}
+	app.insertImageLocked("glance", icon)
+	app.insertImageLocked("menu", icon)
+	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+	for round := 0; round < 3; round++ {
+		for _, key := range []string{"glance", "menu"} {
+			app.imageUseSequence++
+			app.imageLastUsed[key] = app.imageUseSequence
+			app.insertImageLocked(key, icon)
+			if app.images["glance"] != icon || app.images["menu"] != icon {
+				t.Fatalf("round %d: storing %s evicted static chrome", round, key)
+			}
+		}
+	}
+	app.releaseViewportImageKey("preview")
+	if app.images["preview"] != nil || len(app.imageViewport) != 0 {
+		t.Fatal("inactive oversized preview remained cached or pinned")
+	}
+	if app.images["glance"] != icon || app.images["menu"] != icon || app.imageCacheSize != 2*imageCacheBytes(icon) {
+		t.Fatal("releasing preview discarded chrome or miscounted bytes")
+	}
+}
+
+// TestPinnedPreviewKeepsOrdinaryCacheBounded ensures the budget exemption does not disable LRU limits.
+func TestPinnedPreviewKeepsOrdinaryCacheBounded(t *testing.T) {
+	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"preview": {}}}
+	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+	for i := 0; i < launcherImageCacheLimit+8; i++ {
+		key := fmt.Sprintf("icon-%d", i)
+		app.imageLastUsed[key] = uint64(i + 1)
+		app.insertImageLocked(key, &woxui.Image{Width: 1, Height: 1})
+	}
+	if len(app.images) != launcherImageCacheLimit+1 || app.images["icon-0"] != nil || app.images["preview"] == nil {
+		t.Fatal("ordinary item limit or pinned preview ownership was lost")
+	}
+	for i := 0; i < 4; i++ {
+		key := fmt.Sprintf("large-%d", i)
+		app.imageLastUsed[key] = uint64(launcherImageCacheLimit + 100 + i)
+		app.insertImageLocked(key, &woxui.Image{Width: 2048, Height: 2048})
+	}
+	if got := app.imageCacheSize - imageCacheBytes(app.images["preview"]); got > launcherImageCacheMaxBytes {
+		t.Fatalf("ordinary cache uses %d bytes, limit %d", got, launcherImageCacheMaxBytes)
+	}
+}
+
+// TestPreviewImageRebuildKeepsOversizePin prevents redraws from unpinning and reloading the same picture.
+func TestPreviewImageRebuildKeepsOversizePin(t *testing.T) {
+	source := woxImage{ImageType: "absolute", ImageData: "/tmp/pinned-preview.png"}
+	size := previewImageRequestSize(400, 300)
+	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, false, nil)
+	picture := &woxui.Image{Width: 4096, Height: 4096}
+	app := &App{palette: uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, images: map[string]*woxui.Image{},
+		imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{key: {}},
+		pinnedPreview: viewportPreviewPin{source: source, size: size, key: key},
+	}
+	app.insertImageLocked(key, picture)
+	for i := 0; i < 3; i++ {
+		app.buildPreviewImage(source, source, app.palette, 400, 300)
+		if app.images[key] != picture || !app.imageViewportPinned(key) {
+			t.Fatal("unchanged image was released during rebuild")
+		}
+	}
+	if len(app.imageRequested) != 0 {
+		t.Fatal("cached preview scheduled a duplicate decode")
+	}
+}

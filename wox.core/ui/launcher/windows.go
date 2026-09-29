@@ -403,6 +403,7 @@ func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onLauncherWindowClosed() {
+	a.releasePinnedPreviewImage()
 	wasVisible := a.visible
 	a.deactivateDictationAudio()
 	a.launcher = nil

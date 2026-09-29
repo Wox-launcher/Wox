@@ -68,7 +68,6 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 }
 
 func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
-	a.releasePinnedPreviewImage()
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -489,13 +488,17 @@ func (a *App) releasePinnedPreviewImage() {
 	if a.pinnedPreview.size == 0 {
 		return
 	}
-	a.releaseViewportImage(a.pinnedPreview.source, a.pinnedPreview.size)
+	a.releaseViewportImageKey(a.pinnedPreview.key)
 	a.pinnedPreview = viewportPreviewPin{}
 }
 
 func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
 	size := previewImageRequestSize(width, height)
-	a.pinnedPreview = viewportPreviewPin{source: source, size: size}
+	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.palette.isDark(), nil)
+	if a.pinnedPreview.key != key {
+		a.releasePinnedPreviewImage()
+	}
+	a.pinnedPreview = viewportPreviewPin{source: source, size: size, key: key}
 	image := a.imageForViewport(source, size)
 	theme := palette.componentTheme()
 	message := ""
